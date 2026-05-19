@@ -75,6 +75,29 @@ POST /api/chat
 
 `POST /api/chat` returns `text/event-stream`.
 
+## Tool Configuration
+
+The backend loads enabled tools from `TOOL_CONFIG_PATH`, defaulting to `.data/tools.json`.
+If the file is missing, all built-in tools are enabled.
+
+```json
+{
+  "enabled_tools": ["calculator", "get_current_time"],
+  "mcp_servers": [
+    {
+      "id": "local-fake",
+      "enabled": false,
+      "transport": "stdio",
+      "command": "example-mcp-server",
+      "args": []
+    }
+  ]
+}
+```
+
+The current MCP layer is an interface and fake-test harness only; real MCP process
+startup and downloadable tools are intentionally not enabled yet.
+
 ## Day 2 Direction
 
 Next step: add Tool Registry and OpenAI tool calling, then expose tool calls in the UI as inspectable execution events.

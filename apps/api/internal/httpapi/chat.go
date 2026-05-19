@@ -61,11 +61,24 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	writeSSE(w, "conversation", domain.ChatChunk{Type: "conversation", ConversationID: conversationID})
 	flusher.Flush()
 
-	chunks, errs := h.openAI.StreamChat(r.Context(), history, req.Message)
+	events, errs := h.openAI.StreamChatWithTools(r.Context(), history, req.Message, h.tools)
 	var assistant strings.Builder
-	for chunk := range chunks {
-		assistant.WriteString(chunk)
-		writeSSE(w, "delta", domain.ChatChunk{Type: "delta", Delta: chunk})
+	for event := range events {
+		switch event.Type {
+		case "delta":
+			assistant.WriteString(event.Delta)
+			writeSSE(w, "delta", domain.ChatChunk{Type: "delta", Delta: event.Delta})
+		case "tool_start", "tool_end", "tool_error":
+			writeSSE(w, event.Type, domain.ChatChunk{
+				Type:       event.Type,
+				ToolCallID: event.ToolCallID,
+				ToolName:   event.ToolName,
+				Arguments:  event.Arguments,
+				Result:     event.Result,
+				DurationMS: event.DurationMS,
+				Error:      event.Error,
+			})
+		}
 		flusher.Flush()
 	}
 

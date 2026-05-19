@@ -12,6 +12,7 @@ type Config struct {
 	OpenAIBaseURL  string
 	OpenAIModel    string
 	DataPath       string
+	ToolConfigPath string
 	AllowedOrigins string
 }
 
@@ -24,6 +25,7 @@ func Load() Config {
 		OpenAIBaseURL:  getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		OpenAIModel:    getEnv("OPENAI_MODEL", "gpt-4o-mini"),
 		DataPath:       getEnv("DATA_PATH", ".data/agentflow.json"),
+		ToolConfigPath: getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
 		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 	}
 }

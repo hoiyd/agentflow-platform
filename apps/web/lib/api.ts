@@ -16,8 +16,26 @@ export type Message = {
 export type ChatEvent =
   | { type: "conversation"; conversation_id: string }
   | { type: "delta"; delta: string }
+  | {
+      type: "tool_start" | "tool_end" | "tool_error";
+      tool_call_id: string;
+      tool_name: string;
+      arguments?: string;
+      result?: string;
+      duration_ms?: number;
+      error?: string;
+    }
   | { type: "done"; conversation_id: string; message_id: string }
   | { type: "error"; error: string };
+
+export type ToolInfo = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  source: "builtin" | "mcp" | string;
+  source_id?: string;
+  enabled: boolean;
+};
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
@@ -88,4 +106,23 @@ export async function streamChat(
       onEvent(JSON.parse(dataLine.slice(6)) as ChatEvent);
     }
   }
+}
+
+export async function listTools(): Promise<ToolInfo[]> {
+  const response = await fetch(`${API_BASE}/api/tools`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Failed to load tools: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function setToolEnabled(name: string, enabled: boolean): Promise<ToolInfo[]> {
+  const action = enabled ? "enable" : "disable";
+  const response = await fetch(`${API_BASE}/api/tools/${encodeURIComponent(name)}/${action}`, {
+    method: "POST"
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to update tool: ${response.status}`);
+  }
+  return response.json();
 }

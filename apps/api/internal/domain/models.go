@@ -27,5 +27,10 @@ type ChatChunk struct {
 	ConversationID string `json:"conversation_id,omitempty"`
 	MessageID      string `json:"message_id,omitempty"`
 	Delta          string `json:"delta,omitempty"`
+	ToolCallID     string `json:"tool_call_id,omitempty"`
+	ToolName       string `json:"tool_name,omitempty"`
+	Arguments      string `json:"arguments,omitempty"`
+	Result         string `json:"result,omitempty"`
+	DurationMS     int64  `json:"duration_ms,omitempty"`
 	Error          string `json:"error,omitempty"`
 }

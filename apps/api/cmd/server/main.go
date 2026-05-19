@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"agentflow-platform/apps/api/internal/httpapi"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/tools"
 )
 
 func main() {
@@ -22,7 +24,15 @@ func main() {
 	}
 
 	openAIClient := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel)
-	handler := httpapi.NewHandler(fileStore, openAIClient, splitOrigins(cfg.AllowedOrigins))
+	toolConfig, err := tools.LoadConfig(cfg.ToolConfigPath)
+	if err != nil {
+		log.Fatalf("load tools config: %v", err)
+	}
+	toolRegistry, err := tools.BuildRegistry(context.Background(), tools.BuildOptions{Config: toolConfig})
+	if err != nil {
+		log.Fatalf("build tools registry: %v", err)
+	}
+	handler := httpapi.NewHandler(fileStore, openAIClient, toolRegistry, splitOrigins(cfg.AllowedOrigins))
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
