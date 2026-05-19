@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -42,14 +43,8 @@ type FunctionCall struct {
 }
 
 type StreamEvent struct {
-	Type       string
-	Delta      string
-	ToolCallID string
-	ToolName   string
-	Arguments  string
-	Result     string
-	DurationMS int64
-	Error      string
+	Type  string
+	Delta string
 }
 
 func NewClient(apiKey string, baseURL string, model string) *Client {
@@ -72,6 +67,7 @@ func (c *Client) StreamChat(ctx context.Context, history []domain.Message, lates
 		defer close(errs)
 
 		if c.apiKey == "" {
+			log.Printf("chat_fallback mode=local_no_api_key latest_len=%d", len(latest))
 			c.streamFallback(ctx, latest, chunks)
 			return
 		}
@@ -103,6 +99,7 @@ func (c *Client) StreamChatWithTools(ctx context.Context, history []domain.Messa
 		defer close(errs)
 
 		if c.apiKey == "" {
+			log.Printf("chat_fallback mode=local_no_api_key latest_len=%d enabled_tools=%q", len(latest), strings.Join(registry.EnabledNames(), ","))
 			c.streamFallbackEvents(ctx, latest, events)
 			return
 		}
@@ -142,7 +139,8 @@ func (c *Client) streamFallbackEvents(ctx context.Context, latest string, events
 }
 
 func (c *Client) streamOpenAIWithTools(ctx context.Context, history []domain.Message, registry *tools.Registry, events chan<- StreamEvent) error {
-	messages := buildMessagesWithToolNames(history, registry.EnabledNames())
+	enabledTools := registry.EnabledNames()
+	messages := buildMessagesWithToolNames(history, enabledTools)
 	decision, err := c.complete(ctx, map[string]any{
 		"model":       c.model,
 		"messages":    messages,
@@ -151,6 +149,13 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, history []domain.Mes
 		"temperature": 0.2,
 	})
 	if err != nil {
+		log.Printf(
+			"chat_fallback mode=openai_without_tools reason=%q model=%s enabled_tools=%q history_messages=%d",
+			err.Error(),
+			c.model,
+			strings.Join(enabledTools, ","),
+			len(messages),
+		)
 		decision, err = c.complete(ctx, map[string]any{
 			"model":       c.model,
 			"messages":    messages,
@@ -165,6 +170,12 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, history []domain.Mes
 	toolCalls := choice.Message.ToolCalls
 	if len(toolCalls) == 0 {
 		if fallback, ok := parseFallbackToolCall(choice.Message.Content); ok {
+			log.Printf(
+				"chat_fallback mode=json_tool_call tool=%s arguments=%q content_len=%d",
+				fallback.Function.Name,
+				fallback.Function.Arguments,
+				len(choice.Message.Content),
+			)
 			toolCalls = []ToolCall{fallback}
 		}
 	}
@@ -181,29 +192,25 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, history []domain.Mes
 
 	results := make([]tools.ExecutionResult, 0, len(toolCalls))
 	for _, call := range normalizeToolCalls(toolCalls) {
-		events <- StreamEvent{
-			Type:       "tool_start",
-			ToolCallID: call.ID,
-			ToolName:   call.Function.Name,
-			Arguments:  call.Function.Arguments,
-		}
+		log.Printf("tool_call_start id=%s tool=%s arguments=%q", call.ID, call.Function.Name, call.Function.Arguments)
 
 		result := registry.Execute(ctx, call.Function.Name, json.RawMessage(call.Function.Arguments))
 		results = append(results, result)
 		resultText := marshalResult(result)
-		eventType := "tool_end"
+		logStatus := "tool_end"
 		if result.Error != "" {
-			eventType = "tool_error"
+			logStatus = "tool_error"
 		}
-		events <- StreamEvent{
-			Type:       eventType,
-			ToolCallID: call.ID,
-			ToolName:   call.Function.Name,
-			Arguments:  string(result.Arguments),
-			Result:     resultText,
-			DurationMS: result.DurationMS,
-			Error:      result.Error,
-		}
+		log.Printf(
+			"tool_call_end id=%s tool=%s status=%s duration_ms=%d arguments=%q result=%q error=%q",
+			call.ID,
+			call.Function.Name,
+			logStatus,
+			result.DurationMS,
+			string(result.Arguments),
+			resultText,
+			result.Error,
+		)
 
 		messages = append(messages, Message{
 			Role:       "tool",
@@ -217,6 +224,7 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, history []domain.Mes
 		return err
 	}
 	if !emitted {
+		log.Printf("chat_fallback mode=tool_summary_no_stream tool_count=%d", len(results))
 		return emitText(ctx, summarizeToolResults(results), events)
 	}
 	return nil
@@ -407,25 +415,9 @@ func marshalResult(result tools.ExecutionResult) string {
 
 func summarizeToolResults(results []tools.ExecutionResult) string {
 	if len(results) == 0 {
-		return "No tool results were produced."
+		return "Tool execution completed."
 	}
-	lines := []string{"Tool execution completed:"}
-	for _, result := range results {
-		if result.Error != "" {
-			lines = append(lines, fmt.Sprintf("- %s failed: %s", result.Tool, result.Error))
-			continue
-		}
-		lines = append(lines, fmt.Sprintf("- %s returned %s", result.Tool, compactJSON(result.Result)))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func compactJSON(value any) string {
-	bytes, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Sprintf("%v", value)
-	}
-	return string(bytes)
+	return "Tool execution completed."
 }
 
 func parseFallbackToolCall(content string) (ToolCall, bool) {

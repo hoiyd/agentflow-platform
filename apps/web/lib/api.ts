@@ -16,15 +16,6 @@ export type Message = {
 export type ChatEvent =
   | { type: "conversation"; conversation_id: string }
   | { type: "delta"; delta: string }
-  | {
-      type: "tool_start" | "tool_end" | "tool_error";
-      tool_call_id: string;
-      tool_name: string;
-      arguments?: string;
-      result?: string;
-      duration_ms?: number;
-      error?: string;
-    }
   | { type: "done"; conversation_id: string; message_id: string }
   | { type: "error"; error: string };
 

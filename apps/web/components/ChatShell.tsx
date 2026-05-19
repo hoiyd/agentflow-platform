@@ -19,21 +19,10 @@ type DraftMessage = Pick<Message, "role" | "content"> & {
   created_at: string;
 };
 
-type ToolTrace = {
-  id: string;
-  name: string;
-  status: "running" | "completed" | "failed";
-  arguments: string;
-  result?: string;
-  durationMs?: number;
-  error?: string;
-};
-
 export function ChatShell() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [messages, setMessages] = useState<DraftMessage[]>([]);
-  const [toolTraces, setToolTraces] = useState<ToolTrace[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState("");
@@ -55,7 +44,7 @@ export function ChatShell() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, toolTraces]);
+  }, [messages]);
 
   async function refreshConversations(nextActiveId?: string) {
     const items = await listConversations();
@@ -86,7 +75,6 @@ export function ChatShell() {
     setActiveId(id);
     const loaded = await listMessages(id);
     setMessages(loaded);
-    setToolTraces([]);
   }
 
   async function startNewConversation() {
@@ -96,7 +84,6 @@ export function ChatShell() {
     setConversations((items) => [conversation, ...items]);
     setActiveId(conversation.id);
     setMessages([]);
-    setToolTraces([]);
   }
 
   async function toggleTool(tool: ToolInfo) {
@@ -120,7 +107,6 @@ export function ChatShell() {
 
     setInput("");
     setError("");
-    setToolTraces([]);
     setIsStreaming(true);
 
     const optimisticUser: DraftMessage = {
@@ -151,33 +137,6 @@ export function ChatShell() {
           setMessages((items) =>
             items.map((item) =>
               item.id === assistantDraft.id ? { ...item, content: item.content + event.delta } : item
-            )
-          );
-        }
-        if (event.type === "tool_start") {
-          setToolTraces((items) => [
-            ...items,
-            {
-              id: event.tool_call_id,
-              name: event.tool_name,
-              status: "running",
-              arguments: event.arguments ?? ""
-            }
-          ]);
-        }
-        if (event.type === "tool_end" || event.type === "tool_error") {
-          setToolTraces((items) =>
-            items.map((item) =>
-              item.id === event.tool_call_id
-                ? {
-                    ...item,
-                    status: event.type === "tool_error" ? "failed" : "completed",
-                    arguments: event.arguments ?? item.arguments,
-                    result: event.result,
-                    durationMs: event.duration_ms,
-                    error: event.error
-                  }
-                : item
             )
           );
         }
@@ -293,29 +252,6 @@ export function ChatShell() {
                   <div className="bubble">{message.content || "..."}</div>
                 </article>
               ))}
-              {toolTraces.length > 0 ? (
-                <section className="tool-traces" aria-label="Tool calls">
-                  <div className="tool-traces-title">Tool calls</div>
-                  {toolTraces.map((trace) => (
-                    <article className={`tool-trace ${trace.status}`} key={trace.id}>
-                      <div className="tool-trace-header">
-                        <span>{trace.name}</span>
-                        <span>{trace.status}{trace.durationMs !== undefined ? ` · ${trace.durationMs}ms` : ""}</span>
-                      </div>
-                      <div className="tool-trace-grid">
-                        <div>
-                          <div className="tool-label">Arguments</div>
-                          <pre>{formatJSON(trace.arguments)}</pre>
-                        </div>
-                        <div>
-                          <div className="tool-label">{trace.status === "failed" ? "Error" : "Result"}</div>
-                          <pre>{trace.error || formatJSON(trace.result ?? "") || "Waiting..."}</pre>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </section>
-              ) : null}
             </>
           )}
           <div ref={bottomRef} />
@@ -346,17 +282,6 @@ export function ChatShell() {
       </main>
     </div>
   );
-}
-
-function formatJSON(value: string) {
-  if (!value) {
-    return "";
-  }
-  try {
-    return JSON.stringify(JSON.parse(value), null, 2);
-  } catch {
-    return value;
-  }
 }
 
 function formatValue(value: unknown) {

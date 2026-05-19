@@ -16,6 +16,8 @@ import (
 )
 
 func main() {
+	log.SetOutput(os.Stdout)
+
 	cfg := config.Load()
 
 	fileStore, err := store.NewFileStore(cfg.DataPath)

@@ -75,16 +75,6 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		case "delta":
 			assistant.WriteString(event.Delta)
 			writeSSE(w, "delta", domain.ChatChunk{Type: "delta", Delta: event.Delta})
-		case "tool_start", "tool_end", "tool_error":
-			writeSSE(w, event.Type, domain.ChatChunk{
-				Type:       event.Type,
-				ToolCallID: event.ToolCallID,
-				ToolName:   event.ToolName,
-				Arguments:  event.Arguments,
-				Result:     event.Result,
-				DurationMS: event.DurationMS,
-				Error:      event.Error,
-			})
 		}
 		flusher.Flush()
 	}
