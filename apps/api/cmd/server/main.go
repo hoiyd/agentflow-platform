@@ -21,7 +21,7 @@ func main() {
 		log.Fatalf("create store: %v", err)
 	}
 
-	openAIClient := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIModel)
+	openAIClient := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel)
 	handler := httpapi.NewHandler(fileStore, openAIClient, splitOrigins(cfg.AllowedOrigins))
 
 	server := &http.Server{

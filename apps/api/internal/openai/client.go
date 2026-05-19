@@ -17,6 +17,7 @@ import (
 
 type Client struct {
 	apiKey     string
+	baseURL    string
 	model      string
 	httpClient *http.Client
 }
@@ -26,10 +27,11 @@ type Message struct {
 	Content string `json:"content"`
 }
 
-func NewClient(apiKey string, model string) *Client {
+func NewClient(apiKey string, baseURL string, model string) *Client {
 	return &Client{
-		apiKey: strings.TrimSpace(apiKey),
-		model:  model,
+		apiKey:  strings.TrimSpace(apiKey),
+		baseURL: normalizeBaseURL(baseURL),
+		model:   strings.TrimSpace(model),
 		httpClient: &http.Client{
 			Timeout: 90 * time.Second,
 		},
@@ -94,12 +96,14 @@ func (c *Client) streamOpenAI(ctx context.Context, history []domain.Message, chu
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/chat/completions", bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("HTTP-Referer", "http://localhost:3000")
+	req.Header.Set("X-Title", "AgentFlow Platform")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -161,4 +165,12 @@ func suffix(index int, total int) string {
 		return ""
 	}
 	return " "
+}
+
+func normalizeBaseURL(baseURL string) string {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return "https://api.openai.com/v1"
+	}
+	return strings.TrimRight(baseURL, "/")
 }

@@ -9,6 +9,7 @@ import (
 type Config struct {
 	Port           string
 	OpenAIAPIKey   string
+	OpenAIBaseURL  string
 	OpenAIModel    string
 	DataPath       string
 	AllowedOrigins string
@@ -20,6 +21,7 @@ func Load() Config {
 	return Config{
 		Port:           getEnv("PORT", "8080"),
 		OpenAIAPIKey:   getEnv("OPENAI_API_KEY", ""),
+		OpenAIBaseURL:  getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		OpenAIModel:    getEnv("OPENAI_MODEL", "gpt-4o-mini"),
 		DataPath:       getEnv("DATA_PATH", ".data/agentflow.json"),
 		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
