@@ -1,0 +1,8 @@
+node_modules/
+.next/
+dist/
+.idea/
+.env
+.data/
+.cache/
+*.log
