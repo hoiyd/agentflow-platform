@@ -13,11 +13,11 @@ import (
 type Handler struct {
 	store          store.Store
 	openAI         *openai.Client
-	tools          *tools.Registry
+	tools          *tools.Manager
 	allowedOrigins []string
 }
 
-func NewHandler(store store.Store, openAI *openai.Client, tools *tools.Registry, allowedOrigins []string) *Handler {
+func NewHandler(store store.Store, openAI *openai.Client, tools *tools.Manager, allowedOrigins []string) *Handler {
 	return &Handler{store: store, openAI: openAI, tools: tools, allowedOrigins: allowedOrigins}
 }
 

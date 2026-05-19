@@ -24,15 +24,11 @@ func main() {
 	}
 
 	openAIClient := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel)
-	toolConfig, err := tools.LoadConfig(cfg.ToolConfigPath)
+	toolManager, err := tools.NewManager(context.Background(), cfg.ToolConfigPath, nil)
 	if err != nil {
-		log.Fatalf("load tools config: %v", err)
+		log.Fatalf("create tools manager: %v", err)
 	}
-	toolRegistry, err := tools.BuildRegistry(context.Background(), tools.BuildOptions{Config: toolConfig})
-	if err != nil {
-		log.Fatalf("build tools registry: %v", err)
-	}
-	handler := httpapi.NewHandler(fileStore, openAIClient, toolRegistry, splitOrigins(cfg.AllowedOrigins))
+	handler := httpapi.NewHandler(fileStore, openAIClient, toolManager, splitOrigins(cfg.AllowedOrigins))
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,

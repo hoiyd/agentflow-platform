@@ -61,7 +61,14 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	writeSSE(w, "conversation", domain.ChatChunk{Type: "conversation", ConversationID: conversationID})
 	flusher.Flush()
 
-	events, errs := h.openAI.StreamChatWithTools(r.Context(), history, req.Message, h.tools)
+	registry, err := h.tools.Registry(r.Context())
+	if err != nil {
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		flusher.Flush()
+		return
+	}
+
+	events, errs := h.openAI.StreamChatWithTools(r.Context(), history, req.Message, registry)
 	var assistant strings.Builder
 	for event := range events {
 		switch event.Type {
