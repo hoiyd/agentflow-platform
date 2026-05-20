@@ -70,10 +70,27 @@ GET  /health
 GET  /api/conversations
 POST /api/conversations
 GET  /api/conversations/{id}/messages
+GET  /api/agents
+POST /api/agents
+GET  /api/agents/{id}
+GET  /api/runs
+GET  /api/runs/{id}
 POST /api/chat
 ```
 
-`POST /api/chat` returns `text/event-stream`.
+`POST /api/chat` returns `text/event-stream`. It accepts an optional
+`agent_id`; if omitted, the backend uses the default Planner Agent. Each chat
+request creates a Run and streams run metadata before text deltas.
+
+```bash
+curl -s http://localhost:8080/api/agents
+
+curl -N http://localhost:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  --data '{"agent_id":"agent_coding","message":"Say hello from the coding agent"}'
+
+curl -s http://localhost:8080/api/runs
+```
 
 ## Tool Configuration
 

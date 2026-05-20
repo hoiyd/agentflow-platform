@@ -5,10 +5,12 @@ import type { ReactNode } from "react";
 import { lexer } from "marked";
 import type { Token, Tokens } from "marked";
 import {
+  AgentInfo,
   Conversation,
   Message,
   ToolInfo,
   createConversation,
+  listAgents,
   listConversations,
   listTools,
   listMessages,
@@ -29,6 +31,14 @@ export function ChatShell() {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState("");
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [activeAgentId, setActiveAgentId] = useState("");
+  const [agentsError, setAgentsError] = useState("");
+  const [runState, setRunState] = useState<{
+    id: string;
+    agentId: string;
+    status: string;
+  } | null>(null);
   const [view, setView] = useState<"chat" | "tools">("chat");
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [toolsError, setToolsError] = useState("");
@@ -39,9 +49,14 @@ export function ChatShell() {
     () => conversations.find((conversation) => conversation.id === activeId),
     [activeId, conversations]
   );
+  const activeAgent = useMemo(
+    () => agents.find((agent) => agent.id === activeAgentId),
+    [activeAgentId, agents]
+  );
 
   useEffect(() => {
     void refreshConversations();
+    void refreshAgents();
     void refreshTools();
   }, []);
 
@@ -72,8 +87,25 @@ export function ChatShell() {
     }
   }
 
+  async function refreshAgents() {
+    try {
+      setAgentsError("");
+      const items = await listAgents();
+      setAgents(items);
+      setActiveAgentId((current) => {
+        if (current && items.some((agent) => agent.id === current)) {
+          return current;
+        }
+        return items.find((agent) => agent.id === "agent_planner")?.id ?? items[0]?.id ?? "";
+      });
+    } catch (err) {
+      setAgentsError(err instanceof Error ? err.message : "Failed to load agents");
+    }
+  }
+
   async function openConversation(id: string) {
     setError("");
+    setRunState(null);
     setView("chat");
     setActiveId(id);
     const loaded = await listMessages(id);
@@ -82,6 +114,7 @@ export function ChatShell() {
 
   async function startNewConversation() {
     setError("");
+    setRunState(null);
     setView("chat");
     const conversation = await createConversation("New conversation");
     setConversations((items) => [conversation, ...items]);
@@ -110,6 +143,7 @@ export function ChatShell() {
 
     setInput("");
     setError("");
+    setRunState(null);
     setIsStreaming(true);
 
     const optimisticUser: DraftMessage = {
@@ -131,22 +165,43 @@ export function ChatShell() {
     let conversationId = activeId;
 
     try {
-      await streamChat({ conversation_id: conversationId || undefined, message: content }, (event) => {
-        if (event.type === "conversation") {
-          conversationId = event.conversation_id;
-          setActiveId(event.conversation_id);
+      await streamChat(
+        {
+          conversation_id: conversationId || undefined,
+          agent_id: activeAgentId || undefined,
+          message: content
+        },
+        (event) => {
+          if (event.type === "conversation") {
+            conversationId = event.conversation_id;
+            setActiveId(event.conversation_id);
+          }
+          if (event.type === "run") {
+            setRunState({
+              id: event.run_id,
+              agentId: event.agent_id,
+              status: event.status
+            });
+          }
+          if (event.type === "delta") {
+            setMessages((items) =>
+              items.map((item) =>
+                item.id === assistantDraft.id ? { ...item, content: item.content + event.delta } : item
+              )
+            );
+          }
+          if (event.type === "error") {
+            setError(event.error);
+          }
+          if (event.type === "done") {
+            setRunState((current) => ({
+              id: event.run_id ?? current?.id ?? "",
+              agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
+              status: event.status ?? "completed"
+            }));
+          }
         }
-        if (event.type === "delta") {
-          setMessages((items) =>
-            items.map((item) =>
-              item.id === assistantDraft.id ? { ...item, content: item.content + event.delta } : item
-            )
-          );
-        }
-        if (event.type === "error") {
-          setError(event.error);
-        }
-      });
+      );
 
       await refreshConversations(conversationId);
       if (conversationId) {
@@ -165,7 +220,7 @@ export function ChatShell() {
       <aside className="sidebar">
         <div className="brand">
           <h1>AgentFlow</h1>
-          <p>Day 1 chat runtime with Go streaming backend.</p>
+          <p>Day 3 agent runtime with runs, memory, and tools.</p>
         </div>
         <button className="new-chat" onClick={startNewConversation}>
           New Chat
@@ -262,25 +317,55 @@ export function ChatShell() {
         )}
 
         {view === "chat" ? (
-        <form className="composer" onSubmit={handleSubmit}>
-          {error ? <div className="error">{error}</div> : null}
-          <div className="composer-inner">
-            <textarea
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void handleSubmit(event);
-                }
-              }}
-              placeholder="Ask AgentFlow anything..."
-            />
-            <button className="send" disabled={isStreaming || input.trim().length === 0}>
-              Send
-            </button>
-          </div>
-        </form>
+          <form className="composer" onSubmit={handleSubmit}>
+            <div className="agent-bar">
+              <label className="agent-select">
+                <span>Agent</span>
+                <select
+                  value={activeAgentId}
+                  disabled={isStreaming || agents.length === 0}
+                  onChange={(event) => {
+                    setActiveAgentId(event.target.value);
+                    setRunState(null);
+                  }}
+                >
+                  {agents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="agent-summary">
+                <strong>{activeAgent?.name ?? "No agent loaded"}</strong>
+                <span>{activeAgent?.description ?? agentsError}</span>
+              </div>
+              {runState ? (
+                <div className={`run-pill ${runState.status}`}>
+                  <span>{runState.status}</span>
+                  <code>{runState.id}</code>
+                </div>
+              ) : null}
+            </div>
+            {agentsError ? <div className="error">{agentsError}</div> : null}
+            {error ? <div className="error">{error}</div> : null}
+            <div className="composer-inner">
+              <textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void handleSubmit(event);
+                  }
+                }}
+                placeholder="Ask AgentFlow anything..."
+              />
+              <button className="send" disabled={isStreaming || input.trim().length === 0}>
+                Send
+              </button>
+            </div>
+          </form>
         ) : null}
       </main>
     </div>

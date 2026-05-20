@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -149,6 +150,29 @@ func (r *Registry) EnabledNames() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func (r *Registry) EnabledSubset(names []string) (*Registry, error) {
+	subset, err := NewRegistry()
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		tool, ok := r.Get(name)
+		if !ok {
+			continue
+		}
+		if err := subset.Register(tool); err != nil {
+			return nil, err
+		}
+	}
+	return subset, nil
 }
 
 func (r *Registry) Definitions() []map[string]any {

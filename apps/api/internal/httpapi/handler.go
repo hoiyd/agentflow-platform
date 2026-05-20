@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
@@ -14,11 +15,18 @@ type Handler struct {
 	store          store.Store
 	openAI         *openai.Client
 	tools          *tools.Manager
+	agentRuntime   *agent.Runtime
 	allowedOrigins []string
 }
 
 func NewHandler(store store.Store, openAI *openai.Client, tools *tools.Manager, allowedOrigins []string) *Handler {
-	return &Handler{store: store, openAI: openAI, tools: tools, allowedOrigins: allowedOrigins}
+	return &Handler{
+		store:          store,
+		openAI:         openAI,
+		tools:          tools,
+		agentRuntime:   agent.NewRuntime(store, openAI, tools),
+		allowedOrigins: allowedOrigins,
+	}
 }
 
 func (h *Handler) Routes() http.Handler {
@@ -41,6 +49,16 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
 		h.listMessages(w, r)
 	case r.Method == http.MethodPost && path == "/api/chat":
 		h.chat(w, r)
+	case r.Method == http.MethodGet && path == "/api/agents":
+		h.listAgents(w, r)
+	case r.Method == http.MethodPost && path == "/api/agents":
+		h.createAgent(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/agents/"):
+		h.getAgent(w, r)
+	case r.Method == http.MethodGet && path == "/api/runs":
+		h.listRuns(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/"):
+		h.getRun(w, r)
 	case r.Method == http.MethodGet && path == "/api/tools":
 		h.listTools(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/tools/") && strings.HasSuffix(path, "/enable"):
@@ -64,7 +82,7 @@ func (h *Handler) withCORS(next http.Handler) http.Handler {
 			w.Header().Set("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

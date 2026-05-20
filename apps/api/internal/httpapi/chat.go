@@ -61,14 +61,26 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	writeSSE(w, "conversation", domain.ChatChunk{Type: "conversation", ConversationID: conversationID})
 	flusher.Flush()
 
-	registry, err := h.tools.Registry(r.Context())
+	prepared, err := h.agentRuntime.PrepareChatRun(r.Context(), req.AgentID, conversationID)
 	if err != nil {
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		}
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: http.StatusText(status) + ": " + err.Error()})
 		flusher.Flush()
 		return
 	}
+	writeSSE(w, "run", domain.ChatChunk{
+		Type:           "run",
+		ConversationID: conversationID,
+		RunID:          prepared.Run.ID,
+		AgentID:        prepared.Agent.ID,
+		Status:         string(prepared.Run.Status),
+	})
+	flusher.Flush()
 
-	events, errs := h.openAI.StreamChatWithTools(r.Context(), history, req.Message, registry)
+	events, errs := h.agentRuntime.StreamChat(r.Context(), prepared, history, req.Message)
 	var assistant strings.Builder
 	for event := range events {
 		switch event.Type {
@@ -80,6 +92,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := <-errs; err != nil {
+		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
 		flusher.Flush()
 		return
@@ -87,12 +100,27 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 
 	message, err := h.store.AddMessage(conversationID, "assistant", assistant.String())
 	if err != nil {
+		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
 		flusher.Flush()
 		return
 	}
 
-	writeSSE(w, "done", domain.ChatChunk{Type: "done", ConversationID: conversationID, MessageID: message.ID})
+	completed, err := h.agentRuntime.CompleteRun(prepared.Run.ID)
+	if err != nil {
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		flusher.Flush()
+		return
+	}
+
+	writeSSE(w, "done", domain.ChatChunk{
+		Type:           "done",
+		ConversationID: conversationID,
+		RunID:          completed.ID,
+		AgentID:        completed.AgentID,
+		Status:         string(completed.Status),
+		MessageID:      message.ID,
+	})
 	flusher.Flush()
 }
 

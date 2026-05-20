@@ -1,6 +1,9 @@
 package openai
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseFallbackToolCall(t *testing.T) {
 	call, ok := parseFallbackToolCall(`{"action":"tool_call","tool":"calculator","arguments":{"expression":"128 * 37"}}`)
@@ -29,5 +32,18 @@ func TestNormalizeBaseURL(t *testing.T) {
 	got := normalizeBaseURL("https://openrouter.ai/api/v1/")
 	if got != "https://openrouter.ai/api/v1" {
 		t.Fatalf("unexpected base url: %s", got)
+	}
+}
+
+func TestBuildMessagesWithSystemPrompt(t *testing.T) {
+	messages := buildMessagesWithSystemPrompt("You are a test agent.", nil, []string{"calculator"})
+	if len(messages) != 1 {
+		t.Fatalf("expected one system message, got %d", len(messages))
+	}
+	if messages[0].Role != "system" {
+		t.Fatalf("expected system role, got %s", messages[0].Role)
+	}
+	if !strings.Contains(messages[0].Content, "You are a test agent.") {
+		t.Fatalf("expected custom system prompt, got %q", messages[0].Content)
 	}
 }

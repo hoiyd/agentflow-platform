@@ -91,6 +91,10 @@ func (c *Client) StreamChat(ctx context.Context, history []domain.Message, lates
 }
 
 func (c *Client) StreamChatWithTools(ctx context.Context, history []domain.Message, latest string, registry *tools.Registry) (<-chan StreamEvent, <-chan error) {
+	return c.StreamAgentChatWithTools(ctx, "You are AgentFlow's Day 2 assistant. Use tools when they help.", history, latest, registry)
+}
+
+func (c *Client) StreamAgentChatWithTools(ctx context.Context, systemPrompt string, history []domain.Message, latest string, registry *tools.Registry) (<-chan StreamEvent, <-chan error) {
 	events := make(chan StreamEvent)
 	errs := make(chan error, 1)
 
@@ -104,7 +108,7 @@ func (c *Client) StreamChatWithTools(ctx context.Context, history []domain.Messa
 			return
 		}
 
-		if err := c.streamOpenAIWithTools(ctx, history, registry, events); err != nil {
+		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, registry, events); err != nil {
 			errs <- err
 		}
 	}()
@@ -138,9 +142,9 @@ func (c *Client) streamFallbackEvents(ctx context.Context, latest string, events
 	}
 }
 
-func (c *Client) streamOpenAIWithTools(ctx context.Context, history []domain.Message, registry *tools.Registry, events chan<- StreamEvent) error {
+func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string, history []domain.Message, registry *tools.Registry, events chan<- StreamEvent) error {
 	enabledTools := registry.EnabledNames()
-	messages := buildMessagesWithToolNames(history, enabledTools)
+	messages := buildMessagesWithSystemPrompt(systemPrompt, history, enabledTools)
 	decision, err := c.complete(ctx, map[string]any{
 		"model":       c.model,
 		"messages":    messages,
@@ -349,16 +353,24 @@ func buildMessages(history []domain.Message) []Message {
 }
 
 func buildMessagesWithToolNames(history []domain.Message, toolNames []string) []Message {
+	return buildMessagesWithSystemPrompt("You are AgentFlow's Day 2 assistant. Use tools when they help.", history, toolNames)
+}
+
+func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message, toolNames []string) []Message {
 	available := "No tools are currently enabled."
 	fallbackInstruction := ""
 	if len(toolNames) > 0 {
 		available = "Available tools include " + strings.Join(toolNames, ", ") + "."
 		fallbackInstruction = " If native tool calling is unavailable, output only JSON like {\"action\":\"tool_call\",\"tool\":\"calculator\",\"arguments\":{\"expression\":\"128 * 37\"}}."
 	}
+	systemPrompt = strings.TrimSpace(systemPrompt)
+	if systemPrompt == "" {
+		systemPrompt = "You are AgentFlow's assistant."
+	}
 	messages := []Message{
 		{
 			Role:    "system",
-			Content: "You are AgentFlow's Day 2 assistant. Use tools when they help. " + available + fallbackInstruction,
+			Content: systemPrompt + " " + available + fallbackInstruction,
 		},
 	}
 	for _, item := range history {

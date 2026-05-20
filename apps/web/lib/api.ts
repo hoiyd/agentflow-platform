@@ -15,9 +15,33 @@ export type Message = {
 
 export type ChatEvent =
   | { type: "conversation"; conversation_id: string }
+  | {
+      type: "run";
+      conversation_id: string;
+      run_id: string;
+      agent_id: string;
+      status: "queued" | "running" | "completed" | "failed" | string;
+    }
   | { type: "delta"; delta: string }
-  | { type: "done"; conversation_id: string; message_id: string }
+  | {
+      type: "done";
+      conversation_id: string;
+      message_id: string;
+      run_id?: string;
+      agent_id?: string;
+      status?: "queued" | "running" | "completed" | "failed" | string;
+    }
   | { type: "error"; error: string };
+
+export type AgentInfo = {
+  id: string;
+  name: string;
+  description: string;
+  system_prompt: string;
+  tools: string[];
+  created_at: string;
+  updated_at: string;
+};
 
 export type ToolInfo = {
   name: string;
@@ -61,7 +85,7 @@ export async function listMessages(conversationId: string): Promise<Message[]> {
 }
 
 export async function streamChat(
-  input: { conversation_id?: string; message: string },
+  input: { conversation_id?: string; agent_id?: string; message: string },
   onEvent: (event: ChatEvent) => void
 ) {
   const response = await fetch(`${API_BASE}/api/chat`, {
@@ -97,6 +121,14 @@ export async function streamChat(
       onEvent(JSON.parse(dataLine.slice(6)) as ChatEvent);
     }
   }
+}
+
+export async function listAgents(): Promise<AgentInfo[]> {
+  const response = await fetch(`${API_BASE}/api/agents`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Failed to load agents: ${response.status}`);
+  }
+  return response.json();
 }
 
 export async function listTools(): Promise<ToolInfo[]> {
