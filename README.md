@@ -82,22 +82,28 @@ If the file is missing, all built-in tools are enabled.
 
 ```json
 {
-  "enabled_tools": ["calculator", "get_current_time"],
+  "enabled_tools": [
+    "calculator",
+    "smartapis__smartagent_discovery_capabilities",
+    "smartapis__smartagent_catalog_list_plans",
+    "smartapis__smartagent_places_search"
+  ],
   "mcp_servers": [
     {
-      "id": "local-fake",
-      "enabled": false,
-      "transport": "stdio",
-      "command": "example-mcp-server",
-      "args": []
+      "id": "smartapis",
+      "enabled": true,
+      "transport": "streamable-http",
+      "url": "https://smartapis.net/mcp"
     }
   ]
 }
 ```
 
-The current MCP layer is an interface and fake-test harness only; real MCP process
-startup and downloadable tools are intentionally not enabled yet.
+MCP tools are registered as `<server_id>__<tool_name>` to avoid collisions with
+built-in tools. The example above uses the official
+SmartAPIs.net remote MCP endpoint through Streamable HTTP. Stdio MCP servers are
+still supported with `transport: "stdio"`, `command`, and `args`.
 
 ## Day 2 Direction
 
-Next step: add Tool Registry and OpenAI tool calling, then expose tool calls in the UI as inspectable execution events.
+Next step: expose tool calls in the UI as inspectable execution events.

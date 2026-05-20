@@ -102,7 +102,8 @@ func toolFromMCP(serverID string, mcpTool MCPTool, client MCPClient) (Tool, erro
 		return Tool{}, fmt.Errorf("mcp tool %q parameters must be json-compatible: %w", mcpTool.Name, err)
 	}
 
-	name := mcpTool.Name
+	name := mcpRegistryName(serverID, mcpTool.Name)
+	originalName := mcpTool.Name
 	return Tool{
 		Name:        name,
 		Description: mcpTool.Description,
@@ -110,7 +111,11 @@ func toolFromMCP(serverID string, mcpTool MCPTool, client MCPClient) (Tool, erro
 		Source:      "mcp",
 		SourceID:    serverID,
 		Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
-			return client.CallTool(ctx, serverID, name, args)
+			return client.CallTool(ctx, serverID, originalName, args)
 		},
 	}, nil
+}
+
+func mcpRegistryName(serverID string, toolName string) string {
+	return strings.TrimSpace(serverID) + "__" + strings.TrimSpace(toolName)
 }

@@ -14,12 +14,15 @@ type Config struct {
 }
 
 type MCPServerConfig struct {
-	ID        string            `json:"id"`
-	Enabled   bool              `json:"enabled"`
-	Transport string            `json:"transport"`
-	Command   string            `json:"command"`
-	Args      []string          `json:"args"`
-	Env       map[string]string `json:"env"`
+	ID         string            `json:"id"`
+	Enabled    bool              `json:"enabled"`
+	Transport  string            `json:"transport"`
+	Command    string            `json:"command"`
+	Args       []string          `json:"args"`
+	Env        map[string]string `json:"env"`
+	URL        string            `json:"url,omitempty"`
+	Headers    map[string]string `json:"headers,omitempty"`
+	WorkingDir string            `json:"cwd,omitempty"`
 }
 
 func DefaultConfig() Config {

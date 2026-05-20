@@ -26,7 +26,13 @@ func main() {
 	}
 
 	openAIClient := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel)
-	toolManager, err := tools.NewManager(context.Background(), cfg.ToolConfigPath, nil)
+	mcpClient := tools.NewRoutedMCPClient()
+	defer func() {
+		if err := mcpClient.Close(); err != nil {
+			log.Printf("close mcp client: %v", err)
+		}
+	}()
+	toolManager, err := tools.NewManager(context.Background(), cfg.ToolConfigPath, mcpClient)
 	if err != nil {
 		log.Fatalf("create tools manager: %v", err)
 	}

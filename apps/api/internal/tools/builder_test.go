@@ -53,7 +53,7 @@ func TestBuildRegistryRegistersEnabledMCPTools(t *testing.T) {
 
 	registry, err := BuildRegistry(context.Background(), BuildOptions{
 		Config: Config{
-			EnabledTools: []string{"fake_lookup"},
+			EnabledTools: []string{"fake__fake_lookup"},
 			MCPServers: []MCPServerConfig{
 				{ID: "fake", Enabled: true, Transport: "stdio"},
 			},
@@ -68,7 +68,7 @@ func TestBuildRegistryRegistersEnabledMCPTools(t *testing.T) {
 	if len(definitions) != 1 {
 		t.Fatalf("expected 1 definition, got %d", len(definitions))
 	}
-	result := registry.Execute(context.Background(), "fake_lookup", json.RawMessage(`{"query":"agentflow"}`))
+	result := registry.Execute(context.Background(), "fake__fake_lookup", json.RawMessage(`{"query":"agentflow"}`))
 	if result.Error != "" {
 		t.Fatalf("expected mcp tool call to succeed, got %q", result.Error)
 	}
@@ -80,7 +80,7 @@ func TestBuildRegistryRegistersEnabledMCPTools(t *testing.T) {
 func TestBuildRegistryRejectsInvalidMCPTool(t *testing.T) {
 	_, err := BuildRegistry(context.Background(), BuildOptions{
 		Config: Config{
-			EnabledTools: []string{"broken"},
+			EnabledTools: []string{"fake__broken"},
 			MCPServers: []MCPServerConfig{
 				{ID: "fake", Enabled: true},
 			},
