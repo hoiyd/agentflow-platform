@@ -25,7 +25,7 @@ func main() {
 		log.Fatalf("create store: %v", err)
 	}
 
-	openAIClient := openai.NewClient(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel)
+	openAIClient := openai.NewClientWithTimeout(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel, cfg.OpenAITimeout)
 	mcpClient := tools.NewRoutedMCPClient()
 	defer func() {
 		if err := mcpClient.Close(); err != nil {

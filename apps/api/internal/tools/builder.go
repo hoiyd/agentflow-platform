@@ -5,14 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 )
 
 var ErrMCPClientUnavailable = errors.New("mcp client is not available")
 
 type BuildOptions struct {
-	Config    Config
-	MCPClient MCPClient
+	Config                Config
+	MCPClient             MCPClient
+	IgnoreMCPServerErrors bool
 }
 
 func BuildRegistry(ctx context.Context, options BuildOptions) (*Registry, error) {
@@ -37,6 +39,7 @@ func BuildRegistry(ctx context.Context, options BuildOptions) (*Registry, error)
 	if mcpClient == nil {
 		mcpClient = NoopMCPClient{}
 	}
+	unavailableMCPServers := map[string]bool{}
 	for _, server := range options.Config.MCPServers {
 		if !server.Enabled {
 			continue
@@ -46,6 +49,11 @@ func BuildRegistry(ctx context.Context, options BuildOptions) (*Registry, error)
 		}
 		mcpTools, err := mcpClient.ListTools(ctx, server)
 		if err != nil {
+			if options.IgnoreMCPServerErrors {
+				log.Printf("mcp server %q unavailable; skipping tools: %v", server.ID, err)
+				unavailableMCPServers[server.ID] = true
+				continue
+			}
 			return nil, fmt.Errorf("list mcp tools from %q: %w", server.ID, err)
 		}
 		for _, mcpTool := range mcpTools {
@@ -59,11 +67,24 @@ func BuildRegistry(ctx context.Context, options BuildOptions) (*Registry, error)
 		}
 	}
 
+	for serverID := range unavailableMCPServers {
+		removeEnabledToolsForMCPServer(enabled, serverID)
+	}
+
 	if err := applyEnabledTools(registry, enabled); err != nil {
 		return nil, err
 	}
 
 	return registry, nil
+}
+
+func removeEnabledToolsForMCPServer(enabled map[string]bool, serverID string) {
+	prefix := strings.TrimSpace(serverID) + "__"
+	for name := range enabled {
+		if strings.HasPrefix(name, prefix) {
+			delete(enabled, name)
+		}
+	}
 }
 
 func applyEnabledTools(registry *Registry, enabled map[string]bool) error {

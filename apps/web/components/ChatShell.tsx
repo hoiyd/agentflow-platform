@@ -6,12 +6,15 @@ import { lexer } from "marked";
 import type { Token, Tokens } from "marked";
 import {
   AgentInfo,
+  ChatMode,
   Conversation,
   Message,
   ToolInfo,
   createConversation,
+  listCollaborationSteps,
   listAgents,
   listConversations,
+  listRuns,
   listTools,
   listMessages,
   setToolEnabled,
@@ -24,6 +27,15 @@ type DraftMessage = Pick<Message, "role" | "content"> & {
   created_at: string;
 };
 
+type CollaborationStepView = {
+  role: string;
+  agent_id?: string;
+  status: string;
+  input?: string;
+  output?: string;
+  error?: string;
+};
+
 export function ChatShell() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string>("");
@@ -34,6 +46,9 @@ export function ChatShell() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [activeAgentId, setActiveAgentId] = useState("");
   const [isAgentDescriptionExpanded, setIsAgentDescriptionExpanded] = useState(false);
+  const [chatMode, setChatMode] = useState<ChatMode>("single");
+  const [collaborationSteps, setCollaborationSteps] = useState<CollaborationStepView[]>([]);
+  const [isCollaborationPanelOpen, setIsCollaborationPanelOpen] = useState(true);
   const [agentsError, setAgentsError] = useState("");
   const [runState, setRunState] = useState<{
     id: string;
@@ -54,6 +69,7 @@ export function ChatShell() {
     () => agents.find((agent) => agent.id === activeAgentId),
     [activeAgentId, agents]
   );
+  const showCollaborationPanel = chatMode === "multi_agent" || collaborationSteps.length > 0;
 
   useEffect(() => {
     void refreshConversations();
@@ -69,6 +85,12 @@ export function ChatShell() {
     setIsAgentDescriptionExpanded(false);
   }, [activeAgentId]);
 
+  useEffect(() => {
+    if (chatMode === "multi_agent" || collaborationSteps.length > 0) {
+      setIsCollaborationPanelOpen(true);
+    }
+  }, [chatMode, collaborationSteps.length]);
+
   async function refreshConversations(nextActiveId?: string) {
     const items = await listConversations();
     setConversations(items);
@@ -80,6 +102,22 @@ export function ChatShell() {
       setActiveId(items[0].id);
       const loaded = await listMessages(items[0].id);
       setMessages(loaded);
+      await refreshCollaborationSteps(items[0].id);
+    }
+  }
+
+  async function refreshCollaborationSteps(conversationId: string) {
+    try {
+      const runs = await listRuns();
+      const run = runs.find((item) => item.conversation_id === conversationId);
+      if (!run) {
+        setCollaborationSteps([]);
+        return;
+      }
+      const steps = await listCollaborationSteps(run.id);
+      setCollaborationSteps(steps.map(toCollaborationStepView));
+    } catch {
+      setCollaborationSteps([]);
     }
   }
 
@@ -111,15 +149,18 @@ export function ChatShell() {
   async function openConversation(id: string) {
     setError("");
     setRunState(null);
+    setCollaborationSteps([]);
     setView("chat");
     setActiveId(id);
     const loaded = await listMessages(id);
     setMessages(loaded);
+    await refreshCollaborationSteps(id);
   }
 
   async function startNewConversation() {
     setError("");
     setRunState(null);
+    setCollaborationSteps([]);
     setView("chat");
     const conversation = await createConversation("New conversation");
     setConversations((items) => [conversation, ...items]);
@@ -149,6 +190,7 @@ export function ChatShell() {
     setInput("");
     setError("");
     setRunState(null);
+    setCollaborationSteps([]);
     setIsStreaming(true);
 
     const optimisticUser: DraftMessage = {
@@ -174,6 +216,7 @@ export function ChatShell() {
         {
           conversation_id: conversationId || undefined,
           agent_id: activeAgentId || undefined,
+          mode: chatMode,
           message: content
         },
         (event) => {
@@ -194,6 +237,9 @@ export function ChatShell() {
                 item.id === assistantDraft.id ? { ...item, content: item.content + event.delta } : item
               )
             );
+          }
+          if (event.type === "collaboration_step") {
+            setCollaborationSteps((items) => upsertCollaborationStep(items, event));
           }
           if (event.type === "error") {
             setError(event.error);
@@ -298,34 +344,73 @@ export function ChatShell() {
             </div>
           </section>
         ) : (
-        <section className="messages">
-          {messages.length === 0 ? (
-            <div className="empty">
-              <h2>Build the first reliable layer.</h2>
-              <p>
-                Start a conversation. The Go API will persist messages and stream assistant output
-                back through Server-Sent Events.
-              </p>
-            </div>
-          ) : (
-            <>
-              {messages.map((message) => (
-                <article className={`message ${message.role}`} key={message.id}>
-                  <div className="message-meta">{message.role}</div>
-                  <div className="bubble">{message.content ? renderMarkdown(message.content) : "..."}</div>
-                </article>
-              ))}
-            </>
-          )}
-          <div ref={bottomRef} />
-        </section>
+          <section
+            className={`chat-workspace ${
+              showCollaborationPanel && isCollaborationPanelOpen ? "with-collaboration" : ""
+            }`}
+          >
+            <section className="messages">
+              {showCollaborationPanel && !isCollaborationPanelOpen ? (
+                <button
+                  className="collaboration-rail-toggle"
+                  onClick={() => setIsCollaborationPanelOpen(true)}
+                  type="button"
+                >
+                  Show Collaboration Trace
+                </button>
+              ) : null}
+              {messages.length === 0 ? (
+                <div className="empty">
+                  <h2>Build the first reliable layer.</h2>
+                  <p>
+                    Start a conversation. The Go API will persist messages and stream assistant output
+                    back through Server-Sent Events.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {messages.map((message) => (
+                    <article className={`message ${message.role}`} key={message.id}>
+                      <div className="message-meta">{message.role}</div>
+                      <div className="bubble">{message.content ? renderMarkdown(message.content) : "..."}</div>
+                    </article>
+                  ))}
+                </>
+              )}
+              <div ref={bottomRef} />
+            </section>
+            {showCollaborationPanel && isCollaborationPanelOpen ? (
+              <CollaborationPanel
+                onCollapse={() => setIsCollaborationPanelOpen(false)}
+                steps={collaborationSteps}
+              />
+            ) : null}
+          </section>
         )}
 
         {view === "chat" ? (
           <form className="composer" onSubmit={handleSubmit}>
             <div className="agent-bar">
+              <div className="mode-toggle" aria-label="Chat mode">
+                <button
+                  className={chatMode === "single" ? "active" : ""}
+                  disabled={isStreaming}
+                  onClick={() => setChatMode("single")}
+                  type="button"
+                >
+                  Single
+                </button>
+                <button
+                  className={chatMode === "multi_agent" ? "active" : ""}
+                  disabled={isStreaming}
+                  onClick={() => setChatMode("multi_agent")}
+                  type="button"
+                >
+                  Multi-Agent
+                </button>
+              </div>
               <label className="agent-select">
-                <span>Agent</span>
+                <span>{chatMode === "multi_agent" ? "Worker Agent" : "Agent"}</span>
                 <select
                   value={activeAgentId}
                   disabled={isStreaming || agents.length === 0}
@@ -399,6 +484,97 @@ export function ChatShell() {
     </div>
   );
 }
+
+function toCollaborationStepView(step: CollaborationStepView) {
+  return {
+    role: step.role,
+    agent_id: step.agent_id,
+    status: step.status,
+    input: step.input,
+    output: step.output,
+    error: step.error
+  };
+}
+
+function upsertCollaborationStep(items: CollaborationStepView[], event: CollaborationStepView) {
+  const next = {
+    role: event.role,
+    agent_id: event.agent_id,
+    status: event.status,
+    input: event.input,
+    output: event.output,
+    error: event.error
+  };
+  const existing = items.findIndex((item) => item.role === event.role);
+  if (existing === -1) {
+    return [...items, next];
+  }
+  return items.map((item, index) => (index === existing ? { ...item, ...next } : item));
+}
+
+function CollaborationPanel({
+  onCollapse,
+  steps
+}: {
+  onCollapse: () => void;
+  steps: CollaborationStepView[];
+}) {
+  const hasStarted = steps.length > 0;
+  const visibleSteps = collaborationRoles.map((role, index) => {
+    const existing = steps.find((step) => step.role === role.id);
+    if (existing) {
+      return existing;
+    }
+    const previousStarted = steps.some(
+      (step) => collaborationRoles.findIndex((item) => item.id === step.role) < index
+    );
+    return { role: role.id, status: hasStarted && previousStarted ? "queued" : "idle" };
+  });
+
+  return (
+    <aside className="collaboration-panel" aria-label="Multi-agent collaboration">
+      <div className="collaboration-panel-header">
+        <div>
+          <span>Multi-Agent</span>
+          <strong>Collaboration Trace</strong>
+        </div>
+        <div className="collaboration-panel-actions">
+          <small>{visibleSteps.filter((step) => step.status === "completed").length}/4 complete</small>
+          <button onClick={onCollapse} type="button">
+            Hide
+          </button>
+        </div>
+      </div>
+      <div className="collaboration-steps">
+        {visibleSteps.map((step) => {
+          const role = collaborationRoles.find((item) => item.id === step.role);
+          return (
+            <article className={`collaboration-step ${step.status}`} key={step.role}>
+              <div className="collaboration-step-header">
+                <div>
+                  <strong>{role?.label ?? step.role}</strong>
+                  {step.agent_id ? <span>{step.agent_id}</span> : null}
+                </div>
+                <span className="step-status">{step.status}</span>
+              </div>
+              <div className="collaboration-output">
+                {step.output ? renderMarkdown(step.output) : <p>{role?.empty ?? "Waiting for execution."}</p>}
+              </div>
+              {step.error ? <div className="error">{step.error}</div> : null}
+            </article>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
+
+const collaborationRoles = [
+  { id: "planner", label: "Planner", empty: "No plan has been generated yet." },
+  { id: "worker", label: "Worker", empty: "Waiting for the plan before execution." },
+  { id: "reviewer", label: "Reviewer", empty: "Waiting for worker output to review." },
+  { id: "finalizer", label: "Finalizer", empty: "Waiting to synthesize the final answer." }
+];
 
 function formatValue(value: unknown) {
   return JSON.stringify(value, null, 2);

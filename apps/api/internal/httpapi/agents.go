@@ -78,3 +78,27 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, run)
 }
+
+func (h *Handler) listCollaborationSteps(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/runs/"))
+	id = strings.TrimSpace(strings.TrimSuffix(id, "/collaboration_steps"))
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "run id is required")
+		return
+	}
+
+	if _, ok, err := h.store.GetRun(id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	} else if !ok {
+		writeError(w, http.StatusNotFound, "run not found")
+		return
+	}
+
+	steps, err := h.store.ListCollaborationSteps(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, steps)
+}

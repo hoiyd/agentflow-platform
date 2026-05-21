@@ -22,10 +22,11 @@ type FileStore struct {
 }
 
 type fileData struct {
-	Conversations []domain.Conversation `json:"conversations"`
-	Messages      []domain.Message      `json:"messages"`
-	Agents        []domain.Agent        `json:"agents"`
-	Runs          []domain.Run          `json:"runs"`
+	Conversations      []domain.Conversation      `json:"conversations"`
+	Messages           []domain.Message           `json:"messages"`
+	Agents             []domain.Agent             `json:"agents"`
+	Runs               []domain.Run               `json:"runs"`
+	CollaborationSteps []domain.CollaborationStep `json:"collaboration_steps"`
 }
 
 func NewFileStore(path string) (*FileStore, error) {
@@ -287,6 +288,69 @@ func (s *FileStore) ListRuns() ([]domain.Run, error) {
 	return items, nil
 }
 
+func (s *FileStore) CreateCollaborationStep(step domain.CollaborationStep) (domain.CollaborationStep, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.hasRunLocked(step.RunID) {
+		return domain.CollaborationStep{}, errors.New("run not found")
+	}
+	if !s.hasConversationLocked(step.ConversationID) {
+		return domain.CollaborationStep{}, errors.New("conversation not found")
+	}
+	now := time.Now().UTC()
+	step.ID = strings.TrimSpace(step.ID)
+	if step.ID == "" {
+		step.ID = newID("step")
+	}
+	step.Role = strings.TrimSpace(step.Role)
+	if step.Role == "" {
+		return domain.CollaborationStep{}, errors.New("collaboration role is required")
+	}
+	if step.Status == "" {
+		step.Status = domain.CollaborationStepQueued
+	}
+	step.Input = strings.TrimSpace(step.Input)
+	step.Output = strings.TrimSpace(step.Output)
+	step.Error = strings.TrimSpace(step.Error)
+	step.CreatedAt = now
+	step.UpdatedAt = now
+	s.data.CollaborationSteps = append(s.data.CollaborationSteps, step)
+	return step, s.saveLocked()
+}
+
+func (s *FileStore) UpdateCollaborationStep(id string, status domain.CollaborationStepStatus, output string, errorMessage string) (domain.CollaborationStep, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i := range s.data.CollaborationSteps {
+		if s.data.CollaborationSteps[i].ID == id {
+			s.data.CollaborationSteps[i].Status = status
+			s.data.CollaborationSteps[i].Output = strings.TrimSpace(output)
+			s.data.CollaborationSteps[i].Error = strings.TrimSpace(errorMessage)
+			s.data.CollaborationSteps[i].UpdatedAt = time.Now().UTC()
+			return s.data.CollaborationSteps[i], s.saveLocked()
+		}
+	}
+	return domain.CollaborationStep{}, errors.New("collaboration step not found")
+}
+
+func (s *FileStore) ListCollaborationSteps(runID string) ([]domain.CollaborationStep, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	items := []domain.CollaborationStep{}
+	for _, step := range s.data.CollaborationSteps {
+		if step.RunID == runID {
+			items = append(items, step)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].CreatedAt.Before(items[j].CreatedAt)
+	})
+	return items, nil
+}
+
 func (s *FileStore) load() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
@@ -337,6 +401,15 @@ func (s *FileStore) hasConversationLocked(id string) bool {
 	return false
 }
 
+func (s *FileStore) hasRunLocked(id string) bool {
+	for _, item := range s.data.Runs {
+		if item.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *FileStore) hasAgentLocked(id string) bool {
 	for _, item := range s.data.Agents {
 		if item.ID == id {
@@ -348,10 +421,11 @@ func (s *FileStore) hasAgentLocked(id string) bool {
 
 func emptyFileData() fileData {
 	return fileData{
-		Conversations: []domain.Conversation{},
-		Messages:      []domain.Message{},
-		Agents:        []domain.Agent{},
-		Runs:          []domain.Run{},
+		Conversations:      []domain.Conversation{},
+		Messages:           []domain.Message{},
+		Agents:             []domain.Agent{},
+		Runs:               []domain.Run{},
+		CollaborationSteps: []domain.CollaborationStep{},
 	}
 }
 
@@ -367,6 +441,9 @@ func (s *FileStore) normalizeLoadedDataLocked() {
 	}
 	if s.data.Runs == nil {
 		s.data.Runs = []domain.Run{}
+	}
+	if s.data.CollaborationSteps == nil {
+		s.data.CollaborationSteps = []domain.CollaborationStep{}
 	}
 }
 

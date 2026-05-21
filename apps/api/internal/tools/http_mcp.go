@@ -103,7 +103,7 @@ func (c *HTTPMCPClient) ensureSession(ctx context.Context, server MCPServerConfi
 		headers:     server.Headers,
 		client:      c.client,
 	}
-	initCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	initCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err := session.initialize(initCtx); err != nil {
 		return nil, fmt.Errorf("initialize mcp http server %q: %w", server.ID, err)

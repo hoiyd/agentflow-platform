@@ -48,10 +48,34 @@ type Run struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
+type CollaborationStepStatus string
+
+const (
+	CollaborationStepQueued    CollaborationStepStatus = "queued"
+	CollaborationStepRunning   CollaborationStepStatus = "running"
+	CollaborationStepCompleted CollaborationStepStatus = "completed"
+	CollaborationStepFailed    CollaborationStepStatus = "failed"
+)
+
+type CollaborationStep struct {
+	ID             string                  `json:"id"`
+	RunID          string                  `json:"run_id"`
+	ConversationID string                  `json:"conversation_id"`
+	Role           string                  `json:"role"`
+	AgentID        string                  `json:"agent_id,omitempty"`
+	Status         CollaborationStepStatus `json:"status"`
+	Input          string                  `json:"input"`
+	Output         string                  `json:"output"`
+	Error          string                  `json:"error,omitempty"`
+	CreatedAt      time.Time               `json:"created_at"`
+	UpdatedAt      time.Time               `json:"updated_at"`
+}
+
 type ChatRequest struct {
 	ConversationID string `json:"conversation_id"`
 	AgentID        string `json:"agent_id"`
 	Message        string `json:"message"`
+	Mode           string `json:"mode"`
 }
 
 type ChatChunk struct {
@@ -63,4 +87,7 @@ type ChatChunk struct {
 	MessageID      string `json:"message_id,omitempty"`
 	Delta          string `json:"delta,omitempty"`
 	Error          string `json:"error,omitempty"`
+	Role           string `json:"role,omitempty"`
+	Input          string `json:"input,omitempty"`
+	Output         string `json:"output,omitempty"`
 }

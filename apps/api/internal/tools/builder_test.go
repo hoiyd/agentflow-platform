@@ -77,6 +77,30 @@ func TestBuildRegistryRegistersEnabledMCPTools(t *testing.T) {
 	}
 }
 
+func TestBuildRegistrySkipsUnavailableMCPServerWhenAllowed(t *testing.T) {
+	registry, err := BuildRegistry(context.Background(), BuildOptions{
+		Config: Config{
+			EnabledTools: []string{"calculator", "fake__lookup"},
+			MCPServers: []MCPServerConfig{
+				{ID: "fake", Enabled: true},
+			},
+		},
+		MCPClient:             &fakeMCPClient{listErr: errors.New("offline")},
+		IgnoreMCPServerErrors: true,
+	})
+	if err != nil {
+		t.Fatalf("build registry: %v", err)
+	}
+	definitions := registry.Definitions()
+	if len(definitions) != 1 {
+		t.Fatalf("expected only calculator definition, got %d", len(definitions))
+	}
+	fn := definitions[0]["function"].(map[string]any)
+	if fn["name"] != "calculator" {
+		t.Fatalf("expected calculator definition, got %v", fn["name"])
+	}
+}
+
 func TestBuildRegistryRejectsInvalidMCPTool(t *testing.T) {
 	_, err := BuildRegistry(context.Background(), BuildOptions{
 		Config: Config{

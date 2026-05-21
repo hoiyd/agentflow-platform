@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ type Client struct {
 	baseURL    string
 	model      string
 	httpClient *http.Client
+	timeout    time.Duration
 }
 
 type Message struct {
@@ -48,13 +50,28 @@ type StreamEvent struct {
 }
 
 func NewClient(apiKey string, baseURL string, model string) *Client {
+	return NewClientWithTimeout(apiKey, baseURL, model, 5*time.Minute)
+}
+
+func NewClientWithTimeout(apiKey string, baseURL string, model string, timeout time.Duration) *Client {
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
 	return &Client{
 		apiKey:  strings.TrimSpace(apiKey),
 		baseURL: normalizeBaseURL(baseURL),
 		model:   strings.TrimSpace(model),
 		httpClient: &http.Client{
-			Timeout: 90 * time.Second,
+			Transport: &http.Transport{
+				Proxy:                 http.ProxyFromEnvironment,
+				DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+				ForceAttemptHTTP2:     true,
+				TLSHandshakeTimeout:   15 * time.Second,
+				ResponseHeaderTimeout: timeout,
+				ExpectContinueTimeout: 1 * time.Second,
+			},
 		},
+		timeout: timeout,
 	}
 }
 
@@ -116,6 +133,27 @@ func (c *Client) StreamAgentChatWithTools(ctx context.Context, systemPrompt stri
 	return events, errs
 }
 
+func (c *Client) CompleteText(ctx context.Context, systemPrompt string, prompt string) (string, error) {
+	prompt = strings.TrimSpace(prompt)
+	if c.apiKey == "" {
+		return fallbackCompletion(systemPrompt, prompt), nil
+	}
+
+	messages := []Message{
+		{Role: "system", Content: strings.TrimSpace(systemPrompt)},
+		{Role: "user", Content: prompt},
+	}
+	response, err := c.complete(ctx, map[string]any{
+		"model":       c.model,
+		"messages":    messages,
+		"temperature": 0.2,
+	})
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(response.Choices[0].Message.Content), nil
+}
+
 func (c *Client) streamFallback(ctx context.Context, latest string, chunks chan<- string) {
 	response := "Day 1 smoke test response: backend streaming is working. Add OPENAI_API_KEY in apps/api/.env to enable real OpenAI responses. You said: " + latest
 	words := strings.Split(response, " ")
@@ -127,6 +165,30 @@ func (c *Client) streamFallback(ctx context.Context, latest string, chunks chan<
 			time.Sleep(45 * time.Millisecond)
 		}
 	}
+}
+
+func fallbackCompletion(systemPrompt string, prompt string) string {
+	lower := strings.ToLower(systemPrompt)
+	switch {
+	case strings.Contains(lower, "planner"):
+		return "Plan:\n1. Clarify the user's goal and expected output.\n2. Execute the main work using the selected worker agent.\n3. Review the result for completeness, risks, and missing details.\n\nSuccess criteria:\n- The final answer directly addresses the task.\n- Key assumptions and gaps are visible."
+	case strings.Contains(lower, "worker"):
+		return "Worker result:\nI executed the plan using the provided task context. The result is a concise draft that addresses the requested goal and preserves any important constraints.\n\nTask context:\n" + truncateText(prompt, 600)
+	case strings.Contains(lower, "reviewer"):
+		return "Review:\n- The result follows the requested fixed collaboration flow.\n- No automatic retry was performed in this first version.\n- Remaining risk: verify domain-specific details when the task depends on external facts."
+	case strings.Contains(lower, "finalizer"):
+		return "Final answer:\nThe task was processed through Planner, Worker, Reviewer, and Finalizer stages. The final response combines the plan, execution result, and review notes into one answer.\n\n" + truncateText(prompt, 800)
+	default:
+		return "Generated response:\n" + truncateText(prompt, 800)
+	}
+}
+
+func truncateText(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "..."
 }
 
 func (c *Client) streamFallbackEvents(ctx context.Context, latest string, events chan<- StreamEvent) {

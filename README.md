@@ -43,6 +43,10 @@ GOCACHE="$PWD/../../.cache/go-build" go run ./cmd/server
 The API will run at `http://localhost:8080`.
 
 If `OPENAI_API_KEY` is empty, the backend streams a deterministic local response so the app can still be verified.
+Use `OPENAI_REQUEST_TIMEOUT` to tune the OpenAI-compatible request header
+timeout, for example `OPENAI_REQUEST_TIMEOUT=5m`. Response bodies are not cut
+off by a fixed client-wide timeout, which keeps long completions from failing
+mid-read.
 
 ### 2. Frontend
 
@@ -78,12 +82,15 @@ POST /api/agents
 GET  /api/agents/{id}
 GET  /api/runs
 GET  /api/runs/{id}
+GET  /api/runs/{id}/collaboration_steps
 POST /api/chat
 ```
 
 `POST /api/chat` returns `text/event-stream`. It accepts an optional
 `agent_id`; if omitted, the backend uses the default Narrative Strategist. Each chat
 request creates a Run and streams run metadata before text deltas.
+Set `mode` to `multi_agent` to run the fixed Planner -> Worker -> Reviewer ->
+Finalizer orchestrator. In that mode, `agent_id` selects the Worker persona.
 
 ```bash
 curl -s http://localhost:8080/api/agents
@@ -91,6 +98,10 @@ curl -s http://localhost:8080/api/agents
 curl -N http://localhost:8080/api/chat \
   -H 'Content-Type: application/json' \
   --data '{"agent_id":"agent_coding","message":"Say hello from the coding agent"}'
+
+curl -N http://localhost:8080/api/chat \
+  -H 'Content-Type: application/json' \
+  --data '{"mode":"multi_agent","agent_id":"agent_coding","message":"Draft a launch checklist"}'
 
 curl -s http://localhost:8080/api/runs
 ```

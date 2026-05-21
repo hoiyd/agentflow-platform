@@ -20,16 +20,27 @@ export type ChatEvent =
       conversation_id: string;
       run_id: string;
       agent_id: string;
-      status: "queued" | "running" | "completed" | "failed" | string;
+      status: "idle" | "queued" | "running" | "completed" | "failed" | string;
     }
   | { type: "delta"; delta: string }
+  | {
+      type: "collaboration_step";
+      conversation_id: string;
+      run_id: string;
+      agent_id?: string;
+      role: "planner" | "worker" | "reviewer" | "finalizer" | string;
+      status: "idle" | "queued" | "running" | "completed" | "failed" | string;
+      input?: string;
+      output?: string;
+      error?: string;
+    }
   | {
       type: "done";
       conversation_id: string;
       message_id: string;
       run_id?: string;
       agent_id?: string;
-      status?: "queued" | "running" | "completed" | "failed" | string;
+      status?: "idle" | "queued" | "running" | "completed" | "failed" | string;
     }
   | { type: "error"; error: string };
 
@@ -50,6 +61,31 @@ export type ToolInfo = {
   source: "builtin" | "mcp" | string;
   source_id?: string;
   enabled: boolean;
+};
+
+export type ChatMode = "single" | "multi_agent";
+
+export type RunInfo = {
+  id: string;
+  agent_id: string;
+  conversation_id: string;
+  status: "idle" | "queued" | "running" | "completed" | "failed" | string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CollaborationStepInfo = {
+  id: string;
+  run_id: string;
+  conversation_id: string;
+  role: string;
+  agent_id?: string;
+  status: "idle" | "queued" | "running" | "completed" | "failed" | string;
+  input: string;
+  output: string;
+  error?: string;
+  created_at: string;
+  updated_at: string;
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
@@ -85,7 +121,7 @@ export async function listMessages(conversationId: string): Promise<Message[]> {
 }
 
 export async function streamChat(
-  input: { conversation_id?: string; agent_id?: string; message: string },
+  input: { conversation_id?: string; agent_id?: string; message: string; mode?: ChatMode },
   onEvent: (event: ChatEvent) => void
 ) {
   const response = await fetch(`${API_BASE}/api/chat`, {
@@ -135,6 +171,24 @@ export async function listTools(): Promise<ToolInfo[]> {
   const response = await fetch(`${API_BASE}/api/tools`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load tools: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function listRuns(): Promise<RunInfo[]> {
+  const response = await fetch(`${API_BASE}/api/runs`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Failed to load runs: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function listCollaborationSteps(runId: string): Promise<CollaborationStepInfo[]> {
+  const response = await fetch(`${API_BASE}/api/runs/${runId}/collaboration_steps`, {
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to load collaboration steps: ${response.status}`);
   }
   return response.json();
 }

@@ -24,7 +24,7 @@ func NewManager(ctx context.Context, configPath string, mcpClient MCPClient) (*M
 	if err != nil {
 		return nil, err
 	}
-	registry, err := BuildRegistry(ctx, BuildOptions{Config: cfg, MCPClient: mcpClient})
+	registry, err := BuildRegistry(ctx, BuildOptions{Config: cfg, MCPClient: mcpClient, IgnoreMCPServerErrors: true})
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func (m *Manager) reloadIfChangedLocked(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	registry, err := BuildRegistry(ctx, BuildOptions{Config: cfg, MCPClient: m.mcpClient})
+	registry, err := BuildRegistry(ctx, BuildOptions{Config: cfg, MCPClient: m.mcpClient, IgnoreMCPServerErrors: true})
 	if err != nil {
 		return err
 	}
