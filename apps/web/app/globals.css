@@ -461,12 +461,49 @@ input {
   font-size: 14px;
 }
 
-.agent-summary span {
+.agent-description {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
   color: var(--muted);
   font-size: 13px;
+}
+
+.agent-description span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-description.expanded {
+  align-items: start;
+}
+
+.agent-description.expanded span {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.agent-description-toggle {
+  min-width: 28px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 7px;
+  line-height: 1;
+}
+
+.agent-description-toggle:hover {
+  color: var(--text);
+  border-color: #bac3d0;
 }
 
 .run-pill {

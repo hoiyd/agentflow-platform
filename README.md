@@ -53,6 +53,9 @@ npm run dev
 ```
 
 The web app will run at `http://localhost:3000`.
+`npm run dev` runs Next.js in development mode with file watching enabled, so
+frontend edits are visible after refreshing the page without restarting the
+process. Use `npm run start` only for a production build.
 
 ### 3. Verify
 
@@ -79,7 +82,7 @@ POST /api/chat
 ```
 
 `POST /api/chat` returns `text/event-stream`. It accepts an optional
-`agent_id`; if omitted, the backend uses the default Planner Agent. Each chat
+`agent_id`; if omitted, the backend uses the default Narrative Strategist. Each chat
 request creates a Run and streams run metadata before text deltas.
 
 ```bash

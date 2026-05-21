@@ -1,7 +1,9 @@
 package store
 
 import (
+	"os"
 	"testing"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
@@ -26,6 +28,52 @@ func TestFileStoreSeedsDefaultAgents(t *testing.T) {
 	}
 	if !ok || agent.ID != "agent_planner" {
 		t.Fatalf("expected planner default agent, got %#v", agent)
+	}
+}
+
+func TestFileStoreMigratesDefaultAgentText(t *testing.T) {
+	path := t.TempDir() + "/agentflow.json"
+	now := time.Now().UTC()
+	data := `{
+  "conversations": [],
+  "messages": [],
+  "agents": [
+    {
+      "id": "agent_planner",
+      "name": "Planner Agent",
+      "description": "Breaks ambiguous requests into ordered plans and tracks next actions.",
+      "system_prompt": "You are AgentFlow's Planner Agent. Convert goals into clear, ordered plans with dependencies, risks, and next actions.",
+      "tools": ["get_current_time", "mock_web_search"],
+      "created_at": "` + now.Format(time.RFC3339Nano) + `",
+      "updated_at": "` + now.Format(time.RFC3339Nano) + `"
+    }
+  ],
+  "runs": []
+}`
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatalf("write store fixture: %v", err)
+	}
+
+	store, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	agent, ok, err := store.GetAgent("agent_planner")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected migrated agent")
+	}
+	if agent.Name != "Narrative Strategist" {
+		t.Fatalf("expected migrated planner name, got %q", agent.Name)
+	}
+	if agent.Description == "Breaks ambiguous requests into ordered plans and tracks next actions." {
+		t.Fatalf("expected migrated planner description, got %q", agent.Description)
+	}
+	if agent.SystemPrompt == "You are AgentFlow's Planner Agent. Convert goals into clear, ordered plans with dependencies, risks, and next actions." {
+		t.Fatalf("expected migrated planner system prompt, got %q", agent.SystemPrompt)
 	}
 }
 

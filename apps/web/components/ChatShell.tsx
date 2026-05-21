@@ -33,6 +33,7 @@ export function ChatShell() {
   const [error, setError] = useState("");
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [activeAgentId, setActiveAgentId] = useState("");
+  const [isAgentDescriptionExpanded, setIsAgentDescriptionExpanded] = useState(false);
   const [agentsError, setAgentsError] = useState("");
   const [runState, setRunState] = useState<{
     id: string;
@@ -63,6 +64,10 @@ export function ChatShell() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    setIsAgentDescriptionExpanded(false);
+  }, [activeAgentId]);
 
   async function refreshConversations(nextActiveId?: string) {
     const items = await listConversations();
@@ -338,7 +343,30 @@ export function ChatShell() {
               </label>
               <div className="agent-summary">
                 <strong>{activeAgent?.name ?? "No agent loaded"}</strong>
-                <span>{activeAgent?.description ?? agentsError}</span>
+                <div
+                  className={`agent-description ${
+                    isAgentDescriptionExpanded ? "expanded" : ""
+                  }`}
+                >
+                  <span>{activeAgent?.description ?? agentsError}</span>
+                  {activeAgent?.description ? (
+                    <button
+                      aria-expanded={isAgentDescriptionExpanded}
+                      aria-label={
+                        isAgentDescriptionExpanded
+                          ? "Collapse agent description"
+                          : "Expand agent description"
+                      }
+                      className="agent-description-toggle"
+                      onClick={() =>
+                        setIsAgentDescriptionExpanded((current) => !current)
+                      }
+                      type="button"
+                    >
+                      {isAgentDescriptionExpanded ? "Less" : "..."}
+                    </button>
+                  ) : null}
+                </div>
               </div>
               {runState ? (
                 <div className={`run-pill ${runState.status}`}>
