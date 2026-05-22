@@ -1,3 +1,19 @@
+## Principles
+### 1. think before coding
+state your assumptions. ask when unsure. never guess.
+
+### 2. simplicity first
+write the minimum code that solves the problem.
+no abstractions nobody asked for.
+
+### 3. surgical changes
+don't touch code unrelated to the request.
+every changed line must trace back to what was asked.
+
+### 4. goal-driven execution
+turn vague instructions into verifiable success criteria
+before writing a single line.
+
 ## Command Output
 
 Protect context usage. **Any command with unknown or potentially large output must be byte-capped.**

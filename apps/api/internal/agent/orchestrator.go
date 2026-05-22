@@ -27,10 +27,23 @@ type PreparedCollaborationRun struct {
 }
 
 type CollaborationEvent struct {
-	Type  string
-	Run   domain.Run
-	Step  domain.CollaborationStep
-	Delta string
+	Type     string
+	Run      domain.Run
+	Step     domain.CollaborationStep
+	Progress AutonomousProgress
+	Delta    string
+}
+
+type AutonomousProgress struct {
+	Iteration         int
+	MaxIterations     int
+	ElapsedSeconds    int
+	MaxRuntimeSeconds int
+	OutputChars       int
+	MaxOutputChars    int
+	ToolCalls         int
+	MaxToolCalls      int
+	StopReason        string
 }
 
 func (r *Runtime) PrepareCollaborationRun(ctx context.Context, agentID string, conversationID string) (PreparedCollaborationRun, error) {

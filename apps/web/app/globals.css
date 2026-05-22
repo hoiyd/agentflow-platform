@@ -905,6 +905,66 @@ textarea:disabled {
   padding: 5px 9px;
 }
 
+.human-input-panel {
+  border-bottom: 1px solid rgba(86, 76, 66, 0.12);
+  background: #fff6e8;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.human-input-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.human-input-header span {
+  display: block;
+  color: var(--accent-dark);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.human-input-header strong {
+  color: var(--ink);
+  display: block;
+  font-size: 15px;
+  line-height: 1.35;
+  margin-top: 3px;
+}
+
+.human-input-header button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fffaf5;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-weight: 760;
+  padding: 0 16px;
+}
+
+.human-input-header button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.human-input-panel p {
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.human-input-panel textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
 .autonomous-iterations {
   min-height: 0;
   overflow: auto;

@@ -20,6 +20,7 @@ import {
   listRuns,
   listTools,
   listMessages,
+  resumeRun,
   setToolEnabled,
   streamChat
 } from "../lib/api";
@@ -47,6 +48,18 @@ export type CollaborationRole = {
   empty: string;
 };
 
+type AutonomousProgress = {
+  iteration: number;
+  maxIterations: number;
+  elapsedSeconds: number;
+  maxRuntimeSeconds: number;
+  outputChars: number;
+  maxOutputChars: number;
+  toolCalls: number;
+  maxToolCalls: number;
+  stopReason?: string;
+};
+
 export function ChatShell() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string>("");
@@ -59,10 +72,13 @@ export function ChatShell() {
   const [isAgentDescriptionExpanded, setIsAgentDescriptionExpanded] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>("multi_agent");
   const [collaborationSteps, setCollaborationSteps] = useState<CollaborationStepView[]>([]);
+  const [autonomousProgress, setAutonomousProgress] = useState<AutonomousProgress | null>(null);
+  const [humanInputDraft, setHumanInputDraft] = useState("");
   const [isCollaborationPanelOpen, setIsCollaborationPanelOpen] = useState(true);
   const [selectedCollaborationRole, setSelectedCollaborationRole] = useState("planner");
   const [planDraft, setPlanDraft] = useState("");
   const [isContinuingRun, setIsContinuingRun] = useState(false);
+  const [isResumingRun, setIsResumingRun] = useState(false);
   const [isCancelingRun, setIsCancelingRun] = useState(false);
   const [agentsError, setAgentsError] = useState("");
   const [runState, setRunState] = useState<{
@@ -88,6 +104,10 @@ export function ChatShell() {
   const showCollaborationDag = chatMode === "multi_agent";
   const showAutonomousTrace = chatMode === "autonomous";
   const isAwaitingPlanApproval = chatMode === "multi_agent" && runState?.status === "waiting_for_user";
+  const isAwaitingHumanInput =
+    chatMode === "autonomous" &&
+    runState?.status === "waiting_for_user" &&
+    collaborationSteps.some((step) => step.role === "human_input" && step.status === "running");
   const isTerminalRun =
     runState?.status === "completed" ||
     runState?.status === "failed" ||
@@ -96,7 +116,10 @@ export function ChatShell() {
     chatMode === "autonomous" &&
     !!runState?.id &&
     !isTerminalRun &&
-    (isStreaming || runState.status === "running" || runState.status === "canceling");
+    (isStreaming ||
+      runState.status === "running" ||
+      runState.status === "canceling" ||
+      runState.status === "waiting_for_user");
 
   useEffect(() => {
     void refreshConversations();
@@ -154,6 +177,7 @@ export function ChatShell() {
       if (!run) {
         setCollaborationSteps([]);
         setPlanDraft("");
+        setHumanInputDraft("");
         return;
       }
       setRunState({
@@ -170,9 +194,12 @@ export function ChatShell() {
       }
       const planner = steps.find((step) => step.role === "planner");
       setPlanDraft(planner?.output ?? "");
+      const humanInput = steps.find((step) => step.role === "human_input" && step.status === "running");
+      setHumanInputDraft((current) => (humanInput ? current : ""));
     } catch {
       setCollaborationSteps([]);
       setPlanDraft("");
+      setHumanInputDraft("");
     }
   }
 
@@ -205,6 +232,8 @@ export function ChatShell() {
     setError("");
     setRunState(null);
     setCollaborationSteps([]);
+    setAutonomousProgress(null);
+    setHumanInputDraft("");
     setPlanDraft("");
     setIsCancelingRun(false);
     setView("chat");
@@ -216,6 +245,8 @@ export function ChatShell() {
     setError("");
     setRunState(null);
     setCollaborationSteps([]);
+    setAutonomousProgress(null);
+    setHumanInputDraft("");
     setPlanDraft("");
     setIsCancelingRun(false);
     setView("chat");
@@ -244,6 +275,8 @@ export function ChatShell() {
         const nextConversation = items[0];
         setRunState(null);
         setCollaborationSteps([]);
+        setAutonomousProgress(null);
+        setHumanInputDraft("");
         setPlanDraft("");
         setIsCancelingRun(false);
         setMessages([]);
@@ -277,7 +310,7 @@ export function ChatShell() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || isStreaming || isAwaitingPlanApproval) {
+    if (!content || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput) {
       return;
     }
 
@@ -285,6 +318,8 @@ export function ChatShell() {
     setError("");
     setRunState(null);
     setCollaborationSteps([]);
+    setAutonomousProgress(null);
+    setHumanInputDraft("");
     setPlanDraft("");
     setIsCancelingRun(false);
     setIsStreaming(true);
@@ -342,6 +377,9 @@ export function ChatShell() {
             if (event.role === "planner" && event.output) {
               setPlanDraft(event.output);
             }
+          }
+          if (event.type === "autonomous_progress") {
+            setAutonomousProgress(toAutonomousProgress(event));
           }
           if (event.type === "error") {
             setError(event.error);
@@ -433,6 +471,77 @@ export function ChatShell() {
     }
   }
 
+  async function handleResumeAutonomous(userInputOverride?: string) {
+    const runID = runState?.id;
+    const userInput = (userInputOverride ?? humanInputDraft).trim();
+    if (!runID || !userInput || isResumingRun || isStreaming) {
+      return;
+    }
+
+    setError("");
+    setHumanInputDraft(userInput);
+    setIsResumingRun(true);
+    setIsStreaming(true);
+
+    const assistantDraft: DraftMessage = {
+      id: `local-assistant-${Date.now()}`,
+      conversation_id: activeId,
+      role: "assistant",
+      content: "",
+      created_at: new Date().toISOString()
+    };
+    setMessages((items) => [...items, assistantDraft]);
+
+    try {
+      await resumeRun({ run_id: runID, user_input: userInput }, (event) => {
+        if (event.type === "run") {
+          setRunState({
+            id: event.run_id,
+            agentId: event.agent_id,
+            status: event.status
+          });
+          if (event.status !== "waiting_for_user") {
+            setHumanInputDraft("");
+          }
+        }
+        if (event.type === "collaboration_step") {
+          setCollaborationSteps((items) => upsertCollaborationStep(items, event));
+        }
+        if (event.type === "autonomous_progress") {
+          setAutonomousProgress(toAutonomousProgress(event));
+        }
+        if (event.type === "delta") {
+          setMessages((items) =>
+            items.map((item) =>
+              item.id === assistantDraft.id ? { ...item, content: item.content + event.delta } : item
+            )
+          );
+        }
+        if (event.type === "error") {
+          setError(event.error);
+        }
+        if (event.type === "done") {
+          setRunState((current) => ({
+            id: event.run_id ?? current?.id ?? runID,
+            agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
+            status: event.status ?? "completed"
+          }));
+        }
+      });
+
+      if (activeId) {
+        const persisted = await listMessages(activeId);
+        setMessages(persisted);
+        await refreshCollaborationSteps(activeId);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected resume error");
+    } finally {
+      setIsResumingRun(false);
+      setIsStreaming(false);
+    }
+  }
+
   async function handleCancelRun() {
     const runID = runState?.id;
     if (!runID || isCancelingRun) {
@@ -447,6 +556,9 @@ export function ChatShell() {
         agentId: canceled.agent_id,
         status: canceled.status
       });
+      if (canceled.status === "canceled" || canceled.status === "completed" || canceled.status === "failed") {
+        setIsCancelingRun(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to cancel run");
       setIsCancelingRun(false);
@@ -581,6 +693,8 @@ export function ChatShell() {
                   setRunState(null);
                   setIsCancelingRun(false);
                   setCollaborationSteps([]);
+                  setAutonomousProgress(null);
+                  setHumanInputDraft("");
                   setPlanDraft("");
                 }}
               />
@@ -621,8 +735,13 @@ export function ChatShell() {
               showAutonomousTrace ? (
                 <AutonomousPanel
                   isCanceling={isCancelingRun || runState?.status === "canceling"}
+                  humanInputDraft={humanInputDraft}
+                  isResuming={isResumingRun}
                   onCancel={handleCancelRun}
                   onCollapse={() => setIsCollaborationPanelOpen(false)}
+                  onHumanInputChange={setHumanInputDraft}
+                  onResume={handleResumeAutonomous}
+                  progress={autonomousProgress}
                   runStatus={runState?.status ?? ""}
                   steps={collaborationSteps}
                 />
@@ -718,7 +837,7 @@ export function ChatShell() {
             {error ? <div className="error">{error}</div> : null}
             <div className="composer-inner">
               <textarea
-                disabled={isAwaitingPlanApproval}
+                disabled={isAwaitingPlanApproval || isAwaitingHumanInput}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
@@ -730,12 +849,14 @@ export function ChatShell() {
                 placeholder={
                   isAwaitingPlanApproval
                     ? "Review and edit the plan in Collaboration Trace, then continue."
+                    : isAwaitingHumanInput
+                      ? "Answer the question in Autonomous Trace, then continue."
                     : "Ask AgentFlow anything..."
                 }
               />
               <button
                 className="send"
-                disabled={isStreaming || isAwaitingPlanApproval || input.trim().length === 0}
+                disabled={isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput || input.trim().length === 0}
               >
                 Send
               </button>
@@ -801,6 +922,30 @@ function toCollaborationStepView(step: CollaborationStepView) {
   };
 }
 
+function toAutonomousProgress(event: {
+  iteration?: number;
+  max_iterations?: number;
+  elapsed_seconds?: number;
+  max_runtime_seconds?: number;
+  output_chars?: number;
+  max_output_chars?: number;
+  tool_calls?: number;
+  max_tool_calls?: number;
+  stop_reason?: string;
+}): AutonomousProgress {
+  return {
+    iteration: event.iteration ?? 0,
+    maxIterations: event.max_iterations ?? 0,
+    elapsedSeconds: event.elapsed_seconds ?? 0,
+    maxRuntimeSeconds: event.max_runtime_seconds ?? 0,
+    outputChars: event.output_chars ?? 0,
+    maxOutputChars: event.max_output_chars ?? 0,
+    toolCalls: event.tool_calls ?? 0,
+    maxToolCalls: event.max_tool_calls ?? 0,
+    stopReason: event.stop_reason
+  };
+}
+
 function upsertCollaborationStep(items: CollaborationStepView[], event: CollaborationStepView) {
   const next = {
     role: event.role,
@@ -821,22 +966,33 @@ function upsertCollaborationStep(items: CollaborationStepView[], event: Collabor
 }
 
 function AutonomousPanel({
+  humanInputDraft,
   isCanceling,
+  isResuming,
   onCancel,
   onCollapse,
+  onHumanInputChange,
+  onResume,
+  progress,
   runStatus,
   steps
 }: {
+  humanInputDraft: string;
   isCanceling: boolean;
+  isResuming: boolean;
   onCancel: () => void;
   onCollapse: () => void;
+  onHumanInputChange: (value: string) => void;
+  onResume: (value?: string) => void;
+  progress: AutonomousProgress | null;
   runStatus: string;
   steps: CollaborationStepView[];
 }) {
   const activeIterations = groupAutonomousSteps(steps);
-  const latestIteration = activeIterations[activeIterations.length - 1]?.iteration ?? 0;
+  const latestIteration = progress?.iteration ?? activeIterations[activeIterations.length - 1]?.iteration ?? 0;
   const completedSteps = steps.filter((step) => step.status === "completed").length;
-  const canStop = runStatus === "running" || runStatus === "canceling";
+  const canStop = runStatus === "running" || runStatus === "canceling" || runStatus === "waiting_for_user";
+  const humanInputStep = steps.find((step) => step.role === "human_input" && step.status === "running");
 
   return (
     <aside className="collaboration-panel autonomous-panel" aria-label="Autonomous trace">
@@ -847,7 +1003,8 @@ function AutonomousPanel({
         </div>
         <div className="collaboration-panel-actions">
           <small>
-            Iteration {latestIteration || 0} · {completedSteps} steps complete
+            Iteration {latestIteration || 0}
+            {progress?.maxIterations ? ` / ${progress.maxIterations}` : ""} · {completedSteps} steps complete
           </small>
           {canStop ? (
             <button
@@ -866,9 +1023,44 @@ function AutonomousPanel({
       </div>
       <div className="autonomous-limit-strip">
         <span>Status: {runStatus || "idle"}</span>
-        <span>Default max iterations: 5</span>
-        <span>Default runtime cap: 5m</span>
+        <span>
+          Runtime: {formatDuration(progress?.elapsedSeconds ?? 0)}
+          {progress?.maxRuntimeSeconds ? ` / ${formatDuration(progress.maxRuntimeSeconds)}` : ""}
+        </span>
+        <span>
+          Output: {progress?.outputChars ?? 0}
+          {progress?.maxOutputChars ? ` / ${progress.maxOutputChars}` : ""}
+        </span>
+        <span>
+          Tool calls: {progress?.toolCalls ?? 0}
+          {progress?.maxToolCalls ? ` / ${progress.maxToolCalls}` : ""}
+        </span>
+        {progress?.stopReason ? <span>Stop: {progress.stopReason}</span> : null}
       </div>
+      {humanInputStep ? (
+        <section className="human-input-panel" aria-label="Human input required">
+          <div className="human-input-header">
+            <div>
+              <span>Input required</span>
+              <strong>{humanInputStep.output || "Please provide the missing information."}</strong>
+            </div>
+            <button
+              disabled={isResuming || humanInputDraft.trim().length === 0}
+              onClick={() => onResume(humanInputDraft)}
+              type="button"
+            >
+              {isResuming ? "Continuing..." : "Submit & Continue"}
+            </button>
+          </div>
+          {humanInputStep.input ? <p>{humanInputStep.input}</p> : null}
+          <textarea
+            disabled={isResuming}
+            onChange={(event) => onHumanInputChange(event.target.value)}
+            placeholder="Provide the missing details..."
+            value={humanInputDraft}
+          />
+        </section>
+      ) : null}
       <div className="autonomous-iterations">
         {activeIterations.length === 0 ? (
           <div className="autonomous-empty">Waiting for the first autonomous iteration.</div>
@@ -1042,6 +1234,7 @@ const autonomousRoles: CollaborationRole[] = [
   { id: "act", label: "Act", empty: "Waiting to execute the current plan." },
   { id: "review", label: "Review", empty: "Waiting to review the action result." },
   { id: "decide", label: "Decide", empty: "Waiting to decide whether to continue." },
+  { id: "human_input", label: "Human Input", empty: "Waiting to see whether user input is needed." },
   { id: "final", label: "Final", empty: "Waiting for final synthesis." }
 ];
 
@@ -1054,6 +1247,18 @@ function groupAutonomousSteps(steps: CollaborationStepView[]) {
   return [...grouped.entries()]
     .sort(([left], [right]) => left - right)
     .map(([iteration, items]) => ({ iteration, steps: items }));
+}
+
+function formatDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return "0s";
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes <= 0) {
+    return `${remainingSeconds}s`;
+  }
+  return `${minutes}m ${remainingSeconds}s`;
 }
 
 function formatValue(value: unknown) {

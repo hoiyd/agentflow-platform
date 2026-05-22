@@ -86,6 +86,10 @@ type ContinueRunRequest struct {
 	Plan string `json:"plan"`
 }
 
+type ResumeRunRequest struct {
+	UserInput string `json:"user_input"`
+}
+
 type ChatChunk struct {
 	Type           string `json:"type"`
 	ConversationID string `json:"conversation_id,omitempty"`
@@ -97,6 +101,16 @@ type ChatChunk struct {
 	Error          string `json:"error,omitempty"`
 	Role           string `json:"role,omitempty"`
 	Iteration      int    `json:"iteration,omitempty"`
+	MaxIterations  int    `json:"max_iterations,omitempty"`
+	ElapsedSeconds int    `json:"elapsed_seconds,omitempty"`
+	MaxRuntimeSec  int    `json:"max_runtime_seconds,omitempty"`
+	OutputChars    int    `json:"output_chars,omitempty"`
+	MaxOutputChars int    `json:"max_output_chars,omitempty"`
+	ToolCalls      int    `json:"tool_calls,omitempty"`
+	MaxToolCalls   int    `json:"max_tool_calls,omitempty"`
+	StopReason     string `json:"stop_reason,omitempty"`
+	Question       string `json:"question,omitempty"`
+	Context        string `json:"context,omitempty"`
 	Input          string `json:"input,omitempty"`
 	Output         string `json:"output,omitempty"`
 }

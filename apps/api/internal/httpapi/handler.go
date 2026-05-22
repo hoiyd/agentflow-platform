@@ -69,6 +69,8 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
 		h.listRuns(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/continue"):
 		h.continueRun(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/resume"):
+		h.resumeRun(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/cancel"):
 		h.cancelRun(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/collaboration_steps"):

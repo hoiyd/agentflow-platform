@@ -31,6 +31,21 @@ export type ChatEvent =
         | "canceled"
         | string;
     }
+  | {
+      type: "autonomous_progress";
+      conversation_id: string;
+      run_id: string;
+      agent_id?: string;
+      iteration?: number;
+      max_iterations?: number;
+      elapsed_seconds?: number;
+      max_runtime_seconds?: number;
+      output_chars?: number;
+      max_output_chars?: number;
+      tool_calls?: number;
+      max_tool_calls?: number;
+      stop_reason?: string;
+    }
   | { type: "delta"; delta: string }
   | {
       type: "collaboration_step";
@@ -205,6 +220,23 @@ export async function continueRun(
 
   if (!response.ok || !response.body) {
     throw new Error(`Continue request failed: ${response.status}`);
+  }
+
+  await readChatEventStream(response, onEvent);
+}
+
+export async function resumeRun(
+  input: { run_id: string; user_input: string },
+  onEvent: (event: ChatEvent) => void
+) {
+  const response = await fetch(`${API_BASE}/api/runs/${input.run_id}/resume`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_input: input.user_input })
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(`Resume request failed: ${response.status}`);
   }
 
   await readChatEventStream(response, onEvent);
