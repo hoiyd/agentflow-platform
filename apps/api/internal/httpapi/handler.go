@@ -20,11 +20,15 @@ type Handler struct {
 }
 
 func NewHandler(store store.Store, openAI *openai.Client, tools *tools.Manager, allowedOrigins []string) *Handler {
+	return NewHandlerWithRouterMode(store, openAI, tools, allowedOrigins, agent.RouterModeAuto)
+}
+
+func NewHandlerWithRouterMode(store store.Store, openAI *openai.Client, tools *tools.Manager, allowedOrigins []string, routerMode string) *Handler {
 	return &Handler{
 		store:          store,
 		openAI:         openAI,
 		tools:          tools,
-		agentRuntime:   agent.NewRuntime(store, openAI, tools),
+		agentRuntime:   agent.NewRuntimeWithRouterMode(store, openAI, tools, routerMode),
 		allowedOrigins: allowedOrigins,
 	}
 }

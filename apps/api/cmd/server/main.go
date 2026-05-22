@@ -36,7 +36,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("create tools manager: %v", err)
 	}
-	handler := httpapi.NewHandler(fileStore, openAIClient, toolManager, splitOrigins(cfg.AllowedOrigins))
+	handler := httpapi.NewHandlerWithRouterMode(fileStore, openAIClient, toolManager, splitOrigins(cfg.AllowedOrigins), cfg.RouterMode)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -45,6 +45,7 @@ func main() {
 	}
 
 	log.Printf("AgentFlow API listening on http://localhost:%s", cfg.Port)
+	log.Printf("AgentFlow router mode: %s", cfg.RouterMode)
 	if cfg.OpenAIAPIKey == "" {
 		log.Println("OPENAI_API_KEY is empty; using local streaming fallback for verification")
 	}

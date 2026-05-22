@@ -173,6 +173,14 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 	var assistant strings.Builder
 	for event := range events {
 		switch event.Type {
+		case "run":
+			writeSSE(w, "run", domain.ChatChunk{
+				Type:           "run",
+				ConversationID: event.Run.ConversationID,
+				RunID:          event.Run.ID,
+				AgentID:        event.Run.AgentID,
+				Status:         string(event.Run.Status),
+			})
 		case "collaboration_step":
 			writeSSE(w, "collaboration_step", domain.ChatChunk{
 				Type:           "collaboration_step",
@@ -296,6 +304,14 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 	var assistant strings.Builder
 	for event := range events {
 		switch event.Type {
+		case "run":
+			writeSSE(w, "run", domain.ChatChunk{
+				Type:           "run",
+				ConversationID: event.Run.ConversationID,
+				RunID:          event.Run.ID,
+				AgentID:        event.Run.AgentID,
+				Status:         string(event.Run.Status),
+			})
 		case "collaboration_step":
 			writeSSE(w, "collaboration_step", domain.ChatChunk{
 				Type:           "collaboration_step",

@@ -11,9 +11,10 @@ import (
 )
 
 type Runtime struct {
-	store  store.Store
-	openAI *openai.Client
-	tools  *tools.Manager
+	store      store.Store
+	openAI     *openai.Client
+	tools      *tools.Manager
+	routerMode string
 }
 
 type PreparedRun struct {
@@ -23,7 +24,11 @@ type PreparedRun struct {
 }
 
 func NewRuntime(store store.Store, openAI *openai.Client, tools *tools.Manager) *Runtime {
-	return &Runtime{store: store, openAI: openAI, tools: tools}
+	return NewRuntimeWithRouterMode(store, openAI, tools, RouterModeAuto)
+}
+
+func NewRuntimeWithRouterMode(store store.Store, openAI *openai.Client, tools *tools.Manager, routerMode string) *Runtime {
+	return &Runtime{store: store, openAI: openAI, tools: tools, routerMode: NormalizeRouterMode(routerMode)}
 }
 
 func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversationID string) (PreparedRun, error) {

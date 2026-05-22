@@ -240,6 +240,23 @@ func (s *FileStore) CreateRun(agentID string, conversationID string) (domain.Run
 	return run, s.saveLocked()
 }
 
+func (s *FileStore) UpdateRunAgent(id string, agentID string) (domain.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.hasAgentLocked(agentID) {
+		return domain.Run{}, errors.New("agent not found")
+	}
+	for i := range s.data.Runs {
+		if s.data.Runs[i].ID == id {
+			s.data.Runs[i].AgentID = agentID
+			s.data.Runs[i].UpdatedAt = time.Now().UTC()
+			return s.data.Runs[i], s.saveLocked()
+		}
+	}
+	return domain.Run{}, errors.New("run not found")
+}
+
 func (s *FileStore) UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

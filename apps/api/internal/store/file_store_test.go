@@ -103,6 +103,14 @@ func TestFileStoreRunLifecycle(t *testing.T) {
 		t.Fatalf("expected running run with started_at, got %#v", run)
 	}
 
+	run, err = store.UpdateRunAgent(run.ID, "agent_coding")
+	if err != nil {
+		t.Fatalf("update run agent: %v", err)
+	}
+	if run.AgentID != "agent_coding" {
+		t.Fatalf("expected updated run agent, got %q", run.AgentID)
+	}
+
 	run, err = store.UpdateRunStatus(run.ID, domain.RunCompleted, "")
 	if err != nil {
 		t.Fatalf("mark completed: %v", err)

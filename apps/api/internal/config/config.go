@@ -13,6 +13,7 @@ type Config struct {
 	OpenAIBaseURL  string
 	OpenAIModel    string
 	OpenAITimeout  time.Duration
+	RouterMode     string
 	DataPath       string
 	ToolConfigPath string
 	AllowedOrigins string
@@ -27,9 +28,19 @@ func Load() Config {
 		OpenAIBaseURL:  getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		OpenAIModel:    getEnv("OPENAI_MODEL", "gpt-4o-mini"),
 		OpenAITimeout:  getDurationEnv("OPENAI_REQUEST_TIMEOUT", 5*time.Minute),
+		RouterMode:     normalizeRouterMode(getEnv("ROUTER_MODE", "auto")),
 		DataPath:       getEnv("DATA_PATH", ".data/agentflow.json"),
 		ToolConfigPath: getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
 		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
+	}
+}
+
+func normalizeRouterMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "query_match":
+		return "query_match"
+	default:
+		return "auto"
 	}
 }
 

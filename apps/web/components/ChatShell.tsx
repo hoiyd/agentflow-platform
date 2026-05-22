@@ -231,7 +231,7 @@ export function ChatShell() {
       await streamChat(
         {
           conversation_id: conversationId || undefined,
-          agent_id: activeAgentId || undefined,
+          agent_id: chatMode === "single" ? activeAgentId || undefined : undefined,
           mode: chatMode,
           message: content
         },
@@ -480,6 +480,7 @@ export function ChatShell() {
             </section>
             {showCollaborationPanel && isCollaborationPanelOpen ? (
               <CollaborationPanel
+                agents={agents}
                 isContinuing={isContinuingRun}
                 onContinue={handleContinuePlan}
                 onCollapse={() => setIsCollaborationPanelOpen(false)}
@@ -645,6 +646,7 @@ function upsertCollaborationStep(items: CollaborationStepView[], event: Collabor
 }
 
 function CollaborationPanel({
+  agents,
   isContinuing,
   onCollapse,
   onContinue,
@@ -653,6 +655,7 @@ function CollaborationPanel({
   setPlanDraft,
   steps
 }: {
+  agents: AgentInfo[];
   isContinuing: boolean;
   onCollapse: () => void;
   onContinue: (plan?: string) => void;
@@ -665,6 +668,10 @@ function CollaborationPanel({
   const isAwaitingPlanApproval = runStatus === "waiting_for_user";
   const plannerStep = steps.find((step) => step.role === "planner");
   const planEditorRef = useRef<HTMLDivElement | null>(null);
+  const agentNames = useMemo(
+    () => new Map(agents.map((agent) => [agent.id, agent.name])),
+    [agents]
+  );
   const visibleSteps = collaborationRoles.map((role, index) => {
     const existing = steps.find((step) => step.role === role.id);
     if (existing) {
@@ -684,7 +691,9 @@ function CollaborationPanel({
           <strong>Collaboration Trace</strong>
         </div>
         <div className="collaboration-panel-actions">
-          <small>{visibleSteps.filter((step) => step.status === "completed").length}/4 complete</small>
+          <small>
+            {visibleSteps.filter((step) => step.status === "completed").length}/{collaborationRoles.length} complete
+          </small>
           <button onClick={onCollapse} type="button">
             Hide
           </button>
@@ -729,7 +738,11 @@ function CollaborationPanel({
               <div className="collaboration-step-header">
                 <div>
                   <strong>{role?.label ?? step.role}</strong>
-                  {step.agent_id ? <span>{step.agent_id}</span> : null}
+                  {step.agent_id ? (
+                    <span>
+                      {agentNames.get(step.agent_id) ?? "Selected agent"} ({step.agent_id})
+                    </span>
+                  ) : null}
                 </div>
                 <span className="step-status">{step.status}</span>
               </div>
@@ -753,6 +766,7 @@ function CollaborationPanel({
 
 const collaborationRoles = [
   { id: "planner", label: "Planner", empty: "No plan has been generated yet." },
+  { id: "router", label: "Router", empty: "Waiting to choose the best worker agent." },
   { id: "worker", label: "Worker", empty: "Waiting for the plan before execution." },
   { id: "reviewer", label: "Reviewer", empty: "Waiting for worker output to review." },
   { id: "finalizer", label: "Finalizer", empty: "Waiting to synthesize the final answer." }

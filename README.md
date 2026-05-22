@@ -91,9 +91,15 @@ POST /api/chat
 `agent_id`; if omitted, the backend uses the default Narrative Strategist. Each chat
 request creates a Run and streams run metadata before text deltas.
 Set `mode` to `multi_agent` to run the fixed Planner -> Worker -> Reviewer ->
-Finalizer orchestrator. In that mode, `agent_id` selects the Worker persona.
-The Planner step pauses with `waiting_for_user`; edit the plan in the UI or call
-`POST /api/runs/{id}/continue` with the approved plan to continue.
+Finalizer orchestrator. In that mode, the Planner pauses with
+`waiting_for_user`; edit the plan in the UI or call `POST /api/runs/{id}/continue`
+with the approved plan to continue. After approval, a Router step selects the
+Worker persona dynamically. `ROUTER_MODE=auto` uses LLM semantic routing when an
+API key is available and falls back to query matching plus rules when needed.
+`ROUTER_MODE=query_match` always uses the deterministic query matching plus rule
+scoring path. The Router decision is visible in the Collaboration Trace, and the
+API logs `router_candidate_score`, `router_selected`, and
+`collaboration_router_decision` to stdout for debugging.
 
 ```bash
 curl -s http://localhost:8080/api/agents
@@ -104,7 +110,7 @@ curl -N http://localhost:8080/api/chat \
 
 curl -N http://localhost:8080/api/chat \
   -H 'Content-Type: application/json' \
-  --data '{"mode":"multi_agent","agent_id":"agent_coding","message":"Draft a launch checklist"}'
+  --data '{"mode":"multi_agent","message":"Draft a launch checklist"}'
 
 curl -N http://localhost:8080/api/runs/run_123/continue \
   -H 'Content-Type: application/json' \

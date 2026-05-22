@@ -75,6 +75,10 @@ func NewClientWithTimeout(apiKey string, baseURL string, model string, timeout t
 	}
 }
 
+func (c *Client) HasAPIKey() bool {
+	return c.apiKey != ""
+}
+
 func (c *Client) StreamChat(ctx context.Context, history []domain.Message, latest string) (<-chan string, <-chan error) {
 	chunks := make(chan string)
 	errs := make(chan error, 1)

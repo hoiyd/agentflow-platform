@@ -28,7 +28,7 @@ export type ChatEvent =
       conversation_id: string;
       run_id: string;
       agent_id?: string;
-      role: "planner" | "worker" | "reviewer" | "finalizer" | string;
+      role: "planner" | "router" | "worker" | "reviewer" | "finalizer" | string;
       status: "idle" | "queued" | "running" | "waiting_for_user" | "completed" | "failed" | string;
       input?: string;
       output?: string;
