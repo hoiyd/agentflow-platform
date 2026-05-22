@@ -78,6 +78,53 @@ func (s *FileStore) GetConversation(id string) (domain.Conversation, bool, error
 	return domain.Conversation{}, false, nil
 }
 
+func (s *FileStore) DeleteConversation(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.hasConversationLocked(id) {
+		return ErrNotFound("conversation")
+	}
+
+	conversations := make([]domain.Conversation, 0, len(s.data.Conversations))
+	for _, conversation := range s.data.Conversations {
+		if conversation.ID != id {
+			conversations = append(conversations, conversation)
+		}
+	}
+	s.data.Conversations = conversations
+
+	messages := make([]domain.Message, 0, len(s.data.Messages))
+	for _, message := range s.data.Messages {
+		if message.ConversationID != id {
+			messages = append(messages, message)
+		}
+	}
+	s.data.Messages = messages
+
+	runIDs := map[string]bool{}
+	runs := make([]domain.Run, 0, len(s.data.Runs))
+	for _, run := range s.data.Runs {
+		if run.ConversationID == id {
+			runIDs[run.ID] = true
+			continue
+		}
+		runs = append(runs, run)
+	}
+	s.data.Runs = runs
+
+	steps := make([]domain.CollaborationStep, 0, len(s.data.CollaborationSteps))
+	for _, step := range s.data.CollaborationSteps {
+		if step.ConversationID == id || runIDs[step.RunID] {
+			continue
+		}
+		steps = append(steps, step)
+	}
+	s.data.CollaborationSteps = steps
+
+	return s.saveLocked()
+}
+
 func (s *FileStore) ListMessages(conversationID string) ([]domain.Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

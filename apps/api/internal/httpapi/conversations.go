@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"agentflow-platform/apps/api/internal/store"
 )
 
 func (h *Handler) listConversations(w http.ResponseWriter, r *http.Request) {
@@ -27,6 +29,25 @@ func (h *Handler) createConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, conversation)
+}
+
+func (h *Handler) deleteConversation(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/conversations/"))
+	if id == "" || strings.Contains(id, "/") {
+		writeError(w, http.StatusBadRequest, "conversation id is required")
+		return
+	}
+
+	if err := h.store.DeleteConversation(id); err != nil {
+		if store.IsNotFound(err) {
+			writeError(w, http.StatusNotFound, "conversation not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }
 
 func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {

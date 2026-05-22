@@ -110,6 +110,15 @@ export async function createConversation(title: string): Promise<Conversation> {
   return response.json();
 }
 
+export async function deleteConversation(conversationId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/conversations/${conversationId}`, {
+    method: "DELETE"
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to delete conversation: ${response.status}`);
+  }
+}
+
 export async function listMessages(conversationId: string): Promise<Message[]> {
   const response = await fetch(`${API_BASE}/api/conversations/${conversationId}/messages`, {
     cache: "no-store"

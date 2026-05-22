@@ -49,6 +49,8 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
 		h.listConversations(w, r)
 	case r.Method == http.MethodPost && path == "/api/conversations":
 		h.createConversation(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/conversations/") && !strings.HasSuffix(path, "/messages"):
+		h.deleteConversation(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/conversations/") && strings.HasSuffix(path, "/messages"):
 		h.listMessages(w, r)
 	case r.Method == http.MethodPost && path == "/api/chat":
@@ -90,7 +92,7 @@ func (h *Handler) withCORS(next http.Handler) http.Handler {
 			w.Header().Set("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

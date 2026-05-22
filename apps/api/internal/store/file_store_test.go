@@ -120,6 +120,67 @@ func TestFileStoreRunLifecycle(t *testing.T) {
 	}
 }
 
+func TestFileStoreDeleteConversationCascades(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	conversation, err := store.CreateConversation("Delete me")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	if _, err := store.AddMessage(conversation.ID, "user", "hello"); err != nil {
+		t.Fatalf("add message: %v", err)
+	}
+	run, err := store.CreateRun("agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if _, err := store.CreateCollaborationStep(domain.CollaborationStep{
+		RunID:          run.ID,
+		ConversationID: conversation.ID,
+		Role:           "planner",
+		Status:         domain.CollaborationStepCompleted,
+		Input:          "plan",
+		Output:         "done",
+	}); err != nil {
+		t.Fatalf("create collaboration step: %v", err)
+	}
+
+	if err := store.DeleteConversation(conversation.ID); err != nil {
+		t.Fatalf("delete conversation: %v", err)
+	}
+
+	if _, ok, err := store.GetConversation(conversation.ID); err != nil {
+		t.Fatalf("get conversation after delete: %v", err)
+	} else if ok {
+		t.Fatal("expected conversation to be removed")
+	}
+
+	messages, err := store.ListMessages(conversation.ID)
+	if err != nil {
+		t.Fatalf("list messages after delete: %v", err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("expected no messages after delete, got %d", len(messages))
+	}
+
+	if _, ok, err := store.GetRun(run.ID); err != nil {
+		t.Fatalf("get run after delete: %v", err)
+	} else if ok {
+		t.Fatal("expected run to be removed")
+	}
+
+	steps, err := store.ListCollaborationSteps(run.ID)
+	if err != nil {
+		t.Fatalf("list steps after delete: %v", err)
+	}
+	if len(steps) != 0 {
+		t.Fatalf("expected no steps after delete, got %d", len(steps))
+	}
+}
+
 func TestFileStoreCreateAgent(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

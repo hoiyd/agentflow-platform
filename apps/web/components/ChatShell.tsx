@@ -12,6 +12,7 @@ import {
   ToolInfo,
   continueRun,
   createConversation,
+  deleteConversation as deleteConversationApi,
   listCollaborationSteps,
   listAgents,
   listConversations,
@@ -21,6 +22,7 @@ import {
   setToolEnabled,
   streamChat
 } from "../lib/api";
+import { CollaborationDag } from "./CollaborationDag";
 
 type DraftMessage = Pick<Message, "role" | "content"> & {
   id: string;
@@ -28,13 +30,19 @@ type DraftMessage = Pick<Message, "role" | "content"> & {
   created_at: string;
 };
 
-type CollaborationStepView = {
+export type CollaborationStepView = {
   role: string;
   agent_id?: string;
   status: string;
   input?: string;
   output?: string;
   error?: string;
+};
+
+export type CollaborationRole = {
+  id: string;
+  label: string;
+  empty: string;
 };
 
 export function ChatShell() {
@@ -47,9 +55,10 @@ export function ChatShell() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [activeAgentId, setActiveAgentId] = useState("");
   const [isAgentDescriptionExpanded, setIsAgentDescriptionExpanded] = useState(false);
-  const [chatMode, setChatMode] = useState<ChatMode>("single");
+  const [chatMode, setChatMode] = useState<ChatMode>("multi_agent");
   const [collaborationSteps, setCollaborationSteps] = useState<CollaborationStepView[]>([]);
   const [isCollaborationPanelOpen, setIsCollaborationPanelOpen] = useState(true);
+  const [selectedCollaborationRole, setSelectedCollaborationRole] = useState("planner");
   const [planDraft, setPlanDraft] = useState("");
   const [isContinuingRun, setIsContinuingRun] = useState(false);
   const [agentsError, setAgentsError] = useState("");
@@ -95,19 +104,33 @@ export function ChatShell() {
     }
   }, [chatMode]);
 
+  useEffect(() => {
+    if (selectedCollaborationRole === "planner") {
+      return;
+    }
+    if (!collaborationSteps.some((step) => step.role === selectedCollaborationRole)) {
+      setSelectedCollaborationRole("planner");
+    }
+  }, [collaborationSteps, selectedCollaborationRole]);
+
   async function refreshConversations(nextActiveId?: string) {
     const items = await listConversations();
     setConversations(items);
     if (nextActiveId) {
       setActiveId(nextActiveId);
+      await loadConversation(nextActiveId);
       return;
     }
     if (!activeId && items[0]) {
       setActiveId(items[0].id);
-      const loaded = await listMessages(items[0].id);
-      setMessages(loaded);
-      await refreshCollaborationSteps(items[0].id);
+      await loadConversation(items[0].id);
     }
+  }
+
+  async function loadConversation(conversationId: string) {
+    const loaded = await listMessages(conversationId);
+    setMessages(loaded);
+    await refreshCollaborationSteps(conversationId);
   }
 
   async function refreshCollaborationSteps(conversationId: string) {
@@ -166,9 +189,7 @@ export function ChatShell() {
     setPlanDraft("");
     setView("chat");
     setActiveId(id);
-    const loaded = await listMessages(id);
-    setMessages(loaded);
-    await refreshCollaborationSteps(id);
+    await loadConversation(id);
   }
 
   async function startNewConversation() {
@@ -181,6 +202,42 @@ export function ChatShell() {
     setConversations((items) => [conversation, ...items]);
     setActiveId(conversation.id);
     setMessages([]);
+  }
+
+  async function handleDeleteConversation(conversationId: string) {
+    if (isStreaming || isContinuingRun) {
+      return;
+    }
+    const confirmed = window.confirm("Delete this conversation? This cannot be undone.");
+    if (!confirmed) {
+      return;
+    }
+
+    setError("");
+    try {
+      await deleteConversationApi(conversationId);
+      const items = await listConversations();
+      setConversations(items);
+
+      if (conversationId === activeId) {
+        const nextConversation = items[0];
+        setRunState(null);
+        setCollaborationSteps([]);
+        setPlanDraft("");
+        setMessages([]);
+
+        if (nextConversation) {
+          setActiveId(nextConversation.id);
+          setView("chat");
+          await loadConversation(nextConversation.id);
+        } else {
+          setActiveId("");
+          setView("chat");
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete conversation");
+    }
   }
 
   async function toggleTool(tool: ToolInfo) {
@@ -274,10 +331,6 @@ export function ChatShell() {
       );
 
       await refreshConversations(conversationId);
-      if (conversationId) {
-        const persisted = await listMessages(conversationId);
-        setMessages(persisted);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected chat error");
     } finally {
@@ -373,18 +426,43 @@ export function ChatShell() {
           Tools
         </button>
         <div className="conversation-list">
-          {conversations.map((conversation) => (
-            <button
-              className={`conversation-item ${conversation.id === activeId ? "active" : ""}`}
-              key={conversation.id}
-              onClick={() => openConversation(conversation.id)}
-            >
-              <span className="conversation-title">{conversation.title}</span>
-              <span className="conversation-date">
-                {new Date(conversation.updated_at).toLocaleString()}
-              </span>
-            </button>
-          ))}
+          {conversations.map((conversation) => {
+            const isActiveConversation = conversation.id === activeId;
+            return (
+              <div
+                className={`conversation-item ${isActiveConversation ? "active" : ""}`}
+                key={conversation.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openConversation(conversation.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    void openConversation(conversation.id);
+                  }
+                }}
+              >
+                <div className="conversation-item-main">
+                  <span className="conversation-title">{conversation.title}</span>
+                  <span className="conversation-date">
+                    {new Date(conversation.updated_at).toLocaleString()}
+                  </span>
+                </div>
+                <button
+                  aria-label={`Delete conversation ${conversation.title}`}
+                  className="conversation-delete"
+                  disabled={isStreaming || isContinuingRun}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleDeleteConversation(conversation.id);
+                  }}
+                  type="button"
+                >
+                  Delete
+                </button>
+              </div>
+            );
+          })}
         </div>
       </aside>
 
@@ -436,6 +514,17 @@ export function ChatShell() {
               showCollaborationPanel && isCollaborationPanelOpen ? "with-collaboration" : ""
             }`}
           >
+            {showCollaborationPanel && isCollaborationPanelOpen ? (
+              <CollaborationDag
+                activeRole={selectedCollaborationRole}
+                agents={agents}
+                className="collaboration-dag-standalone"
+                onSelectRole={setSelectedCollaborationRole}
+                roles={collaborationRoles}
+                runStatus={runState?.status ?? ""}
+                steps={collaborationSteps}
+              />
+            ) : null}
             <section className="messages">
               <ModeChooser
                 chatMode={chatMode}
@@ -488,6 +577,7 @@ export function ChatShell() {
                 runStatus={runState?.status ?? ""}
                 setPlanDraft={setPlanDraft}
                 steps={collaborationSteps}
+                selectedRole={selectedCollaborationRole}
               />
             ) : null}
           </section>
@@ -652,6 +742,7 @@ function CollaborationPanel({
   onContinue,
   planDraft,
   runStatus,
+  selectedRole,
   setPlanDraft,
   steps
 }: {
@@ -661,6 +752,7 @@ function CollaborationPanel({
   onContinue: (plan?: string) => void;
   planDraft: string;
   runStatus: string;
+  selectedRole: string;
   setPlanDraft: (value: string) => void;
   steps: CollaborationStepView[];
 }) {
@@ -734,7 +826,10 @@ function CollaborationPanel({
           const role = collaborationRoles.find((item) => item.id === step.role);
           const isPlannerWaiting = step.role === "planner" && isAwaitingPlanApproval;
           return (
-            <article className={`collaboration-step ${step.status}`} key={step.role}>
+            <article
+              className={`collaboration-step ${step.status} ${selectedRole === step.role ? "selected" : ""}`}
+              key={step.role}
+            >
               <div className="collaboration-step-header">
                 <div>
                   <strong>{role?.label ?? step.role}</strong>
@@ -764,7 +859,7 @@ function CollaborationPanel({
   );
 }
 
-const collaborationRoles = [
+const collaborationRoles: CollaborationRole[] = [
   { id: "planner", label: "Planner", empty: "No plan has been generated yet." },
   { id: "router", label: "Router", empty: "Waiting to choose the best worker agent." },
   { id: "worker", label: "Worker", empty: "Waiting for the plan before execution." },
