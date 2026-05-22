@@ -30,10 +30,11 @@ type Agent struct {
 type RunStatus string
 
 const (
-	RunQueued    RunStatus = "queued"
-	RunRunning   RunStatus = "running"
-	RunCompleted RunStatus = "completed"
-	RunFailed    RunStatus = "failed"
+	RunQueued         RunStatus = "queued"
+	RunRunning        RunStatus = "running"
+	RunWaitingForUser RunStatus = "waiting_for_user"
+	RunCompleted      RunStatus = "completed"
+	RunFailed         RunStatus = "failed"
 )
 
 type Run struct {
@@ -76,6 +77,10 @@ type ChatRequest struct {
 	AgentID        string `json:"agent_id"`
 	Message        string `json:"message"`
 	Mode           string `json:"mode"`
+}
+
+type ContinueRunRequest struct {
+	Plan string `json:"plan"`
 }
 
 type ChatChunk struct {

@@ -10,6 +10,7 @@ import {
   Conversation,
   Message,
   ToolInfo,
+  continueRun,
   createConversation,
   listCollaborationSteps,
   listAgents,
@@ -49,6 +50,8 @@ export function ChatShell() {
   const [chatMode, setChatMode] = useState<ChatMode>("single");
   const [collaborationSteps, setCollaborationSteps] = useState<CollaborationStepView[]>([]);
   const [isCollaborationPanelOpen, setIsCollaborationPanelOpen] = useState(true);
+  const [planDraft, setPlanDraft] = useState("");
+  const [isContinuingRun, setIsContinuingRun] = useState(false);
   const [agentsError, setAgentsError] = useState("");
   const [runState, setRunState] = useState<{
     id: string;
@@ -69,7 +72,8 @@ export function ChatShell() {
     () => agents.find((agent) => agent.id === activeAgentId),
     [activeAgentId, agents]
   );
-  const showCollaborationPanel = chatMode === "multi_agent" || collaborationSteps.length > 0;
+  const showCollaborationPanel = chatMode === "multi_agent";
+  const isAwaitingPlanApproval = chatMode === "multi_agent" && runState?.status === "waiting_for_user";
 
   useEffect(() => {
     void refreshConversations();
@@ -86,10 +90,10 @@ export function ChatShell() {
   }, [activeAgentId]);
 
   useEffect(() => {
-    if (chatMode === "multi_agent" || collaborationSteps.length > 0) {
+    if (chatMode === "multi_agent") {
       setIsCollaborationPanelOpen(true);
     }
-  }, [chatMode, collaborationSteps.length]);
+  }, [chatMode]);
 
   async function refreshConversations(nextActiveId?: string) {
     const items = await listConversations();
@@ -112,12 +116,21 @@ export function ChatShell() {
       const run = runs.find((item) => item.conversation_id === conversationId);
       if (!run) {
         setCollaborationSteps([]);
+        setPlanDraft("");
         return;
       }
+      setRunState({
+        id: run.id,
+        agentId: run.agent_id,
+        status: run.status
+      });
       const steps = await listCollaborationSteps(run.id);
       setCollaborationSteps(steps.map(toCollaborationStepView));
+      const planner = steps.find((step) => step.role === "planner");
+      setPlanDraft(planner?.output ?? "");
     } catch {
       setCollaborationSteps([]);
+      setPlanDraft("");
     }
   }
 
@@ -150,6 +163,7 @@ export function ChatShell() {
     setError("");
     setRunState(null);
     setCollaborationSteps([]);
+    setPlanDraft("");
     setView("chat");
     setActiveId(id);
     const loaded = await listMessages(id);
@@ -161,6 +175,7 @@ export function ChatShell() {
     setError("");
     setRunState(null);
     setCollaborationSteps([]);
+    setPlanDraft("");
     setView("chat");
     const conversation = await createConversation("New conversation");
     setConversations((items) => [conversation, ...items]);
@@ -183,7 +198,7 @@ export function ChatShell() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || isStreaming) {
+    if (!content || isStreaming || isAwaitingPlanApproval) {
       return;
     }
 
@@ -191,6 +206,7 @@ export function ChatShell() {
     setError("");
     setRunState(null);
     setCollaborationSteps([]);
+    setPlanDraft("");
     setIsStreaming(true);
 
     const optimisticUser: DraftMessage = {
@@ -240,6 +256,9 @@ export function ChatShell() {
           }
           if (event.type === "collaboration_step") {
             setCollaborationSteps((items) => upsertCollaborationStep(items, event));
+            if (event.role === "planner" && event.output) {
+              setPlanDraft(event.output);
+            }
           }
           if (event.type === "error") {
             setError(event.error);
@@ -262,6 +281,74 @@ export function ChatShell() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected chat error");
     } finally {
+      setIsStreaming(false);
+    }
+  }
+
+  async function handleContinuePlan(planOverride?: string) {
+    const runID = runState?.id;
+    const plan = (planOverride ?? planDraft).trim();
+    if (!runID || !plan || isContinuingRun || isStreaming) {
+      return;
+    }
+
+    setError("");
+    setPlanDraft(plan);
+    setIsContinuingRun(true);
+    setIsStreaming(true);
+
+    const assistantDraft: DraftMessage = {
+      id: `local-assistant-${Date.now()}`,
+      conversation_id: activeId,
+      role: "assistant",
+      content: "",
+      created_at: new Date().toISOString()
+    };
+    setMessages((items) => [...items, assistantDraft]);
+
+    try {
+      await continueRun({ run_id: runID, plan }, (event) => {
+        if (event.type === "run") {
+          setRunState({
+            id: event.run_id,
+            agentId: event.agent_id,
+            status: event.status
+          });
+        }
+        if (event.type === "collaboration_step") {
+          setCollaborationSteps((items) => upsertCollaborationStep(items, event));
+          if (event.role === "planner" && event.output) {
+            setPlanDraft(event.output);
+          }
+        }
+        if (event.type === "delta") {
+          setMessages((items) =>
+            items.map((item) =>
+              item.id === assistantDraft.id ? { ...item, content: item.content + event.delta } : item
+            )
+          );
+        }
+        if (event.type === "error") {
+          setError(event.error);
+        }
+        if (event.type === "done") {
+          setRunState((current) => ({
+            id: event.run_id ?? current?.id ?? runID,
+            agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
+            status: event.status ?? "completed"
+          }));
+        }
+      });
+
+      if (activeId) {
+        const persisted = await listMessages(activeId);
+        setMessages(persisted);
+        await refreshCollaborationSteps(activeId);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unexpected continue error");
+    } finally {
+      setIsContinuingRun(false);
       setIsStreaming(false);
     }
   }
@@ -350,13 +437,25 @@ export function ChatShell() {
             }`}
           >
             <section className="messages">
+              <ModeChooser
+                chatMode={chatMode}
+                disabled={isStreaming}
+                setChatMode={(mode) => {
+                  setChatMode(mode);
+                  setRunState(null);
+                  if (mode === "single") {
+                    setCollaborationSteps([]);
+                    setPlanDraft("");
+                  }
+                }}
+              />
               {showCollaborationPanel && !isCollaborationPanelOpen ? (
                 <button
                   className="collaboration-rail-toggle"
                   onClick={() => setIsCollaborationPanelOpen(true)}
                   type="button"
                 >
-                  Show Collaboration Trace
+                  {isAwaitingPlanApproval ? "Review Plan & Continue" : "Show Collaboration Trace"}
                 </button>
               ) : null}
               {messages.length === 0 ? (
@@ -381,7 +480,12 @@ export function ChatShell() {
             </section>
             {showCollaborationPanel && isCollaborationPanelOpen ? (
               <CollaborationPanel
+                isContinuing={isContinuingRun}
+                onContinue={handleContinuePlan}
                 onCollapse={() => setIsCollaborationPanelOpen(false)}
+                planDraft={planDraft}
+                runStatus={runState?.status ?? ""}
+                setPlanDraft={setPlanDraft}
                 steps={collaborationSteps}
               />
             ) : null}
@@ -390,80 +494,68 @@ export function ChatShell() {
 
         {view === "chat" ? (
           <form className="composer" onSubmit={handleSubmit}>
-            <div className="agent-bar">
-              <div className="mode-toggle" aria-label="Chat mode">
-                <button
-                  className={chatMode === "single" ? "active" : ""}
-                  disabled={isStreaming}
-                  onClick={() => setChatMode("single")}
-                  type="button"
-                >
-                  Single
-                </button>
-                <button
-                  className={chatMode === "multi_agent" ? "active" : ""}
-                  disabled={isStreaming}
-                  onClick={() => setChatMode("multi_agent")}
-                  type="button"
-                >
-                  Multi-Agent
-                </button>
-              </div>
-              <label className="agent-select">
-                <span>{chatMode === "multi_agent" ? "Worker Agent" : "Agent"}</span>
-                <select
-                  value={activeAgentId}
-                  disabled={isStreaming || agents.length === 0}
-                  onChange={(event) => {
-                    setActiveAgentId(event.target.value);
-                    setRunState(null);
-                  }}
-                >
-                  {agents.map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {agent.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="agent-summary">
-                <strong>{activeAgent?.name ?? "No agent loaded"}</strong>
-                <div
-                  className={`agent-description ${
-                    isAgentDescriptionExpanded ? "expanded" : ""
-                  }`}
-                >
-                  <span>{activeAgent?.description ?? agentsError}</span>
-                  {activeAgent?.description ? (
-                    <button
-                      aria-expanded={isAgentDescriptionExpanded}
-                      aria-label={
-                        isAgentDescriptionExpanded
-                          ? "Collapse agent description"
-                          : "Expand agent description"
-                      }
-                      className="agent-description-toggle"
-                      onClick={() =>
-                        setIsAgentDescriptionExpanded((current) => !current)
-                      }
-                      type="button"
-                    >
-                      {isAgentDescriptionExpanded ? "Less" : "..."}
-                    </button>
-                  ) : null}
+            {chatMode === "single" ? (
+              <div className="agent-bar single">
+                <label className="agent-select">
+                  <span>Agent</span>
+                  <select
+                    value={activeAgentId}
+                    disabled={isStreaming || agents.length === 0}
+                    onChange={(event) => {
+                      setActiveAgentId(event.target.value);
+                      setRunState(null);
+                    }}
+                  >
+                    {agents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="agent-summary">
+                  <strong>{activeAgent?.name ?? "No agent loaded"}</strong>
+                  <div
+                    className={`agent-description ${
+                      isAgentDescriptionExpanded ? "expanded" : ""
+                    }`}
+                  >
+                    <span>{activeAgent?.description ?? agentsError}</span>
+                    {activeAgent?.description ? (
+                      <button
+                        aria-expanded={isAgentDescriptionExpanded}
+                        aria-label={
+                          isAgentDescriptionExpanded
+                            ? "Collapse agent description"
+                            : "Expand agent description"
+                        }
+                        className="agent-description-toggle"
+                        onClick={() =>
+                          setIsAgentDescriptionExpanded((current) => !current)
+                        }
+                        type="button"
+                      >
+                        {isAgentDescriptionExpanded ? "Less" : "..."}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-              {runState ? (
+            ) : runState ? (
+              <div className="agent-bar multi_agent">
                 <div className={`run-pill ${runState.status}`}>
                   <span>{runState.status}</span>
                   <code>{runState.id}</code>
                 </div>
-              ) : null}
-            </div>
-            {agentsError ? <div className="error">{agentsError}</div> : null}
+              </div>
+            ) : null}
+            {chatMode === "single" && agentsError ? (
+              <div className="error">{agentsError}</div>
+            ) : null}
             {error ? <div className="error">{error}</div> : null}
             <div className="composer-inner">
               <textarea
+                disabled={isAwaitingPlanApproval}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
@@ -472,9 +564,16 @@ export function ChatShell() {
                     void handleSubmit(event);
                   }
                 }}
-                placeholder="Ask AgentFlow anything..."
+                placeholder={
+                  isAwaitingPlanApproval
+                    ? "Review and edit the plan in Collaboration Trace, then continue."
+                    : "Ask AgentFlow anything..."
+                }
               />
-              <button className="send" disabled={isStreaming || input.trim().length === 0}>
+              <button
+                className="send"
+                disabled={isStreaming || isAwaitingPlanApproval || input.trim().length === 0}
+              >
                 Send
               </button>
             </div>
@@ -482,6 +581,39 @@ export function ChatShell() {
         ) : null}
       </main>
     </div>
+  );
+}
+
+function ModeChooser({
+  chatMode,
+  disabled,
+  setChatMode
+}: {
+  chatMode: ChatMode;
+  disabled: boolean;
+  setChatMode: (mode: ChatMode) => void;
+}) {
+  return (
+    <section className="mode-chooser" aria-label="Chat mode">
+      <button
+        className={chatMode === "single" ? "active" : ""}
+        disabled={disabled}
+        onClick={() => setChatMode("single")}
+        type="button"
+      >
+        <span>Single Agent</span>
+        <strong>Direct chat</strong>
+      </button>
+      <button
+        className={chatMode === "multi_agent" ? "active" : ""}
+        disabled={disabled}
+        onClick={() => setChatMode("multi_agent")}
+        type="button"
+      >
+        <span>Multi-Agent</span>
+        <strong>Plan, edit, execute</strong>
+      </button>
+    </section>
   );
 }
 
@@ -513,13 +645,26 @@ function upsertCollaborationStep(items: CollaborationStepView[], event: Collabor
 }
 
 function CollaborationPanel({
+  isContinuing,
   onCollapse,
+  onContinue,
+  planDraft,
+  runStatus,
+  setPlanDraft,
   steps
 }: {
+  isContinuing: boolean;
   onCollapse: () => void;
+  onContinue: (plan?: string) => void;
+  planDraft: string;
+  runStatus: string;
+  setPlanDraft: (value: string) => void;
   steps: CollaborationStepView[];
 }) {
   const hasStarted = steps.length > 0;
+  const isAwaitingPlanApproval = runStatus === "waiting_for_user";
+  const plannerStep = steps.find((step) => step.role === "planner");
+  const planEditorRef = useRef<HTMLDivElement | null>(null);
   const visibleSteps = collaborationRoles.map((role, index) => {
     const existing = steps.find((step) => step.role === role.id);
     if (existing) {
@@ -545,9 +690,40 @@ function CollaborationPanel({
           </button>
         </div>
       </div>
+      {isAwaitingPlanApproval ? (
+        <section className="plan-review" aria-label="Review generated plan">
+          <div className="plan-review-header">
+            <div>
+              <span>Action required</span>
+              <strong>Review the plan before execution</strong>
+            </div>
+            <button
+              disabled={isContinuing || planDraft.trim().length === 0}
+              onClick={() => onContinue(planEditorRef.current?.innerText ?? planDraft)}
+              type="button"
+            >
+              {isContinuing ? "Continuing..." : "Approve & Continue"}
+            </button>
+          </div>
+          <div
+            aria-label="Editable generated plan"
+            className="plan-rich-editor markdown"
+            contentEditable={!isContinuing}
+            onBlur={(event) => setPlanDraft(event.currentTarget.innerText)}
+            ref={planEditorRef}
+            role="textbox"
+            suppressContentEditableWarning
+            tabIndex={0}
+          >
+            {renderMarkdownTokens(lexer(planDraft))}
+          </div>
+          <p>Edit the rendered plan directly. The bottom chat input is paused until you continue this run.</p>
+        </section>
+      ) : null}
       <div className="collaboration-steps">
         {visibleSteps.map((step) => {
           const role = collaborationRoles.find((item) => item.id === step.role);
+          const isPlannerWaiting = step.role === "planner" && isAwaitingPlanApproval;
           return (
             <article className={`collaboration-step ${step.status}`} key={step.role}>
               <div className="collaboration-step-header">
@@ -558,7 +734,13 @@ function CollaborationPanel({
                 <span className="step-status">{step.status}</span>
               </div>
               <div className="collaboration-output">
-                {step.output ? renderMarkdown(step.output) : <p>{role?.empty ?? "Waiting for execution."}</p>}
+                {isPlannerWaiting ? (
+                  plannerStep?.output ? renderMarkdown(plannerStep.output) : <p>Plan is ready for review above.</p>
+                ) : step.output ? (
+                  renderMarkdown(step.output)
+                ) : (
+                  <p>{role?.empty ?? "Waiting for execution."}</p>
+                )}
               </div>
               {step.error ? <div className="error">{step.error}</div> : null}
             </article>

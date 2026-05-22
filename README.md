@@ -83,6 +83,7 @@ GET  /api/agents/{id}
 GET  /api/runs
 GET  /api/runs/{id}
 GET  /api/runs/{id}/collaboration_steps
+POST /api/runs/{id}/continue
 POST /api/chat
 ```
 
@@ -91,6 +92,8 @@ POST /api/chat
 request creates a Run and streams run metadata before text deltas.
 Set `mode` to `multi_agent` to run the fixed Planner -> Worker -> Reviewer ->
 Finalizer orchestrator. In that mode, `agent_id` selects the Worker persona.
+The Planner step pauses with `waiting_for_user`; edit the plan in the UI or call
+`POST /api/runs/{id}/continue` with the approved plan to continue.
 
 ```bash
 curl -s http://localhost:8080/api/agents
@@ -102,6 +105,10 @@ curl -N http://localhost:8080/api/chat \
 curl -N http://localhost:8080/api/chat \
   -H 'Content-Type: application/json' \
   --data '{"mode":"multi_agent","agent_id":"agent_coding","message":"Draft a launch checklist"}'
+
+curl -N http://localhost:8080/api/runs/run_123/continue \
+  -H 'Content-Type: application/json' \
+  --data '{"plan":"1. Confirm scope\\n2. Draft checklist\\n3. Review and finalize"}'
 
 curl -s http://localhost:8080/api/runs
 ```

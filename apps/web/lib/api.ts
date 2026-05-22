@@ -20,7 +20,7 @@ export type ChatEvent =
       conversation_id: string;
       run_id: string;
       agent_id: string;
-      status: "idle" | "queued" | "running" | "completed" | "failed" | string;
+      status: "idle" | "queued" | "running" | "waiting_for_user" | "completed" | "failed" | string;
     }
   | { type: "delta"; delta: string }
   | {
@@ -29,7 +29,7 @@ export type ChatEvent =
       run_id: string;
       agent_id?: string;
       role: "planner" | "worker" | "reviewer" | "finalizer" | string;
-      status: "idle" | "queued" | "running" | "completed" | "failed" | string;
+      status: "idle" | "queued" | "running" | "waiting_for_user" | "completed" | "failed" | string;
       input?: string;
       output?: string;
       error?: string;
@@ -37,10 +37,10 @@ export type ChatEvent =
   | {
       type: "done";
       conversation_id: string;
-      message_id: string;
+      message_id?: string;
       run_id?: string;
       agent_id?: string;
-      status?: "idle" | "queued" | "running" | "completed" | "failed" | string;
+      status?: "idle" | "queued" | "running" | "waiting_for_user" | "completed" | "failed" | string;
     }
   | { type: "error"; error: string };
 
@@ -69,7 +69,7 @@ export type RunInfo = {
   id: string;
   agent_id: string;
   conversation_id: string;
-  status: "idle" | "queued" | "running" | "completed" | "failed" | string;
+  status: "idle" | "queued" | "running" | "waiting_for_user" | "completed" | "failed" | string;
   created_at: string;
   updated_at: string;
 };
@@ -80,7 +80,7 @@ export type CollaborationStepInfo = {
   conversation_id: string;
   role: string;
   agent_id?: string;
-  status: "idle" | "queued" | "running" | "completed" | "failed" | string;
+  status: "idle" | "queued" | "running" | "waiting_for_user" | "completed" | "failed" | string;
   input: string;
   output: string;
   error?: string;
@@ -134,6 +134,30 @@ export async function streamChat(
     throw new Error(`Chat request failed: ${response.status}`);
   }
 
+  await readChatEventStream(response, onEvent);
+}
+
+export async function continueRun(
+  input: { run_id: string; plan: string },
+  onEvent: (event: ChatEvent) => void
+) {
+  const response = await fetch(`${API_BASE}/api/runs/${input.run_id}/continue`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan: input.plan })
+  });
+
+  if (!response.ok || !response.body) {
+    throw new Error(`Continue request failed: ${response.status}`);
+  }
+
+  await readChatEventStream(response, onEvent);
+}
+
+async function readChatEventStream(response: Response, onEvent: (event: ChatEvent) => void) {
+  if (!response.body) {
+    return;
+  }
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";

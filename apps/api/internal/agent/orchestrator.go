@@ -51,11 +51,81 @@ func (r *Runtime) RunCollaboration(ctx context.Context, prepared PreparedCollabo
 		defer close(events)
 		defer close(errs)
 
-		plan, err := r.runCollaborationStep(ctx, events, prepared, "planner", "", plannerPrompt(), task)
+		_, err := r.runCollaborationStep(ctx, events, prepared, "planner", "", plannerPrompt(), task)
 		if err != nil {
 			errs <- err
 			return
 		}
+		_, err = r.store.UpdateRunStatus(prepared.Run.ID, domain.RunWaitingForUser, "")
+		if err != nil {
+			errs <- err
+			return
+		}
+	}()
+
+	return events, errs
+}
+
+func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan string) (<-chan CollaborationEvent, <-chan error) {
+	events := make(chan CollaborationEvent)
+	errs := make(chan error, 1)
+
+	go func() {
+		defer close(events)
+		defer close(errs)
+
+		run, ok, err := r.store.GetRun(strings.TrimSpace(runID))
+		if err != nil {
+			errs <- err
+			return
+		}
+		if !ok {
+			errs <- store.ErrNotFound("run")
+			return
+		}
+		if run.Status != domain.RunWaitingForUser {
+			errs <- fmt.Errorf("run is not waiting for user input")
+			return
+		}
+
+		agent, ok, err := r.store.GetAgent(run.AgentID)
+		if err != nil {
+			errs <- err
+			return
+		}
+		if !ok {
+			errs <- store.ErrNotFound("agent")
+			return
+		}
+
+		steps, err := r.store.ListCollaborationSteps(run.ID)
+		if err != nil {
+			errs <- err
+			return
+		}
+		plannerStep, ok := findCollaborationStep(steps, "planner")
+		if !ok {
+			errs <- fmt.Errorf("planner step not found")
+			return
+		}
+		plan = strings.TrimSpace(plan)
+		if plan == "" {
+			plan = plannerStep.Output
+		}
+		task := plannerStep.Input
+		updatedPlan, err := r.store.UpdateCollaborationStepOutput(plannerStep.ID, plan)
+		if err != nil {
+			errs <- err
+			return
+		}
+		events <- CollaborationEvent{Type: "collaboration_step", Step: updatedPlan}
+
+		run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
+		if err != nil {
+			errs <- err
+			return
+		}
+		prepared := PreparedCollaborationRun{WorkerAgent: agent, Run: run}
 
 		workerInput := fmt.Sprintf("User task:\n%s\n\nPlanner output:\n%s", task, plan)
 		worker, err := r.runCollaborationStep(ctx, events, prepared, "worker", prepared.WorkerAgent.ID, workerPrompt(prepared.WorkerAgent), workerInput)
@@ -81,6 +151,15 @@ func (r *Runtime) RunCollaboration(ctx context.Context, prepared PreparedCollabo
 	}()
 
 	return events, errs
+}
+
+func findCollaborationStep(steps []domain.CollaborationStep, role string) (domain.CollaborationStep, bool) {
+	for _, step := range steps {
+		if step.Role == role {
+			return step, true
+		}
+	}
+	return domain.CollaborationStep{}, false
 }
 
 func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- CollaborationEvent, prepared PreparedCollaborationRun, role string, agentID string, systemPrompt string, input string) (string, error) {

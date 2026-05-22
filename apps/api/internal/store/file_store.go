@@ -253,6 +253,9 @@ func (s *FileStore) UpdateRunStatus(id string, status domain.RunStatus, errorMes
 			if status == domain.RunRunning && s.data.Runs[i].StartedAt == nil {
 				s.data.Runs[i].StartedAt = &now
 			}
+			if status == domain.RunWaitingForUser {
+				s.data.Runs[i].CompletedAt = nil
+			}
 			if status == domain.RunCompleted || status == domain.RunFailed {
 				s.data.Runs[i].CompletedAt = &now
 			}
@@ -328,6 +331,20 @@ func (s *FileStore) UpdateCollaborationStep(id string, status domain.Collaborati
 			s.data.CollaborationSteps[i].Status = status
 			s.data.CollaborationSteps[i].Output = strings.TrimSpace(output)
 			s.data.CollaborationSteps[i].Error = strings.TrimSpace(errorMessage)
+			s.data.CollaborationSteps[i].UpdatedAt = time.Now().UTC()
+			return s.data.CollaborationSteps[i], s.saveLocked()
+		}
+	}
+	return domain.CollaborationStep{}, errors.New("collaboration step not found")
+}
+
+func (s *FileStore) UpdateCollaborationStepOutput(id string, output string) (domain.CollaborationStep, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i := range s.data.CollaborationSteps {
+		if s.data.CollaborationSteps[i].ID == id {
+			s.data.CollaborationSteps[i].Output = strings.TrimSpace(output)
 			s.data.CollaborationSteps[i].UpdatedAt = time.Now().UTC()
 			return s.data.CollaborationSteps[i], s.saveLocked()
 		}

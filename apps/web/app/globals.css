@@ -214,6 +214,50 @@ select {
   padding: 4px 0 12px;
 }
 
+.mode-chooser {
+  max-width: 820px;
+  margin: 0 auto 22px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mode-chooser button {
+  min-width: 0;
+  border: 1px solid rgba(86, 76, 66, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 253, 248, 0.72);
+  color: var(--muted-strong);
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.mode-chooser button.active {
+  border-color: rgba(180, 95, 60, 0.42);
+  background: #fff8ef;
+  box-shadow: 0 10px 30px rgba(180, 95, 60, 0.1);
+  color: var(--ink);
+}
+
+.mode-chooser button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.mode-chooser span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.mode-chooser strong {
+  font-size: 14px;
+}
+
 .collaboration-rail-toggle {
   position: sticky;
   top: 4px;
@@ -506,38 +550,17 @@ select {
 .agent-bar {
   margin-bottom: 12px;
   display: grid;
-  grid-template-columns: auto 220px minmax(0, 1fr) auto;
+  grid-template-columns: 220px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
 }
 
-.mode-toggle {
-  min-height: 40px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: rgba(255, 253, 248, 0.9);
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  overflow: hidden;
+.agent-bar.multi_agent {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.mode-toggle button {
-  min-width: 94px;
-  border: 0;
-  background: transparent;
-  color: var(--muted-strong);
-  cursor: pointer;
-  padding: 0 13px;
-}
-
-.mode-toggle button.active {
-  background: var(--ink);
-  color: #fffaf5;
-}
-
-.mode-toggle button:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
+.agent-bar.multi_agent .run-pill {
+  justify-self: end;
 }
 
 .agent-select {
@@ -679,6 +702,11 @@ textarea:focus {
   box-shadow: 0 0 0 4px rgba(180, 95, 60, 0.12);
 }
 
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
 .send {
   min-height: 56px;
   border: 0;
@@ -712,7 +740,7 @@ textarea:focus {
   background: rgba(255, 253, 248, 0.88);
   box-shadow: var(--shadow);
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -768,6 +796,86 @@ textarea:focus {
 .collaboration-panel-actions button:hover {
   border-color: var(--border-strong);
   color: var(--ink);
+}
+
+.plan-review {
+  border-bottom: 1px solid rgba(86, 76, 66, 0.12);
+  background: #fff6e8;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.plan-review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plan-review-header span {
+  display: block;
+  color: var(--accent-dark);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.plan-review-header strong {
+  color: var(--ink);
+  display: block;
+  font-size: 15px;
+  margin-top: 3px;
+}
+
+.plan-review-header button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fffaf5;
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-weight: 760;
+  padding: 0 18px;
+}
+
+.plan-review-header button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.plan-review-header button:not(:disabled):hover {
+  background: var(--accent-dark);
+}
+
+.plan-rich-editor {
+  min-height: 260px;
+  max-height: 460px;
+  overflow: auto;
+  border: 1px solid rgba(180, 95, 60, 0.28);
+  border-radius: 12px;
+  background: #fffdfa;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  outline: none;
+  padding: 15px 16px;
+}
+
+.plan-rich-editor:focus {
+  border-color: rgba(180, 95, 60, 0.62);
+  box-shadow: 0 0 0 4px rgba(180, 95, 60, 0.12);
+}
+
+.plan-rich-editor[contenteditable="false"] {
+  opacity: 0.72;
+}
+
+.plan-review p {
+  color: var(--muted-strong);
+  font-size: 12px;
+  margin: 0;
 }
 
 .collaboration-steps {
@@ -909,6 +1017,14 @@ textarea:focus {
   }
 
   .agent-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-bar.multi_agent {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-chooser {
     grid-template-columns: 1fr;
   }
 

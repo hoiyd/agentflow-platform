@@ -57,6 +57,8 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
 		h.getAgent(w, r)
 	case r.Method == http.MethodGet && path == "/api/runs":
 		h.listRuns(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/continue"):
+		h.continueRun(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/collaboration_steps"):
 		h.listCollaborationSteps(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/"):

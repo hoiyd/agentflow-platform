@@ -35,5 +35,6 @@ type Store interface {
 	ListRuns() ([]domain.Run, error)
 	CreateCollaborationStep(step domain.CollaborationStep) (domain.CollaborationStep, error)
 	UpdateCollaborationStep(id string, status domain.CollaborationStepStatus, output string, errorMessage string) (domain.CollaborationStep, error)
+	UpdateCollaborationStepOutput(id string, output string) (domain.CollaborationStep, error)
 	ListCollaborationSteps(runID string) ([]domain.CollaborationStep, error)
 }
