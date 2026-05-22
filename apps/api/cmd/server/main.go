@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/httpapi"
 	"agentflow-platform/apps/api/internal/openai"
@@ -36,7 +37,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("create tools manager: %v", err)
 	}
-	handler := httpapi.NewHandlerWithRouterMode(fileStore, openAIClient, toolManager, splitOrigins(cfg.AllowedOrigins), cfg.RouterMode)
+	handler := httpapi.NewHandlerWithRouterModeAndLimits(fileStore, openAIClient, toolManager, splitOrigins(cfg.AllowedOrigins), cfg.RouterMode, agent.AutonomousLimits{
+		MaxIterations:  cfg.AutonomousMaxIterations,
+		MaxRuntime:     cfg.AutonomousMaxRuntime,
+		MaxOutputChars: cfg.AutonomousMaxOutputCharacters,
+		MaxToolCalls:   cfg.AutonomousMaxToolCalls,
+	})
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -46,6 +52,7 @@ func main() {
 
 	log.Printf("AgentFlow API listening on http://localhost:%s", cfg.Port)
 	log.Printf("AgentFlow router mode: %s", cfg.RouterMode)
+	log.Printf("AgentFlow autonomous limits: max_iterations=%d max_runtime=%s max_output_chars=%d max_tool_calls=%d", cfg.AutonomousMaxIterations, cfg.AutonomousMaxRuntime, cfg.AutonomousMaxOutputCharacters, cfg.AutonomousMaxToolCalls)
 	if cfg.OpenAIAPIKey == "" {
 		log.Println("OPENAI_API_KEY is empty; using local streaming fallback for verification")
 	}

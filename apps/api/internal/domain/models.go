@@ -35,6 +35,8 @@ const (
 	RunWaitingForUser RunStatus = "waiting_for_user"
 	RunCompleted      RunStatus = "completed"
 	RunFailed         RunStatus = "failed"
+	RunCanceling      RunStatus = "canceling"
+	RunCanceled       RunStatus = "canceled"
 )
 
 type Run struct {
@@ -65,6 +67,7 @@ type CollaborationStep struct {
 	Role           string                  `json:"role"`
 	AgentID        string                  `json:"agent_id,omitempty"`
 	Status         CollaborationStepStatus `json:"status"`
+	Iteration      int                     `json:"iteration,omitempty"`
 	Input          string                  `json:"input"`
 	Output         string                  `json:"output"`
 	Error          string                  `json:"error,omitempty"`
@@ -93,6 +96,7 @@ type ChatChunk struct {
 	Delta          string `json:"delta,omitempty"`
 	Error          string `json:"error,omitempty"`
 	Role           string `json:"role,omitempty"`
+	Iteration      int    `json:"iteration,omitempty"`
 	Input          string `json:"input,omitempty"`
 	Output         string `json:"output,omitempty"`
 }

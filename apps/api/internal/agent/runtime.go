@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"strings"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/openai"
@@ -11,10 +12,18 @@ import (
 )
 
 type Runtime struct {
-	store      store.Store
-	openAI     *openai.Client
-	tools      *tools.Manager
-	routerMode string
+	store            store.Store
+	openAI           *openai.Client
+	tools            *tools.Manager
+	routerMode       string
+	autonomousLimits AutonomousLimits
+}
+
+type AutonomousLimits struct {
+	MaxIterations  int
+	MaxRuntime     time.Duration
+	MaxOutputChars int
+	MaxToolCalls   int
 }
 
 type PreparedRun struct {
@@ -28,7 +37,26 @@ func NewRuntime(store store.Store, openAI *openai.Client, tools *tools.Manager) 
 }
 
 func NewRuntimeWithRouterMode(store store.Store, openAI *openai.Client, tools *tools.Manager, routerMode string) *Runtime {
-	return &Runtime{store: store, openAI: openAI, tools: tools, routerMode: NormalizeRouterMode(routerMode)}
+	return NewRuntimeWithRouterModeAndLimits(store, openAI, tools, routerMode, DefaultAutonomousLimits())
+}
+
+func NewRuntimeWithRouterModeAndLimits(store store.Store, openAI *openai.Client, tools *tools.Manager, routerMode string, limits AutonomousLimits) *Runtime {
+	return &Runtime{
+		store:            store,
+		openAI:           openAI,
+		tools:            tools,
+		routerMode:       NormalizeRouterMode(routerMode),
+		autonomousLimits: normalizeAutonomousLimits(limits),
+	}
+}
+
+func DefaultAutonomousLimits() AutonomousLimits {
+	return AutonomousLimits{
+		MaxIterations:  5,
+		MaxRuntime:     5 * time.Minute,
+		MaxOutputChars: 60000,
+		MaxToolCalls:   20,
+	}
 }
 
 func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversationID string) (PreparedRun, error) {
@@ -76,6 +104,24 @@ func (r *Runtime) FailRun(id string, err error) (domain.Run, error) {
 	return r.store.UpdateRunStatus(id, domain.RunFailed, message)
 }
 
+func (r *Runtime) CancelRun(id string) (domain.Run, error) {
+	run, ok, err := r.store.GetRun(strings.TrimSpace(id))
+	if err != nil {
+		return domain.Run{}, err
+	}
+	if !ok {
+		return domain.Run{}, store.ErrNotFound("run")
+	}
+	switch run.Status {
+	case domain.RunCompleted, domain.RunFailed, domain.RunCanceled:
+		return run, nil
+	case domain.RunRunning:
+		return r.store.UpdateRunStatus(run.ID, domain.RunCanceling, "cancel requested by user")
+	default:
+		return r.store.UpdateRunStatus(run.ID, domain.RunCanceled, "canceled by user")
+	}
+}
+
 func (r *Runtime) resolveAgent(agentID string) (domain.Agent, error) {
 	if agentID == "" {
 		agent, ok, err := r.store.GetDefaultAgent()
@@ -96,4 +142,21 @@ func (r *Runtime) resolveAgent(agentID string) (domain.Agent, error) {
 		return domain.Agent{}, store.ErrNotFound("agent")
 	}
 	return agent, nil
+}
+
+func normalizeAutonomousLimits(limits AutonomousLimits) AutonomousLimits {
+	defaults := DefaultAutonomousLimits()
+	if limits.MaxIterations <= 0 {
+		limits.MaxIterations = defaults.MaxIterations
+	}
+	if limits.MaxRuntime <= 0 {
+		limits.MaxRuntime = defaults.MaxRuntime
+	}
+	if limits.MaxOutputChars <= 0 {
+		limits.MaxOutputChars = defaults.MaxOutputChars
+	}
+	if limits.MaxToolCalls <= 0 {
+		limits.MaxToolCalls = defaults.MaxToolCalls
+	}
+	return limits
 }

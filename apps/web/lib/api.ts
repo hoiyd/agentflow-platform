@@ -20,7 +20,16 @@ export type ChatEvent =
       conversation_id: string;
       run_id: string;
       agent_id: string;
-      status: "idle" | "queued" | "running" | "waiting_for_user" | "completed" | "failed" | string;
+      status:
+        | "idle"
+        | "queued"
+        | "running"
+        | "waiting_for_user"
+        | "completed"
+        | "failed"
+        | "canceling"
+        | "canceled"
+        | string;
     }
   | { type: "delta"; delta: string }
   | {
@@ -29,7 +38,17 @@ export type ChatEvent =
       run_id: string;
       agent_id?: string;
       role: "planner" | "router" | "worker" | "reviewer" | "finalizer" | string;
-      status: "idle" | "queued" | "running" | "waiting_for_user" | "completed" | "failed" | string;
+      status:
+        | "idle"
+        | "queued"
+        | "running"
+        | "waiting_for_user"
+        | "completed"
+        | "failed"
+        | "canceling"
+        | "canceled"
+        | string;
+      iteration?: number;
       input?: string;
       output?: string;
       error?: string;
@@ -40,7 +59,16 @@ export type ChatEvent =
       message_id?: string;
       run_id?: string;
       agent_id?: string;
-      status?: "idle" | "queued" | "running" | "waiting_for_user" | "completed" | "failed" | string;
+      status?:
+        | "idle"
+        | "queued"
+        | "running"
+        | "waiting_for_user"
+        | "completed"
+        | "failed"
+        | "canceling"
+        | "canceled"
+        | string;
     }
   | { type: "error"; error: string };
 
@@ -63,13 +91,22 @@ export type ToolInfo = {
   enabled: boolean;
 };
 
-export type ChatMode = "single" | "multi_agent";
+export type ChatMode = "single" | "multi_agent" | "autonomous";
 
 export type RunInfo = {
   id: string;
   agent_id: string;
   conversation_id: string;
-  status: "idle" | "queued" | "running" | "waiting_for_user" | "completed" | "failed" | string;
+  status:
+    | "idle"
+    | "queued"
+    | "running"
+    | "waiting_for_user"
+    | "completed"
+    | "failed"
+    | "canceling"
+    | "canceled"
+    | string;
   created_at: string;
   updated_at: string;
 };
@@ -80,7 +117,17 @@ export type CollaborationStepInfo = {
   conversation_id: string;
   role: string;
   agent_id?: string;
-  status: "idle" | "queued" | "running" | "waiting_for_user" | "completed" | "failed" | string;
+  status:
+    | "idle"
+    | "queued"
+    | "running"
+    | "waiting_for_user"
+    | "completed"
+    | "failed"
+    | "canceling"
+    | "canceled"
+    | string;
+  iteration?: number;
   input: string;
   output: string;
   error?: string;
@@ -161,6 +208,16 @@ export async function continueRun(
   }
 
   await readChatEventStream(response, onEvent);
+}
+
+export async function cancelRun(runId: string): Promise<RunInfo> {
+  const response = await fetch(`${API_BASE}/api/runs/${runId}/cancel`, {
+    method: "POST"
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to cancel run: ${response.status}`);
+  }
+  return response.json();
 }
 
 async function readChatEventStream(response: Response, onEvent: (event: ChatEvent) => void) {

@@ -24,11 +24,15 @@ func NewHandler(store store.Store, openAI *openai.Client, tools *tools.Manager, 
 }
 
 func NewHandlerWithRouterMode(store store.Store, openAI *openai.Client, tools *tools.Manager, allowedOrigins []string, routerMode string) *Handler {
+	return NewHandlerWithRouterModeAndLimits(store, openAI, tools, allowedOrigins, routerMode, agent.DefaultAutonomousLimits())
+}
+
+func NewHandlerWithRouterModeAndLimits(store store.Store, openAI *openai.Client, tools *tools.Manager, allowedOrigins []string, routerMode string, limits agent.AutonomousLimits) *Handler {
 	return &Handler{
 		store:          store,
 		openAI:         openAI,
 		tools:          tools,
-		agentRuntime:   agent.NewRuntimeWithRouterMode(store, openAI, tools, routerMode),
+		agentRuntime:   agent.NewRuntimeWithRouterModeAndLimits(store, openAI, tools, routerMode, limits),
 		allowedOrigins: allowedOrigins,
 	}
 }
@@ -65,6 +69,8 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
 		h.listRuns(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/continue"):
 		h.continueRun(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/cancel"):
+		h.cancelRun(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/collaboration_steps"):
 		h.listCollaborationSteps(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/"):

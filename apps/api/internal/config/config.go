@@ -3,35 +3,44 @@ package config
 import (
 	"bufio"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type Config struct {
-	Port           string
-	OpenAIAPIKey   string
-	OpenAIBaseURL  string
-	OpenAIModel    string
-	OpenAITimeout  time.Duration
-	RouterMode     string
-	DataPath       string
-	ToolConfigPath string
-	AllowedOrigins string
+	Port                          string
+	OpenAIAPIKey                  string
+	OpenAIBaseURL                 string
+	OpenAIModel                   string
+	OpenAITimeout                 time.Duration
+	RouterMode                    string
+	AutonomousMaxIterations       int
+	AutonomousMaxRuntime          time.Duration
+	AutonomousMaxOutputCharacters int
+	AutonomousMaxToolCalls        int
+	DataPath                      string
+	ToolConfigPath                string
+	AllowedOrigins                string
 }
 
 func Load() Config {
 	loadDotEnv(".env")
 
 	return Config{
-		Port:           getEnv("PORT", "8080"),
-		OpenAIAPIKey:   getEnv("OPENAI_API_KEY", ""),
-		OpenAIBaseURL:  getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-		OpenAIModel:    getEnv("OPENAI_MODEL", "gpt-4o-mini"),
-		OpenAITimeout:  getDurationEnv("OPENAI_REQUEST_TIMEOUT", 5*time.Minute),
-		RouterMode:     normalizeRouterMode(getEnv("ROUTER_MODE", "auto")),
-		DataPath:       getEnv("DATA_PATH", ".data/agentflow.json"),
-		ToolConfigPath: getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
-		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
+		Port:                          getEnv("PORT", "8080"),
+		OpenAIAPIKey:                  getEnv("OPENAI_API_KEY", ""),
+		OpenAIBaseURL:                 getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		OpenAIModel:                   getEnv("OPENAI_MODEL", "gpt-4o-mini"),
+		OpenAITimeout:                 getDurationEnv("OPENAI_REQUEST_TIMEOUT", 5*time.Minute),
+		RouterMode:                    normalizeRouterMode(getEnv("ROUTER_MODE", "auto")),
+		AutonomousMaxIterations:       getIntEnv("AUTONOMOUS_MAX_ITERATIONS", 5),
+		AutonomousMaxRuntime:          getAutonomousRuntime(),
+		AutonomousMaxOutputCharacters: getIntEnv("AUTONOMOUS_MAX_OUTPUT_CHARS", 60000),
+		AutonomousMaxToolCalls:        getIntEnv("AUTONOMOUS_MAX_TOOL_CALLS", 20),
+		DataPath:                      getEnv("DATA_PATH", ".data/agentflow.json"),
+		ToolConfigPath:                getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
+		AllowedOrigins:                getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 	}
 }
 
@@ -54,6 +63,28 @@ func getDurationEnv(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return duration
+}
+
+func getIntEnv(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func getAutonomousRuntime() time.Duration {
+	if duration := getDurationEnv("AUTONOMOUS_MAX_RUNTIME", 0); duration > 0 {
+		return duration
+	}
+	if seconds := getIntEnv("AUTONOMOUS_MAX_RUNTIME_SECONDS", 300); seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	return 5 * time.Minute
 }
 
 func getEnv(key string, fallback string) string {

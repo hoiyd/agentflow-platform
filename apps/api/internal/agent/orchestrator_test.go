@@ -1,11 +1,14 @@
 package agent
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestSelectWorkerAgentChoosesCodingForImplementationTask(t *testing.T) {
@@ -71,6 +74,93 @@ func TestParseLLMRouteDecisionRejectsUnknownAgent(t *testing.T) {
 	_, err := parseLLMRouteDecision(`{"agent_id":"agent_missing","reason":"bad","scores":[]}`, testAgents())
 	if err == nil {
 		t.Fatal("expected unknown agent error")
+	}
+}
+
+func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := fileStore.CreateConversation("Autonomous test")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, openai.NewClientWithTimeout("", "", "test", time.Second), nil, RouterModeQuery, AutonomousLimits{
+		MaxIterations:  1,
+		MaxRuntime:     time.Minute,
+		MaxOutputChars: 60000,
+		MaxToolCalls:   20,
+	})
+	prepared, err := runtime.PrepareAutonomousRun(context.Background(), conversation.ID)
+	if err != nil {
+		t.Fatalf("prepare autonomous run: %v", err)
+	}
+
+	events, errs := runtime.RunAutonomous(context.Background(), prepared, "Write a concise project update.")
+	for range events {
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("run autonomous: %v", err)
+	}
+
+	steps, err := fileStore.ListCollaborationSteps(prepared.Run.ID)
+	if err != nil {
+		t.Fatalf("list steps: %v", err)
+	}
+	if len(steps) == 0 {
+		t.Fatal("expected autonomous steps")
+	}
+	if steps[0].Iteration != 1 {
+		t.Fatalf("expected first step iteration 1, got %d", steps[0].Iteration)
+	}
+	if steps[len(steps)-1].Role != "final" {
+		t.Fatalf("expected final step, got %q", steps[len(steps)-1].Role)
+	}
+}
+
+func TestAutonomousRunCanBeCanceledBeforeLoop(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := fileStore.CreateConversation("Cancel test")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, openai.NewClientWithTimeout("", "", "test", time.Second), nil, RouterModeQuery, AutonomousLimits{
+		MaxIterations:  2,
+		MaxRuntime:     time.Minute,
+		MaxOutputChars: 60000,
+		MaxToolCalls:   20,
+	})
+	prepared, err := runtime.PrepareAutonomousRun(context.Background(), conversation.ID)
+	if err != nil {
+		t.Fatalf("prepare autonomous run: %v", err)
+	}
+	if _, err := runtime.CancelRun(prepared.Run.ID); err != nil {
+		t.Fatalf("cancel run: %v", err)
+	}
+
+	events, errs := runtime.RunAutonomous(context.Background(), prepared, "Long task")
+	seenCanceled := false
+	for event := range events {
+		if event.Type == "run" && event.Run.Status == domain.RunCanceled {
+			seenCanceled = true
+		}
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("expected clean cancel, got %v", err)
+	}
+	if !seenCanceled {
+		t.Fatal("expected canceled run event")
+	}
+	run, ok, err := fileStore.GetRun(prepared.Run.ID)
+	if err != nil {
+		t.Fatalf("get run: %v", err)
+	}
+	if !ok || run.Status != domain.RunCanceled {
+		t.Fatalf("expected canceled run, got %#v", run)
 	}
 }
 

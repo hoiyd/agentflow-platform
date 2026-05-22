@@ -79,6 +79,26 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, run)
 }
 
+func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/runs/"))
+	id = strings.TrimSpace(strings.TrimSuffix(id, "/cancel"))
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "run id is required")
+		return
+	}
+
+	run, err := h.agentRuntime.CancelRun(id)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			writeError(w, http.StatusNotFound, "run not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, run)
+}
+
 func (h *Handler) listCollaborationSteps(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/runs/"))
 	id = strings.TrimSpace(strings.TrimSuffix(id, "/collaboration_steps"))

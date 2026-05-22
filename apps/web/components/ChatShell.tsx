@@ -10,6 +10,7 @@ import {
   Conversation,
   Message,
   ToolInfo,
+  cancelRun,
   continueRun,
   createConversation,
   deleteConversation as deleteConversationApi,
@@ -34,6 +35,7 @@ export type CollaborationStepView = {
   role: string;
   agent_id?: string;
   status: string;
+  iteration?: number;
   input?: string;
   output?: string;
   error?: string;
@@ -61,6 +63,7 @@ export function ChatShell() {
   const [selectedCollaborationRole, setSelectedCollaborationRole] = useState("planner");
   const [planDraft, setPlanDraft] = useState("");
   const [isContinuingRun, setIsContinuingRun] = useState(false);
+  const [isCancelingRun, setIsCancelingRun] = useState(false);
   const [agentsError, setAgentsError] = useState("");
   const [runState, setRunState] = useState<{
     id: string;
@@ -81,8 +84,19 @@ export function ChatShell() {
     () => agents.find((agent) => agent.id === activeAgentId),
     [activeAgentId, agents]
   );
-  const showCollaborationPanel = chatMode === "multi_agent";
+  const showCollaborationPanel = chatMode === "multi_agent" || chatMode === "autonomous";
+  const showCollaborationDag = chatMode === "multi_agent";
+  const showAutonomousTrace = chatMode === "autonomous";
   const isAwaitingPlanApproval = chatMode === "multi_agent" && runState?.status === "waiting_for_user";
+  const isTerminalRun =
+    runState?.status === "completed" ||
+    runState?.status === "failed" ||
+    runState?.status === "canceled";
+  const canCancelRun =
+    chatMode === "autonomous" &&
+    !!runState?.id &&
+    !isTerminalRun &&
+    (isStreaming || runState.status === "running" || runState.status === "canceling");
 
   useEffect(() => {
     void refreshConversations();
@@ -99,7 +113,7 @@ export function ChatShell() {
   }, [activeAgentId]);
 
   useEffect(() => {
-    if (chatMode === "multi_agent") {
+    if (chatMode === "multi_agent" || chatMode === "autonomous") {
       setIsCollaborationPanelOpen(true);
     }
   }, [chatMode]);
@@ -149,6 +163,11 @@ export function ChatShell() {
       });
       const steps = await listCollaborationSteps(run.id);
       setCollaborationSteps(steps.map(toCollaborationStepView));
+      if (steps.some((step) => autonomousRoles.some((role) => role.id === step.role))) {
+        setChatMode("autonomous");
+      } else if (steps.length > 0) {
+        setChatMode("multi_agent");
+      }
       const planner = steps.find((step) => step.role === "planner");
       setPlanDraft(planner?.output ?? "");
     } catch {
@@ -187,6 +206,7 @@ export function ChatShell() {
     setRunState(null);
     setCollaborationSteps([]);
     setPlanDraft("");
+    setIsCancelingRun(false);
     setView("chat");
     setActiveId(id);
     await loadConversation(id);
@@ -197,6 +217,7 @@ export function ChatShell() {
     setRunState(null);
     setCollaborationSteps([]);
     setPlanDraft("");
+    setIsCancelingRun(false);
     setView("chat");
     const conversation = await createConversation("New conversation");
     setConversations((items) => [conversation, ...items]);
@@ -224,6 +245,7 @@ export function ChatShell() {
         setRunState(null);
         setCollaborationSteps([]);
         setPlanDraft("");
+        setIsCancelingRun(false);
         setMessages([]);
 
         if (nextConversation) {
@@ -264,6 +286,7 @@ export function ChatShell() {
     setRunState(null);
     setCollaborationSteps([]);
     setPlanDraft("");
+    setIsCancelingRun(false);
     setIsStreaming(true);
 
     const optimisticUser: DraftMessage = {
@@ -303,6 +326,9 @@ export function ChatShell() {
               agentId: event.agent_id,
               status: event.status
             });
+            if (event.status === "canceled" || event.status === "completed" || event.status === "failed") {
+              setIsCancelingRun(false);
+            }
           }
           if (event.type === "delta") {
             setMessages((items) =>
@@ -326,6 +352,7 @@ export function ChatShell() {
               agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
               status: event.status ?? "completed"
             }));
+            setIsCancelingRun(false);
           }
         }
       );
@@ -403,6 +430,26 @@ export function ChatShell() {
     } finally {
       setIsContinuingRun(false);
       setIsStreaming(false);
+    }
+  }
+
+  async function handleCancelRun() {
+    const runID = runState?.id;
+    if (!runID || isCancelingRun) {
+      return;
+    }
+    setError("");
+    setIsCancelingRun(true);
+    try {
+      const canceled = await cancelRun(runID);
+      setRunState({
+        id: canceled.id,
+        agentId: canceled.agent_id,
+        status: canceled.status
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to cancel run");
+      setIsCancelingRun(false);
     }
   }
 
@@ -514,7 +561,7 @@ export function ChatShell() {
               showCollaborationPanel && isCollaborationPanelOpen ? "with-collaboration" : ""
             }`}
           >
-            {showCollaborationPanel && isCollaborationPanelOpen ? (
+            {showCollaborationDag && isCollaborationPanelOpen ? (
               <CollaborationDag
                 activeRole={selectedCollaborationRole}
                 agents={agents}
@@ -532,10 +579,9 @@ export function ChatShell() {
                 setChatMode={(mode) => {
                   setChatMode(mode);
                   setRunState(null);
-                  if (mode === "single") {
-                    setCollaborationSteps([]);
-                    setPlanDraft("");
-                  }
+                  setIsCancelingRun(false);
+                  setCollaborationSteps([]);
+                  setPlanDraft("");
                 }}
               />
               {showCollaborationPanel && !isCollaborationPanelOpen ? (
@@ -544,7 +590,11 @@ export function ChatShell() {
                   onClick={() => setIsCollaborationPanelOpen(true)}
                   type="button"
                 >
-                  {isAwaitingPlanApproval ? "Review Plan & Continue" : "Show Collaboration Trace"}
+                  {isAwaitingPlanApproval
+                    ? "Review Plan & Continue"
+                    : showAutonomousTrace
+                      ? "Show Autonomous Trace"
+                      : "Show Collaboration Trace"}
                 </button>
               ) : null}
               {messages.length === 0 ? (
@@ -568,6 +618,15 @@ export function ChatShell() {
               <div ref={bottomRef} />
             </section>
             {showCollaborationPanel && isCollaborationPanelOpen ? (
+              showAutonomousTrace ? (
+                <AutonomousPanel
+                  isCanceling={isCancelingRun || runState?.status === "canceling"}
+                  onCancel={handleCancelRun}
+                  onCollapse={() => setIsCollaborationPanelOpen(false)}
+                  runStatus={runState?.status ?? ""}
+                  steps={collaborationSteps}
+                />
+              ) : (
               <CollaborationPanel
                 agents={agents}
                 isContinuing={isContinuingRun}
@@ -579,6 +638,7 @@ export function ChatShell() {
                 steps={collaborationSteps}
                 selectedRole={selectedCollaborationRole}
               />
+              )
             ) : null}
           </section>
         )}
@@ -633,11 +693,23 @@ export function ChatShell() {
                 </div>
               </div>
             ) : runState ? (
-              <div className="agent-bar multi_agent">
+              <div className={`agent-bar ${chatMode}`}>
                 <div className={`run-pill ${runState.status}`}>
                   <span>{runState.status}</span>
                   <code>{runState.id}</code>
                 </div>
+                {chatMode === "autonomous" ? (
+                  canCancelRun ? (
+                    <button
+                      className="run-stop"
+                      disabled={isCancelingRun || runState.status === "canceling"}
+                      onClick={handleCancelRun}
+                      type="button"
+                    >
+                      {isCancelingRun || runState.status === "canceling" ? "Stopping..." : "Stop"}
+                    </button>
+                  ) : null
+                ) : null}
               </div>
             ) : null}
             {chatMode === "single" && agentsError ? (
@@ -704,6 +776,15 @@ function ModeChooser({
         <span>Multi-Agent</span>
         <strong>Plan, edit, execute</strong>
       </button>
+      <button
+        className={chatMode === "autonomous" ? "active" : ""}
+        disabled={disabled}
+        onClick={() => setChatMode("autonomous")}
+        type="button"
+      >
+        <span>Autonomous</span>
+        <strong>Loop until done</strong>
+      </button>
     </section>
   );
 }
@@ -713,6 +794,7 @@ function toCollaborationStepView(step: CollaborationStepView) {
     role: step.role,
     agent_id: step.agent_id,
     status: step.status,
+    iteration: step.iteration,
     input: step.input,
     output: step.output,
     error: step.error
@@ -724,15 +806,102 @@ function upsertCollaborationStep(items: CollaborationStepView[], event: Collabor
     role: event.role,
     agent_id: event.agent_id,
     status: event.status,
+    iteration: event.iteration,
     input: event.input,
     output: event.output,
     error: event.error
   };
-  const existing = items.findIndex((item) => item.role === event.role);
+  const existing = items.findIndex(
+    (item) => item.role === event.role && (item.iteration ?? 0) === (event.iteration ?? 0)
+  );
   if (existing === -1) {
     return [...items, next];
   }
   return items.map((item, index) => (index === existing ? { ...item, ...next } : item));
+}
+
+function AutonomousPanel({
+  isCanceling,
+  onCancel,
+  onCollapse,
+  runStatus,
+  steps
+}: {
+  isCanceling: boolean;
+  onCancel: () => void;
+  onCollapse: () => void;
+  runStatus: string;
+  steps: CollaborationStepView[];
+}) {
+  const activeIterations = groupAutonomousSteps(steps);
+  const latestIteration = activeIterations[activeIterations.length - 1]?.iteration ?? 0;
+  const completedSteps = steps.filter((step) => step.status === "completed").length;
+  const canStop = runStatus === "running" || runStatus === "canceling";
+
+  return (
+    <aside className="collaboration-panel autonomous-panel" aria-label="Autonomous trace">
+      <div className="collaboration-panel-header">
+        <div>
+          <span>Autonomous</span>
+          <strong>Loop Trace</strong>
+        </div>
+        <div className="collaboration-panel-actions">
+          <small>
+            Iteration {latestIteration || 0} · {completedSteps} steps complete
+          </small>
+          {canStop ? (
+            <button
+              className="trace-stop"
+              disabled={isCanceling || runStatus === "canceling"}
+              onClick={onCancel}
+              type="button"
+            >
+              {isCanceling || runStatus === "canceling" ? "Stopping..." : "Stop"}
+            </button>
+          ) : null}
+          <button onClick={onCollapse} type="button">
+            Hide
+          </button>
+        </div>
+      </div>
+      <div className="autonomous-limit-strip">
+        <span>Status: {runStatus || "idle"}</span>
+        <span>Default max iterations: 5</span>
+        <span>Default runtime cap: 5m</span>
+      </div>
+      <div className="autonomous-iterations">
+        {activeIterations.length === 0 ? (
+          <div className="autonomous-empty">Waiting for the first autonomous iteration.</div>
+        ) : (
+          activeIterations.map((group) => (
+            <section className="autonomous-iteration" key={group.iteration}>
+              <div className="autonomous-iteration-header">
+                <strong>Iteration {group.iteration}</strong>
+                <span>
+                  {group.steps.filter((step) => step.status === "completed").length}/{autonomousRoles.length}
+                </span>
+              </div>
+              {autonomousRoles.map((role) => {
+                const step = group.steps.find((item) => item.role === role.id);
+                return (
+                  <article className={`autonomous-step ${step?.status ?? "idle"}`} key={role.id}>
+                    <div className="autonomous-step-header">
+                      <strong>{role.label}</strong>
+                      <span>{step?.status ?? "idle"}</span>
+                    </div>
+                    <div className="collaboration-output">
+                      {step?.output ? renderMarkdown(step.output) : <p>{role.empty}</p>}
+                    </div>
+                    {step?.error ? <div className="error">{step.error}</div> : null}
+                  </article>
+                );
+              })}
+            </section>
+          ))
+        )}
+      </div>
+    </aside>
+  );
 }
 
 function CollaborationPanel({
@@ -866,6 +1035,26 @@ const collaborationRoles: CollaborationRole[] = [
   { id: "reviewer", label: "Reviewer", empty: "Waiting for worker output to review." },
   { id: "finalizer", label: "Finalizer", empty: "Waiting to synthesize the final answer." }
 ];
+
+const autonomousRoles: CollaborationRole[] = [
+  { id: "observe", label: "Observe", empty: "Waiting to observe task state." },
+  { id: "plan", label: "Plan", empty: "Waiting to plan the next action." },
+  { id: "act", label: "Act", empty: "Waiting to execute the current plan." },
+  { id: "review", label: "Review", empty: "Waiting to review the action result." },
+  { id: "decide", label: "Decide", empty: "Waiting to decide whether to continue." },
+  { id: "final", label: "Final", empty: "Waiting for final synthesis." }
+];
+
+function groupAutonomousSteps(steps: CollaborationStepView[]) {
+  const grouped = new Map<number, CollaborationStepView[]>();
+  for (const step of steps) {
+    const iteration = step.iteration && step.iteration > 0 ? step.iteration : 1;
+    grouped.set(iteration, [...(grouped.get(iteration) ?? []), step]);
+  }
+  return [...grouped.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([iteration, items]) => ({ iteration, steps: items }));
+}
 
 function formatValue(value: unknown) {
   return JSON.stringify(value, null, 2);

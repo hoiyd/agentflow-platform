@@ -320,7 +320,7 @@ func (s *FileStore) UpdateRunStatus(id string, status domain.RunStatus, errorMes
 			if status == domain.RunWaitingForUser {
 				s.data.Runs[i].CompletedAt = nil
 			}
-			if status == domain.RunCompleted || status == domain.RunFailed {
+			if status == domain.RunCompleted || status == domain.RunFailed || status == domain.RunCanceled {
 				s.data.Runs[i].CompletedAt = &now
 			}
 			return s.data.Runs[i], s.saveLocked()
@@ -380,6 +380,9 @@ func (s *FileStore) CreateCollaborationStep(step domain.CollaborationStep) (doma
 	step.Input = strings.TrimSpace(step.Input)
 	step.Output = strings.TrimSpace(step.Output)
 	step.Error = strings.TrimSpace(step.Error)
+	if step.Iteration < 0 {
+		step.Iteration = 0
+	}
 	step.CreatedAt = now
 	step.UpdatedAt = now
 	s.data.CollaborationSteps = append(s.data.CollaborationSteps, step)

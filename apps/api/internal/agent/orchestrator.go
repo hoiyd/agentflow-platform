@@ -16,6 +16,7 @@ import (
 const (
 	ChatModeSingle     = "single"
 	ChatModeMultiAgent = "multi_agent"
+	ChatModeAutonomous = "autonomous"
 	RouterModeAuto     = "auto"
 	RouterModeQuery    = "query_match"
 )
@@ -579,6 +580,8 @@ func NormalizeChatMode(mode string) string {
 		return ChatModeSingle
 	case ChatModeMultiAgent:
 		return ChatModeMultiAgent
+	case ChatModeAutonomous:
+		return ChatModeAutonomous
 	default:
 		return ChatModeSingle
 	}
