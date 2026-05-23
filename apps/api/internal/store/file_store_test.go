@@ -179,6 +179,106 @@ func TestFileStoreDeleteConversationCascades(t *testing.T) {
 	if len(steps) != 0 {
 		t.Fatalf("expected no steps after delete, got %d", len(steps))
 	}
+
+	events, err := store.ListTraceEvents(run.ID)
+	if err != nil {
+		t.Fatalf("list trace events after delete: %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("expected no trace events after delete, got %d", len(events))
+	}
+}
+
+func TestFileStoreTraceReplay(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := store.CreateConversation("Trace test")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	if _, err := store.AddMessage(conversation.ID, "user", "hello"); err != nil {
+		t.Fatalf("add message: %v", err)
+	}
+	run, err := store.CreateRun("agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	run, err = store.UpdateRunStatus(run.ID, domain.RunRunning, "")
+	if err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	step, err := store.CreateCollaborationStep(domain.CollaborationStep{
+		RunID:          run.ID,
+		ConversationID: conversation.ID,
+		Role:           "planner",
+		Status:         domain.CollaborationStepCompleted,
+		Input:          "input",
+		Output:         "output",
+	})
+	if err != nil {
+		t.Fatalf("create step: %v", err)
+	}
+	if _, err := store.CreateTraceEvent(domain.TraceEvent{
+		RunID:  run.ID,
+		StepID: step.ID,
+		Type:   domain.TraceLLMEnd,
+		Payload: map[string]any{
+			"prompt_tokens":         10,
+			"completion_tokens":     5,
+			"total_tokens":          15,
+			"token_usage_estimated": true,
+		},
+		DurationMS: 25,
+	}); err != nil {
+		t.Fatalf("create llm trace: %v", err)
+	}
+	if _, err := store.CreateTraceEvent(domain.TraceEvent{
+		RunID:      run.ID,
+		StepID:     step.ID,
+		Type:       domain.TraceToolEnd,
+		Payload:    map[string]any{"tool_name": "calculator"},
+		DurationMS: 3,
+	}); err != nil {
+		t.Fatalf("create tool trace: %v", err)
+	}
+	if _, err := store.CreateTraceEvent(domain.TraceEvent{
+		RunID:   run.ID,
+		StepID:  step.ID,
+		Type:    domain.TraceError,
+		Payload: map[string]any{"error": "boom"},
+	}); err != nil {
+		t.Fatalf("create error trace: %v", err)
+	}
+
+	summary, err := store.GetRunTraceSummary(run.ID)
+	if err != nil {
+		t.Fatalf("trace summary: %v", err)
+	}
+	if summary.TotalTokens != 15 || summary.PromptTokens != 10 || summary.CompletionTokens != 5 {
+		t.Fatalf("unexpected token summary: %#v", summary)
+	}
+	if !summary.TokenUsageEstimated {
+		t.Fatalf("expected estimated token summary: %#v", summary)
+	}
+	if summary.LLMCalls != 1 || summary.ToolCalls != 1 || summary.ErrorCount != 1 {
+		t.Fatalf("unexpected call summary: %#v", summary)
+	}
+
+	replay, ok, err := store.GetRunReplay(run.ID)
+	if err != nil {
+		t.Fatalf("run replay: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected replay")
+	}
+	if replay.Run.ID != run.ID || replay.Conversation.ID != conversation.ID {
+		t.Fatalf("unexpected replay identity: %#v", replay)
+	}
+	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.Events) != 3 {
+		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.Events))
+	}
 }
 
 func TestFileStoreCreateAgent(t *testing.T) {

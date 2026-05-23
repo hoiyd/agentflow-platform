@@ -9,12 +9,14 @@ import (
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
+	tracepkg "agentflow-platform/apps/api/internal/trace"
 )
 
 type Runtime struct {
 	store            store.Store
 	openAI           *openai.Client
 	tools            *tools.Manager
+	trace            *tracepkg.Recorder
 	routerMode       string
 	autonomousLimits AutonomousLimits
 }
@@ -45,6 +47,7 @@ func NewRuntimeWithRouterModeAndLimits(store store.Store, openAI *openai.Client,
 		store:            store,
 		openAI:           openAI,
 		tools:            tools,
+		trace:            tracepkg.NewRecorder(store),
 		routerMode:       NormalizeRouterMode(routerMode),
 		autonomousLimits: normalizeAutonomousLimits(limits),
 	}
@@ -89,7 +92,7 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 }
 
 func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string) (<-chan openai.StreamEvent, <-chan error) {
-	return r.openAI.StreamAgentChatWithTools(ctx, prepared.Agent.SystemPrompt, history, latest, prepared.Registry)
+	return r.openAI.StreamAgentChatWithToolsTrace(ctx, prepared.Agent.SystemPrompt, history, latest, prepared.Registry, r.trace, prepared.Run.ID, "")
 }
 
 func (r *Runtime) CompleteRun(id string) (domain.Run, error) {
@@ -100,6 +103,10 @@ func (r *Runtime) FailRun(id string, err error) (domain.Run, error) {
 	message := ""
 	if err != nil {
 		message = err.Error()
+		r.trace.Error(context.Background(), id, "", map[string]any{
+			"source": "runtime",
+			"error":  message,
+		})
 	}
 	return r.store.UpdateRunStatus(id, domain.RunFailed, message)
 }

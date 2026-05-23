@@ -14,8 +14,8 @@ This version includes:
 ## Tech Stack
 
 - Frontend: Next.js, React, TypeScript
-- Backend: Go standard library
-- Storage: local JSON file store for Day 1
+- Backend: Go
+- Storage: local JSON file store by default, optional Postgres platform store
 - AI: OpenAI API
 
 ## Project Structure
@@ -41,6 +41,19 @@ GOCACHE="$PWD/../../.cache/go-build" go run ./cmd/server
 ```
 
 The API will run at `http://localhost:8080`.
+
+By default, the backend uses `STORE_DRIVER=file` and persists to
+`DATA_PATH=.data/agentflow.json`. To use Postgres instead:
+
+```bash
+STORE_DRIVER=postgres
+DATABASE_URL=postgres://agentflow:agentflow@localhost:5432/agentflow?sslmode=disable
+```
+
+The Postgres store runs idempotent startup migrations for conversations,
+messages, agents, runs, collaboration steps, trace events, and memory tables.
+Trace replay queries are backed by indexes on run, timestamp, type, status, and
+conversation fields.
 
 If `OPENAI_API_KEY` is empty, the backend streams a deterministic local response so the app can still be verified.
 Use `OPENAI_REQUEST_TIMEOUT` to tune the OpenAI-compatible request header

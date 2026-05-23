@@ -19,6 +19,8 @@ type Config struct {
 	AutonomousMaxRuntime          time.Duration
 	AutonomousMaxOutputCharacters int
 	AutonomousMaxToolCalls        int
+	StoreDriver                   string
+	DatabaseURL                   string
 	DataPath                      string
 	ToolConfigPath                string
 	AllowedOrigins                string
@@ -38,9 +40,20 @@ func Load() Config {
 		AutonomousMaxRuntime:          getAutonomousRuntime(),
 		AutonomousMaxOutputCharacters: getIntEnv("AUTONOMOUS_MAX_OUTPUT_CHARS", 60000),
 		AutonomousMaxToolCalls:        getIntEnv("AUTONOMOUS_MAX_TOOL_CALLS", 20),
+		StoreDriver:                   normalizeStoreDriver(getEnv("STORE_DRIVER", "file")),
+		DatabaseURL:                   getEnv("DATABASE_URL", ""),
 		DataPath:                      getEnv("DATA_PATH", ".data/agentflow.json"),
 		ToolConfigPath:                getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
 		AllowedOrigins:                getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
+	}
+}
+
+func normalizeStoreDriver(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "postgres", "postgresql":
+		return "postgres"
+	default:
+		return "file"
 	}
 }
 

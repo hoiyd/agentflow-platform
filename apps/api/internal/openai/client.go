@@ -16,6 +16,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/tools"
+	tracepkg "agentflow-platform/apps/api/internal/trace"
 )
 
 type Client struct {
@@ -47,6 +48,19 @@ type FunctionCall struct {
 type StreamEvent struct {
 	Type  string
 	Delta string
+}
+
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+	Estimated        bool
+}
+
+type TextCompletion struct {
+	Text  string
+	Model string
+	Usage Usage
 }
 
 func NewClient(apiKey string, baseURL string, model string) *Client {
@@ -97,7 +111,7 @@ func (c *Client) StreamChat(ctx context.Context, history []domain.Message, lates
 		events := make(chan StreamEvent)
 		go func() {
 			defer close(events)
-			if _, err := c.streamMessages(ctx, messages, events); err != nil {
+			if _, _, _, err := c.streamMessages(ctx, messages, events); err != nil {
 				errs <- err
 			}
 		}()
@@ -116,6 +130,10 @@ func (c *Client) StreamChatWithTools(ctx context.Context, history []domain.Messa
 }
 
 func (c *Client) StreamAgentChatWithTools(ctx context.Context, systemPrompt string, history []domain.Message, latest string, registry *tools.Registry) (<-chan StreamEvent, <-chan error) {
+	return c.StreamAgentChatWithToolsTrace(ctx, systemPrompt, history, latest, registry, nil, "", "")
+}
+
+func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt string, history []domain.Message, latest string, registry *tools.Registry, recorder *tracepkg.Recorder, runID string, stepID string) (<-chan StreamEvent, <-chan error) {
 	events := make(chan StreamEvent)
 	errs := make(chan error, 1)
 
@@ -125,11 +143,28 @@ func (c *Client) StreamAgentChatWithTools(ctx context.Context, systemPrompt stri
 
 		if c.apiKey == "" {
 			log.Printf("chat_fallback mode=local_no_api_key latest_len=%d enabled_tools=%q", len(latest), strings.Join(registry.EnabledNames(), ","))
-			c.streamFallbackEvents(ctx, latest, events)
+			output := fallbackEventResponse(latest)
+			span := recorder.LLMStart(ctx, runID, stepID, map[string]any{
+				"model":       "local_fallback",
+				"system":      systemPrompt,
+				"input":       latest,
+				"input_chars": len(latest),
+			})
+			c.streamText(ctx, output, 45*time.Millisecond, events)
+			recorder.LLMEnd(ctx, span, tokenPayload(map[string]any{
+				"model":        "local_fallback",
+				"output":       output,
+				"output_chars": len(output),
+			}, estimateUsage(systemPrompt+"\n"+latest, output)))
 			return
 		}
 
-		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, registry, events); err != nil {
+		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, registry, events, recorder, runID, stepID); err != nil {
+			recorder.Error(ctx, runID, stepID, map[string]any{
+				"source": "llm",
+				"model":  c.model,
+				"error":  err.Error(),
+			})
 			errs <- err
 		}
 	}()
@@ -138,9 +173,22 @@ func (c *Client) StreamAgentChatWithTools(ctx context.Context, systemPrompt stri
 }
 
 func (c *Client) CompleteText(ctx context.Context, systemPrompt string, prompt string) (string, error) {
+	completion, err := c.CompleteTextDetailed(ctx, systemPrompt, prompt)
+	if err != nil {
+		return "", err
+	}
+	return completion.Text, nil
+}
+
+func (c *Client) CompleteTextDetailed(ctx context.Context, systemPrompt string, prompt string) (TextCompletion, error) {
 	prompt = strings.TrimSpace(prompt)
 	if c.apiKey == "" {
-		return fallbackCompletion(systemPrompt, prompt), nil
+		text := fallbackCompletion(systemPrompt, prompt)
+		return TextCompletion{
+			Text:  text,
+			Model: "local_fallback",
+			Usage: estimateUsage(systemPrompt+"\n"+prompt, text),
+		}, nil
 	}
 
 	messages := []Message{
@@ -153,9 +201,17 @@ func (c *Client) CompleteText(ctx context.Context, systemPrompt string, prompt s
 		"temperature": 0.2,
 	})
 	if err != nil {
-		return "", err
+		return TextCompletion{}, err
 	}
-	return strings.TrimSpace(response.Choices[0].Message.Content), nil
+	usage := response.Usage
+	if !usage.Valid() {
+		usage = estimateUsage(strings.TrimSpace(systemPrompt)+"\n"+prompt, strings.TrimSpace(response.Choices[0].Message.Content))
+	}
+	return TextCompletion{
+		Text:  strings.TrimSpace(response.Choices[0].Message.Content),
+		Model: c.model,
+		Usage: usage,
+	}, nil
 }
 
 func (c *Client) streamFallback(ctx context.Context, latest string, chunks chan<- string) {
@@ -196,21 +252,34 @@ func truncateText(value string, limit int) string {
 }
 
 func (c *Client) streamFallbackEvents(ctx context.Context, latest string, events chan<- StreamEvent) {
-	response := "Day 2 smoke test response: backend streaming is working. Add OPENAI_API_KEY in apps/api/.env to enable model-directed tool calling. You said: " + latest
-	words := strings.Split(response, " ")
+	c.streamText(ctx, fallbackEventResponse(latest), 45*time.Millisecond, events)
+}
+
+func fallbackEventResponse(latest string) string {
+	return "Day 2 smoke test response: backend streaming is working. Add OPENAI_API_KEY in apps/api/.env to enable model-directed tool calling. You said: " + latest
+}
+
+func (c *Client) streamText(ctx context.Context, text string, delay time.Duration, events chan<- StreamEvent) {
+	words := strings.Split(text, " ")
 	for i, word := range words {
 		select {
 		case <-ctx.Done():
 			return
 		case events <- StreamEvent{Type: "delta", Delta: word + suffix(i, len(words))}:
-			time.Sleep(45 * time.Millisecond)
+			time.Sleep(delay)
 		}
 	}
 }
 
-func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string, history []domain.Message, registry *tools.Registry, events chan<- StreamEvent) error {
+func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string, history []domain.Message, registry *tools.Registry, events chan<- StreamEvent, recorder *tracepkg.Recorder, runID string, stepID string) error {
 	enabledTools := registry.EnabledNames()
 	messages := buildMessagesWithSystemPrompt(systemPrompt, history, enabledTools)
+	llmSpan := recorder.LLMStart(ctx, runID, stepID, map[string]any{
+		"model":         c.model,
+		"messages":      messages,
+		"enabled_tools": enabledTools,
+		"input_chars":   messagesTextLength(messages),
+	})
 	decision, err := c.complete(ctx, map[string]any{
 		"model":       c.model,
 		"messages":    messages,
@@ -219,6 +288,12 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		"temperature": 0.2,
 	})
 	if err != nil {
+		recorder.Error(ctx, runID, stepID, map[string]any{
+			"source": "llm",
+			"stage":  "tool_selection",
+			"model":  c.model,
+			"error":  err.Error(),
+		})
 		log.Printf(
 			"chat_fallback mode=openai_without_tools reason=%q model=%s enabled_tools=%q history_messages=%d",
 			err.Error(),
@@ -232,6 +307,12 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 			"temperature": 0.2,
 		})
 		if err != nil {
+			recorder.Error(ctx, runID, stepID, map[string]any{
+				"source": "llm",
+				"stage":  "text_fallback",
+				"model":  c.model,
+				"error":  err.Error(),
+			})
 			return err
 		}
 	}
@@ -251,7 +332,20 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	}
 
 	if len(toolCalls) == 0 {
-		return emitText(ctx, choice.Message.Content, events)
+		err := emitText(ctx, choice.Message.Content, events)
+		if err != nil {
+			return err
+		}
+		usage := decision.Usage
+		if !usage.Valid() {
+			usage = estimateUsage(messagesToText(messages), choice.Message.Content)
+		}
+		recorder.LLMEnd(ctx, llmSpan, tokenPayload(map[string]any{
+			"model":        c.model,
+			"output":       choice.Message.Content,
+			"output_chars": len(choice.Message.Content),
+		}, usage))
+		return nil
 	}
 
 	messages = append(messages, Message{
@@ -263,10 +357,32 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	results := make([]tools.ExecutionResult, 0, len(toolCalls))
 	for _, call := range normalizeToolCalls(toolCalls) {
 		log.Printf("tool_call_start id=%s tool=%s arguments=%q", call.ID, call.Function.Name, call.Function.Arguments)
+		toolSpan := recorder.ToolStart(ctx, runID, stepID, map[string]any{
+			"tool_call_id": call.ID,
+			"tool_name":    call.Function.Name,
+			"arguments":    json.RawMessage(call.Function.Arguments),
+		})
 
 		result := registry.Execute(ctx, call.Function.Name, json.RawMessage(call.Function.Arguments))
 		results = append(results, result)
 		resultText := marshalResult(result)
+		toolPayload := map[string]any{
+			"tool_call_id": call.ID,
+			"tool_name":    call.Function.Name,
+			"arguments":    string(result.Arguments),
+			"result":       result.Result,
+			"error":        result.Error,
+		}
+		if result.Error != "" {
+			recorder.Error(ctx, runID, stepID, map[string]any{
+				"source":       "tool",
+				"tool_call_id": call.ID,
+				"tool_name":    call.Function.Name,
+				"arguments":    string(result.Arguments),
+				"error":        result.Error,
+			})
+		}
+		recorder.ToolEnd(ctx, toolSpan, toolPayload)
 		logStatus := "tool_end"
 		if result.Error != "" {
 			logStatus = "tool_error"
@@ -289,14 +405,30 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		})
 	}
 
-	emitted, err := c.streamMessages(ctx, messages, events)
+	emitted, finalOutput, finalUsage, err := c.streamMessages(ctx, messages, events)
 	if err != nil {
+		recorder.Error(ctx, runID, stepID, map[string]any{
+			"source": "llm",
+			"stage":  "final_stream",
+			"model":  c.model,
+			"error":  err.Error(),
+		})
 		return err
 	}
 	if !emitted {
 		log.Printf("chat_fallback mode=tool_summary_no_stream tool_count=%d", len(results))
-		return emitText(ctx, summarizeToolResults(results), events)
+		if err := emitText(ctx, summarizeToolResults(results), events); err != nil {
+			return err
+		}
 	}
+	if !finalUsage.Valid() {
+		finalUsage = estimateUsage(messagesToText(messages), finalOutput)
+	}
+	recorder.LLMEnd(ctx, llmSpan, tokenPayload(map[string]any{
+		"model":        c.model,
+		"output":       finalOutput,
+		"output_chars": len(finalOutput),
+	}, finalUsage))
 	return nil
 }
 
@@ -327,27 +459,39 @@ func (c *Client) complete(ctx context.Context, body map[string]any) (chatComplet
 	return decoded, nil
 }
 
-func (c *Client) streamMessages(ctx context.Context, messages []Message, events chan<- StreamEvent) (bool, error) {
+func (c *Client) streamMessages(ctx context.Context, messages []Message, events chan<- StreamEvent) (bool, string, Usage, error) {
+	emitted, output, usage, err := c.streamMessagesWithUsageOption(ctx, messages, events, true)
+	if err == nil {
+		return emitted, output, usage, nil
+	}
+	log.Printf("chat_stream_usage_fallback reason=%q model=%s", err.Error(), c.model)
+	return c.streamMessagesWithUsageOption(ctx, messages, events, false)
+}
+
+func (c *Client) streamMessagesWithUsageOption(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool) (bool, string, Usage, error) {
 	body := map[string]any{
 		"model":       c.model,
 		"messages":    messages,
 		"stream":      true,
 		"temperature": 0.4,
 	}
+	if includeUsage {
+		body["stream_options"] = map[string]any{"include_usage": true}
+	}
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return false, err
+		return false, "", Usage{}, err
 	}
 
 	resp, err := c.doRequest(ctx, payload)
 	if err != nil {
-		return false, err
+		return false, "", Usage{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		bytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return false, fmt.Errorf("openai-compatible stream failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(bytes)))
+		return false, "", Usage{}, fmt.Errorf("openai-compatible stream failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(bytes)))
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
@@ -355,6 +499,8 @@ func (c *Client) streamMessages(ctx context.Context, messages []Message, events 
 	scanner.Buffer(buf, 1024*1024)
 
 	emitted := false
+	var output strings.Builder
+	var usage Usage
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || !strings.HasPrefix(line, "data: ") {
@@ -362,30 +508,34 @@ func (c *Client) streamMessages(ctx context.Context, messages []Message, events 
 		}
 		data := strings.TrimPrefix(line, "data: ")
 		if data == "[DONE]" {
-			return emitted, nil
+			return emitted, output.String(), usage, nil
 		}
 
 		var event chatCompletionChunk
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			return false, err
+			return false, "", Usage{}, err
+		}
+		if event.Usage != nil {
+			usage = *event.Usage
 		}
 		for _, choice := range event.Choices {
 			if choice.Delta.Content == "" {
 				continue
 			}
 			emitted = true
+			output.WriteString(choice.Delta.Content)
 			select {
 			case <-ctx.Done():
-				return false, ctx.Err()
+				return false, output.String(), usage, ctx.Err()
 			case events <- StreamEvent{Type: "delta", Delta: choice.Delta.Content}:
 			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		return false, err
+		return false, output.String(), usage, err
 	}
-	return false, errors.New("openai-compatible stream ended without [DONE]")
+	return false, output.String(), usage, errors.New("openai-compatible stream ended without [DONE]")
 }
 
 func (c *Client) doRequest(ctx context.Context, payload []byte) (*http.Response, error) {
@@ -406,12 +556,14 @@ type chatCompletionChunk struct {
 			Content string `json:"content"`
 		} `json:"delta"`
 	} `json:"choices"`
+	Usage *Usage `json:"usage"`
 }
 
 type chatCompletionResponse struct {
 	Choices []struct {
 		Message Message `json:"message"`
 	} `json:"choices"`
+	Usage Usage `json:"usage"`
 }
 
 func buildMessages(history []domain.Message) []Message {
@@ -556,4 +708,57 @@ func normalizeBaseURL(baseURL string) string {
 		return "https://api.openai.com/v1"
 	}
 	return strings.TrimRight(baseURL, "/")
+}
+
+func messagesTextLength(messages []Message) int {
+	total := 0
+	for _, message := range messages {
+		total += len(message.Content)
+	}
+	return total
+}
+
+func messagesToText(messages []Message) string {
+	var builder strings.Builder
+	for _, message := range messages {
+		if message.Content == "" {
+			continue
+		}
+		builder.WriteString(message.Role)
+		builder.WriteString(": ")
+		builder.WriteString(message.Content)
+		builder.WriteString("\n")
+	}
+	return builder.String()
+}
+
+func estimateUsage(input string, output string) Usage {
+	promptTokens := estimateTokens(input)
+	completionTokens := estimateTokens(output)
+	return Usage{
+		PromptTokens:     promptTokens,
+		CompletionTokens: completionTokens,
+		TotalTokens:      promptTokens + completionTokens,
+		Estimated:        true,
+	}
+}
+
+func estimateTokens(value string) int {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	return len([]rune(value))/4 + 1
+}
+
+func (u Usage) Valid() bool {
+	return u.PromptTokens > 0 || u.CompletionTokens > 0 || u.TotalTokens > 0
+}
+
+func tokenPayload(payload map[string]any, usage Usage) map[string]any {
+	payload["prompt_tokens"] = usage.PromptTokens
+	payload["completion_tokens"] = usage.CompletionTokens
+	payload["total_tokens"] = usage.TotalTokens
+	payload["token_usage_estimated"] = usage.Estimated
+	return payload
 }

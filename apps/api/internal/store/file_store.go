@@ -27,6 +27,7 @@ type fileData struct {
 	Agents             []domain.Agent             `json:"agents"`
 	Runs               []domain.Run               `json:"runs"`
 	CollaborationSteps []domain.CollaborationStep `json:"collaboration_steps"`
+	TraceEvents        []domain.TraceEvent        `json:"trace_events"`
 }
 
 func NewFileStore(path string) (*FileStore, error) {
@@ -121,6 +122,15 @@ func (s *FileStore) DeleteConversation(id string) error {
 		steps = append(steps, step)
 	}
 	s.data.CollaborationSteps = steps
+
+	traceEvents := make([]domain.TraceEvent, 0, len(s.data.TraceEvents))
+	for _, event := range s.data.TraceEvents {
+		if runIDs[event.RunID] {
+			continue
+		}
+		traceEvents = append(traceEvents, event)
+	}
+	s.data.TraceEvents = traceEvents
 
 	return s.saveLocked()
 }
@@ -435,6 +445,89 @@ func (s *FileStore) ListCollaborationSteps(runID string) ([]domain.Collaboration
 	return items, nil
 }
 
+func (s *FileStore) CreateTraceEvent(event domain.TraceEvent) (domain.TraceEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.hasRunLocked(event.RunID) {
+		return domain.TraceEvent{}, errors.New("run not found")
+	}
+	event.ID = strings.TrimSpace(event.ID)
+	if event.ID == "" {
+		event.ID = newID("trace")
+	}
+	event.StepID = strings.TrimSpace(event.StepID)
+	if event.Type == "" {
+		return domain.TraceEvent{}, errors.New("trace event type is required")
+	}
+	if event.Payload == nil {
+		event.Payload = map[string]any{}
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now().UTC()
+	}
+	if event.DurationMS < 0 {
+		event.DurationMS = 0
+	}
+	s.data.TraceEvents = append(s.data.TraceEvents, event)
+	return event, s.saveLocked()
+}
+
+func (s *FileStore) ListTraceEvents(runID string) ([]domain.TraceEvent, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	items := []domain.TraceEvent{}
+	for _, event := range s.data.TraceEvents {
+		if event.RunID == runID {
+			items = append(items, event)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Timestamp.Equal(items[j].Timestamp) {
+			return items[i].ID < items[j].ID
+		}
+		return items[i].Timestamp.Before(items[j].Timestamp)
+	})
+	return items, nil
+}
+
+func (s *FileStore) GetRunTraceSummary(runID string) (domain.RunTraceSummary, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	run, ok := s.getRunLocked(runID)
+	if !ok {
+		return domain.RunTraceSummary{}, ErrNotFound("run")
+	}
+	return buildRunTraceSummary(run, s.traceEventsForRunLocked(runID)), nil
+}
+
+func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	run, ok := s.getRunLocked(runID)
+	if !ok {
+		return domain.RunReplay{}, false, nil
+	}
+	conversation, ok := s.getConversationLocked(run.ConversationID)
+	if !ok {
+		return domain.RunReplay{}, false, errors.New("conversation not found")
+	}
+	messages := s.messagesForConversationLocked(run.ConversationID)
+	steps := s.stepsForRunLocked(runID)
+	events := s.traceEventsForRunLocked(runID)
+	return domain.RunReplay{
+		Run:          run,
+		Conversation: conversation,
+		Messages:     messages,
+		Steps:        steps,
+		Summary:      buildRunTraceSummary(run, events),
+		Events:       events,
+	}, true, nil
+}
+
 func (s *FileStore) load() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
@@ -510,6 +603,7 @@ func emptyFileData() fileData {
 		Agents:             []domain.Agent{},
 		Runs:               []domain.Run{},
 		CollaborationSteps: []domain.CollaborationStep{},
+		TraceEvents:        []domain.TraceEvent{},
 	}
 }
 
@@ -529,6 +623,123 @@ func (s *FileStore) normalizeLoadedDataLocked() {
 	if s.data.CollaborationSteps == nil {
 		s.data.CollaborationSteps = []domain.CollaborationStep{}
 	}
+	if s.data.TraceEvents == nil {
+		s.data.TraceEvents = []domain.TraceEvent{}
+	}
+}
+
+func (s *FileStore) getRunLocked(id string) (domain.Run, bool) {
+	for _, item := range s.data.Runs {
+		if item.ID == id {
+			return item, true
+		}
+	}
+	return domain.Run{}, false
+}
+
+func (s *FileStore) getConversationLocked(id string) (domain.Conversation, bool) {
+	for _, item := range s.data.Conversations {
+		if item.ID == id {
+			return item, true
+		}
+	}
+	return domain.Conversation{}, false
+}
+
+func (s *FileStore) messagesForConversationLocked(conversationID string) []domain.Message {
+	messages := []domain.Message{}
+	for _, message := range s.data.Messages {
+		if message.ConversationID == conversationID {
+			messages = append(messages, message)
+		}
+	}
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].CreatedAt.Before(messages[j].CreatedAt)
+	})
+	return messages
+}
+
+func (s *FileStore) stepsForRunLocked(runID string) []domain.CollaborationStep {
+	steps := []domain.CollaborationStep{}
+	for _, step := range s.data.CollaborationSteps {
+		if step.RunID == runID {
+			steps = append(steps, step)
+		}
+	}
+	sort.Slice(steps, func(i, j int) bool {
+		return steps[i].CreatedAt.Before(steps[j].CreatedAt)
+	})
+	return steps
+}
+
+func (s *FileStore) traceEventsForRunLocked(runID string) []domain.TraceEvent {
+	events := []domain.TraceEvent{}
+	for _, event := range s.data.TraceEvents {
+		if event.RunID == runID {
+			events = append(events, event)
+		}
+	}
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].Timestamp.Equal(events[j].Timestamp) {
+			return events[i].ID < events[j].ID
+		}
+		return events[i].Timestamp.Before(events[j].Timestamp)
+	})
+	return events
+}
+
+func buildRunTraceSummary(run domain.Run, events []domain.TraceEvent) domain.RunTraceSummary {
+	summary := domain.RunTraceSummary{
+		RunID:  run.ID,
+		Status: run.Status,
+	}
+	if run.StartedAt != nil {
+		end := time.Now().UTC()
+		if run.CompletedAt != nil {
+			end = *run.CompletedAt
+		}
+		if end.After(*run.StartedAt) {
+			summary.TotalDurationMS = end.Sub(*run.StartedAt).Milliseconds()
+		}
+	}
+	for _, event := range events {
+		switch event.Type {
+		case domain.TraceLLMEnd:
+			summary.LLMCalls++
+			summary.PromptTokens += intPayload(event.Payload, "prompt_tokens")
+			summary.CompletionTokens += intPayload(event.Payload, "completion_tokens")
+			summary.TotalTokens += intPayload(event.Payload, "total_tokens")
+			if boolPayload(event.Payload, "token_usage_estimated") {
+				summary.TokenUsageEstimated = true
+			}
+		case domain.TraceToolEnd:
+			summary.ToolCalls++
+		case domain.TraceError:
+			summary.ErrorCount++
+		}
+	}
+	return summary
+}
+
+func intPayload(payload map[string]any, key string) int {
+	switch value := payload[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	case json.Number:
+		i, _ := value.Int64()
+		return int(i)
+	default:
+		return 0
+	}
+}
+
+func boolPayload(payload map[string]any, key string) bool {
+	value, ok := payload[key].(bool)
+	return ok && value
 }
 
 func (s *FileStore) seedDefaultAgentsLocked() {

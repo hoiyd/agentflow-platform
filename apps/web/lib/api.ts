@@ -150,6 +150,40 @@ export type CollaborationStepInfo = {
   updated_at: string;
 };
 
+export type TraceEventType = "llm_start" | "llm_end" | "tool_start" | "tool_end" | "error" | string;
+
+export type TraceEventInfo = {
+  id: string;
+  run_id: string;
+  step_id?: string;
+  type: TraceEventType;
+  payload: Record<string, unknown>;
+  timestamp: string;
+  duration_ms?: number;
+};
+
+export type RunTraceSummary = {
+  run_id: string;
+  status: string;
+  total_duration_ms: number;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  token_usage_estimated: boolean;
+  llm_calls: number;
+  tool_calls: number;
+  error_count: number;
+};
+
+export type RunReplay = {
+  run: RunInfo;
+  conversation: Conversation;
+  messages: Message[];
+  steps: CollaborationStepInfo[];
+  summary: RunTraceSummary;
+  events: TraceEventInfo[];
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
 export async function listConversations(): Promise<Conversation[]> {
@@ -311,6 +345,14 @@ export async function listCollaborationSteps(runId: string): Promise<Collaborati
   });
   if (!response.ok) {
     throw new Error(`Failed to load collaboration steps: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function getRunReplay(runId: string): Promise<RunReplay> {
+  const response = await fetch(`${API_BASE}/api/runs/${runId}/replay`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Failed to load run replay: ${response.status}`);
   }
   return response.json();
 }

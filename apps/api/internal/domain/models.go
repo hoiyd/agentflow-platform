@@ -114,3 +114,45 @@ type ChatChunk struct {
 	Input          string `json:"input,omitempty"`
 	Output         string `json:"output,omitempty"`
 }
+
+type TraceEventType string
+
+const (
+	TraceLLMStart  TraceEventType = "llm_start"
+	TraceLLMEnd    TraceEventType = "llm_end"
+	TraceToolStart TraceEventType = "tool_start"
+	TraceToolEnd   TraceEventType = "tool_end"
+	TraceError     TraceEventType = "error"
+)
+
+type TraceEvent struct {
+	ID         string         `json:"id"`
+	RunID      string         `json:"run_id"`
+	StepID     string         `json:"step_id,omitempty"`
+	Type       TraceEventType `json:"type"`
+	Payload    map[string]any `json:"payload"`
+	Timestamp  time.Time      `json:"timestamp"`
+	DurationMS int64          `json:"duration_ms,omitempty"`
+}
+
+type RunTraceSummary struct {
+	RunID               string    `json:"run_id"`
+	Status              RunStatus `json:"status"`
+	TotalDurationMS     int64     `json:"total_duration_ms"`
+	TotalTokens         int       `json:"total_tokens"`
+	PromptTokens        int       `json:"prompt_tokens"`
+	CompletionTokens    int       `json:"completion_tokens"`
+	TokenUsageEstimated bool      `json:"token_usage_estimated"`
+	LLMCalls            int       `json:"llm_calls"`
+	ToolCalls           int       `json:"tool_calls"`
+	ErrorCount          int       `json:"error_count"`
+}
+
+type RunReplay struct {
+	Run          Run                 `json:"run"`
+	Conversation Conversation        `json:"conversation"`
+	Messages     []Message           `json:"messages"`
+	Steps        []CollaborationStep `json:"steps"`
+	Summary      RunTraceSummary     `json:"summary"`
+	Events       []TraceEvent        `json:"events"`
+}

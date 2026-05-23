@@ -21,9 +21,16 @@ func main() {
 
 	cfg := config.Load()
 
-	fileStore, err := store.NewFileStore(cfg.DataPath)
+	appStore, err := newStore(cfg)
 	if err != nil {
 		log.Fatalf("create store: %v", err)
+	}
+	if closer, ok := appStore.(interface{ Close() error }); ok {
+		defer func() {
+			if err := closer.Close(); err != nil {
+				log.Printf("close store: %v", err)
+			}
+		}()
 	}
 
 	openAIClient := openai.NewClientWithTimeout(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel, cfg.OpenAITimeout)
@@ -37,7 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("create tools manager: %v", err)
 	}
-	handler := httpapi.NewHandlerWithRouterModeAndLimits(fileStore, openAIClient, toolManager, splitOrigins(cfg.AllowedOrigins), cfg.RouterMode, agent.AutonomousLimits{
+	handler := httpapi.NewHandlerWithRouterModeAndLimits(appStore, openAIClient, toolManager, splitOrigins(cfg.AllowedOrigins), cfg.RouterMode, agent.AutonomousLimits{
 		MaxIterations:  cfg.AutonomousMaxIterations,
 		MaxRuntime:     cfg.AutonomousMaxRuntime,
 		MaxOutputChars: cfg.AutonomousMaxOutputCharacters,
@@ -51,6 +58,7 @@ func main() {
 	}
 
 	log.Printf("AgentFlow API listening on http://localhost:%s", cfg.Port)
+	log.Printf("AgentFlow store driver: %s", cfg.StoreDriver)
 	log.Printf("AgentFlow router mode: %s", cfg.RouterMode)
 	log.Printf("AgentFlow autonomous limits: max_iterations=%d max_runtime=%s max_output_chars=%d max_tool_calls=%d", cfg.AutonomousMaxIterations, cfg.AutonomousMaxRuntime, cfg.AutonomousMaxOutputCharacters, cfg.AutonomousMaxToolCalls)
 	if cfg.OpenAIAPIKey == "" {
@@ -62,6 +70,13 @@ func main() {
 	}
 
 	_ = os.Stdout.Sync()
+}
+
+func newStore(cfg config.Config) (store.Store, error) {
+	if cfg.StoreDriver == "postgres" {
+		return store.NewPostgresStore(cfg.DatabaseURL)
+	}
+	return store.NewFileStore(cfg.DataPath)
 }
 
 func splitOrigins(value string) []string {

@@ -122,3 +122,23 @@ func (h *Handler) listCollaborationSteps(w http.ResponseWriter, r *http.Request)
 	}
 	writeJSON(w, http.StatusOK, steps)
 }
+
+func (h *Handler) getRunReplay(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/runs/"))
+	id = strings.TrimSpace(strings.TrimSuffix(id, "/replay"))
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "run id is required")
+		return
+	}
+
+	replay, ok, err := h.store.GetRunReplay(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "run not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, replay)
+}

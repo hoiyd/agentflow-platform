@@ -628,13 +628,20 @@ export function ChatShell() {
       <main className="main">
         <header className="topbar">
           <h2>{view === "tools" ? "Tools" : activeConversation?.title ?? "New conversation"}</h2>
-          <span className="status">
-            {view === "tools"
-              ? `${tools.filter((tool) => tool.enabled).length} enabled`
-              : isStreaming
-                ? "Streaming..."
-                : "Ready"}
-          </span>
+          <div className="topbar-actions">
+            {view === "chat" && runState?.id && isTerminalRun ? (
+              <a className="run-link" href={`/runs/${runState.id}`}>
+                View run
+              </a>
+            ) : null}
+            <span className="status">
+              {view === "tools"
+                ? `${tools.filter((tool) => tool.enabled).length} enabled`
+                : isStreaming
+                  ? "Streaming..."
+                  : "Ready"}
+            </span>
+          </div>
         </header>
 
         {view === "tools" ? (

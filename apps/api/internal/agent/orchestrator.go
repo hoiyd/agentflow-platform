@@ -244,12 +244,40 @@ func (r *Runtime) routeWorkerAgent(ctx context.Context, runID string, agents []d
 }
 
 func (r *Runtime) routeWorkerAgentWithLLM(ctx context.Context, runID string, agents []domain.Agent, task string, plan string) (routeDecision, error) {
-	response, err := r.openAI.CompleteText(ctx, routerSystemPrompt(), routerUserPrompt(task, plan, agents))
+	input := routerUserPrompt(task, plan, agents)
+	span := r.trace.LLMStart(ctx, runID, "", map[string]any{
+		"role":        "router",
+		"system":      routerSystemPrompt(),
+		"input":       input,
+		"input_chars": len(input),
+	})
+	completion, err := r.openAI.CompleteTextDetailed(ctx, routerSystemPrompt(), input)
 	if err != nil {
+		r.trace.Error(ctx, runID, "", map[string]any{
+			"source": "llm",
+			"role":   "router",
+			"error":  err.Error(),
+		})
 		return routeDecision{}, err
 	}
+	response := completion.Text
+	r.trace.LLMEnd(ctx, span, map[string]any{
+		"role":                  "router",
+		"model":                 completion.Model,
+		"output":                response,
+		"output_chars":          len(response),
+		"prompt_tokens":         completion.Usage.PromptTokens,
+		"completion_tokens":     completion.Usage.CompletionTokens,
+		"total_tokens":          completion.Usage.TotalTokens,
+		"token_usage_estimated": completion.Usage.Estimated,
+	})
 	decision, err := parseLLMRouteDecision(response, agents)
 	if err != nil {
+		r.trace.Error(ctx, runID, "", map[string]any{
+			"source": "router",
+			"error":  err.Error(),
+			"output": response,
+		})
 		return routeDecision{}, err
 	}
 	decision.Mode = "llm"
@@ -536,14 +564,39 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- Collab
 	}
 	events <- CollaborationEvent{Type: "collaboration_step", Step: step}
 
-	output, err := r.openAI.CompleteText(ctx, systemPrompt, input)
+	span := r.trace.LLMStart(ctx, prepared.Run.ID, step.ID, map[string]any{
+		"role":        role,
+		"agent_id":    agentID,
+		"system":      systemPrompt,
+		"input":       input,
+		"input_chars": len(input),
+	})
+	completion, err := r.openAI.CompleteTextDetailed(ctx, systemPrompt, input)
 	if err != nil {
+		r.trace.Error(ctx, prepared.Run.ID, step.ID, map[string]any{
+			"source":   "llm",
+			"role":     role,
+			"agent_id": agentID,
+			"error":    err.Error(),
+		})
 		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
 		if updateErr == nil {
 			events <- CollaborationEvent{Type: "collaboration_step", Step: failed}
 		}
 		return "", err
 	}
+	output := completion.Text
+	r.trace.LLMEnd(ctx, span, map[string]any{
+		"role":                  role,
+		"agent_id":              agentID,
+		"model":                 completion.Model,
+		"output":                output,
+		"output_chars":          len(output),
+		"prompt_tokens":         completion.Usage.PromptTokens,
+		"completion_tokens":     completion.Usage.CompletionTokens,
+		"total_tokens":          completion.Usage.TotalTokens,
+		"token_usage_estimated": completion.Usage.Estimated,
+	})
 	completed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepCompleted, output, "")
 	if err != nil {
 		return "", err
