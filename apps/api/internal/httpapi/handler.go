@@ -59,6 +59,10 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
 		h.listMessages(w, r)
 	case r.Method == http.MethodPost && path == "/api/chat":
 		h.chat(w, r)
+	case r.Method == http.MethodPost && path == "/api/memories":
+		h.createMemory(w, r)
+	case r.Method == http.MethodPost && path == "/api/memories/search":
+		h.searchMemories(w, r)
 	case r.Method == http.MethodGet && path == "/api/agents":
 		h.listAgents(w, r)
 	case r.Method == http.MethodPost && path == "/api/agents":

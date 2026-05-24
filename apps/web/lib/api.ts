@@ -186,12 +186,33 @@ export type RunReplay = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
+async function readJSON<T>(response: Response): Promise<T> {
+  return response.json() as Promise<T>;
+}
+
+async function readArrayJSON<T>(response: Response): Promise<T[]> {
+  const data = await readJSON<unknown>(response);
+  return Array.isArray(data) ? (data as T[]) : [];
+}
+
+function normalizeRunReplay(data: unknown): RunReplay {
+  const replay = data as Partial<RunReplay>;
+  return {
+    run: replay.run as RunInfo,
+    conversation: replay.conversation as Conversation,
+    summary: replay.summary as RunTraceSummary,
+    messages: Array.isArray(replay.messages) ? replay.messages : [],
+    steps: Array.isArray(replay.steps) ? replay.steps : [],
+    events: Array.isArray(replay.events) ? replay.events : []
+  };
+}
+
 export async function listConversations(): Promise<Conversation[]> {
   const response = await fetch(`${API_BASE}/api/conversations`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load conversations: ${response.status}`);
   }
-  return response.json();
+  return readArrayJSON<Conversation>(response);
 }
 
 export async function createConversation(title: string): Promise<Conversation> {
@@ -203,7 +224,7 @@ export async function createConversation(title: string): Promise<Conversation> {
   if (!response.ok) {
     throw new Error(`Failed to create conversation: ${response.status}`);
   }
-  return response.json();
+  return readJSON<Conversation>(response);
 }
 
 export async function deleteConversation(conversationId: string): Promise<void> {
@@ -222,7 +243,7 @@ export async function listMessages(conversationId: string): Promise<Message[]> {
   if (!response.ok) {
     throw new Error(`Failed to load messages: ${response.status}`);
   }
-  return response.json();
+  return readArrayJSON<Message>(response);
 }
 
 export async function streamChat(
@@ -283,7 +304,7 @@ export async function cancelRun(runId: string): Promise<RunInfo> {
   if (!response.ok) {
     throw new Error(`Failed to cancel run: ${response.status}`);
   }
-  return response.json();
+  return readJSON<RunInfo>(response);
 }
 
 async function readChatEventStream(response: Response, onEvent: (event: ChatEvent) => void) {
@@ -320,7 +341,7 @@ export async function listAgents(): Promise<AgentInfo[]> {
   if (!response.ok) {
     throw new Error(`Failed to load agents: ${response.status}`);
   }
-  return response.json();
+  return readArrayJSON<AgentInfo>(response);
 }
 
 export async function listTools(): Promise<ToolInfo[]> {
@@ -328,7 +349,7 @@ export async function listTools(): Promise<ToolInfo[]> {
   if (!response.ok) {
     throw new Error(`Failed to load tools: ${response.status}`);
   }
-  return response.json();
+  return readArrayJSON<ToolInfo>(response);
 }
 
 export async function listRuns(): Promise<RunInfo[]> {
@@ -336,7 +357,7 @@ export async function listRuns(): Promise<RunInfo[]> {
   if (!response.ok) {
     throw new Error(`Failed to load runs: ${response.status}`);
   }
-  return response.json();
+  return readArrayJSON<RunInfo>(response);
 }
 
 export async function listCollaborationSteps(runId: string): Promise<CollaborationStepInfo[]> {
@@ -346,7 +367,7 @@ export async function listCollaborationSteps(runId: string): Promise<Collaborati
   if (!response.ok) {
     throw new Error(`Failed to load collaboration steps: ${response.status}`);
   }
-  return response.json();
+  return readArrayJSON<CollaborationStepInfo>(response);
 }
 
 export async function getRunReplay(runId: string): Promise<RunReplay> {
@@ -354,7 +375,7 @@ export async function getRunReplay(runId: string): Promise<RunReplay> {
   if (!response.ok) {
     throw new Error(`Failed to load run replay: ${response.status}`);
   }
-  return response.json();
+  return normalizeRunReplay(await readJSON<unknown>(response));
 }
 
 export async function setToolEnabled(name: string, enabled: boolean): Promise<ToolInfo[]> {
@@ -365,5 +386,5 @@ export async function setToolEnabled(name: string, enabled: boolean): Promise<To
   if (!response.ok) {
     throw new Error(`Failed to update tool: ${response.status}`);
   }
-  return response.json();
+  return readArrayJSON<ToolInfo>(response);
 }

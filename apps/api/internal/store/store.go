@@ -43,4 +43,6 @@ type Store interface {
 	ListTraceEvents(runID string) ([]domain.TraceEvent, error)
 	GetRunTraceSummary(runID string) (domain.RunTraceSummary, error)
 	GetRunReplay(runID string) (domain.RunReplay, bool, error)
+	CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error)
+	SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error)
 }

@@ -3,6 +3,8 @@ package openai
 import (
 	"strings"
 	"testing"
+
+	"agentflow-platform/apps/api/internal/domain"
 )
 
 func TestParseFallbackToolCall(t *testing.T) {
@@ -45,5 +47,26 @@ func TestBuildMessagesWithSystemPrompt(t *testing.T) {
 	}
 	if !strings.Contains(messages[0].Content, "You are a test agent.") {
 		t.Fatalf("expected custom system prompt, got %q", messages[0].Content)
+	}
+}
+
+func TestBuildMessagesWithRetrievedMemories(t *testing.T) {
+	messages := buildMessagesWithSystemPrompt("You are a test agent.", nil, nil, domain.RetrievedMemory{
+		Memory: domain.Memory{
+			ID:      "mem_1",
+			Kind:    "note",
+			Content: "User prefers pgvector-backed memory search.",
+		},
+		Similarity: 0.9,
+		Score:      0.95,
+	})
+	if len(messages) != 1 {
+		t.Fatalf("expected one system message, got %d", len(messages))
+	}
+	if !strings.Contains(messages[0].Content, "Retrieved memories") {
+		t.Fatalf("expected retrieved memory section, got %q", messages[0].Content)
+	}
+	if !strings.Contains(messages[0].Content, "User prefers pgvector-backed memory search.") {
+		t.Fatalf("expected memory content, got %q", messages[0].Content)
 	}
 }

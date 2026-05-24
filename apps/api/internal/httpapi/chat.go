@@ -38,7 +38,8 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.store.AddMessage(conversationID, "user", req.Message); err != nil {
+	userMessage, err := h.store.AddMessage(conversationID, "user", req.Message)
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -64,11 +65,11 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 
 	mode := agentpkg.NormalizeChatMode(req.Mode)
 	if mode == agentpkg.ChatModeAutonomous {
-		h.chatAutonomous(w, flusher, r, req, conversationID)
+		h.chatAutonomous(w, flusher, r, req, conversationID, userMessage)
 		return
 	}
 	if mode == agentpkg.ChatModeMultiAgent {
-		h.chatMultiAgent(w, flusher, r, req, conversationID)
+		h.chatMultiAgent(w, flusher, r, req, conversationID, userMessage)
 		return
 	}
 
@@ -116,6 +117,9 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ok && currentRun.Status == domain.RunWaitingForUser {
+		if !h.rememberMessageOrFail(w, flusher, r, currentRun.ID, userMessage) {
+			return
+		}
 		writeSSE(w, "done", domain.ChatChunk{
 			Type:           "done",
 			ConversationID: conversationID,
@@ -132,6 +136,12 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
 		flusher.Flush()
+		return
+	}
+	if !h.rememberMessageOrFail(w, flusher, r, prepared.Run.ID, userMessage) {
+		return
+	}
+	if !h.rememberMessageOrFail(w, flusher, r, prepared.Run.ID, message) {
 		return
 	}
 
@@ -153,7 +163,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 }
 
-func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string) {
+func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
 	prepared, err := h.agentRuntime.PrepareCollaborationRun(r.Context(), req.AgentID, conversationID)
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -226,6 +236,9 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 		return
 	}
 	if run.Status == domain.RunWaitingForUser {
+		if !h.rememberMessageOrFail(w, flusher, r, run.ID, userMessage) {
+			return
+		}
 		writeSSE(w, "done", domain.ChatChunk{
 			Type:           "done",
 			ConversationID: conversationID,
@@ -242,6 +255,12 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
 		flusher.Flush()
+		return
+	}
+	if !h.rememberMessageOrFail(w, flusher, r, prepared.Run.ID, userMessage) {
+		return
+	}
+	if !h.rememberMessageOrFail(w, flusher, r, prepared.Run.ID, message) {
 		return
 	}
 
@@ -263,7 +282,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 	flusher.Flush()
 }
 
-func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string) {
+func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
 	prepared, err := h.agentRuntime.PrepareAutonomousRun(r.Context(), conversationID)
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -364,6 +383,9 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 		return
 	}
 	if run.Status == domain.RunWaitingForUser || run.Status == domain.RunCanceled {
+		if !h.rememberMessageOrFail(w, flusher, r, run.ID, userMessage) {
+			return
+		}
 		writeSSE(w, "done", domain.ChatChunk{
 			Type:           "done",
 			ConversationID: conversationID,
@@ -380,6 +402,12 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
 		flusher.Flush()
+		return
+	}
+	if !h.rememberMessageOrFail(w, flusher, r, prepared.Run.ID, userMessage) {
+		return
+	}
+	if !h.rememberMessageOrFail(w, flusher, r, prepared.Run.ID, message) {
 		return
 	}
 
@@ -490,6 +518,9 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 		_, _ = h.agentRuntime.FailRun(id, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
 		flusher.Flush()
+		return
+	}
+	if !h.rememberMessageOrFail(w, flusher, r, id, message) {
 		return
 	}
 
@@ -647,6 +678,9 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 		return
 	}
+	if !h.rememberMessageOrFail(w, flusher, r, id, message) {
+		return
+	}
 	completed, err := h.agentRuntime.CompleteRun(id)
 	if err != nil {
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
@@ -662,6 +696,18 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		MessageID:      message.ID,
 	})
 	flusher.Flush()
+}
+
+func (h *Handler) rememberMessageOrFail(w http.ResponseWriter, flusher http.Flusher, r *http.Request, runID string, message domain.Message) bool {
+	if err := h.rememberMessage(r.Context(), message, runID); err != nil {
+		if strings.TrimSpace(runID) != "" {
+			_, _ = h.agentRuntime.FailRun(runID, err)
+		}
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		flusher.Flush()
+		return false
+	}
+	return true
 }
 
 func writeSSE(w http.ResponseWriter, event string, value any) {

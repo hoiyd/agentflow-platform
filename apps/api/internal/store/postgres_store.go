@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,7 +64,7 @@ func (s *PostgresStore) ListConversations() ([]domain.Conversation, error) {
 	}
 	defer rows.Close()
 
-	var items []domain.Conversation
+	items := []domain.Conversation{}
 	for rows.Next() {
 		var item domain.Conversation
 		if err := rows.Scan(&item.ID, &item.Title, &item.CreatedAt, &item.UpdatedAt); err != nil {
@@ -126,7 +128,7 @@ func (s *PostgresStore) ListMessages(conversationID string) ([]domain.Message, e
 	}
 	defer rows.Close()
 
-	var items []domain.Message
+	items := []domain.Message{}
 	for rows.Next() {
 		var item domain.Message
 		if err := rows.Scan(&item.ID, &item.ConversationID, &item.Role, &item.Content, &item.CreatedAt); err != nil {
@@ -189,7 +191,7 @@ func (s *PostgresStore) ListAgents() ([]domain.Agent, error) {
 	}
 	defer rows.Close()
 
-	var items []domain.Agent
+	items := []domain.Agent{}
 	for rows.Next() {
 		item, err := scanAgent(rows)
 		if err != nil {
@@ -375,7 +377,7 @@ func (s *PostgresStore) ListRuns() ([]domain.Run, error) {
 	}
 	defer rows.Close()
 
-	var items []domain.Run
+	items := []domain.Run{}
 	for rows.Next() {
 		run, err := scanRun(rows)
 		if err != nil {
@@ -444,7 +446,7 @@ func (s *PostgresStore) ListCollaborationSteps(runID string) ([]domain.Collabora
 	}
 	defer rows.Close()
 
-	var items []domain.CollaborationStep
+	items := []domain.CollaborationStep{}
 	for rows.Next() {
 		step, err := scanStep(rows)
 		if err != nil {
@@ -495,7 +497,7 @@ func (s *PostgresStore) ListTraceEvents(runID string) ([]domain.TraceEvent, erro
 	}
 	defer rows.Close()
 
-	var items []domain.TraceEvent
+	items := []domain.TraceEvent{}
 	for rows.Next() {
 		event, err := scanTraceEvent(rows)
 		if err != nil {
@@ -553,6 +555,147 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 		Summary:      buildRunTraceSummary(run, events),
 		Events:       events,
 	}, true, nil
+}
+
+func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
+	now := time.Now().UTC()
+	memory.ID = strings.TrimSpace(memory.ID)
+	if memory.ID == "" {
+		memory.ID = newID("mem")
+	}
+	memory.Kind = strings.TrimSpace(memory.Kind)
+	if memory.Kind == "" {
+		return domain.Memory{}, errors.New("memory kind is required")
+	}
+	memory.Content = strings.TrimSpace(memory.Content)
+	if memory.Content == "" {
+		return domain.Memory{}, errors.New("memory content is required")
+	}
+	if memory.Metadata == nil {
+		memory.Metadata = map[string]any{}
+	}
+	if memory.CreatedAt.IsZero() {
+		memory.CreatedAt = now
+	}
+	memory.UpdatedAt = now
+	embedding.MemoryID = memory.ID
+	if embedding.Provider == "" {
+		embedding.Provider = "local"
+	}
+	if embedding.Model == "" {
+		embedding.Model = "local_hash"
+	}
+	if embedding.Dimensions == 0 {
+		embedding.Dimensions = len(embedding.Embedding)
+	}
+	if embedding.CreatedAt.IsZero() {
+		embedding.CreatedAt = now
+	}
+	if len(embedding.Embedding) != 1536 {
+		return domain.Memory{}, fmt.Errorf("memory embedding dimensions must be 1536, got %d", len(embedding.Embedding))
+	}
+	metadataJSON, err := json.Marshal(memory.Metadata)
+	if err != nil {
+		return domain.Memory{}, err
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return domain.Memory{}, err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`
+		INSERT INTO memories (id, workspace_id, user_id, project_id, conversation_id, run_id, source_message_id, kind, content, metadata, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (id) DO UPDATE SET
+			workspace_id = EXCLUDED.workspace_id,
+			user_id = EXCLUDED.user_id,
+			project_id = EXCLUDED.project_id,
+			conversation_id = EXCLUDED.conversation_id,
+			run_id = EXCLUDED.run_id,
+			source_message_id = EXCLUDED.source_message_id,
+			kind = EXCLUDED.kind,
+			content = EXCLUDED.content,
+			metadata = EXCLUDED.metadata,
+			updated_at = EXCLUDED.updated_at`,
+		memory.ID, nullString(memory.WorkspaceID), nullString(memory.UserID), nullString(memory.ProjectID), nullString(memory.ConversationID), nullString(memory.RunID), nullString(memory.SourceMessageID), memory.Kind, memory.Content, metadataJSON, memory.CreatedAt, memory.UpdatedAt); err != nil {
+		return domain.Memory{}, err
+	}
+
+	if _, err := tx.Exec(`
+		INSERT INTO memory_embeddings (memory_id, provider, model, dimensions, embedding, created_at)
+		VALUES ($1, $2, $3, $4, $5::vector, $6)
+		ON CONFLICT (memory_id) DO UPDATE SET
+			provider = EXCLUDED.provider,
+			model = EXCLUDED.model,
+			dimensions = EXCLUDED.dimensions,
+			embedding = EXCLUDED.embedding,
+			created_at = EXCLUDED.created_at`,
+		embedding.MemoryID, embedding.Provider, embedding.Model, embedding.Dimensions, vectorLiteral(embedding.Embedding), embedding.CreatedAt); err != nil {
+		return domain.Memory{}, err
+	}
+	return memory, tx.Commit()
+}
+
+func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+	if len(search.Embedding) != 1536 {
+		return nil, fmt.Errorf("memory search embedding dimensions must be 1536, got %d", len(search.Embedding))
+	}
+	limit := search.Limit
+	if limit <= 0 || limit > 10 {
+		limit = 5
+	}
+
+	args := []any{vectorLiteral(search.Embedding), limit}
+	conditions := []string{}
+	if strings.TrimSpace(search.WorkspaceID) != "" {
+		args = append(args, search.WorkspaceID)
+		conditions = append(conditions, fmt.Sprintf("m.workspace_id = $%d", len(args)))
+	}
+	if strings.TrimSpace(search.UserID) != "" {
+		args = append(args, search.UserID)
+		conditions = append(conditions, fmt.Sprintf("m.user_id = $%d", len(args)))
+	}
+	if strings.TrimSpace(search.ProjectID) != "" {
+		args = append(args, search.ProjectID)
+		conditions = append(conditions, fmt.Sprintf("m.project_id = $%d", len(args)))
+	}
+	for key, value := range search.Metadata {
+		args = append(args, key, value)
+		conditions = append(conditions, fmt.Sprintf("m.metadata ->> $%d = $%d", len(args)-1, len(args)))
+	}
+	where := ""
+	if len(conditions) > 0 {
+		where = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	query := `
+		SELECT
+			m.id, m.workspace_id, m.user_id, m.project_id, m.conversation_id, m.run_id, m.source_message_id, m.kind, m.content, m.metadata, m.created_at, m.updated_at,
+			1 - (e.embedding <=> $1::vector) AS similarity,
+			0.05 / (1 + GREATEST(EXTRACT(EPOCH FROM (now() - m.created_at)) / 86400, 0) / 30) AS recency_boost,
+			(1 - (e.embedding <=> $1::vector)) + (0.05 / (1 + GREATEST(EXTRACT(EPOCH FROM (now() - m.created_at)) / 86400, 0) / 30)) AS score
+		FROM memories m
+		JOIN memory_embeddings e ON e.memory_id = m.id
+		` + where + `
+		ORDER BY score DESC
+		LIMIT $2`
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []domain.RetrievedMemory{}
+	for rows.Next() {
+		item, err := scanRetrievedMemory(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func (s *PostgresStore) migrate(ctx context.Context) error {
@@ -696,11 +839,76 @@ func scanTraceEvent(row scanner) (domain.TraceEvent, error) {
 	return event, nil
 }
 
+func scanRetrievedMemory(row scanner) (domain.RetrievedMemory, error) {
+	var item domain.RetrievedMemory
+	var metadataJSON []byte
+	var workspaceID sql.NullString
+	var userID sql.NullString
+	var projectID sql.NullString
+	var conversationID sql.NullString
+	var runID sql.NullString
+	var sourceMessageID sql.NullString
+	if err := row.Scan(
+		&item.Memory.ID,
+		&workspaceID,
+		&userID,
+		&projectID,
+		&conversationID,
+		&runID,
+		&sourceMessageID,
+		&item.Memory.Kind,
+		&item.Memory.Content,
+		&metadataJSON,
+		&item.Memory.CreatedAt,
+		&item.Memory.UpdatedAt,
+		&item.Similarity,
+		&item.RecencyBoost,
+		&item.Score,
+	); err != nil {
+		return domain.RetrievedMemory{}, err
+	}
+	if workspaceID.Valid {
+		item.Memory.WorkspaceID = workspaceID.String
+	}
+	if userID.Valid {
+		item.Memory.UserID = userID.String
+	}
+	if projectID.Valid {
+		item.Memory.ProjectID = projectID.String
+	}
+	if conversationID.Valid {
+		item.Memory.ConversationID = conversationID.String
+	}
+	if runID.Valid {
+		item.Memory.RunID = runID.String
+	}
+	if sourceMessageID.Valid {
+		item.Memory.SourceMessageID = sourceMessageID.String
+	}
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &item.Memory.Metadata); err != nil {
+			return domain.RetrievedMemory{}, err
+		}
+	}
+	if item.Memory.Metadata == nil {
+		item.Memory.Metadata = map[string]any{}
+	}
+	return item, nil
+}
+
 func nullString(value string) any {
 	if strings.TrimSpace(value) == "" {
 		return nil
 	}
 	return value
+}
+
+func vectorLiteral(values []float64) string {
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, strconv.FormatFloat(value, 'f', -1, 64))
+	}
+	return "[" + strings.Join(parts, ",") + "]"
 }
 
 func defaultAgentByID(id string) domain.Agent {
@@ -713,6 +921,7 @@ func defaultAgentByID(id string) domain.Agent {
 }
 
 var postgresMigrations = []string{
+	`CREATE EXTENSION IF NOT EXISTS vector`,
 	`CREATE TABLE IF NOT EXISTS conversations (
 		id text PRIMARY KEY,
 		workspace_id text,
@@ -806,9 +1015,24 @@ var postgresMigrations = []string{
 		provider text NOT NULL,
 		model text NOT NULL,
 		dimensions integer NOT NULL,
-		embedding double precision[] NOT NULL,
+		embedding vector(1536) NOT NULL,
 		created_at timestamptz NOT NULL
 	)`,
+	`DO $$
+	BEGIN
+		IF EXISTS (
+			SELECT 1
+			FROM information_schema.columns
+			WHERE table_schema = 'public'
+				AND table_name = 'memory_embeddings'
+				AND column_name = 'embedding'
+				AND udt_name <> 'vector'
+		) THEN
+			DELETE FROM memory_embeddings;
+			ALTER TABLE memory_embeddings DROP COLUMN embedding;
+		END IF;
+	END $$`,
+	`ALTER TABLE memory_embeddings ADD COLUMN IF NOT EXISTS embedding vector(1536) NOT NULL`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_conversation_created ON runs(conversation_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_status_created ON runs(status, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at ASC)`,
@@ -816,6 +1040,7 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_trace_events_run_timestamp ON trace_events(run_id, timestamp ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_trace_events_type_timestamp ON trace_events(type, timestamp DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memories_scope_created ON memories(workspace_id, user_id, project_id, created_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_memory_embeddings_vector ON memory_embeddings USING hnsw (embedding vector_cosine_ops)`,
 }
 
 var _ Store = (*PostgresStore)(nil)

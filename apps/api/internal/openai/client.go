@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"strings"
@@ -20,11 +22,12 @@ import (
 )
 
 type Client struct {
-	apiKey     string
-	baseURL    string
-	model      string
-	httpClient *http.Client
-	timeout    time.Duration
+	apiKey         string
+	baseURL        string
+	model          string
+	embeddingModel string
+	httpClient     *http.Client
+	timeout        time.Duration
 }
 
 type Message struct {
@@ -63,18 +66,34 @@ type TextCompletion struct {
 	Usage Usage
 }
 
+type Embedding struct {
+	Vector    []float64
+	Model     string
+	Provider  string
+	Estimated bool
+}
+
 func NewClient(apiKey string, baseURL string, model string) *Client {
 	return NewClientWithTimeout(apiKey, baseURL, model, 5*time.Minute)
 }
 
 func NewClientWithTimeout(apiKey string, baseURL string, model string, timeout time.Duration) *Client {
+	return NewClientWithTimeoutAndEmbeddingModel(apiKey, baseURL, model, "text-embedding-3-small", timeout)
+}
+
+func NewClientWithTimeoutAndEmbeddingModel(apiKey string, baseURL string, model string, embeddingModel string, timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
+	embeddingModel = strings.TrimSpace(embeddingModel)
+	if embeddingModel == "" {
+		embeddingModel = "text-embedding-3-small"
+	}
 	return &Client{
-		apiKey:  strings.TrimSpace(apiKey),
-		baseURL: normalizeBaseURL(baseURL),
-		model:   strings.TrimSpace(model),
+		apiKey:         strings.TrimSpace(apiKey),
+		baseURL:        normalizeBaseURL(baseURL),
+		model:          strings.TrimSpace(model),
+		embeddingModel: embeddingModel,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				Proxy:                 http.ProxyFromEnvironment,
@@ -133,7 +152,7 @@ func (c *Client) StreamAgentChatWithTools(ctx context.Context, systemPrompt stri
 	return c.StreamAgentChatWithToolsTrace(ctx, systemPrompt, history, latest, registry, nil, "", "")
 }
 
-func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt string, history []domain.Message, latest string, registry *tools.Registry, recorder *tracepkg.Recorder, runID string, stepID string) (<-chan StreamEvent, <-chan error) {
+func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt string, history []domain.Message, latest string, registry *tools.Registry, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories ...domain.RetrievedMemory) (<-chan StreamEvent, <-chan error) {
 	events := make(chan StreamEvent)
 	errs := make(chan error, 1)
 
@@ -144,12 +163,16 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 		if c.apiKey == "" {
 			log.Printf("chat_fallback mode=local_no_api_key latest_len=%d enabled_tools=%q", len(latest), strings.Join(registry.EnabledNames(), ","))
 			output := fallbackEventResponse(latest)
-			span := recorder.LLMStart(ctx, runID, stepID, map[string]any{
+			startPayload := map[string]any{
 				"model":       "local_fallback",
 				"system":      systemPrompt,
 				"input":       latest,
 				"input_chars": len(latest),
-			})
+			}
+			if len(retrievedMemories) > 0 {
+				startPayload["retrieved_memories"] = retrievedMemoryPayload(retrievedMemories)
+			}
+			span := recorder.LLMStart(ctx, runID, stepID, startPayload)
 			c.streamText(ctx, output, 45*time.Millisecond, events)
 			recorder.LLMEnd(ctx, span, tokenPayload(map[string]any{
 				"model":        "local_fallback",
@@ -159,7 +182,7 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 			return
 		}
 
-		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, registry, events, recorder, runID, stepID); err != nil {
+		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, registry, events, recorder, runID, stepID, retrievedMemories); err != nil {
 			recorder.Error(ctx, runID, stepID, map[string]any{
 				"source": "llm",
 				"model":  c.model,
@@ -211,6 +234,51 @@ func (c *Client) CompleteTextDetailed(ctx context.Context, systemPrompt string, 
 		Text:  strings.TrimSpace(response.Choices[0].Message.Content),
 		Model: c.model,
 		Usage: usage,
+	}, nil
+}
+
+func (c *Client) EmbedText(ctx context.Context, input string) (Embedding, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return Embedding{}, errors.New("embedding input is required")
+	}
+	if c.apiKey == "" {
+		return Embedding{
+			Vector:    deterministicEmbedding(input, 1536),
+			Model:     "local_hash_embedding",
+			Provider:  "local",
+			Estimated: true,
+		}, nil
+	}
+	payload, err := json.Marshal(map[string]any{
+		"model": c.embeddingModel,
+		"input": input,
+	})
+	if err != nil {
+		return Embedding{}, err
+	}
+	resp, err := c.doPathRequest(ctx, "/embeddings", payload)
+	if err != nil {
+		return Embedding{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		bytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return Embedding{}, fmt.Errorf("openai-compatible embedding request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(bytes)))
+	}
+
+	var decoded embeddingResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return Embedding{}, err
+	}
+	if len(decoded.Data) == 0 || len(decoded.Data[0].Embedding) == 0 {
+		return Embedding{}, errors.New("embedding response returned no vector")
+	}
+	return Embedding{
+		Vector:   decoded.Data[0].Embedding,
+		Model:    decoded.Model,
+		Provider: "openai_compatible",
 	}, nil
 }
 
@@ -271,15 +339,19 @@ func (c *Client) streamText(ctx context.Context, text string, delay time.Duratio
 	}
 }
 
-func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string, history []domain.Message, registry *tools.Registry, events chan<- StreamEvent, recorder *tracepkg.Recorder, runID string, stepID string) error {
+func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string, history []domain.Message, registry *tools.Registry, events chan<- StreamEvent, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory) error {
 	enabledTools := registry.EnabledNames()
-	messages := buildMessagesWithSystemPrompt(systemPrompt, history, enabledTools)
-	llmSpan := recorder.LLMStart(ctx, runID, stepID, map[string]any{
+	messages := buildMessagesWithSystemPrompt(systemPrompt, history, enabledTools, retrievedMemories...)
+	startPayload := map[string]any{
 		"model":         c.model,
 		"messages":      messages,
 		"enabled_tools": enabledTools,
 		"input_chars":   messagesTextLength(messages),
-	})
+	}
+	if len(retrievedMemories) > 0 {
+		startPayload["retrieved_memories"] = retrievedMemoryPayload(retrievedMemories)
+	}
+	llmSpan := recorder.LLMStart(ctx, runID, stepID, startPayload)
 	decision, err := c.complete(ctx, map[string]any{
 		"model":       c.model,
 		"messages":    messages,
@@ -539,7 +611,11 @@ func (c *Client) streamMessagesWithUsageOption(ctx context.Context, messages []M
 }
 
 func (c *Client) doRequest(ctx context.Context, payload []byte) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(payload))
+	return c.doPathRequest(ctx, "/chat/completions", payload)
+}
+
+func (c *Client) doPathRequest(ctx context.Context, path string, payload []byte) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -566,6 +642,13 @@ type chatCompletionResponse struct {
 	Usage Usage `json:"usage"`
 }
 
+type embeddingResponse struct {
+	Model string `json:"model"`
+	Data  []struct {
+		Embedding []float64 `json:"embedding"`
+	} `json:"data"`
+}
+
 func buildMessages(history []domain.Message) []Message {
 	return buildMessagesWithToolNames(history, []string{"calculator", "get_current_time", "mock_web_search"})
 }
@@ -574,7 +657,7 @@ func buildMessagesWithToolNames(history []domain.Message, toolNames []string) []
 	return buildMessagesWithSystemPrompt("You are AgentFlow's Day 2 assistant. Use tools when they help.", history, toolNames)
 }
 
-func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message, toolNames []string) []Message {
+func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message, toolNames []string, retrievedMemories ...domain.RetrievedMemory) []Message {
 	available := "No tools are currently enabled."
 	fallbackInstruction := ""
 	if len(toolNames) > 0 {
@@ -584,6 +667,9 @@ func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message
 	systemPrompt = strings.TrimSpace(systemPrompt)
 	if systemPrompt == "" {
 		systemPrompt = "You are AgentFlow's assistant."
+	}
+	if len(retrievedMemories) > 0 {
+		systemPrompt = systemPrompt + "\n\n" + formatRetrievedMemories(retrievedMemories)
 	}
 	messages := []Message{
 		{
@@ -597,6 +683,20 @@ func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message
 		}
 	}
 	return messages
+}
+
+func formatRetrievedMemories(memories []domain.RetrievedMemory) string {
+	var builder strings.Builder
+	builder.WriteString("Retrieved memories. Use them when relevant, and ignore them when they are not relevant:\n")
+	for index, memory := range memories {
+		if strings.TrimSpace(memory.Memory.Content) == "" {
+			continue
+		}
+		builder.WriteString(fmt.Sprintf("%d. id=%s kind=%s score=%.4f similarity=%.4f\n", index+1, memory.Memory.ID, memory.Memory.Kind, memory.Score, memory.Similarity))
+		builder.WriteString(truncateText(memory.Memory.Content, 1200))
+		builder.WriteString("\n")
+	}
+	return strings.TrimSpace(builder.String())
 }
 
 func emitText(ctx context.Context, text string, events chan<- StreamEvent) error {
@@ -751,6 +851,41 @@ func estimateTokens(value string) int {
 	return len([]rune(value))/4 + 1
 }
 
+func deterministicEmbedding(input string, dimensions int) []float64 {
+	if dimensions <= 0 {
+		dimensions = 1536
+	}
+	vector := make([]float64, dimensions)
+	words := strings.Fields(strings.ToLower(input))
+	if len(words) == 0 {
+		words = []string{input}
+	}
+	for _, word := range words {
+		sum := sha256.Sum256([]byte(word))
+		for i := 0; i < len(sum); i += 2 {
+			index := int(sum[i])<<8 + int(sum[i+1])
+			index = index % dimensions
+			sign := 1.0
+			if sum[(i+1)%len(sum)]%2 == 0 {
+				sign = -1
+			}
+			vector[index] += sign
+		}
+	}
+	var norm float64
+	for _, value := range vector {
+		norm += value * value
+	}
+	if norm == 0 {
+		return vector
+	}
+	norm = math.Sqrt(norm)
+	for i := range vector {
+		vector[i] = vector[i] / norm
+	}
+	return vector
+}
+
 func (u Usage) Valid() bool {
 	return u.PromptTokens > 0 || u.CompletionTokens > 0 || u.TotalTokens > 0
 }
@@ -761,4 +896,22 @@ func tokenPayload(payload map[string]any, usage Usage) map[string]any {
 	payload["total_tokens"] = usage.TotalTokens
 	payload["token_usage_estimated"] = usage.Estimated
 	return payload
+}
+
+func retrievedMemoryPayload(memories []domain.RetrievedMemory) []map[string]any {
+	items := make([]map[string]any, 0, len(memories))
+	for _, memory := range memories {
+		items = append(items, map[string]any{
+			"id":              memory.Memory.ID,
+			"kind":            memory.Memory.Kind,
+			"content":         truncateText(memory.Memory.Content, 1200),
+			"metadata":        memory.Memory.Metadata,
+			"similarity":      memory.Similarity,
+			"recency_boost":   memory.RecencyBoost,
+			"score":           memory.Score,
+			"conversation_id": memory.Memory.ConversationID,
+			"run_id":          memory.Memory.RunID,
+		})
+	}
+	return items
 }

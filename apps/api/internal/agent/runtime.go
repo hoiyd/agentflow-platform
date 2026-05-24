@@ -92,7 +92,34 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 }
 
 func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string) (<-chan openai.StreamEvent, <-chan error) {
-	return r.openAI.StreamAgentChatWithToolsTrace(ctx, prepared.Agent.SystemPrompt, history, latest, prepared.Registry, r.trace, prepared.Run.ID, "")
+	retrievedMemories := r.retrieveMemories(ctx, prepared.Run.ID, latest)
+	return r.openAI.StreamAgentChatWithToolsTrace(ctx, prepared.Agent.SystemPrompt, history, latest, prepared.Registry, r.trace, prepared.Run.ID, "", retrievedMemories...)
+}
+
+func (r *Runtime) retrieveMemories(ctx context.Context, runID string, query string) []domain.RetrievedMemory {
+	embedding, err := r.openAI.EmbedText(ctx, query)
+	if err != nil {
+		r.trace.Error(ctx, runID, "", map[string]any{
+			"source": "memory_retrieval",
+			"stage":  "embed_query",
+			"error":  err.Error(),
+		})
+		return nil
+	}
+	items, err := r.store.SearchMemories(domain.MemorySearch{
+		Query:     query,
+		Embedding: embedding.Vector,
+		Limit:     5,
+	})
+	if err != nil {
+		r.trace.Error(ctx, runID, "", map[string]any{
+			"source": "memory_retrieval",
+			"stage":  "search",
+			"error":  err.Error(),
+		})
+		return nil
+	}
+	return items
 }
 
 func (r *Runtime) CompleteRun(id string) (domain.Run, error) {

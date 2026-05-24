@@ -33,7 +33,7 @@ func main() {
 		}()
 	}
 
-	openAIClient := openai.NewClientWithTimeout(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel, cfg.OpenAITimeout)
+	openAIClient := openai.NewClientWithTimeoutAndEmbeddingModel(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel, cfg.OpenAIEmbeddingModel, cfg.OpenAITimeout)
 	mcpClient := tools.NewRoutedMCPClient()
 	defer func() {
 		if err := mcpClient.Close(); err != nil {

@@ -2,6 +2,7 @@ package store
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -278,6 +279,50 @@ func TestFileStoreTraceReplay(t *testing.T) {
 	}
 	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.Events) != 3 {
 		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.Events))
+	}
+}
+
+func TestFileStoreMemorySearchUsesMetadataSimilarityAndRecency(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	now := time.Now().UTC()
+	if _, err := store.CreateMemory(domain.Memory{
+		Kind:      "note",
+		Content:   "Use pgvector for semantic memory search.",
+		Metadata:  map[string]any{"topic": "database"},
+		CreatedAt: now.Add(-24 * time.Hour),
+	}, domain.MemoryEmbedding{Embedding: []float64{1, 0}}); err != nil {
+		t.Fatalf("create memory: %v", err)
+	}
+	if _, err := store.CreateMemory(domain.Memory{
+		Kind:      "note",
+		Content:   "Unrelated frontend styling note.",
+		Metadata:  map[string]any{"topic": "frontend"},
+		CreatedAt: now,
+	}, domain.MemoryEmbedding{Embedding: []float64{0, 1}}); err != nil {
+		t.Fatalf("create memory: %v", err)
+	}
+
+	items, err := store.SearchMemories(domain.MemorySearch{
+		Query:     "pgvector memory",
+		Embedding: []float64{1, 0},
+		Metadata:  map[string]string{"topic": "database"},
+		Limit:     3,
+	})
+	if err != nil {
+		t.Fatalf("search memories: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one filtered memory, got %d", len(items))
+	}
+	if !strings.Contains(items[0].Memory.Content, "pgvector") {
+		t.Fatalf("expected pgvector memory, got %#v", items[0])
+	}
+	if items[0].Similarity <= 0 || items[0].RecencyBoost <= 0 || items[0].Score <= items[0].Similarity {
+		t.Fatalf("expected similarity plus recency boost, got %#v", items[0])
 	}
 }
 
