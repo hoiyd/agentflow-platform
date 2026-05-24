@@ -1,25 +1,28 @@
 ## Principles
-### 1. think before coding
-state your assumptions. ask when unsure. never guess.
 
-### 2. simplicity first
-write the minimum code that solves the problem.
-no abstractions nobody asked for.
+### 1. Think before coding
 
-### 3. surgical changes
-don't touch code unrelated to the request.
-every changed line must trace back to what was asked.
+State assumptions. Ask when unsure. Never guess.
 
-### 4. goal-driven execution
-turn vague instructions into verifiable success criteria
-before writing a single line.
+### 2. Simplicity first
 
-### 5. Context Window
-when context window usages reaches 85%, trigger auto compact by running `/compact` command in codex.
+Write the minimum code that solves the problem. Do not add abstractions nobody asked for.
+
+### 3. Surgical changes
+
+Do not touch code unrelated to the request. Every changed line must trace back to what was asked.
+
+### 4. Goal-driven execution
+
+Turn vague instructions into verifiable success criteria before writing code.
+
+### 5. Context window
+
+When context window usage reaches 85%, trigger auto compact by running `/compact` in Codex.
 
 ## Command Output
 
-Protect context usage. **Any command with unknown or potentially large output must be byte-capped.**
+Protect context usage. Any command with unknown or potentially large output must be byte-capped.
 
 Default pattern:
 
@@ -27,8 +30,178 @@ Default pattern:
 COMMAND 2>&1 | head -c 4000
 ```
 
+Use `rg` before slower search tools.
+
+## Project Snapshot
+
+AgentFlow is a full-stack AI agent workflow platform.
+
+Current major areas:
+
+- `apps/api`: Go backend.
+- `apps/web`: Next.js frontend.
+- `packages/shared`: shared contracts placeholder.
+
+Implemented product areas:
+
+- streaming chat and persisted conversations
+- single-agent, multi-agent, and autonomous run modes
+- run traces, collaboration steps, replay, continue/resume/cancel
+- built-in and MCP tools
+- persistent semantic memory
+- pgvector-backed memory and RAG search
+- Knowledge UI with text import, `.txt` upload, Markdown upload, document detail, search, and delete
+- backend RAG rerank using lexical boost, metadata boost, recency, and diversity control
+
+## Backend
+
+Run from `apps/api`.
+
+Use Go through gvm when needed:
+
+```bash
+source ~/.gvm/scripts/gvm
+gvm use go1.25.5 >/dev/null
+```
+
+Run tests:
+
+```bash
+mkdir -p /private/tmp/agentflow-go-build-cache
+GOCACHE=/private/tmp/agentflow-go-build-cache go test ./... 2>&1 | head -c 30000
+```
+
+Run server:
+
+```bash
+GOCACHE=/private/tmp/agentflow-go-build-cache go run ./cmd/server
+```
+
+Important backend env:
+
+```bash
+PORT=8080
+STORE_DRIVER=file
+DATA_PATH=.data/agentflow.json
+TOOL_CONFIG_PATH=.data/tools.json
+
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_EMBEDDING_DIMENSIONS=1536
+OPENAI_REQUEST_TIMEOUT=5m
+```
+
+For better RAG embeddings while keeping the current `vector(1536)` schema:
+
+```bash
+OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+OPENAI_EMBEDDING_DIMENSIONS=1536
+```
+
+After changing embedding provider/model, existing knowledge should be re-uploaded or reindexed. Search filters by embedding provider/model to avoid mixing vector spaces.
+
+## Frontend
+
+Run from `apps/web`.
+
+If Node version is wrong, use nvm.
+
+Install and run:
+
+```bash
+npm install
+npm run dev
+```
+
+Build verification:
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v22.6.0/bin:$PATH"
+npm run build 2>&1 | head -c 30000
+```
+
+Next.js may rewrite `apps/web/next-env.d.ts` during build. If the only diff is:
+
+```ts
+import "./.next/types/routes.d.ts";
+```
+
+restore it to the repo's dev import:
+
+```ts
+import "./.next/dev/types/routes.d.ts";
+```
+
+Do not leave generated `next-env.d.ts` churn in the final diff.
+
+## RAG and Knowledge
+
+Current ingestion paths:
+
+- `POST /api/documents` for text content.
+- `POST /api/documents/upload` for `.txt`, `.md`, and `.markdown`.
+
+Markdown chunking:
+
+- headings produce `heading_path`
+- paragraphs, lists, and fenced code blocks produce `chunk_type`
+- code language is preserved as `code_language`
+- heading context is prepended to chunk content
+- oversized blocks use fixed-size fallback chunking
+
+Search behavior:
+
+- query is embedded with the configured provider/model/dimensions
+- store returns vector candidates
+- backend rerank applies lexical and metadata boosts
+- simple diversity penalty reduces repeated chunks from one document
+- response includes embedding metadata and rerank scores
+
+Frontend manual check:
+
+- Search panel should show `Embedding: provider / model / dimensions`.
+- If it shows `metadata unavailable`, the frontend is likely connected to an old backend process.
+- If it shows `local / local_hash_embedding`, semantic quality is limited.
+
+## API Areas
+
+Main endpoints:
+
+- conversations: `/api/conversations`
+- chat: `/api/chat`
+- agents: `/api/agents`
+- runs/replay: `/api/runs`
+- tools: `/api/tools`
+- memories: `/api/memories`, `/api/memories/search`
+- documents: `/api/documents`, `/api/documents/upload`, `/api/documents/{id}`
+- RAG search: `/api/rag/search`
+
+## Verification Expectations
+
+For backend or API changes:
+
+- Run `go test ./...` from `apps/api`.
+- Add or update focused tests when behavior changes.
+- For RAG response shape changes, test the actual JSON shape, not just internal structs.
+
+For frontend changes:
+
+- Run `npm run build` from `apps/web`.
+- If browser verification is requested, start the dev server and verify the relevant flow.
+
+For RAG changes:
+
+- Verify upload/import.
+- Verify list/detail.
+- Verify search response includes embedding metadata.
+- Verify search results are filtered/reranked as expected.
+- Verify delete removes the document from list/detail/search.
+
 ## FAQ
-- 如果是go的版本问题，尝试用 gvm use go1.25.5 切换到合适的版本。
-- 如果是node.js的版本问题，尝试用 nvm 切换到合适的版本。
-- 如果遇到任何问题，你处理不了卡住了，就向我提问题、建议个计划，或开个带注释的草稿 PR，别未经确认就推进大改动。
-- 执行 curl 的 GET METHOD 命令不需要向我确认。
+
+- 如果是 Go 版本问题，尝试用 `gvm use go1.25.5` 切换到合适的版本。
+- 如果是 Node.js 版本问题，尝试用 `nvm` 切换到合适的版本。
+- 如果遇到任何问题处理不了或卡住了，就向用户提问题、建议计划，或开一个带注释的草稿 PR，别未经确认推进大改动。
+- 执行 curl 的 GET method 命令不需要向用户确认。

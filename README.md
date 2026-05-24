@@ -1,22 +1,27 @@
 # AgentFlow Platform
 
-Day 1 MVP for a full-stack AI Agent Workflow Platform.
+Full-stack AI agent workflow platform with streaming chat, agent runs, persistent memory, tool execution, replay traces, and a minimal RAG knowledge base.
 
-This version includes:
+## Current Capabilities
 
-- ChatGPT-like web UI
-- Go backend API
-- OpenAI Chat Completions streaming
-- Server-Sent Events from backend to browser
-- Persistent local conversations and messages
-- Smoke-test fallback when `OPENAI_API_KEY` is not configured
+- Chat UI with persisted conversations and streamed assistant responses.
+- Single-agent, multi-agent, and autonomous run modes.
+- Run lifecycle tracking with collaboration steps, trace events, replay, and cancel/resume/continue flows.
+- Built-in and MCP tool registry with enable/disable controls.
+- Persistent semantic memory backed by embeddings.
+- RAG knowledge base with text, `.txt`, `.md`, and `.markdown` ingestion.
+- Markdown-aware chunking with heading, list, paragraph, and fenced-code metadata.
+- pgvector/Postgres support for memory and document chunk similarity search.
+- Frontend Knowledge page for document upload, document detail, search, similarity threshold, and deletion.
+- Search rerank on the backend using lexical match, metadata match, recency, and simple diversity control.
 
 ## Tech Stack
 
-- Frontend: Next.js, React, TypeScript
-- Backend: Go
-- Storage: local JSON file store by default, optional Postgres platform store
-- AI: OpenAI API
+- Frontend: Next.js, React, TypeScript.
+- Backend: Go.
+- Storage: local JSON file store by default, optional Postgres with pgvector.
+- AI: OpenAI-compatible chat and embeddings APIs.
+- Embeddings: default `text-embedding-3-small`, configurable to `text-embedding-3-large` with fixed dimensions.
 
 ## Project Structure
 
@@ -29,39 +34,66 @@ agentflow-platform/
     shared/   # shared contracts placeholder
 ```
 
-## Getting Started
-
-### 1. Backend
+## Backend
 
 ```bash
 cd apps/api
 cp .env.example .env
 gvm use go1.25.5
-GOCACHE="$PWD/../../.cache/go-build" go run ./cmd/server
+GOCACHE=/private/tmp/agentflow-go-build-cache go run ./cmd/server
 ```
 
-The API will run at `http://localhost:8080`.
+The API runs at `http://localhost:8080` by default.
 
-By default, the backend uses `STORE_DRIVER=file` and persists to
-`DATA_PATH=.data/agentflow.json`. To use Postgres instead:
+### Backend Configuration
+
+Common environment variables:
+
+```bash
+PORT=8080
+STORE_DRIVER=file
+DATA_PATH=.data/agentflow.json
+TOOL_CONFIG_PATH=.data/tools.json
+
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_EMBEDDING_DIMENSIONS=1536
+OPENAI_REQUEST_TIMEOUT=5m
+
+ROUTER_MODE=auto
+ALLOWED_ORIGINS=http://localhost:3000
+```
+
+If `OPENAI_API_KEY` is empty, chat and embeddings use deterministic local fallbacks for verification. The frontend search panel shows whether RAG search used `local / local_hash_embedding` or an OpenAI-compatible embedding provider.
+
+To use a stronger embedding model without changing the existing `vector(1536)` pgvector schema:
+
+```bash
+OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+OPENAI_EMBEDDING_DIMENSIONS=1536
+```
+
+After changing embedding model/provider, re-upload or reindex documents. Search filters candidates by embedding provider/model so old chunks are not mixed with the new query vector space.
+
+### Postgres + pgvector
+
+By default the backend uses the local file store. To use Postgres:
 
 ```bash
 STORE_DRIVER=postgres
 DATABASE_URL=postgres://agentflow:agentflow@localhost:5432/agentflow?sslmode=disable
 ```
 
-The Postgres store runs idempotent startup migrations for conversations,
-messages, agents, runs, collaboration steps, trace events, and memory tables.
-Trace replay queries are backed by indexes on run, timestamp, type, status, and
-conversation fields.
+The Postgres store runs idempotent startup migrations for:
 
-If `OPENAI_API_KEY` is empty, the backend streams a deterministic local response so the app can still be verified.
-Use `OPENAI_REQUEST_TIMEOUT` to tune the OpenAI-compatible request header
-timeout, for example `OPENAI_REQUEST_TIMEOUT=5m`. Response bodies are not cut
-off by a fixed client-wide timeout, which keeps long completions from failing
-mid-read.
+- conversations, messages, agents, runs, collaboration steps, and trace events
+- memories and `memory_embeddings`
+- documents, document chunks, and document chunk embeddings
+- pgvector HNSW indexes for semantic search
 
-### 2. Frontend
+## Frontend
 
 ```bash
 cd apps/web
@@ -69,73 +101,140 @@ npm install
 npm run dev
 ```
 
-The web app will run at `http://localhost:3000`.
-`npm run dev` runs Next.js in development mode with file watching enabled, so
-frontend edits are visible after refreshing the page without restarting the
-process. Use `npm run start` only for a production build.
+The web app runs at `http://localhost:3000`.
 
-### 3. Verify
+Set `NEXT_PUBLIC_API_BASE_URL` only if the API is not running on `http://localhost:8080`.
 
-Open `http://localhost:3000`, send a message, and confirm:
+## Knowledge / RAG
 
-- the assistant response streams token by token
-- a conversation appears in the left sidebar
-- refresh keeps the conversation history
-- `apps/api/.data/agentflow.json` is created
+The Knowledge page supports:
 
-## API
+- adding a text document from a textarea
+- uploading `.txt`, `.md`, and `.markdown` files
+- listing documents with title, filename, format, chunk count, and embedding count
+- viewing document chunks and Markdown metadata
+- deleting documents and their chunks/embeddings
+- searching indexed chunks with a minimum similarity threshold
+- seeing embedding provider/model/dimensions used for search
+
+Markdown ingestion is structure-aware:
+
+- headings become `heading_path`
+- paragraphs, lists, and fenced code blocks become chunk types
+- code block language is preserved when available
+- oversized blocks fall back to fixed-size chunk splitting
+- heading context is included in chunk content to improve retrieval
+
+Search flow:
+
+1. Query is embedded with the configured embedding provider/model.
+2. Vector search retrieves a larger candidate set.
+3. Backend rerank applies lexical boost, metadata boost, recency, and diversity control.
+4. Results return similarity, score, rerank score, and boost components.
+
+## API Summary
 
 ```txt
-GET  /health
-GET  /api/conversations
-POST /api/conversations
-GET  /api/conversations/{id}/messages
-GET  /api/agents
-POST /api/agents
-GET  /api/agents/{id}
-GET  /api/runs
-GET  /api/runs/{id}
-GET  /api/runs/{id}/collaboration_steps
-POST /api/runs/{id}/continue
-POST /api/chat
+GET    /health
+
+GET    /api/conversations
+POST   /api/conversations
+DELETE /api/conversations/{id}
+GET    /api/conversations/{id}/messages
+
+POST   /api/chat
+
+GET    /api/agents
+POST   /api/agents
+GET    /api/agents/{id}
+
+GET    /api/runs
+GET    /api/runs/{id}
+POST   /api/runs/{id}/continue
+POST   /api/runs/{id}/resume
+POST   /api/runs/{id}/cancel
+GET    /api/runs/{id}/collaboration_steps
+GET    /api/runs/{id}/replay
+
+GET    /api/tools
+POST   /api/tools/{name}/enable
+POST   /api/tools/{name}/disable
+
+POST   /api/memories
+POST   /api/memories/search
+
+GET    /api/documents
+POST   /api/documents
+POST   /api/documents/upload
+GET    /api/documents/{id}
+DELETE /api/documents/{id}
+POST   /api/rag/search
 ```
 
-`POST /api/chat` returns `text/event-stream`. It accepts an optional
-`agent_id`; if omitted, the backend uses the default Narrative Strategist. Each chat
-request creates a Run and streams run metadata before text deltas.
-Set `mode` to `multi_agent` to run the fixed Planner -> Worker -> Reviewer ->
-Finalizer orchestrator. In that mode, the Planner pauses with
-`waiting_for_user`; edit the plan in the UI or call `POST /api/runs/{id}/continue`
-with the approved plan to continue. After approval, a Router step selects the
-Worker persona dynamically. `ROUTER_MODE=auto` uses LLM semantic routing when an
-API key is available and falls back to query matching plus rules when needed.
-`ROUTER_MODE=query_match` always uses the deterministic query matching plus rule
-scoring path. The Router decision is visible in the Collaboration Trace, and the
-API logs `router_candidate_score`, `router_selected`, and
-`collaboration_router_decision` to stdout for debugging.
+Example RAG search response:
+
+```json
+{
+  "items": [
+    {
+      "similarity": 0.71,
+      "recency_boost": 0.03,
+      "score": 0.74,
+      "lexical_boost": 0.18,
+      "metadata_boost": 0.1,
+      "rerank_score": 1.02
+    }
+  ],
+  "embedding": {
+    "provider": "openai_compatible",
+    "model": "text-embedding-3-large",
+    "dimensions": 1536,
+    "estimated": false
+  }
+}
+```
+
+## Manual Verification
+
+Backend tests:
 
 ```bash
-curl -s http://localhost:8080/api/agents
-
-curl -N http://localhost:8080/api/chat \
-  -H 'Content-Type: application/json' \
-  --data '{"agent_id":"agent_coding","message":"Say hello from the coding agent"}'
-
-curl -N http://localhost:8080/api/chat \
-  -H 'Content-Type: application/json' \
-  --data '{"mode":"multi_agent","message":"Draft a launch checklist"}'
-
-curl -N http://localhost:8080/api/runs/run_123/continue \
-  -H 'Content-Type: application/json' \
-  --data '{"plan":"1. Confirm scope\\n2. Draft checklist\\n3. Review and finalize"}'
-
-curl -s http://localhost:8080/api/runs
+cd apps/api
+source ~/.gvm/scripts/gvm
+gvm use go1.25.5 >/dev/null
+mkdir -p /private/tmp/agentflow-go-build-cache
+GOCACHE=/private/tmp/agentflow-go-build-cache go test ./...
 ```
+
+Frontend build:
+
+```bash
+cd apps/web
+export PATH="$HOME/.nvm/versions/node/v22.6.0/bin:$PATH"
+npm run build
+```
+
+RAG manual flow:
+
+1. Start backend and frontend.
+2. Open the Knowledge page.
+3. Upload a `.txt` or `.md` file with a unique phrase.
+4. Confirm the document list shows chunk and embedding counts.
+5. Click Details and inspect chunks/metadata.
+6. Search for the unique phrase.
+7. Confirm the search panel shows embedding provider/model/dimensions.
+8. Confirm relevant chunks rank above unrelated content.
+9. Delete the document and confirm it disappears from list/search.
+
+Run replay manual flow:
+
+1. Send a chat message related to uploaded knowledge or prior memory.
+2. Open the run replay page.
+3. Inspect trace payloads for retrieved memories and retrieved document chunks.
 
 ## Tool Configuration
 
-The backend loads enabled tools from `TOOL_CONFIG_PATH`, defaulting to `.data/tools.json`.
-If the file is missing, all built-in tools are enabled.
+The backend loads enabled tools from `TOOL_CONFIG_PATH`, defaulting to `.data/tools.json`. If the file is missing, all built-in tools are enabled.
 
 ```json
 {
@@ -156,11 +255,4 @@ If the file is missing, all built-in tools are enabled.
 }
 ```
 
-MCP tools are registered as `<server_id>__<tool_name>` to avoid collisions with
-built-in tools. The example above uses the official
-SmartAPIs.net remote MCP endpoint through Streamable HTTP. Stdio MCP servers are
-still supported with `transport: "stdio"`, `command`, and `args`.
-
-## Day 2 Direction
-
-Next step: expose tool calls in the UI as inspectable execution events.
+MCP tools are registered as `<server_id>__<tool_name>` to avoid collisions with built-in tools. Stdio MCP servers are also supported with `transport`, `command`, and `args`.
