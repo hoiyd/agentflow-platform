@@ -643,8 +643,10 @@ func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.Ret
 		return nil, fmt.Errorf("memory search embedding dimensions must be 1536, got %d", len(search.Embedding))
 	}
 	limit := search.Limit
-	if limit <= 0 || limit > 10 {
+	if limit <= 0 {
 		limit = 5
+	} else if limit > 20 {
+		limit = 20
 	}
 
 	args := []any{vectorLiteral(search.Embedding), limit}
@@ -690,6 +692,248 @@ func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.Ret
 	items := []domain.RetrievedMemory{}
 	for rows.Next() {
 		item, err := scanRetrievedMemory(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error) {
+	if len(chunks) != len(embeddings) {
+		return domain.Document{}, errors.New("document chunks and embeddings length mismatch")
+	}
+	now := time.Now().UTC()
+	document.ID = strings.TrimSpace(document.ID)
+	if document.ID == "" {
+		document.ID = newID("doc")
+	}
+	document.Title = strings.TrimSpace(document.Title)
+	if document.Title == "" {
+		return domain.Document{}, errors.New("document title is required")
+	}
+	document.Content = strings.TrimSpace(document.Content)
+	if document.Content == "" {
+		return domain.Document{}, errors.New("document content is required")
+	}
+	document.SourceType = strings.TrimSpace(document.SourceType)
+	if document.SourceType == "" {
+		document.SourceType = "text"
+	}
+	if document.Metadata == nil {
+		document.Metadata = map[string]any{}
+	}
+	if document.CreatedAt.IsZero() {
+		document.CreatedAt = now
+	}
+	document.UpdatedAt = now
+	metadataJSON, err := json.Marshal(document.Metadata)
+	if err != nil {
+		return domain.Document{}, err
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return domain.Document{}, err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`
+		INSERT INTO documents (id, workspace_id, title, source_type, source_uri, mime_type, content, metadata, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		document.ID, nullString(document.WorkspaceID), document.Title, document.SourceType, nullString(document.SourceURI), nullString(document.MimeType), document.Content, metadataJSON, document.CreatedAt, document.UpdatedAt); err != nil {
+		return domain.Document{}, err
+	}
+
+	for i := range chunks {
+		chunk := chunks[i]
+		chunk.ID = strings.TrimSpace(chunk.ID)
+		if chunk.ID == "" {
+			chunk.ID = newID("chunk")
+		}
+		chunk.DocumentID = document.ID
+		chunk.ChunkIndex = i
+		chunk.Content = strings.TrimSpace(chunk.Content)
+		if chunk.Content == "" {
+			return domain.Document{}, errors.New("document chunk content is required")
+		}
+		if chunk.Metadata == nil {
+			chunk.Metadata = map[string]any{}
+		}
+		if chunk.CreatedAt.IsZero() {
+			chunk.CreatedAt = now
+		}
+		chunkMetadataJSON, err := json.Marshal(chunk.Metadata)
+		if err != nil {
+			return domain.Document{}, err
+		}
+		if _, err := tx.Exec(`
+			INSERT INTO document_chunks (id, document_id, chunk_index, content, token_count, metadata, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			chunk.ID, chunk.DocumentID, chunk.ChunkIndex, chunk.Content, chunk.TokenCount, chunkMetadataJSON, chunk.CreatedAt); err != nil {
+			return domain.Document{}, err
+		}
+
+		embedding := embeddings[i]
+		embedding.ChunkID = chunk.ID
+		if embedding.Provider == "" {
+			embedding.Provider = "local"
+		}
+		if embedding.Model == "" {
+			embedding.Model = "local_hash"
+		}
+		if embedding.Dimensions == 0 {
+			embedding.Dimensions = len(embedding.Embedding)
+		}
+		if embedding.CreatedAt.IsZero() {
+			embedding.CreatedAt = now
+		}
+		if len(embedding.Embedding) != 1536 {
+			return domain.Document{}, fmt.Errorf("document chunk embedding dimensions must be 1536, got %d", len(embedding.Embedding))
+		}
+		if _, err := tx.Exec(`
+			INSERT INTO document_chunk_embeddings (chunk_id, provider, model, dimensions, embedding, created_at)
+			VALUES ($1, $2, $3, $4, $5::vector, $6)`,
+			embedding.ChunkID, embedding.Provider, embedding.Model, embedding.Dimensions, vectorLiteral(embedding.Embedding), embedding.CreatedAt); err != nil {
+			return domain.Document{}, err
+		}
+	}
+
+	document.ChunkCount = len(chunks)
+	document.EmbeddingCount = len(embeddings)
+	return document, tx.Commit()
+}
+
+func (s *PostgresStore) ListDocuments() ([]domain.Document, error) {
+	rows, err := s.db.Query(`
+		SELECT d.id, d.workspace_id, d.title, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
+			COUNT(DISTINCT c.id) AS chunk_count,
+			COUNT(e.chunk_id) AS embedding_count
+		FROM documents d
+		LEFT JOIN document_chunks c ON c.document_id = d.id
+		LEFT JOIN document_chunk_embeddings e ON e.chunk_id = c.id
+		GROUP BY d.id
+		ORDER BY d.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []domain.Document{}
+	for rows.Next() {
+		document, err := scanDocument(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, document)
+	}
+	return items, rows.Err()
+}
+
+func (s *PostgresStore) GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error) {
+	row := s.db.QueryRow(`
+		SELECT d.id, d.workspace_id, d.title, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
+			COUNT(DISTINCT c.id) AS chunk_count,
+			COUNT(e.chunk_id) AS embedding_count
+		FROM documents d
+		LEFT JOIN document_chunks c ON c.document_id = d.id
+		LEFT JOIN document_chunk_embeddings e ON e.chunk_id = c.id
+		WHERE d.id = $1
+		GROUP BY d.id`, strings.TrimSpace(id))
+	document, err := scanDocument(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Document{}, nil, false, nil
+	}
+	if err != nil {
+		return domain.Document{}, nil, false, err
+	}
+
+	rows, err := s.db.Query(`
+		SELECT id, document_id, chunk_index, content, token_count, metadata, created_at
+		FROM document_chunks
+		WHERE document_id = $1
+		ORDER BY chunk_index ASC`, document.ID)
+	if err != nil {
+		return domain.Document{}, nil, false, err
+	}
+	defer rows.Close()
+
+	chunks := []domain.DocumentChunk{}
+	for rows.Next() {
+		chunk, err := scanDocumentChunk(rows)
+		if err != nil {
+			return domain.Document{}, nil, false, err
+		}
+		chunk.Document = document
+		chunks = append(chunks, chunk)
+	}
+	return document, chunks, true, rows.Err()
+}
+
+func (s *PostgresStore) DeleteDocument(id string) error {
+	_, err := s.db.Exec(`DELETE FROM documents WHERE id = $1`, strings.TrimSpace(id))
+	return err
+}
+
+func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	if len(search.Embedding) != 1536 {
+		return nil, fmt.Errorf("document search embedding dimensions must be 1536, got %d", len(search.Embedding))
+	}
+	limit := search.Limit
+	if limit <= 0 || limit > 10 {
+		limit = 5
+	}
+
+	args := []any{vectorLiteral(search.Embedding), limit}
+	conditions := []string{}
+	if strings.TrimSpace(search.WorkspaceID) != "" {
+		args = append(args, search.WorkspaceID)
+		conditions = append(conditions, fmt.Sprintf("d.workspace_id = $%d", len(args)))
+	}
+	if strings.TrimSpace(search.EmbeddingProvider) != "" {
+		args = append(args, search.EmbeddingProvider)
+		conditions = append(conditions, fmt.Sprintf("e.provider = $%d", len(args)))
+	}
+	if strings.TrimSpace(search.EmbeddingModel) != "" {
+		args = append(args, search.EmbeddingModel)
+		conditions = append(conditions, fmt.Sprintf("e.model = $%d", len(args)))
+	}
+	for key, value := range search.Metadata {
+		args = append(args, key, value)
+		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))
+	}
+	if search.MinSimilarity > 0 {
+		args = append(args, search.MinSimilarity)
+		conditions = append(conditions, fmt.Sprintf("(1 - (e.embedding <=> $1::vector)) >= $%d", len(args)))
+	}
+	where := ""
+	if len(conditions) > 0 {
+		where = "WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	query := `
+		SELECT
+			d.id, d.workspace_id, d.title, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
+			c.id, c.document_id, c.chunk_index, c.content, c.token_count, c.metadata, c.created_at,
+			1 - (e.embedding <=> $1::vector) AS similarity,
+			0.03 / (1 + GREATEST(EXTRACT(EPOCH FROM (now() - c.created_at)) / 86400, 0) / 30) AS recency_boost,
+			(1 - (e.embedding <=> $1::vector)) + (0.03 / (1 + GREATEST(EXTRACT(EPOCH FROM (now() - c.created_at)) / 86400, 0) / 30)) AS score
+		FROM document_chunks c
+		JOIN documents d ON d.id = c.document_id
+		JOIN document_chunk_embeddings e ON e.chunk_id = c.id
+		` + where + `
+		ORDER BY score DESC
+		LIMIT $2`
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []domain.RetrievedDocumentChunk{}
+	for rows.Next() {
+		item, err := scanRetrievedDocumentChunk(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -896,6 +1140,131 @@ func scanRetrievedMemory(row scanner) (domain.RetrievedMemory, error) {
 	return item, nil
 }
 
+func scanDocument(row scanner) (domain.Document, error) {
+	var document domain.Document
+	var workspaceID sql.NullString
+	var sourceURI sql.NullString
+	var mimeType sql.NullString
+	var metadataJSON []byte
+	if err := row.Scan(
+		&document.ID,
+		&workspaceID,
+		&document.Title,
+		&document.SourceType,
+		&sourceURI,
+		&mimeType,
+		&metadataJSON,
+		&document.CreatedAt,
+		&document.UpdatedAt,
+		&document.ChunkCount,
+		&document.EmbeddingCount,
+	); err != nil {
+		return domain.Document{}, err
+	}
+	if workspaceID.Valid {
+		document.WorkspaceID = workspaceID.String
+	}
+	if sourceURI.Valid {
+		document.SourceURI = sourceURI.String
+	}
+	if mimeType.Valid {
+		document.MimeType = mimeType.String
+	}
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &document.Metadata); err != nil {
+			return domain.Document{}, err
+		}
+	}
+	if document.Metadata == nil {
+		document.Metadata = map[string]any{}
+	}
+	return document, nil
+}
+
+func scanDocumentChunk(row scanner) (domain.DocumentChunk, error) {
+	var chunk domain.DocumentChunk
+	var metadataJSON []byte
+	if err := row.Scan(
+		&chunk.ID,
+		&chunk.DocumentID,
+		&chunk.ChunkIndex,
+		&chunk.Content,
+		&chunk.TokenCount,
+		&metadataJSON,
+		&chunk.CreatedAt,
+	); err != nil {
+		return domain.DocumentChunk{}, err
+	}
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &chunk.Metadata); err != nil {
+			return domain.DocumentChunk{}, err
+		}
+	}
+	if chunk.Metadata == nil {
+		chunk.Metadata = map[string]any{}
+	}
+	return chunk, nil
+}
+
+func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, error) {
+	var item domain.RetrievedDocumentChunk
+	var workspaceID sql.NullString
+	var sourceURI sql.NullString
+	var mimeType sql.NullString
+	var documentMetadataJSON []byte
+	var chunkMetadataJSON []byte
+	if err := row.Scan(
+		&item.Document.ID,
+		&workspaceID,
+		&item.Document.Title,
+		&item.Document.SourceType,
+		&sourceURI,
+		&mimeType,
+		&documentMetadataJSON,
+		&item.Document.CreatedAt,
+		&item.Document.UpdatedAt,
+		&item.Chunk.ID,
+		&item.Chunk.DocumentID,
+		&item.Chunk.ChunkIndex,
+		&item.Chunk.Content,
+		&item.Chunk.TokenCount,
+		&chunkMetadataJSON,
+		&item.Chunk.CreatedAt,
+		&item.Similarity,
+		&item.RecencyBoost,
+		&item.Score,
+	); err != nil {
+		return domain.RetrievedDocumentChunk{}, err
+	}
+	if workspaceID.Valid {
+		item.Document.WorkspaceID = workspaceID.String
+	}
+	if sourceURI.Valid {
+		item.Document.SourceURI = sourceURI.String
+	}
+	if mimeType.Valid {
+		item.Document.MimeType = mimeType.String
+	}
+	if len(documentMetadataJSON) > 0 {
+		if err := json.Unmarshal(documentMetadataJSON, &item.Document.Metadata); err != nil {
+			return domain.RetrievedDocumentChunk{}, err
+		}
+	}
+	if len(chunkMetadataJSON) > 0 {
+		if err := json.Unmarshal(chunkMetadataJSON, &item.Chunk.Metadata); err != nil {
+			return domain.RetrievedDocumentChunk{}, err
+		}
+	}
+	if item.Document.Metadata == nil {
+		item.Document.Metadata = map[string]any{}
+	}
+	if item.Chunk.Metadata == nil {
+		item.Chunk.Metadata = map[string]any{}
+	}
+	item.Chunk.Document = item.Document
+	return item, nil
+}
+
 func nullString(value string) any {
 	if strings.TrimSpace(value) == "" {
 		return nil
@@ -1018,6 +1387,35 @@ var postgresMigrations = []string{
 		embedding vector(1536) NOT NULL,
 		created_at timestamptz NOT NULL
 	)`,
+	`CREATE TABLE IF NOT EXISTS documents (
+		id text PRIMARY KEY,
+		workspace_id text,
+		title text NOT NULL,
+		source_type text NOT NULL,
+		source_uri text,
+		mime_type text,
+		content text NOT NULL,
+		metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+		created_at timestamptz NOT NULL,
+		updated_at timestamptz NOT NULL
+	)`,
+	`CREATE TABLE IF NOT EXISTS document_chunks (
+		id text PRIMARY KEY,
+		document_id text NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+		chunk_index integer NOT NULL,
+		content text NOT NULL,
+		token_count integer NOT NULL DEFAULT 0,
+		metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+		created_at timestamptz NOT NULL
+	)`,
+	`CREATE TABLE IF NOT EXISTS document_chunk_embeddings (
+		chunk_id text PRIMARY KEY REFERENCES document_chunks(id) ON DELETE CASCADE,
+		provider text NOT NULL,
+		model text NOT NULL,
+		dimensions integer NOT NULL,
+		embedding vector(1536) NOT NULL,
+		created_at timestamptz NOT NULL
+	)`,
 	`DO $$
 	BEGIN
 		IF EXISTS (
@@ -1041,6 +1439,11 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_trace_events_type_timestamp ON trace_events(type, timestamp DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memories_scope_created ON memories(workspace_id, user_id, project_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memory_embeddings_vector ON memory_embeddings USING hnsw (embedding vector_cosine_ops)`,
+	`CREATE INDEX IF NOT EXISTS idx_documents_workspace_created ON documents(workspace_id, created_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_documents_metadata ON documents USING gin(metadata)`,
+	`CREATE INDEX IF NOT EXISTS idx_document_chunks_document ON document_chunks(document_id, chunk_index)`,
+	`CREATE INDEX IF NOT EXISTS idx_document_chunks_metadata ON document_chunks USING gin(metadata)`,
+	`CREATE INDEX IF NOT EXISTS idx_document_chunk_embeddings_vector ON document_chunk_embeddings USING hnsw (embedding vector_cosine_ops)`,
 }
 
 var _ Store = (*PostgresStore)(nil)

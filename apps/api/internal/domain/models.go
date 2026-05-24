@@ -197,3 +197,83 @@ type RetrievedMemory struct {
 	RecencyBoost float64 `json:"recency_boost"`
 	Score        float64 `json:"score"`
 }
+
+type Document struct {
+	ID             string         `json:"id"`
+	WorkspaceID    string         `json:"workspace_id,omitempty"`
+	Title          string         `json:"title"`
+	SourceType     string         `json:"source_type"`
+	SourceURI      string         `json:"source_uri,omitempty"`
+	MimeType       string         `json:"mime_type,omitempty"`
+	Content        string         `json:"-"`
+	Metadata       map[string]any `json:"metadata"`
+	ChunkCount     int            `json:"chunk_count,omitempty"`
+	EmbeddingCount int            `json:"embedding_count,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+}
+
+type DocumentChunk struct {
+	ID         string         `json:"id"`
+	DocumentID string         `json:"document_id"`
+	ChunkIndex int            `json:"chunk_index"`
+	Content    string         `json:"content"`
+	TokenCount int            `json:"token_count"`
+	Metadata   map[string]any `json:"metadata"`
+	CreatedAt  time.Time      `json:"created_at"`
+	Document   Document       `json:"document,omitempty"`
+}
+
+type DocumentChunkEmbedding struct {
+	ChunkID    string    `json:"chunk_id"`
+	Provider   string    `json:"provider"`
+	Model      string    `json:"model"`
+	Dimensions int       `json:"dimensions"`
+	Embedding  []float64 `json:"-"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type DocumentIngestRequest struct {
+	WorkspaceID string         `json:"workspace_id,omitempty"`
+	Title       string         `json:"title"`
+	Content     string         `json:"content"`
+	SourceType  string         `json:"source_type,omitempty"`
+	SourceURI   string         `json:"source_uri,omitempty"`
+	MimeType    string         `json:"mime_type,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+type DocumentSearch struct {
+	Query             string            `json:"query"`
+	Embedding         []float64         `json:"-"`
+	EmbeddingProvider string            `json:"-"`
+	EmbeddingModel    string            `json:"-"`
+	WorkspaceID       string            `json:"workspace_id,omitempty"`
+	Metadata          map[string]string `json:"metadata,omitempty"`
+	Limit             int               `json:"limit,omitempty"`
+	MinSimilarity     float64           `json:"min_similarity,omitempty"`
+}
+
+type RetrievedDocumentChunk struct {
+	Document         Document      `json:"document"`
+	Chunk            DocumentChunk `json:"chunk"`
+	Similarity       float64       `json:"similarity"`
+	RecencyBoost     float64       `json:"recency_boost"`
+	Score            float64       `json:"score"`
+	LexicalBoost     float64       `json:"lexical_boost,omitempty"`
+	MetadataBoost    float64       `json:"metadata_boost,omitempty"`
+	DiversityPenalty float64       `json:"diversity_penalty,omitempty"`
+	RerankScore      float64       `json:"rerank_score,omitempty"`
+}
+
+type EmbeddingInfo struct {
+	Provider   string `json:"provider"`
+	Model      string `json:"model"`
+	Dimensions int    `json:"dimensions"`
+	Estimated  bool   `json:"estimated"`
+}
+
+type DocumentSearchResponse struct {
+	Items     []RetrievedDocumentChunk `json:"items"`
+	Embedding EmbeddingInfo            `json:"embedding"`
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { lexer } from "marked";
 import type { Token, Tokens } from "marked";
@@ -8,21 +8,31 @@ import {
   AgentInfo,
   ChatMode,
   Conversation,
+  DocumentDetail,
+  DocumentInfo,
+  EmbeddingInfo,
   Message,
+  RetrievedDocumentChunk,
   ToolInfo,
   cancelRun,
   continueRun,
   createConversation,
+  createDocument,
   deleteConversation as deleteConversationApi,
+  deleteDocument as deleteDocumentApi,
   listCollaborationSteps,
   listAgents,
   listConversations,
+  listDocuments,
   listRuns,
   listTools,
   listMessages,
+  getDocument,
   resumeRun,
+  searchRAG,
   setToolEnabled,
-  streamChat
+  streamChat,
+  uploadDocument
 } from "../lib/api";
 import { CollaborationDag } from "./CollaborationDag";
 
@@ -86,10 +96,28 @@ export function ChatShell() {
     agentId: string;
     status: string;
   } | null>(null);
-  const [view, setView] = useState<"chat" | "tools">("chat");
+  const [view, setView] = useState<"chat" | "tools" | "knowledge">("chat");
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [toolsError, setToolsError] = useState("");
   const [updatingTool, setUpdatingTool] = useState("");
+  const [documents, setDocuments] = useState<DocumentInfo[]>([]);
+  const [documentsError, setDocumentsError] = useState("");
+  const [documentTitle, setDocumentTitle] = useState("");
+  const [documentContent, setDocumentContent] = useState("");
+  const [isCreatingDocument, setIsCreatingDocument] = useState(false);
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [isUploadingDocument, setIsUploadingDocument] = useState(false);
+  const [ragQuery, setRagQuery] = useState("");
+  const [ragMinSimilarity, setRagMinSimilarity] = useState("0.15");
+  const [ragResults, setRagResults] = useState<RetrievedDocumentChunk[]>([]);
+  const [ragEmbedding, setRagEmbedding] = useState<EmbeddingInfo | null>(null);
+  const [hasSearchedRAG, setHasSearchedRAG] = useState(false);
+  const [isSearchingRAG, setIsSearchingRAG] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<DocumentDetail | null>(null);
+  const [selectedDocumentId, setSelectedDocumentId] = useState("");
+  const [isLoadingDocumentDetail, setIsLoadingDocumentDetail] = useState(false);
+  const [deletingDocumentId, setDeletingDocumentId] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const activeConversation = useMemo(
@@ -125,6 +153,7 @@ export function ChatShell() {
     void refreshConversations();
     void refreshAgents();
     void refreshTools();
+    void refreshDocuments();
   }, []);
 
   useEffect(() => {
@@ -209,6 +238,17 @@ export function ChatShell() {
       setTools(await listTools());
     } catch (err) {
       setToolsError(err instanceof Error ? err.message : "Failed to load tools");
+    }
+  }
+
+  async function refreshDocuments() {
+    try {
+      setDocumentsError("");
+      setDocuments(await listDocuments());
+      setSelectedDocument(null);
+      setSelectedDocumentId("");
+    } catch (err) {
+      setDocumentsError(err instanceof Error ? err.message : "Failed to load documents");
     }
   }
 
@@ -304,6 +344,117 @@ export function ChatShell() {
       setToolsError(err instanceof Error ? err.message : "Failed to update tool");
     } finally {
       setUpdatingTool("");
+    }
+  }
+
+  async function handleCreateDocument() {
+    const title = documentTitle.trim();
+    const content = documentContent.trim();
+    if (!title || !content || isCreatingDocument) {
+      return;
+    }
+    setIsCreatingDocument(true);
+    setDocumentsError("");
+    try {
+      const created = await createDocument({
+        title,
+        content,
+        metadata: { source: "ui" }
+      });
+      setDocuments((items) => [created, ...items]);
+      setDocumentTitle("");
+      setDocumentContent("");
+    } catch (err) {
+      setDocumentsError(err instanceof Error ? err.message : "Failed to create document");
+    } finally {
+      setIsCreatingDocument(false);
+    }
+  }
+
+  function handleUploadFileChange(event: ChangeEvent<HTMLInputElement>) {
+    setUploadFile(event.target.files?.[0] ?? null);
+  }
+
+  async function handleUploadDocument() {
+    if (!uploadFile || isUploadingDocument) {
+      return;
+    }
+    setIsUploadingDocument(true);
+    setDocumentsError("");
+    try {
+      const created = await uploadDocument({
+        file: uploadFile,
+        title: uploadTitle
+      });
+      setDocuments((items) => [created, ...items]);
+      setUploadFile(null);
+      setUploadTitle("");
+    } catch (err) {
+      setDocumentsError(err instanceof Error ? err.message : "Failed to upload document");
+    } finally {
+      setIsUploadingDocument(false);
+    }
+  }
+
+  async function handleSearchRAG() {
+    const query = ragQuery.trim();
+    if (!query || isSearchingRAG) {
+      return;
+    }
+    setIsSearchingRAG(true);
+    setHasSearchedRAG(true);
+    setDocumentsError("");
+    try {
+      const minSimilarity = Number(ragMinSimilarity);
+      const response = await searchRAG({
+        query,
+        limit: 5,
+        min_similarity: Number.isFinite(minSimilarity) ? minSimilarity : 0
+      });
+      setRagResults(response.items);
+      setRagEmbedding(response.embedding ?? null);
+    } catch (err) {
+      setDocumentsError(err instanceof Error ? err.message : "Failed to search knowledge");
+    } finally {
+      setIsSearchingRAG(false);
+    }
+  }
+
+  async function handleSelectDocument(documentId: string) {
+    setSelectedDocumentId(documentId);
+    setIsLoadingDocumentDetail(true);
+    setDocumentsError("");
+    try {
+      setSelectedDocument(await getDocument(documentId));
+    } catch (err) {
+      setDocumentsError(err instanceof Error ? err.message : "Failed to load document");
+    } finally {
+      setIsLoadingDocumentDetail(false);
+    }
+  }
+
+  async function handleDeleteDocument(document: DocumentInfo) {
+    if (deletingDocumentId) {
+      return;
+    }
+    const confirmed = window.confirm(`Delete knowledge document "${document.title}"? This cannot be undone.`);
+    if (!confirmed) {
+      return;
+    }
+    setDeletingDocumentId(document.id);
+    setDocumentsError("");
+    try {
+      await deleteDocumentApi(document.id);
+      setDocuments((items) => items.filter((item) => item.id !== document.id));
+      setRagResults((items) => items.filter((item) => item.document.id !== document.id));
+      if (selectedDocumentId === document.id) {
+        setSelectedDocumentId("");
+        setSelectedDocument(null);
+      }
+    } catch (err) {
+      setDocumentsError(err instanceof Error ? err.message : "Failed to delete document");
+    } finally {
+      setDeletingDocumentId("");
     }
   }
 
@@ -575,15 +726,28 @@ export function ChatShell() {
         <button className="new-chat" onClick={startNewConversation}>
           New Chat
         </button>
-        <button
-          className={`nav-button ${view === "tools" ? "active" : ""}`}
-          onClick={() => {
-            setView("tools");
-            void refreshTools();
-          }}
-        >
-          Tools
-        </button>
+        <div className="sidebar-section">
+          <div className="sidebar-section-title">Workspace</div>
+          <button
+            className={`nav-button ${view === "tools" ? "active" : ""}`}
+            onClick={() => {
+              setView("tools");
+              void refreshTools();
+            }}
+          >
+            Tools
+          </button>
+          <button
+            className={`nav-button ${view === "knowledge" ? "active" : ""}`}
+            onClick={() => {
+              setView("knowledge");
+              void refreshDocuments();
+            }}
+          >
+            Knowledge
+          </button>
+        </div>
+        <div className="sidebar-section-title conversation-section-title">Conversations</div>
         <div className="conversation-list">
           {conversations.map((conversation) => {
             const isActiveConversation = conversation.id === activeId;
@@ -627,7 +791,13 @@ export function ChatShell() {
 
       <main className="main">
         <header className="topbar">
-          <h2>{view === "tools" ? "Tools" : activeConversation?.title ?? "New conversation"}</h2>
+          <h2>
+            {view === "tools"
+              ? "Tools"
+              : view === "knowledge"
+                ? "Knowledge"
+                : activeConversation?.title ?? "New conversation"}
+          </h2>
           <div className="topbar-actions">
             {view === "chat" && runState?.id && isTerminalRun ? (
               <a className="run-link" href={`/runs/${runState.id}`}>
@@ -637,9 +807,11 @@ export function ChatShell() {
             <span className="status">
               {view === "tools"
                 ? `${tools.filter((tool) => tool.enabled).length} enabled`
-                : isStreaming
-                  ? "Streaming..."
-                  : "Ready"}
+                : view === "knowledge"
+                  ? `${documents.length} documents`
+                  : isStreaming
+                    ? "Streaming..."
+                    : "Ready"}
             </span>
           </div>
         </header>
@@ -674,6 +846,39 @@ export function ChatShell() {
               ))}
             </div>
           </section>
+        ) : view === "knowledge" ? (
+          <KnowledgePanel
+            documents={documents}
+            documentTitle={documentTitle}
+            documentContent={documentContent}
+            error={documentsError}
+            isCreating={isCreatingDocument}
+            isLoadingDocumentDetail={isLoadingDocumentDetail}
+            isSearching={isSearchingRAG}
+            isUploading={isUploadingDocument}
+            deletingDocumentId={deletingDocumentId}
+            minSimilarity={ragMinSimilarity}
+            onContentChange={setDocumentContent}
+            onCreate={handleCreateDocument}
+            onDeleteDocument={handleDeleteDocument}
+            onMinSimilarityChange={setRagMinSimilarity}
+            onQueryChange={setRagQuery}
+            onRefresh={refreshDocuments}
+            onSearch={handleSearchRAG}
+            onSelectDocument={handleSelectDocument}
+            onTitleChange={setDocumentTitle}
+            onUpload={handleUploadDocument}
+            onUploadFileChange={handleUploadFileChange}
+            onUploadTitleChange={setUploadTitle}
+            query={ragQuery}
+            hasSearched={hasSearchedRAG}
+            searchEmbedding={ragEmbedding}
+            results={ragResults}
+            selectedDocument={selectedDocument}
+            selectedDocumentId={selectedDocumentId}
+            uploadFile={uploadFile}
+            uploadTitle={uploadTitle}
+          />
         ) : (
           <section
             className={`chat-workspace ${
@@ -914,6 +1119,315 @@ function ModeChooser({
         <strong>Loop until done</strong>
       </button>
     </section>
+  );
+}
+
+function KnowledgePanel({
+  documents,
+  documentTitle,
+  documentContent,
+  deletingDocumentId,
+  error,
+  hasSearched,
+  isCreating,
+  isLoadingDocumentDetail,
+  isSearching,
+  isUploading,
+  minSimilarity,
+  onContentChange,
+  onCreate,
+  onDeleteDocument,
+  onMinSimilarityChange,
+  onQueryChange,
+  onRefresh,
+  onSearch,
+  onSelectDocument,
+  onTitleChange,
+  onUpload,
+  onUploadFileChange,
+  onUploadTitleChange,
+  query,
+  searchEmbedding,
+  results,
+  selectedDocument,
+  selectedDocumentId,
+  uploadFile,
+  uploadTitle
+}: {
+  documents: DocumentInfo[];
+  documentTitle: string;
+  documentContent: string;
+  deletingDocumentId: string;
+  error: string;
+  hasSearched: boolean;
+  isCreating: boolean;
+  isLoadingDocumentDetail: boolean;
+  isSearching: boolean;
+  isUploading: boolean;
+  minSimilarity: string;
+  onContentChange: (value: string) => void;
+  onCreate: () => void;
+  onDeleteDocument: (document: DocumentInfo) => void;
+  onMinSimilarityChange: (value: string) => void;
+  onQueryChange: (value: string) => void;
+  onRefresh: () => void;
+  onSearch: () => void;
+  onSelectDocument: (documentId: string) => void;
+  onTitleChange: (value: string) => void;
+  onUpload: () => void;
+  onUploadFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onUploadTitleChange: (value: string) => void;
+  query: string;
+  searchEmbedding: EmbeddingInfo | null;
+  results: RetrievedDocumentChunk[];
+  selectedDocument: DocumentDetail | null;
+  selectedDocumentId: string;
+  uploadFile: File | null;
+  uploadTitle: string;
+}) {
+  return (
+    <section className="knowledge-panel">
+      {error ? <div className="error">{error}</div> : null}
+      <div className="knowledge-grid">
+        <section className="knowledge-column">
+          <div className="panel-title">Upload knowledge file</div>
+          <div className="knowledge-form upload-form">
+            <input
+              value={uploadTitle}
+              onChange={(event) => onUploadTitleChange(event.target.value)}
+              placeholder="Optional document title"
+            />
+            <label className="upload-file-control">
+              <input accept=".txt,.md,.markdown,text/plain,text/markdown" onChange={onUploadFileChange} type="file" />
+              <span className="upload-file-action">Choose File</span>
+              <span className={`upload-file-name ${uploadFile ? "" : "empty"}`}>
+                {uploadFile ? `${uploadFile.name} (${formatBytes(uploadFile.size)})` : "No .txt or .md file selected"}
+              </span>
+            </label>
+            <button className="send" disabled={isUploading || !uploadFile} onClick={onUpload} type="button">
+              {isUploading ? "Uploading..." : "Upload File"}
+            </button>
+          </div>
+          <div className="panel-title secondary-panel-title">Add text document</div>
+          <div className="knowledge-form">
+            <input
+              value={documentTitle}
+              onChange={(event) => onTitleChange(event.target.value)}
+              placeholder="Document title"
+            />
+            <textarea
+              value={documentContent}
+              onChange={(event) => onContentChange(event.target.value)}
+              placeholder="Paste text knowledge here..."
+            />
+            <button
+              className="send"
+              disabled={isCreating || documentTitle.trim().length === 0 || documentContent.trim().length === 0}
+              onClick={onCreate}
+              type="button"
+            >
+              {isCreating ? "Adding..." : "Add Document"}
+            </button>
+          </div>
+        </section>
+
+        <section className="knowledge-column">
+          <div className="knowledge-header-row">
+            <div className="panel-title">Documents</div>
+            <button className="secondary-action" onClick={onRefresh} type="button">
+              Refresh
+            </button>
+          </div>
+          <div className="document-list">
+            {documents.length === 0 ? (
+              <div className="empty compact">No documents indexed yet.</div>
+            ) : (
+              documents.map((document) => {
+                const isSelected = selectedDocumentId === document.id;
+                const detail = selectedDocument?.document.id === document.id ? selectedDocument : null;
+
+                return (
+                  <article className="document-card" key={document.id}>
+                    <div className="document-card-summary">
+                      <div>
+                        <h3>{document.title}</h3>
+                        <div className="tool-source">
+                          {documentFilename(document) || new Date(document.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="document-metrics">
+                        <span>{documentFormat(document)}</span>
+                        <span>{document.chunk_count ?? 0} chunks</span>
+                        <span>{document.embedding_count ?? 0} embeddings</span>
+                      </div>
+                      <div className="document-actions">
+                        <button className="secondary-action" onClick={() => onSelectDocument(document.id)} type="button">
+                          Details
+                        </button>
+                        <button
+                          className="secondary-action danger-action"
+                          disabled={deletingDocumentId === document.id}
+                          onClick={() => onDeleteDocument(document)}
+                          type="button"
+                        >
+                          {deletingDocumentId === document.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
+                    {isSelected ? (
+                      <DocumentDetailBlock
+                        detail={detail}
+                        isLoading={isLoadingDocumentDetail && selectedDocumentId === document.id}
+                      />
+                    ) : null}
+                  </article>
+                );
+              })
+            )}
+          </div>
+        </section>
+      </div>
+
+      <section className="knowledge-search">
+        <div className="panel-title">Search indexed chunks</div>
+        <div className="knowledge-search-row">
+          <input
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onSearch();
+              }
+            }}
+            placeholder="Ask a semantic question..."
+          />
+          <label className="threshold-input">
+            <span>Min similarity</span>
+            <input
+              max="1"
+              min="0"
+              onChange={(event) => onMinSimilarityChange(event.target.value)}
+              step="0.05"
+              type="number"
+              value={minSimilarity}
+            />
+          </label>
+          <button className="send" disabled={isSearching || query.trim().length === 0} onClick={onSearch} type="button">
+            {isSearching ? "Searching..." : "Search"}
+          </button>
+        </div>
+        <EmbeddingStatus embedding={searchEmbedding} hasSearched={hasSearched} />
+        <div className="rag-results">
+          {results.length === 0 ? (
+            <div className="empty compact">Search results will appear here.</div>
+          ) : (
+            results.map((result) => (
+              <article className="rag-result-card" key={result.chunk.id}>
+                <div className="rag-result-header">
+                  <div>
+                    <h3>{result.document.title}</h3>
+                    <div className="tool-source">{chunkSourceLabel(result)}</div>
+                  </div>
+                  <div className="document-metrics">
+                    <span>{documentFormat(result.document)}</span>
+                    <span>similarity {formatScore(result.similarity)}</span>
+                    <span>score {formatScore(result.score)}</span>
+                  </div>
+                </div>
+                <p>{result.chunk.content}</p>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+    </section>
+  );
+}
+
+function DocumentDetailBlock({ detail, isLoading }: { detail: DocumentDetail | null; isLoading: boolean }) {
+  if (isLoading) {
+    return <div className="document-detail-inline empty compact">Loading document...</div>;
+  }
+
+  if (!detail) {
+    return <div className="document-detail-inline empty compact">Document detail unavailable.</div>;
+  }
+
+  return (
+    <div className="document-detail-inline">
+      <div className="document-detail-header">
+        <div>
+          <h3>Document detail</h3>
+          <div className="tool-source">
+            {[documentFilename(detail.document), new Date(detail.document.created_at).toLocaleString()]
+              .filter(Boolean)
+              .join(" / ")}
+          </div>
+        </div>
+        <div className="document-metrics">
+          <span>{documentFormat(detail.document)}</span>
+          <span>{detail.document.chunk_count ?? detail.chunks.length} chunks</span>
+          <span>{detail.document.embedding_count ?? 0} embeddings</span>
+        </div>
+      </div>
+      <div className="chunk-list">
+        {detail.chunks.map((chunk) => (
+          <article className="chunk-card" key={chunk.id}>
+            <div className="rag-result-header">
+              <div>
+                <h3>Chunk {chunk.chunk_index + 1}</h3>
+                {metadataString(chunk.metadata, "heading_path") ? (
+                  <div className="tool-source">{metadataString(chunk.metadata, "heading_path")}</div>
+                ) : null}
+              </div>
+              <div className="document-metrics">
+                {metadataString(chunk.metadata, "chunk_type") ? (
+                  <span>{metadataString(chunk.metadata, "chunk_type")}</span>
+                ) : null}
+                <span>{chunk.token_count} tokens</span>
+              </div>
+            </div>
+            <p>{chunk.content}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EmbeddingStatus({ embedding, hasSearched }: { embedding: EmbeddingInfo | null; hasSearched: boolean }) {
+  if (!hasSearched) {
+    return (
+      <div className="embedding-status">
+        <span>Embedding: not checked yet</span>
+        <span>Run a search to show provider/model.</span>
+      </div>
+    );
+  }
+
+  if (!embedding) {
+    return (
+      <div className="embedding-status warning">
+        <span>Embedding: metadata unavailable</span>
+        <span>The API response did not include provider/model; restart the backend if it is still running old code.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`embedding-status ${embedding.estimated ? "warning" : ""}`}>
+      <span>
+        Embedding: {embedding.provider} / {embedding.model}
+        {embedding.dimensions ? ` / ${embedding.dimensions}d` : ""}
+      </span>
+      {embedding.estimated ? (
+        <span>Local fallback is active; semantic quality is limited.</span>
+      ) : (
+        <span>Semantic vector search is using the configured embedding provider.</span>
+      )}
+    </div>
   );
 }
 
@@ -1270,6 +1784,45 @@ function formatDuration(seconds: number) {
 
 function formatValue(value: unknown) {
   return JSON.stringify(value, null, 2);
+}
+
+function formatScore(value: number) {
+  return Number.isFinite(value) ? value.toFixed(3) : "0.000";
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0 B";
+  }
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function metadataString(metadata: Record<string, unknown> | undefined, key: string) {
+  const value = metadata?.[key];
+  return typeof value === "string" ? value : "";
+}
+
+function documentFormat(document: DocumentInfo) {
+  return metadataString(document.metadata, "format") || document.source_type || "text";
+}
+
+function documentFilename(document: DocumentInfo) {
+  return metadataString(document.metadata, "filename") || document.source_uri || "";
+}
+
+function chunkSourceLabel(result: RetrievedDocumentChunk) {
+  const parts = [
+    documentFilename(result.document),
+    metadataString(result.chunk.metadata, "heading_path"),
+    metadataString(result.chunk.metadata, "chunk_type")
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" / ") : `Chunk ${result.chunk.chunk_index + 1}`;
 }
 
 function renderMarkdown(content: string) {

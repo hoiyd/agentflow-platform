@@ -184,6 +184,53 @@ export type RunReplay = {
   events: TraceEventInfo[];
 };
 
+export type DocumentInfo = {
+  id: string;
+  workspace_id?: string;
+  title: string;
+  source_type: string;
+  source_uri?: string;
+  mime_type?: string;
+  metadata: Record<string, unknown>;
+  chunk_count?: number;
+  embedding_count?: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RetrievedDocumentChunk = {
+  document: DocumentInfo;
+  chunk: {
+    id: string;
+    document_id: string;
+    chunk_index: number;
+    content: string;
+    token_count: number;
+    metadata: Record<string, unknown>;
+    created_at: string;
+  };
+  similarity: number;
+  recency_boost: number;
+  score: number;
+};
+
+export type EmbeddingInfo = {
+  provider: string;
+  model: string;
+  dimensions?: number;
+  estimated: boolean;
+};
+
+export type DocumentSearchResponse = {
+  items: RetrievedDocumentChunk[];
+  embedding?: EmbeddingInfo;
+};
+
+export type DocumentDetail = {
+  document: DocumentInfo;
+  chunks: RetrievedDocumentChunk["chunk"][];
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 
 async function readJSON<T>(response: Response): Promise<T> {
@@ -387,4 +434,90 @@ export async function setToolEnabled(name: string, enabled: boolean): Promise<To
     throw new Error(`Failed to update tool: ${response.status}`);
   }
   return readArrayJSON<ToolInfo>(response);
+}
+
+export async function listDocuments(): Promise<DocumentInfo[]> {
+  const response = await fetch(`${API_BASE}/api/documents`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Failed to load documents: ${response.status}`);
+  }
+  return readArrayJSON<DocumentInfo>(response);
+}
+
+export async function createDocument(input: {
+  title: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+}): Promise<DocumentInfo> {
+  const response = await fetch(`${API_BASE}/api/documents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to create document: ${response.status}`);
+  }
+  return readJSON<DocumentInfo>(response);
+}
+
+export async function uploadDocument(input: { file: File; title?: string }): Promise<DocumentInfo> {
+  const form = new FormData();
+  form.append("file", input.file);
+  if (input.title?.trim()) {
+    form.append("title", input.title.trim());
+  }
+  const response = await fetch(`${API_BASE}/api/documents/upload`, {
+    method: "POST",
+    body: form
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to upload document: ${response.status}`);
+  }
+  return readJSON<DocumentInfo>(response);
+}
+
+export async function getDocument(documentId: string): Promise<DocumentDetail> {
+  const response = await fetch(`${API_BASE}/api/documents/${documentId}`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Failed to load document: ${response.status}`);
+  }
+  const data = await readJSON<Partial<DocumentDetail>>(response);
+  return {
+    document: data.document as DocumentInfo,
+    chunks: Array.isArray(data.chunks) ? data.chunks : []
+  };
+}
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/documents/${documentId}`, {
+    method: "DELETE"
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to delete document: ${response.status}`);
+  }
+}
+
+export async function searchRAG(input: {
+  query: string;
+  metadata?: Record<string, string>;
+  limit?: number;
+  min_similarity?: number;
+}): Promise<DocumentSearchResponse> {
+  const response = await fetch(`${API_BASE}/api/rag/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to search knowledge: ${response.status}`);
+  }
+  const data = await readJSON<unknown>(response);
+  if (Array.isArray(data)) {
+    return { items: data as RetrievedDocumentChunk[] };
+  }
+  const payload = data as Partial<DocumentSearchResponse>;
+  return {
+    items: Array.isArray(payload.items) ? payload.items : [],
+    embedding: payload.embedding
+  };
 }

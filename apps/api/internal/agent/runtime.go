@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -92,11 +93,11 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 }
 
 func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string) (<-chan openai.StreamEvent, <-chan error) {
-	retrievedMemories := r.retrieveMemories(ctx, prepared.Run.ID, latest)
-	return r.openAI.StreamAgentChatWithToolsTrace(ctx, prepared.Agent.SystemPrompt, history, latest, prepared.Registry, r.trace, prepared.Run.ID, "", retrievedMemories...)
+	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, latest)
+	return r.openAI.StreamAgentChatWithToolsTrace(ctx, prepared.Agent.SystemPrompt, history, latest, prepared.Registry, r.trace, prepared.Run.ID, "", retrievedMemories, retrievedChunks)
 }
 
-func (r *Runtime) retrieveMemories(ctx context.Context, runID string, query string) []domain.RetrievedMemory {
+func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
 	embedding, err := r.openAI.EmbedText(ctx, query)
 	if err != nil {
 		r.trace.Error(ctx, runID, "", map[string]any{
@@ -104,9 +105,9 @@ func (r *Runtime) retrieveMemories(ctx context.Context, runID string, query stri
 			"stage":  "embed_query",
 			"error":  err.Error(),
 		})
-		return nil
+		return nil, nil
 	}
-	items, err := r.store.SearchMemories(domain.MemorySearch{
+	memories, err := r.store.SearchMemories(domain.MemorySearch{
 		Query:     query,
 		Embedding: embedding.Vector,
 		Limit:     5,
@@ -117,9 +118,98 @@ func (r *Runtime) retrieveMemories(ctx context.Context, runID string, query stri
 			"stage":  "search",
 			"error":  err.Error(),
 		})
-		return nil
+		memories = nil
 	}
-	return items
+	chunks, err := r.store.SearchDocumentChunks(domain.DocumentSearch{
+		Query:     query,
+		Embedding: embedding.Vector,
+		Limit:     5,
+	})
+	if err != nil {
+		r.trace.Error(ctx, runID, "", map[string]any{
+			"source": "rag_retrieval",
+			"stage":  "search",
+			"error":  err.Error(),
+		})
+		chunks = nil
+	}
+	return memories, chunks
+}
+
+func promptWithRetrievedContext(systemPrompt string, memories []domain.RetrievedMemory, chunks []domain.RetrievedDocumentChunk) string {
+	systemPrompt = strings.TrimSpace(systemPrompt)
+	if len(memories) > 0 {
+		systemPrompt += "\n\n" + formatRuntimeRetrievedMemories(memories)
+	}
+	if len(chunks) > 0 {
+		systemPrompt += "\n\n" + formatRuntimeRetrievedChunks(chunks)
+	}
+	return strings.TrimSpace(systemPrompt)
+}
+
+func retrievalTracePayload(memories []domain.RetrievedMemory, chunks []domain.RetrievedDocumentChunk) map[string]any {
+	payload := map[string]any{}
+	if len(memories) > 0 {
+		items := make([]map[string]any, 0, len(memories))
+		for _, memory := range memories {
+			items = append(items, map[string]any{
+				"id":         memory.Memory.ID,
+				"kind":       memory.Memory.Kind,
+				"content":    truncateRuntimeText(memory.Memory.Content, 1200),
+				"metadata":   memory.Memory.Metadata,
+				"similarity": memory.Similarity,
+				"score":      memory.Score,
+			})
+		}
+		payload["retrieved_memories"] = items
+	}
+	if len(chunks) > 0 {
+		items := make([]map[string]any, 0, len(chunks))
+		for _, chunk := range chunks {
+			items = append(items, map[string]any{
+				"document_id":    chunk.Document.ID,
+				"document_title": chunk.Document.Title,
+				"chunk_id":       chunk.Chunk.ID,
+				"chunk_index":    chunk.Chunk.ChunkIndex,
+				"content":        truncateRuntimeText(chunk.Chunk.Content, 1600),
+				"metadata":       chunk.Chunk.Metadata,
+				"similarity":     chunk.Similarity,
+				"score":          chunk.Score,
+			})
+		}
+		payload["retrieved_chunks"] = items
+	}
+	return payload
+}
+
+func formatRuntimeRetrievedMemories(memories []domain.RetrievedMemory) string {
+	var builder strings.Builder
+	builder.WriteString("Retrieved memories. Use them when relevant, and ignore them when they are not relevant:\n")
+	for index, memory := range memories {
+		builder.WriteString(fmt.Sprintf("%d. id=%s kind=%s score=%.4f\n", index+1, memory.Memory.ID, memory.Memory.Kind, memory.Score))
+		builder.WriteString(truncateRuntimeText(memory.Memory.Content, 1200))
+		builder.WriteString("\n")
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func formatRuntimeRetrievedChunks(chunks []domain.RetrievedDocumentChunk) string {
+	var builder strings.Builder
+	builder.WriteString("Retrieved document chunks. Use them when relevant, and ignore them when they are not relevant:\n")
+	for index, chunk := range chunks {
+		builder.WriteString(fmt.Sprintf("%d. document=%s chunk=%s score=%.4f\n", index+1, chunk.Document.Title, chunk.Chunk.ID, chunk.Score))
+		builder.WriteString(truncateRuntimeText(chunk.Chunk.Content, 1600))
+		builder.WriteString("\n")
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func truncateRuntimeText(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if limit <= 0 || len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "...[truncated]"
 }
 
 func (r *Runtime) CompleteRun(id string) (domain.Run, error) {

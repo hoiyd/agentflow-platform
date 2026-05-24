@@ -24,14 +24,17 @@ type FileStore struct {
 }
 
 type fileData struct {
-	Conversations      []domain.Conversation      `json:"conversations"`
-	Messages           []domain.Message           `json:"messages"`
-	Agents             []domain.Agent             `json:"agents"`
-	Runs               []domain.Run               `json:"runs"`
-	CollaborationSteps []domain.CollaborationStep `json:"collaboration_steps"`
-	TraceEvents        []domain.TraceEvent        `json:"trace_events"`
-	Memories           []domain.Memory            `json:"memories"`
-	MemoryEmbeddings   []domain.MemoryEmbedding   `json:"memory_embeddings"`
+	Conversations      []domain.Conversation           `json:"conversations"`
+	Messages           []domain.Message                `json:"messages"`
+	Agents             []domain.Agent                  `json:"agents"`
+	Runs               []domain.Run                    `json:"runs"`
+	CollaborationSteps []domain.CollaborationStep      `json:"collaboration_steps"`
+	TraceEvents        []domain.TraceEvent             `json:"trace_events"`
+	Memories           []domain.Memory                 `json:"memories"`
+	MemoryEmbeddings   []domain.MemoryEmbedding        `json:"memory_embeddings"`
+	Documents          []domain.Document               `json:"documents"`
+	DocumentChunks     []domain.DocumentChunk          `json:"document_chunks"`
+	ChunkEmbeddings    []domain.DocumentChunkEmbedding `json:"document_chunk_embeddings"`
 }
 
 func NewFileStore(path string) (*FileStore, error) {
@@ -580,8 +583,10 @@ func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.Retriev
 	defer s.mu.RUnlock()
 
 	limit := search.Limit
-	if limit <= 0 || limit > 10 {
+	if limit <= 0 {
 		limit = 5
+	} else if limit > 20 {
+		limit = 20
 	}
 	embeddingByMemoryID := map[string]domain.MemoryEmbedding{}
 	for _, embedding := range s.data.MemoryEmbeddings {
@@ -602,6 +607,246 @@ func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.Retriev
 		recencyBoost := memoryRecencyBoost(now, memory.CreatedAt)
 		items = append(items, domain.RetrievedMemory{
 			Memory:       memory,
+			Similarity:   similarity,
+			RecencyBoost: recencyBoost,
+			Score:        similarity + recencyBoost,
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Score > items[j].Score
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
+}
+
+func (s *FileStore) CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(chunks) != len(embeddings) {
+		return domain.Document{}, errors.New("document chunks and embeddings length mismatch")
+	}
+	now := time.Now().UTC()
+	document.ID = strings.TrimSpace(document.ID)
+	if document.ID == "" {
+		document.ID = newID("doc")
+	}
+	document.Title = strings.TrimSpace(document.Title)
+	if document.Title == "" {
+		return domain.Document{}, errors.New("document title is required")
+	}
+	document.Content = strings.TrimSpace(document.Content)
+	if document.Content == "" {
+		return domain.Document{}, errors.New("document content is required")
+	}
+	document.SourceType = strings.TrimSpace(document.SourceType)
+	if document.SourceType == "" {
+		document.SourceType = "text"
+	}
+	if document.Metadata == nil {
+		document.Metadata = map[string]any{}
+	}
+	if document.CreatedAt.IsZero() {
+		document.CreatedAt = now
+	}
+	document.UpdatedAt = now
+
+	for i := range chunks {
+		chunks[i].ID = strings.TrimSpace(chunks[i].ID)
+		if chunks[i].ID == "" {
+			chunks[i].ID = newID("chunk")
+		}
+		chunks[i].DocumentID = document.ID
+		chunks[i].ChunkIndex = i
+		chunks[i].Content = strings.TrimSpace(chunks[i].Content)
+		if chunks[i].Content == "" {
+			return domain.Document{}, errors.New("document chunk content is required")
+		}
+		if chunks[i].Metadata == nil {
+			chunks[i].Metadata = map[string]any{}
+		}
+		if chunks[i].CreatedAt.IsZero() {
+			chunks[i].CreatedAt = now
+		}
+		embeddings[i].ChunkID = chunks[i].ID
+		if embeddings[i].Provider == "" {
+			embeddings[i].Provider = "local"
+		}
+		if embeddings[i].Model == "" {
+			embeddings[i].Model = "local_hash"
+		}
+		if embeddings[i].Dimensions == 0 {
+			embeddings[i].Dimensions = len(embeddings[i].Embedding)
+		}
+		if embeddings[i].CreatedAt.IsZero() {
+			embeddings[i].CreatedAt = now
+		}
+	}
+
+	document.ChunkCount = len(chunks)
+	document.EmbeddingCount = len(embeddings)
+	s.data.Documents = append(s.data.Documents, document)
+	s.data.DocumentChunks = append(s.data.DocumentChunks, chunks...)
+	s.data.ChunkEmbeddings = append(s.data.ChunkEmbeddings, embeddings...)
+	return document, s.saveLocked()
+}
+
+func (s *FileStore) ListDocuments() ([]domain.Document, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	documents := append([]domain.Document(nil), s.data.Documents...)
+	chunkCounts := map[string]int{}
+	embeddingCounts := map[string]int{}
+	for _, chunk := range s.data.DocumentChunks {
+		chunkCounts[chunk.DocumentID]++
+	}
+	chunkIDToDocumentID := map[string]string{}
+	for _, chunk := range s.data.DocumentChunks {
+		chunkIDToDocumentID[chunk.ID] = chunk.DocumentID
+	}
+	for _, embedding := range s.data.ChunkEmbeddings {
+		if documentID := chunkIDToDocumentID[embedding.ChunkID]; documentID != "" {
+			embeddingCounts[documentID]++
+		}
+	}
+	for i := range documents {
+		documents[i].ChunkCount = chunkCounts[documents[i].ID]
+		documents[i].EmbeddingCount = embeddingCounts[documents[i].ID]
+	}
+	sort.Slice(documents, func(i, j int) bool {
+		return documents[i].CreatedAt.After(documents[j].CreatedAt)
+	})
+	return documents, nil
+}
+
+func (s *FileStore) GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var document domain.Document
+	found := false
+	for _, item := range s.data.Documents {
+		if item.ID == strings.TrimSpace(id) {
+			document = item
+			found = true
+			break
+		}
+	}
+	if !found {
+		return domain.Document{}, nil, false, nil
+	}
+	chunks := []domain.DocumentChunk{}
+	for _, chunk := range s.data.DocumentChunks {
+		if chunk.DocumentID == document.ID {
+			chunk.Document = document
+			chunks = append(chunks, chunk)
+		}
+	}
+	sort.Slice(chunks, func(i, j int) bool {
+		return chunks[i].ChunkIndex < chunks[j].ChunkIndex
+	})
+	document.ChunkCount = len(chunks)
+	embeddingByChunkID := map[string]bool{}
+	for _, embedding := range s.data.ChunkEmbeddings {
+		embeddingByChunkID[embedding.ChunkID] = true
+	}
+	for _, chunk := range chunks {
+		if embeddingByChunkID[chunk.ID] {
+			document.EmbeddingCount++
+		}
+	}
+	return document, chunks, true, nil
+}
+
+func (s *FileStore) DeleteDocument(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil
+	}
+	found := false
+	documents := s.data.Documents[:0]
+	for _, document := range s.data.Documents {
+		if document.ID == id {
+			found = true
+			continue
+		}
+		documents = append(documents, document)
+	}
+	if !found {
+		return nil
+	}
+
+	deletedChunkIDs := map[string]bool{}
+	chunks := s.data.DocumentChunks[:0]
+	for _, chunk := range s.data.DocumentChunks {
+		if chunk.DocumentID == id {
+			deletedChunkIDs[chunk.ID] = true
+			continue
+		}
+		chunks = append(chunks, chunk)
+	}
+	embeddings := s.data.ChunkEmbeddings[:0]
+	for _, embedding := range s.data.ChunkEmbeddings {
+		if deletedChunkIDs[embedding.ChunkID] {
+			continue
+		}
+		embeddings = append(embeddings, embedding)
+	}
+
+	s.data.Documents = documents
+	s.data.DocumentChunks = chunks
+	s.data.ChunkEmbeddings = embeddings
+	return s.saveLocked()
+}
+
+func (s *FileStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	limit := search.Limit
+	if limit <= 0 || limit > 10 {
+		limit = 5
+	}
+	documentByID := map[string]domain.Document{}
+	for _, document := range s.data.Documents {
+		documentByID[document.ID] = document
+	}
+	embeddingByChunkID := map[string]domain.DocumentChunkEmbedding{}
+	for _, embedding := range s.data.ChunkEmbeddings {
+		embeddingByChunkID[embedding.ChunkID] = embedding
+	}
+
+	items := []domain.RetrievedDocumentChunk{}
+	now := time.Now().UTC()
+	for _, chunk := range s.data.DocumentChunks {
+		document, ok := documentByID[chunk.DocumentID]
+		if !ok || !documentChunkMatchesSearch(document, chunk, search) {
+			continue
+		}
+		embedding, ok := embeddingByChunkID[chunk.ID]
+		if !ok || len(embedding.Embedding) == 0 || len(search.Embedding) == 0 {
+			continue
+		}
+		if search.EmbeddingProvider != "" && embedding.Provider != search.EmbeddingProvider {
+			continue
+		}
+		if search.EmbeddingModel != "" && embedding.Model != search.EmbeddingModel {
+			continue
+		}
+		similarity := cosineSimilarity(search.Embedding, embedding.Embedding)
+		if search.MinSimilarity > 0 && similarity < search.MinSimilarity {
+			continue
+		}
+		recencyBoost := memoryRecencyBoost(now, chunk.CreatedAt)
+		items = append(items, domain.RetrievedDocumentChunk{
+			Document:     document,
+			Chunk:        chunk,
 			Similarity:   similarity,
 			RecencyBoost: recencyBoost,
 			Score:        similarity + recencyBoost,
@@ -692,6 +937,11 @@ func emptyFileData() fileData {
 		Runs:               []domain.Run{},
 		CollaborationSteps: []domain.CollaborationStep{},
 		TraceEvents:        []domain.TraceEvent{},
+		Memories:           []domain.Memory{},
+		MemoryEmbeddings:   []domain.MemoryEmbedding{},
+		Documents:          []domain.Document{},
+		DocumentChunks:     []domain.DocumentChunk{},
+		ChunkEmbeddings:    []domain.DocumentChunkEmbedding{},
 	}
 }
 
@@ -719,6 +969,15 @@ func (s *FileStore) normalizeLoadedDataLocked() {
 	}
 	if s.data.MemoryEmbeddings == nil {
 		s.data.MemoryEmbeddings = []domain.MemoryEmbedding{}
+	}
+	if s.data.Documents == nil {
+		s.data.Documents = []domain.Document{}
+	}
+	if s.data.DocumentChunks == nil {
+		s.data.DocumentChunks = []domain.DocumentChunk{}
+	}
+	if s.data.ChunkEmbeddings == nil {
+		s.data.ChunkEmbeddings = []domain.DocumentChunkEmbedding{}
 	}
 }
 
@@ -848,6 +1107,22 @@ func memoryMatchesSearch(memory domain.Memory, search domain.MemorySearch) bool 
 	}
 	for key, expected := range search.Metadata {
 		value, ok := memory.Metadata[key]
+		if !ok || strings.TrimSpace(expected) != strings.TrimSpace(toString(value)) {
+			return false
+		}
+	}
+	return true
+}
+
+func documentChunkMatchesSearch(document domain.Document, chunk domain.DocumentChunk, search domain.DocumentSearch) bool {
+	if search.WorkspaceID != "" && document.WorkspaceID != search.WorkspaceID {
+		return false
+	}
+	for key, expected := range search.Metadata {
+		value, ok := chunk.Metadata[key]
+		if !ok {
+			value, ok = document.Metadata[key]
+		}
 		if !ok || strings.TrimSpace(expected) != strings.TrimSpace(toString(value)) {
 			return false
 		}

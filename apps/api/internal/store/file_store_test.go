@@ -324,6 +324,85 @@ func TestFileStoreMemorySearchUsesMetadataSimilarityAndRecency(t *testing.T) {
 	if items[0].Similarity <= 0 || items[0].RecencyBoost <= 0 || items[0].Score <= items[0].Similarity {
 		t.Fatalf("expected similarity plus recency boost, got %#v", items[0])
 	}
+
+}
+
+func TestFileStoreDocumentSearchUsesMetadataSimilarityAndRecency(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	now := time.Now().UTC()
+	document, err := store.CreateDocument(domain.Document{
+		Title:      "Deployment Notes",
+		SourceType: "text",
+		Content:    "The deployment password is amber-9137.",
+		Metadata:   map[string]any{"project": "agentflow"},
+		CreatedAt:  now,
+	}, []domain.DocumentChunk{
+		{
+			Content:    "The deployment password is amber-9137.",
+			TokenCount: 10,
+			Metadata:   map[string]any{"project": "agentflow"},
+			CreatedAt:  now,
+		},
+	}, []domain.DocumentChunkEmbedding{
+		{Embedding: []float64{1, 0}},
+	})
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if document.ChunkCount != 1 || document.EmbeddingCount != 1 {
+		t.Fatalf("expected chunk and embedding counts, got %#v", document)
+	}
+
+	items, err := store.SearchDocumentChunks(domain.DocumentSearch{
+		Query:     "deployment password",
+		Embedding: []float64{1, 0},
+		Metadata:  map[string]string{"project": "agentflow"},
+		Limit:     3,
+	})
+	if err != nil {
+		t.Fatalf("search document chunks: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected one retrieved chunk, got %d", len(items))
+	}
+	if !strings.Contains(items[0].Chunk.Content, "amber-9137") {
+		t.Fatalf("expected deployment chunk, got %#v", items[0])
+	}
+	if items[0].Similarity <= 0 || items[0].RecencyBoost <= 0 || items[0].Score <= items[0].Similarity {
+		t.Fatalf("expected similarity plus recency boost, got %#v", items[0])
+	}
+
+	items, err = store.SearchDocumentChunks(domain.DocumentSearch{
+		Query:             "deployment password",
+		Embedding:         []float64{1, 0},
+		EmbeddingProvider: "openai_compatible",
+		EmbeddingModel:    "text-embedding-3-large",
+		Metadata:          map[string]string{"project": "agentflow"},
+		Limit:             3,
+	})
+	if err != nil {
+		t.Fatalf("search document chunks with embedding model filter: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected embedding model mismatch to filter chunks, got %d", len(items))
+	}
+
+	items, err = store.SearchDocumentChunks(domain.DocumentSearch{
+		Query:         "deployment password",
+		Embedding:     []float64{0, 1},
+		Metadata:      map[string]string{"project": "agentflow"},
+		Limit:         3,
+		MinSimilarity: 0.9,
+	})
+	if err != nil {
+		t.Fatalf("search document chunks with threshold: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected high threshold to filter mismatched chunks, got %d", len(items))
+	}
 }
 
 func TestFileStoreCreateAgent(t *testing.T) {

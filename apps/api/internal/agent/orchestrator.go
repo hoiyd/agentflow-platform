@@ -564,14 +564,20 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- Collab
 	}
 	events <- CollaborationEvent{Type: "collaboration_step", Step: step}
 
-	span := r.trace.LLMStart(ctx, prepared.Run.ID, step.ID, map[string]any{
+	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input)
+	tracePayload := map[string]any{
 		"role":        role,
 		"agent_id":    agentID,
 		"system":      systemPrompt,
 		"input":       input,
 		"input_chars": len(input),
-	})
-	completion, err := r.openAI.CompleteTextDetailed(ctx, systemPrompt, input)
+	}
+	for key, value := range retrievalTracePayload(retrievedMemories, retrievedChunks) {
+		tracePayload[key] = value
+	}
+	contextualPrompt := promptWithRetrievedContext(systemPrompt, retrievedMemories, retrievedChunks)
+	span := r.trace.LLMStart(ctx, prepared.Run.ID, step.ID, tracePayload)
+	completion, err := r.openAI.CompleteTextDetailed(ctx, contextualPrompt, input)
 	if err != nil {
 		r.trace.Error(ctx, prepared.Run.ID, step.ID, map[string]any{
 			"source":   "llm",

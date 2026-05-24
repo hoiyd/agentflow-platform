@@ -26,6 +26,7 @@ type Client struct {
 	baseURL        string
 	model          string
 	embeddingModel string
+	embeddingDims  int
 	httpClient     *http.Client
 	timeout        time.Duration
 }
@@ -67,10 +68,11 @@ type TextCompletion struct {
 }
 
 type Embedding struct {
-	Vector    []float64
-	Model     string
-	Provider  string
-	Estimated bool
+	Vector     []float64
+	Model      string
+	Provider   string
+	Estimated  bool
+	Dimensions int
 }
 
 func NewClient(apiKey string, baseURL string, model string) *Client {
@@ -78,10 +80,10 @@ func NewClient(apiKey string, baseURL string, model string) *Client {
 }
 
 func NewClientWithTimeout(apiKey string, baseURL string, model string, timeout time.Duration) *Client {
-	return NewClientWithTimeoutAndEmbeddingModel(apiKey, baseURL, model, "text-embedding-3-small", timeout)
+	return NewClientWithTimeoutAndEmbeddingModel(apiKey, baseURL, model, "text-embedding-3-small", 1536, timeout)
 }
 
-func NewClientWithTimeoutAndEmbeddingModel(apiKey string, baseURL string, model string, embeddingModel string, timeout time.Duration) *Client {
+func NewClientWithTimeoutAndEmbeddingModel(apiKey string, baseURL string, model string, embeddingModel string, embeddingDims int, timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
@@ -89,11 +91,15 @@ func NewClientWithTimeoutAndEmbeddingModel(apiKey string, baseURL string, model 
 	if embeddingModel == "" {
 		embeddingModel = "text-embedding-3-small"
 	}
+	if embeddingDims <= 0 {
+		embeddingDims = 1536
+	}
 	return &Client{
 		apiKey:         strings.TrimSpace(apiKey),
 		baseURL:        normalizeBaseURL(baseURL),
 		model:          strings.TrimSpace(model),
 		embeddingModel: embeddingModel,
+		embeddingDims:  embeddingDims,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				Proxy:                 http.ProxyFromEnvironment,
@@ -149,10 +155,10 @@ func (c *Client) StreamChatWithTools(ctx context.Context, history []domain.Messa
 }
 
 func (c *Client) StreamAgentChatWithTools(ctx context.Context, systemPrompt string, history []domain.Message, latest string, registry *tools.Registry) (<-chan StreamEvent, <-chan error) {
-	return c.StreamAgentChatWithToolsTrace(ctx, systemPrompt, history, latest, registry, nil, "", "")
+	return c.StreamAgentChatWithToolsTrace(ctx, systemPrompt, history, latest, registry, nil, "", "", nil, nil)
 }
 
-func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt string, history []domain.Message, latest string, registry *tools.Registry, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories ...domain.RetrievedMemory) (<-chan StreamEvent, <-chan error) {
+func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt string, history []domain.Message, latest string, registry *tools.Registry, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) (<-chan StreamEvent, <-chan error) {
 	events := make(chan StreamEvent)
 	errs := make(chan error, 1)
 
@@ -172,6 +178,9 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 			if len(retrievedMemories) > 0 {
 				startPayload["retrieved_memories"] = retrievedMemoryPayload(retrievedMemories)
 			}
+			if len(retrievedChunks) > 0 {
+				startPayload["retrieved_chunks"] = retrievedChunkPayload(retrievedChunks)
+			}
 			span := recorder.LLMStart(ctx, runID, stepID, startPayload)
 			c.streamText(ctx, output, 45*time.Millisecond, events)
 			recorder.LLMEnd(ctx, span, tokenPayload(map[string]any{
@@ -182,7 +191,7 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 			return
 		}
 
-		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, registry, events, recorder, runID, stepID, retrievedMemories); err != nil {
+		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, registry, events, recorder, runID, stepID, retrievedMemories, retrievedChunks); err != nil {
 			recorder.Error(ctx, runID, stepID, map[string]any{
 				"source": "llm",
 				"model":  c.model,
@@ -244,16 +253,14 @@ func (c *Client) EmbedText(ctx context.Context, input string) (Embedding, error)
 	}
 	if c.apiKey == "" {
 		return Embedding{
-			Vector:    deterministicEmbedding(input, 1536),
-			Model:     "local_hash_embedding",
-			Provider:  "local",
-			Estimated: true,
+			Vector:     deterministicEmbedding(input, c.embeddingDims),
+			Model:      "local_hash_embedding",
+			Provider:   "local",
+			Estimated:  true,
+			Dimensions: c.embeddingDims,
 		}, nil
 	}
-	payload, err := json.Marshal(map[string]any{
-		"model": c.embeddingModel,
-		"input": input,
-	})
+	payload, err := c.embeddingRequestPayload(input)
 	if err != nil {
 		return Embedding{}, err
 	}
@@ -276,10 +283,22 @@ func (c *Client) EmbedText(ctx context.Context, input string) (Embedding, error)
 		return Embedding{}, errors.New("embedding response returned no vector")
 	}
 	return Embedding{
-		Vector:   decoded.Data[0].Embedding,
-		Model:    decoded.Model,
-		Provider: "openai_compatible",
+		Vector:     decoded.Data[0].Embedding,
+		Model:      decoded.Model,
+		Provider:   "openai_compatible",
+		Dimensions: len(decoded.Data[0].Embedding),
 	}, nil
+}
+
+func (c *Client) embeddingRequestPayload(input string) ([]byte, error) {
+	request := map[string]any{
+		"model": c.embeddingModel,
+		"input": input,
+	}
+	if c.embeddingDims > 0 {
+		request["dimensions"] = c.embeddingDims
+	}
+	return json.Marshal(request)
 }
 
 func (c *Client) streamFallback(ctx context.Context, latest string, chunks chan<- string) {
@@ -339,9 +358,9 @@ func (c *Client) streamText(ctx context.Context, text string, delay time.Duratio
 	}
 }
 
-func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string, history []domain.Message, registry *tools.Registry, events chan<- StreamEvent, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory) error {
+func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string, history []domain.Message, registry *tools.Registry, events chan<- StreamEvent, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) error {
 	enabledTools := registry.EnabledNames()
-	messages := buildMessagesWithSystemPrompt(systemPrompt, history, enabledTools, retrievedMemories...)
+	messages := buildMessagesWithSystemPrompt(systemPrompt, history, enabledTools, retrievedMemories, retrievedChunks)
 	startPayload := map[string]any{
 		"model":         c.model,
 		"messages":      messages,
@@ -350,6 +369,9 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	}
 	if len(retrievedMemories) > 0 {
 		startPayload["retrieved_memories"] = retrievedMemoryPayload(retrievedMemories)
+	}
+	if len(retrievedChunks) > 0 {
+		startPayload["retrieved_chunks"] = retrievedChunkPayload(retrievedChunks)
 	}
 	llmSpan := recorder.LLMStart(ctx, runID, stepID, startPayload)
 	decision, err := c.complete(ctx, map[string]any{
@@ -654,10 +676,10 @@ func buildMessages(history []domain.Message) []Message {
 }
 
 func buildMessagesWithToolNames(history []domain.Message, toolNames []string) []Message {
-	return buildMessagesWithSystemPrompt("You are AgentFlow's Day 2 assistant. Use tools when they help.", history, toolNames)
+	return buildMessagesWithSystemPrompt("You are AgentFlow's Day 2 assistant. Use tools when they help.", history, toolNames, nil, nil)
 }
 
-func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message, toolNames []string, retrievedMemories ...domain.RetrievedMemory) []Message {
+func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message, toolNames []string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) []Message {
 	available := "No tools are currently enabled."
 	fallbackInstruction := ""
 	if len(toolNames) > 0 {
@@ -670,6 +692,9 @@ func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message
 	}
 	if len(retrievedMemories) > 0 {
 		systemPrompt = systemPrompt + "\n\n" + formatRetrievedMemories(retrievedMemories)
+	}
+	if len(retrievedChunks) > 0 {
+		systemPrompt = systemPrompt + "\n\n" + formatRetrievedChunks(retrievedChunks)
 	}
 	messages := []Message{
 		{
@@ -694,6 +719,20 @@ func formatRetrievedMemories(memories []domain.RetrievedMemory) string {
 		}
 		builder.WriteString(fmt.Sprintf("%d. id=%s kind=%s score=%.4f similarity=%.4f\n", index+1, memory.Memory.ID, memory.Memory.Kind, memory.Score, memory.Similarity))
 		builder.WriteString(truncateText(memory.Memory.Content, 1200))
+		builder.WriteString("\n")
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func formatRetrievedChunks(chunks []domain.RetrievedDocumentChunk) string {
+	var builder strings.Builder
+	builder.WriteString("Retrieved document chunks. Use them when relevant, and ignore them when they are not relevant:\n")
+	for index, chunk := range chunks {
+		if strings.TrimSpace(chunk.Chunk.Content) == "" {
+			continue
+		}
+		builder.WriteString(fmt.Sprintf("%d. document=%s chunk=%s score=%.4f similarity=%.4f\n", index+1, chunk.Document.Title, chunk.Chunk.ID, chunk.Score, chunk.Similarity))
+		builder.WriteString(truncateText(chunk.Chunk.Content, 1600))
 		builder.WriteString("\n")
 	}
 	return strings.TrimSpace(builder.String())
@@ -911,6 +950,24 @@ func retrievedMemoryPayload(memories []domain.RetrievedMemory) []map[string]any 
 			"score":           memory.Score,
 			"conversation_id": memory.Memory.ConversationID,
 			"run_id":          memory.Memory.RunID,
+		})
+	}
+	return items
+}
+
+func retrievedChunkPayload(chunks []domain.RetrievedDocumentChunk) []map[string]any {
+	items := make([]map[string]any, 0, len(chunks))
+	for _, chunk := range chunks {
+		items = append(items, map[string]any{
+			"document_id":    chunk.Document.ID,
+			"document_title": chunk.Document.Title,
+			"chunk_id":       chunk.Chunk.ID,
+			"chunk_index":    chunk.Chunk.ChunkIndex,
+			"content":        truncateText(chunk.Chunk.Content, 1600),
+			"metadata":       chunk.Chunk.Metadata,
+			"similarity":     chunk.Similarity,
+			"recency_boost":  chunk.RecencyBoost,
+			"score":          chunk.Score,
 		})
 	}
 	return items

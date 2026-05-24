@@ -63,6 +63,18 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
 		h.createMemory(w, r)
 	case r.Method == http.MethodPost && path == "/api/memories/search":
 		h.searchMemories(w, r)
+	case r.Method == http.MethodGet && path == "/api/documents":
+		h.listDocuments(w, r)
+	case r.Method == http.MethodPost && path == "/api/documents":
+		h.createDocument(w, r)
+	case r.Method == http.MethodPost && path == "/api/documents/upload":
+		h.uploadDocument(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/documents/"):
+		h.deleteDocument(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/documents/"):
+		h.getDocument(w, r)
+	case r.Method == http.MethodPost && path == "/api/rag/search":
+		h.searchDocumentChunks(w, r)
 	case r.Method == http.MethodGet && path == "/api/agents":
 		h.listAgents(w, r)
 	case r.Method == http.MethodPost && path == "/api/agents":

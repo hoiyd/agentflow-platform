@@ -45,4 +45,9 @@ type Store interface {
 	GetRunReplay(runID string) (domain.RunReplay, bool, error)
 	CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error)
 	SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error)
+	CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error)
+	ListDocuments() ([]domain.Document, error)
+	GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error)
+	DeleteDocument(id string) error
+	SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 }
