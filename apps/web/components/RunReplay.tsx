@@ -207,6 +207,18 @@ function EventDetail({ event }: { event: TraceEventInfo }) {
           <strong>{formatDuration(event.duration_ms)}</strong>
         </div>
       ) : null}
+      {stringPayload(payload, "executor") ? (
+        <div className="detail-kv">
+          <span>Executor</span>
+          <strong>{stringPayload(payload, "executor")}</strong>
+        </div>
+      ) : null}
+      {stringPayload(payload, "framework") ? (
+        <div className="detail-kv">
+          <span>Framework</span>
+          <strong>{stringPayload(payload, "framework")}</strong>
+        </div>
+      ) : null}
       {"prompt_tokens" in payload || "completion_tokens" in payload || "total_tokens" in payload ? (
         <div className="token-strip">
           <Metric label="Prompt" value={formatTokenValue(payload.prompt_tokens, isEstimated)} />
@@ -248,6 +260,10 @@ function RetrievalOverview({ summary }: { summary: ReturnType<typeof buildRetrie
       <div className="retrieval-model">
         <span>Embedding</span>
         <strong>{summary.embeddingLabel}</strong>
+      </div>
+      <div className="retrieval-model">
+        <span>Executor</span>
+        <strong>{summary.executorLabel}</strong>
       </div>
     </section>
   );
@@ -309,11 +325,14 @@ function buildRetrievalSummary(events: TraceEventInfo[]) {
   const provider = stringPayload(firstPayload, "embedding_provider");
   const model = stringPayload(firstPayload, "embedding_model");
   const dimensions = numberPayload(firstPayload, "embedding_dimensions");
+  const executor = firstNonEmpty(events.map((event) => stringPayload(event.payload, "executor")));
+  const framework = firstNonEmpty(events.map((event) => stringPayload(event.payload, "framework")));
   return {
     eventCount: retrievalEvents.length,
     memoryCount,
     chunkCount,
-    embeddingLabel: provider || model ? [provider, model, dimensions ? `${dimensions}d` : ""].filter(Boolean).join(" / ") : "not recorded"
+    embeddingLabel: provider || model ? [provider, model, dimensions ? `${dimensions}d` : ""].filter(Boolean).join(" / ") : "not recorded",
+    executorLabel: executor || framework ? [executor, framework].filter(Boolean).join(" / ") : "not recorded"
   };
 }
 
@@ -337,6 +356,10 @@ function stringPayload(payload: Record<string, unknown>, key: string) {
 function numberPayload(payload: Record<string, unknown>, key: string) {
   const value = payload[key];
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function firstNonEmpty(values: string[]) {
+  return values.find((value) => value.trim()) ?? "";
 }
 
 function formatScore(value: unknown) {

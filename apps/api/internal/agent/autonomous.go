@@ -371,7 +371,10 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 		}
 		return "", errRunCanceled
 	}
-	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input)
+	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input, map[string]any{
+		"executor":  ExecutorNative,
+		"framework": "agentflow-native",
+	})
 	tracePayload := map[string]any{
 		"role":        role,
 		"agent_id":    prepared.WorkerAgent.ID,

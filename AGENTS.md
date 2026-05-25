@@ -52,6 +52,7 @@ Implemented product areas:
 - pgvector-backed memory and RAG search
 - Knowledge UI with text import, `.txt` upload, Markdown upload, document detail, search, and delete
 - backend RAG rerank using lexical boost, metadata boost, recency, and diversity control
+- optional LangChainGo executor for single-agent steps; native orchestration remains the default
 
 ## Backend
 

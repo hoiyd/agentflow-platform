@@ -92,12 +92,24 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 	return PreparedRun{Agent: agent, Run: run, Registry: agentRegistry}, nil
 }
 
-func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string) (<-chan openai.StreamEvent, <-chan error) {
-	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, latest)
-	return r.openAI.StreamAgentChatWithToolsTrace(ctx, prepared.Agent.SystemPrompt, history, latest, prepared.Registry, r.trace, prepared.Run.ID, "", retrievedMemories, retrievedChunks)
+func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string, executorKind string) (<-chan openai.StreamEvent, <-chan error) {
+	executor := r.executorFor(executorKind)
+	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, latest, map[string]any{
+		"executor":  executor.Kind(),
+		"framework": executor.Framework(),
+	})
+	return executor.Stream(ctx, ExecutorInput{
+		Agent:             prepared.Agent,
+		History:           history,
+		Latest:            latest,
+		Registry:          prepared.Registry,
+		RunID:             prepared.Run.ID,
+		RetrievedMemories: retrievedMemories,
+		RetrievedChunks:   retrievedChunks,
+	})
 }
 
-func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
+func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
 	embedding, err := r.openAI.EmbedText(ctx, query)
 	if err != nil {
 		r.trace.Error(ctx, runID, "", map[string]any{
@@ -113,6 +125,9 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		"embedding_model":      embedding.Model,
 		"embedding_dimensions": embedding.Dimensions,
 		"embedding_estimated":  embedding.Estimated,
+	}
+	for key, value := range metadata {
+		payload[key] = value
 	}
 	memories, err := r.store.SearchMemories(domain.MemorySearch{
 		Query:             query,
@@ -151,6 +166,15 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	}
 	r.trace.Retrieval(ctx, runID, "", payload)
 	return memories, chunks
+}
+
+func (r *Runtime) executorFor(kind string) AgentExecutor {
+	switch NormalizeExecutorKind(kind) {
+	case ExecutorLangChainGo:
+		return LangChainGoExecutor{openAI: r.openAI, trace: r.trace}
+	default:
+		return NativeExecutor{openAI: r.openAI, trace: r.trace}
+	}
 }
 
 func promptWithRetrievedContext(systemPrompt string, memories []domain.RetrievedMemory, chunks []domain.RetrievedDocumentChunk) string {

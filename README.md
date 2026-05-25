@@ -14,6 +14,7 @@ Full-stack AI agent workflow platform with streaming chat, agent runs, persisten
 - pgvector/Postgres support for memory and document chunk similarity search.
 - Frontend Knowledge page for document upload, document detail, search, similarity threshold, and deletion.
 - Search rerank on the backend using lexical match, metadata match, recency, and simple diversity control.
+- Optional LangChainGo executor adapter for single-agent chat steps while keeping native orchestration as the default.
 
 ## Tech Stack
 
@@ -21,6 +22,7 @@ Full-stack AI agent workflow platform with streaming chat, agent runs, persisten
 - Backend: Go.
 - Storage: local JSON file store by default, optional Postgres with pgvector.
 - AI: OpenAI-compatible chat and embeddings APIs.
+- Agent framework adapter: LangChainGo for optional step-level execution.
 - Embeddings: default `text-embedding-3-small`, configurable to `text-embedding-3-large` with fixed dimensions.
 
 ## Project Structure
@@ -229,11 +231,12 @@ RAG manual flow:
 Demo replay flow:
 
 1. Add or upload a knowledge document with a unique phrase.
-2. Ask a chat question that should use that phrase.
+2. Ask a chat question that should use that phrase. In Single Agent mode, optionally switch Executor from Native to LangChainGo.
 3. Open the run replay page from the active run link.
-4. Confirm the Retrieved context panel shows retrieval event count, memory count, chunk count, and embedding provider/model/dimensions.
+4. Confirm the Retrieved context panel shows retrieval event count, memory count, chunk count, embedding provider/model/dimensions, and executor/framework.
 5. Select a `retrieval` or `llm_start` event.
 6. Confirm retrieved memories and knowledge chunks are visible above the raw JSON payload.
+7. For LangChainGo runs, confirm event detail or raw payload includes `executor: "langchaingo"`, `framework: "langchaingo"`, and `framework_path: "chains.LLMChain"`.
 
 ## Tool Configuration
 

@@ -92,7 +92,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	})
 	flusher.Flush()
 
-	events, errs := h.agentRuntime.StreamChat(r.Context(), prepared, history, req.Message)
+	events, errs := h.agentRuntime.StreamChat(r.Context(), prepared, history, req.Message, req.Executor)
 	var assistant strings.Builder
 	for event := range events {
 		switch event.Type {

@@ -68,7 +68,10 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		t.Fatalf("create document: %v", err)
 	}
 
-	memories, chunks := runtime.retrieveContext(ctx, run.ID, "pgvector memory retrieval and replay knowledge chunk")
+	memories, chunks := runtime.retrieveContext(ctx, run.ID, "pgvector memory retrieval and replay knowledge chunk", map[string]any{
+		"executor":  ExecutorNative,
+		"framework": "agentflow-native",
+	})
 	if len(memories) == 0 {
 		t.Fatal("expected retrieved memories")
 	}
@@ -102,4 +105,105 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		return
 	}
 	t.Fatal("expected retrieval trace event")
+}
+
+func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T) {
+	ctx := context.Background()
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	client := openai.NewClientWithTimeout("", "", "test", time.Second)
+	runtime := NewRuntime(fileStore, client, nil)
+
+	conversation, err := fileStore.CreateConversation("LangChainGo executor")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	agent, ok, err := fileStore.GetAgent("agent_planner")
+	if err != nil {
+		t.Fatalf("get agent: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected default agent")
+	}
+
+	memoryText := "LangChainGo executor should reuse AgentFlow retrieved memory."
+	memoryEmbedding, err := client.EmbedText(ctx, memoryText)
+	if err != nil {
+		t.Fatalf("embed memory: %v", err)
+	}
+	if _, err := fileStore.CreateMemory(domain.Memory{
+		Kind:    "note",
+		Content: memoryText,
+	}, domain.MemoryEmbedding{
+		Provider:   memoryEmbedding.Provider,
+		Model:      memoryEmbedding.Model,
+		Dimensions: memoryEmbedding.Dimensions,
+		Embedding:  memoryEmbedding.Vector,
+	}); err != nil {
+		t.Fatalf("create memory: %v", err)
+	}
+
+	events, errs := runtime.StreamChat(ctx, PreparedRun{
+		Agent: agent,
+		Run:   run,
+	}, nil, "Use the LangChainGo executor memory.", ExecutorLangChainGo)
+
+	var output string
+	for event := range events {
+		if event.Type == "delta" {
+			output += event.Delta
+		}
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("stream chat: %v", err)
+	}
+	if output == "" {
+		t.Fatal("expected streamed output")
+	}
+
+	replay, ok, err := fileStore.GetRunReplay(run.ID)
+	if err != nil {
+		t.Fatalf("get replay: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected replay")
+	}
+
+	var sawRetrieval bool
+	var sawLLMStart bool
+	for _, event := range replay.Events {
+		if event.Type == domain.TraceRetrieval {
+			sawRetrieval = true
+			if event.Payload["executor"] != ExecutorLangChainGo {
+				t.Fatalf("expected retrieval executor %q, got %#v", ExecutorLangChainGo, event.Payload["executor"])
+			}
+			if event.Payload["framework"] != frameworkLangChainGo {
+				t.Fatalf("expected retrieval framework %q, got %#v", frameworkLangChainGo, event.Payload["framework"])
+			}
+		}
+		if event.Type == domain.TraceLLMStart {
+			sawLLMStart = true
+			if event.Payload["executor"] != ExecutorLangChainGo {
+				t.Fatalf("expected llm_start executor %q, got %#v", ExecutorLangChainGo, event.Payload["executor"])
+			}
+			if event.Payload["framework"] != frameworkLangChainGo {
+				t.Fatalf("expected llm_start framework %q, got %#v", frameworkLangChainGo, event.Payload["framework"])
+			}
+			if event.Payload["framework_path"] != "chains.LLMChain" {
+				t.Fatalf("expected LangChainGo framework path, got %#v", event.Payload["framework_path"])
+			}
+		}
+	}
+	if !sawRetrieval {
+		t.Fatal("expected retrieval trace event")
+	}
+	if !sawLLMStart {
+		t.Fatal("expected llm_start trace event")
+	}
 }

@@ -361,6 +361,27 @@ select {
   font-weight: 600;
 }
 
+.executor-select {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(86, 76, 66, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.executor-select select {
+  min-width: 180px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fffdf8;
+  color: var(--ink);
+  padding: 8px 10px;
+}
+
 .collaboration-rail-toggle {
   position: sticky;
   top: 4px;
@@ -1819,7 +1840,7 @@ textarea:disabled {
   display: grid;
   justify-items: end;
   gap: 5px;
-  min-width: 220px;
+  min-width: 160px;
   color: var(--muted);
   font-size: 12px;
 }
@@ -2171,6 +2192,15 @@ textarea:disabled {
 
   .mode-chooser {
     grid-template-columns: 1fr;
+  }
+
+  .executor-select {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .executor-select select {
+    width: 100%;
   }
 
   .dag-header strong {
