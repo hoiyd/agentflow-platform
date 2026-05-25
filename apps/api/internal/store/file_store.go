@@ -603,6 +603,12 @@ func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.Retriev
 		if !ok || len(embedding.Embedding) == 0 || len(search.Embedding) == 0 {
 			continue
 		}
+		if search.EmbeddingProvider != "" && embedding.Provider != search.EmbeddingProvider {
+			continue
+		}
+		if search.EmbeddingModel != "" && embedding.Model != search.EmbeddingModel {
+			continue
+		}
 		similarity := cosineSimilarity(search.Embedding, embedding.Embedding)
 		recencyBoost := memoryRecencyBoost(now, memory.CreatedAt)
 		items = append(items, domain.RetrievedMemory{

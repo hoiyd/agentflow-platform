@@ -294,7 +294,7 @@ func TestFileStoreMemorySearchUsesMetadataSimilarityAndRecency(t *testing.T) {
 		Content:   "Use pgvector for semantic memory search.",
 		Metadata:  map[string]any{"topic": "database"},
 		CreatedAt: now.Add(-24 * time.Hour),
-	}, domain.MemoryEmbedding{Embedding: []float64{1, 0}}); err != nil {
+	}, domain.MemoryEmbedding{Provider: "openai_compatible", Model: "text-embedding-3-small", Embedding: []float64{1, 0}}); err != nil {
 		t.Fatalf("create memory: %v", err)
 	}
 	if _, err := store.CreateMemory(domain.Memory{
@@ -302,15 +302,17 @@ func TestFileStoreMemorySearchUsesMetadataSimilarityAndRecency(t *testing.T) {
 		Content:   "Unrelated frontend styling note.",
 		Metadata:  map[string]any{"topic": "frontend"},
 		CreatedAt: now,
-	}, domain.MemoryEmbedding{Embedding: []float64{0, 1}}); err != nil {
+	}, domain.MemoryEmbedding{Provider: "local", Model: "local_hash_embedding", Embedding: []float64{0, 1}}); err != nil {
 		t.Fatalf("create memory: %v", err)
 	}
 
 	items, err := store.SearchMemories(domain.MemorySearch{
-		Query:     "pgvector memory",
-		Embedding: []float64{1, 0},
-		Metadata:  map[string]string{"topic": "database"},
-		Limit:     3,
+		Query:             "pgvector memory",
+		Embedding:         []float64{1, 0},
+		EmbeddingProvider: "openai_compatible",
+		EmbeddingModel:    "text-embedding-3-small",
+		Metadata:          map[string]string{"topic": "database"},
+		Limit:             3,
 	})
 	if err != nil {
 		t.Fatalf("search memories: %v", err)
@@ -325,6 +327,20 @@ func TestFileStoreMemorySearchUsesMetadataSimilarityAndRecency(t *testing.T) {
 		t.Fatalf("expected similarity plus recency boost, got %#v", items[0])
 	}
 
+	items, err = store.SearchMemories(domain.MemorySearch{
+		Query:             "pgvector memory",
+		Embedding:         []float64{1, 0},
+		EmbeddingProvider: "local",
+		EmbeddingModel:    "local_hash_embedding",
+		Metadata:          map[string]string{"topic": "database"},
+		Limit:             3,
+	})
+	if err != nil {
+		t.Fatalf("search model mismatch memories: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected no cross-model memories, got %d", len(items))
+	}
 }
 
 func TestFileStoreDocumentSearchUsesMetadataSimilarityAndRecency(t *testing.T) {

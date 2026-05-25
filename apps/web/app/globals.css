@@ -1773,6 +1773,44 @@ textarea:disabled {
   margin-bottom: 20px;
 }
 
+.retrieval-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.82);
+  padding: 14px;
+}
+
+.retrieval-overview .panel-title.inline {
+  border: 0;
+  padding: 0 0 5px;
+}
+
+.retrieval-overview p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.retrieval-model {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  min-width: 220px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.retrieval-model strong {
+  color: var(--ink);
+  font-size: 13px;
+  text-align: right;
+}
+
 .metric {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1931,7 +1969,87 @@ textarea:disabled {
   font-size: 15px;
 }
 
-.event-detail pre {
+.retrieved-context {
+  display: grid;
+  gap: 14px;
+}
+
+.retrieved-context-title {
+  margin-bottom: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.retrieved-list {
+  display: grid;
+  gap: 8px;
+}
+
+.retrieved-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fffaf2;
+  padding: 10px;
+}
+
+.retrieved-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.retrieved-item-header span {
+  color: var(--teal);
+  font-weight: 760;
+}
+
+.retrieved-item p {
+  margin: 8px 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.retrieved-item small {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.raw-json-panel {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(86, 76, 66, 0.16);
+  padding-top: 14px;
+}
+
+.raw-json-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.raw-json-title span {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.raw-json-title small {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.raw-json-panel pre {
   max-height: 520px;
   overflow: auto;
   margin: 0;
@@ -2080,8 +2198,13 @@ textarea:disabled {
   }
 
   .replay-header,
+  .retrieval-overview,
   .step-row {
     flex-direction: column;
+  }
+
+  .retrieval-model {
+    justify-items: start;
   }
 
   .replay-summary,

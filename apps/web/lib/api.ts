@@ -212,6 +212,10 @@ export type RetrievedDocumentChunk = {
   similarity: number;
   recency_boost: number;
   score: number;
+  lexical_boost?: number;
+  metadata_boost?: number;
+  diversity_penalty?: number;
+  rerank_score?: number;
 };
 
 export type EmbeddingInfo = {

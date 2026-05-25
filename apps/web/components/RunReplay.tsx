@@ -8,6 +8,29 @@ type Props = {
   runId: string;
 };
 
+type RetrievedMemoryPayload = {
+  id?: string;
+  kind?: string;
+  content?: string;
+  similarity?: number;
+  score?: number;
+  metadata?: Record<string, unknown>;
+};
+
+type RetrievedChunkPayload = {
+  document_id?: string;
+  document_title?: string;
+  chunk_id?: string;
+  chunk_index?: number;
+  content?: string;
+  similarity?: number;
+  score?: number;
+  rerank_score?: number;
+  lexical_boost?: number;
+  metadata_boost?: number;
+  metadata?: Record<string, unknown>;
+};
+
 export function RunReplay({ runId }: Props) {
   const [replay, setReplay] = useState<RunReplayData | null>(null);
   const [selectedEventId, setSelectedEventId] = useState("");
@@ -40,6 +63,7 @@ export function RunReplay({ runId }: Props) {
     () => replay?.events.find((event) => event.id === selectedEventId) ?? replay?.events[0],
     [replay, selectedEventId]
   );
+  const retrievalSummary = useMemo(() => buildRetrievalSummary(replay?.events ?? []), [replay?.events]);
 
   if (error) {
     return (
@@ -86,6 +110,8 @@ export function RunReplay({ runId }: Props) {
         <Metric label="Tool calls" value={String(replay.summary.tool_calls)} />
         <Metric label="Errors" value={String(replay.summary.error_count)} tone={replay.summary.error_count > 0 ? "danger" : ""} />
       </section>
+
+      <RetrievalOverview summary={retrievalSummary} />
 
       <section className="replay-grid">
         <div className="timeline-panel">
@@ -163,6 +189,8 @@ function Metric({ label, value, tone = "" }: { label: string; value: string; ton
 function EventDetail({ event }: { event: TraceEventInfo }) {
   const payload = event.payload ?? {};
   const isEstimated = payload.token_usage_estimated === true;
+  const memories = retrievedMemories(payload);
+  const chunks = retrievedChunks(payload);
   return (
     <div className="event-detail">
       <div className="detail-kv">
@@ -186,9 +214,134 @@ function EventDetail({ event }: { event: TraceEventInfo }) {
           <Metric label="Total" value={formatTokenValue(payload.total_tokens, isEstimated)} />
         </div>
       ) : null}
-      <pre>{JSON.stringify(payload, null, 2)}</pre>
+      {memories.length > 0 || chunks.length > 0 ? <RetrievedContext memories={memories} chunks={chunks} /> : null}
+      <section className="raw-json-panel">
+        <div className="raw-json-title">
+          <span>Raw event payload</span>
+          <small>Full trace JSON</small>
+        </div>
+        <pre>{JSON.stringify(payload, null, 2)}</pre>
+      </section>
     </div>
   );
+}
+
+function RetrievalOverview({ summary }: { summary: ReturnType<typeof buildRetrievalSummary> }) {
+  if (summary.eventCount === 0) {
+    return (
+      <section className="retrieval-overview">
+        <div>
+          <div className="panel-title inline">Retrieved context</div>
+          <p>No retrieval trace events recorded for this run.</p>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="retrieval-overview">
+      <div>
+        <div className="panel-title inline">Retrieved context</div>
+        <p>
+          {summary.eventCount} retrieval events, {summary.memoryCount} memories, {summary.chunkCount} knowledge chunks.
+        </p>
+      </div>
+      <div className="retrieval-model">
+        <span>Embedding</span>
+        <strong>{summary.embeddingLabel}</strong>
+      </div>
+    </section>
+  );
+}
+
+function RetrievedContext({ memories, chunks }: { memories: RetrievedMemoryPayload[]; chunks: RetrievedChunkPayload[] }) {
+  return (
+    <div className="retrieved-context">
+      {memories.length > 0 ? (
+        <div>
+          <div className="retrieved-context-title">Retrieved memories</div>
+          <div className="retrieved-list">
+            {memories.map((memory, index) => (
+              <article className="retrieved-item" key={`${memory.id ?? "memory"}-${index}`}>
+                <div className="retrieved-item-header">
+                  <strong>{memory.kind || "memory"}</strong>
+                  <span>{formatScore(memory.score ?? memory.similarity)}</span>
+                </div>
+                <p>{memory.content}</p>
+                <small>{memory.id}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {chunks.length > 0 ? (
+        <div>
+          <div className="retrieved-context-title">Retrieved knowledge chunks</div>
+          <div className="retrieved-list">
+            {chunks.map((chunk, index) => (
+              <article className="retrieved-item" key={`${chunk.chunk_id ?? "chunk"}-${index}`}>
+                <div className="retrieved-item-header">
+                  <strong>
+                    {chunk.document_title || "Untitled document"}
+                    {typeof chunk.chunk_index === "number" ? ` #${chunk.chunk_index + 1}` : ""}
+                  </strong>
+                  <span>{formatScore(chunk.rerank_score ?? chunk.score ?? chunk.similarity)}</span>
+                </div>
+                <p>{chunk.content}</p>
+                <small>{[chunk.chunk_id, chunk.lexical_boost ? `lexical +${chunk.lexical_boost.toFixed(3)}` : ""].filter(Boolean).join(" - ")}</small>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function buildRetrievalSummary(events: TraceEventInfo[]) {
+  const explicitEvents = events.filter((event) => event.type === "retrieval");
+  const retrievalEvents =
+    explicitEvents.length > 0
+      ? explicitEvents
+      : events.filter((event) => retrievedMemories(event.payload).length > 0 || retrievedChunks(event.payload).length > 0);
+  const memoryCount = retrievalEvents.reduce((total, event) => total + retrievedMemories(event.payload).length, 0);
+  const chunkCount = retrievalEvents.reduce((total, event) => total + retrievedChunks(event.payload).length, 0);
+  const firstPayload = retrievalEvents[0]?.payload ?? {};
+  const provider = stringPayload(firstPayload, "embedding_provider");
+  const model = stringPayload(firstPayload, "embedding_model");
+  const dimensions = numberPayload(firstPayload, "embedding_dimensions");
+  return {
+    eventCount: retrievalEvents.length,
+    memoryCount,
+    chunkCount,
+    embeddingLabel: provider || model ? [provider, model, dimensions ? `${dimensions}d` : ""].filter(Boolean).join(" / ") : "not recorded"
+  };
+}
+
+function retrievedMemories(payload: Record<string, unknown>): RetrievedMemoryPayload[] {
+  return arrayPayload<RetrievedMemoryPayload>(payload.retrieved_memories);
+}
+
+function retrievedChunks(payload: Record<string, unknown>): RetrievedChunkPayload[] {
+  return arrayPayload<RetrievedChunkPayload>(payload.retrieved_chunks);
+}
+
+function arrayPayload<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function stringPayload(payload: Record<string, unknown>, key: string) {
+  const value = payload[key];
+  return typeof value === "string" ? value : "";
+}
+
+function numberPayload(payload: Record<string, unknown>, key: string) {
+  const value = payload[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function formatScore(value: unknown) {
+  const numberValue = typeof value === "number" ? value : Number(value ?? 0);
+  return Number.isFinite(numberValue) ? numberValue.toFixed(3) : "n/a";
 }
 
 function formatTokenValue(value: unknown, estimated: boolean) {

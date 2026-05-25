@@ -122,6 +122,7 @@ const (
 	TraceLLMEnd    TraceEventType = "llm_end"
 	TraceToolStart TraceEventType = "tool_start"
 	TraceToolEnd   TraceEventType = "tool_end"
+	TraceRetrieval TraceEventType = "retrieval"
 	TraceError     TraceEventType = "error"
 )
 
@@ -182,13 +183,15 @@ type MemoryEmbedding struct {
 }
 
 type MemorySearch struct {
-	Query       string            `json:"query"`
-	Embedding   []float64         `json:"-"`
-	WorkspaceID string            `json:"workspace_id,omitempty"`
-	UserID      string            `json:"user_id,omitempty"`
-	ProjectID   string            `json:"project_id,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
-	Limit       int               `json:"limit,omitempty"`
+	Query             string            `json:"query"`
+	Embedding         []float64         `json:"-"`
+	EmbeddingProvider string            `json:"-"`
+	EmbeddingModel    string            `json:"-"`
+	WorkspaceID       string            `json:"workspace_id,omitempty"`
+	UserID            string            `json:"user_id,omitempty"`
+	ProjectID         string            `json:"project_id,omitempty"`
+	Metadata          map[string]string `json:"metadata,omitempty"`
+	Limit             int               `json:"limit,omitempty"`
 }
 
 type RetrievedMemory struct {

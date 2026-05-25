@@ -44,7 +44,15 @@ func (r *Recorder) ToolEnd(ctx context.Context, span Span, payload map[string]an
 	r.end(ctx, span, domain.TraceToolEnd, payload)
 }
 
+func (r *Recorder) Retrieval(ctx context.Context, runID string, stepID string, payload map[string]any) {
+	r.event(ctx, runID, stepID, domain.TraceRetrieval, payload)
+}
+
 func (r *Recorder) Error(ctx context.Context, runID string, stepID string, payload map[string]any) {
+	r.event(ctx, runID, stepID, domain.TraceError, payload)
+}
+
+func (r *Recorder) event(ctx context.Context, runID string, stepID string, eventType domain.TraceEventType, payload map[string]any) {
 	if r == nil || r.store == nil || strings.TrimSpace(runID) == "" {
 		return
 	}
@@ -54,12 +62,12 @@ func (r *Recorder) Error(ctx context.Context, runID string, stepID string, paylo
 	event, err := r.store.CreateTraceEvent(domain.TraceEvent{
 		RunID:     runID,
 		StepID:    strings.TrimSpace(stepID),
-		Type:      domain.TraceError,
+		Type:      eventType,
 		Payload:   sanitizePayload(payload),
 		Timestamp: time.Now().UTC(),
 	})
 	if err != nil {
-		log.Printf("trace_record_error type=error run_id=%s step_id=%s error=%q", runID, stepID, err.Error())
+		log.Printf("trace_record_error type=%s run_id=%s step_id=%s error=%q", eventType, runID, stepID, err.Error())
 		return
 	}
 	logTraceEvent(event)

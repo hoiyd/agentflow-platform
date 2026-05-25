@@ -663,6 +663,14 @@ func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.Ret
 		args = append(args, search.ProjectID)
 		conditions = append(conditions, fmt.Sprintf("m.project_id = $%d", len(args)))
 	}
+	if strings.TrimSpace(search.EmbeddingProvider) != "" {
+		args = append(args, search.EmbeddingProvider)
+		conditions = append(conditions, fmt.Sprintf("e.provider = $%d", len(args)))
+	}
+	if strings.TrimSpace(search.EmbeddingModel) != "" {
+		args = append(args, search.EmbeddingModel)
+		conditions = append(conditions, fmt.Sprintf("e.model = $%d", len(args)))
+	}
 	for key, value := range search.Metadata {
 		args = append(args, key, value)
 		conditions = append(conditions, fmt.Sprintf("m.metadata ->> $%d = $%d", len(args)-1, len(args)))

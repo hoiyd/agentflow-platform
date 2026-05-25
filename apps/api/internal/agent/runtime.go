@@ -107,10 +107,19 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		})
 		return nil, nil
 	}
+	payload := map[string]any{
+		"query":                truncateRuntimeText(query, 1200),
+		"embedding_provider":   embedding.Provider,
+		"embedding_model":      embedding.Model,
+		"embedding_dimensions": embedding.Dimensions,
+		"embedding_estimated":  embedding.Estimated,
+	}
 	memories, err := r.store.SearchMemories(domain.MemorySearch{
-		Query:     query,
-		Embedding: embedding.Vector,
-		Limit:     5,
+		Query:             query,
+		Embedding:         embedding.Vector,
+		EmbeddingProvider: embedding.Provider,
+		EmbeddingModel:    embedding.Model,
+		Limit:             5,
 	})
 	if err != nil {
 		r.trace.Error(ctx, runID, "", map[string]any{
@@ -121,9 +130,11 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		memories = nil
 	}
 	chunks, err := r.store.SearchDocumentChunks(domain.DocumentSearch{
-		Query:     query,
-		Embedding: embedding.Vector,
-		Limit:     5,
+		Query:             query,
+		Embedding:         embedding.Vector,
+		EmbeddingProvider: embedding.Provider,
+		EmbeddingModel:    embedding.Model,
+		Limit:             5,
 	})
 	if err != nil {
 		r.trace.Error(ctx, runID, "", map[string]any{
@@ -133,6 +144,12 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		})
 		chunks = nil
 	}
+	payload["memory_count"] = len(memories)
+	payload["chunk_count"] = len(chunks)
+	for key, value := range retrievalTracePayload(memories, chunks) {
+		payload[key] = value
+	}
+	r.trace.Retrieval(ctx, runID, "", payload)
 	return memories, chunks
 }
 

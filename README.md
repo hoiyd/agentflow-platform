@@ -226,11 +226,14 @@ RAG manual flow:
 8. Confirm relevant chunks rank above unrelated content.
 9. Delete the document and confirm it disappears from list/search.
 
-Run replay manual flow:
+Demo replay flow:
 
-1. Send a chat message related to uploaded knowledge or prior memory.
-2. Open the run replay page.
-3. Inspect trace payloads for retrieved memories and retrieved document chunks.
+1. Add or upload a knowledge document with a unique phrase.
+2. Ask a chat question that should use that phrase.
+3. Open the run replay page from the active run link.
+4. Confirm the Retrieved context panel shows retrieval event count, memory count, chunk count, and embedding provider/model/dimensions.
+5. Select a `retrieval` or `llm_start` event.
+6. Confirm retrieved memories and knowledge chunks are visible above the raw JSON payload.
 
 ## Tool Configuration
 

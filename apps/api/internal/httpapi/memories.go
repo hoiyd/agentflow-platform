@@ -62,6 +62,8 @@ func (h *Handler) searchMemories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	search.Embedding = embedding.Vector
+	search.EmbeddingProvider = embedding.Provider
+	search.EmbeddingModel = embedding.Model
 	items, err := h.store.SearchMemories(search)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
