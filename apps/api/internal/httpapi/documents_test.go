@@ -233,6 +233,27 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if len(items[0].MatchedTerms) == 0 {
 		t.Fatalf("expected matched terms on search result, got %#v", items[0])
 	}
+	if items[0].Confidence == "" || items[0].Confidence == "low" {
+		t.Fatalf("expected relevant search result to pass confidence gate, got %#v", items[0])
+	}
+	if items[0].EvidenceScore <= 0 {
+		t.Fatalf("expected evidence score on relevant search result, got %#v", items[0])
+	}
+
+	unrelatedBody := []byte(`{"query":"dinner recipe ideas","metadata":{"project":"agentflow"},"limit":3,"min_similarity":0}`)
+	unrelatedReq := httptest.NewRequest(http.MethodPost, "/api/rag/search", bytes.NewReader(unrelatedBody))
+	unrelatedRecorder := httptest.NewRecorder()
+	handler.searchDocumentChunks(unrelatedRecorder, unrelatedReq)
+	if unrelatedRecorder.Code != http.StatusOK {
+		t.Fatalf("expected unrelated search status 200, got %d body=%s", unrelatedRecorder.Code, unrelatedRecorder.Body.String())
+	}
+	var unrelatedResponse domain.DocumentSearchResponse
+	if err := json.Unmarshal(unrelatedRecorder.Body.Bytes(), &unrelatedResponse); err != nil {
+		t.Fatalf("decode unrelated search results: %v", err)
+	}
+	if !unrelatedResponse.NoMatch || unrelatedResponse.Reason == "" || len(unrelatedResponse.Items) != 0 {
+		t.Fatalf("expected unrelated query to be filtered by relevance gate, got %#v", unrelatedResponse)
+	}
 
 	evalBody := []byte(`{
 		"top_k": 5,

@@ -220,6 +220,10 @@ export type RetrievedDocumentChunk = {
   diversity_penalty?: number;
   rerank_score?: number;
   matched_terms?: string[];
+  evidence_score?: number;
+  evidence_coverage?: number;
+  confidence?: "high" | "medium" | "low" | string;
+  filter_reason?: string;
 };
 
 export type EmbeddingInfo = {
@@ -232,6 +236,8 @@ export type EmbeddingInfo = {
 export type DocumentSearchResponse = {
   items: RetrievedDocumentChunk[];
   embedding?: EmbeddingInfo;
+  no_match?: boolean;
+  reason?: string;
 };
 
 export type RAGEvaluationCase = {

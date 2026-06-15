@@ -127,6 +127,7 @@ export function ChatShell() {
   const [ragMinSimilarity, setRagMinSimilarity] = useState("0.15");
   const [ragResults, setRagResults] = useState<RetrievedDocumentChunk[]>([]);
   const [ragEmbedding, setRagEmbedding] = useState<EmbeddingInfo | null>(null);
+  const [ragNoMatchReason, setRagNoMatchReason] = useState("");
   const [hasSearchedRAG, setHasSearchedRAG] = useState(false);
   const [isSearchingRAG, setIsSearchingRAG] = useState(false);
   const [ragEvalCases, setRagEvalCases] = useState(DEFAULT_RAG_EVAL_CASES);
@@ -431,6 +432,7 @@ export function ChatShell() {
       });
       setRagResults(response.items);
       setRagEmbedding(response.embedding ?? null);
+      setRagNoMatchReason(response.no_match ? response.reason ?? "No confident match found." : "");
     } catch (err) {
       setDocumentsError(err instanceof Error ? err.message : "Failed to search knowledge");
     } finally {
@@ -917,6 +919,7 @@ export function ChatShell() {
             onUploadFileChange={handleUploadFileChange}
             onUploadTitleChange={setUploadTitle}
             query={ragQuery}
+            noMatchReason={ragNoMatchReason}
             evaluationCases={ragEvalCases}
             evaluationResult={ragEvalResult}
             onEvaluationCasesChange={setRagEvalCases}
@@ -1208,6 +1211,7 @@ function KnowledgePanel({
   isSearching,
   isUploading,
   minSimilarity,
+  noMatchReason,
   onContentChange,
   onCreate,
   onDeleteDocument,
@@ -1244,6 +1248,7 @@ function KnowledgePanel({
   isSearching: boolean;
   isUploading: boolean;
   minSimilarity: string;
+  noMatchReason: string;
   onContentChange: (value: string) => void;
   onCreate: () => void;
   onDeleteDocument: (document: DocumentInfo) => void;
@@ -1399,9 +1404,12 @@ function KnowledgePanel({
           </button>
         </div>
         <EmbeddingStatus embedding={searchEmbedding} hasSearched={hasSearched} />
+        {hasSearched && noMatchReason ? <div className="rag-no-match">{noMatchReason}</div> : null}
         <div className="rag-results">
           {results.length === 0 ? (
-            <div className="empty compact">Search results will appear here.</div>
+            <div className="empty compact">
+              {hasSearched && noMatchReason ? "No results passed the relevance gate." : "Search results will appear here."}
+            </div>
           ) : (
             results.map((result) => (
               <article className="rag-result-card" key={result.chunk.id}>
@@ -1412,10 +1420,12 @@ function KnowledgePanel({
                   </div>
                   <div className="document-metrics">
                     <span>{documentFormat(result.document)}</span>
+                    {result.confidence ? <span>{result.confidence}</span> : null}
                     <span>similarity {formatScore(result.similarity)}</span>
                     <span>score {formatScore(result.score)}</span>
                   </div>
                 </div>
+                <ScoreBreakdown result={result} />
                 <p>{result.chunk.content}</p>
               </article>
             ))
@@ -1504,6 +1514,7 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
                     <div className="document-metrics">
                       <span>v#{resultItem.vector_rank ?? "-"}</span>
                       <span>r#{resultItem.rerank_rank ?? "-"}</span>
+                      {resultItem.confidence ? <span>{resultItem.confidence}</span> : null}
                       <span>sim {formatScore(resultItem.similarity)}</span>
                       <span>final {formatScore(resultItem.rerank_score ?? resultItem.score)}</span>
                     </div>
@@ -1525,10 +1536,14 @@ function ScoreBreakdown({ result }: { result: RetrievedDocumentChunk }) {
   return (
     <div className="score-breakdown">
       <span>base {formatScore(result.score)}</span>
+      <span>evidence {formatScore(result.evidence_score ?? 0)}</span>
+      <span>coverage {formatPercent(result.evidence_coverage ?? 0)}</span>
       <span>lexical +{formatScore(result.lexical_boost ?? 0)}</span>
       <span>metadata +{formatScore(result.metadata_boost ?? 0)}</span>
       {result.diversity_penalty ? <span>diversity -{formatScore(result.diversity_penalty)}</span> : null}
+      {result.confidence ? <span>confidence {result.confidence}</span> : null}
       {terms.length > 0 ? <span>matched {terms.join(", ")}</span> : <span>matched none</span>}
+      {result.filter_reason ? <span>{result.filter_reason}</span> : null}
     </div>
   );
 }

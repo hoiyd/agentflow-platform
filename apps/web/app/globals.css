@@ -826,6 +826,16 @@ select {
   color: #9c342b;
 }
 
+.rag-no-match {
+  border: 1px solid rgba(174, 64, 53, 0.24);
+  border-radius: 8px;
+  background: #fff7f1;
+  color: #8f392f;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
 .secondary-action {
   min-height: 34px;
   border: 1px solid var(--border);

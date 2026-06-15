@@ -271,6 +271,10 @@ type RetrievedDocumentChunk struct {
 	DiversityPenalty float64       `json:"diversity_penalty,omitempty"`
 	RerankScore      float64       `json:"rerank_score,omitempty"`
 	MatchedTerms     []string      `json:"matched_terms,omitempty"`
+	EvidenceScore    float64       `json:"evidence_score,omitempty"`
+	EvidenceCoverage float64       `json:"evidence_coverage,omitempty"`
+	Confidence       string        `json:"confidence,omitempty"`
+	FilterReason     string        `json:"filter_reason,omitempty"`
 }
 
 type EmbeddingInfo struct {
@@ -283,6 +287,8 @@ type EmbeddingInfo struct {
 type DocumentSearchResponse struct {
 	Items     []RetrievedDocumentChunk `json:"items"`
 	Embedding EmbeddingInfo            `json:"embedding"`
+	NoMatch   bool                     `json:"no_match,omitempty"`
+	Reason    string                   `json:"reason,omitempty"`
 }
 
 type RAGEvaluationCase struct {

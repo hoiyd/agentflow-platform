@@ -225,6 +225,12 @@ func (h *Handler) runDocumentSearch(ctx context.Context, search domain.DocumentS
 		items[index].VectorRank = index + 1
 	}
 	items = rerankDocumentChunks(search.Query, items, requestedLimit)
+	items = applyRelevanceGate(items)
+	noMatch := len(items) == 0
+	reason := ""
+	if noMatch {
+		reason = "No confident match found. Top vector candidates did not pass the relevance gate."
+	}
 	return domain.DocumentSearchResponse{
 		Items: items,
 		Embedding: domain.EmbeddingInfo{
@@ -233,6 +239,8 @@ func (h *Handler) runDocumentSearch(ctx context.Context, search domain.DocumentS
 			Dimensions: embedding.Dimensions,
 			Estimated:  embedding.Estimated,
 		},
+		NoMatch: noMatch,
+		Reason:  reason,
 	}, nil
 }
 
@@ -330,6 +338,10 @@ func rerankDocumentChunks(query string, items []domain.RetrievedDocumentChunk, l
 		items[index].MetadataBoost = metadataBoost(query, queryTerms, items[index])
 		items[index].RerankScore = items[index].Score + items[index].LexicalBoost + items[index].MetadataBoost
 		items[index].MatchedTerms = matchedTerms(query, queryTerms, items[index])
+		items[index].EvidenceCoverage = evidenceCoverage(queryTerms, items[index].MatchedTerms)
+		items[index].EvidenceScore = evidenceScore(query, queryTerms, items[index])
+		items[index].Confidence, items[index].FilterReason = relevanceConfidence(items[index])
+		items[index].RerankScore += items[index].EvidenceScore
 	}
 	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].RerankScore > items[j].RerankScore
@@ -374,6 +386,23 @@ func rerankDocumentChunks(query string, items []domain.RetrievedDocumentChunk, l
 		selected[index].RerankRank = index + 1
 	}
 	return selected
+}
+
+func applyRelevanceGate(items []domain.RetrievedDocumentChunk) []domain.RetrievedDocumentChunk {
+	if len(items) == 0 {
+		return items
+	}
+	filtered := make([]domain.RetrievedDocumentChunk, 0, len(items))
+	for _, item := range items {
+		if item.Confidence == "low" {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	for index := range filtered {
+		filtered[index].RerankRank = index + 1
+	}
+	return filtered
 }
 
 func evaluateRAGCase(evalCase domain.RAGEvaluationCase, items []domain.RetrievedDocumentChunk) domain.RAGEvaluationCaseResult {
@@ -510,6 +539,73 @@ func metadataBoost(query string, queryTerms []string, item domain.RetrievedDocum
 	}
 	boost += 0.10 * float64(matches) / float64(len(queryTerms))
 	return boost
+}
+
+func evidenceCoverage(queryTerms []string, matchedTerms []string) float64 {
+	if len(queryTerms) == 0 {
+		if len(matchedTerms) > 0 {
+			return 1
+		}
+		return 0
+	}
+	if len(matchedTerms) == 0 {
+		return 0
+	}
+	matched := map[string]bool{}
+	for _, term := range matchedTerms {
+		matched[strings.TrimSpace(term)] = true
+	}
+	count := 0
+	for _, term := range queryTerms {
+		if matched[strings.TrimSpace(term)] {
+			count++
+		}
+	}
+	return float64(count) / float64(len(queryTerms))
+}
+
+func evidenceScore(query string, queryTerms []string, item domain.RetrievedDocumentChunk) float64 {
+	score := item.EvidenceCoverage * 0.16
+	exact := strings.ToLower(strings.TrimSpace(query))
+	if exact != "" {
+		content := strings.ToLower(item.Chunk.Content)
+		metadata := strings.ToLower(strings.Join([]string{
+			item.Document.Title,
+			item.Document.SourceURI,
+			metadataText(item.Document.Metadata, "filename"),
+			metadataText(item.Chunk.Metadata, "title"),
+			metadataText(item.Chunk.Metadata, "heading_path"),
+		}, " "))
+		if strings.Contains(content, exact) {
+			score += 0.18
+		}
+		if strings.Contains(metadata, exact) {
+			score += 0.14
+		}
+	}
+	if len(queryTerms) > 0 && item.EvidenceCoverage >= 0.5 {
+		score += 0.06
+	}
+	return score
+}
+
+func relevanceConfidence(item domain.RetrievedDocumentChunk) (string, string) {
+	if item.EvidenceCoverage >= 0.6 || item.EvidenceScore >= 0.24 {
+		return "high", "strong evidence match"
+	}
+	if item.Similarity >= 0.72 {
+		return "high", "strong vector similarity"
+	}
+	if item.Similarity >= 0.60 {
+		return "medium", "vector similarity passed conservative gate"
+	}
+	if len(item.MatchedTerms) > 0 && item.Similarity >= 0.30 {
+		return "medium", "evidence terms matched with acceptable similarity"
+	}
+	if item.RerankScore >= 0.58 && len(item.MatchedTerms) > 0 {
+		return "medium", "rerank score passed with evidence"
+	}
+	return "low", "filtered: weak similarity and no supporting evidence"
 }
 
 func matchedTerms(query string, queryTerms []string, item domain.RetrievedDocumentChunk) []string {
