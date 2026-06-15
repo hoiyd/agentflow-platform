@@ -102,8 +102,15 @@ func migrate(ctx context.Context, db *sql.DB, data fileData) error {
 		if err != nil {
 			return err
 		}
+		deletedAt := sql.NullTime{}
+		if item.Archived {
+			deletedAt = sql.NullTime{Time: item.UpdatedAt, Valid: true}
+			if deletedAt.Time.IsZero() {
+				deletedAt.Time = time.Now().UTC()
+			}
+		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO agents (id, name, description, system_prompt, tools, memory_enabled, retrieval_enabled, executor, archived, created_at, updated_at)
+			INSERT INTO agents (id, name, description, system_prompt, tools, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			ON CONFLICT (id) DO UPDATE SET
 				name = EXCLUDED.name,
@@ -113,10 +120,10 @@ func migrate(ctx context.Context, db *sql.DB, data fileData) error {
 				memory_enabled = EXCLUDED.memory_enabled,
 				retrieval_enabled = EXCLUDED.retrieval_enabled,
 				executor = EXCLUDED.executor,
-				archived = EXCLUDED.archived,
+				deleted_at = EXCLUDED.deleted_at,
 				created_at = EXCLUDED.created_at,
 				updated_at = EXCLUDED.updated_at`,
-			item.ID, item.Name, item.Description, item.SystemPrompt, toolsJSON, item.MemoryEnabled, item.RetrievalEnabled, item.Executor, item.Archived, item.CreatedAt, item.UpdatedAt); err != nil {
+			item.ID, item.Name, item.Description, item.SystemPrompt, toolsJSON, item.MemoryEnabled, item.RetrievalEnabled, item.Executor, deletedAt, item.CreatedAt, item.UpdatedAt); err != nil {
 			return err
 		}
 	}
