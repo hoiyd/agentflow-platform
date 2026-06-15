@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "AgentFlow Platform",
-  description: "Day 1 AI Agent Workflow Platform MVP"
+  description: "AI agent workflow platform with memory, tools, RAG, and replay"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

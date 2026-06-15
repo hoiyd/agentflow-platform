@@ -17,6 +17,9 @@
   --blue: #3f5f8f;
   --danger: #a33a2f;
   --shadow: 0 20px 70px rgba(42, 35, 28, 0.08);
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, "Noto Sans",
+    "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  --font-mono: "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 * {
@@ -34,8 +37,14 @@ body {
     radial-gradient(circle at top left, rgba(180, 95, 60, 0.08), transparent 34rem),
     linear-gradient(180deg, #fbfaf6 0%, var(--bg) 100%);
   color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
+  font-size: 15.5px;
+  font-weight: 400;
+  font-synthesis-weight: none;
   letter-spacing: 0;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,
@@ -72,15 +81,16 @@ select {
 .brand h1 {
   margin: 0 0 8px;
   color: var(--ink);
-  font-size: 20px;
-  font-weight: 720;
+  font-size: 21px;
+  font-weight: 650;
+  line-height: 1.12;
 }
 
 .brand p {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .new-chat,
@@ -114,8 +124,8 @@ select {
   margin: 0 0 8px;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 760;
-  letter-spacing: 0;
+  font-weight: 700;
+  letter-spacing: 0.035em;
   text-transform: uppercase;
 }
 
@@ -244,8 +254,9 @@ select {
 .topbar h2 {
   margin: 0;
   color: var(--ink);
-  font-size: 18px;
-  font-weight: 680;
+  font-size: 19px;
+  font-weight: 650;
+  line-height: 1.2;
 }
 
 .status {
@@ -267,7 +278,7 @@ select {
 .back-link {
   color: var(--accent-dark);
   font-size: 13px;
-  font-weight: 680;
+  font-weight: 600;
   text-decoration: none;
 }
 
@@ -340,12 +351,14 @@ select {
 .mode-chooser span {
   color: var(--muted);
   font-size: 11px;
-  font-weight: 760;
+  font-weight: 700;
+  letter-spacing: 0.035em;
   text-transform: uppercase;
 }
 
 .mode-chooser strong {
   font-size: 14px;
+  font-weight: 600;
 }
 
 .collaboration-rail-toggle {
@@ -360,7 +373,7 @@ select {
   color: var(--muted-strong);
   cursor: pointer;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 600;
   padding: 8px 12px;
   box-shadow: 0 10px 26px rgba(42, 35, 28, 0.06);
 }
@@ -378,8 +391,8 @@ select {
 .empty h2 {
   margin: 0 0 14px;
   color: var(--ink);
-  font-size: 40px;
-  font-weight: 720;
+  font-size: 42px;
+  font-weight: 650;
   line-height: 1.08;
 }
 
@@ -399,7 +412,8 @@ select {
 .message-meta {
   color: var(--muted);
   font-size: 11px;
-  font-weight: 720;
+  font-weight: 700;
+  letter-spacing: 0.035em;
   text-transform: uppercase;
 }
 
@@ -439,6 +453,7 @@ select {
 .markdown h5,
 .markdown h6 {
   color: var(--ink);
+  font-weight: 650;
   line-height: 1.25;
   margin: 16px 0 8px;
 }
@@ -497,7 +512,7 @@ select {
   border-radius: 5px;
   background: #f3efe7;
   color: #3c332b;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 0.92em;
   padding: 1px 4px;
 }
@@ -581,6 +596,7 @@ select {
   color: var(--ink);
   margin: 0 0 4px;
   font-size: 16px;
+  font-weight: 650;
 }
 
 .tool-source {
@@ -846,6 +862,7 @@ select {
   margin: 0 0 4px;
   color: var(--ink);
   font-size: 15px;
+  font-weight: 650;
 }
 
 .document-metrics {
@@ -1032,7 +1049,7 @@ select {
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   overflow: hidden;
   padding: 0;
@@ -1735,8 +1752,10 @@ textarea:disabled {
 .replay-header h1 {
   margin: 8px 0 6px;
   color: var(--ink);
-  font-size: 30px;
+  font-size: 32px;
+  font-weight: 650;
   letter-spacing: 0;
+  line-height: 1.12;
 }
 
 .replay-header p {
@@ -1829,6 +1848,7 @@ textarea:disabled {
   margin-top: 6px;
   color: var(--ink);
   font-size: 19px;
+  font-weight: 650;
 }
 
 .metric.danger strong {
@@ -1855,7 +1875,8 @@ textarea:disabled {
   border-bottom: 1px solid var(--border);
   color: var(--ink);
   font-size: 13px;
-  font-weight: 760;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   padding: 12px 14px;
 }
 

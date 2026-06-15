@@ -151,7 +151,7 @@ func (c *Client) StreamChat(ctx context.Context, history []domain.Message, lates
 }
 
 func (c *Client) StreamChatWithTools(ctx context.Context, history []domain.Message, latest string, registry *tools.Registry) (<-chan StreamEvent, <-chan error) {
-	return c.StreamAgentChatWithTools(ctx, "You are AgentFlow's Day 2 assistant. Use tools when they help.", history, latest, registry)
+	return c.StreamAgentChatWithTools(ctx, "You are AgentFlow's assistant. Use tools when they help.", history, latest, registry)
 }
 
 func (c *Client) StreamAgentChatWithTools(ctx context.Context, systemPrompt string, history []domain.Message, latest string, registry *tools.Registry) (<-chan StreamEvent, <-chan error) {
@@ -302,7 +302,7 @@ func (c *Client) embeddingRequestPayload(input string) ([]byte, error) {
 }
 
 func (c *Client) streamFallback(ctx context.Context, latest string, chunks chan<- string) {
-	response := "Day 1 smoke test response: backend streaming is working. Add OPENAI_API_KEY in apps/api/.env to enable real OpenAI responses. You said: " + latest
+	response := "Local fallback response: backend streaming is working. Add OPENAI_API_KEY in apps/api/.env to enable real OpenAI responses. You said: " + latest
 	words := strings.Split(response, " ")
 	for i, word := range words {
 		select {
@@ -343,7 +343,7 @@ func (c *Client) streamFallbackEvents(ctx context.Context, latest string, events
 }
 
 func fallbackEventResponse(latest string) string {
-	return "Day 2 smoke test response: backend streaming is working. Add OPENAI_API_KEY in apps/api/.env to enable model-directed tool calling. You said: " + latest
+	return "Local fallback response: backend streaming is working. Add OPENAI_API_KEY in apps/api/.env to enable model-directed tool calling. You said: " + latest
 }
 
 func (c *Client) streamText(ctx context.Context, text string, delay time.Duration, events chan<- StreamEvent) {
@@ -676,7 +676,7 @@ func buildMessages(history []domain.Message) []Message {
 }
 
 func buildMessagesWithToolNames(history []domain.Message, toolNames []string) []Message {
-	return buildMessagesWithSystemPrompt("You are AgentFlow's Day 2 assistant. Use tools when they help.", history, toolNames, nil, nil)
+	return buildMessagesWithSystemPrompt("You are AgentFlow's assistant. Use tools when they help.", history, toolNames, nil, nil)
 }
 
 func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message, toolNames []string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) []Message {

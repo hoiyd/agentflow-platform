@@ -53,8 +53,8 @@ func MockWebSearchTool() Tool {
 					"snippet": "Trace events should capture tool name, arguments, result, duration, status, and errors.",
 				},
 				{
-					"title":   "Day 2 MVP scope",
-					"url":     "mock://search/day-2-scope",
+					"title":   "Development scope note",
+					"url":     "mock://search/development-scope",
 					"snippet": "Keep tools deterministic during development so UI and trace behavior remain easy to verify.",
 				},
 				{

@@ -721,7 +721,7 @@ export function ChatShell() {
       <aside className="sidebar">
         <div className="brand">
           <h1>AgentFlow</h1>
-          <p>Day 3 agent runtime with runs, memory, and tools.</p>
+          <p>Agent workflow runtime with runs, memory, tools, and knowledge.</p>
         </div>
         <button className="new-chat" onClick={startNewConversation}>
           New Chat
