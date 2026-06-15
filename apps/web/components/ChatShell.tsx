@@ -13,6 +13,8 @@ import {
   DocumentInfo,
   EmbeddingInfo,
   Message,
+  RAGEvaluationCase,
+  RAGEvaluationRunResponse,
   RetrievedDocumentChunk,
   ToolInfo,
   cancelRun,
@@ -30,6 +32,7 @@ import {
   listMessages,
   getDocument,
   resumeRun,
+  runRAGEvaluation,
   searchRAG,
   setToolEnabled,
   streamChat,
@@ -42,6 +45,16 @@ type DraftMessage = Pick<Message, "role" | "content"> & {
   conversation_id: string;
   created_at: string;
 };
+
+const DEFAULT_RAG_EVAL_CASES = `[
+  {
+    "id": "example_resume_backend",
+    "query": "候选人的后端系统设计经验",
+    "expected_chunk_contains": ["Go", "PostgreSQL"],
+    "min_acceptable_rank": 3,
+    "tags": ["resume", "backend"]
+  }
+]`;
 
 export type CollaborationStepView = {
   role: string;
@@ -116,6 +129,9 @@ export function ChatShell() {
   const [ragEmbedding, setRagEmbedding] = useState<EmbeddingInfo | null>(null);
   const [hasSearchedRAG, setHasSearchedRAG] = useState(false);
   const [isSearchingRAG, setIsSearchingRAG] = useState(false);
+  const [ragEvalCases, setRagEvalCases] = useState(DEFAULT_RAG_EVAL_CASES);
+  const [ragEvalResult, setRagEvalResult] = useState<RAGEvaluationRunResponse | null>(null);
+  const [isRunningRAGEval, setIsRunningRAGEval] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<DocumentDetail | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [isLoadingDocumentDetail, setIsLoadingDocumentDetail] = useState(false);
@@ -419,6 +435,31 @@ export function ChatShell() {
       setDocumentsError(err instanceof Error ? err.message : "Failed to search knowledge");
     } finally {
       setIsSearchingRAG(false);
+    }
+  }
+
+  async function handleRunRAGEvaluation() {
+    if (isRunningRAGEval) {
+      return;
+    }
+    setIsRunningRAGEval(true);
+    setDocumentsError("");
+    try {
+      const parsed = JSON.parse(ragEvalCases) as unknown;
+      if (!Array.isArray(parsed)) {
+        throw new Error("Evaluation cases must be a JSON array");
+      }
+      const minSimilarity = Number(ragMinSimilarity);
+      const response = await runRAGEvaluation({
+        cases: parsed as RAGEvaluationCase[],
+        top_k: 5,
+        min_similarity: Number.isFinite(minSimilarity) ? minSimilarity : 0
+      });
+      setRagEvalResult(response);
+    } catch (err) {
+      setDocumentsError(err instanceof Error ? err.message : "Failed to run retrieval evaluation");
+    } finally {
+      setIsRunningRAGEval(false);
     }
   }
 
@@ -858,6 +899,7 @@ export function ChatShell() {
             isCreating={isCreatingDocument}
             isLoadingDocumentDetail={isLoadingDocumentDetail}
             isSearching={isSearchingRAG}
+            isRunningEvaluation={isRunningRAGEval}
             isUploading={isUploadingDocument}
             deletingDocumentId={deletingDocumentId}
             minSimilarity={ragMinSimilarity}
@@ -867,6 +909,7 @@ export function ChatShell() {
             onMinSimilarityChange={setRagMinSimilarity}
             onQueryChange={setRagQuery}
             onRefresh={refreshDocuments}
+            onRunEvaluation={handleRunRAGEvaluation}
             onSearch={handleSearchRAG}
             onSelectDocument={handleSelectDocument}
             onTitleChange={setDocumentTitle}
@@ -874,6 +917,9 @@ export function ChatShell() {
             onUploadFileChange={handleUploadFileChange}
             onUploadTitleChange={setUploadTitle}
             query={ragQuery}
+            evaluationCases={ragEvalCases}
+            evaluationResult={ragEvalResult}
+            onEvaluationCasesChange={setRagEvalCases}
             hasSearched={hasSearchedRAG}
             searchEmbedding={ragEmbedding}
             results={ragResults}
@@ -1153,18 +1199,23 @@ function KnowledgePanel({
   documentContent,
   deletingDocumentId,
   error,
+  evaluationCases,
+  evaluationResult,
   hasSearched,
   isCreating,
   isLoadingDocumentDetail,
+  isRunningEvaluation,
   isSearching,
   isUploading,
   minSimilarity,
   onContentChange,
   onCreate,
   onDeleteDocument,
+  onEvaluationCasesChange,
   onMinSimilarityChange,
   onQueryChange,
   onRefresh,
+  onRunEvaluation,
   onSearch,
   onSelectDocument,
   onTitleChange,
@@ -1184,18 +1235,23 @@ function KnowledgePanel({
   documentContent: string;
   deletingDocumentId: string;
   error: string;
+  evaluationCases: string;
+  evaluationResult: RAGEvaluationRunResponse | null;
   hasSearched: boolean;
   isCreating: boolean;
   isLoadingDocumentDetail: boolean;
+  isRunningEvaluation: boolean;
   isSearching: boolean;
   isUploading: boolean;
   minSimilarity: string;
   onContentChange: (value: string) => void;
   onCreate: () => void;
   onDeleteDocument: (document: DocumentInfo) => void;
+  onEvaluationCasesChange: (value: string) => void;
   onMinSimilarityChange: (value: string) => void;
   onQueryChange: (value: string) => void;
   onRefresh: () => void;
+  onRunEvaluation: () => void;
   onSearch: () => void;
   onSelectDocument: (documentId: string) => void;
   onTitleChange: (value: string) => void;
@@ -1367,7 +1423,113 @@ function KnowledgePanel({
         </div>
       </section>
 
+      <section className="knowledge-search rag-evaluation">
+        <div className="knowledge-header-row">
+          <div className="panel-title">Retrieval evaluation</div>
+          <button
+            className="send compact-send"
+            disabled={isRunningEvaluation || evaluationCases.trim().length === 0}
+            onClick={onRunEvaluation}
+            type="button"
+          >
+            {isRunningEvaluation ? "Running..." : "Run Eval"}
+          </button>
+        </div>
+        <textarea
+          className="evaluation-cases-input"
+          onChange={(event) => onEvaluationCasesChange(event.target.value)}
+          spellCheck={false}
+          value={evaluationCases}
+        />
+        <EvaluationResult result={evaluationResult} />
+      </section>
+
     </section>
+  );
+}
+
+function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null }) {
+  if (!result) {
+    return <div className="empty compact">Run evaluation to see hit@k and missed retrieval cases.</div>;
+  }
+  const total = result.summary.total || 1;
+  return (
+    <div className="evaluation-result">
+      <div className="evaluation-summary">
+        <div className="metric">
+          <span>Total</span>
+          <strong>{result.summary.total}</strong>
+        </div>
+        <div className="metric">
+          <span>Hit@1</span>
+          <strong>{formatPercent(result.summary.hit_at_1 / total)}</strong>
+        </div>
+        <div className="metric">
+          <span>Hit@3</span>
+          <strong>{formatPercent(result.summary.hit_at_3 / total)}</strong>
+        </div>
+        <div className="metric">
+          <span>Hit@5</span>
+          <strong>{formatPercent(result.summary.hit_at_5 / total)}</strong>
+        </div>
+        <div className={`metric ${result.summary.misses > 0 ? "danger" : ""}`}>
+          <span>Misses</span>
+          <strong>{result.summary.misses}</strong>
+        </div>
+      </div>
+      <EmbeddingStatus embedding={result.embedding ?? null} hasSearched />
+      <div className="evaluation-cases">
+        {result.cases.map((item) => (
+          <article className={`evaluation-case ${item.hit ? "hit" : "miss"}`} key={item.id}>
+            <div className="rag-result-header">
+              <div>
+                <h3>{item.id}</h3>
+                <div className="tool-source">{item.query}</div>
+              </div>
+              <div className="document-metrics">
+                <span>{item.hit ? "hit" : "miss"}</span>
+                <span>{item.best_rank ? `rank ${item.best_rank}` : "no match"}</span>
+              </div>
+            </div>
+            <div className="evaluation-expected">{evaluationExpectedLabel(item)}</div>
+            {item.failure_reason ? <div className="evaluation-failure">{item.failure_reason}</div> : null}
+            <div className="rag-results compact-results">
+              {item.items.slice(0, 5).map((resultItem) => (
+                <article className="rag-result-card" key={resultItem.chunk.id}>
+                  <div className="rag-result-header">
+                    <div>
+                      <h3>{resultItem.document.title}</h3>
+                      <div className="tool-source">{chunkSourceLabel(resultItem)}</div>
+                    </div>
+                    <div className="document-metrics">
+                      <span>v#{resultItem.vector_rank ?? "-"}</span>
+                      <span>r#{resultItem.rerank_rank ?? "-"}</span>
+                      <span>sim {formatScore(resultItem.similarity)}</span>
+                      <span>final {formatScore(resultItem.rerank_score ?? resultItem.score)}</span>
+                    </div>
+                  </div>
+                  <ScoreBreakdown result={resultItem} />
+                  <p>{resultItem.chunk.content}</p>
+                </article>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ScoreBreakdown({ result }: { result: RetrievedDocumentChunk }) {
+  const terms = result.matched_terms ?? [];
+  return (
+    <div className="score-breakdown">
+      <span>base {formatScore(result.score)}</span>
+      <span>lexical +{formatScore(result.lexical_boost ?? 0)}</span>
+      <span>metadata +{formatScore(result.metadata_boost ?? 0)}</span>
+      {result.diversity_penalty ? <span>diversity -{formatScore(result.diversity_penalty)}</span> : null}
+      {terms.length > 0 ? <span>matched {terms.join(", ")}</span> : <span>matched none</span>}
+    </div>
   );
 }
 
@@ -1813,6 +1975,19 @@ function formatValue(value: unknown) {
 
 function formatScore(value: number) {
   return Number.isFinite(value) ? value.toFixed(3) : "0.000";
+}
+
+function formatPercent(value: number) {
+  return Number.isFinite(value) ? `${Math.round(value * 100)}%` : "0%";
+}
+
+function evaluationExpectedLabel(item: RAGEvaluationRunResponse["cases"][number]) {
+  const parts = [
+    item.expected_document_ids?.length ? `documents: ${item.expected_document_ids.join(", ")}` : "",
+    item.expected_chunk_ids?.length ? `chunks: ${item.expected_chunk_ids.join(", ")}` : "",
+    item.expected_chunk_contains?.length ? `contains: ${item.expected_chunk_contains.join(", ")}` : ""
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" / ") : "No expectations configured";
 }
 
 function formatBytes(value: number) {

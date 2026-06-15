@@ -75,6 +75,8 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
 		h.getDocument(w, r)
 	case r.Method == http.MethodPost && path == "/api/rag/search":
 		h.searchDocumentChunks(w, r)
+	case r.Method == http.MethodPost && path == "/api/rag/evaluations/run":
+		h.runRAGEvaluation(w, r)
 	case r.Method == http.MethodGet && path == "/api/agents":
 		h.listAgents(w, r)
 	case r.Method == http.MethodPost && path == "/api/agents":

@@ -922,6 +922,81 @@ select {
   white-space: pre-wrap;
 }
 
+.rag-evaluation {
+  margin-bottom: 28px;
+}
+
+.compact-send {
+  min-height: 38px;
+  min-width: 104px;
+  padding: 0 14px;
+}
+
+.evaluation-cases-input {
+  min-height: 170px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.evaluation-result,
+.evaluation-cases {
+  display: grid;
+  gap: 12px;
+}
+
+.evaluation-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  gap: 10px;
+}
+
+.evaluation-case {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbf8f1;
+  padding: 13px;
+}
+
+.evaluation-case.hit {
+  border-color: rgba(47, 116, 104, 0.26);
+}
+
+.evaluation-case.miss {
+  border-color: rgba(163, 58, 47, 0.24);
+}
+
+.evaluation-expected,
+.evaluation-failure,
+.score-breakdown {
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.evaluation-failure {
+  color: var(--danger);
+  margin-top: 6px;
+}
+
+.compact-results {
+  margin-top: 10px;
+}
+
+.score-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.score-breakdown span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 3px 7px;
+}
+
 .composer {
   border-top: 1px solid rgba(86, 76, 66, 0.14);
   background: rgba(251, 249, 244, 0.9);

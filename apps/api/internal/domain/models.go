@@ -264,10 +264,13 @@ type RetrievedDocumentChunk struct {
 	Similarity       float64       `json:"similarity"`
 	RecencyBoost     float64       `json:"recency_boost"`
 	Score            float64       `json:"score"`
+	VectorRank       int           `json:"vector_rank,omitempty"`
+	RerankRank       int           `json:"rerank_rank,omitempty"`
 	LexicalBoost     float64       `json:"lexical_boost,omitempty"`
 	MetadataBoost    float64       `json:"metadata_boost,omitempty"`
 	DiversityPenalty float64       `json:"diversity_penalty,omitempty"`
 	RerankScore      float64       `json:"rerank_score,omitempty"`
+	MatchedTerms     []string      `json:"matched_terms,omitempty"`
 }
 
 type EmbeddingInfo struct {
@@ -280,4 +283,52 @@ type EmbeddingInfo struct {
 type DocumentSearchResponse struct {
 	Items     []RetrievedDocumentChunk `json:"items"`
 	Embedding EmbeddingInfo            `json:"embedding"`
+}
+
+type RAGEvaluationCase struct {
+	ID                    string   `json:"id"`
+	Query                 string   `json:"query"`
+	ExpectedDocumentIDs   []string `json:"expected_document_ids,omitempty"`
+	ExpectedChunkIDs      []string `json:"expected_chunk_ids,omitempty"`
+	ExpectedChunkContains []string `json:"expected_chunk_contains,omitempty"`
+	MinAcceptableRank     int      `json:"min_acceptable_rank,omitempty"`
+	Tags                  []string `json:"tags,omitempty"`
+}
+
+type RAGEvaluationRunRequest struct {
+	Cases         []RAGEvaluationCase `json:"cases"`
+	WorkspaceID   string              `json:"workspace_id,omitempty"`
+	Metadata      map[string]string   `json:"metadata,omitempty"`
+	TopK          int                 `json:"top_k,omitempty"`
+	MinSimilarity float64             `json:"min_similarity,omitempty"`
+}
+
+type RAGEvaluationSummary struct {
+	Total  int `json:"total"`
+	HitAt1 int `json:"hit_at_1"`
+	HitAt3 int `json:"hit_at_3"`
+	HitAt5 int `json:"hit_at_5"`
+	Misses int `json:"misses"`
+}
+
+type RAGEvaluationCaseResult struct {
+	ID                    string                   `json:"id"`
+	Query                 string                   `json:"query"`
+	ExpectedDocumentIDs   []string                 `json:"expected_document_ids,omitempty"`
+	ExpectedChunkIDs      []string                 `json:"expected_chunk_ids,omitempty"`
+	ExpectedChunkContains []string                 `json:"expected_chunk_contains,omitempty"`
+	Tags                  []string                 `json:"tags,omitempty"`
+	Hit                   bool                     `json:"hit"`
+	HitAt1                bool                     `json:"hit_at_1"`
+	HitAt3                bool                     `json:"hit_at_3"`
+	HitAt5                bool                     `json:"hit_at_5"`
+	BestRank              int                      `json:"best_rank,omitempty"`
+	FailureReason         string                   `json:"failure_reason,omitempty"`
+	Items                 []RetrievedDocumentChunk `json:"items"`
+}
+
+type RAGEvaluationRunResponse struct {
+	Summary   RAGEvaluationSummary      `json:"summary"`
+	Cases     []RAGEvaluationCaseResult `json:"cases"`
+	Embedding EmbeddingInfo             `json:"embedding"`
 }
