@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -175,28 +176,62 @@ func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	response, err := h.runDocumentSearch(r.Context(), search, normalizeDocumentSearchLimit(search.Limit))
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, errDocumentSearchEmbedding) {
+			status = http.StatusBadGateway
+		}
+		writeError(w, status, documentSearchErrorMessage(err))
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+var errDocumentSearchEmbedding = errors.New("document search embedding")
+
+func documentSearchErrorMessage(err error) string {
+	message := strings.TrimSpace(err.Error())
+	if errors.Is(err, errDocumentSearchEmbedding) {
+		message = strings.TrimSpace(strings.TrimPrefix(message, errDocumentSearchEmbedding.Error()))
+	}
+	if message == "" {
+		return "document search failed"
+	}
+	return message
+}
+
+func (h *Handler) runDocumentSearch(ctx context.Context, search domain.DocumentSearch, requestedLimit int) (domain.DocumentSearchResponse, error) {
 	search.Query = strings.TrimSpace(search.Query)
 	if search.Query == "" {
-		writeError(w, http.StatusBadRequest, "query is required")
-		return
+		return domain.DocumentSearchResponse{}, errors.New("query is required")
 	}
-	embedding, err := h.openAI.EmbedText(r.Context(), search.Query)
+	embedding, err := h.openAI.EmbedText(ctx, search.Query)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
+		return domain.DocumentSearchResponse{}, errors.Join(errDocumentSearchEmbedding, err)
 	}
-	requestedLimit := normalizeDocumentSearchLimit(search.Limit)
+	if requestedLimit <= 0 {
+		requestedLimit = normalizeDocumentSearchLimit(search.Limit)
+	}
 	search.Limit = rerankCandidateLimit(requestedLimit)
 	search.Embedding = embedding.Vector
 	search.EmbeddingProvider = embedding.Provider
 	search.EmbeddingModel = embedding.Model
 	items, err := h.store.SearchDocumentChunks(search)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+		return domain.DocumentSearchResponse{}, err
+	}
+	for index := range items {
+		items[index].VectorRank = index + 1
 	}
 	items = rerankDocumentChunks(search.Query, items, requestedLimit)
-	writeJSON(w, http.StatusOK, domain.DocumentSearchResponse{
+	items = applyRelevanceGate(items)
+	noMatch := len(items) == 0
+	reason := ""
+	if noMatch {
+		reason = "No confident match found. Top vector candidates did not pass the relevance gate."
+	}
+	return domain.DocumentSearchResponse{
 		Items: items,
 		Embedding: domain.EmbeddingInfo{
 			Provider:   embedding.Provider,
@@ -204,6 +239,68 @@ func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
 			Dimensions: embedding.Dimensions,
 			Estimated:  embedding.Estimated,
 		},
+		NoMatch: noMatch,
+		Reason:  reason,
+	}, nil
+}
+
+func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
+	var req domain.RAGEvaluationRunRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	if len(req.Cases) == 0 {
+		writeError(w, http.StatusBadRequest, "at least one evaluation case is required")
+		return
+	}
+	if len(req.Cases) > 50 {
+		writeError(w, http.StatusBadRequest, "at most 50 evaluation cases are supported")
+		return
+	}
+	topK := normalizeDocumentSearchLimit(req.TopK)
+	results := make([]domain.RAGEvaluationCaseResult, 0, len(req.Cases))
+	summary := domain.RAGEvaluationSummary{Total: len(req.Cases)}
+	var embedding domain.EmbeddingInfo
+	for _, evalCase := range req.Cases {
+		search := domain.DocumentSearch{
+			Query:         evalCase.Query,
+			WorkspaceID:   req.WorkspaceID,
+			Metadata:      req.Metadata,
+			Limit:         topK,
+			MinSimilarity: req.MinSimilarity,
+		}
+		response, err := h.runDocumentSearch(r.Context(), search, topK)
+		if err != nil {
+			status := http.StatusBadRequest
+			if errors.Is(err, errDocumentSearchEmbedding) {
+				status = http.StatusBadGateway
+			}
+			writeError(w, status, documentSearchErrorMessage(err))
+			return
+		}
+		if embedding.Provider == "" {
+			embedding = response.Embedding
+		}
+		caseResult := evaluateRAGCase(evalCase, response.Items)
+		results = append(results, caseResult)
+		if caseResult.HitAt1 {
+			summary.HitAt1++
+		}
+		if caseResult.HitAt3 {
+			summary.HitAt3++
+		}
+		if caseResult.HitAt5 {
+			summary.HitAt5++
+		}
+		if !caseResult.Hit {
+			summary.Misses++
+		}
+	}
+	writeJSON(w, http.StatusOK, domain.RAGEvaluationRunResponse{
+		Summary:   summary,
+		Cases:     results,
+		Embedding: embedding,
 	})
 }
 
@@ -240,6 +337,11 @@ func rerankDocumentChunks(query string, items []domain.RetrievedDocumentChunk, l
 		items[index].LexicalBoost = lexicalBoost(query, queryTerms, items[index].Chunk.Content)
 		items[index].MetadataBoost = metadataBoost(query, queryTerms, items[index])
 		items[index].RerankScore = items[index].Score + items[index].LexicalBoost + items[index].MetadataBoost
+		items[index].MatchedTerms = matchedTerms(query, queryTerms, items[index])
+		items[index].EvidenceCoverage = evidenceCoverage(queryTerms, items[index].MatchedTerms)
+		items[index].EvidenceScore = evidenceScore(query, queryTerms, items[index])
+		items[index].Confidence, items[index].FilterReason = relevanceConfidence(items[index])
+		items[index].RerankScore += items[index].EvidenceScore
 	}
 	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].RerankScore > items[j].RerankScore
@@ -280,7 +382,106 @@ func rerankDocumentChunks(query string, items []domain.RetrievedDocumentChunk, l
 	sort.SliceStable(selected, func(i, j int) bool {
 		return selected[i].RerankScore > selected[j].RerankScore
 	})
+	for index := range selected {
+		selected[index].RerankRank = index + 1
+	}
 	return selected
+}
+
+func applyRelevanceGate(items []domain.RetrievedDocumentChunk) []domain.RetrievedDocumentChunk {
+	if len(items) == 0 {
+		return items
+	}
+	filtered := make([]domain.RetrievedDocumentChunk, 0, len(items))
+	for _, item := range items {
+		if item.Confidence == "low" {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	for index := range filtered {
+		filtered[index].RerankRank = index + 1
+	}
+	return filtered
+}
+
+func evaluateRAGCase(evalCase domain.RAGEvaluationCase, items []domain.RetrievedDocumentChunk) domain.RAGEvaluationCaseResult {
+	result := domain.RAGEvaluationCaseResult{
+		ID:                    strings.TrimSpace(evalCase.ID),
+		Query:                 strings.TrimSpace(evalCase.Query),
+		ExpectedDocumentIDs:   evalCase.ExpectedDocumentIDs,
+		ExpectedChunkIDs:      evalCase.ExpectedChunkIDs,
+		ExpectedChunkContains: evalCase.ExpectedChunkContains,
+		Tags:                  evalCase.Tags,
+		Items:                 items,
+	}
+	if result.ID == "" {
+		result.ID = result.Query
+	}
+	if result.Query == "" {
+		result.FailureReason = "query is required"
+		return result
+	}
+	bestRank := 0
+	for index, item := range items {
+		if ragCaseItemMatches(evalCase, item) {
+			bestRank = index + 1
+			break
+		}
+	}
+	if bestRank == 0 {
+		result.FailureReason = "no result matched expected document, chunk, or content"
+		return result
+	}
+	result.BestRank = bestRank
+	result.HitAt1 = bestRank <= 1
+	result.HitAt3 = bestRank <= 3
+	result.HitAt5 = bestRank <= 5
+	acceptableRank := evalCase.MinAcceptableRank
+	if acceptableRank <= 0 {
+		acceptableRank = len(items)
+	}
+	result.Hit = bestRank <= acceptableRank
+	return result
+}
+
+func ragCaseItemMatches(evalCase domain.RAGEvaluationCase, item domain.RetrievedDocumentChunk) bool {
+	hasExpectation := false
+	if len(evalCase.ExpectedDocumentIDs) > 0 {
+		hasExpectation = true
+		if !stringInSlice(item.Document.ID, evalCase.ExpectedDocumentIDs) {
+			return false
+		}
+	}
+	if len(evalCase.ExpectedChunkIDs) > 0 {
+		hasExpectation = true
+		if !stringInSlice(item.Chunk.ID, evalCase.ExpectedChunkIDs) {
+			return false
+		}
+	}
+	if len(evalCase.ExpectedChunkContains) > 0 {
+		hasExpectation = true
+		content := strings.ToLower(item.Chunk.Content)
+		for _, expected := range evalCase.ExpectedChunkContains {
+			expected = strings.ToLower(strings.TrimSpace(expected))
+			if expected == "" {
+				continue
+			}
+			if !strings.Contains(content, expected) {
+				return false
+			}
+		}
+	}
+	return hasExpectation
+}
+
+func stringInSlice(value string, values []string) bool {
+	for _, candidate := range values {
+		if strings.TrimSpace(candidate) == value {
+			return true
+		}
+	}
+	return false
 }
 
 func hasUnselectedDocument(items []domain.RetrievedDocumentChunk, usedDocuments map[string]int) bool {
@@ -338,6 +539,103 @@ func metadataBoost(query string, queryTerms []string, item domain.RetrievedDocum
 	}
 	boost += 0.10 * float64(matches) / float64(len(queryTerms))
 	return boost
+}
+
+func evidenceCoverage(queryTerms []string, matchedTerms []string) float64 {
+	if len(queryTerms) == 0 {
+		if len(matchedTerms) > 0 {
+			return 1
+		}
+		return 0
+	}
+	if len(matchedTerms) == 0 {
+		return 0
+	}
+	matched := map[string]bool{}
+	for _, term := range matchedTerms {
+		matched[strings.TrimSpace(term)] = true
+	}
+	count := 0
+	for _, term := range queryTerms {
+		if matched[strings.TrimSpace(term)] {
+			count++
+		}
+	}
+	return float64(count) / float64(len(queryTerms))
+}
+
+func evidenceScore(query string, queryTerms []string, item domain.RetrievedDocumentChunk) float64 {
+	score := item.EvidenceCoverage * 0.16
+	exact := strings.ToLower(strings.TrimSpace(query))
+	if exact != "" {
+		content := strings.ToLower(item.Chunk.Content)
+		metadata := strings.ToLower(strings.Join([]string{
+			item.Document.Title,
+			item.Document.SourceURI,
+			metadataText(item.Document.Metadata, "filename"),
+			metadataText(item.Chunk.Metadata, "title"),
+			metadataText(item.Chunk.Metadata, "heading_path"),
+		}, " "))
+		if strings.Contains(content, exact) {
+			score += 0.18
+		}
+		if strings.Contains(metadata, exact) {
+			score += 0.14
+		}
+	}
+	if len(queryTerms) > 0 && item.EvidenceCoverage >= 0.5 {
+		score += 0.06
+	}
+	return score
+}
+
+func relevanceConfidence(item domain.RetrievedDocumentChunk) (string, string) {
+	if item.EvidenceCoverage >= 0.6 || item.EvidenceScore >= 0.24 {
+		return "high", "strong evidence match"
+	}
+	if item.Similarity >= 0.72 {
+		return "high", "strong vector similarity"
+	}
+	if item.Similarity >= 0.60 {
+		return "medium", "vector similarity passed conservative gate"
+	}
+	if len(item.MatchedTerms) > 0 && item.Similarity >= 0.30 {
+		return "medium", "evidence terms matched with acceptable similarity"
+	}
+	if item.RerankScore >= 0.58 && len(item.MatchedTerms) > 0 {
+		return "medium", "rerank score passed with evidence"
+	}
+	return "low", "filtered: weak similarity and no supporting evidence"
+}
+
+func matchedTerms(query string, queryTerms []string, item domain.RetrievedDocumentChunk) []string {
+	text := strings.ToLower(strings.Join([]string{
+		item.Document.Title,
+		item.Document.SourceURI,
+		item.Chunk.Content,
+		metadataText(item.Document.Metadata, "filename"),
+		metadataText(item.Chunk.Metadata, "title"),
+		metadataText(item.Chunk.Metadata, "heading_path"),
+		metadataText(item.Chunk.Metadata, "chunk_type"),
+	}, " "))
+	matches := []string{}
+	seen := map[string]bool{}
+	exact := strings.ToLower(strings.TrimSpace(query))
+	if exact != "" && strings.Contains(text, exact) {
+		seen[exact] = true
+		matches = append(matches, exact)
+	}
+	for _, term := range queryTerms {
+		term = strings.TrimSpace(term)
+		if term == "" || seen[term] {
+			continue
+		}
+		if strings.Contains(text, term) {
+			seen[term] = true
+			matches = append(matches, term)
+		}
+	}
+	return matches
 }
 
 func metadataText(metadata map[string]any, key string) string {

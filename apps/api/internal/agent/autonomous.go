@@ -39,8 +39,8 @@ type humanInputNeed struct {
 	Question string
 }
 
-func (r *Runtime) PrepareAutonomousRun(ctx context.Context, conversationID string) (PreparedCollaborationRun, error) {
-	agent, err := r.resolveAgent("")
+func (r *Runtime) PrepareAutonomousRun(ctx context.Context, agentID string, conversationID string) (PreparedCollaborationRun, error) {
+	agent, err := r.resolveAgent(agentID)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
@@ -371,7 +371,7 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 		}
 		return "", errRunCanceled
 	}
-	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input, map[string]any{
+	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input, true, true, map[string]any{
 		"executor":  ExecutorNative,
 		"framework": "agentflow-native",
 	})

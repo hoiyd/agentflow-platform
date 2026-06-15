@@ -442,4 +442,48 @@ func TestFileStoreCreateAgent(t *testing.T) {
 	if len(agent.Tools) != 2 {
 		t.Fatalf("expected normalized tools, got %#v", agent.Tools)
 	}
+	if !agent.MemoryEnabled || !agent.RetrievalEnabled || agent.Executor != domain.DefaultAgentExecutor {
+		t.Fatalf("expected default runtime config, got %#v", agent)
+	}
+}
+
+func TestFileStoreArchiveAgent(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	agent, err := store.CreateAgent(domain.Agent{
+		Name:         "Disposable Agent",
+		Description:  "Temporary.",
+		SystemPrompt: "Answer once.",
+	})
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	if err := store.ArchiveAgent(agent.ID); err != nil {
+		t.Fatalf("archive agent: %v", err)
+	}
+
+	agents, err := store.ListAgents()
+	if err != nil {
+		t.Fatalf("list agents: %v", err)
+	}
+	for _, item := range agents {
+		if item.ID == agent.ID {
+			t.Fatalf("expected archived agent to be hidden from list, got %#v", item)
+		}
+	}
+
+	archived, ok, err := store.GetAgent(agent.ID)
+	if err != nil {
+		t.Fatalf("get archived agent: %v", err)
+	}
+	if !ok || !archived.Archived {
+		t.Fatalf("expected archived agent to remain persisted with archived flag, got ok=%v agent=%#v", ok, archived)
+	}
+
+	if err := store.ArchiveAgent("agent_planner"); err == nil {
+		t.Fatal("expected default agent archive to fail")
+	}
 }

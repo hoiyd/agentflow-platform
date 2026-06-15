@@ -183,8 +183,9 @@ func (s *PostgresStore) UpdateConversationTitle(id string, title string) error {
 
 func (s *PostgresStore) ListAgents() ([]domain.Agent, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, description, system_prompt, tools, created_at, updated_at
+		SELECT id, name, description, system_prompt, tools, memory_enabled, retrieval_enabled, executor, archived, created_at, updated_at
 		FROM agents
+		WHERE archived = false
 		ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, err
@@ -215,6 +216,8 @@ func (s *PostgresStore) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 	agent.Description = strings.TrimSpace(agent.Description)
 	agent.SystemPrompt = strings.TrimSpace(agent.SystemPrompt)
 	agent.Tools = normalizeTools(agent.Tools)
+	agent = domain.NormalizeAgentConfig(agent)
+	agent.Archived = false
 	agent.CreatedAt = now
 	agent.UpdatedAt = now
 
@@ -223,15 +226,15 @@ func (s *PostgresStore) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 		return domain.Agent{}, err
 	}
 	_, err = s.db.Exec(`
-		INSERT INTO agents (id, name, description, system_prompt, tools, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		agent.ID, agent.Name, agent.Description, agent.SystemPrompt, toolsJSON, agent.CreatedAt, agent.UpdatedAt)
+		INSERT INTO agents (id, name, description, system_prompt, tools, memory_enabled, retrieval_enabled, executor, archived, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		agent.ID, agent.Name, agent.Description, agent.SystemPrompt, toolsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.Archived, agent.CreatedAt, agent.UpdatedAt)
 	return agent, err
 }
 
 func (s *PostgresStore) GetAgent(id string) (domain.Agent, bool, error) {
 	row := s.db.QueryRow(`
-		SELECT id, name, description, system_prompt, tools, created_at, updated_at
+		SELECT id, name, description, system_prompt, tools, memory_enabled, retrieval_enabled, executor, archived, created_at, updated_at
 		FROM agents
 		WHERE id = $1`, id)
 	agent, err := scanAgent(row)
@@ -260,6 +263,8 @@ func (s *PostgresStore) UpdateAgent(agent domain.Agent) (domain.Agent, error) {
 	agent.Description = strings.TrimSpace(agent.Description)
 	agent.SystemPrompt = strings.TrimSpace(agent.SystemPrompt)
 	agent.Tools = normalizeTools(agent.Tools)
+	agent = domain.NormalizeAgentConfig(agent)
+	agent.Archived = existing.Archived
 	agent.CreatedAt = existing.CreatedAt
 	agent.UpdatedAt = time.Now().UTC()
 	toolsJSON, err := json.Marshal(agent.Tools)
@@ -268,10 +273,33 @@ func (s *PostgresStore) UpdateAgent(agent domain.Agent) (domain.Agent, error) {
 	}
 	_, err = s.db.Exec(`
 		UPDATE agents
-		SET name = $1, description = $2, system_prompt = $3, tools = $4, updated_at = $5
-		WHERE id = $6`,
-		agent.Name, agent.Description, agent.SystemPrompt, toolsJSON, agent.UpdatedAt, agent.ID)
+		SET name = $1, description = $2, system_prompt = $3, tools = $4, memory_enabled = $5, retrieval_enabled = $6, executor = $7, archived = $8, updated_at = $9
+		WHERE id = $10`,
+		agent.Name, agent.Description, agent.SystemPrompt, toolsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.Archived, agent.UpdatedAt, agent.ID)
 	return agent, err
+}
+
+func (s *PostgresStore) ArchiveAgent(id string) error {
+	id = strings.TrimSpace(id)
+	if domain.IsDefaultAgentID(id) {
+		return errors.New("default agents cannot be archived")
+	}
+	result, err := s.db.Exec(`
+		UPDATE agents
+		SET archived = true, updated_at = $1
+		WHERE id = $2`,
+		time.Now().UTC(), id)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return errors.New("agent not found")
+	}
+	return nil
 }
 
 func (s *PostgresStore) GetDefaultAgent() (domain.Agent, bool, error) {
@@ -279,8 +307,9 @@ func (s *PostgresStore) GetDefaultAgent() (domain.Agent, bool, error) {
 		return agent, ok, err
 	}
 	row := s.db.QueryRow(`
-		SELECT id, name, description, system_prompt, tools, created_at, updated_at
+		SELECT id, name, description, system_prompt, tools, memory_enabled, retrieval_enabled, executor, archived, created_at, updated_at
 		FROM agents
+		WHERE archived = false
 		ORDER BY created_at ASC
 		LIMIT 1`)
 	agent, err := scanAgent(row)
@@ -972,9 +1001,9 @@ func (s *PostgresStore) seedDefaultAgents(ctx context.Context) error {
 				return err
 			}
 			if _, err := s.db.ExecContext(ctx, `
-				INSERT INTO agents (id, name, description, system_prompt, tools, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				agent.ID, agent.Name, agent.Description, agent.SystemPrompt, toolsJSON, agent.CreatedAt, agent.UpdatedAt); err != nil {
+				INSERT INTO agents (id, name, description, system_prompt, tools, memory_enabled, retrieval_enabled, executor, archived, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+				agent.ID, agent.Name, agent.Description, agent.SystemPrompt, toolsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.Archived, agent.CreatedAt, agent.UpdatedAt); err != nil {
 				return err
 			}
 		}
@@ -1021,7 +1050,7 @@ type scanner interface {
 func scanAgent(row scanner) (domain.Agent, error) {
 	var agent domain.Agent
 	var toolsJSON []byte
-	if err := row.Scan(&agent.ID, &agent.Name, &agent.Description, &agent.SystemPrompt, &toolsJSON, &agent.CreatedAt, &agent.UpdatedAt); err != nil {
+	if err := row.Scan(&agent.ID, &agent.Name, &agent.Description, &agent.SystemPrompt, &toolsJSON, &agent.MemoryEnabled, &agent.RetrievalEnabled, &agent.Executor, &agent.Archived, &agent.CreatedAt, &agent.UpdatedAt); err != nil {
 		return domain.Agent{}, err
 	}
 	if len(toolsJSON) > 0 {
@@ -1029,7 +1058,7 @@ func scanAgent(row scanner) (domain.Agent, error) {
 			return domain.Agent{}, err
 		}
 	}
-	return agent, nil
+	return domain.NormalizeAgentConfig(agent), nil
 }
 
 func scanRun(row scanner) (domain.Run, error) {
@@ -1317,9 +1346,17 @@ var postgresMigrations = []string{
 		description text NOT NULL DEFAULT '',
 		system_prompt text NOT NULL DEFAULT '',
 		tools jsonb NOT NULL DEFAULT '[]'::jsonb,
+		memory_enabled boolean NOT NULL DEFAULT true,
+		retrieval_enabled boolean NOT NULL DEFAULT true,
+		executor text NOT NULL DEFAULT 'native',
+		archived boolean NOT NULL DEFAULT false,
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS memory_enabled boolean NOT NULL DEFAULT true`,
+	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS retrieval_enabled boolean NOT NULL DEFAULT true`,
+	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS executor text NOT NULL DEFAULT 'native'`,
+	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false`,
 	`CREATE TABLE IF NOT EXISTS messages (
 		id text PRIMARY KEY,
 		conversation_id text NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,

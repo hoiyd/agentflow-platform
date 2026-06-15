@@ -75,10 +75,16 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
 		h.getDocument(w, r)
 	case r.Method == http.MethodPost && path == "/api/rag/search":
 		h.searchDocumentChunks(w, r)
+	case r.Method == http.MethodPost && path == "/api/rag/evaluations/run":
+		h.runRAGEvaluation(w, r)
 	case r.Method == http.MethodGet && path == "/api/agents":
 		h.listAgents(w, r)
 	case r.Method == http.MethodPost && path == "/api/agents":
 		h.createAgent(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/agents/"):
+		h.archiveAgent(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/agents/"):
+		h.updateAgent(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/agents/"):
 		h.getAgent(w, r)
 	case r.Method == http.MethodGet && path == "/api/runs":

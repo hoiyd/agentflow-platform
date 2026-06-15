@@ -8,6 +8,17 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
+type agentConfigRequest struct {
+	ID               string   `json:"id,omitempty"`
+	Name             *string  `json:"name,omitempty"`
+	Description      *string  `json:"description,omitempty"`
+	SystemPrompt     *string  `json:"system_prompt,omitempty"`
+	Tools            []string `json:"tools,omitempty"`
+	MemoryEnabled    *bool    `json:"memory_enabled,omitempty"`
+	RetrievalEnabled *bool    `json:"retrieval_enabled,omitempty"`
+	Executor         *string  `json:"executor,omitempty"`
+}
+
 func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
 	agents, err := h.store.ListAgents()
 	if err != nil {
@@ -18,11 +29,18 @@ func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
-	var agent domain.Agent
-	if err := json.NewDecoder(r.Body).Decode(&agent); err != nil {
+	var req agentConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	agent := domain.Agent{
+		ID:               strings.TrimSpace(req.ID),
+		MemoryEnabled:    true,
+		RetrievalEnabled: true,
+		Executor:         domain.DefaultAgentExecutor,
+	}
+	applyAgentConfigRequest(&agent, req)
 
 	created, err := h.store.CreateAgent(agent)
 	if err != nil {
@@ -48,7 +66,93 @@ func (h *Handler) getAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "agent not found")
 		return
 	}
+	if agent.Archived {
+		writeError(w, http.StatusNotFound, "agent not found")
+		return
+	}
 	writeJSON(w, http.StatusOK, agent)
+}
+
+func (h *Handler) archiveAgent(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/agents/"))
+	if id == "" || strings.Contains(id, "/") {
+		writeError(w, http.StatusBadRequest, "agent id is required")
+		return
+	}
+	if domain.IsDefaultAgentID(id) {
+		writeError(w, http.StatusBadRequest, "default agents cannot be archived")
+		return
+	}
+	if err := h.store.ArchiveAgent(id); err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		}
+		writeError(w, status, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/agents/"))
+	if id == "" || strings.Contains(id, "/") {
+		writeError(w, http.StatusBadRequest, "agent id is required")
+		return
+	}
+	existing, ok, err := h.store.GetAgent(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "agent not found")
+		return
+	}
+	if existing.Archived {
+		writeError(w, http.StatusNotFound, "agent not found")
+		return
+	}
+	var req agentConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	agent := domain.NormalizeAgentConfig(existing)
+	applyAgentConfigRequest(&agent, req)
+	updated, err := h.store.UpdateAgent(agent)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func applyAgentConfigRequest(agent *domain.Agent, req agentConfigRequest) {
+	if req.Name != nil {
+		agent.Name = *req.Name
+	}
+	if req.Description != nil {
+		agent.Description = *req.Description
+	}
+	if req.SystemPrompt != nil {
+		agent.SystemPrompt = *req.SystemPrompt
+	}
+	if req.Tools != nil {
+		agent.Tools = req.Tools
+	}
+	if req.MemoryEnabled != nil {
+		agent.MemoryEnabled = *req.MemoryEnabled
+	}
+	if req.RetrievalEnabled != nil {
+		agent.RetrievalEnabled = *req.RetrievalEnabled
+	}
+	if req.Executor != nil {
+		agent.Executor = strings.TrimSpace(*req.Executor)
+	}
+	if strings.TrimSpace(agent.Executor) == "" {
+		agent.Executor = domain.DefaultAgentExecutor
+	}
 }
 
 func (h *Handler) listRuns(w http.ResponseWriter, r *http.Request) {

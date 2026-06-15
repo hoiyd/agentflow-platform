@@ -227,6 +227,80 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if items[0].RerankScore <= 0 {
 		t.Fatalf("expected rerank score on search result, got %#v", items[0])
 	}
+	if items[0].VectorRank <= 0 || items[0].RerankRank <= 0 {
+		t.Fatalf("expected vector and rerank ranks on search result, got %#v", items[0])
+	}
+	if len(items[0].MatchedTerms) == 0 {
+		t.Fatalf("expected matched terms on search result, got %#v", items[0])
+	}
+	if items[0].Confidence == "" || items[0].Confidence == "low" {
+		t.Fatalf("expected relevant search result to pass confidence gate, got %#v", items[0])
+	}
+	if items[0].EvidenceScore <= 0 {
+		t.Fatalf("expected evidence score on relevant search result, got %#v", items[0])
+	}
+
+	unrelatedBody := []byte(`{"query":"dinner recipe ideas","metadata":{"project":"agentflow"},"limit":3,"min_similarity":0}`)
+	unrelatedReq := httptest.NewRequest(http.MethodPost, "/api/rag/search", bytes.NewReader(unrelatedBody))
+	unrelatedRecorder := httptest.NewRecorder()
+	handler.searchDocumentChunks(unrelatedRecorder, unrelatedReq)
+	if unrelatedRecorder.Code != http.StatusOK {
+		t.Fatalf("expected unrelated search status 200, got %d body=%s", unrelatedRecorder.Code, unrelatedRecorder.Body.String())
+	}
+	var unrelatedResponse domain.DocumentSearchResponse
+	if err := json.Unmarshal(unrelatedRecorder.Body.Bytes(), &unrelatedResponse); err != nil {
+		t.Fatalf("decode unrelated search results: %v", err)
+	}
+	if !unrelatedResponse.NoMatch || unrelatedResponse.Reason == "" || len(unrelatedResponse.Items) != 0 {
+		t.Fatalf("expected unrelated query to be filtered by relevance gate, got %#v", unrelatedResponse)
+	}
+
+	evalBody := []byte(`{
+		"top_k": 5,
+		"min_similarity": 0,
+		"metadata": {"project": "agentflow"},
+		"cases": [
+			{
+				"id": "launch_password",
+				"query": "What is the launch password?",
+				"expected_document_ids": ["` + document.ID + `"],
+				"expected_chunk_contains": ["amber-9137"],
+				"min_acceptable_rank": 3,
+				"tags": ["smoke"]
+			},
+			{
+				"id": "missing_case",
+				"query": "What is the launch password?",
+				"expected_chunk_contains": ["not-in-the-document"],
+				"min_acceptable_rank": 3
+			}
+		]
+	}`)
+	evalReq := httptest.NewRequest(http.MethodPost, "/api/rag/evaluations/run", bytes.NewReader(evalBody))
+	evalRecorder := httptest.NewRecorder()
+	handler.runRAGEvaluation(evalRecorder, evalReq)
+	if evalRecorder.Code != http.StatusOK {
+		t.Fatalf("expected evaluation status 200, got %d body=%s", evalRecorder.Code, evalRecorder.Body.String())
+	}
+	var evalResponse domain.RAGEvaluationRunResponse
+	if err := json.Unmarshal(evalRecorder.Body.Bytes(), &evalResponse); err != nil {
+		t.Fatalf("decode evaluation response: %v", err)
+	}
+	if evalResponse.Summary.Total != 2 || evalResponse.Summary.HitAt1 != 1 || evalResponse.Summary.HitAt3 != 1 || evalResponse.Summary.HitAt5 != 1 || evalResponse.Summary.Misses != 1 {
+		t.Fatalf("unexpected evaluation summary: %#v", evalResponse.Summary)
+	}
+	if evalResponse.Embedding.Provider != "local" || evalResponse.Embedding.Model == "" {
+		t.Fatalf("expected evaluation embedding metadata, got %#v", evalResponse.Embedding)
+	}
+	if len(evalResponse.Cases) != 2 {
+		t.Fatalf("expected two evaluation cases, got %#v", evalResponse.Cases)
+	}
+	if !evalResponse.Cases[0].Hit || evalResponse.Cases[0].BestRank != 1 || len(evalResponse.Cases[0].Items) == 0 {
+		t.Fatalf("expected first evaluation case to hit at rank 1, got %#v", evalResponse.Cases[0])
+	}
+	if evalResponse.Cases[1].Hit || evalResponse.Cases[1].FailureReason == "" {
+		t.Fatalf("expected second evaluation case to miss with reason, got %#v", evalResponse.Cases[1])
+	}
 
 	thresholdBody := []byte(`{"query":"What is the launch password?","metadata":{"project":"agentflow"},"limit":3,"min_similarity":1.01}`)
 	thresholdReq := httptest.NewRequest(http.MethodPost, "/api/rag/search", bytes.NewReader(thresholdBody))

@@ -29,6 +29,7 @@ type Store interface {
 	CreateAgent(agent domain.Agent) (domain.Agent, error)
 	GetAgent(id string) (domain.Agent, bool, error)
 	UpdateAgent(agent domain.Agent) (domain.Agent, error)
+	ArchiveAgent(id string) error
 	GetDefaultAgent() (domain.Agent, bool, error)
 	CreateRun(agentID string, conversationID string) (domain.Run, error)
 	UpdateRunAgent(id string, agentID string) (domain.Run, error)

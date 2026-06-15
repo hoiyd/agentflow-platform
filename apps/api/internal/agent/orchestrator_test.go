@@ -77,6 +77,45 @@ func TestParseLLMRouteDecisionRejectsUnknownAgent(t *testing.T) {
 	}
 }
 
+func TestPreparedRunsUseRequestedAgent(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	runtime := NewRuntime(fileStore, openai.NewClient("", "", ""), nil)
+	custom, err := fileStore.CreateAgent(domain.Agent{
+		Name:             "Resume Reviewer",
+		Description:      "Reviews resumes against job descriptions.",
+		SystemPrompt:     "Review resume evidence.",
+		MemoryEnabled:    true,
+		RetrievalEnabled: true,
+		Executor:         ExecutorNative,
+	})
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	conversation, err := fileStore.CreateConversation("Custom agent run")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+
+	collaboration, err := runtime.PrepareCollaborationRun(context.Background(), custom.ID, conversation.ID)
+	if err != nil {
+		t.Fatalf("prepare collaboration: %v", err)
+	}
+	if collaboration.WorkerAgent.ID != custom.ID || collaboration.Run.AgentID != custom.ID {
+		t.Fatalf("expected collaboration to use requested agent, got agent=%s run_agent=%s", collaboration.WorkerAgent.ID, collaboration.Run.AgentID)
+	}
+
+	autonomous, err := runtime.PrepareAutonomousRun(context.Background(), custom.ID, conversation.ID)
+	if err != nil {
+		t.Fatalf("prepare autonomous: %v", err)
+	}
+	if autonomous.WorkerAgent.ID != custom.ID || autonomous.Run.AgentID != custom.ID {
+		t.Fatalf("expected autonomous to use requested agent, got agent=%s run_agent=%s", autonomous.WorkerAgent.ID, autonomous.Run.AgentID)
+	}
+}
+
 func TestParseAutonomousDecision(t *testing.T) {
 	decision := parseAutonomousDecision(`{"decision":"stop","reason":"done","final_answer":"Complete."}`)
 	if !decision.ValidJSON {
@@ -170,7 +209,7 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 		MaxOutputChars: 60000,
 		MaxToolCalls:   20,
 	})
-	prepared, err := runtime.PrepareAutonomousRun(context.Background(), conversation.ID)
+	prepared, err := runtime.PrepareAutonomousRun(context.Background(), "", conversation.ID)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
 	}
@@ -219,7 +258,7 @@ func TestAutonomousRunCanBeCanceledBeforeLoop(t *testing.T) {
 		MaxOutputChars: 60000,
 		MaxToolCalls:   20,
 	})
-	prepared, err := runtime.PrepareAutonomousRun(context.Background(), conversation.ID)
+	prepared, err := runtime.PrepareAutonomousRun(context.Background(), "", conversation.ID)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
 	}
@@ -264,7 +303,7 @@ func TestResumeAutonomousCompletesHumanInputCheckpoint(t *testing.T) {
 		MaxOutputChars: 60000,
 		MaxToolCalls:   20,
 	})
-	prepared, err := runtime.PrepareAutonomousRun(context.Background(), conversation.ID)
+	prepared, err := runtime.PrepareAutonomousRun(context.Background(), "", conversation.ID)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
 	}

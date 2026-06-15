@@ -93,6 +93,10 @@ export type AgentInfo = {
   description: string;
   system_prompt: string;
   tools: string[];
+  memory_enabled: boolean;
+  retrieval_enabled: boolean;
+  executor: ChatExecutor;
+  archived?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -213,10 +217,17 @@ export type RetrievedDocumentChunk = {
   similarity: number;
   recency_boost: number;
   score: number;
+  vector_rank?: number;
+  rerank_rank?: number;
   lexical_boost?: number;
   metadata_boost?: number;
   diversity_penalty?: number;
   rerank_score?: number;
+  matched_terms?: string[];
+  evidence_score?: number;
+  evidence_coverage?: number;
+  confidence?: "high" | "medium" | "low" | string;
+  filter_reason?: string;
 };
 
 export type EmbeddingInfo = {
@@ -228,6 +239,44 @@ export type EmbeddingInfo = {
 
 export type DocumentSearchResponse = {
   items: RetrievedDocumentChunk[];
+  embedding?: EmbeddingInfo;
+  no_match?: boolean;
+  reason?: string;
+};
+
+export type RAGEvaluationCase = {
+  id: string;
+  query: string;
+  expected_document_ids?: string[];
+  expected_chunk_ids?: string[];
+  expected_chunk_contains?: string[];
+  min_acceptable_rank?: number;
+  tags?: string[];
+};
+
+export type RAGEvaluationRunResponse = {
+  summary: {
+    total: number;
+    hit_at_1: number;
+    hit_at_3: number;
+    hit_at_5: number;
+    misses: number;
+  };
+  cases: Array<{
+    id: string;
+    query: string;
+    expected_document_ids?: string[];
+    expected_chunk_ids?: string[];
+    expected_chunk_contains?: string[];
+    tags?: string[];
+    hit: boolean;
+    hit_at_1: boolean;
+    hit_at_3: boolean;
+    hit_at_5: boolean;
+    best_rank?: number;
+    failure_reason?: string;
+    items: RetrievedDocumentChunk[];
+  }>;
   embedding?: EmbeddingInfo;
 };
 
@@ -393,7 +442,59 @@ export async function listAgents(): Promise<AgentInfo[]> {
   if (!response.ok) {
     throw new Error(`Failed to load agents: ${response.status}`);
   }
-  return readArrayJSON<AgentInfo>(response);
+  const agents = await readArrayJSON<AgentInfo>(response);
+  return agents.map(normalizeAgentInfo);
+}
+
+export async function createAgent(
+  input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
+): Promise<AgentInfo> {
+  const response = await fetch(`${API_BASE}/api/agents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Failed to create agent: ${response.status}${message ? ` ${message}` : ""}`);
+  }
+  return normalizeAgentInfo(await readJSON<AgentInfo>(response));
+}
+
+export async function updateAgent(
+  agentId: string,
+  input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
+): Promise<AgentInfo> {
+  const response = await fetch(`${API_BASE}/api/agents/${agentId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Failed to update agent: ${response.status}${message ? ` ${message}` : ""}`);
+  }
+  return normalizeAgentInfo(await readJSON<AgentInfo>(response));
+}
+
+export async function archiveAgent(agentId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/agents/${agentId}`, {
+    method: "DELETE"
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Failed to archive agent: ${response.status}${message ? ` ${message}` : ""}`);
+  }
+}
+
+function normalizeAgentInfo(agent: AgentInfo): AgentInfo {
+  return {
+    ...agent,
+    tools: Array.isArray(agent.tools) ? agent.tools : [],
+    memory_enabled: agent.memory_enabled ?? true,
+    retrieval_enabled: agent.retrieval_enabled ?? true,
+    executor: agent.executor ?? "native"
+  };
 }
 
 export async function listTools(): Promise<ToolInfo[]> {
@@ -525,4 +626,21 @@ export async function searchRAG(input: {
     items: Array.isArray(payload.items) ? payload.items : [],
     embedding: payload.embedding
   };
+}
+
+export async function runRAGEvaluation(input: {
+  cases: RAGEvaluationCase[];
+  top_k?: number;
+  min_similarity?: number;
+  metadata?: Record<string, string>;
+}): Promise<RAGEvaluationRunResponse> {
+  const response = await fetch(`${API_BASE}/api/rag/evaluations/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to run retrieval evaluation: ${response.status}`);
+  }
+  return readJSON<RAGEvaluationRunResponse>(response);
 }
