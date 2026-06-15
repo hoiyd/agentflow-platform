@@ -93,10 +93,19 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 }
 
 func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string, executorKind string) (<-chan openai.StreamEvent, <-chan error) {
+	if strings.TrimSpace(executorKind) == "" {
+		executorKind = prepared.Agent.Executor
+	}
 	executor := r.executorFor(executorKind)
-	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, latest, map[string]any{
-		"executor":  executor.Kind(),
-		"framework": executor.Framework(),
+	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, latest, prepared.Agent.MemoryEnabled, prepared.Agent.RetrievalEnabled, map[string]any{
+		"agent_id":           prepared.Agent.ID,
+		"agent_name":         prepared.Agent.Name,
+		"executor":           executor.Kind(),
+		"framework":          executor.Framework(),
+		"memory_enabled":     prepared.Agent.MemoryEnabled,
+		"retrieval_enabled":  prepared.Agent.RetrievalEnabled,
+		"configured_tools":   prepared.Agent.Tools,
+		"enabled_tool_count": enabledToolCount(prepared.Registry),
 	})
 	return executor.Stream(ctx, ExecutorInput{
 		Agent:             prepared.Agent,
@@ -109,7 +118,26 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 	})
 }
 
-func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
+func enabledToolCount(registry *tools.Registry) int {
+	if registry == nil {
+		return 0
+	}
+	return len(registry.EnabledNames())
+}
+
+func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string, memoryEnabled bool, retrievalEnabled bool, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
+	payload := map[string]any{
+		"query": truncateRuntimeText(query, 1200),
+	}
+	for key, value := range metadata {
+		payload[key] = value
+	}
+	if !memoryEnabled && !retrievalEnabled {
+		payload["memory_count"] = 0
+		payload["chunk_count"] = 0
+		r.trace.Retrieval(ctx, runID, "", payload)
+		return nil, nil
+	}
 	embedding, err := r.openAI.EmbedText(ctx, query)
 	if err != nil {
 		r.trace.Error(ctx, runID, "", map[string]any{
@@ -119,45 +147,47 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		})
 		return nil, nil
 	}
-	payload := map[string]any{
-		"query":                truncateRuntimeText(query, 1200),
-		"embedding_provider":   embedding.Provider,
-		"embedding_model":      embedding.Model,
-		"embedding_dimensions": embedding.Dimensions,
-		"embedding_estimated":  embedding.Estimated,
-	}
-	for key, value := range metadata {
-		payload[key] = value
-	}
-	memories, err := r.store.SearchMemories(domain.MemorySearch{
-		Query:             query,
-		Embedding:         embedding.Vector,
-		EmbeddingProvider: embedding.Provider,
-		EmbeddingModel:    embedding.Model,
-		Limit:             5,
-	})
-	if err != nil {
-		r.trace.Error(ctx, runID, "", map[string]any{
-			"source": "memory_retrieval",
-			"stage":  "search",
-			"error":  err.Error(),
+	payload["embedding_provider"] = embedding.Provider
+	payload["embedding_model"] = embedding.Model
+	payload["embedding_dimensions"] = embedding.Dimensions
+	payload["embedding_estimated"] = embedding.Estimated
+	var memories []domain.RetrievedMemory
+	if memoryEnabled {
+		var err error
+		memories, err = r.store.SearchMemories(domain.MemorySearch{
+			Query:             query,
+			Embedding:         embedding.Vector,
+			EmbeddingProvider: embedding.Provider,
+			EmbeddingModel:    embedding.Model,
+			Limit:             5,
 		})
-		memories = nil
+		if err != nil {
+			r.trace.Error(ctx, runID, "", map[string]any{
+				"source": "memory_retrieval",
+				"stage":  "search",
+				"error":  err.Error(),
+			})
+			memories = nil
+		}
 	}
-	chunks, err := r.store.SearchDocumentChunks(domain.DocumentSearch{
-		Query:             query,
-		Embedding:         embedding.Vector,
-		EmbeddingProvider: embedding.Provider,
-		EmbeddingModel:    embedding.Model,
-		Limit:             5,
-	})
-	if err != nil {
-		r.trace.Error(ctx, runID, "", map[string]any{
-			"source": "rag_retrieval",
-			"stage":  "search",
-			"error":  err.Error(),
+	var chunks []domain.RetrievedDocumentChunk
+	if retrievalEnabled {
+		var err error
+		chunks, err = r.store.SearchDocumentChunks(domain.DocumentSearch{
+			Query:             query,
+			Embedding:         embedding.Vector,
+			EmbeddingProvider: embedding.Provider,
+			EmbeddingModel:    embedding.Model,
+			Limit:             5,
 		})
-		chunks = nil
+		if err != nil {
+			r.trace.Error(ctx, runID, "", map[string]any{
+				"source": "rag_retrieval",
+				"stage":  "search",
+				"error":  err.Error(),
+			})
+			chunks = nil
+		}
 	}
 	payload["memory_count"] = len(memories)
 	payload["chunk_count"] = len(chunks)
@@ -304,6 +334,9 @@ func (r *Runtime) resolveAgent(agentID string) (domain.Agent, error) {
 		return domain.Agent{}, err
 	}
 	if !ok {
+		return domain.Agent{}, store.ErrNotFound("agent")
+	}
+	if agent.Archived {
 		return domain.Agent{}, store.ErrNotFound("agent")
 	}
 	return agent, nil

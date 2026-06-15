@@ -283,7 +283,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 }
 
 func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
-	prepared, err := h.agentRuntime.PrepareAutonomousRun(r.Context(), conversationID)
+	prepared, err := h.agentRuntime.PrepareAutonomousRun(r.Context(), req.AgentID, conversationID)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if strings.Contains(err.Error(), "not found") {

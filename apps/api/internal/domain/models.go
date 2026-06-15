@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type Conversation struct {
 	ID        string    `json:"id"`
@@ -18,13 +21,42 @@ type Message struct {
 }
 
 type Agent struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Description  string    `json:"description"`
-	SystemPrompt string    `json:"system_prompt"`
-	Tools        []string  `json:"tools"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Description      string    `json:"description"`
+	SystemPrompt     string    `json:"system_prompt"`
+	Tools            []string  `json:"tools"`
+	MemoryEnabled    bool      `json:"memory_enabled"`
+	RetrievalEnabled bool      `json:"retrieval_enabled"`
+	Executor         string    `json:"executor"`
+	Archived         bool      `json:"archived,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+const (
+	DefaultAgentExecutor = "native"
+)
+
+func IsDefaultAgentID(id string) bool {
+	switch strings.TrimSpace(id) {
+	case "agent_research", "agent_coding", "agent_data", "agent_planner":
+		return true
+	default:
+		return false
+	}
+}
+
+func NormalizeAgentConfig(agent Agent) Agent {
+	missingConfig := !agent.MemoryEnabled && !agent.RetrievalEnabled && strings.TrimSpace(agent.Executor) == ""
+	if strings.TrimSpace(agent.Executor) == "" {
+		agent.Executor = DefaultAgentExecutor
+	}
+	if missingConfig {
+		agent.MemoryEnabled = true
+		agent.RetrievalEnabled = true
+	}
+	return agent
 }
 
 type RunStatus string

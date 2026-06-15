@@ -202,7 +202,16 @@ func (s *FileStore) ListAgents() ([]domain.Agent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	items := append([]domain.Agent(nil), s.data.Agents...)
+	items := []domain.Agent{}
+	for _, item := range s.data.Agents {
+		if item.Archived {
+			continue
+		}
+		items = append(items, item)
+	}
+	for index := range items {
+		items[index] = domain.NormalizeAgentConfig(items[index])
+	}
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].CreatedAt.Before(items[j].CreatedAt)
 	})
@@ -225,6 +234,8 @@ func (s *FileStore) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 	agent.Description = strings.TrimSpace(agent.Description)
 	agent.SystemPrompt = strings.TrimSpace(agent.SystemPrompt)
 	agent.Tools = normalizeTools(agent.Tools)
+	agent = domain.NormalizeAgentConfig(agent)
+	agent.Archived = false
 	agent.CreatedAt = now
 	agent.UpdatedAt = now
 	s.data.Agents = append(s.data.Agents, agent)
@@ -237,7 +248,7 @@ func (s *FileStore) GetAgent(id string) (domain.Agent, bool, error) {
 
 	for _, item := range s.data.Agents {
 		if item.ID == id {
-			return item, true, nil
+			return domain.NormalizeAgentConfig(item), true, nil
 		}
 	}
 	return domain.Agent{}, false, nil
@@ -256,6 +267,8 @@ func (s *FileStore) UpdateAgent(agent domain.Agent) (domain.Agent, error) {
 			agent.Description = strings.TrimSpace(agent.Description)
 			agent.SystemPrompt = strings.TrimSpace(agent.SystemPrompt)
 			agent.Tools = normalizeTools(agent.Tools)
+			agent = domain.NormalizeAgentConfig(agent)
+			agent.Archived = s.data.Agents[i].Archived
 			agent.CreatedAt = s.data.Agents[i].CreatedAt
 			agent.UpdatedAt = time.Now().UTC()
 			s.data.Agents[i] = agent
@@ -265,17 +278,37 @@ func (s *FileStore) UpdateAgent(agent domain.Agent) (domain.Agent, error) {
 	return domain.Agent{}, errors.New("agent not found")
 }
 
+func (s *FileStore) ArchiveAgent(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	id = strings.TrimSpace(id)
+	if domain.IsDefaultAgentID(id) {
+		return errors.New("default agents cannot be archived")
+	}
+	for i := range s.data.Agents {
+		if s.data.Agents[i].ID == id {
+			s.data.Agents[i].Archived = true
+			s.data.Agents[i].UpdatedAt = time.Now().UTC()
+			return s.saveLocked()
+		}
+	}
+	return errors.New("agent not found")
+}
+
 func (s *FileStore) GetDefaultAgent() (domain.Agent, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	for _, item := range s.data.Agents {
-		if item.ID == "agent_planner" {
-			return item, true, nil
+		if item.ID == "agent_planner" && !item.Archived {
+			return domain.NormalizeAgentConfig(item), true, nil
 		}
 	}
-	if len(s.data.Agents) > 0 {
-		return s.data.Agents[0], true, nil
+	for _, item := range s.data.Agents {
+		if !item.Archived {
+			return domain.NormalizeAgentConfig(item), true, nil
+		}
 	}
 	return domain.Agent{}, false, nil
 }
@@ -1184,7 +1217,7 @@ func (s *FileStore) seedDefaultAgentsLocked() {
 }
 
 func defaultAgents(now time.Time) []domain.Agent {
-	return []domain.Agent{
+	agents := []domain.Agent{
 		{
 			ID:           "agent_research",
 			Name:         "Field Researcher",
@@ -1222,6 +1255,10 @@ func defaultAgents(now time.Time) []domain.Agent {
 			UpdatedAt:    now,
 		},
 	}
+	for index := range agents {
+		agents[index] = domain.NormalizeAgentConfig(agents[index])
+	}
+	return agents
 }
 
 func (s *FileStore) migrateDefaultAgentsLocked() bool {

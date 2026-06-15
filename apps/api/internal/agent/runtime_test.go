@@ -68,7 +68,7 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		t.Fatalf("create document: %v", err)
 	}
 
-	memories, chunks := runtime.retrieveContext(ctx, run.ID, "pgvector memory retrieval and replay knowledge chunk", map[string]any{
+	memories, chunks := runtime.retrieveContext(ctx, run.ID, "pgvector memory retrieval and replay knowledge chunk", true, true, map[string]any{
 		"executor":  ExecutorNative,
 		"framework": "agentflow-native",
 	})
@@ -101,6 +101,64 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		}
 		if _, ok := event.Payload["retrieved_chunks"]; !ok {
 			t.Fatal("expected retrieved chunks in retrieval payload")
+		}
+		return
+	}
+	t.Fatal("expected retrieval trace event")
+}
+
+func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
+	ctx := context.Background()
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	client := openai.NewClientWithTimeout("", "", "test", time.Second)
+	runtime := NewRuntime(fileStore, client, nil)
+
+	conversation, err := fileStore.CreateConversation("Disabled retrieval")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+
+	memories, chunks := runtime.retrieveContext(ctx, run.ID, "pgvector memory retrieval and replay knowledge chunk", false, false, map[string]any{
+		"agent_id":          "agent_planner",
+		"agent_name":        "Planner",
+		"executor":          ExecutorNative,
+		"framework":         "agentflow-native",
+		"memory_enabled":    false,
+		"retrieval_enabled": false,
+	})
+	if len(memories) != 0 || len(chunks) != 0 {
+		t.Fatalf("expected no retrieved context when disabled, got memories=%d chunks=%d", len(memories), len(chunks))
+	}
+
+	replay, ok, err := fileStore.GetRunReplay(run.ID)
+	if err != nil {
+		t.Fatalf("get replay: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected replay")
+	}
+	for _, event := range replay.Events {
+		if event.Type != domain.TraceRetrieval {
+			continue
+		}
+		if event.Payload["memory_enabled"] != false || event.Payload["retrieval_enabled"] != false {
+			t.Fatalf("expected disabled config in retrieval payload, got %#v", event.Payload)
+		}
+		if event.Payload["memory_count"] != 0 || event.Payload["chunk_count"] != 0 {
+			t.Fatalf("expected zero retrieval counts, got %#v", event.Payload)
+		}
+		if _, ok := event.Payload["retrieved_memories"]; ok {
+			t.Fatalf("did not expect retrieved memories payload, got %#v", event.Payload)
+		}
+		if _, ok := event.Payload["retrieved_chunks"]; ok {
+			t.Fatalf("did not expect retrieved chunks payload, got %#v", event.Payload)
 		}
 		return
 	}

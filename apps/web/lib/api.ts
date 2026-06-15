@@ -93,6 +93,10 @@ export type AgentInfo = {
   description: string;
   system_prompt: string;
   tools: string[];
+  memory_enabled: boolean;
+  retrieval_enabled: boolean;
+  executor: ChatExecutor;
+  archived?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -438,7 +442,59 @@ export async function listAgents(): Promise<AgentInfo[]> {
   if (!response.ok) {
     throw new Error(`Failed to load agents: ${response.status}`);
   }
-  return readArrayJSON<AgentInfo>(response);
+  const agents = await readArrayJSON<AgentInfo>(response);
+  return agents.map(normalizeAgentInfo);
+}
+
+export async function createAgent(
+  input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
+): Promise<AgentInfo> {
+  const response = await fetch(`${API_BASE}/api/agents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Failed to create agent: ${response.status}${message ? ` ${message}` : ""}`);
+  }
+  return normalizeAgentInfo(await readJSON<AgentInfo>(response));
+}
+
+export async function updateAgent(
+  agentId: string,
+  input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
+): Promise<AgentInfo> {
+  const response = await fetch(`${API_BASE}/api/agents/${agentId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Failed to update agent: ${response.status}${message ? ` ${message}` : ""}`);
+  }
+  return normalizeAgentInfo(await readJSON<AgentInfo>(response));
+}
+
+export async function archiveAgent(agentId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/agents/${agentId}`, {
+    method: "DELETE"
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Failed to archive agent: ${response.status}${message ? ` ${message}` : ""}`);
+  }
+}
+
+function normalizeAgentInfo(agent: AgentInfo): AgentInfo {
+  return {
+    ...agent,
+    tools: Array.isArray(agent.tools) ? agent.tools : [],
+    memory_enabled: agent.memory_enabled ?? true,
+    retrieval_enabled: agent.retrieval_enabled ?? true,
+    executor: agent.executor ?? "native"
+  };
 }
 
 export async function listTools(): Promise<ToolInfo[]> {

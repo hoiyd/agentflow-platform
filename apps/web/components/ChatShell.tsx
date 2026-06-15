@@ -17,9 +17,11 @@ import {
   RAGEvaluationRunResponse,
   RetrievedDocumentChunk,
   ToolInfo,
+  archiveAgent,
   cancelRun,
   continueRun,
   createConversation,
+  createAgent,
   createDocument,
   deleteConversation as deleteConversationApi,
   deleteDocument as deleteDocumentApi,
@@ -36,6 +38,7 @@ import {
   searchRAG,
   setToolEnabled,
   streamChat,
+  updateAgent,
   uploadDocument
 } from "../lib/api";
 import { CollaborationDag } from "./CollaborationDag";
@@ -44,6 +47,16 @@ type DraftMessage = Pick<Message, "role" | "content"> & {
   id: string;
   conversation_id: string;
   created_at: string;
+};
+
+type AgentConfigDraft = {
+  name: string;
+  description: string;
+  system_prompt: string;
+  tools: string[];
+  memory_enabled: boolean;
+  retrieval_enabled: boolean;
+  executor: ChatExecutor;
 };
 
 const DEFAULT_RAG_EVAL_CASES = `[
@@ -95,7 +108,6 @@ export function ChatShell() {
   const [activeAgentId, setActiveAgentId] = useState("");
   const [isAgentDescriptionExpanded, setIsAgentDescriptionExpanded] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>("multi_agent");
-  const [chatExecutor, setChatExecutor] = useState<ChatExecutor>("native");
   const [collaborationSteps, setCollaborationSteps] = useState<CollaborationStepView[]>([]);
   const [autonomousProgress, setAutonomousProgress] = useState<AutonomousProgress | null>(null);
   const [humanInputDraft, setHumanInputDraft] = useState("");
@@ -115,6 +127,15 @@ export function ChatShell() {
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [toolsError, setToolsError] = useState("");
   const [updatingTool, setUpdatingTool] = useState("");
+  const [isAgentConfigOpen, setIsAgentConfigOpen] = useState(false);
+  const [agentConfigDraft, setAgentConfigDraft] = useState<AgentConfigDraft | null>(null);
+  const [newAgentDraft, setNewAgentDraft] = useState<AgentConfigDraft | null>(null);
+  const [isNewAgentFormOpen, setIsNewAgentFormOpen] = useState(false);
+  const [isSavingAgentConfig, setIsSavingAgentConfig] = useState(false);
+  const [isCreatingAgent, setIsCreatingAgent] = useState(false);
+  const [archivingAgentId, setArchivingAgentId] = useState("");
+  const [agentArchiveCandidate, setAgentArchiveCandidate] = useState<AgentInfo | null>(null);
+  const [agentConfigStatus, setAgentConfigStatus] = useState("");
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [documentsError, setDocumentsError] = useState("");
   const [documentTitle, setDocumentTitle] = useState("");
@@ -147,6 +168,14 @@ export function ChatShell() {
     () => agents.find((agent) => agent.id === activeAgentId),
     [activeAgentId, agents]
   );
+
+  useEffect(() => {
+    if (!activeAgent) {
+      setAgentConfigDraft(null);
+      return;
+    }
+    setAgentConfigDraft(agentToConfigDraft(activeAgent));
+  }, [activeAgent]);
   const showCollaborationPanel = chatMode === "multi_agent" || chatMode === "autonomous";
   const showCollaborationDag = chatMode === "multi_agent";
   const showAutonomousTrace = chatMode === "autonomous";
@@ -366,6 +395,158 @@ export function ChatShell() {
     }
   }
 
+  function updateAgentConfigDraft(update: Partial<AgentConfigDraft>) {
+    setAgentConfigStatus("");
+    setAgentConfigDraft((current) => (current ? { ...current, ...update } : current));
+  }
+
+  function updateNewAgentDraft(update: Partial<AgentConfigDraft>) {
+    setAgentConfigStatus("");
+    setNewAgentDraft((current) => (current ? { ...current, ...update } : current));
+  }
+
+  function toggleAgentConfigTool(toolName: string) {
+    setAgentConfigStatus("");
+    setAgentConfigDraft((current) => {
+      if (!current) {
+        return current;
+      }
+      const enabled = current.tools.includes(toolName);
+      return {
+        ...current,
+        tools: enabled ? current.tools.filter((name) => name !== toolName) : [...current.tools, toolName]
+      };
+    });
+  }
+
+  function toggleNewAgentTool(toolName: string) {
+    setAgentConfigStatus("");
+    setNewAgentDraft((current) => {
+      if (!current) {
+        return current;
+      }
+      const enabled = current.tools.includes(toolName);
+      return {
+        ...current,
+        tools: enabled ? current.tools.filter((name) => name !== toolName) : [...current.tools, toolName]
+      };
+    });
+  }
+
+  async function handleSaveAgentConfig() {
+    if (!activeAgent || !agentConfigDraft || isSavingAgentConfig) {
+      return;
+    }
+    setIsSavingAgentConfig(true);
+    setAgentsError("");
+    setAgentConfigStatus("");
+    try {
+      const updated = await updateAgent(activeAgent.id, agentConfigDraft);
+      setAgents((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      setAgentConfigDraft(agentToConfigDraft(updated));
+      setAgentConfigStatus("Agent config saved.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save agent config";
+      setAgentsError(message);
+      setAgentConfigStatus(message);
+    } finally {
+      setIsSavingAgentConfig(false);
+    }
+  }
+
+  function handleOpenNewAgentForm() {
+    if (isCreatingAgent || isStreaming) {
+      return;
+    }
+    const base = activeAgent ?? agents[0];
+    setNewAgentDraft({
+      name: base ? `Copy of ${base.name}` : "New Agent",
+      description: base?.description ?? "",
+      system_prompt: base?.system_prompt ?? "You are a helpful AgentFlow agent.",
+      tools: base?.tools ?? [],
+      memory_enabled: base?.memory_enabled ?? true,
+      retrieval_enabled: base?.retrieval_enabled ?? true,
+      executor: base?.executor ?? "native"
+    });
+    setIsNewAgentFormOpen(true);
+    setIsAgentConfigOpen(false);
+    setAgentConfigStatus("Fill out the form, then click Create Agent.");
+  }
+
+  function handleCancelNewAgent() {
+    setIsNewAgentFormOpen(false);
+    setNewAgentDraft(null);
+    setAgentConfigStatus("");
+  }
+
+  async function handleCreateAgent() {
+    if (isCreatingAgent || isStreaming || !newAgentDraft) {
+      return;
+    }
+    setIsCreatingAgent(true);
+    setAgentsError("");
+    setAgentConfigStatus("");
+    try {
+      const created = await createAgent(newAgentDraft);
+      setAgents((items) => [...items, created]);
+      setActiveAgentId(created.id);
+      setAgentConfigDraft(agentToConfigDraft(created));
+      setIsAgentConfigOpen(true);
+      setIsNewAgentFormOpen(false);
+      setNewAgentDraft(null);
+      setRunState(null);
+      setAgentConfigStatus("New agent created.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create agent";
+      setAgentsError(message);
+      setAgentConfigStatus(message);
+    } finally {
+      setIsCreatingAgent(false);
+    }
+  }
+
+  function handleArchiveAgent() {
+    if (!activeAgent || isDefaultAgent(activeAgent) || archivingAgentId) {
+      return;
+    }
+    setAgentArchiveCandidate(activeAgent);
+  }
+
+  async function confirmArchiveAgent() {
+    const candidate = agentArchiveCandidate;
+    if (!candidate || isDefaultAgent(candidate) || archivingAgentId) {
+      return;
+    }
+    setArchivingAgentId(candidate.id);
+    setAgentsError("");
+    setAgentConfigStatus("");
+    try {
+      await archiveAgent(candidate.id);
+      const remaining = agents.filter((agent) => agent.id !== candidate.id);
+      setAgents(remaining);
+      const next = remaining.find((agent) => agent.id === "agent_planner") ?? remaining[0];
+      setActiveAgentId(next?.id ?? "");
+      setIsAgentConfigOpen(false);
+      setIsNewAgentFormOpen(false);
+      setNewAgentDraft(null);
+      setAgentArchiveCandidate(null);
+      setRunState(null);
+      setAgentConfigStatus("Agent archived.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to archive agent";
+      setAgentsError(message);
+      setAgentConfigStatus(message);
+    } finally {
+      setArchivingAgentId("");
+    }
+  }
+
+  function cancelArchiveAgent() {
+    if (!archivingAgentId) {
+      setAgentArchiveCandidate(null);
+    }
+  }
+
   async function handleCreateDocument() {
     const title = documentTitle.trim();
     const content = documentContent.trim();
@@ -542,9 +723,8 @@ export function ChatShell() {
       await streamChat(
         {
           conversation_id: conversationId || undefined,
-          agent_id: chatMode === "single" ? activeAgentId || undefined : undefined,
+          agent_id: activeAgentId || undefined,
           mode: chatMode,
-          executor: chatMode === "single" ? chatExecutor : "native",
           message: content
         },
         (event) => {
@@ -951,14 +1131,9 @@ export function ChatShell() {
             <section className="messages">
               <ModeChooser
                 chatMode={chatMode}
-                chatExecutor={chatExecutor}
                 disabled={isStreaming}
-                setChatExecutor={setChatExecutor}
                 setChatMode={(mode) => {
                   setChatMode(mode);
-                  if (mode !== "single") {
-                    setChatExecutor("native");
-                  }
                   setRunState(null);
                   setIsCancelingRun(false);
                   setCollaborationSteps([]);
@@ -1032,8 +1207,8 @@ export function ChatShell() {
         )}
 
         {view === "chat" ? (
-          <form className="composer" onSubmit={handleSubmit}>
-            {chatMode === "single" ? (
+          <section className="composer">
+            {chatMode === "single" || !runState ? (
               <div className="agent-bar single">
                 <label className="agent-select">
                   <span>Agent</span>
@@ -1079,6 +1254,62 @@ export function ChatShell() {
                     ) : null}
                   </div>
                 </div>
+                {activeAgent && agentConfigDraft ? (
+                  <div className="agent-actions">
+                    <button
+                      className={`agent-create-button ${isNewAgentFormOpen ? "active" : ""}`}
+                      disabled={isCreatingAgent || isStreaming}
+                      onClick={handleOpenNewAgentForm}
+                      type="button"
+                    >
+                      New Agent
+                    </button>
+                    <button
+                      className={`agent-config-toggle ${isAgentConfigOpen ? "active" : ""}`}
+                      onClick={() => {
+                        setIsNewAgentFormOpen(false);
+                        setNewAgentDraft(null);
+                        setAgentConfigStatus("");
+                        setIsAgentConfigOpen((current) => !current);
+                      }}
+                      type="button"
+                    >
+                      {isAgentConfigOpen ? "Hide Config" : "Agent Config"}
+                    </button>
+                  </div>
+                ) : null}
+                {isNewAgentFormOpen && newAgentDraft ? (
+                  <AgentConfigPanel
+                    actionLabel="Create Agent"
+                    availableTools={tools}
+                    draft={newAgentDraft}
+                    disabled={isStreaming || isCreatingAgent}
+                    isSaving={isCreatingAgent}
+                    onCancel={handleCancelNewAgent}
+                    onChange={updateNewAgentDraft}
+                    onSave={handleCreateAgent}
+                    onToggleTool={toggleNewAgentTool}
+                    status={agentConfigStatus}
+                    title="Create new agent"
+                  />
+                ) : null}
+                {isAgentConfigOpen && activeAgent && agentConfigDraft ? (
+                  <AgentConfigPanel
+                    actionLabel="Save Config"
+                    availableTools={tools}
+                    canArchive={!isDefaultAgent(activeAgent)}
+                    draft={agentConfigDraft}
+                    disabled={isStreaming || isSavingAgentConfig}
+                    isArchiving={archivingAgentId === activeAgent.id}
+                    isSaving={isSavingAgentConfig}
+                    onChange={updateAgentConfigDraft}
+                    onArchive={handleArchiveAgent}
+                    onSave={handleSaveAgentConfig}
+                    onToggleTool={toggleAgentConfigTool}
+                    status={agentConfigStatus}
+                    title="Edit agent config"
+                  />
+                ) : null}
               </div>
             ) : runState ? (
               <div className={`agent-bar ${chatMode}`}>
@@ -1104,7 +1335,7 @@ export function ChatShell() {
               <div className="error">{agentsError}</div>
             ) : null}
             {error ? <div className="error">{error}</div> : null}
-            <div className="composer-inner">
+            <form className="composer-inner" onSubmit={handleSubmit}>
               <textarea
                 disabled={isAwaitingPlanApproval || isAwaitingHumanInput}
                 value={input}
@@ -1129,25 +1360,42 @@ export function ChatShell() {
               >
                 Send
               </button>
-            </div>
-          </form>
+            </form>
+          </section>
         ) : null}
       </main>
+      {agentArchiveCandidate ? (
+        <div className="modal-backdrop" role="presentation">
+          <section aria-labelledby="archive-agent-title" aria-modal="true" className="confirm-dialog" role="dialog">
+            <div>
+              <span className="dialog-eyebrow">Archive agent</span>
+              <h2 id="archive-agent-title">{agentArchiveCandidate.name}</h2>
+              <p>
+                This agent will be removed from the active agent list. Existing conversations and replay history will remain available.
+              </p>
+            </div>
+            <div className="confirm-dialog-actions">
+              <button className="secondary-action" disabled={Boolean(archivingAgentId)} onClick={cancelArchiveAgent} type="button">
+                Cancel
+              </button>
+              <button className="danger-primary" disabled={Boolean(archivingAgentId)} onClick={confirmArchiveAgent} type="button">
+                {archivingAgentId ? "Archiving..." : "Archive Agent"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function ModeChooser({
   chatMode,
-  chatExecutor,
   disabled,
-  setChatExecutor,
   setChatMode
 }: {
   chatMode: ChatMode;
-  chatExecutor: ChatExecutor;
   disabled: boolean;
-  setChatExecutor: (executor: ChatExecutor) => void;
   setChatMode: (mode: ChatMode) => void;
 }) {
   return (
@@ -1179,19 +1427,135 @@ function ModeChooser({
         <span>Autonomous</span>
         <strong>Loop until done</strong>
       </button>
-      {chatMode === "single" ? (
-        <label className="executor-select">
+    </section>
+  );
+}
+
+function AgentConfigPanel({
+  actionLabel,
+  availableTools,
+  canArchive = false,
+  disabled,
+  draft,
+  isArchiving = false,
+  isSaving,
+  onArchive,
+  onCancel,
+  onChange,
+  onSave,
+  onToggleTool,
+  status,
+  title
+}: {
+  actionLabel: string;
+  availableTools: ToolInfo[];
+  canArchive?: boolean;
+  disabled: boolean;
+  draft: AgentConfigDraft;
+  isArchiving?: boolean;
+  isSaving: boolean;
+  onArchive?: () => void;
+  onCancel?: () => void;
+  onChange: (update: Partial<AgentConfigDraft>) => void;
+  onSave: () => void;
+  onToggleTool: (toolName: string) => void;
+  status: string;
+  title: string;
+}) {
+  return (
+    <section className="agent-config-panel">
+      <div className="agent-config-header">
+        <strong>{title}</strong>
+        {onCancel ? (
+          <button className="secondary-action" disabled={disabled} onClick={onCancel} type="button">
+            Cancel
+          </button>
+        ) : null}
+      </div>
+      <div className="agent-config-grid">
+        <label>
+          <span>Name</span>
+          <input disabled={disabled} value={draft.name} onChange={(event) => onChange({ name: event.target.value })} />
+        </label>
+        <label>
           <span>Executor</span>
           <select
             disabled={disabled}
-            value={chatExecutor}
-            onChange={(event) => setChatExecutor(event.target.value as ChatExecutor)}
+            value={draft.executor}
+            onChange={(event) => onChange({ executor: event.target.value as ChatExecutor })}
           >
             <option value="native">Native</option>
             <option value="langchaingo">LangChainGo</option>
           </select>
         </label>
-      ) : null}
+      </div>
+      <label>
+        <span>Description</span>
+        <textarea
+          disabled={disabled}
+          value={draft.description}
+          onChange={(event) => onChange({ description: event.target.value })}
+        />
+      </label>
+      <label>
+        <span>System prompt</span>
+        <textarea
+          disabled={disabled}
+          value={draft.system_prompt}
+          onChange={(event) => onChange({ system_prompt: event.target.value })}
+        />
+      </label>
+      <div className="agent-config-switches">
+        <label>
+          <input
+            checked={draft.memory_enabled}
+            disabled={disabled}
+            onChange={(event) => onChange({ memory_enabled: event.target.checked })}
+            type="checkbox"
+          />
+          <span>Memory retrieval</span>
+        </label>
+        <label>
+          <input
+            checked={draft.retrieval_enabled}
+            disabled={disabled}
+            onChange={(event) => onChange({ retrieval_enabled: event.target.checked })}
+            type="checkbox"
+          />
+          <span>Knowledge retrieval</span>
+        </label>
+      </div>
+      <div className="agent-config-tools">
+        <span>Tools</span>
+        <div>
+          {availableTools.length === 0 ? (
+            <small>No tools loaded.</small>
+          ) : (
+            availableTools.map((tool) => (
+              <label key={tool.name}>
+                <input
+                  checked={draft.tools.includes(tool.name)}
+                  disabled={disabled}
+                  onChange={() => onToggleTool(tool.name)}
+                  type="checkbox"
+                />
+                <span>{tool.name}</span>
+              </label>
+            ))
+          )}
+        </div>
+      </div>
+      <div className="agent-config-actions">
+        {status ? <span className={status.includes("Failed") ? "agent-config-status error-text" : "agent-config-status"}>{status}</span> : null}
+        {onArchive && canArchive ? (
+          <button className="secondary-action danger-action" disabled={disabled || isArchiving} onClick={onArchive} type="button">
+            {isArchiving ? "Archiving..." : "Archive Agent"}
+          </button>
+        ) : null}
+        <button className="send compact-send" disabled={disabled || draft.name.trim().length === 0} onClick={onSave} type="button">
+          {isSaving ? "Saving..." : actionLabel}
+        </button>
+      </div>
     </section>
   );
 }
@@ -2003,6 +2367,22 @@ function evaluationExpectedLabel(item: RAGEvaluationRunResponse["cases"][number]
     item.expected_chunk_contains?.length ? `contains: ${item.expected_chunk_contains.join(", ")}` : ""
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" / ") : "No expectations configured";
+}
+
+function agentToConfigDraft(agent: AgentInfo): AgentConfigDraft {
+  return {
+    name: agent.name,
+    description: agent.description,
+    system_prompt: agent.system_prompt,
+    tools: agent.tools ?? [],
+    memory_enabled: agent.memory_enabled ?? true,
+    retrieval_enabled: agent.retrieval_enabled ?? true,
+    executor: agent.executor ?? "native"
+  };
+}
+
+function isDefaultAgent(agent: AgentInfo) {
+  return ["agent_research", "agent_coding", "agent_data", "agent_planner"].includes(agent.id);
 }
 
 function formatBytes(value: number) {

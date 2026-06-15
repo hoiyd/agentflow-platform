@@ -219,6 +219,30 @@ function EventDetail({ event }: { event: TraceEventInfo }) {
           <strong>{stringPayload(payload, "framework")}</strong>
         </div>
       ) : null}
+      {stringPayload(payload, "agent_name") || stringPayload(payload, "agent_id") ? (
+        <div className="detail-kv">
+          <span>Agent</span>
+          <strong>{stringPayload(payload, "agent_name") || stringPayload(payload, "agent_id")}</strong>
+        </div>
+      ) : null}
+      {"memory_enabled" in payload ? (
+        <div className="detail-kv">
+          <span>Memory</span>
+          <strong>{payload.memory_enabled === false ? "Disabled" : "Enabled"}</strong>
+        </div>
+      ) : null}
+      {"retrieval_enabled" in payload ? (
+        <div className="detail-kv">
+          <span>Knowledge</span>
+          <strong>{payload.retrieval_enabled === false ? "Disabled" : "Enabled"}</strong>
+        </div>
+      ) : null}
+      {Array.isArray(payload.configured_tools) ? (
+        <div className="detail-kv">
+          <span>Tools</span>
+          <strong>{payload.configured_tools.length > 0 ? payload.configured_tools.join(", ") : "None"}</strong>
+        </div>
+      ) : null}
       {"prompt_tokens" in payload || "completion_tokens" in payload || "total_tokens" in payload ? (
         <div className="token-strip">
           <Metric label="Prompt" value={formatTokenValue(payload.prompt_tokens, isEstimated)} />
