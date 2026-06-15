@@ -80,6 +80,7 @@ type ChatRequest struct {
 	AgentID        string `json:"agent_id"`
 	Message        string `json:"message"`
 	Mode           string `json:"mode"`
+	Executor       string `json:"executor"`
 }
 
 type ContinueRunRequest struct {

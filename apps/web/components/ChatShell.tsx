@@ -6,6 +6,7 @@ import { lexer } from "marked";
 import type { Token, Tokens } from "marked";
 import {
   AgentInfo,
+  ChatExecutor,
   ChatMode,
   Conversation,
   DocumentDetail,
@@ -81,6 +82,7 @@ export function ChatShell() {
   const [activeAgentId, setActiveAgentId] = useState("");
   const [isAgentDescriptionExpanded, setIsAgentDescriptionExpanded] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>("multi_agent");
+  const [chatExecutor, setChatExecutor] = useState<ChatExecutor>("native");
   const [collaborationSteps, setCollaborationSteps] = useState<CollaborationStepView[]>([]);
   const [autonomousProgress, setAutonomousProgress] = useState<AutonomousProgress | null>(null);
   const [humanInputDraft, setHumanInputDraft] = useState("");
@@ -499,6 +501,7 @@ export function ChatShell() {
           conversation_id: conversationId || undefined,
           agent_id: chatMode === "single" ? activeAgentId || undefined : undefined,
           mode: chatMode,
+          executor: chatMode === "single" ? chatExecutor : "native",
           message: content
         },
         (event) => {
@@ -899,9 +902,14 @@ export function ChatShell() {
             <section className="messages">
               <ModeChooser
                 chatMode={chatMode}
+                chatExecutor={chatExecutor}
                 disabled={isStreaming}
+                setChatExecutor={setChatExecutor}
                 setChatMode={(mode) => {
                   setChatMode(mode);
+                  if (mode !== "single") {
+                    setChatExecutor("native");
+                  }
                   setRunState(null);
                   setIsCancelingRun(false);
                   setCollaborationSteps([]);
@@ -1082,11 +1090,15 @@ export function ChatShell() {
 
 function ModeChooser({
   chatMode,
+  chatExecutor,
   disabled,
+  setChatExecutor,
   setChatMode
 }: {
   chatMode: ChatMode;
+  chatExecutor: ChatExecutor;
   disabled: boolean;
+  setChatExecutor: (executor: ChatExecutor) => void;
   setChatMode: (mode: ChatMode) => void;
 }) {
   return (
@@ -1118,6 +1130,19 @@ function ModeChooser({
         <span>Autonomous</span>
         <strong>Loop until done</strong>
       </button>
+      {chatMode === "single" ? (
+        <label className="executor-select">
+          <span>Executor</span>
+          <select
+            disabled={disabled}
+            value={chatExecutor}
+            onChange={(event) => setChatExecutor(event.target.value as ChatExecutor)}
+          >
+            <option value="native">Native</option>
+            <option value="langchaingo">LangChainGo</option>
+          </select>
+        </label>
+      ) : null}
     </section>
   );
 }

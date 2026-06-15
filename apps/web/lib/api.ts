@@ -107,6 +107,7 @@ export type ToolInfo = {
 };
 
 export type ChatMode = "single" | "multi_agent" | "autonomous";
+export type ChatExecutor = "native" | "langchaingo";
 
 export type RunInfo = {
   id: string;
@@ -298,7 +299,7 @@ export async function listMessages(conversationId: string): Promise<Message[]> {
 }
 
 export async function streamChat(
-  input: { conversation_id?: string; agent_id?: string; message: string; mode?: ChatMode },
+  input: { conversation_id?: string; agent_id?: string; message: string; mode?: ChatMode; executor?: ChatExecutor },
   onEvent: (event: ChatEvent) => void
 ) {
   const response = await fetch(`${API_BASE}/api/chat`, {
