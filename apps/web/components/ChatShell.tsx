@@ -59,6 +59,12 @@ type AgentConfigDraft = {
   executor: ChatExecutor;
 };
 
+type AgentOperationNotice = {
+  title: string;
+  message: string;
+  tone: "success" | "error";
+};
+
 const DEFAULT_RAG_EVAL_CASES = `[
   {
     "id": "example_resume_backend",
@@ -135,6 +141,7 @@ export function ChatShell() {
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
   const [archivingAgentId, setArchivingAgentId] = useState("");
   const [agentArchiveCandidate, setAgentArchiveCandidate] = useState<AgentInfo | null>(null);
+  const [agentOperationNotice, setAgentOperationNotice] = useState<AgentOperationNotice | null>(null);
   const [agentConfigStatus, setAgentConfigStatus] = useState("");
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [documentsError, setDocumentsError] = useState("");
@@ -445,10 +452,20 @@ export function ChatShell() {
       setAgents((items) => items.map((item) => (item.id === updated.id ? updated : item)));
       setAgentConfigDraft(agentToConfigDraft(updated));
       setAgentConfigStatus("Agent config saved.");
+      setAgentOperationNotice({
+        title: "Agent config saved",
+        message: `${updated.name} has been updated and will be used by new runs.`,
+        tone: "success"
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save agent config";
       setAgentsError(message);
       setAgentConfigStatus(message);
+      setAgentOperationNotice({
+        title: "Failed to save agent",
+        message,
+        tone: "error"
+      });
     } finally {
       setIsSavingAgentConfig(false);
     }
@@ -496,10 +513,20 @@ export function ChatShell() {
       setNewAgentDraft(null);
       setRunState(null);
       setAgentConfigStatus("New agent created.");
+      setAgentOperationNotice({
+        title: "Agent created",
+        message: `${created.name} is now available in the active agent list.`,
+        tone: "success"
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to create agent";
       setAgentsError(message);
       setAgentConfigStatus(message);
+      setAgentOperationNotice({
+        title: "Failed to create agent",
+        message,
+        tone: "error"
+      });
     } finally {
       setIsCreatingAgent(false);
     }
@@ -532,10 +559,21 @@ export function ChatShell() {
       setAgentArchiveCandidate(null);
       setRunState(null);
       setAgentConfigStatus("Agent archived.");
+      setAgentOperationNotice({
+        title: "Agent archived",
+        message: `${candidate.name} was removed from the active agent list. Existing conversations and replay history remain available.`,
+        tone: "success"
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to archive agent";
       setAgentsError(message);
       setAgentConfigStatus(message);
+      setAgentArchiveCandidate(null);
+      setAgentOperationNotice({
+        title: "Failed to archive agent",
+        message,
+        tone: "error"
+      });
     } finally {
       setArchivingAgentId("");
     }
@@ -1380,6 +1418,27 @@ export function ChatShell() {
               </button>
               <button className="danger-primary" disabled={Boolean(archivingAgentId)} onClick={confirmArchiveAgent} type="button">
                 {archivingAgentId ? "Archiving..." : "Archive Agent"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {agentOperationNotice ? (
+        <div className="modal-backdrop" role="presentation">
+          <section
+            aria-labelledby="agent-operation-notice-title"
+            aria-modal="true"
+            className={`confirm-dialog operation-notice ${agentOperationNotice.tone}`}
+            role="dialog"
+          >
+            <div>
+              <span className="dialog-eyebrow">{agentOperationNotice.tone === "success" ? "Success" : "Action failed"}</span>
+              <h2 id="agent-operation-notice-title">{agentOperationNotice.title}</h2>
+              <p>{agentOperationNotice.message}</p>
+            </div>
+            <div className="confirm-dialog-actions">
+              <button className="send compact-send" onClick={() => setAgentOperationNotice(null)} type="button">
+                OK
               </button>
             </div>
           </section>

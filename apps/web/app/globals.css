@@ -1150,6 +1150,22 @@ a {
   margin: 0;
 }
 
+.operation-notice.success {
+  border-color: rgba(47, 116, 104, 0.24);
+}
+
+.operation-notice.success .dialog-eyebrow {
+  color: var(--teal);
+}
+
+.operation-notice.error {
+  border-color: rgba(174, 64, 53, 0.28);
+}
+
+.operation-notice.error .dialog-eyebrow {
+  color: #9c342b;
+}
+
 .confirm-dialog-actions {
   display: flex;
   justify-content: flex-end;
