@@ -151,10 +151,12 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 		return
 	}
+	title := h.summarizeConversationTitleBestEffort(r.Context(), conversationID, req.Message, assistant.String())
 
 	writeSSE(w, "done", domain.ChatChunk{
 		Type:           "done",
 		ConversationID: conversationID,
+		Title:          title,
 		RunID:          completed.ID,
 		AgentID:        completed.AgentID,
 		Status:         string(completed.Status),
@@ -270,10 +272,12 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 		flusher.Flush()
 		return
 	}
+	title := h.summarizeConversationTitleBestEffort(r.Context(), conversationID, req.Message, assistant.String())
 
 	writeSSE(w, "done", domain.ChatChunk{
 		Type:           "done",
 		ConversationID: conversationID,
+		Title:          title,
 		RunID:          completed.ID,
 		AgentID:        completed.AgentID,
 		Status:         string(completed.Status),
@@ -417,10 +421,12 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 		flusher.Flush()
 		return
 	}
+	title := h.summarizeConversationTitleBestEffort(r.Context(), conversationID, req.Message, assistant.String())
 
 	writeSSE(w, "done", domain.ChatChunk{
 		Type:           "done",
 		ConversationID: conversationID,
+		Title:          title,
 		RunID:          completed.ID,
 		AgentID:        completed.AgentID,
 		Status:         string(completed.Status),

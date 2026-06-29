@@ -71,6 +71,7 @@ export type ChatEvent =
   | {
       type: "done";
       conversation_id: string;
+      title?: string;
       message_id?: string;
       run_id?: string;
       agent_id?: string;
@@ -324,6 +325,18 @@ export async function createConversation(title: string): Promise<Conversation> {
   });
   if (!response.ok) {
     throw new Error(`Failed to create conversation: ${response.status}`);
+  }
+  return readJSON<Conversation>(response);
+}
+
+export async function updateConversationTitle(conversationId: string, title: string): Promise<Conversation> {
+  const response = await fetch(`${API_BASE}/api/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title })
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to update conversation: ${response.status}`);
   }
   return readJSON<Conversation>(response);
 }

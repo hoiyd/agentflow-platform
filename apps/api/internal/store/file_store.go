@@ -195,7 +195,7 @@ func (s *FileStore) UpdateConversationTitle(id string, title string) error {
 			return s.saveLocked()
 		}
 	}
-	return errors.New("conversation not found")
+	return ErrNotFound("conversation")
 }
 
 func (s *FileStore) ListAgents() ([]domain.Agent, error) {

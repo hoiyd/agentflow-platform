@@ -53,6 +53,8 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
 		h.listConversations(w, r)
 	case r.Method == http.MethodPost && path == "/api/conversations":
 		h.createConversation(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/conversations/") && !strings.HasSuffix(path, "/messages"):
+		h.updateConversation(w, r)
 	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/conversations/") && !strings.HasSuffix(path, "/messages"):
 		h.deleteConversation(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/conversations/") && strings.HasSuffix(path, "/messages"):

@@ -39,6 +39,7 @@ import {
   setToolEnabled,
   streamChat,
   updateAgent,
+  updateConversationTitle,
   uploadDocument
 } from "../lib/api";
 import { CollaborationDag } from "./CollaborationDag";
@@ -165,6 +166,9 @@ export function ChatShell() {
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [isLoadingDocumentDetail, setIsLoadingDocumentDetail] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState("");
+  const [editingConversationId, setEditingConversationId] = useState("");
+  const [conversationTitleDraft, setConversationTitleDraft] = useState("");
+  const [isSavingConversationTitle, setIsSavingConversationTitle] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const activeConversation = useMemo(
@@ -388,6 +392,48 @@ export function ChatShell() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete conversation");
     }
+  }
+
+  function startEditingConversationTitle(conversation: Conversation) {
+    setEditingConversationId(conversation.id);
+    setConversationTitleDraft(conversation.title);
+    setError("");
+  }
+
+  function cancelEditingConversationTitle() {
+    setEditingConversationId("");
+    setConversationTitleDraft("");
+  }
+
+  async function saveConversationTitle() {
+    const conversationId = editingConversationId;
+    const title = conversationTitleDraft.trim();
+    if (!conversationId || !title || isSavingConversationTitle) {
+      return;
+    }
+    setIsSavingConversationTitle(true);
+    setError("");
+    try {
+      const updated = await updateConversationTitle(conversationId, title);
+      setConversations((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      cancelEditingConversationTitle();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update conversation title");
+    } finally {
+      setIsSavingConversationTitle(false);
+    }
+  }
+
+  function applyConversationTitle(conversationId: string, title?: string) {
+    const trimmed = title?.trim();
+    if (!trimmed) {
+      return;
+    }
+    setConversations((items) =>
+      items.map((item) =>
+        item.id === conversationId ? { ...item, title: trimmed, updated_at: new Date().toISOString() } : item
+      )
+    );
   }
 
   async function toggleTool(tool: ToolInfo) {
@@ -800,6 +846,7 @@ export function ChatShell() {
             setError(event.error);
           }
           if (event.type === "done") {
+            applyConversationTitle(event.conversation_id, event.title);
             setRunState((current) => ({
               id: event.run_id ?? current?.id ?? "",
               agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
@@ -1055,13 +1102,50 @@ export function ChatShell() {
 
       <main className="main">
         <header className="topbar">
-          <h2>
-            {view === "tools"
-              ? "Tools"
-              : view === "knowledge"
-                ? "Knowledge"
-                : activeConversation?.title ?? "New conversation"}
-          </h2>
+          {view === "chat" && activeConversation ? (
+            editingConversationId === activeConversation.id ? (
+              <form
+                className="conversation-title-editor"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveConversationTitle();
+                }}
+              >
+                <input
+                  aria-label="Conversation title"
+                  autoFocus
+                  disabled={isSavingConversationTitle}
+                  onChange={(event) => setConversationTitleDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      cancelEditingConversationTitle();
+                    }
+                  }}
+                  value={conversationTitleDraft}
+                />
+                <button disabled={isSavingConversationTitle || !conversationTitleDraft.trim()} type="submit">
+                  Save
+                </button>
+                <button disabled={isSavingConversationTitle} onClick={cancelEditingConversationTitle} type="button">
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <div className="conversation-title-display">
+                <h2>{activeConversation.title}</h2>
+                <button
+                  className="conversation-title-edit"
+                  disabled={isSavingConversationTitle}
+                  onClick={() => startEditingConversationTitle(activeConversation)}
+                  type="button"
+                >
+                  Edit
+                </button>
+              </div>
+            )
+          ) : (
+            <h2>{view === "tools" ? "Tools" : view === "knowledge" ? "Knowledge" : "New conversation"}</h2>
+          )}
           <div className="topbar-actions">
             {view === "chat" && runState?.id && isTerminalRun ? (
               <a className="run-link" href={`/runs/${runState.id}`}>

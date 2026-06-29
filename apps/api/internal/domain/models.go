@@ -126,6 +126,7 @@ type ResumeRunRequest struct {
 type ChatChunk struct {
 	Type           string `json:"type"`
 	ConversationID string `json:"conversation_id,omitempty"`
+	Title          string `json:"title,omitempty"`
 	RunID          string `json:"run_id,omitempty"`
 	AgentID        string `json:"agent_id,omitempty"`
 	Status         string `json:"status,omitempty"`

@@ -31,6 +31,46 @@ func (h *Handler) createConversation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, conversation)
 }
 
+func (h *Handler) updateConversation(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/conversations/"))
+	if id == "" || strings.Contains(id, "/") {
+		writeError(w, http.StatusBadRequest, "conversation id is required")
+		return
+	}
+
+	var body struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	if strings.TrimSpace(body.Title) == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+
+	if err := h.store.UpdateConversationTitle(id, body.Title); err != nil {
+		if store.IsNotFound(err) {
+			writeError(w, http.StatusNotFound, "conversation not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	conversation, ok, err := h.store.GetConversation(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "conversation not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, conversation)
+}
+
 func (h *Handler) deleteConversation(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/conversations/"))
 	if id == "" || strings.Contains(id, "/") {

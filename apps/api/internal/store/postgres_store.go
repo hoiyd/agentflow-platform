@@ -176,7 +176,7 @@ func (s *PostgresStore) UpdateConversationTitle(id string, title string) error {
 	}
 	affected, err := result.RowsAffected()
 	if err == nil && affected == 0 {
-		return errors.New("conversation not found")
+		return ErrNotFound("conversation")
 	}
 	return nil
 }
