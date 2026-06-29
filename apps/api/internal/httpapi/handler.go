@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -8,14 +9,22 @@ import (
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/temporalrun"
 	"agentflow-platform/apps/api/internal/tools"
 )
+
+type temporalRunner interface {
+	StartAgentRun(ctx context.Context, input temporalrun.AgentRunWorkflowInput) (workflowID string, workflowRunID string, err error)
+	CancelRun(ctx context.Context, workflowID string, workflowRunID string) error
+	DescribeRunStatus(ctx context.Context, workflowID string, workflowRunID string) (string, error)
+}
 
 type Handler struct {
 	store          store.Store
 	openAI         *openai.Client
 	tools          *tools.Manager
 	agentRuntime   *agent.Runtime
+	temporalRunner temporalRunner
 	allowedOrigins []string
 }
 
@@ -35,6 +44,11 @@ func NewHandlerWithRouterModeAndLimits(store store.Store, openAI *openai.Client,
 		agentRuntime:   agent.NewRuntimeWithRouterModeAndLimits(store, openAI, tools, routerMode, limits),
 		allowedOrigins: allowedOrigins,
 	}
+}
+
+func (h *Handler) WithTemporalRunner(runner temporalRunner) *Handler {
+	h.temporalRunner = runner
+	return h
 }
 
 func (h *Handler) Routes() http.Handler {

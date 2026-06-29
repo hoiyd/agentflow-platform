@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { RunReplay as RunReplayData, TraceEventInfo } from "../lib/api";
-import { getRunReplay } from "../lib/api";
+import { cancelRun, getRunReplay, resumeRun } from "../lib/api";
 
 type Props = {
   runId: string;
@@ -35,6 +35,8 @@ export function RunReplay({ runId }: Props) {
   const [replay, setReplay] = useState<RunReplayData | null>(null);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [error, setError] = useState("");
+  const [isCanceling, setIsCanceling] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
 
   useEffect(() => {
     let canceled = false;
@@ -46,7 +48,7 @@ export function RunReplay({ runId }: Props) {
           return;
         }
         setReplay(data);
-        setSelectedEventId(data.events[0]?.id ?? "");
+        setSelectedEventId((current) => (current && data.events.some((event) => event.id === current) ? current : data.events[0]?.id ?? ""));
       } catch (err) {
         if (!canceled) {
           setError(err instanceof Error ? err.message : "Failed to load run replay");
@@ -54,8 +56,14 @@ export function RunReplay({ runId }: Props) {
       }
     }
     void load();
+    const interval = window.setInterval(() => {
+      if (!canceled) {
+        void load();
+      }
+    }, 3000);
     return () => {
       canceled = true;
+      window.clearInterval(interval);
     };
   }, [runId]);
 
@@ -64,11 +72,70 @@ export function RunReplay({ runId }: Props) {
     [replay, selectedEventId]
   );
   const retrievalSummary = useMemo(() => buildRetrievalSummary(replay?.events ?? []), [replay?.events]);
+  const canCancel = replay ? ["running", "queued", "waiting_for_user", "canceling"].includes(replay.run.status) : false;
+  const canResumeCanceled = replay?.run.runtime === "temporal" && replay.run.status === "canceled";
+
+  async function handleCancel() {
+    if (!replay || isCanceling) {
+      return;
+    }
+    setIsCanceling(true);
+    setError("");
+    try {
+      const canceled = await cancelRun(replay.run.id);
+      setReplay((current) =>
+        current
+          ? {
+              ...current,
+              run: { ...current.run, ...canceled }
+            }
+          : current
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to cancel run");
+    } finally {
+      setIsCanceling(false);
+    }
+  }
+
+  async function handleResumeCanceled() {
+    if (!replay || isResuming) {
+      return;
+    }
+    setIsResuming(true);
+    setError("");
+    try {
+      await resumeRun({ run_id: replay.run.id, user_input: "Resume canceled Temporal run from replay." }, (event) => {
+        if (event.type === "run" || event.type === "done") {
+          setReplay((current) =>
+            current
+              ? {
+                  ...current,
+                  run: {
+                    ...current.run,
+                    status: event.status ?? current.run.status
+                  }
+                }
+              : current
+          );
+        }
+        if (event.type === "error") {
+          setError(event.error);
+        }
+      });
+      const data = await getRunReplay(replay.run.id);
+      setReplay(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resume run");
+    } finally {
+      setIsResuming(false);
+    }
+  }
 
   if (error) {
     return (
       <main className="replay-page">
-        <a className="back-link" href="/">
+        <a className="back-link" href="/workspace">
           Back to chat
         </a>
         <div className="error">{error}</div>
@@ -79,7 +146,7 @@ export function RunReplay({ runId }: Props) {
   if (!replay) {
     return (
       <main className="replay-page">
-        <a className="back-link" href="/">
+        <a className="back-link" href="/workspace">
           Back to chat
         </a>
         <div className="empty">Loading run replay...</div>
@@ -91,14 +158,28 @@ export function RunReplay({ runId }: Props) {
     <main className="replay-page">
       <header className="replay-header">
         <div>
-          <a className="back-link" href="/">
+          <a className="back-link" href="/workspace">
             Back to chat
           </a>
           <h1>Run replay</h1>
           <p>{replay.conversation.title}</p>
         </div>
-        <span className={`replay-status ${replay.run.status}`}>{replay.run.status}</span>
+        <div className="replay-header-actions">
+          {canResumeCanceled ? (
+            <button className="run-resume" disabled={isResuming} onClick={handleResumeCanceled} type="button">
+              {isResuming ? "Resuming..." : "Resume run"}
+            </button>
+          ) : null}
+          {canCancel ? (
+            <button className="run-stop" disabled={isCanceling || replay.run.status === "canceling"} onClick={handleCancel} type="button">
+              {isCanceling || replay.run.status === "canceling" ? "Stopping..." : "Stop run"}
+            </button>
+          ) : null}
+          <span className={`replay-status ${replay.run.status}`}>{replay.run.status}</span>
+        </div>
       </header>
+
+      <WorkflowOverview replay={replay} />
 
       <section className="replay-summary">
         <Metric label="Total duration" value={formatDuration(replay.summary.total_duration_ms)} />
@@ -174,6 +255,34 @@ export function RunReplay({ runId }: Props) {
         </div>
       </section>
     </main>
+  );
+}
+
+function WorkflowOverview({ replay }: { replay: RunReplayData }) {
+  const isTemporal = replay.run.runtime === "temporal" || Boolean(replay.run.workflow_id);
+  return (
+    <section className={`workflow-overview ${isTemporal ? "temporal" : ""}`}>
+      <div>
+        <div className="panel-title inline">Runtime</div>
+        <p>{isTemporal ? "Temporal durable workflow" : "Native in-process run"}</p>
+      </div>
+      <div className="workflow-kv">
+        <span>Runtime</span>
+        <strong>{replay.run.runtime || "native"}</strong>
+      </div>
+      {isTemporal ? (
+        <>
+          <div className="workflow-kv wide">
+            <span>Workflow ID</span>
+            <strong>{replay.run.workflow_id || "pending"}</strong>
+          </div>
+          <div className="workflow-kv">
+            <span>Workflow status</span>
+            <strong>{replay.run.workflow_status || "unknown"}</strong>
+          </div>
+        </>
+      ) : null}
+    </section>
   );
 }
 

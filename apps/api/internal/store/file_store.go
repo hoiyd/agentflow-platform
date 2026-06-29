@@ -354,6 +354,37 @@ func (s *FileStore) UpdateRunAgent(id string, agentID string) (domain.Run, error
 	return domain.Run{}, errors.New("run not found")
 }
 
+func (s *FileStore) UpdateRunRuntime(id string, runtime string, workflowID string, workflowRunID string, workflowStatus string) (domain.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i := range s.data.Runs {
+		if s.data.Runs[i].ID == id {
+			s.data.Runs[i].Runtime = strings.TrimSpace(runtime)
+			s.data.Runs[i].WorkflowID = strings.TrimSpace(workflowID)
+			s.data.Runs[i].WorkflowRunID = strings.TrimSpace(workflowRunID)
+			s.data.Runs[i].WorkflowStatus = strings.TrimSpace(workflowStatus)
+			s.data.Runs[i].UpdatedAt = time.Now().UTC()
+			return s.data.Runs[i], s.saveLocked()
+		}
+	}
+	return domain.Run{}, errors.New("run not found")
+}
+
+func (s *FileStore) UpdateRunWorkflowStatus(id string, workflowStatus string) (domain.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i := range s.data.Runs {
+		if s.data.Runs[i].ID == id {
+			s.data.Runs[i].WorkflowStatus = strings.TrimSpace(workflowStatus)
+			s.data.Runs[i].UpdatedAt = time.Now().UTC()
+			return s.data.Runs[i], s.saveLocked()
+		}
+	}
+	return domain.Run{}, errors.New("run not found")
+}
+
 func (s *FileStore) UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -366,6 +397,9 @@ func (s *FileStore) UpdateRunStatus(id string, status domain.RunStatus, errorMes
 			s.data.Runs[i].UpdatedAt = now
 			if status == domain.RunRunning && s.data.Runs[i].StartedAt == nil {
 				s.data.Runs[i].StartedAt = &now
+			}
+			if status == domain.RunRunning {
+				s.data.Runs[i].CompletedAt = nil
 			}
 			if status == domain.RunWaitingForUser {
 				s.data.Runs[i].CompletedAt = nil

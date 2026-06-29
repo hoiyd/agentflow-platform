@@ -8,6 +8,7 @@ import {
   AgentInfo,
   ChatExecutor,
   ChatMode,
+  ChatRuntime,
   Conversation,
   DocumentDetail,
   DocumentInfo,
@@ -115,6 +116,7 @@ export function ChatShell() {
   const [activeAgentId, setActiveAgentId] = useState("");
   const [isAgentDescriptionExpanded, setIsAgentDescriptionExpanded] = useState(false);
   const [chatMode, setChatMode] = useState<ChatMode>("multi_agent");
+  const [chatRuntime, setChatRuntime] = useState<ChatRuntime>("native");
   const [collaborationSteps, setCollaborationSteps] = useState<CollaborationStepView[]>([]);
   const [autonomousProgress, setAutonomousProgress] = useState<AutonomousProgress | null>(null);
   const [humanInputDraft, setHumanInputDraft] = useState("");
@@ -129,6 +131,7 @@ export function ChatShell() {
     id: string;
     agentId: string;
     status: string;
+    runtime?: ChatRuntime;
   } | null>(null);
   const [view, setView] = useState<"chat" | "tools" | "knowledge">("chat");
   const [tools, setTools] = useState<ToolInfo[]>([]);
@@ -271,8 +274,10 @@ export function ChatShell() {
       setRunState({
         id: run.id,
         agentId: run.agent_id,
-        status: run.status
+        status: run.status,
+        runtime: run.runtime === "temporal" ? "temporal" : "native"
       });
+      setChatRuntime(run.runtime === "temporal" ? "temporal" : "native");
       const steps = await listCollaborationSteps(run.id);
       setCollaborationSteps(steps.map(toCollaborationStepView));
       if (steps.some((step) => autonomousRoles.some((role) => role.id === step.role))) {
@@ -809,6 +814,7 @@ export function ChatShell() {
           conversation_id: conversationId || undefined,
           agent_id: activeAgentId || undefined,
           mode: chatMode,
+          runtime: chatMode === "autonomous" ? chatRuntime : "native",
           message: content
         },
         (event) => {
@@ -820,7 +826,8 @@ export function ChatShell() {
             setRunState({
               id: event.run_id,
               agentId: event.agent_id,
-              status: event.status
+              status: event.status,
+              runtime: chatMode === "autonomous" ? chatRuntime : "native"
             });
             if (event.status === "canceled" || event.status === "completed" || event.status === "failed") {
               setIsCancelingRun(false);
@@ -847,10 +854,23 @@ export function ChatShell() {
           }
           if (event.type === "done") {
             applyConversationTitle(event.conversation_id, event.title);
+            if (chatMode === "autonomous" && chatRuntime === "temporal" && event.status === "running") {
+              setMessages((items) =>
+                items.map((item) =>
+                  item.id === assistantDraft.id && !item.content
+                    ? {
+                        ...item,
+                        content: "Temporal run started. Open the replay view to watch workflow status, trace steps, retrieved context, and cancellation."
+                      }
+                    : item
+                )
+              );
+            }
             setRunState((current) => ({
               id: event.run_id ?? current?.id ?? "",
               agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
-              status: event.status ?? "completed"
+              status: event.status ?? "completed",
+              runtime: current?.runtime ?? (chatMode === "autonomous" ? chatRuntime : "native")
             }));
             setIsCancelingRun(false);
           }
@@ -892,7 +912,8 @@ export function ChatShell() {
           setRunState({
             id: event.run_id,
             agentId: event.agent_id,
-            status: event.status
+            status: event.status,
+            runtime: runState?.runtime ?? "native"
           });
         }
         if (event.type === "collaboration_step") {
@@ -915,7 +936,8 @@ export function ChatShell() {
           setRunState((current) => ({
             id: event.run_id ?? current?.id ?? runID,
             agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
-            status: event.status ?? "completed"
+            status: event.status ?? "completed",
+            runtime: current?.runtime ?? "native"
           }));
         }
       });
@@ -960,7 +982,8 @@ export function ChatShell() {
           setRunState({
             id: event.run_id,
             agentId: event.agent_id,
-            status: event.status
+            status: event.status,
+            runtime: runState?.runtime ?? chatRuntime
           });
           if (event.status !== "waiting_for_user") {
             setHumanInputDraft("");
@@ -986,7 +1009,8 @@ export function ChatShell() {
           setRunState((current) => ({
             id: event.run_id ?? current?.id ?? runID,
             agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
-            status: event.status ?? "completed"
+            status: event.status ?? "completed",
+            runtime: current?.runtime ?? chatRuntime
           }));
         }
       });
@@ -1016,7 +1040,8 @@ export function ChatShell() {
       setRunState({
         id: canceled.id,
         agentId: canceled.agent_id,
-        status: canceled.status
+        status: canceled.status,
+        runtime: canceled.runtime === "temporal" ? "temporal" : runState?.runtime
       });
       if (canceled.status === "canceled" || canceled.status === "completed" || canceled.status === "failed") {
         setIsCancelingRun(false);
@@ -1152,6 +1177,11 @@ export function ChatShell() {
                 View run
               </a>
             ) : null}
+            {view === "chat" && runState?.id && runState.runtime === "temporal" && !isTerminalRun ? (
+              <a className="run-link" href={`/runs/${runState.id}`}>
+                View Temporal run
+              </a>
+            ) : null}
             <span className="status">
               {view === "tools"
                 ? `${tools.filter((tool) => tool.enabled).length} enabled`
@@ -1264,6 +1294,9 @@ export function ChatShell() {
                   setPlanDraft("");
                 }}
               />
+              {chatMode === "autonomous" ? (
+                <RuntimeChooser runtime={chatRuntime} disabled={isStreaming || Boolean(runState)} onChange={setChatRuntime} />
+              ) : null}
               {showCollaborationPanel && !isCollaborationPanelOpen ? (
                 <button
                   className="collaboration-rail-toggle"
@@ -1439,6 +1472,7 @@ export function ChatShell() {
                   <span>{runState.status}</span>
                   <code>{runState.id}</code>
                 </div>
+                {runState.runtime ? <span className={`runtime-pill ${runState.runtime}`}>{runState.runtime}</span> : null}
                 {chatMode === "autonomous" ? (
                   canCancelRun ? (
                     <button
@@ -1570,6 +1604,43 @@ function ModeChooser({
         <span>Autonomous</span>
         <strong>Loop until done</strong>
       </button>
+    </section>
+  );
+}
+
+function RuntimeChooser({
+  runtime,
+  disabled,
+  onChange
+}: {
+  runtime: ChatRuntime;
+  disabled: boolean;
+  onChange: (runtime: ChatRuntime) => void;
+}) {
+  return (
+    <section className="runtime-chooser" aria-label="Autonomous runtime">
+      <div>
+        <span>Runtime</span>
+        <strong>{runtime === "temporal" ? "Temporal durable workflow" : "Native in-process loop"}</strong>
+      </div>
+      <div className="runtime-options">
+        <button
+          className={runtime === "native" ? "active" : ""}
+          disabled={disabled}
+          onClick={() => onChange("native")}
+          type="button"
+        >
+          Native
+        </button>
+        <button
+          className={runtime === "temporal" ? "active" : ""}
+          disabled={disabled}
+          onClick={() => onChange("temporal")}
+          type="button"
+        >
+          Temporal
+        </button>
+      </div>
     </section>
   );
 }

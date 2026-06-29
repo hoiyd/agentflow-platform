@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/temporalrun"
 )
 
 type agentConfigRequest struct {
@@ -180,6 +181,7 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
+	run = h.refreshTemporalRunStatus(r, run)
 	writeJSON(w, http.StatusOK, run)
 }
 
@@ -191,7 +193,24 @@ func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	run, err := h.agentRuntime.CancelRun(id)
+	run, ok, err := h.store.GetRun(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "run not found")
+		return
+	}
+	if run.Runtime == temporalrun.RuntimeTemporal && h.temporalRunner != nil && strings.TrimSpace(run.WorkflowID) != "" {
+		if err := h.temporalRunner.CancelRun(r.Context(), run.WorkflowID, run.WorkflowRunID); err != nil && !strings.Contains(strings.ToLower(err.Error()), "not found") {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		_, _ = h.store.UpdateRunWorkflowStatus(run.ID, temporalrun.WorkflowStatusCancelRequested)
+	}
+
+	run, err = h.agentRuntime.CancelRun(id)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			writeError(w, http.StatusNotFound, "run not found")
@@ -244,5 +263,46 @@ func (h *Handler) getRunReplay(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
+	replay.Run = h.refreshTemporalRunStatus(r, replay.Run)
+	replay.Summary.Status = replay.Run.Status
 	writeJSON(w, http.StatusOK, replay)
+}
+
+func (h *Handler) refreshTemporalRunStatus(r *http.Request, run domain.Run) domain.Run {
+	if run.Runtime != temporalrun.RuntimeTemporal || h.temporalRunner == nil || strings.TrimSpace(run.WorkflowID) == "" {
+		return run
+	}
+	status, err := h.temporalRunner.DescribeRunStatus(r.Context(), run.WorkflowID, run.WorkflowRunID)
+	if err != nil || strings.TrimSpace(status) == "" {
+		return run
+	}
+	switch status {
+	case temporalrun.WorkflowStatusCanceled:
+		if run.Status == domain.RunCanceling || run.Status == domain.RunRunning || run.Status == domain.RunQueued {
+			if updated, updateErr := h.store.UpdateRunStatus(run.ID, domain.RunCanceled, "canceled by user"); updateErr == nil {
+				run = updated
+			}
+		}
+	case temporalrun.WorkflowStatusCompleted:
+		if run.Status == domain.RunRunning || run.Status == domain.RunQueued || run.Status == domain.RunCanceling {
+			if updated, updateErr := h.store.UpdateRunStatus(run.ID, domain.RunCompleted, ""); updateErr == nil {
+				run = updated
+			}
+		}
+	case temporalrun.WorkflowStatusFailed:
+		if run.Status == domain.RunRunning || run.Status == domain.RunQueued || run.Status == domain.RunCanceling {
+			if updated, updateErr := h.store.UpdateRunStatus(run.ID, domain.RunFailed, run.Error); updateErr == nil {
+				run = updated
+			}
+		}
+	}
+	if status == run.WorkflowStatus {
+		return run
+	}
+	updated, err := h.store.UpdateRunWorkflowStatus(run.ID, status)
+	if err != nil {
+		run.WorkflowStatus = status
+		return run
+	}
+	return updated
 }

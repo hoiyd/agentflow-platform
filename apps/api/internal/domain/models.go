@@ -77,6 +77,10 @@ type Run struct {
 	ConversationID string     `json:"conversation_id"`
 	Status         RunStatus  `json:"status"`
 	Error          string     `json:"error,omitempty"`
+	Runtime        string     `json:"runtime,omitempty"`
+	WorkflowID     string     `json:"workflow_id,omitempty"`
+	WorkflowRunID  string     `json:"workflow_run_id,omitempty"`
+	WorkflowStatus string     `json:"workflow_status,omitempty"`
 	StartedAt      *time.Time `json:"started_at,omitempty"`
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
@@ -113,6 +117,7 @@ type ChatRequest struct {
 	Message        string `json:"message"`
 	Mode           string `json:"mode"`
 	Executor       string `json:"executor"`
+	Runtime        string `json:"runtime"`
 }
 
 type ContinueRunRequest struct {

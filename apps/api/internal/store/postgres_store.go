@@ -344,9 +344,9 @@ func (s *PostgresStore) CreateRun(agentID string, conversationID string) (domain
 		UpdatedAt:      now,
 	}
 	_, err := s.db.Exec(`
-		INSERT INTO runs (id, agent_id, conversation_id, status, error, started_at, completed_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		run.ID, run.AgentID, run.ConversationID, string(run.Status), run.Error, run.StartedAt, run.CompletedAt, run.CreatedAt, run.UpdatedAt)
+		INSERT INTO runs (id, agent_id, conversation_id, status, error, runtime, workflow_id, workflow_run_id, workflow_status, started_at, completed_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+		run.ID, run.AgentID, run.ConversationID, string(run.Status), run.Error, run.Runtime, run.WorkflowID, run.WorkflowRunID, run.WorkflowStatus, run.StartedAt, run.CompletedAt, run.CreatedAt, run.UpdatedAt)
 	return run, err
 }
 
@@ -360,8 +360,31 @@ func (s *PostgresStore) UpdateRunAgent(id string, agentID string) (domain.Run, e
 		UPDATE runs
 		SET agent_id = $1, updated_at = $2
 		WHERE id = $3
-		RETURNING id, agent_id, conversation_id, status, error, started_at, completed_at, created_at, updated_at`,
+		RETURNING id, agent_id, conversation_id, status, error, runtime, workflow_id, workflow_run_id, workflow_status, started_at, completed_at, created_at, updated_at`,
 		agentID, time.Now().UTC(), id)
+}
+
+func (s *PostgresStore) UpdateRunRuntime(id string, runtime string, workflowID string, workflowRunID string, workflowStatus string) (domain.Run, error) {
+	return s.scanRunQuery(`
+		UPDATE runs
+		SET runtime = $1,
+			workflow_id = $2,
+			workflow_run_id = $3,
+			workflow_status = $4,
+			updated_at = $5
+		WHERE id = $6
+		RETURNING id, agent_id, conversation_id, status, error, runtime, workflow_id, workflow_run_id, workflow_status, started_at, completed_at, created_at, updated_at`,
+		strings.TrimSpace(runtime), strings.TrimSpace(workflowID), strings.TrimSpace(workflowRunID), strings.TrimSpace(workflowStatus), time.Now().UTC(), id)
+}
+
+func (s *PostgresStore) UpdateRunWorkflowStatus(id string, workflowStatus string) (domain.Run, error) {
+	return s.scanRunQuery(`
+		UPDATE runs
+		SET workflow_status = $1,
+			updated_at = $2
+		WHERE id = $3
+		RETURNING id, agent_id, conversation_id, status, error, runtime, workflow_id, workflow_run_id, workflow_status, started_at, completed_at, created_at, updated_at`,
+		strings.TrimSpace(workflowStatus), time.Now().UTC(), id)
 }
 
 func (s *PostgresStore) UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error) {
@@ -372,19 +395,20 @@ func (s *PostgresStore) UpdateRunStatus(id string, status domain.RunStatus, erro
 			error = $2,
 			started_at = CASE WHEN $1 = 'running' AND started_at IS NULL THEN $3 ELSE started_at END,
 			completed_at = CASE
+				WHEN $1 = 'running' THEN NULL
 				WHEN $1 = 'waiting_for_user' THEN NULL
 				WHEN $1 IN ('completed', 'failed', 'canceled') THEN $3
 				ELSE completed_at
 			END,
 			updated_at = $3
 		WHERE id = $4
-		RETURNING id, agent_id, conversation_id, status, error, started_at, completed_at, created_at, updated_at`,
+		RETURNING id, agent_id, conversation_id, status, error, runtime, workflow_id, workflow_run_id, workflow_status, started_at, completed_at, created_at, updated_at`,
 		string(status), strings.TrimSpace(errorMessage), now, id)
 }
 
 func (s *PostgresStore) GetRun(id string) (domain.Run, bool, error) {
 	run, err := s.scanRunQuery(`
-		SELECT id, agent_id, conversation_id, status, error, started_at, completed_at, created_at, updated_at
+		SELECT id, agent_id, conversation_id, status, error, runtime, workflow_id, workflow_run_id, workflow_status, started_at, completed_at, created_at, updated_at
 		FROM runs
 		WHERE id = $1`, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -398,7 +422,7 @@ func (s *PostgresStore) GetRun(id string) (domain.Run, bool, error) {
 
 func (s *PostgresStore) ListRuns() ([]domain.Run, error) {
 	rows, err := s.db.Query(`
-		SELECT id, agent_id, conversation_id, status, error, started_at, completed_at, created_at, updated_at
+		SELECT id, agent_id, conversation_id, status, error, runtime, workflow_id, workflow_run_id, workflow_status, started_at, completed_at, created_at, updated_at
 		FROM runs
 		ORDER BY created_at DESC`)
 	if err != nil {
@@ -1067,14 +1091,30 @@ func scanRun(row scanner) (domain.Run, error) {
 	var run domain.Run
 	var status string
 	var errorMessage sql.NullString
+	var runtime sql.NullString
+	var workflowID sql.NullString
+	var workflowRunID sql.NullString
+	var workflowStatus sql.NullString
 	var startedAt sql.NullTime
 	var completedAt sql.NullTime
-	if err := row.Scan(&run.ID, &run.AgentID, &run.ConversationID, &status, &errorMessage, &startedAt, &completedAt, &run.CreatedAt, &run.UpdatedAt); err != nil {
+	if err := row.Scan(&run.ID, &run.AgentID, &run.ConversationID, &status, &errorMessage, &runtime, &workflowID, &workflowRunID, &workflowStatus, &startedAt, &completedAt, &run.CreatedAt, &run.UpdatedAt); err != nil {
 		return domain.Run{}, err
 	}
 	run.Status = domain.RunStatus(status)
 	if errorMessage.Valid {
 		run.Error = errorMessage.String
+	}
+	if runtime.Valid {
+		run.Runtime = runtime.String
+	}
+	if workflowID.Valid {
+		run.WorkflowID = workflowID.String
+	}
+	if workflowRunID.Valid {
+		run.WorkflowRunID = workflowRunID.String
+	}
+	if workflowStatus.Valid {
+		run.WorkflowStatus = workflowStatus.String
 	}
 	if startedAt.Valid {
 		run.StartedAt = &startedAt.Time
@@ -1389,6 +1429,10 @@ var postgresMigrations = []string{
 		project_id text,
 		status text NOT NULL,
 		error text NOT NULL DEFAULT '',
+		runtime text NOT NULL DEFAULT '',
+		workflow_id text NOT NULL DEFAULT '',
+		workflow_run_id text NOT NULL DEFAULT '',
+		workflow_status text NOT NULL DEFAULT '',
 		started_at timestamptz,
 		completed_at timestamptz,
 		created_at timestamptz NOT NULL,
@@ -1489,6 +1533,10 @@ var postgresMigrations = []string{
 		END IF;
 	END $$`,
 	`ALTER TABLE memory_embeddings ADD COLUMN IF NOT EXISTS embedding vector(1536) NOT NULL`,
+	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS runtime text NOT NULL DEFAULT ''`,
+	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS workflow_id text NOT NULL DEFAULT ''`,
+	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS workflow_run_id text NOT NULL DEFAULT ''`,
+	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS workflow_status text NOT NULL DEFAULT ''`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_conversation_created ON runs(conversation_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_status_created ON runs(status, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at ASC)`,

@@ -144,18 +144,22 @@ func migrate(ctx context.Context, db *sql.DB, data fileData) error {
 
 	for _, item := range data.Runs {
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO runs (id, agent_id, conversation_id, status, error, started_at, completed_at, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			INSERT INTO runs (id, agent_id, conversation_id, status, error, runtime, workflow_id, workflow_run_id, workflow_status, started_at, completed_at, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			ON CONFLICT (id) DO UPDATE SET
 				agent_id = EXCLUDED.agent_id,
 				conversation_id = EXCLUDED.conversation_id,
 				status = EXCLUDED.status,
 				error = EXCLUDED.error,
+				runtime = EXCLUDED.runtime,
+				workflow_id = EXCLUDED.workflow_id,
+				workflow_run_id = EXCLUDED.workflow_run_id,
+				workflow_status = EXCLUDED.workflow_status,
 				started_at = EXCLUDED.started_at,
 				completed_at = EXCLUDED.completed_at,
 				created_at = EXCLUDED.created_at,
 				updated_at = EXCLUDED.updated_at`,
-			item.ID, item.AgentID, item.ConversationID, string(item.Status), item.Error, item.StartedAt, item.CompletedAt, item.CreatedAt, item.UpdatedAt); err != nil {
+			item.ID, item.AgentID, item.ConversationID, string(item.Status), item.Error, item.Runtime, item.WorkflowID, item.WorkflowRunID, item.WorkflowStatus, item.StartedAt, item.CompletedAt, item.CreatedAt, item.UpdatedAt); err != nil {
 			return err
 		}
 	}

@@ -140,6 +140,80 @@ func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput 
 	return events, errs
 }
 
+func (r *Runtime) ResumeCanceledAutonomous(ctx context.Context, runID string, resumeNote string) (<-chan CollaborationEvent, <-chan error) {
+	events := make(chan CollaborationEvent)
+	errs := make(chan error, 1)
+
+	go func() {
+		defer close(events)
+		defer close(errs)
+
+		run, ok, err := r.store.GetRun(strings.TrimSpace(runID))
+		if err != nil {
+			errs <- err
+			return
+		}
+		if !ok {
+			errs <- fmt.Errorf("run not found")
+			return
+		}
+		if run.Status != domain.RunCanceled {
+			errs <- fmt.Errorf("run is not canceled")
+			return
+		}
+
+		steps, err := r.store.ListCollaborationSteps(run.ID)
+		if err != nil {
+			errs <- err
+			return
+		}
+		task := firstAutonomousTask(steps)
+		agent, ok, err := r.store.GetAgent(run.AgentID)
+		if err != nil {
+			errs <- err
+			return
+		}
+		if !ok {
+			errs <- fmt.Errorf("agent not found")
+			return
+		}
+
+		resumeStep, err := r.store.CreateCollaborationStep(domain.CollaborationStep{
+			RunID:          run.ID,
+			ConversationID: run.ConversationID,
+			Role:           "resume",
+			AgentID:        run.AgentID,
+			Status:         domain.CollaborationStepCompleted,
+			Iteration:      nextAutonomousIteration(steps),
+			Input:          "Resume canceled autonomous run.",
+			Output:         strings.TrimSpace(resumeNote),
+		})
+		if err != nil {
+			errs <- err
+			return
+		}
+		run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
+		if err != nil {
+			errs <- err
+			return
+		}
+		log.Printf("autonomous_resume_canceled run_id=%s resume_step_id=%s note_len=%d", run.ID, resumeStep.ID, len(resumeNote))
+		events <- CollaborationEvent{Type: "run", Run: run}
+		events <- CollaborationEvent{Type: "collaboration_step", Step: resumeStep}
+
+		state := rebuildCanceledAutonomousState(steps, resumeStep)
+		prepared := PreparedCollaborationRun{WorkerAgent: agent, Run: run}
+		resumedEvents, resumedErrs := r.runAutonomousFromState(ctx, prepared, task, state)
+		for event := range resumedEvents {
+			events <- event
+		}
+		if err := <-resumedErrs; err != nil {
+			errs <- err
+		}
+	}()
+	return events, errs
+}
+
 func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedCollaborationRun, task string, initial autonomousState) (<-chan CollaborationEvent, <-chan error) {
 	events := make(chan CollaborationEvent)
 	errs := make(chan error, 1)
@@ -788,6 +862,50 @@ func rebuildAutonomousState(previousSteps []domain.CollaborationStep, completedH
 		State:       strings.Join(parts, "\n\n"),
 		LastAct:     lastAct,
 		LastReview:  lastReview,
+		NextIter:    maxIteration,
+	}
+}
+
+func rebuildCanceledAutonomousState(previousSteps []domain.CollaborationStep, resumeStep domain.CollaborationStep) autonomousState {
+	maxIteration := resumeStep.Iteration
+	outputChars := len(resumeStep.Output)
+	lastAct := ""
+	lastReview := ""
+	parts := []string{"Canceled run resumed."}
+	if note := strings.TrimSpace(resumeStep.Output); note != "" {
+		parts = append(parts, "Resume note:\n"+note)
+	}
+	for _, step := range previousSteps {
+		outputChars += len(step.Output)
+		if step.Iteration > maxIteration {
+			maxIteration = step.Iteration
+		}
+		if step.Role == "act" && strings.TrimSpace(step.Output) != "" {
+			lastAct = step.Output
+		}
+		if step.Role == "review" && strings.TrimSpace(step.Output) != "" {
+			lastReview = step.Output
+		}
+		if step.Status == domain.CollaborationStepCompleted && strings.TrimSpace(step.Output) != "" {
+			parts = append(parts, fmt.Sprintf("Iteration %d %s output:\n%s", step.Iteration, step.Role, step.Output))
+		}
+	}
+	return autonomousState{
+		StartedAt:   time.Now().UTC(),
+		OutputChars: outputChars,
+		State:       strings.Join(parts, "\n\n"),
+		LastAct:     lastAct,
+		LastReview:  lastReview,
 		NextIter:    maxIteration + 1,
 	}
+}
+
+func nextAutonomousIteration(steps []domain.CollaborationStep) int {
+	maxIteration := 0
+	for _, step := range steps {
+		if step.Iteration > maxIteration {
+			maxIteration = step.Iteration
+		}
+	}
+	return maxIteration + 1
 }

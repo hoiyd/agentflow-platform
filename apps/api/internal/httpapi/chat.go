@@ -8,6 +8,7 @@ import (
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/temporalrun"
 )
 
 func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +66,10 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 
 	mode := agentpkg.NormalizeChatMode(req.Mode)
 	if mode == agentpkg.ChatModeAutonomous {
+		if strings.EqualFold(strings.TrimSpace(req.Runtime), temporalrun.RuntimeTemporal) {
+			h.chatTemporalAutonomous(w, flusher, r, req, conversationID, userMessage)
+			return
+		}
 		h.chatAutonomous(w, flusher, r, req, conversationID, userMessage)
 		return
 	}
@@ -161,6 +166,119 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		AgentID:        completed.AgentID,
 		Status:         string(completed.Status),
 		MessageID:      message.ID,
+	})
+	flusher.Flush()
+}
+
+func (h *Handler) chatTemporalAutonomous(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
+	if h.temporalRunner == nil {
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: "Temporal runtime is not enabled"})
+		flusher.Flush()
+		return
+	}
+
+	prepared, err := h.agentRuntime.PrepareAutonomousRun(r.Context(), req.AgentID, conversationID)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		}
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: http.StatusText(status) + ": " + err.Error()})
+		flusher.Flush()
+		return
+	}
+	run, err := h.store.UpdateRunRuntime(prepared.Run.ID, temporalrun.RuntimeTemporal, "", "", temporalrun.WorkflowStatusRunning)
+	if err != nil {
+		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		flusher.Flush()
+		return
+	}
+
+	workflowID, workflowRunID, err := h.temporalRunner.StartAgentRun(r.Context(), temporalrun.AgentRunWorkflowInput{
+		RunID:          run.ID,
+		ConversationID: conversationID,
+		AgentID:        run.AgentID,
+		UserMessageID:  userMessage.ID,
+		Task:           req.Message,
+	})
+	if err != nil {
+		_, _ = h.agentRuntime.FailRun(run.ID, err)
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		flusher.Flush()
+		return
+	}
+	run, err = h.store.UpdateRunRuntime(run.ID, temporalrun.RuntimeTemporal, workflowID, workflowRunID, temporalrun.WorkflowStatusRunning)
+	if err != nil {
+		_, _ = h.agentRuntime.FailRun(run.ID, err)
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		flusher.Flush()
+		return
+	}
+
+	writeSSE(w, "run", domain.ChatChunk{
+		Type:           "run",
+		ConversationID: conversationID,
+		RunID:          run.ID,
+		AgentID:        run.AgentID,
+		Status:         string(run.Status),
+	})
+	flusher.Flush()
+	writeSSE(w, "done", domain.ChatChunk{
+		Type:           "done",
+		ConversationID: conversationID,
+		RunID:          run.ID,
+		AgentID:        run.AgentID,
+		Status:         string(run.Status),
+	})
+	flusher.Flush()
+}
+
+func (h *Handler) resumeTemporalCanceledAutonomous(w http.ResponseWriter, r *http.Request, run domain.Run, resumeNote string) {
+	if h.temporalRunner == nil {
+		writeError(w, http.StatusBadRequest, "Temporal runtime is not enabled")
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming is not supported")
+		return
+	}
+	workflowID, workflowRunID, err := h.temporalRunner.StartAgentRun(r.Context(), temporalrun.AgentRunWorkflowInput{
+		RunID:          run.ID,
+		ConversationID: run.ConversationID,
+		AgentID:        run.AgentID,
+		Task:           "Resume the canceled autonomous task from the saved run replay.",
+		ResumeCanceled: true,
+		ResumeNote:     resumeNote,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	updated, err := h.store.UpdateRunRuntime(run.ID, temporalrun.RuntimeTemporal, workflowID, workflowRunID, temporalrun.WorkflowStatusRunning)
+	if err != nil {
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		flusher.Flush()
+		return
+	}
+	writeSSE(w, "run", domain.ChatChunk{
+		Type:           "run",
+		ConversationID: updated.ConversationID,
+		RunID:          updated.ID,
+		AgentID:        updated.AgentID,
+		Status:         string(domain.RunRunning),
+	})
+	flusher.Flush()
+	writeSSE(w, "done", domain.ChatChunk{
+		Type:           "done",
+		ConversationID: updated.ConversationID,
+		RunID:          updated.ID,
+		AgentID:        updated.AgentID,
+		Status:         string(domain.RunRunning),
 	})
 	flusher.Flush()
 }
@@ -562,10 +680,6 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.UserInput = strings.TrimSpace(req.UserInput)
-	if req.UserInput == "" {
-		writeError(w, http.StatusBadRequest, "user input is required")
-		return
-	}
 
 	run, ok, err := h.store.GetRun(id)
 	if err != nil {
@@ -574,6 +688,15 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "run not found")
+		return
+	}
+	run = h.refreshTemporalRunStatus(r, run)
+	if run.Status != domain.RunCanceled && req.UserInput == "" {
+		writeError(w, http.StatusBadRequest, "user input is required")
+		return
+	}
+	if run.Status == domain.RunCanceled && run.Runtime == temporalrun.RuntimeTemporal {
+		h.resumeTemporalCanceledAutonomous(w, r, run, req.UserInput)
 		return
 	}
 
@@ -597,6 +720,9 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 
 	events, errs := h.agentRuntime.ResumeAutonomous(r.Context(), id, req.UserInput)
+	if run.Status == domain.RunCanceled {
+		events, errs = h.agentRuntime.ResumeCanceledAutonomous(r.Context(), id, req.UserInput)
+	}
 	var assistant strings.Builder
 	for event := range events {
 		switch event.Type {

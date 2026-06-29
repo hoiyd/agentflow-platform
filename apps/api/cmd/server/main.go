@@ -13,6 +13,7 @@ import (
 	"agentflow-platform/apps/api/internal/httpapi"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/temporalrun"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -44,12 +45,32 @@ func main() {
 	if err != nil {
 		log.Fatalf("create tools manager: %v", err)
 	}
-	handler := httpapi.NewHandlerWithRouterModeAndLimits(appStore, openAIClient, toolManager, splitOrigins(cfg.AllowedOrigins), cfg.RouterMode, agent.AutonomousLimits{
+	limits := agent.AutonomousLimits{
 		MaxIterations:  cfg.AutonomousMaxIterations,
 		MaxRuntime:     cfg.AutonomousMaxRuntime,
 		MaxOutputChars: cfg.AutonomousMaxOutputCharacters,
 		MaxToolCalls:   cfg.AutonomousMaxToolCalls,
-	})
+	}
+	handler := httpapi.NewHandlerWithRouterModeAndLimits(appStore, openAIClient, toolManager, splitOrigins(cfg.AllowedOrigins), cfg.RouterMode, limits)
+
+	var temporalClient interface{ Close() }
+	var temporalWorker *temporalrun.WorkerHandle
+	if cfg.TemporalEnabled {
+		client, err := temporalrun.NewClient(cfg.TemporalHostPort, cfg.TemporalNamespace)
+		if err != nil {
+			log.Fatalf("connect temporal: %v", err)
+		}
+		temporalClient = client
+		defer temporalClient.Close()
+
+		temporalRuntime := agent.NewRuntimeWithRouterModeAndLimits(appStore, openAIClient, toolManager, cfg.RouterMode, limits)
+		temporalWorker, err = temporalrun.StartWorker(client, cfg.TemporalTaskQueue, temporalRuntime, appStore)
+		if err != nil {
+			log.Fatalf("start temporal worker: %v", err)
+		}
+		defer temporalWorker.Stop()
+		handler.WithTemporalRunner(temporalrun.NewRunner(client, cfg.TemporalTaskQueue))
+	}
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -60,6 +81,11 @@ func main() {
 	log.Printf("AgentFlow API listening on http://localhost:%s", cfg.Port)
 	log.Printf("AgentFlow store driver: %s", cfg.StoreDriver)
 	log.Printf("AgentFlow router mode: %s", cfg.RouterMode)
+	if cfg.TemporalEnabled {
+		log.Printf("AgentFlow temporal runtime: enabled host=%s namespace=%s task_queue=%s", cfg.TemporalHostPort, cfg.TemporalNamespace, cfg.TemporalTaskQueue)
+	} else {
+		log.Printf("AgentFlow temporal runtime: disabled")
+	}
 	log.Printf("AgentFlow autonomous limits: max_iterations=%d max_runtime=%s max_output_chars=%d max_tool_calls=%d", cfg.AutonomousMaxIterations, cfg.AutonomousMaxRuntime, cfg.AutonomousMaxOutputCharacters, cfg.AutonomousMaxToolCalls)
 	if cfg.OpenAIAPIKey == "" {
 		log.Println("OPENAI_API_KEY is empty; using local streaming fallback for verification")

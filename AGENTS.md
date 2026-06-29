@@ -20,6 +20,10 @@ Turn vague instructions into verifiable success criteria before writing code.
 
 When context window usage reaches 85%, trigger auto compact by running `/compact` in Codex.
 
+### 6. When in goal mode, use the following template
+
+/goal 达成<你希望 Codex 最终完成的目标>，并通过 <具体可验证的证据>来确认结果有效，同时保持<必须遵守的限制条件>不被破坏。只能使用<允许使用的输入、工具、文件范围或操作边界>。在每一轮迭代之间，Codex 需要根据<如何判断下一步最优行动>来选择下一步。如果遇到阻塞，或者已经没有有效路径可以继续尝试，Codex必须停止，并报告<已经尝试过的方法、已获得的证据、当前阻塞点，以及还需要什么信息或权限才能继续推进>。
+
 ## Command Output
 
 Protect context usage. Any command with unknown or potentially large output must be byte-capped.

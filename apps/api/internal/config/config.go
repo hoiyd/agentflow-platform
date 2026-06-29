@@ -26,6 +26,10 @@ type Config struct {
 	DataPath                      string
 	ToolConfigPath                string
 	AllowedOrigins                string
+	TemporalEnabled               bool
+	TemporalHostPort              string
+	TemporalNamespace             string
+	TemporalTaskQueue             string
 }
 
 func Load() Config {
@@ -49,6 +53,25 @@ func Load() Config {
 		DataPath:                      getEnv("DATA_PATH", ".data/agentflow.json"),
 		ToolConfigPath:                getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
 		AllowedOrigins:                getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
+		TemporalEnabled:               getBoolEnv("TEMPORAL_ENABLED", true),
+		TemporalHostPort:              getEnv("TEMPORAL_HOST_PORT", "localhost:7233"),
+		TemporalNamespace:             getEnv("TEMPORAL_NAMESPACE", "default"),
+		TemporalTaskQueue:             getEnv("TEMPORAL_TASK_QUEUE", "agentflow-agent-runs"),
+	}
+}
+
+func getBoolEnv(key string, fallback bool) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	if value == "" {
+		return fallback
+	}
+	switch value {
+	case "1", "true", "yes", "y", "on":
+		return true
+	case "0", "false", "no", "n", "off":
+		return false
+	default:
+		return fallback
 	}
 }
 

@@ -33,6 +33,8 @@ type Store interface {
 	GetDefaultAgent() (domain.Agent, bool, error)
 	CreateRun(agentID string, conversationID string) (domain.Run, error)
 	UpdateRunAgent(id string, agentID string) (domain.Run, error)
+	UpdateRunRuntime(id string, runtime string, workflowID string, workflowRunID string, workflowStatus string) (domain.Run, error)
+	UpdateRunWorkflowStatus(id string, workflowStatus string) (domain.Run, error)
 	UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error)
 	GetRun(id string) (domain.Run, bool, error)
 	ListRuns() ([]domain.Run, error)
