@@ -1,0 +1,243 @@
+@media (max-width: 1100px) {
+  .home-demo-flow,
+  .home-capabilities {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .knowledge-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-workspace.with-collaboration {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .messages {
+    min-height: 420px;
+  }
+
+  .collaboration-panel {
+    min-height: 520px;
+  }
+
+  .dag-flow {
+    grid-template-columns: repeat(5, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .home-nav {
+    align-items: flex-start;
+    gap: 12px;
+    flex-direction: column;
+    padding: 18px 16px;
+  }
+
+  .home-nav-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .home-nav-link {
+    flex: 1;
+    justify-content: center;
+    padding: 0 10px;
+  }
+
+  .home-nav-link.subtle {
+    display: none;
+  }
+
+  .home-hero {
+    min-height: 74svh;
+  }
+
+  .home-hero-content {
+    padding: 10svh 16px 64px;
+  }
+
+  .home-hero h1 {
+    font-size: 48px;
+  }
+
+  .home-subtitle {
+    font-size: 17px;
+  }
+
+  .home-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .home-primary-action,
+  .home-secondary-action {
+    justify-content: center;
+  }
+
+  .home-section {
+    padding: 38px 16px 0;
+  }
+
+  .home-stack {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .home-stack > div {
+    justify-content: flex-start;
+  }
+
+  .home-demo-flow,
+  .home-capabilities {
+    grid-template-columns: 1fr;
+  }
+
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding: 0 16px;
+    padding-bottom: 12px;
+    padding-top: 12px;
+  }
+
+  .conversation-title-display,
+  .conversation-title-editor {
+    width: 100%;
+  }
+
+  .conversation-title-editor {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .conversation-title-editor input {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
+
+  .topbar-actions {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .chat-workspace {
+    padding: 18px 14px;
+  }
+
+  .knowledge-panel {
+    padding: 18px 14px;
+  }
+
+  .knowledge-search-row,
+  .document-detail-header,
+  .document-card-summary,
+  .rag-result-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .document-metrics {
+    justify-content: flex-start;
+  }
+
+  .empty h2 {
+    font-size: 31px;
+  }
+
+  .composer {
+    padding: 12px 14px 16px;
+  }
+
+  .agent-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-bar.multi_agent,
+  .agent-bar.autonomous {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-chooser {
+    grid-template-columns: 1fr;
+  }
+
+  .dag-header strong {
+    font-size: 13px;
+  }
+
+  .dag-flow {
+    grid-template-columns: 1fr;
+    overflow-x: visible;
+  }
+
+  .dag-item {
+    grid-template-columns: 1fr;
+  }
+
+  .dag-edge {
+    width: 2px;
+    height: 16px;
+    justify-self: center;
+    background: linear-gradient(180deg, rgba(86, 76, 66, 0.18), rgba(86, 76, 66, 0.42));
+  }
+
+  .dag-edge::after {
+    right: auto;
+    top: auto;
+    bottom: -1px;
+    left: 50%;
+    transform: translateX(-50%) rotate(135deg);
+  }
+
+  .run-pill {
+    max-width: none;
+    justify-items: start;
+  }
+
+  .composer-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .send {
+    width: 100%;
+  }
+
+  .replay-page {
+    padding: 18px 14px;
+  }
+
+  .replay-header,
+  .episode-report-header,
+  .retrieval-overview,
+  .step-row {
+    flex-direction: column;
+  }
+
+  .retrieval-model {
+    justify-items: start;
+  }
+
+  .replay-summary,
+  .episode-report-grid,
+  .episode-sections,
+  .replay-grid,
+  .token-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .step-meta {
+    justify-items: start;
+  }
+}
