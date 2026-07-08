@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { EpisodeReport, RunReplay as RunReplayData, TraceEventInfo } from "../lib/api";
-import { getEpisodeReport, getRunReplay } from "../lib/api";
+import { getEpisodeReport, getRunReplay, resumeRun } from "../lib/api";
 
 type Props = {
   runId: string;
@@ -36,13 +36,14 @@ export function RunReplay({ runId }: Props) {
   const [episodeReport, setEpisodeReport] = useState<EpisodeReport | null>(null);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [error, setError] = useState("");
+  const [isResuming, setIsResuming] = useState(false);
 
   useEffect(() => {
     let canceled = false;
     async function load() {
       try {
         setError("");
-        const [data, report] = await Promise.all([getRunReplay(runId), getEpisodeReport(runId)]);
+        const [data, report] = await loadReplayAndReport(runId);
         if (canceled) {
           return;
         }
@@ -66,6 +67,54 @@ export function RunReplay({ runId }: Props) {
     [replay, selectedEventId]
   );
   const retrievalSummary = useMemo(() => buildRetrievalSummary(replay?.events ?? []), [replay?.events]);
+  const canResumeRecoverable = replay?.run.status === "failed_recoverable";
+  const showRecoverableBanner = canResumeRecoverable || isResuming;
+
+  async function handleResumeRecoverable() {
+    if (!replay || isResuming) {
+      return;
+    }
+    setIsResuming(true);
+    setError("");
+    setReplay((current) =>
+      current
+        ? {
+            ...current,
+            run: {
+              ...current.run,
+              status: "running",
+              updated_at: new Date().toISOString()
+            }
+          }
+        : current
+    );
+    try {
+      await resumeRun({ run_id: replay.run.id, user_input: "Resume failed recoverable run from replay." }, (event) => {
+        if (event.type === "run" || event.type === "done") {
+          setReplay((current) =>
+            current
+              ? {
+                  ...current,
+                  run: {
+                    ...current.run,
+                    status: event.status ?? current.run.status,
+                    updated_at: new Date().toISOString()
+                  }
+                }
+              : current
+          );
+        }
+      });
+      const [data, report] = await loadReplayAndReport(replay.run.id);
+      setReplay(data);
+      setEpisodeReport(report);
+      setSelectedEventId(data.events[0]?.id ?? "");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resume run");
+    } finally {
+      setIsResuming(false);
+    }
+  }
 
   if (error) {
     return (
@@ -99,8 +148,23 @@ export function RunReplay({ runId }: Props) {
           <h1>Run replay</h1>
           <p>{replay.conversation.title}</p>
         </div>
-        <span className={`replay-status ${replay.run.status}`}>{replay.run.status}</span>
+        <div className="replay-header-actions">
+          {isResuming ? <span className="replay-status running">Streaming...</span> : null}
+          {canResumeRecoverable || isResuming ? (
+            <button className="run-link" disabled={isResuming} onClick={handleResumeRecoverable} type="button">
+              {isResuming ? "Resuming..." : "Resume run"}
+            </button>
+          ) : null}
+          <span className={`replay-status ${replay.run.status}`}>{replay.run.status}</span>
+        </div>
       </header>
+      {showRecoverableBanner ? (
+        <section className="recoverable-banner">
+          {isResuming
+            ? "Recovery resume is streaming. The run is continuing from saved collaboration steps."
+            : "This run stopped unexpectedly and can be resumed from saved collaboration steps."}
+        </section>
+      ) : null}
 
       <section className="replay-summary">
         <Metric label="Total duration" value={formatDuration(replay.summary.total_duration_ms)} />
@@ -179,6 +243,10 @@ export function RunReplay({ runId }: Props) {
       </section>
     </main>
   );
+}
+
+function loadReplayAndReport(runId: string) {
+  return Promise.all([getRunReplay(runId), getEpisodeReport(runId)]);
 }
 
 function EpisodeReportPanel({ report }: { report: EpisodeReport }) {

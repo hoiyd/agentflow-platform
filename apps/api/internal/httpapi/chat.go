@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -562,10 +563,6 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.UserInput = strings.TrimSpace(req.UserInput)
-	if req.UserInput == "" {
-		writeError(w, http.StatusBadRequest, "user input is required")
-		return
-	}
 
 	run, ok, err := h.store.GetRun(id)
 	if err != nil {
@@ -574,6 +571,14 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "run not found")
+		return
+	}
+	if run.Status == domain.RunWaitingForUser && req.UserInput == "" {
+		writeError(w, http.StatusBadRequest, "user input is required")
+		return
+	}
+	if run.Status != domain.RunWaitingForUser && run.Status != domain.RunFailedRecoverable {
+		writeError(w, http.StatusBadRequest, "run is not resumable")
 		return
 	}
 
@@ -596,7 +601,11 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	})
 	flusher.Flush()
 
-	events, errs := h.agentRuntime.ResumeAutonomous(r.Context(), id, req.UserInput)
+	resumeCtx := detachedRequestContext(r)
+	events, errs := h.agentRuntime.ResumeAutonomous(resumeCtx, id, req.UserInput)
+	if run.Status == domain.RunFailedRecoverable {
+		events, errs = h.agentRuntime.ResumeRecoverableAutonomous(resumeCtx, id, req.UserInput)
+	}
 	var assistant strings.Builder
 	for event := range events {
 		switch event.Type {
@@ -645,7 +654,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := <-errs; err != nil {
-		if !strings.Contains(err.Error(), "not waiting for user input") {
+		if !strings.Contains(err.Error(), "not waiting for user input") && !strings.Contains(err.Error(), "not recoverable") {
 			_, _ = h.agentRuntime.FailRun(id, err)
 		}
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
@@ -684,7 +693,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 		return
 	}
-	if !h.rememberMessageOrFail(w, flusher, r, id, message) {
+	if !h.rememberMessageWithContextOrFail(w, flusher, resumeCtx, id, message) {
 		return
 	}
 	completed, err := h.agentRuntime.CompleteRun(id)
@@ -714,6 +723,22 @@ func (h *Handler) rememberMessageOrFail(w http.ResponseWriter, flusher http.Flus
 		return false
 	}
 	return true
+}
+
+func (h *Handler) rememberMessageWithContextOrFail(w http.ResponseWriter, flusher http.Flusher, ctx context.Context, runID string, message domain.Message) bool {
+	if err := h.rememberMessage(ctx, message, runID); err != nil {
+		if strings.TrimSpace(runID) != "" {
+			_, _ = h.agentRuntime.FailRun(runID, err)
+		}
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		flusher.Flush()
+		return false
+	}
+	return true
+}
+
+func detachedRequestContext(r *http.Request) context.Context {
+	return context.WithoutCancel(r.Context())
 }
 
 func writeSSE(w http.ResponseWriter, event string, value any) {

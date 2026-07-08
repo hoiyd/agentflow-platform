@@ -3,6 +3,9 @@ export type Conversation = {
   title: string;
   created_at: string;
   updated_at: string;
+  started_at?: string;
+  heartbeat_at?: string;
+  completed_at?: string;
 };
 
 export type Message = {
@@ -27,6 +30,7 @@ export type ChatEvent =
         | "waiting_for_user"
         | "completed"
         | "failed"
+        | "failed_recoverable"
         | "canceling"
         | "canceled"
         | string;
@@ -60,6 +64,7 @@ export type ChatEvent =
         | "waiting_for_user"
         | "completed"
         | "failed"
+        | "failed_recoverable"
         | "canceling"
         | "canceled"
         | string;
@@ -82,6 +87,7 @@ export type ChatEvent =
         | "waiting_for_user"
         | "completed"
         | "failed"
+        | "failed_recoverable"
         | "canceling"
         | "canceled"
         | string;
@@ -125,6 +131,7 @@ export type RunInfo = {
     | "waiting_for_user"
     | "completed"
     | "failed"
+    | "failed_recoverable"
     | "canceling"
     | "canceled"
     | string;
@@ -145,6 +152,7 @@ export type CollaborationStepInfo = {
     | "waiting_for_user"
     | "completed"
     | "failed"
+    | "failed_recoverable"
     | "canceling"
     | "canceled"
     | string;

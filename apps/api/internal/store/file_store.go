@@ -367,16 +367,54 @@ func (s *FileStore) UpdateRunStatus(id string, status domain.RunStatus, errorMes
 			if status == domain.RunRunning && s.data.Runs[i].StartedAt == nil {
 				s.data.Runs[i].StartedAt = &now
 			}
+			if status == domain.RunRunning {
+				s.data.Runs[i].HeartbeatAt = &now
+				s.data.Runs[i].CompletedAt = nil
+			}
 			if status == domain.RunWaitingForUser {
 				s.data.Runs[i].CompletedAt = nil
 			}
-			if status == domain.RunCompleted || status == domain.RunFailed || status == domain.RunCanceled {
+			if status == domain.RunCompleted || status == domain.RunFailed || status == domain.RunFailedRecoverable || status == domain.RunCanceled {
 				s.data.Runs[i].CompletedAt = &now
 			}
 			return s.data.Runs[i], s.saveLocked()
 		}
 	}
 	return domain.Run{}, errors.New("run not found")
+}
+
+func (s *FileStore) UpdateRunHeartbeat(id string) (domain.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for i := range s.data.Runs {
+		if s.data.Runs[i].ID == id {
+			now := time.Now().UTC()
+			s.data.Runs[i].HeartbeatAt = &now
+			s.data.Runs[i].UpdatedAt = now
+			return s.data.Runs[i], s.saveLocked()
+		}
+	}
+	return domain.Run{}, errors.New("run not found")
+}
+
+func (s *FileStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	items := []domain.Run{}
+	for _, run := range s.data.Runs {
+		if run.Status != domain.RunRunning {
+			continue
+		}
+		if run.HeartbeatAt == nil || run.HeartbeatAt.Before(cutoff) {
+			items = append(items, run)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].CreatedAt.Before(items[j].CreatedAt)
+	})
+	return items, nil
 }
 
 func (s *FileStore) GetRun(id string) (domain.Run, bool, error) {

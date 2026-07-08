@@ -21,6 +21,7 @@ type Config struct {
 	AutonomousMaxRuntime          time.Duration
 	AutonomousMaxOutputCharacters int
 	AutonomousMaxToolCalls        int
+	RecoveryStaleRunTimeout       time.Duration
 	StoreDriver                   string
 	DatabaseURL                   string
 	DataPath                      string
@@ -44,6 +45,7 @@ func Load() Config {
 		AutonomousMaxRuntime:          getAutonomousRuntime(),
 		AutonomousMaxOutputCharacters: getIntEnv("AUTONOMOUS_MAX_OUTPUT_CHARS", 60000),
 		AutonomousMaxToolCalls:        getIntEnv("AUTONOMOUS_MAX_TOOL_CALLS", 20),
+		RecoveryStaleRunTimeout:       getDurationEnv("RECOVERY_STALE_RUN_TIMEOUT", 60*time.Second),
 		StoreDriver:                   normalizeStoreDriver(getEnv("STORE_DRIVER", "file")),
 		DatabaseURL:                   getEnv("DATABASE_URL", ""),
 		DataPath:                      getEnv("DATA_PATH", ".data/agentflow.json"),

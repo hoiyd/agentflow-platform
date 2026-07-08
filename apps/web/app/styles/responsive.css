@@ -220,8 +220,10 @@
 
   .replay-header,
   .episode-report-header,
+  .replay-header-actions,
   .retrieval-overview,
   .step-row {
+    align-items: flex-start;
     flex-direction: column;
   }
 

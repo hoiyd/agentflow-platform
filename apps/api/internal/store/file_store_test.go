@@ -103,6 +103,9 @@ func TestFileStoreRunLifecycle(t *testing.T) {
 	if run.StartedAt == nil || run.Status != domain.RunRunning {
 		t.Fatalf("expected running run with started_at, got %#v", run)
 	}
+	if run.HeartbeatAt == nil {
+		t.Fatalf("expected running run with heartbeat_at, got %#v", run)
+	}
 
 	run, err = store.UpdateRunAgent(run.ID, "agent_coding")
 	if err != nil {
@@ -118,6 +121,56 @@ func TestFileStoreRunLifecycle(t *testing.T) {
 	}
 	if run.CompletedAt == nil || run.Status != domain.RunCompleted {
 		t.Fatalf("expected completed run with completed_at, got %#v", run)
+	}
+}
+
+func TestFileStoreListStaleRunningRuns(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := store.CreateConversation("Stale run test")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	staleRun, err := store.CreateRun("agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatalf("create stale run: %v", err)
+	}
+	staleRun, err = store.UpdateRunStatus(staleRun.ID, domain.RunRunning, "")
+	if err != nil {
+		t.Fatalf("mark stale run running: %v", err)
+	}
+	freshRun, err := store.CreateRun("agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatalf("create fresh run: %v", err)
+	}
+	if _, err := store.UpdateRunStatus(freshRun.ID, domain.RunRunning, ""); err != nil {
+		t.Fatalf("mark fresh run running: %v", err)
+	}
+	completedRun, err := store.CreateRun("agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatalf("create completed run: %v", err)
+	}
+	if _, err := store.UpdateRunStatus(completedRun.ID, domain.RunCompleted, ""); err != nil {
+		t.Fatalf("mark completed run: %v", err)
+	}
+
+	past := time.Now().UTC().Add(-10 * time.Minute)
+	store.mu.Lock()
+	for i := range store.data.Runs {
+		if store.data.Runs[i].ID == staleRun.ID {
+			store.data.Runs[i].HeartbeatAt = &past
+		}
+	}
+	store.mu.Unlock()
+
+	runs, err := store.ListStaleRunningRuns(time.Now().UTC().Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("list stale runs: %v", err)
+	}
+	if len(runs) != 1 || runs[0].ID != staleRun.ID {
+		t.Fatalf("expected only stale running run, got %#v", runs)
 	}
 }
 

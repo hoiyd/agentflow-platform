@@ -198,6 +198,7 @@ export function ChatShell() {
   const isTerminalRun =
     runState?.status === "completed" ||
     runState?.status === "failed" ||
+    runState?.status === "failed_recoverable" ||
     runState?.status === "canceled";
   const canCancelRun =
     chatMode === "autonomous" &&
@@ -207,6 +208,7 @@ export function ChatShell() {
       runState.status === "running" ||
       runState.status === "canceling" ||
       runState.status === "waiting_for_user");
+  const isRunStreaming = isStreaming || isContinuingRun || isResumingRun;
 
   useEffect(() => {
     void refreshConversations();
@@ -822,7 +824,12 @@ export function ChatShell() {
               agentId: event.agent_id,
               status: event.status
             });
-            if (event.status === "canceled" || event.status === "completed" || event.status === "failed") {
+            if (
+              event.status === "canceled" ||
+              event.status === "completed" ||
+              event.status === "failed" ||
+              event.status === "failed_recoverable"
+            ) {
               setIsCancelingRun(false);
             }
           }
@@ -944,6 +951,14 @@ export function ChatShell() {
     setHumanInputDraft(userInput);
     setIsResumingRun(true);
     setIsStreaming(true);
+    setRunState((current) =>
+      current
+        ? {
+            ...current,
+            status: "running"
+          }
+        : current
+    );
 
     const assistantDraft: DraftMessage = {
       id: `local-assistant-${Date.now()}`,
@@ -1018,7 +1033,12 @@ export function ChatShell() {
         agentId: canceled.agent_id,
         status: canceled.status
       });
-      if (canceled.status === "canceled" || canceled.status === "completed" || canceled.status === "failed") {
+      if (
+        canceled.status === "canceled" ||
+        canceled.status === "completed" ||
+        canceled.status === "failed" ||
+        canceled.status === "failed_recoverable"
+      ) {
         setIsCancelingRun(false);
       }
     } catch (err) {
@@ -1157,7 +1177,7 @@ export function ChatShell() {
                 ? `${tools.filter((tool) => tool.enabled).length} enabled`
                 : view === "knowledge"
                   ? `${documents.length} documents`
-                  : isStreaming
+                  : isRunStreaming
                     ? "Streaming..."
                     : "Ready"}
             </span>

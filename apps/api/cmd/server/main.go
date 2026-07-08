@@ -12,6 +12,7 @@ import (
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/httpapi"
 	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/recovery"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
 )
@@ -31,6 +32,11 @@ func main() {
 				log.Printf("close store: %v", err)
 			}
 		}()
+	}
+	if recovered, err := recovery.MarkStaleRunningRuns(appStore, cfg.RecoveryStaleRunTimeout); err != nil {
+		log.Printf("native recovery scan failed: %v", err)
+	} else if recovered > 0 {
+		log.Printf("native recovery marked %d stale running run(s) as failed_recoverable", recovered)
 	}
 
 	openAIClient := openai.NewClientWithTimeoutAndEmbeddingModel(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel, cfg.OpenAIEmbeddingModel, cfg.OpenAIEmbeddingDimensions, cfg.OpenAITimeout)
@@ -61,6 +67,7 @@ func main() {
 	log.Printf("AgentFlow store driver: %s", cfg.StoreDriver)
 	log.Printf("AgentFlow router mode: %s", cfg.RouterMode)
 	log.Printf("AgentFlow autonomous limits: max_iterations=%d max_runtime=%s max_output_chars=%d max_tool_calls=%d", cfg.AutonomousMaxIterations, cfg.AutonomousMaxRuntime, cfg.AutonomousMaxOutputCharacters, cfg.AutonomousMaxToolCalls)
+	log.Printf("AgentFlow native recovery: stale_run_timeout=%s", cfg.RecoveryStaleRunTimeout)
 	if cfg.OpenAIAPIKey == "" {
 		log.Println("OPENAI_API_KEY is empty; using local streaming fallback for verification")
 	}

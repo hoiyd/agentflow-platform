@@ -62,13 +62,14 @@ func NormalizeAgentConfig(agent Agent) Agent {
 type RunStatus string
 
 const (
-	RunQueued         RunStatus = "queued"
-	RunRunning        RunStatus = "running"
-	RunWaitingForUser RunStatus = "waiting_for_user"
-	RunCompleted      RunStatus = "completed"
-	RunFailed         RunStatus = "failed"
-	RunCanceling      RunStatus = "canceling"
-	RunCanceled       RunStatus = "canceled"
+	RunQueued            RunStatus = "queued"
+	RunRunning           RunStatus = "running"
+	RunWaitingForUser    RunStatus = "waiting_for_user"
+	RunCompleted         RunStatus = "completed"
+	RunFailed            RunStatus = "failed"
+	RunFailedRecoverable RunStatus = "failed_recoverable"
+	RunCanceling         RunStatus = "canceling"
+	RunCanceled          RunStatus = "canceled"
 )
 
 type Run struct {
@@ -78,6 +79,7 @@ type Run struct {
 	Status         RunStatus  `json:"status"`
 	Error          string     `json:"error,omitempty"`
 	StartedAt      *time.Time `json:"started_at,omitempty"`
+	HeartbeatAt    *time.Time `json:"heartbeat_at,omitempty"`
 	CompletedAt    *time.Time `json:"completed_at,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`

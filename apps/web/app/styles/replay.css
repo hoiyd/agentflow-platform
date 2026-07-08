@@ -47,6 +47,37 @@
   color: var(--danger);
 }
 
+.replay-status.failed_recoverable {
+  border-color: rgba(180, 95, 60, 0.34);
+  color: var(--accent-dark);
+}
+
+.replay-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.replay-header-actions .run-link {
+  cursor: pointer;
+}
+
+.replay-header-actions .run-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.recoverable-banner {
+  margin-bottom: 20px;
+  border: 1px solid rgba(180, 95, 60, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 249, 239, 0.9);
+  color: var(--accent-dark);
+  font-size: 13px;
+  font-weight: 650;
+  padding: 12px 14px;
+}
+
 .replay-summary {
   display: grid;
   grid-template-columns: repeat(5, minmax(120px, 1fr));
@@ -453,4 +484,3 @@
   margin: 14px;
   padding: 18px;
 }
-

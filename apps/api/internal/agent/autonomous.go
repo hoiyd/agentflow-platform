@@ -140,6 +140,79 @@ func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput 
 	return events, errs
 }
 
+func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string, recoveryNote string) (<-chan CollaborationEvent, <-chan error) {
+	events := make(chan CollaborationEvent)
+	errs := make(chan error, 1)
+
+	go func() {
+		defer close(events)
+		defer close(errs)
+
+		run, ok, err := r.store.GetRun(strings.TrimSpace(runID))
+		if err != nil {
+			errs <- err
+			return
+		}
+		if !ok {
+			errs <- fmt.Errorf("run not found")
+			return
+		}
+		if run.Status != domain.RunFailedRecoverable {
+			errs <- fmt.Errorf("run is not recoverable")
+			return
+		}
+
+		steps, err := r.store.ListCollaborationSteps(run.ID)
+		if err != nil {
+			errs <- err
+			return
+		}
+		agent, ok, err := r.store.GetAgent(run.AgentID)
+		if err != nil {
+			errs <- err
+			return
+		}
+		if !ok {
+			errs <- fmt.Errorf("agent not found")
+			return
+		}
+
+		recoveryStep, err := r.store.CreateCollaborationStep(domain.CollaborationStep{
+			RunID:          run.ID,
+			ConversationID: run.ConversationID,
+			Role:           "recovery",
+			AgentID:        run.AgentID,
+			Status:         domain.CollaborationStepCompleted,
+			Iteration:      nextAutonomousIteration(steps),
+			Input:          "Resume failed recoverable autonomous run.",
+			Output:         strings.TrimSpace(recoveryNote),
+		})
+		if err != nil {
+			errs <- err
+			return
+		}
+		run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
+		if err != nil {
+			errs <- err
+			return
+		}
+		log.Printf("autonomous_recovery_resume run_id=%s recovery_step_id=%s note_len=%d", run.ID, recoveryStep.ID, len(recoveryNote))
+		events <- CollaborationEvent{Type: "run", Run: run}
+		events <- CollaborationEvent{Type: "collaboration_step", Step: recoveryStep}
+
+		state := rebuildRecoverableAutonomousState(steps, recoveryStep)
+		prepared := PreparedCollaborationRun{WorkerAgent: agent, Run: run}
+		resumedEvents, resumedErrs := r.runAutonomousFromState(ctx, prepared, firstAutonomousTask(steps), state)
+		for event := range resumedEvents {
+			events <- event
+		}
+		if err := <-resumedErrs; err != nil {
+			errs <- err
+		}
+	}()
+	return events, errs
+}
+
 func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedCollaborationRun, task string, initial autonomousState) (<-chan CollaborationEvent, <-chan error) {
 	events := make(chan CollaborationEvent)
 	errs := make(chan error, 1)
@@ -164,8 +237,20 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 		if nextIter <= 0 {
 			nextIter = 1
 		}
+		if nextIter > r.autonomousLimits.MaxIterations {
+			reason := "recovered after max_iterations reached"
+			r.emitAutonomousProgress(events, startedAt, r.autonomousLimits.MaxIterations, outputChars, toolCalls, reason)
+			if err := r.finishAutonomous(ctx, events, prepared, r.autonomousLimits.MaxIterations, task, lastAct, lastReview, reason); err != nil {
+				errs <- err
+			}
+			return
+		}
 
 		for iteration := nextIter; iteration <= r.autonomousLimits.MaxIterations; iteration++ {
+			if err := r.heartbeatRun(prepared.Run.ID); err != nil {
+				errs <- err
+				return
+			}
 			r.emitAutonomousProgress(events, startedAt, iteration, outputChars, toolCalls, "")
 			if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 				if err != errRunCanceled {
@@ -345,6 +430,9 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 }
 
 func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- CollaborationEvent, prepared PreparedCollaborationRun, iteration int, role string, systemPrompt string, input string) (string, error) {
+	if err := r.heartbeatRun(prepared.Run.ID); err != nil {
+		return "", err
+	}
 	if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 		if err != nil {
 			return "", err
@@ -434,8 +522,19 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 	if err != nil {
 		return "", err
 	}
+	if err := r.heartbeatRun(prepared.Run.ID); err != nil {
+		return "", err
+	}
 	events <- CollaborationEvent{Type: "collaboration_step", Step: completed}
 	return output, nil
+}
+
+func (r *Runtime) heartbeatRun(runID string) error {
+	if strings.TrimSpace(runID) == "" {
+		return nil
+	}
+	_, err := r.store.UpdateRunHeartbeat(runID)
+	return err
 }
 
 func (r *Runtime) stopIfCanceled(events chan<- CollaborationEvent, runID string) (bool, error) {
@@ -790,4 +889,54 @@ func rebuildAutonomousState(previousSteps []domain.CollaborationStep, completedH
 		LastReview:  lastReview,
 		NextIter:    maxIteration + 1,
 	}
+}
+
+func rebuildRecoverableAutonomousState(previousSteps []domain.CollaborationStep, recoveryStep domain.CollaborationStep) autonomousState {
+	maxIteration := 0
+	outputChars := len(recoveryStep.Output)
+	lastAct := ""
+	lastReview := ""
+	parts := []string{"Recoverable run resumed from saved steps."}
+	if note := strings.TrimSpace(recoveryStep.Output); note != "" {
+		parts = append(parts, "Recovery note:\n"+note)
+	}
+	for _, step := range previousSteps {
+		if step.Status != domain.CollaborationStepCompleted {
+			continue
+		}
+		if step.Role == "recovery" {
+			continue
+		}
+		outputChars += len(step.Output)
+		if step.Iteration > maxIteration {
+			maxIteration = step.Iteration
+		}
+		if step.Role == "act" && strings.TrimSpace(step.Output) != "" {
+			lastAct = step.Output
+		}
+		if step.Role == "review" && strings.TrimSpace(step.Output) != "" {
+			lastReview = step.Output
+		}
+		if strings.TrimSpace(step.Output) != "" {
+			parts = append(parts, fmt.Sprintf("Previous %s output:\n%s", step.Role, step.Output))
+		}
+	}
+	return autonomousState{
+		StartedAt:   time.Now().UTC(),
+		OutputChars: outputChars,
+		State:       strings.Join(parts, "\n\n"),
+		LastAct:     lastAct,
+		LastReview:  lastReview,
+		NextIter:    maxIteration + 1,
+	}
+}
+
+func nextAutonomousIteration(steps []domain.CollaborationStep) int {
+	next := 1
+	for _, step := range steps {
+		if step.Iteration >= next {
+			next = step.Iteration + 1
+		}
+	}
+	return next
 }

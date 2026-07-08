@@ -217,6 +217,10 @@ func episodeVerification(report domain.EpisodeReport) domain.EpisodeVerification
 		verification.Warnings = append(verification.Warnings, "No retrieved context captured")
 	}
 
+	if report.Run.Status == domain.RunFailedRecoverable {
+		verification.Status = "needs_review"
+		return verification
+	}
 	if report.Run.Status == domain.RunFailed || len(report.Errors) > 0 || report.TraceSummary.ErrorCount > 0 {
 		verification.Status = "failed"
 		return verification

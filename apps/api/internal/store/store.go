@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
@@ -34,6 +35,8 @@ type Store interface {
 	CreateRun(agentID string, conversationID string) (domain.Run, error)
 	UpdateRunAgent(id string, agentID string) (domain.Run, error)
 	UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error)
+	UpdateRunHeartbeat(id string) (domain.Run, error)
+	ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error)
 	GetRun(id string) (domain.Run, bool, error)
 	ListRuns() ([]domain.Run, error)
 	CreateCollaborationStep(step domain.CollaborationStep) (domain.CollaborationStep, error)
