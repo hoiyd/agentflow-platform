@@ -190,6 +190,55 @@ export type RunReplay = {
   events: TraceEventInfo[];
 };
 
+export type EpisodeReport = {
+  run: RunInfo;
+  conversation: Conversation;
+  agent: AgentInfo;
+  task: string;
+  final_output: string;
+  messages: Message[];
+  steps: CollaborationStepInfo[];
+  trace_summary: RunTraceSummary;
+  retrievals: {
+    event_count: number;
+    memories: Record<string, unknown>[];
+    chunks: Record<string, unknown>[];
+  };
+  llm_calls: Array<{
+    event_id: string;
+    step_id?: string;
+    role?: string;
+    agent_id?: string;
+    model?: string;
+    framework?: string;
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    token_usage_estimated?: boolean;
+    output_chars?: number;
+    duration_ms?: number;
+  }>;
+  tool_calls: Array<{
+    event_id: string;
+    step_id?: string;
+    tool_name?: string;
+    tool_call_id?: string;
+    error?: string;
+    duration_ms?: number;
+  }>;
+  errors: Array<{
+    source: string;
+    event_id?: string;
+    step_id?: string;
+    message: string;
+  }>;
+  verification: {
+    status: "passed" | "failed" | "needs_review" | string;
+    evidence: string[];
+    warnings: string[];
+  };
+};
+
 export type DocumentInfo = {
   id: string;
   workspace_id?: string;
@@ -542,6 +591,14 @@ export async function getRunReplay(runId: string): Promise<RunReplay> {
     throw new Error(`Failed to load run replay: ${response.status}`);
   }
   return normalizeRunReplay(await readJSON<unknown>(response));
+}
+
+export async function getEpisodeReport(runId: string): Promise<EpisodeReport> {
+  const response = await fetch(`${API_BASE}/api/runs/${runId}/episode`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Failed to load episode report: ${response.status}`);
+  }
+  return readJSON<EpisodeReport>(response);
 }
 
 export async function setToolEnabled(name: string, enabled: boolean): Promise<ToolInfo[]> {

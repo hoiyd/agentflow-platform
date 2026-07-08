@@ -99,6 +99,8 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
 		h.cancelRun(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/replay"):
 		h.getRunReplay(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/episode"):
+		h.getEpisodeReport(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/collaboration_steps"):
 		h.listCollaborationSteps(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/"):

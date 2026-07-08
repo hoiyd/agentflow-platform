@@ -1,0 +1,74 @@
+.tools-panel {
+  overflow: auto;
+  padding: 28px 30px;
+}
+
+.tools-list {
+  max-width: 980px;
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+}
+
+.tool-card {
+  border: 1px solid rgba(86, 76, 66, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 253, 248, 0.92);
+  box-shadow: 0 12px 40px rgba(42, 35, 28, 0.05);
+  padding: 17px;
+}
+
+.tool-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.tool-card h3 {
+  color: var(--ink);
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.tool-source {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tool-card p {
+  color: var(--muted-strong);
+  line-height: 1.55;
+  margin: 0 0 12px;
+}
+
+.tool-card pre {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbf8f1;
+  color: #3c332b;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.tool-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
