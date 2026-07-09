@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -82,7 +81,7 @@ func TestPreparedRunsUseRequestedAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	runtime := NewRuntime(fileStore, openai.NewClient("", "", ""), nil)
+	runtime := NewRuntime(fileStore, newLocalFallbackOpenAIClientForTest(), nil)
 	custom, err := fileStore.CreateAgent(domain.Agent{
 		Name:             "Resume Reviewer",
 		Description:      "Reviews resumes against job descriptions.",
@@ -203,7 +202,7 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, openai.NewClientWithTimeout("", "", "test", time.Second), nil, RouterModeQuery, AutonomousLimits{
+	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, newLocalFallbackOpenAIClientForTest(), nil, RouterModeQuery, AutonomousLimits{
 		MaxIterations:  1,
 		MaxRuntime:     time.Minute,
 		MaxOutputChars: 60000,
@@ -252,7 +251,7 @@ func TestAutonomousRunCanBeCanceledBeforeLoop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, openai.NewClientWithTimeout("", "", "test", time.Second), nil, RouterModeQuery, AutonomousLimits{
+	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, newLocalFallbackOpenAIClientForTest(), nil, RouterModeQuery, AutonomousLimits{
 		MaxIterations:  2,
 		MaxRuntime:     time.Minute,
 		MaxOutputChars: 60000,
@@ -297,7 +296,7 @@ func TestResumeAutonomousCompletesHumanInputCheckpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, openai.NewClientWithTimeout("", "", "test", time.Second), nil, RouterModeQuery, AutonomousLimits{
+	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, newLocalFallbackOpenAIClientForTest(), nil, RouterModeQuery, AutonomousLimits{
 		MaxIterations:  2,
 		MaxRuntime:     time.Minute,
 		MaxOutputChars: 60000,
@@ -361,7 +360,7 @@ func TestResumeRecoverableAutonomousContinuesFromSavedSteps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, openai.NewClientWithTimeout("", "", "test", time.Second), nil, RouterModeQuery, AutonomousLimits{
+	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, newLocalFallbackOpenAIClientForTest(), nil, RouterModeQuery, AutonomousLimits{
 		MaxIterations:  2,
 		MaxRuntime:     time.Minute,
 		MaxOutputChars: 60000,

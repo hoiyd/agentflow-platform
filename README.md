@@ -60,21 +60,34 @@ TOOL_CONFIG_PATH=.data/tools.json
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-OPENAI_EMBEDDING_DIMENSIONS=1536
+EMBEDDING_BASE_URL=http://localhost:11434/api/embed
+EMBEDDING_MODEL=embeddinggemma
+EMBEDDING_DIMENSIONS=1536
 OPENAI_REQUEST_TIMEOUT=5m
 
 ROUTER_MODE=auto
 ALLOWED_ORIGINS=http://localhost:3000
 ```
 
-If `OPENAI_API_KEY` is empty, chat and embeddings use deterministic local fallbacks for verification. The frontend search panel shows whether RAG search used `local / local_hash_embedding` or an OpenAI-compatible embedding provider.
+If `OPENAI_API_KEY` is empty, chat uses deterministic local fallback for verification. Embeddings call Ollama when `EMBEDDING_BASE_URL` points to `http://localhost:11434/api/embed`; otherwise they use deterministic local fallback. The frontend search panel shows whether RAG search used `ollama / <model>`, `local / local_hash_embedding`, or an OpenAI-compatible embedding provider.
+
+To split providers, keep chat on a hosted OpenAI-compatible API and point embeddings to local Ollama:
+
+```bash
+OPENAI_BASE_URL=https://api.openai.com/v1
+EMBEDDING_BASE_URL=http://localhost:11434/api/embed
+EMBEDDING_MODEL=embeddinggemma
+```
+
+Ollama's `/api/embed` endpoint is supported directly. To use an OpenAI-compatible embedding provider instead, set `EMBEDDING_BASE_URL` to that provider's `/v1` base URL and set `EMBEDDING_MODEL` accordingly.
+
+Ollama embedding dimensions depend on the selected model. The bundled Postgres schema currently uses `vector(1536)`, so use a 1536-dimensional Ollama embedding model with Postgres, or migrate the vector columns to the model's actual dimension.
 
 To use a stronger embedding model without changing the existing `vector(1536)` pgvector schema:
 
 ```bash
-OPENAI_EMBEDDING_MODEL=text-embedding-3-large
-OPENAI_EMBEDDING_DIMENSIONS=1536
+EMBEDDING_MODEL=text-embedding-3-large
+EMBEDDING_DIMENSIONS=1536
 ```
 
 After changing embedding model/provider, re-upload or reindex documents. Search filters candidates by embedding provider/model so old chunks are not mixed with the new query vector space.

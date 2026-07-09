@@ -2,11 +2,10 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
-	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -16,7 +15,7 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	client := openai.NewClientWithTimeout("", "", "test", time.Second)
+	client := newLocalFallbackOpenAIClientForTest()
 	runtime := NewRuntime(fileStore, client, nil)
 
 	conversation, err := fileStore.CreateConversation("Demo retrieval")
@@ -113,7 +112,7 @@ func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	client := openai.NewClientWithTimeout("", "", "test", time.Second)
+	client := newLocalFallbackOpenAIClientForTest()
 	runtime := NewRuntime(fileStore, client, nil)
 
 	conversation, err := fileStore.CreateConversation("Disabled retrieval")
@@ -165,13 +164,60 @@ func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 	t.Fatal("expected retrieval trace event")
 }
 
+func TestRetrieveContextTruncatesEmbeddingQuery(t *testing.T) {
+	ctx := context.Background()
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	runtime := NewRuntime(fileStore, newLocalFallbackOpenAIClientForTest(), nil)
+
+	conversation, err := fileStore.CreateConversation("Long retrieval query")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+
+	query := strings.Repeat("retrieval query ", 300)
+	runtime.retrieveContext(ctx, run.ID, query, true, true, map[string]any{
+		"executor": ExecutorNative,
+	})
+
+	replay, ok, err := fileStore.GetRunReplay(run.ID)
+	if err != nil {
+		t.Fatalf("get replay: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected replay")
+	}
+	for _, event := range replay.Events {
+		if event.Type != domain.TraceRetrieval {
+			continue
+		}
+		if event.Payload["embedding_query_chars"] != 3000 {
+			t.Fatalf("expected embedding query to be truncated to 3000 chars, got %#v", event.Payload["embedding_query_chars"])
+		}
+		if event.Payload["embedding_query_original_chars"] != len(query) {
+			t.Fatalf("expected original query chars %d, got %#v", len(query), event.Payload["embedding_query_original_chars"])
+		}
+		if event.Payload["embedding_query_truncated"] != true {
+			t.Fatalf("expected embedding query truncated flag, got %#v", event.Payload["embedding_query_truncated"])
+		}
+		return
+	}
+	t.Fatal("expected retrieval trace event")
+}
+
 func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T) {
 	ctx := context.Background()
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	client := openai.NewClientWithTimeout("", "", "test", time.Second)
+	client := newLocalFallbackOpenAIClientForTest()
 	runtime := NewRuntime(fileStore, client, nil)
 
 	conversation, err := fileStore.CreateConversation("LangChainGo executor")

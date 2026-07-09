@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { EpisodeReport, RunReplay as RunReplayData, TraceEventInfo } from "../lib/api";
 import { getEpisodeReport, getRunReplay, resumeRun } from "../lib/api";
 
@@ -32,11 +33,13 @@ type RetrievedChunkPayload = {
 };
 
 export function RunReplay({ runId }: Props) {
+  const router = useRouter();
   const [replay, setReplay] = useState<RunReplayData | null>(null);
   const [episodeReport, setEpisodeReport] = useState<EpisodeReport | null>(null);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [error, setError] = useState("");
   const [isResuming, setIsResuming] = useState(false);
+  const hasNavigatedAfterResume = useRef(false);
 
   useEffect(() => {
     let canceled = false;
@@ -68,13 +71,13 @@ export function RunReplay({ runId }: Props) {
   );
   const retrievalSummary = useMemo(() => buildRetrievalSummary(replay?.events ?? []), [replay?.events]);
   const canResumeRecoverable = replay?.run.status === "failed_recoverable";
-  const showRecoverableBanner = canResumeRecoverable || isResuming;
 
   async function handleResumeRecoverable() {
     if (!replay || isResuming) {
       return;
     }
     setIsResuming(true);
+    hasNavigatedAfterResume.current = false;
     setError("");
     setReplay((current) =>
       current
@@ -91,6 +94,10 @@ export function RunReplay({ runId }: Props) {
     try {
       await resumeRun({ run_id: replay.run.id, user_input: "Resume failed recoverable run from replay." }, (event) => {
         if (event.type === "run" || event.type === "done") {
+          if (event.type === "run" && !hasNavigatedAfterResume.current) {
+            hasNavigatedAfterResume.current = true;
+            router.push(`/workspace?conversation=${encodeURIComponent(event.conversation_id ?? replay.run.conversation_id)}`);
+          }
           setReplay((current) =>
             current
               ? {
@@ -149,20 +156,17 @@ export function RunReplay({ runId }: Props) {
           <p>{replay.conversation.title}</p>
         </div>
         <div className="replay-header-actions">
-          {isResuming ? <span className="replay-status running">Streaming...</span> : null}
-          {canResumeRecoverable || isResuming ? (
+          {canResumeRecoverable ? (
             <button className="run-link" disabled={isResuming} onClick={handleResumeRecoverable} type="button">
-              {isResuming ? "Resuming..." : "Resume run"}
+              Resume run
             </button>
           ) : null}
           <span className={`replay-status ${replay.run.status}`}>{replay.run.status}</span>
         </div>
       </header>
-      {showRecoverableBanner ? (
+      {canResumeRecoverable ? (
         <section className="recoverable-banner">
-          {isResuming
-            ? "Recovery resume is streaming. The run is continuing from saved collaboration steps."
-            : "This run stopped unexpectedly and can be resumed from saved collaboration steps."}
+          This run stopped unexpectedly and can be resumed from saved collaboration steps.
         </section>
       ) : null}
 

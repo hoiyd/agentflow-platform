@@ -21,14 +21,20 @@ import (
 	tracepkg "agentflow-platform/apps/api/internal/trace"
 )
 
+const (
+	defaultEmbeddingBaseURL = "http://localhost:11434/api/embed"
+	defaultEmbeddingModel   = "embeddinggemma"
+)
+
 type Client struct {
-	apiKey         string
-	baseURL        string
-	model          string
-	embeddingModel string
-	embeddingDims  int
-	httpClient     *http.Client
-	timeout        time.Duration
+	apiKey              string
+	baseURL             string
+	embeddingBaseURL    string
+	model               string
+	embeddingModel      string
+	embeddingDimensions int
+	httpClient          *http.Client
+	timeout             time.Duration
 }
 
 type Message struct {
@@ -80,26 +86,34 @@ func NewClient(apiKey string, baseURL string, model string) *Client {
 }
 
 func NewClientWithTimeout(apiKey string, baseURL string, model string, timeout time.Duration) *Client {
-	return NewClientWithTimeoutAndEmbeddingModel(apiKey, baseURL, model, "text-embedding-3-small", 1536, timeout)
+	return NewClientWithTimeoutAndEmbeddingModel(apiKey, baseURL, defaultEmbeddingBaseURL, model, defaultEmbeddingModel, 1536, timeout)
 }
 
-func NewClientWithTimeoutAndEmbeddingModel(apiKey string, baseURL string, model string, embeddingModel string, embeddingDims int, timeout time.Duration) *Client {
+func NewClientWithTimeoutAndEmbeddingModel(apiKey string, baseURL string, embeddingBaseURL string, model string, embeddingModel string, embeddingDimensions int, timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
 	}
 	embeddingModel = strings.TrimSpace(embeddingModel)
 	if embeddingModel == "" {
-		embeddingModel = "text-embedding-3-small"
+		embeddingModel = defaultEmbeddingModel
 	}
-	if embeddingDims <= 0 {
-		embeddingDims = 1536
+	if embeddingDimensions <= 0 {
+		embeddingDimensions = 1536
+	}
+	baseURL = normalizeBaseURL(baseURL)
+	embeddingBaseURL = strings.TrimSpace(embeddingBaseURL)
+	if embeddingBaseURL == "" {
+		embeddingBaseURL = defaultEmbeddingBaseURL
+	} else {
+		embeddingBaseURL = normalizeBaseURL(embeddingBaseURL)
 	}
 	return &Client{
-		apiKey:         strings.TrimSpace(apiKey),
-		baseURL:        normalizeBaseURL(baseURL),
-		model:          strings.TrimSpace(model),
-		embeddingModel: embeddingModel,
-		embeddingDims:  embeddingDims,
+		apiKey:              strings.TrimSpace(apiKey),
+		baseURL:             baseURL,
+		embeddingBaseURL:    embeddingBaseURL,
+		model:               strings.TrimSpace(model),
+		embeddingModel:      embeddingModel,
+		embeddingDimensions: embeddingDimensions,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				Proxy:                 http.ProxyFromEnvironment,
@@ -251,20 +265,23 @@ func (c *Client) EmbedText(ctx context.Context, input string) (Embedding, error)
 	if input == "" {
 		return Embedding{}, errors.New("embedding input is required")
 	}
+	if c.usesOllamaEmbedEndpoint() {
+		return c.embedTextWithOllama(ctx, input)
+	}
 	if c.apiKey == "" {
 		return Embedding{
-			Vector:     deterministicEmbedding(input, c.embeddingDims),
+			Vector:     deterministicEmbedding(input, c.embeddingDimensions),
 			Model:      "local_hash_embedding",
 			Provider:   "local",
 			Estimated:  true,
-			Dimensions: c.embeddingDims,
+			Dimensions: c.embeddingDimensions,
 		}, nil
 	}
 	payload, err := c.embeddingRequestPayload(input)
 	if err != nil {
 		return Embedding{}, err
 	}
-	resp, err := c.doPathRequest(ctx, "/embeddings", payload)
+	resp, err := c.doEmbeddingRequest(ctx, payload)
 	if err != nil {
 		return Embedding{}, err
 	}
@@ -290,15 +307,91 @@ func (c *Client) EmbedText(ctx context.Context, input string) (Embedding, error)
 	}, nil
 }
 
+func (c *Client) embedTextWithOllama(ctx context.Context, input string) (Embedding, error) {
+	payload, err := c.ollamaEmbeddingRequestPayload(input)
+	if err != nil {
+		return Embedding{}, err
+	}
+	var lastErr error
+	for attempt := 1; attempt <= 2; attempt++ {
+		embedding, err := c.doOllamaEmbeddingRequest(ctx, input, payload)
+		if err == nil {
+			return embedding, nil
+		}
+		lastErr = err
+		if !isTransientOllamaEmbeddingError(err) || attempt == 2 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return Embedding{}, ctx.Err()
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+	return Embedding{}, lastErr
+}
+
+func (c *Client) doOllamaEmbeddingRequest(ctx context.Context, input string, payload []byte) (Embedding, error) {
+	resp, err := c.doRawRequest(ctx, c.embeddingBaseURL, payload)
+	if err != nil {
+		return Embedding{}, fmt.Errorf("ollama embedding request failed: model=%s dimensions=%d input_chars=%d error=%w", c.embeddingModel, c.embeddingDimensions, len(input), err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		bytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return Embedding{}, fmt.Errorf("ollama embedding request failed: status=%d model=%s dimensions=%d input_chars=%d body=%s", resp.StatusCode, c.embeddingModel, c.embeddingDimensions, len(input), strings.TrimSpace(string(bytes)))
+	}
+
+	var decoded ollamaEmbeddingResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return Embedding{}, err
+	}
+	if len(decoded.Embeddings) == 0 || len(decoded.Embeddings[0]) == 0 {
+		return Embedding{}, errors.New("ollama embedding response returned no vector")
+	}
+	model := strings.TrimSpace(decoded.Model)
+	if model == "" {
+		model = c.embeddingModel
+	}
+	return Embedding{
+		Vector:     decoded.Embeddings[0],
+		Model:      model,
+		Provider:   "ollama",
+		Dimensions: len(decoded.Embeddings[0]),
+	}, nil
+}
+
+func isTransientOllamaEmbeddingError(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "eof") ||
+		strings.Contains(message, "connection reset") ||
+		strings.Contains(message, "broken pipe")
+}
+
 func (c *Client) embeddingRequestPayload(input string) ([]byte, error) {
 	request := map[string]any{
 		"model": c.embeddingModel,
 		"input": input,
 	}
-	if c.embeddingDims > 0 {
-		request["dimensions"] = c.embeddingDims
+	if c.embeddingDimensions > 0 {
+		request["dimensions"] = c.embeddingDimensions
 	}
 	return json.Marshal(request)
+}
+
+func (c *Client) ollamaEmbeddingRequestPayload(input string) ([]byte, error) {
+	request := map[string]any{
+		"model": c.embeddingModel,
+		"input": input,
+	}
+	if c.embeddingDimensions > 0 {
+		request["dimensions"] = c.embeddingDimensions
+	}
+	return json.Marshal(request)
+}
+
+func (c *Client) usesOllamaEmbedEndpoint() bool {
+	return strings.HasSuffix(strings.TrimRight(c.embeddingBaseURL, "/"), "/api/embed")
 }
 
 func (c *Client) streamFallback(ctx context.Context, latest string, chunks chan<- string) {
@@ -633,15 +726,25 @@ func (c *Client) streamMessagesWithUsageOption(ctx context.Context, messages []M
 }
 
 func (c *Client) doRequest(ctx context.Context, payload []byte) (*http.Response, error) {
-	return c.doPathRequest(ctx, "/chat/completions", payload)
+	return c.doPathRequest(ctx, c.baseURL, "/chat/completions", payload)
 }
 
-func (c *Client) doPathRequest(ctx context.Context, path string, payload []byte) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(payload))
+func (c *Client) doEmbeddingRequest(ctx context.Context, payload []byte) (*http.Response, error) {
+	return c.doPathRequest(ctx, c.embeddingBaseURL, "/embeddings", payload)
+}
+
+func (c *Client) doRawRequest(ctx context.Context, url string, payload []byte) (*http.Response, error) {
+	return c.doPathRequest(ctx, url, "", payload)
+}
+
+func (c *Client) doPathRequest(ctx context.Context, baseURL string, path string, payload []byte) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+path, bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("HTTP-Referer", "http://localhost:3000")
 	req.Header.Set("X-Title", "AgentFlow Platform")
@@ -669,6 +772,11 @@ type embeddingResponse struct {
 	Data  []struct {
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
+}
+
+type ollamaEmbeddingResponse struct {
+	Model      string      `json:"model"`
+	Embeddings [][]float64 `json:"embeddings"`
 }
 
 func buildMessages(history []domain.Message) []Message {

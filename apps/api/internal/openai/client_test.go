@@ -41,7 +41,7 @@ func TestNormalizeBaseURL(t *testing.T) {
 
 func TestEmbeddingRequestPayloadSendsConfiguredDimensions(t *testing.T) {
 	var requestBody map[string]any
-	client := NewClientWithTimeoutAndEmbeddingModel("test-key", "https://example.test/v1", "gpt-test", "text-embedding-3-large", 1536, time.Second)
+	client := NewClientWithTimeoutAndEmbeddingModel("test-key", "https://example.test/v1", "https://embed.example.test/v1", "gpt-test", "text-embedding-3-large", 1536, time.Second)
 	payload, err := client.embeddingRequestPayload("semantic search")
 	if err != nil {
 		t.Fatalf("build embedding request: %v", err)
@@ -54,6 +54,37 @@ func TestEmbeddingRequestPayloadSendsConfiguredDimensions(t *testing.T) {
 	}
 	if requestBody["dimensions"] != float64(1536) {
 		t.Fatalf("expected dimensions=1536 in request, got %#v", requestBody)
+	}
+}
+
+func TestEmbeddingBaseURLDefaultsToOllama(t *testing.T) {
+	client := NewClientWithTimeoutAndEmbeddingModel("test-key", "https://example.test/v1", "", "gpt-test", "text-embedding-3-large", 1536, time.Second)
+	if client.embeddingBaseURL != defaultEmbeddingBaseURL {
+		t.Fatalf("expected embedding base url to default to ollama, got %q", client.embeddingBaseURL)
+	}
+}
+
+func TestOllamaEmbeddingRequestPayload(t *testing.T) {
+	var requestBody map[string]any
+	client := NewClientWithTimeoutAndEmbeddingModel("test-key", "https://example.test/v1", "http://localhost:11434/api/embed", "gpt-test", "embeddinggemma", 1536, time.Second)
+	payload, err := client.ollamaEmbeddingRequestPayload("semantic search")
+	if err != nil {
+		t.Fatalf("build ollama embedding request: %v", err)
+	}
+	if err := json.Unmarshal(payload, &requestBody); err != nil {
+		t.Fatalf("decode request body: %v", err)
+	}
+	if requestBody["model"] != "embeddinggemma" {
+		t.Fatalf("expected ollama embedding model in request, got %#v", requestBody)
+	}
+	if requestBody["input"] != "semantic search" {
+		t.Fatalf("expected ollama input in request, got %#v", requestBody)
+	}
+	if requestBody["dimensions"] != float64(1536) {
+		t.Fatalf("expected ollama dimensions=1536 in request, got %#v", requestBody)
+	}
+	if !client.usesOllamaEmbedEndpoint() {
+		t.Fatal("expected /api/embed endpoint to use ollama embedding mode")
 	}
 }
 

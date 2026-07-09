@@ -13,7 +13,6 @@ import (
 
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -51,7 +50,7 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 
 	handler := NewHandlerWithRouterModeAndLimits(
 		fileStore,
-		openai.NewClientWithTimeout("", "", "test", time.Second),
+		newLocalFallbackOpenAIClientForTest(),
 		nil,
 		nil,
 		agent.RouterModeQuery,

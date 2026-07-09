@@ -126,8 +126,12 @@ func enabledToolCount(registry *tools.Registry) int {
 }
 
 func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string, memoryEnabled bool, retrievalEnabled bool, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
+	embeddingQuery := truncateRetrievalEmbeddingQuery(query)
 	payload := map[string]any{
-		"query": truncateRuntimeText(query, 1200),
+		"query":                          truncateRuntimeText(query, 1200),
+		"embedding_query_chars":          len(embeddingQuery),
+		"embedding_query_original_chars": len(query),
+		"embedding_query_truncated":      len(embeddingQuery) < len(query),
 	}
 	for key, value := range metadata {
 		payload[key] = value
@@ -138,7 +142,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		r.trace.Retrieval(ctx, runID, "", payload)
 		return nil, nil
 	}
-	embedding, err := r.openAI.EmbedText(ctx, query)
+	embedding, err := r.openAI.EmbedText(ctx, embeddingQuery)
 	if err != nil {
 		r.trace.Error(ctx, runID, "", map[string]any{
 			"source": "memory_retrieval",
@@ -281,6 +285,15 @@ func truncateRuntimeText(value string, limit int) string {
 		return value
 	}
 	return value[:limit] + "...[truncated]"
+}
+
+func truncateRetrievalEmbeddingQuery(value string) string {
+	const maxEmbeddingQueryChars = 3000
+	value = strings.TrimSpace(value)
+	if len(value) <= maxEmbeddingQueryChars {
+		return value
+	}
+	return value[:maxEmbeddingQueryChars]
 }
 
 func (r *Runtime) CompleteRun(id string) (domain.Run, error) {

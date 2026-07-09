@@ -13,8 +13,9 @@ type Config struct {
 	OpenAIAPIKey                  string
 	OpenAIBaseURL                 string
 	OpenAIModel                   string
-	OpenAIEmbeddingModel          string
-	OpenAIEmbeddingDimensions     int
+	EmbeddingBaseURL              string
+	EmbeddingModel                string
+	EmbeddingDimensions           int
 	OpenAITimeout                 time.Duration
 	RouterMode                    string
 	AutonomousMaxIterations       int
@@ -37,8 +38,9 @@ func Load() Config {
 		OpenAIAPIKey:                  getEnv("OPENAI_API_KEY", ""),
 		OpenAIBaseURL:                 getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		OpenAIModel:                   getEnv("OPENAI_MODEL", "gpt-4o-mini"),
-		OpenAIEmbeddingModel:          getEnv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
-		OpenAIEmbeddingDimensions:     getIntEnv("OPENAI_EMBEDDING_DIMENSIONS", 1536),
+		EmbeddingBaseURL:              getEnv("EMBEDDING_BASE_URL", "http://localhost:11434/api/embed"),
+		EmbeddingModel:                getEnv("EMBEDDING_MODEL", "embeddinggemma"),
+		EmbeddingDimensions:           getIntEnv("EMBEDDING_DIMENSIONS", 1536),
 		OpenAITimeout:                 getDurationEnv("OPENAI_REQUEST_TIMEOUT", 5*time.Minute),
 		RouterMode:                    normalizeRouterMode(getEnv("ROUTER_MODE", "auto")),
 		AutonomousMaxIterations:       getIntEnv("AUTONOMOUS_MAX_ITERATIONS", 5),

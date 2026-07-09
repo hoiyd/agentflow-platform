@@ -89,17 +89,28 @@ TOOL_CONFIG_PATH=.data/tools.json
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-OPENAI_EMBEDDING_DIMENSIONS=1536
+EMBEDDING_BASE_URL=http://localhost:11434/api/embed
+EMBEDDING_MODEL=embeddinggemma
+EMBEDDING_DIMENSIONS=1536
 OPENAI_REQUEST_TIMEOUT=5m
 ```
 
 For better RAG embeddings while keeping the current `vector(1536)` schema:
 
 ```bash
-OPENAI_EMBEDDING_MODEL=text-embedding-3-large
-OPENAI_EMBEDDING_DIMENSIONS=1536
+EMBEDDING_MODEL=text-embedding-3-large
+EMBEDDING_DIMENSIONS=1536
 ```
+
+To keep the main LLM remote while testing embeddings locally:
+
+```bash
+OPENAI_BASE_URL=https://api.openai.com/v1
+EMBEDDING_BASE_URL=http://localhost:11434/api/embed
+EMBEDDING_MODEL=embeddinggemma
+```
+
+Ollama embedding dimensions depend on the selected model. The current Postgres pgvector schema uses `vector(1536)`, so local Ollama embeddings should also output 1536 dimensions before indexing into Postgres.
 
 After changing embedding provider/model, existing knowledge should be re-uploaded or reindexed. Search filters by embedding provider/model to avoid mixing vector spaces.
 

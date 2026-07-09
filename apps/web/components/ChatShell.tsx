@@ -104,7 +104,11 @@ type AutonomousProgress = {
   stopReason?: string;
 };
 
-export function ChatShell() {
+type ChatShellProps = {
+  initialConversationId?: string;
+};
+
+export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [messages, setMessages] = useState<DraftMessage[]>([]);
@@ -208,14 +212,19 @@ export function ChatShell() {
       runState.status === "running" ||
       runState.status === "canceling" ||
       runState.status === "waiting_for_user");
-  const isRunStreaming = isStreaming || isContinuingRun || isResumingRun;
+  const isRunStreaming =
+    isStreaming ||
+    isContinuingRun ||
+    isResumingRun ||
+    runState?.status === "running" ||
+    runState?.status === "canceling";
 
   useEffect(() => {
-    void refreshConversations();
+    void refreshConversations(initialConversationId || undefined);
     void refreshAgents();
     void refreshTools();
     void refreshDocuments();
-  }, []);
+  }, [initialConversationId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -17,7 +16,7 @@ func TestRememberMessageCreatesSearchableEmbedding(t *testing.T) {
 	}
 	handler := &Handler{
 		store:  fileStore,
-		openAI: openai.NewClient("", "", ""),
+		openAI: newLocalFallbackOpenAIClientForTest(),
 	}
 	message := domain.Message{
 		ID:             "msg_test",

@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -155,7 +154,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	}
 	handler := &Handler{
 		store:  fileStore,
-		openAI: openai.NewClient("", "", ""),
+		openAI: newLocalFallbackOpenAIClientForTest(),
 	}
 
 	createBody := []byte(`{
@@ -352,7 +351,7 @@ func TestUploadDocumentAPIAcceptsTxtAndMarkdown(t *testing.T) {
 	}
 	handler := &Handler{
 		store:  fileStore,
-		openAI: openai.NewClient("", "", ""),
+		openAI: newLocalFallbackOpenAIClientForTest(),
 	}
 
 	for _, tc := range []struct {
@@ -408,7 +407,7 @@ func TestUploadDocumentAPIRejectsUnsupportedAndEmptyFiles(t *testing.T) {
 	}
 	handler := &Handler{
 		store:  fileStore,
-		openAI: openai.NewClient("", "", ""),
+		openAI: newLocalFallbackOpenAIClientForTest(),
 	}
 
 	for _, tc := range []struct {

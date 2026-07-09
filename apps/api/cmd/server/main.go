@@ -39,7 +39,15 @@ func main() {
 		log.Printf("native recovery marked %d stale running run(s) as failed_recoverable", recovered)
 	}
 
-	openAIClient := openai.NewClientWithTimeoutAndEmbeddingModel(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, cfg.OpenAIModel, cfg.OpenAIEmbeddingModel, cfg.OpenAIEmbeddingDimensions, cfg.OpenAITimeout)
+	openAIClient := openai.NewClientWithTimeoutAndEmbeddingModel(
+		cfg.OpenAIAPIKey,
+		cfg.OpenAIBaseURL,
+		cfg.EmbeddingBaseURL,
+		cfg.OpenAIModel,
+		cfg.EmbeddingModel,
+		cfg.EmbeddingDimensions,
+		cfg.OpenAITimeout,
+	)
 	mcpClient := tools.NewRoutedMCPClient()
 	defer func() {
 		if err := mcpClient.Close(); err != nil {
