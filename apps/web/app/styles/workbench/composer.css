@@ -2,8 +2,7 @@
 
 .composer {
   border-top: 1px solid var(--border);
-  background: rgba(248, 250, 252, 0.96);
-  backdrop-filter: blur(12px);
+  background: #f8fafc;
   padding: 18px 22px 18px;
 }
 
@@ -30,7 +29,7 @@
 .agent-config-panel label > span,
 .agent-config-tools > span {
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 8px;
   font-weight: 500;
   letter-spacing: 0;
@@ -126,7 +125,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #ffffff;
-  box-shadow: 0 28px 90px rgba(15, 22, 31, 0.22);
+  box-shadow: 0 1px 2px rgba(15, 22, 31, 0.08), 0 12px 28px -14px rgba(15, 22, 31, 0.24);
   overflow-x: hidden;
   overflow-y: auto;
   padding: 20px;
@@ -231,4 +230,3 @@
   place-items: center;
   padding: 0;
 }
-

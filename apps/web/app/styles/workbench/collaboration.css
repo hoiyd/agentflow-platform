@@ -16,7 +16,7 @@
 
 .collaboration-panel-header span {
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 8px;
   font-weight: 500;
   letter-spacing: 0;
@@ -32,8 +32,12 @@
 .collaboration-panel-actions button {
   border-radius: 4px;
   background: #ffffff;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 9px;
+}
+
+.collaboration-panel-header small {
+  font-family: var(--font-mono);
 }
 
 .autonomous-panel {
@@ -356,7 +360,7 @@
 
 .dag-header span {
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 8px;
   font-weight: 500;
   white-space: nowrap;
@@ -364,7 +368,7 @@
 
 .dag-header strong {
   color: var(--muted-strong);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 500;
   line-height: 1.35;

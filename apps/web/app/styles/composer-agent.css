@@ -1,7 +1,6 @@
 .composer {
   border-top: 1px solid rgba(86, 76, 66, 0.14);
-  background: rgba(251, 249, 244, 0.9);
-  backdrop-filter: blur(18px);
+  background: var(--surface);
   padding: 14px 30px 20px;
 }
 
@@ -385,4 +384,3 @@ textarea:disabled {
   color: var(--danger);
   font-size: 14px;
 }
-

@@ -59,7 +59,7 @@
 
 .mode-chooser span {
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0;
@@ -112,7 +112,7 @@
 
 .empty-eyebrow {
   color: var(--accent);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 9px;
   text-transform: uppercase;
 }
@@ -165,7 +165,7 @@
 
 .message-meta {
   color: var(--muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 9px;
   font-weight: 500;
   letter-spacing: 0;

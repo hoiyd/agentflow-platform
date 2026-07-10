@@ -9,8 +9,7 @@
   display: flex;
   flex-direction: column;
   border-right: 1px solid rgba(86, 76, 66, 0.16);
-  background: rgba(251, 249, 244, 0.78);
-  backdrop-filter: blur(18px);
+  background: var(--surface);
 }
 
 .brand {
@@ -182,8 +181,7 @@
 .topbar {
   min-height: 68px;
   border-bottom: 1px solid rgba(86, 76, 66, 0.12);
-  background: rgba(247, 245, 240, 0.72);
-  backdrop-filter: blur(18px);
+  background: var(--surface);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -299,4 +297,3 @@
 .back-link:hover {
   color: var(--accent);
 }
-
