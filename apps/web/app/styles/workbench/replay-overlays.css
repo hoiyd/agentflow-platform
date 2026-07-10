@@ -1,0 +1,123 @@
+/* Replay and overlays */
+
+.replay-page {
+  padding: 24px 28px 48px;
+}
+
+.replay-header h1 {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 620;
+}
+
+.replay-status {
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
+.recoverable-banner,
+.episode-report,
+.episode-card,
+.retrieval-overview,
+.metric,
+.timeline-panel,
+.step-panel,
+.detail-panel,
+.timeline-event,
+.step-row {
+  border-radius: 5px;
+  box-shadow: none;
+}
+
+.episode-report,
+.retrieval-overview,
+.metric,
+.timeline-panel,
+.step-panel,
+.detail-panel {
+  background: #ffffff;
+}
+
+.episode-card,
+.timeline-event,
+.step-row {
+  background: #f8fafc;
+}
+
+.metric strong,
+.episode-card strong,
+.event-time,
+.event-duration,
+.step-meta,
+.retrieval-model {
+  font-family: var(--font-mono);
+}
+
+.timeline-list {
+  position: relative;
+}
+
+.timeline-list::before {
+  content: "";
+  position: absolute;
+  top: 22px;
+  bottom: 22px;
+  left: 20px;
+  width: 1px;
+  background: var(--border-strong);
+}
+
+.timeline-event {
+  position: relative;
+}
+
+.timeline-event.active {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.detail-kv {
+  border-bottom-color: var(--border);
+}
+
+.detail-kv strong,
+.retrieval-model strong,
+.step-agent,
+.step-meta,
+.raw-json-title,
+.retrieved-item-header strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.retrieved-item {
+  border-color: var(--border);
+  border-radius: 4px;
+  background: #f8fafc;
+}
+
+.raw-json-panel {
+  border-top-color: var(--border);
+}
+
+.raw-json-panel pre {
+  border-color: #d5dce5;
+  border-radius: 4px;
+  background: #f4f7fa;
+  color: #273342;
+}
+
+.modal-backdrop {
+  background: rgba(18, 23, 30, 0.48);
+  backdrop-filter: blur(3px);
+}
+
+.confirm-dialog {
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(15, 20, 28, 0.22);
+}
+

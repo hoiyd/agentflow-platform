@@ -1,23 +1,46 @@
 import Link from "next/link";
+import { Activity, ArrowUpRight, Check, Database, GitBranch, Play, Terminal } from "lucide-react";
 
-const capabilities = [
+const workflowSteps = [
   {
-    title: "Agent runtime",
-    body: "Run single-agent, multi-agent, and autonomous workflows with configurable prompts, tools, retrieval, and executor."
+    title: "Plan",
+    detail: "4 tasks generated",
+    duration: "0.8s"
   },
   {
-    title: "Memory and RAG",
-    body: "Index memories and knowledge documents, search with vector retrieval, rerank results, and inspect retrieved context."
+    title: "Research",
+    detail: "3 tools · 12 sources",
+    duration: "6.4s"
   },
   {
-    title: "Replay and evaluation",
-    body: "Review run traces, collaboration steps, retrieved memories, retrieved knowledge, and RAG evaluation output."
+    title: "Synthesize",
+    detail: "2,418 tokens",
+    duration: "3.1s"
+  },
+  {
+    title: "Review",
+    detail: "Quality gate passed",
+    duration: "1.2s"
   }
 ];
 
-const demoSteps = ["Configure an agent", "Add knowledge", "Run a workflow", "Inspect replay"];
-const proofPoints = ["Multi-agent runs", "Semantic memory", "RAG evaluation", "Replay traces"];
-const stackItems = ["Native executor", "LangChainGo", "pgvector", "OpenAI-compatible embeddings"];
+const platformLayers = [
+  {
+    icon: GitBranch,
+    title: "Orchestrate",
+    body: "Move from a direct agent call to planned collaboration and bounded autonomous loops without changing workspaces."
+  },
+  {
+    icon: Database,
+    title: "Ground",
+    body: "Attach tools, semantic memory, and indexed knowledge. Inspect exactly what entered the model context."
+  },
+  {
+    icon: Activity,
+    title: "Observe",
+    body: "Follow execution live, then replay every step, tool call, retrieval, token, latency, and failure."
+  }
+];
 
 export default function Page() {
   return (
@@ -25,74 +48,111 @@ export default function Page() {
       <section className="home-hero">
         <nav className="home-nav" aria-label="Home">
           <Link href="/" className="home-logo">
+            <span className="brand-mark" aria-hidden="true"><span /></span>
             AgentFlow
           </Link>
           <div className="home-nav-actions">
-            <a href="#demo-flow" className="home-nav-link subtle">
-              Demo
+            <a href="#platform" className="home-nav-link subtle">
+              Platform
             </a>
-            <a href="#capabilities" className="home-nav-link subtle">
-              Capabilities
+            <a href="#architecture" className="home-nav-link subtle">
+              Architecture
             </a>
             <Link href="/workspace" className="home-nav-link">
-              Workspace
+              Open workspace <ArrowUpRight size={15} strokeWidth={1.8} />
             </Link>
           </div>
         </nav>
 
         <div className="home-hero-content">
-          <p className="home-kicker">AI agent workflow platform</p>
-          <h1>Build, test, and replay agent workflows.</h1>
+          <p className="home-kicker">Agent runtime · OpenAI compatible</p>
+          <h1>AgentFlow</h1>
+          <p className="home-hero-statement">Build agent systems you can inspect.</p>
           <p className="home-subtitle">
-            AgentFlow is a focused project workspace for configurable agents, tool use, semantic memory, RAG, evaluation, and replayable execution traces.
+            Configure agents, coordinate work, call tools, and follow every decision from prompt to result in one operational workspace.
           </p>
           <div className="home-actions">
             <Link href="/workspace" className="home-primary-action">
-              Open Workspace
+              <Play size={16} fill="currentColor" /> Launch workspace
             </Link>
-            <a href="#demo-flow" className="home-secondary-action">
-              Demo Flow
+            <a href="#platform" className="home-secondary-action">
+              See how runs work
             </a>
           </div>
-          <div className="home-proof-row" aria-label="Project highlights">
-            {proofPoints.map((point) => (
-              <span key={point}>{point}</span>
-            ))}
+        </div>
+
+        <div className="product-frame" aria-label="Agent workflow execution preview">
+          <div className="product-frame-bar">
+            <div className="product-frame-title">
+              <span className="brand-mark small" aria-hidden="true"><span /></span>
+              <span>Travel research</span>
+              <code>run_01JQ7M8</code>
+            </div>
+            <div className="run-live"><span /> completed in 11.5s</div>
+          </div>
+          <div className="product-frame-body">
+            <section className="execution-map">
+              <div className="preview-label">Execution</div>
+              <div className="execution-rail">
+                {workflowSteps.map((step) => (
+                  <div className="execution-step" key={step.title}>
+                    <span className="execution-node"><Check size={11} strokeWidth={2.5} /></span>
+                    <div>
+                      <strong>{step.title}</strong>
+                      <span>{step.detail}</span>
+                    </div>
+                    <code>{step.duration}</code>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="execution-output">
+              <div className="preview-label">Final output</div>
+              <h2>Osaka in late July: high-friction, feasible with constraints.</h2>
+              <p>
+                The run compared live flight options, hotel availability, heat index, and the Tenjin Matsuri calendar before producing a recommendation.
+              </p>
+              <div className="output-facts">
+                <span><strong>12</strong> sources</span>
+                <span><strong>3</strong> tool calls</span>
+                <span><strong>4</strong> agents</span>
+              </div>
+              <div className="output-command"><Terminal size={14} /> Replay run <ArrowUpRight size={14} /></div>
+            </section>
           </div>
         </div>
       </section>
 
-      <section className="home-section home-stack" aria-label="Technical stack">
-        <span>What it demonstrates</span>
-        <div>
-          {stackItems.map((item) => (
-            <strong key={item}>{item}</strong>
-          ))}
-        </div>
-      </section>
-
-      <section className="home-section" id="demo-flow">
+      <section className="home-section" id="platform">
         <div className="home-section-header">
-          <span>Demo flow</span>
-          <h2>Show the system end to end</h2>
+          <span>One operational surface</span>
+          <h2>From prompt to production evidence.</h2>
+          <p>Each layer stays visible and inspectable, so agent behavior can be operated like software.</p>
         </div>
-        <div className="home-demo-flow">
-          {demoSteps.map((step, index) => (
-            <div className="home-demo-step" key={step}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{step}</strong>
-            </div>
+        <div className="platform-layers">
+          {platformLayers.map((item) => (
+            <article className="platform-layer" key={item.title}>
+              <item.icon size={19} strokeWidth={1.7} />
+              <h3>{item.title}</h3>
+              <p>{item.body}</p>
+            </article>
           ))}
         </div>
       </section>
 
-      <section className="home-section home-capabilities" id="capabilities" aria-label="Capabilities">
-        {capabilities.map((item) => (
-          <article className="home-capability" key={item.title}>
-            <h3>{item.title}</h3>
-            <p>{item.body}</p>
-          </article>
-        ))}
+      <section className="home-architecture" id="architecture">
+        <div className="home-section architecture-inner">
+          <div>
+            <span className="section-index">Runtime architecture</span>
+            <h2>Built as a platform,<br />not a chat wrapper.</h2>
+          </div>
+          <div className="architecture-list">
+            <div><code>01</code><span>Go orchestration runtime</span><strong>Native + LangChainGo</strong></div>
+            <div><code>02</code><span>State and retrieval</span><strong>PostgreSQL + pgvector</strong></div>
+            <div><code>03</code><span>Model gateway</span><strong>OpenAI-compatible APIs</strong></div>
+            <div><code>04</code><span>Observability</span><strong>SSE events + replay traces</strong></div>
+          </div>
+        </div>
       </section>
     </main>
   );

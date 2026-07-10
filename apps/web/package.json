@@ -10,6 +10,10 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@fontsource-variable/ibm-plex-sans": "^5.2.8",
+    "@fontsource-variable/manrope": "^5.2.8",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "lucide-react": "^1.24.0",
     "marked": "^18.0.4",
     "next": "16.2.6",
     "react": "19.0.0",

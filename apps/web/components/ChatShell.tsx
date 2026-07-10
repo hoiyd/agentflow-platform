@@ -5,6 +5,31 @@ import type { ReactNode } from "react";
 import { lexer } from "marked";
 import type { Token, Tokens } from "marked";
 import {
+  Activity,
+  Bot,
+  ChevronDown,
+  ChevronUp,
+  Database,
+  GitBranch,
+  Menu,
+  MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  Pencil,
+  Plus,
+  Repeat2,
+  Send,
+  Settings2,
+  Square,
+  Trash2,
+  UserRoundPlus,
+  Users,
+  Wrench,
+  X
+} from "lucide-react";
+import {
   AgentInfo,
   ChatExecutor,
   ChatMode,
@@ -173,6 +198,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const [editingConversationId, setEditingConversationId] = useState("");
   const [conversationTitleDraft, setConversationTitleDraft] = useState("");
   const [isSavingConversationTitle, setIsSavingConversationTitle] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const activeConversation = useMemo(
@@ -237,6 +264,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   useEffect(() => {
     if (chatMode === "multi_agent" || chatMode === "autonomous") {
       setIsCollaborationPanelOpen(true);
+      setIsAgentConfigOpen(false);
+      setIsNewAgentFormOpen(false);
+      setNewAgentDraft(null);
+      setAgentConfigStatus("");
     }
   }, [chatMode]);
 
@@ -274,9 +305,12 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       const runs = await listRuns();
       const run = runs.find((item) => item.conversation_id === conversationId);
       if (!run) {
+        setRunState(null);
         setCollaborationSteps([]);
+        setAutonomousProgress(null);
         setPlanDraft("");
         setHumanInputDraft("");
+        setIsCancelingRun(false);
         return;
       }
       setRunState({
@@ -288,17 +322,22 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setCollaborationSteps(steps.map(toCollaborationStepView));
       if (steps.some((step) => autonomousRoles.some((role) => role.id === step.role))) {
         setChatMode("autonomous");
+        setIsCollaborationPanelOpen(true);
       } else if (steps.length > 0) {
         setChatMode("multi_agent");
+        setIsCollaborationPanelOpen(true);
       }
       const planner = steps.find((step) => step.role === "planner");
       setPlanDraft(planner?.output ?? "");
       const humanInput = steps.find((step) => step.role === "human_input" && step.status === "running");
       setHumanInputDraft((current) => (humanInput ? current : ""));
     } catch {
+      setRunState(null);
       setCollaborationSteps([]);
+      setAutonomousProgress(null);
       setPlanDraft("");
       setHumanInputDraft("");
+      setIsCancelingRun(false);
     }
   }
 
@@ -509,6 +548,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setAgents((items) => items.map((item) => (item.id === updated.id ? updated : item)));
       setAgentConfigDraft(agentToConfigDraft(updated));
       setAgentConfigStatus("Agent config saved.");
+      setIsAgentConfigOpen(false);
       setAgentOperationNotice({
         title: "Agent config saved",
         message: `${updated.name} has been updated and will be used by new runs.`,
@@ -553,6 +593,14 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     setAgentConfigStatus("");
   }
 
+  function handleCancelAgentConfig() {
+    if (isSavingAgentConfig) {
+      return;
+    }
+    setIsAgentConfigOpen(false);
+    setAgentConfigStatus("");
+  }
+
   async function handleCreateAgent() {
     if (isCreatingAgent || isStreaming || !newAgentDraft) {
       return;
@@ -565,7 +613,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setAgents((items) => [...items, created]);
       setActiveAgentId(created.id);
       setAgentConfigDraft(agentToConfigDraft(created));
-      setIsAgentConfigOpen(true);
+      setIsAgentConfigOpen(false);
       setIsNewAgentFormOpen(false);
       setNewAgentDraft(null);
       setRunState(null);
@@ -794,6 +842,9 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     setHumanInputDraft("");
     setPlanDraft("");
     setIsCancelingRun(false);
+    if (chatMode === "multi_agent" || chatMode === "autonomous") {
+      setIsCollaborationPanelOpen(true);
+    }
     setIsStreaming(true);
 
     const optimisticUser: DraftMessage = {
@@ -1057,37 +1108,68 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   }
 
   return (
-    <div className="shell">
-      <aside className="sidebar">
+    <div className={`shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <aside className={`sidebar ${isSidebarOpen ? "mobile-open" : ""} ${isSidebarCollapsed ? "collapsed" : ""}`}>
         <div className="brand">
-          <h1>AgentFlow</h1>
-          <p>Agent workflow runtime with runs, memory, tools, and knowledge.</p>
+          <a className="workspace-brand" href="/" title="AgentFlow Operations workspace">
+            <span className="brand-mark" aria-hidden="true"><span /></span>
+            <span><strong>AgentFlow</strong><small>Operations workspace</small></span>
+          </a>
+          <button
+            aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className="sidebar-collapse"
+            onClick={() => setIsSidebarCollapsed((current) => !current)}
+            title={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            type="button"
+          >
+            {isSidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          </button>
+          <button className="sidebar-close" aria-label="Close navigation" onClick={() => setIsSidebarOpen(false)} type="button">
+            <X size={18} />
+          </button>
         </div>
-        <button className="new-chat" onClick={startNewConversation}>
-          New Chat
+        <button className="new-chat" title="New conversation" onClick={() => {
+          setIsSidebarOpen(false);
+          void startNewConversation();
+        }}>
+          <Plus size={17} /> <span>New conversation</span>
         </button>
         <div className="sidebar-section">
-          <div className="sidebar-section-title">Workspace</div>
+          <div className="sidebar-section-title">Operate</div>
+          <button
+            className={`nav-button ${view === "chat" ? "active" : ""}`}
+            title="Chat"
+            onClick={() => {
+              setView("chat");
+              setIsSidebarOpen(false);
+            }}
+          >
+            <MessageSquare size={16} /> <span>Chat</span>
+          </button>
           <button
             className={`nav-button ${view === "tools" ? "active" : ""}`}
+            title="Tools"
             onClick={() => {
               setView("tools");
+              setIsSidebarOpen(false);
               void refreshTools();
             }}
           >
-            Tools
+            <Wrench size={16} /> <span>Tools</span>
           </button>
           <button
             className={`nav-button ${view === "knowledge" ? "active" : ""}`}
+            title="Knowledge"
             onClick={() => {
               setView("knowledge");
+              setIsSidebarOpen(false);
               void refreshDocuments();
             }}
           >
-            Knowledge
+            <Database size={16} /> <span>Knowledge</span>
           </button>
         </div>
-        <div className="sidebar-section-title conversation-section-title">Conversations</div>
+        <div className="sidebar-section-title conversation-section-title">Recent runs</div>
         <div className="conversation-list">
           {conversations.map((conversation) => {
             const isActiveConversation = conversation.id === activeId;
@@ -1097,7 +1179,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                 key={conversation.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => openConversation(conversation.id)}
+                onClick={() => {
+                  setIsSidebarOpen(false);
+                  void openConversation(conversation.id);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
@@ -1106,9 +1191,12 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                 }}
               >
                 <div className="conversation-item-main">
-                  <span className="conversation-title">{conversation.title}</span>
+                  <span className="conversation-title" title={conversation.title}>{conversation.title}</span>
                   <span className="conversation-date">
-                    {new Date(conversation.updated_at).toLocaleString()}
+                    {new Date(conversation.updated_at).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric"
+                    })}
                   </span>
                 </div>
                 <button
@@ -1121,16 +1209,30 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                   }}
                   type="button"
                 >
-                  Delete
+                  <Trash2 size={14} />
                 </button>
               </div>
             );
           })}
         </div>
+        <div className="sidebar-runtime">
+          <span><i /> <span className="sidebar-runtime-label">API connected</span></span>
+          <code>v0.7</code>
+        </div>
       </aside>
+
+      <button
+        aria-label="Close navigation"
+        className={`sidebar-scrim ${isSidebarOpen ? "visible" : ""}`}
+        onClick={() => setIsSidebarOpen(false)}
+        type="button"
+      />
 
       <main className="main">
         <header className="topbar">
+          <button className="mobile-menu" aria-label="Open navigation" onClick={() => setIsSidebarOpen(true)} type="button">
+            <Menu size={19} />
+          </button>
           {view === "chat" && activeConversation ? (
             editingConversationId === activeConversation.id ? (
               <form
@@ -1161,35 +1263,67 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
               </form>
             ) : (
               <div className="conversation-title-display">
-                <h2>{activeConversation.title}</h2>
+                <div>
+                  <span className="topbar-eyebrow">Conversation</span>
+                  <h2>{activeConversation.title}</h2>
+                </div>
                 <button
+                  aria-label="Rename conversation"
                   className="conversation-title-edit"
                   disabled={isSavingConversationTitle}
                   onClick={() => startEditingConversationTitle(activeConversation)}
                   type="button"
                 >
-                  Edit
+                  <Pencil size={14} />
                 </button>
               </div>
             )
           ) : (
-            <h2>{view === "tools" ? "Tools" : view === "knowledge" ? "Knowledge" : "New conversation"}</h2>
+            <div className="topbar-heading">
+              <span className="topbar-eyebrow">Workspace</span>
+              <h2>{view === "tools" ? "Tools" : view === "knowledge" ? "Knowledge" : "New conversation"}</h2>
+            </div>
           )}
           <div className="topbar-actions">
+            {view === "chat" && runState ? (
+              <span
+                aria-label={`Task status: ${runState.status.replaceAll("_", " ")}`}
+                className={`run-status-indicator ${runState.status}`}
+                title={`Run ${runState.id}`}
+              >
+                <i />
+                <span>Task</span>
+                <strong>{runState.status.replaceAll("_", " ")}</strong>
+              </span>
+            ) : null}
+            {view === "chat" && canCancelRun ? (
+              <button
+                className="topbar-run-stop"
+                disabled={isCancelingRun || runState?.status === "canceling"}
+                onClick={handleCancelRun}
+                type="button"
+              >
+                <Square size={12} fill="currentColor" />
+                {isCancelingRun || runState?.status === "canceling" ? "Stopping" : "Stop"}
+              </button>
+            ) : null}
             {view === "chat" && runState?.id && isTerminalRun ? (
               <a className="run-link" href={`/runs/${runState.id}`}>
-                View run
+                <Activity size={15} /> View trace
               </a>
             ) : null}
-            <span className="status">
-              {view === "tools"
-                ? `${tools.filter((tool) => tool.enabled).length} enabled`
-                : view === "knowledge"
-                  ? `${documents.length} documents`
-                  : isRunStreaming
-                    ? "Streaming..."
-                    : "Ready"}
-            </span>
+            {view !== "chat" || !runState ? (
+              <span className={`status ${isRunStreaming ? "active" : ""}`}>
+                <i />
+                {view === "tools"
+                  ? `${tools.filter((tool) => tool.enabled).length} enabled`
+                  : view === "knowledge"
+                    ? `${documents.length} documents`
+                    : isRunStreaming
+                      ? "Streaming..."
+                      : "Ready"}
+              </span>
+            ) : null}
           </div>
         </header>
 
@@ -1285,34 +1419,42 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                 disabled={isStreaming}
                 setChatMode={(mode) => {
                   setChatMode(mode);
-                  setRunState(null);
-                  setIsCancelingRun(false);
-                  setCollaborationSteps([]);
-                  setAutonomousProgress(null);
-                  setHumanInputDraft("");
-                  setPlanDraft("");
+                  setIsCollaborationPanelOpen(mode === "multi_agent" || mode === "autonomous");
+                  setIsAgentConfigOpen(false);
+                  setIsNewAgentFormOpen(false);
+                  setNewAgentDraft(null);
+                  setAgentConfigStatus("");
                 }}
               />
               {showCollaborationPanel && !isCollaborationPanelOpen ? (
-                <button
-                  className="collaboration-rail-toggle"
-                  onClick={() => setIsCollaborationPanelOpen(true)}
-                  type="button"
-                >
-                  {isAwaitingPlanApproval
-                    ? "Review Plan & Continue"
-                    : showAutonomousTrace
-                      ? "Show Autonomous Trace"
-                      : "Show Collaboration Trace"}
-                </button>
+                <div className="trace-reveal-row">
+                  <button
+                    className="collaboration-rail-toggle trace-panel-toggle"
+                    onClick={() => setIsCollaborationPanelOpen(true)}
+                    type="button"
+                  >
+                    <PanelRightOpen size={14} />
+                    {isAwaitingPlanApproval
+                      ? "Review Plan & Continue"
+                      : showAutonomousTrace
+                        ? "Show Autonomous Trace"
+                        : "Show Collaboration Trace"}
+                  </button>
+                </div>
               ) : null}
               {messages.length === 0 ? (
                 <div className="empty">
-                  <h2>Build the first reliable layer.</h2>
+                  <div className="empty-mark"><GitBranch size={22} strokeWidth={1.5} /></div>
+                  <span className="empty-eyebrow">Ready to run</span>
+                  <h2>What should the agents work on?</h2>
                   <p>
-                    Start a conversation. The Go API will persist messages and stream assistant output
-                    back through Server-Sent Events.
+                    Describe an outcome. Choose direct chat for quick work, collaboration for a reviewed plan, or autonomous mode for bounded execution.
                   </p>
+                  <div className="starter-prompts" aria-label="Starter prompts">
+                    <button onClick={() => setInput("Compare two implementation approaches and recommend one.")} type="button">Compare approaches</button>
+                    <button onClick={() => setInput("Research this topic, cite evidence, and summarize the result.")} type="button">Run research</button>
+                    <button onClick={() => setInput("Create an execution plan and wait for my approval.")} type="button">Draft a plan</button>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -1359,11 +1501,12 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
 
         {view === "chat" ? (
           <section className="composer">
-            {chatMode === "single" || !runState ? (
+            {chatMode === "single" ? (
               <div className="agent-bar single">
                 <label className="agent-select">
                   <span>Agent</span>
                   <select
+                    title={activeAgent?.name ?? "Select an agent"}
                     value={activeAgentId}
                     disabled={isStreaming || agents.length === 0}
                     onChange={(event) => {
@@ -1372,7 +1515,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                     }}
                   >
                     {agents.map((agent) => (
-                      <option key={agent.id} value={agent.id}>
+                      <option key={agent.id} title={agent.name} value={agent.id}>
                         {agent.name}
                       </option>
                     ))}
@@ -1398,9 +1541,9 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                         onClick={() =>
                           setIsAgentDescriptionExpanded((current) => !current)
                         }
-                        type="button"
-                      >
-                        {isAgentDescriptionExpanded ? "Less" : "..."}
+                      type="button"
+                    >
+                        {isAgentDescriptionExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                       </button>
                     ) : null}
                   </div>
@@ -1413,7 +1556,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                       onClick={handleOpenNewAgentForm}
                       type="button"
                     >
-                      New Agent
+                      <UserRoundPlus size={15} /> New agent
                     </button>
                     <button
                       className={`agent-config-toggle ${isAgentConfigOpen ? "active" : ""}`}
@@ -1421,64 +1564,13 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                         setIsNewAgentFormOpen(false);
                         setNewAgentDraft(null);
                         setAgentConfigStatus("");
-                        setIsAgentConfigOpen((current) => !current);
+                        setIsAgentConfigOpen(true);
                       }}
                       type="button"
                     >
-                      {isAgentConfigOpen ? "Hide Config" : "Agent Config"}
+                      <Settings2 size={15} /> Configure
                     </button>
                   </div>
-                ) : null}
-                {isNewAgentFormOpen && newAgentDraft ? (
-                  <AgentConfigPanel
-                    actionLabel="Create Agent"
-                    availableTools={tools}
-                    draft={newAgentDraft}
-                    disabled={isStreaming || isCreatingAgent}
-                    isSaving={isCreatingAgent}
-                    onCancel={handleCancelNewAgent}
-                    onChange={updateNewAgentDraft}
-                    onSave={handleCreateAgent}
-                    onToggleTool={toggleNewAgentTool}
-                    status={agentConfigStatus}
-                    title="Create new agent"
-                  />
-                ) : null}
-                {isAgentConfigOpen && activeAgent && agentConfigDraft ? (
-                  <AgentConfigPanel
-                    actionLabel="Save Config"
-                    availableTools={tools}
-                    canArchive={!isDefaultAgent(activeAgent)}
-                    draft={agentConfigDraft}
-                    disabled={isStreaming || isSavingAgentConfig}
-                    isArchiving={archivingAgentId === activeAgent.id}
-                    isSaving={isSavingAgentConfig}
-                    onChange={updateAgentConfigDraft}
-                    onArchive={handleArchiveAgent}
-                    onSave={handleSaveAgentConfig}
-                    onToggleTool={toggleAgentConfigTool}
-                    status={agentConfigStatus}
-                    title="Edit agent config"
-                  />
-                ) : null}
-              </div>
-            ) : runState ? (
-              <div className={`agent-bar ${chatMode}`}>
-                <div className={`run-pill ${runState.status}`}>
-                  <span>{runState.status}</span>
-                  <code>{runState.id}</code>
-                </div>
-                {chatMode === "autonomous" ? (
-                  canCancelRun ? (
-                    <button
-                      className="run-stop"
-                      disabled={isCancelingRun || runState.status === "canceling"}
-                      onClick={handleCancelRun}
-                      type="button"
-                    >
-                      {isCancelingRun || runState.status === "canceling" ? "Stopping..." : "Stop"}
-                    </button>
-                  ) : null
                 ) : null}
               </div>
             ) : null}
@@ -1506,15 +1598,58 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                 }
               />
               <button
+                aria-label="Send message"
+                title="Send message"
                 className="send"
                 disabled={isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput || input.trim().length === 0}
               >
-                Send
+                <Send size={18} />
               </button>
             </form>
           </section>
         ) : null}
       </main>
+      {chatMode === "single" && isNewAgentFormOpen && newAgentDraft ? (
+        <div className="modal-backdrop agent-config-modal-backdrop create-agent-modal-backdrop" role="presentation">
+          <section aria-label="Create new agent" aria-modal="true" className="agent-config-dialog" role="dialog">
+            <AgentConfigPanel
+              actionLabel="Create Agent"
+              availableTools={tools}
+              draft={newAgentDraft}
+              disabled={isStreaming || isCreatingAgent}
+              isSaving={isCreatingAgent}
+              onCancel={handleCancelNewAgent}
+              onChange={updateNewAgentDraft}
+              onSave={handleCreateAgent}
+              onToggleTool={toggleNewAgentTool}
+              status={agentConfigStatus}
+              title="Create new agent"
+            />
+          </section>
+        </div>
+      ) : null}
+      {chatMode === "single" && isAgentConfigOpen && activeAgent && agentConfigDraft ? (
+        <div className="modal-backdrop agent-config-modal-backdrop" role="presentation">
+          <section aria-label="Edit agent config" aria-modal="true" className="agent-config-dialog" role="dialog">
+            <AgentConfigPanel
+              actionLabel="Save Config"
+              availableTools={tools}
+              canArchive={!isDefaultAgent(activeAgent)}
+              draft={agentConfigDraft}
+              disabled={isStreaming || isSavingAgentConfig}
+              isArchiving={archivingAgentId === activeAgent.id}
+              isSaving={isSavingAgentConfig}
+              onCancel={handleCancelAgentConfig}
+              onChange={updateAgentConfigDraft}
+              onArchive={handleArchiveAgent}
+              onSave={handleSaveAgentConfig}
+              onToggleTool={toggleAgentConfigTool}
+              status={agentConfigStatus}
+              title="Edit agent config"
+            />
+          </section>
+        </div>
+      ) : null}
       {agentArchiveCandidate ? (
         <div className="modal-backdrop" role="presentation">
           <section aria-labelledby="archive-agent-title" aria-modal="true" className="confirm-dialog" role="dialog">
@@ -1578,8 +1713,9 @@ function ModeChooser({
         onClick={() => setChatMode("single")}
         type="button"
       >
-        <span>Single Agent</span>
-        <strong>Direct chat</strong>
+        <Bot size={16} />
+        <span>Direct</span>
+        <strong>Single agent</strong>
       </button>
       <button
         className={chatMode === "multi_agent" ? "active" : ""}
@@ -1587,8 +1723,9 @@ function ModeChooser({
         onClick={() => setChatMode("multi_agent")}
         type="button"
       >
-        <span>Multi-Agent</span>
-        <strong>Plan, edit, execute</strong>
+        <Users size={16} />
+        <span>Coordinate</span>
+        <strong>Multi-agent</strong>
       </button>
       <button
         className={chatMode === "autonomous" ? "active" : ""}
@@ -1596,8 +1733,9 @@ function ModeChooser({
         onClick={() => setChatMode("autonomous")}
         type="button"
       >
+        <Repeat2 size={16} />
         <span>Autonomous</span>
-        <strong>Loop until done</strong>
+        <strong>Bounded loop</strong>
       </button>
     </section>
   );
@@ -1638,11 +1776,6 @@ function AgentConfigPanel({
     <section className="agent-config-panel">
       <div className="agent-config-header">
         <strong>{title}</strong>
-        {onCancel ? (
-          <button className="secondary-action" disabled={disabled} onClick={onCancel} type="button">
-            Cancel
-          </button>
-        ) : null}
       </div>
       <div className="agent-config-grid">
         <label>
@@ -1722,6 +1855,17 @@ function AgentConfigPanel({
         {onArchive && canArchive ? (
           <button className="secondary-action danger-action" disabled={disabled || isArchiving} onClick={onArchive} type="button">
             {isArchiving ? "Archiving..." : "Archive Agent"}
+          </button>
+        ) : null}
+        {onCancel ? (
+          <button
+            aria-label={`Cancel ${title.toLowerCase()}`}
+            className="secondary-action agent-config-cancel"
+            disabled={disabled}
+            onClick={onCancel}
+            type="button"
+          >
+            <X size={15} /> Cancel
           </button>
         ) : null}
         <button className="send compact-send" disabled={disabled || draft.name.trim().length === 0} onClick={onSave} type="button">
@@ -2261,7 +2405,7 @@ function AutonomousPanel({
           <strong>Loop Trace</strong>
         </div>
         <div className="collaboration-panel-actions">
-          <small>
+          <small className="trace-progress-label">
             Iteration {latestIteration || 0}
             {progress?.maxIterations ? ` / ${progress.maxIterations}` : ""} · {completedSteps} steps complete
           </small>
@@ -2275,81 +2419,100 @@ function AutonomousPanel({
               {isCanceling || runStatus === "canceling" ? "Stopping..." : "Stop"}
             </button>
           ) : null}
-          <button onClick={onCollapse} type="button">
-            Hide
+          <button className="trace-panel-toggle trace-collapse" onClick={onCollapse} type="button">
+            <PanelRightClose size={14} /> Hide
           </button>
         </div>
       </div>
-      <div className="autonomous-limit-strip">
-        <span>Status: {runStatus || "idle"}</span>
-        <span>
-          Runtime: {formatDuration(progress?.elapsedSeconds ?? 0)}
-          {progress?.maxRuntimeSeconds ? ` / ${formatDuration(progress.maxRuntimeSeconds)}` : ""}
-        </span>
-        <span>
-          Output: {progress?.outputChars ?? 0}
-          {progress?.maxOutputChars ? ` / ${progress.maxOutputChars}` : ""}
-        </span>
-        <span>
-          Tool calls: {progress?.toolCalls ?? 0}
-          {progress?.maxToolCalls ? ` / ${progress.maxToolCalls}` : ""}
-        </span>
-        {progress?.stopReason ? <span>Stop: {progress.stopReason}</span> : null}
-      </div>
-      {humanInputStep ? (
-        <section className="human-input-panel" aria-label="Human input required">
-          <div className="human-input-header">
-            <div>
-              <span>Input required</span>
-              <strong>{humanInputStep.output || "Please provide the missing information."}</strong>
-            </div>
-            <button
-              disabled={isResuming || humanInputDraft.trim().length === 0}
-              onClick={() => onResume(humanInputDraft)}
-              type="button"
-            >
-              {isResuming ? "Continuing..." : "Submit & Continue"}
-            </button>
+      <div className="autonomous-limit-strip" aria-label="Run status">
+        <div className="trace-metric">
+          <span>Status</span>
+          <strong>{runStatus || "idle"}</strong>
+        </div>
+        <div className="trace-metric">
+          <span>Runtime</span>
+          <strong>
+            {formatDuration(progress?.elapsedSeconds ?? 0)}
+            {progress?.maxRuntimeSeconds ? ` / ${formatDuration(progress.maxRuntimeSeconds)}` : ""}
+          </strong>
+        </div>
+        <div className="trace-metric">
+          <span>Output</span>
+          <strong>
+            {progress?.outputChars ?? 0}
+            {progress?.maxOutputChars ? ` / ${progress.maxOutputChars}` : ""}
+          </strong>
+        </div>
+        <div className="trace-metric">
+          <span>Tool calls</span>
+          <strong>
+            {progress?.toolCalls ?? 0}
+            {progress?.maxToolCalls ? ` / ${progress.maxToolCalls}` : ""}
+          </strong>
+        </div>
+        {progress?.stopReason ? (
+          <div className="trace-metric trace-stop-reason">
+            <span>Stop reason</span>
+            <strong>{progress.stopReason}</strong>
           </div>
-          {humanInputStep.input ? <p>{humanInputStep.input}</p> : null}
-          <textarea
-            disabled={isResuming}
-            onChange={(event) => onHumanInputChange(event.target.value)}
-            placeholder="Provide the missing details..."
-            value={humanInputDraft}
-          />
-        </section>
-      ) : null}
-      <div className="autonomous-iterations">
-        {activeIterations.length === 0 ? (
-          <div className="autonomous-empty">Waiting for the first autonomous iteration.</div>
-        ) : (
-          activeIterations.map((group) => (
-            <section className="autonomous-iteration" key={group.iteration}>
-              <div className="autonomous-iteration-header">
-                <strong>Iteration {group.iteration}</strong>
-                <span>
-                  {group.steps.filter((step) => step.status === "completed").length}/{autonomousRoles.length}
-                </span>
+        ) : null}
+      </div>
+      <div className="autonomous-scroll-area">
+        {humanInputStep ? (
+          <section className="human-input-panel" aria-label="Human input required">
+            <div className="human-input-header">
+              <div>
+                <span>Input required</span>
+                <strong>{humanInputStep.output || "Please provide the missing information."}</strong>
               </div>
-              {autonomousRoles.map((role) => {
-                const step = group.steps.find((item) => item.role === role.id);
-                return (
-                  <article className={`autonomous-step ${step?.status ?? "idle"}`} key={role.id}>
-                    <div className="autonomous-step-header">
-                      <strong>{role.label}</strong>
-                      <span>{step?.status ?? "idle"}</span>
-                    </div>
-                    <div className="collaboration-output">
-                      {step?.output ? renderMarkdown(step.output) : <p>{role.empty}</p>}
-                    </div>
-                    {step?.error ? <div className="error">{step.error}</div> : null}
-                  </article>
-                );
-              })}
-            </section>
-          ))
-        )}
+              <button
+                disabled={isResuming || humanInputDraft.trim().length === 0}
+                onClick={() => onResume(humanInputDraft)}
+                type="button"
+              >
+                {isResuming ? "Continuing..." : "Submit & Continue"}
+              </button>
+            </div>
+            {humanInputStep.input ? <p>{humanInputStep.input}</p> : null}
+            <textarea
+              disabled={isResuming}
+              onChange={(event) => onHumanInputChange(event.target.value)}
+              placeholder="Provide the missing details..."
+              value={humanInputDraft}
+            />
+          </section>
+        ) : null}
+        <div className="autonomous-iterations">
+          {activeIterations.length === 0 ? (
+            <div className="autonomous-empty">Waiting for the first autonomous iteration.</div>
+          ) : (
+            activeIterations.map((group) => (
+              <section className="autonomous-iteration" key={group.iteration}>
+                <div className="autonomous-iteration-header">
+                  <strong>Iteration {group.iteration}</strong>
+                  <span>
+                    {group.steps.filter((step) => step.status === "completed").length}/{autonomousRoles.length}
+                  </span>
+                </div>
+                {autonomousRoles.map((role) => {
+                  const step = group.steps.find((item) => item.role === role.id);
+                  return (
+                    <article className={`autonomous-step ${step?.status ?? "idle"}`} key={role.id}>
+                      <div className="autonomous-step-header">
+                        <strong>{role.label}</strong>
+                        <span>{step?.status ?? "idle"}</span>
+                      </div>
+                      <div className="collaboration-output">
+                        {step?.output ? renderMarkdown(step.output) : <p>{role.empty}</p>}
+                      </div>
+                      {step?.error ? <div className="error">{step.error}</div> : null}
+                    </article>
+                  );
+                })}
+              </section>
+            ))
+          )}
+        </div>
       </div>
     </aside>
   );
@@ -2403,77 +2566,79 @@ function CollaborationPanel({
           <strong>Collaboration Trace</strong>
         </div>
         <div className="collaboration-panel-actions">
-          <small>
+          <small className="trace-progress-label">
             {visibleSteps.filter((step) => step.status === "completed").length}/{collaborationRoles.length} complete
           </small>
-          <button onClick={onCollapse} type="button">
-            Hide
+          <button className="trace-panel-toggle trace-collapse" onClick={onCollapse} type="button">
+            <PanelRightClose size={14} /> Hide
           </button>
         </div>
       </div>
-      {isAwaitingPlanApproval ? (
-        <section className="plan-review" aria-label="Review generated plan">
-          <div className="plan-review-header">
-            <div>
-              <span>Action required</span>
-              <strong>Review the plan before execution</strong>
+      <div className="collaboration-scroll-area">
+        {isAwaitingPlanApproval ? (
+          <section className="plan-review" aria-label="Review generated plan">
+            <div className="plan-review-header">
+              <div>
+                <span>Action required</span>
+                <strong>Review the plan before execution</strong>
+              </div>
+              <button
+                disabled={isContinuing || planDraft.trim().length === 0}
+                onClick={() => onContinue(planEditorRef.current?.innerText ?? planDraft)}
+                type="button"
+              >
+                {isContinuing ? "Continuing..." : "Approve & Continue"}
+              </button>
             </div>
-            <button
-              disabled={isContinuing || planDraft.trim().length === 0}
-              onClick={() => onContinue(planEditorRef.current?.innerText ?? planDraft)}
-              type="button"
+            <div
+              aria-label="Editable generated plan"
+              className="plan-rich-editor markdown"
+              contentEditable={!isContinuing}
+              onBlur={(event) => setPlanDraft(event.currentTarget.innerText)}
+              ref={planEditorRef}
+              role="textbox"
+              suppressContentEditableWarning
+              tabIndex={0}
             >
-              {isContinuing ? "Continuing..." : "Approve & Continue"}
-            </button>
-          </div>
-          <div
-            aria-label="Editable generated plan"
-            className="plan-rich-editor markdown"
-            contentEditable={!isContinuing}
-            onBlur={(event) => setPlanDraft(event.currentTarget.innerText)}
-            ref={planEditorRef}
-            role="textbox"
-            suppressContentEditableWarning
-            tabIndex={0}
-          >
-            {renderMarkdownTokens(lexer(planDraft))}
-          </div>
-          <p>Edit the rendered plan directly. The bottom chat input is paused until you continue this run.</p>
-        </section>
-      ) : null}
-      <div className="collaboration-steps">
-        {visibleSteps.map((step) => {
-          const role = collaborationRoles.find((item) => item.id === step.role);
-          const isPlannerWaiting = step.role === "planner" && isAwaitingPlanApproval;
-          return (
-            <article
-              className={`collaboration-step ${step.status} ${selectedRole === step.role ? "selected" : ""}`}
-              key={step.role}
-            >
-              <div className="collaboration-step-header">
-                <div>
-                  <strong>{role?.label ?? step.role}</strong>
-                  {step.agent_id ? (
-                    <span>
-                      {agentNames.get(step.agent_id) ?? "Selected agent"} ({step.agent_id})
-                    </span>
-                  ) : null}
+              {renderMarkdownTokens(lexer(planDraft))}
+            </div>
+            <p>Edit the rendered plan directly. The bottom chat input is paused until you continue this run.</p>
+          </section>
+        ) : null}
+        <div className="collaboration-steps">
+          {visibleSteps.map((step) => {
+            const role = collaborationRoles.find((item) => item.id === step.role);
+            const isPlannerWaiting = step.role === "planner" && isAwaitingPlanApproval;
+            return (
+              <article
+                className={`collaboration-step ${step.status} ${selectedRole === step.role ? "selected" : ""}`}
+                key={step.role}
+              >
+                <div className="collaboration-step-header">
+                  <div>
+                    <strong>{role?.label ?? step.role}</strong>
+                    {step.agent_id ? (
+                      <span>
+                        {agentNames.get(step.agent_id) ?? "Selected agent"} ({step.agent_id})
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="step-status">{step.status}</span>
                 </div>
-                <span className="step-status">{step.status}</span>
-              </div>
-              <div className="collaboration-output">
-                {isPlannerWaiting ? (
-                  plannerStep?.output ? renderMarkdown(plannerStep.output) : <p>Plan is ready for review above.</p>
-                ) : step.output ? (
-                  renderMarkdown(step.output)
-                ) : (
-                  <p>{role?.empty ?? "Waiting for execution."}</p>
-                )}
-              </div>
-              {step.error ? <div className="error">{step.error}</div> : null}
-            </article>
-          );
-        })}
+                <div className="collaboration-output">
+                  {isPlannerWaiting ? (
+                    plannerStep?.output ? renderMarkdown(plannerStep.output) : <p>Plan is ready for review above.</p>
+                  ) : step.output ? (
+                    renderMarkdown(step.output)
+                  ) : (
+                    <p>{role?.empty ?? "Waiting for execution."}</p>
+                  )}
+                </div>
+                {step.error ? <div className="error">{step.error}</div> : null}
+              </article>
+            );
+          })}
+        </div>
       </div>
     </aside>
   );
