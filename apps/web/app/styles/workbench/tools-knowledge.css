@@ -1,0 +1,67 @@
+/* Tools and knowledge */
+
+.tools-panel,
+.knowledge-panel,
+.replay-page {
+  background: var(--bg);
+}
+
+.tools-panel,
+.knowledge-panel {
+  padding: 24px;
+}
+
+.tools-list {
+  max-width: 1080px;
+  margin: 0 auto;
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+.tool-card {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  padding: 20px 0;
+}
+
+.tool-card pre,
+.tool-card code {
+  border-radius: 4px;
+  background: #edf1f5;
+  font-family: var(--font-mono);
+}
+
+.tool-toggle {
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.knowledge-grid,
+.knowledge-search,
+.rag-evaluation,
+.knowledge-column,
+.document-card,
+.rag-result-card,
+.evaluation-case,
+.document-detail-inline,
+.chunk-card,
+.embedding-status {
+  border-radius: 5px;
+}
+
+.knowledge-column,
+.knowledge-search,
+.rag-evaluation {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.document-card,
+.rag-result-card,
+.evaluation-case,
+.chunk-card {
+  background: #f9fafb;
+}
+

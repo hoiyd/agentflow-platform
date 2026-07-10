@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { EpisodeReport, RunReplay as RunReplayData, TraceEventInfo } from "../lib/api";
 import { getEpisodeReport, getRunReplay, resumeRun } from "../lib/api";
@@ -126,9 +127,9 @@ export function RunReplay({ runId }: Props) {
   if (error) {
     return (
       <main className="replay-page">
-        <a className="back-link" href="/">
+        <Link className="back-link" href="/">
           Back to chat
-        </a>
+        </Link>
         <div className="error">{error}</div>
       </main>
     );
@@ -137,9 +138,9 @@ export function RunReplay({ runId }: Props) {
   if (!replay) {
     return (
       <main className="replay-page">
-        <a className="back-link" href="/">
+        <Link className="back-link" href="/">
           Back to chat
-        </a>
+        </Link>
         <div className="empty">Loading run replay...</div>
       </main>
     );
@@ -149,9 +150,9 @@ export function RunReplay({ runId }: Props) {
     <main className="replay-page">
       <header className="replay-header">
         <div>
-          <a className="back-link" href="/">
+          <Link className="back-link" href="/">
             Back to chat
-          </a>
+          </Link>
           <h1>Run replay</h1>
           <p>{replay.conversation.title}</p>
         </div>

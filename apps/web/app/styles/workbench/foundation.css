@@ -1,0 +1,94 @@
+:root {
+  --bg: #f5f7f9;
+  --surface: #ffffff;
+  --surface-soft: #eef1f4;
+  --surface-raised: #ffffff;
+  --ink: #171a1f;
+  --text: #30363d;
+  --muted: #77818c;
+  --muted-strong: #59636e;
+  --border: #dce1e7;
+  --border-strong: #c5ccd5;
+  --accent: #2d5fd3;
+  --accent-dark: #244ba8;
+  --accent-soft: #e9effd;
+  --teal: #17805f;
+  --blue: #2d5fd3;
+  --danger: #c24146;
+  --warning: #a76018;
+  --shadow: 0 20px 60px rgba(20, 28, 38, 0.08);
+  --font-display: "Manrope Variable", "Avenir Next", sans-serif;
+  --font-sans: "IBM Plex Sans Variable", "Helvetica Neue", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-variation-settings: "wght" 440;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  letter-spacing: 0;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.brand-mark {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 1px solid #15181d;
+  display: grid;
+  place-items: center;
+}
+
+.brand-mark::before,
+.brand-mark::after,
+.brand-mark span {
+  content: "";
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.brand-mark::before { left: 4px; top: 8px; }
+.brand-mark::after { right: 4px; top: 4px; }
+.brand-mark span { right: 4px; bottom: 4px; }
+
+.brand-mark.small {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+}
+
+.brand-mark.small::before { left: 3px; top: 7px; }
+.brand-mark.small::after { right: 3px; top: 3px; }
+.brand-mark.small span { right: 3px; bottom: 3px; }
+
