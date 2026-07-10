@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { lexer } from "marked";
 import type { Token, Tokens } from "marked";
 import {
@@ -210,14 +211,6 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     () => agents.find((agent) => agent.id === activeAgentId),
     [activeAgentId, agents]
   );
-
-  useEffect(() => {
-    if (!activeAgent) {
-      setAgentConfigDraft(null);
-      return;
-    }
-    setAgentConfigDraft(agentToConfigDraft(activeAgent));
-  }, [activeAgent]);
   const showCollaborationPanel = chatMode === "multi_agent" || chatMode === "autonomous";
   const showCollaborationDag = chatMode === "multi_agent";
   const showAutonomousTrace = chatMode === "autonomous";
@@ -245,40 +238,33 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     isResumingRun ||
     runState?.status === "running" ||
     runState?.status === "canceling";
+  const visibleCollaborationRole =
+    selectedCollaborationRole === "planner" ||
+    collaborationSteps.some((step) => step.role === selectedCollaborationRole)
+      ? selectedCollaborationRole
+      : "planner";
 
   useEffect(() => {
     void refreshConversations(initialConversationId || undefined);
     void refreshAgents();
     void refreshTools();
     void refreshDocuments();
-  }, [initialConversationId]);
+  }, [initialConversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => {
-    setIsAgentDescriptionExpanded(false);
-  }, [activeAgentId]);
-
-  useEffect(() => {
-    if (chatMode === "multi_agent" || chatMode === "autonomous") {
-      setIsCollaborationPanelOpen(true);
+  function handleChatModeChange(mode: ChatMode) {
+    setChatMode(mode);
+    setIsCollaborationPanelOpen(mode === "multi_agent" || mode === "autonomous");
+    if (mode !== "single") {
       setIsAgentConfigOpen(false);
       setIsNewAgentFormOpen(false);
       setNewAgentDraft(null);
       setAgentConfigStatus("");
     }
-  }, [chatMode]);
-
-  useEffect(() => {
-    if (selectedCollaborationRole === "planner") {
-      return;
-    }
-    if (!collaborationSteps.some((step) => step.role === selectedCollaborationRole)) {
-      setSelectedCollaborationRole("planner");
-    }
-  }, [collaborationSteps, selectedCollaborationRole]);
+  }
 
   async function refreshConversations(nextActiveId?: string) {
     const items = await listConversations();
@@ -321,11 +307,9 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       const steps = await listCollaborationSteps(run.id);
       setCollaborationSteps(steps.map(toCollaborationStepView));
       if (steps.some((step) => autonomousRoles.some((role) => role.id === step.role))) {
-        setChatMode("autonomous");
-        setIsCollaborationPanelOpen(true);
+        handleChatModeChange("autonomous");
       } else if (steps.length > 0) {
-        setChatMode("multi_agent");
-        setIsCollaborationPanelOpen(true);
+        handleChatModeChange("multi_agent");
       }
       const planner = steps.find((step) => step.role === "planner");
       setPlanDraft(planner?.output ?? "");
@@ -366,12 +350,12 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setAgentsError("");
       const items = await listAgents();
       setAgents(items);
-      setActiveAgentId((current) => {
-        if (current && items.some((agent) => agent.id === current)) {
-          return current;
-        }
-        return items.find((agent) => agent.id === "agent_planner")?.id ?? items[0]?.id ?? "";
-      });
+      const nextAgent =
+        items.find((agent) => agent.id === activeAgentId) ??
+        items.find((agent) => agent.id === "agent_planner") ??
+        items[0];
+      setActiveAgentId(nextAgent?.id ?? "");
+      setAgentConfigDraft(nextAgent ? agentToConfigDraft(nextAgent) : null);
     } catch (err) {
       setAgentsError(err instanceof Error ? err.message : "Failed to load agents");
     }
@@ -658,6 +642,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setAgents(remaining);
       const next = remaining.find((agent) => agent.id === "agent_planner") ?? remaining[0];
       setActiveAgentId(next?.id ?? "");
+      setAgentConfigDraft(next ? agentToConfigDraft(next) : null);
+      setIsAgentDescriptionExpanded(false);
       setIsAgentConfigOpen(false);
       setIsNewAgentFormOpen(false);
       setNewAgentDraft(null);
@@ -1111,10 +1097,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     <div className={`shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className={`sidebar ${isSidebarOpen ? "mobile-open" : ""} ${isSidebarCollapsed ? "collapsed" : ""}`}>
         <div className="brand">
-          <a className="workspace-brand" href="/" title="AgentFlow Operations workspace">
+          <Link className="workspace-brand" href="/" title="AgentFlow Operations workspace">
             <span className="brand-mark" aria-hidden="true"><span /></span>
             <span><strong>AgentFlow</strong><small>Operations workspace</small></span>
-          </a>
+          </Link>
           <button
             aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             className="sidebar-collapse"
@@ -1404,7 +1390,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           >
             {showCollaborationDag && isCollaborationPanelOpen ? (
               <CollaborationDag
-                activeRole={selectedCollaborationRole}
+                activeRole={visibleCollaborationRole}
                 agents={agents}
                 className="collaboration-dag-standalone"
                 onSelectRole={setSelectedCollaborationRole}
@@ -1417,14 +1403,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
               <ModeChooser
                 chatMode={chatMode}
                 disabled={isStreaming}
-                setChatMode={(mode) => {
-                  setChatMode(mode);
-                  setIsCollaborationPanelOpen(mode === "multi_agent" || mode === "autonomous");
-                  setIsAgentConfigOpen(false);
-                  setIsNewAgentFormOpen(false);
-                  setNewAgentDraft(null);
-                  setAgentConfigStatus("");
-                }}
+                setChatMode={handleChatModeChange}
               />
               {showCollaborationPanel && !isCollaborationPanelOpen ? (
                 <div className="trace-reveal-row">
@@ -1492,7 +1471,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                 runStatus={runState?.status ?? ""}
                 setPlanDraft={setPlanDraft}
                 steps={collaborationSteps}
-                selectedRole={selectedCollaborationRole}
+                selectedRole={visibleCollaborationRole}
               />
               )
             ) : null}
@@ -1510,7 +1489,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                     value={activeAgentId}
                     disabled={isStreaming || agents.length === 0}
                     onChange={(event) => {
+                      const nextAgent = agents.find((agent) => agent.id === event.target.value);
                       setActiveAgentId(event.target.value);
+                      setAgentConfigDraft(nextAgent ? agentToConfigDraft(nextAgent) : null);
+                      setIsAgentDescriptionExpanded(false);
                       setRunState(null);
                     }}
                   >
@@ -2873,6 +2855,8 @@ function renderMarkdownImage(token: Tokens.Image, key: string) {
   if (!href) {
     return <span key={key}>{token.text}</span>;
   }
+  // Markdown images may use arbitrary remote or data URLs that Next Image cannot preconfigure.
+  // eslint-disable-next-line @next/next/no-img-element
   return <img alt={token.text} key={key} src={href} title={token.title || undefined} />;
 }
 
