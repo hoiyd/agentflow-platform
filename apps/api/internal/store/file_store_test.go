@@ -163,56 +163,6 @@ func TestFileStoreRunEventsHaveStrictSequence(t *testing.T) {
 	}
 }
 
-func TestFileStoreMigratesAndRemovesLegacyTraceEvents(t *testing.T) {
-	path := t.TempDir() + "/agentflow.json"
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	fixture := `{"conversations":[{"id":"conv_1","title":"Legacy","created_at":"` + now + `","updated_at":"` + now + `"}],"runs":[{"id":"run_1","agent_id":"agent_planner","conversation_id":"conv_1","status":"completed","created_at":"` + now + `","updated_at":"` + now + `"}],"trace_events":[{"id":"trace_1","run_id":"run_1","step_id":"step_1","type":"llm_end","payload":{"total_tokens":9},"timestamp":"` + now + `","duration_ms":12}]}`
-	if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	fileStore, err := NewFileStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	events, err := fileStore.ListRunEvents("run_1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(events) != 1 || events[0].Type != domain.EventModelCompleted || events[0].StageID != "step_1" {
-		t.Fatalf("unexpected migrated events: %#v", events)
-	}
-	if events[0].Payload["duration_ms"] != float64(12) && events[0].Payload["duration_ms"] != int64(12) {
-		t.Fatalf("duration not migrated: %#v", events[0].Payload)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(data), "trace_events") {
-		t.Fatalf("legacy trace_events remained in file: %s", data)
-	}
-}
-
-func TestFileStorePreservesLegacyPayloadForDualWrittenRun(t *testing.T) {
-	path := t.TempDir() + "/agentflow.json"
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	fixture := `{"conversations":[{"id":"conv_1","title":"Dual","created_at":"` + now + `","updated_at":"` + now + `"}],"runs":[{"id":"run_1","agent_id":"agent_planner","conversation_id":"conv_1","status":"completed","created_at":"` + now + `","updated_at":"` + now + `"}],"run_events":[{"id":"event_1","run_id":"run_1","type":"turn.completed","schema_version":1,"sequence":1,"payload":{},"timestamp":"` + now + `"}],"trace_events":[{"id":"trace_1","run_id":"run_1","type":"llm_end","payload":{"total_tokens":17},"timestamp":"` + now + `"}]}`
-	if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	fileStore, err := NewFileStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	events, err := fileStore.ListRunEvents("run_1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(events) != 2 || events[1].Type != "legacy.trace.llm_end" || events[1].Payload["total_tokens"] != float64(17) {
-		t.Fatalf("legacy payload was not preserved: %#v", events)
-	}
-}
-
 func TestFileStoreListStaleRunningRuns(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

@@ -29,7 +29,6 @@ type fileData struct {
 	Agents             []domain.Agent                  `json:"agents"`
 	Runs               []domain.Run                    `json:"runs"`
 	CollaborationSteps []domain.CollaborationStep      `json:"collaboration_steps"`
-	LegacyTraceEvents  []legacyTraceEvent              `json:"trace_events,omitempty"`
 	RunEvents          []domain.RunEvent               `json:"run_events"`
 	Memories           []domain.Memory                 `json:"memories"`
 	MemoryEmbeddings   []domain.MemoryEmbedding        `json:"memory_embeddings"`
@@ -131,13 +130,6 @@ func (s *FileStore) DeleteConversation(id string) error {
 	}
 	s.data.CollaborationSteps = steps
 
-	legacyTraceEvents := make([]legacyTraceEvent, 0, len(s.data.LegacyTraceEvents))
-	for _, event := range s.data.LegacyTraceEvents {
-		if !runIDs[event.RunID] {
-			legacyTraceEvents = append(legacyTraceEvents, event)
-		}
-	}
-	s.data.LegacyTraceEvents = legacyTraceEvents
 	runEvents := make([]domain.RunEvent, 0, len(s.data.RunEvents))
 	for _, event := range s.data.RunEvents {
 		if !runIDs[event.RunID] {
@@ -966,13 +958,12 @@ func (s *FileStore) load() error {
 	if err := json.Unmarshal(bytes, &s.data); err != nil {
 		return err
 	}
-	hadLegacyEvents := len(s.data.LegacyTraceEvents) > 0
 	s.normalizeLoadedDataLocked()
 	if len(s.data.Agents) == 0 {
 		s.seedDefaultAgentsLocked()
 		return s.saveLocked()
 	}
-	if s.migrateDefaultAgentsLocked() || hadLegacyEvents {
+	if s.migrateDefaultAgentsLocked() {
 		return s.saveLocked()
 	}
 	return nil
@@ -1020,7 +1011,6 @@ func emptyFileData() fileData {
 		Agents:             []domain.Agent{},
 		Runs:               []domain.Run{},
 		CollaborationSteps: []domain.CollaborationStep{},
-		LegacyTraceEvents:  []legacyTraceEvent{},
 		RunEvents:          []domain.RunEvent{},
 		Memories:           []domain.Memory{},
 		MemoryEmbeddings:   []domain.MemoryEmbedding{},
@@ -1045,9 +1035,6 @@ func (s *FileStore) normalizeLoadedDataLocked() {
 	}
 	if s.data.CollaborationSteps == nil {
 		s.data.CollaborationSteps = []domain.CollaborationStep{}
-	}
-	if s.migrateLegacyTraceEventsLocked() {
-		s.data.LegacyTraceEvents = nil
 	}
 	if s.data.RunEvents == nil {
 		s.data.RunEvents = []domain.RunEvent{}

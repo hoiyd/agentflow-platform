@@ -1469,28 +1469,6 @@ var postgresMigrations = []string{
 		timestamp timestamptz NOT NULL,
 		UNIQUE(run_id, sequence)
 	)`,
-	`DO $$
-	BEGIN
-		IF to_regclass('public.trace_events') IS NOT NULL THEN
-			INSERT INTO run_events (id, run_id, conversation_id, stage_id, type, schema_version, sequence, payload, timestamp)
-			SELECT t.id, t.run_id, r.conversation_id, t.step_id,
-				CASE WHEN EXISTS (SELECT 1 FROM run_events existing WHERE existing.run_id=t.run_id)
-				THEN 'legacy.trace.' || t.type ELSE CASE t.type
-					WHEN 'llm_start' THEN 'model.started'
-					WHEN 'llm_end' THEN 'model.completed'
-					WHEN 'tool_start' THEN 'tool.started'
-					WHEN 'tool_end' THEN 'tool.completed'
-					WHEN 'retrieval' THEN 'retrieval.completed'
-					WHEN 'error' THEN 'model.failed'
-					ELSE 'legacy.' || t.type END END,
-				1, (SELECT COALESCE(MAX(sequence),0) FROM run_events existing WHERE existing.run_id=t.run_id) + row_number() OVER (PARTITION BY t.run_id ORDER BY t.timestamp, t.id),
-				t.payload || CASE WHEN t.duration_ms > 0 THEN jsonb_build_object('duration_ms', t.duration_ms) ELSE '{}'::jsonb END || CASE WHEN EXISTS (SELECT 1 FROM run_events existing WHERE existing.run_id=t.run_id) THEN '{"migrated_legacy":true}'::jsonb ELSE '{}'::jsonb END,
-				t.timestamp
-			FROM trace_events t JOIN runs r ON r.id = t.run_id
-			ON CONFLICT (id) DO NOTHING;
-			DROP TABLE trace_events;
-		END IF;
-	END $$`,
 	`CREATE TABLE IF NOT EXISTS memories (
 		id text PRIMARY KEY,
 		workspace_id text,
