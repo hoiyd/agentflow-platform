@@ -70,13 +70,13 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	}
 
 	events := parseSSEChunks(t, recorder.Body.String())
-	if !hasChunk(events, "run", func(chunk domain.ChatChunk) bool {
-		return chunk.Status == string(domain.RunRunning)
+	if !hasRunEvent(events, domain.EventRunStarted, func(event domain.RunEvent) bool {
+		return event.Payload["status"] == string(domain.RunRunning)
 	}) {
 		t.Fatalf("expected running run event, got %s", recorder.Body.String())
 	}
-	if !hasChunk(events, "collaboration_step", func(chunk domain.ChatChunk) bool {
-		return chunk.Role == "recovery" && chunk.Status == string(domain.CollaborationStepCompleted)
+	if !hasRunEvent(events, domain.EventStageCompleted, func(event domain.RunEvent) bool {
+		return event.Payload["name"] == "recovery" && event.Payload["status"] == string(domain.CollaborationStepCompleted)
 	}) {
 		t.Fatalf("expected completed recovery step event, got %s", recorder.Body.String())
 	}
@@ -131,8 +131,9 @@ func TestDetachedRequestContextIgnoresCancellationAndKeepsValues(t *testing.T) {
 }
 
 type sseChunk struct {
-	Event string
-	Chunk domain.ChatChunk
+	Event    string
+	Chunk    domain.ChatChunk
+	RunEvent domain.RunEvent
 }
 
 func parseSSEChunks(t *testing.T, body string) []sseChunk {
@@ -147,8 +148,18 @@ func parseSSEChunks(t *testing.T, body string) []sseChunk {
 			continue
 		}
 		if strings.HasPrefix(line, "data: ") {
+			data := []byte(strings.TrimPrefix(line, "data: "))
+			if strings.Contains(currentEvent, ".") {
+				var event domain.RunEvent
+				if err := json.Unmarshal(data, &event); err != nil {
+					t.Fatalf("decode run event: %v", err)
+				}
+				events = append(events, sseChunk{Event: currentEvent, RunEvent: event})
+				currentEvent = ""
+				continue
+			}
 			var chunk domain.ChatChunk
-			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &chunk); err != nil {
+			if err := json.Unmarshal(data, &chunk); err != nil {
 				t.Fatalf("decode SSE chunk: %v line=%q", err, line)
 			}
 			events = append(events, sseChunk{Event: currentEvent, Chunk: chunk})
@@ -159,6 +170,15 @@ func parseSSEChunks(t *testing.T, body string) []sseChunk {
 		t.Fatalf("scan SSE: %v", err)
 	}
 	return events
+}
+
+func hasRunEvent(events []sseChunk, eventType domain.RunEventType, match func(domain.RunEvent) bool) bool {
+	for _, item := range events {
+		if item.RunEvent.Type == eventType && match(item.RunEvent) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasChunk(events []sseChunk, event string, match func(domain.ChatChunk) bool) bool {

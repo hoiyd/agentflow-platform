@@ -16,63 +16,26 @@ export type Message = {
   created_at: string;
 };
 
+export type RunEvent = {
+  id: string;
+  type: string;
+  schema_version: number;
+  sequence: number;
+  conversation_id?: string;
+  run_id: string;
+  stage_id?: string;
+  turn_id?: string;
+  parent_event_id?: string;
+  payload: Record<string, unknown>;
+  timestamp: string;
+};
+
 export type ChatEvent =
   | { type: "conversation"; conversation_id: string }
-  | {
-      type: "run";
-      conversation_id: string;
-      run_id: string;
-      agent_id: string;
-      status:
-        | "idle"
-        | "queued"
-        | "running"
-        | "waiting_for_user"
-        | "completed"
-        | "failed"
-        | "failed_recoverable"
-        | "canceling"
-        | "canceled"
-        | string;
-    }
-  | {
-      type: "autonomous_progress";
-      conversation_id: string;
-      run_id: string;
-      agent_id?: string;
-      iteration?: number;
-      max_iterations?: number;
-      elapsed_seconds?: number;
-      max_runtime_seconds?: number;
-      output_chars?: number;
-      max_output_chars?: number;
-      tool_calls?: number;
-      max_tool_calls?: number;
-      stop_reason?: string;
-    }
-  | { type: "delta"; delta: string }
-  | {
-      type: "collaboration_step";
-      conversation_id: string;
-      run_id: string;
-      agent_id?: string;
-      role: "planner" | "router" | "worker" | "reviewer" | "finalizer" | string;
-      status:
-        | "idle"
-        | "queued"
-        | "running"
-        | "waiting_for_user"
-        | "completed"
-        | "failed"
-        | "failed_recoverable"
-        | "canceling"
-        | "canceled"
-        | string;
-      iteration?: number;
-      input?: string;
-      output?: string;
-      error?: string;
-    }
+  | { type: "run_state"; conversation_id: string; run_id: string; agent_id: string; status: string }
+  | { type: "run_progress"; conversation_id: string; run_id: string; agent_id?: string; iteration?: number; max_iterations?: number; elapsed_seconds?: number; max_runtime_seconds?: number; output_chars?: number; max_output_chars?: number; tool_calls?: number; max_tool_calls?: number; stop_reason?: string }
+  | { type: "model_delta"; delta: string }
+  | { type: "stage_state"; conversation_id: string; run_id: string; agent_id?: string; role: string; status: string; iteration?: number; input?: string; output?: string; error?: string }
   | {
       type: "done";
       conversation_id: string;
@@ -164,18 +127,6 @@ export type CollaborationStepInfo = {
   updated_at: string;
 };
 
-export type TraceEventType = "llm_start" | "llm_end" | "tool_start" | "tool_end" | "error" | string;
-
-export type TraceEventInfo = {
-  id: string;
-  run_id: string;
-  step_id?: string;
-  type: TraceEventType;
-  payload: Record<string, unknown>;
-  timestamp: string;
-  duration_ms?: number;
-};
-
 export type RunTraceSummary = {
   run_id: string;
   status: string;
@@ -195,7 +146,7 @@ export type RunReplay = {
   messages: Message[];
   steps: CollaborationStepInfo[];
   summary: RunTraceSummary;
-  events: TraceEventInfo[];
+  run_events: RunEvent[];
 };
 
 export type EpisodeReport = {
@@ -362,7 +313,7 @@ function normalizeRunReplay(data: unknown): RunReplay {
     summary: replay.summary as RunTraceSummary,
     messages: Array.isArray(replay.messages) ? replay.messages : [],
     steps: Array.isArray(replay.steps) ? replay.steps : [],
-    events: Array.isArray(replay.events) ? replay.events : []
+		run_events: Array.isArray(replay.run_events) ? replay.run_events : []
   };
 }
 
@@ -502,10 +453,38 @@ async function readChatEventStream(response: Response, onEvent: (event: ChatEven
       if (!dataLine) {
         continue;
       }
-      onEvent(JSON.parse(dataLine.slice(6)) as ChatEvent);
+	  const decoded = JSON.parse(dataLine.slice(6)) as ChatEvent | RunEvent;
+	  onEvent(projectRunEvent(decoded));
     }
   }
 }
+
+function projectRunEvent(event: ChatEvent | RunEvent): ChatEvent {
+  if (!("schema_version" in event)) return event;
+  const payload = event.payload;
+  if (event.type === "model.delta") return { type: "model_delta", delta: String(payload.delta ?? "") };
+  if (event.type === "run.progress") return {
+    type: "run_progress", conversation_id: event.conversation_id ?? "", run_id: event.run_id,
+    agent_id: stringValue(payload.agent_id), iteration: numberValue(payload.iteration), max_iterations: numberValue(payload.max_iterations),
+    elapsed_seconds: numberValue(payload.elapsed_seconds), max_runtime_seconds: numberValue(payload.max_runtime_seconds),
+    output_chars: numberValue(payload.output_chars), max_output_chars: numberValue(payload.max_output_chars),
+    tool_calls: numberValue(payload.tool_calls), max_tool_calls: numberValue(payload.max_tool_calls), stop_reason: stringValue(payload.stop_reason)
+  };
+  if (event.type.startsWith("stage.")) return {
+    type: "stage_state", conversation_id: event.conversation_id ?? "", run_id: event.run_id,
+    agent_id: stringValue(payload.agent_id), role: stringValue(payload.name) ?? "stage",
+    status: stringValue(payload.status) ?? event.type.slice("stage.".length), iteration: numberValue(payload.iteration),
+    input: stringValue(payload.input), output: stringValue(payload.output), error: stringValue(payload.error)
+  };
+  if (event.type.startsWith("run.")) return {
+    type: "run_state", conversation_id: event.conversation_id ?? "", run_id: event.run_id,
+    agent_id: stringValue(payload.agent_id) ?? "", status: stringValue(payload.status) ?? event.type.slice("run.".length)
+  };
+  return { type: "model_delta", delta: "" };
+}
+
+function stringValue(value: unknown): string | undefined { return typeof value === "string" ? value : undefined; }
+function numberValue(value: unknown): number | undefined { return typeof value === "number" ? value : undefined; }
 
 export async function listAgents(): Promise<AgentInfo[]> {
   const response = await fetch(`${API_BASE}/api/agents`, { cache: "no-store" });

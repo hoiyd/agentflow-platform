@@ -84,24 +84,15 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 		return
 	}
-	writeSSE(w, "run", domain.ChatChunk{
-		Type:           "run",
-		ConversationID: conversationID,
-		RunID:          prepared.Run.ID,
-		AgentID:        prepared.Agent.ID,
-		Status:         string(prepared.Run.Status),
-	})
-	flusher.Flush()
+	writeRunStateSSE(w, flusher, conversationID, prepared.Run.ID, prepared.Agent.ID, prepared.Run.Status)
 
 	events, errs := h.agentRuntime.StreamChat(r.Context(), prepared, history, req.Message, req.Executor)
 	var assistant strings.Builder
 	for event := range events {
-		switch event.Type {
-		case "delta":
-			assistant.WriteString(event.Delta)
-			writeSSE(w, "delta", domain.ChatChunk{Type: "delta", Delta: event.Delta})
+		if event.Type == "delta" {
+			writeUnifiedRunEvent(w, flusher, domain.RunEvent{Type: domain.EventModelDelta, SchemaVersion: domain.CurrentRunEventSchemaVersion,
+				RunID: prepared.Run.ID, ConversationID: conversationID, Payload: map[string]any{"delta": event.Delta}}, &assistant)
 		}
-		flusher.Flush()
 	}
 
 	if err := <-errs; err != nil {
@@ -178,45 +169,12 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 		return
 	}
 
-	writeSSE(w, "run", domain.ChatChunk{
-		Type:           "run",
-		ConversationID: conversationID,
-		RunID:          prepared.Run.ID,
-		AgentID:        prepared.WorkerAgent.ID,
-		Status:         string(prepared.Run.Status),
-	})
-	flusher.Flush()
+	writeRunStateSSE(w, flusher, conversationID, prepared.Run.ID, prepared.WorkerAgent.ID, prepared.Run.Status)
 
 	events, errs := h.agentRuntime.RunCollaboration(r.Context(), prepared, req.Message)
 	var assistant strings.Builder
 	for event := range events {
-		switch event.Type {
-		case "run":
-			writeSSE(w, "run", domain.ChatChunk{
-				Type:           "run",
-				ConversationID: event.Run.ConversationID,
-				RunID:          event.Run.ID,
-				AgentID:        event.Run.AgentID,
-				Status:         string(event.Run.Status),
-			})
-		case "collaboration_step":
-			writeSSE(w, "collaboration_step", domain.ChatChunk{
-				Type:           "collaboration_step",
-				ConversationID: event.Step.ConversationID,
-				RunID:          event.Step.RunID,
-				AgentID:        event.Step.AgentID,
-				Status:         string(event.Step.Status),
-				Role:           event.Step.Role,
-				Iteration:      event.Step.Iteration,
-				Input:          event.Step.Input,
-				Output:         event.Step.Output,
-				Error:          event.Step.Error,
-			})
-		case "delta":
-			assistant.WriteString(event.Delta)
-			writeSSE(w, "delta", domain.ChatChunk{Type: "delta", Delta: event.Delta})
-		}
-		flusher.Flush()
+		writeUnifiedRunEvent(w, flusher, event, &assistant)
 	}
 
 	if err := <-errs; err != nil {
@@ -299,61 +257,12 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 		return
 	}
 
-	writeSSE(w, "run", domain.ChatChunk{
-		Type:           "run",
-		ConversationID: conversationID,
-		RunID:          prepared.Run.ID,
-		AgentID:        prepared.WorkerAgent.ID,
-		Status:         string(prepared.Run.Status),
-	})
-	flusher.Flush()
+	writeRunStateSSE(w, flusher, conversationID, prepared.Run.ID, prepared.WorkerAgent.ID, prepared.Run.Status)
 
 	events, errs := h.agentRuntime.RunAutonomous(r.Context(), prepared, req.Message)
 	var assistant strings.Builder
 	for event := range events {
-		switch event.Type {
-		case "run":
-			writeSSE(w, "run", domain.ChatChunk{
-				Type:           "run",
-				ConversationID: event.Run.ConversationID,
-				RunID:          event.Run.ID,
-				AgentID:        event.Run.AgentID,
-				Status:         string(event.Run.Status),
-			})
-		case "collaboration_step":
-			writeSSE(w, "collaboration_step", domain.ChatChunk{
-				Type:           "collaboration_step",
-				ConversationID: event.Step.ConversationID,
-				RunID:          event.Step.RunID,
-				AgentID:        event.Step.AgentID,
-				Status:         string(event.Step.Status),
-				Role:           event.Step.Role,
-				Iteration:      event.Step.Iteration,
-				Input:          event.Step.Input,
-				Output:         event.Step.Output,
-				Error:          event.Step.Error,
-			})
-		case "autonomous_progress":
-			writeSSE(w, "autonomous_progress", domain.ChatChunk{
-				Type:           "autonomous_progress",
-				ConversationID: conversationID,
-				RunID:          prepared.Run.ID,
-				AgentID:        prepared.WorkerAgent.ID,
-				Iteration:      event.Progress.Iteration,
-				MaxIterations:  event.Progress.MaxIterations,
-				ElapsedSeconds: event.Progress.ElapsedSeconds,
-				MaxRuntimeSec:  event.Progress.MaxRuntimeSeconds,
-				OutputChars:    event.Progress.OutputChars,
-				MaxOutputChars: event.Progress.MaxOutputChars,
-				ToolCalls:      event.Progress.ToolCalls,
-				MaxToolCalls:   event.Progress.MaxToolCalls,
-				StopReason:     event.Progress.StopReason,
-			})
-		case "delta":
-			assistant.WriteString(event.Delta)
-			writeSSE(w, "delta", domain.ChatChunk{Type: "delta", Delta: event.Delta})
-		}
-		flusher.Flush()
+		writeUnifiedRunEvent(w, flusher, event, &assistant)
 	}
 
 	if err := <-errs; err != nil {
@@ -470,45 +379,12 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	writeSSE(w, "run", domain.ChatChunk{
-		Type:           "run",
-		ConversationID: run.ConversationID,
-		RunID:          run.ID,
-		AgentID:        run.AgentID,
-		Status:         string(run.Status),
-	})
-	flusher.Flush()
+	writeRunStateSSE(w, flusher, run.ConversationID, run.ID, run.AgentID, run.Status)
 
 	events, errs := h.agentRuntime.ContinueCollaboration(r.Context(), id, req.Plan)
 	var assistant strings.Builder
 	for event := range events {
-		switch event.Type {
-		case "run":
-			writeSSE(w, "run", domain.ChatChunk{
-				Type:           "run",
-				ConversationID: event.Run.ConversationID,
-				RunID:          event.Run.ID,
-				AgentID:        event.Run.AgentID,
-				Status:         string(event.Run.Status),
-			})
-		case "collaboration_step":
-			writeSSE(w, "collaboration_step", domain.ChatChunk{
-				Type:           "collaboration_step",
-				ConversationID: event.Step.ConversationID,
-				RunID:          event.Step.RunID,
-				AgentID:        event.Step.AgentID,
-				Status:         string(event.Step.Status),
-				Role:           event.Step.Role,
-				Iteration:      event.Step.Iteration,
-				Input:          event.Step.Input,
-				Output:         event.Step.Output,
-				Error:          event.Step.Error,
-			})
-		case "delta":
-			assistant.WriteString(event.Delta)
-			writeSSE(w, "delta", domain.ChatChunk{Type: "delta", Delta: event.Delta})
-		}
-		flusher.Flush()
+		writeUnifiedRunEvent(w, flusher, event, &assistant)
 	}
 
 	if err := <-errs; err != nil {
@@ -592,14 +468,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	writeSSE(w, "run", domain.ChatChunk{
-		Type:           "run",
-		ConversationID: run.ConversationID,
-		RunID:          run.ID,
-		AgentID:        run.AgentID,
-		Status:         string(run.Status),
-	})
-	flusher.Flush()
+	writeRunStateSSE(w, flusher, run.ConversationID, run.ID, run.AgentID, run.Status)
 
 	resumeCtx := detachedRequestContext(r)
 	events, errs := h.agentRuntime.ResumeAutonomous(resumeCtx, id, req.UserInput)
@@ -608,49 +477,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	}
 	var assistant strings.Builder
 	for event := range events {
-		switch event.Type {
-		case "run":
-			writeSSE(w, "run", domain.ChatChunk{
-				Type:           "run",
-				ConversationID: event.Run.ConversationID,
-				RunID:          event.Run.ID,
-				AgentID:        event.Run.AgentID,
-				Status:         string(event.Run.Status),
-			})
-		case "collaboration_step":
-			writeSSE(w, "collaboration_step", domain.ChatChunk{
-				Type:           "collaboration_step",
-				ConversationID: event.Step.ConversationID,
-				RunID:          event.Step.RunID,
-				AgentID:        event.Step.AgentID,
-				Status:         string(event.Step.Status),
-				Role:           event.Step.Role,
-				Iteration:      event.Step.Iteration,
-				Input:          event.Step.Input,
-				Output:         event.Step.Output,
-				Error:          event.Step.Error,
-			})
-		case "autonomous_progress":
-			writeSSE(w, "autonomous_progress", domain.ChatChunk{
-				Type:           "autonomous_progress",
-				ConversationID: run.ConversationID,
-				RunID:          run.ID,
-				AgentID:        run.AgentID,
-				Iteration:      event.Progress.Iteration,
-				MaxIterations:  event.Progress.MaxIterations,
-				ElapsedSeconds: event.Progress.ElapsedSeconds,
-				MaxRuntimeSec:  event.Progress.MaxRuntimeSeconds,
-				OutputChars:    event.Progress.OutputChars,
-				MaxOutputChars: event.Progress.MaxOutputChars,
-				ToolCalls:      event.Progress.ToolCalls,
-				MaxToolCalls:   event.Progress.MaxToolCalls,
-				StopReason:     event.Progress.StopReason,
-			})
-		case "delta":
-			assistant.WriteString(event.Delta)
-			writeSSE(w, "delta", domain.ChatChunk{Type: "delta", Delta: event.Delta})
-		}
-		flusher.Flush()
+		writeUnifiedRunEvent(w, flusher, event, &assistant)
 	}
 
 	if err := <-errs; err != nil {
@@ -723,6 +550,28 @@ func (h *Handler) rememberMessageOrFail(w http.ResponseWriter, flusher http.Flus
 		return false
 	}
 	return true
+}
+
+func writeUnifiedRunEvent(w http.ResponseWriter, flusher http.Flusher, event domain.RunEvent, assistant *strings.Builder) {
+	if event.Type == domain.EventModelDelta && assistant != nil {
+		if delta, ok := event.Payload["delta"].(string); ok {
+			assistant.WriteString(delta)
+		}
+	}
+	writeSSE(w, string(event.Type), event)
+	flusher.Flush()
+}
+
+func writeRunStateSSE(w http.ResponseWriter, flusher http.Flusher, conversationID, runID, agentID string, status domain.RunStatus) {
+	eventType := domain.EventRunStarted
+	if status == domain.RunWaitingForUser {
+		eventType = domain.EventRunWaitingForUser
+	}
+	if status == domain.RunFailed || status == domain.RunFailedRecoverable {
+		eventType = domain.EventRunFailed
+	}
+	writeUnifiedRunEvent(w, flusher, domain.RunEvent{Type: eventType, SchemaVersion: domain.CurrentRunEventSchemaVersion,
+		ConversationID: conversationID, RunID: runID, Payload: map[string]any{"agent_id": agentID, "status": status}}, nil)
 }
 
 func (h *Handler) rememberMessageWithContextOrFail(w http.ResponseWriter, flusher http.Flusher, ctx context.Context, runID string, message domain.Message) bool {
