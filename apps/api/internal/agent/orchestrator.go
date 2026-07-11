@@ -11,6 +11,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
+	turnpkg "agentflow-platform/apps/api/internal/turn"
 )
 
 const (
@@ -568,44 +569,20 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- Collab
 		"executor":  ExecutorNative,
 		"framework": "agentflow-native",
 	})
-	tracePayload := map[string]any{
-		"role":        role,
-		"agent_id":    agentID,
-		"system":      systemPrompt,
-		"input":       input,
-		"input_chars": len(input),
-	}
-	for key, value := range retrievalTracePayload(retrievedMemories, retrievedChunks) {
-		tracePayload[key] = value
-	}
-	contextualPrompt := promptWithRetrievedContext(systemPrompt, retrievedMemories, retrievedChunks)
-	span := r.trace.LLMStart(ctx, prepared.Run.ID, step.ID, tracePayload)
-	completion, err := r.openAI.CompleteTextDetailed(ctx, contextualPrompt, input)
+	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{
+		RunID: prepared.Run.ID, StepID: step.ID, ConversationID: prepared.Run.ConversationID,
+		Agent: domain.Agent{ID: agentID, SystemPrompt: systemPrompt}, Role: role,
+		SystemPrompt: systemPrompt, Input: input, ModelMode: turnpkg.ModelModeText,
+		Context: turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks},
+	}, nil)
 	if err != nil {
-		r.trace.Error(ctx, prepared.Run.ID, step.ID, map[string]any{
-			"source":   "llm",
-			"role":     role,
-			"agent_id": agentID,
-			"error":    err.Error(),
-		})
 		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
 		if updateErr == nil {
 			events <- CollaborationEvent{Type: "collaboration_step", Step: failed}
 		}
 		return "", err
 	}
-	output := completion.Text
-	r.trace.LLMEnd(ctx, span, map[string]any{
-		"role":                  role,
-		"agent_id":              agentID,
-		"model":                 completion.Model,
-		"output":                output,
-		"output_chars":          len(output),
-		"prompt_tokens":         completion.Usage.PromptTokens,
-		"completion_tokens":     completion.Usage.CompletionTokens,
-		"total_tokens":          completion.Usage.TotalTokens,
-		"token_usage_estimated": completion.Usage.Estimated,
-	})
+	output := result.Output
 	completed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepCompleted, output, "")
 	if err != nil {
 		return "", err

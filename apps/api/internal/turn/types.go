@@ -10,11 +10,17 @@ import (
 )
 
 type StopReason string
+type ModelMode string
 
 const (
 	StopCompleted StopReason = "completed"
 	StopCanceled  StopReason = "canceled"
 	StopFailed    StopReason = "failed"
+)
+
+const (
+	ModelModeAgentStream ModelMode = "agent_stream"
+	ModelModeText        ModelMode = "text"
 )
 
 var ErrInvalidRequest = errors.New("invalid turn request")
@@ -29,6 +35,7 @@ type Request struct {
 	History        []domain.Message
 	Input          string
 	ExecutorKind   string
+	ModelMode      ModelMode
 	Registry       *tools.Registry
 	Context        Context
 	Metadata       map[string]any
