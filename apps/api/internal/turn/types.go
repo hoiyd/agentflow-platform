@@ -61,7 +61,11 @@ type Result struct {
 }
 
 type ModelEvent struct {
-	Delta string
+	Type       EventType
+	Delta      string
+	ToolName   string
+	ToolCallID string
+	Error      string
 }
 
 type Model interface {

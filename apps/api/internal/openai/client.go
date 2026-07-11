@@ -56,8 +56,11 @@ type FunctionCall struct {
 }
 
 type StreamEvent struct {
-	Type  string
-	Delta string
+	Type       string
+	Delta      string
+	ToolName   string
+	ToolCallID string
+	Error      string
 }
 
 type Usage struct {
@@ -549,6 +552,11 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 			"tool_name":    call.Function.Name,
 			"arguments":    json.RawMessage(call.Function.Arguments),
 		})
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case events <- StreamEvent{Type: "tool_start", ToolName: call.Function.Name, ToolCallID: call.ID}:
+		}
 
 		result := registry.Execute(ctx, call.Function.Name, json.RawMessage(call.Function.Arguments))
 		results = append(results, result)
@@ -570,6 +578,11 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 			})
 		}
 		recorder.ToolEnd(ctx, toolSpan, toolPayload)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case events <- StreamEvent{Type: "tool_end", ToolName: call.Function.Name, ToolCallID: call.ID, Error: result.Error}:
+		}
 		logStatus := "tool_end"
 		if result.Error != "" {
 			logStatus = "tool_error"

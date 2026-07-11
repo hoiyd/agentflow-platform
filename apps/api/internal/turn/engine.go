@@ -27,7 +27,14 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 	emit(handler, withType(base, EventModelStarted))
 
 	result, err := e.model.Execute(ctx, request, func(event ModelEvent) {
-		emit(handler, Event{Type: EventModelDelta, RunID: request.RunID, StepID: request.StepID, Delta: event.Delta})
+		eventType := event.Type
+		if eventType == "" {
+			eventType = EventModelDelta
+		}
+		emit(handler, Event{
+			Type: eventType, RunID: request.RunID, StepID: request.StepID,
+			Delta: event.Delta, ToolName: event.ToolName, ToolCallID: event.ToolCallID, Error: event.Error,
+		})
 	})
 	if err != nil {
 		result.StopReason = StopFailed

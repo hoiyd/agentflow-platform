@@ -9,18 +9,22 @@ const (
 	EventModelStarted  EventType = "model.started"
 	EventModelDelta    EventType = "model.delta"
 	EventModelFinished EventType = "model.finished"
+	EventToolStarted   EventType = "tool.started"
+	EventToolFinished  EventType = "tool.finished"
 	EventTurnCompleted EventType = "turn.completed"
 	EventTurnFailed    EventType = "turn.failed"
 )
 
 type Event struct {
-	Type      EventType
-	RunID     string
-	StepID    string
-	Delta     string
-	Result    *Result
-	Error     string
-	Timestamp time.Time
+	Type       EventType
+	RunID      string
+	StepID     string
+	Delta      string
+	ToolName   string
+	ToolCallID string
+	Result     *Result
+	Error      string
+	Timestamp  time.Time
 }
 
 type EventHandler func(Event)

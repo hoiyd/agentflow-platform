@@ -40,9 +40,14 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 				events = nil
 				continue
 			}
-			if event.Type == "delta" {
+			switch event.Type {
+			case "delta":
 				output.WriteString(event.Delta)
-				emit(turn.ModelEvent{Delta: event.Delta})
+				emit(turn.ModelEvent{Type: turn.EventModelDelta, Delta: event.Delta})
+			case "tool_start":
+				emit(turn.ModelEvent{Type: turn.EventToolStarted, ToolName: event.ToolName, ToolCallID: event.ToolCallID})
+			case "tool_end":
+				emit(turn.ModelEvent{Type: turn.EventToolFinished, ToolName: event.ToolName, ToolCallID: event.ToolCallID, Error: event.Error})
 			}
 		case err, ok := <-errs:
 			if !ok {
