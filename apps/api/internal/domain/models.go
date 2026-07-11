@@ -172,6 +172,54 @@ type TraceEvent struct {
 	DurationMS int64          `json:"duration_ms,omitempty"`
 }
 
+type RunEventType string
+
+const (
+	EventRunCreated         RunEventType = "run.created"
+	EventRunStarted         RunEventType = "run.started"
+	EventRunProgress        RunEventType = "run.progress"
+	EventRunWaitingForUser  RunEventType = "run.waiting_for_user"
+	EventRunResumed         RunEventType = "run.resumed"
+	EventRunCancelRequested RunEventType = "run.cancel_requested"
+	EventRunCanceled        RunEventType = "run.canceled"
+	EventRunCompleted       RunEventType = "run.completed"
+	EventRunFailed          RunEventType = "run.failed"
+	EventStageStarted       RunEventType = "stage.started"
+	EventStageCompleted     RunEventType = "stage.completed"
+	EventStageFailed        RunEventType = "stage.failed"
+	EventStageCanceled      RunEventType = "stage.canceled"
+	EventTurnStarted        RunEventType = "turn.started"
+	EventTurnCompleted      RunEventType = "turn.completed"
+	EventTurnFailed         RunEventType = "turn.failed"
+	EventTurnCanceled       RunEventType = "turn.canceled"
+	EventModelStarted       RunEventType = "model.started"
+	EventModelDelta         RunEventType = "model.delta"
+	EventModelCompleted     RunEventType = "model.completed"
+	EventModelFailed        RunEventType = "model.failed"
+	EventToolStarted        RunEventType = "tool.started"
+	EventToolCompleted      RunEventType = "tool.completed"
+	EventToolFailed         RunEventType = "tool.failed"
+	EventRetrievalStarted   RunEventType = "retrieval.started"
+	EventRetrievalCompleted RunEventType = "retrieval.completed"
+	EventRetrievalFailed    RunEventType = "retrieval.failed"
+)
+
+const CurrentRunEventSchemaVersion = 1
+
+type RunEvent struct {
+	ID             string         `json:"id"`
+	Type           RunEventType   `json:"type"`
+	SchemaVersion  int            `json:"schema_version"`
+	Sequence       int64          `json:"sequence"`
+	ConversationID string         `json:"conversation_id,omitempty"`
+	RunID          string         `json:"run_id"`
+	StageID        string         `json:"stage_id,omitempty"`
+	TurnID         string         `json:"turn_id,omitempty"`
+	ParentEventID  string         `json:"parent_event_id,omitempty"`
+	Payload        map[string]any `json:"payload"`
+	Timestamp      time.Time      `json:"timestamp"`
+}
+
 type RunTraceSummary struct {
 	RunID               string    `json:"run_id"`
 	Status              RunStatus `json:"status"`
