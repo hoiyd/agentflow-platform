@@ -8,10 +8,10 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	tracepkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
-	tracepkg "agentflow-platform/apps/api/internal/trace"
 	turnpkg "agentflow-platform/apps/api/internal/turn"
 )
 
@@ -19,7 +19,7 @@ type Runtime struct {
 	store            store.Store
 	openAI           *openai.Client
 	tools            *tools.Manager
-	trace            *tracepkg.Recorder
+	trace            *eventpkg.Recorder
 	turnEngine       *turnpkg.Engine
 	routerMode       string
 	autonomousLimits AutonomousLimits
@@ -184,17 +184,11 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	if !memoryEnabled && !retrievalEnabled {
 		payload["memory_count"] = 0
 		payload["chunk_count"] = 0
-		r.trace.Retrieval(ctx, runID, "", payload)
 		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
 		return nil, nil
 	}
 	embedding, err := r.openAI.EmbedText(ctx, embeddingQuery)
 	if err != nil {
-		r.trace.Error(ctx, runID, "", map[string]any{
-			"source": "memory_retrieval",
-			"stage":  "embed_query",
-			"error":  err.Error(),
-		})
 		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"error": err.Error()}})
 		return nil, nil
 	}
@@ -213,11 +207,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 			Limit:             5,
 		})
 		if err != nil {
-			r.trace.Error(ctx, runID, "", map[string]any{
-				"source": "memory_retrieval",
-				"stage":  "search",
-				"error":  err.Error(),
-			})
+			payload["memory_error"] = err.Error()
 			memories = nil
 		}
 	}
@@ -232,11 +222,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 			Limit:             5,
 		})
 		if err != nil {
-			r.trace.Error(ctx, runID, "", map[string]any{
-				"source": "rag_retrieval",
-				"stage":  "search",
-				"error":  err.Error(),
-			})
+			payload["rag_error"] = err.Error()
 			chunks = nil
 		}
 	}
@@ -245,7 +231,6 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	for key, value := range retrievalTracePayload(memories, chunks) {
 		payload[key] = value
 	}
-	r.trace.Retrieval(ctx, runID, "", payload)
 	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
 	return memories, chunks
 }
@@ -356,10 +341,6 @@ func (r *Runtime) FailRun(id string, err error) (domain.Run, error) {
 	message := ""
 	if err != nil {
 		message = err.Error()
-		r.trace.Error(context.Background(), id, "", map[string]any{
-			"source": "runtime",
-			"error":  message,
-		})
 	}
 	run, updateErr := r.store.UpdateRunStatus(id, domain.RunFailed, message)
 	if updateErr == nil {

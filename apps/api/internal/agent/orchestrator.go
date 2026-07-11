@@ -27,14 +27,6 @@ type PreparedCollaborationRun struct {
 	Run         domain.Run
 }
 
-type CollaborationEvent struct {
-	Type     string
-	Run      domain.Run
-	Step     domain.CollaborationStep
-	Progress AutonomousProgress
-	Delta    string
-}
-
 type AutonomousProgress struct {
 	Iteration         int
 	MaxIterations     int
@@ -45,6 +37,43 @@ type AutonomousProgress struct {
 	ToolCalls         int
 	MaxToolCalls      int
 	StopReason        string
+}
+
+func liveRunEvent(run domain.Run) domain.RunEvent {
+	eventType := domain.EventRunStarted
+	switch run.Status {
+	case domain.RunWaitingForUser:
+		eventType = domain.EventRunWaitingForUser
+	case domain.RunCompleted:
+		eventType = domain.EventRunCompleted
+	case domain.RunFailed, domain.RunFailedRecoverable:
+		eventType = domain.EventRunFailed
+	case domain.RunCanceling:
+		eventType = domain.EventRunCancelRequested
+	case domain.RunCanceled:
+		eventType = domain.EventRunCanceled
+	}
+	return domain.RunEvent{Type: eventType, SchemaVersion: domain.CurrentRunEventSchemaVersion, RunID: run.ID,
+		ConversationID: run.ConversationID, Payload: map[string]any{"status": run.Status, "agent_id": run.AgentID, "error": run.Error}}
+}
+
+func liveStageEvent(step domain.CollaborationStep) domain.RunEvent {
+	eventType := domain.EventStageStarted
+	if step.Status == domain.CollaborationStepCompleted {
+		eventType = domain.EventStageCompleted
+	}
+	if step.Status == domain.CollaborationStepFailed {
+		eventType = domain.EventStageFailed
+	}
+	return domain.RunEvent{Type: eventType, SchemaVersion: domain.CurrentRunEventSchemaVersion, RunID: step.RunID,
+		ConversationID: step.ConversationID, StageID: step.ID, Payload: map[string]any{
+			"name": step.Role, "agent_id": step.AgentID, "status": step.Status, "iteration": step.Iteration,
+			"input": step.Input, "output": step.Output, "error": step.Error,
+		}}
+}
+
+func liveDeltaEvent(runID, delta string) domain.RunEvent {
+	return domain.RunEvent{Type: domain.EventModelDelta, SchemaVersion: domain.CurrentRunEventSchemaVersion, RunID: runID, Payload: map[string]any{"delta": delta}}
 }
 
 func (r *Runtime) PrepareCollaborationRun(ctx context.Context, agentID string, conversationID string) (PreparedCollaborationRun, error) {
@@ -67,8 +96,8 @@ func (r *Runtime) PrepareCollaborationRun(ctx context.Context, agentID string, c
 	return PreparedCollaborationRun{WorkerAgent: agent, Run: run}, nil
 }
 
-func (r *Runtime) RunCollaboration(ctx context.Context, prepared PreparedCollaborationRun, task string) (<-chan CollaborationEvent, <-chan error) {
-	events := make(chan CollaborationEvent)
+func (r *Runtime) RunCollaboration(ctx context.Context, prepared PreparedCollaborationRun, task string) (<-chan domain.RunEvent, <-chan error) {
+	events := make(chan domain.RunEvent)
 	errs := make(chan error, 1)
 
 	go func() {
@@ -91,8 +120,8 @@ func (r *Runtime) RunCollaboration(ctx context.Context, prepared PreparedCollabo
 	return events, errs
 }
 
-func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan string) (<-chan CollaborationEvent, <-chan error) {
-	events := make(chan CollaborationEvent)
+func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan string) (<-chan domain.RunEvent, <-chan error) {
+	events := make(chan domain.RunEvent)
 	errs := make(chan error, 1)
 
 	go func() {
@@ -143,13 +172,15 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			errs <- err
 			return
 		}
-		events <- CollaborationEvent{Type: "collaboration_step", Step: updatedPlan}
+		r.publishStage(ctx, updatedPlan, domain.EventStageCompleted)
+		events <- liveStageEvent(updatedPlan)
 
 		run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
 		if err != nil {
 			errs <- err
 			return
 		}
+		r.publishRunLifecycle(ctx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
 		route := r.routeWorkerAgent(ctx, run.ID, agents, task, plan)
 		routerInput := fmt.Sprintf("User task:\n%s\n\nApproved plan:\n%s\n\nCandidate agents:\n%s", task, plan, formatCandidateAgents(agents))
 		routerStep, err := r.store.CreateCollaborationStep(domain.CollaborationStep{
@@ -165,13 +196,14 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			errs <- err
 			return
 		}
-		events <- CollaborationEvent{Type: "collaboration_step", Step: routerStep}
+		r.publishStage(ctx, routerStep, domain.EventStageCompleted)
+		events <- liveStageEvent(routerStep)
 		run, err = r.store.UpdateRunAgent(run.ID, route.Agent.ID)
 		if err != nil {
 			errs <- err
 			return
 		}
-		events <- CollaborationEvent{Type: "run", Run: run}
+		events <- liveRunEvent(run)
 		log.Printf("collaboration_router_decision run_id=%s router_mode=%s selected_agent_id=%s selected_agent_name=%q score=%d confidence=%.2f reason=%q", run.ID, route.Mode, route.Agent.ID, route.Agent.Name, route.Score, route.Confidence, route.Reason)
 
 		prepared := PreparedCollaborationRun{WorkerAgent: route.Agent, Run: run}
@@ -196,7 +228,7 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			errs <- err
 			return
 		}
-		emitFinalDeltas(ctx, final, events)
+		emitFinalDeltas(ctx, prepared.Run.ID, final, events)
 	}()
 
 	return events, errs
@@ -249,39 +281,16 @@ func (r *Runtime) routeWorkerAgent(ctx context.Context, runID string, agents []d
 
 func (r *Runtime) routeWorkerAgentWithLLM(ctx context.Context, runID string, agents []domain.Agent, task string, plan string) (routeDecision, error) {
 	input := routerUserPrompt(task, plan, agents)
-	span := r.trace.LLMStart(ctx, runID, "", map[string]any{
-		"role":        "router",
-		"system":      routerSystemPrompt(),
-		"input":       input,
-		"input_chars": len(input),
-	})
-	completion, err := r.openAI.CompleteTextDetailed(ctx, routerSystemPrompt(), input)
+	run, _, _ := r.store.GetRun(runID)
+	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{RunID: runID, ConversationID: run.ConversationID,
+		Role: "router", SystemPrompt: routerSystemPrompt(), Input: input, ModelMode: turnpkg.ModelModeText,
+		Metadata: map[string]any{"input_chars": len(input)}, Sink: r.runEventSink()}, nil)
 	if err != nil {
-		r.trace.Error(ctx, runID, "", map[string]any{
-			"source": "llm",
-			"role":   "router",
-			"error":  err.Error(),
-		})
 		return routeDecision{}, err
 	}
-	response := completion.Text
-	r.trace.LLMEnd(ctx, span, map[string]any{
-		"role":                  "router",
-		"model":                 completion.Model,
-		"output":                response,
-		"output_chars":          len(response),
-		"prompt_tokens":         completion.Usage.PromptTokens,
-		"completion_tokens":     completion.Usage.CompletionTokens,
-		"total_tokens":          completion.Usage.TotalTokens,
-		"token_usage_estimated": completion.Usage.Estimated,
-	})
+	response := result.Output
 	decision, err := parseLLMRouteDecision(response, agents)
 	if err != nil {
-		r.trace.Error(ctx, runID, "", map[string]any{
-			"source": "router",
-			"error":  err.Error(),
-			"output": response,
-		})
 		return routeDecision{}, err
 	}
 	decision.Mode = "llm"
@@ -554,7 +563,7 @@ func routerUserPrompt(task string, plan string, agents []domain.Agent) string {
 	return fmt.Sprintf("User task:\n%s\n\nApproved plan:\n%s\n\nCandidate agents:\n%s\n\nReturn JSON only. The selected agent_id must be one of the candidate ids.", task, plan, formatCandidateAgents(agents))
 }
 
-func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- CollaborationEvent, prepared PreparedCollaborationRun, role string, agentID string, systemPrompt string, input string) (string, error) {
+func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, role string, agentID string, systemPrompt string, input string) (string, error) {
 	step, err := r.store.CreateCollaborationStep(domain.CollaborationStep{
 		RunID:          prepared.Run.ID,
 		ConversationID: prepared.Run.ConversationID,
@@ -566,7 +575,7 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- Collab
 	if err != nil {
 		return "", err
 	}
-	events <- CollaborationEvent{Type: "collaboration_step", Step: step}
+	events <- liveStageEvent(step)
 	r.publishStage(ctx, step, domain.EventStageStarted)
 
 	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input, true, true, map[string]any{
@@ -583,7 +592,7 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- Collab
 	if err != nil {
 		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
 		if updateErr == nil {
-			events <- CollaborationEvent{Type: "collaboration_step", Step: failed}
+			events <- liveStageEvent(failed)
 			r.publishStage(ctx, failed, domain.EventStageFailed)
 		}
 		return "", err
@@ -593,7 +602,7 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- Collab
 	if err != nil {
 		return "", err
 	}
-	events <- CollaborationEvent{Type: "collaboration_step", Step: completed}
+	events <- liveStageEvent(completed)
 	r.publishStage(ctx, completed, domain.EventStageCompleted)
 	return output, nil
 }
@@ -618,7 +627,7 @@ func finalizerPrompt() string {
 	return "You are the Finalizer collaboration role. Produce the final user-facing answer by combining the plan, worker result, and reviewer notes. Be concise and do not mention internal implementation details unless relevant."
 }
 
-func emitFinalDeltas(ctx context.Context, text string, events chan<- CollaborationEvent) {
+func emitFinalDeltas(ctx context.Context, runID string, text string, events chan<- domain.RunEvent) {
 	parts := strings.SplitAfter(strings.TrimSpace(text), " ")
 	for _, part := range parts {
 		if part == "" {
@@ -627,7 +636,7 @@ func emitFinalDeltas(ctx context.Context, text string, events chan<- Collaborati
 		select {
 		case <-ctx.Done():
 			return
-		case events <- CollaborationEvent{Type: "delta", Delta: part}:
+		case events <- liveDeltaEvent(runID, part):
 			time.Sleep(15 * time.Millisecond)
 		}
 	}

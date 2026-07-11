@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
 )
 
 type Engine struct{ model Model }
@@ -59,11 +60,12 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 	}
 	base := Event{RunID: request.RunID, StepID: request.StepID}
 	publish(withType(base, EventTurnStarted))
-	publish(withType(base, EventModelStarted))
+	emit(handler, withType(base, EventModelStarted))
 	if sinkErr != nil {
 		return Result{}, sinkErr
 	}
-	result, err := e.model.Execute(ctx, request, func(item ModelEvent) {
+	modelCtx := eventpkg.WithScope(ctx, eventpkg.Scope{ConversationID: request.ConversationID, RunID: request.RunID, StageID: request.StepID, TurnID: request.TurnID})
+	result, err := e.model.Execute(modelCtx, request, func(item ModelEvent) {
 		t := item.Type
 		if t == "" {
 			t = EventModelDelta
@@ -81,7 +83,7 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 		}
 		failed := Event{RunID: request.RunID, StepID: request.StepID, Result: &result, Error: err.Error()}
 		failed.Type = EventModelFailed
-		publish(failed)
+		emit(handler, failed)
 		failed.Type = EventTurnFailed
 		publish(failed)
 		return result, err
@@ -90,7 +92,7 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 	if result.StopReason == "" {
 		result.StopReason = StopCompleted
 	}
-	publish(Event{Type: EventModelFinished, RunID: request.RunID, StepID: request.StepID, Result: &result})
+	emit(handler, Event{Type: EventModelFinished, RunID: request.RunID, StepID: request.StepID, Result: &result})
 	publish(Event{Type: EventTurnCompleted, RunID: request.RunID, StepID: request.StepID, Result: &result})
 	return result, nil
 }

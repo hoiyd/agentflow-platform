@@ -85,8 +85,8 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 	if !ok {
 		t.Fatal("expected replay")
 	}
-	for _, event := range replay.Events {
-		if event.Type != domain.TraceRetrieval {
+	for _, event := range replay.RunEvents {
+		if event.Type != domain.EventRetrievalCompleted {
 			continue
 		}
 		if event.Payload["memory_count"] != len(memories) {
@@ -143,8 +143,8 @@ func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 	if !ok {
 		t.Fatal("expected replay")
 	}
-	for _, event := range replay.Events {
-		if event.Type != domain.TraceRetrieval {
+	for _, event := range replay.RunEvents {
+		if event.Type != domain.EventRetrievalCompleted {
 			continue
 		}
 		if event.Payload["memory_enabled"] != false || event.Payload["retrieval_enabled"] != false {
@@ -193,8 +193,8 @@ func TestRetrieveContextTruncatesEmbeddingQuery(t *testing.T) {
 	if !ok {
 		t.Fatal("expected replay")
 	}
-	for _, event := range replay.Events {
-		if event.Type != domain.TraceRetrieval {
+	for _, event := range replay.RunEvents {
+		if event.Type != domain.EventRetrievalCompleted {
 			continue
 		}
 		if event.Payload["embedding_query_chars"] != 3000 {
@@ -281,8 +281,8 @@ func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T)
 
 	var sawRetrieval bool
 	var sawLLMStart bool
-	for _, event := range replay.Events {
-		if event.Type == domain.TraceRetrieval {
+	for _, event := range replay.RunEvents {
+		if event.Type == domain.EventRetrievalCompleted {
 			sawRetrieval = true
 			if event.Payload["executor"] != ExecutorLangChainGo {
 				t.Fatalf("expected retrieval executor %q, got %#v", ExecutorLangChainGo, event.Payload["executor"])
@@ -291,7 +291,7 @@ func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T)
 				t.Fatalf("expected retrieval framework %q, got %#v", frameworkLangChainGo, event.Payload["framework"])
 			}
 		}
-		if event.Type == domain.TraceLLMStart {
+		if event.Type == domain.EventModelStarted {
 			sawLLMStart = true
 			if event.Payload["executor"] != ExecutorLangChainGo {
 				t.Fatalf("expected llm_start executor %q, got %#v", ExecutorLangChainGo, event.Payload["executor"])
