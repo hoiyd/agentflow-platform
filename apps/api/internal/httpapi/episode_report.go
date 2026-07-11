@@ -47,9 +47,9 @@ func buildEpisodeReport(replay domain.RunReplay, agent domain.Agent) domain.Epis
 		Messages:     replay.Messages,
 		Steps:        replay.Steps,
 		TraceSummary: replay.Summary,
-		Retrievals:   episodeRetrievals(replay.Events),
-		LLMCalls:     episodeLLMCalls(replay.Events),
-		ToolCalls:    episodeToolCalls(replay.Events),
+		Retrievals:   episodeRetrievals(replay.RunEvents),
+		LLMCalls:     episodeLLMCalls(replay.RunEvents),
+		ToolCalls:    episodeToolCalls(replay.RunEvents),
 		Errors:       episodeErrors(replay),
 	}
 	report.Verification = episodeVerification(report)
@@ -91,7 +91,7 @@ func episodeFinalOutput(replay domain.RunReplay) string {
 	return ""
 }
 
-func episodeRetrievals(events []domain.TraceEvent) domain.EpisodeRetrievals {
+func episodeRetrievals(events []domain.RunEvent) domain.EpisodeRetrievals {
 	retrievals := domain.EpisodeRetrievals{
 		Memories: []map[string]any{},
 		Chunks:   []map[string]any{},
@@ -99,7 +99,7 @@ func episodeRetrievals(events []domain.TraceEvent) domain.EpisodeRetrievals {
 	for _, event := range events {
 		memories := mapSlicePayload(event.Payload["retrieved_memories"])
 		chunks := mapSlicePayload(event.Payload["retrieved_chunks"])
-		if event.Type == domain.TraceRetrieval || len(memories) > 0 || len(chunks) > 0 {
+		if event.Type == domain.EventRetrievalCompleted || len(memories) > 0 || len(chunks) > 0 {
 			retrievals.EventCount++
 		}
 		retrievals.Memories = append(retrievals.Memories, memories...)
@@ -108,15 +108,15 @@ func episodeRetrievals(events []domain.TraceEvent) domain.EpisodeRetrievals {
 	return retrievals
 }
 
-func episodeLLMCalls(events []domain.TraceEvent) []domain.EpisodeLLMCall {
+func episodeLLMCalls(events []domain.RunEvent) []domain.EpisodeLLMCall {
 	calls := []domain.EpisodeLLMCall{}
 	for _, event := range events {
-		if event.Type != domain.TraceLLMEnd {
+		if event.Type != domain.EventModelCompleted {
 			continue
 		}
 		calls = append(calls, domain.EpisodeLLMCall{
 			EventID:             event.ID,
-			StepID:              event.StepID,
+			StepID:              event.StageID,
 			Role:                stringPayload(event.Payload, "role"),
 			AgentID:             stringPayload(event.Payload, "agent_id"),
 			Model:               stringPayload(event.Payload, "model"),
@@ -126,25 +126,25 @@ func episodeLLMCalls(events []domain.TraceEvent) []domain.EpisodeLLMCall {
 			TotalTokens:         intPayload(event.Payload, "total_tokens"),
 			TokenUsageEstimated: boolPayload(event.Payload, "token_usage_estimated"),
 			OutputChars:         intPayload(event.Payload, "output_chars"),
-			DurationMS:          event.DurationMS,
+			DurationMS:          int64(intPayload(event.Payload, "duration_ms")),
 		})
 	}
 	return calls
 }
 
-func episodeToolCalls(events []domain.TraceEvent) []domain.EpisodeToolCall {
+func episodeToolCalls(events []domain.RunEvent) []domain.EpisodeToolCall {
 	calls := []domain.EpisodeToolCall{}
 	for _, event := range events {
-		if event.Type != domain.TraceToolEnd {
+		if event.Type != domain.EventToolCompleted && event.Type != domain.EventToolFailed {
 			continue
 		}
 		calls = append(calls, domain.EpisodeToolCall{
 			EventID:    event.ID,
-			StepID:     event.StepID,
+			StepID:     event.StageID,
 			ToolName:   stringPayload(event.Payload, "tool_name"),
 			ToolCallID: stringPayload(event.Payload, "tool_call_id"),
 			Error:      stringPayload(event.Payload, "error"),
-			DurationMS: event.DurationMS,
+			DurationMS: int64(intPayload(event.Payload, "duration_ms")),
 		})
 	}
 	return calls
@@ -168,8 +168,8 @@ func episodeErrors(replay domain.RunReplay) []domain.EpisodeError {
 			Message: strings.TrimSpace(step.Error),
 		})
 	}
-	for _, event := range replay.Events {
-		if event.Type != domain.TraceError {
+	for _, event := range replay.RunEvents {
+		if event.Type != domain.EventModelFailed && event.Type != domain.EventToolFailed && event.Type != domain.EventRetrievalFailed {
 			continue
 		}
 		message := stringPayload(event.Payload, "error")
@@ -183,7 +183,7 @@ func episodeErrors(replay domain.RunReplay) []domain.EpisodeError {
 		errors = append(errors, domain.EpisodeError{
 			Source:  source,
 			EventID: event.ID,
-			StepID:  event.StepID,
+			StepID:  event.StageID,
 			Message: message,
 		})
 	}

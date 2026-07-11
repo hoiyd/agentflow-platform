@@ -49,17 +49,16 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create step: %v", err)
 	}
-	if _, err := store.CreateTraceEvent(domain.TraceEvent{
-		RunID:  run.ID,
-		StepID: step.ID,
-		Type:   domain.TraceLLMEnd,
+	if _, err := store.CreateRunEvent(domain.RunEvent{
+		RunID:   run.ID,
+		StageID: step.ID,
+		Type:    domain.EventModelCompleted,
 		Payload: map[string]any{
 			"prompt_tokens":         10,
 			"completion_tokens":     5,
 			"total_tokens":          15,
 			"token_usage_estimated": true,
 		},
-		DurationMS: 25,
 	}); err != nil {
 		t.Fatalf("create llm trace: %v", err)
 	}
@@ -74,7 +73,7 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if replay.Summary.TotalTokens != 15 || !replay.Summary.TokenUsageEstimated {
 		t.Fatalf("unexpected summary: %#v", replay.Summary)
 	}
-	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.Events) != 1 {
-		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.Events))
+	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.RunEvents) != 1 {
+		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.RunEvents))
 	}
 }

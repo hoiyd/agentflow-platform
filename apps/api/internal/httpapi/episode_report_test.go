@@ -45,10 +45,10 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create step: %v", err)
 	}
-	if _, err := fileStore.CreateTraceEvent(domain.TraceEvent{
-		RunID:  run.ID,
-		StepID: step.ID,
-		Type:   domain.TraceRetrieval,
+	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+		RunID:   run.ID,
+		StageID: step.ID,
+		Type:    domain.EventRetrievalCompleted,
 		Payload: map[string]any{
 			"retrieved_memories": []any{
 				map[string]any{"id": "mem_1", "content": "Built Go services", "score": 0.91},
@@ -60,10 +60,10 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create retrieval trace: %v", err)
 	}
-	if _, err := fileStore.CreateTraceEvent(domain.TraceEvent{
-		RunID:  run.ID,
-		StepID: step.ID,
-		Type:   domain.TraceLLMEnd,
+	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+		RunID:   run.ID,
+		StageID: step.ID,
+		Type:    domain.EventModelCompleted,
 		Payload: map[string]any{
 			"role":                  "final",
 			"agent_id":              "agent_planner",
@@ -74,16 +74,14 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 			"token_usage_estimated": true,
 			"output_chars":          27,
 		},
-		DurationMS: 42,
 	}); err != nil {
 		t.Fatalf("create llm trace: %v", err)
 	}
-	if _, err := fileStore.CreateTraceEvent(domain.TraceEvent{
-		RunID:      run.ID,
-		StepID:     step.ID,
-		Type:       domain.TraceToolEnd,
-		Payload:    map[string]any{"tool_name": "calculator", "tool_call_id": "call_1"},
-		DurationMS: 5,
+	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+		RunID:   run.ID,
+		StageID: step.ID,
+		Type:    domain.EventToolCompleted,
+		Payload: map[string]any{"tool_name": "calculator", "tool_call_id": "call_1"},
 	}); err != nil {
 		t.Fatalf("create tool trace: %v", err)
 	}
@@ -130,8 +128,8 @@ func TestBuildEpisodeReportFailedVerification(t *testing.T) {
 			Error:  "llm failed",
 		},
 		Summary: domain.RunTraceSummary{ErrorCount: 1},
-		Events: []domain.TraceEvent{
-			{ID: "event_1", Type: domain.TraceError, Payload: map[string]any{"source": "llm", "error": "429"}},
+		RunEvents: []domain.RunEvent{
+			{ID: "event_1", Type: domain.EventModelFailed, Payload: map[string]any{"source": "llm", "error": "429"}},
 		},
 	}, domain.Agent{ID: "agent_planner"})
 

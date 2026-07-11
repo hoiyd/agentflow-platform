@@ -43,8 +43,6 @@ type Store interface {
 	UpdateCollaborationStep(id string, status domain.CollaborationStepStatus, output string, errorMessage string) (domain.CollaborationStep, error)
 	UpdateCollaborationStepOutput(id string, output string) (domain.CollaborationStep, error)
 	ListCollaborationSteps(runID string) ([]domain.CollaborationStep, error)
-	CreateTraceEvent(event domain.TraceEvent) (domain.TraceEvent, error)
-	ListTraceEvents(runID string) ([]domain.TraceEvent, error)
 	CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error)
 	ListRunEvents(runID string) ([]domain.RunEvent, error)
 	GetRunTraceSummary(runID string) (domain.RunTraceSummary, error)

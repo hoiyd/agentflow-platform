@@ -521,57 +521,6 @@ func (s *PostgresStore) ListCollaborationSteps(runID string) ([]domain.Collabora
 	return items, rows.Err()
 }
 
-func (s *PostgresStore) CreateTraceEvent(event domain.TraceEvent) (domain.TraceEvent, error) {
-	event.ID = strings.TrimSpace(event.ID)
-	if event.ID == "" {
-		event.ID = newID("trace")
-	}
-	event.StepID = strings.TrimSpace(event.StepID)
-	if event.Type == "" {
-		return domain.TraceEvent{}, errors.New("trace event type is required")
-	}
-	if event.Payload == nil {
-		event.Payload = map[string]any{}
-	}
-	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now().UTC()
-	}
-	if event.DurationMS < 0 {
-		event.DurationMS = 0
-	}
-	payloadJSON, err := json.Marshal(event.Payload)
-	if err != nil {
-		return domain.TraceEvent{}, err
-	}
-	_, err = s.db.Exec(`
-		INSERT INTO trace_events (id, run_id, step_id, type, payload, timestamp, duration_ms)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		event.ID, event.RunID, nullString(event.StepID), string(event.Type), payloadJSON, event.Timestamp, event.DurationMS)
-	return event, err
-}
-
-func (s *PostgresStore) ListTraceEvents(runID string) ([]domain.TraceEvent, error) {
-	rows, err := s.db.Query(`
-		SELECT id, run_id, step_id, type, payload, timestamp, duration_ms
-		FROM trace_events
-		WHERE run_id = $1
-		ORDER BY timestamp ASC, id ASC`, runID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	items := []domain.TraceEvent{}
-	for rows.Next() {
-		event, err := scanTraceEvent(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, event)
-	}
-	return items, rows.Err()
-}
-
 func (s *PostgresStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error) {
 	event.ID = strings.TrimSpace(event.ID)
 	if event.ID == "" {
@@ -657,7 +606,7 @@ func (s *PostgresStore) GetRunTraceSummary(runID string) (domain.RunTraceSummary
 	if !ok {
 		return domain.RunTraceSummary{}, ErrNotFound("run")
 	}
-	events, err := s.ListTraceEvents(runID)
+	events, err := s.ListRunEvents(runID)
 	if err != nil {
 		return domain.RunTraceSummary{}, err
 	}
@@ -684,10 +633,6 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 	if err != nil {
 		return domain.RunReplay{}, false, err
 	}
-	events, err := s.ListTraceEvents(runID)
-	if err != nil {
-		return domain.RunReplay{}, false, err
-	}
 	runEvents, err := s.ListRunEvents(runID)
 	if err != nil {
 		return domain.RunReplay{}, false, err
@@ -697,8 +642,7 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 		Conversation: conversation,
 		Messages:     messages,
 		Steps:        steps,
-		Summary:      buildRunTraceSummary(run, events),
-		Events:       events,
+		Summary:      buildRunTraceSummary(run, runEvents),
 		RunEvents:    runEvents,
 	}, true, nil
 }
@@ -1220,29 +1164,6 @@ func scanStep(row scanner) (domain.CollaborationStep, error) {
 	return step, nil
 }
 
-func scanTraceEvent(row scanner) (domain.TraceEvent, error) {
-	var event domain.TraceEvent
-	var eventType string
-	var stepID sql.NullString
-	var payloadJSON []byte
-	if err := row.Scan(&event.ID, &event.RunID, &stepID, &eventType, &payloadJSON, &event.Timestamp, &event.DurationMS); err != nil {
-		return domain.TraceEvent{}, err
-	}
-	if stepID.Valid {
-		event.StepID = stepID.String
-	}
-	event.Type = domain.TraceEventType(eventType)
-	if len(payloadJSON) > 0 {
-		if err := json.Unmarshal(payloadJSON, &event.Payload); err != nil {
-			return domain.TraceEvent{}, err
-		}
-	}
-	if event.Payload == nil {
-		event.Payload = map[string]any{}
-	}
-	return event, nil
-}
-
 func scanRetrievedMemory(row scanner) (domain.RetrievedMemory, error) {
 	var item domain.RetrievedMemory
 	var metadataJSON []byte
@@ -1534,18 +1455,6 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
-	`CREATE TABLE IF NOT EXISTS trace_events (
-		id text PRIMARY KEY,
-		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-		step_id text,
-		workspace_id text,
-		user_id text,
-		project_id text,
-		type text NOT NULL,
-		payload jsonb NOT NULL DEFAULT '{}'::jsonb,
-		timestamp timestamptz NOT NULL,
-		duration_ms bigint NOT NULL DEFAULT 0
-	)`,
 	`CREATE TABLE IF NOT EXISTS run_events (
 		id text PRIMARY KEY,
 		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
@@ -1560,6 +1469,28 @@ var postgresMigrations = []string{
 		timestamp timestamptz NOT NULL,
 		UNIQUE(run_id, sequence)
 	)`,
+	`DO $$
+	BEGIN
+		IF to_regclass('public.trace_events') IS NOT NULL THEN
+			INSERT INTO run_events (id, run_id, conversation_id, stage_id, type, schema_version, sequence, payload, timestamp)
+			SELECT t.id, t.run_id, r.conversation_id, t.step_id,
+				CASE WHEN EXISTS (SELECT 1 FROM run_events existing WHERE existing.run_id=t.run_id)
+				THEN 'legacy.trace.' || t.type ELSE CASE t.type
+					WHEN 'llm_start' THEN 'model.started'
+					WHEN 'llm_end' THEN 'model.completed'
+					WHEN 'tool_start' THEN 'tool.started'
+					WHEN 'tool_end' THEN 'tool.completed'
+					WHEN 'retrieval' THEN 'retrieval.completed'
+					WHEN 'error' THEN 'model.failed'
+					ELSE 'legacy.' || t.type END END,
+				1, (SELECT COALESCE(MAX(sequence),0) FROM run_events existing WHERE existing.run_id=t.run_id) + row_number() OVER (PARTITION BY t.run_id ORDER BY t.timestamp, t.id),
+				t.payload || CASE WHEN t.duration_ms > 0 THEN jsonb_build_object('duration_ms', t.duration_ms) ELSE '{}'::jsonb END || CASE WHEN EXISTS (SELECT 1 FROM run_events existing WHERE existing.run_id=t.run_id) THEN '{"migrated_legacy":true}'::jsonb ELSE '{}'::jsonb END,
+				t.timestamp
+			FROM trace_events t JOIN runs r ON r.id = t.run_id
+			ON CONFLICT (id) DO NOTHING;
+			DROP TABLE trace_events;
+		END IF;
+	END $$`,
 	`CREATE TABLE IF NOT EXISTS memories (
 		id text PRIMARY KEY,
 		workspace_id text,
@@ -1630,8 +1561,6 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_runs_status_created ON runs(status, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_steps_run_created ON collaboration_steps(run_id, created_at ASC)`,
-	`CREATE INDEX IF NOT EXISTS idx_trace_events_run_timestamp ON trace_events(run_id, timestamp ASC)`,
-	`CREATE INDEX IF NOT EXISTS idx_trace_events_type_timestamp ON trace_events(type, timestamp DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_run_events_run_sequence ON run_events(run_id, sequence ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memories_scope_created ON memories(workspace_id, user_id, project_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memory_embeddings_vector ON memory_embeddings USING hnsw (embedding vector_cosine_ops)`,

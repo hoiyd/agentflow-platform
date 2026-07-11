@@ -163,6 +163,56 @@ func TestFileStoreRunEventsHaveStrictSequence(t *testing.T) {
 	}
 }
 
+func TestFileStoreMigratesAndRemovesLegacyTraceEvents(t *testing.T) {
+	path := t.TempDir() + "/agentflow.json"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	fixture := `{"conversations":[{"id":"conv_1","title":"Legacy","created_at":"` + now + `","updated_at":"` + now + `"}],"runs":[{"id":"run_1","agent_id":"agent_planner","conversation_id":"conv_1","status":"completed","created_at":"` + now + `","updated_at":"` + now + `"}],"trace_events":[{"id":"trace_1","run_id":"run_1","step_id":"step_1","type":"llm_end","payload":{"total_tokens":9},"timestamp":"` + now + `","duration_ms":12}]}`
+	if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fileStore, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := fileStore.ListRunEvents("run_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Type != domain.EventModelCompleted || events[0].StageID != "step_1" {
+		t.Fatalf("unexpected migrated events: %#v", events)
+	}
+	if events[0].Payload["duration_ms"] != float64(12) && events[0].Payload["duration_ms"] != int64(12) {
+		t.Fatalf("duration not migrated: %#v", events[0].Payload)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "trace_events") {
+		t.Fatalf("legacy trace_events remained in file: %s", data)
+	}
+}
+
+func TestFileStorePreservesLegacyPayloadForDualWrittenRun(t *testing.T) {
+	path := t.TempDir() + "/agentflow.json"
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	fixture := `{"conversations":[{"id":"conv_1","title":"Dual","created_at":"` + now + `","updated_at":"` + now + `"}],"runs":[{"id":"run_1","agent_id":"agent_planner","conversation_id":"conv_1","status":"completed","created_at":"` + now + `","updated_at":"` + now + `"}],"run_events":[{"id":"event_1","run_id":"run_1","type":"turn.completed","schema_version":1,"sequence":1,"payload":{},"timestamp":"` + now + `"}],"trace_events":[{"id":"trace_1","run_id":"run_1","type":"llm_end","payload":{"total_tokens":17},"timestamp":"` + now + `"}]}`
+	if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fileStore, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := fileStore.ListRunEvents("run_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 2 || events[1].Type != "legacy.trace.llm_end" || events[1].Payload["total_tokens"] != float64(17) {
+		t.Fatalf("legacy payload was not preserved: %#v", events)
+	}
+}
+
 func TestFileStoreListStaleRunningRuns(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {
@@ -273,12 +323,12 @@ func TestFileStoreDeleteConversationCascades(t *testing.T) {
 		t.Fatalf("expected no steps after delete, got %d", len(steps))
 	}
 
-	events, err := store.ListTraceEvents(run.ID)
+	events, err := store.ListRunEvents(run.ID)
 	if err != nil {
-		t.Fatalf("list trace events after delete: %v", err)
+		t.Fatalf("list run events after delete: %v", err)
 	}
 	if len(events) != 0 {
-		t.Fatalf("expected no trace events after delete, got %d", len(events))
+		t.Fatalf("expected no run events after delete, got %d", len(events))
 	}
 }
 
@@ -313,33 +363,31 @@ func TestFileStoreTraceReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create step: %v", err)
 	}
-	if _, err := store.CreateTraceEvent(domain.TraceEvent{
-		RunID:  run.ID,
-		StepID: step.ID,
-		Type:   domain.TraceLLMEnd,
+	if _, err := store.CreateRunEvent(domain.RunEvent{
+		RunID:   run.ID,
+		StageID: step.ID,
+		Type:    domain.EventModelCompleted,
 		Payload: map[string]any{
 			"prompt_tokens":         10,
 			"completion_tokens":     5,
 			"total_tokens":          15,
 			"token_usage_estimated": true,
 		},
-		DurationMS: 25,
 	}); err != nil {
 		t.Fatalf("create llm trace: %v", err)
 	}
-	if _, err := store.CreateTraceEvent(domain.TraceEvent{
-		RunID:      run.ID,
-		StepID:     step.ID,
-		Type:       domain.TraceToolEnd,
-		Payload:    map[string]any{"tool_name": "calculator"},
-		DurationMS: 3,
+	if _, err := store.CreateRunEvent(domain.RunEvent{
+		RunID:   run.ID,
+		StageID: step.ID,
+		Type:    domain.EventToolCompleted,
+		Payload: map[string]any{"tool_name": "calculator"},
 	}); err != nil {
 		t.Fatalf("create tool trace: %v", err)
 	}
-	if _, err := store.CreateTraceEvent(domain.TraceEvent{
+	if _, err := store.CreateRunEvent(domain.RunEvent{
 		RunID:   run.ID,
-		StepID:  step.ID,
-		Type:    domain.TraceError,
+		StageID: step.ID,
+		Type:    domain.EventModelFailed,
 		Payload: map[string]any{"error": "boom"},
 	}); err != nil {
 		t.Fatalf("create error trace: %v", err)
@@ -369,8 +417,8 @@ func TestFileStoreTraceReplay(t *testing.T) {
 	if replay.Run.ID != run.ID || replay.Conversation.ID != conversation.ID {
 		t.Fatalf("unexpected replay identity: %#v", replay)
 	}
-	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.Events) != 3 {
-		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.Events))
+	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.RunEvents) != 3 {
+		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.RunEvents))
 	}
 }
 
