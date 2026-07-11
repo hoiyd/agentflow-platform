@@ -79,7 +79,7 @@ func TestEngineEmitsFailedLifecycle(t *testing.T) {
 	if err == nil || result.StopReason != StopFailed {
 		t.Fatalf("result = %#v, err = %v", result, err)
 	}
-	want := []EventType{EventTurnStarted, EventModelStarted, EventTurnFailed}
+	want := []EventType{EventTurnStarted, EventModelStarted, EventModelFailed, EventTurnFailed}
 	if !reflect.DeepEqual(events, want) {
 		t.Fatalf("events = %#v, want %#v", events, want)
 	}

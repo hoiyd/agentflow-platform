@@ -574,6 +574,7 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- Collab
 		Agent: domain.Agent{ID: agentID, SystemPrompt: systemPrompt}, Role: role,
 		SystemPrompt: systemPrompt, Input: input, ModelMode: turnpkg.ModelModeText,
 		Context: turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks},
+		Sink:    r.runEventSink(),
 	}, nil)
 	if err != nil {
 		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())

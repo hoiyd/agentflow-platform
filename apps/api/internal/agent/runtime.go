@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
@@ -129,6 +130,7 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 				Memories: retrievedMemories,
 				Chunks:   retrievedChunks,
 			},
+			Sink: r.runEventSink(),
 		}, func(event turnpkg.Event) {
 			if event.Type == turnpkg.EventModelDelta {
 				events <- openai.StreamEvent{Type: "delta", Delta: event.Delta}
@@ -148,7 +150,14 @@ func enabledToolCount(registry *tools.Registry) int {
 	return len(registry.EnabledNames())
 }
 
+func (r *Runtime) runEventSink() eventpkg.Sink { return eventpkg.StoreSink{Store: r.store} }
+
 func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string, memoryEnabled bool, retrievalEnabled bool, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
+	conversationID := ""
+	if run, ok, _ := r.store.GetRun(runID); ok {
+		conversationID = run.ConversationID
+	}
+	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalStarted, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"query": truncateRuntimeText(query, 1200)}})
 	embeddingQuery := truncateRetrievalEmbeddingQuery(query)
 	payload := map[string]any{
 		"query":                          truncateRuntimeText(query, 1200),
@@ -163,6 +172,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		payload["memory_count"] = 0
 		payload["chunk_count"] = 0
 		r.trace.Retrieval(ctx, runID, "", payload)
+		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
 		return nil, nil
 	}
 	embedding, err := r.openAI.EmbedText(ctx, embeddingQuery)
@@ -172,6 +182,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 			"stage":  "embed_query",
 			"error":  err.Error(),
 		})
+		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"error": err.Error()}})
 		return nil, nil
 	}
 	payload["embedding_provider"] = embedding.Provider
@@ -222,6 +233,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		payload[key] = value
 	}
 	r.trace.Retrieval(ctx, runID, "", payload)
+	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
 	return memories, chunks
 }
 

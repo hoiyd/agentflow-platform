@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -28,6 +29,7 @@ var ErrInvalidRequest = errors.New("invalid turn request")
 type Request struct {
 	RunID          string
 	StepID         string
+	TurnID         string
 	ConversationID string
 	Agent          domain.Agent
 	Role           string
@@ -39,6 +41,7 @@ type Request struct {
 	Registry       *tools.Registry
 	Context        Context
 	Metadata       map[string]any
+	Sink           eventpkg.Sink
 }
 
 type Context struct {

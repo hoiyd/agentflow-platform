@@ -470,6 +470,7 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 		ModelMode: turnpkg.ModelModeText,
 		Context:   turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks},
 		Metadata:  map[string]any{"iteration": iteration},
+		Sink:      r.runEventSink(),
 	}, nil)
 	if err != nil {
 		if ctx.Err() != nil {

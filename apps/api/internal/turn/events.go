@@ -9,8 +9,10 @@ const (
 	EventModelStarted  EventType = "model.started"
 	EventModelDelta    EventType = "model.delta"
 	EventModelFinished EventType = "model.finished"
+	EventModelFailed   EventType = "model.failed"
 	EventToolStarted   EventType = "tool.started"
 	EventToolFinished  EventType = "tool.finished"
+	EventToolFailed    EventType = "tool.failed"
 	EventTurnCompleted EventType = "turn.completed"
 	EventTurnFailed    EventType = "turn.failed"
 )

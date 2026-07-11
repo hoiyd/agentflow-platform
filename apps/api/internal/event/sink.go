@@ -11,6 +11,19 @@ type Sink interface {
 	Publish(context.Context, domain.RunEvent) error
 }
 
+type RunEventStore interface {
+	CreateRunEvent(domain.RunEvent) (domain.RunEvent, error)
+}
+type StoreSink struct{ Store RunEventStore }
+
+func (s StoreSink) Publish(_ context.Context, event domain.RunEvent) error {
+	if s.Store == nil || event.Type == domain.EventModelDelta {
+		return nil
+	}
+	_, err := s.Store.CreateRunEvent(event)
+	return err
+}
+
 type SinkFunc func(context.Context, domain.RunEvent) error
 
 func (f SinkFunc) Publish(ctx context.Context, event domain.RunEvent) error {
