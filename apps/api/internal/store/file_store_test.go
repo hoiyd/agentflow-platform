@@ -124,6 +124,45 @@ func TestFileStoreRunLifecycle(t *testing.T) {
 	}
 }
 
+func TestFileStoreRunEventsHaveStrictSequence(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := store.CreateConversation("Event sequence")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := store.CreateRun("agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, eventType := range []domain.RunEventType{domain.EventRunCreated, domain.EventRunStarted, domain.EventRunCompleted} {
+		event, err := store.CreateRunEvent(domain.RunEvent{RunID: run.ID, ConversationID: conversation.ID, Type: eventType})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if event.Sequence < 1 {
+			t.Fatalf("invalid sequence: %d", event.Sequence)
+		}
+	}
+	events, err := store.ListRunEvents(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("events = %d", len(events))
+	}
+	for index, event := range events {
+		if event.Sequence != int64(index+1) {
+			t.Fatalf("sequence[%d] = %d", index, event.Sequence)
+		}
+		if event.SchemaVersion != domain.CurrentRunEventSchemaVersion {
+			t.Fatalf("schema version = %d", event.SchemaVersion)
+		}
+	}
+}
+
 func TestFileStoreListStaleRunningRuns(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

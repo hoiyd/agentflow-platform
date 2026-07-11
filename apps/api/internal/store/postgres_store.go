@@ -572,6 +572,83 @@ func (s *PostgresStore) ListTraceEvents(runID string) ([]domain.TraceEvent, erro
 	return items, rows.Err()
 }
 
+func (s *PostgresStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error) {
+	event.ID = strings.TrimSpace(event.ID)
+	if event.ID == "" {
+		event.ID = newID("event")
+	}
+	if event.Type == "" {
+		return domain.RunEvent{}, errors.New("run event type is required")
+	}
+	if event.SchemaVersion == 0 {
+		event.SchemaVersion = domain.CurrentRunEventSchemaVersion
+	}
+	if event.Payload == nil {
+		event.Payload = map[string]any{}
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now().UTC()
+	}
+	payload, err := json.Marshal(event.Payload)
+	if err != nil {
+		return domain.RunEvent{}, err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return domain.RunEvent{}, err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`SELECT pg_advisory_xact_lock(hashtext($1))`, event.RunID); err != nil {
+		return domain.RunEvent{}, err
+	}
+	err = tx.QueryRow(`
+		INSERT INTO run_events (id, run_id, conversation_id, stage_id, turn_id, parent_event_id, type, schema_version, sequence, payload, timestamp)
+		VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),$7,$8,
+			(SELECT COALESCE(MAX(sequence),0)+1 FROM run_events WHERE run_id=$2),$9,$10)
+		RETURNING sequence`, event.ID, event.RunID, event.ConversationID, event.StageID, event.TurnID,
+		event.ParentEventID, string(event.Type), event.SchemaVersion, payload, event.Timestamp).Scan(&event.Sequence)
+	if err != nil {
+		return domain.RunEvent{}, err
+	}
+	return event, tx.Commit()
+}
+
+func (s *PostgresStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
+	rows, err := s.db.Query(`SELECT id,run_id,conversation_id,stage_id,turn_id,parent_event_id,type,schema_version,sequence,payload,timestamp FROM run_events WHERE run_id=$1 ORDER BY sequence`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.RunEvent{}
+	for rows.Next() {
+		var item domain.RunEvent
+		var conversationID, stageID, turnID, parentID sql.NullString
+		var eventType string
+		var payload []byte
+		if err := rows.Scan(&item.ID, &item.RunID, &conversationID, &stageID, &turnID, &parentID, &eventType, &item.SchemaVersion, &item.Sequence, &payload, &item.Timestamp); err != nil {
+			return nil, err
+		}
+		if conversationID.Valid {
+			item.ConversationID = conversationID.String
+		}
+		if stageID.Valid {
+			item.StageID = stageID.String
+		}
+		if turnID.Valid {
+			item.TurnID = turnID.String
+		}
+		if parentID.Valid {
+			item.ParentEventID = parentID.String
+		}
+		item.Type = domain.RunEventType(eventType)
+		if err := json.Unmarshal(payload, &item.Payload); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (s *PostgresStore) GetRunTraceSummary(runID string) (domain.RunTraceSummary, error) {
 	run, ok, err := s.GetRun(runID)
 	if err != nil {
@@ -1464,6 +1541,20 @@ var postgresMigrations = []string{
 		timestamp timestamptz NOT NULL,
 		duration_ms bigint NOT NULL DEFAULT 0
 	)`,
+	`CREATE TABLE IF NOT EXISTS run_events (
+		id text PRIMARY KEY,
+		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+		conversation_id text,
+		stage_id text,
+		turn_id text,
+		parent_event_id text,
+		type text NOT NULL,
+		schema_version integer NOT NULL,
+		sequence bigint NOT NULL,
+		payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+		timestamp timestamptz NOT NULL,
+		UNIQUE(run_id, sequence)
+	)`,
 	`CREATE TABLE IF NOT EXISTS memories (
 		id text PRIMARY KEY,
 		workspace_id text,
@@ -1536,6 +1627,7 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_steps_run_created ON collaboration_steps(run_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_trace_events_run_timestamp ON trace_events(run_id, timestamp ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_trace_events_type_timestamp ON trace_events(type, timestamp DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_run_events_run_sequence ON run_events(run_id, sequence ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memories_scope_created ON memories(workspace_id, user_id, project_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memory_embeddings_vector ON memory_embeddings USING hnsw (embedding vector_cosine_ops)`,
 	`CREATE INDEX IF NOT EXISTS idx_documents_workspace_created ON documents(workspace_id, created_at DESC)`,

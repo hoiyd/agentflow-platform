@@ -30,6 +30,7 @@ type fileData struct {
 	Runs               []domain.Run                    `json:"runs"`
 	CollaborationSteps []domain.CollaborationStep      `json:"collaboration_steps"`
 	TraceEvents        []domain.TraceEvent             `json:"trace_events"`
+	RunEvents          []domain.RunEvent               `json:"run_events"`
 	Memories           []domain.Memory                 `json:"memories"`
 	MemoryEmbeddings   []domain.MemoryEmbedding        `json:"memory_embeddings"`
 	Documents          []domain.Document               `json:"documents"`
@@ -138,6 +139,13 @@ func (s *FileStore) DeleteConversation(id string) error {
 		traceEvents = append(traceEvents, event)
 	}
 	s.data.TraceEvents = traceEvents
+	runEvents := make([]domain.RunEvent, 0, len(s.data.RunEvents))
+	for _, event := range s.data.RunEvents {
+		if !runIDs[event.RunID] {
+			runEvents = append(runEvents, event)
+		}
+	}
+	s.data.RunEvents = runEvents
 
 	return s.saveLocked()
 }
@@ -567,6 +575,52 @@ func (s *FileStore) ListTraceEvents(runID string) ([]domain.TraceEvent, error) {
 		}
 		return items[i].Timestamp.Before(items[j].Timestamp)
 	})
+	return items, nil
+}
+
+func (s *FileStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.hasRunLocked(event.RunID) {
+		return domain.RunEvent{}, errors.New("run not found")
+	}
+	event.ID = strings.TrimSpace(event.ID)
+	if event.ID == "" {
+		event.ID = newID("event")
+	}
+	if event.Type == "" {
+		return domain.RunEvent{}, errors.New("run event type is required")
+	}
+	if event.SchemaVersion == 0 {
+		event.SchemaVersion = domain.CurrentRunEventSchemaVersion
+	}
+	var next int64 = 1
+	for _, existing := range s.data.RunEvents {
+		if existing.RunID == event.RunID && existing.Sequence >= next {
+			next = existing.Sequence + 1
+		}
+	}
+	event.Sequence = next
+	if event.Payload == nil {
+		event.Payload = map[string]any{}
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now().UTC()
+	}
+	s.data.RunEvents = append(s.data.RunEvents, event)
+	return event, s.saveLocked()
+}
+
+func (s *FileStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	items := []domain.RunEvent{}
+	for _, event := range s.data.RunEvents {
+		if event.RunID == runID {
+			items = append(items, event)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Sequence < items[j].Sequence })
 	return items, nil
 }
 
@@ -1014,6 +1068,7 @@ func emptyFileData() fileData {
 		Runs:               []domain.Run{},
 		CollaborationSteps: []domain.CollaborationStep{},
 		TraceEvents:        []domain.TraceEvent{},
+		RunEvents:          []domain.RunEvent{},
 		Memories:           []domain.Memory{},
 		MemoryEmbeddings:   []domain.MemoryEmbedding{},
 		Documents:          []domain.Document{},
@@ -1040,6 +1095,9 @@ func (s *FileStore) normalizeLoadedDataLocked() {
 	}
 	if s.data.TraceEvents == nil {
 		s.data.TraceEvents = []domain.TraceEvent{}
+	}
+	if s.data.RunEvents == nil {
+		s.data.RunEvents = []domain.RunEvent{}
 	}
 	if s.data.Memories == nil {
 		s.data.Memories = []domain.Memory{}
