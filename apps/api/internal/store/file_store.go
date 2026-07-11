@@ -29,7 +29,7 @@ type fileData struct {
 	Agents             []domain.Agent                  `json:"agents"`
 	Runs               []domain.Run                    `json:"runs"`
 	CollaborationSteps []domain.CollaborationStep      `json:"collaboration_steps"`
-	TraceEvents        []domain.TraceEvent             `json:"trace_events"`
+	RunEvents          []domain.RunEvent               `json:"run_events"`
 	Memories           []domain.Memory                 `json:"memories"`
 	MemoryEmbeddings   []domain.MemoryEmbedding        `json:"memory_embeddings"`
 	Documents          []domain.Document               `json:"documents"`
@@ -130,14 +130,13 @@ func (s *FileStore) DeleteConversation(id string) error {
 	}
 	s.data.CollaborationSteps = steps
 
-	traceEvents := make([]domain.TraceEvent, 0, len(s.data.TraceEvents))
-	for _, event := range s.data.TraceEvents {
-		if runIDs[event.RunID] {
-			continue
+	runEvents := make([]domain.RunEvent, 0, len(s.data.RunEvents))
+	for _, event := range s.data.RunEvents {
+		if !runIDs[event.RunID] {
+			runEvents = append(runEvents, event)
 		}
-		traceEvents = append(traceEvents, event)
 	}
-	s.data.TraceEvents = traceEvents
+	s.data.RunEvents = runEvents
 
 	return s.saveLocked()
 }
@@ -523,50 +522,49 @@ func (s *FileStore) ListCollaborationSteps(runID string) ([]domain.Collaboration
 	return items, nil
 }
 
-func (s *FileStore) CreateTraceEvent(event domain.TraceEvent) (domain.TraceEvent, error) {
+func (s *FileStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	if !s.hasRunLocked(event.RunID) {
-		return domain.TraceEvent{}, errors.New("run not found")
+		return domain.RunEvent{}, errors.New("run not found")
 	}
 	event.ID = strings.TrimSpace(event.ID)
 	if event.ID == "" {
-		event.ID = newID("trace")
+		event.ID = newID("event")
 	}
-	event.StepID = strings.TrimSpace(event.StepID)
 	if event.Type == "" {
-		return domain.TraceEvent{}, errors.New("trace event type is required")
+		return domain.RunEvent{}, errors.New("run event type is required")
 	}
+	if event.SchemaVersion == 0 {
+		event.SchemaVersion = domain.CurrentRunEventSchemaVersion
+	}
+	var next int64 = 1
+	for _, existing := range s.data.RunEvents {
+		if existing.RunID == event.RunID && existing.Sequence >= next {
+			next = existing.Sequence + 1
+		}
+	}
+	event.Sequence = next
 	if event.Payload == nil {
 		event.Payload = map[string]any{}
 	}
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now().UTC()
 	}
-	if event.DurationMS < 0 {
-		event.DurationMS = 0
-	}
-	s.data.TraceEvents = append(s.data.TraceEvents, event)
+	s.data.RunEvents = append(s.data.RunEvents, event)
 	return event, s.saveLocked()
 }
 
-func (s *FileStore) ListTraceEvents(runID string) ([]domain.TraceEvent, error) {
+func (s *FileStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	items := []domain.TraceEvent{}
-	for _, event := range s.data.TraceEvents {
+	items := []domain.RunEvent{}
+	for _, event := range s.data.RunEvents {
 		if event.RunID == runID {
 			items = append(items, event)
 		}
 	}
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].Timestamp.Equal(items[j].Timestamp) {
-			return items[i].ID < items[j].ID
-		}
-		return items[i].Timestamp.Before(items[j].Timestamp)
-	})
+	sort.Slice(items, func(i, j int) bool { return items[i].Sequence < items[j].Sequence })
 	return items, nil
 }
 
@@ -578,7 +576,7 @@ func (s *FileStore) GetRunTraceSummary(runID string) (domain.RunTraceSummary, er
 	if !ok {
 		return domain.RunTraceSummary{}, ErrNotFound("run")
 	}
-	return buildRunTraceSummary(run, s.traceEventsForRunLocked(runID)), nil
+	return buildRunTraceSummary(run, s.runEventsForRunLocked(runID)), nil
 }
 
 func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
@@ -595,14 +593,14 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	}
 	messages := s.messagesForConversationLocked(run.ConversationID)
 	steps := s.stepsForRunLocked(runID)
-	events := s.traceEventsForRunLocked(runID)
+	runEvents := s.runEventsForRunLocked(runID)
 	return domain.RunReplay{
 		Run:          run,
 		Conversation: conversation,
 		Messages:     messages,
 		Steps:        steps,
-		Summary:      buildRunTraceSummary(run, events),
-		Events:       events,
+		Summary:      buildRunTraceSummary(run, runEvents),
+		RunEvents:    runEvents,
 	}, true, nil
 }
 
@@ -1013,7 +1011,7 @@ func emptyFileData() fileData {
 		Agents:             []domain.Agent{},
 		Runs:               []domain.Run{},
 		CollaborationSteps: []domain.CollaborationStep{},
-		TraceEvents:        []domain.TraceEvent{},
+		RunEvents:          []domain.RunEvent{},
 		Memories:           []domain.Memory{},
 		MemoryEmbeddings:   []domain.MemoryEmbedding{},
 		Documents:          []domain.Document{},
@@ -1038,8 +1036,8 @@ func (s *FileStore) normalizeLoadedDataLocked() {
 	if s.data.CollaborationSteps == nil {
 		s.data.CollaborationSteps = []domain.CollaborationStep{}
 	}
-	if s.data.TraceEvents == nil {
-		s.data.TraceEvents = []domain.TraceEvent{}
+	if s.data.RunEvents == nil {
+		s.data.RunEvents = []domain.RunEvent{}
 	}
 	if s.data.Memories == nil {
 		s.data.Memories = []domain.Memory{}
@@ -1102,23 +1100,18 @@ func (s *FileStore) stepsForRunLocked(runID string) []domain.CollaborationStep {
 	return steps
 }
 
-func (s *FileStore) traceEventsForRunLocked(runID string) []domain.TraceEvent {
-	events := []domain.TraceEvent{}
-	for _, event := range s.data.TraceEvents {
+func (s *FileStore) runEventsForRunLocked(runID string) []domain.RunEvent {
+	events := []domain.RunEvent{}
+	for _, event := range s.data.RunEvents {
 		if event.RunID == runID {
 			events = append(events, event)
 		}
 	}
-	sort.Slice(events, func(i, j int) bool {
-		if events[i].Timestamp.Equal(events[j].Timestamp) {
-			return events[i].ID < events[j].ID
-		}
-		return events[i].Timestamp.Before(events[j].Timestamp)
-	})
+	sort.Slice(events, func(i, j int) bool { return events[i].Sequence < events[j].Sequence })
 	return events
 }
 
-func buildRunTraceSummary(run domain.Run, events []domain.TraceEvent) domain.RunTraceSummary {
+func buildRunTraceSummary(run domain.Run, events []domain.RunEvent) domain.RunTraceSummary {
 	summary := domain.RunTraceSummary{
 		RunID:  run.ID,
 		Status: run.Status,
@@ -1134,7 +1127,7 @@ func buildRunTraceSummary(run domain.Run, events []domain.TraceEvent) domain.Run
 	}
 	for _, event := range events {
 		switch event.Type {
-		case domain.TraceLLMEnd:
+		case domain.EventModelCompleted:
 			summary.LLMCalls++
 			summary.PromptTokens += intPayload(event.Payload, "prompt_tokens")
 			summary.CompletionTokens += intPayload(event.Payload, "completion_tokens")
@@ -1142,9 +1135,9 @@ func buildRunTraceSummary(run domain.Run, events []domain.TraceEvent) domain.Run
 			if boolPayload(event.Payload, "token_usage_estimated") {
 				summary.TokenUsageEstimated = true
 			}
-		case domain.TraceToolEnd:
+		case domain.EventToolCompleted, domain.EventToolFailed:
 			summary.ToolCalls++
-		case domain.TraceError:
+		case domain.EventModelFailed, domain.EventRetrievalFailed:
 			summary.ErrorCount++
 		}
 	}

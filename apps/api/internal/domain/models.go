@@ -135,41 +135,54 @@ type ChatChunk struct {
 	MessageID      string `json:"message_id,omitempty"`
 	Delta          string `json:"delta,omitempty"`
 	Error          string `json:"error,omitempty"`
-	Role           string `json:"role,omitempty"`
-	Iteration      int    `json:"iteration,omitempty"`
-	MaxIterations  int    `json:"max_iterations,omitempty"`
-	ElapsedSeconds int    `json:"elapsed_seconds,omitempty"`
-	MaxRuntimeSec  int    `json:"max_runtime_seconds,omitempty"`
-	OutputChars    int    `json:"output_chars,omitempty"`
-	MaxOutputChars int    `json:"max_output_chars,omitempty"`
-	ToolCalls      int    `json:"tool_calls,omitempty"`
-	MaxToolCalls   int    `json:"max_tool_calls,omitempty"`
-	StopReason     string `json:"stop_reason,omitempty"`
-	Question       string `json:"question,omitempty"`
-	Context        string `json:"context,omitempty"`
-	Input          string `json:"input,omitempty"`
-	Output         string `json:"output,omitempty"`
 }
 
-type TraceEventType string
+type RunEventType string
 
 const (
-	TraceLLMStart  TraceEventType = "llm_start"
-	TraceLLMEnd    TraceEventType = "llm_end"
-	TraceToolStart TraceEventType = "tool_start"
-	TraceToolEnd   TraceEventType = "tool_end"
-	TraceRetrieval TraceEventType = "retrieval"
-	TraceError     TraceEventType = "error"
+	EventRunCreated         RunEventType = "run.created"
+	EventRunStarted         RunEventType = "run.started"
+	EventRunProgress        RunEventType = "run.progress"
+	EventRunWaitingForUser  RunEventType = "run.waiting_for_user"
+	EventRunResumed         RunEventType = "run.resumed"
+	EventRunCancelRequested RunEventType = "run.cancel_requested"
+	EventRunCanceled        RunEventType = "run.canceled"
+	EventRunCompleted       RunEventType = "run.completed"
+	EventRunFailed          RunEventType = "run.failed"
+	EventStageStarted       RunEventType = "stage.started"
+	EventStageCompleted     RunEventType = "stage.completed"
+	EventStageFailed        RunEventType = "stage.failed"
+	EventStageCanceled      RunEventType = "stage.canceled"
+	EventTurnStarted        RunEventType = "turn.started"
+	EventTurnCompleted      RunEventType = "turn.completed"
+	EventTurnFailed         RunEventType = "turn.failed"
+	EventTurnCanceled       RunEventType = "turn.canceled"
+	EventModelStarted       RunEventType = "model.started"
+	EventModelDelta         RunEventType = "model.delta"
+	EventModelCompleted     RunEventType = "model.completed"
+	EventModelFailed        RunEventType = "model.failed"
+	EventToolStarted        RunEventType = "tool.started"
+	EventToolCompleted      RunEventType = "tool.completed"
+	EventToolFailed         RunEventType = "tool.failed"
+	EventRetrievalStarted   RunEventType = "retrieval.started"
+	EventRetrievalCompleted RunEventType = "retrieval.completed"
+	EventRetrievalFailed    RunEventType = "retrieval.failed"
 )
 
-type TraceEvent struct {
-	ID         string         `json:"id"`
-	RunID      string         `json:"run_id"`
-	StepID     string         `json:"step_id,omitempty"`
-	Type       TraceEventType `json:"type"`
-	Payload    map[string]any `json:"payload"`
-	Timestamp  time.Time      `json:"timestamp"`
-	DurationMS int64          `json:"duration_ms,omitempty"`
+const CurrentRunEventSchemaVersion = 1
+
+type RunEvent struct {
+	ID             string         `json:"id"`
+	Type           RunEventType   `json:"type"`
+	SchemaVersion  int            `json:"schema_version"`
+	Sequence       int64          `json:"sequence"`
+	ConversationID string         `json:"conversation_id,omitempty"`
+	RunID          string         `json:"run_id"`
+	StageID        string         `json:"stage_id,omitempty"`
+	TurnID         string         `json:"turn_id,omitempty"`
+	ParentEventID  string         `json:"parent_event_id,omitempty"`
+	Payload        map[string]any `json:"payload"`
+	Timestamp      time.Time      `json:"timestamp"`
 }
 
 type RunTraceSummary struct {
@@ -191,7 +204,7 @@ type RunReplay struct {
 	Messages     []Message           `json:"messages"`
 	Steps        []CollaborationStep `json:"steps"`
 	Summary      RunTraceSummary     `json:"summary"`
-	Events       []TraceEvent        `json:"events"`
+	RunEvents    []RunEvent          `json:"run_events"`
 }
 
 type EpisodeReport struct {

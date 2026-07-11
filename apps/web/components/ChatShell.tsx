@@ -864,7 +864,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
             conversationId = event.conversation_id;
             setActiveId(event.conversation_id);
           }
-          if (event.type === "run") {
+          if (event.type === "run_state") {
             setRunState({
               id: event.run_id,
               agentId: event.agent_id,
@@ -879,20 +879,20 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
               setIsCancelingRun(false);
             }
           }
-          if (event.type === "delta") {
+          if (event.type === "model_delta") {
             setMessages((items) =>
               items.map((item) =>
                 item.id === assistantDraft.id ? { ...item, content: item.content + event.delta } : item
               )
             );
           }
-          if (event.type === "collaboration_step") {
+          if (event.type === "stage_state") {
             setCollaborationSteps((items) => upsertCollaborationStep(items, event));
             if (event.role === "planner" && event.output) {
               setPlanDraft(event.output);
             }
           }
-          if (event.type === "autonomous_progress") {
+          if (event.type === "run_progress") {
             setAutonomousProgress(toAutonomousProgress(event));
           }
           if (event.type === "error") {
@@ -941,20 +941,20 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
 
     try {
       await continueRun({ run_id: runID, plan }, (event) => {
-        if (event.type === "run") {
+        if (event.type === "run_state") {
           setRunState({
             id: event.run_id,
             agentId: event.agent_id,
             status: event.status
           });
         }
-        if (event.type === "collaboration_step") {
+        if (event.type === "stage_state") {
           setCollaborationSteps((items) => upsertCollaborationStep(items, event));
           if (event.role === "planner" && event.output) {
             setPlanDraft(event.output);
           }
         }
-        if (event.type === "delta") {
+        if (event.type === "model_delta") {
           setMessages((items) =>
             items.map((item) =>
               item.id === assistantDraft.id ? { ...item, content: item.content + event.delta } : item
@@ -1017,7 +1017,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
 
     try {
       await resumeRun({ run_id: runID, user_input: userInput }, (event) => {
-        if (event.type === "run") {
+        if (event.type === "run_state") {
           setRunState({
             id: event.run_id,
             agentId: event.agent_id,
@@ -1027,13 +1027,13 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
             setHumanInputDraft("");
           }
         }
-        if (event.type === "collaboration_step") {
+        if (event.type === "stage_state") {
           setCollaborationSteps((items) => upsertCollaborationStep(items, event));
         }
-        if (event.type === "autonomous_progress") {
+        if (event.type === "run_progress") {
           setAutonomousProgress(toAutonomousProgress(event));
         }
-        if (event.type === "delta") {
+        if (event.type === "model_delta") {
           setMessages((items) =>
             items.map((item) =>
               item.id === assistantDraft.id ? { ...item, content: item.content + event.delta } : item

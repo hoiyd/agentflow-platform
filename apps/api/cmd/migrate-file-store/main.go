@@ -23,7 +23,7 @@ type fileData struct {
 	Agents             []domain.Agent             `json:"agents"`
 	Runs               []domain.Run               `json:"runs"`
 	CollaborationSteps []domain.CollaborationStep `json:"collaboration_steps"`
-	TraceEvents        []domain.TraceEvent        `json:"trace_events"`
+	RunEvents          []domain.RunEvent          `json:"run_events"`
 }
 
 func main() {
@@ -60,8 +60,8 @@ func main() {
 	if err := migrate(ctx, db, data); err != nil {
 		log.Fatalf("migrate file store: %v", err)
 	}
-	log.Printf("migrated conversations=%d messages=%d agents=%d runs=%d collaboration_steps=%d trace_events=%d",
-		len(data.Conversations), len(data.Messages), len(data.Agents), len(data.Runs), len(data.CollaborationSteps), len(data.TraceEvents))
+	log.Printf("migrated conversations=%d messages=%d agents=%d runs=%d collaboration_steps=%d run_events=%d",
+		len(data.Conversations), len(data.Messages), len(data.Agents), len(data.Runs), len(data.CollaborationSteps), len(data.RunEvents))
 }
 
 func readFileData(path string) (fileData, error) {
@@ -181,22 +181,23 @@ func migrate(ctx context.Context, db *sql.DB, data fileData) error {
 		}
 	}
 
-	for _, item := range data.TraceEvents {
+	for _, item := range data.RunEvents {
 		payloadJSON, err := json.Marshal(item.Payload)
 		if err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO trace_events (id, run_id, step_id, type, payload, timestamp, duration_ms)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			INSERT INTO run_events (id, run_id, conversation_id, stage_id, turn_id, parent_event_id, type, schema_version, sequence, payload, timestamp)
+			VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),$7,$8,$9,$10,$11)
 			ON CONFLICT (id) DO UPDATE SET
 				run_id = EXCLUDED.run_id,
-				step_id = EXCLUDED.step_id,
+				conversation_id = EXCLUDED.conversation_id,
+				stage_id = EXCLUDED.stage_id,
+				turn_id = EXCLUDED.turn_id,
 				type = EXCLUDED.type,
 				payload = EXCLUDED.payload,
-				timestamp = EXCLUDED.timestamp,
-				duration_ms = EXCLUDED.duration_ms`,
-			item.ID, item.RunID, nullString(item.StepID), string(item.Type), payloadJSON, item.Timestamp, item.DurationMS); err != nil {
+				timestamp = EXCLUDED.timestamp`,
+			item.ID, item.RunID, item.ConversationID, item.StageID, item.TurnID, item.ParentEventID, string(item.Type), item.SchemaVersion, item.Sequence, payloadJSON, item.Timestamp); err != nil {
 			return err
 		}
 	}

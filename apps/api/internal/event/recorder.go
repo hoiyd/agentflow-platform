@@ -1,4 +1,4 @@
-package trace
+package event
 
 import (
 	"context"
@@ -18,9 +18,7 @@ type Recorder struct {
 }
 
 type Span struct {
-	RunID     string
-	StepID    string
-	Type      domain.TraceEventType
+	Scope     Scope
 	StartedAt time.Time
 }
 
@@ -29,97 +27,95 @@ func NewRecorder(store store.Store) *Recorder {
 }
 
 func (r *Recorder) LLMStart(ctx context.Context, runID string, stepID string, payload map[string]any) Span {
-	return r.start(ctx, runID, stepID, domain.TraceLLMStart, payload)
+	return r.start(ctx, runID, stepID, domain.EventModelStarted, payload)
 }
 
 func (r *Recorder) LLMEnd(ctx context.Context, span Span, payload map[string]any) {
-	r.end(ctx, span, domain.TraceLLMEnd, payload)
+	r.end(ctx, span, domain.EventModelCompleted, payload)
 }
 
 func (r *Recorder) ToolStart(ctx context.Context, runID string, stepID string, payload map[string]any) Span {
-	return r.start(ctx, runID, stepID, domain.TraceToolStart, payload)
+	return r.start(ctx, runID, stepID, domain.EventToolStarted, payload)
 }
 
 func (r *Recorder) ToolEnd(ctx context.Context, span Span, payload map[string]any) {
-	r.end(ctx, span, domain.TraceToolEnd, payload)
+	eventType := domain.EventToolCompleted
+	if value, _ := payload["error"].(string); strings.TrimSpace(value) != "" {
+		eventType = domain.EventToolFailed
+	}
+	r.end(ctx, span, eventType, payload)
 }
 
 func (r *Recorder) Retrieval(ctx context.Context, runID string, stepID string, payload map[string]any) {
-	r.event(ctx, runID, stepID, domain.TraceRetrieval, payload)
+	r.event(ctx, runID, stepID, domain.EventRetrievalCompleted, payload)
 }
 
 func (r *Recorder) Error(ctx context.Context, runID string, stepID string, payload map[string]any) {
-	r.event(ctx, runID, stepID, domain.TraceError, payload)
+	r.event(ctx, runID, stepID, domain.EventModelFailed, payload)
 }
 
-func (r *Recorder) event(ctx context.Context, runID string, stepID string, eventType domain.TraceEventType, payload map[string]any) {
+func (r *Recorder) event(ctx context.Context, runID string, stepID string, eventType domain.RunEventType, payload map[string]any) {
 	if r == nil || r.store == nil || strings.TrimSpace(runID) == "" {
 		return
 	}
 	if ctx.Err() != nil {
 		return
 	}
-	event, err := r.store.CreateTraceEvent(domain.TraceEvent{
-		RunID:     runID,
-		StepID:    strings.TrimSpace(stepID),
+	scope := recorderScope(ctx, runID, stepID)
+	event, err := r.store.CreateRunEvent(domain.RunEvent{
+		RunID: scope.RunID, ConversationID: scope.ConversationID, StageID: scope.StageID, TurnID: scope.TurnID,
 		Type:      eventType,
 		Payload:   sanitizePayload(payload),
 		Timestamp: time.Now().UTC(),
 	})
 	if err != nil {
-		log.Printf("trace_record_error type=%s run_id=%s step_id=%s error=%q", eventType, runID, stepID, err.Error())
+		log.Printf("event_record_error type=%s run_id=%s step_id=%s error=%q", eventType, runID, stepID, err.Error())
 		return
 	}
-	logTraceEvent(event)
+	logRunEvent(event)
 }
 
-func (r *Recorder) start(ctx context.Context, runID string, stepID string, eventType domain.TraceEventType, payload map[string]any) Span {
+func (r *Recorder) start(ctx context.Context, runID string, stepID string, eventType domain.RunEventType, payload map[string]any) Span {
 	started := time.Now().UTC()
-	span := Span{
-		RunID:     strings.TrimSpace(runID),
-		StepID:    strings.TrimSpace(stepID),
-		Type:      eventType,
-		StartedAt: started,
-	}
-	if r == nil || r.store == nil || span.RunID == "" || ctx.Err() != nil {
+	span := Span{Scope: recorderScope(ctx, runID, stepID), StartedAt: started}
+	if r == nil || r.store == nil || span.Scope.RunID == "" || ctx.Err() != nil {
 		return span
 	}
-	event, err := r.store.CreateTraceEvent(domain.TraceEvent{
-		RunID:     span.RunID,
-		StepID:    span.StepID,
+	event, err := r.store.CreateRunEvent(domain.RunEvent{
+		RunID: span.Scope.RunID, ConversationID: span.Scope.ConversationID, StageID: span.Scope.StageID, TurnID: span.Scope.TurnID,
 		Type:      eventType,
 		Payload:   sanitizePayload(payload),
 		Timestamp: started,
 	})
 	if err != nil {
-		log.Printf("trace_record_error type=%s run_id=%s step_id=%s error=%q", eventType, span.RunID, span.StepID, err.Error())
+		log.Printf("event_record_error type=%s run_id=%s stage_id=%s error=%q", eventType, span.Scope.RunID, span.Scope.StageID, err.Error())
 		return span
 	}
-	logTraceEvent(event)
+	logRunEvent(event)
 	return span
 }
 
-func (r *Recorder) end(ctx context.Context, span Span, eventType domain.TraceEventType, payload map[string]any) {
-	if r == nil || r.store == nil || span.RunID == "" || ctx.Err() != nil {
+func (r *Recorder) end(ctx context.Context, span Span, eventType domain.RunEventType, payload map[string]any) {
+	if r == nil || r.store == nil || span.Scope.RunID == "" || ctx.Err() != nil {
 		return
 	}
 	duration := time.Since(span.StartedAt).Milliseconds()
 	if duration < 0 {
 		duration = 0
 	}
-	event, err := r.store.CreateTraceEvent(domain.TraceEvent{
-		RunID:      span.RunID,
-		StepID:     span.StepID,
-		Type:       eventType,
-		Payload:    sanitizePayload(payload),
-		Timestamp:  time.Now().UTC(),
-		DurationMS: duration,
+	payload = sanitizePayload(payload)
+	payload["duration_ms"] = duration
+	event, err := r.store.CreateRunEvent(domain.RunEvent{
+		RunID: span.Scope.RunID, ConversationID: span.Scope.ConversationID, StageID: span.Scope.StageID, TurnID: span.Scope.TurnID,
+		Type:      eventType,
+		Payload:   payload,
+		Timestamp: time.Now().UTC(),
 	})
 	if err != nil {
-		log.Printf("trace_record_error type=%s run_id=%s step_id=%s error=%q", eventType, span.RunID, span.StepID, err.Error())
+		log.Printf("event_record_error type=%s run_id=%s stage_id=%s error=%q", eventType, span.Scope.RunID, span.Scope.StageID, err.Error())
 		return
 	}
-	logTraceEvent(event)
+	logRunEvent(event)
 }
 
 func sanitizePayload(payload map[string]any) map[string]any {
@@ -159,19 +155,27 @@ func sanitizeValue(value any) any {
 	}
 }
 
-func logTraceEvent(event domain.TraceEvent) {
+func recorderScope(ctx context.Context, runID, stepID string) Scope {
+	scope := ScopeFromContext(ctx)
+	if scope.RunID == "" {
+		scope.RunID = strings.TrimSpace(runID)
+	}
+	if scope.StageID == "" {
+		scope.StageID = strings.TrimSpace(stepID)
+	}
+	return scope
+}
+
+func logRunEvent(event domain.RunEvent) {
 	payload := event.Payload
 	fields := []string{
-		"trace_event",
+		"run_event",
 		"type=" + string(event.Type),
 		"id=" + event.ID,
 		"run_id=" + event.RunID,
 	}
-	if event.StepID != "" {
-		fields = append(fields, "step_id="+event.StepID)
-	}
-	if event.DurationMS > 0 {
-		fields = append(fields, "duration_ms="+strconv.FormatInt(event.DurationMS, 10))
+	if event.StageID != "" {
+		fields = append(fields, "stage_id="+event.StageID)
 	}
 	appendStringField(&fields, payload, "role")
 	appendStringField(&fields, payload, "agent_id")

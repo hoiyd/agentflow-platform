@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	turnpkg "agentflow-platform/apps/api/internal/turn"
 )
 
 var errRunCanceled = errors.New("run canceled")
@@ -53,11 +54,13 @@ func (r *Runtime) PrepareAutonomousRun(ctx context.Context, agentID string, conv
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
+	r.publishRunLifecycle(ctx, run, domain.EventRunCreated, map[string]any{"status": domain.RunQueued})
+	r.publishRunLifecycle(ctx, run, domain.EventRunStarted, map[string]any{"status": run.Status})
 	log.Printf("autonomous_prepare run_id=%s agent_id=%s max_iterations=%d max_runtime=%s max_output_chars=%d max_tool_calls=%d", run.ID, agent.ID, r.autonomousLimits.MaxIterations, r.autonomousLimits.MaxRuntime, r.autonomousLimits.MaxOutputChars, r.autonomousLimits.MaxToolCalls)
 	return PreparedCollaborationRun{WorkerAgent: agent, Run: run}, nil
 }
 
-func (r *Runtime) RunAutonomous(ctx context.Context, prepared PreparedCollaborationRun, task string) (<-chan CollaborationEvent, <-chan error) {
+func (r *Runtime) RunAutonomous(ctx context.Context, prepared PreparedCollaborationRun, task string) (<-chan domain.RunEvent, <-chan error) {
 	return r.runAutonomousFromState(ctx, prepared, task, autonomousState{
 		StartedAt: time.Now().UTC(),
 		State:     "No prior autonomous work.",
@@ -65,8 +68,8 @@ func (r *Runtime) RunAutonomous(ctx context.Context, prepared PreparedCollaborat
 	})
 }
 
-func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput string) (<-chan CollaborationEvent, <-chan error) {
-	events := make(chan CollaborationEvent)
+func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput string) (<-chan domain.RunEvent, <-chan error) {
+	events := make(chan domain.RunEvent)
 	errs := make(chan error, 1)
 
 	go func() {
@@ -124,8 +127,10 @@ func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput 
 			return
 		}
 		log.Printf("autonomous_resume run_id=%s checkpoint_id=%s input_len=%d", run.ID, checkpoint.ID, len(userInput))
-		events <- CollaborationEvent{Type: "run", Run: run}
-		events <- CollaborationEvent{Type: "collaboration_step", Step: completedCheckpoint}
+		r.publishRunLifecycle(ctx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
+		r.publishStage(ctx, completedCheckpoint, domain.EventStageCompleted)
+		events <- liveRunEvent(run)
+		events <- liveStageEvent(completedCheckpoint)
 
 		state := rebuildAutonomousState(steps, completedCheckpoint)
 		prepared := PreparedCollaborationRun{WorkerAgent: agent, Run: run}
@@ -140,8 +145,8 @@ func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput 
 	return events, errs
 }
 
-func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string, recoveryNote string) (<-chan CollaborationEvent, <-chan error) {
-	events := make(chan CollaborationEvent)
+func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string, recoveryNote string) (<-chan domain.RunEvent, <-chan error) {
+	events := make(chan domain.RunEvent)
 	errs := make(chan error, 1)
 
 	go func() {
@@ -197,8 +202,10 @@ func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string,
 			return
 		}
 		log.Printf("autonomous_recovery_resume run_id=%s recovery_step_id=%s note_len=%d", run.ID, recoveryStep.ID, len(recoveryNote))
-		events <- CollaborationEvent{Type: "run", Run: run}
-		events <- CollaborationEvent{Type: "collaboration_step", Step: recoveryStep}
+		r.publishRunLifecycle(ctx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
+		r.publishStage(ctx, recoveryStep, domain.EventStageCompleted)
+		events <- liveRunEvent(run)
+		events <- liveStageEvent(recoveryStep)
 
 		state := rebuildRecoverableAutonomousState(steps, recoveryStep)
 		prepared := PreparedCollaborationRun{WorkerAgent: agent, Run: run}
@@ -213,8 +220,8 @@ func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string,
 	return events, errs
 }
 
-func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedCollaborationRun, task string, initial autonomousState) (<-chan CollaborationEvent, <-chan error) {
-	events := make(chan CollaborationEvent)
+func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedCollaborationRun, task string, initial autonomousState) (<-chan domain.RunEvent, <-chan error) {
+	events := make(chan domain.RunEvent)
 	errs := make(chan error, 1)
 
 	go func() {
@@ -239,7 +246,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 		}
 		if nextIter > r.autonomousLimits.MaxIterations {
 			reason := "recovered after max_iterations reached"
-			r.emitAutonomousProgress(events, startedAt, r.autonomousLimits.MaxIterations, outputChars, toolCalls, reason)
+			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, r.autonomousLimits.MaxIterations, outputChars, toolCalls, reason)
 			if err := r.finishAutonomous(ctx, events, prepared, r.autonomousLimits.MaxIterations, task, lastAct, lastReview, reason); err != nil {
 				errs <- err
 			}
@@ -251,7 +258,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				errs <- err
 				return
 			}
-			r.emitAutonomousProgress(events, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
 			if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 				if err != errRunCanceled {
 					errs <- err
@@ -259,7 +266,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 			if reason := r.limitStopReason(startedAt, outputChars, toolCalls); reason != "" {
-				r.emitAutonomousProgress(events, startedAt, iteration, outputChars, toolCalls, reason)
+				r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, reason)
 				if err := r.finishAutonomous(ctx, events, prepared, iteration, task, lastAct, lastReview, reason); err != nil {
 					errs <- err
 				}
@@ -277,7 +284,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 			outputChars += len(observe)
-			r.emitAutonomousProgress(events, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
 			if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 				if err != errRunCanceled {
 					errs <- err
@@ -294,7 +301,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 			outputChars += len(plan)
-			r.emitAutonomousProgress(events, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
 			if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 				if err != errRunCanceled {
 					errs <- err
@@ -312,7 +319,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 			}
 			outputChars += len(act)
 			lastAct = act
-			r.emitAutonomousProgress(events, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
 			if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 				if err != errRunCanceled {
 					errs <- err
@@ -330,7 +337,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 			}
 			outputChars += len(review)
 			lastReview = review
-			r.emitAutonomousProgress(events, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
 			if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 				if err != errRunCanceled {
 					errs <- err
@@ -347,7 +354,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 			outputChars += len(decide)
-			r.emitAutonomousProgress(events, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
 
 			decision := parseAutonomousDecision(decide)
 			if !decision.ValidJSON || decision.Decision == "" {
@@ -373,7 +380,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				}
 			}
 			if decision.Decision == "stop" || iteration == r.autonomousLimits.MaxIterations {
-				r.emitAutonomousProgress(events, startedAt, iteration, outputChars, toolCalls, decision.Reason)
+				r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, decision.Reason)
 			}
 			log.Printf("autonomous_iteration_decision run_id=%s iteration=%d decision=%s reason=%q output_chars=%d", prepared.Run.ID, iteration, decision.Decision, decision.Reason, outputChars)
 
@@ -402,8 +409,10 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 					return
 				}
 				log.Printf("autonomous_waiting_for_user run_id=%s iteration=%d question=%q reason=%q", prepared.Run.ID, iteration, question, decision.Reason)
-				events <- CollaborationEvent{Type: "collaboration_step", Step: step}
-				events <- CollaborationEvent{Type: "run", Run: run}
+				r.publishStage(ctx, step, domain.EventStageStarted)
+				r.publishRunLifecycle(ctx, run, domain.EventRunWaitingForUser, map[string]any{"status": run.Status, "question": question})
+				events <- liveStageEvent(step)
+				events <- liveRunEvent(run)
 				return
 			}
 
@@ -429,7 +438,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 	return events, errs
 }
 
-func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- CollaborationEvent, prepared PreparedCollaborationRun, iteration int, role string, systemPrompt string, input string) (string, error) {
+func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, iteration int, role string, systemPrompt string, input string) (string, error) {
 	if err := r.heartbeatRun(prepared.Run.ID); err != nil {
 		return "", err
 	}
@@ -451,7 +460,8 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 	if err != nil {
 		return "", err
 	}
-	events <- CollaborationEvent{Type: "collaboration_step", Step: step}
+	events <- liveStageEvent(step)
+	r.publishStage(ctx, step, domain.EventStageStarted)
 
 	if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 		if err != nil {
@@ -463,20 +473,14 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 		"executor":  ExecutorNative,
 		"framework": "agentflow-native",
 	})
-	tracePayload := map[string]any{
-		"role":        role,
-		"agent_id":    prepared.WorkerAgent.ID,
-		"iteration":   iteration,
-		"system":      systemPrompt,
-		"input":       input,
-		"input_chars": len(input),
-	}
-	for key, value := range retrievalTracePayload(retrievedMemories, retrievedChunks) {
-		tracePayload[key] = value
-	}
-	contextualPrompt := promptWithRetrievedContext(systemPrompt, retrievedMemories, retrievedChunks)
-	span := r.trace.LLMStart(ctx, prepared.Run.ID, step.ID, tracePayload)
-	completion, err := r.openAI.CompleteTextDetailed(ctx, contextualPrompt, input)
+	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{
+		RunID: prepared.Run.ID, StepID: step.ID, ConversationID: prepared.Run.ConversationID,
+		Agent: prepared.WorkerAgent, Role: role, SystemPrompt: systemPrompt, Input: input,
+		ModelMode: turnpkg.ModelModeText,
+		Context:   turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks},
+		Metadata:  map[string]any{"iteration": iteration},
+		Sink:      r.runEventSink(),
+	}, nil)
 	if err != nil {
 		if ctx.Err() != nil {
 			if stopped, stopErr := r.stopIfCanceled(events, prepared.Run.ID); stopped || stopErr != nil {
@@ -486,16 +490,10 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 				return "", errRunCanceled
 			}
 		}
-		r.trace.Error(ctx, prepared.Run.ID, step.ID, map[string]any{
-			"source":    "llm",
-			"role":      role,
-			"agent_id":  prepared.WorkerAgent.ID,
-			"iteration": iteration,
-			"error":     err.Error(),
-		})
 		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
 		if updateErr == nil {
-			events <- CollaborationEvent{Type: "collaboration_step", Step: failed}
+			events <- liveStageEvent(failed)
+			r.publishStage(ctx, failed, domain.EventStageFailed)
 		}
 		return "", err
 	}
@@ -505,19 +503,7 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 		}
 		return "", errRunCanceled
 	}
-	output := completion.Text
-	r.trace.LLMEnd(ctx, span, map[string]any{
-		"role":                  role,
-		"agent_id":              prepared.WorkerAgent.ID,
-		"iteration":             iteration,
-		"model":                 completion.Model,
-		"output":                output,
-		"output_chars":          len(output),
-		"prompt_tokens":         completion.Usage.PromptTokens,
-		"completion_tokens":     completion.Usage.CompletionTokens,
-		"total_tokens":          completion.Usage.TotalTokens,
-		"token_usage_estimated": completion.Usage.Estimated,
-	})
+	output := result.Output
 	completed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepCompleted, output, "")
 	if err != nil {
 		return "", err
@@ -525,7 +511,8 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 	if err := r.heartbeatRun(prepared.Run.ID); err != nil {
 		return "", err
 	}
-	events <- CollaborationEvent{Type: "collaboration_step", Step: completed}
+	events <- liveStageEvent(completed)
+	r.publishStage(ctx, completed, domain.EventStageCompleted)
 	return output, nil
 }
 
@@ -537,7 +524,7 @@ func (r *Runtime) heartbeatRun(runID string) error {
 	return err
 }
 
-func (r *Runtime) stopIfCanceled(events chan<- CollaborationEvent, runID string) (bool, error) {
+func (r *Runtime) stopIfCanceled(events chan<- domain.RunEvent, runID string) (bool, error) {
 	run, ok, err := r.store.GetRun(runID)
 	if err != nil {
 		return false, err
@@ -555,7 +542,8 @@ func (r *Runtime) stopIfCanceled(events chan<- CollaborationEvent, runID string)
 		}
 	}
 	log.Printf("autonomous_canceled run_id=%s", run.ID)
-	events <- CollaborationEvent{Type: "run", Run: run}
+	r.publishRunLifecycle(context.Background(), run, domain.EventRunCanceled, map[string]any{"status": run.Status})
+	events <- liveRunEvent(run)
 	return true, errRunCanceled
 }
 
@@ -572,11 +560,11 @@ func (r *Runtime) limitStopReason(startedAt time.Time, outputChars int, toolCall
 	return ""
 }
 
-func (r *Runtime) finishAutonomous(ctx context.Context, events chan<- CollaborationEvent, prepared PreparedCollaborationRun, iteration int, task string, lastAct string, lastReview string, reason string) error {
+func (r *Runtime) finishAutonomous(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, iteration int, task string, lastAct string, lastReview string, reason string) error {
 	return r.emitAutonomousFinal(ctx, events, prepared, iteration, reason, formatAutonomousFallbackFinal(task, lastAct, lastReview, reason))
 }
 
-func (r *Runtime) emitAutonomousFinal(ctx context.Context, events chan<- CollaborationEvent, prepared PreparedCollaborationRun, iteration int, reason string, finalAnswer string) error {
+func (r *Runtime) emitAutonomousFinal(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, iteration int, reason string, finalAnswer string) error {
 	output := strings.TrimSpace(finalAnswer)
 	if output == "" {
 		output = "Autonomous run stopped without a final answer."
@@ -595,8 +583,9 @@ func (r *Runtime) emitAutonomousFinal(ctx context.Context, events chan<- Collabo
 		return err
 	}
 	log.Printf("autonomous_final run_id=%s iteration=%d reason=%q output_len=%d", prepared.Run.ID, iteration, reason, len(output))
-	events <- CollaborationEvent{Type: "collaboration_step", Step: step}
-	emitFinalDeltas(ctx, output, events)
+	r.publishStage(ctx, step, domain.EventStageCompleted)
+	events <- liveStageEvent(step)
+	emitFinalDeltas(ctx, prepared.Run.ID, output, events)
 	return nil
 }
 
@@ -757,21 +746,27 @@ func humanInputNegativeMarkers() []string {
 	}
 }
 
-func (r *Runtime) emitAutonomousProgress(events chan<- CollaborationEvent, startedAt time.Time, iteration int, outputChars int, toolCalls int, stopReason string) {
-	events <- CollaborationEvent{
-		Type: "autonomous_progress",
-		Progress: AutonomousProgress{
-			Iteration:         iteration,
-			MaxIterations:     r.autonomousLimits.MaxIterations,
-			ElapsedSeconds:    int(time.Since(startedAt).Seconds()),
-			MaxRuntimeSeconds: int(r.autonomousLimits.MaxRuntime.Seconds()),
-			OutputChars:       outputChars,
-			MaxOutputChars:    r.autonomousLimits.MaxOutputChars,
-			ToolCalls:         toolCalls,
-			MaxToolCalls:      r.autonomousLimits.MaxToolCalls,
-			StopReason:        strings.TrimSpace(stopReason),
-		},
+func (r *Runtime) emitAutonomousProgress(events chan<- domain.RunEvent, runID string, startedAt time.Time, iteration int, outputChars int, toolCalls int, stopReason string) {
+	progress := AutonomousProgress{
+		Iteration: iteration, MaxIterations: r.autonomousLimits.MaxIterations,
+		ElapsedSeconds: int(time.Since(startedAt).Seconds()), MaxRuntimeSeconds: int(r.autonomousLimits.MaxRuntime.Seconds()),
+		OutputChars: outputChars, MaxOutputChars: r.autonomousLimits.MaxOutputChars,
+		ToolCalls: toolCalls, MaxToolCalls: r.autonomousLimits.MaxToolCalls, StopReason: strings.TrimSpace(stopReason),
 	}
+	if run, ok, _ := r.store.GetRun(runID); ok {
+		r.publishRunLifecycle(context.Background(), run, domain.EventRunProgress, map[string]any{
+			"mode": ChatModeAutonomous, "iteration": progress.Iteration, "max_iterations": progress.MaxIterations,
+			"elapsed_seconds": progress.ElapsedSeconds, "max_runtime_seconds": progress.MaxRuntimeSeconds,
+			"output_chars": progress.OutputChars, "max_output_chars": progress.MaxOutputChars,
+			"tool_calls": progress.ToolCalls, "max_tool_calls": progress.MaxToolCalls, "stop_reason": progress.StopReason,
+		})
+	}
+	events <- domain.RunEvent{Type: domain.EventRunProgress, SchemaVersion: domain.CurrentRunEventSchemaVersion, RunID: runID, Payload: map[string]any{
+		"mode": ChatModeAutonomous, "iteration": progress.Iteration, "max_iterations": progress.MaxIterations,
+		"elapsed_seconds": progress.ElapsedSeconds, "max_runtime_seconds": progress.MaxRuntimeSeconds,
+		"output_chars": progress.OutputChars, "max_output_chars": progress.MaxOutputChars,
+		"tool_calls": progress.ToolCalls, "max_tool_calls": progress.MaxToolCalls, "stop_reason": progress.StopReason,
+	}}
 }
 
 func autonomousObservePrompt() string {

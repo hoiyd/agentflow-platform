@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -216,7 +217,7 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 	events, errs := runtime.RunAutonomous(context.Background(), prepared, "Write a concise project update.")
 	seenProgress := false
 	for event := range events {
-		if event.Type == "autonomous_progress" {
+		if event.Type == domain.EventRunProgress {
 			seenProgress = true
 		}
 	}
@@ -239,6 +240,13 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 	}
 	if steps[len(steps)-1].Role != "final" {
 		t.Fatalf("expected final step, got %q", steps[len(steps)-1].Role)
+	}
+	runEvents, err := fileStore.ListRunEvents(prepared.Run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := eventpkg.ValidateLifecycle(runEvents); err != nil {
+		t.Fatalf("invalid autonomous event lifecycle: %v", err)
 	}
 }
 
@@ -268,7 +276,7 @@ func TestAutonomousRunCanBeCanceledBeforeLoop(t *testing.T) {
 	events, errs := runtime.RunAutonomous(context.Background(), prepared, "Long task")
 	seenCanceled := false
 	for event := range events {
-		if event.Type == "run" && event.Run.Status == domain.RunCanceled {
+		if event.Type == domain.EventRunCanceled && event.Payload["status"] == domain.RunCanceled {
 			seenCanceled = true
 		}
 	}

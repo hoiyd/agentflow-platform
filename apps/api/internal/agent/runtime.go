@@ -7,17 +7,20 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
+	tracepkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
-	tracepkg "agentflow-platform/apps/api/internal/trace"
+	turnpkg "agentflow-platform/apps/api/internal/turn"
 )
 
 type Runtime struct {
 	store            store.Store
 	openAI           *openai.Client
 	tools            *tools.Manager
-	trace            *tracepkg.Recorder
+	trace            *eventpkg.Recorder
+	turnEngine       *turnpkg.Engine
 	routerMode       string
 	autonomousLimits AutonomousLimits
 }
@@ -44,7 +47,7 @@ func NewRuntimeWithRouterMode(store store.Store, openAI *openai.Client, tools *t
 }
 
 func NewRuntimeWithRouterModeAndLimits(store store.Store, openAI *openai.Client, tools *tools.Manager, routerMode string, limits AutonomousLimits) *Runtime {
-	return &Runtime{
+	runtime := &Runtime{
 		store:            store,
 		openAI:           openAI,
 		tools:            tools,
@@ -52,6 +55,8 @@ func NewRuntimeWithRouterModeAndLimits(store store.Store, openAI *openai.Client,
 		routerMode:       NormalizeRouterMode(routerMode),
 		autonomousLimits: normalizeAutonomousLimits(limits),
 	}
+	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
+	return runtime
 }
 
 func DefaultAutonomousLimits() AutonomousLimits {
@@ -77,6 +82,8 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 	if err != nil {
 		return PreparedRun{}, err
 	}
+	r.publishRunLifecycle(ctx, run, domain.EventRunCreated, map[string]any{"status": domain.RunQueued})
+	r.publishRunLifecycle(ctx, run, domain.EventRunStarted, map[string]any{"status": run.Status})
 
 	registry, err := r.tools.Registry(ctx)
 	if err != nil {
@@ -107,15 +114,35 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 		"configured_tools":   prepared.Agent.Tools,
 		"enabled_tool_count": enabledToolCount(prepared.Registry),
 	})
-	return executor.Stream(ctx, ExecutorInput{
-		Agent:             prepared.Agent,
-		History:           history,
-		Latest:            latest,
-		Registry:          prepared.Registry,
-		RunID:             prepared.Run.ID,
-		RetrievedMemories: retrievedMemories,
-		RetrievedChunks:   retrievedChunks,
-	})
+	events := make(chan openai.StreamEvent)
+	errs := make(chan error, 1)
+	go func() {
+		defer close(events)
+		defer close(errs)
+		_, err := r.turnEngine.Execute(ctx, turnpkg.Request{
+			RunID:          prepared.Run.ID,
+			ConversationID: prepared.Run.ConversationID,
+			Agent:          prepared.Agent,
+			SystemPrompt:   prepared.Agent.SystemPrompt,
+			History:        history,
+			Input:          latest,
+			ExecutorKind:   executor.Kind(),
+			Registry:       prepared.Registry,
+			Context: turnpkg.Context{
+				Memories: retrievedMemories,
+				Chunks:   retrievedChunks,
+			},
+			Sink: r.runEventSink(),
+		}, func(event turnpkg.Event) {
+			if event.Type == turnpkg.EventModelDelta {
+				events <- openai.StreamEvent{Type: "delta", Delta: event.Delta}
+			}
+		})
+		if err != nil {
+			errs <- err
+		}
+	}()
+	return events, errs
 }
 
 func enabledToolCount(registry *tools.Registry) int {
@@ -125,7 +152,25 @@ func enabledToolCount(registry *tools.Registry) int {
 	return len(registry.EnabledNames())
 }
 
+func (r *Runtime) runEventSink() eventpkg.Sink { return eventpkg.StoreSink{Store: r.store} }
+
+func (r *Runtime) publishRunLifecycle(ctx context.Context, run domain.Run, eventType domain.RunEventType, payload map[string]any) {
+	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: eventType, RunID: run.ID, ConversationID: run.ConversationID, Payload: payload})
+}
+
+func (r *Runtime) publishStage(ctx context.Context, step domain.CollaborationStep, eventType domain.RunEventType) {
+	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: eventType, RunID: step.RunID, ConversationID: step.ConversationID, StageID: step.ID, Payload: map[string]any{
+		"name": step.Role, "agent_id": step.AgentID, "iteration": step.Iteration,
+		"input": step.Input, "output": step.Output, "error": step.Error,
+	}})
+}
+
 func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string, memoryEnabled bool, retrievalEnabled bool, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
+	conversationID := ""
+	if run, ok, _ := r.store.GetRun(runID); ok {
+		conversationID = run.ConversationID
+	}
+	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalStarted, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"query": truncateRuntimeText(query, 1200)}})
 	embeddingQuery := truncateRetrievalEmbeddingQuery(query)
 	payload := map[string]any{
 		"query":                          truncateRuntimeText(query, 1200),
@@ -139,16 +184,12 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	if !memoryEnabled && !retrievalEnabled {
 		payload["memory_count"] = 0
 		payload["chunk_count"] = 0
-		r.trace.Retrieval(ctx, runID, "", payload)
+		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
 		return nil, nil
 	}
 	embedding, err := r.openAI.EmbedText(ctx, embeddingQuery)
 	if err != nil {
-		r.trace.Error(ctx, runID, "", map[string]any{
-			"source": "memory_retrieval",
-			"stage":  "embed_query",
-			"error":  err.Error(),
-		})
+		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"error": err.Error()}})
 		return nil, nil
 	}
 	payload["embedding_provider"] = embedding.Provider
@@ -166,11 +207,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 			Limit:             5,
 		})
 		if err != nil {
-			r.trace.Error(ctx, runID, "", map[string]any{
-				"source": "memory_retrieval",
-				"stage":  "search",
-				"error":  err.Error(),
-			})
+			payload["memory_error"] = err.Error()
 			memories = nil
 		}
 	}
@@ -185,11 +222,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 			Limit:             5,
 		})
 		if err != nil {
-			r.trace.Error(ctx, runID, "", map[string]any{
-				"source": "rag_retrieval",
-				"stage":  "search",
-				"error":  err.Error(),
-			})
+			payload["rag_error"] = err.Error()
 			chunks = nil
 		}
 	}
@@ -198,7 +231,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	for key, value := range retrievalTracePayload(memories, chunks) {
 		payload[key] = value
 	}
-	r.trace.Retrieval(ctx, runID, "", payload)
+	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
 	return memories, chunks
 }
 
@@ -297,19 +330,23 @@ func truncateRetrievalEmbeddingQuery(value string) string {
 }
 
 func (r *Runtime) CompleteRun(id string) (domain.Run, error) {
-	return r.store.UpdateRunStatus(id, domain.RunCompleted, "")
+	run, err := r.store.UpdateRunStatus(id, domain.RunCompleted, "")
+	if err == nil {
+		r.publishRunLifecycle(context.Background(), run, domain.EventRunCompleted, map[string]any{"status": run.Status})
+	}
+	return run, err
 }
 
 func (r *Runtime) FailRun(id string, err error) (domain.Run, error) {
 	message := ""
 	if err != nil {
 		message = err.Error()
-		r.trace.Error(context.Background(), id, "", map[string]any{
-			"source": "runtime",
-			"error":  message,
-		})
 	}
-	return r.store.UpdateRunStatus(id, domain.RunFailed, message)
+	run, updateErr := r.store.UpdateRunStatus(id, domain.RunFailed, message)
+	if updateErr == nil {
+		r.publishRunLifecycle(context.Background(), run, domain.EventRunFailed, map[string]any{"status": run.Status, "error": message})
+	}
+	return run, updateErr
 }
 
 func (r *Runtime) CancelRun(id string) (domain.Run, error) {
@@ -324,9 +361,17 @@ func (r *Runtime) CancelRun(id string) (domain.Run, error) {
 	case domain.RunCompleted, domain.RunFailed, domain.RunCanceled:
 		return run, nil
 	case domain.RunRunning:
-		return r.store.UpdateRunStatus(run.ID, domain.RunCanceling, "cancel requested by user")
+		updated, err := r.store.UpdateRunStatus(run.ID, domain.RunCanceling, "cancel requested by user")
+		if err == nil {
+			r.publishRunLifecycle(context.Background(), updated, domain.EventRunCancelRequested, map[string]any{"status": updated.Status})
+		}
+		return updated, err
 	default:
-		return r.store.UpdateRunStatus(run.ID, domain.RunCanceled, "canceled by user")
+		updated, err := r.store.UpdateRunStatus(run.ID, domain.RunCanceled, "canceled by user")
+		if err == nil {
+			r.publishRunLifecycle(context.Background(), updated, domain.EventRunCanceled, map[string]any{"status": updated.Status})
+		}
+		return updated, err
 	}
 }
 

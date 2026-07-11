@@ -521,14 +521,16 @@ func (s *PostgresStore) ListCollaborationSteps(runID string) ([]domain.Collabora
 	return items, rows.Err()
 }
 
-func (s *PostgresStore) CreateTraceEvent(event domain.TraceEvent) (domain.TraceEvent, error) {
+func (s *PostgresStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error) {
 	event.ID = strings.TrimSpace(event.ID)
 	if event.ID == "" {
-		event.ID = newID("trace")
+		event.ID = newID("event")
 	}
-	event.StepID = strings.TrimSpace(event.StepID)
 	if event.Type == "" {
-		return domain.TraceEvent{}, errors.New("trace event type is required")
+		return domain.RunEvent{}, errors.New("run event type is required")
+	}
+	if event.SchemaVersion == 0 {
+		event.SchemaVersion = domain.CurrentRunEventSchemaVersion
 	}
 	if event.Payload == nil {
 		event.Payload = map[string]any{}
@@ -536,38 +538,62 @@ func (s *PostgresStore) CreateTraceEvent(event domain.TraceEvent) (domain.TraceE
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now().UTC()
 	}
-	if event.DurationMS < 0 {
-		event.DurationMS = 0
-	}
-	payloadJSON, err := json.Marshal(event.Payload)
+	payload, err := json.Marshal(event.Payload)
 	if err != nil {
-		return domain.TraceEvent{}, err
+		return domain.RunEvent{}, err
 	}
-	_, err = s.db.Exec(`
-		INSERT INTO trace_events (id, run_id, step_id, type, payload, timestamp, duration_ms)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		event.ID, event.RunID, nullString(event.StepID), string(event.Type), payloadJSON, event.Timestamp, event.DurationMS)
-	return event, err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return domain.RunEvent{}, err
+	}
+	defer tx.Rollback()
+	if _, err = tx.Exec(`SELECT pg_advisory_xact_lock(hashtext($1))`, event.RunID); err != nil {
+		return domain.RunEvent{}, err
+	}
+	err = tx.QueryRow(`
+		INSERT INTO run_events (id, run_id, conversation_id, stage_id, turn_id, parent_event_id, type, schema_version, sequence, payload, timestamp)
+		VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),$7,$8,
+			(SELECT COALESCE(MAX(sequence),0)+1 FROM run_events WHERE run_id=$2),$9,$10)
+		RETURNING sequence`, event.ID, event.RunID, event.ConversationID, event.StageID, event.TurnID,
+		event.ParentEventID, string(event.Type), event.SchemaVersion, payload, event.Timestamp).Scan(&event.Sequence)
+	if err != nil {
+		return domain.RunEvent{}, err
+	}
+	return event, tx.Commit()
 }
 
-func (s *PostgresStore) ListTraceEvents(runID string) ([]domain.TraceEvent, error) {
-	rows, err := s.db.Query(`
-		SELECT id, run_id, step_id, type, payload, timestamp, duration_ms
-		FROM trace_events
-		WHERE run_id = $1
-		ORDER BY timestamp ASC, id ASC`, runID)
+func (s *PostgresStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
+	rows, err := s.db.Query(`SELECT id,run_id,conversation_id,stage_id,turn_id,parent_event_id,type,schema_version,sequence,payload,timestamp FROM run_events WHERE run_id=$1 ORDER BY sequence`, runID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-
-	items := []domain.TraceEvent{}
+	items := []domain.RunEvent{}
 	for rows.Next() {
-		event, err := scanTraceEvent(rows)
-		if err != nil {
+		var item domain.RunEvent
+		var conversationID, stageID, turnID, parentID sql.NullString
+		var eventType string
+		var payload []byte
+		if err := rows.Scan(&item.ID, &item.RunID, &conversationID, &stageID, &turnID, &parentID, &eventType, &item.SchemaVersion, &item.Sequence, &payload, &item.Timestamp); err != nil {
 			return nil, err
 		}
-		items = append(items, event)
+		if conversationID.Valid {
+			item.ConversationID = conversationID.String
+		}
+		if stageID.Valid {
+			item.StageID = stageID.String
+		}
+		if turnID.Valid {
+			item.TurnID = turnID.String
+		}
+		if parentID.Valid {
+			item.ParentEventID = parentID.String
+		}
+		item.Type = domain.RunEventType(eventType)
+		if err := json.Unmarshal(payload, &item.Payload); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
 	}
 	return items, rows.Err()
 }
@@ -580,7 +606,7 @@ func (s *PostgresStore) GetRunTraceSummary(runID string) (domain.RunTraceSummary
 	if !ok {
 		return domain.RunTraceSummary{}, ErrNotFound("run")
 	}
-	events, err := s.ListTraceEvents(runID)
+	events, err := s.ListRunEvents(runID)
 	if err != nil {
 		return domain.RunTraceSummary{}, err
 	}
@@ -607,7 +633,7 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 	if err != nil {
 		return domain.RunReplay{}, false, err
 	}
-	events, err := s.ListTraceEvents(runID)
+	runEvents, err := s.ListRunEvents(runID)
 	if err != nil {
 		return domain.RunReplay{}, false, err
 	}
@@ -616,8 +642,8 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 		Conversation: conversation,
 		Messages:     messages,
 		Steps:        steps,
-		Summary:      buildRunTraceSummary(run, events),
-		Events:       events,
+		Summary:      buildRunTraceSummary(run, runEvents),
+		RunEvents:    runEvents,
 	}, true, nil
 }
 
@@ -1138,29 +1164,6 @@ func scanStep(row scanner) (domain.CollaborationStep, error) {
 	return step, nil
 }
 
-func scanTraceEvent(row scanner) (domain.TraceEvent, error) {
-	var event domain.TraceEvent
-	var eventType string
-	var stepID sql.NullString
-	var payloadJSON []byte
-	if err := row.Scan(&event.ID, &event.RunID, &stepID, &eventType, &payloadJSON, &event.Timestamp, &event.DurationMS); err != nil {
-		return domain.TraceEvent{}, err
-	}
-	if stepID.Valid {
-		event.StepID = stepID.String
-	}
-	event.Type = domain.TraceEventType(eventType)
-	if len(payloadJSON) > 0 {
-		if err := json.Unmarshal(payloadJSON, &event.Payload); err != nil {
-			return domain.TraceEvent{}, err
-		}
-	}
-	if event.Payload == nil {
-		event.Payload = map[string]any{}
-	}
-	return event, nil
-}
-
 func scanRetrievedMemory(row scanner) (domain.RetrievedMemory, error) {
 	var item domain.RetrievedMemory
 	var metadataJSON []byte
@@ -1452,17 +1455,19 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
-	`CREATE TABLE IF NOT EXISTS trace_events (
+	`CREATE TABLE IF NOT EXISTS run_events (
 		id text PRIMARY KEY,
 		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-		step_id text,
-		workspace_id text,
-		user_id text,
-		project_id text,
+		conversation_id text,
+		stage_id text,
+		turn_id text,
+		parent_event_id text,
 		type text NOT NULL,
+		schema_version integer NOT NULL,
+		sequence bigint NOT NULL,
 		payload jsonb NOT NULL DEFAULT '{}'::jsonb,
 		timestamp timestamptz NOT NULL,
-		duration_ms bigint NOT NULL DEFAULT 0
+		UNIQUE(run_id, sequence)
 	)`,
 	`CREATE TABLE IF NOT EXISTS memories (
 		id text PRIMARY KEY,
@@ -1534,8 +1539,7 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_runs_status_created ON runs(status, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_steps_run_created ON collaboration_steps(run_id, created_at ASC)`,
-	`CREATE INDEX IF NOT EXISTS idx_trace_events_run_timestamp ON trace_events(run_id, timestamp ASC)`,
-	`CREATE INDEX IF NOT EXISTS idx_trace_events_type_timestamp ON trace_events(type, timestamp DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_run_events_run_sequence ON run_events(run_id, sequence ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memories_scope_created ON memories(workspace_id, user_id, project_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memory_embeddings_vector ON memory_embeddings USING hnsw (embedding vector_cosine_ops)`,
 	`CREATE INDEX IF NOT EXISTS idx_documents_workspace_created ON documents(workspace_id, created_at DESC)`,

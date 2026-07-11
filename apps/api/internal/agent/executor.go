@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	tracepkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/tools"
-	tracepkg "agentflow-platform/apps/api/internal/trace"
 
 	"github.com/tmc/langchaingo/chains"
 	"github.com/tmc/langchaingo/llms"

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { EpisodeReport, RunReplay as RunReplayData, TraceEventInfo } from "../lib/api";
+import type { EpisodeReport, RunReplay as RunReplayData, RunEvent } from "../lib/api";
 import { getEpisodeReport, getRunReplay, resumeRun } from "../lib/api";
 
 type Props = {
@@ -53,7 +53,7 @@ export function RunReplay({ runId }: Props) {
         }
         setReplay(data);
         setEpisodeReport(report);
-        setSelectedEventId(data.events[0]?.id ?? "");
+        setSelectedEventId(data.run_events[0]?.id ?? "");
       } catch (err) {
         if (!canceled) {
           setError(err instanceof Error ? err.message : "Failed to load run replay");
@@ -67,10 +67,10 @@ export function RunReplay({ runId }: Props) {
   }, [runId]);
 
   const selectedEvent = useMemo(
-    () => replay?.events.find((event) => event.id === selectedEventId) ?? replay?.events[0],
+    () => replay?.run_events.find((event) => event.id === selectedEventId) ?? replay?.run_events[0],
     [replay, selectedEventId]
   );
-  const retrievalSummary = useMemo(() => buildRetrievalSummary(replay?.events ?? []), [replay?.events]);
+  const retrievalSummary = useMemo(() => buildRetrievalSummary(replay?.run_events ?? []), [replay?.run_events]);
   const canResumeRecoverable = replay?.run.status === "failed_recoverable";
 
   async function handleResumeRecoverable() {
@@ -94,8 +94,8 @@ export function RunReplay({ runId }: Props) {
     );
     try {
       await resumeRun({ run_id: replay.run.id, user_input: "Resume failed recoverable run from replay." }, (event) => {
-        if (event.type === "run" || event.type === "done") {
-          if (event.type === "run" && !hasNavigatedAfterResume.current) {
+        if (event.type === "run_state" || event.type === "done") {
+          if (event.type === "run_state" && !hasNavigatedAfterResume.current) {
             hasNavigatedAfterResume.current = true;
             router.push(`/workspace?conversation=${encodeURIComponent(event.conversation_id ?? replay.run.conversation_id)}`);
           }
@@ -116,7 +116,7 @@ export function RunReplay({ runId }: Props) {
       const [data, report] = await loadReplayAndReport(replay.run.id);
       setReplay(data);
       setEpisodeReport(report);
-      setSelectedEventId(data.events[0]?.id ?? "");
+      setSelectedEventId(data.run_events[0]?.id ?? "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to resume run");
     } finally {
@@ -189,11 +189,11 @@ export function RunReplay({ runId }: Props) {
       <section className="replay-grid">
         <div className="timeline-panel">
           <div className="panel-title">Status timeline</div>
-          {replay.events.length === 0 ? (
+          {replay.run_events.length === 0 ? (
             <div className="empty compact">No trace events recorded for this run.</div>
           ) : (
             <div className="timeline-list">
-              {replay.events.map((event) => (
+              {replay.run_events.map((event) => (
                 <button
                   className={`timeline-event ${event.type} ${event.id === selectedEvent?.id ? "active" : ""}`}
                   key={event.id}
@@ -202,7 +202,7 @@ export function RunReplay({ runId }: Props) {
                 >
                   <span className="event-type">{event.type}</span>
                   <span className="event-time">{new Date(event.timestamp).toLocaleTimeString()}</span>
-                  {event.duration_ms ? <span className="event-duration">{formatDuration(event.duration_ms)}</span> : null}
+				  {eventDuration(event) ? <span className="event-duration">{formatDuration(eventDuration(event))}</span> : null}
                 </button>
               ))}
             </div>
@@ -216,7 +216,7 @@ export function RunReplay({ runId }: Props) {
           ) : (
             <div className="step-list">
               {replay.steps.map((step) => {
-                const duration = stepDuration(replay.events, step.id);
+                const duration = stepDuration(replay.run_events, step.id);
                 return (
                   <article className="step-row" key={step.id}>
                     <div>
@@ -360,7 +360,7 @@ function Metric({ label, value, tone = "" }: { label: string; value: string; ton
   );
 }
 
-function EventDetail({ event }: { event: TraceEventInfo }) {
+function EventDetail({ event }: { event: RunEvent }) {
   const payload = event.payload ?? {};
   const isEstimated = payload.token_usage_estimated === true;
   const memories = retrievedMemories(payload);
@@ -375,10 +375,10 @@ function EventDetail({ event }: { event: TraceEventInfo }) {
         <span>Timestamp</span>
         <strong>{new Date(event.timestamp).toLocaleString()}</strong>
       </div>
-      {event.duration_ms ? (
+	  {eventDuration(event) ? (
         <div className="detail-kv">
           <span>Duration</span>
-          <strong>{formatDuration(event.duration_ms)}</strong>
+		  <strong>{formatDuration(eventDuration(event))}</strong>
         </div>
       ) : null}
       {stringPayload(payload, "executor") ? (
@@ -511,8 +511,8 @@ function RetrievedContext({ memories, chunks }: { memories: RetrievedMemoryPaylo
   );
 }
 
-function buildRetrievalSummary(events: TraceEventInfo[]) {
-  const explicitEvents = events.filter((event) => event.type === "retrieval");
+function buildRetrievalSummary(events: RunEvent[]) {
+	const explicitEvents = events.filter((event) => event.type === "retrieval.completed");
   const retrievalEvents =
     explicitEvents.length > 0
       ? explicitEvents
@@ -570,10 +570,14 @@ function formatTokenValue(value: unknown, estimated: boolean) {
   return `${Number.isFinite(numberValue) ? numberValue : 0}${estimated ? " est." : ""}`;
 }
 
-function stepDuration(events: TraceEventInfo[], stepId: string) {
+function stepDuration(events: RunEvent[], stepId: string) {
   return events
-    .filter((event) => event.step_id === stepId && typeof event.duration_ms === "number")
-    .reduce((total, event) => total + (event.duration_ms ?? 0), 0);
+	  .filter((event) => event.stage_id === stepId)
+	  .reduce((total, event) => total + eventDuration(event), 0);
+}
+
+function eventDuration(event: RunEvent): number {
+  return typeof event.payload.duration_ms === "number" ? event.payload.duration_ms : 0;
 }
 
 function formatDuration(durationMS: number) {

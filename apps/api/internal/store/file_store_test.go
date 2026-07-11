@@ -124,6 +124,45 @@ func TestFileStoreRunLifecycle(t *testing.T) {
 	}
 }
 
+func TestFileStoreRunEventsHaveStrictSequence(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := store.CreateConversation("Event sequence")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := store.CreateRun("agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, eventType := range []domain.RunEventType{domain.EventRunCreated, domain.EventRunStarted, domain.EventRunCompleted} {
+		event, err := store.CreateRunEvent(domain.RunEvent{RunID: run.ID, ConversationID: conversation.ID, Type: eventType})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if event.Sequence < 1 {
+			t.Fatalf("invalid sequence: %d", event.Sequence)
+		}
+	}
+	events, err := store.ListRunEvents(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("events = %d", len(events))
+	}
+	for index, event := range events {
+		if event.Sequence != int64(index+1) {
+			t.Fatalf("sequence[%d] = %d", index, event.Sequence)
+		}
+		if event.SchemaVersion != domain.CurrentRunEventSchemaVersion {
+			t.Fatalf("schema version = %d", event.SchemaVersion)
+		}
+	}
+}
+
 func TestFileStoreListStaleRunningRuns(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {
@@ -234,12 +273,12 @@ func TestFileStoreDeleteConversationCascades(t *testing.T) {
 		t.Fatalf("expected no steps after delete, got %d", len(steps))
 	}
 
-	events, err := store.ListTraceEvents(run.ID)
+	events, err := store.ListRunEvents(run.ID)
 	if err != nil {
-		t.Fatalf("list trace events after delete: %v", err)
+		t.Fatalf("list run events after delete: %v", err)
 	}
 	if len(events) != 0 {
-		t.Fatalf("expected no trace events after delete, got %d", len(events))
+		t.Fatalf("expected no run events after delete, got %d", len(events))
 	}
 }
 
@@ -274,33 +313,31 @@ func TestFileStoreTraceReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create step: %v", err)
 	}
-	if _, err := store.CreateTraceEvent(domain.TraceEvent{
-		RunID:  run.ID,
-		StepID: step.ID,
-		Type:   domain.TraceLLMEnd,
+	if _, err := store.CreateRunEvent(domain.RunEvent{
+		RunID:   run.ID,
+		StageID: step.ID,
+		Type:    domain.EventModelCompleted,
 		Payload: map[string]any{
 			"prompt_tokens":         10,
 			"completion_tokens":     5,
 			"total_tokens":          15,
 			"token_usage_estimated": true,
 		},
-		DurationMS: 25,
 	}); err != nil {
 		t.Fatalf("create llm trace: %v", err)
 	}
-	if _, err := store.CreateTraceEvent(domain.TraceEvent{
-		RunID:      run.ID,
-		StepID:     step.ID,
-		Type:       domain.TraceToolEnd,
-		Payload:    map[string]any{"tool_name": "calculator"},
-		DurationMS: 3,
+	if _, err := store.CreateRunEvent(domain.RunEvent{
+		RunID:   run.ID,
+		StageID: step.ID,
+		Type:    domain.EventToolCompleted,
+		Payload: map[string]any{"tool_name": "calculator"},
 	}); err != nil {
 		t.Fatalf("create tool trace: %v", err)
 	}
-	if _, err := store.CreateTraceEvent(domain.TraceEvent{
+	if _, err := store.CreateRunEvent(domain.RunEvent{
 		RunID:   run.ID,
-		StepID:  step.ID,
-		Type:    domain.TraceError,
+		StageID: step.ID,
+		Type:    domain.EventModelFailed,
 		Payload: map[string]any{"error": "boom"},
 	}); err != nil {
 		t.Fatalf("create error trace: %v", err)
@@ -330,8 +367,8 @@ func TestFileStoreTraceReplay(t *testing.T) {
 	if replay.Run.ID != run.ID || replay.Conversation.ID != conversation.ID {
 		t.Fatalf("unexpected replay identity: %#v", replay)
 	}
-	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.Events) != 3 {
-		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.Events))
+	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.RunEvents) != 3 {
+		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.RunEvents))
 	}
 }
 
