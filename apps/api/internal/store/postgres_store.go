@@ -688,6 +688,10 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 	if err != nil {
 		return domain.RunReplay{}, false, err
 	}
+	runEvents, err := s.ListRunEvents(runID)
+	if err != nil {
+		return domain.RunReplay{}, false, err
+	}
 	return domain.RunReplay{
 		Run:          run,
 		Conversation: conversation,
@@ -695,6 +699,7 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 		Steps:        steps,
 		Summary:      buildRunTraceSummary(run, events),
 		Events:       events,
+		RunEvents:    runEvents,
 	}, true, nil
 }
 

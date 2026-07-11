@@ -240,6 +240,7 @@ type RunReplay struct {
 	Steps        []CollaborationStep `json:"steps"`
 	Summary      RunTraceSummary     `json:"summary"`
 	Events       []TraceEvent        `json:"events"`
+	RunEvents    []RunEvent          `json:"run_events"`
 }
 
 type EpisodeReport struct {

@@ -650,6 +650,7 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	messages := s.messagesForConversationLocked(run.ConversationID)
 	steps := s.stepsForRunLocked(runID)
 	events := s.traceEventsForRunLocked(runID)
+	runEvents := s.runEventsForRunLocked(runID)
 	return domain.RunReplay{
 		Run:          run,
 		Conversation: conversation,
@@ -657,6 +658,7 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		Steps:        steps,
 		Summary:      buildRunTraceSummary(run, events),
 		Events:       events,
+		RunEvents:    runEvents,
 	}, true, nil
 }
 
@@ -1173,6 +1175,17 @@ func (s *FileStore) traceEventsForRunLocked(runID string) []domain.TraceEvent {
 		}
 		return events[i].Timestamp.Before(events[j].Timestamp)
 	})
+	return events
+}
+
+func (s *FileStore) runEventsForRunLocked(runID string) []domain.RunEvent {
+	events := []domain.RunEvent{}
+	for _, event := range s.data.RunEvents {
+		if event.RunID == runID {
+			events = append(events, event)
+		}
+	}
+	sort.Slice(events, func(i, j int) bool { return events[i].Sequence < events[j].Sequence })
 	return events
 }
 
