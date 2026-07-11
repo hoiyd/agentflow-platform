@@ -82,6 +82,8 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 	if err != nil {
 		return PreparedRun{}, err
 	}
+	r.publishRunLifecycle(ctx, run, domain.EventRunCreated, map[string]any{"status": domain.RunQueued})
+	r.publishRunLifecycle(ctx, run, domain.EventRunStarted, map[string]any{"status": run.Status})
 
 	registry, err := r.tools.Registry(ctx)
 	if err != nil {
@@ -151,6 +153,17 @@ func enabledToolCount(registry *tools.Registry) int {
 }
 
 func (r *Runtime) runEventSink() eventpkg.Sink { return eventpkg.StoreSink{Store: r.store} }
+
+func (r *Runtime) publishRunLifecycle(ctx context.Context, run domain.Run, eventType domain.RunEventType, payload map[string]any) {
+	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: eventType, RunID: run.ID, ConversationID: run.ConversationID, Payload: payload})
+}
+
+func (r *Runtime) publishStage(ctx context.Context, step domain.CollaborationStep, eventType domain.RunEventType) {
+	r.publishRunLifecycle(ctx, domain.Run{ID: step.RunID, ConversationID: step.ConversationID}, eventType, map[string]any{
+		"name": step.Role, "agent_id": step.AgentID, "iteration": step.Iteration,
+		"input": step.Input, "output": step.Output, "error": step.Error, "stage_id": step.ID,
+	})
+}
 
 func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string, memoryEnabled bool, retrievalEnabled bool, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
 	conversationID := ""
@@ -332,7 +345,11 @@ func truncateRetrievalEmbeddingQuery(value string) string {
 }
 
 func (r *Runtime) CompleteRun(id string) (domain.Run, error) {
-	return r.store.UpdateRunStatus(id, domain.RunCompleted, "")
+	run, err := r.store.UpdateRunStatus(id, domain.RunCompleted, "")
+	if err == nil {
+		r.publishRunLifecycle(context.Background(), run, domain.EventRunCompleted, map[string]any{"status": run.Status})
+	}
+	return run, err
 }
 
 func (r *Runtime) FailRun(id string, err error) (domain.Run, error) {
@@ -344,7 +361,11 @@ func (r *Runtime) FailRun(id string, err error) (domain.Run, error) {
 			"error":  message,
 		})
 	}
-	return r.store.UpdateRunStatus(id, domain.RunFailed, message)
+	run, updateErr := r.store.UpdateRunStatus(id, domain.RunFailed, message)
+	if updateErr == nil {
+		r.publishRunLifecycle(context.Background(), run, domain.EventRunFailed, map[string]any{"status": run.Status, "error": message})
+	}
+	return run, updateErr
 }
 
 func (r *Runtime) CancelRun(id string) (domain.Run, error) {
@@ -359,9 +380,17 @@ func (r *Runtime) CancelRun(id string) (domain.Run, error) {
 	case domain.RunCompleted, domain.RunFailed, domain.RunCanceled:
 		return run, nil
 	case domain.RunRunning:
-		return r.store.UpdateRunStatus(run.ID, domain.RunCanceling, "cancel requested by user")
+		updated, err := r.store.UpdateRunStatus(run.ID, domain.RunCanceling, "cancel requested by user")
+		if err == nil {
+			r.publishRunLifecycle(context.Background(), updated, domain.EventRunCancelRequested, map[string]any{"status": updated.Status})
+		}
+		return updated, err
 	default:
-		return r.store.UpdateRunStatus(run.ID, domain.RunCanceled, "canceled by user")
+		updated, err := r.store.UpdateRunStatus(run.ID, domain.RunCanceled, "canceled by user")
+		if err == nil {
+			r.publishRunLifecycle(context.Background(), updated, domain.EventRunCanceled, map[string]any{"status": updated.Status})
+		}
+		return updated, err
 	}
 }
 

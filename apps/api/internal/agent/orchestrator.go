@@ -61,6 +61,8 @@ func (r *Runtime) PrepareCollaborationRun(ctx context.Context, agentID string, c
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
+	r.publishRunLifecycle(ctx, run, domain.EventRunCreated, map[string]any{"status": domain.RunQueued})
+	r.publishRunLifecycle(ctx, run, domain.EventRunStarted, map[string]any{"status": run.Status})
 	log.Printf("collaboration_prepare run_id=%s initial_agent_id=%s requested_agent_id=%q", run.ID, agent.ID, strings.TrimSpace(agentID))
 	return PreparedCollaborationRun{WorkerAgent: agent, Run: run}, nil
 }
@@ -78,11 +80,12 @@ func (r *Runtime) RunCollaboration(ctx context.Context, prepared PreparedCollabo
 			errs <- err
 			return
 		}
-		_, err = r.store.UpdateRunStatus(prepared.Run.ID, domain.RunWaitingForUser, "")
+		waiting, err := r.store.UpdateRunStatus(prepared.Run.ID, domain.RunWaitingForUser, "")
 		if err != nil {
 			errs <- err
 			return
 		}
+		r.publishRunLifecycle(ctx, waiting, domain.EventRunWaitingForUser, map[string]any{"status": waiting.Status})
 	}()
 
 	return events, errs
@@ -564,6 +567,7 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- Collab
 		return "", err
 	}
 	events <- CollaborationEvent{Type: "collaboration_step", Step: step}
+	r.publishStage(ctx, step, domain.EventStageStarted)
 
 	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input, true, true, map[string]any{
 		"executor":  ExecutorNative,
@@ -580,6 +584,7 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- Collab
 		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
 		if updateErr == nil {
 			events <- CollaborationEvent{Type: "collaboration_step", Step: failed}
+			r.publishStage(ctx, failed, domain.EventStageFailed)
 		}
 		return "", err
 	}
@@ -589,6 +594,7 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- Collab
 		return "", err
 	}
 	events <- CollaborationEvent{Type: "collaboration_step", Step: completed}
+	r.publishStage(ctx, completed, domain.EventStageCompleted)
 	return output, nil
 }
 
