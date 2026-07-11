@@ -5,6 +5,9 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
 )
 
 type modelStub struct {
@@ -89,5 +92,17 @@ func TestEngineRejectsEmptyInput(t *testing.T) {
 	_, err := NewEngine(modelStub{}).Execute(context.Background(), Request{}, nil)
 	if !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("expected ErrInvalidRequest, got %v", err)
+	}
+}
+
+func TestEngineStopsWhenDurableEventPublishFails(t *testing.T) {
+	called := false
+	engine := NewEngine(modelStub{result: Result{Output: "should not run"}})
+	_, err := engine.Execute(context.Background(), Request{Input: "work", RunID: "run-1", Sink: eventpkg.SinkFunc(func(context.Context, domain.RunEvent) error {
+		called = true
+		return errors.New("store unavailable")
+	})}, nil)
+	if err == nil || !called {
+		t.Fatalf("expected sink failure, got %v", err)
 	}
 }

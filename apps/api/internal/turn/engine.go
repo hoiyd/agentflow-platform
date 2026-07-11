@@ -23,6 +23,7 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 	if request.TurnID == "" {
 		request.TurnID = "turn_" + time.Now().UTC().Format("20060102150405.000000000")
 	}
+	var sinkErr error
 	publish := func(item Event) {
 		emit(handler, item)
 		if request.Sink == nil {
@@ -50,13 +51,18 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 			payload["total_tokens"] = item.Result.Usage.TotalTokens
 			payload["token_usage_estimated"] = item.Result.Usage.Estimated
 		}
-		_ = request.Sink.Publish(ctx, domain.RunEvent{Type: unifiedEventType(item.Type), RunID: request.RunID,
+		if err := request.Sink.Publish(ctx, domain.RunEvent{Type: unifiedEventType(item.Type), RunID: request.RunID,
 			ConversationID: request.ConversationID, StageID: request.StepID, TurnID: request.TurnID,
-			Payload: payload, Timestamp: time.Now().UTC()})
+			Payload: payload, Timestamp: time.Now().UTC()}); err != nil && sinkErr == nil {
+			sinkErr = err
+		}
 	}
 	base := Event{RunID: request.RunID, StepID: request.StepID}
 	publish(withType(base, EventTurnStarted))
 	publish(withType(base, EventModelStarted))
+	if sinkErr != nil {
+		return Result{}, sinkErr
+	}
 	result, err := e.model.Execute(ctx, request, func(item ModelEvent) {
 		t := item.Type
 		if t == "" {
@@ -65,6 +71,9 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 		publish(Event{Type: t, RunID: request.RunID, StepID: request.StepID, Delta: item.Delta,
 			ToolName: item.ToolName, ToolCallID: item.ToolCallID, Error: item.Error})
 	})
+	if sinkErr != nil {
+		return result, sinkErr
+	}
 	if err != nil {
 		result.StopReason = StopFailed
 		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {

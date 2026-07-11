@@ -159,10 +159,10 @@ func (r *Runtime) publishRunLifecycle(ctx context.Context, run domain.Run, event
 }
 
 func (r *Runtime) publishStage(ctx context.Context, step domain.CollaborationStep, eventType domain.RunEventType) {
-	r.publishRunLifecycle(ctx, domain.Run{ID: step.RunID, ConversationID: step.ConversationID}, eventType, map[string]any{
+	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: eventType, RunID: step.RunID, ConversationID: step.ConversationID, StageID: step.ID, Payload: map[string]any{
 		"name": step.Role, "agent_id": step.AgentID, "iteration": step.Iteration,
-		"input": step.Input, "output": step.Output, "error": step.Error, "stage_id": step.ID,
-	})
+		"input": step.Input, "output": step.Output, "error": step.Error,
+	}})
 }
 
 func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string, memoryEnabled bool, retrievalEnabled bool, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
