@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	turnpkg "agentflow-platform/apps/api/internal/turn"
 )
 
 var errRunCanceled = errors.New("run canceled")
@@ -463,20 +464,13 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 		"executor":  ExecutorNative,
 		"framework": "agentflow-native",
 	})
-	tracePayload := map[string]any{
-		"role":        role,
-		"agent_id":    prepared.WorkerAgent.ID,
-		"iteration":   iteration,
-		"system":      systemPrompt,
-		"input":       input,
-		"input_chars": len(input),
-	}
-	for key, value := range retrievalTracePayload(retrievedMemories, retrievedChunks) {
-		tracePayload[key] = value
-	}
-	contextualPrompt := promptWithRetrievedContext(systemPrompt, retrievedMemories, retrievedChunks)
-	span := r.trace.LLMStart(ctx, prepared.Run.ID, step.ID, tracePayload)
-	completion, err := r.openAI.CompleteTextDetailed(ctx, contextualPrompt, input)
+	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{
+		RunID: prepared.Run.ID, StepID: step.ID, ConversationID: prepared.Run.ConversationID,
+		Agent: prepared.WorkerAgent, Role: role, SystemPrompt: systemPrompt, Input: input,
+		ModelMode: turnpkg.ModelModeText,
+		Context:   turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks},
+		Metadata:  map[string]any{"iteration": iteration},
+	}, nil)
 	if err != nil {
 		if ctx.Err() != nil {
 			if stopped, stopErr := r.stopIfCanceled(events, prepared.Run.ID); stopped || stopErr != nil {
@@ -486,13 +480,6 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 				return "", errRunCanceled
 			}
 		}
-		r.trace.Error(ctx, prepared.Run.ID, step.ID, map[string]any{
-			"source":    "llm",
-			"role":      role,
-			"agent_id":  prepared.WorkerAgent.ID,
-			"iteration": iteration,
-			"error":     err.Error(),
-		})
 		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
 		if updateErr == nil {
 			events <- CollaborationEvent{Type: "collaboration_step", Step: failed}
@@ -505,19 +492,7 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- Collabora
 		}
 		return "", errRunCanceled
 	}
-	output := completion.Text
-	r.trace.LLMEnd(ctx, span, map[string]any{
-		"role":                  role,
-		"agent_id":              prepared.WorkerAgent.ID,
-		"iteration":             iteration,
-		"model":                 completion.Model,
-		"output":                output,
-		"output_chars":          len(output),
-		"prompt_tokens":         completion.Usage.PromptTokens,
-		"completion_tokens":     completion.Usage.CompletionTokens,
-		"total_tokens":          completion.Usage.TotalTokens,
-		"token_usage_estimated": completion.Usage.Estimated,
-	})
+	output := result.Output
 	completed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepCompleted, output, "")
 	if err != nil {
 		return "", err
