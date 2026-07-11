@@ -11,6 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
 	tracepkg "agentflow-platform/apps/api/internal/trace"
+	turnpkg "agentflow-platform/apps/api/internal/turn"
 )
 
 type Runtime struct {
@@ -18,6 +19,7 @@ type Runtime struct {
 	openAI           *openai.Client
 	tools            *tools.Manager
 	trace            *tracepkg.Recorder
+	turnEngine       *turnpkg.Engine
 	routerMode       string
 	autonomousLimits AutonomousLimits
 }
@@ -44,7 +46,7 @@ func NewRuntimeWithRouterMode(store store.Store, openAI *openai.Client, tools *t
 }
 
 func NewRuntimeWithRouterModeAndLimits(store store.Store, openAI *openai.Client, tools *tools.Manager, routerMode string, limits AutonomousLimits) *Runtime {
-	return &Runtime{
+	runtime := &Runtime{
 		store:            store,
 		openAI:           openAI,
 		tools:            tools,
@@ -52,6 +54,8 @@ func NewRuntimeWithRouterModeAndLimits(store store.Store, openAI *openai.Client,
 		routerMode:       NormalizeRouterMode(routerMode),
 		autonomousLimits: normalizeAutonomousLimits(limits),
 	}
+	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
+	return runtime
 }
 
 func DefaultAutonomousLimits() AutonomousLimits {
@@ -107,15 +111,34 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 		"configured_tools":   prepared.Agent.Tools,
 		"enabled_tool_count": enabledToolCount(prepared.Registry),
 	})
-	return executor.Stream(ctx, ExecutorInput{
-		Agent:             prepared.Agent,
-		History:           history,
-		Latest:            latest,
-		Registry:          prepared.Registry,
-		RunID:             prepared.Run.ID,
-		RetrievedMemories: retrievedMemories,
-		RetrievedChunks:   retrievedChunks,
-	})
+	events := make(chan openai.StreamEvent)
+	errs := make(chan error, 1)
+	go func() {
+		defer close(events)
+		defer close(errs)
+		_, err := r.turnEngine.Execute(ctx, turnpkg.Request{
+			RunID:          prepared.Run.ID,
+			ConversationID: prepared.Run.ConversationID,
+			Agent:          prepared.Agent,
+			SystemPrompt:   prepared.Agent.SystemPrompt,
+			History:        history,
+			Input:          latest,
+			ExecutorKind:   executor.Kind(),
+			Registry:       prepared.Registry,
+			Context: turnpkg.Context{
+				Memories: retrievedMemories,
+				Chunks:   retrievedChunks,
+			},
+		}, func(event turnpkg.Event) {
+			if event.Type == turnpkg.EventModelDelta {
+				events <- openai.StreamEvent{Type: "delta", Delta: event.Delta}
+			}
+		})
+		if err != nil {
+			errs <- err
+		}
+	}()
+	return events, errs
 }
 
 func enabledToolCount(registry *tools.Registry) int {
