@@ -5,7 +5,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"agentflow-platform/apps/api/internal/agent"
@@ -64,6 +66,13 @@ func main() {
 		MaxOutputChars: cfg.AutonomousMaxOutputCharacters,
 		MaxToolCalls:   cfg.AutonomousMaxToolCalls,
 	})
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := handler.Close(ctx); err != nil {
+			log.Printf("drain memory sync: %v", err)
+		}
+	}()
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -80,8 +89,25 @@ func main() {
 		log.Println("OPENAI_API_KEY is empty; using local streaming fallback for verification")
 	}
 
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
+	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	serverErrors := make(chan error, 1)
+	go func() {
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErrors:
+		if err != nil && err != http.ErrServerClosed {
+			log.Printf("serve AgentFlow API: %v", err)
+		}
+	case <-shutdownSignal.Done():
+		log.Println("AgentFlow API shutting down")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("shutdown AgentFlow API: %v", err)
+		}
 	}
 
 	_ = os.Stdout.Sync()

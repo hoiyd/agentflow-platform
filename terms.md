@@ -210,11 +210,16 @@ turn.*
 model.*
 tool.*
 retrieval.*
+memory.*
 ```
 
 Overall autonomous budget and iteration status use `run.progress`. Stage events
 describe named orchestration phases; they must not use `workflow.*` or overload
 `step.*`.
+
+Memory synchronization is an auxiliary Run activity. `memory.sync.*` records
+requested, completed, and failed persistence without changing the outcome of a
+successfully completed Turn.
 
 ## Quick reference
 

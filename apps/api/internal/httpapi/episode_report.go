@@ -169,7 +169,7 @@ func episodeErrors(replay domain.RunReplay) []domain.EpisodeError {
 		})
 	}
 	for _, event := range replay.RunEvents {
-		if event.Type != domain.EventModelFailed && event.Type != domain.EventToolFailed && event.Type != domain.EventRetrievalFailed {
+		if event.Type != domain.EventModelFailed && event.Type != domain.EventToolFailed && event.Type != domain.EventRetrievalFailed && event.Type != domain.EventMemorySyncFailed {
 			continue
 		}
 		message := stringPayload(event.Payload, "error")

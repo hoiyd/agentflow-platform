@@ -1,11 +1,13 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/agent"
+	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
@@ -16,6 +18,7 @@ type Handler struct {
 	openAI         *openai.Client
 	tools          *tools.Manager
 	agentRuntime   *agent.Runtime
+	memorySyncer   *memorypkg.Syncer
 	allowedOrigins []string
 }
 
@@ -33,8 +36,16 @@ func NewHandlerWithRouterModeAndLimits(store store.Store, openAI *openai.Client,
 		openAI:         openAI,
 		tools:          tools,
 		agentRuntime:   agent.NewRuntimeWithRouterModeAndLimits(store, openAI, tools, routerMode, limits),
+		memorySyncer:   memorypkg.NewSyncer(store, openAI),
 		allowedOrigins: allowedOrigins,
 	}
+}
+
+func (h *Handler) Close(ctx context.Context) error {
+	if h.memorySyncer == nil {
+		return nil
+	}
+	return h.memorySyncer.Close(ctx)
 }
 
 func (h *Handler) Routes() http.Handler {
