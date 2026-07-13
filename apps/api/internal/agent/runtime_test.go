@@ -22,7 +22,7 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID)
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID)
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestRetrieveContextTruncatesEmbeddingQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID)
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T)
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID)
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -235,6 +235,7 @@ func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T)
 	if !ok {
 		t.Fatal("expected default agent")
 	}
+	agent.Executor = ExecutorLangChainGo
 
 	memoryText := "LangChainGo executor should reuse AgentFlow retrieved memory."
 	memoryEmbedding, err := client.EmbedText(ctx, memoryText)

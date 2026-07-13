@@ -68,6 +68,22 @@ one.
 
 A Run may contain one Turn or many Stages and Turns, depending on its Mode.
 
+## Runtime Snapshot
+
+A **Runtime Snapshot** is the immutable execution protocol captured when a Run
+is created. Resume and recovery reconstruct the runtime from this snapshot
+instead of reading the current editable configuration.
+
+It includes the Run mode, Agent configuration and system prompt, candidate
+Agents for multi-agent routing, provider/model identity, executor, tool names
+and schemas, router mode, and autonomous limits. Replay returns the same
+snapshot so an operator can compare what was configured with what happened.
+
+A Runtime Snapshot never contains API keys, authorization headers, MCP
+environment variables, or other credentials. The current process supplies
+credentials when it reconnects to the frozen provider endpoint. A legacy Run
+without a snapshot remains replayable but cannot be resumed safely.
+
 ## Stage
 
 A **Stage** is a named orchestration phase inside a Run. Only an orchestrator

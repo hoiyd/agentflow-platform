@@ -102,6 +102,13 @@ func (r *Registry) Get(name string) (Tool, bool) {
 	return tool, ok
 }
 
+func (r *Registry) Installed(name string) (Tool, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	tool, ok := r.tools[name]
+	return tool, ok
+}
+
 func (r *Registry) SetEnabled(name string, enabled bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

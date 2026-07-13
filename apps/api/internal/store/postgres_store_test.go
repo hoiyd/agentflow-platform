@@ -30,7 +30,7 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if _, err := store.AddMessage(conversation.ID, "user", "hello"); err != nil {
 		t.Fatalf("add message: %v", err)
 	}
-	run, err := store.CreateRun("agent_planner", conversation.ID)
+	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -69,6 +69,9 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	}
 	if !ok {
 		t.Fatal("expected replay")
+	}
+	if replay.RuntimeSnapshot == nil || replay.RuntimeSnapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion {
+		t.Fatalf("expected postgres snapshot round trip in replay, got %#v", replay.RuntimeSnapshot)
 	}
 	if replay.Summary.TotalTokens != 15 || !replay.Summary.TokenUsageEstimated {
 		t.Fatalf("unexpected summary: %#v", replay.Summary)

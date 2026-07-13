@@ -82,7 +82,16 @@ func (r *Runtime) PrepareCollaborationRun(ctx context.Context, agentID string, c
 		return PreparedCollaborationRun{}, err
 	}
 
-	run, err := r.store.CreateRun(agent.ID, conversationID)
+	agents, err := r.store.ListAgents()
+	if err != nil {
+		return PreparedCollaborationRun{}, err
+	}
+	snapshot, err := r.captureRuntimeSnapshot(ctx, ChatModeMultiAgent, agent, agents, "")
+	if err != nil {
+		return PreparedCollaborationRun{}, err
+	}
+	agent = restoreAgent(snapshot.Agent)
+	run, err := r.store.CreateRun(agent.ID, conversationID, snapshot)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
@@ -142,11 +151,16 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			return
 		}
 
-		agents, err := r.store.ListAgents()
+		restored, err := r.restoreRuntime(ctx, run)
 		if err != nil {
 			errs <- err
 			return
 		}
+		if restored.mode != ChatModeMultiAgent {
+			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeMultiAgent)
+			return
+		}
+		agents := restored.candidateAgents
 		if len(agents) == 0 {
 			errs <- store.ErrNotFound("agent")
 			return
@@ -181,7 +195,7 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			return
 		}
 		r.publishRunLifecycle(ctx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
-		route := r.routeWorkerAgent(ctx, run.ID, agents, task, plan)
+		route := r.routeWorkerAgent(ctx, run.ID, restored, agents, task, plan)
 		routerInput := fmt.Sprintf("User task:\n%s\n\nApproved plan:\n%s\n\nCandidate agents:\n%s", task, plan, formatCandidateAgents(agents))
 		routerStep, err := r.store.CreateCollaborationStep(domain.CollaborationStep{
 			RunID:          run.ID,
@@ -258,14 +272,15 @@ type agentScore struct {
 	Reason string
 }
 
-func (r *Runtime) routeWorkerAgent(ctx context.Context, runID string, agents []domain.Agent, task string, plan string) routeDecision {
-	switch r.routerMode {
+func (r *Runtime) routeWorkerAgent(ctx context.Context, runID string, restored restoredRuntime, agents []domain.Agent, task string, plan string) routeDecision {
+	client := restored.client
+	switch restored.routerMode {
 	case RouterModeQuery:
 		log.Printf("router_start run_id=%s router_mode=query_match candidate_count=%d", runID, len(agents))
 		return selectWorkerAgentWithLog(runID, agents, task, plan)
 	default:
-		log.Printf("router_start run_id=%s router_mode=auto candidate_count=%d llm_available=%t", runID, len(agents), r.openAI.HasAPIKey())
-		if !r.openAI.HasAPIKey() {
+		log.Printf("router_start run_id=%s router_mode=auto candidate_count=%d llm_available=%t", runID, len(agents), client.HasAPIKey())
+		if !client.HasAPIKey() {
 			log.Printf("router_auto_fallback run_id=%s reason=no_openai_api_key fallback_mode=query_match", runID)
 			return selectWorkerAgentWithLog(runID, agents, task, plan)
 		}

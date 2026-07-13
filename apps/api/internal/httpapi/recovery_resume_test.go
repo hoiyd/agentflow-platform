@@ -28,7 +28,7 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	if _, err := fileStore.AddMessage(conversation.ID, "user", "Write a concise recovery demo."); err != nil {
 		t.Fatalf("add message: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID)
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

@@ -68,13 +68,18 @@ func DefaultAutonomousLimits() AutonomousLimits {
 	}
 }
 
-func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversationID string) (PreparedRun, error) {
+func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversationID string, executorKind string) (PreparedRun, error) {
 	agent, err := r.resolveAgent(strings.TrimSpace(agentID))
 	if err != nil {
 		return PreparedRun{}, err
 	}
 
-	run, err := r.store.CreateRun(agent.ID, conversationID)
+	snapshot, err := r.captureRuntimeSnapshot(ctx, ChatModeSingle, agent, nil, executorKind)
+	if err != nil {
+		return PreparedRun{}, err
+	}
+	agent = restoreAgent(snapshot.Agent)
+	run, err := r.store.CreateRun(agent.ID, conversationID, snapshot)
 	if err != nil {
 		return PreparedRun{}, err
 	}
@@ -85,25 +90,31 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 	r.publishRunLifecycle(ctx, run, domain.EventRunCreated, map[string]any{"status": domain.RunQueued})
 	r.publishRunLifecycle(ctx, run, domain.EventRunStarted, map[string]any{"status": run.Status})
 
-	registry, err := r.tools.Registry(ctx)
-	if err != nil {
-		_, _ = r.FailRun(run.ID, err)
-		return PreparedRun{}, err
-	}
-	agentRegistry, err := registry.EnabledSubset(agent.Tools)
+	restored, err := r.restoreRuntime(ctx, run)
 	if err != nil {
 		_, _ = r.FailRun(run.ID, err)
 		return PreparedRun{}, err
 	}
 
-	return PreparedRun{Agent: agent, Run: run, Registry: agentRegistry}, nil
+	return PreparedRun{Agent: agent, Run: run, Registry: restored.registry}, nil
 }
 
 func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string, executorKind string) (<-chan openai.StreamEvent, <-chan error) {
-	if strings.TrimSpace(executorKind) == "" {
-		executorKind = prepared.Agent.Executor
+	events := make(chan openai.StreamEvent)
+	errs := make(chan error, 1)
+	client, err := r.clientForRun(prepared.Run.ID)
+	if err != nil {
+		close(events)
+		errs <- err
+		close(errs)
+		return events, errs
 	}
-	executor := r.executorFor(executorKind)
+	executorKind = prepared.Agent.Executor
+	executor := r.executorFor(executorKind, client)
+	registry := prepared.Registry
+	if registry == nil {
+		registry, _ = tools.NewRegistry()
+	}
 	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, latest, prepared.Agent.MemoryEnabled, prepared.Agent.RetrievalEnabled, map[string]any{
 		"agent_id":           prepared.Agent.ID,
 		"agent_name":         prepared.Agent.Name,
@@ -114,8 +125,6 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 		"configured_tools":   prepared.Agent.Tools,
 		"enabled_tool_count": enabledToolCount(prepared.Registry),
 	})
-	events := make(chan openai.StreamEvent)
-	errs := make(chan error, 1)
 	go func() {
 		defer close(events)
 		defer close(errs)
@@ -127,7 +136,7 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 			History:        history,
 			Input:          latest,
 			ExecutorKind:   executor.Kind(),
-			Registry:       prepared.Registry,
+			Registry:       registry,
 			Context: turnpkg.Context{
 				Memories: retrievedMemories,
 				Chunks:   retrievedChunks,
@@ -187,7 +196,12 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
 		return nil, nil
 	}
-	embedding, err := r.openAI.EmbedText(ctx, embeddingQuery)
+	client, err := r.clientForRun(runID)
+	if err != nil {
+		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"error": err.Error()}})
+		return nil, nil
+	}
+	embedding, err := client.EmbedText(ctx, embeddingQuery)
 	if err != nil {
 		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"error": err.Error()}})
 		return nil, nil
@@ -235,12 +249,12 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	return memories, chunks
 }
 
-func (r *Runtime) executorFor(kind string) AgentExecutor {
+func (r *Runtime) executorFor(kind string, client *openai.Client) AgentExecutor {
 	switch NormalizeExecutorKind(kind) {
 	case ExecutorLangChainGo:
-		return LangChainGoExecutor{openAI: r.openAI, trace: r.trace}
+		return LangChainGoExecutor{openAI: client, trace: r.trace}
 	default:
-		return NativeExecutor{openAI: r.openAI, trace: r.trace}
+		return NativeExecutor{openAI: client, trace: r.trace}
 	}
 }
 
