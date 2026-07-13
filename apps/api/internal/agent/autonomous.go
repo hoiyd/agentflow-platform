@@ -46,7 +46,12 @@ func (r *Runtime) PrepareAutonomousRun(ctx context.Context, agentID string, conv
 		return PreparedCollaborationRun{}, err
 	}
 
-	run, err := r.store.CreateRun(agent.ID, conversationID)
+	snapshot, err := r.captureRuntimeSnapshot(ctx, ChatModeAutonomous, agent, nil, "")
+	if err != nil {
+		return PreparedCollaborationRun{}, err
+	}
+	agent = restoreAgent(snapshot.Agent)
+	run, err := r.store.CreateRun(agent.ID, conversationID, snapshot)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
@@ -106,13 +111,13 @@ func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput 
 			return
 		}
 
-		agent, ok, err := r.store.GetAgent(run.AgentID)
+		restored, err := r.restoreRuntime(ctx, run)
 		if err != nil {
 			errs <- err
 			return
 		}
-		if !ok {
-			errs <- fmt.Errorf("agent not found")
+		if restored.mode != ChatModeAutonomous {
+			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeAutonomous)
 			return
 		}
 
@@ -133,7 +138,7 @@ func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput 
 		events <- liveStageEvent(completedCheckpoint)
 
 		state := rebuildAutonomousState(steps, completedCheckpoint)
-		prepared := PreparedCollaborationRun{WorkerAgent: agent, Run: run}
+		prepared := PreparedCollaborationRun{WorkerAgent: restored.agent, Run: run}
 		resumedEvents, resumedErrs := r.runAutonomousFromState(ctx, prepared, firstAutonomousTask(steps), state)
 		for event := range resumedEvents {
 			events <- event
@@ -172,13 +177,13 @@ func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string,
 			errs <- err
 			return
 		}
-		agent, ok, err := r.store.GetAgent(run.AgentID)
+		restored, err := r.restoreRuntime(ctx, run)
 		if err != nil {
 			errs <- err
 			return
 		}
-		if !ok {
-			errs <- fmt.Errorf("agent not found")
+		if restored.mode != ChatModeAutonomous {
+			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeAutonomous)
 			return
 		}
 
@@ -208,7 +213,7 @@ func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string,
 		events <- liveStageEvent(recoveryStep)
 
 		state := rebuildRecoverableAutonomousState(steps, recoveryStep)
-		prepared := PreparedCollaborationRun{WorkerAgent: agent, Run: run}
+		prepared := PreparedCollaborationRun{WorkerAgent: restored.agent, Run: run}
 		resumedEvents, resumedErrs := r.runAutonomousFromState(ctx, prepared, firstAutonomousTask(steps), state)
 		for event := range resumedEvents {
 			events <- event
@@ -228,6 +233,11 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 		defer close(events)
 		defer close(errs)
 
+		limits, err := r.limitsForRun(prepared.Run.ID)
+		if err != nil {
+			errs <- err
+			return
+		}
 		startedAt := initial.StartedAt
 		if startedAt.IsZero() {
 			startedAt = time.Now().UTC()
@@ -244,29 +254,29 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 		if nextIter <= 0 {
 			nextIter = 1
 		}
-		if nextIter > r.autonomousLimits.MaxIterations {
+		if nextIter > limits.MaxIterations {
 			reason := "recovered after max_iterations reached"
-			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, r.autonomousLimits.MaxIterations, outputChars, toolCalls, reason)
-			if err := r.finishAutonomous(ctx, events, prepared, r.autonomousLimits.MaxIterations, task, lastAct, lastReview, reason); err != nil {
+			r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, limits.MaxIterations, outputChars, toolCalls, reason)
+			if err := r.finishAutonomous(ctx, events, prepared, limits.MaxIterations, task, lastAct, lastReview, reason); err != nil {
 				errs <- err
 			}
 			return
 		}
 
-		for iteration := nextIter; iteration <= r.autonomousLimits.MaxIterations; iteration++ {
+		for iteration := nextIter; iteration <= limits.MaxIterations; iteration++ {
 			if err := r.heartbeatRun(prepared.Run.ID); err != nil {
 				errs <- err
 				return
 			}
-			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, iteration, outputChars, toolCalls, "")
 			if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 				if err != errRunCanceled {
 					errs <- err
 				}
 				return
 			}
-			if reason := r.limitStopReason(startedAt, outputChars, toolCalls); reason != "" {
-				r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, reason)
+			if reason := limitStopReason(limits, startedAt, outputChars, toolCalls); reason != "" {
+				r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, iteration, outputChars, toolCalls, reason)
 				if err := r.finishAutonomous(ctx, events, prepared, iteration, task, lastAct, lastReview, reason); err != nil {
 					errs <- err
 				}
@@ -275,7 +285,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 
 			log.Printf("autonomous_iteration_start run_id=%s iteration=%d output_chars=%d tool_calls=%d", prepared.Run.ID, iteration, outputChars, toolCalls)
 
-			observe, err := r.runAutonomousStep(ctx, events, prepared, iteration, "observe", autonomousObservePrompt(), autonomousObserveInput(task, state, r.autonomousLimits, startedAt, outputChars, toolCalls))
+			observe, err := r.runAutonomousStep(ctx, events, prepared, iteration, "observe", autonomousObservePrompt(), autonomousObserveInput(task, state, limits, startedAt, outputChars, toolCalls))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -284,7 +294,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 			outputChars += len(observe)
-			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, iteration, outputChars, toolCalls, "")
 			if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 				if err != errRunCanceled {
 					errs <- err
@@ -301,7 +311,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 			outputChars += len(plan)
-			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, iteration, outputChars, toolCalls, "")
 			if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 				if err != errRunCanceled {
 					errs <- err
@@ -319,7 +329,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 			}
 			outputChars += len(act)
 			lastAct = act
-			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, iteration, outputChars, toolCalls, "")
 			if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 				if err != errRunCanceled {
 					errs <- err
@@ -337,7 +347,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 			}
 			outputChars += len(review)
 			lastReview = review
-			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, iteration, outputChars, toolCalls, "")
 			if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 				if err != errRunCanceled {
 					errs <- err
@@ -345,7 +355,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 
-			decide, err := r.runAutonomousStep(ctx, events, prepared, iteration, "decide", autonomousDecidePrompt(), autonomousDecideInput(task, observe, plan, act, review, iteration, r.autonomousLimits))
+			decide, err := r.runAutonomousStep(ctx, events, prepared, iteration, "decide", autonomousDecidePrompt(), autonomousDecideInput(task, observe, plan, act, review, iteration, limits))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -354,19 +364,19 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 			outputChars += len(decide)
-			r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, "")
+			r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, iteration, outputChars, toolCalls, "")
 
 			decision := parseAutonomousDecision(decide)
 			if !decision.ValidJSON || decision.Decision == "" {
 				decision.Decision = "continue"
 				decision.Reason = "decide step did not return usable JSON; continuing within safety limits"
-				if iteration == r.autonomousLimits.MaxIterations {
+				if iteration == limits.MaxIterations {
 					decision.Decision = "stop"
 					decision.Reason = "decide step did not return usable JSON at max iteration"
 				}
 				log.Printf("autonomous_decision_fallback run_id=%s iteration=%d reason=%q", prepared.Run.ID, iteration, decision.Reason)
 			}
-			limitReason := r.limitStopReason(startedAt, outputChars, toolCalls)
+			limitReason := limitStopReason(limits, startedAt, outputChars, toolCalls)
 			if limitReason != "" {
 				decision.Decision = "stop"
 				decision.Reason = limitReason
@@ -379,8 +389,8 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 					log.Printf("autonomous_hitl_guard run_id=%s iteration=%d source=%s evidence=%q question=%q", prepared.Run.ID, iteration, need.Source, need.Evidence, need.Question)
 				}
 			}
-			if decision.Decision == "stop" || iteration == r.autonomousLimits.MaxIterations {
-				r.emitAutonomousProgress(events, prepared.Run.ID, startedAt, iteration, outputChars, toolCalls, decision.Reason)
+			if decision.Decision == "stop" || iteration == limits.MaxIterations {
+				r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, iteration, outputChars, toolCalls, decision.Reason)
 			}
 			log.Printf("autonomous_iteration_decision run_id=%s iteration=%d decision=%s reason=%q output_chars=%d", prepared.Run.ID, iteration, decision.Decision, decision.Reason, outputChars)
 
@@ -416,9 +426,9 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 
-			if decision.Decision == "stop" || iteration == r.autonomousLimits.MaxIterations {
+			if decision.Decision == "stop" || iteration == limits.MaxIterations {
 				reason := strings.TrimSpace(decision.Reason)
-				if reason == "" && iteration == r.autonomousLimits.MaxIterations {
+				if reason == "" && iteration == limits.MaxIterations {
 					reason = "max_iterations reached"
 				}
 				finalAnswer := strings.TrimSpace(decision.FinalAnswer)
@@ -547,14 +557,14 @@ func (r *Runtime) stopIfCanceled(events chan<- domain.RunEvent, runID string) (b
 	return true, errRunCanceled
 }
 
-func (r *Runtime) limitStopReason(startedAt time.Time, outputChars int, toolCalls int) string {
-	if time.Since(startedAt) >= r.autonomousLimits.MaxRuntime {
+func limitStopReason(limits AutonomousLimits, startedAt time.Time, outputChars int, toolCalls int) string {
+	if time.Since(startedAt) >= limits.MaxRuntime {
 		return "max_runtime reached"
 	}
-	if outputChars >= r.autonomousLimits.MaxOutputChars {
+	if outputChars >= limits.MaxOutputChars {
 		return "max_output_chars reached"
 	}
-	if toolCalls >= r.autonomousLimits.MaxToolCalls {
+	if toolCalls >= limits.MaxToolCalls {
 		return "max_tool_calls reached"
 	}
 	return ""
@@ -746,12 +756,12 @@ func humanInputNegativeMarkers() []string {
 	}
 }
 
-func (r *Runtime) emitAutonomousProgress(events chan<- domain.RunEvent, runID string, startedAt time.Time, iteration int, outputChars int, toolCalls int, stopReason string) {
+func (r *Runtime) emitAutonomousProgress(events chan<- domain.RunEvent, runID string, limits AutonomousLimits, startedAt time.Time, iteration int, outputChars int, toolCalls int, stopReason string) {
 	progress := AutonomousProgress{
-		Iteration: iteration, MaxIterations: r.autonomousLimits.MaxIterations,
-		ElapsedSeconds: int(time.Since(startedAt).Seconds()), MaxRuntimeSeconds: int(r.autonomousLimits.MaxRuntime.Seconds()),
-		OutputChars: outputChars, MaxOutputChars: r.autonomousLimits.MaxOutputChars,
-		ToolCalls: toolCalls, MaxToolCalls: r.autonomousLimits.MaxToolCalls, StopReason: strings.TrimSpace(stopReason),
+		Iteration: iteration, MaxIterations: limits.MaxIterations,
+		ElapsedSeconds: int(time.Since(startedAt).Seconds()), MaxRuntimeSeconds: int(limits.MaxRuntime.Seconds()),
+		OutputChars: outputChars, MaxOutputChars: limits.MaxOutputChars,
+		ToolCalls: toolCalls, MaxToolCalls: limits.MaxToolCalls, StopReason: strings.TrimSpace(stopReason),
 	}
 	if run, ok, _ := r.store.GetRun(runID); ok {
 		r.publishRunLifecycle(context.Background(), run, domain.EventRunProgress, map[string]any{

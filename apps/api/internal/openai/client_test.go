@@ -39,6 +39,20 @@ func TestNormalizeBaseURL(t *testing.T) {
 	}
 }
 
+func TestSafeRuntimeURLPreservesRequiredQueryParameters(t *testing.T) {
+	got := safeRuntimeURL("https://example.test/openai/deployments/test?api-version=2025-04-01-preview&token=private#fragment")
+	if got != "https://example.test/openai/deployments/test?api-version=2025-04-01-preview" {
+		t.Fatalf("unexpected safe runtime url: %s", got)
+	}
+}
+
+func TestSafeRuntimeURLRemovesCredentials(t *testing.T) {
+	got := safeRuntimeURL("https://user:password@example.test/v1?api_key=private&client-secret=secret&auth_token=private&sig=secret")
+	if got != "https://example.test/v1" {
+		t.Fatalf("unexpected safe runtime url: %s", got)
+	}
+}
+
 func TestEmbeddingRequestPayloadSendsConfiguredDimensions(t *testing.T) {
 	var requestBody map[string]any
 	client := NewClientWithTimeoutAndEmbeddingModel("test-key", "https://example.test/v1", "https://embed.example.test/v1", "gpt-test", "text-embedding-3-large", 1536, time.Second)

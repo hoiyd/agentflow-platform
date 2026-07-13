@@ -32,7 +32,7 @@ type Store interface {
 	UpdateAgent(agent domain.Agent) (domain.Agent, error)
 	ArchiveAgent(id string) error
 	GetDefaultAgent() (domain.Agent, bool, error)
-	CreateRun(agentID string, conversationID string) (domain.Run, error)
+	CreateRun(agentID string, conversationID string, snapshot domain.RuntimeSnapshot) (domain.Run, error)
 	UpdateRunAgent(id string, agentID string) (domain.Run, error)
 	UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error)
 	UpdateRunHeartbeat(id string) (domain.Run, error)

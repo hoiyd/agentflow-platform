@@ -73,16 +73,66 @@ const (
 )
 
 type Run struct {
-	ID             string     `json:"id"`
-	AgentID        string     `json:"agent_id"`
-	ConversationID string     `json:"conversation_id"`
-	Status         RunStatus  `json:"status"`
-	Error          string     `json:"error,omitempty"`
-	StartedAt      *time.Time `json:"started_at,omitempty"`
-	HeartbeatAt    *time.Time `json:"heartbeat_at,omitempty"`
-	CompletedAt    *time.Time `json:"completed_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID              string           `json:"id"`
+	AgentID         string           `json:"agent_id"`
+	ConversationID  string           `json:"conversation_id"`
+	Status          RunStatus        `json:"status"`
+	RuntimeSnapshot *RuntimeSnapshot `json:"runtime_snapshot,omitempty"`
+	Error           string           `json:"error,omitempty"`
+	StartedAt       *time.Time       `json:"started_at,omitempty"`
+	HeartbeatAt     *time.Time       `json:"heartbeat_at,omitempty"`
+	CompletedAt     *time.Time       `json:"completed_at,omitempty"`
+	CreatedAt       time.Time        `json:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
+}
+
+const CurrentRuntimeSnapshotVersion = 1
+
+type RuntimeSnapshot struct {
+	SchemaVersion    int                    `json:"schema_version"`
+	Mode             string                 `json:"mode"`
+	Agent            RuntimeAgentSnapshot   `json:"agent"`
+	CandidateAgents  []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
+	Model            RuntimeModelSnapshot   `json:"model"`
+	Tools            []RuntimeToolSnapshot  `json:"tools"`
+	RouterMode       string                 `json:"router_mode,omitempty"`
+	AutonomousLimits *RuntimeLimitsSnapshot `json:"autonomous_limits,omitempty"`
+	CreatedAt        time.Time              `json:"created_at"`
+}
+
+type RuntimeAgentSnapshot struct {
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Description      string   `json:"description"`
+	SystemPrompt     string   `json:"system_prompt"`
+	Tools            []string `json:"tools"`
+	MemoryEnabled    bool     `json:"memory_enabled"`
+	RetrievalEnabled bool     `json:"retrieval_enabled"`
+	Executor         string   `json:"executor"`
+}
+
+type RuntimeModelSnapshot struct {
+	Provider            string `json:"provider"`
+	BaseURL             string `json:"base_url"`
+	Model               string `json:"model"`
+	EmbeddingBaseURL    string `json:"embedding_base_url"`
+	EmbeddingModel      string `json:"embedding_model"`
+	EmbeddingDimensions int    `json:"embedding_dimensions"`
+}
+
+type RuntimeToolSnapshot struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
+	Source      string         `json:"source"`
+	SourceID    string         `json:"source_id,omitempty"`
+}
+
+type RuntimeLimitsSnapshot struct {
+	MaxIterations  int   `json:"max_iterations"`
+	MaxRuntimeMS   int64 `json:"max_runtime_ms"`
+	MaxOutputChars int   `json:"max_output_chars"`
+	MaxToolCalls   int   `json:"max_tool_calls"`
 }
 
 type CollaborationStepStatus string
@@ -199,12 +249,13 @@ type RunTraceSummary struct {
 }
 
 type RunReplay struct {
-	Run          Run                 `json:"run"`
-	Conversation Conversation        `json:"conversation"`
-	Messages     []Message           `json:"messages"`
-	Steps        []CollaborationStep `json:"steps"`
-	Summary      RunTraceSummary     `json:"summary"`
-	RunEvents    []RunEvent          `json:"run_events"`
+	Run             Run                 `json:"run"`
+	RuntimeSnapshot *RuntimeSnapshot    `json:"runtime_snapshot,omitempty"`
+	Conversation    Conversation        `json:"conversation"`
+	Messages        []Message           `json:"messages"`
+	Steps           []CollaborationStep `json:"steps"`
+	Summary         RunTraceSummary     `json:"summary"`
+	RunEvents       []RunEvent          `json:"run_events"`
 }
 
 type EpisodeReport struct {

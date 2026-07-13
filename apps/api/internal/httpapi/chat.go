@@ -74,7 +74,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prepared, err := h.agentRuntime.PrepareChatRun(r.Context(), req.AgentID, conversationID)
+	prepared, err := h.agentRuntime.PrepareChatRun(r.Context(), req.AgentID, conversationID, req.Executor)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if strings.Contains(err.Error(), "not found") {

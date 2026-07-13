@@ -18,7 +18,11 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	if request.ModelMode == turn.ModelModeText {
 		return m.executeText(ctx, request)
 	}
-	executor := m.runtime.executorFor(request.ExecutorKind)
+	client, err := m.runtime.clientForRun(request.RunID)
+	if err != nil {
+		return turn.Result{}, err
+	}
+	executor := m.runtime.executorFor(request.ExecutorKind, client)
 	events, errs := executor.Stream(ctx, ExecutorInput{
 		Agent:             request.Agent,
 		History:           request.History,
@@ -73,7 +77,11 @@ func (m runtimeTurnModel) executeText(ctx context.Context, request turn.Request)
 	}
 	span := m.runtime.trace.LLMStart(ctx, request.RunID, request.StepID, payload)
 	startedAt := time.Now()
-	completion, err := m.runtime.openAI.CompleteTextDetailed(ctx, prompt, request.Input)
+	client, err := m.runtime.clientForRun(request.RunID)
+	if err != nil {
+		return turn.Result{}, err
+	}
+	completion, err := client.CompleteTextDetailed(ctx, prompt, request.Input)
 	if err != nil {
 		m.runtime.trace.Error(ctx, request.RunID, request.StepID, map[string]any{
 			"source": "llm", "role": request.Role, "agent_id": request.Agent.ID, "error": err.Error(),

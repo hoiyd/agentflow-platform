@@ -322,7 +322,7 @@ func (s *PostgresStore) GetDefaultAgent() (domain.Agent, bool, error) {
 	return agent, true, nil
 }
 
-func (s *PostgresStore) CreateRun(agentID string, conversationID string) (domain.Run, error) {
+func (s *PostgresStore) CreateRun(agentID string, conversationID string, snapshot domain.RuntimeSnapshot) (domain.Run, error) {
 	if _, ok, err := s.GetAgent(agentID); err != nil {
 		return domain.Run{}, err
 	} else if !ok {
@@ -333,20 +333,28 @@ func (s *PostgresStore) CreateRun(agentID string, conversationID string) (domain
 	} else if !ok {
 		return domain.Run{}, errors.New("conversation not found")
 	}
+	if snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion {
+		return domain.Run{}, errors.New("runtime snapshot is required")
+	}
+	snapshotJSON, err := json.Marshal(snapshot)
+	if err != nil {
+		return domain.Run{}, err
+	}
 
 	now := time.Now().UTC()
 	run := domain.Run{
-		ID:             newID("run"),
-		AgentID:        agentID,
-		ConversationID: conversationID,
-		Status:         domain.RunQueued,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:              newID("run"),
+		AgentID:         agentID,
+		ConversationID:  conversationID,
+		Status:          domain.RunQueued,
+		RuntimeSnapshot: cloneRuntimeSnapshot(snapshot),
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
-	_, err := s.db.Exec(`
-		INSERT INTO runs (id, agent_id, conversation_id, status, error, started_at, heartbeat_at, completed_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		run.ID, run.AgentID, run.ConversationID, string(run.Status), run.Error, run.StartedAt, run.HeartbeatAt, run.CompletedAt, run.CreatedAt, run.UpdatedAt)
+	_, err = s.db.Exec(`
+		INSERT INTO runs (id, agent_id, conversation_id, status, error, runtime_snapshot, started_at, heartbeat_at, completed_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		run.ID, run.AgentID, run.ConversationID, string(run.Status), run.Error, snapshotJSON, run.StartedAt, run.HeartbeatAt, run.CompletedAt, run.CreatedAt, run.UpdatedAt)
 	return run, err
 }
 
@@ -360,7 +368,7 @@ func (s *PostgresStore) UpdateRunAgent(id string, agentID string) (domain.Run, e
 		UPDATE runs
 		SET agent_id = $1, updated_at = $2
 		WHERE id = $3
-		RETURNING id, agent_id, conversation_id, status, error, started_at, heartbeat_at, completed_at, created_at, updated_at`,
+		RETURNING id, agent_id, conversation_id, status, error, runtime_snapshot, started_at, heartbeat_at, completed_at, created_at, updated_at`,
 		agentID, time.Now().UTC(), id)
 }
 
@@ -380,7 +388,7 @@ func (s *PostgresStore) UpdateRunStatus(id string, status domain.RunStatus, erro
 			END,
 			updated_at = $3
 		WHERE id = $4
-		RETURNING id, agent_id, conversation_id, status, error, started_at, heartbeat_at, completed_at, created_at, updated_at`,
+		RETURNING id, agent_id, conversation_id, status, error, runtime_snapshot, started_at, heartbeat_at, completed_at, created_at, updated_at`,
 		string(status), strings.TrimSpace(errorMessage), now, id)
 }
 
@@ -390,13 +398,13 @@ func (s *PostgresStore) UpdateRunHeartbeat(id string) (domain.Run, error) {
 		UPDATE runs
 		SET heartbeat_at = $1, updated_at = $1
 		WHERE id = $2
-		RETURNING id, agent_id, conversation_id, status, error, started_at, heartbeat_at, completed_at, created_at, updated_at`,
+		RETURNING id, agent_id, conversation_id, status, error, runtime_snapshot, started_at, heartbeat_at, completed_at, created_at, updated_at`,
 		now, id)
 }
 
 func (s *PostgresStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error) {
 	rows, err := s.db.Query(`
-		SELECT id, agent_id, conversation_id, status, error, started_at, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, agent_id, conversation_id, status, error, runtime_snapshot, started_at, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
 		WHERE status = 'running'
 			AND (heartbeat_at IS NULL OR heartbeat_at < $1)
@@ -419,7 +427,7 @@ func (s *PostgresStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, er
 
 func (s *PostgresStore) GetRun(id string) (domain.Run, bool, error) {
 	run, err := s.scanRunQuery(`
-		SELECT id, agent_id, conversation_id, status, error, started_at, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, agent_id, conversation_id, status, error, runtime_snapshot, started_at, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
 		WHERE id = $1`, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -433,7 +441,7 @@ func (s *PostgresStore) GetRun(id string) (domain.Run, bool, error) {
 
 func (s *PostgresStore) ListRuns() ([]domain.Run, error) {
 	rows, err := s.db.Query(`
-		SELECT id, agent_id, conversation_id, status, error, started_at, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, agent_id, conversation_id, status, error, runtime_snapshot, started_at, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
 		ORDER BY created_at DESC`)
 	if err != nil {
@@ -638,12 +646,13 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 		return domain.RunReplay{}, false, err
 	}
 	return domain.RunReplay{
-		Run:          run,
-		Conversation: conversation,
-		Messages:     messages,
-		Steps:        steps,
-		Summary:      buildRunTraceSummary(run, runEvents),
-		RunEvents:    runEvents,
+		Run:             run,
+		RuntimeSnapshot: cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
+		Conversation:    conversation,
+		Messages:        messages,
+		Steps:           steps,
+		Summary:         buildRunTraceSummary(run, runEvents),
+		RunEvents:       runEvents,
 	}, true, nil
 }
 
@@ -1131,8 +1140,16 @@ func scanRun(row scanner) (domain.Run, error) {
 	var startedAt sql.NullTime
 	var heartbeatAt sql.NullTime
 	var completedAt sql.NullTime
-	if err := row.Scan(&run.ID, &run.AgentID, &run.ConversationID, &status, &errorMessage, &startedAt, &heartbeatAt, &completedAt, &run.CreatedAt, &run.UpdatedAt); err != nil {
+	var snapshotJSON []byte
+	if err := row.Scan(&run.ID, &run.AgentID, &run.ConversationID, &status, &errorMessage, &snapshotJSON, &startedAt, &heartbeatAt, &completedAt, &run.CreatedAt, &run.UpdatedAt); err != nil {
 		return domain.Run{}, err
+	}
+	if len(snapshotJSON) > 0 && string(snapshotJSON) != "null" {
+		var snapshot domain.RuntimeSnapshot
+		if err := json.Unmarshal(snapshotJSON, &snapshot); err != nil {
+			return domain.Run{}, err
+		}
+		run.RuntimeSnapshot = &snapshot
 	}
 	run.Status = domain.RunStatus(status)
 	if errorMessage.Valid {
@@ -1438,6 +1455,7 @@ var postgresMigrations = []string{
 		updated_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS heartbeat_at timestamptz`,
+	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS runtime_snapshot jsonb`,
 	`CREATE TABLE IF NOT EXISTS collaboration_steps (
 		id text PRIMARY KEY,
 		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,

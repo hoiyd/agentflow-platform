@@ -9,6 +9,52 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
+func testRuntimeSnapshot() domain.RuntimeSnapshot {
+	return domain.RuntimeSnapshot{
+		SchemaVersion: domain.CurrentRuntimeSnapshotVersion,
+		Mode:          "single",
+		Agent:         domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
+		Model:         domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
+	}
+}
+
+func TestFileStoreRuntimeSnapshotRoundTripAndReplay(t *testing.T) {
+	path := t.TempDir() + "/agentflow.json"
+	first, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := first.CreateConversation("snapshot round trip")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	snapshot := testRuntimeSnapshot()
+	snapshot.Agent.SystemPrompt = "frozen prompt"
+	run, err := first.CreateRun("agent_planner", conversation.ID, snapshot)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+
+	second, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	loaded, ok, err := second.GetRun(run.ID)
+	if err != nil || !ok {
+		t.Fatalf("get run after reopen: ok=%v err=%v", ok, err)
+	}
+	if loaded.RuntimeSnapshot == nil || loaded.RuntimeSnapshot.Agent.SystemPrompt != "frozen prompt" {
+		t.Fatalf("unexpected loaded snapshot: %#v", loaded.RuntimeSnapshot)
+	}
+	replay, ok, err := second.GetRunReplay(run.ID)
+	if err != nil || !ok {
+		t.Fatalf("get replay: ok=%v err=%v", ok, err)
+	}
+	if replay.RuntimeSnapshot == nil || replay.RuntimeSnapshot.Agent.SystemPrompt != "frozen prompt" {
+		t.Fatalf("replay did not return snapshot: %#v", replay.RuntimeSnapshot)
+	}
+}
+
 func TestFileStoreSeedsDefaultAgents(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {
@@ -88,7 +134,7 @@ func TestFileStoreRunLifecycle(t *testing.T) {
 		t.Fatalf("create conversation: %v", err)
 	}
 
-	run, err := store.CreateRun("agent_planner", conversation.ID)
+	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -133,7 +179,7 @@ func TestFileStoreRunEventsHaveStrictSequence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := store.CreateRun("agent_planner", conversation.ID)
+	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +218,7 @@ func TestFileStoreListStaleRunningRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	staleRun, err := store.CreateRun("agent_planner", conversation.ID)
+	staleRun, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create stale run: %v", err)
 	}
@@ -180,14 +226,14 @@ func TestFileStoreListStaleRunningRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mark stale run running: %v", err)
 	}
-	freshRun, err := store.CreateRun("agent_planner", conversation.ID)
+	freshRun, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create fresh run: %v", err)
 	}
 	if _, err := store.UpdateRunStatus(freshRun.ID, domain.RunRunning, ""); err != nil {
 		t.Fatalf("mark fresh run running: %v", err)
 	}
-	completedRun, err := store.CreateRun("agent_planner", conversation.ID)
+	completedRun, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create completed run: %v", err)
 	}
@@ -226,7 +272,7 @@ func TestFileStoreDeleteConversationCascades(t *testing.T) {
 	if _, err := store.AddMessage(conversation.ID, "user", "hello"); err != nil {
 		t.Fatalf("add message: %v", err)
 	}
-	run, err := store.CreateRun("agent_planner", conversation.ID)
+	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -294,7 +340,7 @@ func TestFileStoreTraceReplay(t *testing.T) {
 	if _, err := store.AddMessage(conversation.ID, "user", "hello"); err != nil {
 		t.Fatalf("add message: %v", err)
 	}
-	run, err := store.CreateRun("agent_planner", conversation.ID)
+	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

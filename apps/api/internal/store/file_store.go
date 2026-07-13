@@ -312,7 +312,7 @@ func (s *FileStore) GetDefaultAgent() (domain.Agent, bool, error) {
 	return domain.Agent{}, false, nil
 }
 
-func (s *FileStore) CreateRun(agentID string, conversationID string) (domain.Run, error) {
+func (s *FileStore) CreateRun(agentID string, conversationID string, snapshot domain.RuntimeSnapshot) (domain.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -322,18 +322,23 @@ func (s *FileStore) CreateRun(agentID string, conversationID string) (domain.Run
 	if !s.hasConversationLocked(conversationID) {
 		return domain.Run{}, errors.New("conversation not found")
 	}
+	if snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion {
+		return domain.Run{}, errors.New("runtime snapshot is required")
+	}
 
 	now := time.Now().UTC()
 	run := domain.Run{
-		ID:             newID("run"),
-		AgentID:        agentID,
-		ConversationID: conversationID,
-		Status:         domain.RunQueued,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:              newID("run"),
+		AgentID:         agentID,
+		ConversationID:  conversationID,
+		Status:          domain.RunQueued,
+		RuntimeSnapshot: cloneRuntimeSnapshot(snapshot),
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
-	s.data.Runs = append(s.data.Runs, run)
-	return run, s.saveLocked()
+	stored := cloneRun(run)
+	s.data.Runs = append(s.data.Runs, stored)
+	return cloneRun(run), s.saveLocked()
 }
 
 func (s *FileStore) UpdateRunAgent(id string, agentID string) (domain.Run, error) {
@@ -347,7 +352,7 @@ func (s *FileStore) UpdateRunAgent(id string, agentID string) (domain.Run, error
 		if s.data.Runs[i].ID == id {
 			s.data.Runs[i].AgentID = agentID
 			s.data.Runs[i].UpdatedAt = time.Now().UTC()
-			return s.data.Runs[i], s.saveLocked()
+			return cloneRun(s.data.Runs[i]), s.saveLocked()
 		}
 	}
 	return domain.Run{}, errors.New("run not found")
@@ -376,7 +381,7 @@ func (s *FileStore) UpdateRunStatus(id string, status domain.RunStatus, errorMes
 			if status == domain.RunCompleted || status == domain.RunFailed || status == domain.RunFailedRecoverable || status == domain.RunCanceled {
 				s.data.Runs[i].CompletedAt = &now
 			}
-			return s.data.Runs[i], s.saveLocked()
+			return cloneRun(s.data.Runs[i]), s.saveLocked()
 		}
 	}
 	return domain.Run{}, errors.New("run not found")
@@ -391,7 +396,7 @@ func (s *FileStore) UpdateRunHeartbeat(id string) (domain.Run, error) {
 			now := time.Now().UTC()
 			s.data.Runs[i].HeartbeatAt = &now
 			s.data.Runs[i].UpdatedAt = now
-			return s.data.Runs[i], s.saveLocked()
+			return cloneRun(s.data.Runs[i]), s.saveLocked()
 		}
 	}
 	return domain.Run{}, errors.New("run not found")
@@ -407,7 +412,7 @@ func (s *FileStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error)
 			continue
 		}
 		if run.HeartbeatAt == nil || run.HeartbeatAt.Before(cutoff) {
-			items = append(items, run)
+			items = append(items, cloneRun(run))
 		}
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -422,7 +427,7 @@ func (s *FileStore) GetRun(id string) (domain.Run, bool, error) {
 
 	for _, item := range s.data.Runs {
 		if item.ID == id {
-			return item, true, nil
+			return cloneRun(item), true, nil
 		}
 	}
 	return domain.Run{}, false, nil
@@ -435,7 +440,10 @@ func (s *FileStore) ListRuns() ([]domain.Run, error) {
 	if len(s.data.Runs) == 0 {
 		return []domain.Run{}, nil
 	}
-	items := append([]domain.Run(nil), s.data.Runs...)
+	items := make([]domain.Run, 0, len(s.data.Runs))
+	for _, run := range s.data.Runs {
+		items = append(items, cloneRun(run))
+	}
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].CreatedAt.After(items[j].CreatedAt)
 	})
@@ -595,13 +603,33 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	steps := s.stepsForRunLocked(runID)
 	runEvents := s.runEventsForRunLocked(runID)
 	return domain.RunReplay{
-		Run:          run,
-		Conversation: conversation,
-		Messages:     messages,
-		Steps:        steps,
-		Summary:      buildRunTraceSummary(run, runEvents),
-		RunEvents:    runEvents,
+		Run:             cloneRun(run),
+		RuntimeSnapshot: cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
+		Conversation:    conversation,
+		Messages:        messages,
+		Steps:           steps,
+		Summary:         buildRunTraceSummary(run, runEvents),
+		RunEvents:       runEvents,
 	}, true, nil
+}
+
+func cloneRuntimeSnapshot(snapshot domain.RuntimeSnapshot) *domain.RuntimeSnapshot {
+	bytes, _ := json.Marshal(snapshot)
+	var cloned domain.RuntimeSnapshot
+	_ = json.Unmarshal(bytes, &cloned)
+	return &cloned
+}
+
+func cloneRuntimeSnapshotValue(snapshot *domain.RuntimeSnapshot) *domain.RuntimeSnapshot {
+	if snapshot == nil {
+		return nil
+	}
+	return cloneRuntimeSnapshot(*snapshot)
+}
+
+func cloneRun(run domain.Run) domain.Run {
+	run.RuntimeSnapshot = cloneRuntimeSnapshotValue(run.RuntimeSnapshot)
+	return run
 }
 
 func (s *FileStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {

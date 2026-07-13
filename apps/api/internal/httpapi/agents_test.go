@@ -154,3 +154,57 @@ func TestArchiveDefaultAgentAPIRejects(t *testing.T) {
 		t.Fatalf("expected default archive status 400, got %d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+func TestRunAPIReturnsSnapshotOnlyFromReplay(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := fileStore.CreateConversation("Snapshot API boundary")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	snapshot := testRuntimeSnapshot()
+	snapshot.Agent.SystemPrompt = "private frozen prompt"
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, snapshot)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	handler := &Handler{store: fileStore}
+
+	for _, path := range []string{"/api/runs", "/api/runs/" + run.ID} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		if path == "/api/runs" {
+			handler.listRuns(recorder, request)
+		} else {
+			handler.getRun(recorder, request)
+		}
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("expected %s status 200, got %d", path, recorder.Code)
+		}
+		if bytes.Contains(recorder.Body.Bytes(), []byte("runtime_snapshot")) || bytes.Contains(recorder.Body.Bytes(), []byte("private frozen prompt")) {
+			t.Fatalf("expected %s to omit runtime snapshot, got %s", path, recorder.Body.String())
+		}
+	}
+
+	recorder := httptest.NewRecorder()
+	handler.getRunReplay(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/replay", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected replay status 200, got %d", recorder.Code)
+	}
+	var replay map[string]json.RawMessage
+	if err := json.Unmarshal(recorder.Body.Bytes(), &replay); err != nil {
+		t.Fatalf("decode replay: %v", err)
+	}
+	if _, ok := replay["runtime_snapshot"]; !ok {
+		t.Fatalf("expected replay snapshot, got %s", recorder.Body.String())
+	}
+	var replayRun map[string]json.RawMessage
+	if err := json.Unmarshal(replay["run"], &replayRun); err != nil {
+		t.Fatalf("decode replay run: %v", err)
+	}
+	if _, ok := replayRun["runtime_snapshot"]; ok {
+		t.Fatalf("expected replay run to omit duplicate snapshot, got %s", replay["run"])
+	}
+}

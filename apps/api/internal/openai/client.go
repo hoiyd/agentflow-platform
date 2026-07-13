@@ -13,6 +13,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -35,6 +36,15 @@ type Client struct {
 	embeddingDimensions int
 	httpClient          *http.Client
 	timeout             time.Duration
+}
+
+type RuntimeIdentity struct {
+	Provider            string
+	BaseURL             string
+	Model               string
+	EmbeddingBaseURL    string
+	EmbeddingModel      string
+	EmbeddingDimensions int
 }
 
 type Message struct {
@@ -133,6 +143,69 @@ func NewClientWithTimeoutAndEmbeddingModel(apiKey string, baseURL string, embedd
 
 func (c *Client) HasAPIKey() bool {
 	return c.apiKey != ""
+}
+
+func (c *Client) RuntimeIdentity() RuntimeIdentity {
+	return RuntimeIdentity{
+		Provider: providerForURL(c.baseURL), BaseURL: safeRuntimeURL(c.baseURL), Model: c.model,
+		EmbeddingBaseURL: safeRuntimeURL(c.embeddingBaseURL), EmbeddingModel: c.embeddingModel,
+		EmbeddingDimensions: c.embeddingDimensions,
+	}
+}
+
+func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) *Client {
+	return NewClientWithTimeoutAndEmbeddingModel(c.apiKey, identity.BaseURL, identity.EmbeddingBaseURL,
+		identity.Model, identity.EmbeddingModel, identity.EmbeddingDimensions, c.timeout)
+}
+
+func safeRuntimeURL(value string) string {
+	parsed, err := url.Parse(strings.TrimSpace(value))
+	if err != nil {
+		return ""
+	}
+	parsed.User = nil
+	query := parsed.Query()
+	for key := range query {
+		if isSensitiveRuntimeQueryKey(key) {
+			query.Del(key)
+		}
+	}
+	parsed.RawQuery = query.Encode()
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
+func isSensitiveRuntimeQueryKey(key string) bool {
+	normalized := strings.NewReplacer("-", "_", ".", "_").Replace(strings.ToLower(strings.TrimSpace(key)))
+	switch normalized {
+	case "api_key", "apikey", "x_api_key", "subscription_key", "key", "token", "access_token", "password", "secret", "signature", "sig", "authorization", "credential", "auth":
+		return true
+	}
+	for _, suffix := range []string{"_token", "_secret", "_password", "_signature", "_credential"} {
+		if strings.HasSuffix(normalized, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+func providerForURL(value string) string {
+	host := strings.ToLower(strings.TrimSpace(value))
+	if parsed, err := url.Parse(host); err == nil && parsed.Hostname() != "" {
+		host = parsed.Hostname()
+	}
+	switch {
+	case strings.Contains(host, "openrouter"):
+		return "openrouter"
+	case strings.Contains(host, "groq"):
+		return "groq"
+	case strings.Contains(host, "openai"):
+		return "openai"
+	case strings.Contains(host, "localhost"), strings.Contains(host, "127.0.0.1"):
+		return "local"
+	default:
+		return "openai_compatible"
+	}
 }
 
 func (c *Client) StreamChat(ctx context.Context, history []domain.Message, latest string) (<-chan string, <-chan error) {
