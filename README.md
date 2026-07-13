@@ -7,7 +7,7 @@ Full-stack AI agent workflow platform with streaming chat, agent runs, persisten
 - Chat UI with persisted conversations and streamed assistant responses.
 - Single-agent, multi-agent, and autonomous run modes.
 - Run lifecycle tracking with collaboration steps, trace events, replay, and cancel/resume/continue flows.
-- Built-in and MCP tool registry with enable/disable controls.
+- Built-in tool catalog with enable/disable controls and guarded execution.
 - Persistent semantic memory backed by embeddings.
 - RAG knowledge base with text, `.txt`, `.md`, and `.markdown` ingestion.
 - Markdown-aware chunking with heading, list, paragraph, and fenced-code metadata.
@@ -259,19 +259,9 @@ The backend loads enabled tools from `TOOL_CONFIG_PATH`, defaulting to `.data/to
 {
   "enabled_tools": [
     "calculator",
-    "smartapis__smartagent_discovery_capabilities",
-    "smartapis__smartagent_catalog_list_plans",
-    "smartapis__smartagent_places_search"
-  ],
-  "mcp_servers": [
-    {
-      "id": "smartapis",
-      "enabled": true,
-      "transport": "streamable-http",
-      "url": "https://smartapis.net/mcp"
-    }
+    "get_current_time"
   ]
 }
 ```
 
-MCP tools are registered as `<server_id>__<tool_name>` to avoid collisions with built-in tools. Stdio MCP servers are also supported with `transport`, `command`, and `args`.
+The tool executor applies typed errors, per-tool timeouts, result-size limits, and trace events to every call.

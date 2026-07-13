@@ -240,15 +240,15 @@ func (c *Client) StreamChat(ctx context.Context, history []domain.Message, lates
 	return chunks, errs
 }
 
-func (c *Client) StreamChatWithTools(ctx context.Context, history []domain.Message, latest string, registry *tools.Registry) (<-chan StreamEvent, <-chan error) {
-	return c.StreamAgentChatWithTools(ctx, "You are AgentFlow's assistant. Use tools when they help.", history, latest, registry)
+func (c *Client) StreamChatWithTools(ctx context.Context, history []domain.Message, latest string, catalog *tools.Catalog) (<-chan StreamEvent, <-chan error) {
+	return c.StreamAgentChatWithTools(ctx, "You are AgentFlow's assistant. Use tools when they help.", history, latest, catalog)
 }
 
-func (c *Client) StreamAgentChatWithTools(ctx context.Context, systemPrompt string, history []domain.Message, latest string, registry *tools.Registry) (<-chan StreamEvent, <-chan error) {
-	return c.StreamAgentChatWithToolsTrace(ctx, systemPrompt, history, latest, registry, nil, "", "", nil, nil)
+func (c *Client) StreamAgentChatWithTools(ctx context.Context, systemPrompt string, history []domain.Message, latest string, catalog *tools.Catalog) (<-chan StreamEvent, <-chan error) {
+	return c.StreamAgentChatWithToolsTrace(ctx, systemPrompt, history, latest, catalog, nil, "", "", nil, nil)
 }
 
-func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt string, history []domain.Message, latest string, registry *tools.Registry, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) (<-chan StreamEvent, <-chan error) {
+func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt string, history []domain.Message, latest string, catalog *tools.Catalog, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) (<-chan StreamEvent, <-chan error) {
 	events := make(chan StreamEvent)
 	errs := make(chan error, 1)
 
@@ -257,7 +257,7 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 		defer close(errs)
 
 		if c.apiKey == "" {
-			log.Printf("chat_fallback mode=local_no_api_key latest_len=%d enabled_tools=%q", len(latest), strings.Join(registry.EnabledNames(), ","))
+			log.Printf("chat_fallback mode=local_no_api_key latest_len=%d enabled_tools=%q", len(latest), strings.Join(catalog.EnabledNames(), ","))
 			output := fallbackEventResponse(latest)
 			startPayload := map[string]any{
 				"model":       "local_fallback",
@@ -281,7 +281,7 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 			return
 		}
 
-		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, registry, events, recorder, runID, stepID, retrievedMemories, retrievedChunks); err != nil {
+		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, catalog, events, recorder, runID, stepID, retrievedMemories, retrievedChunks); err != nil {
 			recorder.Error(ctx, runID, stepID, map[string]any{
 				"source": "llm",
 				"model":  c.model,
@@ -527,8 +527,8 @@ func (c *Client) streamText(ctx context.Context, text string, delay time.Duratio
 	}
 }
 
-func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string, history []domain.Message, registry *tools.Registry, events chan<- StreamEvent, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) error {
-	enabledTools := registry.EnabledNames()
+func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string, history []domain.Message, catalog *tools.Catalog, events chan<- StreamEvent, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) error {
+	enabledTools := catalog.EnabledNames()
 	messages := buildMessagesWithSystemPrompt(systemPrompt, history, enabledTools, retrievedMemories, retrievedChunks)
 	startPayload := map[string]any{
 		"model":         c.model,
@@ -546,7 +546,7 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	decision, err := c.complete(ctx, map[string]any{
 		"model":       c.model,
 		"messages":    messages,
-		"tools":       registry.Definitions(),
+		"tools":       catalog.Definitions(),
 		"tool_choice": "auto",
 		"temperature": 0.2,
 	})
@@ -618,46 +618,30 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	})
 
 	results := make([]tools.ExecutionResult, 0, len(toolCalls))
+	toolExecutor := tools.NewExecutor(catalog, tools.ExecutorOptions{
+		Tracer: tracepkg.NewToolExecutionTracer(recorder, runID, stepID),
+	})
 	for _, call := range normalizeToolCalls(toolCalls) {
 		log.Printf("tool_call_start id=%s tool=%s arguments=%q", call.ID, call.Function.Name, call.Function.Arguments)
-		toolSpan := recorder.ToolStart(ctx, runID, stepID, map[string]any{
-			"tool_call_id": call.ID,
-			"tool_name":    call.Function.Name,
-			"arguments":    json.RawMessage(call.Function.Arguments),
-		})
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case events <- StreamEvent{Type: "tool_start", ToolName: call.Function.Name, ToolCallID: call.ID}:
 		}
 
-		result := registry.Execute(ctx, call.Function.Name, json.RawMessage(call.Function.Arguments))
+		result := toolExecutor.Execute(ctx, tools.ExecutionRequest{
+			CallID: call.ID, Tool: call.Function.Name,
+			Arguments: json.RawMessage(call.Function.Arguments),
+		})
 		results = append(results, result)
 		resultText := marshalResult(result)
-		toolPayload := map[string]any{
-			"tool_call_id": call.ID,
-			"tool_name":    call.Function.Name,
-			"arguments":    string(result.Arguments),
-			"result":       result.Result,
-			"error":        result.Error,
-		}
-		if result.Error != "" {
-			recorder.Error(ctx, runID, stepID, map[string]any{
-				"source":       "tool",
-				"tool_call_id": call.ID,
-				"tool_name":    call.Function.Name,
-				"arguments":    string(result.Arguments),
-				"error":        result.Error,
-			})
-		}
-		recorder.ToolEnd(ctx, toolSpan, toolPayload)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case events <- StreamEvent{Type: "tool_end", ToolName: call.Function.Name, ToolCallID: call.ID, Error: result.Error}:
+		case events <- StreamEvent{Type: "tool_end", ToolName: call.Function.Name, ToolCallID: call.ID, Error: result.ErrorMessage()}:
 		}
 		logStatus := "tool_end"
-		if result.Error != "" {
+		if result.Error != nil {
 			logStatus = "tool_error"
 		}
 		log.Printf(
@@ -668,7 +652,7 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 			result.DurationMS,
 			string(result.Arguments),
 			resultText,
-			result.Error,
+			result.ErrorMessage(),
 		)
 
 		messages = append(messages, Message{
@@ -866,7 +850,7 @@ type ollamaEmbeddingResponse struct {
 }
 
 func buildMessages(history []domain.Message) []Message {
-	return buildMessagesWithToolNames(history, []string{"calculator", "get_current_time", "mock_web_search"})
+	return buildMessagesWithToolNames(history, []string{"calculator", "get_current_time"})
 }
 
 func buildMessagesWithToolNames(history []domain.Message, toolNames []string) []Message {

@@ -1,142 +1,29 @@
 package tools
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"log"
 	"strings"
 )
 
-var ErrMCPClientUnavailable = errors.New("mcp client is not available")
-
-type BuildOptions struct {
-	Config                Config
-	MCPClient             MCPClient
-	IgnoreMCPServerErrors bool
-}
-
-func BuildRegistry(ctx context.Context, options BuildOptions) (*Registry, error) {
-	registry, err := NewRegistry(
-		CalculatorTool(),
-		CurrentTimeTool(),
-		MockWebSearchTool(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	enabled := map[string]bool{}
-	for _, name := range options.Config.EnabledTools {
-		name = strings.TrimSpace(name)
-		if name != "" {
+func BuildCatalog(config Config) (*Catalog, error) {
+	catalog := DefaultCatalog()
+	enabled := make(map[string]bool, len(config.EnabledTools))
+	for _, name := range config.EnabledTools {
+		if name = strings.TrimSpace(name); name != "" {
 			enabled[name] = true
 		}
 	}
-
-	mcpClient := options.MCPClient
-	if mcpClient == nil {
-		mcpClient = NoopMCPClient{}
-	}
-	unavailableMCPServers := map[string]bool{}
-	for _, server := range options.Config.MCPServers {
-		if !server.Enabled {
-			continue
-		}
-		if strings.TrimSpace(server.ID) == "" {
-			return nil, errors.New("enabled mcp server id is required")
-		}
-		mcpTools, err := mcpClient.ListTools(ctx, server)
-		if err != nil {
-			if options.IgnoreMCPServerErrors {
-				log.Printf("mcp server %q unavailable; skipping tools: %v", server.ID, err)
-				unavailableMCPServers[server.ID] = true
-				continue
-			}
-			return nil, fmt.Errorf("list mcp tools from %q: %w", server.ID, err)
-		}
-		for _, mcpTool := range mcpTools {
-			tool, err := toolFromMCP(server.ID, mcpTool, mcpClient)
-			if err != nil {
-				return nil, fmt.Errorf("register mcp tool from %q: %w", server.ID, err)
-			}
-			if err := registry.Register(tool); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	for serverID := range unavailableMCPServers {
-		removeEnabledToolsForMCPServer(enabled, serverID)
-	}
-
-	if err := applyEnabledTools(registry, enabled); err != nil {
-		return nil, err
-	}
-
-	return registry, nil
-}
-
-func removeEnabledToolsForMCPServer(enabled map[string]bool, serverID string) {
-	prefix := strings.TrimSpace(serverID) + "__"
-	for name := range enabled {
-		if strings.HasPrefix(name, prefix) {
-			delete(enabled, name)
-		}
-	}
-}
-
-func applyEnabledTools(registry *Registry, enabled map[string]bool) error {
-	if len(enabled) == 0 {
-		for _, item := range registry.List() {
-			if err := registry.SetEnabled(item.Name, false); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	known := map[string]bool{}
-	for _, item := range registry.List() {
-		known[item.Name] = true
-		if err := registry.SetEnabled(item.Name, enabled[item.Name]); err != nil {
-			return err
+	installed := make(map[string]bool)
+	for _, item := range catalog.List() {
+		installed[item.Name] = true
+		if err := catalog.SetEnabled(item.Name, enabled[item.Name]); err != nil {
+			return nil, err
 		}
 	}
 	for name := range enabled {
-		if !known[name] {
-			return fmt.Errorf("enabled tool %q is not installed", name)
+		if !installed[name] {
+			return nil, fmt.Errorf("enabled tool %q is not installed", name)
 		}
 	}
-	return nil
-}
-
-func toolFromMCP(serverID string, mcpTool MCPTool, client MCPClient) (Tool, error) {
-	if strings.TrimSpace(mcpTool.Name) == "" {
-		return Tool{}, errors.New("mcp tool name is required")
-	}
-	if mcpTool.Parameters == nil {
-		return Tool{}, fmt.Errorf("mcp tool %q parameters are required", mcpTool.Name)
-	}
-	if _, err := json.Marshal(mcpTool.Parameters); err != nil {
-		return Tool{}, fmt.Errorf("mcp tool %q parameters must be json-compatible: %w", mcpTool.Name, err)
-	}
-
-	name := mcpRegistryName(serverID, mcpTool.Name)
-	originalName := mcpTool.Name
-	return Tool{
-		Name:        name,
-		Description: mcpTool.Description,
-		Parameters:  mcpTool.Parameters,
-		Source:      "mcp",
-		SourceID:    serverID,
-		Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
-			return client.CallTool(ctx, serverID, originalName, args)
-		},
-	}, nil
-}
-
-func mcpRegistryName(serverID string, toolName string) string {
-	return strings.TrimSpace(serverID) + "__" + strings.TrimSpace(toolName)
+	return catalog, nil
 }

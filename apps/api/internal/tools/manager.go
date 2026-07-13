@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"context"
 	"errors"
 	"os"
 	"sort"
@@ -14,99 +13,89 @@ type Manager struct {
 	mu         sync.RWMutex
 	configPath string
 	config     Config
-	registry   *Registry
-	mcpClient  MCPClient
+	catalog    *Catalog
 	modTime    time.Time
 }
 
-func NewManager(ctx context.Context, configPath string, mcpClient MCPClient) (*Manager, error) {
+func NewManager(configPath string) (*Manager, error) {
 	cfg, modTime, err := loadConfigWithModTime(configPath)
 	if err != nil {
 		return nil, err
 	}
-	registry, err := BuildRegistry(ctx, BuildOptions{Config: cfg, MCPClient: mcpClient, IgnoreMCPServerErrors: true})
+	catalog, err := BuildCatalog(cfg)
 	if err != nil {
 		return nil, err
 	}
 	return &Manager{
-		configPath: strings.TrimSpace(configPath),
-		config:     cfg,
-		registry:   registry,
-		mcpClient:  mcpClient,
-		modTime:    modTime,
+		configPath: strings.TrimSpace(configPath), config: cfg,
+		catalog: catalog, modTime: modTime,
 	}, nil
 }
 
-func (m *Manager) Registry(ctx context.Context) (*Registry, error) {
-	if err := m.ReloadIfChanged(ctx); err != nil {
+func (m *Manager) Catalog() (*Catalog, error) {
+	if err := m.ReloadIfChanged(); err != nil {
 		return nil, err
 	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.registry, nil
+	return m.catalog, nil
 }
 
-func (m *Manager) List(ctx context.Context) ([]ToolInfo, error) {
-	if err := m.ReloadIfChanged(ctx); err != nil {
+func (m *Manager) List() ([]ToolInfo, error) {
+	if err := m.ReloadIfChanged(); err != nil {
 		return nil, err
 	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.registry.List(), nil
+	return m.catalog.List(), nil
 }
 
-func (m *Manager) SetEnabled(ctx context.Context, name string, enabled bool) ([]ToolInfo, error) {
+func (m *Manager) SetEnabled(name string, enabled bool) ([]ToolInfo, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, errors.New("tool name is required")
 	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
-	if err := m.reloadIfChangedLocked(ctx); err != nil {
+	if err := m.reloadIfChangedLocked(); err != nil {
 		return nil, err
 	}
-
 	nextConfig := m.config
-	nextConfig.EnabledTools = nextEnabledNames(m.registry.List(), name, enabled)
+	nextConfig.EnabledTools = nextEnabledNames(m.catalog.List(), name, enabled)
 	if nextConfig.EnabledTools == nil {
 		return nil, errors.New("tool " + name + " not found")
 	}
 	if err := SaveConfig(m.configPath, nextConfig); err != nil {
 		return nil, err
 	}
-	if err := m.registry.SetEnabled(name, enabled); err != nil {
+	if err := m.catalog.SetEnabled(name, enabled); err != nil {
 		return nil, err
 	}
 	m.config = nextConfig
 	m.modTime = configModTime(m.configPath)
-	return m.registry.List(), nil
+	return m.catalog.List(), nil
 }
 
-func (m *Manager) ReloadIfChanged(ctx context.Context) error {
+func (m *Manager) ReloadIfChanged() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.reloadIfChangedLocked(ctx)
+	return m.reloadIfChangedLocked()
 }
 
-func (m *Manager) reloadIfChangedLocked(ctx context.Context) error {
+func (m *Manager) reloadIfChangedLocked() error {
 	modTime := configModTime(m.configPath)
 	if modTime.Equal(m.modTime) {
 		return nil
 	}
-
 	cfg, loadedModTime, err := loadConfigWithModTime(m.configPath)
 	if err != nil {
 		return err
 	}
-	registry, err := BuildRegistry(ctx, BuildOptions{Config: cfg, MCPClient: m.mcpClient, IgnoreMCPServerErrors: true})
+	catalog, err := BuildCatalog(cfg)
 	if err != nil {
 		return err
 	}
-	m.config = cfg
-	m.registry = registry
-	m.modTime = loadedModTime
+	m.config, m.catalog, m.modTime = cfg, catalog, loadedModTime
 	return nil
 }
 
@@ -135,8 +124,7 @@ func nextEnabledNames(items []ToolInfo, target string, enabled bool) []string {
 	for _, item := range items {
 		itemEnabled := item.Enabled
 		if item.Name == target {
-			found = true
-			itemEnabled = enabled
+			found, itemEnabled = true, enabled
 		}
 		if itemEnabled {
 			names = append(names, item.Name)

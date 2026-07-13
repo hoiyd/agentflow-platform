@@ -1,33 +1,22 @@
 package tools
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
 type Config struct {
-	EnabledTools []string          `json:"enabled_tools"`
-	MCPServers   []MCPServerConfig `json:"mcp_servers"`
-}
-
-type MCPServerConfig struct {
-	ID         string            `json:"id"`
-	Enabled    bool              `json:"enabled"`
-	Transport  string            `json:"transport"`
-	Command    string            `json:"command"`
-	Args       []string          `json:"args"`
-	Env        map[string]string `json:"env"`
-	URL        string            `json:"url,omitempty"`
-	Headers    map[string]string `json:"headers,omitempty"`
-	WorkingDir string            `json:"cwd,omitempty"`
+	EnabledTools []string `json:"enabled_tools"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		EnabledTools: []string{"calculator", "get_current_time", "mock_web_search"},
+		EnabledTools: []string{"calculator", "get_current_time"},
 	}
 }
 
@@ -36,7 +25,7 @@ func LoadConfig(path string) (Config, error) {
 		return DefaultConfig(), nil
 	}
 
-	bytes, err := os.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return DefaultConfig(), nil
@@ -45,8 +34,14 @@ func LoadConfig(path string) (Config, error) {
 	}
 
 	cfg := DefaultConfig()
-	if err := json.Unmarshal(bytes, &cfg); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&cfg); err != nil {
 		return Config{}, fmt.Errorf("parse tools config: %w", err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return Config{}, fmt.Errorf("parse tools config: unexpected trailing data")
 	}
 	if cfg.EnabledTools == nil {
 		cfg.EnabledTools = DefaultConfig().EnabledTools
@@ -59,11 +54,11 @@ func SaveConfig(path string, cfg Config) error {
 		return nil
 	}
 
-	bytes, err := json.MarshalIndent(cfg, "", "  ")
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode tools config: %w", err)
 	}
-	bytes = append(bytes, '\n')
+	data = append(data, '\n')
 
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -75,7 +70,7 @@ func SaveConfig(path string, cfg Config) error {
 		return fmt.Errorf("create temporary tools config: %w", err)
 	}
 	tmpPath := tmp.Name()
-	if _, err := tmp.Write(bytes); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("write temporary tools config: %w", err)

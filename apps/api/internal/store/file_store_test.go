@@ -90,7 +90,7 @@ func TestFileStoreMigratesDefaultAgentText(t *testing.T) {
       "name": "Planner Agent",
       "description": "Breaks ambiguous requests into ordered plans and tracks next actions.",
       "system_prompt": "You are AgentFlow's Planner Agent. Convert goals into clear, ordered plans with dependencies, risks, and next actions.",
-      "tools": ["get_current_time", "mock_web_search"],
+      "tools": ["get_current_time"],
       "created_at": "` + now.Format(time.RFC3339Nano) + `",
       "updated_at": "` + now.Format(time.RFC3339Nano) + `"
     }
@@ -567,7 +567,7 @@ func TestFileStoreCreateAgent(t *testing.T) {
 		Name:         "QA Agent",
 		Description:  "Checks answers.",
 		SystemPrompt: "Be strict.",
-		Tools:        []string{"calculator", "calculator", " mock_web_search "},
+		Tools:        []string{"calculator", "calculator", " get_current_time "},
 	})
 	if err != nil {
 		t.Fatalf("create agent: %v", err)

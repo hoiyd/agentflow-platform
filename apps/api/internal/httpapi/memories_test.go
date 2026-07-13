@@ -20,7 +20,7 @@ func TestRememberMessageCreatesSearchableEmbedding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID)
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

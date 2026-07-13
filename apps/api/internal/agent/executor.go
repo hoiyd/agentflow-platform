@@ -29,7 +29,7 @@ type ExecutorInput struct {
 	Agent             domain.Agent
 	History           []domain.Message
 	Latest            string
-	Registry          *tools.Registry
+	Catalog           *tools.Catalog
 	RunID             string
 	StepID            string
 	RetrievedMemories []domain.RetrievedMemory
@@ -61,7 +61,7 @@ func (e NativeExecutor) Stream(ctx context.Context, input ExecutorInput) (<-chan
 		input.Agent.SystemPrompt,
 		input.History,
 		input.Latest,
-		input.Registry,
+		input.Catalog,
 		e.trace,
 		input.RunID,
 		input.StepID,

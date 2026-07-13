@@ -50,13 +50,7 @@ func main() {
 		cfg.EmbeddingDimensions,
 		cfg.OpenAITimeout,
 	)
-	mcpClient := tools.NewRoutedMCPClient()
-	defer func() {
-		if err := mcpClient.Close(); err != nil {
-			log.Printf("close mcp client: %v", err)
-		}
-	}()
-	toolManager, err := tools.NewManager(context.Background(), cfg.ToolConfigPath, mcpClient)
+	toolManager, err := tools.NewManager(cfg.ToolConfigPath)
 	if err != nil {
 		log.Fatalf("create tools manager: %v", err)
 	}

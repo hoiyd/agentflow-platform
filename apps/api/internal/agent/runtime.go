@@ -33,9 +33,9 @@ type AutonomousLimits struct {
 }
 
 type PreparedRun struct {
-	Agent    domain.Agent
-	Run      domain.Run
-	Registry *tools.Registry
+	Agent   domain.Agent
+	Run     domain.Run
+	Catalog *tools.Catalog
 }
 
 func NewRuntime(store store.Store, openAI *openai.Client, tools *tools.Manager) *Runtime {
@@ -74,7 +74,7 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 		return PreparedRun{}, err
 	}
 
-	snapshot, err := r.captureRuntimeSnapshot(ctx, ChatModeSingle, agent, nil, executorKind)
+	snapshot, err := r.captureRuntimeSnapshot(ChatModeSingle, agent, nil, executorKind)
 	if err != nil {
 		return PreparedRun{}, err
 	}
@@ -90,13 +90,13 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 	r.publishRunLifecycle(ctx, run, domain.EventRunCreated, map[string]any{"status": domain.RunQueued})
 	r.publishRunLifecycle(ctx, run, domain.EventRunStarted, map[string]any{"status": run.Status})
 
-	restored, err := r.restoreRuntime(ctx, run)
+	restored, err := r.restoreRuntime(run)
 	if err != nil {
 		_, _ = r.FailRun(run.ID, err)
 		return PreparedRun{}, err
 	}
 
-	return PreparedRun{Agent: agent, Run: run, Registry: restored.registry}, nil
+	return PreparedRun{Agent: agent, Run: run, Catalog: restored.catalog}, nil
 }
 
 func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string, executorKind string) (<-chan openai.StreamEvent, <-chan error) {
@@ -111,9 +111,9 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 	}
 	executorKind = prepared.Agent.Executor
 	executor := r.executorFor(executorKind, client)
-	registry := prepared.Registry
-	if registry == nil {
-		registry, _ = tools.NewRegistry()
+	catalog := prepared.Catalog
+	if catalog == nil {
+		catalog, _ = tools.NewCatalog()
 	}
 	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, latest, prepared.Agent.MemoryEnabled, prepared.Agent.RetrievalEnabled, map[string]any{
 		"agent_id":           prepared.Agent.ID,
@@ -123,7 +123,7 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 		"memory_enabled":     prepared.Agent.MemoryEnabled,
 		"retrieval_enabled":  prepared.Agent.RetrievalEnabled,
 		"configured_tools":   prepared.Agent.Tools,
-		"enabled_tool_count": enabledToolCount(prepared.Registry),
+		"enabled_tool_count": enabledToolCount(prepared.Catalog),
 	})
 	go func() {
 		defer close(events)
@@ -136,7 +136,7 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 			History:        history,
 			Input:          latest,
 			ExecutorKind:   executor.Kind(),
-			Registry:       registry,
+			Catalog:        catalog,
 			Context: turnpkg.Context{
 				Memories: retrievedMemories,
 				Chunks:   retrievedChunks,
@@ -154,11 +154,11 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 	return events, errs
 }
 
-func enabledToolCount(registry *tools.Registry) int {
-	if registry == nil {
+func enabledToolCount(catalog *tools.Catalog) int {
+	if catalog == nil {
 		return 0
 	}
-	return len(registry.EnabledNames())
+	return len(catalog.EnabledNames())
 }
 
 func (r *Runtime) runEventSink() eventpkg.Sink { return eventpkg.StoreSink{Store: r.store} }

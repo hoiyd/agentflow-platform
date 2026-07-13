@@ -11,16 +11,18 @@ import (
 	"unicode"
 )
 
-func CalculatorTool() Tool {
-	return Tool{
-		Name:        "calculator",
-		Description: "Evaluate a basic arithmetic expression with +, -, *, /, and parentheses.",
-		Parameters: ObjectSchema(map[string]any{
-			"expression": map[string]any{
-				"type":        "string",
-				"description": "Arithmetic expression to evaluate, for example: (128 * 37) / 4",
-			},
-		}, []string{"expression"}),
+func CalculatorTool() Binding {
+	return Binding{
+		Descriptor: Descriptor{
+			Name:        "calculator",
+			Description: "Evaluate a basic arithmetic expression with +, -, *, /, and parentheses.",
+			Parameters: ObjectSchema(map[string]any{
+				"expression": map[string]any{
+					"type":        "string",
+					"description": "Arithmetic expression to evaluate, for example: (128 * 37) / 4",
+				},
+			}, []string{"expression"}),
+		},
 		Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
 			var input struct {
 				Expression string `json:"expression"`

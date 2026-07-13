@@ -2,10 +2,12 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/tools"
 )
 
 type agentConfigRequest struct {
@@ -41,6 +43,10 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		Executor:         domain.DefaultAgentExecutor,
 	}
 	applyAgentConfigRequest(&agent, req)
+	if err := h.validateAgentTools(agent.Tools); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	created, err := h.store.CreateAgent(agent)
 	if err != nil {
@@ -120,12 +126,36 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	agent := domain.NormalizeAgentConfig(existing)
 	applyAgentConfigRequest(&agent, req)
+	if err := h.validateAgentTools(agent.Tools); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	updated, err := h.store.UpdateAgent(agent)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) validateAgentTools(names []string) error {
+	catalog, err := h.currentToolCatalog()
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		if _, ok := catalog.Installed(strings.TrimSpace(name)); !ok {
+			return fmt.Errorf("tool %q is not installed", name)
+		}
+	}
+	return nil
+}
+
+func (h *Handler) currentToolCatalog() (*tools.Catalog, error) {
+	if h.tools != nil {
+		return h.tools.Catalog()
+	}
+	return tools.DefaultCatalog(), nil
 }
 
 func applyAgentConfigRequest(agent *domain.Agent, req agentConfigRequest) {
