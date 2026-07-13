@@ -1137,7 +1137,7 @@ func buildRunTraceSummary(run domain.Run, events []domain.RunEvent) domain.RunTr
 			}
 		case domain.EventToolCompleted, domain.EventToolFailed:
 			summary.ToolCalls++
-		case domain.EventModelFailed, domain.EventRetrievalFailed:
+		case domain.EventModelFailed, domain.EventRetrievalFailed, domain.EventMemorySyncFailed:
 			summary.ErrorCount++
 		}
 	}

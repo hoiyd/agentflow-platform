@@ -1,12 +1,13 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	memorypkg "agentflow-platform/apps/api/internal/memory"
 )
 
 func (h *Handler) createMemory(w http.ResponseWriter, r *http.Request) {
@@ -72,31 +73,11 @@ func (h *Handler) searchMemories(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
-func (h *Handler) rememberMessage(ctx context.Context, message domain.Message, runID string) error {
-	content := strings.TrimSpace(message.Content)
-	if content == "" {
-		return nil
+func (h *Handler) enqueueMemorySync(message domain.Message, runID string) {
+	if h.memorySyncer == nil {
+		return
 	}
-	embedding, err := h.openAI.EmbedText(ctx, content)
-	if err != nil {
-		return err
+	if err := h.memorySyncer.Enqueue(memorypkg.Job{RunID: strings.TrimSpace(runID), Message: message}); err != nil {
+		log.Printf("memory_sync_enqueue_failed run_id=%s message_id=%s error=%q", runID, message.ID, err.Error())
 	}
-	_, err = h.store.CreateMemory(domain.Memory{
-		ID:              "mem_msg_" + message.ID,
-		ConversationID:  message.ConversationID,
-		RunID:           strings.TrimSpace(runID),
-		SourceMessageID: message.ID,
-		Kind:            "message",
-		Content:         content,
-		Metadata: map[string]any{
-			"role": message.Role,
-		},
-		CreatedAt: message.CreatedAt,
-	}, domain.MemoryEmbedding{
-		Provider:   embedding.Provider,
-		Model:      embedding.Model,
-		Dimensions: len(embedding.Vector),
-		Embedding:  embedding.Vector,
-	})
-	return err
 }
