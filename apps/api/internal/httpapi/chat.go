@@ -22,6 +22,11 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "message is required")
 		return
 	}
+	reservation, ok := h.reserveRunCapacity(w)
+	if !ok {
+		return
+	}
+	defer reservation.Cancel()
 
 	conversationID := strings.TrimSpace(req.ConversationID)
 	if conversationID == "" {
@@ -38,6 +43,11 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "conversation not found")
 		return
 	}
+	releaseRun, ok := h.acquireRunSlot(w, r, reservation, conversationID)
+	if !ok {
+		return
+	}
+	defer releaseRun()
 
 	userMessage, err := h.store.AddMessage(conversationID, "user", req.Message)
 	if err != nil {
@@ -347,6 +357,16 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
+	reservation, admitted := h.reserveRunCapacity(w)
+	if !admitted {
+		return
+	}
+	defer reservation.Cancel()
+	releaseRun, admitted := h.acquireRunSlot(w, r, reservation, run.ConversationID)
+	if !admitted {
+		return
+	}
+	defer releaseRun()
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -433,6 +453,16 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run is not resumable")
 		return
 	}
+	reservation, admitted := h.reserveRunCapacity(w)
+	if !admitted {
+		return
+	}
+	defer reservation.Cancel()
+	releaseRun, admitted := h.acquireRunSlot(w, r, reservation, run.ConversationID)
+	if !admitted {
+		return
+	}
+	defer releaseRun()
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {

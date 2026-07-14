@@ -16,6 +16,7 @@ func CalculatorTool() Binding {
 		Descriptor: Descriptor{
 			Name:        "calculator",
 			Description: "Evaluate a basic arithmetic expression with +, -, *, /, and parentheses.",
+			Concurrency: ConcurrencyPolicy{Mode: ConcurrencyReadOnly},
 			Parameters: ObjectSchema(map[string]any{
 				"expression": map[string]any{
 					"type":        "string",

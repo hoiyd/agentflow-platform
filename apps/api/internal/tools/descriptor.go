@@ -7,9 +7,23 @@ import (
 )
 
 type Descriptor struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Parameters  map[string]any    `json:"parameters"`
+	Concurrency ConcurrencyPolicy `json:"concurrency,omitempty"`
+}
+
+type ConcurrencyMode string
+
+const (
+	ConcurrencySerial   ConcurrencyMode = "serial"
+	ConcurrencyReadOnly ConcurrencyMode = "read_only"
+	ConcurrencyKeyed    ConcurrencyMode = "keyed"
+)
+
+type ConcurrencyPolicy struct {
+	Mode        ConcurrencyMode `json:"mode,omitempty"`
+	KeyArgument string          `json:"key_argument,omitempty"`
 }
 
 type Handler func(ctx context.Context, args json.RawMessage) (any, error)

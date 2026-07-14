@@ -65,9 +65,27 @@ EMBEDDING_MODEL=embeddinggemma
 EMBEDDING_DIMENSIONS=1536
 OPENAI_REQUEST_TIMEOUT=5m
 
+MAX_CONCURRENT_RUNS=8
+RUN_QUEUE_SIZE=32
+RUN_QUEUE_WAIT_TIMEOUT=30s
+MAX_CONCURRENT_MODEL_REQUESTS=8
+MODEL_REQUESTS_PER_MINUTE=60
+MODEL_TOKENS_PER_MINUTE=120000
+
 ROUTER_MODE=auto
 ALLOWED_ORIGINS=http://localhost:3000
 ```
+
+Concurrency settings control different layers:
+
+- `MAX_CONCURRENT_RUNS` limits active Agent runs. Runs for the same conversation remain single-writer.
+- `RUN_QUEUE_SIZE` adds bounded waiting capacity beyond active runs. Excess requests receive `429` with `Retry-After`.
+- `RUN_QUEUE_WAIT_TIMEOUT` limits queue waiting time. Timed-out requests receive `503` with `Retry-After`.
+- `MAX_CONCURRENT_MODEL_REQUESTS` limits model HTTP requests currently in flight across Chat and Embeddings. It is a request limit, not a model-count or connection-pool setting. Streaming responses hold a slot until the response body closes.
+- `MODEL_REQUESTS_PER_MINUTE` is the per-API-key request token-bucket capacity and refill rate.
+- `MODEL_TOKENS_PER_MINUTE` is the per-API-key approximate input-token bucket based on serialized request size; streamed output tokens are not included.
+
+Set either per-minute value to `0` to disable that token bucket.
 
 If `OPENAI_API_KEY` is empty, chat uses deterministic local fallback for verification. Embeddings call Ollama when `EMBEDDING_BASE_URL` points to `http://localhost:11434/api/embed`; otherwise they use deterministic local fallback. The frontend search panel shows whether RAG search used `ollama / <model>`, `local / local_hash_embedding`, or an OpenAI-compatible embedding provider.
 

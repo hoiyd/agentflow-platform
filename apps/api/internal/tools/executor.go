@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -13,6 +15,7 @@ import (
 const (
 	DefaultExecutionTimeout = 30 * time.Second
 	DefaultMaxResultBytes   = 20_000
+	DefaultMaxConcurrency   = 4
 )
 
 type ExecutionRequest struct {
@@ -45,14 +48,16 @@ type ExecutionTracer interface {
 }
 
 type ExecutorOptions struct {
-	DefaultPolicy ExecutionPolicy
-	Tracer        ExecutionTracer
+	DefaultPolicy  ExecutionPolicy
+	Tracer         ExecutionTracer
+	MaxConcurrency int
 }
 
 type Executor struct {
-	catalog       *Catalog
-	defaultPolicy ExecutionPolicy
-	tracer        ExecutionTracer
+	catalog        *Catalog
+	defaultPolicy  ExecutionPolicy
+	tracer         ExecutionTracer
+	maxConcurrency int
 }
 
 func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
@@ -63,7 +68,113 @@ func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
 	if policy.MaxResultBytes <= 0 {
 		policy.MaxResultBytes = DefaultMaxResultBytes
 	}
-	return &Executor{catalog: catalog, defaultPolicy: policy, tracer: options.Tracer}
+	maxConcurrency := options.MaxConcurrency
+	if maxConcurrency <= 0 {
+		maxConcurrency = DefaultMaxConcurrency
+	}
+	return &Executor{catalog: catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency}
+}
+
+// ExecuteBatch preserves input order. A serial or unresolved tool makes the whole
+// batch serial; explicitly read-only and distinct keyed groups may run in parallel.
+func (e *Executor) ExecuteBatch(ctx context.Context, requests []ExecutionRequest) []ExecutionResult {
+	if len(requests) == 0 {
+		return nil
+	}
+	groups, parallel := e.concurrentGroups(requests)
+	if !parallel || len(groups) == 1 {
+		return e.executeSequential(ctx, requests)
+	}
+
+	results := make([]ExecutionResult, len(requests))
+	jobs := make(chan []indexedExecutionRequest)
+	workerCount := min(e.maxConcurrency, len(groups))
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for group := range jobs {
+				for _, item := range group {
+					results[item.index] = e.Execute(ctx, item.request)
+				}
+			}
+		}()
+	}
+	for _, group := range groups {
+		jobs <- group
+	}
+	close(jobs)
+	workers.Wait()
+	return results
+}
+
+type indexedExecutionRequest struct {
+	index   int
+	request ExecutionRequest
+}
+
+func (e *Executor) executeSequential(ctx context.Context, requests []ExecutionRequest) []ExecutionResult {
+	results := make([]ExecutionResult, len(requests))
+	for index, request := range requests {
+		results[index] = e.Execute(ctx, request)
+	}
+	return results
+}
+
+func (e *Executor) concurrentGroups(requests []ExecutionRequest) ([][]indexedExecutionRequest, bool) {
+	if e.catalog == nil {
+		return nil, false
+	}
+	groups := make([][]indexedExecutionRequest, 0, len(requests))
+	keyedGroups := make(map[string]int)
+	for index, request := range requests {
+		binding, ok := e.catalog.Resolve(request.Tool)
+		if !ok {
+			return nil, false
+		}
+		item := indexedExecutionRequest{index: index, request: request}
+		switch binding.Descriptor.Concurrency.Mode {
+		case ConcurrencyReadOnly:
+			groups = append(groups, []indexedExecutionRequest{item})
+		case ConcurrencyKeyed:
+			key, ok := concurrencyKey(binding.Descriptor.Concurrency, request.Arguments)
+			if !ok {
+				return nil, false
+			}
+			groupIndex, exists := keyedGroups[key]
+			if !exists {
+				groupIndex = len(groups)
+				keyedGroups[key] = groupIndex
+				groups = append(groups, nil)
+			}
+			groups[groupIndex] = append(groups[groupIndex], item)
+		default:
+			return nil, false
+		}
+	}
+	return groups, true
+}
+
+func concurrencyKey(policy ConcurrencyPolicy, arguments json.RawMessage) (string, bool) {
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(normalizeArguments(arguments), &object); err != nil {
+		return "", false
+	}
+	raw := bytes.TrimSpace(object[policy.KeyArgument])
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return "", false
+	}
+	var scalar any
+	if err := json.Unmarshal(raw, &scalar); err != nil {
+		return "", false
+	}
+	switch scalar.(type) {
+	case string, float64, bool:
+		return strings.TrimSpace(policy.KeyArgument) + ":" + string(raw), true
+	default:
+		return "", false
+	}
 }
 
 func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) (result ExecutionResult) {

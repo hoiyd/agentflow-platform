@@ -12,6 +12,7 @@ func CurrentTimeTool() Binding {
 		Descriptor: Descriptor{
 			Name:        "get_current_time",
 			Description: "Return the current time for an IANA timezone.",
+			Concurrency: ConcurrencyPolicy{Mode: ConcurrencyReadOnly},
 			Parameters: ObjectSchema(map[string]any{
 				"timezone": map[string]any{
 					"type":        "string",
