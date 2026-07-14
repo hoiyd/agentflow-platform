@@ -7,16 +7,18 @@ import (
 	"time"
 )
 
-func CurrentTimeTool() Tool {
-	return Tool{
-		Name:        "get_current_time",
-		Description: "Return the current time for an IANA timezone.",
-		Parameters: ObjectSchema(map[string]any{
-			"timezone": map[string]any{
-				"type":        "string",
-				"description": "IANA timezone such as Asia/Shanghai or America/Los_Angeles.",
-			},
-		}, []string{"timezone"}),
+func CurrentTimeTool() Binding {
+	return Binding{
+		Descriptor: Descriptor{
+			Name:        "get_current_time",
+			Description: "Return the current time for an IANA timezone.",
+			Parameters: ObjectSchema(map[string]any{
+				"timezone": map[string]any{
+					"type":        "string",
+					"description": "IANA timezone such as Asia/Shanghai or America/Los_Angeles.",
+				},
+			}, []string{"timezone"}),
+		},
 		Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
 			var input struct {
 				Timezone string `json:"timezone"`

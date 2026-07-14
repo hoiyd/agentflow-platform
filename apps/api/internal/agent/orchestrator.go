@@ -86,7 +86,7 @@ func (r *Runtime) PrepareCollaborationRun(ctx context.Context, agentID string, c
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
-	snapshot, err := r.captureRuntimeSnapshot(ctx, ChatModeMultiAgent, agent, agents, "")
+	snapshot, err := r.captureRuntimeSnapshot(ChatModeMultiAgent, agent, agents, "")
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
@@ -151,7 +151,7 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			return
 		}
 
-		restored, err := r.restoreRuntime(ctx, run)
+		restored, err := r.restoreRuntime(run)
 		if err != nil {
 			errs <- err
 			return

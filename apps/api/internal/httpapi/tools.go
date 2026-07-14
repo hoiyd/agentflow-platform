@@ -7,7 +7,7 @@ import (
 )
 
 func (h *Handler) listTools(w http.ResponseWriter, r *http.Request) {
-	items, err := h.tools.List(r.Context())
+	items, err := h.tools.List()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -28,7 +28,7 @@ func (h *Handler) setToolEnabled(w http.ResponseWriter, r *http.Request, enabled
 		return
 	}
 
-	items, err := h.tools.SetEnabled(r.Context(), name, enabled)
+	items, err := h.tools.SetEnabled(name, enabled)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
 		return

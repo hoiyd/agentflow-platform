@@ -47,7 +47,7 @@ Implemented product areas:
 - streaming chat and persisted conversations
 - single-agent, multi-agent, and autonomous run modes
 - run traces, collaboration steps, replay, continue/resume/cancel
-- built-in and MCP tools
+- built-in tool catalog and guarded execution
 - persistent semantic memory
 - pgvector-backed memory and RAG search
 - Knowledge UI with text import, `.txt` upload, Markdown upload, document detail, search, and delete

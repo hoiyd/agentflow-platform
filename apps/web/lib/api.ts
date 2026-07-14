@@ -75,8 +75,6 @@ export type ToolInfo = {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-  source: "builtin" | "mcp" | string;
-  source_id?: string;
   enabled: boolean;
 };
 

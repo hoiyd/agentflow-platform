@@ -124,8 +124,6 @@ type RuntimeToolSnapshot struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Parameters  map[string]any `json:"parameters"`
-	Source      string         `json:"source"`
-	SourceID    string         `json:"source_id,omitempty"`
 }
 
 type RuntimeLimitsSnapshot struct {

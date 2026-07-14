@@ -25,7 +25,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if err := tools.SaveConfig(toolPath, tools.DefaultConfig()); err != nil {
 		t.Fatalf("save tools config: %v", err)
 	}
-	manager, err := tools.NewManager(ctx, toolPath, nil)
+	manager, err := tools.NewManager(toolPath)
 	if err != nil {
 		t.Fatalf("new tools manager: %v", err)
 	}
@@ -66,18 +66,18 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if _, err := fileStore.UpdateAgent(agent); err != nil {
 		t.Fatalf("update agent: %v", err)
 	}
-	if _, err := manager.SetEnabled(ctx, "calculator", false); err != nil {
+	if _, err := manager.SetEnabled("calculator", false); err != nil {
 		t.Fatalf("disable calculator: %v", err)
 	}
 
-	restored, err := runtime.restoreRuntime(ctx, prepared.Run)
+	restored, err := runtime.restoreRuntime(prepared.Run)
 	if err != nil {
 		t.Fatalf("restore runtime: %v", err)
 	}
 	if restored.agent.SystemPrompt != "original prompt" {
 		t.Fatalf("expected frozen prompt, got %q", restored.agent.SystemPrompt)
 	}
-	if _, ok := restored.registry.Get("calculator"); !ok {
+	if _, ok := restored.catalog.Resolve("calculator"); !ok {
 		t.Fatal("expected frozen tool to remain available after current config disabled it")
 	}
 	identity := restored.client.RuntimeIdentity()
@@ -86,14 +86,14 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	}
 
 	prepared.Run.RuntimeSnapshot.Tools[0].Description = "changed tool contract"
-	if _, err := runtime.restoreRuntime(ctx, prepared.Run); err == nil || !strings.Contains(err.Error(), "no longer matches") {
+	if _, err := runtime.restoreRuntime(prepared.Run); err == nil || !strings.Contains(err.Error(), "no longer matches") {
 		t.Fatalf("expected changed tool definition to be rejected, got %v", err)
 	}
 }
 
 func TestRestoreRuntimeRejectsLegacyRunWithoutSnapshot(t *testing.T) {
 	runtime := &Runtime{}
-	_, err := runtime.restoreRuntime(context.Background(), domain.Run{ID: "legacy"})
+	_, err := runtime.restoreRuntime(domain.Run{ID: "legacy"})
 	if !strings.Contains(err.Error(), "run cannot be resumed safely") {
 		t.Fatalf("expected explicit legacy run error, got %v", err)
 	}

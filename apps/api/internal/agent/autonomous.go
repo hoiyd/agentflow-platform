@@ -46,7 +46,7 @@ func (r *Runtime) PrepareAutonomousRun(ctx context.Context, agentID string, conv
 		return PreparedCollaborationRun{}, err
 	}
 
-	snapshot, err := r.captureRuntimeSnapshot(ctx, ChatModeAutonomous, agent, nil, "")
+	snapshot, err := r.captureRuntimeSnapshot(ChatModeAutonomous, agent, nil, "")
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
@@ -111,7 +111,7 @@ func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput 
 			return
 		}
 
-		restored, err := r.restoreRuntime(ctx, run)
+		restored, err := r.restoreRuntime(run)
 		if err != nil {
 			errs <- err
 			return
@@ -177,7 +177,7 @@ func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string,
 			errs <- err
 			return
 		}
-		restored, err := r.restoreRuntime(ctx, run)
+		restored, err := r.restoreRuntime(run)
 		if err != nil {
 			errs <- err
 			return

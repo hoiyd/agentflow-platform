@@ -38,7 +38,7 @@ type Request struct {
 	Input          string
 	ExecutorKind   string
 	ModelMode      ModelMode
-	Registry       *tools.Registry
+	Catalog        *tools.Catalog
 	Context        Context
 	Metadata       map[string]any
 	Sink           eventpkg.Sink

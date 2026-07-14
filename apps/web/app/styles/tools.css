@@ -28,7 +28,7 @@
 
 .tool-card h3 {
   color: var(--ink);
-  margin: 0 0 4px;
+	margin: 0;
   font-size: 16px;
   font-weight: 650;
 }
@@ -71,4 +71,3 @@
   height: 18px;
   accent-color: var(--accent);
 }
-

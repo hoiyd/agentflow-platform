@@ -70,7 +70,7 @@ func TestCreateAgentConfigAPI(t *testing.T) {
 		"name": "Resume Reviewer",
 		"description": "Reviews resumes against job descriptions.",
 		"system_prompt": "Review resume evidence.",
-		"tools": ["mock_web_search"],
+		"tools": ["get_current_time"],
 		"memory_enabled": true,
 		"retrieval_enabled": true,
 		"executor": "native"
@@ -90,6 +90,25 @@ func TestCreateAgentConfigAPI(t *testing.T) {
 	}
 	if !agent.MemoryEnabled || !agent.RetrievalEnabled || agent.Executor != domain.DefaultAgentExecutor {
 		t.Fatalf("expected created runtime config, got %#v", agent)
+	}
+}
+
+func TestCreateAgentRejectsUnavailableTool(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	handler := &Handler{store: fileStore}
+	body := []byte(`{
+		"name": "Invalid tool agent",
+		"system_prompt": "Use tools.",
+		"tools": ["removed_tool"]
+	}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/agents", bytes.NewReader(body))
+	recorder := httptest.NewRecorder()
+	handler.createAgent(recorder, req)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 

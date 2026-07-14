@@ -1322,10 +1322,6 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                   <div className="tool-card-header">
                     <div>
                       <h3>{tool.name}</h3>
-                      <div className="tool-source">
-                        {tool.source}
-                        {tool.source_id ? ` · ${tool.source_id}` : ""}
-                      </div>
                     </div>
                     <label className="tool-toggle">
                       <input

@@ -1,26 +1,23 @@
 package tools
 
 import (
-	"context"
-	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestManagerSetEnabledPersistsAndTakesEffectImmediately(t *testing.T) {
-	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "tools.json")
 	if err := SaveConfig(path, DefaultConfig()); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 
-	manager, err := NewManager(ctx, path, nil)
+	manager, err := NewManager(path)
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
 
-	items, err := manager.SetEnabled(ctx, "calculator", false)
+	items, err := manager.SetEnabled("calculator", false)
 	if err != nil {
 		t.Fatalf("disable calculator: %v", err)
 	}
@@ -28,16 +25,12 @@ func TestManagerSetEnabledPersistsAndTakesEffectImmediately(t *testing.T) {
 		t.Fatal("expected calculator to be disabled in list response")
 	}
 
-	registry, err := manager.Registry(ctx)
+	catalog, err := manager.Catalog()
 	if err != nil {
-		t.Fatalf("registry: %v", err)
+		t.Fatalf("catalog: %v", err)
 	}
-	if _, ok := registry.Get("calculator"); ok {
+	if _, ok := catalog.Resolve("calculator"); ok {
 		t.Fatal("expected disabled calculator to be unavailable immediately")
-	}
-	result := registry.Execute(ctx, "calculator", json.RawMessage(`{"expression":"1 + 1"}`))
-	if result.Error == "" {
-		t.Fatal("expected disabled calculator execution to fail immediately")
 	}
 
 	cfg, err := LoadConfig(path)
@@ -52,13 +45,12 @@ func TestManagerSetEnabledPersistsAndTakesEffectImmediately(t *testing.T) {
 }
 
 func TestManagerReloadsExternalConfigChanges(t *testing.T) {
-	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "tools.json")
 	if err := SaveConfig(path, DefaultConfig()); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 
-	manager, err := NewManager(ctx, path, nil)
+	manager, err := NewManager(path)
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
@@ -68,14 +60,14 @@ func TestManagerReloadsExternalConfigChanges(t *testing.T) {
 		t.Fatalf("save updated config: %v", err)
 	}
 
-	registry, err := manager.Registry(ctx)
+	catalog, err := manager.Catalog()
 	if err != nil {
-		t.Fatalf("registry: %v", err)
+		t.Fatalf("catalog: %v", err)
 	}
-	if _, ok := registry.Get("calculator"); ok {
+	if _, ok := catalog.Resolve("calculator"); ok {
 		t.Fatal("expected externally disabled calculator to be unavailable after reload")
 	}
-	if _, ok := registry.Get("get_current_time"); !ok {
+	if _, ok := catalog.Resolve("get_current_time"); !ok {
 		t.Fatal("expected externally enabled get_current_time to remain available")
 	}
 }

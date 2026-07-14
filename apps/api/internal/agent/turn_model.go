@@ -27,7 +27,7 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		Agent:             request.Agent,
 		History:           request.History,
 		Latest:            request.Input,
-		Registry:          request.Registry,
+		Catalog:           request.Catalog,
 		RunID:             request.RunID,
 		StepID:            request.StepID,
 		RetrievedMemories: request.Context.Memories,

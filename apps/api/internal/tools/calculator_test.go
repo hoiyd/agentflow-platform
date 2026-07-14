@@ -7,11 +7,11 @@ import (
 )
 
 func TestCalculatorTool(t *testing.T) {
-	registry := DefaultRegistry()
+	catalog := DefaultCatalog()
 	args := json.RawMessage(`{"expression":"128 * 37 + (10 / 2)"}`)
 
-	result := registry.Execute(context.Background(), "calculator", args)
-	if result.Error != "" {
+	result := NewExecutor(catalog, ExecutorOptions{}).Execute(context.Background(), ExecutionRequest{Tool: "calculator", Arguments: args})
+	if result.Error != nil {
 		t.Fatalf("unexpected tool error: %s", result.Error)
 	}
 

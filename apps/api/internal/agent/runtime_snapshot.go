@@ -2,7 +2,6 @@ package agent
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,13 +20,13 @@ type restoredRuntime struct {
 	mode            string
 	agent           domain.Agent
 	candidateAgents []domain.Agent
-	registry        *tools.Registry
+	catalog         *tools.Catalog
 	client          *openai.Client
 	routerMode      string
 }
 
-func (r *Runtime) captureRuntimeSnapshot(ctx context.Context, mode string, agent domain.Agent, candidates []domain.Agent, executorOverride string) (domain.RuntimeSnapshot, error) {
-	registry, err := r.currentRegistry(ctx)
+func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candidates []domain.Agent, executorOverride string) (domain.RuntimeSnapshot, error) {
+	catalog, err := r.currentCatalog()
 	if err != nil {
 		return domain.RuntimeSnapshot{}, err
 	}
@@ -42,7 +41,7 @@ func (r *Runtime) captureRuntimeSnapshot(ctx context.Context, mode string, agent
 		candidateSnapshots = append(candidateSnapshots, snapshotAgent(candidate))
 		toolNames = append(toolNames, candidate.Tools...)
 	}
-	toolSnapshots := snapshotTools(registry, toolNames)
+	toolSnapshots := snapshotTools(catalog, toolNames)
 	identity := r.openAI.RuntimeIdentity()
 	snapshot := domain.RuntimeSnapshot{
 		SchemaVersion:   domain.CurrentRuntimeSnapshotVersion,
@@ -69,11 +68,11 @@ func (r *Runtime) captureRuntimeSnapshot(ctx context.Context, mode string, agent
 	return snapshot, nil
 }
 
-func (r *Runtime) currentRegistry(ctx context.Context) (*tools.Registry, error) {
+func (r *Runtime) currentCatalog() (*tools.Catalog, error) {
 	if r.tools == nil {
-		return tools.DefaultRegistry(), nil
+		return tools.DefaultCatalog(), nil
 	}
-	return r.tools.Registry(ctx)
+	return r.tools.Catalog()
 }
 
 func snapshotAgent(agent domain.Agent) domain.RuntimeAgentSnapshot {
@@ -97,7 +96,7 @@ func restoreAgent(snapshot domain.RuntimeAgentSnapshot) domain.Agent {
 	}
 }
 
-func snapshotTools(registry *tools.Registry, names []string) []domain.RuntimeToolSnapshot {
+func snapshotTools(catalog *tools.Catalog, names []string) []domain.RuntimeToolSnapshot {
 	seen := map[string]bool{}
 	items := make([]domain.RuntimeToolSnapshot, 0, len(names))
 	for _, name := range names {
@@ -106,29 +105,29 @@ func snapshotTools(registry *tools.Registry, names []string) []domain.RuntimeToo
 			continue
 		}
 		seen[name] = true
-		tool, ok := registry.Get(name)
+		binding, ok := catalog.Resolve(name)
 		if !ok {
 			continue
 		}
 		items = append(items, domain.RuntimeToolSnapshot{
-			Name: tool.Name, Description: tool.Description, Parameters: tool.Parameters,
-			Source: tool.Source, SourceID: tool.SourceID,
+			Name: binding.Descriptor.Name, Description: binding.Descriptor.Description,
+			Parameters: binding.Descriptor.Parameters,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
 	return items
 }
 
-func (r *Runtime) restoreRuntime(ctx context.Context, run domain.Run) (restoredRuntime, error) {
+func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 	if err := validateRuntimeSnapshot(run.RuntimeSnapshot); err != nil {
 		return restoredRuntime{}, fmt.Errorf("%w for run %s: %v; run cannot be resumed safely", ErrRuntimeSnapshotUnavailable, run.ID, err)
 	}
 	snapshot := run.RuntimeSnapshot
-	current, err := r.currentRegistry(ctx)
+	current, err := r.currentCatalog()
 	if err != nil {
 		return restoredRuntime{}, err
 	}
-	restoredTools := make([]tools.Tool, 0, len(snapshot.Tools))
+	restoredBindings := make([]tools.Binding, 0, len(snapshot.Tools))
 	for _, frozen := range snapshot.Tools {
 		installed, ok := current.Installed(frozen.Name)
 		if !ok {
@@ -137,9 +136,9 @@ func (r *Runtime) restoreRuntime(ctx context.Context, run domain.Run) (restoredR
 		if !toolDefinitionMatches(installed, frozen) {
 			return restoredRuntime{}, fmt.Errorf("frozen tool %q no longer matches its captured definition", frozen.Name)
 		}
-		restoredTools = append(restoredTools, installed)
+		restoredBindings = append(restoredBindings, installed)
 	}
-	registry, err := tools.NewRegistry(restoredTools...)
+	catalog, err := tools.NewCatalog(restoredBindings...)
 	if err != nil {
 		return restoredRuntime{}, err
 	}
@@ -153,7 +152,7 @@ func (r *Runtime) restoreRuntime(ctx context.Context, run domain.Run) (restoredR
 	}
 	return restoredRuntime{
 		mode: snapshot.Mode, agent: restoreAgent(snapshot.Agent), candidateAgents: candidates,
-		registry: registry, client: client, routerMode: NormalizeRouterMode(snapshot.RouterMode),
+		catalog: catalog, client: client, routerMode: NormalizeRouterMode(snapshot.RouterMode),
 	}, nil
 }
 
@@ -183,10 +182,10 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	return nil
 }
 
-func toolDefinitionMatches(installed tools.Tool, frozen domain.RuntimeToolSnapshot) bool {
+func toolDefinitionMatches(installed tools.Binding, frozen domain.RuntimeToolSnapshot) bool {
 	currentJSON, err := json.Marshal(domain.RuntimeToolSnapshot{
-		Name: installed.Name, Description: installed.Description, Parameters: installed.Parameters,
-		Source: installed.Source, SourceID: installed.SourceID,
+		Name: installed.Descriptor.Name, Description: installed.Descriptor.Description,
+		Parameters: installed.Descriptor.Parameters,
 	})
 	if err != nil {
 		return false
