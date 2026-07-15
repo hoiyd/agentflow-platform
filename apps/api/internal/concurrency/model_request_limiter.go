@@ -4,63 +4,65 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"agentflow-platform/apps/api/internal/modelrequest"
 )
 
-var ErrTokenLimitExceeded = errors.New("estimated request tokens exceed the configured token bucket capacity")
-
-type ModelOptions struct {
+type ModelRequestLimits struct {
 	MaxConcurrent     int
 	RequestsPerPeriod int
 	TokensPerPeriod   int
 	RatePeriod        time.Duration
 }
 
-type ModelGovernor struct {
+// ModelRequestLimiter applies concurrency and per-key rate limits to each
+// physical model HTTP request, including retry attempts.
+type ModelRequestLimiter struct {
 	global chan struct{}
 	period time.Duration
 	rpm    int
 	tpm    int
 
 	mu   sync.Mutex
-	keys map[string]*keyLimiter
+	keys map[string]*apiKeyLimiter
 }
 
-func NewModelGovernor(options ModelOptions) *ModelGovernor {
-	if options.MaxConcurrent <= 0 {
-		options.MaxConcurrent = 1
+var _ modelrequest.Limiter = (*ModelRequestLimiter)(nil)
+
+func NewModelRequestLimiter(limits ModelRequestLimits) *ModelRequestLimiter {
+	if limits.MaxConcurrent <= 0 {
+		limits.MaxConcurrent = 1
 	}
-	if options.RatePeriod <= 0 {
-		options.RatePeriod = time.Minute
+	if limits.RatePeriod <= 0 {
+		limits.RatePeriod = time.Minute
 	}
-	return &ModelGovernor{
-		global: make(chan struct{}, options.MaxConcurrent),
-		period: options.RatePeriod,
-		rpm:    options.RequestsPerPeriod,
-		tpm:    options.TokensPerPeriod,
-		keys:   make(map[string]*keyLimiter),
+	return &ModelRequestLimiter{
+		global: make(chan struct{}, limits.MaxConcurrent),
+		period: limits.RatePeriod,
+		rpm:    limits.RequestsPerPeriod,
+		tpm:    limits.TokensPerPeriod,
+		keys:   make(map[string]*apiKeyLimiter),
 	}
 }
 
-func (g *ModelGovernor) Acquire(ctx context.Context, apiKey string, estimatedTokens int) (func(), error) {
-	if g == nil {
+func (l *ModelRequestLimiter) AcquireRequest(ctx context.Context, apiKey string, estimatedTokens int) (func(), error) {
+	if l == nil {
 		return func() {}, nil
 	}
 	if estimatedTokens < 1 {
 		estimatedTokens = 1
 	}
-	if strings.TrimSpace(apiKey) != "" && (g.rpm > 0 || g.tpm > 0) {
-		if err := g.keyLimiter(apiKey).take(ctx, estimatedTokens); err != nil {
+	if strings.TrimSpace(apiKey) != "" && (l.rpm > 0 || l.tpm > 0) {
+		if err := l.apiKeyLimiter(apiKey).take(ctx, estimatedTokens); err != nil {
 			return nil, err
 		}
 	}
 
 	select {
-	case g.global <- struct{}{}:
+	case l.global <- struct{}{}:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -68,35 +70,35 @@ func (g *ModelGovernor) Acquire(ctx context.Context, apiKey string, estimatedTok
 	var once sync.Once
 	return func() {
 		once.Do(func() {
-			<-g.global
+			<-l.global
 		})
 	}, nil
 }
 
-func (g *ModelGovernor) keyLimiter(apiKey string) *keyLimiter {
+func (l *ModelRequestLimiter) apiKeyLimiter(apiKey string) *apiKeyLimiter {
 	digest := sha256.Sum256([]byte(apiKey))
 	keyID := hex.EncodeToString(digest[:])
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if limiter := g.keys[keyID]; limiter != nil {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if limiter := l.keys[keyID]; limiter != nil {
 		return limiter
 	}
 	now := time.Now()
-	limiter := &keyLimiter{
-		requests: newTokenBucket(g.rpm, g.period, now),
-		tokens:   newTokenBucket(g.tpm, g.period, now),
+	limiter := &apiKeyLimiter{
+		requests: newTokenBucket(l.rpm, l.period, now),
+		tokens:   newTokenBucket(l.tpm, l.period, now),
 	}
-	g.keys[keyID] = limiter
+	l.keys[keyID] = limiter
 	return limiter
 }
 
-type keyLimiter struct {
+type apiKeyLimiter struct {
 	mu       sync.Mutex
 	requests tokenBucket
 	tokens   tokenBucket
 }
 
-func (l *keyLimiter) take(ctx context.Context, tokenCost int) error {
+func (l *apiKeyLimiter) take(ctx context.Context, tokenCost int) error {
 	for {
 		now := time.Now()
 		l.mu.Lock()
@@ -104,7 +106,7 @@ func (l *keyLimiter) take(ctx context.Context, tokenCost int) error {
 		tokenWait, tokenOK := l.tokens.waitDuration(now, float64(tokenCost))
 		if !tokenOK {
 			l.mu.Unlock()
-			return fmt.Errorf("%w: estimated=%d", ErrTokenLimitExceeded, tokenCost)
+			return &modelrequest.TokenLimitError{EstimatedTokens: tokenCost, Capacity: int(l.tokens.capacity)}
 		}
 		if requestWait <= 0 && tokenWait <= 0 {
 			l.requests.consume(1)

@@ -71,6 +71,9 @@ RUN_QUEUE_WAIT_TIMEOUT=30s
 MAX_CONCURRENT_MODEL_REQUESTS=8
 MODEL_REQUESTS_PER_MINUTE=60
 MODEL_TOKENS_PER_MINUTE=120000
+MODEL_RETRY_MAX_ATTEMPTS=3
+MODEL_RETRY_BASE_DELAY=500ms
+MODEL_RETRY_MAX_DELAY=5s
 
 ROUTER_MODE=auto
 ALLOWED_ORIGINS=http://localhost:3000
@@ -84,8 +87,13 @@ Concurrency settings control different layers:
 - `MAX_CONCURRENT_MODEL_REQUESTS` limits model HTTP requests currently in flight across Chat and Embeddings. It is a request limit, not a model-count or connection-pool setting. Streaming responses hold a slot until the response body closes.
 - `MODEL_REQUESTS_PER_MINUTE` is the per-API-key request token-bucket capacity and refill rate.
 - `MODEL_TOKENS_PER_MINUTE` is the per-API-key approximate input-token bucket based on serialized request size; streamed output tokens are not included.
+- Each retry attempt acquires a new model-request permit and counts toward RPM/TPM. Backoff waits do not hold a concurrency slot.
+- `MODEL_RETRY_MAX_ATTEMPTS` includes the initial request. Set it to `1` to disable retries.
+- `MODEL_RETRY_BASE_DELAY` starts exponential backoff; `MODEL_RETRY_MAX_DELAY` caps both backoff and provider `Retry-After` values.
 
 Set either per-minute value to `0` to disable that token bucket.
+
+Model errors are classified before retry. Transport failures, timeouts, rate limits, provider `5xx` responses, and invalid provider responses are retryable. Authentication, quota, model-not-found, invalid request, context-length, content-policy, local token-budget, and canceled errors fail immediately. Streaming requests retry only before the first output delta, preventing duplicated assistant text.
 
 If `OPENAI_API_KEY` is empty, chat uses deterministic local fallback for verification. Embeddings call Ollama when `EMBEDDING_BASE_URL` points to `http://localhost:11434/api/embed`; otherwise they use deterministic local fallback. The frontend search panel shows whether RAG search used `ollama / <model>`, `local / local_hash_embedding`, or an OpenAI-compatible embedding provider.
 

@@ -51,11 +51,16 @@ func main() {
 		cfg.EmbeddingDimensions,
 		cfg.OpenAITimeout,
 	)
-	openAIClient.SetRequestGovernor(concurrency.NewModelGovernor(concurrency.ModelOptions{
+	openAIClient.SetRequestLimiter(concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{
 		MaxConcurrent:     cfg.MaxConcurrentModelRequests,
 		RequestsPerPeriod: cfg.ModelRequestsPerMinute,
 		TokensPerPeriod:   cfg.ModelTokensPerMinute,
 	}))
+	retryPolicy := openai.DefaultRetryPolicy()
+	retryPolicy.MaxAttempts = cfg.ModelRetryMaxAttempts
+	retryPolicy.BaseDelay = cfg.ModelRetryBaseDelay
+	retryPolicy.MaxDelay = cfg.ModelRetryMaxDelay
+	openAIClient.SetRetryPolicy(retryPolicy)
 	toolManager, err := tools.NewManager(cfg.ToolConfigPath)
 	if err != nil {
 		log.Fatalf("create tools manager: %v", err)
@@ -92,6 +97,7 @@ func main() {
 	log.Printf("AgentFlow native recovery: stale_run_timeout=%s", cfg.RecoveryStaleRunTimeout)
 	log.Printf("AgentFlow run concurrency: max_concurrent=%d queue_size=%d wait_timeout=%s", cfg.MaxConcurrentRuns, cfg.RunQueueSize, cfg.RunQueueWaitTimeout)
 	log.Printf("AgentFlow model concurrency: max_in_flight=%d rpm=%d tpm=%d", cfg.MaxConcurrentModelRequests, cfg.ModelRequestsPerMinute, cfg.ModelTokensPerMinute)
+	log.Printf("AgentFlow model retry: max_attempts=%d base_delay=%s max_delay=%s", cfg.ModelRetryMaxAttempts, cfg.ModelRetryBaseDelay, cfg.ModelRetryMaxDelay)
 	if cfg.OpenAIAPIKey == "" {
 		log.Println("OPENAI_API_KEY is empty; using local streaming fallback for verification")
 	}

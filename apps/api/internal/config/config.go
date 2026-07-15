@@ -28,7 +28,13 @@ type Config struct {
 	// ModelRequestsPerMinute configures the per-API-key request token bucket; zero disables it.
 	ModelRequestsPerMinute int
 	// ModelTokensPerMinute configures the approximate input-token bucket; zero disables it.
-	ModelTokensPerMinute          int
+	ModelTokensPerMinute int
+	// ModelRetryMaxAttempts includes the initial request and all retries.
+	ModelRetryMaxAttempts int
+	// ModelRetryBaseDelay is the first exponential-backoff delay.
+	ModelRetryBaseDelay time.Duration
+	// ModelRetryMaxDelay caps exponential backoff and provider Retry-After values.
+	ModelRetryMaxDelay            time.Duration
 	RouterMode                    string
 	AutonomousMaxIterations       int
 	AutonomousMaxRuntime          time.Duration
@@ -60,6 +66,9 @@ func Load() Config {
 		MaxConcurrentModelRequests:    getIntEnv("MAX_CONCURRENT_MODEL_REQUESTS", 8),
 		ModelRequestsPerMinute:        getNonNegativeIntEnv("MODEL_REQUESTS_PER_MINUTE", 60),
 		ModelTokensPerMinute:          getNonNegativeIntEnv("MODEL_TOKENS_PER_MINUTE", 120000),
+		ModelRetryMaxAttempts:         getIntEnv("MODEL_RETRY_MAX_ATTEMPTS", 3),
+		ModelRetryBaseDelay:           getDurationEnv("MODEL_RETRY_BASE_DELAY", 500*time.Millisecond),
+		ModelRetryMaxDelay:            getDurationEnv("MODEL_RETRY_MAX_DELAY", 5*time.Second),
 		RouterMode:                    normalizeRouterMode(getEnv("ROUTER_MODE", "auto")),
 		AutonomousMaxIterations:       getIntEnv("AUTONOMOUS_MAX_ITERATIONS", 5),
 		AutonomousMaxRuntime:          getAutonomousRuntime(),

@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -9,9 +10,10 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/concurrency"
+	"agentflow-platform/apps/api/internal/modelrequest"
 )
 
-func TestRequestGovernorSlotIsHeldUntilResponseBodyCloses(t *testing.T) {
+func TestRequestLimiterSlotIsHeldUntilResponseBodyCloses(t *testing.T) {
 	client := NewClient("test-key", "https://provider.example/v1", "test-model")
 	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -20,7 +22,7 @@ func TestRequestGovernorSlotIsHeldUntilResponseBodyCloses(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
 		}, nil
 	})}
-	client.SetRequestGovernor(concurrency.NewModelGovernor(concurrency.ModelOptions{
+	client.SetRequestLimiter(concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{
 		MaxConcurrent: 1,
 	}))
 	first, err := client.doPathRequest(context.Background(), "https://provider.example/v1", "/request", []byte(`{}`))
@@ -58,6 +60,27 @@ func TestRequestGovernorSlotIsHeldUntilResponseBodyCloses(t *testing.T) {
 		_ = result.response.Body.Close()
 	case <-time.After(time.Second):
 		t.Fatal("second request did not acquire after response body closed")
+	}
+}
+
+func TestRequestTokenLimitIsTerminalModelError(t *testing.T) {
+	client := retryTestClient()
+	client.SetRequestLimiter(requestLimiterFunc(func(context.Context, string, int) (func(), error) {
+		return nil, &modelrequest.TokenLimitError{EstimatedTokens: 101, Capacity: 100}
+	}))
+	requestSent := false
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		requestSent = true
+		return nil, errors.New("request should not be sent")
+	})}
+
+	_, err := client.CompleteTextDetailed(context.Background(), "system", "hello")
+	modelErr, ok := AsModelError(err)
+	if !ok || modelErr.Kind != ErrorTokenBudgetExceeded || modelErr.Retryable || modelErr.Attempts != 1 {
+		t.Fatalf("expected terminal token-budget error, got %#v", modelErr)
+	}
+	if requestSent {
+		t.Fatal("model request was sent after local token-budget rejection")
 	}
 }
 
