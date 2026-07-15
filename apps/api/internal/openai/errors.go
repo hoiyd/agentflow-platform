@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"agentflow-platform/apps/api/internal/concurrency"
 )
 
 // ErrorKind identifies the recovery action for a failed model request.
@@ -102,9 +100,6 @@ func classifyModelError(operation string, err error) *ModelError {
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return &ModelError{Kind: ErrorTimeout, Operation: operation, Message: "request deadline exceeded", Retryable: true, Cause: err}
-	}
-	if errors.Is(err, concurrency.ErrTokenLimitExceeded) {
-		return &ModelError{Kind: ErrorTokenBudgetExceeded, Operation: operation, Message: cleanErrorMessage(err.Error()), Cause: err}
 	}
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {

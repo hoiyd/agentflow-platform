@@ -87,6 +87,7 @@ Concurrency settings control different layers:
 - `MAX_CONCURRENT_MODEL_REQUESTS` limits model HTTP requests currently in flight across Chat and Embeddings. It is a request limit, not a model-count or connection-pool setting. Streaming responses hold a slot until the response body closes.
 - `MODEL_REQUESTS_PER_MINUTE` is the per-API-key request token-bucket capacity and refill rate.
 - `MODEL_TOKENS_PER_MINUTE` is the per-API-key approximate input-token bucket based on serialized request size; streamed output tokens are not included.
+- Each retry attempt acquires a new model-request permit and counts toward RPM/TPM. Backoff waits do not hold a concurrency slot.
 - `MODEL_RETRY_MAX_ATTEMPTS` includes the initial request. Set it to `1` to disable retries.
 - `MODEL_RETRY_BASE_DELAY` starts exponential backoff; `MODEL_RETRY_MAX_DELAY` caps both backoff and provider `Retry-After` values.
 

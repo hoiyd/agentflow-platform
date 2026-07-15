@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	tracepkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/modelrequest"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -38,7 +38,7 @@ type Client struct {
 	embeddingDimensions int
 	httpClient          *http.Client
 	timeout             time.Duration
-	requestGovernor     *concurrency.ModelGovernor
+	requestLimiter      modelrequest.Limiter
 	retryPolicy         RetryPolicy
 }
 
@@ -190,8 +190,8 @@ func (c *Client) HasAPIKey() bool {
 	return c.apiKey != ""
 }
 
-func (c *Client) SetRequestGovernor(governor *concurrency.ModelGovernor) {
-	c.requestGovernor = governor
+func (c *Client) SetRequestLimiter(limiter modelrequest.Limiter) {
+	c.requestLimiter = limiter
 }
 
 func (c *Client) SetRetryPolicy(policy RetryPolicy) {
@@ -209,7 +209,7 @@ func (c *Client) RuntimeIdentity() RuntimeIdentity {
 func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) *Client {
 	client := NewClientWithTimeoutAndEmbeddingModel(c.apiKey, identity.BaseURL, identity.EmbeddingBaseURL,
 		identity.Model, identity.EmbeddingModel, identity.EmbeddingDimensions, c.timeout)
-	client.requestGovernor = c.requestGovernor
+	client.requestLimiter = c.requestLimiter
 	client.retryPolicy = c.retryPolicy
 	return client
 }
@@ -847,7 +847,7 @@ func (c *Client) doRawRequest(ctx context.Context, url string, payload []byte) (
 }
 
 func (c *Client) doPathRequest(ctx context.Context, baseURL string, path string, payload []byte) (*http.Response, error) {
-	release, err := c.requestGovernor.Acquire(ctx, c.apiKey, estimatedRequestTokens(payload))
+	release, err := c.acquireRequestPermit(ctx, estimatedRequestTokens(payload))
 	if err != nil {
 		return nil, err
 	}
@@ -869,6 +869,22 @@ func (c *Client) doPathRequest(ctx context.Context, baseURL string, path string,
 	}
 	resp.Body = &releaseReadCloser{ReadCloser: resp.Body, release: release}
 	return resp, nil
+}
+
+func (c *Client) acquireRequestPermit(ctx context.Context, estimatedTokens int) (func(), error) {
+	if c.requestLimiter == nil {
+		return func() {}, nil
+	}
+	release, err := c.requestLimiter.AcquireRequest(ctx, c.apiKey, estimatedTokens)
+	var limitErr *modelrequest.TokenLimitError
+	if errors.As(err, &limitErr) {
+		return nil, &ModelError{
+			Kind:    ErrorTokenBudgetExceeded,
+			Message: "estimated request exceeds local token budget",
+			Cause:   err,
+		}
+	}
+	return release, err
 }
 
 func estimatedRequestTokens(payload []byte) int {

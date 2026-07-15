@@ -51,7 +51,7 @@ func main() {
 		cfg.EmbeddingDimensions,
 		cfg.OpenAITimeout,
 	)
-	openAIClient.SetRequestGovernor(concurrency.NewModelGovernor(concurrency.ModelOptions{
+	openAIClient.SetRequestLimiter(concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{
 		MaxConcurrent:     cfg.MaxConcurrentModelRequests,
 		RequestsPerPeriod: cfg.ModelRequestsPerMinute,
 		TokensPerPeriod:   cfg.ModelTokensPerMinute,

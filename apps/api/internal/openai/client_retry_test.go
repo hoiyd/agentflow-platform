@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -23,6 +24,32 @@ func TestCompleteRetriesProviderUnavailable(t *testing.T) {
 	completion, err := client.CompleteTextDetailed(context.Background(), "system", "hello")
 	if err != nil || completion.Text != "ok" || attempts != 2 {
 		t.Fatalf("expected retried completion, text=%q attempts=%d err=%v", completion.Text, attempts, err)
+	}
+}
+
+func TestRetryUsesIndependentRequestPermitPerAttempt(t *testing.T) {
+	client := retryTestClient()
+	events := make([]string, 0, 6)
+	client.SetRequestLimiter(requestLimiterFunc(func(context.Context, string, int) (func(), error) {
+		events = append(events, "acquire")
+		return func() { events = append(events, "release") }, nil
+	}))
+	attempts := 0
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		attempts++
+		events = append(events, "request")
+		if attempts == 1 {
+			return modelHTTPResponse(503, `{"error":{"message":"temporarily unavailable"}}`), nil
+		}
+		return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`), nil
+	})}
+
+	if _, err := client.CompleteTextDetailed(context.Background(), "system", "hello"); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	want := []string{"acquire", "request", "release", "acquire", "request", "release"}
+	if !reflect.DeepEqual(events, want) {
+		t.Fatalf("request permits crossed retry boundary: got %v want %v", events, want)
 	}
 }
 
@@ -86,6 +113,12 @@ func retryTestClient() *Client {
 	client := NewClient("test-key", "https://provider.example/v1", "test-model")
 	client.SetRetryPolicy(RetryPolicy{MaxAttempts: 3, BaseDelay: time.Millisecond, MaxDelay: time.Millisecond})
 	return client
+}
+
+type requestLimiterFunc func(context.Context, string, int) (func(), error)
+
+func (f requestLimiterFunc) AcquireRequest(ctx context.Context, apiKey string, estimatedTokens int) (func(), error) {
+	return f(ctx, apiKey, estimatedTokens)
 }
 
 func modelHTTPResponse(status int, body string) *http.Response {
