@@ -34,7 +34,19 @@ type Config struct {
 	// ModelRetryBaseDelay is the first exponential-backoff delay.
 	ModelRetryBaseDelay time.Duration
 	// ModelRetryMaxDelay caps exponential backoff and provider Retry-After values.
-	ModelRetryMaxDelay            time.Duration
+	ModelRetryMaxDelay time.Duration
+	// ModelContextWindowTokens is the provider model's total input and output context capacity.
+	ModelContextWindowTokens int
+	// ModelOutputReserveTokens reserves capacity for the model response.
+	ModelOutputReserveTokens int
+	// ContextSafetyMarginTokens protects against tokenizer estimation error.
+	ContextSafetyMarginTokens int
+	// ContextHistoryMaxTokens caps prior conversation messages in one model call.
+	ContextHistoryMaxTokens int
+	// ContextMemoryMaxTokens caps semantic memory injected into one model call.
+	ContextMemoryMaxTokens int
+	// ContextKnowledgeMaxTokens caps retrieved document chunks in one model call.
+	ContextKnowledgeMaxTokens     int
 	RouterMode                    string
 	AutonomousMaxIterations       int
 	AutonomousMaxRuntime          time.Duration
@@ -69,6 +81,12 @@ func Load() Config {
 		ModelRetryMaxAttempts:         getIntEnv("MODEL_RETRY_MAX_ATTEMPTS", 3),
 		ModelRetryBaseDelay:           getDurationEnv("MODEL_RETRY_BASE_DELAY", 500*time.Millisecond),
 		ModelRetryMaxDelay:            getDurationEnv("MODEL_RETRY_MAX_DELAY", 5*time.Second),
+		ModelContextWindowTokens:      getIntEnv("MODEL_CONTEXT_WINDOW_TOKENS", 128000),
+		ModelOutputReserveTokens:      getIntEnv("MODEL_OUTPUT_RESERVE_TOKENS", 8192),
+		ContextSafetyMarginTokens:     getIntEnv("CONTEXT_SAFETY_MARGIN_TOKENS", 4096),
+		ContextHistoryMaxTokens:       getIntEnv("CONTEXT_HISTORY_MAX_TOKENS", 64000),
+		ContextMemoryMaxTokens:        getIntEnv("CONTEXT_MEMORY_MAX_TOKENS", 8000),
+		ContextKnowledgeMaxTokens:     getIntEnv("CONTEXT_KNOWLEDGE_MAX_TOKENS", 16000),
 		RouterMode:                    normalizeRouterMode(getEnv("ROUTER_MODE", "auto")),
 		AutonomousMaxIterations:       getIntEnv("AUTONOMOUS_MAX_ITERATIONS", 5),
 		AutonomousMaxRuntime:          getAutonomousRuntime(),

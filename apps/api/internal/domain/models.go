@@ -86,7 +86,10 @@ type Run struct {
 	UpdatedAt       time.Time        `json:"updated_at"`
 }
 
-const CurrentRuntimeSnapshotVersion = 1
+const (
+	LegacyRuntimeSnapshotVersion  = 1
+	CurrentRuntimeSnapshotVersion = 2
+)
 
 type RuntimeSnapshot struct {
 	SchemaVersion    int                    `json:"schema_version"`
@@ -95,9 +98,20 @@ type RuntimeSnapshot struct {
 	CandidateAgents  []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
 	Model            RuntimeModelSnapshot   `json:"model"`
 	Tools            []RuntimeToolSnapshot  `json:"tools"`
+	ContextPolicy    RuntimeContextPolicy   `json:"context_policy"`
 	RouterMode       string                 `json:"router_mode,omitempty"`
 	AutonomousLimits *RuntimeLimitsSnapshot `json:"autonomous_limits,omitempty"`
 	CreatedAt        time.Time              `json:"created_at"`
+}
+
+type RuntimeContextPolicy struct {
+	Version             string `json:"version"`
+	ContextWindowTokens int    `json:"context_window_tokens"`
+	OutputReserveTokens int    `json:"output_reserve_tokens"`
+	SafetyMarginTokens  int    `json:"safety_margin_tokens"`
+	HistoryMaxTokens    int    `json:"history_max_tokens"`
+	MemoryMaxTokens     int    `json:"memory_max_tokens"`
+	KnowledgeMaxTokens  int    `json:"knowledge_max_tokens"`
 }
 
 type RuntimeAgentSnapshot struct {
@@ -209,6 +223,7 @@ const (
 	EventModelDelta          RunEventType = "model.delta"
 	EventModelCompleted      RunEventType = "model.completed"
 	EventModelFailed         RunEventType = "model.failed"
+	EventContextAssembled    RunEventType = "context.assembled"
 	EventToolStarted         RunEventType = "tool.started"
 	EventToolCompleted       RunEventType = "tool.completed"
 	EventToolFailed          RunEventType = "tool.failed"
@@ -219,6 +234,37 @@ const (
 	EventMemorySyncCompleted RunEventType = "memory.sync.completed"
 	EventMemorySyncFailed    RunEventType = "memory.sync.failed"
 )
+
+type ContextManifestEntry struct {
+	Source          string `json:"source"`
+	ReferenceID     string `json:"reference_id"`
+	Role            string `json:"role,omitempty"`
+	Selected        bool   `json:"selected"`
+	Reason          string `json:"reason"`
+	Transformation  string `json:"transformation,omitempty"`
+	EstimatedTokens int    `json:"estimated_tokens"`
+	OriginalBytes   int    `json:"original_bytes"`
+	IncludedBytes   int    `json:"included_bytes"`
+}
+
+type ContextManifest struct {
+	ID                   string                 `json:"id"`
+	ModelCallID          string                 `json:"model_call_id"`
+	RunID                string                 `json:"run_id"`
+	StageID              string                 `json:"stage_id,omitempty"`
+	TurnID               string                 `json:"turn_id"`
+	Model                string                 `json:"model"`
+	PolicyVersion        string                 `json:"policy_version"`
+	ContextWindowTokens  int                    `json:"context_window_tokens"`
+	OutputReserveTokens  int                    `json:"output_reserve_tokens"`
+	SafetyMarginTokens   int                    `json:"safety_margin_tokens"`
+	InputBudgetTokens    int                    `json:"input_budget_tokens"`
+	EstimatedInputTokens int                    `json:"estimated_input_tokens"`
+	ExcludedTokens       int                    `json:"excluded_tokens"`
+	PrefixHash           string                 `json:"prefix_hash"`
+	Entries              []ContextManifestEntry `json:"entries"`
+	CreatedAt            time.Time              `json:"created_at"`
+}
 
 const CurrentRunEventSchemaVersion = 1
 

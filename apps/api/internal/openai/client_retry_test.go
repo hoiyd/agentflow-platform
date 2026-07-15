@@ -8,6 +8,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"agentflow-platform/apps/api/internal/contextassembly"
+	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
 )
 
 func TestCompleteRetriesProviderUnavailable(t *testing.T) {
@@ -24,6 +28,34 @@ func TestCompleteRetriesProviderUnavailable(t *testing.T) {
 	completion, err := client.CompleteTextDetailed(context.Background(), "system", "hello")
 	if err != nil || completion.Text != "ok" || attempts != 2 {
 		t.Fatalf("expected retried completion, text=%q attempts=%d err=%v", completion.Text, attempts, err)
+	}
+}
+
+func TestPhysicalRetryReusesOneContextManifest(t *testing.T) {
+	client := retryTestClient()
+	attempts := 0
+	manifests := 0
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		attempts++
+		if attempts == 1 {
+			return modelHTTPResponse(503, `{"error":{"message":"temporarily unavailable"}}`), nil
+		}
+		return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`), nil
+	})}
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run-1", TurnID: "turn-1"})
+	ctx = contextassembly.WithSession(ctx, contextassembly.Session{
+		Policy: contextassembly.DefaultPolicy(),
+		Sink: eventpkg.SinkFunc(func(_ context.Context, item domain.RunEvent) error {
+			if item.Type == domain.EventContextAssembled {
+				manifests++
+			}
+			return nil
+		}),
+	})
+
+	completion, err := client.CompleteTextDetailed(ctx, "system", "hello")
+	if err != nil || completion.Text != "ok" || attempts != 2 || manifests != 1 {
+		t.Fatalf("expected two attempts and one manifest, text=%q attempts=%d manifests=%d err=%v", completion.Text, attempts, manifests, err)
 	}
 }
 

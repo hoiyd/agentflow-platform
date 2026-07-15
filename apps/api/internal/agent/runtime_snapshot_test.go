@@ -34,6 +34,10 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 		"test-model-v1", "embedding-v1", 1536, time.Second,
 	)
 	runtime := NewRuntime(fileStore, client, manager)
+	runtime.SetContextPolicy(domain.RuntimeContextPolicy{
+		Version: "context-v1", ContextWindowTokens: 32000, OutputReserveTokens: 2048,
+		SafetyMarginTokens: 1024, HistoryMaxTokens: 12000, MemoryMaxTokens: 2000, KnowledgeMaxTokens: 4000,
+	})
 	agent, err := fileStore.CreateAgent(domain.Agent{
 		Name: "Frozen agent", SystemPrompt: "original prompt", Tools: []string{"calculator"},
 		MemoryEnabled: true, RetrievalEnabled: true, Executor: ExecutorNative,
@@ -59,6 +63,13 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 		if strings.Contains(serialized, secret) {
 			t.Fatalf("snapshot leaked secret %q: %s", secret, serialized)
 		}
+	}
+	if prepared.Run.RuntimeSnapshot.ContextPolicy.ContextWindowTokens != 32000 {
+		t.Fatalf("context policy was not frozen: %#v", prepared.Run.RuntimeSnapshot.ContextPolicy)
+	}
+	runtime.SetContextPolicy(domain.RuntimeContextPolicy{Version: "context-v1", ContextWindowTokens: 64000})
+	if prepared.Run.RuntimeSnapshot.ContextPolicy.ContextWindowTokens != 32000 {
+		t.Fatal("runtime config mutation changed the frozen context policy")
 	}
 
 	agent.SystemPrompt = "mutated prompt"

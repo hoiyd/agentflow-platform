@@ -8,6 +8,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/concurrency"
+	"agentflow-platform/apps/api/internal/domain"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
@@ -52,6 +53,10 @@ func (h *Handler) SetRunController(controller *concurrency.RunController) {
 	if controller != nil {
 		h.runController = controller
 	}
+}
+
+func (h *Handler) SetContextPolicy(policy domain.RuntimeContextPolicy) {
+	h.agentRuntime.SetContextPolicy(policy)
 }
 
 func (h *Handler) Close(ctx context.Context) error {

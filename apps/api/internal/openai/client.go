@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	tracepkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/modelrequest"
@@ -52,10 +53,12 @@ type RuntimeIdentity struct {
 }
 
 type Message struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	Role        string     `json:"role"`
+	Content     string     `json:"content,omitempty"`
+	ToolCallID  string     `json:"tool_call_id,omitempty"`
+	ToolCalls   []ToolCall `json:"tool_calls,omitempty"`
+	Source      string     `json:"-"`
+	ReferenceID string     `json:"-"`
 }
 
 type ToolCall struct {
@@ -128,6 +131,11 @@ type TextCompletion struct {
 	Text  string
 	Model string
 	Usage Usage
+}
+
+type PreparedText struct {
+	Messages []Message
+	Manifest domain.ContextManifest
 }
 
 type Embedding struct {
@@ -314,13 +322,19 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 
 		if c.apiKey == "" {
 			log.Printf("chat_fallback mode=local_no_api_key latest_len=%d enabled_tools=%q", len(latest), strings.Join(catalog.EnabledNames(), ","))
+			rawMessages := ensureCurrentInput(buildMessagesWithSystemPrompt(systemPrompt, history, catalog.EnabledNames()), latest)
+			prepared, err := c.prepareModelContextForModel(ctx, "local_fallback", rawMessages, nil)
+			if err != nil {
+				errs <- err
+				return
+			}
 			output := fallbackEventResponse(latest)
-			startPayload := map[string]any{
+			startPayload := mergePayload(map[string]any{
 				"model":       "local_fallback",
 				"system":      systemPrompt,
 				"input":       latest,
 				"input_chars": len(latest),
-			}
+			}, contextTracePayload(prepared.manifest))
 			if len(retrievedMemories) > 0 {
 				startPayload["retrieved_memories"] = retrievedMemoryPayload(retrievedMemories)
 			}
@@ -333,16 +347,11 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 				"model":        "local_fallback",
 				"output":       output,
 				"output_chars": len(output),
-			}, estimateUsage(systemPrompt+"\n"+latest, output)))
+			}, estimateUsage(messagesToText(prepared.messages), output)))
 			return
 		}
 
-		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, catalog, events, recorder, runID, stepID, retrievedMemories, retrievedChunks); err != nil {
-			recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
-				"source": "llm",
-				"model":  c.model,
-				"error":  err.Error(),
-			}, err))
+		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, latest, catalog, events, recorder, runID, stepID, retrievedMemories, retrievedChunks); err != nil {
 			errs <- err
 		}
 	}()
@@ -359,7 +368,31 @@ func (c *Client) CompleteText(ctx context.Context, systemPrompt string, prompt s
 }
 
 func (c *Client) CompleteTextDetailed(ctx context.Context, systemPrompt string, prompt string) (TextCompletion, error) {
+	prepared, err := c.PrepareText(ctx, systemPrompt, prompt)
+	if err != nil {
+		return TextCompletion{}, err
+	}
+	return c.CompletePreparedText(ctx, prepared)
+}
+
+func (c *Client) PrepareText(ctx context.Context, systemPrompt string, prompt string) (PreparedText, error) {
 	prompt = strings.TrimSpace(prompt)
+	model := c.model
+	if c.apiKey == "" {
+		model = "local_fallback"
+	}
+	prepared, err := c.prepareModelContextForModel(ctx, model, []Message{
+		{Role: "system", Content: strings.TrimSpace(systemPrompt), Source: contextassembly.SourceSystem, ReferenceID: "system_prompt"},
+		{Role: "user", Content: prompt, Source: contextassembly.SourceCurrentInput, ReferenceID: "current_input"},
+	}, nil)
+	if err != nil {
+		return PreparedText{}, err
+	}
+	return PreparedText{Messages: prepared.messages, Manifest: prepared.manifest}, nil
+}
+
+func (c *Client) CompletePreparedText(ctx context.Context, prepared PreparedText) (TextCompletion, error) {
+	systemPrompt, prompt := textPromptParts(prepared.Messages)
 	if c.apiKey == "" {
 		text := fallbackCompletion(systemPrompt, prompt)
 		return TextCompletion{
@@ -369,13 +402,9 @@ func (c *Client) CompleteTextDetailed(ctx context.Context, systemPrompt string, 
 		}, nil
 	}
 
-	messages := []Message{
-		{Role: "system", Content: strings.TrimSpace(systemPrompt)},
-		{Role: "user", Content: prompt},
-	}
 	response, err := c.complete(ctx, map[string]any{
 		"model":       c.model,
-		"messages":    messages,
+		"messages":    prepared.Messages,
 		"temperature": 0.2,
 	})
 	if err != nil {
@@ -383,7 +412,7 @@ func (c *Client) CompleteTextDetailed(ctx context.Context, systemPrompt string, 
 	}
 	usage := response.Usage
 	if !usage.Valid() {
-		usage = estimateUsage(strings.TrimSpace(systemPrompt)+"\n"+prompt, strings.TrimSpace(response.Choices[0].Message.Content))
+		usage = estimateUsage(messagesToText(prepared.Messages), strings.TrimSpace(response.Choices[0].Message.Content))
 	}
 	return TextCompletion{
 		Text:  strings.TrimSpace(response.Choices[0].Message.Content),
@@ -562,15 +591,22 @@ func (c *Client) streamText(ctx context.Context, text string, delay time.Duratio
 	}
 }
 
-func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string, history []domain.Message, catalog *tools.Catalog, events chan<- StreamEvent, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) error {
+func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string, history []domain.Message, latest string, catalog *tools.Catalog, events chan<- StreamEvent, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) error {
 	enabledTools := catalog.EnabledNames()
-	messages := buildMessagesWithSystemPrompt(systemPrompt, history, enabledTools, retrievedMemories, retrievedChunks)
-	startPayload := map[string]any{
+	definitions := catalog.Definitions()
+	rawMessages := ensureCurrentInput(buildMessagesWithSystemPrompt(systemPrompt, history, enabledTools), latest)
+	prepared, err := c.prepareModelContext(ctx, rawMessages, definitions)
+	if err != nil {
+		return err
+	}
+	messages := prepared.messages
+	startPayload := mergePayload(map[string]any{
 		"model":         c.model,
+		"call_kind":     "tool_selection",
 		"messages":      messages,
 		"enabled_tools": enabledTools,
 		"input_chars":   messagesTextLength(messages),
-	}
+	}, contextTracePayload(prepared.manifest))
 	if len(retrievedMemories) > 0 {
 		startPayload["retrieved_memories"] = retrievedMemoryPayload(retrievedMemories)
 	}
@@ -581,7 +617,7 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	decision, err := c.complete(ctx, map[string]any{
 		"model":       c.model,
 		"messages":    messages,
-		"tools":       catalog.Definitions(),
+		"tools":       definitions,
 		"tool_choice": "auto",
 		"temperature": 0.2,
 	})
@@ -602,6 +638,19 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 			strings.Join(enabledTools, ","),
 			len(messages),
 		)
+		recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
+			"source": "llm", "stage": "tool_selection", "model": c.model,
+			"manifest_id": prepared.manifest.ID, "error": err.Error(),
+		}, err))
+		prepared, err = c.prepareModelContext(ctx, rawMessages, nil)
+		if err != nil {
+			return err
+		}
+		messages = prepared.messages
+		llmSpan = recorder.LLMStart(ctx, runID, stepID, mergePayload(map[string]any{
+			"model": c.model, "call_kind": "text_capability_fallback", "messages": messages,
+			"input_chars": messagesTextLength(messages),
+		}, contextTracePayload(prepared.manifest)))
 		decision, err = c.complete(ctx, map[string]any{
 			"model":       c.model,
 			"messages":    messages,
@@ -650,10 +699,21 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	}
 
 	normalizedCalls := normalizeToolCalls(toolCalls)
-	messages = append(messages, Message{
-		Role:      "assistant",
-		Content:   choice.Message.Content,
-		ToolCalls: normalizedCalls,
+	usage := decision.Usage
+	if !usage.Valid() {
+		usage = estimateUsage(messagesToText(messages), choice.Message.Content)
+	}
+	recorder.LLMEnd(ctx, llmSpan, tokenPayload(map[string]any{
+		"model": c.model, "output": choice.Message.Content, "output_chars": len(choice.Message.Content),
+		"tool_call_count": len(normalizedCalls), "manifest_id": prepared.manifest.ID,
+	}, usage))
+
+	rawMessages = append(rawMessages, Message{
+		Role:        "assistant",
+		Content:     choice.Message.Content,
+		ToolCalls:   normalizedCalls,
+		Source:      contextassembly.SourceToolCall,
+		ReferenceID: "tool_calls",
 	})
 
 	toolExecutor := tools.NewExecutor(catalog, tools.ExecutorOptions{
@@ -673,13 +733,24 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	for index, result := range results {
 		call := normalizedCalls[index]
 		resultText := marshalResult(result)
-		messages = append(messages, Message{
-			Role:       "tool",
-			ToolCallID: call.ID,
-			Content:    resultText,
+		rawMessages = append(rawMessages, Message{
+			Role:        "tool",
+			ToolCallID:  call.ID,
+			Content:     resultText,
+			Source:      contextassembly.SourceToolResult,
+			ReferenceID: call.ID,
 		})
 	}
 
+	prepared, err = c.prepareModelContext(ctx, rawMessages, nil)
+	if err != nil {
+		return err
+	}
+	messages = prepared.messages
+	llmSpan = recorder.LLMStart(ctx, runID, stepID, mergePayload(map[string]any{
+		"model": c.model, "call_kind": "tool_result_response", "messages": messages,
+		"input_chars": messagesTextLength(messages),
+	}, contextTracePayload(prepared.manifest)))
 	emitted, finalOutput, finalUsage, err := c.streamMessages(ctx, messages, events)
 	if err != nil {
 		recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
@@ -701,6 +772,7 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	}
 	recorder.LLMEnd(ctx, llmSpan, tokenPayload(map[string]any{
 		"model":        c.model,
+		"manifest_id":  prepared.manifest.ID,
 		"output":       finalOutput,
 		"output_chars": len(finalOutput),
 	}, finalUsage))
@@ -944,10 +1016,10 @@ func buildMessages(history []domain.Message) []Message {
 }
 
 func buildMessagesWithToolNames(history []domain.Message, toolNames []string) []Message {
-	return buildMessagesWithSystemPrompt("You are AgentFlow's assistant. Use tools when they help.", history, toolNames, nil, nil)
+	return buildMessagesWithSystemPrompt("You are AgentFlow's assistant. Use tools when they help.", history, toolNames)
 }
 
-func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message, toolNames []string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) []Message {
+func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message, toolNames []string) []Message {
 	available := "No tools are currently enabled."
 	fallbackInstruction := ""
 	if len(toolNames) > 0 {
@@ -958,52 +1030,47 @@ func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message
 	if systemPrompt == "" {
 		systemPrompt = "You are AgentFlow's assistant."
 	}
-	if len(retrievedMemories) > 0 {
-		systemPrompt = systemPrompt + "\n\n" + formatRetrievedMemories(retrievedMemories)
-	}
-	if len(retrievedChunks) > 0 {
-		systemPrompt = systemPrompt + "\n\n" + formatRetrievedChunks(retrievedChunks)
-	}
 	messages := []Message{
 		{
-			Role:    "system",
-			Content: systemPrompt + " " + available + fallbackInstruction,
+			Role: "system", Content: systemPrompt + " " + available + fallbackInstruction,
+			Source: contextassembly.SourceSystem, ReferenceID: "system_prompt",
 		},
 	}
-	for _, item := range history {
+	lastUser := -1
+	for index := range history {
+		if history[index].Role == "user" {
+			lastUser = index
+		}
+	}
+	for index, item := range history {
 		if item.Role == "user" || item.Role == "assistant" {
-			messages = append(messages, Message{Role: item.Role, Content: item.Content})
+			source := contextassembly.SourceHistory
+			if index == lastUser {
+				source = contextassembly.SourceCurrentInput
+			}
+			messages = append(messages, Message{Role: item.Role, Content: item.Content, Source: source, ReferenceID: item.ID})
 		}
 	}
 	return messages
 }
 
-func formatRetrievedMemories(memories []domain.RetrievedMemory) string {
-	var builder strings.Builder
-	builder.WriteString("Retrieved memories. Use them when relevant, and ignore them when they are not relevant:\n")
-	for index, memory := range memories {
-		if strings.TrimSpace(memory.Memory.Content) == "" {
-			continue
-		}
-		builder.WriteString(fmt.Sprintf("%d. id=%s kind=%s score=%.4f similarity=%.4f\n", index+1, memory.Memory.ID, memory.Memory.Kind, memory.Score, memory.Similarity))
-		builder.WriteString(truncateText(memory.Memory.Content, 1200))
-		builder.WriteString("\n")
+func ensureCurrentInput(messages []Message, latest string) []Message {
+	latest = strings.TrimSpace(latest)
+	if latest == "" {
+		return messages
 	}
-	return strings.TrimSpace(builder.String())
-}
-
-func formatRetrievedChunks(chunks []domain.RetrievedDocumentChunk) string {
-	var builder strings.Builder
-	builder.WriteString("Retrieved document chunks. Use them when relevant, and ignore them when they are not relevant:\n")
-	for index, chunk := range chunks {
-		if strings.TrimSpace(chunk.Chunk.Content) == "" {
-			continue
+	for index := len(messages) - 1; index >= 0; index-- {
+		if messages[index].Source == contextassembly.SourceCurrentInput {
+			if strings.TrimSpace(messages[index].Content) == latest {
+				return messages
+			}
+			messages[index].Source = contextassembly.SourceHistory
+			break
 		}
-		builder.WriteString(fmt.Sprintf("%d. document=%s chunk=%s score=%.4f similarity=%.4f\n", index+1, chunk.Document.Title, chunk.Chunk.ID, chunk.Score, chunk.Similarity))
-		builder.WriteString(truncateText(chunk.Chunk.Content, 1600))
-		builder.WriteString("\n")
 	}
-	return strings.TrimSpace(builder.String())
+	return append(messages, Message{
+		Role: "user", Content: latest, Source: contextassembly.SourceCurrentInput, ReferenceID: "current_input",
+	})
 }
 
 func emitText(ctx context.Context, text string, events chan<- StreamEvent) error {
