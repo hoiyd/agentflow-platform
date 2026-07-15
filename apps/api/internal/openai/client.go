@@ -39,6 +39,7 @@ type Client struct {
 	httpClient          *http.Client
 	timeout             time.Duration
 	requestGovernor     *concurrency.ModelGovernor
+	retryPolicy         RetryPolicy
 }
 
 type RuntimeIdentity struct {
@@ -180,7 +181,8 @@ func NewClientWithTimeoutAndEmbeddingModel(apiKey string, baseURL string, embedd
 				ExpectContinueTimeout: 1 * time.Second,
 			},
 		},
-		timeout: timeout,
+		timeout:     timeout,
+		retryPolicy: DefaultRetryPolicy(),
 	}
 }
 
@@ -190,6 +192,10 @@ func (c *Client) HasAPIKey() bool {
 
 func (c *Client) SetRequestGovernor(governor *concurrency.ModelGovernor) {
 	c.requestGovernor = governor
+}
+
+func (c *Client) SetRetryPolicy(policy RetryPolicy) {
+	c.retryPolicy = policy.normalized()
 }
 
 func (c *Client) RuntimeIdentity() RuntimeIdentity {
@@ -204,6 +210,7 @@ func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) *Client {
 	client := NewClientWithTimeoutAndEmbeddingModel(c.apiKey, identity.BaseURL, identity.EmbeddingBaseURL,
 		identity.Model, identity.EmbeddingModel, identity.EmbeddingDimensions, c.timeout)
 	client.requestGovernor = c.requestGovernor
+	client.retryPolicy = c.retryPolicy
 	return client
 }
 
@@ -331,11 +338,11 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 		}
 
 		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, catalog, events, recorder, runID, stepID, retrievedMemories, retrievedChunks); err != nil {
-			recorder.Error(ctx, runID, stepID, map[string]any{
+			recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
 				"source": "llm",
 				"model":  c.model,
 				"error":  err.Error(),
-			})
+			}, err))
 			errs <- err
 		}
 	}()
@@ -406,30 +413,31 @@ func (c *Client) EmbedText(ctx context.Context, input string) (Embedding, error)
 	if err != nil {
 		return Embedding{}, err
 	}
-	resp, err := c.doEmbeddingRequest(ctx, payload)
-	if err != nil {
-		return Embedding{}, err
-	}
-	defer resp.Body.Close()
+	const operation = "embedding.openai_compatible"
+	return executeWithRetry(ctx, c.retryPolicy, operation, func() (Embedding, error) {
+		resp, err := c.doEmbeddingRequest(ctx, payload)
+		if err != nil {
+			return Embedding{}, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return Embedding{}, modelErrorFromHTTPResponse(operation, resp)
+		}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		bytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return Embedding{}, fmt.Errorf("openai-compatible embedding request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(bytes)))
-	}
-
-	var decoded embeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return Embedding{}, err
-	}
-	if len(decoded.Data) == 0 || len(decoded.Data[0].Embedding) == 0 {
-		return Embedding{}, errors.New("embedding response returned no vector")
-	}
-	return Embedding{
-		Vector:     decoded.Data[0].Embedding,
-		Model:      decoded.Model,
-		Provider:   "openai_compatible",
-		Dimensions: len(decoded.Data[0].Embedding),
-	}, nil
+		var decoded embeddingResponse
+		if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+			return Embedding{}, invalidResponseError(operation, "failed to decode embedding response", err)
+		}
+		if len(decoded.Data) == 0 || len(decoded.Data[0].Embedding) == 0 {
+			return Embedding{}, invalidResponseError(operation, "embedding response returned no vector", nil)
+		}
+		return Embedding{
+			Vector:     decoded.Data[0].Embedding,
+			Model:      decoded.Model,
+			Provider:   "openai_compatible",
+			Dimensions: len(decoded.Data[0].Embedding),
+		}, nil
+	})
 }
 
 func (c *Client) embedTextWithOllama(ctx context.Context, input string) (Embedding, error) {
@@ -437,23 +445,9 @@ func (c *Client) embedTextWithOllama(ctx context.Context, input string) (Embeddi
 	if err != nil {
 		return Embedding{}, err
 	}
-	var lastErr error
-	for attempt := 1; attempt <= 2; attempt++ {
-		embedding, err := c.doOllamaEmbeddingRequest(ctx, input, payload)
-		if err == nil {
-			return embedding, nil
-		}
-		lastErr = err
-		if !isTransientOllamaEmbeddingError(err) || attempt == 2 {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			return Embedding{}, ctx.Err()
-		case <-time.After(250 * time.Millisecond):
-		}
-	}
-	return Embedding{}, lastErr
+	return executeWithRetry(ctx, c.retryPolicy, "embedding.ollama", func() (Embedding, error) {
+		return c.doOllamaEmbeddingRequest(ctx, input, payload)
+	})
 }
 
 func (c *Client) doOllamaEmbeddingRequest(ctx context.Context, input string, payload []byte) (Embedding, error) {
@@ -463,16 +457,15 @@ func (c *Client) doOllamaEmbeddingRequest(ctx context.Context, input string, pay
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		bytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return Embedding{}, fmt.Errorf("ollama embedding request failed: status=%d model=%s dimensions=%d input_chars=%d body=%s", resp.StatusCode, c.embeddingModel, c.embeddingDimensions, len(input), strings.TrimSpace(string(bytes)))
+		return Embedding{}, modelErrorFromHTTPResponse("embedding.ollama", resp)
 	}
 
 	var decoded ollamaEmbeddingResponse
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return Embedding{}, err
+		return Embedding{}, invalidResponseError("embedding.ollama", "failed to decode Ollama embedding response", err)
 	}
 	if len(decoded.Embeddings) == 0 || len(decoded.Embeddings[0]) == 0 {
-		return Embedding{}, errors.New("ollama embedding response returned no vector")
+		return Embedding{}, invalidResponseError("embedding.ollama", "Ollama embedding response returned no vector", nil)
 	}
 	model := strings.TrimSpace(decoded.Model)
 	if model == "" {
@@ -484,13 +477,6 @@ func (c *Client) doOllamaEmbeddingRequest(ctx context.Context, input string, pay
 		Provider:   "ollama",
 		Dimensions: len(decoded.Embeddings[0]),
 	}, nil
-}
-
-func isTransientOllamaEmbeddingError(err error) bool {
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "eof") ||
-		strings.Contains(message, "connection reset") ||
-		strings.Contains(message, "broken pipe")
 }
 
 func (c *Client) embeddingRequestPayload(input string) ([]byte, error) {
@@ -540,7 +526,7 @@ func fallbackCompletion(systemPrompt string, prompt string) string {
 	case strings.Contains(lower, "worker"):
 		return "Worker result:\nI executed the plan using the provided task context. The result is a concise draft that addresses the requested goal and preserves any important constraints.\n\nTask context:\n" + truncateText(prompt, 600)
 	case strings.Contains(lower, "reviewer"):
-		return "Review:\n- The result follows the requested fixed collaboration flow.\n- No automatic retry was performed in this first version.\n- Remaining risk: verify domain-specific details when the task depends on external facts."
+		return "Review:\n- The result follows the requested fixed collaboration flow.\n- Remaining risk: verify domain-specific details when the task depends on external facts."
 	case strings.Contains(lower, "finalizer"):
 		return "Final answer:\nThe task was processed through Planner, Worker, Reviewer, and Finalizer stages. The final response combines the plan, execution result, and review notes into one answer.\n\n" + truncateText(prompt, 800)
 	default:
@@ -600,14 +586,17 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		"temperature": 0.2,
 	})
 	if err != nil {
-		recorder.Error(ctx, runID, stepID, map[string]any{
-			"source": "llm",
-			"stage":  "tool_selection",
-			"model":  c.model,
-			"error":  err.Error(),
-		})
+		if !isToolCallingUnsupported(err) {
+			recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
+				"source": "llm",
+				"stage":  "tool_selection",
+				"model":  c.model,
+				"error":  err.Error(),
+			}, err))
+			return err
+		}
 		log.Printf(
-			"chat_fallback mode=openai_without_tools reason=%q model=%s enabled_tools=%q history_messages=%d",
+			"chat_capability_fallback capability=tool_calling reason=%q model=%s enabled_tools=%q history_messages=%d",
 			err.Error(),
 			c.model,
 			strings.Join(enabledTools, ","),
@@ -619,12 +608,12 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 			"temperature": 0.2,
 		})
 		if err != nil {
-			recorder.Error(ctx, runID, stepID, map[string]any{
+			recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
 				"source": "llm",
 				"stage":  "text_fallback",
 				"model":  c.model,
 				"error":  err.Error(),
-			})
+			}, err))
 			return err
 		}
 	}
@@ -693,12 +682,12 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 
 	emitted, finalOutput, finalUsage, err := c.streamMessages(ctx, messages, events)
 	if err != nil {
-		recorder.Error(ctx, runID, stepID, map[string]any{
+		recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
 			"source": "llm",
 			"stage":  "final_stream",
 			"model":  c.model,
 			"error":  err.Error(),
-		})
+		}, err))
 		return err
 	}
 	if !emitted {
@@ -723,26 +712,26 @@ func (c *Client) complete(ctx context.Context, body map[string]any) (chatComplet
 	if err != nil {
 		return chatCompletionResponse{}, err
 	}
+	const operation = "chat.completion"
+	return executeWithRetry(ctx, c.retryPolicy, operation, func() (chatCompletionResponse, error) {
+		resp, err := c.doRequest(ctx, payload)
+		if err != nil {
+			return chatCompletionResponse{}, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return chatCompletionResponse{}, modelErrorFromHTTPResponse(operation, resp)
+		}
 
-	resp, err := c.doRequest(ctx, payload)
-	if err != nil {
-		return chatCompletionResponse{}, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		bytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return chatCompletionResponse{}, fmt.Errorf("openai-compatible request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(bytes)))
-	}
-
-	var decoded chatCompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return chatCompletionResponse{}, err
-	}
-	if len(decoded.Choices) == 0 {
-		return chatCompletionResponse{}, errors.New("model returned no choices")
-	}
-	return decoded, nil
+		var decoded chatCompletionResponse
+		if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+			return chatCompletionResponse{}, invalidResponseError(operation, "failed to decode model response", err)
+		}
+		if len(decoded.Choices) == 0 {
+			return chatCompletionResponse{}, invalidResponseError(operation, "model returned no choices", nil)
+		}
+		return decoded, nil
+	})
 }
 
 func (c *Client) streamMessages(ctx context.Context, messages []Message, events chan<- StreamEvent) (bool, string, Usage, error) {
@@ -750,11 +739,33 @@ func (c *Client) streamMessages(ctx context.Context, messages []Message, events 
 	if err == nil {
 		return emitted, output, usage, nil
 	}
-	log.Printf("chat_stream_usage_fallback reason=%q model=%s", err.Error(), c.model)
+	if !isStreamUsageUnsupported(err) {
+		return emitted, output, usage, err
+	}
+	log.Printf("chat_stream_capability_fallback capability=stream_usage model=%s reason=%q", c.model, err.Error())
 	return c.streamMessagesWithUsageOption(ctx, messages, events, false)
 }
 
 func (c *Client) streamMessagesWithUsageOption(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool) (bool, string, Usage, error) {
+	const operation = "chat.stream"
+	result, err := executeWithRetry(ctx, c.retryPolicy, operation, func() (streamAttemptResult, error) {
+		attemptResult, attemptErr := c.streamMessagesAttempt(ctx, messages, events, includeUsage)
+		if attemptErr != nil && attemptResult.emitted {
+			return attemptResult, withoutRetry(attemptErr, operation)
+		}
+		return attemptResult, attemptErr
+	})
+	return result.emitted, result.output, result.usage, err
+}
+
+type streamAttemptResult struct {
+	emitted bool
+	output  string
+	usage   Usage
+}
+
+func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool) (streamAttemptResult, error) {
+	const operation = "chat.stream"
 	body := map[string]any{
 		"model":       c.model,
 		"messages":    messages,
@@ -766,18 +777,17 @@ func (c *Client) streamMessagesWithUsageOption(ctx context.Context, messages []M
 	}
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return false, "", Usage{}, err
+		return streamAttemptResult{}, err
 	}
 
 	resp, err := c.doRequest(ctx, payload)
 	if err != nil {
-		return false, "", Usage{}, err
+		return streamAttemptResult{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		bytes, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return false, "", Usage{}, fmt.Errorf("openai-compatible stream failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(bytes)))
+		return streamAttemptResult{}, modelErrorFromHTTPResponse(operation, resp)
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
@@ -794,12 +804,12 @@ func (c *Client) streamMessagesWithUsageOption(ctx context.Context, messages []M
 		}
 		data := strings.TrimPrefix(line, "data: ")
 		if data == "[DONE]" {
-			return emitted, output.String(), usage, nil
+			return streamAttemptResult{emitted: emitted, output: output.String(), usage: usage}, nil
 		}
 
 		var event chatCompletionChunk
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			return false, "", Usage{}, err
+			return streamAttemptResult{emitted: emitted, output: output.String(), usage: usage}, invalidResponseError(operation, "failed to decode stream event", err)
 		}
 		if event.Usage != nil {
 			usage = *event.Usage
@@ -812,16 +822,16 @@ func (c *Client) streamMessagesWithUsageOption(ctx context.Context, messages []M
 			output.WriteString(choice.Delta.Content)
 			select {
 			case <-ctx.Done():
-				return false, output.String(), usage, ctx.Err()
+				return streamAttemptResult{emitted: emitted, output: output.String(), usage: usage}, ctx.Err()
 			case events <- StreamEvent{Type: "delta", Delta: choice.Delta.Content}:
 			}
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
-		return false, output.String(), usage, err
+		return streamAttemptResult{emitted: emitted, output: output.String(), usage: usage}, invalidResponseError(operation, "model stream read failed", err)
 	}
-	return false, output.String(), usage, errors.New("openai-compatible stream ended without [DONE]")
+	return streamAttemptResult{emitted: emitted, output: output.String(), usage: usage}, invalidResponseError(operation, "model stream ended without [DONE]", nil)
 }
 
 func (c *Client) doRequest(ctx context.Context, payload []byte) (*http.Response, error) {
