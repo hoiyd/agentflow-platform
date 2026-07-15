@@ -15,6 +15,16 @@
   scrollbar-gutter: stable;
 }
 
+.chat-workspace.expanded-content .mode-chooser,
+.chat-workspace.expanded-content .message,
+.chat-workspace.expanded-content .trace-reveal-row {
+  max-width: 1040px;
+}
+
+.chat-workspace.expanded-content .trace-reveal-row {
+  margin-inline: auto;
+}
+
 .mode-chooser {
   position: sticky;
   top: 0;

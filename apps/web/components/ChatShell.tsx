@@ -214,6 +214,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const showCollaborationPanel = chatMode === "multi_agent" || chatMode === "autonomous";
   const showCollaborationDag = chatMode === "multi_agent";
   const showAutonomousTrace = chatMode === "autonomous";
+  const useExpandedConversationWidth =
+    chatMode === "single" || (showCollaborationPanel && !isCollaborationPanelOpen);
   const isAwaitingPlanApproval = chatMode === "multi_agent" && runState?.status === "waiting_for_user";
   const isAwaitingHumanInput =
     chatMode === "autonomous" &&
@@ -1380,7 +1382,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           />
         ) : (
           <section
-            className={`chat-workspace ${
+            className={`chat-workspace ${useExpandedConversationWidth ? "expanded-content" : ""} ${
               showCollaborationPanel && isCollaborationPanelOpen ? "with-collaboration" : ""
             }`}
           >

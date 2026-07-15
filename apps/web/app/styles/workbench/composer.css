@@ -1,6 +1,8 @@
 /* Composer and agent config */
 
 .composer {
+  min-height: 0;
+  align-self: end;
   border-top: 1px solid var(--border);
   background: #f8fafc;
   padding: 18px 22px 18px;
