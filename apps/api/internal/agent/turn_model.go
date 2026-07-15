@@ -21,7 +21,7 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		return turn.Result{}, err
 	}
 	ctx = contextassembly.WithSession(ctx, contextassembly.Session{
-		Policy: snapshot.ContextPolicy, Sink: request.Sink,
+		Config: snapshot.ContextAssembly, Sink: request.Sink,
 		History: request.History, CurrentInput: request.Input,
 		Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
 	})

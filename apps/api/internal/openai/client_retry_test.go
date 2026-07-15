@@ -44,7 +44,7 @@ func TestPhysicalRetryReusesOneContextManifest(t *testing.T) {
 	})}
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run-1", TurnID: "turn-1"})
 	ctx = contextassembly.WithSession(ctx, contextassembly.Session{
-		Policy: contextassembly.DefaultPolicy(),
+		Config: contextassembly.DefaultConfig(),
 		Sink: eventpkg.SinkFunc(func(_ context.Context, item domain.RunEvent) error {
 			if item.Type == domain.EventContextAssembled {
 				manifests++

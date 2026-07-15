@@ -84,7 +84,7 @@ func contextTracePayload(manifest domain.ContextManifest) map[string]any {
 	}
 	return map[string]any{
 		"manifest_id": manifest.ID, "model_call_id": manifest.ModelCallID,
-		"context_policy_version": manifest.PolicyVersion, "context_input_budget_tokens": manifest.InputBudgetTokens,
+		"context_assembler_version": manifest.AssemblerVersion, "context_input_budget_tokens": manifest.InputBudgetTokens,
 		"context_estimated_input_tokens": manifest.EstimatedInputTokens, "context_prefix_hash": manifest.PrefixHash,
 	}
 }

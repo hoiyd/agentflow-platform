@@ -17,8 +17,8 @@ func TestAssembleSelectsContextAndPublishesManifestWithoutRawContent(t *testing.
 		ConversationID: "conv-1", RunID: "run-1", StageID: "stage-1", TurnID: "turn-1",
 	})
 	ctx = WithSession(ctx, Session{
-		Policy: domain.RuntimeContextPolicy{
-			Version: PolicyVersion, ContextWindowTokens: 256, OutputReserveTokens: 16, SafetyMarginTokens: 8,
+		Config: domain.ContextAssemblyConfig{
+			AssemblerVersion: AssemblerVersion, ContextWindowTokens: 256, OutputReserveTokens: 16, SafetyMarginTokens: 8,
 			HistoryMaxTokens: 30, MemoryMaxTokens: 40, KnowledgeMaxTokens: 40,
 		},
 		Sink: eventpkg.SinkFunc(func(_ context.Context, item domain.RunEvent) error {
@@ -81,8 +81,8 @@ func TestAssembleSelectsContextAndPublishesManifestWithoutRawContent(t *testing.
 
 func TestAssembleRejectsRequiredContextOverBudget(t *testing.T) {
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run-1", TurnID: "turn-1"})
-	ctx = WithSession(ctx, Session{Policy: domain.RuntimeContextPolicy{
-		Version: PolicyVersion, ContextWindowTokens: 32, OutputReserveTokens: 4, SafetyMarginTokens: 4,
+	ctx = WithSession(ctx, Session{Config: domain.ContextAssemblyConfig{
+		AssemblerVersion: AssemblerVersion, ContextWindowTokens: 32, OutputReserveTokens: 4, SafetyMarginTokens: 4,
 		HistoryMaxTokens: 8, MemoryMaxTokens: 8, KnowledgeMaxTokens: 8,
 	}})
 
@@ -102,7 +102,7 @@ func TestPrefixHashIgnoresDynamicRetrieval(t *testing.T) {
 	}}
 	assemble := func(memory string) domain.ContextManifest {
 		ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run", TurnID: "turn"})
-		ctx = WithSession(ctx, Session{Policy: DefaultPolicy(), Memories: []domain.RetrievedMemory{{
+		ctx = WithSession(ctx, Session{Config: DefaultConfig(), Memories: []domain.RetrievedMemory{{
 			Memory: domain.Memory{ID: "mem", Content: memory}, Score: 1,
 		}}})
 		pack, err := Assemble(ctx, request)
@@ -121,7 +121,7 @@ func TestPrefixHashIgnoresDynamicRetrieval(t *testing.T) {
 func TestAssembleAddsSessionHistoryWithoutRepeatingCurrentInput(t *testing.T) {
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run", TurnID: "turn"})
 	ctx = WithSession(ctx, Session{
-		Policy: DefaultPolicy(), CurrentInput: "current question",
+		Config: DefaultConfig(), CurrentInput: "current question",
 		History: []domain.Message{
 			{ID: "user-old", Role: "user", Content: "earlier question"},
 			{ID: "assistant-old", Role: "assistant", Content: "earlier answer"},

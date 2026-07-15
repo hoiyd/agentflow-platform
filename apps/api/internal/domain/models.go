@@ -98,14 +98,14 @@ type RuntimeSnapshot struct {
 	CandidateAgents  []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
 	Model            RuntimeModelSnapshot   `json:"model"`
 	Tools            []RuntimeToolSnapshot  `json:"tools"`
-	ContextPolicy    RuntimeContextPolicy   `json:"context_policy"`
+	ContextAssembly  ContextAssemblyConfig  `json:"context_assembly"`
 	RouterMode       string                 `json:"router_mode,omitempty"`
 	AutonomousLimits *RuntimeLimitsSnapshot `json:"autonomous_limits,omitempty"`
 	CreatedAt        time.Time              `json:"created_at"`
 }
 
-type RuntimeContextPolicy struct {
-	Version             string `json:"version"`
+type ContextAssemblyConfig struct {
+	AssemblerVersion    string `json:"assembler_version"`
 	ContextWindowTokens int    `json:"context_window_tokens"`
 	OutputReserveTokens int    `json:"output_reserve_tokens"`
 	SafetyMarginTokens  int    `json:"safety_margin_tokens"`
@@ -254,7 +254,7 @@ type ContextManifest struct {
 	StageID              string                 `json:"stage_id,omitempty"`
 	TurnID               string                 `json:"turn_id"`
 	Model                string                 `json:"model"`
-	PolicyVersion        string                 `json:"policy_version"`
+	AssemblerVersion     string                 `json:"assembler_version"`
 	ContextWindowTokens  int                    `json:"context_window_tokens"`
 	OutputReserveTokens  int                    `json:"output_reserve_tokens"`
 	SafetyMarginTokens   int                    `json:"safety_margin_tokens"`

@@ -28,7 +28,7 @@ func TestToolRoundTripCreatesManifestPerLogicalModelCall(t *testing.T) {
 		ConversationID: "conv-1", RunID: "run-1", StageID: "stage-1", TurnID: "turn-1",
 	})
 	ctx = contextassembly.WithSession(ctx, contextassembly.Session{
-		Policy: contextassembly.DefaultPolicy(), Sink: eventpkg.StoreSink{Store: store}, CurrentInput: "calculate 1 + 1",
+		Config: contextassembly.DefaultConfig(), Sink: eventpkg.StoreSink{Store: store}, CurrentInput: "calculate 1 + 1",
 	})
 	history := []domain.Message{{ID: "message-1", Role: "user", Content: "calculate 1 + 1"}}
 

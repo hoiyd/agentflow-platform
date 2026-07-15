@@ -77,7 +77,7 @@ func main() {
 		QueueSize:     cfg.RunQueueSize,
 		WaitTimeout:   cfg.RunQueueWaitTimeout,
 	}))
-	handler.SetContextPolicy(domain.RuntimeContextPolicy{
+	handler.SetContextAssemblyConfig(domain.ContextAssemblyConfig{
 		ContextWindowTokens: cfg.ModelContextWindowTokens,
 		OutputReserveTokens: cfg.ModelOutputReserveTokens, SafetyMarginTokens: cfg.ContextSafetyMarginTokens,
 		HistoryMaxTokens: cfg.ContextHistoryMaxTokens, MemoryMaxTokens: cfg.ContextMemoryMaxTokens,

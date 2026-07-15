@@ -55,8 +55,8 @@ func (h *Handler) SetRunController(controller *concurrency.RunController) {
 	}
 }
 
-func (h *Handler) SetContextPolicy(policy domain.RuntimeContextPolicy) {
-	h.agentRuntime.SetContextPolicy(policy)
+func (h *Handler) SetContextAssemblyConfig(config domain.ContextAssemblyConfig) {
+	h.agentRuntime.SetContextAssemblyConfig(config)
 }
 
 func (h *Handler) Close(ctx context.Context) error {

@@ -296,7 +296,7 @@ func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T)
 		if event.Type == domain.EventContextAssembled {
 			sawContextManifest = true
 			manifest, _ := event.Payload["manifest"].(map[string]any)
-			if manifest["id"] == "" || manifest["policy_version"] != "context-v1" {
+			if manifest["id"] == "" || manifest["assembler_version"] != "context-assembler-v1" {
 				t.Fatalf("unexpected context manifest payload: %#v", event.Payload)
 			}
 		}

@@ -28,8 +28,8 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	if !active {
 		return Pack{Messages: cloneMessages(request.Messages)}, nil
 	}
-	policy := NormalizePolicy(session.Policy)
-	inputBudget := policy.ContextWindowTokens - policy.OutputReserveTokens - policy.SafetyMarginTokens
+	config := NormalizeConfig(session.Config)
+	inputBudget := config.ContextWindowTokens - config.OutputReserveTokens - config.SafetyMarginTokens
 	messages := normalizeMessages(mergeSessionHistory(request.Messages, session))
 	entries := make([]domain.ContextManifestEntry, 0, len(messages)+len(request.Tools)+len(session.Memories)+len(session.Knowledge))
 	messageCandidates := make([]candidate, 0, len(messages))
@@ -65,9 +65,9 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	knowledgeCandidates := knowledgeCandidates(session.Knowledge)
 	selectedTokens := requiredTokens
 	if requiredTokens <= inputBudget {
-		selectedTokens += selectRecentHistory(messageCandidates, policy.HistoryMaxTokens, inputBudget-selectedTokens)
-		selectedTokens += selectRelevant(memoryCandidates, policy.MemoryMaxTokens, inputBudget-selectedTokens, "memory_budget_exceeded")
-		selectedTokens += selectRelevant(knowledgeCandidates, policy.KnowledgeMaxTokens, inputBudget-selectedTokens, "knowledge_budget_exceeded")
+		selectedTokens += selectRecentHistory(messageCandidates, config.HistoryMaxTokens, inputBudget-selectedTokens)
+		selectedTokens += selectRelevant(memoryCandidates, config.MemoryMaxTokens, inputBudget-selectedTokens, "memory_budget_exceeded")
+		selectedTokens += selectRelevant(knowledgeCandidates, config.KnowledgeMaxTokens, inputBudget-selectedTokens, "knowledge_budget_exceeded")
 	} else {
 		excludeOptional(messageCandidates, "input_budget_exceeded")
 		excludeOptional(memoryCandidates, "input_budget_exceeded")
@@ -88,7 +88,7 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	entries = appendCandidateEntries(entries, knowledgeCandidates)
 	packedMessages = injectRetrievedContext(packedMessages, memoryCandidates, knowledgeCandidates)
 
-	manifest := newManifest(ctx, request.Model, policy, inputBudget, selectedTokens, entries, prefixHash(messages, request.Tools))
+	manifest := newManifest(ctx, request.Model, config, inputBudget, selectedTokens, entries, prefixHash(messages, request.Tools))
 	if err := publishManifest(ctx, session.Sink, manifest); err != nil {
 		return Pack{}, fmt.Errorf("persist context manifest: %w", err)
 	}
@@ -305,7 +305,7 @@ func selectedFormatted(items []candidate) []string {
 	return selected
 }
 
-func newManifest(ctx context.Context, model string, policy domain.RuntimeContextPolicy, inputBudget int, selectedTokens int, entries []domain.ContextManifestEntry, hash string) domain.ContextManifest {
+func newManifest(ctx context.Context, model string, config domain.ContextAssemblyConfig, inputBudget int, selectedTokens int, entries []domain.ContextManifestEntry, hash string) domain.ContextManifest {
 	scope := eventpkg.ScopeFromContext(ctx)
 	excluded := 0
 	for _, entry := range entries {
@@ -315,9 +315,9 @@ func newManifest(ctx context.Context, model string, policy domain.RuntimeContext
 	}
 	return domain.ContextManifest{
 		ID: newID("ctx"), ModelCallID: newID("call"), RunID: scope.RunID, StageID: scope.StageID,
-		TurnID: scope.TurnID, Model: model, PolicyVersion: policy.Version,
-		ContextWindowTokens: policy.ContextWindowTokens, OutputReserveTokens: policy.OutputReserveTokens,
-		SafetyMarginTokens: policy.SafetyMarginTokens, InputBudgetTokens: inputBudget,
+		TurnID: scope.TurnID, Model: model, AssemblerVersion: config.AssemblerVersion,
+		ContextWindowTokens: config.ContextWindowTokens, OutputReserveTokens: config.OutputReserveTokens,
+		SafetyMarginTokens: config.SafetyMarginTokens, InputBudgetTokens: inputBudget,
 		EstimatedInputTokens: selectedTokens, ExcludedTokens: excluded,
 		PrefixHash: hash, Entries: entries, CreatedAt: time.Now().UTC(),
 	}

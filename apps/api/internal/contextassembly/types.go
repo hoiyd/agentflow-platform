@@ -10,7 +10,7 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 )
 
-const PolicyVersion = "context-v1"
+const AssemblerVersion = "context-assembler-v1"
 
 const (
 	SourceSystem         = "system"
@@ -62,7 +62,7 @@ type Pack struct {
 }
 
 type Session struct {
-	Policy       domain.RuntimeContextPolicy
+	Config       domain.ContextAssemblyConfig
 	Sink         eventpkg.Sink
 	History      []domain.Message
 	CurrentInput string
@@ -84,40 +84,40 @@ func sessionFromContext(ctx context.Context) (Session, bool) {
 	return session, ok
 }
 
-func DefaultPolicy() domain.RuntimeContextPolicy {
-	return domain.RuntimeContextPolicy{
-		Version: PolicyVersion, ContextWindowTokens: 128000, OutputReserveTokens: 8192,
+func DefaultConfig() domain.ContextAssemblyConfig {
+	return domain.ContextAssemblyConfig{
+		AssemblerVersion: AssemblerVersion, ContextWindowTokens: 128000, OutputReserveTokens: 8192,
 		SafetyMarginTokens: 4096, HistoryMaxTokens: 64000, MemoryMaxTokens: 8000,
 		KnowledgeMaxTokens: 16000,
 	}
 }
 
-func NormalizePolicy(policy domain.RuntimeContextPolicy) domain.RuntimeContextPolicy {
-	defaults := DefaultPolicy()
-	if policy.Version == "" {
-		policy.Version = defaults.Version
+func NormalizeConfig(config domain.ContextAssemblyConfig) domain.ContextAssemblyConfig {
+	defaults := DefaultConfig()
+	if config.AssemblerVersion == "" {
+		config.AssemblerVersion = defaults.AssemblerVersion
 	}
-	if policy.ContextWindowTokens <= 0 {
-		policy.ContextWindowTokens = defaults.ContextWindowTokens
+	if config.ContextWindowTokens <= 0 {
+		config.ContextWindowTokens = defaults.ContextWindowTokens
 	}
-	if policy.OutputReserveTokens <= 0 {
-		policy.OutputReserveTokens = defaults.OutputReserveTokens
+	if config.OutputReserveTokens <= 0 {
+		config.OutputReserveTokens = defaults.OutputReserveTokens
 	}
-	if policy.SafetyMarginTokens <= 0 {
-		policy.SafetyMarginTokens = defaults.SafetyMarginTokens
+	if config.SafetyMarginTokens <= 0 {
+		config.SafetyMarginTokens = defaults.SafetyMarginTokens
 	}
-	if policy.OutputReserveTokens+policy.SafetyMarginTokens >= policy.ContextWindowTokens {
-		policy.OutputReserveTokens = max(1, policy.ContextWindowTokens/8)
-		policy.SafetyMarginTokens = max(1, policy.ContextWindowTokens/16)
+	if config.OutputReserveTokens+config.SafetyMarginTokens >= config.ContextWindowTokens {
+		config.OutputReserveTokens = max(1, config.ContextWindowTokens/8)
+		config.SafetyMarginTokens = max(1, config.ContextWindowTokens/16)
 	}
-	if policy.HistoryMaxTokens <= 0 {
-		policy.HistoryMaxTokens = defaults.HistoryMaxTokens
+	if config.HistoryMaxTokens <= 0 {
+		config.HistoryMaxTokens = defaults.HistoryMaxTokens
 	}
-	if policy.MemoryMaxTokens <= 0 {
-		policy.MemoryMaxTokens = defaults.MemoryMaxTokens
+	if config.MemoryMaxTokens <= 0 {
+		config.MemoryMaxTokens = defaults.MemoryMaxTokens
 	}
-	if policy.KnowledgeMaxTokens <= 0 {
-		policy.KnowledgeMaxTokens = defaults.KnowledgeMaxTokens
+	if config.KnowledgeMaxTokens <= 0 {
+		config.KnowledgeMaxTokens = defaults.KnowledgeMaxTokens
 	}
-	return policy
+	return config
 }

@@ -34,8 +34,8 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 		"test-model-v1", "embedding-v1", 1536, time.Second,
 	)
 	runtime := NewRuntime(fileStore, client, manager)
-	runtime.SetContextPolicy(domain.RuntimeContextPolicy{
-		Version: "context-v1", ContextWindowTokens: 32000, OutputReserveTokens: 2048,
+	runtime.SetContextAssemblyConfig(domain.ContextAssemblyConfig{
+		AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 32000, OutputReserveTokens: 2048,
 		SafetyMarginTokens: 1024, HistoryMaxTokens: 12000, MemoryMaxTokens: 2000, KnowledgeMaxTokens: 4000,
 	})
 	agent, err := fileStore.CreateAgent(domain.Agent{
@@ -64,12 +64,12 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 			t.Fatalf("snapshot leaked secret %q: %s", secret, serialized)
 		}
 	}
-	if prepared.Run.RuntimeSnapshot.ContextPolicy.ContextWindowTokens != 32000 {
-		t.Fatalf("context policy was not frozen: %#v", prepared.Run.RuntimeSnapshot.ContextPolicy)
+	if prepared.Run.RuntimeSnapshot.ContextAssembly.ContextWindowTokens != 32000 {
+		t.Fatalf("context assembly config was not frozen: %#v", prepared.Run.RuntimeSnapshot.ContextAssembly)
 	}
-	runtime.SetContextPolicy(domain.RuntimeContextPolicy{Version: "context-v1", ContextWindowTokens: 64000})
-	if prepared.Run.RuntimeSnapshot.ContextPolicy.ContextWindowTokens != 32000 {
-		t.Fatal("runtime config mutation changed the frozen context policy")
+	runtime.SetContextAssemblyConfig(domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 64000})
+	if prepared.Run.RuntimeSnapshot.ContextAssembly.ContextWindowTokens != 32000 {
+		t.Fatal("runtime config mutation changed the frozen context assembly config")
 	}
 
 	agent.SystemPrompt = "mutated prompt"

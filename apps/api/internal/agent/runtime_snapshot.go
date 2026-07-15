@@ -54,10 +54,10 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 			EmbeddingBaseURL: identity.EmbeddingBaseURL, EmbeddingModel: identity.EmbeddingModel,
 			EmbeddingDimensions: identity.EmbeddingDimensions,
 		},
-		Tools:         toolSnapshots,
-		ContextPolicy: contextassembly.NormalizePolicy(r.contextPolicy),
-		RouterMode:    r.routerMode,
-		CreatedAt:     time.Now().UTC(),
+		Tools:           toolSnapshots,
+		ContextAssembly: contextassembly.NormalizeConfig(r.contextAssemblyConfig),
+		RouterMode:      r.routerMode,
+		CreatedAt:       time.Now().UTC(),
 	}
 	if mode == ChatModeAutonomous {
 		snapshot.AutonomousLimits = &domain.RuntimeLimitsSnapshot{
@@ -125,7 +125,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 		return restoredRuntime{}, fmt.Errorf("%w for run %s: %v; run cannot be resumed safely", ErrRuntimeSnapshotUnavailable, run.ID, err)
 	}
 	snapshot := run.RuntimeSnapshot
-	snapshot.ContextPolicy = contextassembly.NormalizePolicy(snapshot.ContextPolicy)
+	snapshot.ContextAssembly = contextassembly.NormalizeConfig(snapshot.ContextAssembly)
 	current, err := r.currentCatalog()
 	if err != nil {
 		return restoredRuntime{}, err
@@ -208,7 +208,7 @@ func (r *Runtime) snapshotForRun(runID string) (*domain.RuntimeSnapshot, error) 
 	if err := validateRuntimeSnapshot(run.RuntimeSnapshot); err != nil {
 		return nil, fmt.Errorf("%w for run %s: %v", ErrRuntimeSnapshotUnavailable, runID, err)
 	}
-	run.RuntimeSnapshot.ContextPolicy = contextassembly.NormalizePolicy(run.RuntimeSnapshot.ContextPolicy)
+	run.RuntimeSnapshot.ContextAssembly = contextassembly.NormalizeConfig(run.RuntimeSnapshot.ContextAssembly)
 	return run.RuntimeSnapshot, nil
 }
 

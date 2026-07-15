@@ -16,14 +16,14 @@ import (
 )
 
 type Runtime struct {
-	store            RuntimeStore
-	openAI           *openai.Client
-	tools            *tools.Manager
-	trace            *eventpkg.Recorder
-	turnEngine       *turnpkg.Engine
-	routerMode       string
-	contextPolicy    domain.RuntimeContextPolicy
-	autonomousLimits AutonomousLimits
+	store                 RuntimeStore
+	openAI                *openai.Client
+	tools                 *tools.Manager
+	trace                 *eventpkg.Recorder
+	turnEngine            *turnpkg.Engine
+	routerMode            string
+	contextAssemblyConfig domain.ContextAssemblyConfig
+	autonomousLimits      AutonomousLimits
 }
 
 type RuntimeStore interface {
@@ -67,20 +67,20 @@ func NewRuntimeWithRouterMode(store RuntimeStore, openAI *openai.Client, tools *
 
 func NewRuntimeWithRouterModeAndLimits(store RuntimeStore, openAI *openai.Client, tools *tools.Manager, routerMode string, limits AutonomousLimits) *Runtime {
 	runtime := &Runtime{
-		store:            store,
-		openAI:           openAI,
-		tools:            tools,
-		trace:            tracepkg.NewRecorder(store),
-		routerMode:       NormalizeRouterMode(routerMode),
-		contextPolicy:    contextassembly.DefaultPolicy(),
-		autonomousLimits: normalizeAutonomousLimits(limits),
+		store:                 store,
+		openAI:                openAI,
+		tools:                 tools,
+		trace:                 tracepkg.NewRecorder(store),
+		routerMode:            NormalizeRouterMode(routerMode),
+		contextAssemblyConfig: contextassembly.DefaultConfig(),
+		autonomousLimits:      normalizeAutonomousLimits(limits),
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime
 }
 
-func (r *Runtime) SetContextPolicy(policy domain.RuntimeContextPolicy) {
-	r.contextPolicy = contextassembly.NormalizePolicy(policy)
+func (r *Runtime) SetContextAssemblyConfig(config domain.ContextAssemblyConfig) {
+	r.contextAssemblyConfig = contextassembly.NormalizeConfig(config)
 }
 
 func DefaultAutonomousLimits() AutonomousLimits {
