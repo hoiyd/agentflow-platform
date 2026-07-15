@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/concurrency"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
@@ -19,6 +20,7 @@ type Handler struct {
 	tools          *tools.Manager
 	agentRuntime   *agent.Runtime
 	memorySyncer   *memorypkg.Syncer
+	runController  *concurrency.RunController
 	allowedOrigins []string
 }
 
@@ -32,12 +34,23 @@ func NewHandlerWithRouterMode(store store.Store, openAI *openai.Client, tools *t
 
 func NewHandlerWithRouterModeAndLimits(store store.Store, openAI *openai.Client, tools *tools.Manager, allowedOrigins []string, routerMode string, limits agent.AutonomousLimits) *Handler {
 	return &Handler{
-		store:          store,
-		openAI:         openAI,
-		tools:          tools,
-		agentRuntime:   agent.NewRuntimeWithRouterModeAndLimits(store, openAI, tools, routerMode, limits),
-		memorySyncer:   memorypkg.NewSyncer(store, openAI),
+		store:        store,
+		openAI:       openAI,
+		tools:        tools,
+		agentRuntime: agent.NewRuntimeWithRouterModeAndLimits(store, openAI, tools, routerMode, limits),
+		memorySyncer: memorypkg.NewSyncer(store, openAI),
+		runController: concurrency.NewRunController(concurrency.RunOptions{
+			MaxConcurrent: concurrency.DefaultMaxConcurrentRuns,
+			QueueSize:     concurrency.DefaultRunQueueSize,
+			WaitTimeout:   concurrency.DefaultRunQueueWait,
+		}),
 		allowedOrigins: allowedOrigins,
+	}
+}
+
+func (h *Handler) SetRunController(controller *concurrency.RunController) {
+	if controller != nil {
+		h.runController = controller
 	}
 }
 
@@ -139,6 +152,7 @@ func (h *Handler) withCORS(next http.Handler) http.Handler {
 			w.Header().Set("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Expose-Headers", "Retry-After")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
 
 		if r.Method == http.MethodOptions {

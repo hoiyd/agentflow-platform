@@ -15,8 +15,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
+	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	tracepkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/tools"
@@ -36,6 +38,7 @@ type Client struct {
 	embeddingDimensions int
 	httpClient          *http.Client
 	timeout             time.Duration
+	requestGovernor     *concurrency.ModelGovernor
 }
 
 type RuntimeIdentity struct {
@@ -71,6 +74,46 @@ type StreamEvent struct {
 	ToolName   string
 	ToolCallID string
 	Error      string
+}
+
+type streamToolExecutionTracer struct {
+	delegate tools.ExecutionTracer
+	events   chan<- StreamEvent
+}
+
+func (t *streamToolExecutionTracer) ToolStarted(ctx context.Context, request tools.ExecutionRequest) {
+	if t.delegate != nil {
+		t.delegate.ToolStarted(ctx, request)
+	}
+	log.Printf("tool_call_start id=%s tool=%s arguments=%q", request.CallID, request.Tool, string(request.Arguments))
+	select {
+	case <-ctx.Done():
+	case t.events <- StreamEvent{Type: "tool_start", ToolName: request.Tool, ToolCallID: request.CallID}:
+	}
+}
+
+func (t *streamToolExecutionTracer) ToolFinished(ctx context.Context, result tools.ExecutionResult) {
+	if t.delegate != nil {
+		t.delegate.ToolFinished(ctx, result)
+	}
+	select {
+	case <-ctx.Done():
+	case t.events <- StreamEvent{Type: "tool_end", ToolName: result.Tool, ToolCallID: result.CallID, Error: result.ErrorMessage()}:
+	}
+	status := "tool_end"
+	if result.Error != nil {
+		status = "tool_error"
+	}
+	log.Printf(
+		"tool_call_end id=%s tool=%s status=%s duration_ms=%d arguments=%q result=%q error=%q",
+		result.CallID,
+		result.Tool,
+		status,
+		result.DurationMS,
+		string(result.Arguments),
+		marshalResult(result),
+		result.ErrorMessage(),
+	)
 }
 
 type Usage struct {
@@ -145,6 +188,10 @@ func (c *Client) HasAPIKey() bool {
 	return c.apiKey != ""
 }
 
+func (c *Client) SetRequestGovernor(governor *concurrency.ModelGovernor) {
+	c.requestGovernor = governor
+}
+
 func (c *Client) RuntimeIdentity() RuntimeIdentity {
 	return RuntimeIdentity{
 		Provider: providerForURL(c.baseURL), BaseURL: safeRuntimeURL(c.baseURL), Model: c.model,
@@ -154,8 +201,10 @@ func (c *Client) RuntimeIdentity() RuntimeIdentity {
 }
 
 func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) *Client {
-	return NewClientWithTimeoutAndEmbeddingModel(c.apiKey, identity.BaseURL, identity.EmbeddingBaseURL,
+	client := NewClientWithTimeoutAndEmbeddingModel(c.apiKey, identity.BaseURL, identity.EmbeddingBaseURL,
 		identity.Model, identity.EmbeddingModel, identity.EmbeddingDimensions, c.timeout)
+	client.requestGovernor = c.requestGovernor
+	return client
 }
 
 func safeRuntimeURL(value string) string {
@@ -611,50 +660,30 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		return nil
 	}
 
+	normalizedCalls := normalizeToolCalls(toolCalls)
 	messages = append(messages, Message{
 		Role:      "assistant",
 		Content:   choice.Message.Content,
-		ToolCalls: normalizeToolCalls(toolCalls),
+		ToolCalls: normalizedCalls,
 	})
 
-	results := make([]tools.ExecutionResult, 0, len(toolCalls))
 	toolExecutor := tools.NewExecutor(catalog, tools.ExecutorOptions{
-		Tracer: tracepkg.NewToolExecutionTracer(recorder, runID, stepID),
+		Tracer: &streamToolExecutionTracer{
+			delegate: tracepkg.NewToolExecutionTracer(recorder, runID, stepID),
+			events:   events,
+		},
 	})
-	for _, call := range normalizeToolCalls(toolCalls) {
-		log.Printf("tool_call_start id=%s tool=%s arguments=%q", call.ID, call.Function.Name, call.Function.Arguments)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case events <- StreamEvent{Type: "tool_start", ToolName: call.Function.Name, ToolCallID: call.ID}:
-		}
-
-		result := toolExecutor.Execute(ctx, tools.ExecutionRequest{
+	requests := make([]tools.ExecutionRequest, 0, len(normalizedCalls))
+	for _, call := range normalizedCalls {
+		requests = append(requests, tools.ExecutionRequest{
 			CallID: call.ID, Tool: call.Function.Name,
 			Arguments: json.RawMessage(call.Function.Arguments),
 		})
-		results = append(results, result)
+	}
+	results := toolExecutor.ExecuteBatch(ctx, requests)
+	for index, result := range results {
+		call := normalizedCalls[index]
 		resultText := marshalResult(result)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case events <- StreamEvent{Type: "tool_end", ToolName: call.Function.Name, ToolCallID: call.ID, Error: result.ErrorMessage()}:
-		}
-		logStatus := "tool_end"
-		if result.Error != nil {
-			logStatus = "tool_error"
-		}
-		log.Printf(
-			"tool_call_end id=%s tool=%s status=%s duration_ms=%d arguments=%q result=%q error=%q",
-			call.ID,
-			call.Function.Name,
-			logStatus,
-			result.DurationMS,
-			string(result.Arguments),
-			resultText,
-			result.ErrorMessage(),
-		)
-
 		messages = append(messages, Message{
 			Role:       "tool",
 			ToolCallID: call.ID,
@@ -808,8 +837,13 @@ func (c *Client) doRawRequest(ctx context.Context, url string, payload []byte) (
 }
 
 func (c *Client) doPathRequest(ctx context.Context, baseURL string, path string, payload []byte) (*http.Response, error) {
+	release, err := c.requestGovernor.Acquire(ctx, c.apiKey, estimatedRequestTokens(payload))
+	if err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+path, bytes.NewReader(payload))
 	if err != nil {
+		release()
 		return nil, err
 	}
 	if c.apiKey != "" {
@@ -818,7 +852,37 @@ func (c *Client) doPathRequest(ctx context.Context, baseURL string, path string,
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("HTTP-Referer", "http://localhost:3000")
 	req.Header.Set("X-Title", "AgentFlow Platform")
-	return c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	resp.Body = &releaseReadCloser{ReadCloser: resp.Body, release: release}
+	return resp, nil
+}
+
+func estimatedRequestTokens(payload []byte) int {
+	return max(1, (len(payload)+3)/4)
+}
+
+type releaseReadCloser struct {
+	io.ReadCloser
+	release func()
+	once    sync.Once
+}
+
+func (r *releaseReadCloser) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	if err != nil {
+		r.once.Do(r.release)
+	}
+	return n, err
+}
+
+func (r *releaseReadCloser) Close() error {
+	err := r.ReadCloser.Close()
+	r.once.Do(r.release)
+	return err
 }
 
 type chatCompletionChunk struct {

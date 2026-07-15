@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/httpapi"
 	"agentflow-platform/apps/api/internal/openai"
@@ -50,6 +51,11 @@ func main() {
 		cfg.EmbeddingDimensions,
 		cfg.OpenAITimeout,
 	)
+	openAIClient.SetRequestGovernor(concurrency.NewModelGovernor(concurrency.ModelOptions{
+		MaxConcurrent:     cfg.MaxConcurrentModelRequests,
+		RequestsPerPeriod: cfg.ModelRequestsPerMinute,
+		TokensPerPeriod:   cfg.ModelTokensPerMinute,
+	}))
 	toolManager, err := tools.NewManager(cfg.ToolConfigPath)
 	if err != nil {
 		log.Fatalf("create tools manager: %v", err)
@@ -60,6 +66,11 @@ func main() {
 		MaxOutputChars: cfg.AutonomousMaxOutputCharacters,
 		MaxToolCalls:   cfg.AutonomousMaxToolCalls,
 	})
+	handler.SetRunController(concurrency.NewRunController(concurrency.RunOptions{
+		MaxConcurrent: cfg.MaxConcurrentRuns,
+		QueueSize:     cfg.RunQueueSize,
+		WaitTimeout:   cfg.RunQueueWaitTimeout,
+	}))
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -79,6 +90,8 @@ func main() {
 	log.Printf("AgentFlow router mode: %s", cfg.RouterMode)
 	log.Printf("AgentFlow autonomous limits: max_iterations=%d max_runtime=%s max_output_chars=%d max_tool_calls=%d", cfg.AutonomousMaxIterations, cfg.AutonomousMaxRuntime, cfg.AutonomousMaxOutputCharacters, cfg.AutonomousMaxToolCalls)
 	log.Printf("AgentFlow native recovery: stale_run_timeout=%s", cfg.RecoveryStaleRunTimeout)
+	log.Printf("AgentFlow run concurrency: max_concurrent=%d queue_size=%d wait_timeout=%s", cfg.MaxConcurrentRuns, cfg.RunQueueSize, cfg.RunQueueWaitTimeout)
+	log.Printf("AgentFlow model concurrency: max_in_flight=%d rpm=%d tpm=%d", cfg.MaxConcurrentModelRequests, cfg.ModelRequestsPerMinute, cfg.ModelTokensPerMinute)
 	if cfg.OpenAIAPIKey == "" {
 		log.Println("OPENAI_API_KEY is empty; using local streaming fallback for verification")
 	}

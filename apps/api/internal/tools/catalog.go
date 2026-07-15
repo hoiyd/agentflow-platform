@@ -56,6 +56,20 @@ func (c *Catalog) Register(binding Binding) error {
 	if _, err := json.Marshal(binding.Descriptor.Parameters); err != nil {
 		return fmt.Errorf("tool %q parameters must be JSON-compatible: %w", name, err)
 	}
+	concurrency := binding.Descriptor.Concurrency
+	switch concurrency.Mode {
+	case "", ConcurrencySerial, ConcurrencyReadOnly:
+		if strings.TrimSpace(concurrency.KeyArgument) != "" {
+			return fmt.Errorf("tool %q concurrency key argument requires keyed mode", name)
+		}
+	case ConcurrencyKeyed:
+		if strings.TrimSpace(concurrency.KeyArgument) == "" {
+			return fmt.Errorf("tool %q keyed concurrency requires a key argument", name)
+		}
+		binding.Descriptor.Concurrency.KeyArgument = strings.TrimSpace(concurrency.KeyArgument)
+	default:
+		return fmt.Errorf("tool %q has unsupported concurrency mode %q", name, concurrency.Mode)
+	}
 	if _, exists := c.bindings[name]; exists {
 		return fmt.Errorf("tool %q already registered", name)
 	}

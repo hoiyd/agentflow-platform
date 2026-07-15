@@ -9,14 +9,26 @@ import (
 )
 
 type Config struct {
-	Port                          string
-	OpenAIAPIKey                  string
-	OpenAIBaseURL                 string
-	OpenAIModel                   string
-	EmbeddingBaseURL              string
-	EmbeddingModel                string
-	EmbeddingDimensions           int
-	OpenAITimeout                 time.Duration
+	Port                string
+	OpenAIAPIKey        string
+	OpenAIBaseURL       string
+	OpenAIModel         string
+	EmbeddingBaseURL    string
+	EmbeddingModel      string
+	EmbeddingDimensions int
+	OpenAITimeout       time.Duration
+	// MaxConcurrentRuns caps active Agent runs across all conversations.
+	MaxConcurrentRuns int
+	// RunQueueSize is the additional bounded waiting capacity beyond active runs.
+	RunQueueSize int
+	// RunQueueWaitTimeout limits how long an admitted run may wait for execution.
+	RunQueueWaitTimeout time.Duration
+	// MaxConcurrentModelRequests caps in-flight Chat and Embedding HTTP requests.
+	MaxConcurrentModelRequests int
+	// ModelRequestsPerMinute configures the per-API-key request token bucket; zero disables it.
+	ModelRequestsPerMinute int
+	// ModelTokensPerMinute configures the approximate input-token bucket; zero disables it.
+	ModelTokensPerMinute          int
 	RouterMode                    string
 	AutonomousMaxIterations       int
 	AutonomousMaxRuntime          time.Duration
@@ -42,6 +54,12 @@ func Load() Config {
 		EmbeddingModel:                getEnv("EMBEDDING_MODEL", "embeddinggemma"),
 		EmbeddingDimensions:           getIntEnv("EMBEDDING_DIMENSIONS", 1536),
 		OpenAITimeout:                 getDurationEnv("OPENAI_REQUEST_TIMEOUT", 5*time.Minute),
+		MaxConcurrentRuns:             getIntEnv("MAX_CONCURRENT_RUNS", 8),
+		RunQueueSize:                  getNonNegativeIntEnv("RUN_QUEUE_SIZE", 32),
+		RunQueueWaitTimeout:           getDurationEnv("RUN_QUEUE_WAIT_TIMEOUT", 30*time.Second),
+		MaxConcurrentModelRequests:    getIntEnv("MAX_CONCURRENT_MODEL_REQUESTS", 8),
+		ModelRequestsPerMinute:        getNonNegativeIntEnv("MODEL_REQUESTS_PER_MINUTE", 60),
+		ModelTokensPerMinute:          getNonNegativeIntEnv("MODEL_TOKENS_PER_MINUTE", 120000),
 		RouterMode:                    normalizeRouterMode(getEnv("ROUTER_MODE", "auto")),
 		AutonomousMaxIterations:       getIntEnv("AUTONOMOUS_MAX_ITERATIONS", 5),
 		AutonomousMaxRuntime:          getAutonomousRuntime(),
@@ -93,6 +111,18 @@ func getIntEnv(key string, fallback int) int {
 	}
 	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func getNonNegativeIntEnv(key string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
 		return fallback
 	}
 	return parsed

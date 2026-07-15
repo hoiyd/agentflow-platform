@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -137,6 +139,60 @@ func TestExecutorEmitsTracingCallbacks(t *testing.T) {
 	}
 }
 
+func TestExecuteBatchDefaultsToSerial(t *testing.T) {
+	var active atomic.Int32
+	var maximum atomic.Int32
+	catalog, err := NewCatalog(concurrencyTestTool("serial", ConcurrencyPolicy{}, &active, &maximum))
+	if err != nil {
+		t.Fatalf("new catalog: %v", err)
+	}
+	requests := []ExecutionRequest{{Tool: "serial"}, {Tool: "serial"}}
+	results := NewExecutor(catalog, ExecutorOptions{}).ExecuteBatch(context.Background(), requests)
+	if len(results) != 2 || maximum.Load() != 1 {
+		t.Fatalf("expected serial execution, max=%d results=%d", maximum.Load(), len(results))
+	}
+}
+
+func TestExecuteBatchRunsReadOnlyToolsConcurrently(t *testing.T) {
+	var active atomic.Int32
+	var maximum atomic.Int32
+	catalog, err := NewCatalog(concurrencyTestTool("reader", ConcurrencyPolicy{Mode: ConcurrencyReadOnly}, &active, &maximum))
+	if err != nil {
+		t.Fatalf("new catalog: %v", err)
+	}
+	requests := []ExecutionRequest{{Tool: "reader"}, {Tool: "reader"}}
+	results := NewExecutor(catalog, ExecutorOptions{MaxConcurrency: 2}).ExecuteBatch(context.Background(), requests)
+	if len(results) != 2 || maximum.Load() < 2 {
+		t.Fatalf("expected read-only calls to overlap, max=%d results=%d", maximum.Load(), len(results))
+	}
+}
+
+func TestExecuteBatchSerializesMatchingConcurrencyKeys(t *testing.T) {
+	tracker := &keyConcurrencyTracker{active: make(map[string]int)}
+	catalog, err := NewCatalog(Binding{
+		Descriptor: Descriptor{
+			Name: "keyed", Parameters: ObjectSchema(map[string]any{"resource_id": map[string]any{"type": "string"}}, []string{"resource_id"}),
+			Concurrency: ConcurrencyPolicy{Mode: ConcurrencyKeyed, KeyArgument: "resource_id"},
+		},
+		Handler: tracker.handle,
+	})
+	if err != nil {
+		t.Fatalf("new catalog: %v", err)
+	}
+	requests := []ExecutionRequest{
+		{Tool: "keyed", Arguments: json.RawMessage(`{"resource_id":"a"}`)},
+		{Tool: "keyed", Arguments: json.RawMessage(`{"resource_id":"a"}`)},
+		{Tool: "keyed", Arguments: json.RawMessage(`{"resource_id":"b"}`)},
+	}
+	NewExecutor(catalog, ExecutorOptions{MaxConcurrency: 3}).ExecuteBatch(context.Background(), requests)
+	if tracker.maxForKey("a") != 1 {
+		t.Fatalf("matching keys overlapped: max=%d", tracker.maxForKey("a"))
+	}
+	if tracker.maxTotal < 2 {
+		t.Fatalf("distinct keys did not overlap: max=%d", tracker.maxTotal)
+	}
+}
+
 func TestExecutionErrorUnwrapsCause(t *testing.T) {
 	cause := errors.New("cause")
 	err := executionError(ErrorExecutionFailed, "failed", cause)
@@ -148,6 +204,60 @@ func TestExecutionErrorUnwrapsCause(t *testing.T) {
 type recordingTracer struct {
 	started  ExecutionRequest
 	finished ExecutionResult
+}
+
+func concurrencyTestTool(name string, policy ConcurrencyPolicy, active, maximum *atomic.Int32) Binding {
+	return Binding{
+		Descriptor: Descriptor{Name: name, Parameters: ObjectSchema(nil, nil), Concurrency: policy},
+		Handler: func(context.Context, json.RawMessage) (any, error) {
+			current := active.Add(1)
+			for {
+				previous := maximum.Load()
+				if current <= previous || maximum.CompareAndSwap(previous, current) {
+					break
+				}
+			}
+			time.Sleep(20 * time.Millisecond)
+			active.Add(-1)
+			return map[string]any{"ok": true}, nil
+		},
+	}
+}
+
+type keyConcurrencyTracker struct {
+	mu       sync.Mutex
+	active   map[string]int
+	maximum  map[string]int
+	total    int
+	maxTotal int
+}
+
+func (t *keyConcurrencyTracker) handle(_ context.Context, args json.RawMessage) (any, error) {
+	var input struct {
+		ResourceID string `json:"resource_id"`
+	}
+	_ = json.Unmarshal(args, &input)
+	t.mu.Lock()
+	if t.maximum == nil {
+		t.maximum = make(map[string]int)
+	}
+	t.active[input.ResourceID]++
+	t.total++
+	t.maximum[input.ResourceID] = max(t.maximum[input.ResourceID], t.active[input.ResourceID])
+	t.maxTotal = max(t.maxTotal, t.total)
+	t.mu.Unlock()
+	time.Sleep(20 * time.Millisecond)
+	t.mu.Lock()
+	t.active[input.ResourceID]--
+	t.total--
+	t.mu.Unlock()
+	return map[string]any{"resource_id": input.ResourceID}, nil
+}
+
+func (t *keyConcurrencyTracker) maxForKey(key string) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.maximum[key]
 }
 
 func (t *recordingTracer) ToolStarted(_ context.Context, request ExecutionRequest) {
