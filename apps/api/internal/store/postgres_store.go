@@ -979,8 +979,18 @@ func (s *PostgresStore) GetDocument(id string) (domain.Document, []domain.Docume
 }
 
 func (s *PostgresStore) DeleteDocument(id string) error {
-	_, err := s.db.Exec(`DELETE FROM documents WHERE id = $1`, strings.TrimSpace(id))
-	return err
+	result, err := s.db.Exec(`DELETE FROM documents WHERE id = $1`, strings.TrimSpace(id))
+	if err != nil {
+		return err
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if deleted == 0 {
+		return ErrNotFound("document")
+	}
+	return nil
 }
 
 func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {

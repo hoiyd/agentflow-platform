@@ -7,21 +7,14 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
-	"regexp"
-	"sort"
 	"strings"
-	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/store"
 )
 
-const (
-	documentChunkSize      = 4000
-	documentChunkOverlap   = 500
-	documentUploadMaxBytes = 2 << 20
-)
-
-var orderedMarkdownListPattern = regexp.MustCompile(`^\d+[.)]\s+`)
+const documentUploadMaxBytes = 2 << 20
 
 func (h *Handler) listDocuments(w http.ResponseWriter, r *http.Request) {
 	documents, err := h.store.ListDocuments()
@@ -60,7 +53,11 @@ func (h *Handler) deleteDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.DeleteDocument(id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		status := http.StatusInternalServerError
+		if store.IsNotFound(err) {
+			status = http.StatusNotFound
+		}
+		writeError(w, status, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -72,7 +69,7 @@ func (h *Handler) createDocument(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
-	document, chunks, err := buildDocumentChunks(req)
+	document, chunks, err := rag.BuildDocument(req)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -94,7 +91,7 @@ func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	filename := strings.TrimSpace(header.Filename)
-	format, mimeType, ok := documentFormatFromFilename(filename)
+	format, mimeType, ok := rag.FormatFromFilename(filename)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "only .txt, .md, and .markdown files are supported")
 		return
@@ -132,7 +129,7 @@ func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
 			metadata[key] = value
 		}
 	}
-	document, chunks, err := buildDocumentChunks(domain.DocumentIngestRequest{
+	document, chunks, err := rag.BuildDocument(domain.DocumentIngestRequest{
 		Title:      title,
 		Content:    content,
 		SourceType: "file",
@@ -176,7 +173,7 @@ func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
-	response, err := h.runDocumentSearch(r.Context(), search, normalizeDocumentSearchLimit(search.Limit))
+	response, err := h.runDocumentSearch(r.Context(), search, rag.NormalizeSearchLimit(search.Limit))
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, errDocumentSearchEmbedding) {
@@ -211,9 +208,9 @@ func (h *Handler) runDocumentSearch(ctx context.Context, search domain.DocumentS
 		return domain.DocumentSearchResponse{}, errors.Join(errDocumentSearchEmbedding, err)
 	}
 	if requestedLimit <= 0 {
-		requestedLimit = normalizeDocumentSearchLimit(search.Limit)
+		requestedLimit = rag.NormalizeSearchLimit(search.Limit)
 	}
-	search.Limit = rerankCandidateLimit(requestedLimit)
+	search.Limit = rag.CandidateLimit(requestedLimit)
 	search.Embedding = embedding.Vector
 	search.EmbeddingProvider = embedding.Provider
 	search.EmbeddingModel = embedding.Model
@@ -224,8 +221,8 @@ func (h *Handler) runDocumentSearch(ctx context.Context, search domain.DocumentS
 	for index := range items {
 		items[index].VectorRank = index + 1
 	}
-	items = rerankDocumentChunks(search.Query, items, requestedLimit)
-	items = applyRelevanceGate(items)
+	items = rag.Rerank(search.Query, items, requestedLimit)
+	items = rag.ApplyRelevanceGate(items)
 	noMatch := len(items) == 0
 	reason := ""
 	if noMatch {
@@ -258,7 +255,7 @@ func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "at most 50 evaluation cases are supported")
 		return
 	}
-	topK := normalizeDocumentSearchLimit(req.TopK)
+	topK := rag.NormalizeSearchLimit(req.TopK)
 	results := make([]domain.RAGEvaluationCaseResult, 0, len(req.Cases))
 	summary := domain.RAGEvaluationSummary{Total: len(req.Cases)}
 	var embedding domain.EmbeddingInfo
@@ -282,7 +279,7 @@ func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
 		if embedding.Provider == "" {
 			embedding = response.Embedding
 		}
-		caseResult := evaluateRAGCase(evalCase, response.Items)
+		caseResult := rag.EvaluateCase(evalCase, response.Items)
 		results = append(results, caseResult)
 		if caseResult.HitAt1 {
 			summary.HitAt1++
@@ -302,696 +299,4 @@ func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
 		Cases:     results,
 		Embedding: embedding,
 	})
-}
-
-func normalizeDocumentSearchLimit(limit int) int {
-	if limit <= 0 {
-		return 5
-	}
-	if limit > 10 {
-		return 10
-	}
-	return limit
-}
-
-func rerankCandidateLimit(limit int) int {
-	if limit <= 0 {
-		limit = 5
-	}
-	candidateLimit := limit * 4
-	if candidateLimit < 10 {
-		candidateLimit = 10
-	}
-	if candidateLimit > 20 {
-		candidateLimit = 20
-	}
-	return candidateLimit
-}
-
-func rerankDocumentChunks(query string, items []domain.RetrievedDocumentChunk, limit int) []domain.RetrievedDocumentChunk {
-	if len(items) == 0 {
-		return items
-	}
-	queryTerms := queryTerms(query)
-	for index := range items {
-		items[index].LexicalBoost = lexicalBoost(query, queryTerms, items[index].Chunk.Content)
-		items[index].MetadataBoost = metadataBoost(query, queryTerms, items[index])
-		items[index].RerankScore = items[index].Score + items[index].LexicalBoost + items[index].MetadataBoost
-		items[index].MatchedTerms = matchedTerms(query, queryTerms, items[index])
-		items[index].EvidenceCoverage = evidenceCoverage(queryTerms, items[index].MatchedTerms)
-		items[index].EvidenceScore = evidenceScore(query, queryTerms, items[index])
-		items[index].Confidence, items[index].FilterReason = relevanceConfidence(items[index])
-		items[index].RerankScore += items[index].EvidenceScore
-	}
-	sort.SliceStable(items, func(i, j int) bool {
-		return items[i].RerankScore > items[j].RerankScore
-	})
-
-	selected := make([]domain.RetrievedDocumentChunk, 0, minInt(limit, len(items)))
-	usedDocuments := map[string]int{}
-	for _, item := range items {
-		if len(selected) >= limit {
-			break
-		}
-		documentUses := usedDocuments[item.Document.ID]
-		if documentUses > 0 && hasUnselectedDocument(items, usedDocuments) {
-			item.DiversityPenalty = 0.04 * float64(documentUses)
-			item.RerankScore -= item.DiversityPenalty
-			if documentUses >= 2 {
-				continue
-			}
-		}
-		selected = append(selected, item)
-		usedDocuments[item.Document.ID]++
-	}
-	if len(selected) < limit {
-		seenChunks := map[string]bool{}
-		for _, item := range selected {
-			seenChunks[item.Chunk.ID] = true
-		}
-		for _, item := range items {
-			if len(selected) >= limit {
-				break
-			}
-			if seenChunks[item.Chunk.ID] {
-				continue
-			}
-			selected = append(selected, item)
-		}
-	}
-	sort.SliceStable(selected, func(i, j int) bool {
-		return selected[i].RerankScore > selected[j].RerankScore
-	})
-	for index := range selected {
-		selected[index].RerankRank = index + 1
-	}
-	return selected
-}
-
-func applyRelevanceGate(items []domain.RetrievedDocumentChunk) []domain.RetrievedDocumentChunk {
-	if len(items) == 0 {
-		return items
-	}
-	filtered := make([]domain.RetrievedDocumentChunk, 0, len(items))
-	for _, item := range items {
-		if item.Confidence == "low" {
-			continue
-		}
-		filtered = append(filtered, item)
-	}
-	for index := range filtered {
-		filtered[index].RerankRank = index + 1
-	}
-	return filtered
-}
-
-func evaluateRAGCase(evalCase domain.RAGEvaluationCase, items []domain.RetrievedDocumentChunk) domain.RAGEvaluationCaseResult {
-	result := domain.RAGEvaluationCaseResult{
-		ID:                    strings.TrimSpace(evalCase.ID),
-		Query:                 strings.TrimSpace(evalCase.Query),
-		ExpectedDocumentIDs:   evalCase.ExpectedDocumentIDs,
-		ExpectedChunkIDs:      evalCase.ExpectedChunkIDs,
-		ExpectedChunkContains: evalCase.ExpectedChunkContains,
-		Tags:                  evalCase.Tags,
-		Items:                 items,
-	}
-	if result.ID == "" {
-		result.ID = result.Query
-	}
-	if result.Query == "" {
-		result.FailureReason = "query is required"
-		return result
-	}
-	bestRank := 0
-	for index, item := range items {
-		if ragCaseItemMatches(evalCase, item) {
-			bestRank = index + 1
-			break
-		}
-	}
-	if bestRank == 0 {
-		result.FailureReason = "no result matched expected document, chunk, or content"
-		return result
-	}
-	result.BestRank = bestRank
-	result.HitAt1 = bestRank <= 1
-	result.HitAt3 = bestRank <= 3
-	result.HitAt5 = bestRank <= 5
-	acceptableRank := evalCase.MinAcceptableRank
-	if acceptableRank <= 0 {
-		acceptableRank = len(items)
-	}
-	result.Hit = bestRank <= acceptableRank
-	return result
-}
-
-func ragCaseItemMatches(evalCase domain.RAGEvaluationCase, item domain.RetrievedDocumentChunk) bool {
-	hasExpectation := false
-	if len(evalCase.ExpectedDocumentIDs) > 0 {
-		hasExpectation = true
-		if !stringInSlice(item.Document.ID, evalCase.ExpectedDocumentIDs) {
-			return false
-		}
-	}
-	if len(evalCase.ExpectedChunkIDs) > 0 {
-		hasExpectation = true
-		if !stringInSlice(item.Chunk.ID, evalCase.ExpectedChunkIDs) {
-			return false
-		}
-	}
-	if len(evalCase.ExpectedChunkContains) > 0 {
-		hasExpectation = true
-		content := strings.ToLower(item.Chunk.Content)
-		for _, expected := range evalCase.ExpectedChunkContains {
-			expected = strings.ToLower(strings.TrimSpace(expected))
-			if expected == "" {
-				continue
-			}
-			if !strings.Contains(content, expected) {
-				return false
-			}
-		}
-	}
-	return hasExpectation
-}
-
-func stringInSlice(value string, values []string) bool {
-	for _, candidate := range values {
-		if strings.TrimSpace(candidate) == value {
-			return true
-		}
-	}
-	return false
-}
-
-func hasUnselectedDocument(items []domain.RetrievedDocumentChunk, usedDocuments map[string]int) bool {
-	for _, item := range items {
-		if usedDocuments[item.Document.ID] == 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func lexicalBoost(query string, queryTerms []string, content string) float64 {
-	content = strings.ToLower(content)
-	query = strings.ToLower(strings.TrimSpace(query))
-	boost := 0.0
-	if query != "" && strings.Contains(content, query) {
-		boost += 0.18
-	}
-	if len(queryTerms) == 0 {
-		return boost
-	}
-	matches := 0
-	for _, term := range queryTerms {
-		if strings.Contains(content, term) {
-			matches++
-		}
-	}
-	boost += 0.14 * float64(matches) / float64(len(queryTerms))
-	return boost
-}
-
-func metadataBoost(query string, queryTerms []string, item domain.RetrievedDocumentChunk) float64 {
-	text := strings.Join([]string{
-		item.Document.Title,
-		item.Document.SourceURI,
-		metadataText(item.Document.Metadata, "filename"),
-		metadataText(item.Chunk.Metadata, "title"),
-		metadataText(item.Chunk.Metadata, "heading_path"),
-		metadataText(item.Chunk.Metadata, "chunk_type"),
-	}, " ")
-	text = strings.ToLower(text)
-	query = strings.ToLower(strings.TrimSpace(query))
-	boost := 0.0
-	if query != "" && strings.Contains(text, query) {
-		boost += 0.12
-	}
-	if len(queryTerms) == 0 {
-		return boost
-	}
-	matches := 0
-	for _, term := range queryTerms {
-		if strings.Contains(text, term) {
-			matches++
-		}
-	}
-	boost += 0.10 * float64(matches) / float64(len(queryTerms))
-	return boost
-}
-
-func evidenceCoverage(queryTerms []string, matchedTerms []string) float64 {
-	if len(queryTerms) == 0 {
-		if len(matchedTerms) > 0 {
-			return 1
-		}
-		return 0
-	}
-	if len(matchedTerms) == 0 {
-		return 0
-	}
-	matched := map[string]bool{}
-	for _, term := range matchedTerms {
-		matched[strings.TrimSpace(term)] = true
-	}
-	count := 0
-	for _, term := range queryTerms {
-		if matched[strings.TrimSpace(term)] {
-			count++
-		}
-	}
-	return float64(count) / float64(len(queryTerms))
-}
-
-func evidenceScore(query string, queryTerms []string, item domain.RetrievedDocumentChunk) float64 {
-	score := item.EvidenceCoverage * 0.16
-	exact := strings.ToLower(strings.TrimSpace(query))
-	if exact != "" {
-		content := strings.ToLower(item.Chunk.Content)
-		metadata := strings.ToLower(strings.Join([]string{
-			item.Document.Title,
-			item.Document.SourceURI,
-			metadataText(item.Document.Metadata, "filename"),
-			metadataText(item.Chunk.Metadata, "title"),
-			metadataText(item.Chunk.Metadata, "heading_path"),
-		}, " "))
-		if strings.Contains(content, exact) {
-			score += 0.18
-		}
-		if strings.Contains(metadata, exact) {
-			score += 0.14
-		}
-	}
-	if len(queryTerms) > 0 && item.EvidenceCoverage >= 0.5 {
-		score += 0.06
-	}
-	return score
-}
-
-func relevanceConfidence(item domain.RetrievedDocumentChunk) (string, string) {
-	if item.EvidenceCoverage >= 0.6 || item.EvidenceScore >= 0.24 {
-		return "high", "strong evidence match"
-	}
-	if item.Similarity >= 0.72 {
-		return "high", "strong vector similarity"
-	}
-	if item.Similarity >= 0.60 {
-		return "medium", "vector similarity passed conservative gate"
-	}
-	if len(item.MatchedTerms) > 0 && item.Similarity >= 0.30 {
-		return "medium", "evidence terms matched with acceptable similarity"
-	}
-	if item.RerankScore >= 0.58 && len(item.MatchedTerms) > 0 {
-		return "medium", "rerank score passed with evidence"
-	}
-	return "low", "filtered: weak similarity and no supporting evidence"
-}
-
-func matchedTerms(query string, queryTerms []string, item domain.RetrievedDocumentChunk) []string {
-	text := strings.ToLower(strings.Join([]string{
-		item.Document.Title,
-		item.Document.SourceURI,
-		item.Chunk.Content,
-		metadataText(item.Document.Metadata, "filename"),
-		metadataText(item.Chunk.Metadata, "title"),
-		metadataText(item.Chunk.Metadata, "heading_path"),
-		metadataText(item.Chunk.Metadata, "chunk_type"),
-	}, " "))
-	matches := []string{}
-	seen := map[string]bool{}
-	exact := strings.ToLower(strings.TrimSpace(query))
-	if exact != "" && strings.Contains(text, exact) {
-		seen[exact] = true
-		matches = append(matches, exact)
-	}
-	for _, term := range queryTerms {
-		term = strings.TrimSpace(term)
-		if term == "" || seen[term] {
-			continue
-		}
-		if strings.Contains(text, term) {
-			seen[term] = true
-			matches = append(matches, term)
-		}
-	}
-	return matches
-}
-
-func metadataText(metadata map[string]any, key string) string {
-	if metadata == nil {
-		return ""
-	}
-	value, ok := metadata[key]
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(metadataValueString(value))
-}
-
-func metadataValueString(value any) string {
-	switch typed := value.(type) {
-	case string:
-		return typed
-	case []byte:
-		return string(typed)
-	default:
-		return ""
-	}
-}
-
-func queryTerms(query string) []string {
-	fields := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
-		return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && !(r >= '\u4e00' && r <= '\u9fff')
-	})
-	terms := make([]string, 0, len(fields)+len([]rune(query)))
-	seen := map[string]bool{}
-	for _, field := range fields {
-		field = strings.TrimSpace(field)
-		if len([]rune(field)) < 2 || seen[field] {
-			continue
-		}
-		seen[field] = true
-		terms = append(terms, field)
-	}
-	runes := []rune(strings.TrimSpace(query))
-	for i := 0; i+1 < len(runes); i++ {
-		if !isCJK(runes[i]) || !isCJK(runes[i+1]) {
-			continue
-		}
-		term := string(runes[i : i+2])
-		if seen[term] {
-			continue
-		}
-		seen[term] = true
-		terms = append(terms, term)
-	}
-	return terms
-}
-
-func isCJK(r rune) bool {
-	return r >= '\u4e00' && r <= '\u9fff'
-}
-
-func minInt(a int, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func buildDocumentChunks(req domain.DocumentIngestRequest) (domain.Document, []domain.DocumentChunk, error) {
-	title := strings.TrimSpace(req.Title)
-	content := strings.TrimSpace(req.Content)
-	if title == "" {
-		return domain.Document{}, nil, errors.New("document title is required")
-	}
-	if content == "" {
-		return domain.Document{}, nil, errors.New("document content is required")
-	}
-	sourceType := strings.TrimSpace(req.SourceType)
-	if sourceType == "" {
-		sourceType = "text"
-	}
-	metadata := req.Metadata
-	if metadata == nil {
-		metadata = map[string]any{}
-	}
-	now := time.Now().UTC()
-	document := domain.Document{
-		WorkspaceID: strings.TrimSpace(req.WorkspaceID),
-		Title:       title,
-		SourceType:  sourceType,
-		SourceURI:   strings.TrimSpace(req.SourceURI),
-		MimeType:    strings.TrimSpace(req.MimeType),
-		Content:     content,
-		Metadata:    metadata,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
-	format := documentFormatFromRequest(req)
-	metadata["format"] = format
-	if sourceType == "file" {
-		if filename := strings.TrimSpace(req.SourceURI); filename != "" {
-			metadata["filename"] = filename
-		}
-	}
-	parts := buildDocumentChunkParts(content, format)
-	chunks := make([]domain.DocumentChunk, 0, len(parts))
-	for index, part := range parts {
-		chunkMetadata := copyMetadata(metadata)
-		chunkMetadata["title"] = title
-		chunkMetadata["chunk_index"] = index
-		if _, ok := chunkMetadata["chunk_type"]; !ok {
-			chunkMetadata["chunk_type"] = "text"
-		}
-		chunks = append(chunks, domain.DocumentChunk{
-			ChunkIndex: index,
-			Content:    part.Content,
-			TokenCount: estimateDocumentTokens(part.Content),
-			Metadata:   chunkMetadata,
-			CreatedAt:  now,
-		})
-		for key, value := range part.Metadata {
-			chunks[len(chunks)-1].Metadata[key] = value
-		}
-	}
-	return document, chunks, nil
-}
-
-type documentChunkPart struct {
-	Content  string
-	Metadata map[string]any
-}
-
-func buildDocumentChunkParts(content string, format string) []documentChunkPart {
-	if format == "markdown" {
-		return splitMarkdownContent(content)
-	}
-	parts := splitDocumentContent(content, documentChunkSize, documentChunkOverlap)
-	chunks := make([]documentChunkPart, 0, len(parts))
-	for _, part := range parts {
-		chunks = append(chunks, documentChunkPart{
-			Content:  part,
-			Metadata: map[string]any{"chunk_type": "text"},
-		})
-	}
-	return chunks
-}
-
-func documentFormatFromRequest(req domain.DocumentIngestRequest) string {
-	sourceType := strings.ToLower(strings.TrimSpace(req.SourceType))
-	mimeType := strings.ToLower(strings.TrimSpace(req.MimeType))
-	if sourceType == "markdown" || strings.Contains(mimeType, "markdown") {
-		return "markdown"
-	}
-	if value, ok := req.Metadata["format"].(string); ok && strings.EqualFold(strings.TrimSpace(value), "markdown") {
-		return "markdown"
-	}
-	return "text"
-}
-
-func documentFormatFromFilename(filename string) (string, string, bool) {
-	switch strings.ToLower(filepath.Ext(filename)) {
-	case ".txt":
-		return "text", "text/plain", true
-	case ".md", ".markdown":
-		return "markdown", "text/markdown", true
-	default:
-		return "", "", false
-	}
-}
-
-func splitMarkdownContent(content string) []documentChunkPart {
-	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
-	headingPath := []string{}
-	parts := []documentChunkPart{}
-	buffer := []string{}
-	bufferType := ""
-	inCode := false
-	codeFence := ""
-	codeLanguage := ""
-
-	flush := func() {
-		text := strings.TrimSpace(strings.Join(buffer, "\n"))
-		if text == "" {
-			buffer = nil
-			bufferType = ""
-			return
-		}
-		metadata := map[string]any{
-			"chunk_type":    bufferType,
-			"source_format": "markdown",
-		}
-		if len(headingPath) > 0 {
-			metadata["heading_path"] = strings.Join(headingPath, " > ")
-			text = markdownHeadingContext(headingPath) + "\n\n" + text
-		}
-		if codeLanguage != "" && bufferType == "code" {
-			metadata["code_language"] = codeLanguage
-		}
-		parts = appendChunkPart(parts, text, metadata)
-		buffer = nil
-		bufferType = ""
-		codeLanguage = ""
-	}
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if inCode {
-			buffer = append(buffer, line)
-			if strings.HasPrefix(trimmed, codeFence) {
-				inCode = false
-				flush()
-			}
-			continue
-		}
-		if fence, language, ok := markdownFenceStart(trimmed); ok {
-			flush()
-			inCode = true
-			codeFence = fence
-			codeLanguage = language
-			bufferType = "code"
-			buffer = append(buffer, line)
-			continue
-		}
-		if level, title, ok := markdownHeading(trimmed); ok {
-			flush()
-			if level <= len(headingPath) {
-				headingPath = headingPath[:level-1]
-			}
-			headingPath = append(headingPath, title)
-			continue
-		}
-		if trimmed == "" {
-			flush()
-			continue
-		}
-		lineType := "paragraph"
-		if isMarkdownListLine(trimmed) {
-			lineType = "list"
-		}
-		if bufferType != "" && bufferType != lineType {
-			flush()
-		}
-		bufferType = lineType
-		buffer = append(buffer, line)
-	}
-	flush()
-	if len(parts) == 0 {
-		return buildDocumentChunkParts(content, "text")
-	}
-	return parts
-}
-
-func markdownHeadingContext(headingPath []string) string {
-	lines := make([]string, 0, len(headingPath))
-	for index, heading := range headingPath {
-		heading = strings.TrimSpace(heading)
-		if heading == "" {
-			continue
-		}
-		level := index + 1
-		if level > 6 {
-			level = 6
-		}
-		lines = append(lines, strings.Repeat("#", level)+" "+heading)
-	}
-	return strings.Join(lines, "\n")
-}
-
-func appendChunkPart(parts []documentChunkPart, content string, metadata map[string]any) []documentChunkPart {
-	if len([]rune(content)) <= documentChunkSize {
-		return append(parts, documentChunkPart{Content: content, Metadata: metadata})
-	}
-	for _, part := range splitDocumentContent(content, documentChunkSize, documentChunkOverlap) {
-		partMetadata := copyMetadata(metadata)
-		partMetadata["chunk_type"] = metadata["chunk_type"]
-		partMetadata["split_reason"] = "oversize_markdown_block"
-		parts = append(parts, documentChunkPart{Content: part, Metadata: partMetadata})
-	}
-	return parts
-}
-
-func markdownFenceStart(trimmed string) (string, string, bool) {
-	for _, fence := range []string{"```", "~~~"} {
-		if strings.HasPrefix(trimmed, fence) {
-			return fence, strings.TrimSpace(strings.TrimPrefix(trimmed, fence)), true
-		}
-	}
-	return "", "", false
-}
-
-func markdownHeading(trimmed string) (int, string, bool) {
-	if !strings.HasPrefix(trimmed, "#") {
-		return 0, "", false
-	}
-	level := 0
-	for level < len(trimmed) && trimmed[level] == '#' {
-		level++
-	}
-	if level == 0 || level > 6 || level >= len(trimmed) || trimmed[level] != ' ' {
-		return 0, "", false
-	}
-	title := strings.TrimSpace(trimmed[level:])
-	if title == "" {
-		return 0, "", false
-	}
-	return level, title, true
-}
-
-func isMarkdownListLine(trimmed string) bool {
-	return strings.HasPrefix(trimmed, "- ") ||
-		strings.HasPrefix(trimmed, "* ") ||
-		strings.HasPrefix(trimmed, "+ ") ||
-		orderedMarkdownListPattern.MatchString(trimmed)
-}
-
-func splitDocumentContent(content string, size int, overlap int) []string {
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return nil
-	}
-	if size <= 0 {
-		size = documentChunkSize
-	}
-	if overlap < 0 {
-		overlap = 0
-	}
-	if overlap >= size {
-		overlap = size / 4
-	}
-	runes := []rune(content)
-	if len(runes) <= size {
-		return []string{content}
-	}
-	parts := []string{}
-	for start := 0; start < len(runes); {
-		end := start + size
-		if end > len(runes) {
-			end = len(runes)
-		}
-		parts = append(parts, strings.TrimSpace(string(runes[start:end])))
-		if end == len(runes) {
-			break
-		}
-		start = end - overlap
-	}
-	return parts
-}
-
-func copyMetadata(metadata map[string]any) map[string]any {
-	copied := make(map[string]any, len(metadata))
-	for key, value := range metadata {
-		copied[key] = value
-	}
-	return copied
-}
-
-func estimateDocumentTokens(content string) int {
-	runes := len([]rune(strings.TrimSpace(content)))
-	if runes == 0 {
-		return 0
-	}
-	return runes/4 + 1
 }

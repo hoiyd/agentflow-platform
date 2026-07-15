@@ -8,13 +8,12 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 const payloadStringLimit = 20000
 
 type Recorder struct {
-	store store.Store
+	store RunEventStore
 }
 
 type Span struct {
@@ -22,7 +21,7 @@ type Span struct {
 	StartedAt time.Time
 }
 
-func NewRecorder(store store.Store) *Recorder {
+func NewRecorder(store RunEventStore) *Recorder {
 	return &Recorder{store: store}
 }
 

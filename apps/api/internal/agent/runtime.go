@@ -16,13 +16,31 @@ import (
 )
 
 type Runtime struct {
-	store            store.Store
+	store            RuntimeStore
 	openAI           *openai.Client
 	tools            *tools.Manager
 	trace            *eventpkg.Recorder
 	turnEngine       *turnpkg.Engine
 	routerMode       string
 	autonomousLimits AutonomousLimits
+}
+
+type RuntimeStore interface {
+	ListAgents() ([]domain.Agent, error)
+	GetAgent(string) (domain.Agent, bool, error)
+	GetDefaultAgent() (domain.Agent, bool, error)
+	CreateRun(string, string, domain.RuntimeSnapshot) (domain.Run, error)
+	UpdateRunAgent(string, string) (domain.Run, error)
+	UpdateRunStatus(string, domain.RunStatus, string) (domain.Run, error)
+	UpdateRunHeartbeat(string) (domain.Run, error)
+	GetRun(string) (domain.Run, bool, error)
+	CreateCollaborationStep(domain.CollaborationStep) (domain.CollaborationStep, error)
+	UpdateCollaborationStep(string, domain.CollaborationStepStatus, string, string) (domain.CollaborationStep, error)
+	UpdateCollaborationStepOutput(string, string) (domain.CollaborationStep, error)
+	ListCollaborationSteps(string) ([]domain.CollaborationStep, error)
+	eventpkg.RunEventStore
+	SearchMemories(domain.MemorySearch) ([]domain.RetrievedMemory, error)
+	SearchDocumentChunks(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 }
 
 type AutonomousLimits struct {
@@ -38,15 +56,15 @@ type PreparedRun struct {
 	Catalog *tools.Catalog
 }
 
-func NewRuntime(store store.Store, openAI *openai.Client, tools *tools.Manager) *Runtime {
+func NewRuntime(store RuntimeStore, openAI *openai.Client, tools *tools.Manager) *Runtime {
 	return NewRuntimeWithRouterMode(store, openAI, tools, RouterModeAuto)
 }
 
-func NewRuntimeWithRouterMode(store store.Store, openAI *openai.Client, tools *tools.Manager, routerMode string) *Runtime {
+func NewRuntimeWithRouterMode(store RuntimeStore, openAI *openai.Client, tools *tools.Manager, routerMode string) *Runtime {
 	return NewRuntimeWithRouterModeAndLimits(store, openAI, tools, routerMode, DefaultAutonomousLimits())
 }
 
-func NewRuntimeWithRouterModeAndLimits(store store.Store, openAI *openai.Client, tools *tools.Manager, routerMode string, limits AutonomousLimits) *Runtime {
+func NewRuntimeWithRouterModeAndLimits(store RuntimeStore, openAI *openai.Client, tools *tools.Manager, routerMode string, limits AutonomousLimits) *Runtime {
 	runtime := &Runtime{
 		store:            store,
 		openAI:           openAI,
