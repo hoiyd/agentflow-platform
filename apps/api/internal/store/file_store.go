@@ -37,6 +37,8 @@ type fileData struct {
 	ChunkEmbeddings    []domain.DocumentChunkEmbedding `json:"document_chunk_embeddings"`
 }
 
+var _ Store = (*FileStore)(nil)
+
 func NewFileStore(path string) (*FileStore, error) {
 	store := &FileStore{path: path}
 	if err := store.load(); err != nil {
@@ -870,7 +872,7 @@ func (s *FileStore) DeleteDocument(id string) error {
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return nil
+		return ErrNotFound("document")
 	}
 	found := false
 	documents := s.data.Documents[:0]
@@ -882,7 +884,7 @@ func (s *FileStore) DeleteDocument(id string) error {
 		documents = append(documents, document)
 	}
 	if !found {
-		return nil
+		return ErrNotFound("document")
 	}
 
 	deletedChunkIDs := map[string]bool{}

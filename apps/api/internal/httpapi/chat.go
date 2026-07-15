@@ -9,6 +9,7 @@ import (
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
 )
 
 func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +88,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	prepared, err := h.agentRuntime.PrepareChatRun(r.Context(), req.AgentID, conversationID, req.Executor)
 	if err != nil {
 		status := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "not found") {
+		if store.IsNotFound(err) {
 			status = http.StatusNotFound
 		}
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: http.StatusText(status) + ": " + err.Error()})
@@ -164,7 +165,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 	prepared, err := h.agentRuntime.PrepareCollaborationRun(r.Context(), req.AgentID, conversationID)
 	if err != nil {
 		status := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "not found") {
+		if store.IsNotFound(err) {
 			status = http.StatusNotFound
 		}
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: http.StatusText(status) + ": " + err.Error()})
@@ -245,7 +246,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 	prepared, err := h.agentRuntime.PrepareAutonomousRun(r.Context(), req.AgentID, conversationID)
 	if err != nil {
 		status := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "not found") {
+		if store.IsNotFound(err) {
 			status = http.StatusNotFound
 		}
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: http.StatusText(status) + ": " + err.Error()})

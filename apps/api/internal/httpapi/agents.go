@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -91,7 +92,7 @@ func (h *Handler) archiveAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.store.ArchiveAgent(id); err != nil {
 		status := http.StatusBadRequest
-		if strings.Contains(err.Error(), "not found") {
+		if store.IsNotFound(err) {
 			status = http.StatusNotFound
 		}
 		writeError(w, status, err.Error())
@@ -227,7 +228,7 @@ func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 
 	run, err := h.agentRuntime.CancelRun(id)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
+		if store.IsNotFound(err) {
 			writeError(w, http.StatusNotFound, "run not found")
 			return
 		}

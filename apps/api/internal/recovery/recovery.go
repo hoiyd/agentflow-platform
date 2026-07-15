@@ -5,12 +5,16 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 const staleRunMessage = "run heartbeat expired; previous worker may have crashed"
 
-func MarkStaleRunningRuns(appStore store.Store, staleTimeout time.Duration) (int, error) {
+type Store interface {
+	ListStaleRunningRuns(time.Time) ([]domain.Run, error)
+	UpdateRunStatus(string, domain.RunStatus, string) (domain.Run, error)
+}
+
+func MarkStaleRunningRuns(appStore Store, staleTimeout time.Duration) (int, error) {
 	if staleTimeout <= 0 {
 		return 0, nil
 	}

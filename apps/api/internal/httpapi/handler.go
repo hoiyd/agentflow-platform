@@ -63,81 +63,8 @@ func (h *Handler) Close(ctx context.Context) error {
 
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", h.route)
+	h.registerRoutes(mux)
 	return h.withCORS(mux)
-}
-
-func (h *Handler) route(w http.ResponseWriter, r *http.Request) {
-	path := r.URL.Path
-
-	switch {
-	case r.Method == http.MethodGet && path == "/health":
-		h.health(w, r)
-	case r.Method == http.MethodGet && path == "/api/conversations":
-		h.listConversations(w, r)
-	case r.Method == http.MethodPost && path == "/api/conversations":
-		h.createConversation(w, r)
-	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/conversations/") && !strings.HasSuffix(path, "/messages"):
-		h.updateConversation(w, r)
-	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/conversations/") && !strings.HasSuffix(path, "/messages"):
-		h.deleteConversation(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/conversations/") && strings.HasSuffix(path, "/messages"):
-		h.listMessages(w, r)
-	case r.Method == http.MethodPost && path == "/api/chat":
-		h.chat(w, r)
-	case r.Method == http.MethodPost && path == "/api/memories":
-		h.createMemory(w, r)
-	case r.Method == http.MethodPost && path == "/api/memories/search":
-		h.searchMemories(w, r)
-	case r.Method == http.MethodGet && path == "/api/documents":
-		h.listDocuments(w, r)
-	case r.Method == http.MethodPost && path == "/api/documents":
-		h.createDocument(w, r)
-	case r.Method == http.MethodPost && path == "/api/documents/upload":
-		h.uploadDocument(w, r)
-	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/documents/"):
-		h.deleteDocument(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/documents/"):
-		h.getDocument(w, r)
-	case r.Method == http.MethodPost && path == "/api/rag/search":
-		h.searchDocumentChunks(w, r)
-	case r.Method == http.MethodPost && path == "/api/rag/evaluations/run":
-		h.runRAGEvaluation(w, r)
-	case r.Method == http.MethodGet && path == "/api/agents":
-		h.listAgents(w, r)
-	case r.Method == http.MethodPost && path == "/api/agents":
-		h.createAgent(w, r)
-	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/agents/"):
-		h.archiveAgent(w, r)
-	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/api/agents/"):
-		h.updateAgent(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/agents/"):
-		h.getAgent(w, r)
-	case r.Method == http.MethodGet && path == "/api/runs":
-		h.listRuns(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/continue"):
-		h.continueRun(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/resume"):
-		h.resumeRun(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/cancel"):
-		h.cancelRun(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/replay"):
-		h.getRunReplay(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/episode"):
-		h.getEpisodeReport(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/") && strings.HasSuffix(path, "/collaboration_steps"):
-		h.listCollaborationSteps(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/api/runs/"):
-		h.getRun(w, r)
-	case r.Method == http.MethodGet && path == "/api/tools":
-		h.listTools(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/tools/") && strings.HasSuffix(path, "/enable"):
-		h.setToolEnabled(w, r, true)
-	case r.Method == http.MethodPost && strings.HasPrefix(path, "/api/tools/") && strings.HasSuffix(path, "/disable"):
-		h.setToolEnabled(w, r, false)
-	default:
-		writeError(w, http.StatusNotFound, "route not found")
-	}
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
