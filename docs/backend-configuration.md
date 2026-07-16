@@ -81,7 +81,7 @@ DATABASE_URL=postgres://agentflow:agentflow@localhost:5432/agentflow?sslmode=dis
 The Postgres store runs idempotent startup migrations for:
 
 - conversations, messages, agents, runs, collaboration steps, and trace events
-- memories and `memory_embeddings`
+- memory candidates, curated memories, and `memory_embeddings`
 - documents, document chunks, and document chunk embeddings
 - pgvector HNSW indexes for semantic search
 

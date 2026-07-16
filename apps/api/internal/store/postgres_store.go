@@ -726,6 +726,63 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 	}, true, nil
 }
 
+func (s *PostgresStore) CreateMemoryCandidate(candidate domain.MemoryCandidate) (domain.MemoryCandidate, bool, error) {
+	var err error
+	candidate, err = normalizeMemoryCandidate(candidate)
+	if err != nil {
+		return domain.MemoryCandidate{}, false, err
+	}
+	result, err := s.db.Exec(`
+		INSERT INTO memory_candidates (
+			id, conversation_id, run_id, source_message_id, source_role, kind, content,
+			status, extraction_reason, policy_reason, created_at
+		) VALUES ($1,NULLIF($2,''),NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10,$11)
+		ON CONFLICT (id) DO NOTHING`,
+		candidate.ID, candidate.ConversationID, candidate.RunID, candidate.SourceMessageID,
+		candidate.SourceRole, candidate.Kind, candidate.Content, string(candidate.Status),
+		candidate.ExtractionReason, candidate.PolicyReason, candidate.CreatedAt)
+	if err != nil {
+		return domain.MemoryCandidate{}, false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return domain.MemoryCandidate{}, false, err
+	}
+	if rows == 1 {
+		return candidate, true, nil
+	}
+	existing, err := scanMemoryCandidate(s.db.QueryRow(`
+		SELECT id,conversation_id,run_id,source_message_id,source_role,kind,content,status,
+			extraction_reason,policy_reason,created_at
+		FROM memory_candidates WHERE id=$1`, candidate.ID))
+	return existing, false, err
+}
+
+func (s *PostgresStore) ListMemoryCandidates(conversationID string) ([]domain.MemoryCandidate, error) {
+	query := `SELECT id,conversation_id,run_id,source_message_id,source_role,kind,content,status,
+		extraction_reason,policy_reason,created_at FROM memory_candidates`
+	args := []any{}
+	if strings.TrimSpace(conversationID) != "" {
+		query += " WHERE conversation_id=$1"
+		args = append(args, conversationID)
+	}
+	query += " ORDER BY created_at,id"
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.MemoryCandidate{}
+	for rows.Next() {
+		item, err := scanMemoryCandidate(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
 	now := time.Now().UTC()
 	memory.ID = strings.TrimSpace(memory.ID)
@@ -875,6 +932,55 @@ func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.Ret
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (s *PostgresStore) ListLegacyMessageMemories() ([]domain.Memory, error) {
+	rows, err := s.db.Query(`
+		SELECT id,workspace_id,user_id,project_id,conversation_id,run_id,source_message_id,
+			kind,content,metadata,created_at,updated_at
+		FROM memories
+		WHERE lower(trim(kind))='message' AND (source_message_id IS NOT NULL OR id LIKE 'mem_msg_%')
+		ORDER BY created_at,id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.Memory{}
+	for rows.Next() {
+		item, err := scanMemory(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *PostgresStore) DeleteLegacyMessageMemories(ids []string) (int, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	deleted := 0
+	for _, id := range ids {
+		result, err := tx.Exec(`
+			DELETE FROM memories
+			WHERE id=$1 AND lower(trim(kind))='message'
+				AND (source_message_id IS NOT NULL OR id LIKE 'mem_msg_%')`, strings.TrimSpace(id))
+		if err != nil {
+			return 0, err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		deleted += int(count)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return deleted, nil
 }
 
 func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error) {
@@ -1318,6 +1424,71 @@ func scanRetrievedMemory(row scanner) (domain.RetrievedMemory, error) {
 	return item, nil
 }
 
+func scanMemoryCandidate(row scanner) (domain.MemoryCandidate, error) {
+	var item domain.MemoryCandidate
+	var conversationID sql.NullString
+	var runID sql.NullString
+	var status string
+	if err := row.Scan(
+		&item.ID, &conversationID, &runID, &item.SourceMessageID, &item.SourceRole,
+		&item.Kind, &item.Content, &status, &item.ExtractionReason, &item.PolicyReason, &item.CreatedAt,
+	); err != nil {
+		return domain.MemoryCandidate{}, err
+	}
+	if conversationID.Valid {
+		item.ConversationID = conversationID.String
+	}
+	if runID.Valid {
+		item.RunID = runID.String
+	}
+	item.Status = domain.MemoryCandidateStatus(status)
+	return item, nil
+}
+
+func scanMemory(row scanner) (domain.Memory, error) {
+	var item domain.Memory
+	var metadataJSON []byte
+	var workspaceID sql.NullString
+	var userID sql.NullString
+	var projectID sql.NullString
+	var conversationID sql.NullString
+	var runID sql.NullString
+	var sourceMessageID sql.NullString
+	if err := row.Scan(
+		&item.ID, &workspaceID, &userID, &projectID, &conversationID, &runID,
+		&sourceMessageID, &item.Kind, &item.Content, &metadataJSON, &item.CreatedAt, &item.UpdatedAt,
+	); err != nil {
+		return domain.Memory{}, err
+	}
+	if workspaceID.Valid {
+		item.WorkspaceID = workspaceID.String
+	}
+	if userID.Valid {
+		item.UserID = userID.String
+	}
+	if projectID.Valid {
+		item.ProjectID = projectID.String
+	}
+	if conversationID.Valid {
+		item.ConversationID = conversationID.String
+	}
+	if runID.Valid {
+		item.RunID = runID.String
+	}
+	if sourceMessageID.Valid {
+		item.SourceMessageID = sourceMessageID.String
+	}
+	if len(metadataJSON) > 0 {
+		if err := json.Unmarshal(metadataJSON, &item.Metadata); err != nil {
+			return domain.Memory{}, err
+		}
+	}
+	if item.Metadata == nil {
+		item.Metadata = map[string]any{}
+	}
+	return item, nil
+}
+
 func scanDocument(row scanner) (domain.Document, error) {
 	var document domain.Document
 	var workspaceID sql.NullString
@@ -1596,6 +1767,19 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
+	`CREATE TABLE IF NOT EXISTS memory_candidates (
+		id text PRIMARY KEY,
+		conversation_id text REFERENCES conversations(id) ON DELETE CASCADE,
+		run_id text REFERENCES runs(id) ON DELETE SET NULL,
+		source_message_id text NOT NULL,
+		source_role text NOT NULL,
+		kind text NOT NULL,
+		content text NOT NULL,
+		status text NOT NULL,
+		extraction_reason text NOT NULL,
+		policy_reason text NOT NULL,
+		created_at timestamptz NOT NULL
+	)`,
 	`CREATE TABLE IF NOT EXISTS memory_embeddings (
 		memory_id text PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
 		provider text NOT NULL,
@@ -1655,6 +1839,8 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_run_events_run_sequence ON run_events(run_id, sequence ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_context_compactions_conversation_created ON context_compactions(conversation_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memories_scope_created ON memories(workspace_id, user_id, project_id, created_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_memory_candidates_conversation_created ON memory_candidates(conversation_id, created_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_memory_candidates_source_message ON memory_candidates(source_message_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_memory_embeddings_vector ON memory_embeddings USING hnsw (embedding vector_cosine_ops)`,
 	`CREATE INDEX IF NOT EXISTS idx_documents_workspace_created ON documents(workspace_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_documents_metadata ON documents USING gin(metadata)`,

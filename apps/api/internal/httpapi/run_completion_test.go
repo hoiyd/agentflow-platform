@@ -7,8 +7,18 @@ import (
 
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
+	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/store"
 )
+
+type recordingMemoryCurationQueue struct {
+	jobs []memorypkg.CurationJob
+}
+
+func (q *recordingMemoryCurationQueue) Enqueue(job memorypkg.CurationJob) error {
+	q.jobs = append(q.jobs, job)
+	return nil
+}
 
 func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
@@ -29,11 +39,17 @@ func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
 	runtime := agent.NewRuntime(agent.RuntimeOptions{
 		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(),
 	})
-	handler := &Handler{store: fileStore, agentRuntime: runtime}
+	memoryCuration := &recordingMemoryCurationQueue{}
+	handler := &Handler{store: fileStore, agentRuntime: runtime, memoryCuration: memoryCuration}
 	response := httptest.NewRecorder()
+	userMessage := domain.Message{
+		ID: "msg_user", ConversationID: conversation.ID, Role: "user",
+		Content: "Remember that AgentFlow uses typed events.",
+	}
 
 	ok := handler.completeStreamingRun(response, response, context.Background(), runCompletionRequest{
 		RunID: run.ID, ConversationID: conversation.ID, Assistant: "Completed response.",
+		UserMessage: &userMessage,
 	})
 	if !ok {
 		t.Fatalf("complete streaming run failed: %s", response.Body.String())
@@ -49,5 +65,8 @@ func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
 	}
 	if len(messages) != 1 || messages[0].Role != "assistant" || messages[0].Content != "Completed response." {
 		t.Fatalf("unexpected persisted messages: %#v", messages)
+	}
+	if len(memoryCuration.jobs) != 1 || memoryCuration.jobs[0].Message.ID != userMessage.ID || memoryCuration.jobs[0].Message.Role != "user" {
+		t.Fatalf("completion should curate only the user message: %#v", memoryCuration.jobs)
 	}
 }

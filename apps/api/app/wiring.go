@@ -21,9 +21,9 @@ import (
 )
 
 type applicationDependencies struct {
-	store   store.Store
-	handler *httpapi.Handler
-	memory  *memorypkg.Syncer
+	store         store.Store
+	handler       *httpapi.Handler
+	memoryCurator *memorypkg.Curator
 }
 
 func buildDependencies(cfg config.Config) (applicationDependencies, error) {
@@ -66,7 +66,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	})
 	semanticMemory := memorypkg.NewSemanticMemory(appStore, modelClient)
 	knowledgeBase := knowledge.NewKnowledgeBase(appStore, modelClient)
-	memorySyncer := memorypkg.NewSyncer(appStore, modelClient)
+	memoryCurator := memorypkg.NewCurator(appStore, modelClient)
 	runController := concurrency.NewRunController(concurrency.RunOptions{
 		MaxConcurrent: cfg.MaxConcurrentRuns,
 		QueueSize:     cfg.RunQueueSize,
@@ -79,19 +79,19 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		AgentRuntime:   agentRuntime,
 		Memory:         semanticMemory,
 		Knowledge:      knowledgeBase,
-		MemoryQueue:    memorySyncer,
+		MemoryCuration: memoryCurator,
 		RunController:  runController,
 		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
 	})
 	if err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = memorySyncer.Close(ctx)
+		_ = memoryCurator.Close(ctx)
 		return applicationDependencies{}, fmt.Errorf("create http handler: %w", err)
 	}
 
 	cleanupStore = false
-	return applicationDependencies{store: appStore, handler: handler, memory: memorySyncer}, nil
+	return applicationDependencies{store: appStore, handler: handler, memoryCurator: memoryCurator}, nil
 }
 
 func newModelClient(cfg config.Config) *openai.Client {

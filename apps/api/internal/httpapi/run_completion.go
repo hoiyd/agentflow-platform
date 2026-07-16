@@ -50,9 +50,8 @@ func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flush
 	flusher.Flush()
 
 	if request.UserMessage != nil {
-		h.enqueueMemorySync(*request.UserMessage, request.RunID)
+		h.enqueueMemoryCuration(*request.UserMessage, request.RunID)
 	}
-	h.enqueueMemorySync(message, request.RunID)
 	return true
 }
 

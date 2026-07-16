@@ -19,7 +19,7 @@ apps/api/
     tools/          tool catalog and guarded execution
     openai/         model-provider adapter
     store/          File and Postgres persistence adapters
-    memory/         semantic memory operations and asynchronous synchronization
+    memory/         semantic memory operations and asynchronous curation
     knowledge/      knowledge-base ingestion, embedding, search, and RAG evaluation
     rag/            chunking and retrieval ranking
     concurrency/    run and model-request limits
@@ -79,10 +79,10 @@ Moving packages out of `internal` only to make the tree appear balanced would we
 1. Store selection and stale-run recovery.
 2. Model client limits and retry policy.
 3. Tool Manager and Agent Runtime configuration.
-4. Memory and Knowledge services plus asynchronous Memory Sync.
+4. Memory and Knowledge capabilities plus asynchronous Memory Curation.
 5. Run admission and Context Assembly policy.
 6. HTTP server startup and graceful shutdown.
-7. Memory Syncer drain followed by Store close.
+7. Memory Curator drain followed by Store close.
 
 ## Main Call Paths
 
@@ -93,7 +93,7 @@ HTTP chat request
   -> Turn Engine
   -> typed Run Events
   -> shared Run completion
-  -> message persistence and asynchronous memory sync
+  -> message persistence and asynchronous memory curation
 
 HTTP knowledge request
   -> Knowledge Base
@@ -101,6 +101,6 @@ HTTP knowledge request
   -> Store
 ```
 
-Single-Agent, Multi-Agent, and Autonomous streams expose the same `domain.RunEvent` contract to the HTTP adapter. Their common completion path persists the assistant message, transitions the Run, optionally generates the conversation title, flushes the final SSE event, and then schedules memory synchronization.
+Single-Agent, Multi-Agent, and Autonomous streams expose the same `domain.RunEvent` contract to the HTTP adapter. Their common completion path persists the assistant message, transitions the Run, optionally generates the conversation title, flushes the final SSE event, and then schedules conservative curation of explicitly durable user facts. Assistant output and ordinary chat remain conversation history rather than long-term memory.
 
 Adding another executable should reuse the relevant application wiring instead of copying dependency construction from `cmd/server`.

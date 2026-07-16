@@ -118,7 +118,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	if ok && currentRun.Status == domain.RunWaitingForUser {
 		writeTerminalRunDone(w, flusher, currentRun)
-		h.enqueueMemorySync(userMessage, currentRun.ID)
+		h.enqueueMemoryCuration(userMessage, currentRun.ID)
 		return
 	}
 
@@ -169,7 +169,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 	}
 	if run.Status == domain.RunWaitingForUser {
 		writeTerminalRunDone(w, flusher, run)
-		h.enqueueMemorySync(userMessage, run.ID)
+		h.enqueueMemoryCuration(userMessage, run.ID)
 		return
 	}
 
@@ -225,7 +225,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 	}
 	if run.Status == domain.RunWaitingForUser || run.Status == domain.RunCanceled {
 		writeTerminalRunDone(w, flusher, run)
-		h.enqueueMemorySync(userMessage, run.ID)
+		h.enqueueMemoryCuration(userMessage, run.ID)
 		return
 	}
 

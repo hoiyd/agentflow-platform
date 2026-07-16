@@ -46,11 +46,11 @@ func (h *Handler) searchMemories(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
-func (h *Handler) enqueueMemorySync(message domain.Message, runID string) {
-	if h.memoryQueue == nil {
+func (h *Handler) enqueueMemoryCuration(message domain.Message, runID string) {
+	if h.memoryCuration == nil {
 		return
 	}
-	if err := h.memoryQueue.Enqueue(memorypkg.Job{RunID: strings.TrimSpace(runID), Message: message}); err != nil {
-		log.Printf("memory_sync_enqueue_failed run_id=%s message_id=%s error=%q", runID, message.ID, err.Error())
+	if err := h.memoryCuration.Enqueue(memorypkg.CurationJob{RunID: strings.TrimSpace(runID), Message: message}); err != nil {
+		log.Printf("memory_curation_enqueue_failed run_id=%s message_id=%s error=%q", runID, message.ID, err.Error())
 	}
 }
