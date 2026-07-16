@@ -64,7 +64,6 @@ type RunEventStore interface {
 type ContextCompactionStore interface {
 	CreateContextCompaction(domain.ContextCompaction) (domain.ContextCompaction, error)
 	GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error)
-	ListContextCompactions(conversationID string) ([]domain.ContextCompaction, error)
 }
 
 type MemoryStore interface {

@@ -210,27 +210,6 @@ func (s *PostgresStore) GetLatestContextCompaction(conversationID string) (domai
 	return item, err == nil, err
 }
 
-func (s *PostgresStore) ListContextCompactions(conversationID string) ([]domain.ContextCompaction, error) {
-	rows, err := s.db.Query(`
-		SELECT id, conversation_id, run_id, trigger, summary, source_message_ids,
-			source_hash, before_tokens, after_tokens, summary_model, algorithm_version, created_at
-		FROM context_compactions WHERE conversation_id = $1
-		ORDER BY created_at ASC, id ASC`, conversationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := make([]domain.ContextCompaction, 0)
-	for rows.Next() {
-		item, err := scanContextCompaction(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
-}
-
 type contextCompactionScanner interface {
 	Scan(...any) error
 }

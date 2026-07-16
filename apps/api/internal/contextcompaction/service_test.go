@@ -31,12 +31,12 @@ func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
 		return SummaryResult{Text: "## Goal\nPreserve important context.\n## Source References\nmessage ids retained", Model: "summary-model"}, nil
 	})
 	config := compactionTestConfig()
-	first, created, err := service.CompactIfNeeded(context.Background(), Request{
+	first, err := service.CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerSoft,
 		Config: config, Summarizer: summarizer,
 	})
-	if err != nil || !created {
-		t.Fatalf("first compaction: created=%v err=%v", created, err)
+	if err != nil || first == nil {
+		t.Fatalf("first compaction: item=%#v err=%v", first, err)
 	}
 	if len(first.SourceMessageIDs) == 0 || first.BeforeTokens <= first.AfterTokens {
 		t.Fatalf("unexpected first compaction: %#v", first)
@@ -53,12 +53,12 @@ func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
 		}
 		_, _ = fileStore.AddMessage(conversation.ID, role, strings.Repeat("new context ", 10))
 	}
-	second, created, err := service.CompactIfNeeded(context.Background(), Request{
+	second, err := service.CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerHard,
 		Config: config, Summarizer: summarizer,
 	})
-	if err != nil || !created {
-		t.Fatalf("second compaction: created=%v err=%v", created, err)
+	if err != nil || second == nil {
+		t.Fatalf("second compaction: item=%#v err=%v", second, err)
 	}
 	if len(second.SourceMessageIDs) <= len(first.SourceMessageIDs) {
 		t.Fatalf("iterative compaction did not extend sources: first=%d second=%d", len(first.SourceMessageIDs), len(second.SourceMessageIDs))
@@ -78,19 +78,19 @@ func TestCompactIfNeededFailureKeepsRawMessages(t *testing.T) {
 		_, _ = fileStore.AddMessage(conversation.ID, "user", strings.Repeat("context ", 20))
 	}
 	service := NewService(fileStore)
-	_, created, err := service.CompactIfNeeded(context.Background(), Request{
+	compaction, err := service.CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerHard,
 		Config: compactionTestConfig(), Summarizer: SummarizerFunc(func(context.Context, SummaryRequest) (SummaryResult, error) {
 			return SummaryResult{}, errors.New("summary provider unavailable")
 		}),
 	})
-	if err == nil || created {
-		t.Fatalf("expected non-destructive failure: created=%v err=%v", created, err)
+	if err == nil || compaction != nil {
+		t.Fatalf("expected non-destructive failure: item=%#v err=%v", compaction, err)
 	}
-	compactions, _ := fileStore.ListContextCompactions(conversation.ID)
+	_, hasCompaction, _ := fileStore.GetLatestContextCompaction(conversation.ID)
 	messages, _ := fileStore.ListMessages(conversation.ID)
-	if len(compactions) != 0 || len(messages) != 6 {
-		t.Fatalf("failed compaction changed durable state: compactions=%d messages=%d", len(compactions), len(messages))
+	if hasCompaction || len(messages) != 6 {
+		t.Fatalf("failed compaction changed durable state: has_compaction=%v messages=%d", hasCompaction, len(messages))
 	}
 	events, _ := fileStore.ListRunEvents(run.ID)
 	if !hasEvent(events, domain.EventCompactionFailed) {
@@ -106,15 +106,15 @@ func TestCompactIfNeededPrefersObservedPromptTokensForSoftTrigger(t *testing.T) 
 	config := compactionTestConfig()
 	config.CompactionSoftThreshold = 0.9
 	service := NewService(fileStore)
-	_, created, err := service.CompactIfNeeded(context.Background(), Request{
+	compaction, err := service.CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerSoft,
 		ObservedPromptTokens: 200, Config: config,
 		Summarizer: SummarizerFunc(func(context.Context, SummaryRequest) (SummaryResult, error) {
 			return SummaryResult{Text: "## Goal\nKeep context", Model: "summary-model"}, nil
 		}),
 	})
-	if err != nil || !created {
-		t.Fatalf("observed prompt usage should trigger compaction: created=%v err=%v", created, err)
+	if err != nil || compaction == nil {
+		t.Fatalf("observed prompt usage should trigger compaction: item=%#v err=%v", compaction, err)
 	}
 	events, _ := fileStore.ListRunEvents(run.ID)
 	foundObservedUsage := false
@@ -153,10 +153,10 @@ func compactionTestConfig() domain.ContextAssemblyConfig {
 	return domain.ContextAssemblyConfig{
 		ContextWindowTokens: 240, OutputReserveTokens: 20, SafetyMarginTokens: 20,
 		HistoryMaxTokens: 160, MemoryMaxTokens: 20, KnowledgeMaxTokens: 20,
-		CompactionMode: contextassembly.CompactionModeAuto, CompactionVersion: contextassembly.CompactionVersion,
+		ToolResultMaxTokens: 20, CompactionMode: contextassembly.CompactionModeAuto,
 		CompactionSoftThreshold: 0.25, CompactionHardThreshold: 0.30,
 		CompactionRecentTokens: 24, CompactionSummaryMaxTokens: 40,
-		CompactionToolResultMaxTokens: 20, CompactionTimeoutMS: 1000,
+		CompactionTimeoutMS: 1000,
 	}
 }
 

@@ -12,29 +12,33 @@ import (
 )
 
 func (r *Runtime) scheduleSoftContextCompaction(run domain.Run) {
-	go r.compactContextBestEffort(context.Background(), run.ID, run.ConversationID, contextassembly.CompactionTriggerSoft)
+	go func() {
+		snapshot, err := r.snapshotForRun(run.ID)
+		if err != nil {
+			return
+		}
+		r.compactContextBestEffort(context.Background(), run.ID, run.ConversationID, snapshot, contextassembly.CompactionTriggerSoft)
+	}()
 }
 
-func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversationID, trigger string) {
-	if r == nil || r.contextCompactor == nil || conversationID == "" {
+func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversationID string, snapshot *domain.RuntimeSnapshot, trigger string) {
+	if r == nil || r.contextCompactor == nil || snapshot == nil || conversationID == "" {
 		return
 	}
-	snapshot, err := r.snapshotForRun(runID)
-	if err != nil || snapshot.ContextAssembly.CompactionMode == contextassembly.CompactionModeOff {
+	if snapshot.ContextAssembly.CompactionMode == contextassembly.CompactionModeOff {
 		return
 	}
 	timeout := time.Duration(snapshot.ContextAssembly.CompactionTimeoutMS) * time.Millisecond
 	compactCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	client, err := r.clientForRun(runID)
-	if err != nil {
-		log.Printf("context_compaction_skipped run_id=%s trigger=%s error=%q", runID, trigger, err.Error())
-		return
-	}
 	var summarizer contextcompaction.Summarizer
-	if client.HasAPIKey() {
+	if r.openAI.HasAPIKey() {
 		summarizer = contextcompaction.SummarizerFunc(func(ctx context.Context, request contextcompaction.SummaryRequest) (contextcompaction.SummaryResult, error) {
+			client, err := r.clientFromSnapshot(snapshot)
+			if err != nil {
+				return contextcompaction.SummaryResult{}, err
+			}
 			completion, err := client.CompleteTextDetailed(ctx, request.SystemPrompt, request.Prompt)
 			return contextcompaction.SummaryResult{Text: completion.Text, Model: completion.Model}, err
 		})
@@ -43,7 +47,7 @@ func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversat
 	if trigger == contextassembly.CompactionTriggerSoft {
 		observedPromptTokens = r.maxObservedPromptTokens(runID)
 	}
-	compaction, created, err := r.contextCompactor.CompactIfNeeded(compactCtx, contextcompaction.Request{
+	compaction, err := r.contextCompactor.CompactIfNeeded(compactCtx, contextcompaction.Request{
 		RunID: runID, ConversationID: conversationID, Trigger: trigger,
 		ObservedPromptTokens: observedPromptTokens,
 		Config:               snapshot.ContextAssembly, Summarizer: summarizer,
@@ -52,7 +56,7 @@ func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversat
 		log.Printf("context_compaction_failed run_id=%s trigger=%s error=%q", runID, trigger, err.Error())
 		return
 	}
-	if created {
+	if compaction != nil {
 		log.Printf("context_compaction_completed run_id=%s trigger=%s compaction_id=%s before_tokens=%d after_tokens=%d", runID, trigger, compaction.ID, compaction.BeforeTokens, compaction.AfterTokens)
 	}
 }

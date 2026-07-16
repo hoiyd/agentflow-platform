@@ -217,24 +217,20 @@ func (s *FileStore) CreateContextCompaction(compaction domain.ContextCompaction)
 }
 
 func (s *FileStore) GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error) {
-	items, err := s.ListContextCompactions(conversationID)
-	if err != nil || len(items) == 0 {
-		return domain.ContextCompaction{}, false, err
-	}
-	return items[len(items)-1], true, nil
-}
-
-func (s *FileStore) ListContextCompactions(conversationID string) ([]domain.ContextCompaction, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	items := make([]domain.ContextCompaction, 0)
+	var latest domain.ContextCompaction
+	found := false
 	for _, item := range s.data.ContextCompactions {
-		if item.ConversationID == conversationID {
-			items = append(items, cloneContextCompaction(item))
+		if item.ConversationID != conversationID {
+			continue
+		}
+		if !found || item.CreatedAt.After(latest.CreatedAt) || (item.CreatedAt.Equal(latest.CreatedAt) && item.ID > latest.ID) {
+			latest = item
+			found = true
 		}
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
-	return items, nil
+	return cloneContextCompaction(latest), found, nil
 }
 
 func cloneContextCompaction(item domain.ContextCompaction) domain.ContextCompaction {

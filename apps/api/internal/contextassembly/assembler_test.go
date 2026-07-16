@@ -179,7 +179,7 @@ func TestAssembleUsesPersistedCompactionAndExcludesCoveredHistory(t *testing.T) 
 
 func TestAssembleCompactsOversizedRequiredToolResult(t *testing.T) {
 	config := DefaultConfig()
-	config.CompactionToolResultMaxTokens = 20
+	config.ToolResultMaxTokens = 20
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run", TurnID: "turn"})
 	ctx = WithSession(ctx, Session{Config: config})
 	pack, err := Assemble(ctx, Request{Model: "test", Messages: []Message{

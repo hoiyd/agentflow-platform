@@ -12,7 +12,6 @@ import (
 
 const (
 	AssemblerVersion      = "context-assembler-v1"
-	CompactionVersion     = "context-compaction-v1"
 	CompactionModeAuto    = "auto"
 	CompactionModeOff     = "off"
 	CompactionTriggerSoft = "soft"
@@ -97,11 +96,10 @@ func DefaultConfig() domain.ContextAssemblyConfig {
 	return domain.ContextAssemblyConfig{
 		AssemblerVersion: AssemblerVersion, ContextWindowTokens: 128000, OutputReserveTokens: 8192,
 		SafetyMarginTokens: 4096, HistoryMaxTokens: 64000, MemoryMaxTokens: 8000,
-		KnowledgeMaxTokens: 16000, CompactionMode: CompactionModeAuto,
-		CompactionVersion: CompactionVersion, CompactionSoftThreshold: 0.70,
+		KnowledgeMaxTokens: 16000, ToolResultMaxTokens: 2000, CompactionMode: CompactionModeAuto,
+		CompactionSoftThreshold: 0.70,
 		CompactionHardThreshold: 0.85, CompactionRecentTokens: 16000,
-		CompactionSummaryMaxTokens: 2000, CompactionToolResultMaxTokens: 2000,
-		CompactionTimeoutMS: 45000,
+		CompactionSummaryMaxTokens: 2000, CompactionTimeoutMS: 45000,
 	}
 }
 
@@ -132,13 +130,13 @@ func NormalizeConfig(config domain.ContextAssemblyConfig) domain.ContextAssembly
 	if config.KnowledgeMaxTokens <= 0 {
 		config.KnowledgeMaxTokens = defaults.KnowledgeMaxTokens
 	}
+	if config.ToolResultMaxTokens <= 0 {
+		config.ToolResultMaxTokens = defaults.ToolResultMaxTokens
+	}
 	switch config.CompactionMode {
 	case CompactionModeOff:
 	default:
 		config.CompactionMode = CompactionModeAuto
-	}
-	if config.CompactionVersion == "" {
-		config.CompactionVersion = defaults.CompactionVersion
 	}
 	if config.CompactionSoftThreshold <= 0 || config.CompactionSoftThreshold >= 1 {
 		config.CompactionSoftThreshold = defaults.CompactionSoftThreshold
@@ -154,9 +152,6 @@ func NormalizeConfig(config domain.ContextAssemblyConfig) domain.ContextAssembly
 	}
 	if config.CompactionSummaryMaxTokens <= 0 {
 		config.CompactionSummaryMaxTokens = defaults.CompactionSummaryMaxTokens
-	}
-	if config.CompactionToolResultMaxTokens <= 0 {
-		config.CompactionToolResultMaxTokens = defaults.CompactionToolResultMaxTokens
 	}
 	if config.CompactionTimeoutMS <= 0 {
 		config.CompactionTimeoutMS = defaults.CompactionTimeoutMS

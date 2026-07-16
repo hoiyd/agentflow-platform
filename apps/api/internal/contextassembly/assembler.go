@@ -31,20 +31,20 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	config := NormalizeConfig(session.Config)
 	inputBudget := config.ContextWindowTokens - config.OutputReserveTokens - config.SafetyMarginTokens
 	messages := normalizeMessages(mergeSessionHistory(request.Messages, session))
-	messages, compactedToolResults := compactToolResults(messages, config.CompactionToolResultMaxTokens)
 	entries := make([]domain.ContextManifestEntry, 0, len(messages)+len(request.Tools)+len(session.Memories)+len(session.Knowledge)+1)
 	messageCandidates := make([]candidate, 0, len(messages))
 	requiredTokens := 0
 
-	for index, message := range messages {
+	for index := range messages {
+		transformation := "original"
+		originalBytes := len(messages[index].Content)
+		if (messages[index].Source == SourceToolResult || messages[index].Role == "tool") && EstimateTokens(messages[index].Content) > config.ToolResultMaxTokens {
+			messages[index].Content = compactText(messages[index].Content, config.ToolResultMaxTokens)
+			transformation = "tool_result_compacted"
+		}
+		message := messages[index]
 		tokens := estimateMessageTokens(message)
 		required := isRequiredSource(message.Source)
-		transformation := "original"
-		originalBytes := len(message.Content)
-		if original, ok := compactedToolResults[index]; ok {
-			transformation = "tool_result_compacted"
-			originalBytes = original
-		}
 		entry := domain.ContextManifestEntry{
 			Source: message.Source, ReferenceID: message.ReferenceID, Role: message.Role,
 			Selected: required, Reason: reasonForMessage(message.Source, required),
@@ -374,26 +374,6 @@ func newManifest(ctx context.Context, model string, config domain.ContextAssembl
 		manifest.CompactionID = compaction.ID
 	}
 	return manifest
-}
-
-func compactToolResults(messages []Message, maxTokens int) ([]Message, map[int]int) {
-	if maxTokens <= 0 {
-		return messages, nil
-	}
-	result := cloneMessages(messages)
-	compacted := map[int]int{}
-	for index := range result {
-		if result[index].Source != SourceToolResult && result[index].Role != "tool" {
-			continue
-		}
-		if EstimateTokens(result[index].Content) <= maxTokens {
-			continue
-		}
-		original := result[index].Content
-		result[index].Content = compactText(original, maxTokens)
-		compacted[index] = len(original)
-	}
-	return result, compacted
 }
 
 func compactText(value string, maxTokens int) string {

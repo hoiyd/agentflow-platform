@@ -106,21 +106,20 @@ type RuntimeSnapshot struct {
 }
 
 type ContextAssemblyConfig struct {
-	AssemblerVersion              string  `json:"assembler_version"`
-	ContextWindowTokens           int     `json:"context_window_tokens"`
-	OutputReserveTokens           int     `json:"output_reserve_tokens"`
-	SafetyMarginTokens            int     `json:"safety_margin_tokens"`
-	HistoryMaxTokens              int     `json:"history_max_tokens"`
-	MemoryMaxTokens               int     `json:"memory_max_tokens"`
-	KnowledgeMaxTokens            int     `json:"knowledge_max_tokens"`
-	CompactionMode                string  `json:"compaction_mode"`
-	CompactionVersion             string  `json:"compaction_version"`
-	CompactionSoftThreshold       float64 `json:"compaction_soft_threshold"`
-	CompactionHardThreshold       float64 `json:"compaction_hard_threshold"`
-	CompactionRecentTokens        int     `json:"compaction_recent_tokens"`
-	CompactionSummaryMaxTokens    int     `json:"compaction_summary_max_tokens"`
-	CompactionToolResultMaxTokens int     `json:"compaction_tool_result_max_tokens"`
-	CompactionTimeoutMS           int64   `json:"compaction_timeout_ms"`
+	AssemblerVersion           string  `json:"assembler_version"`
+	ContextWindowTokens        int     `json:"context_window_tokens"`
+	OutputReserveTokens        int     `json:"output_reserve_tokens"`
+	SafetyMarginTokens         int     `json:"safety_margin_tokens"`
+	HistoryMaxTokens           int     `json:"history_max_tokens"`
+	MemoryMaxTokens            int     `json:"memory_max_tokens"`
+	KnowledgeMaxTokens         int     `json:"knowledge_max_tokens"`
+	ToolResultMaxTokens        int     `json:"compaction_tool_result_max_tokens"`
+	CompactionMode             string  `json:"compaction_mode"`
+	CompactionSoftThreshold    float64 `json:"compaction_soft_threshold"`
+	CompactionHardThreshold    float64 `json:"compaction_hard_threshold"`
+	CompactionRecentTokens     int     `json:"compaction_recent_tokens"`
+	CompactionSummaryMaxTokens int     `json:"compaction_summary_max_tokens"`
+	CompactionTimeoutMS        int64   `json:"compaction_timeout_ms"`
 }
 
 type ContextCompaction struct {

@@ -21,7 +21,7 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	if err != nil {
 		return turn.Result{}, err
 	}
-	m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, contextassembly.CompactionTriggerHard)
+	m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerHard)
 	var compaction *domain.ContextCompaction
 	if snapshot.ContextAssembly.CompactionMode != contextassembly.CompactionModeOff {
 		if latest, ok, loadErr := m.runtime.store.GetLatestContextCompaction(request.ConversationID); loadErr == nil && ok {

@@ -18,6 +18,8 @@ import (
 
 var ErrSummaryUnavailable = errors.New("context compaction summary is unavailable")
 
+const AlgorithmVersion = "context-compaction-v1"
+
 type Store interface {
 	ListMessages(conversationID string) ([]domain.Message, error)
 	CreateContextCompaction(domain.ContextCompaction) (domain.ContextCompaction, error)
@@ -64,13 +66,13 @@ func NewService(store Store) *Service {
 	return &Service{store: store, locks: map[string]*sync.Mutex{}}
 }
 
-func (s *Service) CompactIfNeeded(ctx context.Context, request Request) (domain.ContextCompaction, bool, error) {
+func (s *Service) CompactIfNeeded(ctx context.Context, request Request) (*domain.ContextCompaction, error) {
 	if s == nil || s.store == nil {
-		return domain.ContextCompaction{}, false, errors.New("context compaction store is required")
+		return nil, errors.New("context compaction store is required")
 	}
 	config := contextassembly.NormalizeConfig(request.Config)
 	if config.CompactionMode == contextassembly.CompactionModeOff {
-		return domain.ContextCompaction{}, false, nil
+		return nil, nil
 	}
 	lock := s.conversationLock(request.ConversationID)
 	lock.Lock()
@@ -78,36 +80,40 @@ func (s *Service) CompactIfNeeded(ctx context.Context, request Request) (domain.
 
 	messages, err := s.store.ListMessages(request.ConversationID)
 	if err != nil {
-		return domain.ContextCompaction{}, false, err
+		return nil, err
 	}
-	previous, hasPrevious, err := s.store.GetLatestContextCompaction(request.ConversationID)
+	latest, hasPrevious, err := s.store.GetLatestContextCompaction(request.ConversationID)
 	if err != nil {
-		return domain.ContextCompaction{}, false, err
+		return nil, err
 	}
-	plan := buildPlan(messages, previous, hasPrevious, config)
+	var previous *domain.ContextCompaction
+	if hasPrevious {
+		previous = &latest
+	}
+	plan := buildPlan(messages, previous, config)
 	threshold := thresholdTokens(config, request.Trigger)
 	triggerTokens := max(plan.beforeTokens, request.ObservedPromptTokens)
 	if triggerTokens < threshold || len(plan.newSourceMessages) < 2 {
-		return domain.ContextCompaction{}, false, nil
+		return nil, nil
 	}
 	if request.Summarizer == nil {
 		err := ErrSummaryUnavailable
 		s.publish(request, domain.EventCompactionFailed, eventpkg.ContextCompactionPayload{
 			Trigger: request.Trigger, Status: "failed", BeforeTokens: plan.beforeTokens,
 			ObservedPromptTokens: request.ObservedPromptTokens,
-			AlgorithmVersion:     config.CompactionVersion, Error: err.Error(),
+			AlgorithmVersion:     AlgorithmVersion, Error: err.Error(),
 		})
-		return domain.ContextCompaction{}, false, err
+		return nil, err
 	}
 
 	s.publish(request, domain.EventCompactionStarted, eventpkg.ContextCompactionPayload{
 		Trigger: request.Trigger, Status: "running", SourceMessageIDs: plan.sourceIDs,
 		BeforeTokens: plan.beforeTokens, ObservedPromptTokens: request.ObservedPromptTokens,
-		AlgorithmVersion: config.CompactionVersion,
+		AlgorithmVersion: AlgorithmVersion,
 	})
 	result, err := request.Summarizer.Summarize(ctx, SummaryRequest{
 		SystemPrompt: compactionSystemPrompt,
-		Prompt:       compactionPrompt(previous, hasPrevious, plan.newSourceMessages, config.CompactionSummaryMaxTokens),
+		Prompt:       compactionPrompt(previous, plan.newSourceMessages, config.CompactionSummaryMaxTokens),
 	})
 	if err != nil || strings.TrimSpace(result.Text) == "" {
 		if err == nil {
@@ -117,9 +123,9 @@ func (s *Service) CompactIfNeeded(ctx context.Context, request Request) (domain.
 			Trigger: request.Trigger, Status: "failed", SourceMessageIDs: plan.sourceIDs,
 			BeforeTokens: plan.beforeTokens, ObservedPromptTokens: request.ObservedPromptTokens,
 			SummaryModel:     result.Model,
-			AlgorithmVersion: config.CompactionVersion, Error: truncateError(err.Error()),
+			AlgorithmVersion: AlgorithmVersion, Error: truncateError(err.Error()),
 		})
-		return domain.ContextCompaction{}, false, err
+		return nil, err
 	}
 
 	summary := limitSummary(strings.TrimSpace(result.Text), config.CompactionSummaryMaxTokens)
@@ -128,7 +134,7 @@ func (s *Service) CompactIfNeeded(ctx context.Context, request Request) (domain.
 		Summary: summary, SourceMessageIDs: plan.sourceIDs, SourceHash: sourceHash(messages, plan.sourceIDs),
 		BeforeTokens: plan.beforeTokens,
 		AfterTokens:  contextassembly.EstimateTokens(summary) + plan.protectedTokens,
-		SummaryModel: result.Model, AlgorithmVersion: config.CompactionVersion, CreatedAt: time.Now().UTC(),
+		SummaryModel: result.Model, AlgorithmVersion: AlgorithmVersion, CreatedAt: time.Now().UTC(),
 	}
 	created, err := s.store.CreateContextCompaction(compaction)
 	if err != nil {
@@ -136,9 +142,9 @@ func (s *Service) CompactIfNeeded(ctx context.Context, request Request) (domain.
 			Trigger: request.Trigger, Status: "failed", SourceMessageIDs: plan.sourceIDs,
 			BeforeTokens: plan.beforeTokens, ObservedPromptTokens: request.ObservedPromptTokens,
 			SummaryModel:     result.Model,
-			AlgorithmVersion: config.CompactionVersion, Error: truncateError(err.Error()),
+			AlgorithmVersion: AlgorithmVersion, Error: truncateError(err.Error()),
 		})
-		return domain.ContextCompaction{}, false, err
+		return nil, err
 	}
 	s.publish(request, domain.EventCompactionCompleted, eventpkg.ContextCompactionPayload{
 		CompactionID: created.ID, Trigger: request.Trigger, Status: "completed",
@@ -147,7 +153,7 @@ func (s *Service) CompactIfNeeded(ctx context.Context, request Request) (domain.
 		SummaryModel:     created.SummaryModel,
 		AlgorithmVersion: created.AlgorithmVersion,
 	})
-	return created, true, nil
+	return &created, nil
 }
 
 type compactionPlan struct {
@@ -157,16 +163,16 @@ type compactionPlan struct {
 	protectedTokens   int
 }
 
-func buildPlan(messages []domain.Message, previous domain.ContextCompaction, hasPrevious bool, config domain.ContextAssemblyConfig) compactionPlan {
+func buildPlan(messages []domain.Message, previous *domain.ContextCompaction, config domain.ContextAssemblyConfig) compactionPlan {
 	covered := map[string]bool{}
-	if hasPrevious {
+	if previous != nil {
 		for _, id := range previous.SourceMessageIDs {
 			covered[id] = true
 		}
 	}
 	active := make([]domain.Message, 0, len(messages))
 	beforeTokens := 0
-	if hasPrevious {
+	if previous != nil {
 		beforeTokens += contextassembly.EstimateTokens(previous.Summary)
 	}
 	for _, message := range messages {
@@ -194,7 +200,10 @@ func buildPlan(messages []domain.Message, previous domain.ContextCompaction, has
 		protectedTokens += estimateMessage(active[cut])
 	}
 	newSources := append([]domain.Message(nil), active[:cut]...)
-	sourceIDs := append([]string(nil), previous.SourceMessageIDs...)
+	var sourceIDs []string
+	if previous != nil {
+		sourceIDs = append(sourceIDs, previous.SourceMessageIDs...)
+	}
 	for _, message := range newSources {
 		sourceIDs = append(sourceIDs, message.ID)
 	}
@@ -214,11 +223,11 @@ func estimateMessage(message domain.Message) int {
 	return 4 + contextassembly.EstimateTokens(message.Role) + contextassembly.EstimateTokens(message.Content)
 }
 
-func compactionPrompt(previous domain.ContextCompaction, hasPrevious bool, messages []domain.Message, maxTokens int) string {
+func compactionPrompt(previous *domain.ContextCompaction, messages []domain.Message, maxTokens int) string {
 	var builder strings.Builder
 	builder.WriteString("Create an updated structured handoff summary for older conversation context.\n")
 	builder.WriteString(fmt.Sprintf("Target no more than approximately %d tokens. Preserve exact identifiers, constraints, decisions, errors, and unresolved work.\n", maxTokens))
-	if hasPrevious {
+	if previous != nil {
 		builder.WriteString("\nPREVIOUS COMPACTION SUMMARY:\n")
 		builder.WriteString(previous.Summary)
 		builder.WriteString("\n")
