@@ -88,7 +88,8 @@ type Run struct {
 
 const (
 	LegacyRuntimeSnapshotVersion  = 1
-	CurrentRuntimeSnapshotVersion = 2
+	ContextRuntimeSnapshotVersion = 2
+	CurrentRuntimeSnapshotVersion = 3
 )
 
 type RuntimeSnapshot struct {
@@ -105,13 +106,35 @@ type RuntimeSnapshot struct {
 }
 
 type ContextAssemblyConfig struct {
-	AssemblerVersion    string `json:"assembler_version"`
-	ContextWindowTokens int    `json:"context_window_tokens"`
-	OutputReserveTokens int    `json:"output_reserve_tokens"`
-	SafetyMarginTokens  int    `json:"safety_margin_tokens"`
-	HistoryMaxTokens    int    `json:"history_max_tokens"`
-	MemoryMaxTokens     int    `json:"memory_max_tokens"`
-	KnowledgeMaxTokens  int    `json:"knowledge_max_tokens"`
+	AssemblerVersion           string  `json:"assembler_version"`
+	ContextWindowTokens        int     `json:"context_window_tokens"`
+	OutputReserveTokens        int     `json:"output_reserve_tokens"`
+	SafetyMarginTokens         int     `json:"safety_margin_tokens"`
+	HistoryMaxTokens           int     `json:"history_max_tokens"`
+	MemoryMaxTokens            int     `json:"memory_max_tokens"`
+	KnowledgeMaxTokens         int     `json:"knowledge_max_tokens"`
+	ToolResultMaxTokens        int     `json:"compaction_tool_result_max_tokens"`
+	CompactionMode             string  `json:"compaction_mode"`
+	CompactionSoftThreshold    float64 `json:"compaction_soft_threshold"`
+	CompactionHardThreshold    float64 `json:"compaction_hard_threshold"`
+	CompactionRecentTokens     int     `json:"compaction_recent_tokens"`
+	CompactionSummaryMaxTokens int     `json:"compaction_summary_max_tokens"`
+	CompactionTimeoutMS        int64   `json:"compaction_timeout_ms"`
+}
+
+type ContextCompaction struct {
+	ID               string    `json:"id"`
+	ConversationID   string    `json:"conversation_id"`
+	RunID            string    `json:"run_id"`
+	Trigger          string    `json:"trigger"`
+	Summary          string    `json:"summary"`
+	SourceMessageIDs []string  `json:"source_message_ids"`
+	SourceHash       string    `json:"source_hash"`
+	BeforeTokens     int       `json:"before_tokens"`
+	AfterTokens      int       `json:"after_tokens"`
+	SummaryModel     string    `json:"summary_model"`
+	AlgorithmVersion string    `json:"algorithm_version"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type RuntimeAgentSnapshot struct {
@@ -224,6 +247,9 @@ const (
 	EventModelCompleted      RunEventType = "model.completed"
 	EventModelFailed         RunEventType = "model.failed"
 	EventContextAssembled    RunEventType = "context.assembled"
+	EventCompactionStarted   RunEventType = "context.compaction_started"
+	EventCompactionCompleted RunEventType = "context.compaction_completed"
+	EventCompactionFailed    RunEventType = "context.compaction_failed"
 	EventToolStarted         RunEventType = "tool.started"
 	EventToolCompleted       RunEventType = "tool.completed"
 	EventToolFailed          RunEventType = "tool.failed"
@@ -262,6 +288,7 @@ type ContextManifest struct {
 	EstimatedInputTokens int                    `json:"estimated_input_tokens"`
 	ExcludedTokens       int                    `json:"excluded_tokens"`
 	PrefixHash           string                 `json:"prefix_hash"`
+	CompactionID         string                 `json:"compaction_id,omitempty"`
 	Entries              []ContextManifestEntry `json:"entries"`
 	CreatedAt            time.Time              `json:"created_at"`
 }

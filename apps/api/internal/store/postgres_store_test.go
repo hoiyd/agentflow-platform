@@ -38,6 +38,18 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mark running: %v", err)
 	}
+	compaction, err := store.CreateContextCompaction(domain.ContextCompaction{
+		ConversationID: conversation.ID, RunID: run.ID, Trigger: "soft", Summary: "summary",
+		SourceMessageIDs: []string{"message-1"}, SourceHash: "source-hash", BeforeTokens: 100,
+		AfterTokens: 20, SummaryModel: "test", AlgorithmVersion: "context-compaction-v1",
+	})
+	if err != nil {
+		t.Fatalf("create context compaction: %v", err)
+	}
+	latest, ok, err := store.GetLatestContextCompaction(conversation.ID)
+	if err != nil || !ok || latest.ID != compaction.ID {
+		t.Fatalf("postgres compaction round trip: ok=%v err=%v item=%#v", ok, err, latest)
+	}
 	step, err := store.CreateCollaborationStep(domain.CollaborationStep{
 		RunID:          run.ID,
 		ConversationID: conversation.ID,

@@ -10,7 +10,13 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 )
 
-const AssemblerVersion = "context-assembler-v1"
+const (
+	AssemblerVersion      = "context-assembler-v1"
+	CompactionModeAuto    = "auto"
+	CompactionModeOff     = "off"
+	CompactionTriggerSoft = "soft"
+	CompactionTriggerHard = "hard"
+)
 
 const (
 	SourceSystem         = "system"
@@ -19,6 +25,7 @@ const (
 	SourceCurrentInput   = "current_input"
 	SourceMemory         = "memory"
 	SourceKnowledge      = "knowledge"
+	SourceCompaction     = "compaction_summary"
 	SourceToolCall       = "tool_call"
 	SourceToolResult     = "tool_result"
 )
@@ -68,6 +75,7 @@ type Session struct {
 	CurrentInput string
 	Memories     []domain.RetrievedMemory
 	Knowledge    []domain.RetrievedDocumentChunk
+	Compaction   *domain.ContextCompaction
 }
 
 type sessionKey struct{}
@@ -88,7 +96,10 @@ func DefaultConfig() domain.ContextAssemblyConfig {
 	return domain.ContextAssemblyConfig{
 		AssemblerVersion: AssemblerVersion, ContextWindowTokens: 128000, OutputReserveTokens: 8192,
 		SafetyMarginTokens: 4096, HistoryMaxTokens: 64000, MemoryMaxTokens: 8000,
-		KnowledgeMaxTokens: 16000,
+		KnowledgeMaxTokens: 16000, ToolResultMaxTokens: 2000, CompactionMode: CompactionModeAuto,
+		CompactionSoftThreshold: 0.70,
+		CompactionHardThreshold: 0.85, CompactionRecentTokens: 16000,
+		CompactionSummaryMaxTokens: 2000, CompactionTimeoutMS: 45000,
 	}
 }
 
@@ -119,5 +130,38 @@ func NormalizeConfig(config domain.ContextAssemblyConfig) domain.ContextAssembly
 	if config.KnowledgeMaxTokens <= 0 {
 		config.KnowledgeMaxTokens = defaults.KnowledgeMaxTokens
 	}
+	if config.ToolResultMaxTokens <= 0 {
+		config.ToolResultMaxTokens = defaults.ToolResultMaxTokens
+	}
+	switch config.CompactionMode {
+	case CompactionModeOff:
+	default:
+		config.CompactionMode = CompactionModeAuto
+	}
+	if config.CompactionSoftThreshold <= 0 || config.CompactionSoftThreshold >= 1 {
+		config.CompactionSoftThreshold = defaults.CompactionSoftThreshold
+	}
+	if config.CompactionHardThreshold <= config.CompactionSoftThreshold || config.CompactionHardThreshold >= 1 {
+		config.CompactionHardThreshold = defaults.CompactionHardThreshold
+	}
+	if config.CompactionRecentTokens <= 0 {
+		config.CompactionRecentTokens = defaults.CompactionRecentTokens
+	}
+	if config.CompactionRecentTokens >= config.HistoryMaxTokens {
+		config.CompactionRecentTokens = max(1, config.HistoryMaxTokens/4)
+	}
+	if config.CompactionSummaryMaxTokens <= 0 {
+		config.CompactionSummaryMaxTokens = defaults.CompactionSummaryMaxTokens
+	}
+	if config.CompactionTimeoutMS <= 0 {
+		config.CompactionTimeoutMS = defaults.CompactionTimeoutMS
+	}
 	return config
+}
+
+func NormalizeSnapshotConfig(config domain.ContextAssemblyConfig, schemaVersion int) domain.ContextAssemblyConfig {
+	if schemaVersion < domain.CurrentRuntimeSnapshotVersion {
+		config.CompactionMode = CompactionModeOff
+	}
+	return NormalizeConfig(config)
 }

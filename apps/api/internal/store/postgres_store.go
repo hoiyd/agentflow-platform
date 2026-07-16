@@ -166,6 +166,76 @@ func (s *PostgresStore) AddMessage(conversationID string, role string, content s
 	return message, tx.Commit()
 }
 
+func (s *PostgresStore) CreateContextCompaction(compaction domain.ContextCompaction) (domain.ContextCompaction, error) {
+	if compaction.ID == "" {
+		compaction.ID = newID("cmp")
+	}
+	if compaction.CreatedAt.IsZero() {
+		compaction.CreatedAt = time.Now().UTC()
+	}
+	sourceIDs, err := json.Marshal(compaction.SourceMessageIDs)
+	if err != nil {
+		return domain.ContextCompaction{}, err
+	}
+	result, err := s.db.Exec(`
+		INSERT INTO context_compactions (
+			id, conversation_id, run_id, trigger, summary, source_message_ids,
+			source_hash, before_tokens, after_tokens, summary_model,
+			algorithm_version, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (conversation_id, source_hash) DO NOTHING`,
+		compaction.ID, compaction.ConversationID, compaction.RunID, compaction.Trigger,
+		compaction.Summary, sourceIDs, compaction.SourceHash, compaction.BeforeTokens,
+		compaction.AfterTokens, compaction.SummaryModel, compaction.AlgorithmVersion,
+		compaction.CreatedAt)
+	if err != nil {
+		return domain.ContextCompaction{}, err
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		return s.getContextCompactionByHash(compaction.ConversationID, compaction.SourceHash)
+	}
+	return compaction, nil
+}
+
+func (s *PostgresStore) GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error) {
+	row := s.db.QueryRow(`
+		SELECT id, conversation_id, run_id, trigger, summary, source_message_ids,
+			source_hash, before_tokens, after_tokens, summary_model, algorithm_version, created_at
+		FROM context_compactions WHERE conversation_id = $1
+		ORDER BY created_at DESC, id DESC LIMIT 1`, conversationID)
+	item, err := scanContextCompaction(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.ContextCompaction{}, false, nil
+	}
+	return item, err == nil, err
+}
+
+type contextCompactionScanner interface {
+	Scan(...any) error
+}
+
+func scanContextCompaction(row contextCompactionScanner) (domain.ContextCompaction, error) {
+	var item domain.ContextCompaction
+	var sourceIDs []byte
+	err := row.Scan(&item.ID, &item.ConversationID, &item.RunID, &item.Trigger, &item.Summary,
+		&sourceIDs, &item.SourceHash, &item.BeforeTokens, &item.AfterTokens, &item.SummaryModel,
+		&item.AlgorithmVersion, &item.CreatedAt)
+	if err != nil {
+		return domain.ContextCompaction{}, err
+	}
+	if err := json.Unmarshal(sourceIDs, &item.SourceMessageIDs); err != nil {
+		return domain.ContextCompaction{}, err
+	}
+	return item, nil
+}
+
+func (s *PostgresStore) getContextCompactionByHash(conversationID, sourceHash string) (domain.ContextCompaction, error) {
+	return scanContextCompaction(s.db.QueryRow(`
+		SELECT id, conversation_id, run_id, trigger, summary, source_message_ids,
+			source_hash, before_tokens, after_tokens, summary_model, algorithm_version, created_at
+		FROM context_compactions WHERE conversation_id = $1 AND source_hash = $2`, conversationID, sourceHash))
+}
+
 func (s *PostgresStore) UpdateConversationTitle(id string, title string) error {
 	result, err := s.db.Exec(`
 		UPDATE conversations
@@ -1497,6 +1567,21 @@ var postgresMigrations = []string{
 		timestamp timestamptz NOT NULL,
 		UNIQUE(run_id, sequence)
 	)`,
+	`CREATE TABLE IF NOT EXISTS context_compactions (
+		id text PRIMARY KEY,
+		conversation_id text NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+		trigger text NOT NULL,
+		summary text NOT NULL,
+		source_message_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+		source_hash text NOT NULL,
+		before_tokens integer NOT NULL,
+		after_tokens integer NOT NULL,
+		summary_model text NOT NULL,
+		algorithm_version text NOT NULL,
+		created_at timestamptz NOT NULL,
+		UNIQUE(conversation_id, source_hash)
+	)`,
 	`CREATE TABLE IF NOT EXISTS memories (
 		id text PRIMARY KEY,
 		workspace_id text,
@@ -1568,6 +1653,7 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_steps_run_created ON collaboration_steps(run_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_run_events_run_sequence ON run_events(run_id, sequence ASC)`,
+	`CREATE INDEX IF NOT EXISTS idx_context_compactions_conversation_created ON context_compactions(conversation_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memories_scope_created ON memories(workspace_id, user_id, project_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memory_embeddings_vector ON memory_embeddings USING hnsw (embedding vector_cosine_ops)`,
 	`CREATE INDEX IF NOT EXISTS idx_documents_workspace_created ON documents(workspace_id, created_at DESC)`,

@@ -61,6 +61,11 @@ type RunEventStore interface {
 	GetRunReplay(runID string) (domain.RunReplay, bool, error)
 }
 
+type ContextCompactionStore interface {
+	CreateContextCompaction(domain.ContextCompaction) (domain.ContextCompaction, error)
+	GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error)
+}
+
 type MemoryStore interface {
 	CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error)
 	SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error)
@@ -82,6 +87,7 @@ type Store interface {
 	RunStore
 	CollaborationStore
 	RunEventStore
+	ContextCompactionStore
 	MemoryStore
 	DocumentStore
 }

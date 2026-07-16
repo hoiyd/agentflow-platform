@@ -30,6 +30,7 @@ type fileData struct {
 	Runs               []domain.Run                    `json:"runs"`
 	CollaborationSteps []domain.CollaborationStep      `json:"collaboration_steps"`
 	RunEvents          []domain.RunEvent               `json:"run_events"`
+	ContextCompactions []domain.ContextCompaction      `json:"context_compactions"`
 	Memories           []domain.Memory                 `json:"memories"`
 	MemoryEmbeddings   []domain.MemoryEmbedding        `json:"memory_embeddings"`
 	Documents          []domain.Document               `json:"documents"`
@@ -140,6 +141,14 @@ func (s *FileStore) DeleteConversation(id string) error {
 	}
 	s.data.RunEvents = runEvents
 
+	compactions := make([]domain.ContextCompaction, 0, len(s.data.ContextCompactions))
+	for _, compaction := range s.data.ContextCompactions {
+		if compaction.ConversationID != id {
+			compactions = append(compactions, compaction)
+		}
+	}
+	s.data.ContextCompactions = compactions
+
 	return s.saveLocked()
 }
 
@@ -183,6 +192,50 @@ func (s *FileStore) AddMessage(conversationID string, role string, content strin
 		}
 	}
 	return message, s.saveLocked()
+}
+
+func (s *FileStore) CreateContextCompaction(compaction domain.ContextCompaction) (domain.ContextCompaction, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.hasConversationLocked(compaction.ConversationID) {
+		return domain.ContextCompaction{}, ErrNotFound("conversation")
+	}
+	for _, existing := range s.data.ContextCompactions {
+		if existing.ConversationID == compaction.ConversationID && existing.SourceHash == compaction.SourceHash {
+			return cloneContextCompaction(existing), nil
+		}
+	}
+	if compaction.ID == "" {
+		compaction.ID = newID("cmp")
+	}
+	if compaction.CreatedAt.IsZero() {
+		compaction.CreatedAt = time.Now().UTC()
+	}
+	compaction.SourceMessageIDs = append([]string(nil), compaction.SourceMessageIDs...)
+	s.data.ContextCompactions = append(s.data.ContextCompactions, compaction)
+	return cloneContextCompaction(compaction), s.saveLocked()
+}
+
+func (s *FileStore) GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var latest domain.ContextCompaction
+	found := false
+	for _, item := range s.data.ContextCompactions {
+		if item.ConversationID != conversationID {
+			continue
+		}
+		if !found || item.CreatedAt.After(latest.CreatedAt) || (item.CreatedAt.Equal(latest.CreatedAt) && item.ID > latest.ID) {
+			latest = item
+			found = true
+		}
+	}
+	return cloneContextCompaction(latest), found, nil
+}
+
+func cloneContextCompaction(item domain.ContextCompaction) domain.ContextCompaction {
+	item.SourceMessageIDs = append([]string(nil), item.SourceMessageIDs...)
+	return item
 }
 
 func (s *FileStore) UpdateConversationTitle(id string, title string) error {
@@ -1042,6 +1095,7 @@ func emptyFileData() fileData {
 		Runs:               []domain.Run{},
 		CollaborationSteps: []domain.CollaborationStep{},
 		RunEvents:          []domain.RunEvent{},
+		ContextCompactions: []domain.ContextCompaction{},
 		Memories:           []domain.Memory{},
 		MemoryEmbeddings:   []domain.MemoryEmbedding{},
 		Documents:          []domain.Document{},
@@ -1068,6 +1122,9 @@ func (s *FileStore) normalizeLoadedDataLocked() {
 	}
 	if s.data.RunEvents == nil {
 		s.data.RunEvents = []domain.RunEvent{}
+	}
+	if s.data.ContextCompactions == nil {
+		s.data.ContextCompactions = []domain.ContextCompaction{}
 	}
 	if s.data.Memories == nil {
 		s.data.Memories = []domain.Memory{}

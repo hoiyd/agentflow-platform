@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/contextassembly"
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/turn"
 )
 
@@ -20,10 +21,18 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	if err != nil {
 		return turn.Result{}, err
 	}
+	m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerHard)
+	var compaction *domain.ContextCompaction
+	if snapshot.ContextAssembly.CompactionMode != contextassembly.CompactionModeOff {
+		if latest, ok, loadErr := m.runtime.store.GetLatestContextCompaction(request.ConversationID); loadErr == nil && ok {
+			compaction = &latest
+		}
+	}
 	ctx = contextassembly.WithSession(ctx, contextassembly.Session{
 		Config: snapshot.ContextAssembly, Sink: request.Sink,
 		History: request.History, CurrentInput: request.Input,
 		Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
+		Compaction: compaction,
 	})
 	if request.ModelMode == turn.ModelModeText {
 		return m.executeText(ctx, request)
