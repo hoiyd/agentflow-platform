@@ -130,7 +130,7 @@
     overflow: hidden;
   }
 
-  .chat-workspace.with-collaboration > .messages {
+  .chat-workspace.with-collaboration > .conversation-column {
     display: none;
   }
 

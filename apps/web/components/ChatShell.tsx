@@ -201,7 +201,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const [isSavingConversationTitle, setIsSavingConversationTitle] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const messagesRef = useRef<HTMLElement | null>(null);
 
   const activeConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === activeId),
@@ -254,7 +254,11 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   }, [initialConversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = messagesRef.current;
+    if (!container) {
+      return;
+    }
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   function handleChatModeChange(mode: ChatMode) {
@@ -1295,7 +1299,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                 {isCancelingRun || runState?.status === "canceling" ? "Stopping" : "Stop"}
               </button>
             ) : null}
-            {view === "chat" && runState?.id && isTerminalRun ? (
+            {view === "chat" && runState?.id ? (
               <a className="run-link" href={`/runs/${runState.id}`}>
                 <Activity size={15} /> View trace
               </a>
@@ -1384,7 +1388,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           <section
             className={`chat-workspace ${useExpandedConversationWidth ? "expanded-content" : ""} ${
               showCollaborationPanel && isCollaborationPanelOpen ? "with-collaboration" : ""
-            }`}
+            } ${showCollaborationDag && isCollaborationPanelOpen ? "with-collaboration-dag" : ""}`}
           >
             {showCollaborationDag && isCollaborationPanelOpen ? (
               <CollaborationDag
@@ -1397,54 +1401,55 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                 steps={collaborationSteps}
               />
             ) : null}
-            <section className="messages">
+            <div className="conversation-column">
               <ModeChooser
                 chatMode={chatMode}
                 disabled={isStreaming}
                 setChatMode={handleChatModeChange}
               />
-              {showCollaborationPanel && !isCollaborationPanelOpen ? (
-                <div className="trace-reveal-row">
-                  <button
-                    className="collaboration-rail-toggle trace-panel-toggle"
-                    onClick={() => setIsCollaborationPanelOpen(true)}
-                    type="button"
-                  >
-                    <PanelRightOpen size={14} />
-                    {isAwaitingPlanApproval
-                      ? "Review Plan & Continue"
-                      : showAutonomousTrace
-                        ? "Show Autonomous Trace"
-                        : "Show Collaboration Trace"}
-                  </button>
-                </div>
-              ) : null}
-              {messages.length === 0 ? (
-                <div className="empty">
-                  <div className="empty-mark"><GitBranch size={22} strokeWidth={1.5} /></div>
-                  <span className="empty-eyebrow">Ready to run</span>
-                  <h2>What should the agents work on?</h2>
-                  <p>
-                    Describe an outcome. Choose direct chat for quick work, collaboration for a reviewed plan, or autonomous mode for bounded execution.
-                  </p>
-                  <div className="starter-prompts" aria-label="Starter prompts">
-                    <button onClick={() => setInput("Compare two implementation approaches and recommend one.")} type="button">Compare approaches</button>
-                    <button onClick={() => setInput("Research this topic, cite evidence, and summarize the result.")} type="button">Run research</button>
-                    <button onClick={() => setInput("Create an execution plan and wait for my approval.")} type="button">Draft a plan</button>
+              <section className="messages" ref={messagesRef}>
+                {showCollaborationPanel && !isCollaborationPanelOpen ? (
+                  <div className="trace-reveal-row">
+                    <button
+                      className="collaboration-rail-toggle trace-panel-toggle"
+                      onClick={() => setIsCollaborationPanelOpen(true)}
+                      type="button"
+                    >
+                      <PanelRightOpen size={14} />
+                      {isAwaitingPlanApproval
+                        ? "Review Plan & Continue"
+                        : showAutonomousTrace
+                          ? "Show Autonomous Trace"
+                          : "Show Collaboration Trace"}
+                    </button>
                   </div>
-                </div>
-              ) : (
-                <>
-                  {messages.map((message) => (
-                    <article className={`message ${message.role}`} key={message.id}>
-                      <div className="message-meta">{message.role}</div>
-                      <div className="bubble">{message.content ? renderMarkdown(message.content) : "..."}</div>
-                    </article>
-                  ))}
-                </>
-              )}
-              <div ref={bottomRef} />
-            </section>
+                ) : null}
+                {messages.length === 0 ? (
+                  <div className="empty">
+                    <div className="empty-mark"><GitBranch size={22} strokeWidth={1.5} /></div>
+                    <span className="empty-eyebrow">Ready to run</span>
+                    <h2>What should the agents work on?</h2>
+                    <p>
+                      Describe an outcome. Choose direct chat for quick work, collaboration for a reviewed plan, or autonomous mode for bounded execution.
+                    </p>
+                    <div className="starter-prompts" aria-label="Starter prompts">
+                      <button onClick={() => setInput("Compare two implementation approaches and recommend one.")} type="button">Compare approaches</button>
+                      <button onClick={() => setInput("Research this topic, cite evidence, and summarize the result.")} type="button">Run research</button>
+                      <button onClick={() => setInput("Create an execution plan and wait for my approval.")} type="button">Draft a plan</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {messages.map((message) => (
+                      <article className={`message ${message.role}`} key={message.id}>
+                        <div className="message-meta">{message.role}</div>
+                        <div className="bubble">{message.content ? renderMarkdown(message.content) : "..."}</div>
+                      </article>
+                    ))}
+                  </>
+                )}
+              </section>
+            </div>
             {showCollaborationPanel && isCollaborationPanelOpen ? (
               showAutonomousTrace ? (
                 <AutonomousPanel
