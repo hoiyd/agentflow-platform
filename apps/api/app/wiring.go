@@ -1,15 +1,19 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/httpapi"
+	"agentflow-platform/apps/api/internal/knowledge"
+	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/recovery"
 	"agentflow-platform/apps/api/internal/store"
@@ -19,6 +23,7 @@ import (
 type applicationDependencies struct {
 	store   store.Store
 	handler *httpapi.Handler
+	memory  *memorypkg.Syncer
 }
 
 func buildDependencies(cfg config.Config) (applicationDependencies, error) {
@@ -46,28 +51,47 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
 	}
 
-	handler := httpapi.NewHandlerWithRouterModeAndLimits(
-		appStore,
-		modelClient,
-		toolManager,
-		splitOrigins(cfg.AllowedOrigins),
-		cfg.RouterMode,
-		agent.AutonomousLimits{
+	agentRuntime := agent.NewRuntime(agent.RuntimeOptions{
+		Store:           appStore,
+		ModelClient:     modelClient,
+		Tools:           toolManager,
+		RouterMode:      cfg.RouterMode,
+		ContextAssembly: contextAssemblyConfig(cfg),
+		Autonomous: agent.AutonomousLimits{
 			MaxIterations:  cfg.AutonomousMaxIterations,
 			MaxRuntime:     cfg.AutonomousMaxRuntime,
 			MaxOutputChars: cfg.AutonomousMaxOutputCharacters,
 			MaxToolCalls:   cfg.AutonomousMaxToolCalls,
 		},
-	)
-	handler.SetRunController(concurrency.NewRunController(concurrency.RunOptions{
+	})
+	semanticMemory := memorypkg.NewSemanticMemory(appStore, modelClient)
+	knowledgeBase := knowledge.NewKnowledgeBase(appStore, modelClient)
+	memorySyncer := memorypkg.NewSyncer(appStore, modelClient)
+	runController := concurrency.NewRunController(concurrency.RunOptions{
 		MaxConcurrent: cfg.MaxConcurrentRuns,
 		QueueSize:     cfg.RunQueueSize,
 		WaitTimeout:   cfg.RunQueueWaitTimeout,
-	}))
-	handler.SetContextAssemblyConfig(contextAssemblyConfig(cfg))
+	})
+	handler, err := httpapi.NewHandler(httpapi.Dependencies{
+		Store:          appStore,
+		ModelClient:    modelClient,
+		Tools:          toolManager,
+		AgentRuntime:   agentRuntime,
+		Memory:         semanticMemory,
+		Knowledge:      knowledgeBase,
+		MemoryQueue:    memorySyncer,
+		RunController:  runController,
+		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
+	})
+	if err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = memorySyncer.Close(ctx)
+		return applicationDependencies{}, fmt.Errorf("create http handler: %w", err)
+	}
 
 	cleanupStore = false
-	return applicationDependencies{store: appStore, handler: handler}, nil
+	return applicationDependencies{store: appStore, handler: handler, memory: memorySyncer}, nil
 }
 
 func newModelClient(cfg config.Config) *openai.Client {

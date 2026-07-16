@@ -19,7 +19,8 @@ apps/api/
     tools/          tool catalog and guarded execution
     openai/         model-provider adapter
     store/          File and Postgres persistence adapters
-    memory/         asynchronous memory synchronization
+    memory/         semantic memory operations and asynchronous synchronization
+    knowledge/      knowledge-base ingestion, embedding, search, and RAG evaluation
     rag/            chunking and retrieval ranking
     concurrency/    run and model-request limits
     recovery/       stale-run recovery
@@ -34,16 +35,20 @@ cmd/server
     v
 app
     |
-    +--> internal/httpapi --> internal/agent --> internal/turn
-    |                              |
-    |                              +--> context, events, tools, model adapter
+    +--> internal/httpapi --> consumer-defined service interfaces
+    |             |                    |
+    |             |                    +--> memory, knowledge
+    |             |
+    |             +--> internal/agent --> internal/turn
+    |                                      |
+    |                                      +--> context, events, tools, model adapter
     |
-    +--> internal/store, recovery, concurrency, config
+    +--> store, recovery, concurrency, config
 ```
 
 `cmd/server` is deliberately thin. It reads process configuration, creates the application, binds OS signals, and reports lifecycle errors.
 
-`app` is the composition root. It creates concrete adapters, applies runtime policies, wires the HTTP handler, owns the HTTP server, and closes background work before persistence.
+`app` is the composition root. It creates every long-lived service and concrete adapter, applies runtime policies, injects a complete dependency set into the HTTP handler, owns the HTTP server, and closes background work before persistence.
 
 `internal` is Go's module-private visibility boundary, not a lower architectural layer. Keeping product implementation under `internal` prevents other modules from accidentally depending on unstable backend packages. Packages inside it should continue to expose the smallest interfaces required by their consumers.
 
@@ -51,7 +56,7 @@ app
 
 ### Use a real composition root
 
-Dependency construction belongs in `app`, not in `cmd/server` and not in HTTP handlers. This keeps process bootstrapping testable and gives all executables one canonical wiring path.
+Dependency construction belongs in `app`, not in `cmd/server` and not in HTTP handlers. Handlers do not construct runtimes, queues, or default policies and do not rely on post-construction setters. This keeps process bootstrapping testable and gives all executables one canonical wiring path.
 
 ### Do not mirror generic Clean Architecture folders
 
@@ -59,7 +64,9 @@ Empty `api`, `core`, and `services` directories do not create useful boundaries.
 
 ### Keep transport and execution separate
 
-`httpapi` owns HTTP parsing and responses. Agent execution remains in `agent` and `turn`; model access, persistence, tools, and tracing remain separate adapters or capabilities.
+`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.SemanticMemory` owns validation, embedding, and memory persistence; `knowledge.KnowledgeBase` owns ingestion, embedding, retrieval reranking, and RAG evaluation. Agent execution remains in `agent` and `turn`.
+
+The HTTP package defines the small service interfaces it consumes. Concrete implementations are selected only by `app`, so adding caching, another embedding implementation, or a different service adapter does not change transport code.
 
 ### Preserve private implementation packages
 
@@ -72,8 +79,28 @@ Moving packages out of `internal` only to make the tree appear balanced would we
 1. Store selection and stale-run recovery.
 2. Model client limits and retry policy.
 3. Tool Manager and Agent Runtime configuration.
-4. Run admission and Context Assembly policy.
-5. HTTP server startup and graceful shutdown.
-6. Memory Syncer drain followed by Store close.
+4. Memory and Knowledge services plus asynchronous Memory Sync.
+5. Run admission and Context Assembly policy.
+6. HTTP server startup and graceful shutdown.
+7. Memory Syncer drain followed by Store close.
+
+## Main Call Paths
+
+```text
+HTTP chat request
+  -> run admission
+  -> Agent Runtime
+  -> Turn Engine
+  -> typed Run Events
+  -> shared Run completion
+  -> message persistence and asynchronous memory sync
+
+HTTP knowledge request
+  -> Knowledge Base
+  -> chunking / embedding / reranking
+  -> Store
+```
+
+Single-Agent, Multi-Agent, and Autonomous streams expose the same `domain.RunEvent` contract to the HTTP adapter. Their common completion path persists the assistant message, transitions the Run, optionally generates the conversation title, flushes the final SSE event, and then schedules memory synchronization.
 
 Adding another executable should reuse the relevant application wiring instead of copying dependency construction from `cmd/server`.

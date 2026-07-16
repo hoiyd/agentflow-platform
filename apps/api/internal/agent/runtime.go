@@ -24,7 +24,7 @@ type Runtime struct {
 	turnEngine            *turnpkg.Engine
 	routerMode            string
 	contextAssemblyConfig domain.ContextAssemblyConfig
-	contextCompactor      *contextcompaction.Service
+	contextCompactor      *contextcompaction.Compactor
 	autonomousLimits      AutonomousLimits
 }
 
@@ -62,31 +62,30 @@ type PreparedRun struct {
 	Catalog *tools.Catalog
 }
 
-func NewRuntime(store RuntimeStore, openAI *openai.Client, tools *tools.Manager) *Runtime {
-	return NewRuntimeWithRouterMode(store, openAI, tools, RouterModeAuto)
+// RuntimeOptions captures the complete runtime policy at construction time so
+// new Runs can freeze one coherent snapshot without post-construction setters.
+type RuntimeOptions struct {
+	Store           RuntimeStore
+	ModelClient     *openai.Client
+	Tools           *tools.Manager
+	RouterMode      string
+	ContextAssembly domain.ContextAssemblyConfig
+	Autonomous      AutonomousLimits
 }
 
-func NewRuntimeWithRouterMode(store RuntimeStore, openAI *openai.Client, tools *tools.Manager, routerMode string) *Runtime {
-	return NewRuntimeWithRouterModeAndLimits(store, openAI, tools, routerMode, DefaultAutonomousLimits())
-}
-
-func NewRuntimeWithRouterModeAndLimits(store RuntimeStore, openAI *openai.Client, tools *tools.Manager, routerMode string, limits AutonomousLimits) *Runtime {
+func NewRuntime(options RuntimeOptions) *Runtime {
 	runtime := &Runtime{
-		store:                 store,
-		openAI:                openAI,
-		tools:                 tools,
-		trace:                 tracepkg.NewRecorder(store),
-		routerMode:            NormalizeRouterMode(routerMode),
-		contextAssemblyConfig: contextassembly.DefaultConfig(),
-		contextCompactor:      contextcompaction.NewService(store),
-		autonomousLimits:      normalizeAutonomousLimits(limits),
+		store:                 options.Store,
+		openAI:                options.ModelClient,
+		tools:                 options.Tools,
+		trace:                 tracepkg.NewRecorder(options.Store),
+		routerMode:            NormalizeRouterMode(options.RouterMode),
+		contextAssemblyConfig: contextassembly.NormalizeConfig(options.ContextAssembly),
+		contextCompactor:      contextcompaction.NewCompactor(options.Store),
+		autonomousLimits:      normalizeAutonomousLimits(options.Autonomous),
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime
-}
-
-func (r *Runtime) SetContextAssemblyConfig(config domain.ContextAssemblyConfig) {
-	r.contextAssemblyConfig = contextassembly.NormalizeConfig(config)
 }
 
 func DefaultAutonomousLimits() AutonomousLimits {
@@ -129,8 +128,8 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 	return PreparedRun{Agent: agent, Run: run, Catalog: restored.catalog}, nil
 }
 
-func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string, executorKind string) (<-chan openai.StreamEvent, <-chan error) {
-	events := make(chan openai.StreamEvent)
+func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string, executorKind string) (<-chan domain.RunEvent, <-chan error) {
+	events := make(chan domain.RunEvent)
 	errs := make(chan error, 1)
 	client, err := r.clientForRun(prepared.Run.ID)
 	if err != nil {
@@ -174,7 +173,14 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 			Sink: r.runEventSink(),
 		}, func(event turnpkg.Event) {
 			if event.Type == turnpkg.EventModelDelta {
-				events <- openai.StreamEvent{Type: "delta", Delta: event.Delta}
+				events <- domain.RunEvent{
+					Type:           domain.EventModelDelta,
+					SchemaVersion:  domain.CurrentRunEventSchemaVersion,
+					RunID:          prepared.Run.ID,
+					ConversationID: prepared.Run.ConversationID,
+					Payload:        map[string]any{"delta": event.Delta},
+					Timestamp:      event.Timestamp,
+				}
 			}
 		})
 		if err != nil {

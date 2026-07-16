@@ -1,13 +1,56 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/store"
 )
+
+func TestMemoryCreateAndSearchAPI(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	client := newLocalFallbackOpenAIClientForTest()
+	handler := &Handler{memories: memorypkg.NewSemanticMemory(fileStore, client)}
+
+	createRequest := httptest.NewRequest(http.MethodPost, "/api/memories", bytes.NewBufferString(`{
+		"kind":"note","content":"AgentFlow uses typed run events."
+	}`))
+	createResponse := httptest.NewRecorder()
+	handler.createMemory(createResponse, createRequest)
+	if createResponse.Code != http.StatusCreated {
+		t.Fatalf("create memory: status=%d body=%s", createResponse.Code, createResponse.Body.String())
+	}
+	var created domain.Memory
+	if err := json.Unmarshal(createResponse.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode created memory: %v", err)
+	}
+
+	searchRequest := httptest.NewRequest(http.MethodPost, "/api/memories/search", bytes.NewBufferString(`{
+		"query":"typed run events","limit":1
+	}`))
+	searchResponse := httptest.NewRecorder()
+	handler.searchMemories(searchResponse, searchRequest)
+	if searchResponse.Code != http.StatusOK {
+		t.Fatalf("search memory: status=%d body=%s", searchResponse.Code, searchResponse.Body.String())
+	}
+	var items []domain.RetrievedMemory
+	if err := json.Unmarshal(searchResponse.Body.Bytes(), &items); err != nil {
+		t.Fatalf("decode memory search: %v", err)
+	}
+	if len(items) != 1 || items[0].Memory.ID != created.ID {
+		t.Fatalf("unexpected memory search result: %#v", items)
+	}
+}
 
 func TestRememberMessageCreatesSearchableEmbedding(t *testing.T) {
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
@@ -15,7 +58,8 @@ func TestRememberMessageCreatesSearchableEmbedding(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	client := newLocalFallbackOpenAIClientForTest()
-	handler := NewHandler(fileStore, client, nil, nil)
+	memorySyncer := memorypkg.NewSyncer(fileStore, client)
+	handler := &Handler{store: fileStore, openAI: client, memoryQueue: memorySyncer}
 	conversation, err := fileStore.CreateConversation("memory sync")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -35,7 +79,7 @@ func TestRememberMessageCreatesSearchableEmbedding(t *testing.T) {
 	handler.enqueueMemorySync(message, run.ID)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if err := handler.Close(ctx); err != nil {
+	if err := memorySyncer.Close(ctx); err != nil {
 		t.Fatalf("drain memory sync: %v", err)
 	}
 	queryEmbedding, err := handler.openAI.EmbedText(context.Background(), "pgvector semantic memory embeddings")

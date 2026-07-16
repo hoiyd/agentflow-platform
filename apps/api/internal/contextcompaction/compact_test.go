@@ -24,14 +24,14 @@ func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
 		}
 	}
 
-	service := NewService(fileStore)
+	compactor := NewCompactor(fileStore)
 	var prompts []string
 	summarizer := SummarizerFunc(func(_ context.Context, request SummaryRequest) (SummaryResult, error) {
 		prompts = append(prompts, request.Prompt)
 		return SummaryResult{Text: "## Goal\nPreserve important context.\n## Source References\nmessage ids retained", Model: "summary-model"}, nil
 	})
 	config := compactionTestConfig()
-	first, err := service.CompactIfNeeded(context.Background(), Request{
+	first, err := compactor.CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerSoft,
 		Config: config, Summarizer: summarizer,
 	})
@@ -53,7 +53,7 @@ func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
 		}
 		_, _ = fileStore.AddMessage(conversation.ID, role, strings.Repeat("new context ", 10))
 	}
-	second, err := service.CompactIfNeeded(context.Background(), Request{
+	second, err := compactor.CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerHard,
 		Config: config, Summarizer: summarizer,
 	})
@@ -77,8 +77,8 @@ func TestCompactIfNeededFailureKeepsRawMessages(t *testing.T) {
 	for index := 0; index < 6; index++ {
 		_, _ = fileStore.AddMessage(conversation.ID, "user", strings.Repeat("context ", 20))
 	}
-	service := NewService(fileStore)
-	compaction, err := service.CompactIfNeeded(context.Background(), Request{
+	compactor := NewCompactor(fileStore)
+	compaction, err := compactor.CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerHard,
 		Config: compactionTestConfig(), Summarizer: SummarizerFunc(func(context.Context, SummaryRequest) (SummaryResult, error) {
 			return SummaryResult{}, errors.New("summary provider unavailable")
@@ -105,8 +105,8 @@ func TestCompactIfNeededPrefersObservedPromptTokensForSoftTrigger(t *testing.T) 
 	}
 	config := compactionTestConfig()
 	config.CompactionSoftThreshold = 0.9
-	service := NewService(fileStore)
-	compaction, err := service.CompactIfNeeded(context.Background(), Request{
+	compactor := NewCompactor(fileStore)
+	compaction, err := compactor.CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerSoft,
 		ObservedPromptTokens: 200, Config: config,
 		Summarizer: SummarizerFunc(func(context.Context, SummaryRequest) (SummaryResult, error) {

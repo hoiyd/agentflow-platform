@@ -16,7 +16,7 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	client := newLocalFallbackOpenAIClientForTest()
-	runtime := NewRuntime(fileStore, client, nil)
+	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: client})
 
 	conversation, err := fileStore.CreateConversation("Demo retrieval")
 	if err != nil {
@@ -113,7 +113,7 @@ func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	client := newLocalFallbackOpenAIClientForTest()
-	runtime := NewRuntime(fileStore, client, nil)
+	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: client})
 
 	conversation, err := fileStore.CreateConversation("Disabled retrieval")
 	if err != nil {
@@ -170,7 +170,7 @@ func TestRetrieveContextTruncatesEmbeddingQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	runtime := NewRuntime(fileStore, newLocalFallbackOpenAIClientForTest(), nil)
+	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 
 	conversation, err := fileStore.CreateConversation("Long retrieval query")
 	if err != nil {
@@ -218,7 +218,7 @@ func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T)
 		t.Fatalf("new store: %v", err)
 	}
 	client := newLocalFallbackOpenAIClientForTest()
-	runtime := NewRuntime(fileStore, client, nil)
+	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: client})
 
 	conversation, err := fileStore.CreateConversation("LangChainGo executor")
 	if err != nil {
@@ -261,8 +261,10 @@ func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T)
 
 	var output string
 	for event := range events {
-		if event.Type == "delta" {
-			output += event.Delta
+		if event.Type == domain.EventModelDelta {
+			if delta, ok := event.Payload["delta"].(string); ok {
+				output += delta
+			}
 		}
 	}
 	if err := <-errs; err != nil {

@@ -10,16 +10,16 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/config"
-	"agentflow-platform/apps/api/internal/httpapi"
+	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/store"
 )
 
 // Application owns the API process lifecycle and its composed dependencies.
 type Application struct {
-	config  config.Config
-	store   store.Store
-	handler *httpapi.Handler
-	server  *http.Server
+	config config.Config
+	store  store.Store
+	memory *memorypkg.Syncer
+	server *http.Server
 
 	closeOnce sync.Once
 	closeErr  error
@@ -32,9 +32,9 @@ func New(cfg config.Config) (*Application, error) {
 	}
 
 	return &Application{
-		config:  cfg,
-		store:   dependencies.store,
-		handler: dependencies.handler,
+		config: cfg,
+		store:  dependencies.store,
+		memory: dependencies.memory,
 		server: &http.Server{
 			Addr:              ":" + cfg.Port,
 			Handler:           dependencies.handler.Routes(),
@@ -74,8 +74,8 @@ func (a *Application) Close(ctx context.Context) error {
 
 	a.closeOnce.Do(func() {
 		var closeErrors []error
-		if a.handler != nil {
-			if err := a.handler.Close(ctx); err != nil {
+		if a.memory != nil {
+			if err := a.memory.Close(ctx); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("drain memory sync: %w", err))
 			}
 		}
