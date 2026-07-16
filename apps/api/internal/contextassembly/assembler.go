@@ -31,20 +31,27 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	config := NormalizeConfig(session.Config)
 	inputBudget := config.ContextWindowTokens - config.OutputReserveTokens - config.SafetyMarginTokens
 	messages := normalizeMessages(mergeSessionHistory(request.Messages, session))
-	entries := make([]domain.ContextManifestEntry, 0, len(messages)+len(request.Tools)+len(session.Memories)+len(session.Knowledge))
+	messages, compactedToolResults := compactToolResults(messages, config.CompactionToolResultMaxTokens)
+	entries := make([]domain.ContextManifestEntry, 0, len(messages)+len(request.Tools)+len(session.Memories)+len(session.Knowledge)+1)
 	messageCandidates := make([]candidate, 0, len(messages))
 	requiredTokens := 0
 
 	for index, message := range messages {
 		tokens := estimateMessageTokens(message)
 		required := isRequiredSource(message.Source)
+		transformation := "original"
+		originalBytes := len(message.Content)
+		if original, ok := compactedToolResults[index]; ok {
+			transformation = "tool_result_compacted"
+			originalBytes = original
+		}
 		entry := domain.ContextManifestEntry{
 			Source: message.Source, ReferenceID: message.ReferenceID, Role: message.Role,
 			Selected: required, Reason: reasonForMessage(message.Source, required),
-			Transformation: "original", EstimatedTokens: tokens, OriginalBytes: len(message.Content),
+			Transformation: transformation, EstimatedTokens: tokens, OriginalBytes: originalBytes,
 		}
 		if required {
-			entry.IncludedBytes = entry.OriginalBytes
+			entry.IncludedBytes = len(message.Content)
 			requiredTokens += tokens
 		}
 		messageCandidates = append(messageCandidates, candidate{messageIndex: index, entry: entry})
@@ -63,7 +70,12 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 
 	memoryCandidates := memoryCandidates(session.Memories)
 	knowledgeCandidates := knowledgeCandidates(session.Knowledge)
+	compactionCandidate := contextCompactionCandidate(session.Compaction)
 	selectedTokens := requiredTokens
+	if compactionCandidate != nil {
+		selectedTokens += compactionCandidate.entry.EstimatedTokens
+		requiredTokens += compactionCandidate.entry.EstimatedTokens
+	}
 	if requiredTokens <= inputBudget {
 		selectedTokens += selectRecentHistory(messageCandidates, config.HistoryMaxTokens, inputBudget-selectedTokens)
 		selectedTokens += selectRelevant(memoryCandidates, config.MemoryMaxTokens, inputBudget-selectedTokens, "memory_budget_exceeded")
@@ -86,9 +98,12 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	}
 	entries = appendCandidateEntries(entries, memoryCandidates)
 	entries = appendCandidateEntries(entries, knowledgeCandidates)
-	packedMessages = injectRetrievedContext(packedMessages, memoryCandidates, knowledgeCandidates)
+	if compactionCandidate != nil {
+		entries = append(entries, compactionCandidate.entry)
+	}
+	packedMessages = injectSelectedContext(packedMessages, compactionCandidate, memoryCandidates, knowledgeCandidates)
 
-	manifest := newManifest(ctx, request.Model, config, inputBudget, selectedTokens, entries, prefixHash(messages, request.Tools))
+	manifest := newManifest(ctx, request.Model, config, inputBudget, selectedTokens, entries, prefixHash(messages, request.Tools), session.Compaction)
 	if err := publishManifest(ctx, session.Sink, manifest); err != nil {
 		return Pack{}, fmt.Errorf("persist context manifest: %w", err)
 	}
@@ -129,9 +144,10 @@ func normalizeMessages(messages []Message) []Message {
 }
 
 func mergeSessionHistory(messages []Message, session Session) []Message {
+	merged := messages
 	for _, message := range messages {
 		if message.Source == SourceHistory {
-			return messages
+			return excludeCompactedHistory(merged, session.Compaction)
 		}
 	}
 	prior := make([]Message, 0, len(session.History))
@@ -153,7 +169,7 @@ func mergeSessionHistory(messages []Message, session Session) []Message {
 		})
 	}
 	if len(prior) == 0 {
-		return messages
+		return excludeCompactedHistory(merged, session.Compaction)
 	}
 	insertAt := len(messages)
 	for index, message := range messages {
@@ -162,11 +178,29 @@ func mergeSessionHistory(messages []Message, session Session) []Message {
 			break
 		}
 	}
-	merged := make([]Message, 0, len(messages)+len(prior))
+	merged = make([]Message, 0, len(messages)+len(prior))
 	merged = append(merged, messages[:insertAt]...)
 	merged = append(merged, prior...)
 	merged = append(merged, messages[insertAt:]...)
-	return merged
+	return excludeCompactedHistory(merged, session.Compaction)
+}
+
+func excludeCompactedHistory(messages []Message, compaction *domain.ContextCompaction) []Message {
+	if compaction == nil || len(compaction.SourceMessageIDs) == 0 {
+		return messages
+	}
+	covered := make(map[string]bool, len(compaction.SourceMessageIDs))
+	for _, id := range compaction.SourceMessageIDs {
+		covered[id] = true
+	}
+	filtered := make([]Message, 0, len(messages))
+	for _, message := range messages {
+		if message.Source == SourceHistory && covered[message.ReferenceID] {
+			continue
+		}
+		filtered = append(filtered, message)
+	}
+	return filtered
 }
 
 func isRequiredSource(source string) bool {
@@ -275,8 +309,23 @@ func knowledgeCandidates(chunks []domain.RetrievedDocumentChunk) []candidate {
 	return items
 }
 
-func injectRetrievedContext(messages []Message, memories []candidate, knowledge []candidate) []Message {
-	sections := make([]string, 0, 2)
+func contextCompactionCandidate(compaction *domain.ContextCompaction) *candidate {
+	if compaction == nil || strings.TrimSpace(compaction.Summary) == "" {
+		return nil
+	}
+	formatted := "<conversation_summary id=\"" + compaction.ID + "\">\n" + strings.TrimSpace(compaction.Summary) + "\n</conversation_summary>"
+	return &candidate{formatted: formatted, entry: domain.ContextManifestEntry{
+		Source: SourceCompaction, ReferenceID: compaction.ID, Selected: true, Reason: "required",
+		Transformation: "compacted", EstimatedTokens: EstimateTokens(formatted),
+		OriginalBytes: len(compaction.Summary), IncludedBytes: len(formatted),
+	}}
+}
+
+func injectSelectedContext(messages []Message, compaction *candidate, memories []candidate, knowledge []candidate) []Message {
+	sections := make([]string, 0, 3)
+	if compaction != nil {
+		sections = append(sections, compaction.formatted)
+	}
 	if selected := selectedFormatted(memories); len(selected) > 0 {
 		sections = append(sections, "<memories>\n"+strings.Join(selected, "\n\n")+"\n</memories>")
 	}
@@ -305,7 +354,7 @@ func selectedFormatted(items []candidate) []string {
 	return selected
 }
 
-func newManifest(ctx context.Context, model string, config domain.ContextAssemblyConfig, inputBudget int, selectedTokens int, entries []domain.ContextManifestEntry, hash string) domain.ContextManifest {
+func newManifest(ctx context.Context, model string, config domain.ContextAssemblyConfig, inputBudget int, selectedTokens int, entries []domain.ContextManifestEntry, hash string, compaction *domain.ContextCompaction) domain.ContextManifest {
 	scope := eventpkg.ScopeFromContext(ctx)
 	excluded := 0
 	for _, entry := range entries {
@@ -313,7 +362,7 @@ func newManifest(ctx context.Context, model string, config domain.ContextAssembl
 			excluded += entry.EstimatedTokens
 		}
 	}
-	return domain.ContextManifest{
+	manifest := domain.ContextManifest{
 		ID: newID("ctx"), ModelCallID: newID("call"), RunID: scope.RunID, StageID: scope.StageID,
 		TurnID: scope.TurnID, Model: model, AssemblerVersion: config.AssemblerVersion,
 		ContextWindowTokens: config.ContextWindowTokens, OutputReserveTokens: config.OutputReserveTokens,
@@ -321,6 +370,48 @@ func newManifest(ctx context.Context, model string, config domain.ContextAssembl
 		EstimatedInputTokens: selectedTokens, ExcludedTokens: excluded,
 		PrefixHash: hash, Entries: entries, CreatedAt: time.Now().UTC(),
 	}
+	if compaction != nil {
+		manifest.CompactionID = compaction.ID
+	}
+	return manifest
+}
+
+func compactToolResults(messages []Message, maxTokens int) ([]Message, map[int]int) {
+	if maxTokens <= 0 {
+		return messages, nil
+	}
+	result := cloneMessages(messages)
+	compacted := map[int]int{}
+	for index := range result {
+		if result[index].Source != SourceToolResult && result[index].Role != "tool" {
+			continue
+		}
+		if EstimateTokens(result[index].Content) <= maxTokens {
+			continue
+		}
+		original := result[index].Content
+		result[index].Content = compactText(original, maxTokens)
+		compacted[index] = len(original)
+	}
+	return result, compacted
+}
+
+func compactText(value string, maxTokens int) string {
+	marker := fmt.Sprintf("\n...[tool result compacted; original_bytes=%d]...\n", len(value))
+	runes := []rune(value)
+	low, high := 0, len(runes)
+	for low < high {
+		mid := (low + high + 1) / 2
+		head := (mid * 2) / 3
+		candidate := string(runes[:head]) + marker + string(runes[len(runes)-(mid-head):])
+		if EstimateTokens(candidate) <= maxTokens {
+			low = mid
+		} else {
+			high = mid - 1
+		}
+	}
+	head := (low * 2) / 3
+	return string(runes[:head]) + marker + string(runes[len(runes)-(low-head):])
 }
 
 func publishManifest(ctx context.Context, sink eventpkg.Sink, manifest domain.ContextManifest) error {

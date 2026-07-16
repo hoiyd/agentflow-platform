@@ -46,7 +46,21 @@ type Config struct {
 	// ContextMemoryMaxTokens caps semantic memory injected into one model call.
 	ContextMemoryMaxTokens int
 	// ContextKnowledgeMaxTokens caps retrieved document chunks in one model call.
-	ContextKnowledgeMaxTokens     int
+	ContextKnowledgeMaxTokens int
+	// ContextCompactionMode supports auto or off.
+	ContextCompactionMode string
+	// ContextCompactionSoftThreshold triggers best-effort post-run compaction.
+	ContextCompactionSoftThreshold float64
+	// ContextCompactionHardThreshold triggers preflight compaction before a model call.
+	ContextCompactionHardThreshold float64
+	// ContextCompactionRecentTokens protects the recent raw conversation tail.
+	ContextCompactionRecentTokens int
+	// ContextCompactionSummaryMaxTokens caps the persisted structured summary.
+	ContextCompactionSummaryMaxTokens int
+	// ContextCompactionToolResultMaxTokens caps required tool-result messages deterministically.
+	ContextCompactionToolResultMaxTokens int
+	// ContextCompactionTimeout limits one auxiliary summary request.
+	ContextCompactionTimeout      time.Duration
 	RouterMode                    string
 	AutonomousMaxIterations       int
 	AutonomousMaxRuntime          time.Duration
@@ -64,40 +78,47 @@ func Load() Config {
 	loadDotEnv(".env")
 
 	return Config{
-		Port:                          getEnv("PORT", "8080"),
-		OpenAIAPIKey:                  getEnv("OPENAI_API_KEY", ""),
-		OpenAIBaseURL:                 getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-		OpenAIModel:                   getEnv("OPENAI_MODEL", "gpt-4o-mini"),
-		EmbeddingBaseURL:              getEnv("EMBEDDING_BASE_URL", "http://localhost:11434/api/embed"),
-		EmbeddingModel:                getEnv("EMBEDDING_MODEL", "embeddinggemma"),
-		EmbeddingDimensions:           getIntEnv("EMBEDDING_DIMENSIONS", 1536),
-		OpenAITimeout:                 getDurationEnv("OPENAI_REQUEST_TIMEOUT", 5*time.Minute),
-		MaxConcurrentRuns:             getIntEnv("MAX_CONCURRENT_RUNS", 8),
-		RunQueueSize:                  getNonNegativeIntEnv("RUN_QUEUE_SIZE", 32),
-		RunQueueWaitTimeout:           getDurationEnv("RUN_QUEUE_WAIT_TIMEOUT", 30*time.Second),
-		MaxConcurrentModelRequests:    getIntEnv("MAX_CONCURRENT_MODEL_REQUESTS", 8),
-		ModelRequestsPerMinute:        getNonNegativeIntEnv("MODEL_REQUESTS_PER_MINUTE", 60),
-		ModelTokensPerMinute:          getNonNegativeIntEnv("MODEL_TOKENS_PER_MINUTE", 120000),
-		ModelRetryMaxAttempts:         getIntEnv("MODEL_RETRY_MAX_ATTEMPTS", 3),
-		ModelRetryBaseDelay:           getDurationEnv("MODEL_RETRY_BASE_DELAY", 500*time.Millisecond),
-		ModelRetryMaxDelay:            getDurationEnv("MODEL_RETRY_MAX_DELAY", 5*time.Second),
-		ModelContextWindowTokens:      getIntEnv("MODEL_CONTEXT_WINDOW_TOKENS", 128000),
-		ModelOutputReserveTokens:      getIntEnv("MODEL_OUTPUT_RESERVE_TOKENS", 8192),
-		ContextSafetyMarginTokens:     getIntEnv("CONTEXT_SAFETY_MARGIN_TOKENS", 4096),
-		ContextHistoryMaxTokens:       getIntEnv("CONTEXT_HISTORY_MAX_TOKENS", 64000),
-		ContextMemoryMaxTokens:        getIntEnv("CONTEXT_MEMORY_MAX_TOKENS", 8000),
-		ContextKnowledgeMaxTokens:     getIntEnv("CONTEXT_KNOWLEDGE_MAX_TOKENS", 16000),
-		RouterMode:                    normalizeRouterMode(getEnv("ROUTER_MODE", "auto")),
-		AutonomousMaxIterations:       getIntEnv("AUTONOMOUS_MAX_ITERATIONS", 5),
-		AutonomousMaxRuntime:          getAutonomousRuntime(),
-		AutonomousMaxOutputCharacters: getIntEnv("AUTONOMOUS_MAX_OUTPUT_CHARS", 60000),
-		AutonomousMaxToolCalls:        getIntEnv("AUTONOMOUS_MAX_TOOL_CALLS", 20),
-		RecoveryStaleRunTimeout:       getDurationEnv("RECOVERY_STALE_RUN_TIMEOUT", 60*time.Second),
-		StoreDriver:                   normalizeStoreDriver(getEnv("STORE_DRIVER", "file")),
-		DatabaseURL:                   getEnv("DATABASE_URL", ""),
-		DataPath:                      getEnv("DATA_PATH", ".data/agentflow.json"),
-		ToolConfigPath:                getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
-		AllowedOrigins:                getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
+		Port:                                 getEnv("PORT", "8080"),
+		OpenAIAPIKey:                         getEnv("OPENAI_API_KEY", ""),
+		OpenAIBaseURL:                        getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		OpenAIModel:                          getEnv("OPENAI_MODEL", "gpt-4o-mini"),
+		EmbeddingBaseURL:                     getEnv("EMBEDDING_BASE_URL", "http://localhost:11434/api/embed"),
+		EmbeddingModel:                       getEnv("EMBEDDING_MODEL", "embeddinggemma"),
+		EmbeddingDimensions:                  getIntEnv("EMBEDDING_DIMENSIONS", 1536),
+		OpenAITimeout:                        getDurationEnv("OPENAI_REQUEST_TIMEOUT", 5*time.Minute),
+		MaxConcurrentRuns:                    getIntEnv("MAX_CONCURRENT_RUNS", 8),
+		RunQueueSize:                         getNonNegativeIntEnv("RUN_QUEUE_SIZE", 32),
+		RunQueueWaitTimeout:                  getDurationEnv("RUN_QUEUE_WAIT_TIMEOUT", 30*time.Second),
+		MaxConcurrentModelRequests:           getIntEnv("MAX_CONCURRENT_MODEL_REQUESTS", 8),
+		ModelRequestsPerMinute:               getNonNegativeIntEnv("MODEL_REQUESTS_PER_MINUTE", 60),
+		ModelTokensPerMinute:                 getNonNegativeIntEnv("MODEL_TOKENS_PER_MINUTE", 120000),
+		ModelRetryMaxAttempts:                getIntEnv("MODEL_RETRY_MAX_ATTEMPTS", 3),
+		ModelRetryBaseDelay:                  getDurationEnv("MODEL_RETRY_BASE_DELAY", 500*time.Millisecond),
+		ModelRetryMaxDelay:                   getDurationEnv("MODEL_RETRY_MAX_DELAY", 5*time.Second),
+		ModelContextWindowTokens:             getIntEnv("MODEL_CONTEXT_WINDOW_TOKENS", 128000),
+		ModelOutputReserveTokens:             getIntEnv("MODEL_OUTPUT_RESERVE_TOKENS", 8192),
+		ContextSafetyMarginTokens:            getIntEnv("CONTEXT_SAFETY_MARGIN_TOKENS", 4096),
+		ContextHistoryMaxTokens:              getIntEnv("CONTEXT_HISTORY_MAX_TOKENS", 64000),
+		ContextMemoryMaxTokens:               getIntEnv("CONTEXT_MEMORY_MAX_TOKENS", 8000),
+		ContextKnowledgeMaxTokens:            getIntEnv("CONTEXT_KNOWLEDGE_MAX_TOKENS", 16000),
+		ContextCompactionMode:                normalizeCompactionMode(getEnv("CONTEXT_COMPACTION_MODE", "auto")),
+		ContextCompactionSoftThreshold:       getFloatEnv("CONTEXT_COMPACTION_SOFT_THRESHOLD", 0.70),
+		ContextCompactionHardThreshold:       getFloatEnv("CONTEXT_COMPACTION_HARD_THRESHOLD", 0.85),
+		ContextCompactionRecentTokens:        getIntEnv("CONTEXT_COMPACTION_RECENT_TOKENS", 16000),
+		ContextCompactionSummaryMaxTokens:    getIntEnv("CONTEXT_COMPACTION_SUMMARY_MAX_TOKENS", 2000),
+		ContextCompactionToolResultMaxTokens: getIntEnv("CONTEXT_COMPACTION_TOOL_RESULT_MAX_TOKENS", 2000),
+		ContextCompactionTimeout:             getDurationEnv("CONTEXT_COMPACTION_TIMEOUT", 45*time.Second),
+		RouterMode:                           normalizeRouterMode(getEnv("ROUTER_MODE", "auto")),
+		AutonomousMaxIterations:              getIntEnv("AUTONOMOUS_MAX_ITERATIONS", 5),
+		AutonomousMaxRuntime:                 getAutonomousRuntime(),
+		AutonomousMaxOutputCharacters:        getIntEnv("AUTONOMOUS_MAX_OUTPUT_CHARS", 60000),
+		AutonomousMaxToolCalls:               getIntEnv("AUTONOMOUS_MAX_TOOL_CALLS", 20),
+		RecoveryStaleRunTimeout:              getDurationEnv("RECOVERY_STALE_RUN_TIMEOUT", 60*time.Second),
+		StoreDriver:                          normalizeStoreDriver(getEnv("STORE_DRIVER", "file")),
+		DatabaseURL:                          getEnv("DATABASE_URL", ""),
+		DataPath:                             getEnv("DATA_PATH", ".data/agentflow.json"),
+		ToolConfigPath:                       getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
+		AllowedOrigins:                       getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 	}
 }
 
@@ -117,6 +138,13 @@ func normalizeRouterMode(value string) string {
 	default:
 		return "auto"
 	}
+}
+
+func normalizeCompactionMode(value string) string {
+	if strings.EqualFold(strings.TrimSpace(value), "off") {
+		return "off"
+	}
+	return "auto"
 }
 
 func getDurationEnv(key string, fallback time.Duration) time.Duration {
@@ -150,6 +178,18 @@ func getNonNegativeIntEnv(key string, fallback int) int {
 	}
 	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed < 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func getFloatEnv(key string, fallback float64) float64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil || parsed <= 0 {
 		return fallback
 	}
 	return parsed

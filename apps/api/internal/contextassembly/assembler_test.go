@@ -143,6 +143,75 @@ func TestAssembleAddsSessionHistoryWithoutRepeatingCurrentInput(t *testing.T) {
 	}
 }
 
+func TestAssembleUsesPersistedCompactionAndExcludesCoveredHistory(t *testing.T) {
+	compaction := domain.ContextCompaction{
+		ID: "cmp-1", Summary: "## Goal\nShip the release safely.",
+		SourceMessageIDs: []string{"old-user", "old-assistant"},
+	}
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run", TurnID: "turn"})
+	ctx = WithSession(ctx, Session{
+		Config: DefaultConfig(), CurrentInput: "what next?", Compaction: &compaction,
+		History: []domain.Message{
+			{ID: "old-user", Role: "user", Content: "old question"},
+			{ID: "old-assistant", Role: "assistant", Content: "old answer"},
+			{ID: "recent-user", Role: "user", Content: "recent question"},
+			{ID: "current", Role: "user", Content: "what next?"},
+		},
+	})
+	pack, err := Assemble(ctx, Request{Model: "test", Messages: []Message{
+		{Source: SourceSystem, ReferenceID: "system", Role: "system", Content: "system"},
+		{Source: SourceCurrentInput, ReferenceID: "current-input", Role: "user", Content: "what next?"},
+	}})
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	if messageContent(pack.Messages, "old-user") != "" || messageContent(pack.Messages, "old-assistant") != "" {
+		t.Fatalf("covered history remained active: %#v", pack.Messages)
+	}
+	current := messageContent(pack.Messages, "current-input")
+	if !strings.Contains(current, "<conversation_summary") || !strings.Contains(current, "Ship the release safely") {
+		t.Fatalf("compaction summary was not injected: %q", current)
+	}
+	if pack.Manifest.CompactionID != "cmp-1" || !selectedEntry(pack.Manifest, "cmp-1") {
+		t.Fatalf("manifest did not reference compaction: %#v", pack.Manifest)
+	}
+}
+
+func TestAssembleCompactsOversizedRequiredToolResult(t *testing.T) {
+	config := DefaultConfig()
+	config.CompactionToolResultMaxTokens = 20
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run", TurnID: "turn"})
+	ctx = WithSession(ctx, Session{Config: config})
+	pack, err := Assemble(ctx, Request{Model: "test", Messages: []Message{
+		{Source: SourceSystem, ReferenceID: "system", Role: "system", Content: "system"},
+		{Source: SourceToolResult, ReferenceID: "call-1", Role: "tool", Content: strings.Repeat("verbose tool output ", 200)},
+		{Source: SourceCurrentInput, ReferenceID: "current", Role: "user", Content: "continue"},
+	}})
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	result := messageContent(pack.Messages, "call-1")
+	if !strings.Contains(result, "tool result compacted") || EstimateTokens(result) > 20 {
+		t.Fatalf("tool result was not compacted to budget: tokens=%d content=%q", EstimateTokens(result), result)
+	}
+	for _, entry := range pack.Manifest.Entries {
+		if entry.ReferenceID == "call-1" && (entry.Transformation != "tool_result_compacted" || entry.OriginalBytes <= entry.IncludedBytes) {
+			t.Fatalf("tool compaction metadata missing: %#v", entry)
+		}
+	}
+}
+
+func TestLegacySnapshotKeepsCompactionDisabled(t *testing.T) {
+	legacy := NormalizeSnapshotConfig(domain.ContextAssemblyConfig{}, domain.ContextRuntimeSnapshotVersion)
+	if legacy.CompactionMode != CompactionModeOff {
+		t.Fatalf("legacy snapshot unexpectedly enabled compaction: %#v", legacy)
+	}
+	current := NormalizeSnapshotConfig(domain.ContextAssemblyConfig{}, domain.CurrentRuntimeSnapshotVersion)
+	if current.CompactionMode != CompactionModeAuto {
+		t.Fatalf("current snapshot did not receive compaction defaults: %#v", current)
+	}
+}
+
 func selectedEntry(manifest domain.ContextManifest, referenceID string) bool {
 	for _, entry := range manifest.Entries {
 		if entry.ReferenceID == referenceID {

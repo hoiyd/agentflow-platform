@@ -64,6 +64,32 @@ func TestFileStoreRuntimeSnapshotRoundTripAndReplay(t *testing.T) {
 	}
 }
 
+func TestFileStoreContextCompactionRoundTrip(t *testing.T) {
+	path := t.TempDir() + "/agentflow.json"
+	first, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, _ := first.CreateConversation("compaction round trip")
+	run, _ := first.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	created, err := first.CreateContextCompaction(domain.ContextCompaction{
+		ConversationID: conversation.ID, RunID: run.ID, Trigger: "soft", Summary: "structured summary",
+		SourceMessageIDs: []string{"msg-1", "msg-2"}, SourceHash: "hash-1", BeforeTokens: 100,
+		AfterTokens: 25, SummaryModel: "test", AlgorithmVersion: "context-compaction-v1",
+	})
+	if err != nil {
+		t.Fatalf("create compaction: %v", err)
+	}
+	second, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	latest, ok, err := second.GetLatestContextCompaction(conversation.ID)
+	if err != nil || !ok || latest.ID != created.ID || len(latest.SourceMessageIDs) != 2 {
+		t.Fatalf("compaction did not round trip: ok=%v err=%v item=%#v", ok, err, latest)
+	}
+}
+
 func TestFileStoreSeedsDefaultAgents(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

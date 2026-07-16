@@ -125,7 +125,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 		return restoredRuntime{}, fmt.Errorf("%w for run %s: %v; run cannot be resumed safely", ErrRuntimeSnapshotUnavailable, run.ID, err)
 	}
 	snapshot := run.RuntimeSnapshot
-	snapshot.ContextAssembly = contextassembly.NormalizeConfig(snapshot.ContextAssembly)
+	snapshot.ContextAssembly = contextassembly.NormalizeSnapshotConfig(snapshot.ContextAssembly, snapshot.SchemaVersion)
 	current, err := r.currentCatalog()
 	if err != nil {
 		return restoredRuntime{}, err
@@ -160,7 +160,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 }
 
 func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
-	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
+	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
 		return ErrRuntimeSnapshotUnavailable
 	}
 	switch snapshot.Mode {
@@ -208,7 +208,7 @@ func (r *Runtime) snapshotForRun(runID string) (*domain.RuntimeSnapshot, error) 
 	if err := validateRuntimeSnapshot(run.RuntimeSnapshot); err != nil {
 		return nil, fmt.Errorf("%w for run %s: %v", ErrRuntimeSnapshotUnavailable, runID, err)
 	}
-	run.RuntimeSnapshot.ContextAssembly = contextassembly.NormalizeConfig(run.RuntimeSnapshot.ContextAssembly)
+	run.RuntimeSnapshot.ContextAssembly = contextassembly.NormalizeSnapshotConfig(run.RuntimeSnapshot.ContextAssembly, run.RuntimeSnapshot.SchemaVersion)
 	return run.RuntimeSnapshot, nil
 }
 

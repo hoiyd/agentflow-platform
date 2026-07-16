@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/contextassembly"
+	"agentflow-platform/apps/api/internal/contextcompaction"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	tracepkg "agentflow-platform/apps/api/internal/event"
@@ -23,11 +24,13 @@ type Runtime struct {
 	turnEngine            *turnpkg.Engine
 	routerMode            string
 	contextAssemblyConfig domain.ContextAssemblyConfig
+	contextCompactor      *contextcompaction.Service
 	autonomousLimits      AutonomousLimits
 }
 
 type RuntimeStore interface {
 	ListAgents() ([]domain.Agent, error)
+	ListMessages(string) ([]domain.Message, error)
 	GetAgent(string) (domain.Agent, bool, error)
 	GetDefaultAgent() (domain.Agent, bool, error)
 	CreateRun(string, string, domain.RuntimeSnapshot) (domain.Run, error)
@@ -40,6 +43,8 @@ type RuntimeStore interface {
 	UpdateCollaborationStepOutput(string, string) (domain.CollaborationStep, error)
 	ListCollaborationSteps(string) ([]domain.CollaborationStep, error)
 	eventpkg.RunEventStore
+	ListRunEvents(string) ([]domain.RunEvent, error)
+	store.ContextCompactionStore
 	SearchMemories(domain.MemorySearch) ([]domain.RetrievedMemory, error)
 	SearchDocumentChunks(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 }
@@ -73,6 +78,7 @@ func NewRuntimeWithRouterModeAndLimits(store RuntimeStore, openAI *openai.Client
 		trace:                 tracepkg.NewRecorder(store),
 		routerMode:            NormalizeRouterMode(routerMode),
 		contextAssemblyConfig: contextassembly.DefaultConfig(),
+		contextCompactor:      contextcompaction.NewService(store),
 		autonomousLimits:      normalizeAutonomousLimits(limits),
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
@@ -338,6 +344,7 @@ func (r *Runtime) CompleteRun(id string) (domain.Run, error) {
 	run, err := r.store.UpdateRunStatus(id, domain.RunCompleted, "")
 	if err == nil {
 		r.publishRunLifecycle(context.Background(), run, domain.EventRunCompleted, map[string]any{"status": run.Status})
+		r.scheduleSoftContextCompaction(run)
 	}
 	return run, err
 }

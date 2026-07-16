@@ -45,6 +45,19 @@ type ContextAssembledPayload struct {
 	Manifest domain.ContextManifest `json:"manifest"`
 }
 
+type ContextCompactionPayload struct {
+	CompactionID         string   `json:"compaction_id,omitempty"`
+	Trigger              string   `json:"trigger"`
+	Status               string   `json:"status"`
+	SourceMessageIDs     []string `json:"source_message_ids,omitempty"`
+	BeforeTokens         int      `json:"before_tokens,omitempty"`
+	AfterTokens          int      `json:"after_tokens,omitempty"`
+	ObservedPromptTokens int      `json:"observed_prompt_tokens,omitempty"`
+	SummaryModel         string   `json:"summary_model,omitempty"`
+	AlgorithmVersion     string   `json:"algorithm_version"`
+	Error                string   `json:"error,omitempty"`
+}
+
 type ToolPayload struct {
 	ToolCallID string `json:"tool_call_id"`
 	ToolName   string `json:"tool_name"`
