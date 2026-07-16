@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
@@ -33,10 +34,12 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 		"do-not-persist-this-key", "https://user:password@openrouter.ai/api/v1?token=private", "http://localhost:11434/api/embed",
 		"test-model-v1", "embedding-v1", 1536, time.Second,
 	)
-	runtime := NewRuntime(fileStore, client, manager)
-	runtime.SetContextAssemblyConfig(domain.ContextAssemblyConfig{
-		AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 32000, OutputReserveTokens: 2048,
-		SafetyMarginTokens: 1024, HistoryMaxTokens: 12000, MemoryMaxTokens: 2000, KnowledgeMaxTokens: 4000,
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: client, Tools: manager,
+		ContextAssembly: domain.ContextAssemblyConfig{
+			AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 32000, OutputReserveTokens: 2048,
+			SafetyMarginTokens: 1024, HistoryMaxTokens: 12000, MemoryMaxTokens: 2000, KnowledgeMaxTokens: 4000,
+		},
 	})
 	agent, err := fileStore.CreateAgent(domain.Agent{
 		Name: "Frozen agent", SystemPrompt: "original prompt", Tools: []string{"calculator"},
@@ -67,7 +70,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if prepared.Run.RuntimeSnapshot.ContextAssembly.ContextWindowTokens != 32000 {
 		t.Fatalf("context assembly config was not frozen: %#v", prepared.Run.RuntimeSnapshot.ContextAssembly)
 	}
-	runtime.SetContextAssemblyConfig(domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 64000})
+	runtime.contextAssemblyConfig = contextassembly.NormalizeConfig(domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 64000})
 	if prepared.Run.RuntimeSnapshot.ContextAssembly.ContextWindowTokens != 32000 {
 		t.Fatal("runtime config mutation changed the frozen context assembly config")
 	}
@@ -115,7 +118,7 @@ func TestClientForRunRejectsMissingSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
 	}
-	runtime := NewRuntime(fileStore, openai.NewClient("", "", "test"), nil)
+	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: openai.NewClient("", "", "test")})
 
 	if _, err := runtime.clientForRun("missing"); !errors.Is(err, ErrRuntimeSnapshotUnavailable) {
 		t.Fatalf("expected missing snapshot error, got %v", err)

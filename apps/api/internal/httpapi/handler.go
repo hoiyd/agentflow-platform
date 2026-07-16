@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -15,55 +16,85 @@ import (
 	"agentflow-platform/apps/api/internal/tools"
 )
 
+type MemoryQueue interface {
+	Enqueue(memorypkg.Job) error
+}
+
+// MemoryOperations is the transport-facing subset of semantic memory behavior.
+type MemoryOperations interface {
+	Create(context.Context, domain.Memory) (domain.Memory, error)
+	Search(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error)
+}
+
+// KnowledgeOperations is the transport-facing subset of knowledge-base behavior.
+type KnowledgeOperations interface {
+	Ingest(context.Context, domain.DocumentIngestRequest) (domain.Document, error)
+	Search(context.Context, domain.DocumentSearch, int) (domain.DocumentSearchResponse, error)
+	Evaluate(context.Context, domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error)
+}
+
+// Dependencies is the complete production dependency set for the HTTP adapter.
+// Construction and lifecycle ownership remain in the app composition root.
+type Dependencies struct {
+	Store          store.Store
+	ModelClient    *openai.Client
+	Tools          *tools.Manager
+	AgentRuntime   *agent.Runtime
+	Memory         MemoryOperations
+	Knowledge      KnowledgeOperations
+	MemoryQueue    MemoryQueue
+	RunController  *concurrency.RunController
+	AllowedOrigins []string
+}
+
 type Handler struct {
 	store          store.Store
 	openAI         *openai.Client
 	tools          *tools.Manager
 	agentRuntime   *agent.Runtime
-	memorySyncer   *memorypkg.Syncer
+	memories       MemoryOperations
+	knowledge      KnowledgeOperations
+	memoryQueue    MemoryQueue
 	runController  *concurrency.RunController
 	allowedOrigins []string
 }
 
-func NewHandler(store store.Store, openAI *openai.Client, tools *tools.Manager, allowedOrigins []string) *Handler {
-	return NewHandlerWithRouterMode(store, openAI, tools, allowedOrigins, agent.RouterModeAuto)
-}
-
-func NewHandlerWithRouterMode(store store.Store, openAI *openai.Client, tools *tools.Manager, allowedOrigins []string, routerMode string) *Handler {
-	return NewHandlerWithRouterModeAndLimits(store, openAI, tools, allowedOrigins, routerMode, agent.DefaultAutonomousLimits())
-}
-
-func NewHandlerWithRouterModeAndLimits(store store.Store, openAI *openai.Client, tools *tools.Manager, allowedOrigins []string, routerMode string, limits agent.AutonomousLimits) *Handler {
+func NewHandler(dependencies Dependencies) (*Handler, error) {
+	if dependencies.Store == nil {
+		return nil, errors.New("http api store is required")
+	}
+	if dependencies.ModelClient == nil {
+		return nil, errors.New("http api model client is required")
+	}
+	if dependencies.Tools == nil {
+		return nil, errors.New("http api tools manager is required")
+	}
+	if dependencies.AgentRuntime == nil {
+		return nil, errors.New("http api agent runtime is required")
+	}
+	if dependencies.Memory == nil {
+		return nil, errors.New("http api memory operations are required")
+	}
+	if dependencies.Knowledge == nil {
+		return nil, errors.New("http api knowledge operations are required")
+	}
+	if dependencies.MemoryQueue == nil {
+		return nil, errors.New("http api memory queue is required")
+	}
+	if dependencies.RunController == nil {
+		return nil, errors.New("http api run controller is required")
+	}
 	return &Handler{
-		store:        store,
-		openAI:       openAI,
-		tools:        tools,
-		agentRuntime: agent.NewRuntimeWithRouterModeAndLimits(store, openAI, tools, routerMode, limits),
-		memorySyncer: memorypkg.NewSyncer(store, openAI),
-		runController: concurrency.NewRunController(concurrency.RunOptions{
-			MaxConcurrent: concurrency.DefaultMaxConcurrentRuns,
-			QueueSize:     concurrency.DefaultRunQueueSize,
-			WaitTimeout:   concurrency.DefaultRunQueueWait,
-		}),
-		allowedOrigins: allowedOrigins,
-	}
-}
-
-func (h *Handler) SetRunController(controller *concurrency.RunController) {
-	if controller != nil {
-		h.runController = controller
-	}
-}
-
-func (h *Handler) SetContextAssemblyConfig(config domain.ContextAssemblyConfig) {
-	h.agentRuntime.SetContextAssemblyConfig(config)
-}
-
-func (h *Handler) Close(ctx context.Context) error {
-	if h.memorySyncer == nil {
-		return nil
-	}
-	return h.memorySyncer.Close(ctx)
+		store:          dependencies.Store,
+		openAI:         dependencies.ModelClient,
+		tools:          dependencies.Tools,
+		agentRuntime:   dependencies.AgentRuntime,
+		memories:       dependencies.Memory,
+		knowledge:      dependencies.Knowledge,
+		memoryQueue:    dependencies.MemoryQueue,
+		runController:  dependencies.RunController,
+		allowedOrigins: append([]string(nil), dependencies.AllowedOrigins...),
+	}, nil
 }
 
 func (h *Handler) Routes() http.Handler {

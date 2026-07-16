@@ -100,10 +100,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	events, errs := h.agentRuntime.StreamChat(r.Context(), prepared, history, req.Message, req.Executor)
 	var assistant strings.Builder
 	for event := range events {
-		if event.Type == "delta" {
-			writeUnifiedRunEvent(w, flusher, domain.RunEvent{Type: domain.EventModelDelta, SchemaVersion: domain.CurrentRunEventSchemaVersion,
-				RunID: prepared.Run.ID, ConversationID: conversationID, Payload: map[string]any{"delta": event.Delta}}, &assistant)
-		}
+		writeUnifiedRunEvent(w, flusher, event, &assistant)
 	}
 
 	if err := <-errs; err != nil {
@@ -120,45 +117,15 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ok && currentRun.Status == domain.RunWaitingForUser {
-		writeSSE(w, "done", domain.ChatChunk{
-			Type:           "done",
-			ConversationID: conversationID,
-			RunID:          currentRun.ID,
-			AgentID:        currentRun.AgentID,
-			Status:         string(currentRun.Status),
-		})
-		flusher.Flush()
+		writeTerminalRunDone(w, flusher, currentRun)
 		h.enqueueMemorySync(userMessage, currentRun.ID)
 		return
 	}
 
-	message, err := h.store.AddMessage(conversationID, "assistant", assistant.String())
-	if err != nil {
-		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
-		flusher.Flush()
-		return
-	}
-	completed, err := h.agentRuntime.CompleteRun(prepared.Run.ID)
-	if err != nil {
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
-		flusher.Flush()
-		return
-	}
-	title := h.summarizeConversationTitleBestEffort(r.Context(), conversationID, req.Message, assistant.String())
-
-	writeSSE(w, "done", domain.ChatChunk{
-		Type:           "done",
-		ConversationID: conversationID,
-		Title:          title,
-		RunID:          completed.ID,
-		AgentID:        completed.AgentID,
-		Status:         string(completed.Status),
-		MessageID:      message.ID,
+	h.completeStreamingRun(w, flusher, r.Context(), runCompletionRequest{
+		RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
+		Assistant: assistant.String(), UserMessage: &userMessage, GenerateTitle: true,
 	})
-	flusher.Flush()
-	h.enqueueMemorySync(userMessage, prepared.Run.ID)
-	h.enqueueMemorySync(message, prepared.Run.ID)
 }
 
 func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
@@ -201,45 +168,15 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 		return
 	}
 	if run.Status == domain.RunWaitingForUser {
-		writeSSE(w, "done", domain.ChatChunk{
-			Type:           "done",
-			ConversationID: conversationID,
-			RunID:          run.ID,
-			AgentID:        run.AgentID,
-			Status:         string(run.Status),
-		})
-		flusher.Flush()
+		writeTerminalRunDone(w, flusher, run)
 		h.enqueueMemorySync(userMessage, run.ID)
 		return
 	}
 
-	message, err := h.store.AddMessage(conversationID, "assistant", assistant.String())
-	if err != nil {
-		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
-		flusher.Flush()
-		return
-	}
-	completed, err := h.agentRuntime.CompleteRun(prepared.Run.ID)
-	if err != nil {
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
-		flusher.Flush()
-		return
-	}
-	title := h.summarizeConversationTitleBestEffort(r.Context(), conversationID, req.Message, assistant.String())
-
-	writeSSE(w, "done", domain.ChatChunk{
-		Type:           "done",
-		ConversationID: conversationID,
-		Title:          title,
-		RunID:          completed.ID,
-		AgentID:        completed.AgentID,
-		Status:         string(completed.Status),
-		MessageID:      message.ID,
+	h.completeStreamingRun(w, flusher, r.Context(), runCompletionRequest{
+		RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
+		Assistant: assistant.String(), UserMessage: &userMessage, GenerateTitle: true,
 	})
-	flusher.Flush()
-	h.enqueueMemorySync(userMessage, prepared.Run.ID)
-	h.enqueueMemorySync(message, prepared.Run.ID)
 }
 
 func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
@@ -265,14 +202,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 	if err := <-errs; err != nil {
 		currentRun, ok, getErr := h.store.GetRun(prepared.Run.ID)
 		if getErr == nil && ok && currentRun.Status == domain.RunCanceled {
-			writeSSE(w, "done", domain.ChatChunk{
-				Type:           "done",
-				ConversationID: conversationID,
-				RunID:          currentRun.ID,
-				AgentID:        currentRun.AgentID,
-				Status:         string(currentRun.Status),
-			})
-			flusher.Flush()
+			writeTerminalRunDone(w, flusher, currentRun)
 			return
 		}
 		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
@@ -294,45 +224,15 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 		return
 	}
 	if run.Status == domain.RunWaitingForUser || run.Status == domain.RunCanceled {
-		writeSSE(w, "done", domain.ChatChunk{
-			Type:           "done",
-			ConversationID: conversationID,
-			RunID:          run.ID,
-			AgentID:        run.AgentID,
-			Status:         string(run.Status),
-		})
-		flusher.Flush()
+		writeTerminalRunDone(w, flusher, run)
 		h.enqueueMemorySync(userMessage, run.ID)
 		return
 	}
 
-	message, err := h.store.AddMessage(conversationID, "assistant", assistant.String())
-	if err != nil {
-		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
-		flusher.Flush()
-		return
-	}
-	completed, err := h.agentRuntime.CompleteRun(prepared.Run.ID)
-	if err != nil {
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
-		flusher.Flush()
-		return
-	}
-	title := h.summarizeConversationTitleBestEffort(r.Context(), conversationID, req.Message, assistant.String())
-
-	writeSSE(w, "done", domain.ChatChunk{
-		Type:           "done",
-		ConversationID: conversationID,
-		Title:          title,
-		RunID:          completed.ID,
-		AgentID:        completed.AgentID,
-		Status:         string(completed.Status),
-		MessageID:      message.ID,
+	h.completeStreamingRun(w, flusher, r.Context(), runCompletionRequest{
+		RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
+		Assistant: assistant.String(), UserMessage: &userMessage, GenerateTitle: true,
 	})
-	flusher.Flush()
-	h.enqueueMemorySync(userMessage, prepared.Run.ID)
-	h.enqueueMemorySync(message, prepared.Run.ID)
 }
 
 func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
@@ -396,30 +296,9 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message, err := h.store.AddMessage(run.ConversationID, "assistant", assistant.String())
-	if err != nil {
-		_, _ = h.agentRuntime.FailRun(id, err)
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
-		flusher.Flush()
-		return
-	}
-	completed, err := h.agentRuntime.CompleteRun(id)
-	if err != nil {
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
-		flusher.Flush()
-		return
-	}
-
-	writeSSE(w, "done", domain.ChatChunk{
-		Type:           "done",
-		ConversationID: completed.ConversationID,
-		RunID:          completed.ID,
-		AgentID:        completed.AgentID,
-		Status:         string(completed.Status),
-		MessageID:      message.ID,
+	h.completeStreamingRun(w, flusher, r.Context(), runCompletionRequest{
+		RunID: id, ConversationID: run.ConversationID, Assistant: assistant.String(),
 	})
-	flusher.Flush()
-	h.enqueueMemorySync(message, id)
 }
 
 func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
@@ -509,40 +388,13 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if current.Status == domain.RunWaitingForUser || current.Status == domain.RunCanceled {
-		writeSSE(w, "done", domain.ChatChunk{
-			Type:           "done",
-			ConversationID: current.ConversationID,
-			RunID:          current.ID,
-			AgentID:        current.AgentID,
-			Status:         string(current.Status),
-		})
-		flusher.Flush()
+		writeTerminalRunDone(w, flusher, current)
 		return
 	}
 
-	message, err := h.store.AddMessage(current.ConversationID, "assistant", assistant.String())
-	if err != nil {
-		_, _ = h.agentRuntime.FailRun(id, err)
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
-		flusher.Flush()
-		return
-	}
-	completed, err := h.agentRuntime.CompleteRun(id)
-	if err != nil {
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
-		flusher.Flush()
-		return
-	}
-	writeSSE(w, "done", domain.ChatChunk{
-		Type:           "done",
-		ConversationID: completed.ConversationID,
-		RunID:          completed.ID,
-		AgentID:        completed.AgentID,
-		Status:         string(completed.Status),
-		MessageID:      message.ID,
+	h.completeStreamingRun(w, flusher, r.Context(), runCompletionRequest{
+		RunID: id, ConversationID: current.ConversationID, Assistant: assistant.String(),
 	})
-	flusher.Flush()
-	h.enqueueMemorySync(message, id)
 }
 
 func writeUnifiedRunEvent(w http.ResponseWriter, flusher http.Flusher, event domain.RunEvent, assistant *strings.Builder) {

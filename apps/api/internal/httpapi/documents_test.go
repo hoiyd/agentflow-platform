@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/knowledge"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -18,10 +19,8 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	handler := &Handler{
-		store:  fileStore,
-		openAI: newLocalFallbackOpenAIClientForTest(),
-	}
+	client := newLocalFallbackOpenAIClientForTest()
+	handler := &Handler{store: fileStore, knowledge: knowledge.NewKnowledgeBase(fileStore, client)}
 
 	createBody := []byte(`{
 		"title": "Launch Notes",
@@ -231,10 +230,8 @@ func TestUploadDocumentAPIAcceptsTxtAndMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	handler := &Handler{
-		store:  fileStore,
-		openAI: newLocalFallbackOpenAIClientForTest(),
-	}
+	client := newLocalFallbackOpenAIClientForTest()
+	handler := &Handler{store: fileStore, knowledge: knowledge.NewKnowledgeBase(fileStore, client)}
 
 	for _, tc := range []struct {
 		name       string
@@ -287,10 +284,8 @@ func TestUploadDocumentAPIRejectsUnsupportedAndEmptyFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	handler := &Handler{
-		store:  fileStore,
-		openAI: newLocalFallbackOpenAIClientForTest(),
-	}
+	client := newLocalFallbackOpenAIClientForTest()
+	handler := &Handler{store: fileStore, knowledge: knowledge.NewKnowledgeBase(fileStore, client)}
 
 	for _, tc := range []struct {
 		name     string

@@ -1,15 +1,14 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"path/filepath"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/knowledge"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -69,12 +68,12 @@ func (h *Handler) createDocument(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
-	document, chunks, err := rag.BuildDocument(req)
+	document, err := h.knowledge.Ingest(r.Context(), req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeKnowledgeError(w, err)
 		return
 	}
-	h.persistDocument(w, r, document, chunks)
+	writeJSON(w, http.StatusCreated, document)
 }
 
 func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +128,7 @@ func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
 			metadata[key] = value
 		}
 	}
-	document, chunks, err := rag.BuildDocument(domain.DocumentIngestRequest{
+	document, err := h.knowledge.Ingest(r.Context(), domain.DocumentIngestRequest{
 		Title:      title,
 		Content:    content,
 		SourceType: "file",
@@ -138,33 +137,10 @@ func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
 		Metadata:   metadata,
 	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeKnowledgeError(w, err)
 		return
 	}
-	h.persistDocument(w, r, document, chunks)
-}
-
-func (h *Handler) persistDocument(w http.ResponseWriter, r *http.Request, document domain.Document, chunks []domain.DocumentChunk) {
-	embeddings := make([]domain.DocumentChunkEmbedding, 0, len(chunks))
-	for _, chunk := range chunks {
-		embedding, err := h.openAI.EmbedText(r.Context(), chunk.Content)
-		if err != nil {
-			writeError(w, http.StatusBadGateway, err.Error())
-			return
-		}
-		embeddings = append(embeddings, domain.DocumentChunkEmbedding{
-			Provider:   embedding.Provider,
-			Model:      embedding.Model,
-			Dimensions: len(embedding.Vector),
-			Embedding:  embedding.Vector,
-		})
-	}
-	created, err := h.store.CreateDocument(document, chunks, embeddings)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusCreated, created)
+	writeJSON(w, http.StatusCreated, document)
 }
 
 func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
@@ -173,72 +149,12 @@ func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
-	response, err := h.runDocumentSearch(r.Context(), search, rag.NormalizeSearchLimit(search.Limit))
+	response, err := h.knowledge.Search(r.Context(), search, rag.NormalizeSearchLimit(search.Limit))
 	if err != nil {
-		status := http.StatusBadRequest
-		if errors.Is(err, errDocumentSearchEmbedding) {
-			status = http.StatusBadGateway
-		}
-		writeError(w, status, documentSearchErrorMessage(err))
+		writeKnowledgeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
-}
-
-var errDocumentSearchEmbedding = errors.New("document search embedding")
-
-func documentSearchErrorMessage(err error) string {
-	message := strings.TrimSpace(err.Error())
-	if errors.Is(err, errDocumentSearchEmbedding) {
-		message = strings.TrimSpace(strings.TrimPrefix(message, errDocumentSearchEmbedding.Error()))
-	}
-	if message == "" {
-		return "document search failed"
-	}
-	return message
-}
-
-func (h *Handler) runDocumentSearch(ctx context.Context, search domain.DocumentSearch, requestedLimit int) (domain.DocumentSearchResponse, error) {
-	search.Query = strings.TrimSpace(search.Query)
-	if search.Query == "" {
-		return domain.DocumentSearchResponse{}, errors.New("query is required")
-	}
-	embedding, err := h.openAI.EmbedText(ctx, search.Query)
-	if err != nil {
-		return domain.DocumentSearchResponse{}, errors.Join(errDocumentSearchEmbedding, err)
-	}
-	if requestedLimit <= 0 {
-		requestedLimit = rag.NormalizeSearchLimit(search.Limit)
-	}
-	search.Limit = rag.CandidateLimit(requestedLimit)
-	search.Embedding = embedding.Vector
-	search.EmbeddingProvider = embedding.Provider
-	search.EmbeddingModel = embedding.Model
-	items, err := h.store.SearchDocumentChunks(search)
-	if err != nil {
-		return domain.DocumentSearchResponse{}, err
-	}
-	for index := range items {
-		items[index].VectorRank = index + 1
-	}
-	items = rag.Rerank(search.Query, items, requestedLimit)
-	items = rag.ApplyRelevanceGate(items)
-	noMatch := len(items) == 0
-	reason := ""
-	if noMatch {
-		reason = "No confident match found. Top vector candidates did not pass the relevance gate."
-	}
-	return domain.DocumentSearchResponse{
-		Items: items,
-		Embedding: domain.EmbeddingInfo{
-			Provider:   embedding.Provider,
-			Model:      embedding.Model,
-			Dimensions: embedding.Dimensions,
-			Estimated:  embedding.Estimated,
-		},
-		NoMatch: noMatch,
-		Reason:  reason,
-	}, nil
 }
 
 func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
@@ -247,56 +163,18 @@ func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
-	if len(req.Cases) == 0 {
-		writeError(w, http.StatusBadRequest, "at least one evaluation case is required")
+	response, err := h.knowledge.Evaluate(r.Context(), req)
+	if err != nil {
+		writeKnowledgeError(w, err)
 		return
 	}
-	if len(req.Cases) > 50 {
-		writeError(w, http.StatusBadRequest, "at most 50 evaluation cases are supported")
-		return
+	writeJSON(w, http.StatusOK, response)
+}
+
+func writeKnowledgeError(w http.ResponseWriter, err error) {
+	status := http.StatusBadRequest
+	if knowledge.IsEmbeddingError(err) {
+		status = http.StatusBadGateway
 	}
-	topK := rag.NormalizeSearchLimit(req.TopK)
-	results := make([]domain.RAGEvaluationCaseResult, 0, len(req.Cases))
-	summary := domain.RAGEvaluationSummary{Total: len(req.Cases)}
-	var embedding domain.EmbeddingInfo
-	for _, evalCase := range req.Cases {
-		search := domain.DocumentSearch{
-			Query:         evalCase.Query,
-			WorkspaceID:   req.WorkspaceID,
-			Metadata:      req.Metadata,
-			Limit:         topK,
-			MinSimilarity: req.MinSimilarity,
-		}
-		response, err := h.runDocumentSearch(r.Context(), search, topK)
-		if err != nil {
-			status := http.StatusBadRequest
-			if errors.Is(err, errDocumentSearchEmbedding) {
-				status = http.StatusBadGateway
-			}
-			writeError(w, status, documentSearchErrorMessage(err))
-			return
-		}
-		if embedding.Provider == "" {
-			embedding = response.Embedding
-		}
-		caseResult := rag.EvaluateCase(evalCase, response.Items)
-		results = append(results, caseResult)
-		if caseResult.HitAt1 {
-			summary.HitAt1++
-		}
-		if caseResult.HitAt3 {
-			summary.HitAt3++
-		}
-		if caseResult.HitAt5 {
-			summary.HitAt5++
-		}
-		if !caseResult.Hit {
-			summary.Misses++
-		}
-	}
-	writeJSON(w, http.StatusOK, domain.RAGEvaluationRunResponse{
-		Summary:   summary,
-		Cases:     results,
-		Embedding: embedding,
-	})
+	writeError(w, status, err.Error())
 }

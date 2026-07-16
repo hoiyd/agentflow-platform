@@ -89,7 +89,7 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 		t.Fatalf("mark completed: %v", err)
 	}
 
-	handler := NewHandler(fileStore, nil, nil, nil)
+	handler := &Handler{store: fileStore}
 	req := httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/episode", nil)
 	recorder := httptest.NewRecorder()
 	handler.getEpisodeReport(recorder, req)

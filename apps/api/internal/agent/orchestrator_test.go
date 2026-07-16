@@ -82,7 +82,7 @@ func TestPreparedRunsUseRequestedAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	runtime := NewRuntime(fileStore, newLocalFallbackOpenAIClientForTest(), nil)
+	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	custom, err := fileStore.CreateAgent(domain.Agent{
 		Name:             "Resume Reviewer",
 		Description:      "Reviews resumes against job descriptions.",
@@ -203,11 +203,11 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, newLocalFallbackOpenAIClientForTest(), nil, RouterModeQuery, AutonomousLimits{
-		MaxIterations:  1,
-		MaxRuntime:     time.Minute,
-		MaxOutputChars: 60000,
-		MaxToolCalls:   20,
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+		Autonomous: AutonomousLimits{
+			MaxIterations: 1, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
+		},
 	})
 	prepared, err := runtime.PrepareAutonomousRun(context.Background(), "", conversation.ID)
 	if err != nil {
@@ -259,11 +259,11 @@ func TestAutonomousRunCanBeCanceledBeforeLoop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, newLocalFallbackOpenAIClientForTest(), nil, RouterModeQuery, AutonomousLimits{
-		MaxIterations:  2,
-		MaxRuntime:     time.Minute,
-		MaxOutputChars: 60000,
-		MaxToolCalls:   20,
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+		Autonomous: AutonomousLimits{
+			MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
+		},
 	})
 	prepared, err := runtime.PrepareAutonomousRun(context.Background(), "", conversation.ID)
 	if err != nil {
@@ -304,11 +304,11 @@ func TestResumeAutonomousCompletesHumanInputCheckpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, newLocalFallbackOpenAIClientForTest(), nil, RouterModeQuery, AutonomousLimits{
-		MaxIterations:  2,
-		MaxRuntime:     time.Minute,
-		MaxOutputChars: 60000,
-		MaxToolCalls:   20,
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+		Autonomous: AutonomousLimits{
+			MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
+		},
 	})
 	prepared, err := runtime.PrepareAutonomousRun(context.Background(), "", conversation.ID)
 	if err != nil {
@@ -368,11 +368,11 @@ func TestResumeRecoverableAutonomousContinuesFromSavedSteps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	runtime := NewRuntimeWithRouterModeAndLimits(fileStore, newLocalFallbackOpenAIClientForTest(), nil, RouterModeQuery, AutonomousLimits{
-		MaxIterations:  2,
-		MaxRuntime:     time.Minute,
-		MaxOutputChars: 60000,
-		MaxToolCalls:   20,
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+		Autonomous: AutonomousLimits{
+			MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
+		},
 	})
 	prepared, err := runtime.PrepareAutonomousRun(context.Background(), "", conversation.ID)
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -48,19 +49,22 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 		t.Fatalf("mark recoverable: %v", err)
 	}
 
-	handler := NewHandlerWithRouterModeAndLimits(
-		fileStore,
-		newLocalFallbackOpenAIClientForTest(),
-		nil,
-		nil,
-		agent.RouterModeQuery,
-		agent.AutonomousLimits{
+	client := newLocalFallbackOpenAIClientForTest()
+	runtime := agent.NewRuntime(agent.RuntimeOptions{
+		Store: fileStore, ModelClient: client, RouterMode: agent.RouterModeQuery,
+		Autonomous: agent.AutonomousLimits{
 			MaxIterations:  2,
 			MaxRuntime:     time.Minute,
 			MaxOutputChars: 60000,
 			MaxToolCalls:   20,
 		},
-	)
+	})
+	handler := &Handler{
+		store: fileStore, openAI: client, agentRuntime: runtime,
+		runController: concurrency.NewRunController(concurrency.RunOptions{
+			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
+		}),
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/runs/"+run.ID+"/resume", bytes.NewReader([]byte(`{"user_input":"Resume from test"}`)))
 	recorder := httptest.NewRecorder()

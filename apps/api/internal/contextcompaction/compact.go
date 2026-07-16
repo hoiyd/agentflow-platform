@@ -56,17 +56,17 @@ type Request struct {
 	Summarizer           Summarizer
 }
 
-type Service struct {
+type Compactor struct {
 	store Store
 	mu    sync.Mutex
 	locks map[string]*sync.Mutex
 }
 
-func NewService(store Store) *Service {
-	return &Service{store: store, locks: map[string]*sync.Mutex{}}
+func NewCompactor(store Store) *Compactor {
+	return &Compactor{store: store, locks: map[string]*sync.Mutex{}}
 }
 
-func (s *Service) CompactIfNeeded(ctx context.Context, request Request) (*domain.ContextCompaction, error) {
+func (s *Compactor) CompactIfNeeded(ctx context.Context, request Request) (*domain.ContextCompaction, error) {
 	if s == nil || s.store == nil {
 		return nil, errors.New("context compaction store is required")
 	}
@@ -298,7 +298,7 @@ func uniqueIDs(ids []string) []string {
 	return result
 }
 
-func (s *Service) publish(request Request, eventType domain.RunEventType, payload eventpkg.ContextCompactionPayload) {
+func (s *Compactor) publish(request Request, eventType domain.RunEventType, payload eventpkg.ContextCompactionPayload) {
 	if request.RunID == "" {
 		return
 	}
@@ -312,7 +312,7 @@ func (s *Service) publish(request Request, eventType domain.RunEventType, payloa
 	})
 }
 
-func (s *Service) conversationLock(conversationID string) *sync.Mutex {
+func (s *Compactor) conversationLock(conversationID string) *sync.Mutex {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if lock := s.locks[conversationID]; lock != nil {
