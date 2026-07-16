@@ -3,156 +3,35 @@ package main
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"agentflow-platform/apps/api/internal/agent"
-	"agentflow-platform/apps/api/internal/concurrency"
+	"agentflow-platform/apps/api/app"
 	"agentflow-platform/apps/api/internal/config"
-	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/httpapi"
-	"agentflow-platform/apps/api/internal/openai"
-	"agentflow-platform/apps/api/internal/recovery"
-	"agentflow-platform/apps/api/internal/store"
-	"agentflow-platform/apps/api/internal/tools"
 )
 
 func main() {
 	log.SetOutput(os.Stdout)
 
-	cfg := config.Load()
-
-	appStore, err := newStore(cfg)
+	application, err := app.New(config.Load())
 	if err != nil {
-		log.Fatalf("create store: %v", err)
+		log.Fatalf("create AgentFlow application: %v", err)
 	}
-	if closer, ok := appStore.(interface{ Close() error }); ok {
-		defer func() {
-			if err := closer.Close(); err != nil {
-				log.Printf("close store: %v", err)
-			}
-		}()
-	}
-	if recovered, err := recovery.MarkStaleRunningRuns(appStore, cfg.RecoveryStaleRunTimeout); err != nil {
-		log.Printf("native recovery scan failed: %v", err)
-	} else if recovered > 0 {
-		log.Printf("native recovery marked %d stale running run(s) as failed_recoverable", recovered)
-	}
-
-	openAIClient := openai.NewClientWithTimeoutAndEmbeddingModel(
-		cfg.OpenAIAPIKey,
-		cfg.OpenAIBaseURL,
-		cfg.EmbeddingBaseURL,
-		cfg.OpenAIModel,
-		cfg.EmbeddingModel,
-		cfg.EmbeddingDimensions,
-		cfg.OpenAITimeout,
-	)
-	openAIClient.SetRequestLimiter(concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{
-		MaxConcurrent:     cfg.MaxConcurrentModelRequests,
-		RequestsPerPeriod: cfg.ModelRequestsPerMinute,
-		TokensPerPeriod:   cfg.ModelTokensPerMinute,
-	}))
-	retryPolicy := openai.DefaultRetryPolicy()
-	retryPolicy.MaxAttempts = cfg.ModelRetryMaxAttempts
-	retryPolicy.BaseDelay = cfg.ModelRetryBaseDelay
-	retryPolicy.MaxDelay = cfg.ModelRetryMaxDelay
-	openAIClient.SetRetryPolicy(retryPolicy)
-	toolManager, err := tools.NewManager(cfg.ToolConfigPath)
-	if err != nil {
-		log.Fatalf("create tools manager: %v", err)
-	}
-	handler := httpapi.NewHandlerWithRouterModeAndLimits(appStore, openAIClient, toolManager, splitOrigins(cfg.AllowedOrigins), cfg.RouterMode, agent.AutonomousLimits{
-		MaxIterations:  cfg.AutonomousMaxIterations,
-		MaxRuntime:     cfg.AutonomousMaxRuntime,
-		MaxOutputChars: cfg.AutonomousMaxOutputCharacters,
-		MaxToolCalls:   cfg.AutonomousMaxToolCalls,
-	})
-	handler.SetRunController(concurrency.NewRunController(concurrency.RunOptions{
-		MaxConcurrent: cfg.MaxConcurrentRuns,
-		QueueSize:     cfg.RunQueueSize,
-		WaitTimeout:   cfg.RunQueueWaitTimeout,
-	}))
-	handler.SetContextAssemblyConfig(domain.ContextAssemblyConfig{
-		ContextWindowTokens: cfg.ModelContextWindowTokens,
-		OutputReserveTokens: cfg.ModelOutputReserveTokens, SafetyMarginTokens: cfg.ContextSafetyMarginTokens,
-		HistoryMaxTokens: cfg.ContextHistoryMaxTokens, MemoryMaxTokens: cfg.ContextMemoryMaxTokens,
-		KnowledgeMaxTokens: cfg.ContextKnowledgeMaxTokens, ToolResultMaxTokens: cfg.ContextToolResultMaxTokens,
-		CompactionMode:          cfg.ContextCompactionMode,
-		CompactionSoftThreshold: cfg.ContextCompactionSoftThreshold, CompactionHardThreshold: cfg.ContextCompactionHardThreshold,
-		CompactionRecentTokens: cfg.ContextCompactionRecentTokens, CompactionSummaryMaxTokens: cfg.ContextCompactionSummaryMaxTokens,
-		CompactionTimeoutMS: cfg.ContextCompactionTimeout.Milliseconds(),
-	})
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := handler.Close(ctx); err != nil {
-			log.Printf("drain memory sync: %v", err)
+		if err := application.Close(ctx); err != nil {
+			log.Printf("close AgentFlow application: %v", err)
 		}
 	}()
-
-	server := &http.Server{
-		Addr:              ":" + cfg.Port,
-		Handler:           handler.Routes(),
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-
-	log.Printf("AgentFlow API listening on http://localhost:%s", cfg.Port)
-	log.Printf("AgentFlow store driver: %s", cfg.StoreDriver)
-	log.Printf("AgentFlow router mode: %s", cfg.RouterMode)
-	log.Printf("AgentFlow autonomous limits: max_iterations=%d max_runtime=%s max_output_chars=%d max_tool_calls=%d", cfg.AutonomousMaxIterations, cfg.AutonomousMaxRuntime, cfg.AutonomousMaxOutputCharacters, cfg.AutonomousMaxToolCalls)
-	log.Printf("AgentFlow native recovery: stale_run_timeout=%s", cfg.RecoveryStaleRunTimeout)
-	log.Printf("AgentFlow run concurrency: max_concurrent=%d queue_size=%d wait_timeout=%s", cfg.MaxConcurrentRuns, cfg.RunQueueSize, cfg.RunQueueWaitTimeout)
-	log.Printf("AgentFlow model concurrency: max_in_flight=%d rpm=%d tpm=%d", cfg.MaxConcurrentModelRequests, cfg.ModelRequestsPerMinute, cfg.ModelTokensPerMinute)
-	log.Printf("AgentFlow model retry: max_attempts=%d base_delay=%s max_delay=%s", cfg.ModelRetryMaxAttempts, cfg.ModelRetryBaseDelay, cfg.ModelRetryMaxDelay)
-	log.Printf("AgentFlow context policy: window=%d output_reserve=%d safety_margin=%d history_max=%d memory_max=%d knowledge_max=%d tool_result_max=%d compaction=%s soft=%.2f hard=%.2f recent=%d summary_max=%d", cfg.ModelContextWindowTokens, cfg.ModelOutputReserveTokens, cfg.ContextSafetyMarginTokens, cfg.ContextHistoryMaxTokens, cfg.ContextMemoryMaxTokens, cfg.ContextKnowledgeMaxTokens, cfg.ContextToolResultMaxTokens, cfg.ContextCompactionMode, cfg.ContextCompactionSoftThreshold, cfg.ContextCompactionHardThreshold, cfg.ContextCompactionRecentTokens, cfg.ContextCompactionSummaryMaxTokens)
-	if cfg.OpenAIAPIKey == "" {
-		log.Println("OPENAI_API_KEY is empty; using local streaming fallback for verification")
-	}
 
 	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	serverErrors := make(chan error, 1)
-	go func() {
-		serverErrors <- server.ListenAndServe()
-	}()
-
-	select {
-	case err := <-serverErrors:
-		if err != nil && err != http.ErrServerClosed {
-			log.Printf("serve AgentFlow API: %v", err)
-		}
-	case <-shutdownSignal.Done():
-		log.Println("AgentFlow API shutting down")
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := server.Shutdown(ctx); err != nil {
-			log.Printf("shutdown AgentFlow API: %v", err)
-		}
+	if err := application.Run(shutdownSignal); err != nil {
+		log.Printf("serve AgentFlow API: %v", err)
 	}
 
 	_ = os.Stdout.Sync()
-}
-
-func newStore(cfg config.Config) (store.Store, error) {
-	if cfg.StoreDriver == "postgres" {
-		return store.NewPostgresStore(cfg.DatabaseURL)
-	}
-	return store.NewFileStore(cfg.DataPath)
-}
-
-func splitOrigins(value string) []string {
-	parts := strings.Split(value, ",")
-	origins := make([]string, 0, len(parts))
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
-			origins = append(origins, trimmed)
-		}
-	}
-	return origins
 }
