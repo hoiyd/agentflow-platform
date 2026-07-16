@@ -76,14 +76,6 @@ type MemoryCandidateStore interface {
 	ListMemoryCandidates(conversationID string) ([]domain.MemoryCandidate, error)
 }
 
-// LegacyMemoryStore is used by the explicit message-memory cleanup command.
-// It is separate from runtime recall so migration operations cannot leak into
-// normal Turn execution paths.
-type LegacyMemoryStore interface {
-	ListLegacyMessageMemories() ([]domain.Memory, error)
-	DeleteLegacyMessageMemories(ids []string) (int, error)
-}
-
 type DocumentStore interface {
 	CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error)
 	ListDocuments() ([]domain.Document, error)
@@ -103,6 +95,5 @@ type Store interface {
 	ContextCompactionStore
 	MemoryStore
 	MemoryCandidateStore
-	LegacyMemoryStore
 	DocumentStore
 }

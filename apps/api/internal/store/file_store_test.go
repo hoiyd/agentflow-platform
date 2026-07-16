@@ -543,37 +543,6 @@ func TestFileStoreMemoryCandidateRoundTripIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestFileStoreLegacyMessageMemoryCleanupPreservesCuratedMemory(t *testing.T) {
-	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	legacy, err := store.CreateMemory(domain.Memory{
-		ID: "mem_msg_legacy", SourceMessageID: "msg_legacy", Kind: "message", Content: "raw chat",
-	}, domain.MemoryEmbedding{Embedding: []float64{1}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	curated, err := store.CreateMemory(domain.Memory{
-		ID: "mem_curated_test", SourceMessageID: "msg_curated", Kind: "preference", Content: "concise answers",
-	}, domain.MemoryEmbedding{Embedding: []float64{1}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	items, err := store.ListLegacyMessageMemories()
-	if err != nil || len(items) != 1 || items[0].ID != legacy.ID {
-		t.Fatalf("legacy scan: items=%#v err=%v", items, err)
-	}
-	deleted, err := store.DeleteLegacyMessageMemories([]string{legacy.ID, curated.ID})
-	if err != nil || deleted != 1 {
-		t.Fatalf("legacy delete: deleted=%d err=%v", deleted, err)
-	}
-	results, err := store.SearchMemories(domain.MemorySearch{Embedding: []float64{1}, Limit: 5})
-	if err != nil || len(results) != 1 || results[0].Memory.ID != curated.ID {
-		t.Fatalf("curated memory was not preserved: results=%#v err=%v", results, err)
-	}
-}
-
 func TestFileStoreDocumentSearchUsesMetadataSimilarityAndRecency(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

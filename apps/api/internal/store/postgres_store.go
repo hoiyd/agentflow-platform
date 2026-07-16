@@ -934,55 +934,6 @@ func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.Ret
 	return items, rows.Err()
 }
 
-func (s *PostgresStore) ListLegacyMessageMemories() ([]domain.Memory, error) {
-	rows, err := s.db.Query(`
-		SELECT id,workspace_id,user_id,project_id,conversation_id,run_id,source_message_id,
-			kind,content,metadata,created_at,updated_at
-		FROM memories
-		WHERE lower(trim(kind))='message' AND (source_message_id IS NOT NULL OR id LIKE 'mem_msg_%')
-		ORDER BY created_at,id`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []domain.Memory{}
-	for rows.Next() {
-		item, err := scanMemory(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, item)
-	}
-	return items, rows.Err()
-}
-
-func (s *PostgresStore) DeleteLegacyMessageMemories(ids []string) (int, error) {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-	deleted := 0
-	for _, id := range ids {
-		result, err := tx.Exec(`
-			DELETE FROM memories
-			WHERE id=$1 AND lower(trim(kind))='message'
-				AND (source_message_id IS NOT NULL OR id LIKE 'mem_msg_%')`, strings.TrimSpace(id))
-		if err != nil {
-			return 0, err
-		}
-		count, err := result.RowsAffected()
-		if err != nil {
-			return 0, err
-		}
-		deleted += int(count)
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return deleted, nil
-}
-
 func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error) {
 	if len(chunks) != len(embeddings) {
 		return domain.Document{}, errors.New("document chunks and embeddings length mismatch")
@@ -1781,7 +1732,6 @@ var postgresMigrations = []string{
 		confidence double precision NOT NULL DEFAULT 1,
 		created_at timestamptz NOT NULL
 	)`,
-	`ALTER TABLE memory_candidates ADD COLUMN IF NOT EXISTS confidence double precision NOT NULL DEFAULT 1`,
 	`CREATE TABLE IF NOT EXISTS memory_embeddings (
 		memory_id text PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
 		provider text NOT NULL,
@@ -1819,21 +1769,6 @@ var postgresMigrations = []string{
 		embedding vector(1536) NOT NULL,
 		created_at timestamptz NOT NULL
 	)`,
-	`DO $$
-	BEGIN
-		IF EXISTS (
-			SELECT 1
-			FROM information_schema.columns
-			WHERE table_schema = 'public'
-				AND table_name = 'memory_embeddings'
-				AND column_name = 'embedding'
-				AND udt_name <> 'vector'
-		) THEN
-			DELETE FROM memory_embeddings;
-			ALTER TABLE memory_embeddings DROP COLUMN embedding;
-		END IF;
-	END $$`,
-	`ALTER TABLE memory_embeddings ADD COLUMN IF NOT EXISTS embedding vector(1536) NOT NULL`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_conversation_created ON runs(conversation_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_status_created ON runs(status, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at ASC)`,

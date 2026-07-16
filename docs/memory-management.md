@@ -65,34 +65,4 @@ memory.sync.completed | memory.sync.failed
 
 The Curator uses a bounded, ordered background queue and drains accepted work during shutdown. Adaptive model requests share the normal model concurrency, rate-limit, retry, and timeout controls. Extraction, embedding, queue, Candidate, or Memory failures are observable, but they do not change a successfully completed Run.
 
-The explicit `POST /api/memories` and `POST /api/memories/search` APIs remain available. Versioned replace/remove mutations are a later feature; this change only replaces implicit message copying with conservative curation.
-
-## Legacy message-memory cleanup
-
-Older AgentFlow versions created `kind=message` Memory records for every user and assistant message. The migration command identifies only those legacy records by kind plus `source_message_id` or the old `mem_msg_` ID prefix. Curated and explicitly created Memory records are not selected.
-
-Run a dry-run first:
-
-```bash
-cd apps/api
-go run ./cmd/migrate-curated-memory
-```
-
-The command prints a JSON report containing mode, found count, deleted count, and candidate Memory IDs. It does not print Memory content.
-
-Apply the cleanup explicitly:
-
-```bash
-go run ./cmd/migrate-curated-memory --apply
-```
-
-It uses `STORE_DRIVER`, `DATA_PATH`, and `DATABASE_URL` from the normal backend configuration. Flags can override them:
-
-```bash
-go run ./cmd/migrate-curated-memory \
-  --store-driver=file \
-  --data-path=.data/agentflow.json \
-  --apply
-```
-
-The cleanup is idempotent: a second apply reports zero matching records. The command does not delete Messages, Candidates, curated Memory, or explicitly created non-message Memory.
+The explicit `POST /api/memories` and `POST /api/memories/search` APIs remain available. Versioned replace/remove mutations are a later feature; this change replaces implicit message copying with conservative curation.

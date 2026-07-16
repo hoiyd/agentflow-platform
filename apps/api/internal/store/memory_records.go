@@ -37,8 +37,3 @@ func normalizeMemoryCandidate(candidate domain.MemoryCandidate) (domain.MemoryCa
 	}
 	return candidate, nil
 }
-
-func isLegacyMessageMemory(item domain.Memory) bool {
-	return strings.EqualFold(strings.TrimSpace(item.Kind), "message") &&
-		(strings.TrimSpace(item.SourceMessageID) != "" || strings.HasPrefix(item.ID, "mem_msg_"))
-}

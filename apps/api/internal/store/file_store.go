@@ -810,48 +810,6 @@ func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.Retriev
 	return items, nil
 }
 
-func (s *FileStore) ListLegacyMessageMemories() ([]domain.Memory, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	items := []domain.Memory{}
-	for _, item := range s.data.Memories {
-		if isLegacyMessageMemory(item) {
-			items = append(items, item)
-		}
-	}
-	return items, nil
-}
-
-func (s *FileStore) DeleteLegacyMessageMemories(ids []string) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	wanted := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		wanted[strings.TrimSpace(id)] = true
-	}
-	deleted := map[string]bool{}
-	memories := make([]domain.Memory, 0, len(s.data.Memories))
-	for _, item := range s.data.Memories {
-		if wanted[item.ID] && isLegacyMessageMemory(item) {
-			deleted[item.ID] = true
-			continue
-		}
-		memories = append(memories, item)
-	}
-	if len(deleted) == 0 {
-		return 0, nil
-	}
-	embeddings := make([]domain.MemoryEmbedding, 0, len(s.data.MemoryEmbeddings))
-	for _, embedding := range s.data.MemoryEmbeddings {
-		if !deleted[embedding.MemoryID] {
-			embeddings = append(embeddings, embedding)
-		}
-	}
-	s.data.Memories = memories
-	s.data.MemoryEmbeddings = embeddings
-	return len(deleted), s.saveLocked()
-}
-
 func (s *FileStore) CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
