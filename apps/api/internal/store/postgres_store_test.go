@@ -42,7 +42,7 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	candidate, created, err := store.CreateMemoryCandidate(domain.MemoryCandidate{
 		ID: "memcand_" + message.ID, ConversationID: conversation.ID, RunID: run.ID,
 		SourceMessageID: message.ID, SourceRole: "user", Kind: "fact", Content: "hello",
-		Status: domain.MemoryCandidateAccepted, ExtractionReason: "explicit_memory_request", PolicyReason: "accepted",
+		Status: domain.MemoryCandidateAccepted, ExtractionReason: "adaptive_model", PolicyReason: "accepted", Confidence: 0.92,
 	})
 	if err != nil || !created {
 		t.Fatalf("create memory candidate: candidate=%#v created=%v err=%v", candidate, created, err)
@@ -51,7 +51,7 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 		t.Fatalf("duplicate candidate should be idempotent: created=%v err=%v", created, err)
 	}
 	candidates, err := store.ListMemoryCandidates(conversation.ID)
-	if err != nil || len(candidates) != 1 || candidates[0].ID != candidate.ID {
+	if err != nil || len(candidates) != 1 || candidates[0].ID != candidate.ID || candidates[0].Confidence != candidate.Confidence {
 		t.Fatalf("postgres memory candidate round trip: candidates=%#v err=%v", candidates, err)
 	}
 	compaction, err := store.CreateContextCompaction(domain.ContextCompaction{

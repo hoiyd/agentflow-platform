@@ -735,12 +735,12 @@ func (s *PostgresStore) CreateMemoryCandidate(candidate domain.MemoryCandidate) 
 	result, err := s.db.Exec(`
 		INSERT INTO memory_candidates (
 			id, conversation_id, run_id, source_message_id, source_role, kind, content,
-			status, extraction_reason, policy_reason, created_at
-		) VALUES ($1,NULLIF($2,''),NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10,$11)
+			status, extraction_reason, policy_reason, confidence, created_at
+		) VALUES ($1,NULLIF($2,''),NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10,$11,$12)
 		ON CONFLICT (id) DO NOTHING`,
 		candidate.ID, candidate.ConversationID, candidate.RunID, candidate.SourceMessageID,
 		candidate.SourceRole, candidate.Kind, candidate.Content, string(candidate.Status),
-		candidate.ExtractionReason, candidate.PolicyReason, candidate.CreatedAt)
+		candidate.ExtractionReason, candidate.PolicyReason, candidate.Confidence, candidate.CreatedAt)
 	if err != nil {
 		return domain.MemoryCandidate{}, false, err
 	}
@@ -753,14 +753,14 @@ func (s *PostgresStore) CreateMemoryCandidate(candidate domain.MemoryCandidate) 
 	}
 	existing, err := scanMemoryCandidate(s.db.QueryRow(`
 		SELECT id,conversation_id,run_id,source_message_id,source_role,kind,content,status,
-			extraction_reason,policy_reason,created_at
+			extraction_reason,policy_reason,confidence,created_at
 		FROM memory_candidates WHERE id=$1`, candidate.ID))
 	return existing, false, err
 }
 
 func (s *PostgresStore) ListMemoryCandidates(conversationID string) ([]domain.MemoryCandidate, error) {
 	query := `SELECT id,conversation_id,run_id,source_message_id,source_role,kind,content,status,
-		extraction_reason,policy_reason,created_at FROM memory_candidates`
+		extraction_reason,policy_reason,confidence,created_at FROM memory_candidates`
 	args := []any{}
 	if strings.TrimSpace(conversationID) != "" {
 		query += " WHERE conversation_id=$1"
@@ -1431,7 +1431,7 @@ func scanMemoryCandidate(row scanner) (domain.MemoryCandidate, error) {
 	var status string
 	if err := row.Scan(
 		&item.ID, &conversationID, &runID, &item.SourceMessageID, &item.SourceRole,
-		&item.Kind, &item.Content, &status, &item.ExtractionReason, &item.PolicyReason, &item.CreatedAt,
+		&item.Kind, &item.Content, &status, &item.ExtractionReason, &item.PolicyReason, &item.Confidence, &item.CreatedAt,
 	); err != nil {
 		return domain.MemoryCandidate{}, err
 	}
@@ -1778,8 +1778,10 @@ var postgresMigrations = []string{
 		status text NOT NULL,
 		extraction_reason text NOT NULL,
 		policy_reason text NOT NULL,
+		confidence double precision NOT NULL DEFAULT 1,
 		created_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE memory_candidates ADD COLUMN IF NOT EXISTS confidence double precision NOT NULL DEFAULT 1`,
 	`CREATE TABLE IF NOT EXISTS memory_embeddings (
 		memory_id text PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
 		provider text NOT NULL,

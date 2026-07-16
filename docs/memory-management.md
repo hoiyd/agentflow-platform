@@ -16,23 +16,41 @@ After the response has been flushed, the user message is submitted to the backgr
 
 ```text
 completed response
-  -> explicit durability signal extraction
+  -> explicit rule extraction
+  -> adaptive model fallback (optional)
   -> conservative policy evaluation
   -> persisted accepted/rejected candidate
   -> accepted candidate embedding
   -> durable semantic memory
 ```
 
-The initial extractor intentionally favors precision over recall. It recognizes explicit English and Chinese signals such as:
+The rule extractor remains the high-precision fast path. It recognizes explicit English and Chinese signals such as:
 
 - `Remember that ...` / `请记住...`
 - `I prefer ...` / `我的偏好是...`
 - `Correction: ...` / `更正：...`
 - `For this project, ...` / `项目约定：...`
 
-Messages without one of these signals do not create a Candidate. Assistant messages are never submitted for automatic curation.
+When no rule matches, adaptive extraction can ask the configured chat model for one structured `ADD` or `NOOP` decision. A cheap prefilter skips assistant messages, obvious questions, short or oversized messages, temporary/task-result content, and potential secrets before any auxiliary model call. Model output is constrained to durable facts, preferences, corrections, and project conventions.
 
-The initial policy rejects temporary instructions, task-completion logs, oversized content, and potential secrets. Secret-like rejected content is persisted only as `[redacted potential secret]`; the original value is not written to Candidate events or durable Memory.
+The composite extractor always runs rules first, so explicit requests do not spend an additional model request. The original Message remains authoritative evidence and every Candidate stores its `source_message_id`; model-generated text is never treated as evidence by itself.
+
+Adaptive extraction has three modes:
+
+- `off`: use only deterministic rule extraction.
+- `shadow`: persist adaptive Candidates as rejected with `policy_reason=adaptive_shadow_mode`, without embedding or adding durable Memory.
+- `auto`: allow adaptive Candidates above the confidence threshold to continue through policy and persistence.
+
+`shadow` is the default rollout mode. Adaptive extraction is disabled automatically when `OPENAI_API_KEY` is empty. Promote to `auto` only after reviewing shadow Candidates against representative conversations.
+
+```bash
+MEMORY_ADAPTIVE_EXTRACTION_MODE=shadow
+MEMORY_ADAPTIVE_MIN_CONFIDENCE=0.85
+```
+
+The model currently supports only `ADD/NOOP`. It does not replace or remove existing Memory because safe consolidation requires retrieval of related memories and versioned mutation semantics.
+
+The deterministic policy rejects low-confidence adaptive proposals, temporary instructions, task-completion logs, oversized content, and potential secrets. Secret-like rejected content is persisted only as `[redacted potential secret]`; the original value is not written to Candidate events or durable Memory.
 
 ## Events and failure behavior
 
@@ -45,7 +63,7 @@ memory.sync.requested
 memory.sync.completed | memory.sync.failed
 ```
 
-The Curator uses a bounded, ordered background queue and drains accepted work during shutdown. Extraction, embedding, queue, Candidate, or Memory failures are observable, but they do not change a successfully completed Run.
+The Curator uses a bounded, ordered background queue and drains accepted work during shutdown. Adaptive model requests share the normal model concurrency, rate-limit, retry, and timeout controls. Extraction, embedding, queue, Candidate, or Memory failures are observable, but they do not change a successfully completed Run.
 
 The explicit `POST /api/memories` and `POST /api/memories/search` APIs remain available. Versioned replace/remove mutations are a later feature; this change only replaces implicit message copying with conservative curation.
 

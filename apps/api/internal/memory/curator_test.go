@@ -19,6 +19,12 @@ type blockingEmbedder struct {
 	once    sync.Once
 }
 
+type immediateEmbedder struct{}
+
+func (immediateEmbedder) EmbedText(context.Context, string) (openai.Embedding, error) {
+	return openai.Embedding{Provider: "test", Model: "test", Vector: []float64{1}}, nil
+}
+
 func (e *blockingEmbedder) EmbedText(context.Context, string) (openai.Embedding, error) {
 	e.once.Do(func() { close(e.started) })
 	<-e.release
@@ -121,6 +127,74 @@ func TestCuratorIgnoresOrdinaryChatAndAssistantOutput(t *testing.T) {
 	if len(store.candidates) != 0 || len(store.memories) != 0 || len(store.events) != 0 {
 		t.Fatalf("ordinary chat became durable memory: candidates=%#v memories=%#v events=%#v", store.candidates, store.memories, store.events)
 	}
+}
+
+func TestCuratorPersistsAdaptiveCandidateInShadowModeWithoutCommittingMemory(t *testing.T) {
+	store := &recordingStore{}
+	model := &stubCandidateModel{response: `{"decision":"add","kind":"preference","content":"User prefers concise implementation notes.","confidence":0.94}`}
+	curator := NewCuratorWithOptions(store, immediateEmbedder{}, CuratorOptions{
+		QueueSize: 4, JobTimeout: time.Second, AdaptiveMode: AdaptiveModeShadow,
+		Extractor: CompositeCandidateExtractor{
+			Primary: RuleBasedCandidateExtractor{}, Fallback: AdaptiveCandidateExtractor{Model: model},
+		},
+	})
+	if err := curator.Enqueue(CurationJob{RunID: "run_shadow", Message: domain.Message{
+		ID: "msg_shadow", ConversationID: "conv_test", Role: "user",
+		Content: "Concise implementation notes are much easier for me to review later.",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	closeCurator(t, curator)
+	if len(store.candidates) != 1 || store.candidates[0].PolicyReason != PolicyRejectShadowMode || store.candidates[0].Confidence != 0.94 {
+		t.Fatalf("adaptive shadow candidate mismatch: %#v", store.candidates)
+	}
+	if len(store.memories) != 0 {
+		t.Fatalf("shadow candidate became durable memory: %#v", store.memories)
+	}
+	assertEventTypes(t, store.eventTypes(), []domain.RunEventType{
+		domain.EventMemoryCandidateProposed, domain.EventMemoryCandidateRejected,
+	})
+}
+
+func TestCuratorCommitsHighConfidenceAdaptiveCandidateInAutoMode(t *testing.T) {
+	store := &recordingStore{}
+	model := &stubCandidateModel{response: `{"decision":"add","kind":"project_convention","content":"The backend uses Go 1.25.5.","confidence":0.96}`}
+	curator := NewCuratorWithOptions(store, immediateEmbedder{}, CuratorOptions{
+		QueueSize: 4, JobTimeout: time.Second, AdaptiveMode: AdaptiveModeAuto,
+		Extractor: AdaptiveCandidateExtractor{Model: model},
+	})
+	if err := curator.Enqueue(CurationJob{RunID: "run_auto", Message: domain.Message{
+		ID: "msg_auto", ConversationID: "conv_test", Role: "user",
+		Content: "All backend code in this project must use Go 1.25.5.",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	closeCurator(t, curator)
+	if len(store.candidates) != 1 || store.candidates[0].Status != domain.MemoryCandidateAccepted {
+		t.Fatalf("adaptive candidate was not accepted: %#v", store.candidates)
+	}
+	if len(store.memories) != 1 || store.memories[0].Content != "The backend uses Go 1.25.5." {
+		t.Fatalf("adaptive memory mismatch: %#v", store.memories)
+	}
+}
+
+func TestCuratorPublishesAdaptiveExtractionFailure(t *testing.T) {
+	store := &recordingStore{}
+	model := &stubCandidateModel{response: "not json"}
+	curator := NewCuratorWithOptions(store, immediateEmbedder{}, CuratorOptions{
+		QueueSize: 4, JobTimeout: time.Second, AdaptiveMode: AdaptiveModeShadow,
+		Extractor: AdaptiveCandidateExtractor{Model: model},
+	})
+	if err := curator.Enqueue(CurationJob{RunID: "run_failed", Message: domain.Message{
+		ID: "msg_failed", Role: "user", Content: "The backend always uses a typed event contract for observability.",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	closeCurator(t, curator)
+	if len(store.candidates) != 0 || len(store.memories) != 0 {
+		t.Fatalf("failed extraction persisted state: candidates=%#v memories=%#v", store.candidates, store.memories)
+	}
+	assertEventTypes(t, store.eventTypes(), []domain.RunEventType{domain.EventMemoryCandidateFailed})
 }
 
 func TestCuratorPersistsRejectedSensitiveCandidate(t *testing.T) {

@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"strings"
 	"unicode/utf8"
 
@@ -12,6 +13,7 @@ const (
 	CandidateReasonPreference = "stable_preference"
 	CandidateReasonCorrection = "user_correction"
 	CandidateReasonConvention = "project_convention"
+	CandidateReasonAdaptive   = "adaptive_model"
 
 	PolicyAccepted          = "accepted"
 	PolicyRejectRole        = "unsupported_source_role"
@@ -20,16 +22,19 @@ const (
 	PolicyRejectSecret      = "potential_secret"
 	PolicyRejectTemporary   = "temporary_context"
 	PolicyRejectTaskOutcome = "task_outcome"
+	PolicyRejectConfidence  = "confidence_below_threshold"
+	PolicyRejectShadowMode  = "adaptive_shadow_mode"
 )
 
 type CandidateDraft struct {
 	Kind             string
 	Content          string
 	ExtractionReason string
+	Confidence       float64
 }
 
 type CandidateExtractor interface {
-	Extract(domain.Message) (CandidateDraft, bool)
+	Extract(context.Context, domain.Message) (CandidateDraft, bool, error)
 }
 
 type CandidatePolicy interface {
@@ -77,26 +82,29 @@ var candidatePatterns = []candidatePattern{
 	{prefix: "项目约定:", kind: "project_convention", reason: CandidateReasonConvention},
 }
 
-func (RuleBasedCandidateExtractor) Extract(message domain.Message) (CandidateDraft, bool) {
+func (RuleBasedCandidateExtractor) Extract(_ context.Context, message domain.Message) (CandidateDraft, bool, error) {
 	if !strings.EqualFold(strings.TrimSpace(message.Role), "user") {
-		return CandidateDraft{}, false
+		return CandidateDraft{}, false, nil
 	}
 	content := normalizeCandidateText(message.Content)
 	for _, pattern := range candidatePatterns {
 		if remainder, ok := trimPrefixFold(content, pattern.prefix); ok {
 			remainder = strings.TrimSpace(strings.TrimLeft(remainder, ":：,- "))
 			if remainder == "" {
-				return CandidateDraft{}, false
+				return CandidateDraft{}, false, nil
 			}
-			return CandidateDraft{Kind: pattern.kind, Content: remainder, ExtractionReason: pattern.reason}, true
+			return CandidateDraft{
+				Kind: pattern.kind, Content: remainder, ExtractionReason: pattern.reason, Confidence: 1,
+			}, true, nil
 		}
 	}
-	return CandidateDraft{}, false
+	return CandidateDraft{}, false, nil
 }
 
 type ConservativeCandidatePolicy struct {
-	MinRunes int
-	MaxRunes int
+	MinRunes      int
+	MaxRunes      int
+	MinConfidence float64
 }
 
 func (p ConservativeCandidatePolicy) Evaluate(message domain.Message, draft CandidateDraft) PolicyDecision {
@@ -127,6 +135,13 @@ func (p ConservativeCandidatePolicy) Evaluate(message domain.Message, draft Cand
 	}
 	if containsAny(lower, taskOutcomeMarkers) {
 		return PolicyDecision{Reason: PolicyRejectTaskOutcome}
+	}
+	minConfidence := p.MinConfidence
+	if minConfidence <= 0 || minConfidence > 1 {
+		minConfidence = 0.85
+	}
+	if draft.ExtractionReason == CandidateReasonAdaptive && draft.Confidence < minConfidence {
+		return PolicyDecision{Reason: PolicyRejectConfidence}
 	}
 	return PolicyDecision{Accepted: true, Reason: PolicyAccepted}
 }

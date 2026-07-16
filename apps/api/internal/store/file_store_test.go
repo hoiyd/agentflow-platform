@@ -524,7 +524,7 @@ func TestFileStoreMemoryCandidateRoundTripIsIdempotent(t *testing.T) {
 		ID: "memcand_test", ConversationID: "conv_test", RunID: "run_test",
 		SourceMessageID: "msg_test", SourceRole: "user", Kind: "preference",
 		Content: "concise answers", Status: domain.MemoryCandidateAccepted,
-		ExtractionReason: "stable_preference", PolicyReason: "accepted",
+		ExtractionReason: "adaptive_model", PolicyReason: "accepted", Confidence: 0.91,
 	}
 	created, ok, err := first.CreateMemoryCandidate(candidate)
 	if err != nil || !ok || created.ID != candidate.ID {
@@ -538,7 +538,7 @@ func TestFileStoreMemoryCandidateRoundTripIsIdempotent(t *testing.T) {
 		t.Fatalf("reload store: %v", err)
 	}
 	items, err := second.ListMemoryCandidates("conv_test")
-	if err != nil || len(items) != 1 || items[0].Content != candidate.Content {
+	if err != nil || len(items) != 1 || items[0].Content != candidate.Content || items[0].Confidence != candidate.Confidence {
 		t.Fatalf("candidate round trip: items=%#v err=%v", items, err)
 	}
 }

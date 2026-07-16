@@ -75,12 +75,13 @@ type RetrievalPayload struct {
 }
 
 type MemoryCandidatePayload struct {
-	CandidateID      string `json:"candidate_id,omitempty"`
-	SourceMessageID  string `json:"source_message_id"`
-	SourceRole       string `json:"source_role"`
-	Kind             string `json:"kind,omitempty"`
-	Status           string `json:"status"`
-	ExtractionReason string `json:"extraction_reason,omitempty"`
-	PolicyReason     string `json:"policy_reason,omitempty"`
-	Error            string `json:"error,omitempty"`
+	CandidateID      string  `json:"candidate_id,omitempty"`
+	SourceMessageID  string  `json:"source_message_id"`
+	SourceRole       string  `json:"source_role"`
+	Kind             string  `json:"kind,omitempty"`
+	Status           string  `json:"status"`
+	ExtractionReason string  `json:"extraction_reason,omitempty"`
+	PolicyReason     string  `json:"policy_reason,omitempty"`
+	Confidence       float64 `json:"confidence,omitempty"`
+	Error            string  `json:"error,omitempty"`
 }

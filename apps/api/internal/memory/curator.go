@@ -18,6 +18,9 @@ import (
 const (
 	defaultCurationQueueSize  = 256
 	defaultCurationJobTimeout = 30 * time.Second
+	AdaptiveModeOff           = "off"
+	AdaptiveModeShadow        = "shadow"
+	AdaptiveModeAuto          = "auto"
 )
 
 var (
@@ -41,23 +44,25 @@ type CurationJob struct {
 }
 
 type CuratorOptions struct {
-	QueueSize  int
-	JobTimeout time.Duration
-	Extractor  CandidateExtractor
-	Policy     CandidatePolicy
+	QueueSize    int
+	JobTimeout   time.Duration
+	Extractor    CandidateExtractor
+	Policy       CandidatePolicy
+	AdaptiveMode string
 }
 
-// Curator turns explicitly durable user statements into auditable candidates
-// and long-term memory without delaying the primary response.
+// Curator turns durable user statements into auditable candidates and
+// long-term memory without delaying the primary response.
 type Curator struct {
-	store      CuratorStore
-	embedder   Embedder
-	extractor  CandidateExtractor
-	policy     CandidatePolicy
-	jobs       chan CurationJob
-	jobTimeout time.Duration
-	ctx        context.Context
-	cancel     context.CancelFunc
+	store        CuratorStore
+	embedder     Embedder
+	extractor    CandidateExtractor
+	policy       CandidatePolicy
+	adaptiveMode string
+	jobs         chan CurationJob
+	jobTimeout   time.Duration
+	ctx          context.Context
+	cancel       context.CancelFunc
 
 	mu     sync.Mutex
 	closed bool
@@ -81,10 +86,12 @@ func NewCuratorWithOptions(store CuratorStore, embedder Embedder, options Curato
 	if options.Policy == nil {
 		options.Policy = ConservativeCandidatePolicy{}
 	}
+	options.AdaptiveMode = normalizeAdaptiveMode(options.AdaptiveMode)
 	ctx, cancel := context.WithCancel(context.Background())
 	curator := &Curator{
 		store: store, embedder: embedder, extractor: options.Extractor, policy: options.Policy,
-		jobs: make(chan CurationJob, options.QueueSize), jobTimeout: options.JobTimeout,
+		adaptiveMode: options.AdaptiveMode,
+		jobs:         make(chan CurationJob, options.QueueSize), jobTimeout: options.JobTimeout,
 		ctx: ctx, cancel: cancel,
 	}
 	curator.wg.Add(1)
@@ -142,11 +149,25 @@ func (c *Curator) run() {
 }
 
 func (c *Curator) curate(job CurationJob) {
-	draft, ok := c.extractor.Extract(job.Message)
+	ctx, cancel := context.WithTimeout(c.ctx, c.jobTimeout)
+	draft, ok, err := c.extractor.Extract(ctx, job.Message)
+	cancel()
+	if err != nil {
+		candidate := domain.MemoryCandidate{
+			ID: candidateID(job), ConversationID: job.Message.ConversationID, RunID: strings.TrimSpace(job.RunID),
+			SourceMessageID: job.Message.ID, SourceRole: strings.TrimSpace(job.Message.Role),
+		}
+		c.publish(job, domain.EventMemoryCandidateFailed, candidatePayload(candidate, "failed", err))
+		log.Printf("memory_candidate_extraction_failed run_id=%s message_id=%s error=%q", job.RunID, job.Message.ID, err.Error())
+		return
+	}
 	if !ok {
 		return
 	}
 	decision := c.policy.Evaluate(job.Message, draft)
+	if decision.Accepted && draft.ExtractionReason == CandidateReasonAdaptive && c.adaptiveMode != AdaptiveModeAuto {
+		decision = PolicyDecision{Reason: PolicyRejectShadowMode}
+	}
 	status := domain.MemoryCandidateRejected
 	if decision.Accepted {
 		status = domain.MemoryCandidateAccepted
@@ -160,7 +181,8 @@ func (c *Curator) curate(job CurationJob) {
 		SourceMessageID: job.Message.ID, SourceRole: strings.TrimSpace(job.Message.Role),
 		Kind: draft.Kind, Content: candidateContent, Status: status,
 		ExtractionReason: draft.ExtractionReason, PolicyReason: decision.Reason,
-		CreatedAt: time.Now().UTC(),
+		Confidence: draft.Confidence,
+		CreatedAt:  time.Now().UTC(),
 	}
 	createdCandidate, created, err := c.store.CreateMemoryCandidate(candidate)
 	if err != nil {
@@ -247,12 +269,24 @@ func candidatePayload(candidate domain.MemoryCandidate, status string, err error
 		CandidateID: candidate.ID, SourceMessageID: candidate.SourceMessageID,
 		SourceRole: candidate.SourceRole, Kind: candidate.Kind, Status: status,
 		ExtractionReason: candidate.ExtractionReason, PolicyReason: candidate.PolicyReason,
-		Error: errorMessage,
+		Confidence: candidate.Confidence,
+		Error:      errorMessage,
 	})
 	if payloadErr != nil {
 		return map[string]any{"status": status, "error": payloadErr.Error()}
 	}
 	return payload
+}
+
+func normalizeAdaptiveMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case AdaptiveModeAuto:
+		return AdaptiveModeAuto
+	case AdaptiveModeShadow:
+		return AdaptiveModeShadow
+	default:
+		return AdaptiveModeOff
+	}
 }
 
 func candidateID(job CurationJob) string {

@@ -415,6 +415,7 @@ type MemoryCandidate struct {
 	Status           MemoryCandidateStatus `json:"status"`
 	ExtractionReason string                `json:"extraction_reason"`
 	PolicyReason     string                `json:"policy_reason"`
+	Confidence       float64               `json:"confidence"`
 	CreatedAt        time.Time             `json:"created_at"`
 }
 

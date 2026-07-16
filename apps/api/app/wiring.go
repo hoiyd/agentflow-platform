@@ -66,7 +66,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	})
 	semanticMemory := memorypkg.NewSemanticMemory(appStore, modelClient)
 	knowledgeBase := knowledge.NewKnowledgeBase(appStore, modelClient)
-	memoryCurator := memorypkg.NewCurator(appStore, modelClient)
+	memoryCurator := newMemoryCurator(cfg, appStore, modelClient)
 	runController := concurrency.NewRunController(concurrency.RunOptions{
 		MaxConcurrent: cfg.MaxConcurrentRuns,
 		QueueSize:     cfg.RunQueueSize,
@@ -92,6 +92,21 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 
 	cleanupStore = false
 	return applicationDependencies{store: appStore, handler: handler, memoryCurator: memoryCurator}, nil
+}
+
+func newMemoryCurator(cfg config.Config, appStore store.Store, modelClient *openai.Client) *memorypkg.Curator {
+	var fallback memorypkg.CandidateExtractor
+	adaptiveEnabled := cfg.MemoryAdaptiveExtractionMode == memorypkg.AdaptiveModeShadow || cfg.MemoryAdaptiveExtractionMode == memorypkg.AdaptiveModeAuto
+	if strings.TrimSpace(cfg.OpenAIAPIKey) != "" && adaptiveEnabled {
+		fallback = memorypkg.AdaptiveCandidateExtractor{Model: modelClient}
+	}
+	return memorypkg.NewCuratorWithOptions(appStore, modelClient, memorypkg.CuratorOptions{
+		Extractor: memorypkg.CompositeCandidateExtractor{
+			Primary: memorypkg.RuleBasedCandidateExtractor{}, Fallback: fallback,
+		},
+		Policy:       memorypkg.ConservativeCandidatePolicy{MinConfidence: cfg.MemoryAdaptiveMinConfidence},
+		AdaptiveMode: cfg.MemoryAdaptiveExtractionMode,
+	})
 }
 
 func newModelClient(cfg config.Config) *openai.Client {

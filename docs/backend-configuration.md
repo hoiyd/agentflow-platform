@@ -69,6 +69,19 @@ EMBEDDING_DIMENSIONS=1536
 
 After changing embedding model/provider, re-upload or reindex documents. Search filters candidates by embedding provider/model so old chunks are not mixed with the new query vector space.
 
+## Adaptive Memory Extraction
+
+The Memory Curator always recognizes explicit durability signals through deterministic rules. Optional adaptive extraction runs only after the rule path returns no Candidate:
+
+```bash
+MEMORY_ADAPTIVE_EXTRACTION_MODE=shadow
+MEMORY_ADAPTIVE_MIN_CONFIDENCE=0.85
+```
+
+Modes are `off`, `shadow`, and `auto`. `shadow` records model proposals for evaluation but does not commit them to durable Memory. `auto` commits only proposals that pass the confidence threshold and the deterministic safety policy. No adaptive model request is made when `OPENAI_API_KEY` is empty.
+
+Adaptive extraction uses the configured chat model and therefore consumes the same global concurrency, RPM, and TPM budgets as normal model requests. Explicit rule matches remain model-free.
+
 ## Postgres + pgvector
 
 By default the backend uses the local file store. To use Postgres:
