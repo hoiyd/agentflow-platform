@@ -16,8 +16,8 @@ import (
 	"agentflow-platform/apps/api/internal/tools"
 )
 
-type MemoryQueue interface {
-	Enqueue(memorypkg.Job) error
+type MemoryCurationQueue interface {
+	Enqueue(memorypkg.CurationJob) error
 }
 
 // MemoryOperations is the transport-facing subset of semantic memory behavior.
@@ -42,7 +42,7 @@ type Dependencies struct {
 	AgentRuntime   *agent.Runtime
 	Memory         MemoryOperations
 	Knowledge      KnowledgeOperations
-	MemoryQueue    MemoryQueue
+	MemoryCuration MemoryCurationQueue
 	RunController  *concurrency.RunController
 	AllowedOrigins []string
 }
@@ -54,7 +54,7 @@ type Handler struct {
 	agentRuntime   *agent.Runtime
 	memories       MemoryOperations
 	knowledge      KnowledgeOperations
-	memoryQueue    MemoryQueue
+	memoryCuration MemoryCurationQueue
 	runController  *concurrency.RunController
 	allowedOrigins []string
 }
@@ -78,8 +78,8 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 	if dependencies.Knowledge == nil {
 		return nil, errors.New("http api knowledge operations are required")
 	}
-	if dependencies.MemoryQueue == nil {
-		return nil, errors.New("http api memory queue is required")
+	if dependencies.MemoryCuration == nil {
+		return nil, errors.New("http api memory curation queue is required")
 	}
 	if dependencies.RunController == nil {
 		return nil, errors.New("http api run controller is required")
@@ -91,7 +91,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		agentRuntime:   dependencies.AgentRuntime,
 		memories:       dependencies.Memory,
 		knowledge:      dependencies.Knowledge,
-		memoryQueue:    dependencies.MemoryQueue,
+		memoryCuration: dependencies.MemoryCuration,
 		runController:  dependencies.RunController,
 		allowedOrigins: append([]string(nil), dependencies.AllowedOrigins...),
 	}, nil

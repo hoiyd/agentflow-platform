@@ -8,7 +8,7 @@ Full-stack AI agent workflow platform with streaming chat, agent runs, persisten
 - Single-agent, multi-agent, and autonomous run modes.
 - Run lifecycle tracking with collaboration steps, trace events, replay, and cancel/resume/continue flows.
 - Built-in tool catalog with enable/disable controls and guarded execution.
-- Persistent semantic memory backed by embeddings.
+- Curated semantic memory backed by embeddings; ordinary chat and assistant output remain conversation history.
 - RAG knowledge base with text, `.txt`, `.md`, and `.markdown` ingestion.
 - Markdown-aware chunking with heading, list, paragraph, and fenced-code metadata.
 - pgvector/Postgres support for memory and document chunk similarity search.
@@ -66,6 +66,7 @@ Set `NEXT_PUBLIC_API_BASE_URL` only if the API is not running on `http://localho
 - [Backend Architecture](docs/backend-architecture.md): Go package ownership, dependency direction, application composition, and lifecycle.
 - [Backend Configuration](docs/backend-configuration.md): environment variables, concurrency, retry policy, model and embedding providers, Postgres, and tool configuration.
 - [Context Management](docs/context-management.md): context assembly, compaction triggers, algorithm, compression ratio, persistence, and failure behavior.
+- [Memory Management](docs/memory-management.md): hybrid candidate extraction, shadow evaluation, curation policy, background persistence, events, and legacy cleanup.
 - [Knowledge / RAG](docs/knowledge-rag.md): document ingestion, Markdown chunking, vector search, and reranking.
 - [API Reference](docs/api-reference.md): HTTP endpoints and an example RAG response.
 - [Verification Guide](docs/verification-guide.md): backend tests, frontend build, RAG checks, and replay checks.

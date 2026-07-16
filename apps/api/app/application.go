@@ -16,10 +16,10 @@ import (
 
 // Application owns the API process lifecycle and its composed dependencies.
 type Application struct {
-	config config.Config
-	store  store.Store
-	memory *memorypkg.Syncer
-	server *http.Server
+	config        config.Config
+	store         store.Store
+	memoryCurator *memorypkg.Curator
+	server        *http.Server
 
 	closeOnce sync.Once
 	closeErr  error
@@ -32,9 +32,9 @@ func New(cfg config.Config) (*Application, error) {
 	}
 
 	return &Application{
-		config: cfg,
-		store:  dependencies.store,
-		memory: dependencies.memory,
+		config:        cfg,
+		store:         dependencies.store,
+		memoryCurator: dependencies.memoryCurator,
 		server: &http.Server{
 			Addr:              ":" + cfg.Port,
 			Handler:           dependencies.handler.Routes(),
@@ -74,9 +74,9 @@ func (a *Application) Close(ctx context.Context) error {
 
 	a.closeOnce.Do(func() {
 		var closeErrors []error
-		if a.memory != nil {
-			if err := a.memory.Close(ctx); err != nil {
-				closeErrors = append(closeErrors, fmt.Errorf("drain memory sync: %w", err))
+		if a.memoryCurator != nil {
+			if err := a.memoryCurator.Close(ctx); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("drain memory curation: %w", err))
 			}
 		}
 		if err := closeStore(a.store); err != nil {

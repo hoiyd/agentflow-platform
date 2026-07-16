@@ -31,6 +31,7 @@ type fileData struct {
 	CollaborationSteps []domain.CollaborationStep      `json:"collaboration_steps"`
 	RunEvents          []domain.RunEvent               `json:"run_events"`
 	ContextCompactions []domain.ContextCompaction      `json:"context_compactions"`
+	MemoryCandidates   []domain.MemoryCandidate        `json:"memory_candidates"`
 	Memories           []domain.Memory                 `json:"memories"`
 	MemoryEmbeddings   []domain.MemoryEmbedding        `json:"memory_embeddings"`
 	Documents          []domain.Document               `json:"documents"`
@@ -236,6 +237,36 @@ func (s *FileStore) GetLatestContextCompaction(conversationID string) (domain.Co
 func cloneContextCompaction(item domain.ContextCompaction) domain.ContextCompaction {
 	item.SourceMessageIDs = append([]string(nil), item.SourceMessageIDs...)
 	return item
+}
+
+func (s *FileStore) CreateMemoryCandidate(candidate domain.MemoryCandidate) (domain.MemoryCandidate, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var err error
+	candidate, err = normalizeMemoryCandidate(candidate)
+	if err != nil {
+		return domain.MemoryCandidate{}, false, err
+	}
+	for _, existing := range s.data.MemoryCandidates {
+		if existing.ID == candidate.ID {
+			return existing, false, nil
+		}
+	}
+	s.data.MemoryCandidates = append(s.data.MemoryCandidates, candidate)
+	return candidate, true, s.saveLocked()
+}
+
+func (s *FileStore) ListMemoryCandidates(conversationID string) ([]domain.MemoryCandidate, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	items := make([]domain.MemoryCandidate, 0, len(s.data.MemoryCandidates))
+	for _, candidate := range s.data.MemoryCandidates {
+		if conversationID == "" || candidate.ConversationID == conversationID {
+			items = append(items, candidate)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
+	return items, nil
 }
 
 func (s *FileStore) UpdateConversationTitle(id string, title string) error {
@@ -779,6 +810,48 @@ func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.Retriev
 	return items, nil
 }
 
+func (s *FileStore) ListLegacyMessageMemories() ([]domain.Memory, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	items := []domain.Memory{}
+	for _, item := range s.data.Memories {
+		if isLegacyMessageMemory(item) {
+			items = append(items, item)
+		}
+	}
+	return items, nil
+}
+
+func (s *FileStore) DeleteLegacyMessageMemories(ids []string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	wanted := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		wanted[strings.TrimSpace(id)] = true
+	}
+	deleted := map[string]bool{}
+	memories := make([]domain.Memory, 0, len(s.data.Memories))
+	for _, item := range s.data.Memories {
+		if wanted[item.ID] && isLegacyMessageMemory(item) {
+			deleted[item.ID] = true
+			continue
+		}
+		memories = append(memories, item)
+	}
+	if len(deleted) == 0 {
+		return 0, nil
+	}
+	embeddings := make([]domain.MemoryEmbedding, 0, len(s.data.MemoryEmbeddings))
+	for _, embedding := range s.data.MemoryEmbeddings {
+		if !deleted[embedding.MemoryID] {
+			embeddings = append(embeddings, embedding)
+		}
+	}
+	s.data.Memories = memories
+	s.data.MemoryEmbeddings = embeddings
+	return len(deleted), s.saveLocked()
+}
+
 func (s *FileStore) CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1096,6 +1169,7 @@ func emptyFileData() fileData {
 		CollaborationSteps: []domain.CollaborationStep{},
 		RunEvents:          []domain.RunEvent{},
 		ContextCompactions: []domain.ContextCompaction{},
+		MemoryCandidates:   []domain.MemoryCandidate{},
 		Memories:           []domain.Memory{},
 		MemoryEmbeddings:   []domain.MemoryEmbedding{},
 		Documents:          []domain.Document{},
@@ -1125,6 +1199,9 @@ func (s *FileStore) normalizeLoadedDataLocked() {
 	}
 	if s.data.ContextCompactions == nil {
 		s.data.ContextCompactions = []domain.ContextCompaction{}
+	}
+	if s.data.MemoryCandidates == nil {
+		s.data.MemoryCandidates = []domain.MemoryCandidate{}
 	}
 	if s.data.Memories == nil {
 		s.data.Memories = []domain.Memory{}
@@ -1224,7 +1301,7 @@ func buildRunTraceSummary(run domain.Run, events []domain.RunEvent) domain.RunTr
 			}
 		case domain.EventToolCompleted, domain.EventToolFailed:
 			summary.ToolCalls++
-		case domain.EventModelFailed, domain.EventRetrievalFailed, domain.EventMemorySyncFailed:
+		case domain.EventModelFailed, domain.EventRetrievalFailed, domain.EventMemoryCandidateFailed, domain.EventMemorySyncFailed:
 			summary.ErrorCount++
 		}
 	}

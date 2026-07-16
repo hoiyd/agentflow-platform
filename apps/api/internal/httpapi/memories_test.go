@@ -52,14 +52,14 @@ func TestMemoryCreateAndSearchAPI(t *testing.T) {
 	}
 }
 
-func TestRememberMessageCreatesSearchableEmbedding(t *testing.T) {
+func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
 	client := newLocalFallbackOpenAIClientForTest()
-	memorySyncer := memorypkg.NewSyncer(fileStore, client)
-	handler := &Handler{store: fileStore, openAI: client, memoryQueue: memorySyncer}
+	memoryCurator := memorypkg.NewCurator(fileStore, client)
+	handler := &Handler{store: fileStore, openAI: client, memoryCuration: memoryCurator}
 	conversation, err := fileStore.CreateConversation("memory sync")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -76,11 +76,11 @@ func TestRememberMessageCreatesSearchableEmbedding(t *testing.T) {
 		CreatedAt:      time.Now().UTC(),
 	}
 
-	handler.enqueueMemorySync(message, run.ID)
+	handler.enqueueMemoryCuration(message, run.ID)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if err := memorySyncer.Close(ctx); err != nil {
-		t.Fatalf("drain memory sync: %v", err)
+	if err := memoryCurator.Close(ctx); err != nil {
+		t.Fatalf("drain memory curation: %v", err)
 	}
 	queryEmbedding, err := handler.openAI.EmbedText(context.Background(), "pgvector semantic memory embeddings")
 	if err != nil {
@@ -88,7 +88,7 @@ func TestRememberMessageCreatesSearchableEmbedding(t *testing.T) {
 	}
 	items, err := fileStore.SearchMemories(domain.MemorySearch{
 		Embedding: queryEmbedding.Vector,
-		Metadata:  map[string]string{"role": "user"},
+		Metadata:  map[string]string{"source_role": "user"},
 		Limit:     1,
 	})
 	if err != nil {
@@ -107,7 +107,20 @@ func TestRememberMessageCreatesSearchableEmbedding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list run events: %v", err)
 	}
-	if len(events) != 2 || events[0].Type != domain.EventMemorySyncRequested || events[1].Type != domain.EventMemorySyncCompleted {
-		t.Fatalf("unexpected memory sync events: %#v", events)
+	wantEvents := []domain.RunEventType{
+		domain.EventMemoryCandidateProposed, domain.EventMemoryCandidateAccepted,
+		domain.EventMemorySyncRequested, domain.EventMemorySyncCompleted,
+	}
+	if len(events) != len(wantEvents) {
+		t.Fatalf("unexpected memory curation events: %#v", events)
+	}
+	for index, want := range wantEvents {
+		if events[index].Type != want {
+			t.Fatalf("event[%d]=%s want=%s", index, events[index].Type, want)
+		}
+	}
+	candidates, err := fileStore.ListMemoryCandidates(conversation.ID)
+	if err != nil || len(candidates) != 1 || candidates[0].Status != domain.MemoryCandidateAccepted {
+		t.Fatalf("accepted candidate was not persisted: candidates=%#v err=%v", candidates, err)
 	}
 }

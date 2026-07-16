@@ -27,7 +27,8 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 		_ = store.DeleteConversation(conversation.ID)
 	})
 
-	if _, err := store.AddMessage(conversation.ID, "user", "hello"); err != nil {
+	message, err := store.AddMessage(conversation.ID, "user", "hello")
+	if err != nil {
 		t.Fatalf("add message: %v", err)
 	}
 	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
@@ -37,6 +38,21 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	run, err = store.UpdateRunStatus(run.ID, domain.RunRunning, "")
 	if err != nil {
 		t.Fatalf("mark running: %v", err)
+	}
+	candidate, created, err := store.CreateMemoryCandidate(domain.MemoryCandidate{
+		ID: "memcand_" + message.ID, ConversationID: conversation.ID, RunID: run.ID,
+		SourceMessageID: message.ID, SourceRole: "user", Kind: "fact", Content: "hello",
+		Status: domain.MemoryCandidateAccepted, ExtractionReason: "adaptive_model", PolicyReason: "accepted", Confidence: 0.92,
+	})
+	if err != nil || !created {
+		t.Fatalf("create memory candidate: candidate=%#v created=%v err=%v", candidate, created, err)
+	}
+	if _, created, err := store.CreateMemoryCandidate(candidate); err != nil || created {
+		t.Fatalf("duplicate candidate should be idempotent: created=%v err=%v", created, err)
+	}
+	candidates, err := store.ListMemoryCandidates(conversation.ID)
+	if err != nil || len(candidates) != 1 || candidates[0].ID != candidate.ID || candidates[0].Confidence != candidate.Confidence {
+		t.Fatalf("postgres memory candidate round trip: candidates=%#v err=%v", candidates, err)
 	}
 	compaction, err := store.CreateContextCompaction(domain.ContextCompaction{
 		ConversationID: conversation.ID, RunID: run.ID, Trigger: "soft", Summary: "summary",

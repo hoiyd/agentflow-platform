@@ -233,9 +233,10 @@ Overall autonomous budget and iteration status use `run.progress`. Stage events
 describe named orchestration phases; they must not use `workflow.*` or overload
 `step.*`.
 
-Memory synchronization is an auxiliary Run activity. `memory.sync.*` records
-requested, completed, and failed persistence without changing the outcome of a
-successfully completed Turn.
+Memory curation is an auxiliary Run activity. `memory.candidate.*` records the
+proposal and policy decision for an explicitly durable user fact.
+`memory.sync.*` records embedding and persistence of an accepted Candidate.
+Neither activity changes the outcome of a successfully completed Turn.
 
 ## Quick reference
 

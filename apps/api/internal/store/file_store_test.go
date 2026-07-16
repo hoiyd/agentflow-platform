@@ -514,6 +514,66 @@ func TestFileStoreMemorySearchUsesMetadataSimilarityAndRecency(t *testing.T) {
 	}
 }
 
+func TestFileStoreMemoryCandidateRoundTripIsIdempotent(t *testing.T) {
+	path := t.TempDir() + "/agentflow.json"
+	first, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	candidate := domain.MemoryCandidate{
+		ID: "memcand_test", ConversationID: "conv_test", RunID: "run_test",
+		SourceMessageID: "msg_test", SourceRole: "user", Kind: "preference",
+		Content: "concise answers", Status: domain.MemoryCandidateAccepted,
+		ExtractionReason: "adaptive_model", PolicyReason: "accepted", Confidence: 0.91,
+	}
+	created, ok, err := first.CreateMemoryCandidate(candidate)
+	if err != nil || !ok || created.ID != candidate.ID {
+		t.Fatalf("create candidate: created=%#v ok=%v err=%v", created, ok, err)
+	}
+	if _, ok, err := first.CreateMemoryCandidate(candidate); err != nil || ok {
+		t.Fatalf("duplicate candidate should be idempotent: ok=%v err=%v", ok, err)
+	}
+	second, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("reload store: %v", err)
+	}
+	items, err := second.ListMemoryCandidates("conv_test")
+	if err != nil || len(items) != 1 || items[0].Content != candidate.Content || items[0].Confidence != candidate.Confidence {
+		t.Fatalf("candidate round trip: items=%#v err=%v", items, err)
+	}
+}
+
+func TestFileStoreLegacyMessageMemoryCleanupPreservesCuratedMemory(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	legacy, err := store.CreateMemory(domain.Memory{
+		ID: "mem_msg_legacy", SourceMessageID: "msg_legacy", Kind: "message", Content: "raw chat",
+	}, domain.MemoryEmbedding{Embedding: []float64{1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	curated, err := store.CreateMemory(domain.Memory{
+		ID: "mem_curated_test", SourceMessageID: "msg_curated", Kind: "preference", Content: "concise answers",
+	}, domain.MemoryEmbedding{Embedding: []float64{1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := store.ListLegacyMessageMemories()
+	if err != nil || len(items) != 1 || items[0].ID != legacy.ID {
+		t.Fatalf("legacy scan: items=%#v err=%v", items, err)
+	}
+	deleted, err := store.DeleteLegacyMessageMemories([]string{legacy.ID, curated.ID})
+	if err != nil || deleted != 1 {
+		t.Fatalf("legacy delete: deleted=%d err=%v", deleted, err)
+	}
+	results, err := store.SearchMemories(domain.MemorySearch{Embedding: []float64{1}, Limit: 5})
+	if err != nil || len(results) != 1 || results[0].Memory.ID != curated.ID {
+		t.Fatalf("curated memory was not preserved: results=%#v err=%v", results, err)
+	}
+}
+
 func TestFileStoreDocumentSearchUsesMetadataSimilarityAndRecency(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

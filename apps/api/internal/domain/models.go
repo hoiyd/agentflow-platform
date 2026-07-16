@@ -225,40 +225,44 @@ type ChatChunk struct {
 type RunEventType string
 
 const (
-	EventRunCreated          RunEventType = "run.created"
-	EventRunStarted          RunEventType = "run.started"
-	EventRunProgress         RunEventType = "run.progress"
-	EventRunWaitingForUser   RunEventType = "run.waiting_for_user"
-	EventRunResumed          RunEventType = "run.resumed"
-	EventRunCancelRequested  RunEventType = "run.cancel_requested"
-	EventRunCanceled         RunEventType = "run.canceled"
-	EventRunCompleted        RunEventType = "run.completed"
-	EventRunFailed           RunEventType = "run.failed"
-	EventStageStarted        RunEventType = "stage.started"
-	EventStageCompleted      RunEventType = "stage.completed"
-	EventStageFailed         RunEventType = "stage.failed"
-	EventStageCanceled       RunEventType = "stage.canceled"
-	EventTurnStarted         RunEventType = "turn.started"
-	EventTurnCompleted       RunEventType = "turn.completed"
-	EventTurnFailed          RunEventType = "turn.failed"
-	EventTurnCanceled        RunEventType = "turn.canceled"
-	EventModelStarted        RunEventType = "model.started"
-	EventModelDelta          RunEventType = "model.delta"
-	EventModelCompleted      RunEventType = "model.completed"
-	EventModelFailed         RunEventType = "model.failed"
-	EventContextAssembled    RunEventType = "context.assembled"
-	EventCompactionStarted   RunEventType = "context.compaction_started"
-	EventCompactionCompleted RunEventType = "context.compaction_completed"
-	EventCompactionFailed    RunEventType = "context.compaction_failed"
-	EventToolStarted         RunEventType = "tool.started"
-	EventToolCompleted       RunEventType = "tool.completed"
-	EventToolFailed          RunEventType = "tool.failed"
-	EventRetrievalStarted    RunEventType = "retrieval.started"
-	EventRetrievalCompleted  RunEventType = "retrieval.completed"
-	EventRetrievalFailed     RunEventType = "retrieval.failed"
-	EventMemorySyncRequested RunEventType = "memory.sync.requested"
-	EventMemorySyncCompleted RunEventType = "memory.sync.completed"
-	EventMemorySyncFailed    RunEventType = "memory.sync.failed"
+	EventRunCreated              RunEventType = "run.created"
+	EventRunStarted              RunEventType = "run.started"
+	EventRunProgress             RunEventType = "run.progress"
+	EventRunWaitingForUser       RunEventType = "run.waiting_for_user"
+	EventRunResumed              RunEventType = "run.resumed"
+	EventRunCancelRequested      RunEventType = "run.cancel_requested"
+	EventRunCanceled             RunEventType = "run.canceled"
+	EventRunCompleted            RunEventType = "run.completed"
+	EventRunFailed               RunEventType = "run.failed"
+	EventStageStarted            RunEventType = "stage.started"
+	EventStageCompleted          RunEventType = "stage.completed"
+	EventStageFailed             RunEventType = "stage.failed"
+	EventStageCanceled           RunEventType = "stage.canceled"
+	EventTurnStarted             RunEventType = "turn.started"
+	EventTurnCompleted           RunEventType = "turn.completed"
+	EventTurnFailed              RunEventType = "turn.failed"
+	EventTurnCanceled            RunEventType = "turn.canceled"
+	EventModelStarted            RunEventType = "model.started"
+	EventModelDelta              RunEventType = "model.delta"
+	EventModelCompleted          RunEventType = "model.completed"
+	EventModelFailed             RunEventType = "model.failed"
+	EventContextAssembled        RunEventType = "context.assembled"
+	EventCompactionStarted       RunEventType = "context.compaction_started"
+	EventCompactionCompleted     RunEventType = "context.compaction_completed"
+	EventCompactionFailed        RunEventType = "context.compaction_failed"
+	EventToolStarted             RunEventType = "tool.started"
+	EventToolCompleted           RunEventType = "tool.completed"
+	EventToolFailed              RunEventType = "tool.failed"
+	EventRetrievalStarted        RunEventType = "retrieval.started"
+	EventRetrievalCompleted      RunEventType = "retrieval.completed"
+	EventRetrievalFailed         RunEventType = "retrieval.failed"
+	EventMemoryCandidateProposed RunEventType = "memory.candidate.proposed"
+	EventMemoryCandidateAccepted RunEventType = "memory.candidate.accepted"
+	EventMemoryCandidateRejected RunEventType = "memory.candidate.rejected"
+	EventMemoryCandidateFailed   RunEventType = "memory.candidate.failed"
+	EventMemorySyncRequested     RunEventType = "memory.sync.requested"
+	EventMemorySyncCompleted     RunEventType = "memory.sync.completed"
+	EventMemorySyncFailed        RunEventType = "memory.sync.failed"
 )
 
 type ContextManifestEntry struct {
@@ -389,6 +393,30 @@ type EpisodeVerification struct {
 	Status   string   `json:"status"`
 	Evidence []string `json:"evidence"`
 	Warnings []string `json:"warnings"`
+}
+
+type MemoryCandidateStatus string
+
+const (
+	MemoryCandidateAccepted MemoryCandidateStatus = "accepted"
+	MemoryCandidateRejected MemoryCandidateStatus = "rejected"
+)
+
+// MemoryCandidate is an auditable proposal derived from a source message.
+// Raw messages remain authoritative; only accepted candidates become Memory.
+type MemoryCandidate struct {
+	ID               string                `json:"id"`
+	ConversationID   string                `json:"conversation_id,omitempty"`
+	RunID            string                `json:"run_id,omitempty"`
+	SourceMessageID  string                `json:"source_message_id"`
+	SourceRole       string                `json:"source_role"`
+	Kind             string                `json:"kind"`
+	Content          string                `json:"content"`
+	Status           MemoryCandidateStatus `json:"status"`
+	ExtractionReason string                `json:"extraction_reason"`
+	PolicyReason     string                `json:"policy_reason"`
+	Confidence       float64               `json:"confidence"`
+	CreatedAt        time.Time             `json:"created_at"`
 }
 
 type Memory struct {

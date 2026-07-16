@@ -60,7 +60,11 @@ type Config struct {
 	// ContextCompactionSummaryMaxTokens caps the persisted structured summary.
 	ContextCompactionSummaryMaxTokens int
 	// ContextCompactionTimeout limits one auxiliary summary request.
-	ContextCompactionTimeout      time.Duration
+	ContextCompactionTimeout time.Duration
+	// MemoryAdaptiveExtractionMode supports off, shadow, or auto.
+	MemoryAdaptiveExtractionMode string
+	// MemoryAdaptiveMinConfidence is the commit threshold for model-proposed candidates.
+	MemoryAdaptiveMinConfidence   float64
 	RouterMode                    string
 	AutonomousMaxIterations       int
 	AutonomousMaxRuntime          time.Duration
@@ -108,6 +112,8 @@ func Load() Config {
 		ContextCompactionRecentTokens:     getIntEnv("CONTEXT_COMPACTION_RECENT_TOKENS", 16000),
 		ContextCompactionSummaryMaxTokens: getIntEnv("CONTEXT_COMPACTION_SUMMARY_MAX_TOKENS", 2000),
 		ContextCompactionTimeout:          getDurationEnv("CONTEXT_COMPACTION_TIMEOUT", 45*time.Second),
+		MemoryAdaptiveExtractionMode:      normalizeAdaptiveMemoryMode(getEnv("MEMORY_ADAPTIVE_EXTRACTION_MODE", "shadow")),
+		MemoryAdaptiveMinConfidence:       getUnitFloatEnv("MEMORY_ADAPTIVE_MIN_CONFIDENCE", 0.85),
 		RouterMode:                        normalizeRouterMode(getEnv("ROUTER_MODE", "auto")),
 		AutonomousMaxIterations:           getIntEnv("AUTONOMOUS_MAX_ITERATIONS", 5),
 		AutonomousMaxRuntime:              getAutonomousRuntime(),
@@ -145,6 +151,15 @@ func normalizeCompactionMode(value string) string {
 		return "off"
 	}
 	return "auto"
+}
+
+func normalizeAdaptiveMemoryMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "shadow", "auto":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "off"
+	}
 }
 
 func getDurationEnv(key string, fallback time.Duration) time.Duration {
@@ -190,6 +205,18 @@ func getFloatEnv(key string, fallback float64) float64 {
 	}
 	parsed, err := strconv.ParseFloat(value, 64)
 	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func getUnitFloatEnv(key string, fallback float64) float64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil || parsed <= 0 || parsed > 1 {
 		return fallback
 	}
 	return parsed
