@@ -2,10 +2,10 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	tracepkg "agentflow-platform/apps/api/internal/event"
@@ -16,13 +16,14 @@ import (
 )
 
 type Runtime struct {
-	store            RuntimeStore
-	openAI           *openai.Client
-	tools            *tools.Manager
-	trace            *eventpkg.Recorder
-	turnEngine       *turnpkg.Engine
-	routerMode       string
-	autonomousLimits AutonomousLimits
+	store                 RuntimeStore
+	openAI                *openai.Client
+	tools                 *tools.Manager
+	trace                 *eventpkg.Recorder
+	turnEngine            *turnpkg.Engine
+	routerMode            string
+	contextAssemblyConfig domain.ContextAssemblyConfig
+	autonomousLimits      AutonomousLimits
 }
 
 type RuntimeStore interface {
@@ -66,15 +67,20 @@ func NewRuntimeWithRouterMode(store RuntimeStore, openAI *openai.Client, tools *
 
 func NewRuntimeWithRouterModeAndLimits(store RuntimeStore, openAI *openai.Client, tools *tools.Manager, routerMode string, limits AutonomousLimits) *Runtime {
 	runtime := &Runtime{
-		store:            store,
-		openAI:           openAI,
-		tools:            tools,
-		trace:            tracepkg.NewRecorder(store),
-		routerMode:       NormalizeRouterMode(routerMode),
-		autonomousLimits: normalizeAutonomousLimits(limits),
+		store:                 store,
+		openAI:                openAI,
+		tools:                 tools,
+		trace:                 tracepkg.NewRecorder(store),
+		routerMode:            NormalizeRouterMode(routerMode),
+		contextAssemblyConfig: contextassembly.DefaultConfig(),
+		autonomousLimits:      normalizeAutonomousLimits(limits),
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime
+}
+
+func (r *Runtime) SetContextAssemblyConfig(config domain.ContextAssemblyConfig) {
+	r.contextAssemblyConfig = contextassembly.NormalizeConfig(config)
 }
 
 func DefaultAutonomousLimits() AutonomousLimits {
@@ -276,17 +282,6 @@ func (r *Runtime) executorFor(kind string, client *openai.Client) AgentExecutor 
 	}
 }
 
-func promptWithRetrievedContext(systemPrompt string, memories []domain.RetrievedMemory, chunks []domain.RetrievedDocumentChunk) string {
-	systemPrompt = strings.TrimSpace(systemPrompt)
-	if len(memories) > 0 {
-		systemPrompt += "\n\n" + formatRuntimeRetrievedMemories(memories)
-	}
-	if len(chunks) > 0 {
-		systemPrompt += "\n\n" + formatRuntimeRetrievedChunks(chunks)
-	}
-	return strings.TrimSpace(systemPrompt)
-}
-
 func retrievalTracePayload(memories []domain.RetrievedMemory, chunks []domain.RetrievedDocumentChunk) map[string]any {
 	payload := map[string]any{}
 	if len(memories) > 0 {
@@ -320,28 +315,6 @@ func retrievalTracePayload(memories []domain.RetrievedMemory, chunks []domain.Re
 		payload["retrieved_chunks"] = items
 	}
 	return payload
-}
-
-func formatRuntimeRetrievedMemories(memories []domain.RetrievedMemory) string {
-	var builder strings.Builder
-	builder.WriteString("Retrieved memories. Use them when relevant, and ignore them when they are not relevant:\n")
-	for index, memory := range memories {
-		builder.WriteString(fmt.Sprintf("%d. id=%s kind=%s score=%.4f\n", index+1, memory.Memory.ID, memory.Memory.Kind, memory.Score))
-		builder.WriteString(truncateRuntimeText(memory.Memory.Content, 1200))
-		builder.WriteString("\n")
-	}
-	return strings.TrimSpace(builder.String())
-}
-
-func formatRuntimeRetrievedChunks(chunks []domain.RetrievedDocumentChunk) string {
-	var builder strings.Builder
-	builder.WriteString("Retrieved document chunks. Use them when relevant, and ignore them when they are not relevant:\n")
-	for index, chunk := range chunks {
-		builder.WriteString(fmt.Sprintf("%d. document=%s chunk=%s score=%.4f\n", index+1, chunk.Document.Title, chunk.Chunk.ID, chunk.Score))
-		builder.WriteString(truncateRuntimeText(chunk.Chunk.Content, 1600))
-		builder.WriteString("\n")
-	}
-	return strings.TrimSpace(builder.String())
 }
 
 func truncateRuntimeText(value string, limit int) string {

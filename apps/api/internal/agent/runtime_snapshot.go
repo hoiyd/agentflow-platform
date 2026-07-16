@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/tools"
@@ -53,9 +54,10 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 			EmbeddingBaseURL: identity.EmbeddingBaseURL, EmbeddingModel: identity.EmbeddingModel,
 			EmbeddingDimensions: identity.EmbeddingDimensions,
 		},
-		Tools:      toolSnapshots,
-		RouterMode: r.routerMode,
-		CreatedAt:  time.Now().UTC(),
+		Tools:           toolSnapshots,
+		ContextAssembly: contextassembly.NormalizeConfig(r.contextAssemblyConfig),
+		RouterMode:      r.routerMode,
+		CreatedAt:       time.Now().UTC(),
 	}
 	if mode == ChatModeAutonomous {
 		snapshot.AutonomousLimits = &domain.RuntimeLimitsSnapshot{
@@ -123,6 +125,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 		return restoredRuntime{}, fmt.Errorf("%w for run %s: %v; run cannot be resumed safely", ErrRuntimeSnapshotUnavailable, run.ID, err)
 	}
 	snapshot := run.RuntimeSnapshot
+	snapshot.ContextAssembly = contextassembly.NormalizeConfig(snapshot.ContextAssembly)
 	current, err := r.currentCatalog()
 	if err != nil {
 		return restoredRuntime{}, err
@@ -157,7 +160,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 }
 
 func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
-	if snapshot == nil || snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion {
+	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
 		return ErrRuntimeSnapshotUnavailable
 	}
 	switch snapshot.Mode {
@@ -205,6 +208,7 @@ func (r *Runtime) snapshotForRun(runID string) (*domain.RuntimeSnapshot, error) 
 	if err := validateRuntimeSnapshot(run.RuntimeSnapshot); err != nil {
 		return nil, fmt.Errorf("%w for run %s: %v", ErrRuntimeSnapshotUnavailable, runID, err)
 	}
+	run.RuntimeSnapshot.ContextAssembly = contextassembly.NormalizeConfig(run.RuntimeSnapshot.ContextAssembly)
 	return run.RuntimeSnapshot, nil
 }
 

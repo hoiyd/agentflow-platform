@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"agentflow-platform/apps/api/internal/domain"
 )
 
 func TestParseFallbackToolCall(t *testing.T) {
@@ -103,7 +101,7 @@ func TestOllamaEmbeddingRequestPayload(t *testing.T) {
 }
 
 func TestBuildMessagesWithSystemPrompt(t *testing.T) {
-	messages := buildMessagesWithSystemPrompt("You are a test agent.", nil, []string{"calculator"}, nil, nil)
+	messages := buildMessagesWithSystemPrompt("You are a test agent.", nil, []string{"calculator"})
 	if len(messages) != 1 {
 		t.Fatalf("expected one system message, got %d", len(messages))
 	}
@@ -112,47 +110,5 @@ func TestBuildMessagesWithSystemPrompt(t *testing.T) {
 	}
 	if !strings.Contains(messages[0].Content, "You are a test agent.") {
 		t.Fatalf("expected custom system prompt, got %q", messages[0].Content)
-	}
-}
-
-func TestBuildMessagesWithRetrievedMemories(t *testing.T) {
-	messages := buildMessagesWithSystemPrompt("You are a test agent.", nil, nil, []domain.RetrievedMemory{{
-		Memory: domain.Memory{
-			ID:      "mem_1",
-			Kind:    "note",
-			Content: "User prefers pgvector-backed memory search.",
-		},
-		Similarity: 0.9,
-		Score:      0.95,
-	}}, nil)
-	if len(messages) != 1 {
-		t.Fatalf("expected one system message, got %d", len(messages))
-	}
-	if !strings.Contains(messages[0].Content, "Retrieved memories") {
-		t.Fatalf("expected retrieved memory section, got %q", messages[0].Content)
-	}
-	if !strings.Contains(messages[0].Content, "User prefers pgvector-backed memory search.") {
-		t.Fatalf("expected memory content, got %q", messages[0].Content)
-	}
-}
-
-func TestBuildMessagesWithRetrievedChunks(t *testing.T) {
-	messages := buildMessagesWithSystemPrompt("You are a test agent.", nil, nil, nil, []domain.RetrievedDocumentChunk{{
-		Document: domain.Document{ID: "doc_1", Title: "Deploy Notes"},
-		Chunk: domain.DocumentChunk{
-			ID:      "chunk_1",
-			Content: "The deployment password is amber-9137.",
-		},
-		Similarity: 0.91,
-		Score:      0.94,
-	}})
-	if len(messages) != 1 {
-		t.Fatalf("expected one system message, got %d", len(messages))
-	}
-	if !strings.Contains(messages[0].Content, "Retrieved document chunks") {
-		t.Fatalf("expected retrieved chunk section, got %q", messages[0].Content)
-	}
-	if !strings.Contains(messages[0].Content, "amber-9137") {
-		t.Fatalf("expected chunk content, got %q", messages[0].Content)
 	}
 }

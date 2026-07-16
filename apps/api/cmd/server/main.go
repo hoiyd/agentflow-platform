@@ -13,6 +13,7 @@ import (
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/config"
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/httpapi"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/recovery"
@@ -76,6 +77,12 @@ func main() {
 		QueueSize:     cfg.RunQueueSize,
 		WaitTimeout:   cfg.RunQueueWaitTimeout,
 	}))
+	handler.SetContextAssemblyConfig(domain.ContextAssemblyConfig{
+		ContextWindowTokens: cfg.ModelContextWindowTokens,
+		OutputReserveTokens: cfg.ModelOutputReserveTokens, SafetyMarginTokens: cfg.ContextSafetyMarginTokens,
+		HistoryMaxTokens: cfg.ContextHistoryMaxTokens, MemoryMaxTokens: cfg.ContextMemoryMaxTokens,
+		KnowledgeMaxTokens: cfg.ContextKnowledgeMaxTokens,
+	})
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -98,6 +105,7 @@ func main() {
 	log.Printf("AgentFlow run concurrency: max_concurrent=%d queue_size=%d wait_timeout=%s", cfg.MaxConcurrentRuns, cfg.RunQueueSize, cfg.RunQueueWaitTimeout)
 	log.Printf("AgentFlow model concurrency: max_in_flight=%d rpm=%d tpm=%d", cfg.MaxConcurrentModelRequests, cfg.ModelRequestsPerMinute, cfg.ModelTokensPerMinute)
 	log.Printf("AgentFlow model retry: max_attempts=%d base_delay=%s max_delay=%s", cfg.ModelRetryMaxAttempts, cfg.ModelRetryBaseDelay, cfg.ModelRetryMaxDelay)
+	log.Printf("AgentFlow context policy: window=%d output_reserve=%d safety_margin=%d history_max=%d memory_max=%d knowledge_max=%d", cfg.ModelContextWindowTokens, cfg.ModelOutputReserveTokens, cfg.ContextSafetyMarginTokens, cfg.ContextHistoryMaxTokens, cfg.ContextMemoryMaxTokens, cfg.ContextKnowledgeMaxTokens)
 	if cfg.OpenAIAPIKey == "" {
 		log.Println("OPENAI_API_KEY is empty; using local streaming fallback for verification")
 	}

@@ -1,5 +1,7 @@
 package event
 
+import "agentflow-platform/apps/api/internal/domain"
+
 type RunStatusPayload struct {
 	Status string `json:"status"`
 	Error  string `json:"error,omitempty"`
@@ -37,6 +39,10 @@ type ModelPayload struct {
 	TokenUsageEstimated bool   `json:"token_usage_estimated,omitempty"`
 	DurationMS          int64  `json:"duration_ms,omitempty"`
 	Error               string `json:"error,omitempty"`
+}
+
+type ContextAssembledPayload struct {
+	Manifest domain.ContextManifest `json:"manifest"`
 }
 
 type ToolPayload struct {

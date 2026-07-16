@@ -62,6 +62,12 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create llm trace: %v", err)
 	}
+	if _, err := store.CreateRunEvent(domain.RunEvent{
+		RunID: run.ID, StageID: step.ID, Type: domain.EventContextAssembled,
+		Payload: map[string]any{"manifest": map[string]any{"id": "ctx-1", "assembler_version": "context-assembler-v1", "entries": []any{}}},
+	}); err != nil {
+		t.Fatalf("create context manifest trace: %v", err)
+	}
 
 	replay, ok, err := store.GetRunReplay(run.ID)
 	if err != nil {
@@ -76,7 +82,10 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if replay.Summary.TotalTokens != 15 || !replay.Summary.TokenUsageEstimated {
 		t.Fatalf("unexpected summary: %#v", replay.Summary)
 	}
-	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.RunEvents) != 1 {
+	if replay.RuntimeSnapshot.ContextAssembly.AssemblerVersion != "context-assembler-v1" {
+		t.Fatalf("expected context assembly config round trip, got %#v", replay.RuntimeSnapshot.ContextAssembly)
+	}
+	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.RunEvents) != 2 {
 		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.RunEvents))
 	}
 }

@@ -281,6 +281,7 @@ func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T)
 	}
 
 	var sawRetrieval bool
+	var sawContextManifest bool
 	var sawLLMStart bool
 	for _, event := range replay.RunEvents {
 		if event.Type == domain.EventRetrievalCompleted {
@@ -290,6 +291,13 @@ func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T)
 			}
 			if event.Payload["framework"] != frameworkLangChainGo {
 				t.Fatalf("expected retrieval framework %q, got %#v", frameworkLangChainGo, event.Payload["framework"])
+			}
+		}
+		if event.Type == domain.EventContextAssembled {
+			sawContextManifest = true
+			manifest, _ := event.Payload["manifest"].(map[string]any)
+			if manifest["id"] == "" || manifest["assembler_version"] != "context-assembler-v1" {
+				t.Fatalf("unexpected context manifest payload: %#v", event.Payload)
 			}
 		}
 		if event.Type == domain.EventModelStarted {
@@ -303,6 +311,9 @@ func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T)
 			if event.Payload["framework_path"] != "chains.LLMChain" {
 				t.Fatalf("expected LangChainGo framework path, got %#v", event.Payload["framework_path"])
 			}
+			if event.Payload["manifest_id"] == "" {
+				t.Fatalf("expected model.started to reference a context manifest: %#v", event.Payload)
+			}
 		}
 	}
 	if !sawRetrieval {
@@ -310,5 +321,8 @@ func TestStreamChatWithLangChainGoExecutorRecordsFrameworkMetadata(t *testing.T)
 	}
 	if !sawLLMStart {
 		t.Fatal("expected llm_start trace event")
+	}
+	if !sawContextManifest {
+		t.Fatal("expected context.assembled trace event")
 	}
 }

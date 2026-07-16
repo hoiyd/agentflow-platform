@@ -91,14 +91,9 @@ func (e LangChainGoExecutor) Stream(ctx context.Context, input ExecutorInput) (<
 		defer close(events)
 		defer close(errs)
 
-		template := prompts.NewPromptTemplate(langChainGoPromptTemplate, []string{"system", "history", "memories", "knowledge", "input"})
-		chain := chains.NewLLMChain(langChainGoModel{client: e.openAI}, template)
+		template := prompts.NewPromptTemplate(langChainGoPromptTemplate, []string{"input"})
 		values := map[string]any{
-			"system":    strings.TrimSpace(input.Agent.SystemPrompt),
-			"history":   formatExecutorHistory(input.History),
-			"memories":  formatRuntimeRetrievedMemories(input.RetrievedMemories),
-			"knowledge": formatRuntimeRetrievedChunks(input.RetrievedChunks),
-			"input":     strings.TrimSpace(input.Latest),
+			"input": strings.TrimSpace(input.Latest),
 		}
 
 		promptText, err := template.Format(values)
@@ -120,7 +115,21 @@ func (e LangChainGoExecutor) Stream(ctx context.Context, input ExecutorInput) (<
 		if len(input.RetrievedChunks) > 0 {
 			startPayload["retrieved_chunks"] = retrievalTracePayload(nil, input.RetrievedChunks)["retrieved_chunks"]
 		}
-		span := e.trace.LLMStart(ctx, input.RunID, input.StepID, startPayload)
+		var span tracepkg.Span
+		spanStarted := false
+		model := langChainGoModel{
+			client: e.openAI, systemPrompt: input.Agent.SystemPrompt,
+			onPrepared: func(prepared openai.PreparedText) {
+				if prepared.Manifest.ID != "" {
+					startPayload["manifest_id"] = prepared.Manifest.ID
+					startPayload["model_call_id"] = prepared.Manifest.ModelCallID
+					startPayload["context_estimated_input_tokens"] = prepared.Manifest.EstimatedInputTokens
+				}
+				span = e.trace.LLMStart(ctx, input.RunID, input.StepID, startPayload)
+				spanStarted = true
+			},
+		}
+		chain := chains.NewLLMChain(model, template)
 
 		startedAt := time.Now()
 		result, err := chain.Call(ctx, values)
@@ -138,6 +147,11 @@ func (e LangChainGoExecutor) Stream(ctx context.Context, input ExecutorInput) (<
 		output, ok := result["text"].(string)
 		if !ok {
 			err := errors.New("langchaingo executor returned non-string output")
+			if spanStarted {
+				e.trace.Error(ctx, input.RunID, input.StepID, map[string]any{
+					"source": "langchaingo_executor", "executor": e.Kind(), "framework": e.Framework(), "error": err.Error(),
+				})
+			}
 			errs <- err
 			return
 		}
@@ -146,14 +160,16 @@ func (e LangChainGoExecutor) Stream(ctx context.Context, input ExecutorInput) (<
 			output = "No response generated."
 		}
 		e.streamText(ctx, output, events)
-		e.trace.LLMEnd(ctx, span, map[string]any{
-			"executor":       e.Kind(),
-			"framework":      e.Framework(),
-			"framework_path": "chains.LLMChain",
-			"output":         truncateRuntimeText(output, 4000),
-			"output_chars":   len(output),
-			"duration_ms":    time.Since(startedAt).Milliseconds(),
-		})
+		if spanStarted {
+			e.trace.LLMEnd(ctx, span, map[string]any{
+				"executor":       e.Kind(),
+				"framework":      e.Framework(),
+				"framework_path": "chains.LLMChain",
+				"output":         truncateRuntimeText(output, 4000),
+				"output_chars":   len(output),
+				"duration_ms":    time.Since(startedAt).Milliseconds(),
+			})
+		}
 	}()
 
 	return events, errs
@@ -170,12 +186,21 @@ func (e LangChainGoExecutor) streamText(ctx context.Context, output string, even
 }
 
 type langChainGoModel struct {
-	client *openai.Client
+	client       *openai.Client
+	systemPrompt string
+	onPrepared   func(openai.PreparedText)
 }
 
 func (m langChainGoModel) GenerateContent(ctx context.Context, messages []llms.MessageContent, _ ...llms.CallOption) (*llms.ContentResponse, error) {
 	prompt := flattenLangChainGoMessages(messages)
-	completion, err := m.client.CompleteTextDetailed(ctx, "", prompt)
+	prepared, err := m.client.PrepareText(ctx, m.systemPrompt, prompt)
+	if err != nil {
+		return nil, err
+	}
+	if m.onPrepared != nil {
+		m.onPrepared(prepared)
+	}
+	completion, err := m.client.CompletePreparedText(ctx, prepared)
 	if err != nil {
 		return nil, err
 	}
@@ -201,35 +226,7 @@ func flattenLangChainGoMessages(messages []llms.MessageContent) string {
 	return strings.TrimSpace(builder.String())
 }
 
-func formatExecutorHistory(history []domain.Message) string {
-	if len(history) == 0 {
-		return "No prior messages."
-	}
-	var builder strings.Builder
-	for _, message := range history {
-		content := strings.TrimSpace(message.Content)
-		if content == "" {
-			continue
-		}
-		builder.WriteString(message.Role)
-		builder.WriteString(": ")
-		builder.WriteString(truncateRuntimeText(content, 1000))
-		builder.WriteString("\n")
-	}
-	return strings.TrimSpace(builder.String())
-}
-
-const langChainGoPromptTemplate = `{{.system}}
-
-You are executing this single agent step through LangChainGo.
-Use the retrieved memories and knowledge only when they are relevant.
-
-Conversation history:
-{{.history}}
-
-{{.memories}}
-
-{{.knowledge}}
+const langChainGoPromptTemplate = `You are executing this single agent step through LangChainGo.
 
 User query:
 {{.input}}`

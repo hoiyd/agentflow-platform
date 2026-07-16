@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/turn"
 )
 
@@ -15,6 +16,15 @@ type runtimeTurnModel struct {
 }
 
 func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emit func(turn.ModelEvent)) (turn.Result, error) {
+	snapshot, err := m.runtime.snapshotForRun(request.RunID)
+	if err != nil {
+		return turn.Result{}, err
+	}
+	ctx = contextassembly.WithSession(ctx, contextassembly.Session{
+		Config: snapshot.ContextAssembly, Sink: request.Sink,
+		History: request.History, CurrentInput: request.Input,
+		Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
+	})
 	if request.ModelMode == turn.ModelModeText {
 		return m.executeText(ctx, request)
 	}
@@ -64,7 +74,6 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 }
 
 func (m runtimeTurnModel) executeText(ctx context.Context, request turn.Request) (turn.Result, error) {
-	prompt := promptWithRetrievedContext(request.SystemPrompt, request.Context.Memories, request.Context.Chunks)
 	payload := map[string]any{
 		"role": request.Role, "agent_id": request.Agent.ID, "system": request.SystemPrompt,
 		"input": request.Input, "input_chars": len(request.Input),
@@ -75,13 +84,22 @@ func (m runtimeTurnModel) executeText(ctx context.Context, request turn.Request)
 	for key, value := range retrievalTracePayload(request.Context.Memories, request.Context.Chunks) {
 		payload[key] = value
 	}
-	span := m.runtime.trace.LLMStart(ctx, request.RunID, request.StepID, payload)
-	startedAt := time.Now()
 	client, err := m.runtime.clientForRun(request.RunID)
 	if err != nil {
 		return turn.Result{}, err
 	}
-	completion, err := client.CompleteTextDetailed(ctx, prompt, request.Input)
+	prepared, err := client.PrepareText(ctx, request.SystemPrompt, request.Input)
+	if err != nil {
+		return turn.Result{}, err
+	}
+	if prepared.Manifest.ID != "" {
+		payload["manifest_id"] = prepared.Manifest.ID
+		payload["model_call_id"] = prepared.Manifest.ModelCallID
+		payload["context_estimated_input_tokens"] = prepared.Manifest.EstimatedInputTokens
+	}
+	span := m.runtime.trace.LLMStart(ctx, request.RunID, request.StepID, payload)
+	startedAt := time.Now()
+	completion, err := client.CompletePreparedText(ctx, prepared)
 	if err != nil {
 		m.runtime.trace.Error(ctx, request.RunID, request.StepID, map[string]any{
 			"source": "llm", "role": request.Role, "agent_id": request.Agent.ID, "error": err.Error(),

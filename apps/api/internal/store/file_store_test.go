@@ -11,10 +11,11 @@ import (
 
 func testRuntimeSnapshot() domain.RuntimeSnapshot {
 	return domain.RuntimeSnapshot{
-		SchemaVersion: domain.CurrentRuntimeSnapshotVersion,
-		Mode:          "single",
-		Agent:         domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
-		Model:         domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
+		SchemaVersion:   domain.CurrentRuntimeSnapshotVersion,
+		Mode:            "single",
+		Agent:           domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
+		Model:           domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
+		ContextAssembly: domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 128000, OutputReserveTokens: 8192, SafetyMarginTokens: 4096, HistoryMaxTokens: 64000, MemoryMaxTokens: 8000, KnowledgeMaxTokens: 16000},
 	}
 }
 
@@ -34,6 +35,11 @@ func TestFileStoreRuntimeSnapshotRoundTripAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
+	if _, err := first.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventContextAssembled, Payload: map[string]any{
+		"manifest": map[string]any{"id": "ctx-1", "assembler_version": "context-assembler-v1", "entries": []any{}},
+	}}); err != nil {
+		t.Fatalf("create context manifest event: %v", err)
+	}
 
 	second, err := NewFileStore(path)
 	if err != nil {
@@ -52,6 +58,9 @@ func TestFileStoreRuntimeSnapshotRoundTripAndReplay(t *testing.T) {
 	}
 	if replay.RuntimeSnapshot == nil || replay.RuntimeSnapshot.Agent.SystemPrompt != "frozen prompt" {
 		t.Fatalf("replay did not return snapshot: %#v", replay.RuntimeSnapshot)
+	}
+	if replay.RuntimeSnapshot.ContextAssembly.AssemblerVersion != "context-assembler-v1" || len(replay.RunEvents) != 1 || replay.RunEvents[0].Type != domain.EventContextAssembled {
+		t.Fatalf("context assembly config or manifest event did not round trip: snapshot=%#v events=%#v", replay.RuntimeSnapshot, replay.RunEvents)
 	}
 }
 
