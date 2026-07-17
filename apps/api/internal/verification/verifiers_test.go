@@ -80,3 +80,14 @@ func TestJSONSchemaVerifierValidatesRunOutput(t *testing.T) {
 		t.Fatalf("expected schema mismatch, got %#v", failed)
 	}
 }
+
+func TestJSONSchemaVerifierBlocksRemoteReferences(t *testing.T) {
+	registry := NewRegistry(Options{})
+	verifier, _ := registry.Resolve(domain.VerifierJSONSchema)
+	result := verifier.Verify(context.Background(), domain.VerifierSpec{
+		JSONSchema: &domain.JSONSchemaVerifierConfig{Schema: map[string]any{"$ref": "https://example.com/schema.json"}},
+	}, SubjectForRunOutput(`{"status":"ok"}`))
+	if result.Status != domain.VerificationBlocked || !strings.Contains(result.Summary, "remote schema reference is disabled") {
+		t.Fatalf("remote schema reference was not blocked: %#v", result)
+	}
+}

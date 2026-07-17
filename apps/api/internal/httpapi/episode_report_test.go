@@ -107,8 +107,8 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 	if report.FinalOutput != "Final answer with evidence." {
 		t.Fatalf("unexpected final output: %q", report.FinalOutput)
 	}
-	if report.Verification.Status != "passed" {
-		t.Fatalf("expected passed verification, got %#v", report.Verification)
+	if report.Verification.Status != domain.VerificationNotRequired {
+		t.Fatalf("expected verification to be not required, got %#v", report.Verification)
 	}
 	if len(report.Retrievals.Memories) != 1 || len(report.Retrievals.Chunks) != 1 || report.Retrievals.EventCount != 1 {
 		t.Fatalf("unexpected retrievals: %#v", report.Retrievals)
@@ -121,7 +121,7 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 	}
 }
 
-func TestBuildEpisodeReportFailedVerification(t *testing.T) {
+func TestBuildEpisodeReportDoesNotInventVerificationForFailedRun(t *testing.T) {
 	report := buildEpisodeReport(domain.RunReplay{
 		Run: domain.Run{
 			Status: domain.RunFailed,
@@ -133,10 +133,29 @@ func TestBuildEpisodeReportFailedVerification(t *testing.T) {
 		},
 	}, domain.Agent{ID: "agent_planner"})
 
-	if report.Verification.Status != "failed" {
-		t.Fatalf("expected failed verification, got %#v", report.Verification)
+	if report.Verification.Status != domain.VerificationNotRequired {
+		t.Fatalf("expected verification to be not required, got %#v", report.Verification)
 	}
 	if len(report.Errors) != 2 {
 		t.Fatalf("expected run and trace errors, got %#v", report.Errors)
+	}
+}
+
+func TestBuildEpisodeReportUsesPersistedVerificationEvidence(t *testing.T) {
+	contract := &domain.CompletionContract{ID: "contract_test", Version: 1, Hash: "sha256:contract"}
+	report := buildEpisodeReport(domain.RunReplay{
+		Run: domain.Run{Status: domain.RunCompleted, VerificationStatus: domain.VerificationPassed, CompletionContract: contract},
+		VerificationEvidence: []domain.VerificationEvidence{{
+			ID: "evidence_1", VerifierID: "tests", Status: domain.VerificationPassed,
+			SubjectHash: "sha256:subject", Summary: "command completed successfully",
+		}},
+		VerificationArtifacts: []domain.VerificationArtifact{{ID: "artifact_1", EvidenceID: "evidence_1", Content: "ok"}},
+	}, domain.Agent{ID: "agent_planner"})
+
+	if report.Verification.Status != domain.VerificationPassed || report.Verification.Contract != contract || report.Verification.SubjectHash != "sha256:subject" {
+		t.Fatalf("unexpected verification report: %#v", report.Verification)
+	}
+	if len(report.Verification.Evidence) != 1 || len(report.Verification.Records) != 1 || len(report.Verification.Artifacts) != 1 {
+		t.Fatalf("persisted verification details missing: %#v", report.Verification)
 	}
 }

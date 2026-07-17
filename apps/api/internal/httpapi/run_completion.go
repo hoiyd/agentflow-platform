@@ -85,6 +85,7 @@ func (h *Handler) resolveRunCompletion(ctx context.Context, runID, output string
 	}
 	decision, err := h.verification.Verify(ctx, runID, verification.SubjectForRunOutput(output))
 	if err != nil {
+		_, _ = h.store.UpdateRunVerificationStatus(runID, domain.VerificationBlocked)
 		return domain.Run{}, err
 	}
 	if decision.AllowCompletion {
@@ -95,8 +96,8 @@ func (h *Handler) resolveRunCompletion(ctx context.Context, runID, output string
 
 func latestAssistantOutput(messages []domain.Message) string {
 	for index := len(messages) - 1; index >= 0; index-- {
-		if messages[index].Role == "assistant" {
-			return strings.TrimSpace(messages[index].Content)
+		if messages[index].Role == "assistant" && strings.TrimSpace(messages[index].Content) != "" {
+			return messages[index].Content
 		}
 	}
 	return ""

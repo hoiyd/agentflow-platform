@@ -104,7 +104,7 @@ func TestVerifyRunRetriesRecoverableEvidenceAndCompletes(t *testing.T) {
 	handler := &Handler{store: fileStore, agentRuntime: runtime, verification: verification.NewEngine(fileStore, registry)}
 	first := httptest.NewRecorder()
 	if !handler.completeStreamingRun(first, first, context.Background(), runCompletionRequest{
-		RunID: run.ID, ConversationID: conversation.ID, Assistant: "candidate",
+		RunID: run.ID, ConversationID: conversation.ID, Assistant: " candidate ",
 	}) {
 		t.Fatalf("first verification failed unexpectedly: %s", first.Body.String())
 	}

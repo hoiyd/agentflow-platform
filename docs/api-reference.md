@@ -19,8 +19,10 @@ GET    /api/runs/{id}
 POST   /api/runs/{id}/continue
 POST   /api/runs/{id}/resume
 POST   /api/runs/{id}/cancel
+POST   /api/runs/{id}/verify
 GET    /api/runs/{id}/collaboration_steps
 GET    /api/runs/{id}/replay
+GET    /api/runs/{id}/episode
 
 GET    /api/tools
 POST   /api/tools/{name}/enable
@@ -36,6 +38,10 @@ GET    /api/documents/{id}
 DELETE /api/documents/{id}
 POST   /api/rag/search
 ```
+
+`POST /api/chat` accepts an optional `completion_contract`. When present, the server freezes the effective contract before creating the Run and does not publish `run.completed` until fresh Evidence satisfies its policy. `POST /api/runs/{id}/verify` consumes another bounded attempt against the latest persisted assistant output. Replay responses include `verification_evidence` and `verification_artifacts`.
+
+See [Completion Verification](completion-verification.md) for the request shape and policy semantics.
 
 Example RAG search response:
 

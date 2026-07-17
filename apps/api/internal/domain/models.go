@@ -402,9 +402,13 @@ type EpisodeError struct {
 }
 
 type EpisodeVerification struct {
-	Status   string   `json:"status"`
-	Evidence []string `json:"evidence"`
-	Warnings []string `json:"warnings"`
+	Status      VerificationStatus     `json:"status"`
+	SubjectHash string                 `json:"subject_hash,omitempty"`
+	Contract    *CompletionContract    `json:"contract,omitempty"`
+	Evidence    []string               `json:"evidence"`
+	Warnings    []string               `json:"warnings"`
+	Records     []VerificationEvidence `json:"records"`
+	Artifacts   []VerificationArtifact `json:"artifacts"`
 }
 
 type MemoryCandidateStatus string

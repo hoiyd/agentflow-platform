@@ -148,6 +148,9 @@ func validateSpec(spec *domain.VerifierSpec) error {
 		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 			return invalidContract("http verifier " + spec.ID + " requires an absolute http(s) URL")
 		}
+		if parsed.User != nil {
+			return invalidContract("http verifier " + spec.ID + " must not embed credentials in the URL")
+		}
 		if spec.HTTP.ExpectedStatus == 0 {
 			spec.HTTP.ExpectedStatus = http.StatusOK
 		}

@@ -66,6 +66,10 @@ func TestFreezeContractRejectsNonGatingOrUnsafeDefinitions(t *testing.T) {
 			ID: "http", Type: domain.VerifierHTTP, Required: true,
 			HTTP: &domain.HTTPVerifierConfig{Method: "POST", URL: "https://example.com", ExpectedStatus: 200},
 		}}}},
+		{name: "http embedded credentials", contract: domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
+			ID: "http", Type: domain.VerifierHTTP, Required: true,
+			HTTP: &domain.HTTPVerifierConfig{Method: "GET", URL: "https://user:secret@example.com", ExpectedStatus: 200},
+		}}}},
 		{name: "absolute working directory", contract: domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
 			ID: "command", Type: domain.VerifierCommand, Required: true,
 			Command: &domain.CommandVerifierConfig{Args: []string{"go", "test"}, WorkingDirectory: "/tmp"},

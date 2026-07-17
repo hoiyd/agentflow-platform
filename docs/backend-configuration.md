@@ -7,6 +7,10 @@ PORT=8080
 STORE_DRIVER=file
 DATA_PATH=.data/agentflow.json
 TOOL_CONFIG_PATH=.data/tools.json
+VERIFICATION_WORKSPACE_ROOT=
+VERIFICATION_ALLOWED_COMMANDS=
+VERIFICATION_ALLOWED_HTTP_HOSTS=
+VERIFICATION_MAX_ARTIFACT_BYTES=65536
 
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
@@ -112,3 +116,11 @@ The backend loads enabled tools from `TOOL_CONFIG_PATH`, defaulting to `.data/to
 ```
 
 The tool executor applies typed errors, per-tool timeouts, result-size limits, and trace events to every call.
+
+## Completion Verification
+
+Command verification is disabled when `VERIFICATION_WORKSPACE_ROOT` or `VERIFICATION_ALLOWED_COMMANDS` is empty. The command is an argument vector executed without a shell; its relative working directory cannot escape the configured root. `VERIFICATION_ALLOWED_COMMANDS` is a comma-separated exact executable allowlist.
+
+HTTP verification permits localhost and loopback IPs. `VERIFICATION_ALLOWED_HTTP_HOSTS` adds comma-separated exact hostname or host:port values. Redirects are checked against the same allowlist. `VERIFICATION_MAX_ARTIFACT_BYTES` caps persisted output for each verifier while the Artifact keeps the output hash, observed byte count, and truncation flag.
+
+See [Completion Verification](completion-verification.md) for contract and Gate behavior.

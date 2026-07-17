@@ -483,7 +483,7 @@ func (s *FileStore) AppendVerificationRecord(record domain.VerificationRecord) e
 			return errors.New("verification artifact does not match evidence")
 		}
 	}
-	s.data.VerificationEvidence = append(s.data.VerificationEvidence, record.Evidence)
+	s.data.VerificationEvidence = append(s.data.VerificationEvidence, cloneVerificationEvidence(record.Evidence))
 	s.data.VerificationArtifacts = append(s.data.VerificationArtifacts, record.Artifacts...)
 	return s.saveLocked()
 }
@@ -494,7 +494,7 @@ func (s *FileStore) ListVerificationEvidence(runID string) ([]domain.Verificatio
 	items := []domain.VerificationEvidence{}
 	for _, item := range s.data.VerificationEvidence {
 		if item.RunID == runID {
-			items = append(items, item)
+			items = append(items, cloneVerificationEvidence(item))
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].StartedAt.Before(items[j].StartedAt) })
@@ -822,10 +822,15 @@ func verificationEvidenceForRun(items []domain.VerificationEvidence, runID strin
 	result := []domain.VerificationEvidence{}
 	for _, item := range items {
 		if item.RunID == runID {
-			result = append(result, item)
+			result = append(result, cloneVerificationEvidence(item))
 		}
 	}
 	return result
+}
+
+func cloneVerificationEvidence(evidence domain.VerificationEvidence) domain.VerificationEvidence {
+	evidence.ArtifactIDs = append([]string(nil), evidence.ArtifactIDs...)
+	return evidence
 }
 
 func verificationArtifactsForRun(items []domain.VerificationArtifact, runID string) []domain.VerificationArtifact {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -52,7 +53,7 @@ func buildEpisodeReport(replay domain.RunReplay, agent domain.Agent) domain.Epis
 		ToolCalls:    episodeToolCalls(replay.RunEvents),
 		Errors:       episodeErrors(replay),
 	}
-	report.Verification = episodeVerification(report)
+	report.Verification = episodeVerification(replay)
 	return report
 }
 
@@ -190,45 +191,36 @@ func episodeErrors(replay domain.RunReplay) []domain.EpisodeError {
 	return errors
 }
 
-func episodeVerification(report domain.EpisodeReport) domain.EpisodeVerification {
-	verification := domain.EpisodeVerification{
-		Status:   "needs_review",
-		Evidence: []string{},
-		Warnings: []string{},
+func episodeVerification(replay domain.RunReplay) domain.EpisodeVerification {
+	status := replay.Run.VerificationStatus
+	if status == "" {
+		status = domain.VerificationNotRequired
 	}
-	if report.Run.Status == domain.RunCompleted {
-		verification.Evidence = append(verification.Evidence, "Run completed")
-	} else {
-		verification.Warnings = append(verification.Warnings, "Run status is "+string(report.Run.Status))
+	result := domain.EpisodeVerification{
+		Status: status, Contract: replay.Run.CompletionContract,
+		Evidence: []string{}, Warnings: []string{},
+		Records: replay.VerificationEvidence, Artifacts: replay.VerificationArtifacts,
 	}
-	if len(report.Errors) == 0 && report.TraceSummary.ErrorCount == 0 {
-		verification.Evidence = append(verification.Evidence, "No errors recorded")
-	} else {
-		verification.Warnings = append(verification.Warnings, "Errors recorded")
+	if replay.Run.CompletionContract == nil {
+		result.Evidence = append(result.Evidence, "Completion contract not required")
+		return result
 	}
-	if strings.TrimSpace(report.FinalOutput) != "" {
-		verification.Evidence = append(verification.Evidence, "Final output captured")
-	} else {
-		verification.Warnings = append(verification.Warnings, "No final output captured")
+	for _, item := range replay.VerificationEvidence {
+		if item.Status != domain.VerificationStale {
+			result.SubjectHash = item.SubjectHash
+		}
+		message := fmt.Sprintf("%s %s: %s", item.VerifierID, item.Status, item.Summary)
+		switch item.Status {
+		case domain.VerificationPassed:
+			result.Evidence = append(result.Evidence, message)
+		case domain.VerificationFailed, domain.VerificationBlocked, domain.VerificationStale:
+			result.Warnings = append(result.Warnings, message)
+		}
 	}
-	if len(report.Retrievals.Memories) > 0 || len(report.Retrievals.Chunks) > 0 {
-		verification.Evidence = append(verification.Evidence, "Retrieved context captured")
-	} else {
-		verification.Warnings = append(verification.Warnings, "No retrieved context captured")
+	if len(replay.VerificationEvidence) == 0 {
+		result.Warnings = append(result.Warnings, "No verification evidence recorded")
 	}
-
-	if report.Run.Status == domain.RunFailedRecoverable {
-		verification.Status = "needs_review"
-		return verification
-	}
-	if report.Run.Status == domain.RunFailed || len(report.Errors) > 0 || report.TraceSummary.ErrorCount > 0 {
-		verification.Status = "failed"
-		return verification
-	}
-	if report.Run.Status == domain.RunCompleted && strings.TrimSpace(report.FinalOutput) != "" {
-		verification.Status = "passed"
-	}
-	return verification
+	return result
 }
 
 func mapSlicePayload(value any) []map[string]any {

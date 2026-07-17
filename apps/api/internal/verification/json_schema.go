@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 
@@ -26,6 +27,7 @@ func (jsonSchemaVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, 
 	}
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
+	compiler.UseLoader(denyRemoteSchemaLoader{})
 	const resource = "urn:agentflow:verification-schema"
 	if err := compiler.AddResource(resource, spec.JSONSchema.Schema); err != nil {
 		return blocked("load json schema: " + err.Error())
@@ -48,6 +50,12 @@ func (jsonSchemaVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, 
 		return Result{Status: domain.VerificationFailed, Summary: "json schema mismatch: " + singleLine(err.Error()), Output: subject.Value, OutputBytes: len(subject.Value)}
 	}
 	return Result{Status: domain.VerificationPassed, Summary: "run output matched JSON schema", Output: subject.Value, OutputBytes: len(subject.Value)}
+}
+
+type denyRemoteSchemaLoader struct{}
+
+func (denyRemoteSchemaLoader) Load(location string) (any, error) {
+	return nil, fmt.Errorf("remote schema reference is disabled: %s", location)
 }
 
 func singleLine(value string) string {

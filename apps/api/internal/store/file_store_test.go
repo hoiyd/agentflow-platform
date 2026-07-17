@@ -128,6 +128,11 @@ func TestFileStoreVerificationContractEvidenceAndArtifactsRoundTrip(t *testing.T
 	if replay.Run.VerificationStatus != domain.VerificationPassed || len(replay.VerificationEvidence) != 1 || len(replay.VerificationArtifacts) != 1 {
 		t.Fatalf("verification did not round trip: run=%#v evidence=%#v artifacts=%#v", replay.Run, replay.VerificationEvidence, replay.VerificationArtifacts)
 	}
+	replay.VerificationEvidence[0].ArtifactIDs[0] = "mutated"
+	freshEvidence, err := second.ListVerificationEvidence(run.ID)
+	if err != nil || freshEvidence[0].ArtifactIDs[0] != "artifact_test" {
+		t.Fatalf("stored evidence was mutable through a read result: %#v err=%v", freshEvidence, err)
+	}
 }
 
 func TestFileStoreContextCompactionRoundTrip(t *testing.T) {
