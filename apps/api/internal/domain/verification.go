@@ -7,6 +7,8 @@ const CurrentCompletionContractVersion = 1
 type VerificationStatus string
 
 const (
+	// VerificationNotRequired is the default for Runs created without an
+	// explicit CompletionContract in the initial chat request.
 	VerificationNotRequired VerificationStatus = "not_required"
 	VerificationPending     VerificationStatus = "pending"
 	VerificationRunning     VerificationStatus = "running"
@@ -38,7 +40,8 @@ const (
 	VerifierJSONSchema VerifierType = "json_schema"
 )
 
-// CompletionContract is frozen onto a Run before execution starts.
+// CompletionContract opts one Run into evidence-gated completion. It must be
+// supplied when the Run is created and is frozen before execution starts.
 type CompletionContract struct {
 	ID          string             `json:"id"`
 	Version     int                `json:"version"`

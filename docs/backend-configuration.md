@@ -119,6 +119,8 @@ The tool executor applies typed errors, per-tool timeouts, result-size limits, a
 
 ## Completion Verification
 
+Completion verification is enabled per Run by including `completion_contract` in the initial `POST /api/chat` request. These environment variables only define verifier security boundaries and output limits; configuring them does not automatically verify Single, Multi-Agent, or Autonomous chats.
+
 Command verification is disabled when `VERIFICATION_WORKSPACE_ROOT` or `VERIFICATION_ALLOWED_COMMANDS` is empty. The command is an argument vector executed without a shell; its relative working directory cannot escape the configured root. `VERIFICATION_ALLOWED_COMMANDS` is a comma-separated exact executable allowlist.
 
 HTTP verification permits localhost and loopback IPs. `VERIFICATION_ALLOWED_HTTP_HOSTS` adds comma-separated exact hostname or host:port values. Redirects are checked against the same allowlist. `VERIFICATION_MAX_ARTIFACT_BYTES` caps persisted output for each verifier while the Artifact keeps the output hash, observed byte count, and truncation flag.

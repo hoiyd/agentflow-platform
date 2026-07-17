@@ -39,7 +39,9 @@ DELETE /api/documents/{id}
 POST   /api/rag/search
 ```
 
-`POST /api/chat` accepts an optional `completion_contract`. When present, the server freezes the effective contract before creating the Run and does not publish `run.completed` until fresh Evidence satisfies its policy. `POST /api/runs/{id}/verify` consumes another bounded attempt against the latest persisted assistant output. Replay responses include `verification_evidence` and `verification_artifacts`.
+`POST /api/chat` accepts an optional `completion_contract`. This field is the only trigger that opts a new Run into verification; chat mode and `VERIFICATION_*` server settings do not enable it automatically. When present, the server freezes the effective contract before creating the Run and does not publish `run.completed` until fresh Evidence satisfies its policy.
+
+Runs created without the field remain `verification_status=not_required`. A contracted Run carries the same frozen contract through continue/resume operations. `POST /api/runs/{id}/verify` only retries an existing contracted Run against its latest persisted assistant output; it returns `409` for an ordinary Run. Replay responses include `verification_evidence` and `verification_artifacts`.
 
 See [Completion Verification](completion-verification.md) for the request shape and policy semantics.
 

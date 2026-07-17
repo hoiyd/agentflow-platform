@@ -1,6 +1,23 @@
 # Completion Verification
 
-AgentFlow treats an assistant response as a candidate result until a frozen Completion Contract is satisfied. Ordinary chat does not require verification and keeps `verification_status=not_required`.
+AgentFlow treats an assistant response as a candidate result until a frozen Completion Contract is satisfied. Verification is explicitly enabled per Run; ordinary chat does not require verification and keeps `verification_status=not_required`.
+
+## When Verification Runs
+
+Verification is **opt-in**, not inferred from the chat mode or server configuration.
+
+A Run enters the verification lifecycle only when its initial `POST /api/chat` request includes a valid, non-null `completion_contract`. The server validates and freezes that contract before creating the Run. This rule is identical for `single`, `multi_agent`, and `autonomous` modes.
+
+| Situation | Verification behavior |
+|---|---|
+| `POST /api/chat` omits `completion_contract` | Run starts as `not_required`; it completes through the normal path without verifiers or Evidence. |
+| `POST /api/chat` includes a valid `completion_contract` | Run starts as `pending`; the Completion Gate runs when the Run produces a candidate final output. |
+| Multi-Agent or Autonomous Run pauses at an intermediate `waiting_for_user` boundary | The Gate does not run yet because no completion is being claimed. The frozen contract remains attached to the Run. |
+| A contracted Run is continued or resumed and reaches the completion path | The inherited frozen contract is evaluated; callers cannot replace or weaken it. |
+| `POST /api/runs/{id}/verify` is called | An existing contracted Run consumes another bounded verification attempt against its latest persisted assistant output. |
+| `/verify` is called for an ordinary Run | The API returns `409`; it does not retrofit a contract onto an existing Run. |
+
+`VERIFICATION_WORKSPACE_ROOT`, command allowlists, HTTP host allowlists, and Artifact limits only configure which verifier implementations may run safely. Setting these environment variables does **not** enable verification for any Run by itself.
 
 ## Execution Model
 
@@ -37,7 +54,7 @@ A failed or blocked check remains `failed_recoverable` while attempt budget rema
 
 ## Contract Example
 
-Pass the contract with `POST /api/chat`:
+Opt one new Run into verification by passing the contract with `POST /api/chat`:
 
 ```json
 {

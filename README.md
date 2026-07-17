@@ -7,7 +7,7 @@ Full-stack AI agent workflow platform with streaming chat, agent runs, persisten
 - Chat UI with persisted conversations and streamed assistant responses.
 - Single-agent, multi-agent, and autonomous run modes.
 - Run lifecycle tracking with collaboration steps, trace events, replay, and cancel/resume/continue flows.
-- Evidence-gated completion with frozen contracts, deterministic verifiers, Subject Hash freshness, and Replay artifacts.
+- Opt-in evidence-gated completion with per-Run frozen contracts, deterministic verifiers, Subject Hash freshness, and Replay artifacts.
 - Built-in tool catalog with enable/disable controls and guarded execution.
 - Curated semantic memory backed by embeddings; ordinary chat and assistant output remain conversation history.
 - RAG knowledge base with text, `.txt`, `.md`, and `.markdown` ingestion.

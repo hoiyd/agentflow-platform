@@ -77,6 +77,8 @@ func (h *Handler) resolveRunCompletion(ctx context.Context, runID, output string
 	if !ok {
 		return domain.Run{}, errors.New("run not found")
 	}
+	// Verification is opt-in per Run. Server verifier configuration only makes
+	// implementations available; it never changes an uncontracted chat Run.
 	if run.CompletionContract == nil {
 		return h.agentRuntime.CompleteRun(runID)
 	}
