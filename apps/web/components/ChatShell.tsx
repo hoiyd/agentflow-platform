@@ -23,6 +23,7 @@ import {
   Repeat2,
   Send,
   Settings2,
+  ShieldCheck,
   Square,
   Trash2,
   UserRoundPlus,
@@ -68,7 +69,15 @@ import {
   updateConversationTitle,
   uploadDocument
 } from "../lib/api";
+import {
+  DEFAULT_COMPLETION_VERIFICATION,
+  buildCompletionContract,
+  normalizeCompletionVerification,
+  validateCompletionVerification
+} from "../lib/verification";
+import type { CompletionVerificationSettings } from "../lib/verification";
 import { CollaborationDag } from "./CollaborationDag";
+import { CompletionVerificationPanel } from "./CompletionVerificationPanel";
 
 type DraftMessage = Pick<Message, "role" | "content"> & {
   id: string;
@@ -159,7 +168,14 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     id: string;
     agentId: string;
     status: string;
+    verificationStatus: string;
   } | null>(null);
+  const [completionVerification, setCompletionVerification] = useState<CompletionVerificationSettings>(
+    DEFAULT_COMPLETION_VERIFICATION
+  );
+  const [completionVerificationDraft, setCompletionVerificationDraft] =
+    useState<CompletionVerificationSettings | null>(null);
+  const [completionVerificationError, setCompletionVerificationError] = useState("");
   const [view, setView] = useState<"chat" | "tools" | "knowledge">("chat");
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [toolsError, setToolsError] = useState("");
@@ -308,7 +324,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setRunState({
         id: run.id,
         agentId: run.agent_id,
-        status: run.status
+        status: run.status,
+        verificationStatus: run.verification_status ?? "not_required"
       });
       const steps = await listCollaborationSteps(run.id);
       setCollaborationSteps(steps.map(toCollaborationStepView));
@@ -591,6 +608,29 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     setAgentConfigStatus("");
   }
 
+  function handleOpenCompletionVerification() {
+    if (isStreaming) {
+      return;
+    }
+    setCompletionVerificationError("");
+    setCompletionVerificationDraft(structuredClone(completionVerification));
+  }
+
+  function handleSaveCompletionVerification() {
+    if (!completionVerificationDraft) {
+      return;
+    }
+    const normalized = normalizeCompletionVerification(completionVerificationDraft);
+    const validationErrors = validateCompletionVerification(normalized);
+    if (validationErrors.length > 0) {
+      setCompletionVerificationError(validationErrors[0]);
+      return;
+    }
+    setCompletionVerification(normalized);
+    setCompletionVerificationError("");
+    setCompletionVerificationDraft(null);
+  }
+
   async function handleCreateAgent() {
     if (isCreatingAgent || isStreaming || !newAgentDraft) {
       return;
@@ -825,6 +865,13 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     if (!content || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput) {
       return;
     }
+    let completionContract;
+    try {
+      completionContract = buildCompletionContract(completionVerification);
+    } catch (contractError) {
+      setError(contractError instanceof Error ? contractError.message : "Invalid completion verification policy");
+      return;
+    }
 
     setInput("");
     setError("");
@@ -863,7 +910,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           conversation_id: conversationId || undefined,
           agent_id: activeAgentId || undefined,
           mode: chatMode,
-          message: content
+          message: content,
+          completion_contract: completionContract
         },
         (event) => {
           if (event.type === "conversation") {
@@ -871,11 +919,13 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
             setActiveId(event.conversation_id);
           }
           if (event.type === "run_state") {
-            setRunState({
+            setRunState((current) => ({
               id: event.run_id,
               agentId: event.agent_id,
-              status: event.status
-            });
+              status: event.status,
+              verificationStatus:
+                current?.verificationStatus ?? (completionContract ? "pending" : "not_required")
+            }));
             if (
               event.status === "canceled" ||
               event.status === "completed" ||
@@ -909,7 +959,9 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
             setRunState((current) => ({
               id: event.run_id ?? current?.id ?? "",
               agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
-              status: event.status ?? "completed"
+              status: event.status ?? "completed",
+              verificationStatus:
+                event.verification_status ?? current?.verificationStatus ?? (completionContract ? "pending" : "not_required")
             }));
             setIsCancelingRun(false);
           }
@@ -948,11 +1000,12 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     try {
       await continueRun({ run_id: runID, plan }, (event) => {
         if (event.type === "run_state") {
-          setRunState({
+          setRunState((current) => ({
             id: event.run_id,
             agentId: event.agent_id,
-            status: event.status
-          });
+            status: event.status,
+            verificationStatus: current?.verificationStatus ?? "not_required"
+          }));
         }
         if (event.type === "stage_state") {
           setCollaborationSteps((items) => upsertCollaborationStep(items, event));
@@ -974,7 +1027,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           setRunState((current) => ({
             id: event.run_id ?? current?.id ?? runID,
             agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
-            status: event.status ?? "completed"
+            status: event.status ?? "completed",
+            verificationStatus: event.verification_status ?? current?.verificationStatus ?? "not_required"
           }));
         }
       });
@@ -1024,11 +1078,12 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     try {
       await resumeRun({ run_id: runID, user_input: userInput }, (event) => {
         if (event.type === "run_state") {
-          setRunState({
+          setRunState((current) => ({
             id: event.run_id,
             agentId: event.agent_id,
-            status: event.status
-          });
+            status: event.status,
+            verificationStatus: current?.verificationStatus ?? "not_required"
+          }));
           if (event.status !== "waiting_for_user") {
             setHumanInputDraft("");
           }
@@ -1053,7 +1108,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           setRunState((current) => ({
             id: event.run_id ?? current?.id ?? runID,
             agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
-            status: event.status ?? "completed"
+            status: event.status ?? "completed",
+            verificationStatus: event.verification_status ?? current?.verificationStatus ?? "not_required"
           }));
         }
       });
@@ -1083,7 +1139,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setRunState({
         id: canceled.id,
         agentId: canceled.agent_id,
-        status: canceled.status
+        status: canceled.status,
+        verificationStatus: canceled.verification_status ?? "not_required"
       });
       if (
         canceled.status === "canceled" ||
@@ -1286,6 +1343,16 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                 <i />
                 <span>Task</span>
                 <strong>{runState.status.replaceAll("_", " ")}</strong>
+              </span>
+            ) : null}
+            {view === "chat" && runState && runState.verificationStatus !== "not_required" ? (
+              <span
+                aria-label={`Verification status: ${runState.verificationStatus.replaceAll("_", " ")}`}
+                className={`run-status-indicator verification-status-indicator ${runState.verificationStatus}`}
+              >
+                <ShieldCheck size={13} />
+                <span>Verification</span>
+                <strong>{runState.verificationStatus.replaceAll("_", " ")}</strong>
               </span>
             ) : null}
             {view === "chat" && canCancelRun ? (
@@ -1559,6 +1626,19 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                 ) : null}
               </div>
             ) : null}
+            <div className="composer-run-options">
+              <button
+                aria-pressed={completionVerification.enabled}
+                className={`verification-config-toggle ${completionVerification.enabled ? "active" : ""}`}
+                disabled={isStreaming}
+                onClick={handleOpenCompletionVerification}
+                type="button"
+              >
+                <ShieldCheck size={15} />
+                <span>Completion verification</span>
+                <strong>{completionVerification.enabled ? "On" : "Off"}</strong>
+              </button>
+            </div>
             {chatMode === "single" && agentsError ? (
               <div className="error">{agentsError}</div>
             ) : null}
@@ -1594,6 +1674,30 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           </section>
         ) : null}
       </main>
+      {completionVerificationDraft ? (
+        <div className="modal-backdrop agent-config-modal-backdrop" role="presentation">
+          <section
+            aria-label="Completion verification"
+            aria-modal="true"
+            className="agent-config-dialog verification-config-dialog"
+            role="dialog"
+          >
+            <CompletionVerificationPanel
+              draft={completionVerificationDraft}
+              error={completionVerificationError}
+              onCancel={() => {
+                setCompletionVerificationDraft(null);
+                setCompletionVerificationError("");
+              }}
+              onChange={(update) => {
+                setCompletionVerificationError("");
+                setCompletionVerificationDraft((current) => (current ? { ...current, ...update } : current));
+              }}
+              onSave={handleSaveCompletionVerification}
+            />
+          </section>
+        </div>
+      ) : null}
       {chatMode === "single" && isNewAgentFormOpen && newAgentDraft ? (
         <div className="modal-backdrop agent-config-modal-backdrop create-agent-modal-backdrop" role="presentation">
           <section aria-label="Create new agent" aria-modal="true" className="agent-config-dialog" role="dialog">

@@ -19,6 +19,8 @@ A Run enters the verification lifecycle only when its initial `POST /api/chat` r
 
 `VERIFICATION_WORKSPACE_ROOT`, command allowlists, HTTP host allowlists, and Artifact limits only configure which verifier implementations may run safely. Setting these environment variables does **not** enable verification for any Run by itself.
 
+The chat composer exposes this opt-in under **Completion verification**. Its verifier tabs can configure all five built-in types: text constraints, citation policy, JSON Schema, read-only HTTP checks, and allowlisted commands. The same policy applies to the next `single`, `multi_agent`, or `autonomous` Run because all three modes share the same chat request path. HTTP checks still follow the backend host allowlist; command checks require `VERIFICATION_WORKSPACE_ROOT` and an allowlisted executable. The final SSE `done` event includes `verification_status`, and the workspace shows that status separately from the Run lifecycle status. Disabling the control omits `completion_contract` entirely.
+
 ## Execution Model
 
 ```text
