@@ -53,6 +53,32 @@ func TestFreezeContractNormalizesAndHashesEffectiveDefinition(t *testing.T) {
 	}
 }
 
+func TestFreezeContractAcceptsWebCompletionVerificationPolicy(t *testing.T) {
+	registry := NewRegistry(Options{})
+	contract, err := registry.FreezeContract(&domain.CompletionContract{
+		SubjectType: "run_output",
+		Verifiers: []domain.VerifierSpec{
+			{
+				ID: "response-length", Type: domain.VerifierTextConstraints, Required: true,
+				Config: map[string]any{"min_characters": 120},
+			},
+			{
+				ID: "source-policy", Type: domain.VerifierCitation, Required: true,
+				Config: map[string]any{"min_citations": 2, "min_unique_hosts": 1, "require_https": true},
+			},
+		},
+		Policy: domain.VerificationPolicy{
+			Mode: domain.VerificationAllMustPass, MaxAttempts: 2, OnExhausted: domain.VerificationWaitForUser,
+		},
+	})
+	if err != nil {
+		t.Fatalf("freeze web completion verification policy: %v", err)
+	}
+	if contract.Version != domain.CurrentCompletionContractVersion || contract.Hash == "" || len(contract.Verifiers) != 2 {
+		t.Fatalf("unexpected frozen web contract: %#v", contract)
+	}
+}
+
 type customVerifier struct{}
 
 func (customVerifier) Type() domain.VerifierType { return domain.VerifierType("custom_assertion") }

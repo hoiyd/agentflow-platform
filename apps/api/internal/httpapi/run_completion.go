@@ -43,13 +43,14 @@ func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flush
 		title = h.summarizeConversationTitleBestEffort(ctx, request.ConversationID, request.UserInput, request.Assistant)
 	}
 	writeSSE(w, "done", domain.ChatChunk{
-		Type:           "done",
-		ConversationID: completed.ConversationID,
-		Title:          title,
-		RunID:          completed.ID,
-		AgentID:        completed.AgentID,
-		Status:         string(completed.Status),
-		MessageID:      message.ID,
+		Type:               "done",
+		ConversationID:     completed.ConversationID,
+		Title:              title,
+		RunID:              completed.ID,
+		AgentID:            completed.AgentID,
+		Status:             string(completed.Status),
+		VerificationStatus: string(completed.VerificationStatus),
+		MessageID:          message.ID,
 	})
 	flusher.Flush()
 
@@ -107,11 +108,12 @@ func latestAssistantOutput(messages []domain.Message) string {
 
 func writeTerminalRunDone(w http.ResponseWriter, flusher http.Flusher, run domain.Run) {
 	writeSSE(w, "done", domain.ChatChunk{
-		Type:           "done",
-		ConversationID: run.ConversationID,
-		RunID:          run.ID,
-		AgentID:        run.AgentID,
-		Status:         string(run.Status),
+		Type:               "done",
+		ConversationID:     run.ConversationID,
+		RunID:              run.ID,
+		AgentID:            run.AgentID,
+		Status:             string(run.Status),
+		VerificationStatus: string(run.VerificationStatus),
 	})
 	flusher.Flush()
 }

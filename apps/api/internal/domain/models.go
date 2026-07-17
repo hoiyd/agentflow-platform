@@ -216,15 +216,16 @@ type ResumeRunRequest struct {
 }
 
 type ChatChunk struct {
-	Type           string `json:"type"`
-	ConversationID string `json:"conversation_id,omitempty"`
-	Title          string `json:"title,omitempty"`
-	RunID          string `json:"run_id,omitempty"`
-	AgentID        string `json:"agent_id,omitempty"`
-	Status         string `json:"status,omitempty"`
-	MessageID      string `json:"message_id,omitempty"`
-	Delta          string `json:"delta,omitempty"`
-	Error          string `json:"error,omitempty"`
+	Type               string `json:"type"`
+	ConversationID     string `json:"conversation_id,omitempty"`
+	Title              string `json:"title,omitempty"`
+	RunID              string `json:"run_id,omitempty"`
+	AgentID            string `json:"agent_id,omitempty"`
+	Status             string `json:"status,omitempty"`
+	VerificationStatus string `json:"verification_status,omitempty"`
+	MessageID          string `json:"message_id,omitempty"`
+	Delta              string `json:"delta,omitempty"`
+	Error              string `json:"error,omitempty"`
 }
 
 type RunEventType string

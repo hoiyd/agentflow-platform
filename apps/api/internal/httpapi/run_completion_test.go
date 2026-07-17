@@ -61,6 +61,9 @@ func TestCompleteStreamingRunRequiresFreshPassingEvidence(t *testing.T) {
 	if !strings.Contains(response.Body.String(), `"status":"waiting_for_user"`) {
 		t.Fatalf("terminal SSE did not expose gate decision: %s", response.Body.String())
 	}
+	if !strings.Contains(response.Body.String(), `"verification_status":"failed"`) {
+		t.Fatalf("terminal SSE did not expose verification status: %s", response.Body.String())
+	}
 	if evidence, err := fileStore.ListVerificationEvidence(run.ID); err != nil || len(evidence) != 1 || evidence[0].Status != domain.VerificationFailed {
 		t.Fatalf("missing failed evidence: %#v err=%v", evidence, err)
 	}
