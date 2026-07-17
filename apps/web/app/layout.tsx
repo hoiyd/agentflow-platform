@@ -22,6 +22,7 @@ import "./styles/workbench/home.css";
 import "./styles/workbench/shell.css";
 import "./styles/workbench/chat.css";
 import "./styles/workbench/composer.css";
+import "./styles/workbench/verification.css";
 import "./styles/workbench/tools-knowledge.css";
 import "./styles/workbench/collaboration.css";
 import "./styles/workbench/replay-overlays.css";

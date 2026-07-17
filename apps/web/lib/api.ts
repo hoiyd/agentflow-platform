@@ -1,3 +1,5 @@
+import type { CompletionContractInput } from "./verification";
+
 export type Conversation = {
   id: string;
   title: string;
@@ -54,6 +56,15 @@ export type ChatEvent =
         | "canceling"
         | "canceled"
         | string;
+      verification_status?:
+        | "not_required"
+        | "pending"
+        | "running"
+        | "passed"
+        | "failed"
+        | "blocked"
+        | "stale"
+        | string;
     }
   | { type: "error"; error: string };
 
@@ -96,6 +107,8 @@ export type RunInfo = {
     | "canceling"
     | "canceled"
     | string;
+  verification_status?: "not_required" | "pending" | "running" | "passed" | "failed" | "blocked" | "stale" | string;
+  completion_contract?: CompletionContractInput | Record<string, unknown>;
   created_at: string;
   updated_at: string;
 };
@@ -145,6 +158,8 @@ export type RunReplay = {
   steps: CollaborationStepInfo[];
   summary: RunTraceSummary;
   run_events: RunEvent[];
+  verification_evidence: Array<Record<string, unknown>>;
+  verification_artifacts: Array<Record<string, unknown>>;
 };
 
 export type EpisodeReport = {
@@ -190,9 +205,13 @@ export type EpisodeReport = {
     message: string;
   }>;
   verification: {
-    status: "passed" | "failed" | "needs_review" | string;
+    status: "not_required" | "pending" | "running" | "passed" | "failed" | "blocked" | "stale" | string;
+    subject_hash?: string;
+    contract?: Record<string, unknown>;
     evidence: string[];
     warnings: string[];
+    records: Array<Record<string, unknown>>;
+    artifacts: Array<Record<string, unknown>>;
   };
 };
 
@@ -311,7 +330,9 @@ function normalizeRunReplay(data: unknown): RunReplay {
     summary: replay.summary as RunTraceSummary,
     messages: Array.isArray(replay.messages) ? replay.messages : [],
     steps: Array.isArray(replay.steps) ? replay.steps : [],
-		run_events: Array.isArray(replay.run_events) ? replay.run_events : []
+    run_events: Array.isArray(replay.run_events) ? replay.run_events : [],
+    verification_evidence: Array.isArray(replay.verification_evidence) ? replay.verification_evidence : [],
+    verification_artifacts: Array.isArray(replay.verification_artifacts) ? replay.verification_artifacts : []
   };
 }
 
@@ -367,7 +388,14 @@ export async function listMessages(conversationId: string): Promise<Message[]> {
 }
 
 export async function streamChat(
-  input: { conversation_id?: string; agent_id?: string; message: string; mode?: ChatMode; executor?: ChatExecutor },
+  input: {
+    conversation_id?: string;
+    agent_id?: string;
+    message: string;
+    mode?: ChatMode;
+    executor?: ChatExecutor;
+    completion_contract?: CompletionContractInput;
+  },
   onEvent: (event: ChatEvent) => void
 ) {
   const response = await fetch(`${API_BASE}/api/chat`, {
@@ -377,7 +405,8 @@ export async function streamChat(
   });
 
   if (!response.ok || !response.body) {
-    throw new Error(`Chat request failed: ${response.status}`);
+    const message = await response.text();
+    throw new Error(`Chat request failed: ${response.status}${message ? ` ${message}` : ""}`);
   }
 
   await readChatEventStream(response, onEvent);
@@ -425,6 +454,14 @@ export async function cancelRun(runId: string): Promise<RunInfo> {
     throw new Error(`Failed to cancel run: ${response.status}`);
   }
   return readJSON<RunInfo>(response);
+}
+
+export async function verifyRun(runId: string): Promise<{ run: RunInfo; decision: Record<string, unknown> }> {
+  const response = await fetch(`${API_BASE}/api/runs/${runId}/verify`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`Verify request failed: ${response.status}`);
+  }
+  return readJSON<{ run: RunInfo; decision: Record<string, unknown> }>(response);
 }
 
 async function readChatEventStream(response: Response, onEvent: (event: ChatEvent) => void) {
