@@ -37,8 +37,10 @@ The first implementation supports:
 - `command`: executes an argument vector directly, without a shell.
 - `http`: performs read-only `GET` or `HEAD` checks.
 - `json_schema`: validates the final Run output with JSON Schema 2020-12.
+- `text_constraints`: checks character/word bounds, required or forbidden phrases, and required Markdown headings.
+- `citation`: checks explicit Markdown citation count, HTTPS use, and allowed or blocked source hosts.
 
-Each Evidence record binds the contract/version, verifier/version, Runtime Snapshot hash, exact candidate Subject Hash, attempt number, status, duration, exit code, summary, and Artifact IDs. Evidence is append-only. When a later candidate has a different Subject Hash, AgentFlow appends a `stale` marker that references the superseded Evidence rather than rewriting history.
+Each Evidence record binds the contract/version, verifier/version, Runtime Snapshot hash, exact candidate Subject Hash, attempt number, status, duration, exit code, summary, structured details, and Artifact IDs. One verifier may emit multiple bounded Artifacts, such as a score report and diagnostics. Evidence is append-only. When a later candidate has a different Subject Hash, AgentFlow appends a `stale` marker that references the superseded Evidence rather than rewriting history.
 
 ## Policy Semantics
 
@@ -66,7 +68,7 @@ Opt one new Run into verification by passing the contract with `POST /api/chat`:
         "id": "response-schema",
         "type": "json_schema",
         "required": true,
-        "json_schema": {
+        "config": {
           "schema": {
             "type": "object",
             "properties": {
@@ -81,7 +83,7 @@ Opt one new Run into verification by passing the contract with `POST /api/chat`:
         "id": "service-health",
         "type": "http",
         "required": true,
-        "http": {
+        "config": {
           "method": "GET",
           "url": "http://localhost:8080/health",
           "expected_status": 200
@@ -99,11 +101,65 @@ Opt one new Run into verification by passing the contract with `POST /api/chat`:
 
 The server assigns the contract ID when omitted, freezes verifier implementation versions and defaults, and stores a canonical contract hash before the Run starts. Request-provided `hash` and `version` values are not trusted.
 
+All verifier-specific settings live under `config`. Each registered verifier strictly decodes its own config, rejects unknown fields, applies defaults, and freezes the normalized value into the Completion Contract. For example, a research-style response can use deterministic checks without pretending they prove factual correctness:
+
+```json
+{
+  "subject_type": "run_output",
+  "verifiers": [
+    {
+      "id": "report-shape",
+      "type": "text_constraints",
+      "required": true,
+      "config": {
+        "min_words": 300,
+        "max_words": 1200,
+        "required_headings": ["Findings", "Sources"],
+        "forbidden_phrases": ["TODO"]
+      }
+    },
+    {
+      "id": "source-policy",
+      "type": "citation",
+      "required": true,
+      "config": {
+        "min_citations": 3,
+        "min_unique_hosts": 2,
+        "require_https": true,
+        "blocked_hosts": ["example.invalid"]
+      }
+    }
+  ],
+  "policy": {
+    "mode": "all_must_pass",
+    "max_attempts": 2,
+    "on_exhausted": "waiting_for_user"
+  }
+}
+```
+
+`citation` counts unique external URLs from explicit Markdown links and CommonMark autolinks. Relative links, images, and bare URL-like text are not citations. Host rules match the configured host and its subdomains. This verifier does not fetch sources or judge whether a source supports a claim; source reachability and claim groundedness belong in separate verifiers.
+
+## Extension Model
+
+The execution interface is intentionally small: a verifier declares a stable type and implementation version, owns config normalization, and returns a status, compact structured details, and zero or more artifacts. `Registry.Register` adds an implementation before the Engine starts serving Runs. A new synchronous verifier does not require changes to `VerifierSpec`, Completion Contract hashing, gate evaluation, persistence, replay, or event schemas.
+
+This supports the common verifier families without forcing them into one scoring method:
+
+- Deterministic outcome checks: command/test execution, HTTP probes, JSON Schema, database assertions, file or state invariants.
+- Deterministic response checks: text constraints, citation/source policy, parsers, static analyzers, and exact-match rules.
+- Model-based graders: rubric scoring, groundedness, completeness, and pairwise comparison can return scores and claim-level diagnostics through `details` and Artifacts.
+- Human review: expert judgment and calibration should enter through a future asynchronous evidence-ingestion path rather than blocking a synchronous verifier process.
+
+The Completion Gate deliberately consumes only `passed`, `failed`, or `blocked`; verifier-specific scores remain evidence details. Thresholds and rubric weighting belong inside the verifier that owns their semantics. The gate policy stays limited to required checks, `all_must_pass`/`any_may_pass`, attempt bounds, and exhaustion behavior.
+
+For subjective outputs such as articles and research reports, combine deterministic checks with an appropriately calibrated model or human grader. Deterministic structure and citation checks are useful evidence, but they are not substitutes for factuality, source quality, argument coherence, or editorial judgment.
+
 ## Security Boundaries
 
 Command verification is disabled unless `VERIFICATION_WORKSPACE_ROOT` and `VERIFICATION_ALLOWED_COMMANDS` are both configured. Working directories must be relative and remain below the root. HTTP verification permits loopback targets by default; other exact hosts require `VERIFICATION_ALLOWED_HTTP_HOSTS`. Redirects are checked against the same policy. HTTP verifiers cannot send mutation methods or persisted authorization headers.
 
-Verifier output is hashed and persisted as an Artifact, capped by `VERIFICATION_MAX_ARTIFACT_BYTES` (64 KiB by default). The Artifact records the observed byte count and whether stored content was truncated.
+Each verifier Artifact and the structured Evidence details are capped by `VERIFICATION_MAX_ARTIFACT_BYTES` (64 KiB by default). At most eight Artifacts are retained per Evidence record. Artifacts record the observed byte count, content hash, media type, and whether stored content was truncated.
 
 ## Replay and Events
 
@@ -131,4 +187,4 @@ The implementation follows three practical evaluation principles:
 - Grade the real outcome separately from the agent transcript, and prefer deterministic code-based graders where possible, as described in [Anthropic's evaluation guide](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents).
 - Give the loop an explicit verification phase, stopping rule, named terminal outcome, and bounded attempt budget, consistent with [recent loop-engineering specification work](https://arxiv.org/abs/2607.00038).
 
-This MVP intentionally omits a generic CI runner and does not permit an LLM judge to be the only required verifier.
+This MVP intentionally omits a generic CI runner, asynchronous human evidence ingestion, and built-in model graders. Deployments that later register model graders should retain deterministic or human checks for high-impact completion decisions rather than relying on an LLM judge alone.

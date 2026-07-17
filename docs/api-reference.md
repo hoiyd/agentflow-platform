@@ -43,7 +43,7 @@ POST   /api/rag/search
 
 Runs created without the field remain `verification_status=not_required`. A contracted Run carries the same frozen contract through continue/resume operations. `POST /api/runs/{id}/verify` only retries an existing contracted Run against its latest persisted assistant output; it returns `409` for an ordinary Run. Replay responses include `verification_evidence` and `verification_artifacts`.
 
-See [Completion Verification](completion-verification.md) for the request shape and policy semantics.
+Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, and `citation`. See [Completion Verification](completion-verification.md) for exact config shapes, scope, extension points, and policy semantics.
 
 Example RAG search response:
 
