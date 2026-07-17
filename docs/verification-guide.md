@@ -39,3 +39,12 @@ Demo replay flow:
 5. Select a `retrieval` or `llm_start` event.
 6. Confirm retrieved memories and knowledge chunks are visible above the raw JSON payload.
 7. For LangChainGo runs, confirm event detail or raw payload includes `executor: "langchaingo"`, `framework: "langchaingo"`, and `framework_path: "chains.LLMChain"`.
+
+Completion Gate flow:
+
+1. Send `POST /api/chat` with the JSON Schema contract from [Completion Verification](completion-verification.md).
+2. Return output that does not match the schema and confirm the Run does not become `completed`.
+3. Inspect `GET /api/runs/{id}/replay` and confirm failed Evidence includes contract/verifier versions, Subject Hash, Snapshot Hash, summary, and an Artifact ID.
+4. For an HTTP verifier with remaining attempt budget, restore the target service and call `POST /api/runs/{id}/verify`.
+5. Confirm fresh passing Evidence is appended and `run.completed` appears only after `verification.passed`.
+6. Change the candidate subject in a resumed Run and confirm a `verification.stale` marker references the superseded Evidence.

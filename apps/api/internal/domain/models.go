@@ -73,17 +73,19 @@ const (
 )
 
 type Run struct {
-	ID              string           `json:"id"`
-	AgentID         string           `json:"agent_id"`
-	ConversationID  string           `json:"conversation_id"`
-	Status          RunStatus        `json:"status"`
-	RuntimeSnapshot *RuntimeSnapshot `json:"runtime_snapshot,omitempty"`
-	Error           string           `json:"error,omitempty"`
-	StartedAt       *time.Time       `json:"started_at,omitempty"`
-	HeartbeatAt     *time.Time       `json:"heartbeat_at,omitempty"`
-	CompletedAt     *time.Time       `json:"completed_at,omitempty"`
-	CreatedAt       time.Time        `json:"created_at"`
-	UpdatedAt       time.Time        `json:"updated_at"`
+	ID                 string              `json:"id"`
+	AgentID            string              `json:"agent_id"`
+	ConversationID     string              `json:"conversation_id"`
+	Status             RunStatus           `json:"status"`
+	RuntimeSnapshot    *RuntimeSnapshot    `json:"runtime_snapshot,omitempty"`
+	CompletionContract *CompletionContract `json:"completion_contract,omitempty"`
+	VerificationStatus VerificationStatus  `json:"verification_status"`
+	Error              string              `json:"error,omitempty"`
+	StartedAt          *time.Time          `json:"started_at,omitempty"`
+	HeartbeatAt        *time.Time          `json:"heartbeat_at,omitempty"`
+	CompletedAt        *time.Time          `json:"completed_at,omitempty"`
+	CreatedAt          time.Time           `json:"created_at"`
+	UpdatedAt          time.Time           `json:"updated_at"`
 }
 
 const (
@@ -200,6 +202,9 @@ type ChatRequest struct {
 	Message        string `json:"message"`
 	Mode           string `json:"mode"`
 	Executor       string `json:"executor"`
+	// CompletionContract explicitly enables verification for the new Run.
+	// Omitting it leaves verification_status=not_required in every chat mode.
+	CompletionContract *CompletionContract `json:"completion_contract,omitempty"`
 }
 
 type ContinueRunRequest struct {
@@ -211,15 +216,16 @@ type ResumeRunRequest struct {
 }
 
 type ChatChunk struct {
-	Type           string `json:"type"`
-	ConversationID string `json:"conversation_id,omitempty"`
-	Title          string `json:"title,omitempty"`
-	RunID          string `json:"run_id,omitempty"`
-	AgentID        string `json:"agent_id,omitempty"`
-	Status         string `json:"status,omitempty"`
-	MessageID      string `json:"message_id,omitempty"`
-	Delta          string `json:"delta,omitempty"`
-	Error          string `json:"error,omitempty"`
+	Type               string `json:"type"`
+	ConversationID     string `json:"conversation_id,omitempty"`
+	Title              string `json:"title,omitempty"`
+	RunID              string `json:"run_id,omitempty"`
+	AgentID            string `json:"agent_id,omitempty"`
+	Status             string `json:"status,omitempty"`
+	VerificationStatus string `json:"verification_status,omitempty"`
+	MessageID          string `json:"message_id,omitempty"`
+	Delta              string `json:"delta,omitempty"`
+	Error              string `json:"error,omitempty"`
 }
 
 type RunEventType string
@@ -263,6 +269,13 @@ const (
 	EventMemorySyncRequested     RunEventType = "memory.sync.requested"
 	EventMemorySyncCompleted     RunEventType = "memory.sync.completed"
 	EventMemorySyncFailed        RunEventType = "memory.sync.failed"
+	EventVerificationRequested   RunEventType = "verification.requested"
+	EventVerificationStarted     RunEventType = "verification.started"
+	EventVerificationPassed      RunEventType = "verification.passed"
+	EventVerificationFailed      RunEventType = "verification.failed"
+	EventVerificationBlocked     RunEventType = "verification.blocked"
+	EventVerificationStale       RunEventType = "verification.stale"
+	EventRunRevisionRequested    RunEventType = "run.revision_requested"
 )
 
 type ContextManifestEntry struct {
@@ -327,13 +340,15 @@ type RunTraceSummary struct {
 }
 
 type RunReplay struct {
-	Run             Run                 `json:"run"`
-	RuntimeSnapshot *RuntimeSnapshot    `json:"runtime_snapshot,omitempty"`
-	Conversation    Conversation        `json:"conversation"`
-	Messages        []Message           `json:"messages"`
-	Steps           []CollaborationStep `json:"steps"`
-	Summary         RunTraceSummary     `json:"summary"`
-	RunEvents       []RunEvent          `json:"run_events"`
+	Run                   Run                    `json:"run"`
+	RuntimeSnapshot       *RuntimeSnapshot       `json:"runtime_snapshot,omitempty"`
+	Conversation          Conversation           `json:"conversation"`
+	Messages              []Message              `json:"messages"`
+	Steps                 []CollaborationStep    `json:"steps"`
+	Summary               RunTraceSummary        `json:"summary"`
+	RunEvents             []RunEvent             `json:"run_events"`
+	VerificationEvidence  []VerificationEvidence `json:"verification_evidence"`
+	VerificationArtifacts []VerificationArtifact `json:"verification_artifacts"`
 }
 
 type EpisodeReport struct {
@@ -390,9 +405,13 @@ type EpisodeError struct {
 }
 
 type EpisodeVerification struct {
-	Status   string   `json:"status"`
-	Evidence []string `json:"evidence"`
-	Warnings []string `json:"warnings"`
+	Status      VerificationStatus     `json:"status"`
+	SubjectHash string                 `json:"subject_hash,omitempty"`
+	Contract    *CompletionContract    `json:"contract,omitempty"`
+	Evidence    []string               `json:"evidence"`
+	Warnings    []string               `json:"warnings"`
+	Records     []VerificationEvidence `json:"records"`
+	Artifacts   []VerificationArtifact `json:"artifacts"`
 }
 
 type MemoryCandidateStatus string

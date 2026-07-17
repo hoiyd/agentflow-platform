@@ -14,6 +14,7 @@ import (
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/verification"
 )
 
 type MemoryCurationQueue interface {
@@ -44,6 +45,7 @@ type Dependencies struct {
 	Knowledge      KnowledgeOperations
 	MemoryCuration MemoryCurationQueue
 	RunController  *concurrency.RunController
+	Verification   *verification.Engine
 	AllowedOrigins []string
 }
 
@@ -56,6 +58,7 @@ type Handler struct {
 	knowledge      KnowledgeOperations
 	memoryCuration MemoryCurationQueue
 	runController  *concurrency.RunController
+	verification   *verification.Engine
 	allowedOrigins []string
 }
 
@@ -84,6 +87,9 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 	if dependencies.RunController == nil {
 		return nil, errors.New("http api run controller is required")
 	}
+	if dependencies.Verification == nil {
+		return nil, errors.New("http api verification engine is required")
+	}
 	return &Handler{
 		store:          dependencies.Store,
 		openAI:         dependencies.ModelClient,
@@ -93,6 +99,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		knowledge:      dependencies.Knowledge,
 		memoryCuration: dependencies.MemoryCuration,
 		runController:  dependencies.RunController,
+		verification:   dependencies.Verification,
 		allowedOrigins: append([]string(nil), dependencies.AllowedOrigins...),
 	}, nil
 }

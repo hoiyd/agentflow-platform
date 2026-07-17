@@ -75,7 +75,15 @@ type Config struct {
 	DatabaseURL                   string
 	DataPath                      string
 	ToolConfigPath                string
-	AllowedOrigins                string
+	// VerificationWorkspaceRoot bounds command verifier working directories. Empty disables command execution.
+	VerificationWorkspaceRoot string
+	// VerificationAllowedCommands is a comma-separated executable allowlist for command verifiers.
+	VerificationAllowedCommands string
+	// VerificationAllowedHTTPHosts extends HTTP verification beyond loopback hosts.
+	VerificationAllowedHTTPHosts string
+	// VerificationMaxArtifactBytes caps persisted raw output per verifier while retaining its full byte count and hash.
+	VerificationMaxArtifactBytes int
+	AllowedOrigins               string
 }
 
 func Load() Config {
@@ -124,6 +132,10 @@ func Load() Config {
 		DatabaseURL:                       getEnv("DATABASE_URL", ""),
 		DataPath:                          getEnv("DATA_PATH", ".data/agentflow.json"),
 		ToolConfigPath:                    getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
+		VerificationWorkspaceRoot:         getEnv("VERIFICATION_WORKSPACE_ROOT", ""),
+		VerificationAllowedCommands:       getEnv("VERIFICATION_ALLOWED_COMMANDS", ""),
+		VerificationAllowedHTTPHosts:      getEnv("VERIFICATION_ALLOWED_HTTP_HOSTS", ""),
+		VerificationMaxArtifactBytes:      getIntEnv("VERIFICATION_MAX_ARTIFACT_BYTES", 65536),
 		AllowedOrigins:                    getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 	}
 }

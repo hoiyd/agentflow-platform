@@ -4,14 +4,16 @@ go 1.25.0
 
 require (
 	github.com/jackc/pgx/v5 v5.9.2
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/tmc/langchaingo v0.1.14
+	github.com/yuin/goldmark v1.8.2
 )
 
 require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.2.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
-	github.com/dlclark/regexp2 v1.10.0 // indirect
+	github.com/dlclark/regexp2 v1.11.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
