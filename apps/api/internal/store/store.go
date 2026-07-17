@@ -39,12 +39,20 @@ type AgentStore interface {
 
 type RunStore interface {
 	CreateRun(agentID string, conversationID string, snapshot domain.RuntimeSnapshot) (domain.Run, error)
+	CreateRunWithContract(agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error)
 	UpdateRunAgent(id string, agentID string) (domain.Run, error)
 	UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error)
 	UpdateRunHeartbeat(id string) (domain.Run, error)
 	ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error)
 	GetRun(id string) (domain.Run, bool, error)
 	ListRuns() ([]domain.Run, error)
+}
+
+type VerificationStore interface {
+	UpdateRunVerificationStatus(id string, status domain.VerificationStatus) (domain.Run, error)
+	AppendVerificationRecord(record domain.VerificationRecord) error
+	ListVerificationEvidence(runID string) ([]domain.VerificationEvidence, error)
+	ListVerificationArtifacts(runID string) ([]domain.VerificationArtifact, error)
 }
 
 type CollaborationStore interface {
@@ -92,6 +100,7 @@ type Store interface {
 	RunStore
 	CollaborationStore
 	RunEventStore
+	VerificationStore
 	ContextCompactionStore
 	MemoryStore
 	MemoryCandidateStore

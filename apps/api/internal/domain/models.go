@@ -73,17 +73,19 @@ const (
 )
 
 type Run struct {
-	ID              string           `json:"id"`
-	AgentID         string           `json:"agent_id"`
-	ConversationID  string           `json:"conversation_id"`
-	Status          RunStatus        `json:"status"`
-	RuntimeSnapshot *RuntimeSnapshot `json:"runtime_snapshot,omitempty"`
-	Error           string           `json:"error,omitempty"`
-	StartedAt       *time.Time       `json:"started_at,omitempty"`
-	HeartbeatAt     *time.Time       `json:"heartbeat_at,omitempty"`
-	CompletedAt     *time.Time       `json:"completed_at,omitempty"`
-	CreatedAt       time.Time        `json:"created_at"`
-	UpdatedAt       time.Time        `json:"updated_at"`
+	ID                 string              `json:"id"`
+	AgentID            string              `json:"agent_id"`
+	ConversationID     string              `json:"conversation_id"`
+	Status             RunStatus           `json:"status"`
+	RuntimeSnapshot    *RuntimeSnapshot    `json:"runtime_snapshot,omitempty"`
+	CompletionContract *CompletionContract `json:"completion_contract,omitempty"`
+	VerificationStatus VerificationStatus  `json:"verification_status"`
+	Error              string              `json:"error,omitempty"`
+	StartedAt          *time.Time          `json:"started_at,omitempty"`
+	HeartbeatAt        *time.Time          `json:"heartbeat_at,omitempty"`
+	CompletedAt        *time.Time          `json:"completed_at,omitempty"`
+	CreatedAt          time.Time           `json:"created_at"`
+	UpdatedAt          time.Time           `json:"updated_at"`
 }
 
 const (
@@ -327,13 +329,15 @@ type RunTraceSummary struct {
 }
 
 type RunReplay struct {
-	Run             Run                 `json:"run"`
-	RuntimeSnapshot *RuntimeSnapshot    `json:"runtime_snapshot,omitempty"`
-	Conversation    Conversation        `json:"conversation"`
-	Messages        []Message           `json:"messages"`
-	Steps           []CollaborationStep `json:"steps"`
-	Summary         RunTraceSummary     `json:"summary"`
-	RunEvents       []RunEvent          `json:"run_events"`
+	Run                   Run                    `json:"run"`
+	RuntimeSnapshot       *RuntimeSnapshot       `json:"runtime_snapshot,omitempty"`
+	Conversation          Conversation           `json:"conversation"`
+	Messages              []Message              `json:"messages"`
+	Steps                 []CollaborationStep    `json:"steps"`
+	Summary               RunTraceSummary        `json:"summary"`
+	RunEvents             []RunEvent             `json:"run_events"`
+	VerificationEvidence  []VerificationEvidence `json:"verification_evidence"`
+	VerificationArtifacts []VerificationArtifact `json:"verification_artifacts"`
 }
 
 type EpisodeReport struct {

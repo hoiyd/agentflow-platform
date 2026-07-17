@@ -64,6 +64,72 @@ func TestFileStoreRuntimeSnapshotRoundTripAndReplay(t *testing.T) {
 	}
 }
 
+func TestFileStoreVerificationContractEvidenceAndArtifactsRoundTrip(t *testing.T) {
+	path := t.TempDir() + "/agentflow.json"
+	first, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := first.CreateConversation("verification round trip")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	contract := &domain.CompletionContract{
+		ID: "contract_test", Version: 1, Hash: "sha256:contract", SubjectType: "run_output",
+		Verifiers: []domain.VerifierSpec{{
+			ID: "schema", Type: domain.VerifierJSONSchema, Version: "1", Required: true,
+			JSONSchema: &domain.JSONSchemaVerifierConfig{Schema: map[string]any{"type": "object"}},
+		}},
+		Policy: domain.VerificationPolicy{Mode: domain.VerificationAllMustPass, MaxAttempts: 2, OnExhausted: domain.VerificationWaitForUser},
+	}
+	run, err := first.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), contract)
+	if err != nil {
+		t.Fatalf("create run with contract: %v", err)
+	}
+	if run.VerificationStatus != domain.VerificationPending {
+		t.Fatalf("expected pending verification, got %q", run.VerificationStatus)
+	}
+	contract.Verifiers[0].JSONSchema.Schema["type"] = "string"
+
+	now := time.Now().UTC()
+	exitCode := 0
+	record := domain.VerificationRecord{
+		Evidence: domain.VerificationEvidence{
+			ID: "evidence_test", RunID: run.ID, ContractID: "contract_test", ContractVersion: 1,
+			VerifierID: "schema", VerifierType: domain.VerifierJSONSchema, VerifierVersion: "1",
+			Attempt: 1, SubjectHash: "sha256:subject", SnapshotHash: "sha256:snapshot",
+			Status: domain.VerificationPassed, StartedAt: now, CompletedAt: now,
+			ExitCode: &exitCode, Summary: "schema matched", ArtifactIDs: []string{"artifact_test"},
+		},
+		Artifacts: []domain.VerificationArtifact{{
+			ID: "artifact_test", RunID: run.ID, EvidenceID: "evidence_test", Kind: "verifier_output",
+			MediaType: "text/plain", Content: "schema matched", ContentHash: "sha256:output",
+			ByteSize: 14, CreatedAt: now,
+		}},
+	}
+	if err := first.AppendVerificationRecord(record); err != nil {
+		t.Fatalf("append verification record: %v", err)
+	}
+	if _, err := first.UpdateRunVerificationStatus(run.ID, domain.VerificationPassed); err != nil {
+		t.Fatalf("update verification status: %v", err)
+	}
+
+	second, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	replay, ok, err := second.GetRunReplay(run.ID)
+	if err != nil || !ok {
+		t.Fatalf("get replay: ok=%v err=%v", ok, err)
+	}
+	if replay.Run.CompletionContract == nil || replay.Run.CompletionContract.Verifiers[0].JSONSchema.Schema["type"] != "object" {
+		t.Fatalf("contract was not frozen: %#v", replay.Run.CompletionContract)
+	}
+	if replay.Run.VerificationStatus != domain.VerificationPassed || len(replay.VerificationEvidence) != 1 || len(replay.VerificationArtifacts) != 1 {
+		t.Fatalf("verification did not round trip: run=%#v evidence=%#v artifacts=%#v", replay.Run, replay.VerificationEvidence, replay.VerificationArtifacts)
+	}
+}
+
 func TestFileStoreContextCompactionRoundTrip(t *testing.T) {
 	path := t.TempDir() + "/agentflow.json"
 	first, err := NewFileStore(path)

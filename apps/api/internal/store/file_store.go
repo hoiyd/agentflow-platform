@@ -24,19 +24,21 @@ type FileStore struct {
 }
 
 type fileData struct {
-	Conversations      []domain.Conversation           `json:"conversations"`
-	Messages           []domain.Message                `json:"messages"`
-	Agents             []domain.Agent                  `json:"agents"`
-	Runs               []domain.Run                    `json:"runs"`
-	CollaborationSteps []domain.CollaborationStep      `json:"collaboration_steps"`
-	RunEvents          []domain.RunEvent               `json:"run_events"`
-	ContextCompactions []domain.ContextCompaction      `json:"context_compactions"`
-	MemoryCandidates   []domain.MemoryCandidate        `json:"memory_candidates"`
-	Memories           []domain.Memory                 `json:"memories"`
-	MemoryEmbeddings   []domain.MemoryEmbedding        `json:"memory_embeddings"`
-	Documents          []domain.Document               `json:"documents"`
-	DocumentChunks     []domain.DocumentChunk          `json:"document_chunks"`
-	ChunkEmbeddings    []domain.DocumentChunkEmbedding `json:"document_chunk_embeddings"`
+	Conversations         []domain.Conversation           `json:"conversations"`
+	Messages              []domain.Message                `json:"messages"`
+	Agents                []domain.Agent                  `json:"agents"`
+	Runs                  []domain.Run                    `json:"runs"`
+	CollaborationSteps    []domain.CollaborationStep      `json:"collaboration_steps"`
+	RunEvents             []domain.RunEvent               `json:"run_events"`
+	VerificationEvidence  []domain.VerificationEvidence   `json:"verification_evidence"`
+	VerificationArtifacts []domain.VerificationArtifact   `json:"verification_artifacts"`
+	ContextCompactions    []domain.ContextCompaction      `json:"context_compactions"`
+	MemoryCandidates      []domain.MemoryCandidate        `json:"memory_candidates"`
+	Memories              []domain.Memory                 `json:"memories"`
+	MemoryEmbeddings      []domain.MemoryEmbedding        `json:"memory_embeddings"`
+	Documents             []domain.Document               `json:"documents"`
+	DocumentChunks        []domain.DocumentChunk          `json:"document_chunks"`
+	ChunkEmbeddings       []domain.DocumentChunkEmbedding `json:"document_chunk_embeddings"`
 }
 
 var _ Store = (*FileStore)(nil)
@@ -141,6 +143,22 @@ func (s *FileStore) DeleteConversation(id string) error {
 		}
 	}
 	s.data.RunEvents = runEvents
+
+	evidence := make([]domain.VerificationEvidence, 0, len(s.data.VerificationEvidence))
+	for _, item := range s.data.VerificationEvidence {
+		if !runIDs[item.RunID] {
+			evidence = append(evidence, item)
+		}
+	}
+	s.data.VerificationEvidence = evidence
+
+	artifacts := make([]domain.VerificationArtifact, 0, len(s.data.VerificationArtifacts))
+	for _, item := range s.data.VerificationArtifacts {
+		if !runIDs[item.RunID] {
+			artifacts = append(artifacts, item)
+		}
+	}
+	s.data.VerificationArtifacts = artifacts
 
 	compactions := make([]domain.ContextCompaction, 0, len(s.data.ContextCompactions))
 	for _, compaction := range s.data.ContextCompactions {
@@ -399,6 +417,10 @@ func (s *FileStore) GetDefaultAgent() (domain.Agent, bool, error) {
 }
 
 func (s *FileStore) CreateRun(agentID string, conversationID string, snapshot domain.RuntimeSnapshot) (domain.Run, error) {
+	return s.CreateRunWithContract(agentID, conversationID, snapshot, nil)
+}
+
+func (s *FileStore) CreateRunWithContract(agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -414,17 +436,82 @@ func (s *FileStore) CreateRun(agentID string, conversationID string, snapshot do
 
 	now := time.Now().UTC()
 	run := domain.Run{
-		ID:              newID("run"),
-		AgentID:         agentID,
-		ConversationID:  conversationID,
-		Status:          domain.RunQueued,
-		RuntimeSnapshot: cloneRuntimeSnapshot(snapshot),
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:                 newID("run"),
+		AgentID:            agentID,
+		ConversationID:     conversationID,
+		Status:             domain.RunQueued,
+		RuntimeSnapshot:    cloneRuntimeSnapshot(snapshot),
+		CompletionContract: cloneCompletionContract(contract),
+		VerificationStatus: domain.VerificationNotRequired,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+	if contract != nil {
+		run.VerificationStatus = domain.VerificationPending
 	}
 	stored := cloneRun(run)
 	s.data.Runs = append(s.data.Runs, stored)
 	return cloneRun(run), s.saveLocked()
+}
+
+func (s *FileStore) UpdateRunVerificationStatus(id string, status domain.VerificationStatus) (domain.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.data.Runs {
+		if s.data.Runs[i].ID == id {
+			s.data.Runs[i].VerificationStatus = status
+			s.data.Runs[i].UpdatedAt = time.Now().UTC()
+			return cloneRun(s.data.Runs[i]), s.saveLocked()
+		}
+	}
+	return domain.Run{}, errors.New("run not found")
+}
+
+func (s *FileStore) AppendVerificationRecord(record domain.VerificationRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.getRunLocked(record.Evidence.RunID); !ok {
+		return errors.New("run not found")
+	}
+	for _, item := range s.data.VerificationEvidence {
+		if item.ID == record.Evidence.ID {
+			return errors.New("verification evidence already exists")
+		}
+	}
+	for _, artifact := range record.Artifacts {
+		if artifact.RunID != record.Evidence.RunID || artifact.EvidenceID != record.Evidence.ID {
+			return errors.New("verification artifact does not match evidence")
+		}
+	}
+	s.data.VerificationEvidence = append(s.data.VerificationEvidence, record.Evidence)
+	s.data.VerificationArtifacts = append(s.data.VerificationArtifacts, record.Artifacts...)
+	return s.saveLocked()
+}
+
+func (s *FileStore) ListVerificationEvidence(runID string) ([]domain.VerificationEvidence, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	items := []domain.VerificationEvidence{}
+	for _, item := range s.data.VerificationEvidence {
+		if item.RunID == runID {
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].StartedAt.Before(items[j].StartedAt) })
+	return items, nil
+}
+
+func (s *FileStore) ListVerificationArtifacts(runID string) ([]domain.VerificationArtifact, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	items := []domain.VerificationArtifact{}
+	for _, item := range s.data.VerificationArtifacts {
+		if item.RunID == runID {
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
+	return items, nil
 }
 
 func (s *FileStore) UpdateRunAgent(id string, agentID string) (domain.Run, error) {
@@ -689,13 +776,15 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	steps := s.stepsForRunLocked(runID)
 	runEvents := s.runEventsForRunLocked(runID)
 	return domain.RunReplay{
-		Run:             cloneRun(run),
-		RuntimeSnapshot: cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
-		Conversation:    conversation,
-		Messages:        messages,
-		Steps:           steps,
-		Summary:         buildRunTraceSummary(run, runEvents),
-		RunEvents:       runEvents,
+		Run:                   cloneRun(run),
+		RuntimeSnapshot:       cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
+		Conversation:          conversation,
+		Messages:              messages,
+		Steps:                 steps,
+		Summary:               buildRunTraceSummary(run, runEvents),
+		RunEvents:             runEvents,
+		VerificationEvidence:  verificationEvidenceForRun(s.data.VerificationEvidence, runID),
+		VerificationArtifacts: verificationArtifactsForRun(s.data.VerificationArtifacts, runID),
 	}, true, nil
 }
 
@@ -715,7 +804,38 @@ func cloneRuntimeSnapshotValue(snapshot *domain.RuntimeSnapshot) *domain.Runtime
 
 func cloneRun(run domain.Run) domain.Run {
 	run.RuntimeSnapshot = cloneRuntimeSnapshotValue(run.RuntimeSnapshot)
+	run.CompletionContract = cloneCompletionContract(run.CompletionContract)
 	return run
+}
+
+func cloneCompletionContract(contract *domain.CompletionContract) *domain.CompletionContract {
+	if contract == nil {
+		return nil
+	}
+	bytes, _ := json.Marshal(contract)
+	var cloned domain.CompletionContract
+	_ = json.Unmarshal(bytes, &cloned)
+	return &cloned
+}
+
+func verificationEvidenceForRun(items []domain.VerificationEvidence, runID string) []domain.VerificationEvidence {
+	result := []domain.VerificationEvidence{}
+	for _, item := range items {
+		if item.RunID == runID {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func verificationArtifactsForRun(items []domain.VerificationArtifact, runID string) []domain.VerificationArtifact {
+	result := []domain.VerificationArtifact{}
+	for _, item := range items {
+		if item.RunID == runID {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 func (s *FileStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
