@@ -18,6 +18,7 @@ import (
 	"agentflow-platform/apps/api/internal/recovery"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/verification"
 )
 
 type applicationDependencies struct {
@@ -50,6 +51,13 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
 	}
+	verifierRegistry := verification.NewRegistry(verification.Options{
+		WorkspaceRoot:    cfg.VerificationWorkspaceRoot,
+		AllowedCommands:  splitCSV(cfg.VerificationAllowedCommands),
+		AllowedHTTPHosts: splitCSV(cfg.VerificationAllowedHTTPHosts),
+		MaxArtifactBytes: cfg.VerificationMaxArtifactBytes,
+	})
+	verificationEngine := verification.NewEngine(appStore, verifierRegistry)
 
 	agentRuntime := agent.NewRuntime(agent.RuntimeOptions{
 		Store:           appStore,
@@ -81,6 +89,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		Knowledge:      knowledgeBase,
 		MemoryCuration: memoryCurator,
 		RunController:  runController,
+		Verification:   verificationEngine,
 		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
 	})
 	if err != nil {
@@ -165,6 +174,10 @@ func closeStore(appStore store.Store) error {
 }
 
 func splitOrigins(value string) []string {
+	return splitCSV(value)
+}
+
+func splitCSV(value string) []string {
 	parts := strings.Split(value, ",")
 	origins := make([]string, 0, len(parts))
 	for _, part := range parts {

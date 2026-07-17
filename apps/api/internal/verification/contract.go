@@ -98,11 +98,16 @@ func (r *Registry) FreezeContract(input *domain.CompletionContract) (*domain.Com
 		return nil, invalidContract("policy.on_exhausted must be fail or waiting_for_user")
 	}
 	contract.Hash = ""
-	contract.Hash, err = hashJSON(contract)
+	contract.Hash, err = completionContractHash(contract)
 	if err != nil {
 		return nil, &VerificationError{Kind: ErrorInvalidContract, Message: "hash completion contract", Cause: err}
 	}
 	return &contract, nil
+}
+
+func completionContractHash(contract domain.CompletionContract) (string, error) {
+	contract.Hash = ""
+	return hashJSON(contract)
 }
 
 func validateSpec(spec *domain.VerifierSpec) error {

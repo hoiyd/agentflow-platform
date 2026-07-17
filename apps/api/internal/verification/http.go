@@ -69,18 +69,13 @@ func (v httpVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _ Su
 		return blocked("http request failed: " + err.Error())
 	}
 	defer response.Body.Close()
-	body, readErr := io.ReadAll(io.LimitReader(response.Body, v.outputLimit+1))
-	if readErr != nil {
+	output := newCappedBuffer(int(v.outputLimit))
+	if _, readErr := io.Copy(output, response.Body); readErr != nil {
 		return blocked("read http response: " + readErr.Error())
-	}
-	total := len(body)
-	truncated := int64(total) > v.outputLimit
-	if truncated {
-		body = body[:v.outputLimit]
 	}
 	result := Result{
 		Status: domain.VerificationPassed, Summary: fmt.Sprintf("http status %d matched", response.StatusCode),
-		Output: string(body), OutputBytes: total, Truncated: truncated,
+		Output: output.String(), OutputHash: output.Hash(), OutputBytes: output.Total(), Truncated: output.Truncated(),
 	}
 	if response.StatusCode != spec.HTTP.ExpectedStatus {
 		result.Status = domain.VerificationFailed

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ type RuntimeStore interface {
 	GetAgent(string) (domain.Agent, bool, error)
 	GetDefaultAgent() (domain.Agent, bool, error)
 	CreateRun(string, string, domain.RuntimeSnapshot) (domain.Run, error)
+	CreateRunWithContract(string, string, domain.RuntimeSnapshot, *domain.CompletionContract) (domain.Run, error)
 	UpdateRunAgent(string, string) (domain.Run, error)
 	UpdateRunStatus(string, domain.RunStatus, string) (domain.Run, error)
 	UpdateRunHeartbeat(string) (domain.Run, error)
@@ -98,6 +100,10 @@ func DefaultAutonomousLimits() AutonomousLimits {
 }
 
 func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversationID string, executorKind string) (PreparedRun, error) {
+	return r.PrepareChatRunWithContract(ctx, agentID, conversationID, executorKind, nil)
+}
+
+func (r *Runtime) PrepareChatRunWithContract(ctx context.Context, agentID string, conversationID string, executorKind string, contract *domain.CompletionContract) (PreparedRun, error) {
 	agent, err := r.resolveAgent(strings.TrimSpace(agentID))
 	if err != nil {
 		return PreparedRun{}, err
@@ -108,7 +114,7 @@ func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversati
 		return PreparedRun{}, err
 	}
 	agent = restoreAgent(snapshot.Agent)
-	run, err := r.store.CreateRun(agent.ID, conversationID, snapshot)
+	run, err := r.store.CreateRunWithContract(agent.ID, conversationID, snapshot, contract)
 	if err != nil {
 		return PreparedRun{}, err
 	}
@@ -365,6 +371,24 @@ func (r *Runtime) FailRun(id string, err error) (domain.Run, error) {
 		r.publishRunLifecycle(context.Background(), run, domain.EventRunFailed, map[string]any{"status": run.Status, "error": message})
 	}
 	return run, updateErr
+}
+
+func (r *Runtime) RejectRunCompletion(id string, status domain.RunStatus, reason string) (domain.Run, error) {
+	eventType := domain.EventRunFailed
+	switch status {
+	case domain.RunFailed, domain.RunFailedRecoverable:
+	case domain.RunWaitingForUser:
+		eventType = domain.EventRunWaitingForUser
+	default:
+		return domain.Run{}, fmt.Errorf("invalid verification rejection status %q", status)
+	}
+	run, err := r.store.UpdateRunStatus(id, status, strings.TrimSpace(reason))
+	if err == nil {
+		r.publishRunLifecycle(context.Background(), run, eventType, map[string]any{
+			"status": run.Status, "error": run.Error, "source": "completion_gate",
+		})
+	}
+	return run, err
 }
 
 func (r *Runtime) CancelRun(id string) (domain.Run, error) {

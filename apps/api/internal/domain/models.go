@@ -197,11 +197,12 @@ type CollaborationStep struct {
 }
 
 type ChatRequest struct {
-	ConversationID string `json:"conversation_id"`
-	AgentID        string `json:"agent_id"`
-	Message        string `json:"message"`
-	Mode           string `json:"mode"`
-	Executor       string `json:"executor"`
+	ConversationID     string              `json:"conversation_id"`
+	AgentID            string              `json:"agent_id"`
+	Message            string              `json:"message"`
+	Mode               string              `json:"mode"`
+	Executor           string              `json:"executor"`
+	CompletionContract *CompletionContract `json:"completion_contract,omitempty"`
 }
 
 type ContinueRunRequest struct {
@@ -265,6 +266,13 @@ const (
 	EventMemorySyncRequested     RunEventType = "memory.sync.requested"
 	EventMemorySyncCompleted     RunEventType = "memory.sync.completed"
 	EventMemorySyncFailed        RunEventType = "memory.sync.failed"
+	EventVerificationRequested   RunEventType = "verification.requested"
+	EventVerificationStarted     RunEventType = "verification.started"
+	EventVerificationPassed      RunEventType = "verification.passed"
+	EventVerificationFailed      RunEventType = "verification.failed"
+	EventVerificationBlocked     RunEventType = "verification.blocked"
+	EventVerificationStale       RunEventType = "verification.stale"
+	EventRunRevisionRequested    RunEventType = "run.revision_requested"
 )
 
 type ContextManifestEntry struct {

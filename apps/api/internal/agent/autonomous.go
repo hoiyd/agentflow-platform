@@ -41,6 +41,10 @@ type humanInputNeed struct {
 }
 
 func (r *Runtime) PrepareAutonomousRun(ctx context.Context, agentID string, conversationID string) (PreparedCollaborationRun, error) {
+	return r.PrepareAutonomousRunWithContract(ctx, agentID, conversationID, nil)
+}
+
+func (r *Runtime) PrepareAutonomousRunWithContract(ctx context.Context, agentID string, conversationID string, contract *domain.CompletionContract) (PreparedCollaborationRun, error) {
 	agent, err := r.resolveAgent(agentID)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
@@ -51,7 +55,7 @@ func (r *Runtime) PrepareAutonomousRun(ctx context.Context, agentID string, conv
 		return PreparedCollaborationRun{}, err
 	}
 	agent = restoreAgent(snapshot.Agent)
-	run, err := r.store.CreateRun(agent.ID, conversationID, snapshot)
+	run, err := r.store.CreateRunWithContract(agent.ID, conversationID, snapshot, contract)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}

@@ -23,6 +23,12 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "message is required")
 		return
 	}
+	contract, err := h.freezeCompletionContract(req.CompletionContract)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.CompletionContract = contract
 	reservation, ok := h.reserveRunCapacity(w)
 	if !ok {
 		return
@@ -85,7 +91,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prepared, err := h.agentRuntime.PrepareChatRun(r.Context(), req.AgentID, conversationID, req.Executor)
+	prepared, err := h.agentRuntime.PrepareChatRunWithContract(r.Context(), req.AgentID, conversationID, req.Executor, req.CompletionContract)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if store.IsNotFound(err) {
@@ -129,7 +135,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
-	prepared, err := h.agentRuntime.PrepareCollaborationRun(r.Context(), req.AgentID, conversationID)
+	prepared, err := h.agentRuntime.PrepareCollaborationRunWithContract(r.Context(), req.AgentID, conversationID, req.CompletionContract)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if store.IsNotFound(err) {
@@ -180,7 +186,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 }
 
 func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
-	prepared, err := h.agentRuntime.PrepareAutonomousRun(r.Context(), req.AgentID, conversationID)
+	prepared, err := h.agentRuntime.PrepareAutonomousRunWithContract(r.Context(), req.AgentID, conversationID, req.CompletionContract)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if store.IsNotFound(err) {

@@ -56,7 +56,7 @@ func (v commandVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _
 	command.Stdout = output
 	command.Stderr = output
 	err = command.Run()
-	result := Result{Status: domain.VerificationPassed, Summary: "command completed successfully", Output: output.String(), OutputBytes: output.Total(), Truncated: output.Truncated()}
+	result := Result{Status: domain.VerificationPassed, Summary: "command completed successfully", Output: output.String(), OutputHash: output.Hash(), OutputBytes: output.Total(), Truncated: output.Truncated()}
 	if err == nil {
 		code := 0
 		result.ExitCode = &code

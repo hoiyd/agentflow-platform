@@ -32,6 +32,7 @@ type Result struct {
 	Summary     string
 	ExitCode    *int
 	Output      string
+	OutputHash  string
 	OutputBytes int
 	Truncated   bool
 }
