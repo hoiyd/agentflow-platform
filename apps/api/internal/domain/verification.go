@@ -71,10 +71,9 @@ type CommandVerifierConfig struct {
 }
 
 type HTTPVerifierConfig struct {
-	Method         string            `json:"method"`
-	URL            string            `json:"url"`
-	Headers        map[string]string `json:"headers,omitempty"`
-	ExpectedStatus int               `json:"expected_status"`
+	Method         string `json:"method"`
+	URL            string `json:"url"`
+	ExpectedStatus int    `json:"expected_status"`
 }
 
 type JSONSchemaVerifierConfig struct {
