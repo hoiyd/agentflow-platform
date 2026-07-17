@@ -1,6 +1,7 @@
 package verification
 
 import (
+	"context"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
@@ -12,7 +13,7 @@ func TestFreezeContractNormalizesAndHashesEffectiveDefinition(t *testing.T) {
 		ID: "contract_test",
 		Verifiers: []domain.VerifierSpec{{
 			ID: "schema", Type: domain.VerifierJSONSchema, Required: true,
-			JSONSchema: &domain.JSONSchemaVerifierConfig{Schema: map[string]any{
+			Config: map[string]any{"schema": map[string]any{
 				"type": "object", "required": []any{"status"},
 			}},
 		}},
@@ -30,8 +31,8 @@ func TestFreezeContractNormalizesAndHashesEffectiveDefinition(t *testing.T) {
 	if frozen.Policy.Mode != domain.VerificationAllMustPass || frozen.Policy.MaxAttempts != 2 || frozen.Policy.OnExhausted != domain.VerificationWaitForUser {
 		t.Fatalf("policy defaults were not frozen: %#v", frozen.Policy)
 	}
-	input.Verifiers[0].JSONSchema.Schema["type"] = "string"
-	if frozen.Verifiers[0].JSONSchema.Schema["type"] != "object" {
+	input.Verifiers[0].Config["schema"].(map[string]any)["type"] = "string"
+	if frozen.Verifiers[0].Config["schema"].(map[string]any)["type"] != "object" {
 		t.Fatal("frozen contract retained caller-owned schema map")
 	}
 
@@ -39,7 +40,7 @@ func TestFreezeContractNormalizesAndHashesEffectiveDefinition(t *testing.T) {
 		ID: "contract_test",
 		Verifiers: []domain.VerifierSpec{{
 			ID: "schema", Type: domain.VerifierJSONSchema, Required: true,
-			JSONSchema: &domain.JSONSchemaVerifierConfig{Schema: map[string]any{
+			Config: map[string]any{"schema": map[string]any{
 				"required": []any{"status"}, "type": "object",
 			}},
 		}},
@@ -52,6 +53,46 @@ func TestFreezeContractNormalizesAndHashesEffectiveDefinition(t *testing.T) {
 	}
 }
 
+type customVerifier struct{}
+
+func (customVerifier) Type() domain.VerifierType { return domain.VerifierType("custom_assertion") }
+func (customVerifier) Version() string           { return "custom-v1" }
+func (customVerifier) NormalizeConfig(spec *domain.VerifierSpec) error {
+	if spec.Config == nil {
+		spec.Config = map[string]any{}
+	}
+	return nil
+}
+func (customVerifier) Verify(context.Context, domain.VerifierSpec, Subject) Result {
+	return Result{
+		Status: domain.VerificationPassed, Summary: "custom assertion passed",
+		Details: map[string]any{"score": 1.0},
+		Artifacts: []Artifact{
+			{Kind: "score", MediaType: "application/json", Content: `{"score":1}`, ByteSize: 11},
+			{Kind: "notes", MediaType: "text/plain", Content: "passed", ByteSize: 6},
+		},
+	}
+}
+
+func TestRegistryAcceptsCustomVerifierWithoutCoreChanges(t *testing.T) {
+	registry := NewRegistry(Options{})
+	if err := registry.Register(customVerifier{}); err != nil {
+		t.Fatalf("register custom verifier: %v", err)
+	}
+	frozen, err := registry.FreezeContract(&domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
+		ID: "custom", Type: domain.VerifierType("custom_assertion"), Required: true,
+	}}})
+	if err != nil {
+		t.Fatalf("freeze custom verifier: %v", err)
+	}
+	if frozen.Verifiers[0].Version != "custom-v1" {
+		t.Fatalf("custom implementation version was not frozen: %#v", frozen.Verifiers[0])
+	}
+	if err := registry.Register(customVerifier{}); err == nil {
+		t.Fatal("duplicate verifier registration should fail")
+	}
+}
+
 func TestFreezeContractRejectsNonGatingOrUnsafeDefinitions(t *testing.T) {
 	registry := NewRegistry(Options{})
 	tests := []struct {
@@ -60,19 +101,19 @@ func TestFreezeContractRejectsNonGatingOrUnsafeDefinitions(t *testing.T) {
 	}{
 		{name: "no required verifier", contract: domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
 			ID: "schema", Type: domain.VerifierJSONSchema,
-			JSONSchema: &domain.JSONSchemaVerifierConfig{Schema: map[string]any{"type": "object"}},
+			Config: map[string]any{"schema": map[string]any{"type": "object"}},
 		}}}},
 		{name: "http side effect", contract: domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
 			ID: "http", Type: domain.VerifierHTTP, Required: true,
-			HTTP: &domain.HTTPVerifierConfig{Method: "POST", URL: "https://example.com", ExpectedStatus: 200},
+			Config: map[string]any{"method": "POST", "url": "https://example.com", "expected_status": 200},
 		}}}},
 		{name: "http embedded credentials", contract: domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
 			ID: "http", Type: domain.VerifierHTTP, Required: true,
-			HTTP: &domain.HTTPVerifierConfig{Method: "GET", URL: "https://user:secret@example.com", ExpectedStatus: 200},
+			Config: map[string]any{"method": "GET", "url": "https://user:secret@example.com", "expected_status": 200},
 		}}}},
 		{name: "absolute working directory", contract: domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
 			ID: "command", Type: domain.VerifierCommand, Required: true,
-			Command: &domain.CommandVerifierConfig{Args: []string{"go", "test"}, WorkingDirectory: "/tmp"},
+			Config: map[string]any{"args": []string{"go", "test"}, "working_directory": "/tmp"},
 		}}}},
 	}
 	for _, test := range tests {

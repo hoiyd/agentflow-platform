@@ -6,9 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
-	"path/filepath"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
@@ -69,7 +66,7 @@ func (r *Registry) FreezeContract(input *domain.CompletionContract) (*domain.Com
 		if spec.TimeoutMS < 1 || spec.TimeoutMS > maxVerifierTimeoutMS {
 			return nil, invalidContract(fmt.Sprintf("verifier %s timeout_ms must be between 1 and %d", spec.ID, maxVerifierTimeoutMS))
 		}
-		if err := validateSpec(spec); err != nil {
+		if err := verifier.NormalizeConfig(spec); err != nil {
 			return nil, err
 		}
 		if spec.Required {
@@ -108,61 +105,6 @@ func (r *Registry) FreezeContract(input *domain.CompletionContract) (*domain.Com
 func completionContractHash(contract domain.CompletionContract) (string, error) {
 	contract.Hash = ""
 	return hashJSON(contract)
-}
-
-func validateSpec(spec *domain.VerifierSpec) error {
-	configured := 0
-	if spec.Command != nil {
-		configured++
-	}
-	if spec.HTTP != nil {
-		configured++
-	}
-	if spec.JSONSchema != nil {
-		configured++
-	}
-	if configured != 1 {
-		return invalidContract("verifier " + spec.ID + " must define exactly one typed config")
-	}
-	switch spec.Type {
-	case domain.VerifierCommand:
-		if spec.Command == nil || len(spec.Command.Args) == 0 || strings.TrimSpace(spec.Command.Args[0]) == "" {
-			return invalidContract("command verifier " + spec.ID + " requires args")
-		}
-		if filepath.IsAbs(spec.Command.WorkingDirectory) {
-			return invalidContract("command verifier " + spec.ID + " working_directory must be relative")
-		}
-	case domain.VerifierHTTP:
-		if spec.HTTP == nil {
-			return invalidContract("http verifier " + spec.ID + " requires http config")
-		}
-		method := strings.ToUpper(strings.TrimSpace(spec.HTTP.Method))
-		if method == "" {
-			method = http.MethodGet
-		}
-		if method != http.MethodGet && method != http.MethodHead {
-			return invalidContract("http verifier " + spec.ID + " only supports GET or HEAD")
-		}
-		spec.HTTP.Method = method
-		parsed, err := url.ParseRequestURI(strings.TrimSpace(spec.HTTP.URL))
-		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-			return invalidContract("http verifier " + spec.ID + " requires an absolute http(s) URL")
-		}
-		if parsed.User != nil {
-			return invalidContract("http verifier " + spec.ID + " must not embed credentials in the URL")
-		}
-		if spec.HTTP.ExpectedStatus == 0 {
-			spec.HTTP.ExpectedStatus = http.StatusOK
-		}
-		if spec.HTTP.ExpectedStatus < 100 || spec.HTTP.ExpectedStatus > 599 {
-			return invalidContract("http verifier " + spec.ID + " expected_status is invalid")
-		}
-	case domain.VerifierJSONSchema:
-		if spec.JSONSchema == nil || len(spec.JSONSchema.Schema) == 0 {
-			return invalidContract("json_schema verifier " + spec.ID + " requires schema")
-		}
-	}
-	return nil
 }
 
 func SubjectForRunOutput(value string) Subject {

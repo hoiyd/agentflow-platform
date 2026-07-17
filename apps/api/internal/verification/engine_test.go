@@ -2,7 +2,9 @@ package verification
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
@@ -118,6 +120,56 @@ func TestEngineFailsClosedWhenFrozenVerifierImplementationIsUnavailable(t *testi
 	}
 }
 
+func TestEnginePersistsStructuredEvidenceFromCustomVerifier(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	registry := NewRegistry(Options{})
+	if err := registry.Register(customVerifier{}); err != nil {
+		t.Fatalf("register custom verifier: %v", err)
+	}
+	contract, err := registry.FreezeContract(&domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
+		ID: "custom", Type: domain.VerifierType("custom_assertion"), Required: true,
+	}}})
+	if err != nil {
+		t.Fatalf("freeze contract: %v", err)
+	}
+	conversation, _ := fileStore.CreateConversation("custom verification")
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, verificationSnapshot(), contract)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	decision, err := NewEngine(fileStore, registry).Verify(context.Background(), run.ID, SubjectForRunOutput("candidate"))
+	if err != nil || !decision.AllowCompletion {
+		t.Fatalf("custom verifier did not pass gate: decision=%#v err=%v", decision, err)
+	}
+	evidence, _ := fileStore.ListVerificationEvidence(run.ID)
+	artifacts, _ := fileStore.ListVerificationArtifacts(run.ID)
+	if len(evidence) != 1 || evidence[0].Details["score"] != 1.0 || len(evidence[0].ArtifactIDs) != 2 || len(artifacts) != 2 {
+		t.Fatalf("custom evidence did not persist: evidence=%#v artifacts=%#v", evidence, artifacts)
+	}
+}
+
+func TestEvidencePayloadsAreBounded(t *testing.T) {
+	outputs := make([]Artifact, maxArtifactsPerEvidence+1)
+	for index := range outputs {
+		outputs[index] = Artifact{Kind: "diagnostic", Content: "abcdef", ByteSize: 6}
+	}
+	artifacts := buildArtifacts("run", "evidence", outputs, time.Now().UTC(), 4)
+	if len(artifacts) != maxArtifactsPerEvidence || artifacts[0].Content != "abcd" || !artifacts[0].Truncated || artifacts[0].ByteSize != 6 || artifacts[0].ContentHash != hashBytes([]byte("abcdef")) {
+		t.Fatalf("artifacts were not bounded: %#v", artifacts)
+	}
+	unicodeArtifact := buildArtifacts("run", "evidence", []Artifact{{Content: "ééé", ByteSize: 6}}, time.Now().UTC(), 5)
+	if unicodeArtifact[0].Content != "éé" || !unicodeArtifact[0].Truncated {
+		t.Fatalf("artifact truncation split UTF-8 content: %#v", unicodeArtifact[0])
+	}
+	details := cloneDetails(map[string]any{"payload": strings.Repeat("x", 100)}, 16)
+	if details["truncated"] != true || details["byte_size"] == nil {
+		t.Fatalf("details were not bounded: %#v", details)
+	}
+}
+
 func newVerificationTestRun(t *testing.T, policy domain.VerificationPolicy, specs []domain.VerifierSpec) (*store.FileStore, domain.Run, *Engine) {
 	t.Helper()
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
@@ -143,7 +195,7 @@ func newVerificationTestRun(t *testing.T, policy domain.VerificationPolicy, spec
 func schemaSpec(id string, required bool, expected string) domain.VerifierSpec {
 	return domain.VerifierSpec{
 		ID: id, Type: domain.VerifierJSONSchema, Required: required,
-		JSONSchema: &domain.JSONSchemaVerifierConfig{Schema: map[string]any{
+		Config: map[string]any{"schema": map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"status": map[string]any{"const": expected}},
 			"required":   []any{"status"},

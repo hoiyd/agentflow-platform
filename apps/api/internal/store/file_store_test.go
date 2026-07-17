@@ -75,10 +75,10 @@ func TestFileStoreVerificationContractEvidenceAndArtifactsRoundTrip(t *testing.T
 		t.Fatalf("create conversation: %v", err)
 	}
 	contract := &domain.CompletionContract{
-		ID: "contract_test", Version: 1, Hash: "sha256:contract", SubjectType: "run_output",
+		ID: "contract_test", Version: domain.CurrentCompletionContractVersion, Hash: "sha256:contract", SubjectType: "run_output",
 		Verifiers: []domain.VerifierSpec{{
 			ID: "schema", Type: domain.VerifierJSONSchema, Version: "1", Required: true,
-			JSONSchema: &domain.JSONSchemaVerifierConfig{Schema: map[string]any{"type": "object"}},
+			Config: map[string]any{"schema": map[string]any{"type": "object"}},
 		}},
 		Policy: domain.VerificationPolicy{Mode: domain.VerificationAllMustPass, MaxAttempts: 2, OnExhausted: domain.VerificationWaitForUser},
 	}
@@ -89,17 +89,17 @@ func TestFileStoreVerificationContractEvidenceAndArtifactsRoundTrip(t *testing.T
 	if run.VerificationStatus != domain.VerificationPending {
 		t.Fatalf("expected pending verification, got %q", run.VerificationStatus)
 	}
-	contract.Verifiers[0].JSONSchema.Schema["type"] = "string"
+	contract.Verifiers[0].Config["schema"].(map[string]any)["type"] = "string"
 
 	now := time.Now().UTC()
 	exitCode := 0
 	record := domain.VerificationRecord{
 		Evidence: domain.VerificationEvidence{
-			ID: "evidence_test", RunID: run.ID, ContractID: "contract_test", ContractVersion: 1,
+			ID: "evidence_test", RunID: run.ID, ContractID: "contract_test", ContractVersion: domain.CurrentCompletionContractVersion,
 			VerifierID: "schema", VerifierType: domain.VerifierJSONSchema, VerifierVersion: "1",
 			Attempt: 1, SubjectHash: "sha256:subject", SnapshotHash: "sha256:snapshot",
 			Status: domain.VerificationPassed, StartedAt: now, CompletedAt: now,
-			ExitCode: &exitCode, Summary: "schema matched", ArtifactIDs: []string{"artifact_test"},
+			ExitCode: &exitCode, Summary: "schema matched", Details: map[string]any{"matched": true}, ArtifactIDs: []string{"artifact_test"},
 		},
 		Artifacts: []domain.VerificationArtifact{{
 			ID: "artifact_test", RunID: run.ID, EvidenceID: "evidence_test", Kind: "verifier_output",
@@ -122,15 +122,16 @@ func TestFileStoreVerificationContractEvidenceAndArtifactsRoundTrip(t *testing.T
 	if err != nil || !ok {
 		t.Fatalf("get replay: ok=%v err=%v", ok, err)
 	}
-	if replay.Run.CompletionContract == nil || replay.Run.CompletionContract.Verifiers[0].JSONSchema.Schema["type"] != "object" {
+	if replay.Run.CompletionContract == nil || replay.Run.CompletionContract.Verifiers[0].Config["schema"].(map[string]any)["type"] != "object" {
 		t.Fatalf("contract was not frozen: %#v", replay.Run.CompletionContract)
 	}
 	if replay.Run.VerificationStatus != domain.VerificationPassed || len(replay.VerificationEvidence) != 1 || len(replay.VerificationArtifacts) != 1 {
 		t.Fatalf("verification did not round trip: run=%#v evidence=%#v artifacts=%#v", replay.Run, replay.VerificationEvidence, replay.VerificationArtifacts)
 	}
 	replay.VerificationEvidence[0].ArtifactIDs[0] = "mutated"
+	replay.VerificationEvidence[0].Details["matched"] = false
 	freshEvidence, err := second.ListVerificationEvidence(run.ID)
-	if err != nil || freshEvidence[0].ArtifactIDs[0] != "artifact_test" {
+	if err != nil || freshEvidence[0].ArtifactIDs[0] != "artifact_test" || freshEvidence[0].Details["matched"] != true {
 		t.Fatalf("stored evidence was mutable through a read result: %#v err=%v", freshEvidence, err)
 	}
 }

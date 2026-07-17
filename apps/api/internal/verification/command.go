@@ -16,6 +16,11 @@ type commandVerifier struct {
 	outputLimit   int
 }
 
+type CommandConfig struct {
+	Args             []string `json:"args"`
+	WorkingDirectory string   `json:"working_directory,omitempty"`
+}
+
 func newCommandVerifier(workspaceRoot string, allowedCommands []string, outputLimit int) commandVerifier {
 	root := ""
 	if configured := strings.TrimSpace(workspaceRoot); configured != "" {
@@ -33,30 +38,54 @@ func newCommandVerifier(workspaceRoot string, allowedCommands []string, outputLi
 func (commandVerifier) Type() domain.VerifierType { return domain.VerifierCommand }
 func (commandVerifier) Version() string           { return "command-v1" }
 
+func (commandVerifier) NormalizeConfig(spec *domain.VerifierSpec) error {
+	config, err := decodeConfig[CommandConfig](spec)
+	if err != nil {
+		return err
+	}
+	if len(config.Args) == 0 || strings.TrimSpace(config.Args[0]) == "" {
+		return invalidContract("command verifier " + spec.ID + " requires args")
+	}
+	config.Args = append([]string(nil), config.Args...)
+	config.Args[0] = strings.TrimSpace(config.Args[0])
+	config.WorkingDirectory = strings.TrimSpace(config.WorkingDirectory)
+	if filepath.IsAbs(config.WorkingDirectory) {
+		return invalidContract("command verifier " + spec.ID + " working_directory must be relative")
+	}
+	return freezeConfig(spec, config)
+}
+
 func (v commandVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _ Subject) Result {
-	if spec.Command == nil || len(spec.Command.Args) == 0 {
+	config, err := decodeConfig[CommandConfig](&spec)
+	if err != nil || len(config.Args) == 0 {
 		return blocked("command config is missing")
 	}
-	executable := strings.TrimSpace(spec.Command.Args[0])
+	executable := strings.TrimSpace(config.Args[0])
 	if !v.allowed[executable] {
 		return blocked("command is not allowlisted: " + executable)
 	}
 	if v.workspaceRoot == "" {
 		return blocked("verification workspace root is not configured")
 	}
-	workingDirectory := filepath.Join(v.workspaceRoot, filepath.Clean(spec.Command.WorkingDirectory))
+	workingDirectory := filepath.Join(v.workspaceRoot, filepath.Clean(config.WorkingDirectory))
 	relative, err := filepath.Rel(v.workspaceRoot, workingDirectory)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return blocked("working directory escapes verification workspace")
 	}
 
-	command := exec.CommandContext(ctx, executable, spec.Command.Args[1:]...)
+	command := exec.CommandContext(ctx, executable, config.Args[1:]...)
 	command.Dir = workingDirectory
 	output := newCappedBuffer(v.outputLimit)
 	command.Stdout = output
 	command.Stderr = output
 	err = command.Run()
-	result := Result{Status: domain.VerificationPassed, Summary: "command completed successfully", Output: output.String(), OutputHash: output.Hash(), OutputBytes: output.Total(), Truncated: output.Truncated()}
+	result := Result{
+		Status: domain.VerificationPassed, Summary: "command completed successfully",
+		Artifacts: []Artifact{{
+			Kind: "command_output", MediaType: "text/plain; charset=utf-8",
+			Content: output.String(), ContentHash: output.Hash(), ByteSize: output.Total(), Truncated: output.Truncated(),
+		}},
+	}
 	if err == nil {
 		code := 0
 		result.ExitCode = &code

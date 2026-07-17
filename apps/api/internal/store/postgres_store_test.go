@@ -37,9 +37,9 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 		t.Fatalf("create run: %v", err)
 	}
 	contract := &domain.CompletionContract{
-		ID: "contract_" + run.ID, Version: 1, Hash: "sha256:contract", SubjectType: "run_output",
+		ID: "contract_" + run.ID, Version: domain.CurrentCompletionContractVersion, Hash: "sha256:contract", SubjectType: "run_output",
 		Verifiers: []domain.VerifierSpec{{ID: "schema", Type: domain.VerifierJSONSchema, Version: "1", Required: true,
-			JSONSchema: &domain.JSONSchemaVerifierConfig{Schema: map[string]any{"type": "object"}}}},
+			Config: map[string]any{"schema": map[string]any{"type": "object"}}}},
 		Policy: domain.VerificationPolicy{Mode: domain.VerificationAllMustPass, MaxAttempts: 1, OnExhausted: domain.VerificationFailRun},
 	}
 	contractRun, err := store.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), contract)
@@ -50,9 +50,9 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	record := domain.VerificationRecord{
 		Evidence: domain.VerificationEvidence{
 			ID: "evidence_" + contractRun.ID, RunID: contractRun.ID, ContractID: contract.ID,
-			ContractVersion: 1, VerifierID: "schema", VerifierType: domain.VerifierJSONSchema,
+			ContractVersion: domain.CurrentCompletionContractVersion, VerifierID: "schema", VerifierType: domain.VerifierJSONSchema,
 			VerifierVersion: "1", Attempt: 1, SubjectHash: "sha256:subject", SnapshotHash: "sha256:snapshot",
-			Status: domain.VerificationPassed, StartedAt: now, CompletedAt: now, Summary: "matched",
+			Status: domain.VerificationPassed, StartedAt: now, CompletedAt: now, Summary: "matched", Details: map[string]any{"matched": true},
 			ArtifactIDs: []string{"artifact_" + contractRun.ID},
 		},
 		Artifacts: []domain.VerificationArtifact{{
@@ -68,7 +68,7 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 		t.Fatalf("update verification status: %v", err)
 	}
 	verificationReplay, ok, err := store.GetRunReplay(contractRun.ID)
-	if err != nil || !ok || verificationReplay.Run.CompletionContract == nil || len(verificationReplay.VerificationEvidence) != 1 || len(verificationReplay.VerificationArtifacts) != 1 {
+	if err != nil || !ok || verificationReplay.Run.CompletionContract == nil || len(verificationReplay.VerificationEvidence) != 1 || len(verificationReplay.VerificationArtifacts) != 1 || verificationReplay.VerificationEvidence[0].Details["matched"] != true {
 		t.Fatalf("postgres verification round trip: ok=%v err=%v replay=%#v", ok, err, verificationReplay)
 	}
 	run, err = store.UpdateRunStatus(run.ID, domain.RunRunning, "")

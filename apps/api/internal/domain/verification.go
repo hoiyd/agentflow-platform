@@ -2,7 +2,7 @@ package domain
 
 import "time"
 
-const CurrentCompletionContractVersion = 1
+const CurrentCompletionContractVersion = 2
 
 type VerificationStatus string
 
@@ -35,9 +35,11 @@ const (
 type VerifierType string
 
 const (
-	VerifierCommand    VerifierType = "command"
-	VerifierHTTP       VerifierType = "http"
-	VerifierJSONSchema VerifierType = "json_schema"
+	VerifierCommand         VerifierType = "command"
+	VerifierHTTP            VerifierType = "http"
+	VerifierJSONSchema      VerifierType = "json_schema"
+	VerifierTextConstraints VerifierType = "text_constraints"
+	VerifierCitation        VerifierType = "citation"
 )
 
 // CompletionContract opts one Run into evidence-gated completion. It must be
@@ -58,29 +60,14 @@ type VerificationPolicy struct {
 }
 
 type VerifierSpec struct {
-	ID         string                    `json:"id"`
-	Type       VerifierType              `json:"type"`
-	Version    string                    `json:"version"`
-	Required   bool                      `json:"required"`
-	TimeoutMS  int64                     `json:"timeout_ms"`
-	Command    *CommandVerifierConfig    `json:"command,omitempty"`
-	HTTP       *HTTPVerifierConfig       `json:"http,omitempty"`
-	JSONSchema *JSONSchemaVerifierConfig `json:"json_schema,omitempty"`
-}
-
-type CommandVerifierConfig struct {
-	Args             []string `json:"args"`
-	WorkingDirectory string   `json:"working_directory,omitempty"`
-}
-
-type HTTPVerifierConfig struct {
-	Method         string `json:"method"`
-	URL            string `json:"url"`
-	ExpectedStatus int    `json:"expected_status"`
-}
-
-type JSONSchemaVerifierConfig struct {
-	Schema map[string]any `json:"schema"`
+	ID        string       `json:"id"`
+	Type      VerifierType `json:"type"`
+	Version   string       `json:"version"`
+	Required  bool         `json:"required"`
+	TimeoutMS int64        `json:"timeout_ms"`
+	// Config is interpreted and normalized by the registered verifier before
+	// the full spec is hashed into the frozen CompletionContract.
+	Config map[string]any `json:"config"`
 }
 
 // VerificationEvidence is immutable. A later subject produces new evidence;
@@ -103,6 +90,7 @@ type VerificationEvidence struct {
 	DurationMS           int64              `json:"duration_ms"`
 	ExitCode             *int               `json:"exit_code,omitempty"`
 	Summary              string             `json:"summary"`
+	Details              map[string]any     `json:"details"`
 	ArtifactIDs          []string           `json:"artifact_ids"`
 	SupersedesEvidenceID string             `json:"supersedes_evidence_id,omitempty"`
 }

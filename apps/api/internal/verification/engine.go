@@ -2,12 +2,16 @@ package verification
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
+
+const maxArtifactsPerEvidence = 8
 
 type Store interface {
 	GetRun(string) (domain.Run, bool, error)
@@ -142,7 +146,7 @@ func (e *Engine) markStaleEvidence(run domain.Run, previous []domain.Verificatio
 			VerifierID: item.VerifierID, VerifierType: item.VerifierType, VerifierVersion: item.VerifierVersion,
 			Attempt: attempt, SubjectHash: subject.Hash, SnapshotHash: item.SnapshotHash,
 			Status: domain.VerificationStale, StartedAt: now, CompletedAt: now,
-			Summary: "subject changed; previous evidence is stale", ArtifactIDs: []string{}, SupersedesEvidenceID: item.ID,
+			Summary: "subject changed; previous evidence is stale", Details: map[string]any{}, ArtifactIDs: []string{}, SupersedesEvidenceID: item.ID,
 		}
 		if err := e.store.AppendVerificationRecord(domain.VerificationRecord{Evidence: marker, Artifacts: []domain.VerificationArtifact{}}); err != nil {
 			return err
@@ -171,16 +175,24 @@ func (e *Engine) runVerifier(ctx context.Context, run domain.Run, spec domain.Ve
 	}
 
 	evidenceID := newID("evidence")
-	artifact := buildArtifact(run.ID, evidenceID, result, completed, e.registry.maxArtifactBytes)
+	artifacts := buildArtifacts(run.ID, evidenceID, result.Artifacts, completed, e.registry.maxArtifactBytes)
+	details := cloneDetails(result.Details, e.registry.maxArtifactBytes)
+	if omitted := len(result.Artifacts) - len(artifacts); omitted > 0 {
+		details["artifacts_omitted"] = omitted
+	}
+	artifactIDs := make([]string, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		artifactIDs = append(artifactIDs, artifact.ID)
+	}
 	evidence := domain.VerificationEvidence{
 		ID: evidenceID, RunID: run.ID, ContractID: run.CompletionContract.ID,
 		ContractVersion: run.CompletionContract.Version, VerifierID: spec.ID,
 		VerifierType: spec.Type, VerifierVersion: spec.Version, Attempt: attempt,
 		SubjectHash: subject.Hash, SnapshotHash: snapshotHash, Status: result.Status,
 		StartedAt: started, CompletedAt: completed, DurationMS: completed.Sub(started).Milliseconds(),
-		ExitCode: result.ExitCode, Summary: strings.TrimSpace(result.Summary), ArtifactIDs: []string{artifact.ID},
+		ExitCode: result.ExitCode, Summary: strings.TrimSpace(result.Summary), Details: details, ArtifactIDs: artifactIDs,
 	}
-	if err := e.store.AppendVerificationRecord(domain.VerificationRecord{Evidence: evidence, Artifacts: []domain.VerificationArtifact{artifact}}); err != nil {
+	if err := e.store.AppendVerificationRecord(domain.VerificationRecord{Evidence: evidence, Artifacts: artifacts}); err != nil {
 		return domain.VerificationBlocked, err
 	}
 	eventType := domain.EventVerificationPassed
@@ -194,27 +206,53 @@ func (e *Engine) runVerifier(ctx context.Context, run domain.Run, spec domain.Ve
 	return result.Status, nil
 }
 
-func buildArtifact(runID, evidenceID string, result Result, createdAt time.Time, limit int) domain.VerificationArtifact {
-	content := result.Output
-	truncated := result.Truncated
-	byteSize := result.OutputBytes
-	if byteSize == 0 {
-		byteSize = len(content)
+func buildArtifacts(runID, evidenceID string, outputs []Artifact, createdAt time.Time, limit int) []domain.VerificationArtifact {
+	if len(outputs) > maxArtifactsPerEvidence {
+		outputs = outputs[:maxArtifactsPerEvidence]
 	}
-	contentHash := result.OutputHash
-	if contentHash == "" {
-		contentHash = hashBytes([]byte(content))
+	artifacts := make([]domain.VerificationArtifact, 0, len(outputs))
+	for _, output := range outputs {
+		originalContent := output.Content
+		content, contentChanged := boundedArtifactContent(output.Content, limit)
+		truncated := output.Truncated || contentChanged
+		byteSize := output.ByteSize
+		if byteSize == 0 {
+			byteSize = len(originalContent)
+		}
+		contentHash := output.ContentHash
+		if contentHash == "" {
+			contentHash = hashBytes([]byte(originalContent))
+		}
+		kind := strings.TrimSpace(output.Kind)
+		if kind == "" {
+			kind = "verifier_output"
+		}
+		mediaType := strings.TrimSpace(output.MediaType)
+		if mediaType == "" {
+			mediaType = "text/plain; charset=utf-8"
+		}
+		artifacts = append(artifacts, domain.VerificationArtifact{
+			ID: newID("artifact"), RunID: runID, EvidenceID: evidenceID,
+			Kind: kind, MediaType: mediaType, Content: content,
+			ContentHash: contentHash, ByteSize: byteSize,
+			Truncated: truncated, CreatedAt: createdAt,
+		})
+	}
+	return artifacts
+}
+
+func boundedArtifactContent(content string, limit int) (string, bool) {
+	original := content
+	if !utf8.ValidString(content) {
+		content = strings.ToValidUTF8(content, "\uFFFD")
 	}
 	if limit > 0 && len(content) > limit {
 		content = content[:limit]
-		truncated = true
+		for !utf8.ValidString(content) {
+			content = content[:len(content)-1]
+		}
 	}
-	return domain.VerificationArtifact{
-		ID: newID("artifact"), RunID: runID, EvidenceID: evidenceID,
-		Kind: "verifier_output", MediaType: "text/plain; charset=utf-8",
-		Content: content, ContentHash: contentHash, ByteSize: byteSize,
-		Truncated: truncated, CreatedAt: createdAt,
-	}
+	return content, content != original
 }
 
 func evaluateGate(contract domain.CompletionContract, results map[string]domain.VerificationStatus, attempt int, subjectHash string) Decision {
@@ -284,8 +322,27 @@ func evidencePayload(evidence domain.VerificationEvidence) map[string]any {
 		"attempt": evidence.Attempt, "subject_hash": evidence.SubjectHash,
 		"snapshot_hash": evidence.SnapshotHash, "status": evidence.Status,
 		"duration_ms": evidence.DurationMS, "summary": evidence.Summary,
-		"artifact_ids": evidence.ArtifactIDs, "supersedes_evidence_id": evidence.SupersedesEvidenceID,
+		"details": evidence.Details, "artifact_ids": evidence.ArtifactIDs,
+		"supersedes_evidence_id": evidence.SupersedesEvidenceID,
 	}
+}
+
+func cloneDetails(details map[string]any, limit int) map[string]any {
+	if details == nil {
+		return map[string]any{}
+	}
+	encoded, err := json.Marshal(details)
+	if err != nil {
+		return map[string]any{"serialization_error": err.Error()}
+	}
+	if limit > 0 && len(encoded) > limit {
+		return map[string]any{"truncated": true, "byte_size": len(encoded)}
+	}
+	cloned := make(map[string]any, len(details))
+	if err := json.Unmarshal(encoded, &cloned); err != nil {
+		return map[string]any{"serialization_error": err.Error()}
+	}
+	return cloned
 }
 
 func (e *Engine) recordEvent(run domain.Run, eventType domain.RunEventType, payload map[string]any) {

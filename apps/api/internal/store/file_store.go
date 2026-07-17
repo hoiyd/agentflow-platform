@@ -830,6 +830,13 @@ func verificationEvidenceForRun(items []domain.VerificationEvidence, runID strin
 
 func cloneVerificationEvidence(evidence domain.VerificationEvidence) domain.VerificationEvidence {
 	evidence.ArtifactIDs = append([]string(nil), evidence.ArtifactIDs...)
+	if evidence.Details == nil {
+		evidence.Details = map[string]any{}
+	} else {
+		encoded, _ := json.Marshal(evidence.Details)
+		evidence.Details = nil
+		_ = json.Unmarshal(encoded, &evidence.Details)
+	}
 	return evidence
 }
 

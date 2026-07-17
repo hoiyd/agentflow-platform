@@ -495,19 +495,27 @@ func (s *PostgresStore) AppendVerificationRecord(record domain.VerificationRecor
 	if err != nil {
 		return err
 	}
+	detailsValue := record.Evidence.Details
+	if detailsValue == nil {
+		detailsValue = map[string]any{}
+	}
+	details, err := json.Marshal(detailsValue)
+	if err != nil {
+		return err
+	}
 	_, err = tx.Exec(`
 		INSERT INTO verification_evidence (
 			id, run_id, stage_id, contract_id, contract_version, verifier_id,
 			verifier_type, verifier_version, attempt, subject_hash, snapshot_hash,
 			status, started_at, completed_at, duration_ms, exit_code, summary,
-			artifact_ids, supersedes_evidence_id
-		) VALUES ($1,$2,NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NULLIF($19,''))`,
+			details, artifact_ids, supersedes_evidence_id
+		) VALUES ($1,$2,NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,NULLIF($20,''))`,
 		record.Evidence.ID, record.Evidence.RunID, record.Evidence.StageID,
 		record.Evidence.ContractID, record.Evidence.ContractVersion, record.Evidence.VerifierID,
 		string(record.Evidence.VerifierType), record.Evidence.VerifierVersion, record.Evidence.Attempt,
 		record.Evidence.SubjectHash, record.Evidence.SnapshotHash, string(record.Evidence.Status),
 		record.Evidence.StartedAt, record.Evidence.CompletedAt, record.Evidence.DurationMS,
-		record.Evidence.ExitCode, record.Evidence.Summary, artifactIDs, record.Evidence.SupersedesEvidenceID)
+		record.Evidence.ExitCode, record.Evidence.Summary, details, artifactIDs, record.Evidence.SupersedesEvidenceID)
 	if err != nil {
 		return err
 	}
@@ -534,7 +542,7 @@ func (s *PostgresStore) ListVerificationEvidence(runID string) ([]domain.Verific
 		SELECT id, run_id, COALESCE(stage_id,''), contract_id, contract_version,
 			verifier_id, verifier_type, verifier_version, attempt, subject_hash,
 			snapshot_hash, status, started_at, completed_at, duration_ms, exit_code,
-			summary, artifact_ids, COALESCE(supersedes_evidence_id,'')
+			summary, details, artifact_ids, COALESCE(supersedes_evidence_id,'')
 		FROM verification_evidence WHERE run_id = $1 ORDER BY started_at, id`, runID)
 	if err != nil {
 		return nil, err
@@ -1442,12 +1450,13 @@ func scanVerificationEvidence(row scanner) (domain.VerificationEvidence, error) 
 	var item domain.VerificationEvidence
 	var verifierType string
 	var status string
+	var details []byte
 	var artifactIDs []byte
 	var exitCode sql.NullInt64
 	if err := row.Scan(&item.ID, &item.RunID, &item.StageID, &item.ContractID,
 		&item.ContractVersion, &item.VerifierID, &verifierType, &item.VerifierVersion,
 		&item.Attempt, &item.SubjectHash, &item.SnapshotHash, &status, &item.StartedAt,
-		&item.CompletedAt, &item.DurationMS, &exitCode, &item.Summary, &artifactIDs,
+		&item.CompletedAt, &item.DurationMS, &exitCode, &item.Summary, &details, &artifactIDs,
 		&item.SupersedesEvidenceID); err != nil {
 		return domain.VerificationEvidence{}, err
 	}
@@ -1456,6 +1465,15 @@ func scanVerificationEvidence(row scanner) (domain.VerificationEvidence, error) 
 	if exitCode.Valid {
 		value := int(exitCode.Int64)
 		item.ExitCode = &value
+	}
+	item.Details = map[string]any{}
+	if len(details) > 0 {
+		if err := json.Unmarshal(details, &item.Details); err != nil {
+			return domain.VerificationEvidence{}, err
+		}
+	}
+	if item.Details == nil {
+		item.Details = map[string]any{}
 	}
 	if len(artifactIDs) > 0 {
 		if err := json.Unmarshal(artifactIDs, &item.ArtifactIDs); err != nil {
@@ -1870,9 +1888,11 @@ var postgresMigrations = []string{
 		duration_ms bigint NOT NULL,
 		exit_code integer,
 		summary text NOT NULL DEFAULT '',
+		details jsonb NOT NULL DEFAULT '{}'::jsonb,
 		artifact_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
 		supersedes_evidence_id text
 	)`,
+	`ALTER TABLE verification_evidence ADD COLUMN IF NOT EXISTS details jsonb NOT NULL DEFAULT '{}'::jsonb`,
 	`CREATE INDEX IF NOT EXISTS verification_evidence_run_idx ON verification_evidence(run_id, started_at)`,
 	`CREATE TABLE IF NOT EXISTS verification_artifacts (
 		id text PRIMARY KEY,

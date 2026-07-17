@@ -28,7 +28,7 @@ func TestCompleteStreamingRunRequiresFreshPassingEvidence(t *testing.T) {
 	contract, err := registry.FreezeContract(&domain.CompletionContract{
 		ID: "contract_json", Verifiers: []domain.VerifierSpec{{
 			ID: "response-schema", Type: domain.VerifierJSONSchema, Required: true,
-			JSONSchema: &domain.JSONSchemaVerifierConfig{Schema: map[string]any{
+			Config: map[string]any{"schema": map[string]any{
 				"type": "object", "properties": map[string]any{"status": map[string]any{"const": "ok"}}, "required": []any{"status"},
 			}},
 		}},
@@ -86,7 +86,7 @@ func TestVerifyRunRetriesRecoverableEvidenceAndCompletes(t *testing.T) {
 	contract, err := registry.FreezeContract(&domain.CompletionContract{
 		ID: "contract_http", Verifiers: []domain.VerifierSpec{{
 			ID: "health", Type: domain.VerifierHTTP, Required: true,
-			HTTP: &domain.HTTPVerifierConfig{Method: http.MethodGet, URL: server.URL, ExpectedStatus: http.StatusOK},
+			Config: map[string]any{"method": http.MethodGet, "url": server.URL, "expected_status": http.StatusOK},
 		}},
 		Policy: domain.VerificationPolicy{Mode: domain.VerificationAllMustPass, MaxAttempts: 2, OnExhausted: domain.VerificationFailRun},
 	})
