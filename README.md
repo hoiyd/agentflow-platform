@@ -70,5 +70,7 @@ Set `NEXT_PUBLIC_API_BASE_URL` only if the API is not running on `http://localho
 - [Completion Verification](docs/completion-verification.md): frozen contracts, deterministic evidence, Subject Hash freshness, completion policy, and security boundaries.
 - [Memory Management](docs/memory-management.md): hybrid candidate extraction, shadow evaluation, curation policy, background persistence, and events.
 - [Knowledge / RAG](docs/knowledge-rag.md): document ingestion, Markdown chunking, vector search, and reranking.
+- [Local llama.cpp Runtime](docs/local-llamacpp.md): local OpenAI-compatible model serving, tool-call notes, context budget settings, and CGO smoke demo.
+- [libllama CGO Design](docs/libllama-cgo-design.md): in-process GGUF inference boundary, native wrapper prototype, streaming, cancellation, build, and verification.
 - [API Reference](docs/api-reference.md): HTTP endpoints and an example RAG response.
 - [Verification Guide](docs/verification-guide.md): backend tests, frontend build, RAG checks, and replay checks.
