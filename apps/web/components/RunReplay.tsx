@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { EpisodeReport, RunReplay as RunReplayData, RunEvent } from "../lib/api";
 import { getEpisodeReport, getRunReplay, resumeRun } from "../lib/api";
+import { BudgetEventDetail, RunUsagePanel } from "./RunUsagePanel";
 
 type Props = {
   runId: string;
@@ -181,6 +182,12 @@ export function RunReplay({ runId }: Props) {
         <Metric label="Tool calls" value={String(replay.summary.tool_calls)} />
         <Metric label="Errors" value={String(replay.summary.error_count)} tone={replay.summary.error_count > 0 ? "danger" : ""} />
       </section>
+
+      <RunUsagePanel
+        activeRuntimeMS={replay.run.active_runtime_ms ?? 0}
+        events={replay.run_events}
+        ledger={replay.usage_ledger}
+      />
 
       {episodeReport ? <EpisodeReportPanel report={episodeReport} /> : null}
 
@@ -362,7 +369,7 @@ function Metric({ label, value, tone = "" }: { label: string; value: string; ton
 
 function EventDetail({ event }: { event: RunEvent }) {
   const payload = event.payload ?? {};
-  const isEstimated = payload.token_usage_estimated === true;
+  const isEstimated = payload.token_usage_estimated === true || payload.usage_estimated === true;
   const memories = retrievedMemories(payload);
   const chunks = retrievedChunks(payload);
   return (
@@ -424,6 +431,7 @@ function EventDetail({ event }: { event: RunEvent }) {
           <Metric label="Total" value={formatTokenValue(payload.total_tokens, isEstimated)} />
         </div>
       ) : null}
+      {event.type === "budget.exceeded" ? <BudgetEventDetail payload={payload} /> : null}
       {memories.length > 0 || chunks.length > 0 ? <RetrievedContext memories={memories} chunks={chunks} /> : null}
       <section className="raw-json-panel">
         <div className="raw-json-title">

@@ -16,6 +16,7 @@ import "./styles/collaboration/autonomous.css";
 import "./styles/collaboration/dag.css";
 import "./styles/collaboration/plan-steps.css";
 import "./styles/replay.css";
+import "./styles/run-usage.css";
 import "./styles/responsive.css";
 import "./styles/workbench/foundation.css";
 import "./styles/workbench/home.css";

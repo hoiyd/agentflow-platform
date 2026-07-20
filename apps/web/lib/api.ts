@@ -109,6 +109,12 @@ export type RunInfo = {
     | string;
   verification_status?: "not_required" | "pending" | "running" | "passed" | "failed" | "blocked" | "stale" | string;
   completion_contract?: CompletionContractInput | Record<string, unknown>;
+  error?: string;
+  started_at?: string;
+  execution_started_at?: string;
+  active_runtime_ms?: number;
+  heartbeat_at?: string;
+  completed_at?: string;
   created_at: string;
   updated_at: string;
 };
@@ -151,12 +157,63 @@ export type RunTraceSummary = {
   error_count: number;
 };
 
+export type RuntimeRunBudget = {
+  max_model_calls?: number;
+  max_prompt_tokens?: number;
+  max_completion_tokens?: number;
+  max_total_tokens?: number;
+  max_tool_calls?: number;
+  max_runtime_ms?: number;
+  max_estimated_cost_micros?: number;
+  input_cost_per_million_tokens_micros?: number;
+  output_cost_per_million_tokens_micros?: number;
+};
+
+export type RunUsageTotals = {
+  model_calls: number;
+  tool_calls: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  estimated_cost_micros: number;
+  open_reservations: number;
+};
+
+export type RunUsageEntry = {
+  id: string;
+  run_id: string;
+  operation_id: string;
+  stage_id?: string;
+  turn_id?: string;
+  kind: "model.reservation" | "model.settlement" | "tool.execution" | string;
+  purpose: "primary" | "router" | "compaction" | string;
+  model?: string;
+  tool_name?: string;
+  model_calls?: number;
+  tool_calls?: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  estimated_cost_micros?: number;
+  estimated?: boolean;
+  timestamp: string;
+};
+
+export type RunUsageLedger = {
+  run_id: string;
+  budget: RuntimeRunBudget;
+  totals: RunUsageTotals;
+  entries: RunUsageEntry[];
+  updated_at?: string;
+};
+
 export type RunReplay = {
   run: RunInfo;
   conversation: Conversation;
   messages: Message[];
   steps: CollaborationStepInfo[];
   summary: RunTraceSummary;
+  usage_ledger: RunUsageLedger;
   run_events: RunEvent[];
   verification_evidence: Array<Record<string, unknown>>;
   verification_artifacts: Array<Record<string, unknown>>;
@@ -324,15 +381,41 @@ async function readArrayJSON<T>(response: Response): Promise<T[]> {
 
 function normalizeRunReplay(data: unknown): RunReplay {
   const replay = data as Partial<RunReplay>;
+  const run = replay.run as RunInfo;
   return {
-    run: replay.run as RunInfo,
+    run,
     conversation: replay.conversation as Conversation,
     summary: replay.summary as RunTraceSummary,
     messages: Array.isArray(replay.messages) ? replay.messages : [],
     steps: Array.isArray(replay.steps) ? replay.steps : [],
+    usage_ledger: normalizeRunUsageLedger(replay.usage_ledger, run?.id ?? ""),
     run_events: Array.isArray(replay.run_events) ? replay.run_events : [],
     verification_evidence: Array.isArray(replay.verification_evidence) ? replay.verification_evidence : [],
     verification_artifacts: Array.isArray(replay.verification_artifacts) ? replay.verification_artifacts : []
+  };
+}
+
+const EMPTY_RUN_USAGE_TOTALS: RunUsageTotals = {
+  model_calls: 0,
+  tool_calls: 0,
+  prompt_tokens: 0,
+  completion_tokens: 0,
+  total_tokens: 0,
+  estimated_cost_micros: 0,
+  open_reservations: 0
+};
+
+function normalizeRunUsageLedger(value: unknown, runId: string): RunUsageLedger {
+  const ledger = value && typeof value === "object" ? (value as Partial<RunUsageLedger>) : {};
+  return {
+    run_id: typeof ledger.run_id === "string" ? ledger.run_id : runId,
+    budget: ledger.budget && typeof ledger.budget === "object" ? ledger.budget : {},
+    totals: {
+      ...EMPTY_RUN_USAGE_TOTALS,
+      ...(ledger.totals && typeof ledger.totals === "object" ? ledger.totals : {})
+    },
+    entries: Array.isArray(ledger.entries) ? ledger.entries : [],
+    ...(typeof ledger.updated_at === "string" ? { updated_at: ledger.updated_at } : {})
   };
 }
 
@@ -613,6 +696,14 @@ export async function getRunReplay(runId: string): Promise<RunReplay> {
     throw new Error(`Failed to load run replay: ${response.status}`);
   }
   return normalizeRunReplay(await readJSON<unknown>(response));
+}
+
+export async function getRunUsage(runId: string): Promise<RunUsageLedger> {
+  const response = await fetch(`${API_BASE}/api/runs/${runId}/usage`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Failed to load run usage: ${response.status}`);
+  }
+  return normalizeRunUsageLedger(await readJSON<unknown>(response), runId);
 }
 
 export async function getEpisodeReport(runId: string): Promise<EpisodeReport> {
