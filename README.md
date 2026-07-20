@@ -65,6 +65,7 @@ Set `NEXT_PUBLIC_API_BASE_URL` only if the API is not running on `http://localho
 
 ## Documentation
 
+- [Execution Controls](docs/execution-controls.md): canonical map of concurrency, rate limits, retries, Run Budget, Context capacity, Autonomous guards, Tool and Verification limits.
 - [Backend Architecture](docs/backend-architecture.md): Go package ownership, dependency direction, application composition, and lifecycle.
 - [Backend Configuration](docs/backend-configuration.md): environment variables, concurrency, retry policy, model and embedding providers, Postgres, and tool configuration.
 - [Run Budget and Usage Ledger](docs/run-budget.md): frozen limits, accounting scope, hard/observed enforcement, persistence, and API behavior.

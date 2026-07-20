@@ -1,5 +1,9 @@
 # Run Budget and Usage Ledger
 
+For a system-wide comparison with concurrency, RPM/TPM, Retry, Context,
+Autonomous, Tool, and Verification controls, see
+[Execution Controls](execution-controls.md).
+
 Run Budget bounds cumulative work attributable to one Run. It complements the
 shared concurrency and provider controls rather than replacing them.
 
