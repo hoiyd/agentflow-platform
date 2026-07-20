@@ -69,6 +69,11 @@ type RunEventStore interface {
 	GetRunReplay(runID string) (domain.RunReplay, bool, error)
 }
 
+type RunUsageStore interface {
+	ApplyRunUsage(domain.RunUsageEntry) (domain.RunUsageLedger, bool, error)
+	GetRunUsageLedger(runID string) (domain.RunUsageLedger, bool, error)
+}
+
 type ContextCompactionStore interface {
 	CreateContextCompaction(domain.ContextCompaction) (domain.ContextCompaction, error)
 	GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error)
@@ -100,6 +105,7 @@ type Store interface {
 	RunStore
 	CollaborationStore
 	RunEventStore
+	RunUsageStore
 	VerificationStore
 	ContextCompactionStore
 	MemoryStore

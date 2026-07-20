@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
 )
 
@@ -30,6 +31,7 @@ type fileData struct {
 	Runs                  []domain.Run                    `json:"runs"`
 	CollaborationSteps    []domain.CollaborationStep      `json:"collaboration_steps"`
 	RunEvents             []domain.RunEvent               `json:"run_events"`
+	RunUsageEntries       []domain.RunUsageEntry          `json:"run_usage_entries"`
 	VerificationEvidence  []domain.VerificationEvidence   `json:"verification_evidence"`
 	VerificationArtifacts []domain.VerificationArtifact   `json:"verification_artifacts"`
 	ContextCompactions    []domain.ContextCompaction      `json:"context_compactions"`
@@ -143,6 +145,14 @@ func (s *FileStore) DeleteConversation(id string) error {
 		}
 	}
 	s.data.RunEvents = runEvents
+
+	usageEntries := make([]domain.RunUsageEntry, 0, len(s.data.RunUsageEntries))
+	for _, entry := range s.data.RunUsageEntries {
+		if !runIDs[entry.RunID] {
+			usageEntries = append(usageEntries, entry)
+		}
+	}
+	s.data.RunUsageEntries = usageEntries
 
 	evidence := make([]domain.VerificationEvidence, 0, len(s.data.VerificationEvidence))
 	for _, item := range s.data.VerificationEvidence {
@@ -538,6 +548,15 @@ func (s *FileStore) UpdateRunStatus(id string, status domain.RunStatus, errorMes
 	for i := range s.data.Runs {
 		if s.data.Runs[i].ID == id {
 			now := time.Now().UTC()
+			wasRunning := s.data.Runs[i].Status == domain.RunRunning
+			willRun := status == domain.RunRunning
+			if wasRunning && !willRun && s.data.Runs[i].ExecutionStartedAt != nil {
+				s.data.Runs[i].ActiveRuntimeMS += max(int64(0), now.Sub(*s.data.Runs[i].ExecutionStartedAt).Milliseconds())
+				s.data.Runs[i].ExecutionStartedAt = nil
+			}
+			if !wasRunning && willRun {
+				s.data.Runs[i].ExecutionStartedAt = &now
+			}
 			s.data.Runs[i].Status = status
 			s.data.Runs[i].Error = strings.TrimSpace(errorMessage)
 			s.data.Runs[i].UpdatedAt = now
@@ -760,6 +779,62 @@ func (s *FileStore) GetRunTraceSummary(runID string) (domain.RunTraceSummary, er
 	return buildRunTraceSummary(run, s.runEventsForRunLocked(runID)), nil
 }
 
+func (s *FileStore) ApplyRunUsage(entry domain.RunUsageEntry) (domain.RunUsageLedger, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	run, ok := s.getRunLocked(entry.RunID)
+	if !ok {
+		return domain.RunUsageLedger{}, false, ErrNotFound("run")
+	}
+	if err := validateUsageEntry(entry); err != nil {
+		return domain.RunUsageLedger{}, false, err
+	}
+	entries := s.runUsageEntriesForRunLocked(entry.RunID)
+	for _, existing := range entries {
+		if existing.OperationID != entry.OperationID || existing.Kind != entry.Kind {
+			continue
+		}
+		ledger := budget.BuildLedger(entry.RunID, runBudget(run), entries)
+		if !sameUsageEntry(existing, entry) {
+			return ledger, false, errors.New("run usage operation already recorded with different values")
+		}
+		return ledger, false, nil
+	}
+	if entry.Kind == domain.UsageModelSettlement && !hasUsageReservation(entries, entry.OperationID) {
+		return budget.BuildLedger(entry.RunID, runBudget(run), entries), false, errors.New("model usage settlement has no reservation")
+	}
+	proposed := append(append([]domain.RunUsageEntry(nil), entries...), entry)
+	ledger := budget.BuildLedger(entry.RunID, runBudget(run), proposed)
+	if entry.Kind != domain.UsageModelSettlement {
+		current := budget.BuildLedger(entry.RunID, runBudget(run), entries)
+		if err := budget.Check(runBudget(run), current.Totals, budget.EntryTotals(entry), entry.OperationID, entry.Purpose); err != nil {
+			return current, false, err
+		}
+	}
+
+	s.data.RunUsageEntries = append(s.data.RunUsageEntries, entry)
+	if err := s.saveLocked(); err != nil {
+		return domain.RunUsageLedger{}, false, err
+	}
+	if entry.Kind == domain.UsageModelSettlement {
+		if err := budget.CheckTotals(runBudget(run), ledger.Totals, entry.OperationID, entry.Purpose); err != nil {
+			return ledger, true, err
+		}
+	}
+	return ledger, true, nil
+}
+
+func (s *FileStore) GetRunUsageLedger(runID string) (domain.RunUsageLedger, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	run, ok := s.getRunLocked(runID)
+	if !ok {
+		return domain.RunUsageLedger{}, false, nil
+	}
+	return budget.BuildLedger(runID, runBudget(run), s.runUsageEntriesForRunLocked(runID)), true, nil
+}
+
 func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -782,6 +857,7 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		Messages:              messages,
 		Steps:                 steps,
 		Summary:               buildRunTraceSummary(run, runEvents),
+		UsageLedger:           budget.BuildLedger(runID, runBudget(run), s.runUsageEntriesForRunLocked(runID)),
 		RunEvents:             runEvents,
 		VerificationEvidence:  verificationEvidenceForRun(s.data.VerificationEvidence, runID),
 		VerificationArtifacts: verificationArtifactsForRun(s.data.VerificationArtifacts, runID),
@@ -806,6 +882,72 @@ func cloneRun(run domain.Run) domain.Run {
 	run.RuntimeSnapshot = cloneRuntimeSnapshotValue(run.RuntimeSnapshot)
 	run.CompletionContract = cloneCompletionContract(run.CompletionContract)
 	return run
+}
+
+func (s *FileStore) runUsageEntriesForRunLocked(runID string) []domain.RunUsageEntry {
+	entries := []domain.RunUsageEntry{}
+	for _, entry := range s.data.RunUsageEntries {
+		if entry.RunID == runID {
+			entries = append(entries, entry)
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Timestamp.Equal(entries[j].Timestamp) {
+			return entries[i].ID < entries[j].ID
+		}
+		return entries[i].Timestamp.Before(entries[j].Timestamp)
+	})
+	return entries
+}
+
+func runBudget(run domain.Run) domain.RuntimeRunBudget {
+	if run.RuntimeSnapshot == nil || run.RuntimeSnapshot.RunBudget == nil {
+		return domain.RuntimeRunBudget{}
+	}
+	return *run.RuntimeSnapshot.RunBudget
+}
+
+func validateUsageEntry(entry domain.RunUsageEntry) error {
+	if strings.TrimSpace(entry.ID) == "" || strings.TrimSpace(entry.RunID) == "" || strings.TrimSpace(entry.OperationID) == "" {
+		return errors.New("run usage requires id, run_id, and operation_id")
+	}
+	if entry.Purpose != domain.UsagePurposePrimary && entry.Purpose != domain.UsagePurposeRouter && entry.Purpose != domain.UsagePurposeCompaction {
+		return errors.New("run usage purpose is invalid")
+	}
+	if entry.ModelCalls < 0 || entry.ToolCalls < 0 || entry.PromptTokens < 0 || entry.CompletionTokens < 0 || entry.TotalTokens < 0 || entry.EstimatedCostMicros < 0 {
+		return errors.New("run usage values cannot be negative")
+	}
+	switch entry.Kind {
+	case domain.UsageModelReservation, domain.UsageModelSettlement:
+		if entry.ModelCalls != 1 || entry.ToolCalls != 0 || entry.TotalTokens < entry.PromptTokens+entry.CompletionTokens {
+			return errors.New("model usage entry has invalid counters")
+		}
+	case domain.UsageToolExecution:
+		if entry.ToolCalls != 1 || entry.ModelCalls != 0 || entry.PromptTokens != 0 || entry.CompletionTokens != 0 || entry.TotalTokens != 0 || entry.EstimatedCostMicros != 0 {
+			return errors.New("tool usage entry has invalid counters")
+		}
+	default:
+		return errors.New("run usage kind is invalid")
+	}
+	if entry.Timestamp.IsZero() {
+		return errors.New("run usage timestamp is required")
+	}
+	return nil
+}
+
+func hasUsageReservation(entries []domain.RunUsageEntry, operationID string) bool {
+	for _, entry := range entries {
+		if entry.OperationID == operationID && entry.Kind == domain.UsageModelReservation {
+			return true
+		}
+	}
+	return false
+}
+
+func sameUsageEntry(left, right domain.RunUsageEntry) bool {
+	left.ID, right.ID = "", ""
+	left.Timestamp, right.Timestamp = time.Time{}, time.Time{}
+	return left == right
 }
 
 func cloneCompletionContract(contract *domain.CompletionContract) *domain.CompletionContract {

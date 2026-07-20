@@ -82,6 +82,8 @@ type Run struct {
 	VerificationStatus VerificationStatus  `json:"verification_status"`
 	Error              string              `json:"error,omitempty"`
 	StartedAt          *time.Time          `json:"started_at,omitempty"`
+	ExecutionStartedAt *time.Time          `json:"execution_started_at,omitempty"`
+	ActiveRuntimeMS    int64               `json:"active_runtime_ms"`
 	HeartbeatAt        *time.Time          `json:"heartbeat_at,omitempty"`
 	CompletedAt        *time.Time          `json:"completed_at,omitempty"`
 	CreatedAt          time.Time           `json:"created_at"`
@@ -89,9 +91,10 @@ type Run struct {
 }
 
 const (
-	LegacyRuntimeSnapshotVersion  = 1
-	ContextRuntimeSnapshotVersion = 2
-	CurrentRuntimeSnapshotVersion = 3
+	LegacyRuntimeSnapshotVersion     = 1
+	ContextRuntimeSnapshotVersion    = 2
+	CompactionRuntimeSnapshotVersion = 3
+	CurrentRuntimeSnapshotVersion    = 4
 )
 
 type RuntimeSnapshot struct {
@@ -104,6 +107,7 @@ type RuntimeSnapshot struct {
 	ContextAssembly  ContextAssemblyConfig  `json:"context_assembly"`
 	RouterMode       string                 `json:"router_mode,omitempty"`
 	AutonomousLimits *RuntimeLimitsSnapshot `json:"autonomous_limits,omitempty"`
+	RunBudget        *RuntimeRunBudget      `json:"run_budget,omitempty"`
 	CreatedAt        time.Time              `json:"created_at"`
 }
 
@@ -170,6 +174,20 @@ type RuntimeLimitsSnapshot struct {
 	MaxRuntimeMS   int64 `json:"max_runtime_ms"`
 	MaxOutputChars int   `json:"max_output_chars"`
 	MaxToolCalls   int   `json:"max_tool_calls"`
+}
+
+// RuntimeRunBudget is frozen with a Run. Zero disables the corresponding
+// limit or price, so later environment changes cannot alter an existing Run.
+type RuntimeRunBudget struct {
+	MaxModelCalls                    int   `json:"max_model_calls,omitempty"`
+	MaxPromptTokens                  int   `json:"max_prompt_tokens,omitempty"`
+	MaxCompletionTokens              int   `json:"max_completion_tokens,omitempty"`
+	MaxTotalTokens                   int   `json:"max_total_tokens,omitempty"`
+	MaxToolCalls                     int   `json:"max_tool_calls,omitempty"`
+	MaxRuntimeMS                     int64 `json:"max_runtime_ms,omitempty"`
+	MaxEstimatedCostMicros           int64 `json:"max_estimated_cost_micros,omitempty"`
+	InputCostPerMillionTokensMicros  int64 `json:"input_cost_per_million_tokens_micros,omitempty"`
+	OutputCostPerMillionTokensMicros int64 `json:"output_cost_per_million_tokens_micros,omitempty"`
 }
 
 type CollaborationStepStatus string
@@ -276,6 +294,8 @@ const (
 	EventVerificationBlocked     RunEventType = "verification.blocked"
 	EventVerificationStale       RunEventType = "verification.stale"
 	EventRunRevisionRequested    RunEventType = "run.revision_requested"
+	EventUsageRecorded           RunEventType = "usage.recorded"
+	EventBudgetExceeded          RunEventType = "budget.exceeded"
 )
 
 type ContextManifestEntry struct {
@@ -339,6 +359,62 @@ type RunTraceSummary struct {
 	ErrorCount          int       `json:"error_count"`
 }
 
+type RunUsagePurpose string
+
+const (
+	UsagePurposePrimary    RunUsagePurpose = "primary"
+	UsagePurposeRouter     RunUsagePurpose = "router"
+	UsagePurposeCompaction RunUsagePurpose = "compaction"
+)
+
+type RunUsageEntryKind string
+
+const (
+	UsageModelReservation RunUsageEntryKind = "model.reservation"
+	UsageModelSettlement  RunUsageEntryKind = "model.settlement"
+	UsageToolExecution    RunUsageEntryKind = "tool.execution"
+)
+
+// RunUsageEntry is append-only. A model settlement stores absolute provider
+// usage and supersedes the estimate for the same operation when totals are built.
+type RunUsageEntry struct {
+	ID                  string            `json:"id"`
+	RunID               string            `json:"run_id"`
+	OperationID         string            `json:"operation_id"`
+	StageID             string            `json:"stage_id,omitempty"`
+	TurnID              string            `json:"turn_id,omitempty"`
+	Kind                RunUsageEntryKind `json:"kind"`
+	Purpose             RunUsagePurpose   `json:"purpose"`
+	Model               string            `json:"model,omitempty"`
+	ToolName            string            `json:"tool_name,omitempty"`
+	ModelCalls          int               `json:"model_calls,omitempty"`
+	ToolCalls           int               `json:"tool_calls,omitempty"`
+	PromptTokens        int               `json:"prompt_tokens,omitempty"`
+	CompletionTokens    int               `json:"completion_tokens,omitempty"`
+	TotalTokens         int               `json:"total_tokens,omitempty"`
+	EstimatedCostMicros int64             `json:"estimated_cost_micros,omitempty"`
+	Estimated           bool              `json:"estimated,omitempty"`
+	Timestamp           time.Time         `json:"timestamp"`
+}
+
+type RunUsageTotals struct {
+	ModelCalls          int   `json:"model_calls"`
+	ToolCalls           int   `json:"tool_calls"`
+	PromptTokens        int   `json:"prompt_tokens"`
+	CompletionTokens    int   `json:"completion_tokens"`
+	TotalTokens         int   `json:"total_tokens"`
+	EstimatedCostMicros int64 `json:"estimated_cost_micros"`
+	OpenReservations    int   `json:"open_reservations"`
+}
+
+type RunUsageLedger struct {
+	RunID     string           `json:"run_id"`
+	Budget    RuntimeRunBudget `json:"budget"`
+	Totals    RunUsageTotals   `json:"totals"`
+	Entries   []RunUsageEntry  `json:"entries"`
+	UpdatedAt *time.Time       `json:"updated_at,omitempty"`
+}
+
 type RunReplay struct {
 	Run                   Run                    `json:"run"`
 	RuntimeSnapshot       *RuntimeSnapshot       `json:"runtime_snapshot,omitempty"`
@@ -346,6 +422,7 @@ type RunReplay struct {
 	Messages              []Message              `json:"messages"`
 	Steps                 []CollaborationStep    `json:"steps"`
 	Summary               RunTraceSummary        `json:"summary"`
+	UsageLedger           RunUsageLedger         `json:"usage_ledger"`
 	RunEvents             []RunEvent             `json:"run_events"`
 	VerificationEvidence  []VerificationEvidence `json:"verification_evidence"`
 	VerificationArtifacts []VerificationArtifact `json:"verification_artifacts"`

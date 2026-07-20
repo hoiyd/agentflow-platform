@@ -6,8 +6,102 @@ import (
 	"testing"
 	"time"
 
+	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
 )
+
+func TestFileStoreUsageLedgerIsIdempotentAndPersistsSettlementOverage(t *testing.T) {
+	path := t.TempDir() + "/agentflow.json"
+	store, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := store.CreateConversation("usage ledger")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	snapshot := testRuntimeSnapshot()
+	snapshot.RunBudget = &domain.RuntimeRunBudget{MaxModelCalls: 1, MaxTotalTokens: 10}
+	run, err := store.CreateRun("agent_planner", conversation.ID, snapshot)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if _, applied, applyErr := store.ApplyRunUsage(domain.RunUsageEntry{
+		ID: "usage-invalid", RunID: run.ID, OperationID: "call-invalid",
+		Kind: domain.UsageModelReservation, Purpose: domain.UsagePurposePrimary,
+		ModelCalls: 1, PromptTokens: -5, CompletionTokens: 1, TotalTokens: -4,
+		Timestamp: time.Now().UTC(),
+	}); applyErr == nil || applied {
+		t.Fatalf("invalid negative usage was accepted: applied=%t err=%v", applied, applyErr)
+	}
+	now := time.Now().UTC()
+	reservation := domain.RunUsageEntry{
+		ID: "usage-reserve-1", RunID: run.ID, OperationID: "model-call-1",
+		Kind: domain.UsageModelReservation, Purpose: domain.UsagePurposePrimary,
+		Model: "test", ModelCalls: 1, PromptTokens: 5, CompletionTokens: 1,
+		TotalTokens: 6, Estimated: true, Timestamp: now,
+	}
+	ledger, applied, err := store.ApplyRunUsage(reservation)
+	if err != nil || !applied || ledger.Totals.OpenReservations != 1 {
+		t.Fatalf("reserve usage: applied=%t ledger=%#v err=%v", applied, ledger, err)
+	}
+	duplicate := reservation
+	duplicate.ID = "usage-reserve-retry"
+	duplicate.Timestamp = now.Add(time.Second)
+	ledger, applied, err = store.ApplyRunUsage(duplicate)
+	if err != nil || applied || len(ledger.Entries) != 1 {
+		t.Fatalf("duplicate reservation was not idempotent: applied=%t ledger=%#v err=%v", applied, ledger, err)
+	}
+	settlement := domain.RunUsageEntry{
+		ID: "usage-settle-1", RunID: run.ID, OperationID: "model-call-1",
+		Kind: domain.UsageModelSettlement, Purpose: domain.UsagePurposePrimary,
+		Model: "test", ModelCalls: 1, PromptTokens: 7, CompletionTokens: 5,
+		TotalTokens: 12, Timestamp: now.Add(2 * time.Second),
+	}
+	ledger, applied, err = store.ApplyRunUsage(settlement)
+	exceeded, ok := budget.AsExceeded(err)
+	if !applied || !ok || exceeded.Resource != budget.ResourceTotalTokens || ledger.Totals.TotalTokens != 12 || ledger.Totals.OpenReservations != 0 {
+		t.Fatalf("settlement overage was not persisted: applied=%t ledger=%#v err=%v", applied, ledger, err)
+	}
+
+	reopened, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	replay, ok, err := reopened.GetRunReplay(run.ID)
+	if err != nil || !ok || replay.UsageLedger.Totals.TotalTokens != 12 || len(replay.UsageLedger.Entries) != 2 {
+		t.Fatalf("usage replay round trip: ok=%t ledger=%#v err=%v", ok, replay.UsageLedger, err)
+	}
+}
+
+func TestFileStoreActiveRuntimeExcludesWaitingForUser(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := store.CreateConversation("runtime segments")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if _, err = store.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
+		t.Fatalf("start run: %v", err)
+	}
+	time.Sleep(8 * time.Millisecond)
+	waiting, err := store.UpdateRunStatus(run.ID, domain.RunWaitingForUser, "")
+	if err != nil || waiting.ActiveRuntimeMS <= 0 || waiting.ExecutionStartedAt != nil {
+		t.Fatalf("pause run: run=%#v err=%v", waiting, err)
+	}
+	activeBeforeWait := waiting.ActiveRuntimeMS
+	time.Sleep(20 * time.Millisecond)
+	resumed, err := store.UpdateRunStatus(run.ID, domain.RunRunning, "")
+	if err != nil || resumed.ActiveRuntimeMS != activeBeforeWait || resumed.ExecutionStartedAt == nil {
+		t.Fatalf("waiting time leaked into active runtime: before=%d resumed=%#v err=%v", activeBeforeWait, resumed, err)
+	}
+}
 
 func testRuntimeSnapshot() domain.RuntimeSnapshot {
 	return domain.RuntimeSnapshot{
