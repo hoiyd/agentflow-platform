@@ -36,6 +36,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	)
 	runtime := NewRuntime(RuntimeOptions{
 		Store: fileStore, ModelClient: client, Tools: manager,
+		RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 12, MaxRuntimeMS: 90_000, MaxToolCalls: 7},
 		ContextAssembly: domain.ContextAssemblyConfig{
 			AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 32000, OutputReserveTokens: 2048,
 			SafetyMarginTokens: 1024, HistoryMaxTokens: 12000, MemoryMaxTokens: 2000, KnowledgeMaxTokens: 4000,
@@ -70,6 +71,13 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if prepared.Run.RuntimeSnapshot.ContextAssembly.ContextWindowTokens != 32000 {
 		t.Fatalf("context assembly config was not frozen: %#v", prepared.Run.RuntimeSnapshot.ContextAssembly)
 	}
+	if prepared.Run.RuntimeSnapshot.RunBudget == nil || prepared.Run.RuntimeSnapshot.RunBudget.MaxModelCalls != 12 || prepared.Run.RuntimeSnapshot.RunBudget.MaxRuntimeMS != 90_000 {
+		t.Fatalf("run budget was not frozen: %#v", prepared.Run.RuntimeSnapshot.RunBudget)
+	}
+	runtime.runBudget.MaxModelCalls = 99
+	if prepared.Run.RuntimeSnapshot.RunBudget.MaxModelCalls != 12 {
+		t.Fatal("runtime budget mutation changed the frozen snapshot")
+	}
 	runtime.contextAssemblyConfig = contextassembly.NormalizeConfig(domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 64000})
 	if prepared.Run.RuntimeSnapshot.ContextAssembly.ContextWindowTokens != 32000 {
 		t.Fatal("runtime config mutation changed the frozen context assembly config")
@@ -102,6 +110,35 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	prepared.Run.RuntimeSnapshot.Tools[0].Description = "changed tool contract"
 	if _, err := runtime.restoreRuntime(prepared.Run); err == nil || !strings.Contains(err.Error(), "no longer matches") {
 		t.Fatalf("expected changed tool definition to be rejected, got %v", err)
+	}
+}
+
+func TestRuntimeSnapshotAcceptsV1ThroughV4AndKeepsOlderRunsBudgetless(t *testing.T) {
+	for _, version := range []int{
+		domain.LegacyRuntimeSnapshotVersion,
+		domain.ContextRuntimeSnapshotVersion,
+		domain.CompactionRuntimeSnapshotVersion,
+		domain.CurrentRuntimeSnapshotVersion,
+	} {
+		snapshot := &domain.RuntimeSnapshot{
+			SchemaVersion: version, Mode: ChatModeSingle,
+			Agent: domain.RuntimeAgentSnapshot{ID: "agent"}, Model: domain.RuntimeModelSnapshot{Model: "model"},
+		}
+		if err := validateRuntimeSnapshot(snapshot); err != nil {
+			t.Fatalf("snapshot v%d should remain readable: %v", version, err)
+		}
+		if version < domain.CurrentRuntimeSnapshotVersion && snapshot.RunBudget != nil {
+			t.Fatalf("older snapshot v%d unexpectedly inherited a budget", version)
+		}
+	}
+}
+
+func TestEffectiveAutonomousLimitsUseStricterRunBudget(t *testing.T) {
+	limits := effectiveAutonomousLimits(AutonomousLimits{
+		MaxIterations: 5, MaxRuntime: 5 * time.Minute, MaxOutputChars: 1000, MaxToolCalls: 20,
+	}, domain.RuntimeRunBudget{MaxRuntimeMS: int64((2 * time.Minute).Milliseconds()), MaxToolCalls: 8})
+	if limits.MaxRuntime != 2*time.Minute || limits.MaxToolCalls != 8 {
+		t.Fatalf("expected stricter effective autonomous limits, got %#v", limits)
 	}
 }
 

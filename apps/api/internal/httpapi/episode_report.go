@@ -170,16 +170,24 @@ func episodeErrors(replay domain.RunReplay) []domain.EpisodeError {
 		})
 	}
 	for _, event := range replay.RunEvents {
-		if event.Type != domain.EventModelFailed && event.Type != domain.EventToolFailed && event.Type != domain.EventRetrievalFailed && event.Type != domain.EventMemoryCandidateFailed && event.Type != domain.EventMemorySyncFailed {
+		if event.Type != domain.EventModelFailed && event.Type != domain.EventToolFailed && event.Type != domain.EventRetrievalFailed && event.Type != domain.EventMemoryCandidateFailed && event.Type != domain.EventMemorySyncFailed && event.Type != domain.EventBudgetExceeded {
 			continue
 		}
 		message := stringPayload(event.Payload, "error")
+		if event.Type == domain.EventBudgetExceeded {
+			message = fmt.Sprintf("run budget exceeded: resource=%s limit=%d used=%d requested=%d",
+				stringPayload(event.Payload, "resource"), intPayload(event.Payload, "limit"),
+				intPayload(event.Payload, "used"), intPayload(event.Payload, "requested"))
+		}
 		if message == "" {
 			message = "trace error"
 		}
 		source := stringPayload(event.Payload, "source")
 		if source == "" {
 			source = "trace"
+			if event.Type == domain.EventBudgetExceeded {
+				source = "budget"
+			}
 		}
 		errors = append(errors, domain.EpisodeError{
 			Source:  source,

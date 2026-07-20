@@ -85,3 +85,29 @@ type MemoryCandidatePayload struct {
 	Confidence       float64 `json:"confidence,omitempty"`
 	Error            string  `json:"error,omitempty"`
 }
+
+type UsagePayload struct {
+	UsageEntryID        string `json:"usage_entry_id"`
+	OperationID         string `json:"operation_id"`
+	Kind                string `json:"kind"`
+	Purpose             string `json:"purpose"`
+	Model               string `json:"model,omitempty"`
+	ToolName            string `json:"tool_name,omitempty"`
+	ModelCalls          int    `json:"model_calls"`
+	ToolCalls           int    `json:"tool_calls"`
+	PromptTokens        int    `json:"prompt_tokens"`
+	CompletionTokens    int    `json:"completion_tokens"`
+	TotalTokens         int    `json:"total_tokens"`
+	EstimatedCostMicros int64  `json:"estimated_cost_micros"`
+	OpenReservations    int    `json:"open_reservations"`
+	UsageEstimated      bool   `json:"usage_estimated"`
+}
+
+type BudgetExceededPayload struct {
+	Resource    string `json:"resource"`
+	Limit       int64  `json:"limit"`
+	Used        int64  `json:"used"`
+	Requested   int64  `json:"requested"`
+	OperationID string `json:"operation_id,omitempty"`
+	Purpose     string `json:"purpose,omitempty"`
+}

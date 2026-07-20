@@ -57,14 +57,16 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		Tools:           toolSnapshots,
 		ContextAssembly: contextassembly.NormalizeConfig(r.contextAssemblyConfig),
 		RouterMode:      r.routerMode,
+		RunBudget:       cloneRunBudget(r.runBudget),
 		CreatedAt:       time.Now().UTC(),
 	}
 	if mode == ChatModeAutonomous {
+		limits := effectiveAutonomousLimits(r.autonomousLimits, r.runBudget)
 		snapshot.AutonomousLimits = &domain.RuntimeLimitsSnapshot{
-			MaxIterations:  r.autonomousLimits.MaxIterations,
-			MaxRuntimeMS:   r.autonomousLimits.MaxRuntime.Milliseconds(),
-			MaxOutputChars: r.autonomousLimits.MaxOutputChars,
-			MaxToolCalls:   r.autonomousLimits.MaxToolCalls,
+			MaxIterations:  limits.MaxIterations,
+			MaxRuntimeMS:   limits.MaxRuntime.Milliseconds(),
+			MaxOutputChars: limits.MaxOutputChars,
+			MaxToolCalls:   limits.MaxToolCalls,
 		}
 	}
 	return snapshot, nil
@@ -160,7 +162,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 }
 
 func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
-	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
+	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CompactionRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
 		return ErrRuntimeSnapshotUnavailable
 	}
 	switch snapshot.Mode {
@@ -183,6 +185,25 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 		return errors.New("runtime snapshot has no model")
 	}
 	return nil
+}
+
+func cloneRunBudget(value domain.RuntimeRunBudget) *domain.RuntimeRunBudget {
+	cloned := value
+	return &cloned
+}
+
+func effectiveAutonomousLimits(limits AutonomousLimits, runBudget domain.RuntimeRunBudget) AutonomousLimits {
+	limits = normalizeAutonomousLimits(limits)
+	if runBudget.MaxRuntimeMS > 0 {
+		runLimit := time.Duration(runBudget.MaxRuntimeMS) * time.Millisecond
+		if limits.MaxRuntime <= 0 || runLimit < limits.MaxRuntime {
+			limits.MaxRuntime = runLimit
+		}
+	}
+	if runBudget.MaxToolCalls > 0 && (limits.MaxToolCalls <= 0 || runBudget.MaxToolCalls < limits.MaxToolCalls) {
+		limits.MaxToolCalls = runBudget.MaxToolCalls
+	}
+	return limits
 }
 
 func toolDefinitionMatches(installed tools.Binding, frozen domain.RuntimeToolSnapshot) bool {

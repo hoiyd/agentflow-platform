@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	tracepkg "agentflow-platform/apps/api/internal/event"
@@ -329,6 +330,12 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 				return
 			}
 			output := fallbackEventResponse(latest)
+			callCtx := budget.WithOperation(ctx, prepared.manifest.ModelCallID)
+			reservation, err := beginBudgetedModelCall(callCtx, "local_fallback", estimateTokens(messagesToText(prepared.messages)))
+			if err != nil {
+				errs <- err
+				return
+			}
 			startPayload := mergePayload(map[string]any{
 				"model":       "local_fallback",
 				"system":      systemPrompt,
@@ -343,11 +350,16 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 			}
 			span := recorder.LLMStart(ctx, runID, stepID, startPayload)
 			c.streamText(ctx, output, 45*time.Millisecond, events)
+			usage := estimateUsage(messagesToText(prepared.messages), output)
+			if err := settleBudgetedModelCall(callCtx, reservation, usage); err != nil {
+				errs <- err
+				return
+			}
 			recorder.LLMEnd(ctx, span, tokenPayload(map[string]any{
 				"model":        "local_fallback",
 				"output":       output,
 				"output_chars": len(output),
-			}, estimateUsage(messagesToText(prepared.messages), output)))
+			}, usage))
 			return
 		}
 
@@ -392,13 +404,23 @@ func (c *Client) PrepareText(ctx context.Context, systemPrompt string, prompt st
 }
 
 func (c *Client) CompletePreparedText(ctx context.Context, prepared PreparedText) (TextCompletion, error) {
+	ctx = budget.WithOperation(ctx, prepared.Manifest.ModelCallID)
+	ctx = withOutputTokenLimit(ctx, prepared.Manifest.OutputReserveTokens)
 	systemPrompt, prompt := textPromptParts(prepared.Messages)
 	if c.apiKey == "" {
 		text := fallbackCompletion(systemPrompt, prompt)
+		reservation, err := beginBudgetedModelCall(ctx, "local_fallback", estimateTokens(messagesToText(prepared.Messages)))
+		if err != nil {
+			return TextCompletion{}, err
+		}
+		usage := estimateUsage(systemPrompt+"\n"+prompt, text)
+		if err := settleBudgetedModelCall(ctx, reservation, usage); err != nil {
+			return TextCompletion{}, err
+		}
 		return TextCompletion{
 			Text:  text,
 			Model: "local_fallback",
-			Usage: estimateUsage(systemPrompt+"\n"+prompt, text),
+			Usage: usage,
 		}, nil
 	}
 
@@ -614,7 +636,9 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		startPayload["retrieved_chunks"] = retrievedChunkPayload(retrievedChunks)
 	}
 	llmSpan := recorder.LLMStart(ctx, runID, stepID, startPayload)
-	decision, err := c.complete(ctx, map[string]any{
+	decisionCtx := budget.WithOperation(ctx, prepared.manifest.ModelCallID)
+	decisionCtx = withOutputTokenLimit(decisionCtx, prepared.manifest.OutputReserveTokens)
+	decision, err := c.complete(decisionCtx, map[string]any{
 		"model":       c.model,
 		"messages":    messages,
 		"tools":       definitions,
@@ -651,7 +675,9 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 			"model": c.model, "call_kind": "text_capability_fallback", "messages": messages,
 			"input_chars": messagesTextLength(messages),
 		}, contextTracePayload(prepared.manifest)))
-		decision, err = c.complete(ctx, map[string]any{
+		decisionCtx = budget.WithOperation(ctx, prepared.manifest.ModelCallID)
+		decisionCtx = withOutputTokenLimit(decisionCtx, prepared.manifest.OutputReserveTokens)
+		decision, err = c.complete(decisionCtx, map[string]any{
 			"model":       c.model,
 			"messages":    messages,
 			"temperature": 0.2,
@@ -730,6 +756,11 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		})
 	}
 	results := toolExecutor.ExecuteBatch(ctx, requests)
+	for _, result := range results {
+		if exceeded, ok := budget.AsExceeded(result.Error); ok {
+			return exceeded
+		}
+	}
 	for index, result := range results {
 		call := normalizedCalls[index]
 		resultText := marshalResult(result)
@@ -751,7 +782,9 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		"model": c.model, "call_kind": "tool_result_response", "messages": messages,
 		"input_chars": messagesTextLength(messages),
 	}, contextTracePayload(prepared.manifest)))
-	emitted, finalOutput, finalUsage, err := c.streamMessages(ctx, messages, events)
+	streamCtx := budget.WithOperation(ctx, prepared.manifest.ModelCallID)
+	streamCtx = withOutputTokenLimit(streamCtx, prepared.manifest.OutputReserveTokens)
+	emitted, finalOutput, finalUsage, err := c.streamMessages(streamCtx, messages, events)
 	if err != nil {
 		recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
 			"source": "llm",
@@ -784,8 +817,19 @@ func (c *Client) complete(ctx context.Context, body map[string]any) (chatComplet
 	if err != nil {
 		return chatCompletionResponse{}, err
 	}
+	reservation, err := beginBudgetedModelCall(ctx, c.model, estimatedRequestTokens(payload))
+	if err != nil {
+		return chatCompletionResponse{}, err
+	}
+	if maxTokens := minPositive(reservation.MaxCompletionTokens, outputTokenLimit(ctx)); maxTokens > 0 {
+		body["max_tokens"] = maxTokens
+		payload, err = json.Marshal(body)
+		if err != nil {
+			return chatCompletionResponse{}, err
+		}
+	}
 	const operation = "chat.completion"
-	return executeWithRetry(ctx, c.retryPolicy, operation, func() (chatCompletionResponse, error) {
+	response, err := executeWithRetry(ctx, c.retryPolicy, operation, func() (chatCompletionResponse, error) {
 		resp, err := c.doRequest(ctx, payload)
 		if err != nil {
 			return chatCompletionResponse{}, err
@@ -804,24 +848,59 @@ func (c *Client) complete(ctx context.Context, body map[string]any) (chatComplet
 		}
 		return decoded, nil
 	})
+	if err != nil {
+		return response, err
+	}
+	if !response.Usage.Valid() {
+		response.Usage = estimateUsage(string(payload), response.Choices[0].Message.Content)
+	}
+	if err := settleBudgetedModelCall(ctx, reservation, response.Usage); err != nil {
+		return response, err
+	}
+	return response, nil
 }
 
 func (c *Client) streamMessages(ctx context.Context, messages []Message, events chan<- StreamEvent) (bool, string, Usage, error) {
-	emitted, output, usage, err := c.streamMessagesWithUsageOption(ctx, messages, events, true)
+	reservation, err := beginBudgetedModelCall(ctx, c.model, estimateTokens(messagesToText(messages)))
+	if err != nil {
+		return false, "", Usage{}, err
+	}
+	maxCompletionTokens := minPositive(reservation.MaxCompletionTokens, outputTokenLimit(ctx))
+	emitted, output, usage, err := c.streamMessagesWithUsageLimit(ctx, messages, events, true, maxCompletionTokens)
 	if err == nil {
+		if !usage.Valid() {
+			usage = estimateUsage(messagesToText(messages), output)
+		}
+		if settleErr := settleBudgetedModelCall(ctx, reservation, usage); settleErr != nil {
+			return emitted, output, usage, settleErr
+		}
 		return emitted, output, usage, nil
 	}
 	if !isStreamUsageUnsupported(err) {
 		return emitted, output, usage, err
 	}
 	log.Printf("chat_stream_capability_fallback capability=stream_usage model=%s reason=%q", c.model, err.Error())
-	return c.streamMessagesWithUsageOption(ctx, messages, events, false)
+	emitted, output, usage, err = c.streamMessagesWithUsageLimit(ctx, messages, events, false, maxCompletionTokens)
+	if err != nil {
+		return emitted, output, usage, err
+	}
+	if !usage.Valid() {
+		usage = estimateUsage(messagesToText(messages), output)
+	}
+	if err := settleBudgetedModelCall(ctx, reservation, usage); err != nil {
+		return emitted, output, usage, err
+	}
+	return emitted, output, usage, nil
 }
 
 func (c *Client) streamMessagesWithUsageOption(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool) (bool, string, Usage, error) {
+	return c.streamMessagesWithUsageLimit(ctx, messages, events, includeUsage, 0)
+}
+
+func (c *Client) streamMessagesWithUsageLimit(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool, maxCompletionTokens int) (bool, string, Usage, error) {
 	const operation = "chat.stream"
 	result, err := executeWithRetry(ctx, c.retryPolicy, operation, func() (streamAttemptResult, error) {
-		attemptResult, attemptErr := c.streamMessagesAttempt(ctx, messages, events, includeUsage)
+		attemptResult, attemptErr := c.streamMessagesAttempt(ctx, messages, events, includeUsage, maxCompletionTokens)
 		if attemptErr != nil && attemptResult.emitted {
 			return attemptResult, withoutRetry(attemptErr, operation)
 		}
@@ -830,19 +909,72 @@ func (c *Client) streamMessagesWithUsageOption(ctx context.Context, messages []M
 	return result.emitted, result.output, result.usage, err
 }
 
+func beginBudgetedModelCall(ctx context.Context, model string, estimatedPromptTokens int) (budget.ModelReservation, error) {
+	controller := budget.FromContext(ctx)
+	if controller == nil {
+		return budget.ModelReservation{Model: model, EstimatedPromptTokens: estimatedPromptTokens}, nil
+	}
+	operationID := budget.OperationFromContext(ctx)
+	if operationID == "" {
+		operationID = budget.NewOperationID("model")
+	}
+	return controller.BeginModelCall(ctx, budget.ModelCallEstimate{
+		OperationID: operationID, Purpose: budget.PurposeFromContext(ctx),
+		Model: model, EstimatedPromptTokens: estimatedPromptTokens,
+	})
+}
+
+func settleBudgetedModelCall(ctx context.Context, reservation budget.ModelReservation, usage Usage) error {
+	controller := budget.FromContext(ctx)
+	if controller == nil {
+		return nil
+	}
+	return controller.SettleModelCall(ctx, reservation, budget.ModelUsage{
+		PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens,
+		TotalTokens: usage.TotalTokens, Estimated: usage.Estimated,
+	})
+}
+
+type outputTokenLimitKey struct{}
+
+func withOutputTokenLimit(ctx context.Context, limit int) context.Context {
+	if limit <= 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, outputTokenLimitKey{}, limit)
+}
+
+func outputTokenLimit(ctx context.Context) int {
+	limit, _ := ctx.Value(outputTokenLimitKey{}).(int)
+	return max(0, limit)
+}
+
+func minPositive(values ...int) int {
+	result := 0
+	for _, value := range values {
+		if value > 0 && (result == 0 || value < result) {
+			result = value
+		}
+	}
+	return result
+}
+
 type streamAttemptResult struct {
 	emitted bool
 	output  string
 	usage   Usage
 }
 
-func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool) (streamAttemptResult, error) {
+func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool, maxCompletionTokens int) (streamAttemptResult, error) {
 	const operation = "chat.stream"
 	body := map[string]any{
 		"model":       c.model,
 		"messages":    messages,
 		"stream":      true,
 		"temperature": 0.4,
+	}
+	if maxCompletionTokens > 0 {
+		body["max_tokens"] = maxCompletionTokens
 	}
 	if includeUsage {
 		body["stream_options"] = map[string]any{"include_usage": true}

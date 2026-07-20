@@ -9,6 +9,7 @@ const (
 	ErrorExecutionTimeout  ErrorCode = "execution_timeout"
 	ErrorExecutionCanceled ErrorCode = "execution_canceled"
 	ErrorResultEncoding    ErrorCode = "result_encoding_failed"
+	ErrorBudgetExceeded    ErrorCode = "budget_exceeded"
 )
 
 type ExecutionError struct {

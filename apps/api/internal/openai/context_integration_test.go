@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
@@ -24,9 +25,11 @@ func TestToolRoundTripCreatesManifestPerLogicalModelCall(t *testing.T) {
 	})}
 	store := &recordingEventStore{}
 	recorder := eventpkg.NewRecorder(store)
+	budgetController := &modelBudgetController{}
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{
 		ConversationID: "conv-1", RunID: "run-1", StageID: "stage-1", TurnID: "turn-1",
 	})
+	ctx = budget.WithController(ctx, budgetController)
 	ctx = contextassembly.WithSession(ctx, contextassembly.Session{
 		Config: contextassembly.DefaultConfig(), Sink: eventpkg.StoreSink{Store: store}, CurrentInput: "calculate 1 + 1",
 	})
@@ -63,6 +66,12 @@ func TestToolRoundTripCreatesManifestPerLogicalModelCall(t *testing.T) {
 	}
 	if len(manifestIDs) != 2 {
 		t.Fatalf("expected distinct manifest ids, got %#v", manifestIDs)
+	}
+	if budgetController.begins != 2 || budgetController.settles != 2 || len(budgetController.estimates) != 2 {
+		t.Fatalf("expected two settled logical model calls, controller=%#v", budgetController)
+	}
+	if budgetController.estimates[0].OperationID == budgetController.estimates[1].OperationID {
+		t.Fatalf("tool selection and final response reused operation id %q", budgetController.estimates[0].OperationID)
 	}
 }
 

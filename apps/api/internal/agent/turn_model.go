@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/turn"
@@ -16,11 +17,26 @@ type runtimeTurnModel struct {
 	runtime *Runtime
 }
 
-func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emit func(turn.ModelEvent)) (turn.Result, error) {
+func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emit func(turn.ModelEvent)) (result turn.Result, err error) {
 	snapshot, err := m.runtime.snapshotForRun(request.RunID)
 	if err != nil {
 		return turn.Result{}, err
 	}
+	ctx, cancel, err := m.runtime.contextWithRunBudget(ctx, request.RunID)
+	if err != nil {
+		return turn.Result{}, err
+	}
+	defer cancel()
+	if request.Role == "router" {
+		ctx = budget.WithPurpose(ctx, domain.UsagePurposeRouter)
+	} else {
+		ctx = budget.WithPurpose(ctx, domain.UsagePurposePrimary)
+	}
+	defer func() {
+		if err != nil {
+			err = runBudgetCause(ctx, err)
+		}
+	}()
 	m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerHard)
 	var compaction *domain.ContextCompaction
 	if snapshot.ContextAssembly.CompactionMode != contextassembly.CompactionModeOff {
@@ -106,6 +122,7 @@ func (m runtimeTurnModel) executeText(ctx context.Context, request turn.Request)
 		payload["model_call_id"] = prepared.Manifest.ModelCallID
 		payload["context_estimated_input_tokens"] = prepared.Manifest.EstimatedInputTokens
 	}
+	ctx = budget.WithOperation(ctx, prepared.Manifest.ModelCallID)
 	span := m.runtime.trace.LLMStart(ctx, request.RunID, request.StepID, payload)
 	startedAt := time.Now()
 	completion, err := client.CompletePreparedText(ctx, prepared)
