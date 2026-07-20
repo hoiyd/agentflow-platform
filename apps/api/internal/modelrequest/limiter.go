@@ -10,14 +10,14 @@ type Limiter interface {
 	AcquireRequest(ctx context.Context, apiKey string, estimatedTokens int) (release func(), err error)
 }
 
-// TokenLimitError reports that one request cannot fit within the configured
-// local token-bucket capacity.
-type TokenLimitError struct {
+// TokenBucketCapacityError reports that one physical request cannot fit within
+// the configured per-key TPM bucket capacity.
+type TokenBucketCapacityError struct {
 	EstimatedTokens int
 	Capacity        int
 }
 
-func (e *TokenLimitError) Error() string {
+func (e *TokenBucketCapacityError) Error() string {
 	return fmt.Sprintf(
 		"estimated request tokens exceed the configured token bucket capacity: estimated=%d capacity=%d",
 		e.EstimatedTokens,

@@ -44,6 +44,7 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 	}
 	toolSnapshots := snapshotTools(catalog, toolNames)
 	identity := r.openAI.RuntimeIdentity()
+	runBudget := r.runBudget
 	snapshot := domain.RuntimeSnapshot{
 		SchemaVersion:   domain.CurrentRuntimeSnapshotVersion,
 		Mode:            mode,
@@ -57,14 +58,16 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		Tools:           toolSnapshots,
 		ContextAssembly: contextassembly.NormalizeConfig(r.contextAssemblyConfig),
 		RouterMode:      r.routerMode,
+		RunBudget:       cloneRunBudget(runBudget),
 		CreatedAt:       time.Now().UTC(),
 	}
 	if mode == ChatModeAutonomous {
+		limits := normalizeAutonomousLimits(r.autonomousLimits)
+		runBudget = effectiveAutonomousRunBudget(runBudget, limits)
+		snapshot.RunBudget = cloneRunBudget(runBudget)
 		snapshot.AutonomousLimits = &domain.RuntimeLimitsSnapshot{
-			MaxIterations:  r.autonomousLimits.MaxIterations,
-			MaxRuntimeMS:   r.autonomousLimits.MaxRuntime.Milliseconds(),
-			MaxOutputChars: r.autonomousLimits.MaxOutputChars,
-			MaxToolCalls:   r.autonomousLimits.MaxToolCalls,
+			MaxIterations:  limits.MaxIterations,
+			MaxOutputChars: limits.MaxOutputChars,
 		}
 	}
 	return snapshot, nil
@@ -160,7 +163,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 }
 
 func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
-	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
+	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CompactionRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.RunBudgetRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
 		return ErrRuntimeSnapshotUnavailable
 	}
 	switch snapshot.Mode {
@@ -182,7 +185,29 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	if strings.TrimSpace(snapshot.Model.Model) == "" {
 		return errors.New("runtime snapshot has no model")
 	}
+	if snapshot.SchemaVersion >= domain.RunBudgetRuntimeSnapshotVersion && snapshot.RunBudget == nil {
+		return errors.New("runtime snapshot has no run budget")
+	}
 	return nil
+}
+
+func cloneRunBudget(value domain.RuntimeRunBudget) *domain.RuntimeRunBudget {
+	cloned := value
+	return &cloned
+}
+
+// effectiveAutonomousRunBudget resolves the two configuration profiles once at
+// Run creation. Runtime and tool usage then have one enforcement owner: Run Budget.
+func effectiveAutonomousRunBudget(runBudget domain.RuntimeRunBudget, limits AutonomousLimits) domain.RuntimeRunBudget {
+	limits = normalizeAutonomousLimits(limits)
+	modeRuntimeMS := limits.MaxRuntime.Milliseconds()
+	if modeRuntimeMS > 0 && (runBudget.MaxRuntimeMS <= 0 || modeRuntimeMS < runBudget.MaxRuntimeMS) {
+		runBudget.MaxRuntimeMS = modeRuntimeMS
+	}
+	if limits.MaxToolCalls > 0 && (runBudget.MaxToolCalls <= 0 || limits.MaxToolCalls < runBudget.MaxToolCalls) {
+		runBudget.MaxToolCalls = limits.MaxToolCalls
+	}
+	return runBudget
 }
 
 func toolDefinitionMatches(installed tools.Binding, frozen domain.RuntimeToolSnapshot) bool {
@@ -233,17 +258,34 @@ func (r *Runtime) clientFromSnapshot(snapshot *domain.RuntimeSnapshot) (*openai.
 	}), nil
 }
 
-func (r *Runtime) limitsForRun(runID string) (AutonomousLimits, error) {
+func (r *Runtime) limitsForRun(runID string) (AutonomousLimits, bool, error) {
 	snapshot, err := r.snapshotForRun(runID)
 	if err != nil {
-		return AutonomousLimits{}, err
+		return AutonomousLimits{}, false, err
+	}
+	limits, legacyResourceGuards, err := autonomousLimitsFromSnapshot(snapshot)
+	if err != nil {
+		return AutonomousLimits{}, false, fmt.Errorf("%w for autonomous run %s: %v", ErrRuntimeSnapshotUnavailable, runID, err)
+	}
+	return limits, legacyResourceGuards, nil
+}
+
+func autonomousLimitsFromSnapshot(snapshot *domain.RuntimeSnapshot) (AutonomousLimits, bool, error) {
+	if snapshot == nil {
+		return AutonomousLimits{}, false, errors.New("snapshot is missing")
 	}
 	if snapshot.AutonomousLimits == nil {
-		return AutonomousLimits{}, fmt.Errorf("%w for autonomous run %s: limits are missing", ErrRuntimeSnapshotUnavailable, runID)
+		return AutonomousLimits{}, false, errors.New("limits are missing")
 	}
 	frozen := snapshot.AutonomousLimits
-	return normalizeAutonomousLimits(AutonomousLimits{
+	limits := normalizeAutonomousLimits(AutonomousLimits{
 		MaxIterations: frozen.MaxIterations, MaxRuntime: time.Duration(frozen.MaxRuntimeMS) * time.Millisecond,
 		MaxOutputChars: frozen.MaxOutputChars, MaxToolCalls: frozen.MaxToolCalls,
-	}), nil
+	})
+	if snapshot.SchemaVersion >= domain.CurrentRuntimeSnapshotVersion && snapshot.RunBudget != nil {
+		limits.MaxRuntime = time.Duration(snapshot.RunBudget.MaxRuntimeMS) * time.Millisecond
+		limits.MaxToolCalls = snapshot.RunBudget.MaxToolCalls
+		return limits, false, nil
+	}
+	return limits, true, nil
 }

@@ -237,7 +237,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 		defer close(events)
 		defer close(errs)
 
-		limits, err := r.limitsForRun(prepared.Run.ID)
+		limits, enforceLegacyResourceLimits, err := r.limitsForRun(prepared.Run.ID)
 		if err != nil {
 			errs <- err
 			return
@@ -279,7 +279,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				}
 				return
 			}
-			if reason := limitStopReason(limits, startedAt, outputChars, toolCalls); reason != "" {
+			if reason := limitStopReason(limits, startedAt, outputChars, toolCalls, enforceLegacyResourceLimits); reason != "" {
 				r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, iteration, outputChars, toolCalls, reason)
 				if err := r.finishAutonomous(ctx, events, prepared, iteration, task, lastAct, lastReview, reason); err != nil {
 					errs <- err
@@ -380,7 +380,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				}
 				log.Printf("autonomous_decision_fallback run_id=%s iteration=%d reason=%q", prepared.Run.ID, iteration, decision.Reason)
 			}
-			limitReason := limitStopReason(limits, startedAt, outputChars, toolCalls)
+			limitReason := limitStopReason(limits, startedAt, outputChars, toolCalls, enforceLegacyResourceLimits)
 			if limitReason != "" {
 				decision.Decision = "stop"
 				decision.Reason = limitReason
@@ -561,14 +561,14 @@ func (r *Runtime) stopIfCanceled(events chan<- domain.RunEvent, runID string) (b
 	return true, errRunCanceled
 }
 
-func limitStopReason(limits AutonomousLimits, startedAt time.Time, outputChars int, toolCalls int) string {
-	if time.Since(startedAt) >= limits.MaxRuntime {
+func limitStopReason(limits AutonomousLimits, startedAt time.Time, outputChars int, toolCalls int, enforceLegacyResourceLimits bool) string {
+	if enforceLegacyResourceLimits && time.Since(startedAt) >= limits.MaxRuntime {
 		return "max_runtime reached"
 	}
 	if outputChars >= limits.MaxOutputChars {
 		return "max_output_chars reached"
 	}
-	if toolCalls >= limits.MaxToolCalls {
+	if enforceLegacyResourceLimits && toolCalls >= limits.MaxToolCalls {
 		return "max_tool_calls reached"
 	}
 	return ""

@@ -6,6 +6,7 @@ import (
 	"log"
 	"time"
 
+	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/contextcompaction"
 	"agentflow-platform/apps/api/internal/domain"
@@ -35,6 +36,7 @@ func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversat
 	var summarizer contextcompaction.Summarizer
 	if r.openAI.HasAPIKey() {
 		summarizer = contextcompaction.SummarizerFunc(func(ctx context.Context, request contextcompaction.SummaryRequest) (contextcompaction.SummaryResult, error) {
+			ctx = budget.WithPurpose(ctx, domain.UsagePurposeCompaction)
 			client, err := r.clientFromSnapshot(snapshot)
 			if err != nil {
 				return contextcompaction.SummaryResult{}, err

@@ -7,6 +7,7 @@ Full-stack AI agent workflow platform with streaming chat, agent runs, persisten
 - Chat UI with persisted conversations and streamed assistant responses.
 - Single-agent, multi-agent, and autonomous run modes.
 - Run lifecycle tracking with collaboration steps, trace events, replay, and cancel/resume/continue flows.
+- Frozen per-Run budgets with idempotent model/tool usage ledgers and active-runtime accounting.
 - Opt-in evidence-gated completion with per-Run frozen contracts, deterministic verifiers, Subject Hash freshness, and Replay artifacts.
 - Built-in tool catalog with enable/disable controls and guarded execution.
 - Curated semantic memory backed by embeddings; ordinary chat and assistant output remain conversation history.
@@ -64,8 +65,10 @@ Set `NEXT_PUBLIC_API_BASE_URL` only if the API is not running on `http://localho
 
 ## Documentation
 
+- [Execution Controls](docs/execution-controls.md): canonical map of concurrency, rate limits, retries, Run Budget, Context capacity, Autonomous guards, Tool and Verification limits.
 - [Backend Architecture](docs/backend-architecture.md): Go package ownership, dependency direction, application composition, and lifecycle.
 - [Backend Configuration](docs/backend-configuration.md): environment variables, concurrency, retry policy, model and embedding providers, Postgres, and tool configuration.
+- [Run Budget and Usage Ledger](docs/run-budget.md): frozen limits, accounting scope, hard/observed enforcement, persistence, and API behavior.
 - [Context Management](docs/context-management.md): context assembly, compaction triggers, algorithm, compression ratio, persistence, and failure behavior.
 - [Completion Verification](docs/completion-verification.md): frozen contracts, deterministic evidence, Subject Hash freshness, completion policy, and security boundaries.
 - [Memory Management](docs/memory-management.md): hybrid candidate extraction, shadow evaluation, curation policy, background persistence, and events.

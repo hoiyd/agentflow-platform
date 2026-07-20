@@ -210,6 +210,10 @@ func TestLegacySnapshotKeepsCompactionDisabled(t *testing.T) {
 	if current.CompactionMode != CompactionModeAuto {
 		t.Fatalf("current snapshot did not receive compaction defaults: %#v", current)
 	}
+	v3 := NormalizeSnapshotConfig(domain.ContextAssemblyConfig{}, domain.CompactionRuntimeSnapshotVersion)
+	if v3.CompactionMode != CompactionModeAuto {
+		t.Fatalf("v3 snapshot lost its frozen compaction behavior: %#v", v3)
+	}
 }
 
 func selectedEntry(manifest domain.ContextManifest, referenceID string) bool {

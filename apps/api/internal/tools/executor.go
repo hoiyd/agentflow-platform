@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"agentflow-platform/apps/api/internal/budget"
 )
 
 const (
@@ -202,6 +204,14 @@ func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) (resul
 	if !validObjectArguments(request.Arguments) {
 		result.Error = executionError(ErrorInvalidArgs, "tool arguments must be a JSON object", nil)
 		return result
+	}
+	if controller := budget.FromContext(ctx); controller != nil {
+		if err := controller.RecordToolCall(ctx, budget.ToolCall{
+			OperationID: request.CallID, Purpose: budget.PurposeFromContext(ctx), ToolName: request.Tool,
+		}); err != nil {
+			result.Error = executionError(ErrorBudgetExceeded, err.Error(), err)
+			return result
+		}
 	}
 
 	policy := effectivePolicy(e.defaultPolicy, binding.Policy)

@@ -160,7 +160,7 @@ func NormalizeConfig(config domain.ContextAssemblyConfig) domain.ContextAssembly
 }
 
 func NormalizeSnapshotConfig(config domain.ContextAssemblyConfig, schemaVersion int) domain.ContextAssemblyConfig {
-	if schemaVersion < domain.CurrentRuntimeSnapshotVersion {
+	if schemaVersion < domain.CompactionRuntimeSnapshotVersion {
 		config.CompactionMode = CompactionModeOff
 	}
 	return NormalizeConfig(config)

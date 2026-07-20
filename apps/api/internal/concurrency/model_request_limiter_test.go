@@ -65,7 +65,7 @@ func TestModelRequestLimiterRejectsRequestAboveTokenCapacity(t *testing.T) {
 	if _, err := limiter.AcquireRequest(context.Background(), "secret-key", 11); err == nil {
 		t.Fatal("expected token capacity error")
 	} else {
-		var limitErr *modelrequest.TokenLimitError
+		var limitErr *modelrequest.TokenBucketCapacityError
 		if !errors.As(err, &limitErr) || limitErr.EstimatedTokens != 11 || limitErr.Capacity != 10 {
 			t.Fatalf("unexpected token capacity error: %#v", err)
 		}

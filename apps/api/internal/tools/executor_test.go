@@ -9,7 +9,56 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"agentflow-platform/apps/api/internal/budget"
+	"agentflow-platform/apps/api/internal/domain"
 )
+
+func TestExecutorChargesOnlyValidatedToolExecutions(t *testing.T) {
+	controller := &toolBudgetController{}
+	ctx := budget.WithController(context.Background(), controller)
+	executor := NewExecutor(DefaultCatalog(), ExecutorOptions{})
+
+	invalid := executor.Execute(ctx, ExecutionRequest{CallID: "invalid", Tool: "calculator", Arguments: json.RawMessage(`[]`)})
+	if invalid.Error == nil || invalid.Error.Code != ErrorInvalidArgs || controller.calls != 0 {
+		t.Fatalf("invalid arguments consumed tool budget: result=%#v calls=%d", invalid, controller.calls)
+	}
+	valid := executor.Execute(ctx, ExecutionRequest{CallID: "valid", Tool: "calculator", Arguments: json.RawMessage(`{"expression":"1 + 1"}`)})
+	if valid.Error != nil || controller.calls != 1 || controller.last.OperationID != "valid" || controller.last.ToolName != "calculator" || controller.last.Purpose != domain.UsagePurposePrimary {
+		t.Fatalf("validated execution was not charged once: result=%#v controller=%#v", valid, controller)
+	}
+}
+
+func TestExecutorReturnsTypedBudgetError(t *testing.T) {
+	controller := &toolBudgetController{err: &budget.ExceededError{Resource: budget.ResourceToolCalls, Limit: 1, Used: 1, Requested: 1}}
+	ctx := budget.WithController(context.Background(), controller)
+	result := NewExecutor(DefaultCatalog(), ExecutorOptions{}).Execute(ctx, ExecutionRequest{CallID: "call-2", Tool: "calculator", Arguments: json.RawMessage(`{"expression":"2 + 2"}`)})
+	if result.Error == nil || result.Error.Code != ErrorBudgetExceeded {
+		t.Fatalf("expected typed budget error, got %#v", result.Error)
+	}
+}
+
+type toolBudgetController struct {
+	calls int
+	last  budget.ToolCall
+	err   error
+}
+
+func (c *toolBudgetController) BeginModelCall(context.Context, budget.ModelCallEstimate) (budget.ModelReservation, error) {
+	return budget.ModelReservation{}, nil
+}
+
+func (c *toolBudgetController) SettleModelCall(context.Context, budget.ModelReservation, budget.ModelUsage) error {
+	return nil
+}
+
+func (c *toolBudgetController) RecordToolCall(_ context.Context, call budget.ToolCall) error {
+	c.calls++
+	c.last = call
+	return c.err
+}
+
+var _ budget.Controller = (*toolBudgetController)(nil)
 
 func TestExecutorReturnsTypedErrors(t *testing.T) {
 	catalog := DefaultCatalog()

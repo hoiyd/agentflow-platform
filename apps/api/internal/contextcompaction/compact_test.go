@@ -139,7 +139,7 @@ func newCompactionTestStore(t *testing.T) (*store.FileStore, domain.Conversation
 		t.Fatalf("create conversation: %v", err)
 	}
 	run, err := fileStore.CreateRun("agent_planner", conversation.ID, domain.RuntimeSnapshot{
-		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single",
+		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single", RunBudget: &domain.RuntimeRunBudget{},
 		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Model: domain.RuntimeModelSnapshot{Model: "test"},
 		ContextAssembly: compactionTestConfig(),
 	})

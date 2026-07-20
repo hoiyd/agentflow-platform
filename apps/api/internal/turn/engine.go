@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 )
@@ -65,6 +66,7 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 		return Result{}, sinkErr
 	}
 	modelCtx := eventpkg.WithScope(ctx, eventpkg.Scope{ConversationID: request.ConversationID, RunID: request.RunID, StageID: request.StepID, TurnID: request.TurnID})
+	modelCtx = budget.WithScope(modelCtx, budget.Scope{StageID: request.StepID, TurnID: request.TurnID})
 	result, err := e.model.Execute(modelCtx, request, func(item ModelEvent) {
 		t := item.Type
 		if t == "" {

@@ -71,6 +71,14 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			MaxOutputChars: cfg.AutonomousMaxOutputCharacters,
 			MaxToolCalls:   cfg.AutonomousMaxToolCalls,
 		},
+		RunBudget: domain.RuntimeRunBudget{
+			MaxModelCalls: cfg.RunMaxModelCalls, MaxPromptTokens: cfg.RunMaxPromptTokens,
+			MaxCompletionTokens: cfg.RunMaxCompletionTokens, MaxTotalTokens: cfg.RunMaxTotalTokens,
+			MaxToolCalls: cfg.RunMaxToolCalls, MaxRuntimeMS: cfg.RunMaxRuntime.Milliseconds(),
+			MaxEstimatedCostMicros:           cfg.RunMaxEstimatedCostMicros,
+			InputCostPerMillionTokensMicros:  cfg.ModelInputCostPerMillionMicros,
+			OutputCostPerMillionTokensMicros: cfg.ModelOutputCostPerMillionMicros,
+		},
 	})
 	semanticMemory := memorypkg.NewSemanticMemory(appStore, modelClient)
 	knowledgeBase := knowledge.NewKnowledgeBase(appStore, modelClient)

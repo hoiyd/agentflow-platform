@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -35,6 +36,24 @@ type Config struct {
 	ModelRetryBaseDelay time.Duration
 	// ModelRetryMaxDelay caps exponential backoff and provider Retry-After values.
 	ModelRetryMaxDelay time.Duration
+	// RunMaxModelCalls limits logical LLM calls in one Run; provider retries do not add calls.
+	RunMaxModelCalls int
+	// RunMaxPromptTokens limits cumulative input usage, including open reservations.
+	RunMaxPromptTokens int
+	// RunMaxCompletionTokens limits cumulative output usage and bounds each request when possible.
+	RunMaxCompletionTokens int
+	// RunMaxTotalTokens limits cumulative input plus output usage.
+	RunMaxTotalTokens int
+	// RunMaxToolCalls limits admitted, validated tool executions across all stages.
+	RunMaxToolCalls int
+	// RunMaxRuntime limits active execution time; waiting_for_user time is excluded.
+	RunMaxRuntime time.Duration
+	// RunMaxEstimatedCostMicros limits configured model cost in integer microdollars.
+	RunMaxEstimatedCostMicros int64
+	// ModelInputCostPerMillionMicros is frozen into each Run for deterministic estimates.
+	ModelInputCostPerMillionMicros int64
+	// ModelOutputCostPerMillionMicros is frozen into each Run for deterministic estimates.
+	ModelOutputCostPerMillionMicros int64
 	// ModelContextWindowTokens is the provider model's total input and output context capacity.
 	ModelContextWindowTokens int
 	// ModelOutputReserveTokens reserves capacity for the model response.
@@ -64,17 +83,21 @@ type Config struct {
 	// MemoryAdaptiveExtractionMode supports off, shadow, or auto.
 	MemoryAdaptiveExtractionMode string
 	// MemoryAdaptiveMinConfidence is the commit threshold for model-proposed candidates.
-	MemoryAdaptiveMinConfidence   float64
-	RouterMode                    string
-	AutonomousMaxIterations       int
-	AutonomousMaxRuntime          time.Duration
+	MemoryAdaptiveMinConfidence float64
+	RouterMode                  string
+	// AutonomousMaxIterations is a mode-owned loop bound, independent of model-call count.
+	AutonomousMaxIterations int
+	// AutonomousMaxRuntime is folded into the frozen Run Budget for new Autonomous Runs.
+	AutonomousMaxRuntime time.Duration
+	// AutonomousMaxOutputCharacters bounds accumulated loop text, not provider tokens.
 	AutonomousMaxOutputCharacters int
-	AutonomousMaxToolCalls        int
-	RecoveryStaleRunTimeout       time.Duration
-	StoreDriver                   string
-	DatabaseURL                   string
-	DataPath                      string
-	ToolConfigPath                string
+	// AutonomousMaxToolCalls is folded into the frozen Run Budget for new Autonomous Runs.
+	AutonomousMaxToolCalls  int
+	RecoveryStaleRunTimeout time.Duration
+	StoreDriver             string
+	DatabaseURL             string
+	DataPath                string
+	ToolConfigPath          string
 	// VerificationWorkspaceRoot bounds command verifier working directories. Empty disables command execution.
 	VerificationWorkspaceRoot string
 	// VerificationAllowedCommands is a comma-separated executable allowlist for command verifiers.
@@ -107,6 +130,15 @@ func Load() Config {
 		ModelRetryMaxAttempts:             getIntEnv("MODEL_RETRY_MAX_ATTEMPTS", 3),
 		ModelRetryBaseDelay:               getDurationEnv("MODEL_RETRY_BASE_DELAY", 500*time.Millisecond),
 		ModelRetryMaxDelay:                getDurationEnv("MODEL_RETRY_MAX_DELAY", 5*time.Second),
+		RunMaxModelCalls:                  getNonNegativeIntEnv("RUN_MAX_MODEL_CALLS", 32),
+		RunMaxPromptTokens:                getNonNegativeIntEnv("RUN_MAX_PROMPT_TOKENS", 200000),
+		RunMaxCompletionTokens:            getNonNegativeIntEnv("RUN_MAX_COMPLETION_TOKENS", 50000),
+		RunMaxTotalTokens:                 getNonNegativeIntEnv("RUN_MAX_TOTAL_TOKENS", 250000),
+		RunMaxToolCalls:                   getNonNegativeIntEnv("RUN_MAX_TOOL_CALLS", 50),
+		RunMaxRuntime:                     getDurationEnv("RUN_MAX_RUNTIME", 15*time.Minute),
+		RunMaxEstimatedCostMicros:         getUSDAsMicrosEnv("RUN_MAX_ESTIMATED_COST_USD", 0),
+		ModelInputCostPerMillionMicros:    getUSDAsMicrosEnv("MODEL_INPUT_COST_PER_MILLION_TOKENS_USD", 0),
+		ModelOutputCostPerMillionMicros:   getUSDAsMicrosEnv("MODEL_OUTPUT_COST_PER_MILLION_TOKENS_USD", 0),
 		ModelContextWindowTokens:          getIntEnv("MODEL_CONTEXT_WINDOW_TOKENS", 128000),
 		ModelOutputReserveTokens:          getIntEnv("MODEL_OUTPUT_RESERVE_TOKENS", 8192),
 		ContextSafetyMarginTokens:         getIntEnv("CONTEXT_SAFETY_MARGIN_TOKENS", 4096),
@@ -208,6 +240,18 @@ func getNonNegativeIntEnv(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func getUSDAsMicrosEnv(key string, fallback float64) int64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return int64(math.Round(fallback * 1_000_000))
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil || parsed < 0 {
+		parsed = fallback
+	}
+	return int64(math.Round(parsed * 1_000_000))
 }
 
 func getFloatEnv(key string, fallback float64) float64 {

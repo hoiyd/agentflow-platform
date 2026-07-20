@@ -106,7 +106,7 @@ func (l *apiKeyLimiter) take(ctx context.Context, tokenCost int) error {
 		tokenWait, tokenOK := l.tokens.waitDuration(now, float64(tokenCost))
 		if !tokenOK {
 			l.mu.Unlock()
-			return &modelrequest.TokenLimitError{EstimatedTokens: tokenCost, Capacity: int(l.tokens.capacity)}
+			return &modelrequest.TokenBucketCapacityError{EstimatedTokens: tokenCost, Capacity: int(l.tokens.capacity)}
 		}
 		if requestWait <= 0 && tokenWait <= 0 {
 			l.requests.consume(1)

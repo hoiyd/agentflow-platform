@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
@@ -56,6 +57,41 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 	}
 	if persisted.MemoryEnabled || !persisted.RetrievalEnabled || persisted.Executor != "langchaingo" {
 		t.Fatalf("expected persisted config, got %#v", persisted)
+	}
+}
+
+func TestRunUsageAPIExposesLedger(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := fileStore.CreateConversation("usage api")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	snapshot := testRuntimeSnapshot()
+	snapshot.RunBudget = &domain.RuntimeRunBudget{MaxToolCalls: 3}
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, snapshot)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if _, _, err = fileStore.ApplyRunUsage(domain.RunUsageEntry{
+		ID: "usage-1", RunID: run.ID, OperationID: "tool-1", Kind: domain.UsageToolExecution,
+		Purpose: domain.UsagePurposePrimary, ToolName: "calculator", ToolCalls: 1, Timestamp: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("record usage: %v", err)
+	}
+	recorder := httptest.NewRecorder()
+	(&Handler{store: fileStore}).getRunUsage(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/usage", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("usage endpoint status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var ledger domain.RunUsageLedger
+	if err := json.Unmarshal(recorder.Body.Bytes(), &ledger); err != nil {
+		t.Fatalf("decode ledger: %v", err)
+	}
+	if ledger.RunID != run.ID || ledger.Budget.MaxToolCalls != 3 || ledger.Totals.ToolCalls != 1 || len(ledger.Entries) != 1 {
+		t.Fatalf("unexpected usage response: %#v", ledger)
 	}
 }
 

@@ -283,3 +283,21 @@ func (h *Handler) getRunReplay(w http.ResponseWriter, r *http.Request) {
 	replay.Run.RuntimeSnapshot = nil
 	writeJSON(w, http.StatusOK, replay)
 }
+
+func (h *Handler) getRunUsage(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/runs/"), "/usage"))
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "run id is required")
+		return
+	}
+	ledger, ok, err := h.store.GetRunUsageLedger(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "run not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, ledger)
+}

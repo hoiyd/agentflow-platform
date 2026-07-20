@@ -27,6 +27,7 @@ type Runtime struct {
 	contextAssemblyConfig domain.ContextAssemblyConfig
 	contextCompactor      *contextcompaction.Compactor
 	autonomousLimits      AutonomousLimits
+	runBudget             domain.RuntimeRunBudget
 }
 
 type RuntimeStore interface {
@@ -47,6 +48,7 @@ type RuntimeStore interface {
 	eventpkg.RunEventStore
 	ListRunEvents(string) ([]domain.RunEvent, error)
 	store.ContextCompactionStore
+	store.RunUsageStore
 	SearchMemories(domain.MemorySearch) ([]domain.RetrievedMemory, error)
 	SearchDocumentChunks(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 }
@@ -73,6 +75,7 @@ type RuntimeOptions struct {
 	RouterMode      string
 	ContextAssembly domain.ContextAssemblyConfig
 	Autonomous      AutonomousLimits
+	RunBudget       domain.RuntimeRunBudget
 }
 
 func NewRuntime(options RuntimeOptions) *Runtime {
@@ -85,6 +88,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		contextAssemblyConfig: contextassembly.NormalizeConfig(options.ContextAssembly),
 		contextCompactor:      contextcompaction.NewCompactor(options.Store),
 		autonomousLimits:      normalizeAutonomousLimits(options.Autonomous),
+		runBudget:             options.RunBudget,
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime
