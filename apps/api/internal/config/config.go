@@ -83,17 +83,21 @@ type Config struct {
 	// MemoryAdaptiveExtractionMode supports off, shadow, or auto.
 	MemoryAdaptiveExtractionMode string
 	// MemoryAdaptiveMinConfidence is the commit threshold for model-proposed candidates.
-	MemoryAdaptiveMinConfidence   float64
-	RouterMode                    string
-	AutonomousMaxIterations       int
-	AutonomousMaxRuntime          time.Duration
+	MemoryAdaptiveMinConfidence float64
+	RouterMode                  string
+	// AutonomousMaxIterations is a mode-owned loop bound, independent of model-call count.
+	AutonomousMaxIterations int
+	// AutonomousMaxRuntime is folded into the frozen Run Budget for new Autonomous Runs.
+	AutonomousMaxRuntime time.Duration
+	// AutonomousMaxOutputCharacters bounds accumulated loop text, not provider tokens.
 	AutonomousMaxOutputCharacters int
-	AutonomousMaxToolCalls        int
-	RecoveryStaleRunTimeout       time.Duration
-	StoreDriver                   string
-	DatabaseURL                   string
-	DataPath                      string
-	ToolConfigPath                string
+	// AutonomousMaxToolCalls is folded into the frozen Run Budget for new Autonomous Runs.
+	AutonomousMaxToolCalls  int
+	RecoveryStaleRunTimeout time.Duration
+	StoreDriver             string
+	DatabaseURL             string
+	DataPath                string
+	ToolConfigPath          string
 	// VerificationWorkspaceRoot bounds command verifier working directories. Empty disables command execution.
 	VerificationWorkspaceRoot string
 	// VerificationAllowedCommands is a comma-separated executable allowlist for command verifiers.

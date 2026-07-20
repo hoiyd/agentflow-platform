@@ -66,7 +66,7 @@ func TestRequestLimiterSlotIsHeldUntilResponseBodyCloses(t *testing.T) {
 func TestRequestTokenLimitIsTerminalModelError(t *testing.T) {
 	client := retryTestClient()
 	client.SetRequestLimiter(requestLimiterFunc(func(context.Context, string, int) (func(), error) {
-		return nil, &modelrequest.TokenLimitError{EstimatedTokens: 101, Capacity: 100}
+		return nil, &modelrequest.TokenBucketCapacityError{EstimatedTokens: 101, Capacity: 100}
 	}))
 	requestSent := false
 	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
@@ -76,7 +76,7 @@ func TestRequestTokenLimitIsTerminalModelError(t *testing.T) {
 
 	_, err := client.CompleteTextDetailed(context.Background(), "system", "hello")
 	modelErr, ok := AsModelError(err)
-	if !ok || modelErr.Kind != ErrorTokenBudgetExceeded || modelErr.Retryable || modelErr.Attempts != 1 {
+	if !ok || modelErr.Kind != ErrorRequestTokenCapacity || modelErr.Retryable || modelErr.Attempts != 1 {
 		t.Fatalf("expected terminal token-budget error, got %#v", modelErr)
 	}
 	if requestSent {

@@ -29,7 +29,7 @@ const (
 	ErrorInvalidRequest        ErrorKind = "invalid_request"
 	ErrorContextLengthExceeded ErrorKind = "context_length_exceeded"
 	ErrorContentPolicy         ErrorKind = "content_policy"
-	ErrorTokenBudgetExceeded   ErrorKind = "token_budget_exceeded"
+	ErrorRequestTokenCapacity  ErrorKind = "request_token_capacity_exceeded"
 	ErrorInvalidResponse       ErrorKind = "invalid_response"
 )
 

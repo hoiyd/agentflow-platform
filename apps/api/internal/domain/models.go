@@ -94,7 +94,8 @@ const (
 	LegacyRuntimeSnapshotVersion     = 1
 	ContextRuntimeSnapshotVersion    = 2
 	CompactionRuntimeSnapshotVersion = 3
-	CurrentRuntimeSnapshotVersion    = 4
+	RunBudgetRuntimeSnapshotVersion  = 4
+	CurrentRuntimeSnapshotVersion    = 5
 )
 
 type RuntimeSnapshot struct {

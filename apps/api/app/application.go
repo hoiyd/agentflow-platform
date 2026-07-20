@@ -100,7 +100,7 @@ func (a *Application) logStartup() {
 	log.Printf("AgentFlow API listening on http://localhost:%s", cfg.Port)
 	log.Printf("AgentFlow store driver: %s", cfg.StoreDriver)
 	log.Printf("AgentFlow router mode: %s", cfg.RouterMode)
-	log.Printf("AgentFlow autonomous limits: max_iterations=%d max_runtime=%s max_output_chars=%d max_tool_calls=%d", cfg.AutonomousMaxIterations, cfg.AutonomousMaxRuntime, cfg.AutonomousMaxOutputCharacters, cfg.AutonomousMaxToolCalls)
+	log.Printf("AgentFlow autonomous profile: max_iterations=%d max_output_chars=%d run_budget_runtime_cap=%s run_budget_tool_cap=%d", cfg.AutonomousMaxIterations, cfg.AutonomousMaxOutputCharacters, cfg.AutonomousMaxRuntime, cfg.AutonomousMaxToolCalls)
 	log.Printf("AgentFlow native recovery: stale_run_timeout=%s", cfg.RecoveryStaleRunTimeout)
 	log.Printf("AgentFlow run concurrency: max_concurrent=%d queue_size=%d wait_timeout=%s", cfg.MaxConcurrentRuns, cfg.RunQueueSize, cfg.RunQueueWaitTimeout)
 	log.Printf("AgentFlow model concurrency: max_in_flight=%d rpm=%d tpm=%d", cfg.MaxConcurrentModelRequests, cfg.ModelRequestsPerMinute, cfg.ModelTokensPerMinute)

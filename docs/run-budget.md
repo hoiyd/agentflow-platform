@@ -11,13 +11,16 @@ shared concurrency and provider controls rather than replacing them.
 | Model request limiter | API key and process | physical HTTP attempts, RPM, and approximate TPM |
 | Retry Policy | one logical model call | retryable physical attempts and backoff |
 | Run Budget | one persisted Run | logical model calls, tokens, tools, active runtime, and configured cost |
+| Context Assembly | one logical model call | context-window fit and output reserve, not cumulative usage |
+| Autonomous loop guards | one Autonomous Run | iterations and accumulated output characters |
+| Trace summary / Episode | one persisted Run | observational projection only; never admission or enforcement |
 
 A retry acquires another model-request permit but does not reserve another Run
 model call. The reservation surrounds the entire Retry Policy operation.
 
 ## Frozen Budget
 
-New Runs store `RuntimeRunBudget` in Runtime Snapshot v4. Resume and Replay use
+New Runs store `RuntimeRunBudget` in Runtime Snapshot v5. Resume and Replay use
 that frozen value even when environment configuration changes. Snapshot v1-v3
 Runs remain readable and resumable under their original, budgetless protocol;
 they never inherit current limits implicitly.
@@ -86,10 +89,17 @@ Run state persists `active_runtime_ms` and the current execution-segment start.
 Transitions out of `running` close the segment. Time spent queued,
 `waiting_for_user`, canceling, or stopped does not consume runtime budget.
 
-Autonomous limits remain mode-specific safety controls. At Run creation,
-Autonomous runtime and tool limits are reduced to the stricter value when the
-general Run Budget is lower. This leaves one explicit effective limit instead
-of competing counters.
+For new Snapshot v5 Runs, Autonomous iterations and output characters remain
+mode-owned loop guards. Its runtime and tool configuration is resolved against
+the general Run Budget once at Run creation, and the stricter values are stored
+only in `RuntimeRunBudget`. The ledger/controller is therefore the sole runtime
+and tool enforcement owner; the Autonomous progress projection reads those
+frozen values but does not run a second counter.
+
+Snapshot v1-v3 Autonomous Runs have no Run Budget. Snapshot v4 introduced Run
+Budget but still carried the original Autonomous runtime/tool guards. Resume
+preserves those historical protocols so an old Run does not silently change;
+only newly captured v5 Runs use the single-owner model.
 
 ## Events and API
 

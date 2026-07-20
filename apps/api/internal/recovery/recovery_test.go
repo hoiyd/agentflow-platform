@@ -17,7 +17,9 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, domain.RuntimeSnapshot{SchemaVersion: domain.CurrentRuntimeSnapshotVersion})
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
+	})
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

@@ -58,7 +58,7 @@ Concurrency settings control different layers:
 
 Set either per-minute value to `0` to disable that token bucket.
 
-Model errors are classified before retry. Transport failures, timeouts, rate limits, provider `5xx` responses, and invalid provider responses are retryable. Authentication, quota, model-not-found, invalid request, context-length, content-policy, local token-budget, and canceled errors fail immediately. Streaming requests retry only before the first output delta, preventing duplicated assistant text.
+Model errors are classified before retry. Transport failures, timeouts, rate limits, provider `5xx` responses, and invalid provider responses are retryable. Authentication, quota, model-not-found, invalid request, context-length, content-policy, local request token-bucket capacity, and canceled errors fail immediately. Streaming requests retry only before the first output delta, preventing duplicated assistant text.
 
 ## Run Budget
 
@@ -76,6 +76,13 @@ Run model calls are logical operations. Provider retries continue to consume
 request concurrency and RPM/TPM, but reuse one Run reservation. See
 [Run Budget and Usage Ledger](run-budget.md) for purpose scope, settlement,
 output caps, Autonomous precedence, and observed-overage semantics.
+
+`AUTONOMOUS_MAX_ITERATIONS` and `AUTONOMOUS_MAX_OUTPUT_CHARS` are mode-owned
+loop guards. `AUTONOMOUS_MAX_RUNTIME_SECONDS` and
+`AUTONOMOUS_MAX_TOOL_CALLS` are mode-specific configuration caps: for new Runs
+they are folded into the frozen Run Budget by taking the stricter value, then
+only Run Budget enforces those two resources. This avoids competing counters
+while preserving the existing Autonomous safety profile.
 
 If `OPENAI_API_KEY` is empty, chat uses deterministic local fallback for verification. Embeddings call Ollama when `EMBEDDING_BASE_URL` points to `http://localhost:11434/api/embed`; otherwise they use deterministic local fallback. The frontend search panel shows whether RAG search used `ollama / <model>`, `local / local_hash_embedding`, or an OpenAI-compatible embedding provider.
 

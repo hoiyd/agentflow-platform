@@ -20,6 +20,11 @@ func TestBudgetWrapsPhysicalRetriesAndCapsCompletion(t *testing.T) {
 	client := retryTestClient()
 	controller := &modelBudgetController{maxCompletionTokens: 7}
 	attempts := 0
+	permits := 0
+	client.SetRequestLimiter(requestLimiterFunc(func(context.Context, string, int) (func(), error) {
+		permits++
+		return func() {}, nil
+	}))
 	client.httpClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
 		attempts++
 		body, _ := io.ReadAll(request.Body)
@@ -37,8 +42,8 @@ func TestBudgetWrapsPhysicalRetriesAndCapsCompletion(t *testing.T) {
 	})}
 	ctx := budget.WithController(context.Background(), controller)
 	completion, err := client.CompleteTextDetailed(ctx, "system", "hello")
-	if err != nil || completion.Text != "ok" || attempts != 2 || controller.begins != 1 || controller.settles != 1 {
-		t.Fatalf("budget crossed logical retry boundary: completion=%#v attempts=%d controller=%#v err=%v", completion, attempts, controller, err)
+	if err != nil || completion.Text != "ok" || attempts != 2 || permits != 2 || controller.begins != 1 || controller.settles != 1 {
+		t.Fatalf("logical/physical controls crossed boundaries: completion=%#v attempts=%d permits=%d controller=%#v err=%v", completion, attempts, permits, controller, err)
 	}
 	if controller.estimate.OperationID == "" || controller.usage.TotalTokens != 5 {
 		t.Fatalf("missing stable operation or settlement usage: %#v", controller)

@@ -1080,11 +1080,11 @@ func (c *Client) acquireRequestPermit(ctx context.Context, estimatedTokens int) 
 		return func() {}, nil
 	}
 	release, err := c.requestLimiter.AcquireRequest(ctx, c.apiKey, estimatedTokens)
-	var limitErr *modelrequest.TokenLimitError
+	var limitErr *modelrequest.TokenBucketCapacityError
 	if errors.As(err, &limitErr) {
 		return nil, &ModelError{
-			Kind:    ErrorTokenBudgetExceeded,
-			Message: "estimated request exceeds local token budget",
+			Kind:    ErrorRequestTokenCapacity,
+			Message: "estimated request exceeds local TPM bucket capacity",
 			Cause:   err,
 		}
 	}

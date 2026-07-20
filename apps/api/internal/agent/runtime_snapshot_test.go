@@ -113,32 +113,104 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	}
 }
 
-func TestRuntimeSnapshotAcceptsV1ThroughV4AndKeepsOlderRunsBudgetless(t *testing.T) {
+func TestRuntimeSnapshotAcceptsV1ThroughV5AndKeepsPreBudgetRunsBudgetless(t *testing.T) {
 	for _, version := range []int{
 		domain.LegacyRuntimeSnapshotVersion,
 		domain.ContextRuntimeSnapshotVersion,
 		domain.CompactionRuntimeSnapshotVersion,
+		domain.RunBudgetRuntimeSnapshotVersion,
 		domain.CurrentRuntimeSnapshotVersion,
 	} {
 		snapshot := &domain.RuntimeSnapshot{
 			SchemaVersion: version, Mode: ChatModeSingle,
 			Agent: domain.RuntimeAgentSnapshot{ID: "agent"}, Model: domain.RuntimeModelSnapshot{Model: "model"},
 		}
+		if version >= domain.RunBudgetRuntimeSnapshotVersion {
+			snapshot.RunBudget = &domain.RuntimeRunBudget{}
+		}
 		if err := validateRuntimeSnapshot(snapshot); err != nil {
 			t.Fatalf("snapshot v%d should remain readable: %v", version, err)
 		}
-		if version < domain.CurrentRuntimeSnapshotVersion && snapshot.RunBudget != nil {
+		if version < domain.RunBudgetRuntimeSnapshotVersion && snapshot.RunBudget != nil {
 			t.Fatalf("older snapshot v%d unexpectedly inherited a budget", version)
 		}
 	}
 }
 
-func TestEffectiveAutonomousLimitsUseStricterRunBudget(t *testing.T) {
-	limits := effectiveAutonomousLimits(AutonomousLimits{
+func TestEffectiveAutonomousRunBudgetUsesStricterModeProfile(t *testing.T) {
+	limits := AutonomousLimits{
 		MaxIterations: 5, MaxRuntime: 5 * time.Minute, MaxOutputChars: 1000, MaxToolCalls: 20,
-	}, domain.RuntimeRunBudget{MaxRuntimeMS: int64((2 * time.Minute).Milliseconds()), MaxToolCalls: 8})
-	if limits.MaxRuntime != 2*time.Minute || limits.MaxToolCalls != 8 {
-		t.Fatalf("expected stricter effective autonomous limits, got %#v", limits)
+	}
+	budget := effectiveAutonomousRunBudget(domain.RuntimeRunBudget{
+		MaxRuntimeMS: int64((2 * time.Minute).Milliseconds()), MaxToolCalls: 8,
+	}, limits)
+	if budget.MaxRuntimeMS != (2*time.Minute).Milliseconds() || budget.MaxToolCalls != 8 {
+		t.Fatalf("expected stricter values to remain in Run Budget, got %#v", budget)
+	}
+}
+
+func TestCaptureAutonomousSnapshotStoresRuntimeAndToolsOnlyInRunBudget(t *testing.T) {
+	runtime := &Runtime{
+		openAI: openai.NewClient("", "", "test-model"),
+		autonomousLimits: AutonomousLimits{
+			MaxIterations: 5, MaxRuntime: 5 * time.Minute,
+			MaxOutputChars: 1000, MaxToolCalls: 20,
+		},
+		runBudget: domain.RuntimeRunBudget{
+			MaxRuntimeMS: (15 * time.Minute).Milliseconds(), MaxToolCalls: 50,
+		},
+	}
+	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeAutonomous, domain.Agent{ID: "agent"}, nil, "")
+	if err != nil {
+		t.Fatalf("capture snapshot: %v", err)
+	}
+	if snapshot.RunBudget == nil || snapshot.RunBudget.MaxRuntimeMS != (5*time.Minute).Milliseconds() || snapshot.RunBudget.MaxToolCalls != 20 {
+		t.Fatalf("mode profile was not folded into Run Budget: %#v", snapshot.RunBudget)
+	}
+	if snapshot.AutonomousLimits == nil || snapshot.AutonomousLimits.MaxRuntimeMS != 0 || snapshot.AutonomousLimits.MaxToolCalls != 0 {
+		t.Fatalf("autonomous snapshot retained duplicate resource owners: %#v", snapshot.AutonomousLimits)
+	}
+}
+
+func TestCurrentAutonomousSnapshotUsesRunBudgetAsSingleResourceOwner(t *testing.T) {
+	snapshot := &domain.RuntimeSnapshot{
+		SchemaVersion: domain.CurrentRuntimeSnapshotVersion,
+		AutonomousLimits: &domain.RuntimeLimitsSnapshot{
+			MaxIterations: 5, MaxOutputChars: 1000,
+		},
+		RunBudget: &domain.RuntimeRunBudget{
+			MaxRuntimeMS: (90 * time.Second).Milliseconds(), MaxToolCalls: 7,
+		},
+	}
+	limits, legacyResourceGuards, err := autonomousLimitsFromSnapshot(snapshot)
+	if err != nil || legacyResourceGuards {
+		t.Fatalf("current snapshot retained duplicate resource guards: legacy=%t err=%v", legacyResourceGuards, err)
+	}
+	if limits.MaxRuntime != 90*time.Second || limits.MaxToolCalls != 7 {
+		t.Fatalf("progress limits were not projected from Run Budget: %#v", limits)
+	}
+	if reason := limitStopReason(limits, time.Now().Add(-2*time.Minute), 0, 7, legacyResourceGuards); reason != "" {
+		t.Fatalf("current loop duplicated Run Budget enforcement: %q", reason)
+	}
+}
+
+func TestV4AutonomousSnapshotKeepsItsRuntimeAndToolGuards(t *testing.T) {
+	snapshot := &domain.RuntimeSnapshot{
+		SchemaVersion: domain.RunBudgetRuntimeSnapshotVersion,
+		AutonomousLimits: &domain.RuntimeLimitsSnapshot{
+			MaxIterations: 5, MaxRuntimeMS: (3 * time.Minute).Milliseconds(),
+			MaxOutputChars: 1000, MaxToolCalls: 12,
+		},
+		RunBudget: &domain.RuntimeRunBudget{
+			MaxRuntimeMS: (10 * time.Minute).Milliseconds(), MaxToolCalls: 40,
+		},
+	}
+	limits, legacyResourceGuards, err := autonomousLimitsFromSnapshot(snapshot)
+	if err != nil || !legacyResourceGuards {
+		t.Fatalf("legacy resource guards were not preserved: legacy=%t err=%v", legacyResourceGuards, err)
+	}
+	if limits.MaxRuntime != 3*time.Minute || limits.MaxToolCalls != 12 {
+		t.Fatalf("legacy limits changed during restore: %#v", limits)
 	}
 }
 

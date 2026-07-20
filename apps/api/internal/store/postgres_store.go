@@ -408,7 +408,7 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 	} else if !ok {
 		return domain.Run{}, errors.New("conversation not found")
 	}
-	if snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion {
+	if snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion || snapshot.RunBudget == nil {
 		return domain.Run{}, errors.New("runtime snapshot is required")
 	}
 	snapshotJSON, err := json.Marshal(snapshot)

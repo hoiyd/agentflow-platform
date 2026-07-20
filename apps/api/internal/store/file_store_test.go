@@ -106,6 +106,7 @@ func TestFileStoreActiveRuntimeExcludesWaitingForUser(t *testing.T) {
 func testRuntimeSnapshot() domain.RuntimeSnapshot {
 	return domain.RuntimeSnapshot{
 		SchemaVersion:   domain.CurrentRuntimeSnapshotVersion,
+		RunBudget:       &domain.RuntimeRunBudget{},
 		Mode:            "single",
 		Agent:           domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
 		Model:           domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
