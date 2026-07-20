@@ -30,6 +30,16 @@ MODEL_RETRY_MAX_ATTEMPTS=3
 MODEL_RETRY_BASE_DELAY=500ms
 MODEL_RETRY_MAX_DELAY=5s
 
+RUN_MAX_MODEL_CALLS=32
+RUN_MAX_PROMPT_TOKENS=200000
+RUN_MAX_COMPLETION_TOKENS=50000
+RUN_MAX_TOTAL_TOKENS=250000
+RUN_MAX_TOOL_CALLS=50
+RUN_MAX_RUNTIME=15m
+RUN_MAX_ESTIMATED_COST_USD=0
+MODEL_INPUT_COST_PER_MILLION_TOKENS_USD=0
+MODEL_OUTPUT_COST_PER_MILLION_TOKENS_USD=0
+
 ROUTER_MODE=auto
 ALLOWED_ORIGINS=http://localhost:3000
 ```
@@ -49,6 +59,23 @@ Concurrency settings control different layers:
 Set either per-minute value to `0` to disable that token bucket.
 
 Model errors are classified before retry. Transport failures, timeouts, rate limits, provider `5xx` responses, and invalid provider responses are retryable. Authentication, quota, model-not-found, invalid request, context-length, content-policy, local token-budget, and canceled errors fail immediately. Streaming requests retry only before the first output delta, preventing duplicated assistant text.
+
+## Run Budget
+
+`RUN_MAX_*` values are frozen into each new Run's Runtime Snapshot. Set a call,
+token, tool, cost, or runtime value to `0` to disable that dimension. Runtime
+means accumulated `running` segments; queue and `waiting_for_user` time are not
+charged.
+
+The two model price settings and maximum cost are USD values converted to
+integer microdollars for persistence. Cost enforcement is disabled while
+`RUN_MAX_ESTIMATED_COST_USD=0`. Configure both input and output prices for the
+selected model before enabling it.
+
+Run model calls are logical operations. Provider retries continue to consume
+request concurrency and RPM/TPM, but reuse one Run reservation. See
+[Run Budget and Usage Ledger](run-budget.md) for purpose scope, settlement,
+output caps, Autonomous precedence, and observed-overage semantics.
 
 If `OPENAI_API_KEY` is empty, chat uses deterministic local fallback for verification. Embeddings call Ollama when `EMBEDDING_BASE_URL` points to `http://localhost:11434/api/embed`; otherwise they use deterministic local fallback. The frontend search panel shows whether RAG search used `ollama / <model>`, `local / local_hash_embedding`, or an OpenAI-compatible embedding provider.
 
@@ -98,6 +125,7 @@ DATABASE_URL=postgres://agentflow:agentflow@localhost:5432/agentflow?sslmode=dis
 The Postgres store runs idempotent startup migrations for:
 
 - conversations, messages, agents, runs, collaboration steps, and trace events
+- Run active-runtime state and append-only usage entries
 - memory candidates, curated memories, and `memory_embeddings`
 - documents, document chunks, and document chunk embeddings
 - pgvector HNSW indexes for semantic search

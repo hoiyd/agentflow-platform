@@ -23,6 +23,7 @@ apps/api/
     knowledge/      knowledge-base ingestion, embedding, search, and RAG evaluation
     rag/            chunking and retrieval ranking
     concurrency/    run and model-request limits
+    budget/         per-Run resource accounting and enforcement
     recovery/       stale-run recovery
     config/         environment configuration
 ```
@@ -77,7 +78,7 @@ Moving packages out of `internal` only to make the tree appear balanced would we
 `app.Application` owns:
 
 1. Store selection and stale-run recovery.
-2. Model client limits and retry policy.
+2. Model client limits, retry policy, and frozen Run Budget policy.
 3. Tool Manager and Agent Runtime configuration.
 4. Memory and Knowledge capabilities plus asynchronous Memory Curation.
 5. Run admission and Context Assembly policy.

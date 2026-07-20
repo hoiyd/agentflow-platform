@@ -48,3 +48,11 @@ Completion Gate flow:
 4. For an HTTP verifier with remaining attempt budget, restore the target service and call `POST /api/runs/{id}/verify`.
 5. Confirm fresh passing Evidence is appended and `run.completed` appears only after `verification.passed`.
 6. Change the candidate subject in a resumed Run and confirm a `verification.stale` marker references the superseded Evidence.
+
+Run Budget flow:
+
+1. Set `RUN_MAX_MODEL_CALLS=1`, start the backend, and create a Multi-Agent or Autonomous Run that requires more than one model call.
+2. Confirm the Run stops with a typed budget error and Replay contains `budget.exceeded`.
+3. Call `GET /api/runs/{id}/usage` and confirm the ledger has one model reservation/settlement operation rather than one entry per provider retry attempt.
+4. Pause an Autonomous Run at `waiting_for_user`, wait longer than `RUN_MAX_RUNTIME`, and resume it. Confirm only active execution time is charged.
+5. With Postgres, run `TEST_DATABASE_URL=... go test ./internal/store -run 'TestPostgresRunUsage|TestPostgresActiveRuntime'` to verify atomic reservation and active-runtime round trips.

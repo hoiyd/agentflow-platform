@@ -76,7 +76,7 @@ instead of reading the current editable configuration.
 
 It includes the Run mode, Agent configuration and system prompt, candidate
 Agents for multi-agent routing, provider/model identity, executor, tool names
-and schemas, router mode, and autonomous limits. Replay returns the same
+and schemas, router mode, autonomous limits, and the Run Budget. Replay returns the same
 snapshot so an operator can compare what was configured with what happened.
 
 A Runtime Snapshot never contains API keys, authorization headers, provider
@@ -138,11 +138,23 @@ not a Stage, Turn, Model Call, or retry count.
 
 ## Model Call
 
-A **Model Call** is one request to an LLM provider and its response. One Turn
-may make multiple Model Calls, especially when tools are involved.
+A **Model Call** is one logical request to an LLM provider and its response. One
+logical call may contain multiple physical provider attempts under Retry Policy.
+One Turn may make multiple Model Calls, especially when tools are involved.
 
 A Model Call records provider/model identity, token usage, duration, output,
 and failure information. Streaming deltas belong to the active Model Call.
+
+## Usage Ledger
+
+A **Usage Ledger** is the append-only accounting record for one Run. Model
+reservations and settlements share a stable operation ID. Effective totals use
+provider settlement when available and retain conservative estimates as open
+reservations when a call ends before settlement. Tool executions use their tool
+call ID as the operation ID.
+
+The ledger is the authority for Run Budget and cost accounting. Trace summaries
+remain an event-derived presentation of observed execution activity.
 
 ## Tool Call
 
@@ -227,6 +239,8 @@ model.*
 tool.*
 retrieval.*
 memory.*
+usage.*
+budget.*
 ```
 
 Overall autonomous budget and iteration status use `run.progress`. Stage events
