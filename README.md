@@ -31,6 +31,7 @@ Full-stack AI agent workflow platform with streaming chat, agent runs, persisten
 
 ```txt
 agentflow-platform/
+  api/             # shared OpenAPI contract
   apps/
     api/      # Go backend
     web/      # Next.js frontend
@@ -74,4 +75,5 @@ Set `NEXT_PUBLIC_API_BASE_URL` only if the API is not running on `http://localho
 - [Memory Management](docs/memory-management.md): hybrid candidate extraction, shadow evaluation, curation policy, background persistence, and events.
 - [Knowledge / RAG](docs/knowledge-rag.md): document ingestion, Markdown chunking, vector search, and reranking.
 - [API Reference](docs/api-reference.md): HTTP endpoints and an example RAG response.
+- [API Contract](docs/api-contract.md): OpenAPI ownership, generated Go/TypeScript DTOs, client generation, and drift checks.
 - [Verification Guide](docs/verification-guide.md): backend tests, frontend build, RAG checks, and replay checks.

@@ -6,21 +6,11 @@ import (
 	"net/http"
 	"strings"
 
+	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
 )
-
-type agentConfigRequest struct {
-	ID               string   `json:"id,omitempty"`
-	Name             *string  `json:"name,omitempty"`
-	Description      *string  `json:"description,omitempty"`
-	SystemPrompt     *string  `json:"system_prompt,omitempty"`
-	Tools            []string `json:"tools,omitempty"`
-	MemoryEnabled    *bool    `json:"memory_enabled,omitempty"`
-	RetrievalEnabled *bool    `json:"retrieval_enabled,omitempty"`
-	Executor         *string  `json:"executor,omitempty"`
-}
 
 func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
 	agents, err := h.store.ListAgents()
@@ -32,16 +22,18 @@ func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
-	var req agentConfigRequest
+	var req apicontract.AgentConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
 	agent := domain.Agent{
-		ID:               strings.TrimSpace(req.ID),
 		MemoryEnabled:    true,
 		RetrievalEnabled: true,
 		Executor:         domain.DefaultAgentExecutor,
+	}
+	if req.Id != nil {
+		agent.ID = strings.TrimSpace(*req.Id)
 	}
 	applyAgentConfigRequest(&agent, req)
 	if err := h.validateAgentTools(agent.Tools); err != nil {
@@ -120,7 +112,7 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "agent not found")
 		return
 	}
-	var req agentConfigRequest
+	var req apicontract.AgentConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
@@ -159,7 +151,7 @@ func (h *Handler) currentToolCatalog() (*tools.Catalog, error) {
 	return tools.DefaultCatalog(), nil
 }
 
-func applyAgentConfigRequest(agent *domain.Agent, req agentConfigRequest) {
+func applyAgentConfigRequest(agent *domain.Agent, req apicontract.AgentConfigRequest) {
 	if req.Name != nil {
 		agent.Name = *req.Name
 	}
@@ -170,7 +162,7 @@ func applyAgentConfigRequest(agent *domain.Agent, req agentConfigRequest) {
 		agent.SystemPrompt = *req.SystemPrompt
 	}
 	if req.Tools != nil {
-		agent.Tools = req.Tools
+		agent.Tools = append([]string(nil), (*req.Tools)...)
 	}
 	if req.MemoryEnabled != nil {
 		agent.MemoryEnabled = *req.MemoryEnabled
@@ -179,7 +171,7 @@ func applyAgentConfigRequest(agent *domain.Agent, req agentConfigRequest) {
 		agent.RetrievalEnabled = *req.RetrievalEnabled
 	}
 	if req.Executor != nil {
-		agent.Executor = strings.TrimSpace(*req.Executor)
+		agent.Executor = strings.TrimSpace(string(*req.Executor))
 	}
 	if strings.TrimSpace(agent.Executor) == "" {
 		agent.Executor = domain.DefaultAgentExecutor

@@ -1,223 +1,38 @@
-import type { CompletionContractInput } from "./verification";
+import createClient from "openapi-fetch";
+import type { components, paths } from "./api/generated";
 
-export type Conversation = {
-  id: string;
-  title: string;
-  created_at: string;
-  updated_at: string;
-  started_at?: string;
-  heartbeat_at?: string;
-  completed_at?: string;
-};
+type Schemas = components["schemas"];
 
-export type Message = {
-  id: string;
-  conversation_id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  created_at: string;
-};
+export type Conversation = Schemas["Conversation"];
 
-export type RunEvent = {
-  id: string;
-  type: string;
-  schema_version: number;
-  sequence: number;
-  conversation_id?: string;
-  run_id: string;
-  stage_id?: string;
-  turn_id?: string;
-  parent_event_id?: string;
-  payload: Record<string, unknown>;
-  timestamp: string;
-};
+export type Message = Schemas["Message"];
 
-export type ChatEvent =
-  | { type: "conversation"; conversation_id: string }
-  | { type: "run_state"; conversation_id: string; run_id: string; agent_id: string; status: string }
-  | { type: "run_progress"; conversation_id: string; run_id: string; agent_id?: string; iteration?: number; max_iterations?: number; elapsed_seconds?: number; max_runtime_seconds?: number; output_chars?: number; max_output_chars?: number; tool_calls?: number; max_tool_calls?: number; stop_reason?: string }
-  | { type: "model_delta"; delta: string }
-  | { type: "stage_state"; conversation_id: string; run_id: string; agent_id?: string; role: string; status: string; iteration?: number; input?: string; output?: string; error?: string }
-  | {
-      type: "done";
-      conversation_id: string;
-      title?: string;
-      message_id?: string;
-      run_id?: string;
-      agent_id?: string;
-      status?:
-        | "idle"
-        | "queued"
-        | "running"
-        | "waiting_for_user"
-        | "completed"
-        | "failed"
-        | "failed_recoverable"
-        | "canceling"
-        | "canceled"
-        | string;
-      verification_status?:
-        | "not_required"
-        | "pending"
-        | "running"
-        | "passed"
-        | "failed"
-        | "blocked"
-        | "stale"
-        | string;
-    }
-  | { type: "error"; error: string };
+export type RunEvent = Schemas["RunEvent"];
 
-export type AgentInfo = {
-  id: string;
-  name: string;
-  description: string;
-  system_prompt: string;
-  tools: string[];
-  memory_enabled: boolean;
-  retrieval_enabled: boolean;
-  executor: ChatExecutor;
-  archived?: boolean;
-  created_at: string;
-  updated_at: string;
-};
+export type ChatEvent = Exclude<Schemas["ChatStreamEvent"], RunEvent>;
 
-export type ToolInfo = {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  enabled: boolean;
-};
+export type AgentInfo = Schemas["Agent"];
 
-export type ChatMode = "single" | "multi_agent" | "autonomous";
-export type ChatExecutor = "native" | "langchaingo";
+export type ToolInfo = Schemas["ToolInfo"];
 
-export type RunInfo = {
-  id: string;
-  agent_id: string;
-  conversation_id: string;
-  status:
-    | "idle"
-    | "queued"
-    | "running"
-    | "waiting_for_user"
-    | "completed"
-    | "failed"
-    | "failed_recoverable"
-    | "canceling"
-    | "canceled"
-    | string;
-  verification_status?: "not_required" | "pending" | "running" | "passed" | "failed" | "blocked" | "stale" | string;
-  completion_contract?: CompletionContractInput | Record<string, unknown>;
-  error?: string;
-  started_at?: string;
-  execution_started_at?: string;
-  active_runtime_ms?: number;
-  heartbeat_at?: string;
-  completed_at?: string;
-  created_at: string;
-  updated_at: string;
-};
+export type ChatMode = Schemas["ChatMode"];
+export type ChatExecutor = Schemas["ChatExecutor"];
 
-export type CollaborationStepInfo = {
-  id: string;
-  run_id: string;
-  conversation_id: string;
-  role: string;
-  agent_id?: string;
-  status:
-    | "idle"
-    | "queued"
-    | "running"
-    | "waiting_for_user"
-    | "completed"
-    | "failed"
-    | "failed_recoverable"
-    | "canceling"
-    | "canceled"
-    | string;
-  iteration?: number;
-  input: string;
-  output: string;
-  error?: string;
-  created_at: string;
-  updated_at: string;
-};
+export type RunInfo = Schemas["Run"];
 
-export type RunTraceSummary = {
-  run_id: string;
-  status: string;
-  total_duration_ms: number;
-  total_tokens: number;
-  prompt_tokens: number;
-  completion_tokens: number;
-  token_usage_estimated: boolean;
-  llm_calls: number;
-  tool_calls: number;
-  error_count: number;
-};
+export type CollaborationStepInfo = Schemas["CollaborationStep"];
 
-export type RuntimeRunBudget = {
-  max_model_calls?: number;
-  max_prompt_tokens?: number;
-  max_completion_tokens?: number;
-  max_total_tokens?: number;
-  max_tool_calls?: number;
-  max_runtime_ms?: number;
-  max_estimated_cost_micros?: number;
-  input_cost_per_million_tokens_micros?: number;
-  output_cost_per_million_tokens_micros?: number;
-};
+export type RunTraceSummary = Schemas["RunTraceSummary"];
 
-export type RunUsageTotals = {
-  model_calls: number;
-  tool_calls: number;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  estimated_cost_micros: number;
-  open_reservations: number;
-};
+export type RuntimeRunBudget = Schemas["RuntimeRunBudget"];
 
-export type RunUsageEntry = {
-  id: string;
-  run_id: string;
-  operation_id: string;
-  stage_id?: string;
-  turn_id?: string;
-  kind: "model.reservation" | "model.settlement" | "tool.execution" | string;
-  purpose: "primary" | "router" | "compaction" | string;
-  model?: string;
-  tool_name?: string;
-  model_calls?: number;
-  tool_calls?: number;
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
-  estimated_cost_micros?: number;
-  estimated?: boolean;
-  timestamp: string;
-};
+export type RunUsageTotals = Schemas["RunUsageTotals"];
 
-export type RunUsageLedger = {
-  run_id: string;
-  budget: RuntimeRunBudget;
-  totals: RunUsageTotals;
-  entries: RunUsageEntry[];
-  updated_at?: string;
-};
+export type RunUsageEntry = Schemas["RunUsageEntry"];
 
-export type RunReplay = {
-  run: RunInfo;
-  conversation: Conversation;
-  messages: Message[];
-  steps: CollaborationStepInfo[];
-  summary: RunTraceSummary;
-  usage_ledger: RunUsageLedger;
-  run_events: RunEvent[];
-  verification_evidence: Array<Record<string, unknown>>;
-  verification_artifacts: Array<Record<string, unknown>>;
-};
+export type RunUsageLedger = Schemas["RunUsageLedger"];
+
+export type RunReplay = Schemas["RunReplay"];
 
 export type EpisodeReport = {
   run: RunInfo;
@@ -369,6 +184,15 @@ export type DocumentDetail = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+const contractClient = createClient<paths>({ baseUrl: API_BASE });
+
+function contractError(action: string, response: Response, error: unknown): Error {
+  const detail =
+    error && typeof error === "object" && "error" in error && typeof error.error === "string"
+      ? ` ${error.error}`
+      : "";
+  return new Error(`${action}: ${response.status}${detail}`);
+}
 
 async function readJSON<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
@@ -471,14 +295,7 @@ export async function listMessages(conversationId: string): Promise<Message[]> {
 }
 
 export async function streamChat(
-  input: {
-    conversation_id?: string;
-    agent_id?: string;
-    message: string;
-    mode?: ChatMode;
-    executor?: ChatExecutor;
-    completion_contract?: CompletionContractInput;
-  },
+  input: Schemas["ChatRequest"],
   onEvent: (event: ChatEvent) => void
 ) {
   const response = await fetch(`${API_BASE}/api/chat`, {
@@ -530,21 +347,23 @@ export async function resumeRun(
 }
 
 export async function cancelRun(runId: string): Promise<RunInfo> {
-  const response = await fetch(`${API_BASE}/api/runs/${runId}/cancel`, {
-    method: "POST"
+  const { data, error, response } = await contractClient.POST("/api/runs/{id}/cancel", {
+    params: { path: { id: runId } }
   });
-  if (!response.ok) {
-    throw new Error(`Failed to cancel run: ${response.status}`);
+  if (!data) {
+    throw contractError("Failed to cancel run", response, error);
   }
-  return readJSON<RunInfo>(response);
+  return data;
 }
 
-export async function verifyRun(runId: string): Promise<{ run: RunInfo; decision: Record<string, unknown> }> {
-  const response = await fetch(`${API_BASE}/api/runs/${runId}/verify`, { method: "POST" });
-  if (!response.ok) {
-    throw new Error(`Verify request failed: ${response.status}`);
+export async function verifyRun(runId: string): Promise<Schemas["VerifyRunResponse"]> {
+  const { data, error, response } = await contractClient.POST("/api/runs/{id}/verify", {
+    params: { path: { id: runId } }
+  });
+  if (!data) {
+    throw contractError("Verify request failed", response, error);
   }
-  return readJSON<{ run: RunInfo; decision: Record<string, unknown> }>(response);
+  return data;
 }
 
 async function readChatEventStream(response: Response, onEvent: (event: ChatEvent) => void) {
@@ -596,61 +415,72 @@ function projectRunEvent(event: ChatEvent | RunEvent): ChatEvent {
   };
   if (event.type.startsWith("run.")) return {
     type: "run_state", conversation_id: event.conversation_id ?? "", run_id: event.run_id,
-    agent_id: stringValue(payload.agent_id) ?? "", status: stringValue(payload.status) ?? event.type.slice("run.".length)
+    agent_id: stringValue(payload.agent_id) ?? "", status: runStatusValue(payload.status) ?? fallbackRunStatus(event.type)
   };
   return { type: "model_delta", delta: "" };
 }
 
 function stringValue(value: unknown): string | undefined { return typeof value === "string" ? value : undefined; }
 function numberValue(value: unknown): number | undefined { return typeof value === "number" ? value : undefined; }
+function runStatusValue(value: unknown): Schemas["RunStatus"] | undefined {
+  if (typeof value !== "string") return undefined;
+  const statuses: Schemas["RunStatus"][] = [
+    "queued", "running", "waiting_for_user", "completed", "failed", "failed_recoverable", "canceling", "canceled"
+  ];
+  return statuses.find((status) => status === value);
+}
+function fallbackRunStatus(eventType: string): Schemas["RunStatus"] {
+  if (eventType === "run.created") return "queued";
+  if (eventType === "run.waiting_for_user") return "waiting_for_user";
+  if (eventType === "run.completed") return "completed";
+  if (eventType === "run.failed") return "failed";
+  if (eventType === "run.cancel_requested") return "canceling";
+  if (eventType === "run.canceled") return "canceled";
+  return "running";
+}
 
 export async function listAgents(): Promise<AgentInfo[]> {
-  const response = await fetch(`${API_BASE}/api/agents`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load agents: ${response.status}`);
+  const { data, error, response } = await contractClient.GET("/api/agents", {
+    fetch: (request) => fetch(request, { cache: "no-store" })
+  });
+  if (!data) {
+    throw contractError("Failed to load agents", response, error);
   }
-  const agents = await readArrayJSON<AgentInfo>(response);
-  return agents.map(normalizeAgentInfo);
+  return data.map(normalizeAgentInfo);
 }
 
 export async function createAgent(
   input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
 ): Promise<AgentInfo> {
-  const response = await fetch(`${API_BASE}/api/agents`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input)
+  const { data, error, response } = await contractClient.POST("/api/agents", {
+    body: input
   });
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Failed to create agent: ${response.status}${message ? ` ${message}` : ""}`);
+  if (!data) {
+    throw contractError("Failed to create agent", response, error);
   }
-  return normalizeAgentInfo(await readJSON<AgentInfo>(response));
+  return normalizeAgentInfo(data);
 }
 
 export async function updateAgent(
   agentId: string,
   input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
 ): Promise<AgentInfo> {
-  const response = await fetch(`${API_BASE}/api/agents/${agentId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input)
+  const { data, error, response } = await contractClient.PATCH("/api/agents/{id}", {
+    params: { path: { id: agentId } },
+    body: input
   });
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Failed to update agent: ${response.status}${message ? ` ${message}` : ""}`);
+  if (!data) {
+    throw contractError("Failed to update agent", response, error);
   }
-  return normalizeAgentInfo(await readJSON<AgentInfo>(response));
+  return normalizeAgentInfo(data);
 }
 
 export async function archiveAgent(agentId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/agents/${agentId}`, {
-    method: "DELETE"
+  const { error, response } = await contractClient.DELETE("/api/agents/{id}", {
+    params: { path: { id: agentId } }
   });
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Failed to archive agent: ${response.status}${message ? ` ${message}` : ""}`);
+    throw contractError("Failed to archive agent", response, error);
   }
 }
 
@@ -665,45 +495,56 @@ function normalizeAgentInfo(agent: AgentInfo): AgentInfo {
 }
 
 export async function listTools(): Promise<ToolInfo[]> {
-  const response = await fetch(`${API_BASE}/api/tools`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load tools: ${response.status}`);
+  const { data, error, response } = await contractClient.GET("/api/tools", {
+    fetch: (request) => fetch(request, { cache: "no-store" })
+  });
+  if (!data) {
+    throw contractError("Failed to load tools", response, error);
   }
-  return readArrayJSON<ToolInfo>(response);
+  return data;
 }
 
 export async function listRuns(): Promise<RunInfo[]> {
-  const response = await fetch(`${API_BASE}/api/runs`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load runs: ${response.status}`);
+  const { data, error, response } = await contractClient.GET("/api/runs", {
+    fetch: (request) => fetch(request, { cache: "no-store" })
+  });
+  if (!data) {
+    throw contractError("Failed to load runs", response, error);
   }
-  return readArrayJSON<RunInfo>(response);
+  return data;
 }
 
 export async function listCollaborationSteps(runId: string): Promise<CollaborationStepInfo[]> {
-  const response = await fetch(`${API_BASE}/api/runs/${runId}/collaboration_steps`, {
-    cache: "no-store"
+  const { data, error, response } = await contractClient.GET("/api/runs/{id}/collaboration_steps", {
+    params: { path: { id: runId } },
+    fetch: (request) => fetch(request, { cache: "no-store" })
   });
-  if (!response.ok) {
-    throw new Error(`Failed to load collaboration steps: ${response.status}`);
+  if (!data) {
+    throw contractError("Failed to load collaboration steps", response, error);
   }
-  return readArrayJSON<CollaborationStepInfo>(response);
+  return data;
 }
 
 export async function getRunReplay(runId: string): Promise<RunReplay> {
-  const response = await fetch(`${API_BASE}/api/runs/${runId}/replay`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load run replay: ${response.status}`);
+  const { data, error, response } = await contractClient.GET("/api/runs/{id}/replay", {
+    params: { path: { id: runId } },
+    fetch: (request) => fetch(request, { cache: "no-store" })
+  });
+  if (!data) {
+    throw contractError("Failed to load run replay", response, error);
   }
-  return normalizeRunReplay(await readJSON<unknown>(response));
+  return normalizeRunReplay(data);
 }
 
 export async function getRunUsage(runId: string): Promise<RunUsageLedger> {
-  const response = await fetch(`${API_BASE}/api/runs/${runId}/usage`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load run usage: ${response.status}`);
+  const { data, error, response } = await contractClient.GET("/api/runs/{id}/usage", {
+    params: { path: { id: runId } },
+    fetch: (request) => fetch(request, { cache: "no-store" })
+  });
+  if (!data) {
+    throw contractError("Failed to load run usage", response, error);
   }
-  return normalizeRunUsageLedger(await readJSON<unknown>(response), runId);
+  return normalizeRunUsageLedger(data, runId);
 }
 
 export async function getEpisodeReport(runId: string): Promise<EpisodeReport> {
@@ -715,14 +556,13 @@ export async function getEpisodeReport(runId: string): Promise<EpisodeReport> {
 }
 
 export async function setToolEnabled(name: string, enabled: boolean): Promise<ToolInfo[]> {
-  const action = enabled ? "enable" : "disable";
-  const response = await fetch(`${API_BASE}/api/tools/${encodeURIComponent(name)}/${action}`, {
-    method: "POST"
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to update tool: ${response.status}`);
+  const result = enabled
+    ? await contractClient.POST("/api/tools/{name}/enable", { params: { path: { name } } })
+    : await contractClient.POST("/api/tools/{name}/disable", { params: { path: { name } } });
+  if (!result.data) {
+    throw contractError("Failed to update tool", result.response, result.error);
   }
-  return readArrayJSON<ToolInfo>(response);
+  return result.data;
 }
 
 export async function listDocuments(): Promise<DocumentInfo[]> {

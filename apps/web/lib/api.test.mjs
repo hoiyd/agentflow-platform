@@ -80,7 +80,7 @@ test("run usage client calls the dedicated endpoint", async (t) => {
     totals: { tool_calls: 1 },
     entries: []
   }, (url) => {
-    requestedURL = String(url);
+    requestedURL = url instanceof Request ? url.url : String(url);
   });
 
   const ledger = await getRunUsage("run-2");

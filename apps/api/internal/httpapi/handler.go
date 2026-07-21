@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
@@ -152,5 +153,5 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+	writeJSON(w, status, apicontract.ErrorResponse{Error: message})
 }

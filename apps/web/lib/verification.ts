@@ -1,5 +1,9 @@
-export type VerificationFailureAction = "fail" | "waiting_for_user";
-export type VerifierTypeInput = "command" | "http" | "json_schema" | "text_constraints" | "citation";
+import type { components } from "./api/generated";
+
+type ContractSchemas = components["schemas"];
+
+export type VerificationFailureAction = ContractSchemas["VerificationPolicyInput"]["on_exhausted"];
+export type VerifierTypeInput = ContractSchemas["VerifierType"];
 
 export type TextConstraintsSettings = {
   enabled: boolean;
@@ -52,22 +56,8 @@ export type CompletionVerificationSettings = {
   onExhausted: VerificationFailureAction;
 };
 
-export type VerifierSpecInput = {
-  id: string;
-  type: VerifierTypeInput;
-  required: true;
-  config: Record<string, unknown>;
-};
-
-export type CompletionContractInput = {
-  subject_type: "run_output";
-  verifiers: VerifierSpecInput[];
-  policy: {
-    mode: "all_must_pass";
-    max_attempts: number;
-    on_exhausted: VerificationFailureAction;
-  };
-};
+export type VerifierSpecInput = ContractSchemas["VerifierSpecInput"] & { required: true };
+export type CompletionContractInput = ContractSchemas["CompletionContractInput"];
 
 export const DEFAULT_COMPLETION_VERIFICATION: CompletionVerificationSettings = {
   enabled: false,
