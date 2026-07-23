@@ -21,7 +21,7 @@ apps/api/
     store/          File and Postgres persistence adapters
     memory/         semantic memory operations and asynchronous curation
     knowledge/      knowledge-base ingestion, embedding, search, and RAG evaluation
-    rag/            chunking and retrieval ranking
+    rag/            chunking and shared recall, reranking, and relevance gating
     concurrency/    run and model-request limits
     budget/         per-Run resource accounting and enforcement
     recovery/       stale-run recovery
@@ -65,7 +65,7 @@ Empty `api`, `core`, and `services` directories do not create useful boundaries.
 
 ### Keep transport and execution separate
 
-`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.SemanticMemory` owns validation, embedding, and memory persistence; `knowledge.KnowledgeBase` owns ingestion, embedding, retrieval reranking, and RAG evaluation. Agent execution remains in `agent` and `turn`.
+`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.SemanticMemory` owns validation, embedding, and memory persistence; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and RAG evaluation. Agent execution remains in `agent` and `turn`.
 
 The HTTP package defines the small service interfaces it consumes. Concrete implementations are selected only by `app`, so adding caching, another embedding implementation, or a different service adapter does not change transport code.
 
@@ -96,11 +96,26 @@ HTTP chat request
   -> shared Run completion
   -> message persistence and asynchronous memory curation
 
-HTTP knowledge request
+HTTP RAG search or Agent context retrieval
   -> Knowledge Base
-  -> chunking / embedding / reranking
+  -> query embedding
+  -> Retrieval Pipeline
+       -> Store dense recall
+       -> Store lexical recall
+       -> deduplicate / rerank / relevance gate
+
+HTTP document ingestion
+  -> Knowledge Base
+  -> chunking / embedding
   -> Store
 ```
+
+The Retrieval Pipeline, rather than an Agent runtime or HTTP handler, owns the
+recall sequence and result policy. Stores expose separate dense and lexical
+search operations and remain responsible for applying workspace and metadata
+filters. This keeps HTTP, Single-Agent, Multi-Agent, and Autonomous retrieval
+behavior aligned while allowing File and Postgres adapters to use different
+index implementations.
 
 Single-Agent, Multi-Agent, and Autonomous streams expose the same `domain.RunEvent` contract to the HTTP adapter. Their common completion path persists the assistant message, transitions the Run, optionally generates the conversation title, flushes the final SSE event, and then schedules conservative curation of explicitly durable user facts. Assistant output and ordinary chat remain conversation history rather than long-term memory.
 

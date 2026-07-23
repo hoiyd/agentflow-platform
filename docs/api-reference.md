@@ -57,6 +57,10 @@ Example RAG search response:
       "similarity": 0.71,
       "recency_boost": 0.03,
       "score": 0.74,
+      "vector_rank": 2,
+      "lexical_rank": 1,
+      "lexical_score": 0.92,
+      "rerank_rank": 1,
       "lexical_boost": 0.18,
       "metadata_boost": 0.1,
       "rerank_score": 1.02
@@ -70,3 +74,14 @@ Example RAG search response:
   }
 }
 ```
+
+`vector_rank` and `lexical_rank` identify which independent recall paths found
+the chunk. Either field can be omitted when that path did not return the chunk.
+`lexical_score` is produced by lexical recall, while `lexical_boost` is a
+separate feature added by the shared reranker. A lexical-only item has
+`similarity: 0`.
+
+By default, lexical recall may add chunks that are absent from dense Top-K.
+Passing a positive `min_similarity` keeps vector-threshold behavior and excludes
+lexical-only chunks; lexical rank and score can still annotate matching dense
+results.

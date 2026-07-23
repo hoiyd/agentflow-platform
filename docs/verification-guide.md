@@ -22,13 +22,26 @@ RAG manual flow:
 
 1. Start backend and frontend.
 2. Open the Knowledge page.
-3. Upload a `.txt` or `.md` file with a unique phrase.
+3. Upload a `.txt` or `.md` file with a unique identifier such as `AUTH-7F31`
+   and enough surrounding prose to form a normal chunk.
 4. Confirm the document list shows chunk and embedding counts.
 5. Click Details and inspect chunks/metadata.
-6. Search for the unique phrase.
+6. Search for a question containing the exact identifier with
+   `min_similarity` omitted or set to `0`.
 7. Confirm the search panel shows embedding provider/model/dimensions.
-8. Confirm relevant chunks rank above unrelated content.
-9. Delete the document and confirm it disappears from list/search.
+8. Confirm the relevant chunk ranks above unrelated content and the API item
+   exposes `lexical_rank` and `lexical_score`. A lexical-only hit can have
+   `similarity: 0` with no `vector_rank`.
+9. Repeat with a positive `min_similarity` and confirm lexical-only chunks are
+   excluded while dense hits can still carry lexical fields.
+10. Delete the document and confirm it disappears from list/search.
+
+Postgres lexical integration test (use only a disposable database):
+
+```bash
+cd apps/api
+TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStoreLexicalRecall
+```
 
 Demo replay flow:
 

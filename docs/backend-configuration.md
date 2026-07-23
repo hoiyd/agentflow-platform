@@ -139,6 +139,13 @@ The Postgres store runs idempotent startup migrations for:
 - memory candidates, curated memories, and `memory_embeddings`
 - documents, document chunks, and document chunk embeddings
 - pgvector HNSW indexes for semantic search
+- generated `tsvector` columns and GIN indexes for document and chunk lexical search
+
+Lexical search does not require an additional environment variable. The
+Postgres startup migration creates and maintains the generated full-text
+columns automatically. The file store performs the same logical recall path
+with in-process phrase, identifier, and term-coverage scoring instead of a
+persisted text index.
 
 ## Tool Configuration
 
