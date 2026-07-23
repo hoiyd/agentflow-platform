@@ -79,6 +79,7 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 		return domain.DocumentSearchResponse{}, err
 	}
 	items := mergeRecallCandidates(denseItems, lexicalItems, search.MinSimilarity <= 0)
+	items = ReciprocalRankFusion(items)
 	items = Rerank(search.Query, items, requestedLimit)
 	items = ApplyRelevanceGate(items)
 
@@ -86,7 +87,8 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 		embedding.Dimensions = len(embedding.Vector)
 	}
 	response := domain.DocumentSearchResponse{
-		Items: items,
+		Items:  items,
+		Fusion: RRFInfo(),
 		Embedding: domain.EmbeddingInfo{
 			Provider:   embedding.Provider,
 			Model:      embedding.Model,

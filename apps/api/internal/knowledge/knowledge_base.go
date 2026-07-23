@@ -113,6 +113,7 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 	results := make([]domain.RAGEvaluationCaseResult, 0, len(request.Cases))
 	summary := domain.RAGEvaluationSummary{Total: len(request.Cases)}
 	var embedding domain.EmbeddingInfo
+	var fusion domain.FusionInfo
 	for _, evaluationCase := range request.Cases {
 		response, err := s.Search(ctx, domain.DocumentSearch{
 			Query:         evaluationCase.Query,
@@ -126,6 +127,7 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 		}
 		if embedding.Provider == "" {
 			embedding = response.Embedding
+			fusion = response.Fusion
 		}
 		caseResult := rag.EvaluateCase(evaluationCase, response.Items)
 		results = append(results, caseResult)
@@ -142,5 +144,5 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 			summary.Misses++
 		}
 	}
-	return domain.RAGEvaluationRunResponse{Summary: summary, Cases: results, Embedding: embedding}, nil
+	return domain.RAGEvaluationRunResponse{Summary: summary, Cases: results, Embedding: embedding, Fusion: fusion}, nil
 }

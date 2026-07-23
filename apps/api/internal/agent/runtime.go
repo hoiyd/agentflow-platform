@@ -302,6 +302,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 				payload["rag_error"] = searchErr.Error()
 			} else {
 				chunks = response.Items
+				payload["fusion"] = response.Fusion
 				payload["rag_no_match"] = response.NoMatch
 				if response.Reason != "" {
 					payload["rag_no_match_reason"] = response.Reason
@@ -358,6 +359,8 @@ func retrievalTracePayload(memories []domain.RetrievedMemory, chunks []domain.Re
 				"vector_rank":    chunk.VectorRank,
 				"lexical_rank":   chunk.LexicalRank,
 				"lexical_score":  chunk.LexicalScore,
+				"rrf_score":      chunk.RRFScore,
+				"fusion_rank":    chunk.FusionRank,
 				"rerank_rank":    chunk.RerankRank,
 				"rerank_score":   chunk.RerankScore,
 				"confidence":     chunk.Confidence,

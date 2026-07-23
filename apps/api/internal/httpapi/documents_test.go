@@ -85,20 +85,26 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if searchResponse.Embedding.Dimensions != 1536 {
 		t.Fatalf("expected embedding dimensions metadata, got %#v", searchResponse.Embedding)
 	}
+	if searchResponse.Fusion.Algorithm != "rrf" || searchResponse.Fusion.RankConstant != 60 || searchResponse.Fusion.DenseWeight != 1 || searchResponse.Fusion.LexicalWeight != 1 {
+		t.Fatalf("expected RRF configuration metadata, got %#v", searchResponse.Fusion)
+	}
 	if !strings.Contains(items[0].Chunk.Content, "amber-9137") {
 		t.Fatalf("expected launch password chunk, got %#v", items[0])
 	}
 	if items[0].RerankScore <= 0 {
 		t.Fatalf("expected rerank score on search result, got %#v", items[0])
 	}
-	if items[0].VectorRank <= 0 || items[0].RerankRank <= 0 {
-		t.Fatalf("expected vector and rerank ranks on search result, got %#v", items[0])
+	if items[0].VectorRank <= 0 || items[0].FusionRank <= 0 || items[0].RerankRank <= 0 {
+		t.Fatalf("expected vector, fusion, and rerank ranks on search result, got %#v", items[0])
 	}
 	if items[0].LexicalRank <= 0 || items[0].LexicalScore <= 0 {
 		t.Fatalf("expected independent lexical recall evidence on search result, got %#v", items[0])
 	}
-	if !strings.Contains(searchRecorder.Body.String(), `"lexical_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"lexical_score"`) {
-		t.Fatalf("expected lexical recall fields in API JSON, got %s", searchRecorder.Body.String())
+	if items[0].RRFScore <= 0 {
+		t.Fatalf("expected RRF score on search result, got %#v", items[0])
+	}
+	if !strings.Contains(searchRecorder.Body.String(), `"lexical_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"lexical_score"`) || !strings.Contains(searchRecorder.Body.String(), `"rrf_score"`) || !strings.Contains(searchRecorder.Body.String(), `"fusion_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"rank_constant":60`) {
+		t.Fatalf("expected recall and fusion fields in API JSON, got %s", searchRecorder.Body.String())
 	}
 	if len(items[0].MatchedTerms) == 0 {
 		t.Fatalf("expected matched terms on search result, got %#v", items[0])
@@ -161,6 +167,9 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	}
 	if evalResponse.Embedding.Provider != "local" || evalResponse.Embedding.Model == "" {
 		t.Fatalf("expected evaluation embedding metadata, got %#v", evalResponse.Embedding)
+	}
+	if evalResponse.Fusion != searchResponse.Fusion {
+		t.Fatalf("expected search and evaluation to expose the same fusion metadata, got search=%#v evaluation=%#v", searchResponse.Fusion, evalResponse.Fusion)
 	}
 	if len(evalResponse.Cases) != 2 {
 		t.Fatalf("expected two evaluation cases, got %#v", evalResponse.Cases)

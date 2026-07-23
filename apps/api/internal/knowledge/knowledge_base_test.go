@@ -59,7 +59,7 @@ func TestKnowledgeBaseIngestsSearchesAndEvaluatesKnowledge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("search knowledge: %v", err)
 	}
-	if len(response.Items) != 1 || response.Embedding.Provider != "test" {
+	if len(response.Items) != 1 || response.Embedding.Provider != "test" || response.Fusion.Algorithm != "rrf" {
 		t.Fatalf("unexpected search response: %#v", response)
 	}
 
@@ -73,6 +73,9 @@ func TestKnowledgeBaseIngestsSearchesAndEvaluatesKnowledge(t *testing.T) {
 	}
 	if evaluation.Summary.HitAt1 != 1 || evaluation.Summary.Misses != 0 {
 		t.Fatalf("unexpected evaluation summary: %#v", evaluation.Summary)
+	}
+	if evaluation.Fusion != response.Fusion {
+		t.Fatalf("expected evaluation fusion metadata %#v, got %#v", response.Fusion, evaluation.Fusion)
 	}
 }
 

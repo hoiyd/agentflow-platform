@@ -5,7 +5,26 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"agentflow-platform/apps/api/internal/domain"
 )
+
+func TestRetrievedChunkPayloadIncludesFusionProvenance(t *testing.T) {
+	items := retrievedChunkPayload([]domain.RetrievedDocumentChunk{{
+		Chunk:       domain.DocumentChunk{ID: "chunk-1"},
+		VectorRank:  2,
+		LexicalRank: 1,
+		RRFScore:    0.0325,
+		FusionRank:  1,
+		RerankRank:  2,
+	}})
+	if len(items) != 1 {
+		t.Fatalf("expected one retrieved chunk payload, got %#v", items)
+	}
+	if items[0]["vector_rank"] != 2 || items[0]["lexical_rank"] != 1 || items[0]["rrf_score"] != 0.0325 || items[0]["fusion_rank"] != 1 || items[0]["rerank_rank"] != 2 {
+		t.Fatalf("expected recall, fusion, and rerank provenance, got %#v", items[0])
+	}
+}
 
 func TestParseFallbackToolCall(t *testing.T) {
 	call, ok := parseFallbackToolCall(`{"action":"tool_call","tool":"calculator","arguments":{"expression":"128 * 37"}}`)

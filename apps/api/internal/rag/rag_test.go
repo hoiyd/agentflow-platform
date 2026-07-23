@@ -105,6 +105,7 @@ func TestRerankDocumentChunksBoostsLexicalAndMetadataMatches(t *testing.T) {
 			Similarity:   0.72,
 			RecencyBoost: 0.01,
 			Score:        0.73,
+			VectorRank:   1,
 		},
 		{
 			Document: domain.Document{ID: "doc_cn", Title: "家常菜谱"},
@@ -118,17 +119,19 @@ func TestRerankDocumentChunksBoostsLexicalAndMetadataMatches(t *testing.T) {
 			Similarity:   0.61,
 			RecencyBoost: 0.01,
 			Score:        0.62,
+			VectorRank:   2,
+			LexicalRank:  1,
 		},
 	}
 
-	reranked := Rerank("做饭", items, 2)
+	reranked := Rerank("做饭", ReciprocalRankFusion(items), 2)
 	if len(reranked) != 2 {
 		t.Fatalf("expected two reranked chunks, got %d", len(reranked))
 	}
 	if reranked[0].Document.ID != "doc_cn" {
 		t.Fatalf("expected lexical/metadata match first, got %#v", reranked)
 	}
-	if reranked[0].LexicalBoost <= 0 || reranked[0].MetadataBoost <= 0 || reranked[0].RerankScore <= reranked[0].Score {
+	if reranked[0].LexicalBoost <= 0 || reranked[0].MetadataBoost <= 0 || reranked[0].RRFScore <= 0 || reranked[0].RerankScore <= normalizedRRFScore(reranked[0].RRFScore) {
 		t.Fatalf("expected rerank boosts on Chinese match, got %#v", reranked[0])
 	}
 }

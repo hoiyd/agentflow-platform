@@ -1438,6 +1438,8 @@ func retrievedChunkPayload(chunks []domain.RetrievedDocumentChunk) []map[string]
 			"vector_rank":    chunk.VectorRank,
 			"lexical_rank":   chunk.LexicalRank,
 			"lexical_score":  chunk.LexicalScore,
+			"rrf_score":      chunk.RRFScore,
+			"fusion_rank":    chunk.FusionRank,
 			"rerank_rank":    chunk.RerankRank,
 			"rerank_score":   chunk.RerankScore,
 		})

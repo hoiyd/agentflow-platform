@@ -39,6 +39,7 @@ import {
   DocumentDetail,
   DocumentInfo,
   EmbeddingInfo,
+  FusionInfo,
   Message,
   RAGEvaluationCase,
   RAGEvaluationRunResponse,
@@ -202,6 +203,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const [ragMinSimilarity, setRagMinSimilarity] = useState("0.15");
   const [ragResults, setRagResults] = useState<RetrievedDocumentChunk[]>([]);
   const [ragEmbedding, setRagEmbedding] = useState<EmbeddingInfo | null>(null);
+  const [ragFusion, setRagFusion] = useState<FusionInfo | null>(null);
   const [ragNoMatchReason, setRagNoMatchReason] = useState("");
   const [hasSearchedRAG, setHasSearchedRAG] = useState(false);
   const [isSearchingRAG, setIsSearchingRAG] = useState(false);
@@ -788,6 +790,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       });
       setRagResults(response.items);
       setRagEmbedding(response.embedding ?? null);
+      setRagFusion(response.fusion ?? null);
       setRagNoMatchReason(response.no_match ? response.reason ?? "No confident match found." : "");
     } catch (err) {
       setDocumentsError(err instanceof Error ? err.message : "Failed to search knowledge");
@@ -1445,6 +1448,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
             onEvaluationCasesChange={setRagEvalCases}
             hasSearched={hasSearchedRAG}
             searchEmbedding={ragEmbedding}
+            searchFusion={ragFusion}
             results={ragResults}
             selectedDocument={selectedDocument}
             selectedDocumentId={selectedDocumentId}
@@ -1997,6 +2001,7 @@ function KnowledgePanel({
   onUploadTitleChange,
   query,
   searchEmbedding,
+  searchFusion,
   results,
   selectedDocument,
   selectedDocumentId,
@@ -2034,6 +2039,7 @@ function KnowledgePanel({
   onUploadTitleChange: (value: string) => void;
   query: string;
   searchEmbedding: EmbeddingInfo | null;
+  searchFusion: FusionInfo | null;
   results: RetrievedDocumentChunk[];
   selectedDocument: DocumentDetail | null;
   selectedDocumentId: string;
@@ -2173,6 +2179,7 @@ function KnowledgePanel({
           </button>
         </div>
         <EmbeddingStatus embedding={searchEmbedding} hasSearched={hasSearched} />
+        <FusionStatus fusion={searchFusion} hasSearched={hasSearched} />
         {hasSearched && noMatchReason ? <div className="rag-no-match">{noMatchReason}</div> : null}
         <div className="rag-results">
           {results.length === 0 ? (
@@ -2189,9 +2196,13 @@ function KnowledgePanel({
                   </div>
                   <div className="document-metrics">
                     <span>{documentFormat(result.document)}</span>
+                    <span>Semantic #{result.vector_rank ?? "-"}</span>
+                    <span>Keyword #{result.lexical_rank ?? "-"}</span>
+                    <span>Fusion #{result.fusion_rank ?? "-"}</span>
+                    <span>Final #{result.rerank_rank ?? "-"}</span>
                     {result.confidence ? <span>{result.confidence}</span> : null}
                     <span>similarity {formatScore(result.similarity)}</span>
-                    <span>score {formatScore(result.score)}</span>
+                    <span>final {formatScore(result.rerank_score ?? result.score)}</span>
                   </div>
                 </div>
                 <ScoreBreakdown result={result} />
@@ -2257,6 +2268,7 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
         </div>
       </div>
       <EmbeddingStatus embedding={result.embedding ?? null} hasSearched />
+      <FusionStatus fusion={result.fusion ?? null} hasSearched />
       <div className="evaluation-cases">
         {result.cases.map((item) => (
           <article className={`evaluation-case ${item.hit ? "hit" : "miss"}`} key={item.id}>
@@ -2281,8 +2293,10 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
                       <div className="tool-source">{chunkSourceLabel(resultItem)}</div>
                     </div>
                     <div className="document-metrics">
-                      <span>v#{resultItem.vector_rank ?? "-"}</span>
-                      <span>r#{resultItem.rerank_rank ?? "-"}</span>
+                      <span>Semantic #{resultItem.vector_rank ?? "-"}</span>
+                      <span>Keyword #{resultItem.lexical_rank ?? "-"}</span>
+                      <span>Fusion #{resultItem.fusion_rank ?? "-"}</span>
+                      <span>Final #{resultItem.rerank_rank ?? "-"}</span>
                       {resultItem.confidence ? <span>{resultItem.confidence}</span> : null}
                       <span>sim {formatScore(resultItem.similarity)}</span>
                       <span>final {formatScore(resultItem.rerank_score ?? resultItem.score)}</span>
@@ -2304,7 +2318,8 @@ function ScoreBreakdown({ result }: { result: RetrievedDocumentChunk }) {
   const terms = result.matched_terms ?? [];
   return (
     <div className="score-breakdown">
-      <span>base {formatScore(result.score)}</span>
+      <span>recall {formatScore(result.score)}</span>
+      {result.rrf_score !== undefined ? <span>RRF {formatRRFScore(result.rrf_score)}</span> : null}
       <span>evidence {formatScore(result.evidence_score ?? 0)}</span>
       <span>coverage {formatPercent(result.evidence_coverage ?? 0)}</span>
       <span>lexical +{formatScore(result.lexical_boost ?? 0)}</span>
@@ -2398,6 +2413,29 @@ function EmbeddingStatus({ embedding, hasSearched }: { embedding: EmbeddingInfo 
       ) : (
         <span>Semantic vector search is using the configured embedding provider.</span>
       )}
+    </div>
+  );
+}
+
+function FusionStatus({ fusion, hasSearched }: { fusion: FusionInfo | null; hasSearched: boolean }) {
+  if (!hasSearched) {
+    return null;
+  }
+  if (!fusion) {
+    return (
+      <div className="embedding-status warning">
+        <span>Fusion: metadata unavailable</span>
+      </div>
+    );
+  }
+  return (
+    <div className="embedding-status">
+      <span>
+        Fusion: {fusion.algorithm.toUpperCase()} / {fusion.version} / k={fusion.rank_constant}
+      </span>
+      <span>
+        Semantic {fusion.dense_weight.toFixed(1)} / Keyword {fusion.lexical_weight.toFixed(1)}
+      </span>
     </div>
   );
 }
@@ -2780,6 +2818,10 @@ function formatValue(value: unknown) {
 
 function formatScore(value: number) {
   return Number.isFinite(value) ? value.toFixed(3) : "0.000";
+}
+
+function formatRRFScore(value: number) {
+  return Number.isFinite(value) ? value.toFixed(6) : "0.000000";
 }
 
 function formatPercent(value: number) {

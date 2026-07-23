@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getRunReplay, getRunUsage } from "./api.ts";
+import { getRunReplay, getRunUsage, searchRAG } from "./api.ts";
 
 function replayPayload(overrides = {}) {
   return {
@@ -89,4 +89,21 @@ test("run usage client calls the dedicated endpoint", async (t) => {
   assert.equal(ledger.budget.max_tool_calls, 4);
   assert.equal(ledger.totals.tool_calls, 1);
   assert.equal(ledger.totals.open_reservations, 0);
+});
+
+test("RAG search preserves fusion and no-match metadata", async (t) => {
+  mockFetch(t, {
+    items: [],
+    embedding: { provider: "local", model: "test", dimensions: 3, estimated: true },
+    fusion: { algorithm: "rrf", version: "rrf-v1", rank_constant: 60, dense_weight: 1, lexical_weight: 1 },
+    no_match: true,
+    reason: "No confident match found."
+  });
+
+  const response = await searchRAG({ query: "AUTH-7F31" });
+
+  assert.equal(response.fusion?.algorithm, "rrf");
+  assert.equal(response.fusion?.rank_constant, 60);
+  assert.equal(response.no_match, true);
+  assert.equal(response.reason, "No confident match found.");
 });

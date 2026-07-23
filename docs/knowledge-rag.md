@@ -28,9 +28,10 @@ HTTP search, Single-Agent, Multi-Agent, and Autonomous runs use the same
    requested workspace and metadata filters.
 3. Merge candidates by chunk ID while preserving `vector_rank`,
    `lexical_rank`, and `lexical_score` provenance.
-4. Apply the existing evidence-aware reranker, metadata and recency signals,
+4. Fuse the two recall rankings with equal-weight Reciprocal Rank Fusion (RRF).
+5. Apply the existing evidence-aware reranker, metadata and recency signals,
    and document diversity control.
-5. Remove low-confidence results with the relevance gate and return the
+6. Remove low-confidence results with the relevance gate and return the
    requested top K.
 
 Dense recall uses cosine similarity against document chunk embeddings. Lexical
@@ -41,9 +42,29 @@ query-term coverage across content and selected metadata. Postgres uses exact
 substring matching plus `simple`-configuration full-text search over generated
 `tsvector` columns and GIN indexes.
 
-This stage does not implement Reciprocal Rank Fusion (RRF). Dense and lexical
-candidates are deduplicated, then ordered by the shared heuristic reranker. RRF
-is a separate planned change.
+RRF uses the standard rank constant `k = 60` and equal weights:
+
+```text
+rrf_score = sum(1 / (60 + rank_in_recall_path))
+```
+
+A missing recall path contributes zero. Candidates are sorted by `rrf_score` to
+produce `fusion_rank`; deterministic chunk-ID ordering breaks exact ties. Raw
+dense and lexical scores are retained for observability but are not compared
+across recall paths. The downstream `rerank_score` starts from a normalized RRF
+score and then applies the existing lexical, metadata, evidence, and diversity
+signals.
+
+Search and evaluation responses include a top-level `fusion` object containing
+the algorithm, version, rank constant, and source weights. Retrieval trace
+events record the same object. The Knowledge and Replay interfaces display this
+metadata and retain six decimal places for raw RRF scores so adjacent source
+ranks remain distinguishable during manual verification.
+
+The UI labels the dense/vector path as **Semantic** and the lexical path as
+**Keyword**. These user-facing names map to the existing `vector_rank`,
+`lexical_rank`, `dense_weight`, and `lexical_weight` API fields; the wire
+contract remains unchanged.
 
 ## Search Semantics
 
@@ -54,6 +75,8 @@ is a separate planned change.
   that did not pass dense recall.
 - `lexical_score` is the lexical recall score. `lexical_boost` is a separate
   reranker feature calculated after candidate merging.
+- `rrf_score` is the raw reciprocal-rank sum and `fusion_rank` is its ordering
+  before the heuristic reranker assigns `rerank_rank`.
 - A lexical-only result has `similarity: 0` and no `vector_rank`; a dense-only
   result has no `lexical_rank` or `lexical_score`.
 - `no_match` remains true when all recalled candidates fail the relevance gate.
