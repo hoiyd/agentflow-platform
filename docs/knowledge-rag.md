@@ -55,6 +55,12 @@ across recall paths. The downstream `rerank_score` starts from a normalized RRF
 score and then applies the existing lexical, metadata, evidence, and diversity
 signals.
 
+Search and evaluation responses include a top-level `fusion` object containing
+the algorithm, version, rank constant, and source weights. Retrieval trace
+events record the same object. The Knowledge and Replay interfaces display this
+metadata and retain six decimal places for raw RRF scores so adjacent source
+ranks remain distinguishable during manual verification.
+
 ## Search Semantics
 
 - Omitting `min_similarity`, or setting it to `0`, allows lexical-only chunks

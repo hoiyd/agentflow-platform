@@ -646,9 +646,18 @@ type EmbeddingInfo struct {
 	Estimated  bool   `json:"estimated"`
 }
 
+type FusionInfo struct {
+	Algorithm     string  `json:"algorithm"`
+	Version       string  `json:"version"`
+	RankConstant  int     `json:"rank_constant"`
+	DenseWeight   float64 `json:"dense_weight"`
+	LexicalWeight float64 `json:"lexical_weight"`
+}
+
 type DocumentSearchResponse struct {
 	Items     []RetrievedDocumentChunk `json:"items"`
 	Embedding EmbeddingInfo            `json:"embedding"`
+	Fusion    FusionInfo               `json:"fusion"`
 	NoMatch   bool                     `json:"no_match,omitempty"`
 	Reason    string                   `json:"reason,omitempty"`
 }
@@ -699,4 +708,5 @@ type RAGEvaluationRunResponse struct {
 	Summary   RAGEvaluationSummary      `json:"summary"`
 	Cases     []RAGEvaluationCaseResult `json:"cases"`
 	Embedding EmbeddingInfo             `json:"embedding"`
+	Fusion    FusionInfo                `json:"fusion"`
 }

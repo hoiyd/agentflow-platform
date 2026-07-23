@@ -324,9 +324,18 @@ export type EmbeddingInfo = {
   estimated: boolean;
 };
 
+export type FusionInfo = {
+  algorithm: string;
+  version: string;
+  rank_constant: number;
+  dense_weight: number;
+  lexical_weight: number;
+};
+
 export type DocumentSearchResponse = {
   items: RetrievedDocumentChunk[];
   embedding?: EmbeddingInfo;
+  fusion?: FusionInfo;
   no_match?: boolean;
   reason?: string;
 };
@@ -365,6 +374,7 @@ export type RAGEvaluationRunResponse = {
     items: RetrievedDocumentChunk[];
   }>;
   embedding?: EmbeddingInfo;
+  fusion?: FusionInfo;
 };
 
 export type DocumentDetail = {
@@ -811,7 +821,10 @@ export async function searchRAG(input: {
   const payload = data as Partial<DocumentSearchResponse>;
   return {
     items: Array.isArray(payload.items) ? payload.items : [],
-    embedding: payload.embedding
+    embedding: payload.embedding,
+    fusion: payload.fusion,
+    no_match: payload.no_match,
+    reason: payload.reason
   };
 }
 

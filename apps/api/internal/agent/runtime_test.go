@@ -104,6 +104,10 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		if _, ok := event.Payload["retrieved_chunks"]; !ok {
 			t.Fatal("expected retrieved chunks in retrieval payload")
 		}
+		fusion, ok := event.Payload["fusion"].(domain.FusionInfo)
+		if !ok || fusion.Algorithm != "rrf" || fusion.RankConstant != 60 {
+			t.Fatalf("expected active fusion configuration in retrieval trace, got %#v", event.Payload["fusion"])
+		}
 		retrieved, ok := event.Payload["retrieved_chunks"].([]map[string]any)
 		if !ok || len(retrieved) == 0 || retrieved[0]["lexical_rank"] == nil || retrieved[0]["rrf_score"] == nil || retrieved[0]["fusion_rank"] == nil || retrieved[0]["rerank_rank"] == nil || retrieved[0]["confidence"] == nil {
 			t.Fatalf("expected shared pipeline ranks in retrieval trace, got %#v", event.Payload["retrieved_chunks"])

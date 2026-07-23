@@ -6,13 +6,29 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-const rrfRankConstant = 60
+const (
+	rrfAlgorithm     = "rrf"
+	rrfVersion       = "rrf-v1"
+	rrfRankConstant  = 60
+	rrfDenseWeight   = 1.0
+	rrfLexicalWeight = 1.0
+)
+
+func RRFInfo() domain.FusionInfo {
+	return domain.FusionInfo{
+		Algorithm:     rrfAlgorithm,
+		Version:       rrfVersion,
+		RankConstant:  rrfRankConstant,
+		DenseWeight:   rrfDenseWeight,
+		LexicalWeight: rrfLexicalWeight,
+	}
+}
 
 // ReciprocalRankFusion combines independent recall rankings without comparing
 // provider-specific dense and lexical scores.
 func ReciprocalRankFusion(items []domain.RetrievedDocumentChunk) []domain.RetrievedDocumentChunk {
 	for index := range items {
-		items[index].RRFScore = reciprocalRank(items[index].VectorRank) + reciprocalRank(items[index].LexicalRank)
+		items[index].RRFScore = rrfDenseWeight*reciprocalRank(items[index].VectorRank) + rrfLexicalWeight*reciprocalRank(items[index].LexicalRank)
 	}
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].RRFScore == items[j].RRFScore {
@@ -37,7 +53,7 @@ func normalizedRRFScore(score float64) float64 {
 	if score <= 0 {
 		return 0
 	}
-	maximum := 2.0 / float64(rrfRankConstant+1)
+	maximum := (rrfDenseWeight + rrfLexicalWeight) / float64(rrfRankConstant+1)
 	if score >= maximum {
 		return 1
 	}

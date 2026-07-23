@@ -73,6 +73,13 @@ Example RAG search response:
     "model": "text-embedding-3-large",
     "dimensions": 1536,
     "estimated": false
+  },
+  "fusion": {
+    "algorithm": "rrf",
+    "version": "rrf-v1",
+    "rank_constant": 60,
+    "dense_weight": 1,
+    "lexical_weight": 1
   }
 }
 ```
@@ -88,6 +95,11 @@ an absent rank contributes zero. `fusion_rank` is the ordering immediately
 after RRF, while `rerank_rank` is the final ordering after evidence, metadata,
 lexical, and diversity signals. The adapter-level `score` remains available for
 diagnostics but is not compared across dense and lexical recall paths.
+
+The top-level `fusion` object reports the exact algorithm version, rank
+constant, and source weights used for the response. The same metadata is
+returned by RAG evaluation and recorded in Agent retrieval traces so UI and
+offline checks can reproduce the score without copying server constants.
 
 By default, lexical recall may add chunks that are absent from dense Top-K.
 Passing a positive `min_similarity` keeps vector-threshold behavior and excludes

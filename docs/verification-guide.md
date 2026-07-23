@@ -37,7 +37,9 @@ RAG manual flow:
    excluded while dense hits can still carry lexical fields.
 10. Inspect a candidate returned by both recall paths and confirm its
     `rrf_score` equals `1 / (60 + vector_rank) + 1 / (60 + lexical_rank)`.
-11. Delete the document and confirm it disappears from list/search.
+11. Confirm the Knowledge page shows `RRF / rrf-v1 / k=60`, equal Dense and
+    Lexical weights, and enough score precision to reproduce the API value.
+12. Delete the document and confirm it disappears from list/search.
 
 Postgres lexical integration test (use only a disposable database):
 
@@ -51,7 +53,7 @@ Demo replay flow:
 1. Add or upload a knowledge document with a unique phrase.
 2. Ask a chat question that should use that phrase. In Single Agent mode, optionally switch Executor from Native to LangChainGo.
 3. Open the run replay page from the active run link.
-4. Confirm the Retrieved context panel shows retrieval event count, memory count, chunk count, embedding provider/model/dimensions, and executor/framework.
+4. Confirm the Retrieved context panel shows retrieval event count, memory count, chunk count, embedding provider/model/dimensions, executor/framework, and RRF version/parameters.
 5. Select a `retrieval` or `llm_start` event.
 6. Confirm retrieved memories and knowledge chunks are visible above the raw JSON payload.
 7. For LangChainGo runs, confirm event detail or raw payload includes `executor: "langchaingo"`, `framework: "langchaingo"`, and `framework_path: "chains.LLMChain"`.

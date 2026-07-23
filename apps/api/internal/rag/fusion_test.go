@@ -30,6 +30,13 @@ func TestReciprocalRankFusionCombinesIndependentRankings(t *testing.T) {
 	}
 }
 
+func TestRRFInfoDescribesTheActiveFusionConfiguration(t *testing.T) {
+	info := RRFInfo()
+	if info.Algorithm != "rrf" || info.Version != "rrf-v1" || info.RankConstant != 60 || info.DenseWeight != 1 || info.LexicalWeight != 1 {
+		t.Fatalf("unexpected RRF metadata: %#v", info)
+	}
+}
+
 func TestReciprocalRankFusionIgnoresRawRecallScores(t *testing.T) {
 	items := []domain.RetrievedDocumentChunk{
 		{Chunk: domain.DocumentChunk{ID: "rank-two"}, VectorRank: 2, Score: 100},

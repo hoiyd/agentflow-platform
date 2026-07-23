@@ -85,6 +85,9 @@ func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
 	if response.Items[0].RRFScore <= 0 {
 		t.Fatalf("expected an RRF score, got %#v", response.Items[0])
 	}
+	if response.Fusion != RRFInfo() {
+		t.Fatalf("expected active fusion metadata, got %#v", response.Fusion)
+	}
 	if response.Items[0].Confidence == "" || response.Items[0].Confidence == "low" {
 		t.Fatalf("expected relevant result to pass the gate, got %#v", response.Items[0])
 	}

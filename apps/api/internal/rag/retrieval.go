@@ -87,7 +87,8 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 		embedding.Dimensions = len(embedding.Vector)
 	}
 	response := domain.DocumentSearchResponse{
-		Items: items,
+		Items:  items,
+		Fusion: RRFInfo(),
 		Embedding: domain.EmbeddingInfo{
 			Provider:   embedding.Provider,
 			Model:      embedding.Model,

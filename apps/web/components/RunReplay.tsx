@@ -39,6 +39,14 @@ type RetrievedChunkPayload = {
   metadata?: Record<string, unknown>;
 };
 
+type FusionPayload = {
+  algorithm?: string;
+  version?: string;
+  rank_constant?: number;
+  dense_weight?: number;
+  lexical_weight?: number;
+};
+
 export function RunReplay({ runId }: Props) {
   const router = useRouter();
   const [replay, setReplay] = useState<RunReplayData | null>(null);
@@ -377,6 +385,7 @@ function EventDetail({ event }: { event: RunEvent }) {
   const isEstimated = payload.token_usage_estimated === true || payload.usage_estimated === true;
   const memories = retrievedMemories(payload);
   const chunks = retrievedChunks(payload);
+  const fusion = fusionPayload(payload.fusion);
   return (
     <div className="event-detail">
       <div className="detail-kv">
@@ -421,6 +430,12 @@ function EventDetail({ event }: { event: RunEvent }) {
         <div className="detail-kv">
           <span>Knowledge</span>
           <strong>{payload.retrieval_enabled === false ? "Disabled" : "Enabled"}</strong>
+        </div>
+      ) : null}
+      {fusion ? (
+        <div className="detail-kv">
+          <span>Fusion</span>
+          <strong>{fusionLabel(fusion)}</strong>
         </div>
       ) : null}
       {Array.isArray(payload.configured_tools) ? (
@@ -476,6 +491,10 @@ function RetrievalOverview({ summary }: { summary: ReturnType<typeof buildRetrie
         <span>Executor</span>
         <strong>{summary.executorLabel}</strong>
       </div>
+      <div className="retrieval-model">
+        <span>Fusion</span>
+        <strong>{summary.fusionLabel}</strong>
+      </div>
     </section>
   );
 }
@@ -521,7 +540,7 @@ function RetrievedContext({ memories, chunks }: { memories: RetrievedMemoryPaylo
                     chunk.lexical_rank ? `lexical #${chunk.lexical_rank}` : "",
                     chunk.fusion_rank ? `fusion #${chunk.fusion_rank}` : "",
                     chunk.rerank_rank ? `rerank #${chunk.rerank_rank}` : "",
-                    chunk.rrf_score ? `RRF ${chunk.rrf_score.toFixed(4)}` : "",
+                    chunk.rrf_score ? `RRF ${chunk.rrf_score.toFixed(6)}` : "",
                     chunk.lexical_boost ? `lexical +${chunk.lexical_boost.toFixed(3)}` : "",
                   ]
                     .filter(Boolean)
@@ -550,13 +569,33 @@ function buildRetrievalSummary(events: RunEvent[]) {
   const dimensions = numberPayload(firstPayload, "embedding_dimensions");
   const executor = firstNonEmpty(events.map((event) => stringPayload(event.payload, "executor")));
   const framework = firstNonEmpty(events.map((event) => stringPayload(event.payload, "framework")));
+  const fusion = fusionPayload(firstPayload.fusion);
   return {
     eventCount: retrievalEvents.length,
     memoryCount,
     chunkCount,
     embeddingLabel: provider || model ? [provider, model, dimensions ? `${dimensions}d` : ""].filter(Boolean).join(" / ") : "not recorded",
-    executorLabel: executor || framework ? [executor, framework].filter(Boolean).join(" / ") : "not recorded"
+    executorLabel: executor || framework ? [executor, framework].filter(Boolean).join(" / ") : "not recorded",
+    fusionLabel: fusion ? fusionLabel(fusion) : "not recorded"
   };
+}
+
+function fusionPayload(value: unknown): FusionPayload | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as FusionPayload;
+}
+
+function fusionLabel(fusion: FusionPayload) {
+  const algorithm = fusion.algorithm?.toUpperCase() || "RRF";
+  const version = fusion.version || "unversioned";
+  const rankConstant = typeof fusion.rank_constant === "number" ? `k=${fusion.rank_constant}` : "k=?";
+  const weights =
+    typeof fusion.dense_weight === "number" && typeof fusion.lexical_weight === "number"
+      ? `dense ${fusion.dense_weight.toFixed(1)} / lexical ${fusion.lexical_weight.toFixed(1)}`
+      : "weights not recorded";
+  return `${algorithm} / ${version} / ${rankConstant} / ${weights}`;
 }
 
 function retrievedMemories(payload: Record<string, unknown>): RetrievedMemoryPayload[] {
