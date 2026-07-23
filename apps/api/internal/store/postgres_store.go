@@ -44,6 +44,10 @@ func NewPostgresStore(databaseURL string) (*PostgresStore, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := store.validateSchema(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if err := store.seedDefaultAgents(ctx); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -1022,7 +1026,7 @@ type usageQueryer interface {
 func listRunUsageEntries(queryer usageQueryer, runID string) ([]domain.RunUsageEntry, error) {
 	rows, err := queryer.Query(`
 		SELECT id, run_id, operation_id, COALESCE(stage_id,''), COALESCE(turn_id,''),
-			kind, purpose, model, tool_name, model_calls, tool_calls, prompt_tokens,
+			kind, purpose, COALESCE(model,''), COALESCE(tool_name,''), model_calls, tool_calls, prompt_tokens,
 			completion_tokens, total_tokens, estimated_cost_micros, estimated, timestamp
 		FROM run_usage_entries WHERE run_id = $1 ORDER BY timestamp, id`, runID)
 	if err != nil {
@@ -1728,6 +1732,80 @@ func (s *PostgresStore) migrate(ctx context.Context) error {
 	return nil
 }
 
+type postgresColumnRequirement struct {
+	Table   string
+	Column  string
+	UDTName string
+	NotNull bool
+}
+
+var postgresRequiredColumns = []postgresColumnRequirement{
+	{Table: "conversations", Column: "workspace_id"},
+	{Table: "messages", Column: "workspace_id"},
+	{Table: "agents", Column: "memory_enabled", NotNull: true},
+	{Table: "agents", Column: "retrieval_enabled", NotNull: true},
+	{Table: "agents", Column: "executor", NotNull: true},
+	{Table: "agents", Column: "deleted_at"},
+	{Table: "runs", Column: "workspace_id"},
+	{Table: "runs", Column: "heartbeat_at"},
+	{Table: "runs", Column: "runtime_snapshot"},
+	{Table: "runs", Column: "completion_contract"},
+	{Table: "runs", Column: "verification_status", NotNull: true},
+	{Table: "runs", Column: "execution_started_at"},
+	{Table: "runs", Column: "active_runtime_ms", NotNull: true},
+	{Table: "verification_evidence", Column: "details", UDTName: "jsonb", NotNull: true},
+	{Table: "memory_candidates", Column: "confidence", UDTName: "float8", NotNull: true},
+	{Table: "memory_embeddings", Column: "embedding", UDTName: "vector", NotNull: true},
+	{Table: "documents", Column: "workspace_id"},
+	{Table: "documents", Column: "lexical_vector", UDTName: "tsvector"},
+	{Table: "document_chunks", Column: "lexical_vector", UDTName: "tsvector"},
+	{Table: "run_usage_entries", Column: "operation_id", UDTName: "text", NotNull: true},
+	{Table: "run_usage_entries", Column: "purpose", UDTName: "text", NotNull: true},
+	{Table: "run_usage_entries", Column: "model", UDTName: "text", NotNull: true},
+	{Table: "run_usage_entries", Column: "tool_name", UDTName: "text", NotNull: true},
+}
+
+func (s *PostgresStore) validateSchema(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT table_name, column_name, udt_name, is_nullable
+		FROM information_schema.columns
+		WHERE table_schema = current_schema()`)
+	if err != nil {
+		return fmt.Errorf("inspect postgres schema: %w", err)
+	}
+	defer rows.Close()
+	type columnState struct {
+		UDTName  string
+		Nullable string
+	}
+	columns := map[string]columnState{}
+	for rows.Next() {
+		var table, column string
+		var state columnState
+		if err := rows.Scan(&table, &column, &state.UDTName, &state.Nullable); err != nil {
+			return fmt.Errorf("scan postgres schema: %w", err)
+		}
+		columns[table+"."+column] = state
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("inspect postgres schema: %w", err)
+	}
+	for _, requirement := range postgresRequiredColumns {
+		key := requirement.Table + "." + requirement.Column
+		state, ok := columns[key]
+		if !ok {
+			return fmt.Errorf("postgres schema is missing required column %s.%s", requirement.Table, requirement.Column)
+		}
+		if requirement.UDTName != "" && state.UDTName != requirement.UDTName {
+			return fmt.Errorf("postgres column %s.%s has type %s, want %s", requirement.Table, requirement.Column, state.UDTName, requirement.UDTName)
+		}
+		if requirement.NotNull && state.Nullable != "NO" {
+			return fmt.Errorf("postgres column %s.%s must be NOT NULL", requirement.Table, requirement.Column)
+		}
+	}
+	return nil
+}
+
 func (s *PostgresStore) seedDefaultAgents(ctx context.Context) error {
 	var count int
 	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM agents`).Scan(&count); err != nil {
@@ -2366,6 +2444,7 @@ var postgresMigrations = []string{
 		confidence double precision NOT NULL DEFAULT 1,
 		created_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE memory_candidates ADD COLUMN IF NOT EXISTS confidence double precision NOT NULL DEFAULT 1`,
 	`CREATE TABLE IF NOT EXISTS memory_embeddings (
 		memory_id text PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
 		provider text NOT NULL,
@@ -2374,6 +2453,20 @@ var postgresMigrations = []string{
 		embedding vector(1536) NOT NULL,
 		created_at timestamptz NOT NULL
 	)`,
+	`DO $$
+	BEGIN
+		IF EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = current_schema()
+				AND table_name = 'memory_embeddings'
+				AND column_name = 'embedding'
+				AND udt_name <> 'vector'
+		) THEN
+			ALTER TABLE memory_embeddings
+				ALTER COLUMN embedding TYPE vector(1536)
+				USING embedding::vector(1536);
+		END IF;
+	END $$`,
 	`CREATE TABLE IF NOT EXISTS documents (
 		id text PRIMARY KEY,
 		workspace_id text,
@@ -2439,6 +2532,14 @@ var postgresMigrations = []string{
 	`ALTER TABLE run_usage_entries ADD COLUMN IF NOT EXISTS purpose text`,
 	`UPDATE run_usage_entries SET purpose = 'primary' WHERE purpose IS NULL OR BTRIM(purpose) = ''`,
 	`ALTER TABLE run_usage_entries ALTER COLUMN purpose SET NOT NULL`,
+	`ALTER TABLE run_usage_entries ADD COLUMN IF NOT EXISTS model text`,
+	`UPDATE run_usage_entries SET model = '' WHERE model IS NULL`,
+	`ALTER TABLE run_usage_entries ALTER COLUMN model SET DEFAULT ''`,
+	`ALTER TABLE run_usage_entries ALTER COLUMN model SET NOT NULL`,
+	`ALTER TABLE run_usage_entries ADD COLUMN IF NOT EXISTS tool_name text`,
+	`UPDATE run_usage_entries SET tool_name = '' WHERE tool_name IS NULL`,
+	`ALTER TABLE run_usage_entries ALTER COLUMN tool_name SET DEFAULT ''`,
+	`ALTER TABLE run_usage_entries ALTER COLUMN tool_name SET NOT NULL`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS run_usage_entries_run_operation_kind_idx ON run_usage_entries(run_id, operation_id, kind)`,
 	`CREATE INDEX IF NOT EXISTS run_usage_entries_run_timestamp_idx ON run_usage_entries(run_id, timestamp, id)`,
 	`CREATE INDEX IF NOT EXISTS idx_context_compactions_conversation_created ON context_compactions(conversation_id, created_at ASC)`,

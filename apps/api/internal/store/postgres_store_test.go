@@ -11,7 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
+func TestPostgresMigrationsCoverKnownSchemaDrift(t *testing.T) {
 	joined := strings.Join(postgresMigrations, "\n")
 	for _, expected := range []string{
 		"ADD COLUMN IF NOT EXISTS operation_id text",
@@ -20,10 +20,51 @@ func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
 		"ADD COLUMN IF NOT EXISTS purpose text",
 		"SET purpose = 'primary'",
 		"ALTER COLUMN purpose SET NOT NULL",
+		"ADD COLUMN IF NOT EXISTS model text",
+		"SET model = '' WHERE model IS NULL",
+		"ALTER COLUMN model SET NOT NULL",
+		"ADD COLUMN IF NOT EXISTS tool_name text",
+		"SET tool_name = '' WHERE tool_name IS NULL",
+		"ALTER COLUMN tool_name SET NOT NULL",
 		"run_usage_entries_run_operation_kind_idx",
+		"ADD COLUMN IF NOT EXISTS confidence double precision NOT NULL DEFAULT 1",
+		"ALTER COLUMN embedding TYPE vector(1536)",
+		"USING embedding::vector(1536)",
 	} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("missing legacy run usage migration step %q", expected)
+		}
+	}
+}
+
+func TestPostgresSchemaValidationCoversHistoricalAdditions(t *testing.T) {
+	required := map[string]bool{}
+	for _, requirement := range postgresRequiredColumns {
+		required[requirement.Table+"."+requirement.Column] = true
+	}
+	for _, expected := range []string{
+		"agents.memory_enabled",
+		"agents.retrieval_enabled",
+		"agents.executor",
+		"agents.deleted_at",
+		"runs.heartbeat_at",
+		"runs.runtime_snapshot",
+		"runs.completion_contract",
+		"runs.verification_status",
+		"runs.execution_started_at",
+		"runs.active_runtime_ms",
+		"verification_evidence.details",
+		"memory_candidates.confidence",
+		"memory_embeddings.embedding",
+		"documents.lexical_vector",
+		"document_chunks.lexical_vector",
+		"run_usage_entries.operation_id",
+		"run_usage_entries.purpose",
+		"run_usage_entries.model",
+		"run_usage_entries.tool_name",
+	} {
+		if !required[expected] {
+			t.Fatalf("schema validation is missing historical column %s", expected)
 		}
 	}
 }
