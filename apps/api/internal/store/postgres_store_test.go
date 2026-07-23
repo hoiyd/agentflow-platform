@@ -2,6 +2,7 @@ package store
 
 import (
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -9,6 +10,23 @@ import (
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
 )
+
+func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"ADD COLUMN IF NOT EXISTS operation_id text",
+		"SET operation_id = id",
+		"ALTER COLUMN operation_id SET NOT NULL",
+		"ADD COLUMN IF NOT EXISTS purpose text",
+		"SET purpose = 'primary'",
+		"ALTER COLUMN purpose SET NOT NULL",
+		"run_usage_entries_run_operation_kind_idx",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing legacy run usage migration step %q", expected)
+		}
+	}
+}
 
 func TestPostgresRunUsageReservationIsAtomic(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
