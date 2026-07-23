@@ -8,14 +8,16 @@ import (
 const RAGPromptGuardPolicyVersion = "rag-prompt-guard-v1"
 
 type Conversation struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string    `json:"id"`
+	WorkspaceID string    `json:"workspace_id"`
+	Title       string    `json:"title"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type Message struct {
 	ID             string    `json:"id"`
+	WorkspaceID    string    `json:"workspace_id"`
 	ConversationID string    `json:"conversation_id"`
 	Role           string    `json:"role"`
 	Content        string    `json:"content"`
@@ -76,6 +78,7 @@ const (
 
 type Run struct {
 	ID                 string              `json:"id"`
+	WorkspaceID        string              `json:"workspace_id"`
 	AgentID            string              `json:"agent_id"`
 	ConversationID     string              `json:"conversation_id"`
 	Status             RunStatus           `json:"status"`
@@ -218,6 +221,7 @@ type CollaborationStep struct {
 }
 
 type ChatRequest struct {
+	WorkspaceID    string `json:"workspace_id"`
 	ConversationID string `json:"conversation_id"`
 	AgentID        string `json:"agent_id"`
 	Message        string `json:"message"`

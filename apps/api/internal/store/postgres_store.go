@@ -57,7 +57,7 @@ func (s *PostgresStore) Close() error {
 
 func (s *PostgresStore) ListConversations() ([]domain.Conversation, error) {
 	rows, err := s.db.Query(`
-		SELECT id, title, created_at, updated_at
+		SELECT id, COALESCE(workspace_id, ''), title, created_at, updated_at
 		FROM conversations
 		ORDER BY updated_at DESC`)
 	if err != nil {
@@ -68,7 +68,28 @@ func (s *PostgresStore) ListConversations() ([]domain.Conversation, error) {
 	items := []domain.Conversation{}
 	for rows.Next() {
 		var item domain.Conversation
-		if err := rows.Scan(&item.ID, &item.Title, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.Title, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *PostgresStore) ListConversationsByWorkspace(workspaceID string) ([]domain.Conversation, error) {
+	rows, err := s.db.Query(`
+		SELECT id, workspace_id, title, created_at, updated_at
+		FROM conversations
+		WHERE workspace_id = $1
+		ORDER BY updated_at DESC`, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.Conversation{}
+	for rows.Next() {
+		var item domain.Conversation
+		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.Title, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -77,26 +98,31 @@ func (s *PostgresStore) ListConversations() ([]domain.Conversation, error) {
 }
 
 func (s *PostgresStore) CreateConversation(title string) (domain.Conversation, error) {
+	return s.CreateConversationInWorkspace("default", title)
+}
+
+func (s *PostgresStore) CreateConversationInWorkspace(workspaceID string, title string) (domain.Conversation, error) {
 	now := time.Now().UTC()
 	conversation := domain.Conversation{
-		ID:        newID("conv"),
-		Title:     normalizeTitle(title),
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          newID("conv"),
+		WorkspaceID: strings.TrimSpace(workspaceID),
+		Title:       normalizeTitle(title),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	_, err := s.db.Exec(`
-		INSERT INTO conversations (id, title, created_at, updated_at)
-		VALUES ($1, $2, $3, $4)`,
-		conversation.ID, conversation.Title, conversation.CreatedAt, conversation.UpdatedAt)
+		INSERT INTO conversations (id, workspace_id, title, created_at, updated_at)
+		VALUES ($1, NULLIF($2, ''), $3, $4, $5)`,
+		conversation.ID, conversation.WorkspaceID, conversation.Title, conversation.CreatedAt, conversation.UpdatedAt)
 	return conversation, err
 }
 
 func (s *PostgresStore) GetConversation(id string) (domain.Conversation, bool, error) {
 	var item domain.Conversation
 	err := s.db.QueryRow(`
-		SELECT id, title, created_at, updated_at
+		SELECT id, COALESCE(workspace_id, ''), title, created_at, updated_at
 		FROM conversations
-		WHERE id = $1`, id).Scan(&item.ID, &item.Title, &item.CreatedAt, &item.UpdatedAt)
+		WHERE id = $1`, id).Scan(&item.ID, &item.WorkspaceID, &item.Title, &item.CreatedAt, &item.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Conversation{}, false, nil
 	}
@@ -104,6 +130,19 @@ func (s *PostgresStore) GetConversation(id string) (domain.Conversation, bool, e
 		return domain.Conversation{}, false, err
 	}
 	return item, true, nil
+}
+
+func (s *PostgresStore) GetConversationInWorkspace(workspaceID string, id string) (domain.Conversation, bool, error) {
+	var item domain.Conversation
+	err := s.db.QueryRow(`
+		SELECT id, workspace_id, title, created_at, updated_at
+		FROM conversations
+		WHERE workspace_id = $1 AND id = $2`, workspaceID, id).
+		Scan(&item.ID, &item.WorkspaceID, &item.Title, &item.CreatedAt, &item.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Conversation{}, false, nil
+	}
+	return item, err == nil, err
 }
 
 func (s *PostgresStore) DeleteConversation(id string) error {
@@ -118,9 +157,20 @@ func (s *PostgresStore) DeleteConversation(id string) error {
 	return nil
 }
 
+func (s *PostgresStore) DeleteConversationInWorkspace(workspaceID string, id string) error {
+	result, err := s.db.Exec(`DELETE FROM conversations WHERE workspace_id = $1 AND id = $2`, workspaceID, id)
+	if err != nil {
+		return err
+	}
+	if affected, rowsErr := result.RowsAffected(); rowsErr == nil && affected == 0 {
+		return ErrNotFound("conversation")
+	}
+	return nil
+}
+
 func (s *PostgresStore) ListMessages(conversationID string) ([]domain.Message, error) {
 	rows, err := s.db.Query(`
-		SELECT id, conversation_id, role, content, created_at
+		SELECT id, COALESCE(workspace_id, ''), conversation_id, role, content, created_at
 		FROM messages
 		WHERE conversation_id = $1
 		ORDER BY created_at ASC`, conversationID)
@@ -132,7 +182,29 @@ func (s *PostgresStore) ListMessages(conversationID string) ([]domain.Message, e
 	items := []domain.Message{}
 	for rows.Next() {
 		var item domain.Message
-		if err := rows.Scan(&item.ID, &item.ConversationID, &item.Role, &item.Content, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.ConversationID, &item.Role, &item.Content, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (s *PostgresStore) ListMessagesInWorkspace(workspaceID string, conversationID string) ([]domain.Message, error) {
+	rows, err := s.db.Query(`
+		SELECT m.id, m.workspace_id, m.conversation_id, m.role, m.content, m.created_at
+		FROM messages m
+		JOIN conversations c ON c.id = m.conversation_id
+		WHERE c.workspace_id = $1 AND m.workspace_id = $1 AND m.conversation_id = $2
+		ORDER BY m.created_at ASC`, workspaceID, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.Message{}
+	for rows.Next() {
+		var item domain.Message
+		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.ConversationID, &item.Role, &item.Content, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -154,17 +226,29 @@ func (s *PostgresStore) AddMessage(conversationID string, role string, content s
 		return domain.Message{}, err
 	}
 	defer tx.Rollback()
+	if err := tx.QueryRow(`SELECT COALESCE(workspace_id, '') FROM conversations WHERE id = $1`, conversationID).Scan(&message.WorkspaceID); err != nil {
+		return domain.Message{}, err
+	}
 
 	if _, err := tx.Exec(`
-		INSERT INTO messages (id, conversation_id, role, content, created_at)
-		VALUES ($1, $2, $3, $4, $5)`,
-		message.ID, message.ConversationID, message.Role, message.Content, message.CreatedAt); err != nil {
+		INSERT INTO messages (id, workspace_id, conversation_id, role, content, created_at)
+		VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6)`,
+		message.ID, message.WorkspaceID, message.ConversationID, message.Role, message.Content, message.CreatedAt); err != nil {
 		return domain.Message{}, err
 	}
 	if _, err := tx.Exec(`UPDATE conversations SET updated_at = $1 WHERE id = $2`, now, conversationID); err != nil {
 		return domain.Message{}, err
 	}
 	return message, tx.Commit()
+}
+
+func (s *PostgresStore) AddMessageInWorkspace(workspaceID string, conversationID string, role string, content string) (domain.Message, error) {
+	if _, found, err := s.GetConversationInWorkspace(workspaceID, conversationID); err != nil {
+		return domain.Message{}, err
+	} else if !found {
+		return domain.Message{}, ErrNotFound("conversation")
+	}
+	return s.AddMessage(conversationID, role, content)
 }
 
 func (s *PostgresStore) CreateContextCompaction(compaction domain.ContextCompaction) (domain.ContextCompaction, error) {
@@ -247,6 +331,20 @@ func (s *PostgresStore) UpdateConversationTitle(id string, title string) error {
 	}
 	affected, err := result.RowsAffected()
 	if err == nil && affected == 0 {
+		return ErrNotFound("conversation")
+	}
+	return nil
+}
+
+func (s *PostgresStore) UpdateConversationTitleInWorkspace(workspaceID string, id string, title string) error {
+	result, err := s.db.Exec(`
+		UPDATE conversations
+		SET title = $1, updated_at = $2
+		WHERE workspace_id = $3 AND id = $4`, normalizeTitle(title), time.Now().UTC(), workspaceID, id)
+	if err != nil {
+		return err
+	}
+	if affected, rowsErr := result.RowsAffected(); rowsErr == nil && affected == 0 {
 		return ErrNotFound("conversation")
 	}
 	return nil
@@ -403,7 +501,8 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 	} else if !ok {
 		return domain.Run{}, errors.New("agent not found")
 	}
-	if _, ok, err := s.GetConversation(conversationID); err != nil {
+	conversation, ok, err := s.GetConversation(conversationID)
+	if err != nil {
 		return domain.Run{}, err
 	} else if !ok {
 		return domain.Run{}, errors.New("conversation not found")
@@ -423,6 +522,7 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 	now := time.Now().UTC()
 	run := domain.Run{
 		ID:                 newID("run"),
+		WorkspaceID:        conversation.WorkspaceID,
 		AgentID:            agentID,
 		ConversationID:     conversationID,
 		Status:             domain.RunQueued,
@@ -436,9 +536,9 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 		run.VerificationStatus = domain.VerificationPending
 	}
 	_, err = s.db.Exec(`
-		INSERT INTO runs (id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-		run.ID, run.AgentID, run.ConversationID, string(run.Status), run.Error, snapshotJSON, contractJSON, string(run.VerificationStatus), run.StartedAt, run.ExecutionStartedAt, run.ActiveRuntimeMS, run.HeartbeatAt, run.CompletedAt, run.CreatedAt, run.UpdatedAt)
+		INSERT INTO runs (id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at)
+		VALUES ($1, NULLIF($2, ''), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		run.ID, run.WorkspaceID, run.AgentID, run.ConversationID, string(run.Status), run.Error, snapshotJSON, contractJSON, string(run.VerificationStatus), run.StartedAt, run.ExecutionStartedAt, run.ActiveRuntimeMS, run.HeartbeatAt, run.CompletedAt, run.CreatedAt, run.UpdatedAt)
 	return run, err
 }
 
@@ -452,7 +552,7 @@ func (s *PostgresStore) UpdateRunAgent(id string, agentID string) (domain.Run, e
 		UPDATE runs
 		SET agent_id = $1, updated_at = $2
 		WHERE id = $3
-		RETURNING id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
+		RETURNING id, COALESCE(workspace_id, ''), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
 		agentID, time.Now().UTC(), id)
 }
 
@@ -482,7 +582,7 @@ func (s *PostgresStore) UpdateRunStatus(id string, status domain.RunStatus, erro
 			END,
 			updated_at = $3
 		WHERE id = $4
-		RETURNING id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
+		RETURNING id, COALESCE(workspace_id, ''), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
 		string(status), strings.TrimSpace(errorMessage), now, id)
 }
 
@@ -491,7 +591,7 @@ func (s *PostgresStore) UpdateRunVerificationStatus(id string, status domain.Ver
 		UPDATE runs
 		SET verification_status = $1, updated_at = $2
 		WHERE id = $3
-		RETURNING id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
+		RETURNING id, COALESCE(workspace_id, ''), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
 		string(status), time.Now().UTC(), id)
 }
 
@@ -598,13 +698,13 @@ func (s *PostgresStore) UpdateRunHeartbeat(id string) (domain.Run, error) {
 		UPDATE runs
 		SET heartbeat_at = $1, updated_at = $1
 		WHERE id = $2
-		RETURNING id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
+		RETURNING id, COALESCE(workspace_id, ''), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
 		now, id)
 }
 
 func (s *PostgresStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error) {
 	rows, err := s.db.Query(`
-		SELECT id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, COALESCE(workspace_id, ''), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
 		WHERE status = 'running'
 			AND (heartbeat_at IS NULL OR heartbeat_at < $1)
@@ -627,7 +727,7 @@ func (s *PostgresStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, er
 
 func (s *PostgresStore) GetRun(id string) (domain.Run, bool, error) {
 	run, err := s.scanRunQuery(`
-		SELECT id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, COALESCE(workspace_id, ''), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
 		WHERE id = $1`, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -641,7 +741,7 @@ func (s *PostgresStore) GetRun(id string) (domain.Run, bool, error) {
 
 func (s *PostgresStore) ListRuns() ([]domain.Run, error) {
 	rows, err := s.db.Query(`
-		SELECT id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, COALESCE(workspace_id, ''), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
 		ORDER BY created_at DESC`)
 	if err != nil {
@@ -658,6 +758,35 @@ func (s *PostgresStore) ListRuns() ([]domain.Run, error) {
 		items = append(items, run)
 	}
 	return items, rows.Err()
+}
+
+func (s *PostgresStore) ListRunsByWorkspace(workspaceID string) ([]domain.Run, error) {
+	rows, err := s.db.Query(`
+		SELECT id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		FROM runs WHERE workspace_id = $1 ORDER BY created_at DESC`, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.Run{}
+	for rows.Next() {
+		run, scanErr := scanRun(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		items = append(items, run)
+	}
+	return items, rows.Err()
+}
+
+func (s *PostgresStore) GetRunInWorkspace(workspaceID string, id string) (domain.Run, bool, error) {
+	run, err := s.scanRunQuery(`
+		SELECT id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		FROM runs WHERE workspace_id = $1 AND id = $2`, workspaceID, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Run{}, false, nil
+	}
+	return run, err == nil, err
 }
 
 func (s *PostgresStore) CreateCollaborationStep(step domain.CollaborationStep) (domain.CollaborationStep, error) {
@@ -1323,6 +1452,30 @@ func (s *PostgresStore) ListDocuments() ([]domain.Document, error) {
 	return items, rows.Err()
 }
 
+func (s *PostgresStore) ListDocumentsByWorkspace(workspaceID string) ([]domain.Document, error) {
+	rows, err := s.db.Query(`
+		SELECT d.id, d.workspace_id, d.title, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
+			COUNT(DISTINCT c.id) AS chunk_count, COUNT(e.chunk_id) AS embedding_count
+		FROM documents d
+		LEFT JOIN document_chunks c ON c.document_id = d.id
+		LEFT JOIN document_chunk_embeddings e ON e.chunk_id = c.id
+		WHERE d.workspace_id = $1
+		GROUP BY d.id ORDER BY d.created_at DESC`, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.Document{}
+	for rows.Next() {
+		document, scanErr := scanDocument(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		items = append(items, document)
+	}
+	return items, rows.Err()
+}
+
 func (s *PostgresStore) GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error) {
 	row := s.db.QueryRow(`
 		SELECT d.id, d.workspace_id, d.title, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
@@ -1363,6 +1516,43 @@ func (s *PostgresStore) GetDocument(id string) (domain.Document, []domain.Docume
 	return document, chunks, true, rows.Err()
 }
 
+func (s *PostgresStore) GetDocumentInWorkspace(workspaceID string, id string) (domain.Document, []domain.DocumentChunk, bool, error) {
+	row := s.db.QueryRow(`
+		SELECT d.id, d.workspace_id, d.title, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
+			COUNT(DISTINCT c.id) AS chunk_count, COUNT(e.chunk_id) AS embedding_count
+		FROM documents d
+		LEFT JOIN document_chunks c ON c.document_id = d.id
+		LEFT JOIN document_chunk_embeddings e ON e.chunk_id = c.id
+		WHERE d.workspace_id = $1 AND d.id = $2
+		GROUP BY d.id`, workspaceID, strings.TrimSpace(id))
+	document, err := scanDocument(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Document{}, nil, false, nil
+	}
+	if err != nil {
+		return domain.Document{}, nil, false, err
+	}
+	rows, err := s.db.Query(`
+		SELECT c.id, c.document_id, c.chunk_index, c.content, c.token_count, c.metadata, c.created_at
+		FROM document_chunks c JOIN documents d ON d.id = c.document_id
+		WHERE d.workspace_id = $1 AND c.document_id = $2
+		ORDER BY c.chunk_index ASC`, workspaceID, document.ID)
+	if err != nil {
+		return domain.Document{}, nil, false, err
+	}
+	defer rows.Close()
+	chunks := []domain.DocumentChunk{}
+	for rows.Next() {
+		chunk, scanErr := scanDocumentChunk(rows)
+		if scanErr != nil {
+			return domain.Document{}, nil, false, scanErr
+		}
+		chunk.Document = document
+		chunks = append(chunks, chunk)
+	}
+	return document, chunks, true, rows.Err()
+}
+
 func (s *PostgresStore) DeleteDocument(id string) error {
 	result, err := s.db.Exec(`DELETE FROM documents WHERE id = $1`, strings.TrimSpace(id))
 	if err != nil {
@@ -1373,6 +1563,19 @@ func (s *PostgresStore) DeleteDocument(id string) error {
 		return err
 	}
 	if deleted == 0 {
+		return ErrNotFound("document")
+	}
+	return nil
+}
+
+func (s *PostgresStore) DeleteDocumentInWorkspace(workspaceID string, id string) error {
+	result, err := s.db.Exec(`DELETE FROM documents WHERE workspace_id = $1 AND id = $2`, workspaceID, strings.TrimSpace(id))
+	if err != nil {
+		return err
+	}
+	if deleted, rowsErr := result.RowsAffected(); rowsErr != nil {
+		return rowsErr
+	} else if deleted == 0 {
 		return ErrNotFound("document")
 	}
 	return nil
@@ -1611,7 +1814,7 @@ func scanRun(row scanner) (domain.Run, error) {
 	var snapshotJSON []byte
 	var contractJSON []byte
 	var verificationStatus string
-	if err := row.Scan(&run.ID, &run.AgentID, &run.ConversationID, &status, &errorMessage, &snapshotJSON, &contractJSON, &verificationStatus, &startedAt, &executionStartedAt, &run.ActiveRuntimeMS, &heartbeatAt, &completedAt, &run.CreatedAt, &run.UpdatedAt); err != nil {
+	if err := row.Scan(&run.ID, &run.WorkspaceID, &run.AgentID, &run.ConversationID, &status, &errorMessage, &snapshotJSON, &contractJSON, &verificationStatus, &startedAt, &executionStartedAt, &run.ActiveRuntimeMS, &heartbeatAt, &completedAt, &run.CreatedAt, &run.UpdatedAt); err != nil {
 		return domain.Run{}, err
 	}
 	if len(contractJSON) > 0 && string(contractJSON) != "null" {
@@ -1984,6 +2187,8 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS workspace_id text`,
+	`UPDATE conversations SET workspace_id = 'default' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = ''`,
 	`CREATE TABLE IF NOT EXISTS agents (
 		id text PRIMARY KEY,
 		workspace_id text,
@@ -2025,6 +2230,8 @@ var postgresMigrations = []string{
 		content text NOT NULL,
 		created_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS workspace_id text`,
+	`UPDATE messages m SET workspace_id = c.workspace_id FROM conversations c WHERE m.conversation_id = c.id AND (m.workspace_id IS NULL OR BTRIM(m.workspace_id) = '')`,
 	`CREATE TABLE IF NOT EXISTS runs (
 		id text PRIMARY KEY,
 		agent_id text NOT NULL REFERENCES agents(id),
@@ -2040,6 +2247,8 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS workspace_id text`,
+	`UPDATE runs r SET workspace_id = c.workspace_id FROM conversations c WHERE r.conversation_id = c.id AND (r.workspace_id IS NULL OR BTRIM(r.workspace_id) = '')`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS heartbeat_at timestamptz`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS runtime_snapshot jsonb`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS completion_contract jsonb`,
@@ -2177,6 +2386,8 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS workspace_id text`,
+	`UPDATE documents SET workspace_id = 'default' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = ''`,
 	`CREATE TABLE IF NOT EXISTS document_chunks (
 		id text PRIMARY KEY,
 		document_id text NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -2195,6 +2406,9 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_conversation_created ON runs(conversation_id, created_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_conversations_workspace_updated ON conversations(workspace_id, updated_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_runs_workspace_created ON runs(workspace_id, created_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_messages_workspace_conversation_created ON messages(workspace_id, conversation_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_status_created ON runs(status, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_steps_run_created ON collaboration_steps(run_id, created_at ASC)`,

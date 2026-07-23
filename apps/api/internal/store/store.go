@@ -28,6 +28,24 @@ type ConversationStore interface {
 	UpdateConversationTitle(id string, title string) error
 }
 
+// WorkspaceStore is the tenant-scoped persistence boundary used by external
+// APIs. Implementations must apply the workspace predicate in the data query,
+// rather than filtering results after they have been returned.
+type WorkspaceStore interface {
+	ListConversationsByWorkspace(workspaceID string) ([]domain.Conversation, error)
+	CreateConversationInWorkspace(workspaceID string, title string) (domain.Conversation, error)
+	GetConversationInWorkspace(workspaceID string, id string) (domain.Conversation, bool, error)
+	DeleteConversationInWorkspace(workspaceID string, id string) error
+	ListMessagesInWorkspace(workspaceID string, conversationID string) ([]domain.Message, error)
+	AddMessageInWorkspace(workspaceID string, conversationID string, role string, content string) (domain.Message, error)
+	UpdateConversationTitleInWorkspace(workspaceID string, id string, title string) error
+	ListRunsByWorkspace(workspaceID string) ([]domain.Run, error)
+	GetRunInWorkspace(workspaceID string, id string) (domain.Run, bool, error)
+	ListDocumentsByWorkspace(workspaceID string) ([]domain.Document, error)
+	GetDocumentInWorkspace(workspaceID string, id string) (domain.Document, []domain.DocumentChunk, bool, error)
+	DeleteDocumentInWorkspace(workspaceID string, id string) error
+}
+
 type AgentStore interface {
 	ListAgents() ([]domain.Agent, error)
 	CreateAgent(agent domain.Agent) (domain.Agent, error)
@@ -102,6 +120,7 @@ type DocumentStore interface {
 // on the smallest capability interface above that satisfies their use case.
 type Store interface {
 	ConversationStore
+	WorkspaceStore
 	AgentStore
 	RunStore
 	CollaborationStore

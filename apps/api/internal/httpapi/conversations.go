@@ -9,7 +9,7 @@ import (
 )
 
 func (h *Handler) listConversations(w http.ResponseWriter, r *http.Request) {
-	conversations, err := h.store.ListConversations()
+	conversations, err := h.store.ListConversationsByWorkspace(workspaceIDFromRequest(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -23,7 +23,7 @@ func (h *Handler) createConversation(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
-	conversation, err := h.store.CreateConversation(body.Title)
+	conversation, err := h.store.CreateConversationInWorkspace(workspaceIDFromRequest(r), body.Title)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -50,7 +50,8 @@ func (h *Handler) updateConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.UpdateConversationTitle(id, body.Title); err != nil {
+	workspaceID := workspaceIDFromRequest(r)
+	if err := h.store.UpdateConversationTitleInWorkspace(workspaceID, id, body.Title); err != nil {
 		if store.IsNotFound(err) {
 			writeError(w, http.StatusNotFound, "conversation not found")
 			return
@@ -58,7 +59,7 @@ func (h *Handler) updateConversation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	conversation, ok, err := h.store.GetConversation(id)
+	conversation, ok, err := h.store.GetConversationInWorkspace(workspaceID, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -78,7 +79,7 @@ func (h *Handler) deleteConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.store.DeleteConversation(id); err != nil {
+	if err := h.store.DeleteConversationInWorkspace(workspaceIDFromRequest(r), id); err != nil {
 		if store.IsNotFound(err) {
 			writeError(w, http.StatusNotFound, "conversation not found")
 			return
@@ -96,7 +97,8 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "conversation id is required")
 		return
 	}
-	if _, ok, err := h.store.GetConversation(id); err != nil {
+	workspaceID := workspaceIDFromRequest(r)
+	if _, ok, err := h.store.GetConversationInWorkspace(workspaceID, id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	} else if !ok {
@@ -104,7 +106,7 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messages, err := h.store.ListMessages(id)
+	messages, err := h.store.ListMessagesInWorkspace(workspaceID, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

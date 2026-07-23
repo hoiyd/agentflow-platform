@@ -16,6 +16,12 @@ func (h *Handler) createMemory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	workspaceID, matches := resolvePayloadWorkspace(r, memory.WorkspaceID)
+	if !matches {
+		writeError(w, http.StatusBadRequest, "workspace_id does not match request scope")
+		return
+	}
+	memory.WorkspaceID = workspaceID
 	created, err := h.memories.Create(r.Context(), memory)
 	if err != nil {
 		status := http.StatusBadRequest
@@ -34,6 +40,12 @@ func (h *Handler) searchMemories(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	workspaceID, matches := resolvePayloadWorkspace(r, search.WorkspaceID)
+	if !matches {
+		writeError(w, http.StatusBadRequest, "workspace_id does not match request scope")
+		return
+	}
+	search.WorkspaceID = workspaceID
 	items, err := h.memories.Search(r.Context(), search)
 	if err != nil {
 		status := http.StatusBadRequest

@@ -67,19 +67,45 @@ func (s *FileStore) ListConversations() ([]domain.Conversation, error) {
 	return items, nil
 }
 
+func (s *FileStore) ListConversationsByWorkspace(workspaceID string) ([]domain.Conversation, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	items := make([]domain.Conversation, 0)
+	for _, item := range s.data.Conversations {
+		if item.WorkspaceID == workspaceID {
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].UpdatedAt.After(items[j].UpdatedAt) })
+	return items, nil
+}
+
 func (s *FileStore) CreateConversation(title string) (domain.Conversation, error) {
+	return s.CreateConversationInWorkspace("default", title)
+}
+
+func (s *FileStore) CreateConversationInWorkspace(workspaceID string, title string) (domain.Conversation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	now := time.Now().UTC()
 	conversation := domain.Conversation{
-		ID:        newID("conv"),
-		Title:     normalizeTitle(title),
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          newID("conv"),
+		WorkspaceID: strings.TrimSpace(workspaceID),
+		Title:       normalizeTitle(title),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	s.data.Conversations = append(s.data.Conversations, conversation)
 	return conversation, s.saveLocked()
+}
+
+func (s *FileStore) GetConversationInWorkspace(workspaceID string, id string) (domain.Conversation, bool, error) {
+	conversation, found, err := s.GetConversation(id)
+	if err != nil || !found || conversation.WorkspaceID != workspaceID {
+		return domain.Conversation{}, false, err
+	}
+	return conversation, true, nil
 }
 
 func (s *FileStore) GetConversation(id string) (domain.Conversation, bool, error) {
@@ -181,6 +207,15 @@ func (s *FileStore) DeleteConversation(id string) error {
 	return s.saveLocked()
 }
 
+func (s *FileStore) DeleteConversationInWorkspace(workspaceID string, id string) error {
+	if _, found, err := s.GetConversationInWorkspace(workspaceID, id); err != nil {
+		return err
+	} else if !found {
+		return ErrNotFound("conversation")
+	}
+	return s.DeleteConversation(id)
+}
+
 func (s *FileStore) ListMessages(conversationID string) ([]domain.Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -197,6 +232,25 @@ func (s *FileStore) ListMessages(conversationID string) ([]domain.Message, error
 	return messages, nil
 }
 
+func (s *FileStore) ListMessagesInWorkspace(workspaceID string, conversationID string) ([]domain.Message, error) {
+	if _, found, err := s.GetConversationInWorkspace(workspaceID, conversationID); err != nil {
+		return nil, err
+	} else if !found {
+		return nil, ErrNotFound("conversation")
+	}
+	messages, err := s.ListMessages(conversationID)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]domain.Message, 0, len(messages))
+	for _, message := range messages {
+		if message.WorkspaceID == workspaceID {
+			items = append(items, message)
+		}
+	}
+	return items, nil
+}
+
 func (s *FileStore) AddMessage(conversationID string, role string, content string) (domain.Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -208,6 +262,7 @@ func (s *FileStore) AddMessage(conversationID string, role string, content strin
 	now := time.Now().UTC()
 	message := domain.Message{
 		ID:             newID("msg"),
+		WorkspaceID:    s.workspaceForConversationLocked(conversationID),
 		ConversationID: conversationID,
 		Role:           role,
 		Content:        content,
@@ -221,6 +276,15 @@ func (s *FileStore) AddMessage(conversationID string, role string, content strin
 		}
 	}
 	return message, s.saveLocked()
+}
+
+func (s *FileStore) AddMessageInWorkspace(workspaceID string, conversationID string, role string, content string) (domain.Message, error) {
+	if _, found, err := s.GetConversationInWorkspace(workspaceID, conversationID); err != nil {
+		return domain.Message{}, err
+	} else if !found {
+		return domain.Message{}, ErrNotFound("conversation")
+	}
+	return s.AddMessage(conversationID, role, content)
 }
 
 func (s *FileStore) CreateContextCompaction(compaction domain.ContextCompaction) (domain.ContextCompaction, error) {
@@ -309,6 +373,15 @@ func (s *FileStore) UpdateConversationTitle(id string, title string) error {
 		}
 	}
 	return ErrNotFound("conversation")
+}
+
+func (s *FileStore) UpdateConversationTitleInWorkspace(workspaceID string, id string, title string) error {
+	if _, found, err := s.GetConversationInWorkspace(workspaceID, id); err != nil {
+		return err
+	} else if !found {
+		return ErrNotFound("conversation")
+	}
+	return s.UpdateConversationTitle(id, title)
 }
 
 func (s *FileStore) ListAgents() ([]domain.Agent, error) {
@@ -447,6 +520,7 @@ func (s *FileStore) CreateRunWithContract(agentID string, conversationID string,
 	now := time.Now().UTC()
 	run := domain.Run{
 		ID:                 newID("run"),
+		WorkspaceID:        s.workspaceForConversationLocked(conversationID),
 		AgentID:            agentID,
 		ConversationID:     conversationID,
 		Status:             domain.RunQueued,
@@ -640,6 +714,28 @@ func (s *FileStore) ListRuns() ([]domain.Run, error) {
 		return items[i].CreatedAt.After(items[j].CreatedAt)
 	})
 	return items, nil
+}
+
+func (s *FileStore) ListRunsByWorkspace(workspaceID string) ([]domain.Run, error) {
+	runs, err := s.ListRuns()
+	if err != nil {
+		return nil, err
+	}
+	items := make([]domain.Run, 0, len(runs))
+	for _, run := range runs {
+		if run.WorkspaceID == workspaceID {
+			items = append(items, run)
+		}
+	}
+	return items, nil
+}
+
+func (s *FileStore) GetRunInWorkspace(workspaceID string, id string) (domain.Run, bool, error) {
+	run, found, err := s.GetRun(id)
+	if err != nil || !found || run.WorkspaceID != workspaceID {
+		return domain.Run{}, false, err
+	}
+	return run, true, nil
 }
 
 func (s *FileStore) CreateCollaborationStep(step domain.CollaborationStep) (domain.CollaborationStep, error) {
@@ -1185,6 +1281,20 @@ func (s *FileStore) ListDocuments() ([]domain.Document, error) {
 	return documents, nil
 }
 
+func (s *FileStore) ListDocumentsByWorkspace(workspaceID string) ([]domain.Document, error) {
+	documents, err := s.ListDocuments()
+	if err != nil {
+		return nil, err
+	}
+	items := make([]domain.Document, 0, len(documents))
+	for _, document := range documents {
+		if document.WorkspaceID == workspaceID {
+			items = append(items, document)
+		}
+	}
+	return items, nil
+}
+
 func (s *FileStore) GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1220,6 +1330,14 @@ func (s *FileStore) GetDocument(id string) (domain.Document, []domain.DocumentCh
 		if embeddingByChunkID[chunk.ID] {
 			document.EmbeddingCount++
 		}
+	}
+	return document, chunks, true, nil
+}
+
+func (s *FileStore) GetDocumentInWorkspace(workspaceID string, id string) (domain.Document, []domain.DocumentChunk, bool, error) {
+	document, chunks, found, err := s.GetDocument(id)
+	if err != nil || !found || document.WorkspaceID != workspaceID {
+		return domain.Document{}, nil, false, err
 	}
 	return document, chunks, true, nil
 }
@@ -1266,6 +1384,15 @@ func (s *FileStore) DeleteDocument(id string) error {
 	s.data.DocumentChunks = chunks
 	s.data.ChunkEmbeddings = embeddings
 	return s.saveLocked()
+}
+
+func (s *FileStore) DeleteDocumentInWorkspace(workspaceID string, id string) error {
+	if _, _, found, err := s.GetDocumentInWorkspace(workspaceID, id); err != nil {
+		return err
+	} else if !found {
+		return ErrNotFound("document")
+	}
+	return s.DeleteDocument(id)
 }
 
 func (s *FileStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
@@ -1397,12 +1524,12 @@ func (s *FileStore) load() error {
 	if err := json.Unmarshal(bytes, &s.data); err != nil {
 		return err
 	}
-	s.normalizeLoadedDataLocked()
+	workspaceMigrated := s.normalizeLoadedDataLocked()
 	if len(s.data.Agents) == 0 {
 		s.seedDefaultAgentsLocked()
 		return s.saveLocked()
 	}
-	if s.migrateDefaultAgentsLocked() {
+	if workspaceMigrated || s.migrateDefaultAgentsLocked() {
 		return s.saveLocked()
 	}
 	return nil
@@ -1423,6 +1550,15 @@ func (s *FileStore) hasConversationLocked(id string) bool {
 		}
 	}
 	return false
+}
+
+func (s *FileStore) workspaceForConversationLocked(id string) string {
+	for _, conversation := range s.data.Conversations {
+		if conversation.ID == id {
+			return conversation.WorkspaceID
+		}
+	}
+	return ""
 }
 
 func (s *FileStore) hasRunLocked(id string) bool {
@@ -1461,7 +1597,8 @@ func emptyFileData() fileData {
 	}
 }
 
-func (s *FileStore) normalizeLoadedDataLocked() {
+func (s *FileStore) normalizeLoadedDataLocked() bool {
+	migrated := false
 	if s.data.Conversations == nil {
 		s.data.Conversations = []domain.Conversation{}
 	}
@@ -1501,6 +1638,33 @@ func (s *FileStore) normalizeLoadedDataLocked() {
 	if s.data.ChunkEmbeddings == nil {
 		s.data.ChunkEmbeddings = []domain.DocumentChunkEmbedding{}
 	}
+	workspaceByConversation := make(map[string]string, len(s.data.Conversations))
+	for i := range s.data.Conversations {
+		if strings.TrimSpace(s.data.Conversations[i].WorkspaceID) == "" {
+			s.data.Conversations[i].WorkspaceID = "default"
+			migrated = true
+		}
+		workspaceByConversation[s.data.Conversations[i].ID] = s.data.Conversations[i].WorkspaceID
+	}
+	for i := range s.data.Messages {
+		if strings.TrimSpace(s.data.Messages[i].WorkspaceID) == "" {
+			s.data.Messages[i].WorkspaceID = workspaceByConversation[s.data.Messages[i].ConversationID]
+			migrated = true
+		}
+	}
+	for i := range s.data.Runs {
+		if strings.TrimSpace(s.data.Runs[i].WorkspaceID) == "" {
+			s.data.Runs[i].WorkspaceID = workspaceByConversation[s.data.Runs[i].ConversationID]
+			migrated = true
+		}
+	}
+	for i := range s.data.Documents {
+		if strings.TrimSpace(s.data.Documents[i].WorkspaceID) == "" {
+			s.data.Documents[i].WorkspaceID = "default"
+			migrated = true
+		}
+	}
+	return migrated
 }
 
 func (s *FileStore) getRunLocked(id string) (domain.Run, bool) {

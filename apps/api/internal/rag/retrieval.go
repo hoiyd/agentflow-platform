@@ -28,11 +28,20 @@ type Embedding struct {
 }
 
 type RetrievalPipeline struct {
-	store SearchStore
+	store              SearchStore
+	requireWorkspaceID bool
+}
+
+type RetrievalOptions struct {
+	RequireWorkspaceID bool
 }
 
 func NewRetrievalPipeline(store SearchStore) *RetrievalPipeline {
-	return &RetrievalPipeline{store: store}
+	return NewRetrievalPipelineWithOptions(store, RetrievalOptions{})
+}
+
+func NewRetrievalPipelineWithOptions(store SearchStore, options RetrievalOptions) *RetrievalPipeline {
+	return &RetrievalPipeline{store: store, requireWorkspaceID: options.RequireWorkspaceID}
 }
 
 func EmbedQuery(ctx context.Context, query string, embed EmbedFunc) (Embedding, error) {
@@ -62,6 +71,10 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 	}
 	if p == nil || p.store == nil {
 		return domain.DocumentSearchResponse{}, errors.New("retrieval store is required")
+	}
+	search.WorkspaceID = strings.TrimSpace(search.WorkspaceID)
+	if p.requireWorkspaceID && search.WorkspaceID == "" {
+		return domain.DocumentSearchResponse{}, errors.New("workspace_id is required for retrieval")
 	}
 
 	requestedLimit = NormalizeSearchLimit(requestedLimit)

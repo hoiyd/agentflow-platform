@@ -2,6 +2,7 @@ import type { CompletionContractInput } from "./verification";
 
 export type Conversation = {
   id: string;
+  workspace_id: string;
   title: string;
   created_at: string;
   updated_at: string;
@@ -12,6 +13,7 @@ export type Conversation = {
 
 export type Message = {
   id: string;
+  workspace_id: string;
   conversation_id: string;
   role: "user" | "assistant" | "system";
   content: string;
@@ -94,6 +96,7 @@ export type ChatExecutor = "native" | "langchaingo";
 
 export type RunInfo = {
   id: string;
+  workspace_id: string;
   agent_id: string;
   conversation_id: string;
   status:
@@ -274,7 +277,7 @@ export type EpisodeReport = {
 
 export type DocumentInfo = {
   id: string;
-  workspace_id?: string;
+  workspace_id: string;
   title: string;
   source_type: string;
   source_uri?: string;
@@ -401,6 +404,13 @@ export type DocumentDetail = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID?.trim() || "default";
+
+function workspaceFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set("X-Workspace-ID", WORKSPACE_ID);
+  return fetch(input, { ...init, headers });
+}
 
 async function readJSON<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
@@ -452,7 +462,7 @@ function normalizeRunUsageLedger(value: unknown, runId: string): RunUsageLedger 
 }
 
 export async function listConversations(): Promise<Conversation[]> {
-  const response = await fetch(`${API_BASE}/api/conversations`, { cache: "no-store" });
+  const response = await workspaceFetch(`${API_BASE}/api/conversations`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load conversations: ${response.status}`);
   }
@@ -460,7 +470,7 @@ export async function listConversations(): Promise<Conversation[]> {
 }
 
 export async function createConversation(title: string): Promise<Conversation> {
-  const response = await fetch(`${API_BASE}/api/conversations`, {
+  const response = await workspaceFetch(`${API_BASE}/api/conversations`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title })
@@ -472,7 +482,7 @@ export async function createConversation(title: string): Promise<Conversation> {
 }
 
 export async function updateConversationTitle(conversationId: string, title: string): Promise<Conversation> {
-  const response = await fetch(`${API_BASE}/api/conversations/${conversationId}`, {
+  const response = await workspaceFetch(`${API_BASE}/api/conversations/${conversationId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title })
@@ -484,7 +494,7 @@ export async function updateConversationTitle(conversationId: string, title: str
 }
 
 export async function deleteConversation(conversationId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/conversations/${conversationId}`, {
+  const response = await workspaceFetch(`${API_BASE}/api/conversations/${conversationId}`, {
     method: "DELETE"
   });
   if (!response.ok) {
@@ -493,7 +503,7 @@ export async function deleteConversation(conversationId: string): Promise<void> 
 }
 
 export async function listMessages(conversationId: string): Promise<Message[]> {
-  const response = await fetch(`${API_BASE}/api/conversations/${conversationId}/messages`, {
+  const response = await workspaceFetch(`${API_BASE}/api/conversations/${conversationId}/messages`, {
     cache: "no-store"
   });
   if (!response.ok) {
@@ -513,7 +523,7 @@ export async function streamChat(
   },
   onEvent: (event: ChatEvent) => void
 ) {
-  const response = await fetch(`${API_BASE}/api/chat`, {
+  const response = await workspaceFetch(`${API_BASE}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
@@ -531,7 +541,7 @@ export async function continueRun(
   input: { run_id: string; plan: string },
   onEvent: (event: ChatEvent) => void
 ) {
-  const response = await fetch(`${API_BASE}/api/runs/${input.run_id}/continue`, {
+  const response = await workspaceFetch(`${API_BASE}/api/runs/${input.run_id}/continue`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ plan: input.plan })
@@ -548,7 +558,7 @@ export async function resumeRun(
   input: { run_id: string; user_input: string },
   onEvent: (event: ChatEvent) => void
 ) {
-  const response = await fetch(`${API_BASE}/api/runs/${input.run_id}/resume`, {
+  const response = await workspaceFetch(`${API_BASE}/api/runs/${input.run_id}/resume`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_input: input.user_input })
@@ -562,7 +572,7 @@ export async function resumeRun(
 }
 
 export async function cancelRun(runId: string): Promise<RunInfo> {
-  const response = await fetch(`${API_BASE}/api/runs/${runId}/cancel`, {
+  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/cancel`, {
     method: "POST"
   });
   if (!response.ok) {
@@ -572,7 +582,7 @@ export async function cancelRun(runId: string): Promise<RunInfo> {
 }
 
 export async function verifyRun(runId: string): Promise<{ run: RunInfo; decision: Record<string, unknown> }> {
-  const response = await fetch(`${API_BASE}/api/runs/${runId}/verify`, { method: "POST" });
+  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/verify`, { method: "POST" });
   if (!response.ok) {
     throw new Error(`Verify request failed: ${response.status}`);
   }
@@ -637,7 +647,7 @@ function stringValue(value: unknown): string | undefined { return typeof value =
 function numberValue(value: unknown): number | undefined { return typeof value === "number" ? value : undefined; }
 
 export async function listAgents(): Promise<AgentInfo[]> {
-  const response = await fetch(`${API_BASE}/api/agents`, { cache: "no-store" });
+  const response = await workspaceFetch(`${API_BASE}/api/agents`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load agents: ${response.status}`);
   }
@@ -648,7 +658,7 @@ export async function listAgents(): Promise<AgentInfo[]> {
 export async function createAgent(
   input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
 ): Promise<AgentInfo> {
-  const response = await fetch(`${API_BASE}/api/agents`, {
+  const response = await workspaceFetch(`${API_BASE}/api/agents`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
@@ -664,7 +674,7 @@ export async function updateAgent(
   agentId: string,
   input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
 ): Promise<AgentInfo> {
-  const response = await fetch(`${API_BASE}/api/agents/${agentId}`, {
+  const response = await workspaceFetch(`${API_BASE}/api/agents/${agentId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
@@ -677,7 +687,7 @@ export async function updateAgent(
 }
 
 export async function archiveAgent(agentId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/agents/${agentId}`, {
+  const response = await workspaceFetch(`${API_BASE}/api/agents/${agentId}`, {
     method: "DELETE"
   });
   if (!response.ok) {
@@ -697,7 +707,7 @@ function normalizeAgentInfo(agent: AgentInfo): AgentInfo {
 }
 
 export async function listTools(): Promise<ToolInfo[]> {
-  const response = await fetch(`${API_BASE}/api/tools`, { cache: "no-store" });
+  const response = await workspaceFetch(`${API_BASE}/api/tools`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load tools: ${response.status}`);
   }
@@ -705,7 +715,7 @@ export async function listTools(): Promise<ToolInfo[]> {
 }
 
 export async function listRuns(): Promise<RunInfo[]> {
-  const response = await fetch(`${API_BASE}/api/runs`, { cache: "no-store" });
+  const response = await workspaceFetch(`${API_BASE}/api/runs`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load runs: ${response.status}`);
   }
@@ -713,7 +723,7 @@ export async function listRuns(): Promise<RunInfo[]> {
 }
 
 export async function listCollaborationSteps(runId: string): Promise<CollaborationStepInfo[]> {
-  const response = await fetch(`${API_BASE}/api/runs/${runId}/collaboration_steps`, {
+  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/collaboration_steps`, {
     cache: "no-store"
   });
   if (!response.ok) {
@@ -723,7 +733,7 @@ export async function listCollaborationSteps(runId: string): Promise<Collaborati
 }
 
 export async function getRunReplay(runId: string): Promise<RunReplay> {
-  const response = await fetch(`${API_BASE}/api/runs/${runId}/replay`, { cache: "no-store" });
+  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/replay`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load run replay: ${response.status}`);
   }
@@ -731,7 +741,7 @@ export async function getRunReplay(runId: string): Promise<RunReplay> {
 }
 
 export async function getRunUsage(runId: string): Promise<RunUsageLedger> {
-  const response = await fetch(`${API_BASE}/api/runs/${runId}/usage`, { cache: "no-store" });
+  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/usage`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load run usage: ${response.status}`);
   }
@@ -739,7 +749,7 @@ export async function getRunUsage(runId: string): Promise<RunUsageLedger> {
 }
 
 export async function getEpisodeReport(runId: string): Promise<EpisodeReport> {
-  const response = await fetch(`${API_BASE}/api/runs/${runId}/episode`, { cache: "no-store" });
+  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/episode`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load episode report: ${response.status}`);
   }
@@ -748,7 +758,7 @@ export async function getEpisodeReport(runId: string): Promise<EpisodeReport> {
 
 export async function setToolEnabled(name: string, enabled: boolean): Promise<ToolInfo[]> {
   const action = enabled ? "enable" : "disable";
-  const response = await fetch(`${API_BASE}/api/tools/${encodeURIComponent(name)}/${action}`, {
+  const response = await workspaceFetch(`${API_BASE}/api/tools/${encodeURIComponent(name)}/${action}`, {
     method: "POST"
   });
   if (!response.ok) {
@@ -758,7 +768,7 @@ export async function setToolEnabled(name: string, enabled: boolean): Promise<To
 }
 
 export async function listDocuments(): Promise<DocumentInfo[]> {
-  const response = await fetch(`${API_BASE}/api/documents`, { cache: "no-store" });
+  const response = await workspaceFetch(`${API_BASE}/api/documents`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load documents: ${response.status}`);
   }
@@ -770,7 +780,7 @@ export async function createDocument(input: {
   content: string;
   metadata?: Record<string, unknown>;
 }): Promise<DocumentInfo> {
-  const response = await fetch(`${API_BASE}/api/documents`, {
+  const response = await workspaceFetch(`${API_BASE}/api/documents`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
@@ -787,7 +797,7 @@ export async function uploadDocument(input: { file: File; title?: string }): Pro
   if (input.title?.trim()) {
     form.append("title", input.title.trim());
   }
-  const response = await fetch(`${API_BASE}/api/documents/upload`, {
+  const response = await workspaceFetch(`${API_BASE}/api/documents/upload`, {
     method: "POST",
     body: form
   });
@@ -798,7 +808,7 @@ export async function uploadDocument(input: { file: File; title?: string }): Pro
 }
 
 export async function getDocument(documentId: string): Promise<DocumentDetail> {
-  const response = await fetch(`${API_BASE}/api/documents/${documentId}`, { cache: "no-store" });
+  const response = await workspaceFetch(`${API_BASE}/api/documents/${documentId}`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load document: ${response.status}`);
   }
@@ -810,7 +820,7 @@ export async function getDocument(documentId: string): Promise<DocumentDetail> {
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/documents/${documentId}`, {
+  const response = await workspaceFetch(`${API_BASE}/api/documents/${documentId}`, {
     method: "DELETE"
   });
   if (!response.ok) {
@@ -824,7 +834,7 @@ export async function searchRAG(input: {
   limit?: number;
   min_similarity?: number;
 }): Promise<DocumentSearchResponse> {
-  const response = await fetch(`${API_BASE}/api/rag/search`, {
+  const response = await workspaceFetch(`${API_BASE}/api/rag/search`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
@@ -853,7 +863,7 @@ export async function runRAGEvaluation(input: {
   min_similarity?: number;
   metadata?: Record<string, string>;
 }): Promise<RAGEvaluationRunResponse> {
-  const response = await fetch(`${API_BASE}/api/rag/evaluations/run`, {
+  const response = await workspaceFetch(`${API_BASE}/api/rag/evaluations/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
