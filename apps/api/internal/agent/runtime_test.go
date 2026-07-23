@@ -33,8 +33,9 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		t.Fatalf("embed memory: %v", err)
 	}
 	if _, err := fileStore.CreateMemory(domain.Memory{
-		Kind:    "note",
-		Content: memoryText,
+		WorkspaceID: conversation.WorkspaceID,
+		Kind:        "note",
+		Content:     memoryText,
 	}, domain.MemoryEmbedding{
 		Provider:   memoryEmbedding.Provider,
 		Model:      memoryEmbedding.Model,
@@ -50,10 +51,11 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		t.Fatalf("embed chunk: %v", err)
 	}
 	if _, err := fileStore.CreateDocument(domain.Document{
-		Title:      "Demo Knowledge",
-		SourceType: "text",
-		Content:    chunkText,
-		Metadata:   map[string]any{"format": "text"},
+		WorkspaceID: conversation.WorkspaceID,
+		Title:       "Demo Knowledge",
+		SourceType:  "text",
+		Content:     chunkText,
+		Metadata:    map[string]any{"format": "text"},
 	}, []domain.DocumentChunk{{
 		Content:    chunkText,
 		TokenCount: 9,

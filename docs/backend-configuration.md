@@ -7,6 +7,9 @@ Common environment variables:
 
 ```bash
 PORT=8080
+APP_ENV=development
+DEFAULT_WORKSPACE_ID=default
+REQUIRE_WORKSPACE_ID=false
 STORE_DRIVER=file
 DATA_PATH=.data/agentflow.json
 TOOL_CONFIG_PATH=.data/tools.json
@@ -46,6 +49,21 @@ MODEL_OUTPUT_COST_PER_MILLION_TOKENS_USD=0
 ROUTER_MODE=auto
 ALLOWED_ORIGINS=http://localhost:3000
 ```
+
+## Workspace Isolation
+
+API clients send the active workspace in `X-Workspace-ID`. The web client uses
+`NEXT_PUBLIC_WORKSPACE_ID`, defaulting to `default` for local development.
+Conversation, Message, Run, Document, Memory Search, and RAG Search persist or
+derive the same workspace ID; scoped Store queries apply the predicate in the
+database query.
+
+`APP_ENV=production` always enables required workspace mode, even when
+`REQUIRE_WORKSPACE_ID=false`. Missing workspace context returns `400` before an
+API handler runs, and the production Retrieval Pipeline independently rejects
+an empty workspace. `REQUIRE_WORKSPACE_ID=true` enables the same behavior in
+other environments. Existing unscoped persisted records are migrated to
+`DEFAULT_WORKSPACE_ID` semantics (`default` in the bundled stores).
 
 Concurrency settings control different layers:
 

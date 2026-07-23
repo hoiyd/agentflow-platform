@@ -853,6 +853,63 @@ func TestFileStoreLexicalRecallFindsExactIdentifierWithFilters(t *testing.T) {
 	}
 }
 
+func TestFileStoreWorkspaceIsolationAcrossConversationRunAndDocument(t *testing.T) {
+	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversationA, err := fileStore.CreateConversationInWorkspace("workspace-a", "Workspace A")
+	if err != nil {
+		t.Fatalf("create conversation A: %v", err)
+	}
+	if _, err := fileStore.CreateConversationInWorkspace("workspace-b", "Workspace B"); err != nil {
+		t.Fatalf("create conversation B: %v", err)
+	}
+	if _, err := fileStore.AddMessageInWorkspace("workspace-a", conversationA.ID, "user", "private A"); err != nil {
+		t.Fatalf("add message A: %v", err)
+	}
+	if _, err := fileStore.AddMessageInWorkspace("workspace-b", conversationA.ID, "user", "cross tenant"); !IsNotFound(err) {
+		t.Fatalf("expected cross-workspace message write to be hidden, got %v", err)
+	}
+	run, err := fileStore.CreateRun("agent_planner", conversationA.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if run.WorkspaceID != "workspace-a" {
+		t.Fatalf("expected run to inherit workspace-a, got %q", run.WorkspaceID)
+	}
+	if _, found, err := fileStore.GetRunInWorkspace("workspace-b", run.ID); err != nil || found {
+		t.Fatalf("expected run to be invisible from workspace-b, found=%v err=%v", found, err)
+	}
+
+	createDocument := func(workspaceID, title string) {
+		t.Helper()
+		_, createErr := fileStore.CreateDocument(domain.Document{
+			WorkspaceID: workspaceID, Title: title, SourceType: "text", Content: title,
+		}, []domain.DocumentChunk{{Content: title}}, []domain.DocumentChunkEmbedding{{
+			Provider: "test", Model: "test", Dimensions: 2, Embedding: []float64{1, 0},
+		}})
+		if createErr != nil {
+			t.Fatalf("create document: %v", createErr)
+		}
+	}
+	createDocument("workspace-a", "private alpha term")
+	createDocument("workspace-b", "private beta term")
+	results, err := fileStore.SearchDocumentChunksLexical(domain.DocumentSearch{
+		WorkspaceID: "workspace-a", Query: "private", LexicalTerms: []string{"private"}, Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("lexical search: %v", err)
+	}
+	if len(results) != 1 || results[0].Document.WorkspaceID != "workspace-a" {
+		t.Fatalf("expected only workspace-a document, got %#v", results)
+	}
+	conversations, err := fileStore.ListConversationsByWorkspace("workspace-a")
+	if err != nil || len(conversations) != 1 || conversations[0].ID != conversationA.ID {
+		t.Fatalf("unexpected workspace-a conversations: %#v err=%v", conversations, err)
+	}
+}
+
 func TestFileStoreCreateAgent(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

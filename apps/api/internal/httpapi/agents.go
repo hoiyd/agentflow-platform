@@ -187,7 +187,7 @@ func applyAgentConfigRequest(agent *domain.Agent, req agentConfigRequest) {
 }
 
 func (h *Handler) listRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := h.store.ListRuns()
+	runs, err := h.store.ListRunsByWorkspace(workspaceIDFromRequest(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -205,7 +205,7 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	run, ok, err := h.store.GetRun(id)
+	run, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -223,6 +223,13 @@ func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 	id = strings.TrimSpace(strings.TrimSuffix(id, "/cancel"))
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "run id is required")
+		return
+	}
+	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	} else if !ok {
+		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
 
@@ -247,7 +254,7 @@ func (h *Handler) listCollaborationSteps(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if _, ok, err := h.store.GetRun(id); err != nil {
+	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	} else if !ok {
@@ -270,6 +277,13 @@ func (h *Handler) getRunReplay(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
+	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	} else if !ok {
+		writeError(w, http.StatusNotFound, "run not found")
+		return
+	}
 
 	replay, ok, err := h.store.GetRunReplay(id)
 	if err != nil {
@@ -288,6 +302,13 @@ func (h *Handler) getRunUsage(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/runs/"), "/usage"))
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "run id is required")
+		return
+	}
+	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	} else if !ok {
+		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
 	ledger, ok, err := h.store.GetRunUsageLedger(id)

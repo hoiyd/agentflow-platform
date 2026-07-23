@@ -10,6 +10,9 @@ import (
 )
 
 type Config struct {
+	Environment         string
+	DefaultWorkspaceID  string
+	RequireWorkspaceID  bool
 	Port                string
 	OpenAIAPIKey        string
 	OpenAIBaseURL       string
@@ -111,8 +114,12 @@ type Config struct {
 
 func Load() Config {
 	loadDotEnv(".env")
+	environment := normalizeEnvironment(getEnv("APP_ENV", "development"))
 
 	return Config{
+		Environment:                       environment,
+		DefaultWorkspaceID:                strings.TrimSpace(getEnv("DEFAULT_WORKSPACE_ID", "default")),
+		RequireWorkspaceID:                environment == "production" || getBoolEnv("REQUIRE_WORKSPACE_ID", false),
 		Port:                              getEnv("PORT", "8080"),
 		OpenAIAPIKey:                      getEnv("OPENAI_API_KEY", ""),
 		OpenAIBaseURL:                     getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
@@ -170,6 +177,13 @@ func Load() Config {
 		VerificationMaxArtifactBytes:      getIntEnv("VERIFICATION_MAX_ARTIFACT_BYTES", 65536),
 		AllowedOrigins:                    getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 	}
+}
+
+func normalizeEnvironment(value string) string {
+	if strings.EqualFold(strings.TrimSpace(value), "production") {
+		return "production"
+	}
+	return "development"
 }
 
 func normalizeStoreDriver(value string) string {
@@ -273,6 +287,18 @@ func getUnitFloatEnv(key string, fallback float64) float64 {
 	}
 	parsed, err := strconv.ParseFloat(value, 64)
 	if err != nil || parsed <= 0 || parsed > 1 {
+		return fallback
+	}
+	return parsed
+}
+
+func getBoolEnv(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
 		return fallback
 	}
 	return parsed
