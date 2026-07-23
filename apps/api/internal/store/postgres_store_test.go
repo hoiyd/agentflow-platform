@@ -68,7 +68,6 @@ func TestPostgresSchemaValidationCoversHistoricalAdditions(t *testing.T) {
 		}
 	}
 }
-
 func TestPostgresRunUsageReservationIsAtomic(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
