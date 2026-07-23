@@ -15,6 +15,7 @@ import (
 	"agentflow-platform/apps/api/internal/knowledge"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/recovery"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
@@ -58,6 +59,8 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		MaxArtifactBytes: cfg.VerificationMaxArtifactBytes,
 	})
 	verificationEngine := verification.NewEngine(appStore, verifierRegistry)
+	retrievalPipeline := rag.NewRetrievalPipeline(appStore)
+	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, modelClient, retrievalPipeline)
 
 	agentRuntime := agent.NewRuntime(agent.RuntimeOptions{
 		Store:           appStore,
@@ -79,9 +82,9 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			InputCostPerMillionTokensMicros:  cfg.ModelInputCostPerMillionMicros,
 			OutputCostPerMillionTokensMicros: cfg.ModelOutputCostPerMillionMicros,
 		},
+		KnowledgeRetriever: retrievalPipeline,
 	})
 	semanticMemory := memorypkg.NewSemanticMemory(appStore, modelClient)
-	knowledgeBase := knowledge.NewKnowledgeBase(appStore, modelClient)
 	memoryCurator := newMemoryCurator(cfg, appStore, modelClient)
 	runController := concurrency.NewRunController(concurrency.RunOptions{
 		MaxConcurrent: cfg.MaxConcurrentRuns,

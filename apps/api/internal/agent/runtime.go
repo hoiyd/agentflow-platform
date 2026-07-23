@@ -12,6 +12,7 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	tracepkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
 	turnpkg "agentflow-platform/apps/api/internal/turn"
@@ -28,6 +29,7 @@ type Runtime struct {
 	contextCompactor      *contextcompaction.Compactor
 	autonomousLimits      AutonomousLimits
 	runBudget             domain.RuntimeRunBudget
+	knowledgeRetriever    rag.Retriever
 }
 
 type RuntimeStore interface {
@@ -50,7 +52,6 @@ type RuntimeStore interface {
 	store.ContextCompactionStore
 	store.RunUsageStore
 	SearchMemories(domain.MemorySearch) ([]domain.RetrievedMemory, error)
-	SearchDocumentChunks(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 }
 
 type AutonomousLimits struct {
@@ -69,16 +70,23 @@ type PreparedRun struct {
 // RuntimeOptions captures the complete runtime policy at construction time so
 // new Runs can freeze one coherent snapshot without post-construction setters.
 type RuntimeOptions struct {
-	Store           RuntimeStore
-	ModelClient     *openai.Client
-	Tools           *tools.Manager
-	RouterMode      string
-	ContextAssembly domain.ContextAssemblyConfig
-	Autonomous      AutonomousLimits
-	RunBudget       domain.RuntimeRunBudget
+	Store              RuntimeStore
+	ModelClient        *openai.Client
+	Tools              *tools.Manager
+	RouterMode         string
+	ContextAssembly    domain.ContextAssemblyConfig
+	Autonomous         AutonomousLimits
+	RunBudget          domain.RuntimeRunBudget
+	KnowledgeRetriever rag.Retriever
 }
 
 func NewRuntime(options RuntimeOptions) *Runtime {
+	knowledgeRetriever := options.KnowledgeRetriever
+	if knowledgeRetriever == nil {
+		if searchStore, ok := options.Store.(rag.SearchStore); ok {
+			knowledgeRetriever = rag.NewRetrievalPipeline(searchStore)
+		}
+	}
 	runtime := &Runtime{
 		store:                 options.Store,
 		openAI:                options.ModelClient,
@@ -89,6 +97,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		contextCompactor:      contextcompaction.NewCompactor(options.Store),
 		autonomousLimits:      normalizeAutonomousLimits(options.Autonomous),
 		runBudget:             options.RunBudget,
+		knowledgeRetriever:    knowledgeRetriever,
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime
@@ -226,7 +235,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		conversationID = run.ConversationID
 	}
 	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalStarted, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"query": truncateRuntimeText(query, 1200)}})
-	embeddingQuery := truncateRetrievalEmbeddingQuery(query)
+	embeddingQuery := rag.EmbeddingQuery(query)
 	payload := map[string]any{
 		"query":                          truncateRuntimeText(query, 1200),
 		"embedding_query_chars":          len(embeddingQuery),
@@ -247,7 +256,16 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"error": err.Error()}})
 		return nil, nil
 	}
-	embedding, err := client.EmbedText(ctx, embeddingQuery)
+	embedding, err := rag.EmbedQuery(ctx, query, func(ctx context.Context, query string) (rag.Embedding, error) {
+		result, embedErr := client.EmbedText(ctx, query)
+		return rag.Embedding{
+			Vector:     result.Vector,
+			Provider:   result.Provider,
+			Model:      result.Model,
+			Dimensions: result.Dimensions,
+			Estimated:  result.Estimated,
+		}, embedErr
+	})
 	if err != nil {
 		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"error": err.Error()}})
 		return nil, nil
@@ -273,17 +291,22 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	}
 	var chunks []domain.RetrievedDocumentChunk
 	if retrievalEnabled {
-		var err error
-		chunks, err = r.store.SearchDocumentChunks(domain.DocumentSearch{
-			Query:             query,
-			Embedding:         embedding.Vector,
-			EmbeddingProvider: embedding.Provider,
-			EmbeddingModel:    embedding.Model,
-			Limit:             5,
-		})
-		if err != nil {
-			payload["rag_error"] = err.Error()
-			chunks = nil
+		if r.knowledgeRetriever == nil {
+			payload["rag_error"] = "knowledge retriever is not configured"
+		} else {
+			response, searchErr := r.knowledgeRetriever.Search(domain.DocumentSearch{
+				Query: query,
+				Limit: 5,
+			}, 5, embedding)
+			if searchErr != nil {
+				payload["rag_error"] = searchErr.Error()
+			} else {
+				chunks = response.Items
+				payload["rag_no_match"] = response.NoMatch
+				if response.Reason != "" {
+					payload["rag_no_match_reason"] = response.Reason
+				}
+			}
 		}
 	}
 	payload["memory_count"] = len(memories)
@@ -332,6 +355,11 @@ func retrievalTracePayload(memories []domain.RetrievedMemory, chunks []domain.Re
 				"metadata":       chunk.Chunk.Metadata,
 				"similarity":     chunk.Similarity,
 				"score":          chunk.Score,
+				"vector_rank":    chunk.VectorRank,
+				"rerank_rank":    chunk.RerankRank,
+				"rerank_score":   chunk.RerankScore,
+				"confidence":     chunk.Confidence,
+				"filter_reason":  chunk.FilterReason,
 			})
 		}
 		payload["retrieved_chunks"] = items
@@ -345,15 +373,6 @@ func truncateRuntimeText(value string, limit int) string {
 		return value
 	}
 	return value[:limit] + "...[truncated]"
-}
-
-func truncateRetrievalEmbeddingQuery(value string) string {
-	const maxEmbeddingQueryChars = 3000
-	value = strings.TrimSpace(value)
-	if len(value) <= maxEmbeddingQueryChars {
-		return value
-	}
-	return value[:maxEmbeddingQueryChars]
 }
 
 func (r *Runtime) CompleteRun(id string) (domain.Run, error) {

@@ -20,12 +20,20 @@ type Embedder interface {
 }
 
 type KnowledgeBase struct {
-	store    Store
-	embedder Embedder
+	store     Store
+	embedder  Embedder
+	retriever rag.Retriever
 }
 
 func NewKnowledgeBase(store Store, embedder Embedder) *KnowledgeBase {
-	return &KnowledgeBase{store: store, embedder: embedder}
+	return NewKnowledgeBaseWithRetriever(store, embedder, rag.NewRetrievalPipeline(store))
+}
+
+func NewKnowledgeBaseWithRetriever(store Store, embedder Embedder, retriever rag.Retriever) *KnowledgeBase {
+	if retriever == nil {
+		retriever = rag.NewRetrievalPipeline(store)
+	}
+	return &KnowledgeBase{store: store, embedder: embedder, retriever: retriever}
 }
 
 // EmbeddingError lets transports distinguish provider availability from
@@ -73,41 +81,23 @@ func (s *KnowledgeBase) Search(ctx context.Context, search domain.DocumentSearch
 		return domain.DocumentSearchResponse{}, errors.New("query is required")
 	}
 
-	embedding, err := s.embedder.EmbedText(ctx, search.Query)
+	embedding, err := rag.EmbedQuery(ctx, search.Query, func(ctx context.Context, query string) (rag.Embedding, error) {
+		result, embedErr := s.embedder.EmbedText(ctx, query)
+		return rag.Embedding{
+			Vector:     result.Vector,
+			Provider:   result.Provider,
+			Model:      result.Model,
+			Dimensions: result.Dimensions,
+			Estimated:  result.Estimated,
+		}, embedErr
+	})
 	if err != nil {
 		return domain.DocumentSearchResponse{}, EmbeddingError{Err: err}
 	}
 	if requestedLimit <= 0 {
-		requestedLimit = rag.NormalizeSearchLimit(search.Limit)
+		requestedLimit = search.Limit
 	}
-	search.Limit = rag.CandidateLimit(requestedLimit)
-	search.Embedding = embedding.Vector
-	search.EmbeddingProvider = embedding.Provider
-	search.EmbeddingModel = embedding.Model
-	items, err := s.store.SearchDocumentChunks(search)
-	if err != nil {
-		return domain.DocumentSearchResponse{}, err
-	}
-	for index := range items {
-		items[index].VectorRank = index + 1
-	}
-	items = rag.Rerank(search.Query, items, requestedLimit)
-	items = rag.ApplyRelevanceGate(items)
-
-	response := domain.DocumentSearchResponse{
-		Items: items,
-		Embedding: domain.EmbeddingInfo{
-			Provider:   embedding.Provider,
-			Model:      embedding.Model,
-			Dimensions: embedding.Dimensions,
-			Estimated:  embedding.Estimated,
-		},
-		NoMatch: len(items) == 0,
-	}
-	if response.NoMatch {
-		response.Reason = "No confident match found. Top vector candidates did not pass the relevance gate."
-	}
-	return response, nil
+	return s.retriever.Search(search, requestedLimit, embedding)
 }
 
 func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error) {
