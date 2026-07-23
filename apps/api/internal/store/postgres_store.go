@@ -2219,6 +2219,13 @@ var postgresMigrations = []string{
 		timestamp timestamptz NOT NULL,
 		UNIQUE(run_id, operation_id, kind)
 	)`,
+	`ALTER TABLE run_usage_entries ADD COLUMN IF NOT EXISTS operation_id text`,
+	`UPDATE run_usage_entries SET operation_id = id WHERE operation_id IS NULL OR BTRIM(operation_id) = ''`,
+	`ALTER TABLE run_usage_entries ALTER COLUMN operation_id SET NOT NULL`,
+	`ALTER TABLE run_usage_entries ADD COLUMN IF NOT EXISTS purpose text`,
+	`UPDATE run_usage_entries SET purpose = 'primary' WHERE purpose IS NULL OR BTRIM(purpose) = ''`,
+	`ALTER TABLE run_usage_entries ALTER COLUMN purpose SET NOT NULL`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS run_usage_entries_run_operation_kind_idx ON run_usage_entries(run_id, operation_id, kind)`,
 	`CREATE INDEX IF NOT EXISTS run_usage_entries_run_timestamp_idx ON run_usage_entries(run_id, timestamp, id)`,
 	`CREATE INDEX IF NOT EXISTS idx_context_compactions_conversation_created ON context_compactions(conversation_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_memories_scope_created ON memories(workspace_id, user_id, project_id, created_at DESC)`,
