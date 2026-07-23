@@ -1273,8 +1273,11 @@ func (s *FileStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain
 	defer s.mu.RUnlock()
 
 	limit := search.Limit
-	if limit <= 0 || limit > 10 {
+	if limit <= 0 {
 		limit = 5
+	}
+	if limit > 20 {
+		limit = 20
 	}
 	documentByID := map[string]domain.Document{}
 	for _, document := range s.data.Documents {

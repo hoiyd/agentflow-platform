@@ -1383,8 +1383,11 @@ func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]do
 		return nil, fmt.Errorf("document search embedding dimensions must be 1536, got %d", len(search.Embedding))
 	}
 	limit := search.Limit
-	if limit <= 0 || limit > 10 {
+	if limit <= 0 {
 		limit = 5
+	}
+	if limit > 20 {
+		limit = 20
 	}
 
 	args := []any{vectorLiteral(search.Embedding), limit}

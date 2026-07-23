@@ -8,12 +8,26 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/store"
 )
 
 type embeddingStub struct {
 	embedding openai.Embedding
 	err       error
+}
+
+type knowledgeRetrieverStub struct {
+	search    domain.DocumentSearch
+	limit     int
+	embedding rag.Embedding
+}
+
+func (s *knowledgeRetrieverStub) Search(search domain.DocumentSearch, limit int, embedding rag.Embedding) (domain.DocumentSearchResponse, error) {
+	s.search = search
+	s.limit = limit
+	s.embedding = embedding
+	return domain.DocumentSearchResponse{NoMatch: true}, nil
 }
 
 func (e embeddingStub) EmbedText(context.Context, string) (openai.Embedding, error) {
@@ -69,5 +83,22 @@ func TestKnowledgeBaseClassifiesEmbeddingFailure(t *testing.T) {
 	_, err := knowledgeBase.Search(context.Background(), domain.DocumentSearch{Query: "launch"}, 1)
 	if !IsEmbeddingError(err) || !errors.Is(err, want) {
 		t.Fatalf("expected typed embedding error, got %v", err)
+	}
+}
+
+func TestKnowledgeBaseDelegatesSearchToRetrievalPipeline(t *testing.T) {
+	retriever := &knowledgeRetrieverStub{}
+	knowledgeBase := NewKnowledgeBaseWithRetriever(nil, embeddingStub{embedding: openai.Embedding{
+		Vector: []float64{1, 0, 0}, Provider: "test", Model: "embedding-v1", Dimensions: 3,
+	}}, retriever)
+
+	if _, err := knowledgeBase.Search(context.Background(), domain.DocumentSearch{Query: "launch password", Limit: 4}, 4); err != nil {
+		t.Fatalf("search knowledge: %v", err)
+	}
+	if retriever.limit != 4 || retriever.search.Query != "launch password" {
+		t.Fatalf("expected search request to be delegated, got search=%#v limit=%d", retriever.search, retriever.limit)
+	}
+	if retriever.embedding.Provider != "test" || retriever.embedding.Model != "embedding-v1" || retriever.embedding.Dimensions != 3 || len(retriever.embedding.Vector) != 3 {
+		t.Fatalf("expected embedding metadata, got %#v", retriever.embedding)
 	}
 }
