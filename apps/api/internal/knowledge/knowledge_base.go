@@ -130,7 +130,9 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 			fusion = response.Fusion
 		}
 		caseResult := rag.EvaluateCase(evaluationCase, response.Items)
+		caseResult.Security = response.Security
 		results = append(results, caseResult)
+		summary.BlockedCandidates += response.Security.BlockedCandidates
 		if caseResult.HitAt1 {
 			summary.HitAt1++
 		}

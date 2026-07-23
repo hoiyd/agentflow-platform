@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const RAGPromptGuardPolicyVersion = "rag-prompt-guard-v1"
+
 type Conversation struct {
 	ID        string    `json:"id"`
 	Title     string    `json:"title"`
@@ -654,10 +656,26 @@ type FusionInfo struct {
 	LexicalWeight float64 `json:"lexical_weight"`
 }
 
+type KnowledgeSecurityDecision struct {
+	DocumentID string   `json:"document_id"`
+	ChunkID    string   `json:"chunk_id"`
+	Action     string   `json:"action"`
+	Reasons    []string `json:"reasons"`
+}
+
+type KnowledgeSecurityInfo struct {
+	PolicyVersion     string                      `json:"policy_version"`
+	UntrustedContext  bool                        `json:"untrusted_context"`
+	CheckedCandidates int                         `json:"checked_candidates"`
+	BlockedCandidates int                         `json:"blocked_candidates"`
+	Decisions         []KnowledgeSecurityDecision `json:"decisions,omitempty"`
+}
+
 type DocumentSearchResponse struct {
 	Items     []RetrievedDocumentChunk `json:"items"`
 	Embedding EmbeddingInfo            `json:"embedding"`
 	Fusion    FusionInfo               `json:"fusion"`
+	Security  KnowledgeSecurityInfo    `json:"security"`
 	NoMatch   bool                     `json:"no_match,omitempty"`
 	Reason    string                   `json:"reason,omitempty"`
 }
@@ -681,11 +699,12 @@ type RAGEvaluationRunRequest struct {
 }
 
 type RAGEvaluationSummary struct {
-	Total  int `json:"total"`
-	HitAt1 int `json:"hit_at_1"`
-	HitAt3 int `json:"hit_at_3"`
-	HitAt5 int `json:"hit_at_5"`
-	Misses int `json:"misses"`
+	Total             int `json:"total"`
+	HitAt1            int `json:"hit_at_1"`
+	HitAt3            int `json:"hit_at_3"`
+	HitAt5            int `json:"hit_at_5"`
+	Misses            int `json:"misses"`
+	BlockedCandidates int `json:"blocked_candidates,omitempty"`
 }
 
 type RAGEvaluationCaseResult struct {
@@ -702,6 +721,7 @@ type RAGEvaluationCaseResult struct {
 	BestRank              int                      `json:"best_rank,omitempty"`
 	FailureReason         string                   `json:"failure_reason,omitempty"`
 	Items                 []RetrievedDocumentChunk `json:"items"`
+	Security              KnowledgeSecurityInfo    `json:"security"`
 }
 
 type RAGEvaluationRunResponse struct {

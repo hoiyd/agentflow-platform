@@ -303,6 +303,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 			} else {
 				chunks = response.Items
 				payload["fusion"] = response.Fusion
+				payload["knowledge_security"] = response.Security
 				payload["rag_no_match"] = response.NoMatch
 				if response.Reason != "" {
 					payload["rag_no_match_reason"] = response.Reason

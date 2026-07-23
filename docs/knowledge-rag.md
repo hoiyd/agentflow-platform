@@ -28,10 +28,13 @@ HTTP search, Single-Agent, Multi-Agent, and Autonomous runs use the same
    requested workspace and metadata filters.
 3. Merge candidates by chunk ID while preserving `vector_rank`,
    `lexical_rank`, and `lexical_score` provenance.
-4. Fuse the two recall rankings with equal-weight Reciprocal Rank Fusion (RRF).
-5. Apply the existing evidence-aware reranker, metadata and recency signals,
+4. Block candidates that match high-confidence prompt-injection patterns and
+   record structured filtering decisions.
+5. Fuse the remaining recall rankings with equal-weight Reciprocal Rank Fusion
+   (RRF).
+6. Apply the existing evidence-aware reranker, metadata and recency signals,
    and document diversity control.
-6. Remove low-confidence results with the relevance gate and return the
+7. Remove low-confidence results with the relevance gate and return the
    requested top K.
 
 Dense recall uses cosine similarity against document chunk embeddings. Lexical
@@ -65,6 +68,34 @@ The UI labels the dense/vector path as **Semantic** and the lexical path as
 **Keyword**. These user-facing names map to the existing `vector_rank`,
 `lexical_rank`, `dense_weight`, and `lexical_weight` API fields; the wire
 contract remains unchanged.
+
+## Prompt-Injection Guard
+
+All retrieved knowledge is treated as untrusted external data. The guard uses
+policy version `rag-prompt-guard-v1` and blocks high-confidence patterns before
+RRF, including:
+
+- requests to ignore, override, or bypass prior/system instructions
+- attempts to replace the model role or inject a new system prompt
+- requests to reveal system/developer instructions
+- explicit requests to invoke tools or execute shell commands
+- attempts to spoof AgentFlow's untrusted-knowledge boundary markers
+
+Blocked chunks do not participate in fusion, reranking, context selection, or
+model calls. Responses and retrieval traces retain only document/chunk IDs, the
+`blocked` action, and reason codes; blocked raw content is not copied into the
+security decision.
+
+Context Assembly adds a system-level policy that retrieved knowledge is data,
+not instructions. Selected chunks are enclosed in
+`<untrusted_knowledge_context>` and `<untrusted_knowledge_document>` markers,
+and the current user request is placed after the retrieved context. This trust
+boundary remains active even when no injection pattern is detected.
+
+The deterministic detector intentionally favors precision over broad semantic
+classification. It is one defense layer, not a claim that every possible
+natural-language attack can be recognized. The system-role trust policy,
+content boundary, filtering, and audit trail provide defense in depth.
 
 ## Search Semantics
 

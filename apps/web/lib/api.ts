@@ -332,10 +332,26 @@ export type FusionInfo = {
   lexical_weight: number;
 };
 
+export type KnowledgeSecurityDecision = {
+  document_id: string;
+  chunk_id: string;
+  action: "blocked" | string;
+  reasons: string[];
+};
+
+export type KnowledgeSecurityInfo = {
+  policy_version: string;
+  untrusted_context: boolean;
+  checked_candidates: number;
+  blocked_candidates: number;
+  decisions?: KnowledgeSecurityDecision[];
+};
+
 export type DocumentSearchResponse = {
   items: RetrievedDocumentChunk[];
   embedding?: EmbeddingInfo;
   fusion?: FusionInfo;
+  security?: KnowledgeSecurityInfo;
   no_match?: boolean;
   reason?: string;
 };
@@ -357,6 +373,7 @@ export type RAGEvaluationRunResponse = {
     hit_at_3: number;
     hit_at_5: number;
     misses: number;
+    blocked_candidates?: number;
   };
   cases: Array<{
     id: string;
@@ -372,6 +389,7 @@ export type RAGEvaluationRunResponse = {
     best_rank?: number;
     failure_reason?: string;
     items: RetrievedDocumentChunk[];
+    security?: KnowledgeSecurityInfo;
   }>;
   embedding?: EmbeddingInfo;
   fusion?: FusionInfo;
@@ -823,6 +841,7 @@ export async function searchRAG(input: {
     items: Array.isArray(payload.items) ? payload.items : [],
     embedding: payload.embedding,
     fusion: payload.fusion,
+    security: payload.security,
     no_match: payload.no_match,
     reason: payload.reason
   };

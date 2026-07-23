@@ -91,11 +91,12 @@ test("run usage client calls the dedicated endpoint", async (t) => {
   assert.equal(ledger.totals.open_reservations, 0);
 });
 
-test("RAG search preserves fusion and no-match metadata", async (t) => {
+test("RAG search preserves fusion, security, and no-match metadata", async (t) => {
   mockFetch(t, {
     items: [],
     embedding: { provider: "local", model: "test", dimensions: 3, estimated: true },
     fusion: { algorithm: "rrf", version: "rrf-v1", rank_constant: 60, dense_weight: 1, lexical_weight: 1 },
+    security: { policy_version: "rag-prompt-guard-v1", untrusted_context: true, checked_candidates: 1, blocked_candidates: 1, decisions: [{ document_id: "doc-1", chunk_id: "chunk-1", action: "blocked", reasons: ["instruction_override"] }] },
     no_match: true,
     reason: "No confident match found."
   });
@@ -104,6 +105,8 @@ test("RAG search preserves fusion and no-match metadata", async (t) => {
 
   assert.equal(response.fusion?.algorithm, "rrf");
   assert.equal(response.fusion?.rank_constant, 60);
+  assert.equal(response.security?.policy_version, "rag-prompt-guard-v1");
+  assert.deepEqual(response.security?.decisions?.[0].reasons, ["instruction_override"]);
   assert.equal(response.no_match, true);
   assert.equal(response.reason, "No confident match found.");
 });
