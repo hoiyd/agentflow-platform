@@ -102,7 +102,7 @@ HTTP RAG search or Agent context retrieval
   -> Retrieval Pipeline
        -> Store dense recall
        -> Store lexical recall
-       -> deduplicate / RRF fusion / rerank / relevance gate
+       -> deduplicate / prompt-injection guard / RRF fusion / rerank / relevance gate
 
 HTTP document ingestion
   -> Knowledge Base
@@ -111,7 +111,8 @@ HTTP document ingestion
 ```
 
 The Retrieval Pipeline, rather than an Agent runtime or HTTP handler, owns the
-recall sequence, reciprocal-rank fusion, and result policy. Stores expose
+recall sequence, prompt-injection filtering, reciprocal-rank fusion, and result
+policy. Stores expose
 separate dense and lexical search operations and remain responsible for
 applying workspace and metadata filters. Fusion consumes only the two source
 ranks, so File and Postgres adapters can use different score implementations

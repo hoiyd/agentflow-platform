@@ -80,6 +80,20 @@ Example RAG search response:
     "rank_constant": 60,
     "dense_weight": 1,
     "lexical_weight": 1
+  },
+  "security": {
+    "policy_version": "rag-prompt-guard-v1",
+    "untrusted_context": true,
+    "checked_candidates": 4,
+    "blocked_candidates": 1,
+    "decisions": [
+      {
+        "document_id": "doc_123",
+        "chunk_id": "chunk_456",
+        "action": "blocked",
+        "reasons": ["instruction_override"]
+      }
+    ]
   }
 }
 ```
@@ -100,6 +114,14 @@ The top-level `fusion` object reports the exact algorithm version, rank
 constant, and source weights used for the response. The same metadata is
 returned by RAG evaluation and recorded in Agent retrieval traces so UI and
 offline checks can reproduce the score without copying server constants.
+
+The top-level `security` object reports the prompt-injection policy version,
+candidate counts, and filtering decisions. Decisions contain source IDs,
+action, and reason codes but never copy blocked chunk content. Candidates with
+`action: "blocked"` are removed before RRF. Evaluation cases include the same
+security object, and evaluation summaries expose the aggregate
+`blocked_candidates` count. Agent retrieval traces record this object as
+`knowledge_security`.
 
 By default, lexical recall may add chunks that are absent from dense Top-K.
 Passing a positive `min_similarity` keeps vector-threshold behavior and excludes

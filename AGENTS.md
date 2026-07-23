@@ -51,7 +51,7 @@ Implemented product areas:
 - persistent semantic memory
 - pgvector-backed memory and RAG search
 - Knowledge UI with text import, `.txt` upload, Markdown upload, document detail, search, and delete
-- backend RAG retrieval using independent dense/lexical recall, RRF fusion, evidence-aware reranking, and diversity control
+- backend RAG retrieval using independent dense/lexical recall, prompt-injection filtering, RRF fusion, evidence-aware reranking, and diversity control
 - optional LangChainGo executor for single-agent steps; native orchestration remains the default
 
 ## Backend
@@ -168,9 +168,10 @@ Search behavior:
 - query is embedded with the configured provider/model/dimensions
 - stores return independent dense and lexical candidate rankings
 - RRF combines both rankings without comparing their raw score scales
+- high-confidence prompt-injection candidates are blocked before fusion and recorded without their raw content
 - backend rerank applies lexical, metadata, and evidence signals to the fused candidates
 - simple diversity penalty reduces repeated chunks from one document
-- response includes embedding metadata, recall ranks, RRF score, fusion rank, and rerank scores
+- response includes embedding metadata, security decisions, recall ranks, RRF score, fusion rank, and rerank scores
 
 Frontend manual check:
 

@@ -79,6 +79,7 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 		return domain.DocumentSearchResponse{}, err
 	}
 	items := mergeRecallCandidates(denseItems, lexicalItems, search.MinSimilarity <= 0)
+	items, security := GuardPromptInjection(items)
 	items = ReciprocalRankFusion(items)
 	items = Rerank(search.Query, items, requestedLimit)
 	items = ApplyRelevanceGate(items)
@@ -87,8 +88,9 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 		embedding.Dimensions = len(embedding.Vector)
 	}
 	response := domain.DocumentSearchResponse{
-		Items:  items,
-		Fusion: RRFInfo(),
+		Items:    items,
+		Fusion:   RRFInfo(),
+		Security: security,
 		Embedding: domain.EmbeddingInfo{
 			Provider:   embedding.Provider,
 			Model:      embedding.Model,
@@ -98,7 +100,11 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 		NoMatch: len(items) == 0,
 	}
 	if response.NoMatch {
-		response.Reason = "No confident match found. Retrieved candidates did not pass the relevance gate."
+		if security.BlockedCandidates > 0 && security.BlockedCandidates == security.CheckedCandidates {
+			response.Reason = "No safe match found. Retrieved candidates were blocked by the knowledge security policy."
+		} else {
+			response.Reason = "No confident match found. Retrieved candidates did not pass the relevance gate."
+		}
 	}
 	return response, nil
 }

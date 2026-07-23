@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { EpisodeReport, RunReplay as RunReplayData, RunEvent } from "../lib/api";
+import type { EpisodeReport, KnowledgeSecurityInfo, RunReplay as RunReplayData, RunEvent } from "../lib/api";
 import { getEpisodeReport, getRunReplay, resumeRun } from "../lib/api";
 import { BudgetEventDetail, RunUsagePanel } from "./RunUsagePanel";
 
@@ -386,6 +386,7 @@ function EventDetail({ event }: { event: RunEvent }) {
   const memories = retrievedMemories(payload);
   const chunks = retrievedChunks(payload);
   const fusion = fusionPayload(payload.fusion);
+  const knowledgeSecurity = knowledgeSecurityPayload(payload.knowledge_security);
   return (
     <div className="event-detail">
       <div className="detail-kv">
@@ -436,6 +437,12 @@ function EventDetail({ event }: { event: RunEvent }) {
         <div className="detail-kv">
           <span>Fusion</span>
           <strong>{fusionLabel(fusion)}</strong>
+        </div>
+      ) : null}
+      {knowledgeSecurity ? (
+        <div className="detail-kv">
+          <span>Knowledge security</span>
+          <strong>{knowledgeSecurityLabel(knowledgeSecurity)}</strong>
         </div>
       ) : null}
       {Array.isArray(payload.configured_tools) ? (
@@ -494,6 +501,10 @@ function RetrievalOverview({ summary }: { summary: ReturnType<typeof buildRetrie
       <div className="retrieval-model">
         <span>Fusion</span>
         <strong>{summary.fusionLabel}</strong>
+      </div>
+      <div className="retrieval-model">
+        <span>Knowledge security</span>
+        <strong>{summary.knowledgeSecurityLabel}</strong>
       </div>
     </section>
   );
@@ -570,14 +581,29 @@ function buildRetrievalSummary(events: RunEvent[]) {
   const executor = firstNonEmpty(events.map((event) => stringPayload(event.payload, "executor")));
   const framework = firstNonEmpty(events.map((event) => stringPayload(event.payload, "framework")));
   const fusion = fusionPayload(firstPayload.fusion);
+  const knowledgeSecurity = knowledgeSecurityPayload(firstPayload.knowledge_security);
   return {
     eventCount: retrievalEvents.length,
     memoryCount,
     chunkCount,
     embeddingLabel: provider || model ? [provider, model, dimensions ? `${dimensions}d` : ""].filter(Boolean).join(" / ") : "not recorded",
     executorLabel: executor || framework ? [executor, framework].filter(Boolean).join(" / ") : "not recorded",
-    fusionLabel: fusion ? fusionLabel(fusion) : "not recorded"
+    fusionLabel: fusion ? fusionLabel(fusion) : "not recorded",
+    knowledgeSecurityLabel: knowledgeSecurity ? knowledgeSecurityLabel(knowledgeSecurity) : "not recorded"
   };
+}
+
+function knowledgeSecurityPayload(value: unknown): KnowledgeSecurityInfo | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as KnowledgeSecurityInfo;
+}
+
+function knowledgeSecurityLabel(security: KnowledgeSecurityInfo) {
+  const reasons = Array.from(new Set((security.decisions ?? []).flatMap((decision) => decision.reasons ?? [])));
+  const reasonLabel = reasons.length > 0 ? ` / ${reasons.join(", ")}` : "";
+  return `${security.policy_version} / checked ${security.checked_candidates} / blocked ${security.blocked_candidates}${reasonLabel}`;
 }
 
 function fusionPayload(value: unknown): FusionPayload | null {

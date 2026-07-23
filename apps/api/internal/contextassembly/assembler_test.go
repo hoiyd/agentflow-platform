@@ -59,8 +59,19 @@ func TestAssembleSelectsContextAndPublishesManifestWithoutRawContent(t *testing.
 		t.Fatalf("expected recent and relevant context to be selected: %#v", pack.Manifest.Entries)
 	}
 	current := messageContent(pack.Messages, "current")
-	if !strings.Contains(current, "<memories>") || !strings.Contains(current, "<knowledge>") {
+	if !strings.Contains(current, "<memories>") || !strings.Contains(current, "<untrusted_knowledge_context") {
 		t.Fatalf("expected retrieved context in current input, got %q", current)
+	}
+	if !strings.Contains(pack.Messages[0].Content, knowledgeTrustPolicy) {
+		t.Fatalf("expected system-level knowledge trust policy, got %q", pack.Messages[0].Content)
+	}
+	if strings.LastIndex(current, "User request:") < strings.LastIndex(current, "</untrusted_knowledge_context>") {
+		t.Fatalf("expected the user request after untrusted knowledge, got %q", current)
+	}
+	for _, entry := range pack.Manifest.Entries {
+		if entry.ReferenceID == "chunk-1" && entry.Transformation != "untrusted_wrapped" {
+			t.Fatalf("expected untrusted knowledge transformation in manifest, got %#v", entry)
+		}
 	}
 	if strings.Contains(pack.Messages[0].Content, "mem-1") || strings.Contains(pack.Messages[0].Content, "chunk-1") {
 		t.Fatal("retrieved context changed the stable system prefix")

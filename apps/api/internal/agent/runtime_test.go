@@ -108,6 +108,10 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		if !ok || fusion.Algorithm != "rrf" || fusion.RankConstant != 60 {
 			t.Fatalf("expected active fusion configuration in retrieval trace, got %#v", event.Payload["fusion"])
 		}
+		security, ok := event.Payload["knowledge_security"].(domain.KnowledgeSecurityInfo)
+		if !ok || security.PolicyVersion != domain.RAGPromptGuardPolicyVersion || !security.UntrustedContext || security.CheckedCandidates == 0 {
+			t.Fatalf("expected knowledge security summary in retrieval trace, got %#v", event.Payload["knowledge_security"])
+		}
 		retrieved, ok := event.Payload["retrieved_chunks"].([]map[string]any)
 		if !ok || len(retrieved) == 0 || retrieved[0]["lexical_rank"] == nil || retrieved[0]["rrf_score"] == nil || retrieved[0]["fusion_rank"] == nil || retrieved[0]["rerank_rank"] == nil || retrieved[0]["confidence"] == nil {
 			t.Fatalf("expected shared pipeline ranks in retrieval trace, got %#v", event.Payload["retrieved_chunks"])

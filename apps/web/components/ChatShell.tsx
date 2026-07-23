@@ -40,6 +40,7 @@ import {
   DocumentInfo,
   EmbeddingInfo,
   FusionInfo,
+  KnowledgeSecurityInfo,
   Message,
   RAGEvaluationCase,
   RAGEvaluationRunResponse,
@@ -204,6 +205,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const [ragResults, setRagResults] = useState<RetrievedDocumentChunk[]>([]);
   const [ragEmbedding, setRagEmbedding] = useState<EmbeddingInfo | null>(null);
   const [ragFusion, setRagFusion] = useState<FusionInfo | null>(null);
+  const [ragSecurity, setRagSecurity] = useState<KnowledgeSecurityInfo | null>(null);
   const [ragNoMatchReason, setRagNoMatchReason] = useState("");
   const [hasSearchedRAG, setHasSearchedRAG] = useState(false);
   const [isSearchingRAG, setIsSearchingRAG] = useState(false);
@@ -791,6 +793,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setRagResults(response.items);
       setRagEmbedding(response.embedding ?? null);
       setRagFusion(response.fusion ?? null);
+      setRagSecurity(response.security ?? null);
       setRagNoMatchReason(response.no_match ? response.reason ?? "No confident match found." : "");
     } catch (err) {
       setDocumentsError(err instanceof Error ? err.message : "Failed to search knowledge");
@@ -1449,6 +1452,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
             hasSearched={hasSearchedRAG}
             searchEmbedding={ragEmbedding}
             searchFusion={ragFusion}
+            searchSecurity={ragSecurity}
             results={ragResults}
             selectedDocument={selectedDocument}
             selectedDocumentId={selectedDocumentId}
@@ -2002,6 +2006,7 @@ function KnowledgePanel({
   query,
   searchEmbedding,
   searchFusion,
+  searchSecurity,
   results,
   selectedDocument,
   selectedDocumentId,
@@ -2040,6 +2045,7 @@ function KnowledgePanel({
   query: string;
   searchEmbedding: EmbeddingInfo | null;
   searchFusion: FusionInfo | null;
+  searchSecurity: KnowledgeSecurityInfo | null;
   results: RetrievedDocumentChunk[];
   selectedDocument: DocumentDetail | null;
   selectedDocumentId: string;
@@ -2180,6 +2186,7 @@ function KnowledgePanel({
         </div>
         <EmbeddingStatus embedding={searchEmbedding} hasSearched={hasSearched} />
         <FusionStatus fusion={searchFusion} hasSearched={hasSearched} />
+        <KnowledgeSecurityStatus hasSearched={hasSearched} security={searchSecurity} />
         {hasSearched && noMatchReason ? <div className="rag-no-match">{noMatchReason}</div> : null}
         <div className="rag-results">
           {results.length === 0 ? (
@@ -2266,6 +2273,10 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
           <span>Misses</span>
           <strong>{result.summary.misses}</strong>
         </div>
+        <div className={`metric ${(result.summary.blocked_candidates ?? 0) > 0 ? "danger" : ""}`}>
+          <span>Blocked</span>
+          <strong>{result.summary.blocked_candidates ?? 0}</strong>
+        </div>
       </div>
       <EmbeddingStatus embedding={result.embedding ?? null} hasSearched />
       <FusionStatus fusion={result.fusion ?? null} hasSearched />
@@ -2284,6 +2295,9 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
             </div>
             <div className="evaluation-expected">{evaluationExpectedLabel(item)}</div>
             {item.failure_reason ? <div className="evaluation-failure">{item.failure_reason}</div> : null}
+            {item.security && item.security.blocked_candidates > 0 ? (
+              <div className="evaluation-failure">{knowledgeSecurityLabel(item.security)}</div>
+            ) : null}
             <div className="rag-results compact-results">
               {item.items.slice(0, 5).map((resultItem) => (
                 <article className="rag-result-card" key={resultItem.chunk.id}>
@@ -2438,6 +2452,40 @@ function FusionStatus({ fusion, hasSearched }: { fusion: FusionInfo | null; hasS
       </span>
     </div>
   );
+}
+
+function KnowledgeSecurityStatus({
+  security,
+  hasSearched,
+}: {
+  security: KnowledgeSecurityInfo | null;
+  hasSearched: boolean;
+}) {
+  if (!hasSearched) {
+    return null;
+  }
+  if (!security) {
+    return (
+      <div className="embedding-status warning">
+        <span>Knowledge security: metadata unavailable</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`embedding-status ${security.blocked_candidates > 0 ? "warning" : ""}`}>
+      <span>{knowledgeSecurityLabel(security)}</span>
+      {security.blocked_candidates > 0 ? <span>{knowledgeSecurityReasons(security)}</span> : null}
+    </div>
+  );
+}
+
+function knowledgeSecurityLabel(security: KnowledgeSecurityInfo) {
+  return `Knowledge security: ${security.policy_version} / checked ${security.checked_candidates} / blocked ${security.blocked_candidates}`;
+}
+
+function knowledgeSecurityReasons(security: KnowledgeSecurityInfo) {
+  const reasons = Array.from(new Set((security.decisions ?? []).flatMap((decision) => decision.reasons ?? [])));
+  return reasons.length > 0 ? `Reasons: ${reasons.join(", ")}` : "Reasons not recorded";
 }
 
 function toCollaborationStepView(step: CollaborationStepView) {
