@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -785,6 +786,32 @@ func TestFileStoreDocumentSearchUsesMetadataSimilarityAndRecency(t *testing.T) {
 	}
 	if len(items) != 0 {
 		t.Fatalf("expected high threshold to filter mismatched chunks, got %d", len(items))
+	}
+}
+
+func TestFileStoreDocumentSearchSupportsExpandedCandidateLimit(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	chunks := make([]domain.DocumentChunk, 12)
+	embeddings := make([]domain.DocumentChunkEmbedding, 12)
+	for index := range chunks {
+		chunks[index] = domain.DocumentChunk{Content: fmt.Sprintf("Candidate %d", index), TokenCount: 2}
+		embeddings[index] = domain.DocumentChunkEmbedding{Embedding: []float64{1, 0}}
+	}
+	if _, err := store.CreateDocument(domain.Document{
+		Title: "Candidate set", SourceType: "text", Content: "Candidate set",
+	}, chunks, embeddings); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+
+	items, err := store.SearchDocumentChunks(domain.DocumentSearch{Embedding: []float64{1, 0}, Limit: 12})
+	if err != nil {
+		t.Fatalf("search document chunks: %v", err)
+	}
+	if len(items) != 12 {
+		t.Fatalf("expected expanded candidate limit to return 12 chunks, got %d", len(items))
 	}
 }
 
