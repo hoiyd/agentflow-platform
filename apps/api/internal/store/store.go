@@ -95,6 +95,7 @@ type DocumentStore interface {
 	GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error)
 	DeleteDocument(id string) error
 	SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
+	SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 }
 
 // Store is the application-level persistence contract. Consumers should depend

@@ -301,6 +301,8 @@ export type RetrievedDocumentChunk = {
   recency_boost: number;
   score: number;
   vector_rank?: number;
+  lexical_rank?: number;
+  lexical_score?: number;
   rerank_rank?: number;
   lexical_boost?: number;
   metadata_boost?: number;

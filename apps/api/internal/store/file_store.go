@@ -1327,6 +1327,54 @@ func (s *FileStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain
 	return items, nil
 }
 
+func (s *FileStore) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	limit := search.Limit
+	if limit <= 0 {
+		limit = 5
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	documentByID := make(map[string]domain.Document, len(s.data.Documents))
+	for _, document := range s.data.Documents {
+		documentByID[document.ID] = document
+	}
+
+	items := []domain.RetrievedDocumentChunk{}
+	now := time.Now().UTC()
+	for _, chunk := range s.data.DocumentChunks {
+		document, ok := documentByID[chunk.DocumentID]
+		if !ok || !documentChunkMatchesSearch(document, chunk, search) {
+			continue
+		}
+		lexicalScore := documentChunkLexicalScore(search, document, chunk)
+		if lexicalScore <= 0 {
+			continue
+		}
+		recencyBoost := memoryRecencyBoost(now, chunk.CreatedAt)
+		items = append(items, domain.RetrievedDocumentChunk{
+			Document:     document,
+			Chunk:        chunk,
+			RecencyBoost: recencyBoost,
+			Score:        lexicalScore + recencyBoost,
+			LexicalScore: lexicalScore,
+		})
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].LexicalScore == items[j].LexicalScore {
+			return items[i].RecencyBoost > items[j].RecencyBoost
+		}
+		return items[i].LexicalScore > items[j].LexicalScore
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
+}
+
 func (s *FileStore) load() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
@@ -1597,6 +1645,66 @@ func documentChunkMatchesSearch(document domain.Document, chunk domain.DocumentC
 		}
 	}
 	return true
+}
+
+func documentChunkLexicalScore(search domain.DocumentSearch, document domain.Document, chunk domain.DocumentChunk) float64 {
+	query := strings.ToLower(strings.TrimSpace(search.Query))
+	if query == "" {
+		return 0
+	}
+	text := strings.ToLower(strings.Join([]string{
+		document.Title,
+		document.SourceURI,
+		chunk.Content,
+		toString(document.Metadata["filename"]),
+		toString(chunk.Metadata["title"]),
+		toString(chunk.Metadata["heading_path"]),
+	}, " "))
+	score := 0.0
+	if strings.Contains(text, query) {
+		score = 1
+	}
+	if lexicalIdentifierMatch(query, text) {
+		score = 1
+	}
+	if len(search.LexicalTerms) > 0 {
+		matches := 0
+		for _, term := range search.LexicalTerms {
+			if strings.Contains(text, strings.ToLower(strings.TrimSpace(term))) {
+				matches++
+			}
+		}
+		coverage := float64(matches) / float64(len(search.LexicalTerms))
+		if candidate := coverage * 0.60; candidate > score {
+			score = candidate
+		}
+	}
+	if score > 1 {
+		return 1
+	}
+	return score
+}
+
+func lexicalIdentifierMatch(query string, text string) bool {
+	for _, token := range strings.Fields(query) {
+		token = strings.Trim(token, ".,;:!?()[]{}<>\"'`，。；：！？（）【】")
+		if len([]rune(token)) < 3 || !containsASCIIDigit(token) {
+			continue
+		}
+		if strings.Contains(text, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsASCIIDigit(value string) bool {
+	for _, r := range value {
+		if r >= '0' && r <= '9' {
+			return true
+		}
+	}
+	return false
 }
 
 func cosineSimilarity(a []float64, b []float64) float64 {

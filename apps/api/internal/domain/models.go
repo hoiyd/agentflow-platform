@@ -609,6 +609,7 @@ type DocumentSearch struct {
 	Embedding         []float64         `json:"-"`
 	EmbeddingProvider string            `json:"-"`
 	EmbeddingModel    string            `json:"-"`
+	LexicalTerms      []string          `json:"-"`
 	WorkspaceID       string            `json:"workspace_id,omitempty"`
 	Metadata          map[string]string `json:"metadata,omitempty"`
 	Limit             int               `json:"limit,omitempty"`
@@ -622,6 +623,8 @@ type RetrievedDocumentChunk struct {
 	RecencyBoost     float64       `json:"recency_boost"`
 	Score            float64       `json:"score"`
 	VectorRank       int           `json:"vector_rank,omitempty"`
+	LexicalRank      int           `json:"lexical_rank,omitempty"`
+	LexicalScore     float64       `json:"lexical_score,omitempty"`
 	RerankRank       int           `json:"rerank_rank,omitempty"`
 	LexicalBoost     float64       `json:"lexical_boost,omitempty"`
 	MetadataBoost    float64       `json:"metadata_boost,omitempty"`

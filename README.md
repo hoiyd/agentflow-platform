@@ -13,9 +13,9 @@ Full-stack AI agent workflow platform with streaming chat, agent runs, persisten
 - Curated semantic memory backed by embeddings; ordinary chat and assistant output remain conversation history.
 - RAG knowledge base with text, `.txt`, `.md`, and `.markdown` ingestion.
 - Markdown-aware chunking with heading, list, paragraph, and fenced-code metadata.
-- pgvector/Postgres support for memory and document chunk similarity search.
+- Hybrid document retrieval with independent dense and lexical recall for both the local file store and Postgres/pgvector.
 - Frontend Knowledge page for document upload, document detail, search, similarity threshold, and deletion.
-- Search rerank on the backend using lexical match, metadata match, recency, and simple diversity control.
+- Shared RAG pipeline across HTTP, Single-Agent, Multi-Agent, and Autonomous modes, with candidate deduplication, evidence-aware reranking, and a relevance gate.
 - Optional LangChainGo executor adapter for single-agent chat steps while keeping native orchestration as the default.
 
 ## Tech Stack
@@ -72,6 +72,6 @@ Set `NEXT_PUBLIC_API_BASE_URL` only if the API is not running on `http://localho
 - [Context Management](docs/context-management.md): context assembly, compaction triggers, algorithm, compression ratio, persistence, and failure behavior.
 - [Completion Verification](docs/completion-verification.md): frozen contracts, deterministic evidence, Subject Hash freshness, completion policy, and security boundaries.
 - [Memory Management](docs/memory-management.md): hybrid candidate extraction, shadow evaluation, curation policy, background persistence, and events.
-- [Knowledge / RAG](docs/knowledge-rag.md): document ingestion, Markdown chunking, vector search, and reranking.
+- [Knowledge / RAG](docs/knowledge-rag.md): document ingestion, Markdown chunking, dense and lexical recall, reranking, and relevance gating.
 - [API Reference](docs/api-reference.md): HTTP endpoints and an example RAG response.
 - [Verification Guide](docs/verification-guide.md): backend tests, frontend build, RAG checks, and replay checks.

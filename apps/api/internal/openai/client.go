@@ -1435,6 +1435,11 @@ func retrievedChunkPayload(chunks []domain.RetrievedDocumentChunk) []map[string]
 			"similarity":     chunk.Similarity,
 			"recency_boost":  chunk.RecencyBoost,
 			"score":          chunk.Score,
+			"vector_rank":    chunk.VectorRank,
+			"lexical_rank":   chunk.LexicalRank,
+			"lexical_score":  chunk.LexicalScore,
+			"rerank_rank":    chunk.RerankRank,
+			"rerank_score":   chunk.RerankScore,
 		})
 	}
 	return items
