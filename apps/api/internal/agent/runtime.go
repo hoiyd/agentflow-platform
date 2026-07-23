@@ -356,6 +356,8 @@ func retrievalTracePayload(memories []domain.RetrievedMemory, chunks []domain.Re
 				"similarity":     chunk.Similarity,
 				"score":          chunk.Score,
 				"vector_rank":    chunk.VectorRank,
+				"lexical_rank":   chunk.LexicalRank,
+				"lexical_score":  chunk.LexicalScore,
 				"rerank_rank":    chunk.RerankRank,
 				"rerank_score":   chunk.RerankScore,
 				"confidence":     chunk.Confidence,

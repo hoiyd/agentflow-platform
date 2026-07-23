@@ -9,13 +9,21 @@ import (
 )
 
 type retrievalStoreStub struct {
-	search domain.DocumentSearch
-	items  []domain.RetrievedDocumentChunk
+	denseSearch   domain.DocumentSearch
+	lexicalSearch domain.DocumentSearch
+	denseItems    []domain.RetrievedDocumentChunk
+	lexicalItems  []domain.RetrievedDocumentChunk
 }
 
 func (s *retrievalStoreStub) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
-	s.search = search
-	return append([]domain.RetrievedDocumentChunk(nil), s.items...), nil
+	s.denseSearch = search
+	return append([]domain.RetrievedDocumentChunk(nil), s.denseItems...), nil
+
+}
+
+func (s *retrievalStoreStub) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	s.lexicalSearch = search
+	return append([]domain.RetrievedDocumentChunk(nil), s.lexicalItems...), nil
 }
 
 func TestEmbedQueryNormalizesInput(t *testing.T) {
@@ -36,7 +44,7 @@ func TestEmbedQueryNormalizesInput(t *testing.T) {
 }
 
 func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
-	store := &retrievalStoreStub{items: []domain.RetrievedDocumentChunk{
+	store := &retrievalStoreStub{denseItems: []domain.RetrievedDocumentChunk{
 		{
 			Document:   domain.Document{ID: "doc_unrelated", Title: "Dinner ideas"},
 			Chunk:      domain.DocumentChunk{ID: "chunk_unrelated", Content: "A collection of unrelated dinner recipes."},
@@ -59,11 +67,14 @@ func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("search pipeline: %v", err)
 	}
-	if store.search.Limit != CandidateLimit(3) {
-		t.Fatalf("expected candidate limit %d, got %d", CandidateLimit(3), store.search.Limit)
+	if store.denseSearch.Limit != CandidateLimit(3) || store.lexicalSearch.Limit != CandidateLimit(3) {
+		t.Fatalf("expected both recalls to use candidate limit %d, got dense=%d lexical=%d", CandidateLimit(3), store.denseSearch.Limit, store.lexicalSearch.Limit)
 	}
-	if store.search.EmbeddingProvider != "test" || store.search.EmbeddingModel != "embedding-v1" || len(store.search.Embedding) != 3 {
-		t.Fatalf("expected pipeline to prepare embedded recall request, got %#v", store.search)
+	if store.denseSearch.EmbeddingProvider != "test" || store.denseSearch.EmbeddingModel != "embedding-v1" || len(store.denseSearch.Embedding) != 3 {
+		t.Fatalf("expected pipeline to prepare embedded recall request, got %#v", store.denseSearch)
+	}
+	if len(store.lexicalSearch.LexicalTerms) == 0 {
+		t.Fatalf("expected pipeline to prepare lexical terms, got %#v", store.lexicalSearch)
 	}
 	if len(response.Items) != 1 || response.Items[0].Document.ID != "doc_launch" {
 		t.Fatalf("expected only the relevant launch result, got %#v", response.Items)
@@ -76,5 +87,34 @@ func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
 	}
 	if response.NoMatch {
 		t.Fatal("expected a confident match")
+	}
+}
+
+func TestRetrievalPipelineRecallsIdentifierOutsideDenseCandidates(t *testing.T) {
+	store := &retrievalStoreStub{
+		denseItems: []domain.RetrievedDocumentChunk{{
+			Document:   domain.Document{ID: "doc_generic", Title: "Authentication guide"},
+			Chunk:      domain.DocumentChunk{ID: "chunk_generic", Content: "General authentication troubleshooting."},
+			Similarity: 0.82, Score: 0.82,
+		}},
+		lexicalItems: []domain.RetrievedDocumentChunk{{
+			Document:     domain.Document{ID: "doc_error", Title: "Error catalog"},
+			Chunk:        domain.DocumentChunk{ID: "chunk_error", Content: "AUTH-7F31 means the refresh token has expired."},
+			RecencyBoost: 0.03, Score: 1.03, LexicalScore: 1,
+		}},
+	}
+	pipeline := NewRetrievalPipeline(store)
+
+	response, err := pipeline.Search(domain.DocumentSearch{Query: "AUTH-7F31 怎么解决", Limit: 3}, 3, Embedding{
+		Vector: []float64{1, 0, 0}, Provider: "test", Model: "embedding-v1", Dimensions: 3,
+	})
+	if err != nil {
+		t.Fatalf("search pipeline: %v", err)
+	}
+	if len(response.Items) == 0 || response.Items[0].Chunk.ID != "chunk_error" {
+		t.Fatalf("expected lexical-only identifier result to lead the reranked candidates, got %#v", response.Items)
+	}
+	if response.Items[0].VectorRank != 0 || response.Items[0].LexicalRank != 1 || response.Items[0].LexicalScore != 1 {
+		t.Fatalf("expected lexical-only rank evidence, got %#v", response.Items[0])
 	}
 }

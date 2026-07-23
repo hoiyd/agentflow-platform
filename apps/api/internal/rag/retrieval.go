@@ -10,6 +10,7 @@ import (
 
 type SearchStore interface {
 	SearchDocumentChunks(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
+	SearchDocumentChunksLexical(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 }
 
 type Retriever interface {
@@ -68,13 +69,16 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 	search.Embedding = embedding.Vector
 	search.EmbeddingProvider = embedding.Provider
 	search.EmbeddingModel = embedding.Model
-	items, err := p.store.SearchDocumentChunks(search)
+	search.LexicalTerms = QueryTerms(search.Query)
+	denseItems, err := p.store.SearchDocumentChunks(search)
 	if err != nil {
 		return domain.DocumentSearchResponse{}, err
 	}
-	for index := range items {
-		items[index].VectorRank = index + 1
+	lexicalItems, err := p.store.SearchDocumentChunksLexical(search)
+	if err != nil {
+		return domain.DocumentSearchResponse{}, err
 	}
+	items := mergeRecallCandidates(denseItems, lexicalItems, search.MinSimilarity <= 0)
 	items = Rerank(search.Query, items, requestedLimit)
 	items = ApplyRelevanceGate(items)
 
@@ -92,7 +96,34 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 		NoMatch: len(items) == 0,
 	}
 	if response.NoMatch {
-		response.Reason = "No confident match found. Top vector candidates did not pass the relevance gate."
+		response.Reason = "No confident match found. Retrieved candidates did not pass the relevance gate."
 	}
 	return response, nil
+}
+
+func mergeRecallCandidates(denseItems []domain.RetrievedDocumentChunk, lexicalItems []domain.RetrievedDocumentChunk, includeLexicalOnly bool) []domain.RetrievedDocumentChunk {
+	items := make([]domain.RetrievedDocumentChunk, 0, len(denseItems)+len(lexicalItems))
+	chunkIndexes := make(map[string]int, len(denseItems)+len(lexicalItems))
+	for index, item := range denseItems {
+		item.VectorRank = index + 1
+		chunkIndexes[item.Chunk.ID] = len(items)
+		items = append(items, item)
+	}
+	for index, item := range lexicalItems {
+		item.LexicalRank = index + 1
+		if item.LexicalScore <= 0 {
+			item.LexicalScore = item.Score - item.RecencyBoost
+		}
+		if existingIndex, ok := chunkIndexes[item.Chunk.ID]; ok {
+			items[existingIndex].LexicalRank = item.LexicalRank
+			items[existingIndex].LexicalScore = item.LexicalScore
+			continue
+		}
+		if !includeLexicalOnly {
+			continue
+		}
+		chunkIndexes[item.Chunk.ID] = len(items)
+		items = append(items, item)
+	}
+	return items
 }

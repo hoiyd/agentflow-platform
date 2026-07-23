@@ -815,6 +815,44 @@ func TestFileStoreDocumentSearchSupportsExpandedCandidateLimit(t *testing.T) {
 	}
 }
 
+func TestFileStoreLexicalRecallFindsExactIdentifierWithFilters(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	for _, workspaceID := range []string{"workspace-a", "workspace-b"} {
+		content := "AUTH-7F31 means the refresh token has expired."
+		if _, err := store.CreateDocument(domain.Document{
+			WorkspaceID: workspaceID,
+			Title:       "Authentication error catalog",
+			SourceType:  "text",
+			Content:     content,
+			Metadata:    map[string]any{"project": "agentflow"},
+		}, []domain.DocumentChunk{{
+			Content: content, TokenCount: 10, Metadata: map[string]any{"project": "agentflow"},
+		}}, []domain.DocumentChunkEmbedding{{Embedding: []float64{1, 0}}}); err != nil {
+			t.Fatalf("create document: %v", err)
+		}
+	}
+
+	items, err := store.SearchDocumentChunksLexical(domain.DocumentSearch{
+		Query:        "AUTH-7F31 怎么解决",
+		LexicalTerms: []string{"auth", "7f31", "怎么", "解决"},
+		WorkspaceID:  "workspace-a",
+		Metadata:     map[string]string{"project": "agentflow"},
+		Limit:        5,
+	})
+	if err != nil {
+		t.Fatalf("search document chunks lexically: %v", err)
+	}
+	if len(items) != 1 || items[0].Document.WorkspaceID != "workspace-a" {
+		t.Fatalf("expected one workspace-filtered lexical result, got %#v", items)
+	}
+	if items[0].LexicalScore != 1 || items[0].Similarity != 0 {
+		t.Fatalf("expected exact lexical score without vector similarity, got %#v", items[0])
+	}
+}
+
 func TestFileStoreCreateAgent(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

@@ -35,7 +35,7 @@ func Rerank(query string, items []domain.RetrievedDocumentChunk, limit int) []do
 	if len(items) == 0 {
 		return items
 	}
-	queryTerms := queryTerms(query)
+	queryTerms := QueryTerms(query)
 	for index := range items {
 		items[index].LexicalBoost = lexicalBoost(query, queryTerms, items[index].Chunk.Content)
 		items[index].MetadataBoost = metadataBoost(query, queryTerms, items[index])
@@ -293,6 +293,9 @@ func evidenceScore(query string, queryTerms []string, item domain.RetrievedDocum
 }
 
 func relevanceConfidence(item domain.RetrievedDocumentChunk) (string, string) {
+	if item.LexicalRank > 0 && item.LexicalScore >= 0.95 {
+		return "high", "strong lexical recall match"
+	}
 	if item.EvidenceCoverage >= 0.6 || item.EvidenceScore >= 0.24 {
 		return "high", "strong evidence match"
 	}
@@ -307,6 +310,9 @@ func relevanceConfidence(item domain.RetrievedDocumentChunk) (string, string) {
 	}
 	if item.RerankScore >= 0.58 && len(item.MatchedTerms) > 0 {
 		return "medium", "rerank score passed with evidence"
+	}
+	if item.LexicalRank > 0 && item.LexicalScore >= 0.20 && len(item.MatchedTerms) > 0 {
+		return "medium", "lexical recall passed with supporting terms"
 	}
 	return "low", "filtered: weak similarity and no supporting evidence"
 }
@@ -363,7 +369,7 @@ func metadataValueString(value any) string {
 	}
 }
 
-func queryTerms(query string) []string {
+func QueryTerms(query string) []string {
 	fields := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
 		return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && !(r >= '\u4e00' && r <= '\u9fff')
 	})

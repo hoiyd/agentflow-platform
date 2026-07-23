@@ -250,3 +250,40 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.RunEvents))
 	}
 }
+
+func TestPostgresStoreLexicalRecall(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	store, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatalf("new postgres store: %v", err)
+	}
+	defer store.Close()
+
+	workspaceID := "test-lexical-" + time.Now().UTC().Format("20060102150405.000000000")
+	content := "AUTH-7F31 means the refresh token has expired."
+	embedding := make([]float64, 1536)
+	embedding[0] = 1
+	document, err := store.CreateDocument(domain.Document{
+		WorkspaceID: workspaceID, Title: "Authentication errors", SourceType: "text", Content: content,
+	}, []domain.DocumentChunk{{Content: content, TokenCount: 10}}, []domain.DocumentChunkEmbedding{{
+		Provider: "test", Model: "embedding-v1", Dimensions: 1536, Embedding: embedding,
+	}})
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	t.Cleanup(func() { _ = store.DeleteDocument(document.ID) })
+
+	items, err := store.SearchDocumentChunksLexical(domain.DocumentSearch{
+		Query: "AUTH-7F31 怎么解决", LexicalTerms: []string{"auth", "7f31", "怎么", "解决"},
+		WorkspaceID: workspaceID, Limit: 5,
+	})
+	if err != nil {
+		t.Fatalf("search document chunks lexically: %v", err)
+	}
+	if len(items) != 1 || items[0].Document.ID != document.ID || items[0].LexicalScore <= 0 {
+		t.Fatalf("expected postgres lexical match, got %#v", items)
+	}
+}

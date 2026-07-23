@@ -94,6 +94,12 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if items[0].VectorRank <= 0 || items[0].RerankRank <= 0 {
 		t.Fatalf("expected vector and rerank ranks on search result, got %#v", items[0])
 	}
+	if items[0].LexicalRank <= 0 || items[0].LexicalScore <= 0 {
+		t.Fatalf("expected independent lexical recall evidence on search result, got %#v", items[0])
+	}
+	if !strings.Contains(searchRecorder.Body.String(), `"lexical_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"lexical_score"`) {
+		t.Fatalf("expected lexical recall fields in API JSON, got %s", searchRecorder.Body.String())
+	}
 	if len(items[0].MatchedTerms) == 0 {
 		t.Fatalf("expected matched terms on search result, got %#v", items[0])
 	}
