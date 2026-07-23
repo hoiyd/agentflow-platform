@@ -61,6 +61,11 @@ events record the same object. The Knowledge and Replay interfaces display this
 metadata and retain six decimal places for raw RRF scores so adjacent source
 ranks remain distinguishable during manual verification.
 
+The UI labels the dense/vector path as **Semantic** and the lexical path as
+**Keyword**. These user-facing names map to the existing `vector_rank`,
+`lexical_rank`, `dense_weight`, and `lexical_weight` API fields; the wire
+contract remains unchanged.
+
 ## Search Semantics
 
 - Omitting `min_similarity`, or setting it to `0`, allows lexical-only chunks

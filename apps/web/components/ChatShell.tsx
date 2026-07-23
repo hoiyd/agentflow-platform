@@ -2196,8 +2196,8 @@ function KnowledgePanel({
                   </div>
                   <div className="document-metrics">
                     <span>{documentFormat(result.document)}</span>
-                    <span>Dense #{result.vector_rank ?? "-"}</span>
-                    <span>Lexical #{result.lexical_rank ?? "-"}</span>
+                    <span>Semantic #{result.vector_rank ?? "-"}</span>
+                    <span>Keyword #{result.lexical_rank ?? "-"}</span>
                     <span>Fusion #{result.fusion_rank ?? "-"}</span>
                     <span>Final #{result.rerank_rank ?? "-"}</span>
                     {result.confidence ? <span>{result.confidence}</span> : null}
@@ -2293,8 +2293,8 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
                       <div className="tool-source">{chunkSourceLabel(resultItem)}</div>
                     </div>
                     <div className="document-metrics">
-                      <span>Dense #{resultItem.vector_rank ?? "-"}</span>
-                      <span>Lexical #{resultItem.lexical_rank ?? "-"}</span>
+                      <span>Semantic #{resultItem.vector_rank ?? "-"}</span>
+                      <span>Keyword #{resultItem.lexical_rank ?? "-"}</span>
                       <span>Fusion #{resultItem.fusion_rank ?? "-"}</span>
                       <span>Final #{resultItem.rerank_rank ?? "-"}</span>
                       {resultItem.confidence ? <span>{resultItem.confidence}</span> : null}
@@ -2434,7 +2434,7 @@ function FusionStatus({ fusion, hasSearched }: { fusion: FusionInfo | null; hasS
         Fusion: {fusion.algorithm.toUpperCase()} / {fusion.version} / k={fusion.rank_constant}
       </span>
       <span>
-        Dense {fusion.dense_weight.toFixed(1)} / Lexical {fusion.lexical_weight.toFixed(1)}
+        Semantic {fusion.dense_weight.toFixed(1)} / Keyword {fusion.lexical_weight.toFixed(1)}
       </span>
     </div>
   );

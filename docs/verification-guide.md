@@ -37,8 +37,8 @@ RAG manual flow:
    excluded while dense hits can still carry lexical fields.
 10. Inspect a candidate returned by both recall paths and confirm its
     `rrf_score` equals `1 / (60 + vector_rank) + 1 / (60 + lexical_rank)`.
-11. Confirm the Knowledge page shows `RRF / rrf-v1 / k=60`, equal Dense and
-    Lexical weights, and enough score precision to reproduce the API value.
+11. Confirm the Knowledge page shows `RRF / rrf-v1 / k=60`, equal Semantic and
+    Keyword weights, and enough score precision to reproduce the API value.
 12. Delete the document and confirm it disappears from list/search.
 
 Postgres lexical integration test (use only a disposable database):

@@ -536,8 +536,8 @@ function RetrievedContext({ memories, chunks }: { memories: RetrievedMemoryPaylo
                 <small>
                   {[
                     chunk.chunk_id,
-                    chunk.vector_rank ? `dense #${chunk.vector_rank}` : "",
-                    chunk.lexical_rank ? `lexical #${chunk.lexical_rank}` : "",
+                    chunk.vector_rank ? `semantic #${chunk.vector_rank}` : "",
+                    chunk.lexical_rank ? `keyword #${chunk.lexical_rank}` : "",
                     chunk.fusion_rank ? `fusion #${chunk.fusion_rank}` : "",
                     chunk.rerank_rank ? `rerank #${chunk.rerank_rank}` : "",
                     chunk.rrf_score ? `RRF ${chunk.rrf_score.toFixed(6)}` : "",
@@ -593,7 +593,7 @@ function fusionLabel(fusion: FusionPayload) {
   const rankConstant = typeof fusion.rank_constant === "number" ? `k=${fusion.rank_constant}` : "k=?";
   const weights =
     typeof fusion.dense_weight === "number" && typeof fusion.lexical_weight === "number"
-      ? `dense ${fusion.dense_weight.toFixed(1)} / lexical ${fusion.lexical_weight.toFixed(1)}`
+      ? `semantic ${fusion.dense_weight.toFixed(1)} / keyword ${fusion.lexical_weight.toFixed(1)}`
       : "weights not recorded";
   return `${algorithm} / ${version} / ${rankConstant} / ${weights}`;
 }
