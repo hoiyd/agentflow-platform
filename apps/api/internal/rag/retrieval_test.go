@@ -79,8 +79,11 @@ func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
 	if len(response.Items) != 1 || response.Items[0].Document.ID != "doc_launch" {
 		t.Fatalf("expected only the relevant launch result, got %#v", response.Items)
 	}
-	if response.Items[0].VectorRank != 2 || response.Items[0].RerankRank != 1 {
-		t.Fatalf("expected vector and rerank positions to be preserved, got %#v", response.Items[0])
+	if response.Items[0].VectorRank != 2 || response.Items[0].FusionRank != 2 || response.Items[0].RerankRank != 1 {
+		t.Fatalf("expected vector, fusion, and rerank positions to be preserved, got %#v", response.Items[0])
+	}
+	if response.Items[0].RRFScore <= 0 {
+		t.Fatalf("expected an RRF score, got %#v", response.Items[0])
 	}
 	if response.Items[0].Confidence == "" || response.Items[0].Confidence == "low" {
 		t.Fatalf("expected relevant result to pass the gate, got %#v", response.Items[0])
@@ -114,7 +117,7 @@ func TestRetrievalPipelineRecallsIdentifierOutsideDenseCandidates(t *testing.T) 
 	if len(response.Items) == 0 || response.Items[0].Chunk.ID != "chunk_error" {
 		t.Fatalf("expected lexical-only identifier result to lead the reranked candidates, got %#v", response.Items)
 	}
-	if response.Items[0].VectorRank != 0 || response.Items[0].LexicalRank != 1 || response.Items[0].LexicalScore != 1 {
+	if response.Items[0].VectorRank != 0 || response.Items[0].LexicalRank != 1 || response.Items[0].LexicalScore != 1 || response.Items[0].FusionRank == 0 || response.Items[0].RRFScore <= 0 {
 		t.Fatalf("expected lexical-only rank evidence, got %#v", response.Items[0])
 	}
 }

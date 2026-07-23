@@ -2189,6 +2189,10 @@ function KnowledgePanel({
                   </div>
                   <div className="document-metrics">
                     <span>{documentFormat(result.document)}</span>
+                    <span>v#{result.vector_rank ?? "-"}</span>
+                    <span>l#{result.lexical_rank ?? "-"}</span>
+                    <span>f#{result.fusion_rank ?? "-"}</span>
+                    <span>r#{result.rerank_rank ?? "-"}</span>
                     {result.confidence ? <span>{result.confidence}</span> : null}
                     <span>similarity {formatScore(result.similarity)}</span>
                     <span>score {formatScore(result.score)}</span>
@@ -2282,6 +2286,8 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
                     </div>
                     <div className="document-metrics">
                       <span>v#{resultItem.vector_rank ?? "-"}</span>
+                      <span>l#{resultItem.lexical_rank ?? "-"}</span>
+                      <span>f#{resultItem.fusion_rank ?? "-"}</span>
                       <span>r#{resultItem.rerank_rank ?? "-"}</span>
                       {resultItem.confidence ? <span>{resultItem.confidence}</span> : null}
                       <span>sim {formatScore(resultItem.similarity)}</span>
@@ -2304,7 +2310,8 @@ function ScoreBreakdown({ result }: { result: RetrievedDocumentChunk }) {
   const terms = result.matched_terms ?? [];
   return (
     <div className="score-breakdown">
-      <span>base {formatScore(result.score)}</span>
+      <span>recall {formatScore(result.score)}</span>
+      <span>RRF {formatScore(result.rrf_score ?? 0)}</span>
       <span>evidence {formatScore(result.evidence_score ?? 0)}</span>
       <span>coverage {formatPercent(result.evidence_coverage ?? 0)}</span>
       <span>lexical +{formatScore(result.lexical_boost ?? 0)}</span>

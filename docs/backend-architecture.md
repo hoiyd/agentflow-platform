@@ -102,7 +102,7 @@ HTTP RAG search or Agent context retrieval
   -> Retrieval Pipeline
        -> Store dense recall
        -> Store lexical recall
-       -> deduplicate / rerank / relevance gate
+       -> deduplicate / RRF fusion / rerank / relevance gate
 
 HTTP document ingestion
   -> Knowledge Base
@@ -111,11 +111,12 @@ HTTP document ingestion
 ```
 
 The Retrieval Pipeline, rather than an Agent runtime or HTTP handler, owns the
-recall sequence and result policy. Stores expose separate dense and lexical
-search operations and remain responsible for applying workspace and metadata
-filters. This keeps HTTP, Single-Agent, Multi-Agent, and Autonomous retrieval
-behavior aligned while allowing File and Postgres adapters to use different
-index implementations.
+recall sequence, reciprocal-rank fusion, and result policy. Stores expose
+separate dense and lexical search operations and remain responsible for
+applying workspace and metadata filters. Fusion consumes only the two source
+ranks, so File and Postgres adapters can use different score implementations
+without leaking incomparable scales into final ordering. This keeps HTTP,
+Single-Agent, Multi-Agent, and Autonomous retrieval behavior aligned.
 
 Single-Agent, Multi-Agent, and Autonomous streams expose the same `domain.RunEvent` contract to the HTTP adapter. Their common completion path persists the assistant message, transitions the Run, optionally generates the conversation title, flushes the final SSE event, and then schedules conservative curation of explicitly durable user facts. Assistant output and ordinary chat remain conversation history rather than long-term memory.
 

@@ -303,6 +303,8 @@ export type RetrievedDocumentChunk = {
   vector_rank?: number;
   lexical_rank?: number;
   lexical_score?: number;
+  rrf_score?: number;
+  fusion_rank?: number;
   rerank_rank?: number;
   lexical_boost?: number;
   metadata_boost?: number;

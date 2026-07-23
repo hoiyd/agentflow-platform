@@ -625,6 +625,8 @@ type RetrievedDocumentChunk struct {
 	VectorRank       int           `json:"vector_rank,omitempty"`
 	LexicalRank      int           `json:"lexical_rank,omitempty"`
 	LexicalScore     float64       `json:"lexical_score,omitempty"`
+	RRFScore         float64       `json:"rrf_score,omitempty"`
+	FusionRank       int           `json:"fusion_rank,omitempty"`
 	RerankRank       int           `json:"rerank_rank,omitempty"`
 	LexicalBoost     float64       `json:"lexical_boost,omitempty"`
 	MetadataBoost    float64       `json:"metadata_boost,omitempty"`

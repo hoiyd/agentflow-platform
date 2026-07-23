@@ -30,11 +30,14 @@ RAG manual flow:
    `min_similarity` omitted or set to `0`.
 7. Confirm the search panel shows embedding provider/model/dimensions.
 8. Confirm the relevant chunk ranks above unrelated content and the API item
-   exposes `lexical_rank` and `lexical_score`. A lexical-only hit can have
-   `similarity: 0` with no `vector_rank`.
+   exposes `vector_rank`, `lexical_rank`, `rrf_score`, `fusion_rank`, and
+   `rerank_rank`. A lexical-only hit can have `similarity: 0` with no
+   `vector_rank`.
 9. Repeat with a positive `min_similarity` and confirm lexical-only chunks are
    excluded while dense hits can still carry lexical fields.
-10. Delete the document and confirm it disappears from list/search.
+10. Inspect a candidate returned by both recall paths and confirm its
+    `rrf_score` equals `1 / (60 + vector_rank) + 1 / (60 + lexical_rank)`.
+11. Delete the document and confirm it disappears from list/search.
 
 Postgres lexical integration test (use only a disposable database):
 

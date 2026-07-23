@@ -39,7 +39,7 @@ func Rerank(query string, items []domain.RetrievedDocumentChunk, limit int) []do
 	for index := range items {
 		items[index].LexicalBoost = lexicalBoost(query, queryTerms, items[index].Chunk.Content)
 		items[index].MetadataBoost = metadataBoost(query, queryTerms, items[index])
-		items[index].RerankScore = items[index].Score + items[index].LexicalBoost + items[index].MetadataBoost
+		items[index].RerankScore = normalizedRRFScore(items[index].RRFScore) + items[index].LexicalBoost + items[index].MetadataBoost
 		items[index].MatchedTerms = matchedTerms(query, queryTerms, items[index])
 		items[index].EvidenceCoverage = evidenceCoverage(queryTerms, items[index].MatchedTerms)
 		items[index].EvidenceScore = evidenceScore(query, queryTerms, items[index])

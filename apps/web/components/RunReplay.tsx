@@ -28,6 +28,11 @@ type RetrievedChunkPayload = {
   content?: string;
   similarity?: number;
   score?: number;
+  vector_rank?: number;
+  lexical_rank?: number;
+  rrf_score?: number;
+  fusion_rank?: number;
+  rerank_rank?: number;
   rerank_score?: number;
   lexical_boost?: number;
   metadata_boost?: number;
@@ -509,7 +514,19 @@ function RetrievedContext({ memories, chunks }: { memories: RetrievedMemoryPaylo
                   <span>{formatScore(chunk.rerank_score ?? chunk.score ?? chunk.similarity)}</span>
                 </div>
                 <p>{chunk.content}</p>
-                <small>{[chunk.chunk_id, chunk.lexical_boost ? `lexical +${chunk.lexical_boost.toFixed(3)}` : ""].filter(Boolean).join(" - ")}</small>
+                <small>
+                  {[
+                    chunk.chunk_id,
+                    chunk.vector_rank ? `dense #${chunk.vector_rank}` : "",
+                    chunk.lexical_rank ? `lexical #${chunk.lexical_rank}` : "",
+                    chunk.fusion_rank ? `fusion #${chunk.fusion_rank}` : "",
+                    chunk.rerank_rank ? `rerank #${chunk.rerank_rank}` : "",
+                    chunk.rrf_score ? `RRF ${chunk.rrf_score.toFixed(4)}` : "",
+                    chunk.lexical_boost ? `lexical +${chunk.lexical_boost.toFixed(3)}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" - ")}
+                </small>
               </article>
             ))}
           </div>

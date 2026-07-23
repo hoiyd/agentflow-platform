@@ -77,7 +77,7 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 	if len(chunks) == 0 {
 		t.Fatal("expected retrieved document chunks")
 	}
-	if chunks[0].VectorRank == 0 || chunks[0].LexicalRank == 0 || chunks[0].RerankRank == 0 || chunks[0].Confidence == "" {
+	if chunks[0].VectorRank == 0 || chunks[0].LexicalRank == 0 || chunks[0].RRFScore <= 0 || chunks[0].FusionRank == 0 || chunks[0].RerankRank == 0 || chunks[0].Confidence == "" {
 		t.Fatalf("expected runtime retrieval to use the shared rerank and gate pipeline, got %#v", chunks[0])
 	}
 
@@ -105,7 +105,7 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 			t.Fatal("expected retrieved chunks in retrieval payload")
 		}
 		retrieved, ok := event.Payload["retrieved_chunks"].([]map[string]any)
-		if !ok || len(retrieved) == 0 || retrieved[0]["lexical_rank"] == nil || retrieved[0]["rerank_rank"] == nil || retrieved[0]["confidence"] == nil {
+		if !ok || len(retrieved) == 0 || retrieved[0]["lexical_rank"] == nil || retrieved[0]["rrf_score"] == nil || retrieved[0]["fusion_rank"] == nil || retrieved[0]["rerank_rank"] == nil || retrieved[0]["confidence"] == nil {
 			t.Fatalf("expected shared pipeline ranks in retrieval trace, got %#v", event.Payload["retrieved_chunks"])
 		}
 		return

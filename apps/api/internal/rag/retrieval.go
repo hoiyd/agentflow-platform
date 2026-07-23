@@ -79,6 +79,7 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 		return domain.DocumentSearchResponse{}, err
 	}
 	items := mergeRecallCandidates(denseItems, lexicalItems, search.MinSimilarity <= 0)
+	items = ReciprocalRankFusion(items)
 	items = Rerank(search.Query, items, requestedLimit)
 	items = ApplyRelevanceGate(items)
 
