@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { EpisodeReport, KnowledgeSecurityInfo, RunReplay as RunReplayData, RunEvent } from "../lib/api";
+import type { EpisodeReport, RunReplay as RunReplayData, RunEvent } from "../lib/api";
+import type { KnowledgeSecurityInfo } from "../lib/knowledge-api";
 import { getEpisodeReport, getRunReplay, resumeRun } from "../lib/api";
 import { BudgetEventDetail, RunUsagePanel } from "./RunUsagePanel";
 
