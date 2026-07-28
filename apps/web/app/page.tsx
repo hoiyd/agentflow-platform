@@ -1,45 +1,103 @@
 import Link from "next/link";
-import { Activity, ArrowUpRight, Check, Database, GitBranch, Play, Terminal } from "lucide-react";
+import type { CSSProperties } from "react";
+import {
+  Activity,
+  ArrowRight,
+  ArrowUpRight,
+  Bot,
+  Braces,
+  Check,
+  Database,
+  FileCheck2,
+  Gauge,
+  GitBranch,
+  Layers3,
+  Play,
+  Repeat2,
+  Search,
+  ShieldCheck,
+  Users,
+  Wrench
+} from "lucide-react";
 
-const workflowSteps = [
+const runtimeStages = [
+  { name: "Plan", detail: "4 steps", state: "complete" },
+  { name: "Retrieve", detail: "6 grounded chunks", state: "complete" },
+  { name: "Act", detail: "3 tool calls", state: "complete" },
+  { name: "Verify", detail: "5 checks passed", state: "complete" }
+];
+
+const executionModes = [
   {
-    title: "Plan",
-    detail: "4 tasks generated",
-    duration: "0.8s"
+    icon: Bot,
+    label: "Direct",
+    title: "Single agent",
+    body: "One configured agent handles the request with tools, memory, retrieval, and streaming output."
   },
   {
-    title: "Research",
-    detail: "3 tools · 12 sources",
-    duration: "6.4s"
+    icon: Users,
+    label: "Coordinate",
+    title: "Multi-agent",
+    body: "Planner, researcher, worker, and reviewer collaborate through persisted steps and visible handoffs."
   },
   {
-    title: "Synthesize",
-    detail: "2,418 tokens",
-    duration: "3.1s"
-  },
-  {
-    title: "Review",
-    detail: "Quality gate passed",
-    duration: "1.2s"
+    icon: Repeat2,
+    label: "Autonomous",
+    title: "Bounded loop",
+    body: "Observe, plan, act, review, and decide within explicit iteration, runtime, output, and tool limits."
   }
 ];
 
-const platformLayers = [
+const platformCapabilities = [
   {
-    icon: GitBranch,
-    title: "Orchestrate",
-    body: "Move from a direct agent call to planned collaboration and bounded autonomous loops without changing workspaces."
+    icon: Layers3,
+    phase: "Configure",
+    title: "Agents and execution policy",
+    body: "Create reusable agents, choose native or LangChainGo execution, attach tools, and freeze completion and budget policy per run.",
+    details: ["Agent profiles", "Tool catalog", "Frozen run snapshot"]
   },
   {
     icon: Database,
-    title: "Ground",
-    body: "Attach tools, semantic memory, and indexed knowledge. Inspect exactly what entered the model context."
+    phase: "Ground",
+    title: "Memory and hybrid RAG",
+    body: "Combine curated semantic memory with Markdown-aware knowledge ingestion, semantic and keyword recall, RRF fusion, reranking, and relevance gating.",
+    details: ["Source details", "Prompt-injection guard", "RAG evaluation"]
+  },
+  {
+    icon: Wrench,
+    phase: "Execute",
+    title: "Tool-aware orchestration",
+    body: "Stream every mode through the same Go runtime, with guarded tool execution, resumable run state, context assembly, and compaction.",
+    details: ["SSE events", "Cancel and resume", "Context manifest"]
+  },
+  {
+    icon: Gauge,
+    phase: "Control",
+    title: "Budgets and runtime limits",
+    body: "Enforce model, token, tool, active-runtime, and estimated-cost limits with an append-only usage ledger and explicit failure states.",
+    details: ["Usage ledger", "Rate limits", "Progress guards"]
+  },
+  {
+    icon: FileCheck2,
+    phase: "Verify",
+    title: "Evidence-gated completion",
+    body: "Treat output as a candidate until frozen completion contracts pass deterministic text, schema, citation, HTTP, or command checks.",
+    details: ["Subject hash", "Retryable evidence", "Verification artifacts"]
   },
   {
     icon: Activity,
-    title: "Observe",
-    body: "Follow execution live, then replay every step, tool call, retrieval, token, latency, and failure."
+    phase: "Inspect",
+    title: "Trace, usage, and replay",
+    body: "Inspect collaboration steps, retrieval decisions, tool calls, model usage, errors, and verification evidence during and after every run.",
+    details: ["Live status", "Run trace", "Episode replay"]
   }
+];
+
+const architectureRows = [
+  { label: "Runtime", value: "Go orchestration", detail: "Native core · optional LangChainGo adapter" },
+  { label: "Models", value: "OpenAI-compatible", detail: "Chat and embedding providers" },
+  { label: "State", value: "File or PostgreSQL", detail: "pgvector semantic retrieval" },
+  { label: "Transport", value: "HTTP + SSE", detail: "Persisted events and replay projections" }
 ];
 
 export default function Page() {
@@ -52,106 +110,160 @@ export default function Page() {
             AgentFlow
           </Link>
           <div className="home-nav-actions">
-            <a href="#platform" className="home-nav-link subtle">
-              Platform
-            </a>
-            <a href="#architecture" className="home-nav-link subtle">
-              Architecture
-            </a>
+            <a href="#modes" className="home-nav-link subtle">Modes</a>
+            <a href="#platform" className="home-nav-link subtle">Platform</a>
+            <a href="#architecture" className="home-nav-link subtle">Architecture</a>
             <Link href="/workspace" className="home-nav-link">
               Open workspace <ArrowUpRight size={15} strokeWidth={1.8} />
             </Link>
           </div>
         </nav>
 
-        <div className="home-hero-content">
-          <p className="home-kicker">Agent runtime · OpenAI compatible</p>
-          <h1>AgentFlow</h1>
-          <p className="home-hero-statement">Build agent systems you can inspect.</p>
-          <p className="home-subtitle">
-            Configure agents, coordinate work, call tools, and follow every decision from prompt to result in one operational workspace.
-          </p>
-          <div className="home-actions">
-            <Link href="/workspace" className="home-primary-action">
-              <Play size={16} fill="currentColor" /> Launch workspace
-            </Link>
-            <a href="#platform" className="home-secondary-action">
-              See how runs work
-            </a>
+        <div className="home-runtime-scene" aria-label="Completed AgentFlow run preview">
+          <div className="runtime-scene-header">
+            <div>
+              <span className="runtime-scene-label">RUN</span>
+              <code>run_01JQ7M8</code>
+            </div>
+            <strong><Check size={13} strokeWidth={2.4} /> Completed</strong>
+          </div>
+
+          <div className="runtime-scene-main">
+            <div className="runtime-mode-line">
+              <span>MODE</span>
+              <strong>Multi-agent</strong>
+              <span className="runtime-line" aria-hidden="true" />
+            </div>
+            <div className="runtime-stage-list">
+              {runtimeStages.map((stage, index) => (
+                <div className="runtime-stage" key={stage.name} style={{ "--stage-index": index } as CSSProperties}>
+                  <span className="runtime-stage-index">0{index + 1}</span>
+                  <span className="runtime-stage-node"><Check size={12} strokeWidth={2.5} /></span>
+                  <div>
+                    <strong>{stage.name}</strong>
+                    <span>{stage.detail}</span>
+                  </div>
+                  <code>{stage.state}</code>
+                </div>
+              ))}
+            </div>
+
+            <div className="runtime-evidence">
+              <div className="runtime-evidence-title">
+                <span>EVIDENCE</span>
+                <strong>Replay snapshot</strong>
+              </div>
+              <dl>
+                <div><dt>Retrieval</dt><dd>RRF · 6 chunks</dd></div>
+                <div><dt>Context</dt><dd>72.4k / 115.7k</dd></div>
+                <div><dt>Usage</dt><dd>12,904 tokens</dd></div>
+                <div><dt>Verification</dt><dd className="runtime-pass">passed</dd></div>
+              </dl>
+            </div>
           </div>
         </div>
 
-        <div className="product-frame" aria-label="Agent workflow execution preview">
-          <div className="product-frame-bar">
-            <div className="product-frame-title">
-              <span className="brand-mark small" aria-hidden="true"><span /></span>
-              <span>Travel research</span>
-              <code>run_01JQ7M8</code>
+        <div className="home-hero-inner">
+          <div className="home-hero-content">
+            <p className="home-kicker">Go-native agent workflow platform</p>
+            <h1>AgentFlow</h1>
+            <p className="home-hero-statement">Run agents like production systems.</p>
+            <p className="home-subtitle">
+              Build direct agents, coordinated teams, and bounded autonomous loops with grounded retrieval, tools, budgets, verification, and replay in one workspace.
+            </p>
+            <div className="home-actions">
+              <Link href="/workspace" className="home-primary-action">
+                <Play size={15} fill="currentColor" /> Launch workspace
+              </Link>
+              <a href="#platform" className="home-secondary-action">
+                Explore the platform <ArrowRight size={15} />
+              </a>
             </div>
-            <div className="run-live"><span /> completed in 11.5s</div>
-          </div>
-          <div className="product-frame-body">
-            <section className="execution-map">
-              <div className="preview-label">Execution</div>
-              <div className="execution-rail">
-                {workflowSteps.map((step) => (
-                  <div className="execution-step" key={step.title}>
-                    <span className="execution-node"><Check size={11} strokeWidth={2.5} /></span>
-                    <div>
-                      <strong>{step.title}</strong>
-                      <span>{step.detail}</span>
-                    </div>
-                    <code>{step.duration}</code>
-                  </div>
-                ))}
-              </div>
-            </section>
-            <section className="execution-output">
-              <div className="preview-label">Final output</div>
-              <h2>Osaka in late July: high-friction, feasible with constraints.</h2>
-              <p>
-                The run compared live flight options, hotel availability, heat index, and the Tenjin Matsuri calendar before producing a recommendation.
-              </p>
-              <div className="output-facts">
-                <span><strong>12</strong> sources</span>
-                <span><strong>3</strong> tool calls</span>
-                <span><strong>4</strong> agents</span>
-              </div>
-              <div className="output-command"><Terminal size={14} /> Replay run <ArrowUpRight size={14} /></div>
-            </section>
           </div>
         </div>
       </section>
 
-      <section className="home-section" id="platform">
-        <div className="home-section-header">
-          <span>One operational surface</span>
-          <h2>From prompt to production evidence.</h2>
-          <p>Each layer stays visible and inspectable, so agent behavior can be operated like software.</p>
+      <section className="home-modes" id="modes">
+        <div className="home-section">
+          <div className="home-section-header">
+            <span>Execution modes</span>
+            <h2>Choose the runtime shape that fits the task.</h2>
+            <p>All three modes share the same tools, retrieval pipeline, run controls, status model, and trace contract.</p>
+          </div>
+          <div className="mode-list">
+            {executionModes.map((mode) => (
+              <article className="mode-row" key={mode.title}>
+                <mode.icon size={20} strokeWidth={1.7} />
+                <span>{mode.label}</span>
+                <h3>{mode.title}</h3>
+                <p>{mode.body}</p>
+              </article>
+            ))}
+          </div>
         </div>
-        <div className="platform-layers">
-          {platformLayers.map((item) => (
-            <article className="platform-layer" key={item.title}>
-              <item.icon size={19} strokeWidth={1.7} />
-              <h3>{item.title}</h3>
-              <p>{item.body}</p>
-            </article>
-          ))}
+      </section>
+
+      <section className="home-platform" id="platform">
+        <div className="home-section">
+          <div className="home-section-header">
+            <span>Operational lifecycle</span>
+            <h2>Control the run from configuration to evidence.</h2>
+            <p>AgentFlow keeps the parts that usually disappear inside a framework visible, persisted, and testable.</p>
+          </div>
+          <div className="capability-list">
+            {platformCapabilities.map((capability) => (
+              <article className="capability-row" key={capability.phase}>
+                <div className="capability-phase">
+                  <capability.icon size={19} strokeWidth={1.7} />
+                  <span>{capability.phase}</span>
+                </div>
+                <div className="capability-copy">
+                  <h3>{capability.title}</h3>
+                  <p>{capability.body}</p>
+                </div>
+                <ul>
+                  {capability.details.map((detail) => <li key={detail}>{detail}</li>)}
+                </ul>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
       <section className="home-architecture" id="architecture">
         <div className="home-section architecture-inner">
-          <div>
-            <span className="section-index">Runtime architecture</span>
-            <h2>Built as a platform,<br />not a chat wrapper.</h2>
+          <div className="architecture-heading">
+            <span className="section-index">Platform architecture</span>
+            <h2>Native orchestration.<br />Explicit boundaries.</h2>
+            <p>A compact stack built to expose execution state instead of hiding it behind a chat abstraction.</p>
+            <div className="architecture-signals" aria-label="Architecture capabilities">
+              <span><GitBranch size={14} /> Workflow state</span>
+              <span><Search size={14} /> Hybrid retrieval</span>
+              <span><ShieldCheck size={14} /> Policy checks</span>
+              <span><Braces size={14} /> Typed events</span>
+            </div>
           </div>
           <div className="architecture-list">
-            <div><code>01</code><span>Go orchestration runtime</span><strong>Native + LangChainGo</strong></div>
-            <div><code>02</code><span>State and retrieval</span><strong>PostgreSQL + pgvector</strong></div>
-            <div><code>03</code><span>Model gateway</span><strong>OpenAI-compatible APIs</strong></div>
-            <div><code>04</code><span>Observability</span><strong>SSE events + replay traces</strong></div>
+            {architectureRows.map((row) => (
+              <div key={row.label}>
+                <span>{row.label}</span>
+                <strong>{row.value}</strong>
+                <code>{row.detail}</code>
+              </div>
+            ))}
           </div>
+        </div>
+      </section>
+
+      <section className="home-final-cta">
+        <div className="home-section final-cta-inner">
+          <div>
+            <span>AgentFlow Platform</span>
+            <h2>Start with a prompt. Keep the evidence.</h2>
+          </div>
+          <Link href="/workspace" className="home-primary-action">
+            Open workspace <ArrowUpRight size={15} />
+          </Link>
         </div>
       </section>
     </main>
