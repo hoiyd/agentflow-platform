@@ -1,0 +1,254 @@
+/* Full-bleed runtime scene used by the landing hero */
+
+.home-runtime-scene {
+  position: absolute;
+  z-index: 1;
+  inset: 0 0 0 55%;
+  overflow: hidden;
+  border-left: 1px solid #d7dbe0;
+  background: #f8f9fa;
+  animation: runtime-scene-enter 620ms cubic-bezier(0.2, 0.75, 0.25, 1) 80ms both;
+}
+
+.home-runtime-scene::before {
+  content: "";
+  position: absolute;
+  inset: 128px 0 0;
+  border-top: 1px solid #d7dbe0;
+  background-color: #f3f4f5;
+  background-image:
+    linear-gradient(rgba(55, 62, 70, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(55, 62, 70, 0.045) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.runtime-scene-header {
+  position: absolute;
+  top: 78px;
+  right: 0;
+  left: 0;
+  min-height: 50px;
+  border-top: 1px solid #d7dbe0;
+  border-bottom: 1px solid #d7dbe0;
+  background: rgba(248, 249, 250, 0.96);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 34px;
+}
+
+.runtime-scene-header > div,
+.runtime-scene-header strong {
+  display: flex;
+  align-items: center;
+}
+
+.runtime-scene-header > div {
+  gap: 12px;
+}
+
+.runtime-scene-label,
+.runtime-mode-line > span:first-child,
+.runtime-evidence-title > span {
+  color: #7b8794;
+  font-size: 10px;
+  font-weight: 560;
+}
+
+.runtime-scene-header code {
+  color: #3c4753;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.runtime-scene-header strong {
+  gap: 7px;
+  color: #146b50;
+  font-size: 11px;
+  font-weight: 590;
+}
+
+.runtime-scene-main {
+  position: relative;
+  z-index: 1;
+  width: min(720px, 100%);
+  min-height: 100%;
+  margin-left: auto;
+  padding: 144px 36px 0;
+  background: transparent;
+}
+
+.runtime-mode-line {
+  display: grid;
+  grid-template-columns: 54px auto minmax(60px, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.runtime-mode-line strong {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 620;
+}
+
+.runtime-line {
+  height: 1px;
+  background: #aeb8c4;
+  transform-origin: left;
+  animation: runtime-line-draw 720ms ease 420ms both;
+}
+
+.runtime-stage-list {
+  position: relative;
+  margin-top: 20px;
+}
+
+.runtime-stage-list::before {
+  content: "";
+  position: absolute;
+  top: 28px;
+  bottom: 28px;
+  left: 70px;
+  width: 1px;
+  background: #9da8b4;
+}
+
+.runtime-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  border-bottom: 1px solid #cbd2da;
+  opacity: 0;
+  animation: runtime-stage-enter 360ms ease both;
+  animation-delay: calc(260ms + var(--stage-index) * 90ms);
+}
+
+.runtime-stage:first-child {
+  border-top: 1px solid #cbd2da;
+}
+
+.runtime-stage-index {
+  color: #8793a0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.runtime-stage-node {
+  position: relative;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+}
+
+.runtime-stage > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.runtime-stage strong {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 630;
+}
+
+.runtime-stage > div > span {
+  color: var(--muted-strong);
+  font-size: 11px;
+}
+
+.runtime-stage > code {
+  color: #146b50;
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.runtime-evidence {
+  margin-top: 20px;
+  border-top: 1px solid #aeb8c4;
+}
+
+.runtime-evidence-title {
+  min-height: 40px;
+  border-bottom: 1px solid #cbd2da;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.runtime-evidence-title strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.runtime-evidence-title > span {
+  font-size: 11px;
+}
+
+.runtime-evidence dl {
+  margin: 0;
+}
+
+.runtime-evidence dl > div {
+  min-height: 30px;
+  border-bottom: 1px solid #cbd2da;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+}
+
+.runtime-evidence dt {
+  color: #677482;
+  font-size: 12px;
+  font-weight: 480;
+}
+
+.runtime-evidence dd {
+  color: #394551;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.runtime-evidence dd.runtime-pass {
+  color: #146b50;
+}
+
+@keyframes runtime-scene-enter {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes runtime-line-draw {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes runtime-stage-enter {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-runtime-scene,
+  .runtime-line,
+  .runtime-stage {
+    animation: none;
+    opacity: 1;
+  }
+}

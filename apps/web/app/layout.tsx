@@ -5,7 +5,6 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "@fontsource/ibm-plex-mono/600.css";
 import "./styles/base.css";
-import "./styles/home.css";
 import "./styles/shell.css";
 import "./styles/chat.css";
 import "./styles/tools.css";
@@ -20,6 +19,7 @@ import "./styles/run-usage.css";
 import "./styles/responsive.css";
 import "./styles/workbench/foundation.css";
 import "./styles/workbench/home.css";
+import "./styles/workbench/home-runtime.css";
 import "./styles/workbench/shell.css";
 import "./styles/workbench/chat.css";
 import "./styles/workbench/composer.css";
@@ -31,7 +31,8 @@ import "./styles/workbench/responsive.css";
 
 export const metadata: Metadata = {
   title: "AgentFlow Platform",
-  description: "AI agent workflow platform with memory, tools, RAG, and replay"
+  description:
+    "Go-native AI agent workflow platform with multi-agent orchestration, hybrid RAG, tools, verification, budgets, traces, and replay"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
