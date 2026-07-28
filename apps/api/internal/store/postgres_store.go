@@ -1232,9 +1232,9 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(`
-		INSERT INTO documents (id, workspace_id, title, source_type, source_uri, mime_type, content, metadata, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		document.ID, nullString(document.WorkspaceID), document.Title, document.SourceType, nullString(document.SourceURI), nullString(document.MimeType), document.Content, metadataJSON, document.CreatedAt, document.UpdatedAt); err != nil {
+		INSERT INTO documents (id, workspace_id, title, version, content_hash, source_type, source_uri, mime_type, content, metadata, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		document.ID, nullString(document.WorkspaceID), document.Title, document.Version, document.ContentHash, document.SourceType, nullString(document.SourceURI), nullString(document.MimeType), document.Content, metadataJSON, document.CreatedAt, document.UpdatedAt); err != nil {
 		return domain.Document{}, err
 	}
 
@@ -1253,6 +1253,12 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 		if chunk.Metadata == nil {
 			chunk.Metadata = map[string]any{}
 		}
+		if chunk.SectionPath == nil {
+			chunk.SectionPath = []string{}
+		}
+		if chunk.DocumentVersion == "" {
+			chunk.DocumentVersion = document.Version
+		}
 		if chunk.CreatedAt.IsZero() {
 			chunk.CreatedAt = now
 		}
@@ -1260,10 +1266,14 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 		if err != nil {
 			return domain.Document{}, err
 		}
+		sectionPathJSON, err := json.Marshal(chunk.SectionPath)
+		if err != nil {
+			return domain.Document{}, err
+		}
 		if _, err := tx.Exec(`
-			INSERT INTO document_chunks (id, document_id, chunk_index, content, token_count, metadata, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			chunk.ID, chunk.DocumentID, chunk.ChunkIndex, chunk.Content, chunk.TokenCount, chunkMetadataJSON, chunk.CreatedAt); err != nil {
+			INSERT INTO document_chunks (id, document_id, parent_id, section_path, start_offset, end_offset, document_version, content_hash, chunk_index, content, token_count, metadata, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			chunk.ID, chunk.DocumentID, chunk.ParentID, sectionPathJSON, chunk.StartOffset, chunk.EndOffset, chunk.DocumentVersion, chunk.ContentHash, chunk.ChunkIndex, chunk.Content, chunk.TokenCount, chunkMetadataJSON, chunk.CreatedAt); err != nil {
 			return domain.Document{}, err
 		}
 
@@ -1299,7 +1309,7 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 
 func (s *PostgresStore) ListDocuments() ([]domain.Document, error) {
 	rows, err := s.db.Query(`
-		SELECT d.id, d.workspace_id, d.title, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
+		SELECT d.id, d.workspace_id, d.title, d.version, d.content_hash, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
 			COUNT(DISTINCT c.id) AS chunk_count,
 			COUNT(e.chunk_id) AS embedding_count
 		FROM documents d
@@ -1325,7 +1335,7 @@ func (s *PostgresStore) ListDocuments() ([]domain.Document, error) {
 
 func (s *PostgresStore) GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error) {
 	row := s.db.QueryRow(`
-		SELECT d.id, d.workspace_id, d.title, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
+		SELECT d.id, d.workspace_id, d.title, d.version, d.content_hash, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
 			COUNT(DISTINCT c.id) AS chunk_count,
 			COUNT(e.chunk_id) AS embedding_count
 		FROM documents d
@@ -1342,7 +1352,7 @@ func (s *PostgresStore) GetDocument(id string) (domain.Document, []domain.Docume
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, document_id, chunk_index, content, token_count, metadata, created_at
+		SELECT id, document_id, parent_id, section_path, start_offset, end_offset, document_version, content_hash, chunk_index, content, token_count, metadata, created_at
 		FROM document_chunks
 		WHERE document_id = $1
 		ORDER BY chunk_index ASC`, document.ID)
@@ -1419,8 +1429,8 @@ func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]do
 
 	query := `
 		SELECT
-			d.id, d.workspace_id, d.title, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
-			c.id, c.document_id, c.chunk_index, c.content, c.token_count, c.metadata, c.created_at,
+			d.id, d.workspace_id, d.title, d.version, d.content_hash, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
+			c.id, c.document_id, c.parent_id, c.section_path, c.start_offset, c.end_offset, c.document_version, c.content_hash, c.chunk_index, c.content, c.token_count, c.metadata, c.created_at,
 			1 - (e.embedding <=> $1::vector) AS similarity,
 			0.03 / (1 + GREATEST(EXTRACT(EPOCH FROM (now() - c.created_at)) / 86400, 0) / 30) AS recency_boost,
 			(1 - (e.embedding <=> $1::vector)) + (0.03 / (1 + GREATEST(EXTRACT(EPOCH FROM (now() - c.created_at)) / 86400, 0) / 30)) AS score
@@ -1485,8 +1495,8 @@ func (s *PostgresStore) SearchDocumentChunksLexical(search domain.DocumentSearch
 	recencyBoost := `(0.03 / (1 + GREATEST(EXTRACT(EPOCH FROM (now() - c.created_at)) / 86400, 0) / 30))`
 	query := `
 		SELECT
-			d.id, d.workspace_id, d.title, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
-			c.id, c.document_id, c.chunk_index, c.content, c.token_count, c.metadata, c.created_at,
+			d.id, d.workspace_id, d.title, d.version, d.content_hash, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
+			c.id, c.document_id, c.parent_id, c.section_path, c.start_offset, c.end_offset, c.document_version, c.content_hash, c.chunk_index, c.content, c.token_count, c.metadata, c.created_at,
 			0::double precision AS similarity,
 			` + recencyBoost + ` AS recency_boost,
 			` + lexicalScore + ` + ` + recencyBoost + ` AS score
@@ -1834,6 +1844,8 @@ func scanDocument(row scanner) (domain.Document, error) {
 		&document.ID,
 		&workspaceID,
 		&document.Title,
+		&document.Version,
+		&document.ContentHash,
 		&document.SourceType,
 		&sourceURI,
 		&mimeType,
@@ -1868,9 +1880,16 @@ func scanDocument(row scanner) (domain.Document, error) {
 func scanDocumentChunk(row scanner) (domain.DocumentChunk, error) {
 	var chunk domain.DocumentChunk
 	var metadataJSON []byte
+	var sectionPathJSON []byte
 	if err := row.Scan(
 		&chunk.ID,
 		&chunk.DocumentID,
+		&chunk.ParentID,
+		&sectionPathJSON,
+		&chunk.StartOffset,
+		&chunk.EndOffset,
+		&chunk.DocumentVersion,
+		&chunk.ContentHash,
 		&chunk.ChunkIndex,
 		&chunk.Content,
 		&chunk.TokenCount,
@@ -1878,6 +1897,11 @@ func scanDocumentChunk(row scanner) (domain.DocumentChunk, error) {
 		&chunk.CreatedAt,
 	); err != nil {
 		return domain.DocumentChunk{}, err
+	}
+	if len(sectionPathJSON) > 0 {
+		if err := json.Unmarshal(sectionPathJSON, &chunk.SectionPath); err != nil {
+			return domain.DocumentChunk{}, err
+		}
 	}
 	if len(metadataJSON) > 0 {
 		if err := json.Unmarshal(metadataJSON, &chunk.Metadata); err != nil {
@@ -1897,10 +1921,13 @@ func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, err
 	var mimeType sql.NullString
 	var documentMetadataJSON []byte
 	var chunkMetadataJSON []byte
+	var sectionPathJSON []byte
 	if err := row.Scan(
 		&item.Document.ID,
 		&workspaceID,
 		&item.Document.Title,
+		&item.Document.Version,
+		&item.Document.ContentHash,
 		&item.Document.SourceType,
 		&sourceURI,
 		&mimeType,
@@ -1909,6 +1936,12 @@ func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, err
 		&item.Document.UpdatedAt,
 		&item.Chunk.ID,
 		&item.Chunk.DocumentID,
+		&item.Chunk.ParentID,
+		&sectionPathJSON,
+		&item.Chunk.StartOffset,
+		&item.Chunk.EndOffset,
+		&item.Chunk.DocumentVersion,
+		&item.Chunk.ContentHash,
 		&item.Chunk.ChunkIndex,
 		&item.Chunk.Content,
 		&item.Chunk.TokenCount,
@@ -1936,6 +1969,11 @@ func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, err
 	}
 	if len(chunkMetadataJSON) > 0 {
 		if err := json.Unmarshal(chunkMetadataJSON, &item.Chunk.Metadata); err != nil {
+			return domain.RetrievedDocumentChunk{}, err
+		}
+	}
+	if len(sectionPathJSON) > 0 {
+		if err := json.Unmarshal(sectionPathJSON, &item.Chunk.SectionPath); err != nil {
 			return domain.RetrievedDocumentChunk{}, err
 		}
 	}
@@ -2169,6 +2207,8 @@ var postgresMigrations = []string{
 		id text PRIMARY KEY,
 		workspace_id text,
 		title text NOT NULL,
+		version text NOT NULL DEFAULT '',
+		content_hash text NOT NULL DEFAULT '',
 		source_type text NOT NULL,
 		source_uri text,
 		mime_type text,
@@ -2177,15 +2217,29 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS version text NOT NULL DEFAULT ''`,
+	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_hash text NOT NULL DEFAULT ''`,
 	`CREATE TABLE IF NOT EXISTS document_chunks (
 		id text PRIMARY KEY,
 		document_id text NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+		parent_id text NOT NULL DEFAULT '',
+		section_path jsonb NOT NULL DEFAULT '[]'::jsonb,
+		start_offset integer NOT NULL DEFAULT 0,
+		end_offset integer NOT NULL DEFAULT 0,
+		document_version text NOT NULL DEFAULT '',
+		content_hash text NOT NULL DEFAULT '',
 		chunk_index integer NOT NULL,
 		content text NOT NULL,
 		token_count integer NOT NULL DEFAULT 0,
 		metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
 		created_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS parent_id text NOT NULL DEFAULT ''`,
+	`ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS section_path jsonb NOT NULL DEFAULT '[]'::jsonb`,
+	`ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS start_offset integer NOT NULL DEFAULT 0`,
+	`ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS end_offset integer NOT NULL DEFAULT 0`,
+	`ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS document_version text NOT NULL DEFAULT ''`,
+	`ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS content_hash text NOT NULL DEFAULT ''`,
 	`CREATE TABLE IF NOT EXISTS document_chunk_embeddings (
 		chunk_id text PRIMARY KEY REFERENCES document_chunks(id) ON DELETE CASCADE,
 		provider text NOT NULL,
@@ -2197,6 +2251,7 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_runs_conversation_created ON runs(conversation_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_status_created ON runs(status, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at ASC)`,
+	`CREATE INDEX IF NOT EXISTS idx_document_chunks_parent_index ON document_chunks(document_id, parent_id, chunk_index)`,
 	`CREATE INDEX IF NOT EXISTS idx_steps_run_created ON collaboration_steps(run_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_run_events_run_sequence ON run_events(run_id, sequence ASC)`,
 	`CREATE TABLE IF NOT EXISTS run_usage_entries (

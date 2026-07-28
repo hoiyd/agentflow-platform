@@ -39,6 +39,7 @@ type fileData struct {
 	Memories              []domain.Memory                 `json:"memories"`
 	MemoryEmbeddings      []domain.MemoryEmbedding        `json:"memory_embeddings"`
 	Documents             []domain.Document               `json:"documents"`
+	DocumentContents      map[string]string               `json:"document_contents,omitempty"`
 	DocumentChunks        []domain.DocumentChunk          `json:"document_chunks"`
 	ChunkEmbeddings       []domain.DocumentChunkEmbedding `json:"document_chunk_embeddings"`
 }
@@ -1130,6 +1131,12 @@ func (s *FileStore) CreateDocument(document domain.Document, chunks []domain.Doc
 		if chunks[i].Metadata == nil {
 			chunks[i].Metadata = map[string]any{}
 		}
+		if chunks[i].SectionPath == nil {
+			chunks[i].SectionPath = []string{}
+		}
+		if chunks[i].DocumentVersion == "" {
+			chunks[i].DocumentVersion = document.Version
+		}
 		if chunks[i].CreatedAt.IsZero() {
 			chunks[i].CreatedAt = now
 		}
@@ -1150,6 +1157,10 @@ func (s *FileStore) CreateDocument(document domain.Document, chunks []domain.Doc
 
 	document.ChunkCount = len(chunks)
 	document.EmbeddingCount = len(embeddings)
+	if s.data.DocumentContents == nil {
+		s.data.DocumentContents = map[string]string{}
+	}
+	s.data.DocumentContents[document.ID] = document.Content
 	s.data.Documents = append(s.data.Documents, document)
 	s.data.DocumentChunks = append(s.data.DocumentChunks, chunks...)
 	s.data.ChunkEmbeddings = append(s.data.ChunkEmbeddings, embeddings...)
@@ -1263,6 +1274,7 @@ func (s *FileStore) DeleteDocument(id string) error {
 	}
 
 	s.data.Documents = documents
+	delete(s.data.DocumentContents, id)
 	s.data.DocumentChunks = chunks
 	s.data.ChunkEmbeddings = embeddings
 	return s.saveLocked()
@@ -1456,6 +1468,7 @@ func emptyFileData() fileData {
 		Memories:           []domain.Memory{},
 		MemoryEmbeddings:   []domain.MemoryEmbedding{},
 		Documents:          []domain.Document{},
+		DocumentContents:   map[string]string{},
 		DocumentChunks:     []domain.DocumentChunk{},
 		ChunkEmbeddings:    []domain.DocumentChunkEmbedding{},
 	}
@@ -1494,6 +1507,12 @@ func (s *FileStore) normalizeLoadedDataLocked() {
 	}
 	if s.data.Documents == nil {
 		s.data.Documents = []domain.Document{}
+	}
+	if s.data.DocumentContents == nil {
+		s.data.DocumentContents = map[string]string{}
+	}
+	for index := range s.data.Documents {
+		s.data.Documents[index].Content = s.data.DocumentContents[s.data.Documents[index].ID]
 	}
 	if s.data.DocumentChunks == nil {
 		s.data.DocumentChunks = []domain.DocumentChunk{}

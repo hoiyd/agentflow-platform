@@ -1,9 +1,12 @@
 package rag
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,7 +22,7 @@ var orderedMarkdownListPattern = regexp.MustCompile(`^\d+[.)]\s+`)
 
 func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.DocumentChunk, error) {
 	title := strings.TrimSpace(req.Title)
-	content := strings.TrimSpace(req.Content)
+	content := normalizeDocumentContent(req.Content)
 	if title == "" {
 		return domain.Document{}, nil, errors.New("document title is required")
 	}
@@ -30,14 +33,18 @@ func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.
 	if sourceType == "" {
 		sourceType = "text"
 	}
-	metadata := req.Metadata
-	if metadata == nil {
-		metadata = map[string]any{}
+	metadata := copyMetadata(req.Metadata)
+	contentHash := sourceHash(content)
+	version := strings.TrimSpace(req.Version)
+	if version == "" {
+		version = "sha256:" + contentHash
 	}
 	now := time.Now().UTC()
 	document := domain.Document{
 		WorkspaceID: strings.TrimSpace(req.WorkspaceID),
 		Title:       title,
+		Version:     version,
+		ContentHash: contentHash,
 		SourceType:  sourceType,
 		SourceURI:   strings.TrimSpace(req.SourceURI),
 		MimeType:    strings.TrimSpace(req.MimeType),
@@ -53,7 +60,7 @@ func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.
 			metadata["filename"] = filename
 		}
 	}
-	parts := buildDocumentChunkParts(content, format)
+	parts := buildDocumentChunkParts(content, format, version)
 	chunks := make([]domain.DocumentChunk, 0, len(parts))
 	for index, part := range parts {
 		chunkMetadata := copyMetadata(metadata)
@@ -63,6 +70,11 @@ func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.
 			chunkMetadata["chunk_type"] = "text"
 		}
 		chunks = append(chunks, domain.DocumentChunk{
+			ChunkSource: domain.ChunkSource{
+				ParentID: part.ParentID, SectionPath: append([]string{}, part.SectionPath...),
+				StartOffset: part.StartOffset, EndOffset: part.EndOffset,
+				DocumentVersion: version, ContentHash: sourceHash(part.Content),
+			},
 			ChunkIndex: index,
 			Content:    part.Content,
 			TokenCount: estimateDocumentTokens(part.Content),
@@ -77,19 +89,25 @@ func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.
 }
 
 type documentChunkPart struct {
-	Content  string
-	Metadata map[string]any
+	Content     string
+	ParentID    string
+	SectionPath []string
+	StartOffset int
+	EndOffset   int
+	Metadata    map[string]any
 }
 
-func buildDocumentChunkParts(content string, format string) []documentChunkPart {
+func buildDocumentChunkParts(content string, format string, documentVersion string) []documentChunkPart {
 	if format == "markdown" {
-		return splitMarkdownContent(content)
+		return splitMarkdownContent(content, documentVersion)
 	}
-	parts := splitDocumentContent(content, documentChunkSize, documentChunkOverlap)
-	chunks := make([]documentChunkPart, 0, len(parts))
-	for _, part := range parts {
+	ranges := splitDocumentContentRanges(content, documentChunkSize, documentChunkOverlap)
+	chunks := make([]documentChunkPart, 0, len(ranges))
+	parentID := sourceParentID(documentVersion, nil, 0)
+	for _, part := range ranges {
 		chunks = append(chunks, documentChunkPart{
-			Content:  part,
+			Content: part.Content, ParentID: parentID,
+			StartOffset: part.StartOffset, EndOffset: part.EndOffset,
 			Metadata: map[string]any{"chunk_type": "text"},
 		})
 	}
@@ -119,19 +137,20 @@ func FormatFromFilename(filename string) (string, string, bool) {
 	}
 }
 
-func splitMarkdownContent(content string) []documentChunkPart {
-	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+func splitMarkdownContent(content string, documentVersion string) []documentChunkPart {
+	lines := sourceLines(content)
 	headingPath := []string{}
 	parts := []documentChunkPart{}
-	buffer := []string{}
+	buffer := []sourceLine{}
 	bufferType := ""
 	inCode := false
 	codeFence := ""
 	codeLanguage := ""
+	sectionStart := 0
 
 	flush := func() {
-		text := strings.TrimSpace(strings.Join(buffer, "\n"))
-		if text == "" {
+		source, startOffset, _ := sourceRange(content, buffer)
+		if source == "" {
 			buffer = nil
 			bufferType = ""
 			return
@@ -142,19 +161,19 @@ func splitMarkdownContent(content string) []documentChunkPart {
 		}
 		if len(headingPath) > 0 {
 			metadata["heading_path"] = strings.Join(headingPath, " > ")
-			text = markdownHeadingContext(headingPath) + "\n\n" + text
 		}
 		if codeLanguage != "" && bufferType == "code" {
 			metadata["code_language"] = codeLanguage
 		}
-		parts = appendChunkPart(parts, text, metadata)
+		parts = appendMarkdownChunkParts(parts, source, startOffset, metadata, headingPath,
+			sourceParentID(documentVersion, headingPath, sectionStart))
 		buffer = nil
 		bufferType = ""
 		codeLanguage = ""
 	}
 
 	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
+		trimmed := strings.TrimSpace(line.Text)
 		if inCode {
 			buffer = append(buffer, line)
 			if strings.HasPrefix(trimmed, codeFence) {
@@ -174,6 +193,7 @@ func splitMarkdownContent(content string) []documentChunkPart {
 		}
 		if level, title, ok := markdownHeading(trimmed); ok {
 			flush()
+			sectionStart = line.StartOffset
 			if level <= len(headingPath) {
 				headingPath = headingPath[:level-1]
 			}
@@ -196,7 +216,7 @@ func splitMarkdownContent(content string) []documentChunkPart {
 	}
 	flush()
 	if len(parts) == 0 {
-		return buildDocumentChunkParts(content, "text")
+		return buildDocumentChunkParts(content, "text", documentVersion)
 	}
 	return parts
 }
@@ -217,15 +237,32 @@ func markdownHeadingContext(headingPath []string) string {
 	return strings.Join(lines, "\n")
 }
 
-func appendChunkPart(parts []documentChunkPart, content string, metadata map[string]any) []documentChunkPart {
-	if len([]rune(content)) <= documentChunkSize {
-		return append(parts, documentChunkPart{Content: content, Metadata: metadata})
+func appendMarkdownChunkParts(parts []documentChunkPart, source string, startOffset int, metadata map[string]any, sectionPath []string, parentID string) []documentChunkPart {
+	headingContext := markdownHeadingContext(sectionPath)
+	contentSize := documentChunkSize
+	if headingContext != "" {
+		contentSize -= len([]rune(headingContext)) + 2
+		if contentSize < documentChunkSize/2 {
+			contentSize = documentChunkSize / 2
+		}
 	}
-	for _, part := range splitDocumentContent(content, documentChunkSize, documentChunkOverlap) {
+	ranges := splitDocumentContentRanges(source, contentSize, documentChunkOverlap)
+	for _, sourcePart := range ranges {
 		partMetadata := copyMetadata(metadata)
-		partMetadata["chunk_type"] = metadata["chunk_type"]
-		partMetadata["split_reason"] = "oversize_markdown_block"
-		parts = append(parts, documentChunkPart{Content: part, Metadata: partMetadata})
+		if len(ranges) > 1 {
+			partMetadata["split_reason"] = "oversize_markdown_block"
+		}
+		chunkContent := sourcePart.Content
+		if headingContext != "" {
+			chunkContent = headingContext + "\n\n" + chunkContent
+		}
+		parts = append(parts, documentChunkPart{
+			Content: chunkContent, ParentID: parentID,
+			SectionPath: append([]string(nil), sectionPath...),
+			StartOffset: startOffset + sourcePart.StartOffset,
+			EndOffset:   startOffset + sourcePart.EndOffset,
+			Metadata:    partMetadata,
+		})
 	}
 	return parts
 }
@@ -264,8 +301,13 @@ func isMarkdownListLine(trimmed string) bool {
 		orderedMarkdownListPattern.MatchString(trimmed)
 }
 
-func splitDocumentContent(content string, size int, overlap int) []string {
-	content = strings.TrimSpace(content)
+type sourceRangePart struct {
+	Content     string
+	StartOffset int
+	EndOffset   int
+}
+
+func splitDocumentContentRanges(content string, size int, overlap int) []sourceRangePart {
 	if content == "" {
 		return nil
 	}
@@ -279,22 +321,92 @@ func splitDocumentContent(content string, size int, overlap int) []string {
 		overlap = size / 4
 	}
 	runes := []rune(content)
-	if len(runes) <= size {
-		return []string{content}
+	byteOffsets := make([]int, len(runes)+1)
+	byteOffset := 0
+	for index, value := range runes {
+		byteOffsets[index] = byteOffset
+		byteOffset += len(string(value))
 	}
-	parts := []string{}
+	byteOffsets[len(runes)] = len(content)
+	parts := []sourceRangePart{}
 	for start := 0; start < len(runes); {
 		end := start + size
 		if end > len(runes) {
 			end = len(runes)
 		}
-		parts = append(parts, strings.TrimSpace(string(runes[start:end])))
+		rawStart := byteOffsets[start]
+		rawEnd := byteOffsets[end]
+		raw := content[rawStart:rawEnd]
+		trimmed := strings.TrimSpace(raw)
+		if trimmed != "" {
+			leadingBytes := strings.Index(raw, trimmed)
+			partStart := rawStart + leadingBytes
+			parts = append(parts, sourceRangePart{Content: trimmed, StartOffset: partStart, EndOffset: partStart + len(trimmed)})
+		}
 		if end == len(runes) {
 			break
 		}
 		start = end - overlap
 	}
 	return parts
+}
+
+type sourceLine struct {
+	Text        string
+	StartOffset int
+	EndOffset   int
+}
+
+func sourceLines(content string) []sourceLine {
+	lines := make([]sourceLine, 0, strings.Count(content, "\n")+1)
+	start := 0
+	for start <= len(content) {
+		end := strings.IndexByte(content[start:], '\n')
+		if end < 0 {
+			lines = append(lines, sourceLine{Text: content[start:], StartOffset: start, EndOffset: len(content)})
+			break
+		}
+		end += start
+		lines = append(lines, sourceLine{Text: content[start:end], StartOffset: start, EndOffset: end})
+		start = end + 1
+		if start == len(content) {
+			lines = append(lines, sourceLine{StartOffset: start, EndOffset: start})
+			break
+		}
+	}
+	return lines
+}
+
+func sourceRange(content string, lines []sourceLine) (string, int, int) {
+	if len(lines) == 0 {
+		return "", 0, 0
+	}
+	start := lines[0].StartOffset
+	end := lines[len(lines)-1].EndOffset
+	raw := content[start:end]
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", 0, 0
+	}
+	leadingBytes := strings.Index(raw, trimmed)
+	start += leadingBytes
+	return trimmed, start, start + len(trimmed)
+}
+
+func normalizeDocumentContent(content string) string {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
+	return strings.TrimSpace(content)
+}
+
+func sourceHash(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])
+}
+
+func sourceParentID(documentVersion string, sectionPath []string, sectionStart int) string {
+	identity := documentVersion + "\x00" + strings.Join(sectionPath, "\x00") + "\x00" + strconv.Itoa(sectionStart)
+	return "parent_" + sourceHash(identity)[:24]
 }
 
 func copyMetadata(metadata map[string]any) map[string]any {

@@ -276,6 +276,8 @@ export type DocumentInfo = {
   id: string;
   workspace_id?: string;
   title: string;
+  version?: string;
+  content_hash?: string;
   source_type: string;
   source_uri?: string;
   mime_type?: string;
@@ -291,6 +293,12 @@ export type RetrievedDocumentChunk = {
   chunk: {
     id: string;
     document_id: string;
+    parent_id?: string;
+    section_path?: string[];
+    start_offset?: number;
+    end_offset?: number;
+    document_version?: string;
+    content_hash?: string;
     chunk_index: number;
     content: string;
     token_count: number;
@@ -767,6 +775,7 @@ export async function listDocuments(): Promise<DocumentInfo[]> {
 
 export async function createDocument(input: {
   title: string;
+  version?: string;
   content: string;
   metadata?: Record<string, unknown>;
 }): Promise<DocumentInfo> {

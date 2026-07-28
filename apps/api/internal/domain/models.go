@@ -565,6 +565,8 @@ type Document struct {
 	ID             string         `json:"id"`
 	WorkspaceID    string         `json:"workspace_id,omitempty"`
 	Title          string         `json:"title"`
+	Version        string         `json:"version,omitempty"`
+	ContentHash    string         `json:"content_hash,omitempty"`
 	SourceType     string         `json:"source_type"`
 	SourceURI      string         `json:"source_uri,omitempty"`
 	MimeType       string         `json:"mime_type,omitempty"`
@@ -576,9 +578,19 @@ type Document struct {
 	UpdatedAt      time.Time      `json:"updated_at"`
 }
 
+type ChunkSource struct {
+	ParentID        string   `json:"parent_id,omitempty"`
+	SectionPath     []string `json:"section_path"`
+	StartOffset     int      `json:"start_offset"`
+	EndOffset       int      `json:"end_offset"`
+	DocumentVersion string   `json:"document_version,omitempty"`
+	ContentHash     string   `json:"content_hash,omitempty"`
+}
+
 type DocumentChunk struct {
-	ID         string         `json:"id"`
-	DocumentID string         `json:"document_id"`
+	ID         string `json:"id"`
+	DocumentID string `json:"document_id"`
+	ChunkSource
 	ChunkIndex int            `json:"chunk_index"`
 	Content    string         `json:"content"`
 	TokenCount int            `json:"token_count"`
@@ -599,6 +611,7 @@ type DocumentChunkEmbedding struct {
 type DocumentIngestRequest struct {
 	WorkspaceID string         `json:"workspace_id,omitempty"`
 	Title       string         `json:"title"`
+	Version     string         `json:"version,omitempty"`
 	Content     string         `json:"content"`
 	SourceType  string         `json:"source_type,omitempty"`
 	SourceURI   string         `json:"source_uri,omitempty"`

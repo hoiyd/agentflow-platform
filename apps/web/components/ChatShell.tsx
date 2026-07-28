@@ -2199,7 +2199,7 @@ function KnowledgePanel({
                 <div className="rag-result-header">
                   <div>
                     <h3>{result.document.title}</h3>
-                    <div className="tool-source">{chunkSourceLabel(result)}</div>
+                    <div className="tool-source">Source details: {chunkSourceDetails(result)}</div>
                   </div>
                   <div className="document-metrics">
                     <span>{documentFormat(result.document)}</span>
@@ -2304,7 +2304,7 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
                   <div className="rag-result-header">
                     <div>
                       <h3>{resultItem.document.title}</h3>
-                      <div className="tool-source">{chunkSourceLabel(resultItem)}</div>
+                      <div className="tool-source">Source details: {chunkSourceDetails(resultItem)}</div>
                     </div>
                     <div className="document-metrics">
                       <span>Semantic #{resultItem.vector_rank ?? "-"}</span>
@@ -2361,7 +2361,11 @@ function DocumentDetailBlock({ detail, isLoading }: { detail: DocumentDetail | n
         <div>
           <h3>Document detail</h3>
           <div className="tool-source">
-            {[documentFilename(detail.document), new Date(detail.document.created_at).toLocaleString()]
+            {[
+              documentFilename(detail.document),
+              shortSourceLabel("version", detail.document.version),
+              new Date(detail.document.created_at).toLocaleString()
+            ]
               .filter(Boolean)
               .join(" / ")}
           </div>
@@ -2378,9 +2382,7 @@ function DocumentDetailBlock({ detail, isLoading }: { detail: DocumentDetail | n
             <div className="rag-result-header">
               <div>
                 <h3>Chunk {chunk.chunk_index + 1}</h3>
-                {metadataString(chunk.metadata, "heading_path") ? (
-                  <div className="tool-source">{metadataString(chunk.metadata, "heading_path")}</div>
-                ) : null}
+                <div className="tool-source">Source details: {documentChunkSourceDetails(chunk)}</div>
               </div>
               <div className="document-metrics">
                 {metadataString(chunk.metadata, "chunk_type") ? (
@@ -2927,13 +2929,37 @@ function documentFilename(document: DocumentInfo) {
   return metadataString(document.metadata, "filename") || document.source_uri || "";
 }
 
-function chunkSourceLabel(result: RetrievedDocumentChunk) {
+function chunkSourceDetails(result: RetrievedDocumentChunk) {
   const parts = [
     documentFilename(result.document),
-    metadataString(result.chunk.metadata, "heading_path"),
-    metadataString(result.chunk.metadata, "chunk_type")
+    result.chunk.section_path?.join(" > ") || metadataString(result.chunk.metadata, "heading_path"),
+    metadataString(result.chunk.metadata, "chunk_type"),
+    sourceRangeLabel(result.chunk.start_offset, result.chunk.end_offset),
+    shortSourceLabel("version", result.chunk.document_version),
+    shortSourceLabel("hash", result.chunk.content_hash)
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" / ") : `Chunk ${result.chunk.chunk_index + 1}`;
+}
+
+function documentChunkSourceDetails(chunk: RetrievedDocumentChunk["chunk"]) {
+  return [
+    chunk.section_path?.join(" > ") || metadataString(chunk.metadata, "heading_path") || "document root",
+    sourceRangeLabel(chunk.start_offset, chunk.end_offset),
+    shortSourceLabel("version", chunk.document_version),
+    shortSourceLabel("hash", chunk.content_hash)
+  ]
+    .filter(Boolean)
+    .join(" / ");
+}
+
+function sourceRangeLabel(start: number | undefined, end: number | undefined) {
+  return typeof start === "number" && typeof end === "number" && end > start ? `bytes ${start}-${end}` : "";
+}
+
+function shortSourceLabel(label: string, value: string | undefined) {
+  if (!value) return "";
+  const normalized = value.startsWith("sha256:") ? value.slice(7) : value;
+  return `${label} ${normalized.slice(0, 12)}`;
 }
 
 function renderMarkdown(content: string) {

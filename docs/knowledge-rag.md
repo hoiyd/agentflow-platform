@@ -18,6 +18,32 @@ Markdown ingestion is structure-aware:
 - oversized blocks fall back to fixed-size chunk splitting
 - heading context is included in chunk content to improve retrieval
 
+## Chunk Source Traceability
+
+Newly ingested documents and chunks carry structured source details:
+
+- `version` is accepted from the ingest request; when omitted it is derived as
+  `sha256:<document_content_hash>`.
+- Document and chunk `content_hash` values are lowercase SHA-256 hex digests.
+- `section_path` is a structured heading path. The existing `heading_path`
+  metadata remains available for compatibility and search features.
+- `start_offset` and `end_offset` form a half-open UTF-8 byte range into the
+  normalized source document. Ingestion normalizes CRLF/CR line endings to LF
+  and trims outer whitespace before calculating offsets and hashes.
+- Markdown heading context prepended for retrieval is not part of the source
+  byte range. Slicing the normalized document by the offsets returns the
+  original source block contained in the stored chunk.
+- `parent_id` is deterministic for a document version and source section.
+  Chunks from the same Markdown section share it; plain-text chunks share the
+  document root parent. This prepares grouping for Parent-Child Retrieval.
+
+The document detail API, RAG search results, Agent retrieval events, and model
+call traces expose the same source fields. Existing rows are preserved with
+empty/default source details; the migration does not invent unverifiable
+offsets or hashes for legacy chunks. FileStore persists normalized source
+content in its internal data file so offsets remain resolvable after restart;
+the full source content is still excluded from HTTP document responses.
+
 ## Retrieval Pipeline
 
 HTTP search, Single-Agent, Multi-Agent, and Autonomous runs use the same
@@ -27,7 +53,7 @@ HTTP search, Single-Agent, Multi-Agent, and Autonomous runs use the same
 2. Recall independent dense and lexical candidate sets. Both paths apply the
    requested workspace and metadata filters.
 3. Merge candidates by chunk ID while preserving `vector_rank`,
-   `lexical_rank`, and `lexical_score` provenance.
+   `lexical_rank`, and `lexical_score` recall details.
 4. Block candidates that match high-confidence prompt-injection patterns and
    record structured filtering decisions.
 5. Fuse the remaining recall rankings with equal-weight Reciprocal Rank Fusion

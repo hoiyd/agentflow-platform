@@ -119,6 +119,12 @@ ranks, so File and Postgres adapters can use different score implementations
 without leaking incomparable scales into final ordering. This keeps HTTP,
 Single-Agent, Multi-Agent, and Autonomous retrieval behavior aligned.
 
+Document ingestion also owns source traceability generation before persistence. It
+normalizes source text, derives document/chunk SHA-256 hashes and document
+version, and assigns section parents plus UTF-8 byte offsets. FileStore and
+PostgresStore persist these values without recomputing them, and retrieval
+adapters return them unchanged for API and trace consumers.
+
 Single-Agent, Multi-Agent, and Autonomous streams expose the same `domain.RunEvent` contract to the HTTP adapter. Their common completion path persists the assistant message, transitions the Run, optionally generates the conversation title, flushes the final SSE event, and then schedules conservative curation of explicitly durable user facts. Assistant output and ordinary chat remain conversation history rather than long-term memory.
 
 Adding another executable should reuse the relevant application wiring instead of copying dependency construction from `cmd/server`.

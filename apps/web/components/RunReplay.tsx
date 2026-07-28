@@ -23,7 +23,13 @@ type RetrievedMemoryPayload = {
 type RetrievedChunkPayload = {
   document_id?: string;
   document_title?: string;
+  document_version?: string;
   chunk_id?: string;
+  parent_id?: string;
+  section_path?: string[];
+  start_offset?: number;
+  end_offset?: number;
+  content_hash?: string;
   chunk_index?: number;
   content?: string;
   similarity?: number;
@@ -546,7 +552,7 @@ function RetrievedContext({ memories, chunks }: { memories: RetrievedMemoryPaylo
                 <p>{chunk.content}</p>
                 <small>
                   {[
-                    chunk.chunk_id,
+                    sourceDetailsLabel(chunk),
                     chunk.vector_rank ? `semantic #${chunk.vector_rank}` : "",
                     chunk.lexical_rank ? `keyword #${chunk.lexical_rank}` : "",
                     chunk.fusion_rank ? `fusion #${chunk.fusion_rank}` : "",
@@ -653,6 +659,27 @@ function firstNonEmpty(values: string[]) {
 function formatScore(value: unknown) {
   const numberValue = typeof value === "number" ? value : Number(value ?? 0);
   return Number.isFinite(numberValue) ? numberValue.toFixed(3) : "n/a";
+}
+
+function sourceDetailsLabel(chunk: RetrievedChunkPayload) {
+  const details = [
+    chunk.chunk_id,
+    chunk.section_path?.join(" > "),
+    sourceRangeLabel(chunk.start_offset, chunk.end_offset),
+    shortSourceLabel("version", chunk.document_version),
+    shortSourceLabel("hash", chunk.content_hash)
+  ].filter(Boolean);
+  return details.length > 0 ? `Source details: ${details.join(" / ")}` : "";
+}
+
+function sourceRangeLabel(start: number | undefined, end: number | undefined) {
+  return typeof start === "number" && typeof end === "number" && end > start ? `bytes ${start}-${end}` : "";
+}
+
+function shortSourceLabel(label: string, value: string | undefined) {
+  if (!value) return "";
+  const normalized = value.startsWith("sha256:") ? value.slice(7) : value;
+  return `${label} ${normalized.slice(0, 12)}`;
 }
 
 function formatTokenValue(value: unknown, estimated: boolean) {
