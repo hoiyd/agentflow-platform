@@ -57,6 +57,18 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if detail.Document.ID != document.ID || len(detail.Chunks) != 1 {
 		t.Fatalf("expected created document detail, got %#v", detail)
 	}
+	if detail.Document.Version == "" || len(detail.Document.ContentHash) != 64 {
+		t.Fatalf("expected document source details, got %#v", detail.Document)
+	}
+	detailChunk := detail.Chunks[0]
+	if detailChunk.ParentID == "" || detailChunk.DocumentVersion != detail.Document.Version || len(detailChunk.ContentHash) != 64 || detailChunk.EndOffset <= detailChunk.StartOffset {
+		t.Fatalf("expected chunk source details in detail response, got %#v", detailChunk)
+	}
+	for _, field := range []string{"\"parent_id\"", "\"section_path\"", "\"start_offset\"", "\"end_offset\"", "\"document_version\"", "\"content_hash\""} {
+		if !strings.Contains(detailRecorder.Body.String(), field) {
+			t.Fatalf("expected source field %s in document detail JSON: %s", field, detailRecorder.Body.String())
+		}
+	}
 
 	searchBody := []byte(`{"query":"What is the launch password?","metadata":{"project":"agentflow"},"limit":3,"min_similarity":0}`)
 	searchReq := httptest.NewRequest(http.MethodPost, "/api/rag/search", bytes.NewReader(searchBody))
@@ -93,6 +105,9 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	}
 	if !strings.Contains(items[0].Chunk.Content, "amber-9137") {
 		t.Fatalf("expected launch password chunk, got %#v", items[0])
+	}
+	if items[0].Chunk.ParentID != detailChunk.ParentID || items[0].Chunk.ContentHash != detailChunk.ContentHash || items[0].Chunk.DocumentVersion != detail.Document.Version {
+		t.Fatalf("expected search source details to match ingested chunk, got %#v", items[0].Chunk)
 	}
 	if items[0].RerankScore <= 0 {
 		t.Fatalf("expected rerank score on search result, got %#v", items[0])

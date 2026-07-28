@@ -789,6 +789,40 @@ func TestFileStoreDocumentSearchUsesMetadataSimilarityAndRecency(t *testing.T) {
 	}
 }
 
+func TestFileStorePersistsDocumentChunkSourceDetails(t *testing.T) {
+	path := t.TempDir() + "/agentflow.json"
+	fileStore, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	content := "Deploy AgentFlow from the release guide."
+	document, err := fileStore.CreateDocument(domain.Document{
+		Title: "Release guide", Version: "release-v3", ContentHash: "document-hash", SourceType: "text", Content: content,
+	}, []domain.DocumentChunk{{
+		ChunkSource: domain.ChunkSource{ParentID: "parent-release", SectionPath: []string{"Release", "Deploy"}, StartOffset: 0, EndOffset: len(content),
+			DocumentVersion: "release-v3", ContentHash: "chunk-hash"}, Content: content, TokenCount: 10,
+	}}, []domain.DocumentChunkEmbedding{{Provider: "test", Model: "test", Dimensions: 2, Embedding: []float64{1, 0}}})
+	if err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+
+	reloaded, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("reload store: %v", err)
+	}
+	loadedDocument, chunks, found, err := reloaded.GetDocument(document.ID)
+	if err != nil || !found || len(chunks) != 1 {
+		t.Fatalf("get reloaded document: found=%v chunks=%d err=%v", found, len(chunks), err)
+	}
+	chunk := chunks[0]
+	if loadedDocument.Content != content || loadedDocument.Version != "release-v3" || loadedDocument.ContentHash != "document-hash" || chunk.ParentID != "parent-release" || chunk.DocumentVersion != "release-v3" || chunk.ContentHash != "chunk-hash" || chunk.StartOffset != 0 || chunk.EndOffset != len(content) || strings.Join(chunk.SectionPath, " > ") != "Release > Deploy" {
+		t.Fatalf("unexpected persisted source details: document=%#v chunk=%#v", loadedDocument, chunk)
+	}
+	if loadedDocument.Content[chunk.StartOffset:chunk.EndOffset] != chunk.Content {
+		t.Fatalf("persisted offsets did not resolve to source content")
+	}
+}
+
 func TestFileStoreDocumentSearchSupportsExpandedCandidateLimit(t *testing.T) {
 	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

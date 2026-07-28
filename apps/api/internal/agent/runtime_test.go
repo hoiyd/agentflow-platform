@@ -50,14 +50,16 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		t.Fatalf("embed chunk: %v", err)
 	}
 	if _, err := fileStore.CreateDocument(domain.Document{
-		Title:      "Demo Knowledge",
-		SourceType: "text",
-		Content:    chunkText,
-		Metadata:   map[string]any{"format": "text"},
+		Title:       "Demo Knowledge",
+		Version:     "demo-v1",
+		ContentHash: "document-hash",
+		SourceType:  "text",
+		Content:     chunkText,
+		Metadata:    map[string]any{"format": "text"},
 	}, []domain.DocumentChunk{{
-		Content:    chunkText,
-		TokenCount: 9,
-		Metadata:   map[string]any{"chunk_type": "paragraph"},
+		ChunkSource: domain.ChunkSource{ParentID: "parent-demo", SectionPath: []string{"Replay"},
+			StartOffset: 4, EndOffset: 72, DocumentVersion: "demo-v1", ContentHash: "chunk-hash"},
+		Content: chunkText, TokenCount: 9, Metadata: map[string]any{"chunk_type": "paragraph"},
 	}}, []domain.DocumentChunkEmbedding{{
 		Provider:   chunkEmbedding.Provider,
 		Model:      chunkEmbedding.Model,
@@ -115,6 +117,9 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		retrieved, ok := event.Payload["retrieved_chunks"].([]map[string]any)
 		if !ok || len(retrieved) == 0 || retrieved[0]["lexical_rank"] == nil || retrieved[0]["rrf_score"] == nil || retrieved[0]["fusion_rank"] == nil || retrieved[0]["rerank_rank"] == nil || retrieved[0]["confidence"] == nil {
 			t.Fatalf("expected shared pipeline ranks in retrieval trace, got %#v", event.Payload["retrieved_chunks"])
+		}
+		if retrieved[0]["parent_id"] != "parent-demo" || retrieved[0]["document_version"] != "demo-v1" || retrieved[0]["content_hash"] != "chunk-hash" || retrieved[0]["start_offset"] != 4 || retrieved[0]["end_offset"] != 72 {
+			t.Fatalf("expected chunk source details in retrieval trace, got %#v", retrieved[0])
 		}
 		return
 	}

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getRunReplay, getRunUsage, searchRAG } from "./api.ts";
+import { getRunReplay, getRunUsage } from "./api.ts";
+import { searchRAG } from "./knowledge-api.ts";
 
 function replayPayload(overrides = {}) {
   return {

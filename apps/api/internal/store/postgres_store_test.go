@@ -28,6 +28,25 @@ func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
 	}
 }
 
+func TestPostgresMigrationsAddDocumentSourceTraceability(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"documents ADD COLUMN IF NOT EXISTS version",
+		"documents ADD COLUMN IF NOT EXISTS content_hash",
+		"document_chunks ADD COLUMN IF NOT EXISTS parent_id",
+		"document_chunks ADD COLUMN IF NOT EXISTS section_path",
+		"document_chunks ADD COLUMN IF NOT EXISTS start_offset",
+		"document_chunks ADD COLUMN IF NOT EXISTS end_offset",
+		"document_chunks ADD COLUMN IF NOT EXISTS document_version",
+		"document_chunks ADD COLUMN IF NOT EXISTS content_hash",
+		"idx_document_chunks_parent_index",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing document source migration step %q", expected)
+		}
+	}
+}
+
 func TestPostgresRunUsageReservationIsAtomic(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -285,8 +304,8 @@ func TestPostgresStoreLexicalRecall(t *testing.T) {
 	embedding := make([]float64, 1536)
 	embedding[0] = 1
 	document, err := store.CreateDocument(domain.Document{
-		WorkspaceID: workspaceID, Title: "Authentication errors", SourceType: "text", Content: content,
-	}, []domain.DocumentChunk{{Content: content, TokenCount: 10}}, []domain.DocumentChunkEmbedding{{
+		WorkspaceID: workspaceID, Title: "Authentication errors", Version: "auth-v1", ContentHash: "document-hash", SourceType: "text", Content: content,
+	}, []domain.DocumentChunk{{ChunkSource: domain.ChunkSource{ParentID: "parent-auth", SectionPath: []string{"Errors"}, StartOffset: 0, EndOffset: len(content), DocumentVersion: "auth-v1", ContentHash: "chunk-hash"}, Content: content, TokenCount: 10}}, []domain.DocumentChunkEmbedding{{
 		Provider: "test", Model: "embedding-v1", Dimensions: 1536, Embedding: embedding,
 	}})
 	if err != nil {
@@ -303,5 +322,8 @@ func TestPostgresStoreLexicalRecall(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].Document.ID != document.ID || items[0].LexicalScore <= 0 {
 		t.Fatalf("expected postgres lexical match, got %#v", items)
+	}
+	if items[0].Document.Version != "auth-v1" || items[0].Chunk.ParentID != "parent-auth" || items[0].Chunk.ContentHash != "chunk-hash" || strings.Join(items[0].Chunk.SectionPath, " > ") != "Errors" {
+		t.Fatalf("expected postgres source details round trip, got %#v", items[0])
 	}
 }

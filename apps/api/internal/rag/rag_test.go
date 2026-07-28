@@ -19,6 +19,9 @@ func TestBuildDocumentChunksSplitsAndCopiesMetadata(t *testing.T) {
 	if len(chunks) < 2 {
 		t.Fatalf("expected multiple chunks, got %d", len(chunks))
 	}
+	if !strings.HasPrefix(document.Version, "sha256:") || len(document.ContentHash) != 64 {
+		t.Fatalf("expected derived document source details, got version=%q hash=%q", document.Version, document.ContentHash)
+	}
 	for index, chunk := range chunks {
 		if chunk.ChunkIndex != index {
 			t.Fatalf("expected chunk index %d, got %d", index, chunk.ChunkIndex)
@@ -29,6 +32,33 @@ func TestBuildDocumentChunksSplitsAndCopiesMetadata(t *testing.T) {
 		if chunk.TokenCount <= 0 {
 			t.Fatalf("expected token estimate, got %d", chunk.TokenCount)
 		}
+		if chunk.ParentID == "" || chunk.DocumentVersion != document.Version || len(chunk.ContentHash) != 64 {
+			t.Fatalf("expected chunk source details, got %#v", chunk)
+		}
+		if chunk.StartOffset < 0 || chunk.EndOffset <= chunk.StartOffset || chunk.EndOffset > len(document.Content) {
+			t.Fatalf("invalid chunk offsets %d-%d for %d bytes", chunk.StartOffset, chunk.EndOffset, len(document.Content))
+		}
+		if document.Content[chunk.StartOffset:chunk.EndOffset] != chunk.Content {
+			t.Fatalf("chunk offsets did not resolve to source content")
+		}
+	}
+}
+
+func TestBuildDocumentNormalizesSourceAndHonorsExplicitVersion(t *testing.T) {
+	document, chunks, err := BuildDocument(domain.DocumentIngestRequest{
+		Title: "Unicode", Version: "release-2026.07", Content: "  第一行\r\n第二行  ",
+	})
+	if err != nil {
+		t.Fatalf("build document: %v", err)
+	}
+	if document.Content != "第一行\n第二行" || document.Version != "release-2026.07" {
+		t.Fatalf("unexpected normalized document: %#v", document)
+	}
+	if len(chunks) != 1 || chunks[0].StartOffset != 0 || chunks[0].EndOffset != len(document.Content) {
+		t.Fatalf("unexpected unicode source details: %#v", chunks)
+	}
+	if document.Content[chunks[0].StartOffset:chunks[0].EndOffset] != chunks[0].Content {
+		t.Fatalf("unicode byte offsets did not resolve to source content")
 	}
 }
 
@@ -62,7 +92,15 @@ func TestBuildMarkdownDocumentChunksUsesStructureMetadata(t *testing.T) {
 	var foundList bool
 	var foundOrderedList bool
 	var foundCode bool
+	var setupParentID string
 	for _, chunk := range chunks {
+		if chunk.EndOffset <= chunk.StartOffset || chunk.EndOffset > len(document.Content) {
+			t.Fatalf("invalid markdown offsets: %#v", chunk)
+		}
+		source := document.Content[chunk.StartOffset:chunk.EndOffset]
+		if !strings.Contains(chunk.Content, source) {
+			t.Fatalf("markdown offsets did not resolve to chunk source: %q", source)
+		}
 		switch chunk.Metadata["chunk_type"] {
 		case "list":
 			foundList = true
@@ -73,6 +111,10 @@ func TestBuildMarkdownDocumentChunksUsesStructureMetadata(t *testing.T) {
 			if !strings.HasPrefix(chunk.Content, "# AgentFlow\n## Setup\n\n") {
 				t.Fatalf("expected heading context in list chunk, got %q", chunk.Content)
 			}
+			if strings.Join(chunk.SectionPath, " > ") != "AgentFlow > Setup" {
+				t.Fatalf("expected structured section path, got %#v", chunk.SectionPath)
+			}
+			setupParentID = chunk.ParentID
 		case "code":
 			foundCode = true
 			if strings.Count(chunk.Content, "```") != 2 {
@@ -83,6 +125,9 @@ func TestBuildMarkdownDocumentChunksUsesStructureMetadata(t *testing.T) {
 			}
 			if chunk.Metadata["code_language"] != "sql" {
 				t.Fatalf("expected sql code language, got %#v", chunk.Metadata)
+			}
+			if setupParentID == "" || chunk.ParentID != setupParentID {
+				t.Fatalf("expected setup chunks to share parent, list=%q code=%q", setupParentID, chunk.ParentID)
 			}
 		}
 	}

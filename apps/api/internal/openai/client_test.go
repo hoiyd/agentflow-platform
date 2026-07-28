@@ -9,9 +9,11 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-func TestRetrievedChunkPayloadIncludesFusionProvenance(t *testing.T) {
+func TestRetrievedChunkPayloadIncludesFusionRanksAndSourceDetails(t *testing.T) {
 	items := retrievedChunkPayload([]domain.RetrievedDocumentChunk{{
-		Chunk:       domain.DocumentChunk{ID: "chunk-1"},
+		Chunk: domain.DocumentChunk{ID: "chunk-1", ChunkSource: domain.ChunkSource{
+			ParentID: "parent-1", SectionPath: []string{"Guide", "Deploy"},
+			StartOffset: 12, EndOffset: 48, DocumentVersion: "v1", ContentHash: "hash-1"}},
 		VectorRank:  2,
 		LexicalRank: 1,
 		RRFScore:    0.0325,
@@ -22,7 +24,10 @@ func TestRetrievedChunkPayloadIncludesFusionProvenance(t *testing.T) {
 		t.Fatalf("expected one retrieved chunk payload, got %#v", items)
 	}
 	if items[0]["vector_rank"] != 2 || items[0]["lexical_rank"] != 1 || items[0]["rrf_score"] != 0.0325 || items[0]["fusion_rank"] != 1 || items[0]["rerank_rank"] != 2 {
-		t.Fatalf("expected recall, fusion, and rerank provenance, got %#v", items[0])
+		t.Fatalf("expected recall, fusion, and rerank fields, got %#v", items[0])
+	}
+	if items[0]["parent_id"] != "parent-1" || items[0]["document_version"] != "v1" || items[0]["content_hash"] != "hash-1" || items[0]["start_offset"] != 12 || items[0]["end_offset"] != 48 {
+		t.Fatalf("expected source details, got %#v", items[0])
 	}
 }
 

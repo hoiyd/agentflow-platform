@@ -54,6 +54,26 @@ Example RAG search response:
 {
   "items": [
     {
+      "document": {
+        "id": "doc_123",
+        "title": "Deployment guide",
+        "version": "sha256:6f7a...",
+        "content_hash": "6f7a..."
+      },
+      "chunk": {
+        "id": "chunk_456",
+        "document_id": "doc_123",
+        "parent_id": "parent_3145f56f93c43b551a60df5d",
+        "section_path": ["Operations", "Deploy"],
+        "start_offset": 128,
+        "end_offset": 384,
+        "document_version": "sha256:6f7a...",
+        "content_hash": "a51c...",
+        "chunk_index": 2,
+        "content": "Deploy the service after the smoke tests pass.",
+        "token_count": 12,
+        "metadata": {}
+      },
       "similarity": 0.71,
       "recency_boost": 0.03,
       "score": 0.74,
@@ -97,6 +117,13 @@ Example RAG search response:
   }
 }
 ```
+
+Document and chunk hashes are full lowercase SHA-256 hex strings; the example
+abbreviates them for readability. Chunk offsets are a half-open UTF-8 byte
+range into the normalized source document (`start_offset` inclusive,
+`end_offset` exclusive). An ingest request may provide `version`; otherwise the
+server derives it from the normalized document content hash. The same chunk
+source details are included in Agent `retrieved_chunks` trace payloads.
 
 `vector_rank` and `lexical_rank` identify which independent recall paths found
 the chunk. Either field can be omitted when that path did not return the chunk.

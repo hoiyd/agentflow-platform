@@ -45,6 +45,6 @@ func TestReciprocalRankFusionIgnoresRawRecallScores(t *testing.T) {
 
 	fused := ReciprocalRankFusion(items)
 	if fused[0].Chunk.ID != "rank-one" {
-		t.Fatalf("expected rank provenance, not raw score magnitude, to determine fusion: %#v", fused)
+		t.Fatalf("expected source ranks, not raw score magnitude, to determine fusion: %#v", fused)
 	}
 }
