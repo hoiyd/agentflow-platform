@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  ContextSelectionInfo,
   DocumentDetail,
   DocumentInfo,
   EmbeddingInfo,
@@ -13,6 +14,9 @@ import type { KnowledgeWorkbenchModel } from "./useKnowledgeWorkbench";
 
 export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
   const {
+    contextItems,
+    contextSelection,
+    contextTokenBudget,
     documents,
     documentTitle,
     documentContent,
@@ -180,6 +184,16 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
               value={minSimilarity}
             />
           </label>
+          <label className="threshold-input">
+            <span>Context budget</span>
+            <input
+              min="1"
+              onChange={(event) => model.setContextTokenBudget(event.target.value)}
+              step="100"
+              type="number"
+              value={contextTokenBudget}
+            />
+          </label>
           <button
             className="send"
             disabled={isSearching || query.trim().length === 0}
@@ -192,6 +206,7 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
         <EmbeddingStatus embedding={searchEmbedding} hasSearched={hasSearched} />
         <FusionStatus fusion={searchFusion} hasSearched={hasSearched} />
         <KnowledgeSecurityStatus hasSearched={hasSearched} security={searchSecurity} />
+        <ContextSelectionStatus hasSearched={hasSearched} selection={contextSelection} />
         {hasSearched && noMatchReason ? <div className="rag-no-match">{noMatchReason}</div> : null}
         <div className="rag-results">
           {results.length === 0 ? (
@@ -225,6 +240,7 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
             ))
           )}
         </div>
+        <ModelContextPreview items={contextItems} selection={contextSelection} />
       </section>
 
       <section className="knowledge-search rag-evaluation">
@@ -249,6 +265,84 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
       </section>
     </section>
   );
+}
+
+function ContextSelectionStatus({
+  selection,
+  hasSearched
+}: {
+  selection: ContextSelectionInfo | null;
+  hasSearched: boolean;
+}) {
+  if (!hasSearched) {
+    return null;
+  }
+  if (!selection) {
+    return (
+      <div className="embedding-status warning">
+        <span>Context selection: metadata unavailable</span>
+      </div>
+    );
+  }
+  return (
+    <div className="embedding-status">
+      <span>
+        Context: {selection.version} / {selection.tokens_used.toLocaleString()} of {selection.token_budget.toLocaleString()} tokens
+      </span>
+      <span>
+        {selection.matched_children} matched / {selection.parent_chunks} parent / {selection.adjacent_chunks} adjacent
+      </span>
+      <span>{selection.scope_filtered ? "Scope filtered" : "Scope unavailable"}</span>
+    </div>
+  );
+}
+
+function ModelContextPreview({
+  items,
+  selection
+}: {
+  items: RetrievedDocumentChunk[];
+  selection: ContextSelectionInfo | null;
+}) {
+  if (!selection || items.length === 0) {
+    return null;
+  }
+  return (
+    <section className="rag-context-preview">
+      <div className="knowledge-header-row">
+        <div className="panel-title">Model context</div>
+        <div className="tool-source">{items.length} chunks after expansion and budget selection</div>
+      </div>
+      <div className="rag-results compact-results">
+        {items.map((item) => (
+          <article className="rag-result-card context-result-card" key={item.chunk.id}>
+            <div className="rag-result-header">
+              <div>
+                <h3>{item.document.title}</h3>
+                <div className="tool-source">Source details: {chunkSourceDetails(item)}</div>
+              </div>
+              <div className="document-metrics">
+                <span>{contextRoleLabel(item.context_role)}</span>
+                <span>{item.chunk.token_count} tokens</span>
+              </div>
+            </div>
+            <p>{item.chunk.content}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function contextRoleLabel(role: RetrievedDocumentChunk["context_role"]) {
+  switch (role) {
+    case "parent":
+      return "Parent context";
+    case "adjacent":
+      return "Adjacent context";
+    default:
+      return "Matched child";
+  }
 }
 
 function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null }) {

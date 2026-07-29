@@ -70,7 +70,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 		}
 	}
 
-	searchBody := []byte(`{"query":"What is the launch password?","metadata":{"project":"agentflow"},"limit":3,"min_similarity":0}`)
+	searchBody := []byte(`{"query":"What is the launch password?","metadata":{"project":"agentflow"},"limit":3,"min_similarity":0,"context_token_budget":100}`)
 	searchReq := httptest.NewRequest(http.MethodPost, "/api/rag/search", bytes.NewReader(searchBody))
 	searchRecorder := httptest.NewRecorder()
 	handler.searchDocumentChunks(searchRecorder, searchReq)
@@ -103,6 +103,12 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if searchResponse.Security.PolicyVersion != domain.RAGPromptGuardPolicyVersion || !searchResponse.Security.UntrustedContext || searchResponse.Security.CheckedCandidates != 1 || searchResponse.Security.BlockedCandidates != 0 {
 		t.Fatalf("expected safe knowledge security metadata, got %#v", searchResponse.Security)
 	}
+	if len(searchResponse.ContextItems) != 1 || searchResponse.ContextItems[0].Chunk.ID != items[0].Chunk.ID || searchResponse.ContextItems[0].ContextRole != domain.ContextRoleMatchedChild {
+		t.Fatalf("expected matched child in model context, got %#v", searchResponse.ContextItems)
+	}
+	if searchResponse.ContextSelection.Version != "parent-child-v1" || searchResponse.ContextSelection.TokenBudget != 100 || searchResponse.ContextSelection.MatchedChildren != 1 || !searchResponse.ContextSelection.ScopeFiltered {
+		t.Fatalf("expected context selection metadata, got %#v", searchResponse.ContextSelection)
+	}
 	if !strings.Contains(items[0].Chunk.Content, "amber-9137") {
 		t.Fatalf("expected launch password chunk, got %#v", items[0])
 	}
@@ -121,7 +127,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if items[0].RRFScore <= 0 {
 		t.Fatalf("expected RRF score on search result, got %#v", items[0])
 	}
-	if !strings.Contains(searchRecorder.Body.String(), `"lexical_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"lexical_score"`) || !strings.Contains(searchRecorder.Body.String(), `"rrf_score"`) || !strings.Contains(searchRecorder.Body.String(), `"fusion_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"rank_constant":60`) || !strings.Contains(searchRecorder.Body.String(), `"policy_version":"rag-prompt-guard-v1"`) {
+	if !strings.Contains(searchRecorder.Body.String(), `"lexical_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"lexical_score"`) || !strings.Contains(searchRecorder.Body.String(), `"rrf_score"`) || !strings.Contains(searchRecorder.Body.String(), `"fusion_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"rank_constant":60`) || !strings.Contains(searchRecorder.Body.String(), `"policy_version":"rag-prompt-guard-v1"`) || !strings.Contains(searchRecorder.Body.String(), `"context_items"`) || !strings.Contains(searchRecorder.Body.String(), `"context_selection"`) {
 		t.Fatalf("expected recall and fusion fields in API JSON, got %s", searchRecorder.Body.String())
 	}
 	if len(items[0].MatchedTerms) == 0 {

@@ -103,6 +103,9 @@ HTTP RAG search or Agent context retrieval
        -> Store dense recall
        -> Store lexical recall
        -> deduplicate / prompt-injection guard / RRF fusion / rerank / relevance gate
+       -> Context Selector
+            -> scoped same-parent / adjacent chunk lookup
+            -> prompt-injection guard / deduplicate / token-budget selection
 
 HTTP document ingestion
   -> Knowledge Base
@@ -118,6 +121,15 @@ applying workspace and metadata filters. Fusion consumes only the two source
 ranks, so File and Postgres adapters can use different score implementations
 without leaking incomparable scales into final ordering. This keeps HTTP,
 Single-Agent, Multi-Agent, and Autonomous retrieval behavior aligned.
+
+The Context Selector runs only after the relevance gate. Ranked child hits stay
+in `items` for evaluation and diagnostics; `context_items` is the actual
+knowledge context selected for model input. Expansion lookups are constrained
+to the matched document and preserve workspace and metadata filters. They
+prefer chunks sharing the logical section parent, fall back to an adjacent
+chunk window when no parent chunk can be selected, and never exceed the
+configured knowledge token budget. Expanded chunks pass through the same
+prompt-injection guard before they can enter model context.
 
 Document ingestion also owns source traceability generation before persistence. It
 normalizes source text, derives document/chunk SHA-256 hashes and document

@@ -49,6 +49,8 @@ export type RetrievedDocumentChunk = {
   evidence_coverage?: number;
   confidence?: "high" | "medium" | "low" | string;
   filter_reason?: string;
+  context_role?: "matched_child" | "parent" | "adjacent" | string;
+  matched_chunk_id?: string;
 };
 
 export type EmbeddingInfo = {
@@ -81,8 +83,20 @@ export type KnowledgeSecurityInfo = {
   decisions?: KnowledgeSecurityDecision[];
 };
 
+export type ContextSelectionInfo = {
+  version: string;
+  token_budget: number;
+  tokens_used: number;
+  matched_children: number;
+  parent_chunks: number;
+  adjacent_chunks: number;
+  scope_filtered: boolean;
+};
+
 export type DocumentSearchResponse = {
   items: RetrievedDocumentChunk[];
+  context_items?: RetrievedDocumentChunk[];
+  context_selection?: ContextSelectionInfo;
   embedding?: EmbeddingInfo;
   fusion?: FusionInfo;
   security?: KnowledgeSecurityInfo;
@@ -212,6 +226,7 @@ export async function searchRAG(input: {
   metadata?: Record<string, string>;
   limit?: number;
   min_similarity?: number;
+  context_token_budget?: number;
 }): Promise<DocumentSearchResponse> {
   const response = await fetch(`${API_BASE}/api/rag/search`, {
     method: "POST",
@@ -228,6 +243,8 @@ export async function searchRAG(input: {
   const payload = data as Partial<DocumentSearchResponse>;
   return {
     items: Array.isArray(payload.items) ? payload.items : [],
+    context_items: Array.isArray(payload.context_items) ? payload.context_items : [],
+    context_selection: payload.context_selection,
     embedding: payload.embedding,
     fusion: payload.fusion,
     security: payload.security,

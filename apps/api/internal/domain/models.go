@@ -620,16 +620,32 @@ type DocumentIngestRequest struct {
 }
 
 type DocumentSearch struct {
-	Query             string            `json:"query"`
-	Embedding         []float64         `json:"-"`
-	EmbeddingProvider string            `json:"-"`
-	EmbeddingModel    string            `json:"-"`
-	LexicalTerms      []string          `json:"-"`
-	WorkspaceID       string            `json:"workspace_id,omitempty"`
-	Metadata          map[string]string `json:"metadata,omitempty"`
-	Limit             int               `json:"limit,omitempty"`
-	MinSimilarity     float64           `json:"min_similarity,omitempty"`
+	Query              string            `json:"query"`
+	Embedding          []float64         `json:"-"`
+	EmbeddingProvider  string            `json:"-"`
+	EmbeddingModel     string            `json:"-"`
+	LexicalTerms       []string          `json:"-"`
+	WorkspaceID        string            `json:"workspace_id,omitempty"`
+	Metadata           map[string]string `json:"metadata,omitempty"`
+	Limit              int               `json:"limit,omitempty"`
+	MinSimilarity      float64           `json:"min_similarity,omitempty"`
+	ContextTokenBudget int               `json:"context_token_budget,omitempty"`
 }
+
+type DocumentContextSearch struct {
+	DocumentID     string
+	WorkspaceID    string
+	ParentID       string
+	ChunkIndex     int
+	NeighborWindow int
+	Metadata       map[string]string
+}
+
+const (
+	ContextRoleMatchedChild = "matched_child"
+	ContextRoleParent       = "parent"
+	ContextRoleAdjacent     = "adjacent"
+)
 
 type RetrievedDocumentChunk struct {
 	Document         Document      `json:"document"`
@@ -652,6 +668,8 @@ type RetrievedDocumentChunk struct {
 	EvidenceCoverage float64       `json:"evidence_coverage,omitempty"`
 	Confidence       string        `json:"confidence,omitempty"`
 	FilterReason     string        `json:"filter_reason,omitempty"`
+	ContextRole      string        `json:"context_role,omitempty"`
+	MatchedChunkID   string        `json:"matched_chunk_id,omitempty"`
 }
 
 type EmbeddingInfo struct {
@@ -684,13 +702,25 @@ type KnowledgeSecurityInfo struct {
 	Decisions         []KnowledgeSecurityDecision `json:"decisions,omitempty"`
 }
 
+type ContextSelectionInfo struct {
+	Version         string `json:"version"`
+	TokenBudget     int    `json:"token_budget"`
+	TokensUsed      int    `json:"tokens_used"`
+	MatchedChildren int    `json:"matched_children"`
+	ParentChunks    int    `json:"parent_chunks"`
+	AdjacentChunks  int    `json:"adjacent_chunks"`
+	ScopeFiltered   bool   `json:"scope_filtered"`
+}
+
 type DocumentSearchResponse struct {
-	Items     []RetrievedDocumentChunk `json:"items"`
-	Embedding EmbeddingInfo            `json:"embedding"`
-	Fusion    FusionInfo               `json:"fusion"`
-	Security  KnowledgeSecurityInfo    `json:"security"`
-	NoMatch   bool                     `json:"no_match,omitempty"`
-	Reason    string                   `json:"reason,omitempty"`
+	Items            []RetrievedDocumentChunk `json:"items"`
+	ContextItems     []RetrievedDocumentChunk `json:"context_items,omitempty"`
+	ContextSelection ContextSelectionInfo     `json:"context_selection"`
+	Embedding        EmbeddingInfo            `json:"embedding"`
+	Fusion           FusionInfo               `json:"fusion"`
+	Security         KnowledgeSecurityInfo    `json:"security"`
+	NoMatch          bool                     `json:"no_match,omitempty"`
+	Reason           string                   `json:"reason,omitempty"`
 }
 
 type RAGEvaluationCase struct {

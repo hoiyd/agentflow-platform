@@ -11,6 +11,7 @@ import (
 type SearchStore interface {
 	SearchDocumentChunks(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 	SearchDocumentChunksLexical(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
+	ListDocumentContextChunks(domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error)
 }
 
 type Retriever interface {
@@ -83,14 +84,21 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 	items = ReciprocalRankFusion(items)
 	items = Rerank(search.Query, items, requestedLimit)
 	items = ApplyRelevanceGate(items)
+	contextItems, contextSelection, contextSecurity, err := NewContextSelector(p.store).Select(search, items)
+	if err != nil {
+		return domain.DocumentSearchResponse{}, err
+	}
+	security = mergeKnowledgeSecurity(security, contextSecurity)
 
 	if embedding.Dimensions <= 0 {
 		embedding.Dimensions = len(embedding.Vector)
 	}
 	response := domain.DocumentSearchResponse{
-		Items:    items,
-		Fusion:   RRFInfo(),
-		Security: security,
+		Items:            items,
+		ContextItems:     contextItems,
+		ContextSelection: contextSelection,
+		Fusion:           RRFInfo(),
+		Security:         security,
 		Embedding: domain.EmbeddingInfo{
 			Provider:   embedding.Provider,
 			Model:      embedding.Model,

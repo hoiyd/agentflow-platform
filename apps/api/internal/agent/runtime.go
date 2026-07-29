@@ -290,20 +290,34 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		}
 	}
 	var chunks []domain.RetrievedDocumentChunk
+	var matchedChunks []domain.RetrievedDocumentChunk
 	if retrievalEnabled {
 		if r.knowledgeRetriever == nil {
 			payload["rag_error"] = "knowledge retriever is not configured"
 		} else {
+			contextTokenBudget := r.contextAssemblyConfig.KnowledgeMaxTokens
+			if snapshot, snapshotErr := r.snapshotForRun(runID); snapshotErr == nil {
+				contextTokenBudget = snapshot.ContextAssembly.KnowledgeMaxTokens
+			}
 			response, searchErr := r.knowledgeRetriever.Search(domain.DocumentSearch{
-				Query: query,
-				Limit: 5,
+				Query:              query,
+				Limit:              5,
+				ContextTokenBudget: contextTokenBudget,
 			}, 5, embedding)
 			if searchErr != nil {
 				payload["rag_error"] = searchErr.Error()
 			} else {
-				chunks = response.Items
+				matchedChunks = response.Items
+				if response.ContextItems != nil {
+					chunks = response.ContextItems
+				} else {
+					chunks = response.Items
+				}
 				payload["fusion"] = response.Fusion
 				payload["knowledge_security"] = response.Security
+				if response.ContextSelection.Version != "" {
+					payload["context_selection"] = response.ContextSelection
+				}
 				payload["rag_no_match"] = response.NoMatch
 				if response.Reason != "" {
 					payload["rag_no_match_reason"] = response.Reason
@@ -313,8 +327,12 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	}
 	payload["memory_count"] = len(memories)
 	payload["chunk_count"] = len(chunks)
+	payload["matched_chunk_count"] = len(matchedChunks)
 	for key, value := range retrievalTracePayload(memories, chunks) {
 		payload[key] = value
+	}
+	if len(matchedChunks) > 0 {
+		payload["matched_chunks"] = retrievedChunkTraceItems(matchedChunks)
 	}
 	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
 	return memories, chunks
@@ -346,37 +364,43 @@ func retrievalTracePayload(memories []domain.RetrievedMemory, chunks []domain.Re
 		payload["retrieved_memories"] = items
 	}
 	if len(chunks) > 0 {
-		items := make([]map[string]any, 0, len(chunks))
-		for _, chunk := range chunks {
-			items = append(items, map[string]any{
-				"document_id":      chunk.Document.ID,
-				"document_title":   chunk.Document.Title,
-				"document_version": chunk.Chunk.DocumentVersion,
-				"chunk_id":         chunk.Chunk.ID,
-				"parent_id":        chunk.Chunk.ParentID,
-				"section_path":     chunk.Chunk.SectionPath,
-				"start_offset":     chunk.Chunk.StartOffset,
-				"end_offset":       chunk.Chunk.EndOffset,
-				"content_hash":     chunk.Chunk.ContentHash,
-				"chunk_index":      chunk.Chunk.ChunkIndex,
-				"content":          truncateRuntimeText(chunk.Chunk.Content, 1600),
-				"metadata":         chunk.Chunk.Metadata,
-				"similarity":       chunk.Similarity,
-				"score":            chunk.Score,
-				"vector_rank":      chunk.VectorRank,
-				"lexical_rank":     chunk.LexicalRank,
-				"lexical_score":    chunk.LexicalScore,
-				"rrf_score":        chunk.RRFScore,
-				"fusion_rank":      chunk.FusionRank,
-				"rerank_rank":      chunk.RerankRank,
-				"rerank_score":     chunk.RerankScore,
-				"confidence":       chunk.Confidence,
-				"filter_reason":    chunk.FilterReason,
-			})
-		}
-		payload["retrieved_chunks"] = items
+		payload["retrieved_chunks"] = retrievedChunkTraceItems(chunks)
 	}
 	return payload
+}
+
+func retrievedChunkTraceItems(chunks []domain.RetrievedDocumentChunk) []map[string]any {
+	items := make([]map[string]any, 0, len(chunks))
+	for _, chunk := range chunks {
+		items = append(items, map[string]any{
+			"document_id":      chunk.Document.ID,
+			"document_title":   chunk.Document.Title,
+			"document_version": chunk.Chunk.DocumentVersion,
+			"chunk_id":         chunk.Chunk.ID,
+			"parent_id":        chunk.Chunk.ParentID,
+			"section_path":     chunk.Chunk.SectionPath,
+			"start_offset":     chunk.Chunk.StartOffset,
+			"end_offset":       chunk.Chunk.EndOffset,
+			"content_hash":     chunk.Chunk.ContentHash,
+			"chunk_index":      chunk.Chunk.ChunkIndex,
+			"content":          truncateRuntimeText(chunk.Chunk.Content, 1600),
+			"metadata":         chunk.Chunk.Metadata,
+			"similarity":       chunk.Similarity,
+			"score":            chunk.Score,
+			"vector_rank":      chunk.VectorRank,
+			"lexical_rank":     chunk.LexicalRank,
+			"lexical_score":    chunk.LexicalScore,
+			"rrf_score":        chunk.RRFScore,
+			"fusion_rank":      chunk.FusionRank,
+			"rerank_rank":      chunk.RerankRank,
+			"rerank_score":     chunk.RerankScore,
+			"confidence":       chunk.Confidence,
+			"filter_reason":    chunk.FilterReason,
+			"context_role":     chunk.ContextRole,
+			"matched_chunk_id": chunk.MatchedChunkID,
+		})
+	}
+	return items
 }
 
 func truncateRuntimeText(value string, limit int) string {

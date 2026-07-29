@@ -92,22 +92,39 @@ test("run usage client calls the dedicated endpoint", async (t) => {
   assert.equal(ledger.totals.open_reservations, 0);
 });
 
-test("RAG search preserves fusion, security, and no-match metadata", async (t) => {
+test("RAG search preserves fusion, security, context selection, and no-match metadata", async (t) => {
+  let requestBody = {};
   mockFetch(t, {
     items: [],
+    context_items: [{ document: { id: "doc-1" }, chunk: { id: "chunk-1" }, context_role: "matched_child" }],
+    context_selection: {
+      version: "parent-child-v1",
+      token_budget: 16000,
+      tokens_used: 12,
+      matched_children: 1,
+      parent_chunks: 0,
+      adjacent_chunks: 0,
+      scope_filtered: true
+    },
     embedding: { provider: "local", model: "test", dimensions: 3, estimated: true },
     fusion: { algorithm: "rrf", version: "rrf-v1", rank_constant: 60, dense_weight: 1, lexical_weight: 1 },
     security: { policy_version: "rag-prompt-guard-v1", untrusted_context: true, checked_candidates: 1, blocked_candidates: 1, decisions: [{ document_id: "doc-1", chunk_id: "chunk-1", action: "blocked", reasons: ["instruction_override"] }] },
     no_match: true,
     reason: "No confident match found."
+  }, (_url, options) => {
+    requestBody = JSON.parse(String(options?.body ?? "{}"));
   });
 
-  const response = await searchRAG({ query: "AUTH-7F31" });
+  const response = await searchRAG({ query: "AUTH-7F31", context_token_budget: 2400 });
 
   assert.equal(response.fusion?.algorithm, "rrf");
   assert.equal(response.fusion?.rank_constant, 60);
   assert.equal(response.security?.policy_version, "rag-prompt-guard-v1");
   assert.deepEqual(response.security?.decisions?.[0].reasons, ["instruction_override"]);
+  assert.equal(response.context_items?.[0].context_role, "matched_child");
+  assert.equal(response.context_selection?.version, "parent-child-v1");
+  assert.equal(response.context_selection?.scope_filtered, true);
+  assert.equal(requestBody.context_token_budget, 2400);
   assert.equal(response.no_match, true);
   assert.equal(response.reason, "No confident match found.");
 });
