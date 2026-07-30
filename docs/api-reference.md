@@ -151,6 +151,13 @@ keeps ranked child hits in `items` and returns the actual model context in
 - `source_chunk_ids`: source chunks represented by a merged context item
 - `matched_chunk_ids`: ranked child hits represented by a merged context item
 - `merged_chunk_count`: number of source chunks combined into the item
+- `source_id`: stable per-response source alias such as `S1`
+
+The top-level `citation_sources` array is the trusted source catalog for
+`context_items`. Its entries include `source_id`, document identity and title,
+the transformed context chunk ID, represented source chunk IDs, section path,
+document version, and byte offsets. Source aliases are assigned after context
+transformation, so merged context items receive one alias.
 
 The top-level `context_selection` object contains `version`, `max_tokens`,
 `tokens_used`, `matched_children`, `parent_chunks`, `adjacent_chunks`, and
@@ -164,6 +171,15 @@ as `retrieved_chunks`. `matched_chunk_count` and `chunk_count` report their
 respective sizes, while `context_selection` records the token-limit decision.
 Merged `retrieved_chunks` also carry source and matched chunk IDs so Replay can
 show how a synthetic context item was assembled.
+
+Assistant output may cite selected knowledge with markers such as `[S1]`. The
+terminal chat event and persisted assistant Message return a structured
+`citations` array containing only markers resolved against the sources selected
+in the final Context Manifest. Unknown or budget-excluded markers are omitted
+from `citations`, exposed as `invalid_citation_ids` in the terminal event, and
+recorded by a `citation.resolved` trace event. This native RAG protocol is
+separate from the optional completion verifier named `citation`, which checks
+external Markdown links.
 
 The top-level `security` object reports the prompt-injection policy version,
 candidate counts, and filtering decisions for both direct recall and expanded

@@ -18,8 +18,8 @@ func TestAssembleSelectsContextAndPublishesManifestWithoutRawContent(t *testing.
 	})
 	ctx = WithSession(ctx, Session{
 		Config: domain.ContextAssemblyConfig{
-			AssemblerVersion: AssemblerVersion, ContextWindowTokens: 256, OutputReserveTokens: 16, SafetyMarginTokens: 8,
-			HistoryMaxTokens: 30, MemoryMaxTokens: 40, KnowledgeMaxTokens: 40,
+			AssemblerVersion: AssemblerVersion, ContextWindowTokens: 320, OutputReserveTokens: 16, SafetyMarginTokens: 8,
+			HistoryMaxTokens: 30, MemoryMaxTokens: 40, KnowledgeMaxTokens: 50,
 		},
 		Sink: eventpkg.SinkFunc(func(_ context.Context, item domain.RunEvent) error {
 			published = item
@@ -30,7 +30,7 @@ func TestAssembleSelectsContextAndPublishesManifestWithoutRawContent(t *testing.
 		}},
 		Knowledge: []domain.RetrievedDocumentChunk{{
 			Document: domain.Document{Title: "Deploy Guide"},
-			Chunk:    domain.DocumentChunk{ID: "chunk-1", Content: "Run the smoke tests before deploy."}, Score: 0.8,
+			Chunk:    domain.DocumentChunk{ID: "chunk-1", Content: "Run the smoke tests before deploy."}, Score: 0.8, SourceID: "S1",
 		}},
 	})
 
@@ -62,6 +62,9 @@ func TestAssembleSelectsContextAndPublishesManifestWithoutRawContent(t *testing.
 	if !strings.Contains(current, "<memories>") || !strings.Contains(current, "<untrusted_knowledge_context") {
 		t.Fatalf("expected retrieved context in current input, got %q", current)
 	}
+	if !strings.Contains(current, `source_id="S1"`) || !strings.Contains(pack.Messages[0].Content, "[S1]") {
+		t.Fatalf("expected native citation protocol in assembled context: system=%q current=%q", pack.Messages[0].Content, current)
+	}
 	if !strings.Contains(pack.Messages[0].Content, knowledgeTrustPolicy) {
 		t.Fatalf("expected system-level knowledge trust policy, got %q", pack.Messages[0].Content)
 	}
@@ -71,6 +74,9 @@ func TestAssembleSelectsContextAndPublishesManifestWithoutRawContent(t *testing.
 	for _, entry := range pack.Manifest.Entries {
 		if entry.ReferenceID == "chunk-1" && entry.Transformation != "untrusted_wrapped" {
 			t.Fatalf("expected untrusted knowledge transformation in manifest, got %#v", entry)
+		}
+		if entry.ReferenceID == "chunk-1" && entry.CitationSourceID != "S1" {
+			t.Fatalf("expected citation source in manifest, got %#v", entry)
 		}
 	}
 	if strings.Contains(pack.Messages[0].Content, "mem-1") || strings.Contains(pack.Messages[0].Content, "chunk-1") {

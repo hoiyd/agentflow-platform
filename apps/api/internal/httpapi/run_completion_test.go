@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -187,4 +188,50 @@ func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
 	if len(memoryCuration.jobs) != 1 || memoryCuration.jobs[0].Message.ID != userMessage.ID || memoryCuration.jobs[0].Message.Role != "user" {
 		t.Fatalf("completion should curate only the user message: %#v", memoryCuration.jobs)
 	}
+}
+
+func TestCompleteStreamingRunPersistsOnlyCitationsSelectedForModelContext(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, _ := fileStore.CreateConversation("citation completion")
+	run, _ := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	_, _ = fileStore.UpdateRunStatus(run.ID, domain.RunRunning, "")
+	sources := []domain.RAGCitation{
+		{SourceID: "S1", DocumentID: "doc-1", DocumentTitle: "Selected", ChunkID: "chunk-1"},
+		{SourceID: "S2", DocumentID: "doc-2", DocumentTitle: "Budget excluded", ChunkID: "chunk-2"},
+	}
+	_, _ = fileStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventRetrievalCompleted, Payload: map[string]any{"citation_sources": sources}})
+	_, _ = fileStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventContextAssembled, Payload: map[string]any{
+		"manifest": domain.ContextManifest{Entries: []domain.ContextManifestEntry{
+			{Source: "knowledge", CitationSourceID: "S1", Selected: true},
+			{Source: "knowledge", CitationSourceID: "S2", Selected: false},
+		}},
+	}})
+
+	runtime := agent.NewRuntime(agent.RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	handler := &Handler{store: fileStore, agentRuntime: runtime}
+	response := httptest.NewRecorder()
+	if !handler.completeStreamingRun(response, response, context.Background(), runCompletionRequest{
+		RunID: run.ID, ConversationID: conversation.ID, Assistant: "Supported [S1], excluded [S2], invented [S9].",
+	}) {
+		t.Fatalf("complete streaming run: %s", response.Body.String())
+	}
+	messages, _ := fileStore.ListMessages(conversation.ID)
+	if len(messages) != 1 || len(messages[0].Citations) != 1 || messages[0].Citations[0].SourceID != "S1" {
+		t.Fatalf("unexpected persisted citations: %#v", messages)
+	}
+	if !strings.Contains(response.Body.String(), `"citations":[{"source_id":"S1"`) || !strings.Contains(response.Body.String(), `"invalid_citation_ids":["S2","S9"]`) {
+		t.Fatalf("terminal SSE did not expose citation resolution: %s", response.Body.String())
+	}
+	events, _ := fileStore.ListRunEvents(run.ID)
+	last := events[len(events)-2]
+	if last.Type != domain.EventCitationResolved || !strings.Contains(formatValueForTest(last.Payload), "rag-citation-v1") {
+		t.Fatalf("citation resolution was not traced: %#v", events)
+	}
+}
+
+func formatValueForTest(value any) string {
+	return fmt.Sprintf("%v", value)
 }

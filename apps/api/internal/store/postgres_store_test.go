@@ -47,6 +47,18 @@ func TestPostgresMigrationsAddDocumentSourceTraceability(t *testing.T) {
 	}
 }
 
+func TestPostgresMigrationsAddMessageCitations(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"citations jsonb NOT NULL DEFAULT '[]'::jsonb",
+		"messages ADD COLUMN IF NOT EXISTS citations",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing message citation migration step %q", expected)
+		}
+	}
+}
+
 func TestPostgresRunUsageReservationIsAtomic(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -166,6 +178,11 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("add message: %v", err)
 	}
+	if _, err := store.AddMessageWithCitations(conversation.ID, "assistant", "Answer [S1].", []domain.RAGCitation{{
+		SourceID: "S1", DocumentID: "doc-1", DocumentTitle: "Guide", ChunkID: "chunk-1",
+	}}); err != nil {
+		t.Fatalf("add cited message: %v", err)
+	}
 	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	if err != nil {
 		t.Fatalf("create run: %v", err)
@@ -283,7 +300,7 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if replay.RuntimeSnapshot.ContextAssembly.AssemblerVersion != "context-assembler-v1" {
 		t.Fatalf("expected context assembly config round trip, got %#v", replay.RuntimeSnapshot.ContextAssembly)
 	}
-	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.RunEvents) != 2 {
+	if len(replay.Messages) != 2 || len(replay.Messages[1].Citations) != 1 || replay.Messages[1].Citations[0].SourceID != "S1" || len(replay.Steps) != 1 || len(replay.RunEvents) != 2 {
 		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.RunEvents))
 	}
 }

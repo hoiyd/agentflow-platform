@@ -25,6 +25,7 @@ type ConversationStore interface {
 	DeleteConversation(id string) error
 	ListMessages(conversationID string) ([]domain.Message, error)
 	AddMessage(conversationID string, role string, content string) (domain.Message, error)
+	AddMessageWithCitations(conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error)
 	UpdateConversationTitle(id string, title string) error
 }
 

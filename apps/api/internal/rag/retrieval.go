@@ -89,6 +89,7 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 		return domain.DocumentSearchResponse{}, err
 	}
 	security = mergeKnowledgeSecurity(security, contextSecurity)
+	contextItems, citationSources := AssignCitationSources(contextItems)
 
 	if embedding.Dimensions <= 0 {
 		embedding.Dimensions = len(embedding.Vector)
@@ -96,6 +97,7 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 	response := domain.DocumentSearchResponse{
 		Items:            items,
 		ContextItems:     contextItems,
+		CitationSources:  citationSources,
 		ContextSelection: contextSelection,
 		Fusion:           RRFInfo(),
 		Security:         security,

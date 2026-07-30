@@ -54,6 +54,19 @@ export type RetrievedDocumentChunk = {
   source_chunk_ids?: string[];
   matched_chunk_ids?: string[];
   merged_chunk_count?: number;
+  source_id?: string;
+};
+
+export type RAGCitation = {
+  source_id: string;
+  document_id: string;
+  document_title: string;
+  document_version?: string;
+  chunk_id: string;
+  source_chunk_ids?: string[];
+  section_path?: string[];
+  start_offset?: number;
+  end_offset?: number;
 };
 
 export type EmbeddingInfo = {
@@ -113,6 +126,7 @@ export type ContextTransformationInfo = {
 export type DocumentSearchResponse = {
   items: RetrievedDocumentChunk[];
   context_items?: RetrievedDocumentChunk[];
+  citation_sources?: RAGCitation[];
   context_selection?: ContextSelectionInfo;
   embedding?: EmbeddingInfo;
   fusion?: FusionInfo;
@@ -261,6 +275,7 @@ export async function searchRAG(input: {
   return {
     items: Array.isArray(payload.items) ? payload.items : [],
     context_items: Array.isArray(payload.context_items) ? payload.context_items : [],
+    citation_sources: Array.isArray(payload.citation_sources) ? payload.citation_sources : [],
     context_selection: payload.context_selection,
     embedding: payload.embedding,
     fusion: payload.fusion,

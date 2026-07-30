@@ -68,7 +68,7 @@ import { CompletionVerificationPanel } from "./CompletionVerificationPanel";
 import { KnowledgePanel } from "./knowledge/KnowledgePanel";
 import { useKnowledgeWorkbench } from "./knowledge/useKnowledgeWorkbench";
 
-type DraftMessage = Pick<Message, "role" | "content"> & {
+type DraftMessage = Pick<Message, "role" | "content" | "citations"> & {
   id: string;
   conversation_id: string;
   created_at: string;
@@ -765,6 +765,9 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
             setError(event.error);
           }
           if (event.type === "done") {
+            setMessages((items) =>
+              items.map((item) => item.id === assistantDraft.id ? { ...item, citations: event.citations } : item)
+            );
             applyConversationTitle(event.conversation_id, event.title);
             setRunState((current) => ({
               id: event.run_id ?? current?.id ?? "",
@@ -834,6 +837,9 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           setError(event.error);
         }
         if (event.type === "done") {
+          setMessages((items) =>
+            items.map((item) => item.id === assistantDraft.id ? { ...item, citations: event.citations } : item)
+          );
           setRunState((current) => ({
             id: event.run_id ?? current?.id ?? runID,
             agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
@@ -915,6 +921,9 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           setError(event.error);
         }
         if (event.type === "done") {
+          setMessages((items) =>
+            items.map((item) => item.id === assistantDraft.id ? { ...item, citations: event.citations } : item)
+          );
           setRunState((current) => ({
             id: event.run_id ?? current?.id ?? runID,
             agentId: event.agent_id ?? current?.agentId ?? activeAgentId,
@@ -1283,7 +1292,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
                     {messages.map((message) => (
                       <article className={`message ${message.role}`} key={message.id}>
                         <div className="message-meta">{message.role}</div>
-                        <div className="bubble">{message.content ? renderMarkdown(message.content) : "..."}</div>
+                        <div className="bubble">
+                          {message.content ? renderMarkdown(message.content) : "..."}
+                          <MessageCitations citations={message.citations} />
+                        </div>
                       </article>
                     ))}
                   </>
@@ -2132,6 +2144,31 @@ function isDefaultAgent(agent: AgentInfo) {
 
 function renderMarkdown(content: string) {
   return <div className="markdown">{renderMarkdownTokens(lexer(content))}</div>;
+}
+
+function MessageCitations({ citations }: { citations?: Message["citations"] }) {
+  if (!citations || citations.length === 0) {
+    return null;
+  }
+  return (
+    <section className="message-citations" aria-label="Source details">
+      <div className="message-citations-title">Source details</div>
+      <ol>
+        {citations.map((citation) => {
+          const location = citation.section_path?.filter(Boolean).join(" / ");
+          const sourceCount = citation.source_chunk_ids?.length ?? 0;
+          return (
+            <li key={citation.source_id}>
+              <span className="citation-source-id">[{citation.source_id}]</span>
+              <span>{citation.document_title || citation.document_id}</span>
+              {location ? <span className="citation-location">{location}</span> : null}
+              {sourceCount > 1 ? <span className="citation-location">{sourceCount} chunks</span> : null}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
 }
 
 function renderMarkdownTokens(tokens: Token[]) {

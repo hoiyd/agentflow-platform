@@ -101,6 +101,9 @@ func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
 	if len(response.ContextItems) != 1 || response.ContextItems[0].Chunk.ID != "chunk_launch" || response.ContextItems[0].ContextRole != domain.ContextRoleMatchedChild {
 		t.Fatalf("expected the matched child in model context, got %#v", response.ContextItems)
 	}
+	if response.ContextItems[0].SourceID != "S1" || len(response.CitationSources) != 1 || response.CitationSources[0].SourceID != "S1" || response.CitationSources[0].ChunkID != "chunk_launch" {
+		t.Fatalf("expected stable citation source metadata, got context=%#v sources=%#v", response.ContextItems, response.CitationSources)
+	}
 	if response.ContextSelection.Version != ContextSelectionVersion || response.ContextSelection.MatchedChildren != 1 || !response.ContextSelection.ScopeFiltered {
 		t.Fatalf("expected context selection metadata, got %#v", response.ContextSelection)
 	}

@@ -22,6 +22,7 @@ type RetrievedMemoryPayload = {
 };
 
 type RetrievedChunkPayload = {
+  source_id?: string;
   document_id?: string;
   document_title?: string;
   document_version?: string;
@@ -569,6 +570,7 @@ function RetrievedContext({ memories, chunks }: { memories: RetrievedMemoryPaylo
                 <p>{chunk.content}</p>
                 <small>
                   {[
+					chunk.source_id ? `[${chunk.source_id}]` : "",
                     sourceDetailsLabel(chunk),
                     chunk.context_role ? contextRoleLabel(chunk.context_role) : "",
                     chunk.merged_chunk_count && chunk.merged_chunk_count > 1 ? `${chunk.merged_chunk_count} source chunks` : "",

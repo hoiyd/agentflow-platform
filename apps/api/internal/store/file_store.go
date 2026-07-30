@@ -188,6 +188,7 @@ func (s *FileStore) ListMessages(conversationID string) ([]domain.Message, error
 	messages := []domain.Message{}
 	for _, message := range s.data.Messages {
 		if message.ConversationID == conversationID {
+			message.Citations = cloneCitations(message.Citations)
 			messages = append(messages, message)
 		}
 	}
@@ -198,6 +199,10 @@ func (s *FileStore) ListMessages(conversationID string) ([]domain.Message, error
 }
 
 func (s *FileStore) AddMessage(conversationID string, role string, content string) (domain.Message, error) {
+	return s.AddMessageWithCitations(conversationID, role, content, nil)
+}
+
+func (s *FileStore) AddMessageWithCitations(conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -211,6 +216,7 @@ func (s *FileStore) AddMessage(conversationID string, role string, content strin
 		ConversationID: conversationID,
 		Role:           role,
 		Content:        content,
+		Citations:      cloneCitations(citations),
 		CreatedAt:      now,
 	}
 	s.data.Messages = append(s.data.Messages, message)
@@ -221,6 +227,19 @@ func (s *FileStore) AddMessage(conversationID string, role string, content strin
 		}
 	}
 	return message, s.saveLocked()
+}
+
+func cloneCitations(citations []domain.RAGCitation) []domain.RAGCitation {
+	if len(citations) == 0 {
+		return nil
+	}
+	cloned := make([]domain.RAGCitation, len(citations))
+	for index, citation := range citations {
+		citation.SourceChunkIDs = append([]string(nil), citation.SourceChunkIDs...)
+		citation.SectionPath = append([]string(nil), citation.SectionPath...)
+		cloned[index] = citation
+	}
+	return cloned
 }
 
 func (s *FileStore) CreateContextCompaction(compaction domain.ContextCompaction) (domain.ContextCompaction, error) {

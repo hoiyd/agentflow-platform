@@ -119,7 +119,7 @@ func (s *PostgresStore) DeleteConversation(id string) error {
 
 func (s *PostgresStore) ListMessages(conversationID string) ([]domain.Message, error) {
 	rows, err := s.db.Query(`
-		SELECT id, conversation_id, role, content, created_at
+		SELECT id, conversation_id, role, content, citations, created_at
 		FROM messages
 		WHERE conversation_id = $1
 		ORDER BY created_at ASC`, conversationID)
@@ -131,7 +131,11 @@ func (s *PostgresStore) ListMessages(conversationID string) ([]domain.Message, e
 	items := []domain.Message{}
 	for rows.Next() {
 		var item domain.Message
-		if err := rows.Scan(&item.ID, &item.ConversationID, &item.Role, &item.Content, &item.CreatedAt); err != nil {
+		var citationsJSON []byte
+		if err := rows.Scan(&item.ID, &item.ConversationID, &item.Role, &item.Content, &citationsJSON, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(citationsJSON, &item.Citations); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -140,13 +144,26 @@ func (s *PostgresStore) ListMessages(conversationID string) ([]domain.Message, e
 }
 
 func (s *PostgresStore) AddMessage(conversationID string, role string, content string) (domain.Message, error) {
+	return s.AddMessageWithCitations(conversationID, role, content, nil)
+}
+
+func (s *PostgresStore) AddMessageWithCitations(conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error) {
 	now := time.Now().UTC()
 	message := domain.Message{
 		ID:             newID("msg"),
 		ConversationID: conversationID,
 		Role:           role,
 		Content:        content,
+		Citations:      cloneCitations(citations),
 		CreatedAt:      now,
+	}
+	citationsJSON := []byte("[]")
+	if len(message.Citations) > 0 {
+		var err error
+		citationsJSON, err = json.Marshal(message.Citations)
+		if err != nil {
+			return domain.Message{}, err
+		}
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -155,9 +172,9 @@ func (s *PostgresStore) AddMessage(conversationID string, role string, content s
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(`
-		INSERT INTO messages (id, conversation_id, role, content, created_at)
-		VALUES ($1, $2, $3, $4, $5)`,
-		message.ID, message.ConversationID, message.Role, message.Content, message.CreatedAt); err != nil {
+		INSERT INTO messages (id, conversation_id, role, content, citations, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		message.ID, message.ConversationID, message.Role, message.Content, citationsJSON, message.CreatedAt); err != nil {
 		return domain.Message{}, err
 	}
 	if _, err := tx.Exec(`UPDATE conversations SET updated_at = $1 WHERE id = $2`, now, conversationID); err != nil {

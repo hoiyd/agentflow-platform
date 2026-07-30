@@ -112,6 +112,10 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		if _, ok := event.Payload["matched_chunks"]; !ok {
 			t.Fatal("expected matched child chunks in retrieval payload")
 		}
+		citationSources, ok := event.Payload["citation_sources"].([]domain.RAGCitation)
+		if !ok || len(citationSources) != len(chunks) || citationSources[0].SourceID != "S1" {
+			t.Fatalf("expected trusted citation source catalog in retrieval payload, got %#v", event.Payload["citation_sources"])
+		}
 		fusion, ok := event.Payload["fusion"].(domain.FusionInfo)
 		if !ok || fusion.Algorithm != "rrf" || fusion.RankConstant != 60 {
 			t.Fatalf("expected active fusion configuration in retrieval trace, got %#v", event.Payload["fusion"])
@@ -128,7 +132,7 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 			t.Fatalf("expected context transformation metadata in retrieval trace, got %#v", selection.Transformation)
 		}
 		retrieved, ok := event.Payload["retrieved_chunks"].([]map[string]any)
-		if !ok || len(retrieved) == 0 || retrieved[0]["lexical_rank"] == nil || retrieved[0]["rrf_score"] == nil || retrieved[0]["fusion_rank"] == nil || retrieved[0]["rerank_rank"] == nil || retrieved[0]["confidence"] == nil {
+		if !ok || len(retrieved) == 0 || retrieved[0]["source_id"] != "S1" || retrieved[0]["lexical_rank"] == nil || retrieved[0]["rrf_score"] == nil || retrieved[0]["fusion_rank"] == nil || retrieved[0]["rerank_rank"] == nil || retrieved[0]["confidence"] == nil {
 			t.Fatalf("expected shared pipeline ranks in retrieval trace, got %#v", event.Payload["retrieved_chunks"])
 		}
 		if retrieved[0]["parent_id"] != "parent-demo" || retrieved[0]["document_version"] != "demo-v1" || retrieved[0]["content_hash"] != "chunk-hash" || retrieved[0]["start_offset"] != 4 || retrieved[0]["end_offset"] != 72 {
@@ -151,6 +155,7 @@ func TestRetrievedChunkTraceItemsIncludesMergedContextSources(t *testing.T) {
 		SourceChunkIDs:   []string{"child-1", "child-2"},
 		MatchedChunkIDs:  []string{"child-2"},
 		MergedChunkCount: 2,
+		SourceID:         "S1",
 	}})
 
 	if len(items) != 1 {
@@ -158,6 +163,9 @@ func TestRetrievedChunkTraceItemsIncludesMergedContextSources(t *testing.T) {
 	}
 	if items[0]["merged_chunk_count"] != 2 {
 		t.Fatalf("expected merged chunk count in trace, got %#v", items[0])
+	}
+	if items[0]["source_id"] != "S1" {
+		t.Fatalf("expected citation source ID in trace, got %#v", items[0])
 	}
 	sourceIDs, ok := items[0]["source_chunk_ids"].([]string)
 	if !ok || len(sourceIDs) != 2 || sourceIDs[0] != "child-1" || sourceIDs[1] != "child-2" {

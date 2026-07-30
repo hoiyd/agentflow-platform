@@ -8,6 +8,11 @@ input budget = model context window - output reserve - safety margin
 
 The assembler always keeps required protocol content such as the system prompt, current input, tool calls, and tool results. Optional conversation history, semantic memory, and RAG knowledge are selected within their source budgets. Each call emits a Context Manifest describing what was selected, excluded, or transformed without persisting raw prompt content in the manifest.
 
+Selected RAG knowledge also carries a per-context citation source ID such as
+`S1`. The manifest records that alias on each knowledge entry, allowing final
+response citations to be resolved only against knowledge that survived the
+assembler's last input-budget check.
+
 Context compaction is non-destructive. It creates a persisted structured summary for older conversation messages; it never deletes or overwrites the original messages. On subsequent model calls, the assembler injects that summary, excludes the covered raw messages, and keeps the recent raw tail.
 
 ## When compaction runs

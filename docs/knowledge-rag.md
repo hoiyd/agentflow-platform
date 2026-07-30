@@ -159,6 +159,31 @@ contributing match. The nested `context_selection.transformation` object records
 input/output counts, removed duplicates, adjacent merges, and included document
 groups for API and Replay verification.
 
+## Native Citation Protocol
+
+After context transformation, model-context chunks receive deterministic
+per-response aliases `S1`, `S2`, and so on. The search response exposes those
+aliases on `context_items` and returns their trusted metadata in
+`citation_sources`. Merged chunks keep one alias while their
+`source_chunk_ids` preserve the underlying source set.
+
+Context Assembly wraps selected knowledge with its `source_id` and instructs
+the model to cite supporting evidence with the exact marker, for example
+`[S1]`. The Context Manifest records the alias separately from the chunk
+reference. If the final input budget excludes a chunk, its manifest entry is
+not selected and its alias is not eligible for the answer.
+
+At completion, the server parses markers from the generated text and resolves
+them against the latest actual Context Manifest plus the trusted retrieval
+catalog. Structured citations are persisted with the assistant Message and
+returned by the terminal SSE event. Repeated markers are deduplicated in first
+appearance order. Unknown and excluded markers never receive source metadata;
+they are reported as invalid in SSE and the `citation.resolved` trace event.
+
+Source aliases are stable within one search response and its Run context. They
+are intentionally not global document IDs and may be reassigned by a later
+search whose final context ordering differs.
+
 ## Prompt-Injection Guard
 
 All retrieved knowledge is treated as untrusted external data. The guard uses

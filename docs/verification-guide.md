@@ -87,6 +87,8 @@ Demo replay flow:
 5. Select a `retrieval` or `llm_start` event.
 6. Confirm retrieved memories and knowledge chunks are visible above the raw JSON payload.
 7. For LangChainGo runs, confirm event detail or raw payload includes `executor: "langchaingo"`, `framework: "langchaingo"`, and `framework_path: "chains.LLMChain"`.
+8. Ask for a grounded answer and confirm the response uses `[S1]`-style markers, the assistant Message shows matching Source details, and Replay contains `citation.resolved` with no invalid source IDs.
+9. Force an answer marker outside the selected catalog in a test model response and confirm it is excluded from structured `citations` and listed under `invalid_source_ids`.
 
 Completion Gate flow:
 

@@ -11,6 +11,30 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
+func TestFileStoreMessageCitationsRoundTrip(t *testing.T) {
+	path := t.TempDir() + "/agentflow.json"
+	first, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, _ := first.CreateConversation("citation round trip")
+	_, err = first.AddMessageWithCitations(conversation.ID, "assistant", "Answer [S1].", []domain.RAGCitation{{
+		SourceID: "S1", DocumentID: "doc-1", DocumentTitle: "Guide", ChunkID: "chunk-1",
+		SourceChunkIDs: []string{"chunk-1", "chunk-2"}, SectionPath: []string{"Deploy"},
+	}})
+	if err != nil {
+		t.Fatalf("add cited message: %v", err)
+	}
+	reopened, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	messages, err := reopened.ListMessages(conversation.ID)
+	if err != nil || len(messages) != 1 || len(messages[0].Citations) != 1 || messages[0].Citations[0].SourceID != "S1" || len(messages[0].Citations[0].SourceChunkIDs) != 2 {
+		t.Fatalf("citations did not round trip: messages=%#v err=%v", messages, err)
+	}
+}
+
 func TestFileStoreUsageLedgerIsIdempotentAndPersistsSettlementOverage(t *testing.T) {
 	path := t.TempDir() + "/agentflow.json"
 	store, err := NewFileStore(path)

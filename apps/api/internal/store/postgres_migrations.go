@@ -61,8 +61,10 @@ var postgresMigrations = []string{
 		project_id text,
 		role text NOT NULL,
 		content text NOT NULL,
+		citations jsonb NOT NULL DEFAULT '[]'::jsonb,
 		created_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS citations jsonb NOT NULL DEFAULT '[]'::jsonb`,
 	`CREATE TABLE IF NOT EXISTS runs (
 		id text PRIMARY KEY,
 		agent_id text NOT NULL REFERENCES agents(id),
