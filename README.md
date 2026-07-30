@@ -17,13 +17,14 @@ Full-stack AI agent workflow platform with streaming chat, agent runs, persisten
 - Frontend Knowledge page for document upload, document detail, search, similarity threshold, and deletion.
 - Shared RAG pipeline across HTTP, Single-Agent, Multi-Agent, and Autonomous modes, with reciprocal-rank fusion, evidence-aware reranking, and a relevance gate.
 - Parent-child context selection that retrieves with child chunks, then fills same-section or adjacent chunks within the knowledge context token limit.
+- Context transformation that removes duplicate sources, groups results by document, and merges adjacent chunks without exceeding the knowledge context token limit.
 - RAG prompt-injection guard with untrusted-context boundaries, deterministic blocking, and auditable filtering reasons.
 - Optional LangChainGo executor adapter for single-agent chat steps while keeping native orchestration as the default.
 
 ## Tech Stack
 
 - Frontend: Next.js, React, TypeScript.
-- Backend: Go.
+- Backend: Go 1.26.5.
 - Storage: local JSON file store by default, optional Postgres with pgvector.
 - AI: OpenAI-compatible chat and embeddings APIs.
 - Agent framework adapter: LangChainGo for optional step-level execution.
@@ -47,7 +48,7 @@ agentflow-platform/
 ```bash
 cd apps/api
 cp .env.example .env
-gvm use go1.25.5
+gvm use go1.26.5
 GOCACHE=/private/tmp/agentflow-go-build-cache go run ./cmd/server
 ```
 

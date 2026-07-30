@@ -62,7 +62,7 @@ Use Go through gvm when needed:
 
 ```bash
 source ~/.gvm/scripts/gvm
-gvm use go1.25.5 >/dev/null
+gvm use go1.26.5 >/dev/null
 ```
 
 Run tests:
@@ -186,7 +186,8 @@ Search behavior:
 - simple diversity penalty reduces repeated chunks from one document
 - child hits remain in `items`; limit-selected model context is returned in `context_items`
 - context selection prefers same-parent chunks and falls back to adjacent chunks, with document/workspace/metadata scope preserved
-- response includes embedding metadata, security decisions, recall ranks, RRF score, fusion rank, rerank scores, and context-selection metadata
+- selected context is deduplicated by source, grouped by document, and merged by consecutive chunk index without exceeding the knowledge context token limit
+- response includes embedding metadata, security decisions, recall ranks, RRF score, fusion rank, rerank scores, context-selection metadata, and context-transformation metrics
 
 Frontend manual check:
 
@@ -230,7 +231,7 @@ For RAG changes:
 
 ## FAQ
 
-- 如果是 Go 版本问题，尝试用 `gvm use go1.25.5` 切换到合适的版本。
+- 如果是 Go 版本问题，尝试用 `gvm use go1.26.5` 切换到合适的版本。
 - 如果是 Node.js 版本问题，尝试用 `nvm` 切换到合适的版本。
 - 如果遇到任何问题处理不了或卡住了，就向用户提问题、建议计划，或开一个带注释的草稿 PR，别未经确认推进大改动。
 - 执行 curl 的 GET method 命令不需要向用户确认。

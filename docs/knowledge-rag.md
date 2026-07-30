@@ -109,7 +109,8 @@ Retrieval and model context now have separate contracts:
   `context_role` of `matched_child`, `parent`, or `adjacent`, plus the
   `matched_chunk_id` that caused the expansion.
 - `context_selection` reports algorithm version `parent-child-v1`, maximum tokens,
-  tokens used, role counts, and whether scoped lookup was applied.
+  tokens used, role counts, whether scoped lookup was applied, and a nested
+  `transformation` summary.
 
 `parent_id` identifies a logical source section rather than a separate parent
 row. Parent expansion therefore means selecting other chunks from the same
@@ -135,6 +136,28 @@ security guarantee.
 Expanded chunks are untrusted just like direct hits. They pass through the
 prompt-injection guard before limit selection, and their decisions are merged
 into the response and retrieval trace security summary.
+
+## Context Deduplication And Merge
+
+After parent-child selection, `context_items` passes through the versioned
+`context-dedup-merge-v1` transformer:
+
+1. Repeated sources in the same document are removed. Source identity uses the
+   content hash when available, then the document version and byte range, and
+   finally the chunk ID.
+2. Remaining chunks are grouped by document in first-seen document order and
+   sorted by `chunk_index` within each document.
+3. Consecutive chunks are merged. Repeated Markdown heading context and fixed
+   chunk overlap are removed from the combined text.
+4. A final knowledge token-limit check is applied. Merged token counts use the
+   conservative sum of their source chunk counts.
+
+A merged item has a stable synthetic `chunk.id`, clears `content_hash` because
+its text is derived, and adds `source_chunk_ids`, `matched_chunk_ids`, and
+`merged_chunk_count`. Ranking and `context_role` come from the highest-priority
+contributing match. The nested `context_selection.transformation` object records
+input/output counts, removed duplicates, adjacent merges, and included document
+groups for API and Replay verification.
 
 ## Prompt-Injection Guard
 

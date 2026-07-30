@@ -292,6 +292,13 @@ function ContextSelectionStatus({
       <span>
         {selection.matched_children} matched / {selection.parent_chunks} parent / {selection.adjacent_chunks} adjacent
       </span>
+      {selection.transformation ? (
+        <span>
+          Context merge: {selection.transformation.input_chunks} to {selection.transformation.output_chunks} /{" "}
+          {selection.transformation.duplicates_removed} duplicates / {selection.transformation.adjacent_merges} merges /{" "}
+          {selection.transformation.document_groups} documents
+        </span>
+      ) : null}
       <span>{selection.scope_filtered ? "Scope filtered" : "Scope unavailable"}</span>
     </div>
   );
@@ -311,7 +318,7 @@ function ModelContextPreview({
     <section className="rag-context-preview">
       <div className="knowledge-header-row">
         <div className="panel-title">Model context</div>
-        <div className="tool-source">{items.length} chunks after expansion and budget selection</div>
+        <div className="tool-source">{items.length} chunks after expansion and limit selection</div>
       </div>
       <div className="rag-results compact-results">
         {items.map((item) => (
@@ -323,6 +330,9 @@ function ModelContextPreview({
               </div>
               <div className="document-metrics">
                 <span>{contextRoleLabel(item.context_role)}</span>
+                {item.merged_chunk_count && item.merged_chunk_count > 1 ? (
+                  <span>{item.merged_chunk_count} source chunks</span>
+                ) : null}
                 <span>{item.chunk.token_count} tokens</span>
               </div>
             </div>
@@ -636,10 +646,12 @@ function documentFilename(document: DocumentInfo) {
 }
 
 function chunkSourceDetails(result: RetrievedDocumentChunk) {
+  const isMerged = Boolean(result.merged_chunk_count && result.merged_chunk_count > 1);
   const parts = [
     documentFilename(result.document),
-    result.chunk.section_path?.join(" > ") || metadataString(result.chunk.metadata, "heading_path"),
-    metadataString(result.chunk.metadata, "chunk_type"),
+    result.source_chunk_ids?.length ? `chunks ${result.source_chunk_ids.join(", ")}` : "",
+    result.chunk.section_path?.join(" > ") || (isMerged ? "" : metadataString(result.chunk.metadata, "heading_path")),
+    isMerged ? "merged context" : metadataString(result.chunk.metadata, "chunk_type"),
     sourceRangeLabel(result.chunk.start_offset, result.chunk.end_offset),
     shortSourceLabel("version", result.chunk.document_version),
     shortSourceLabel("hash", result.chunk.content_hash)

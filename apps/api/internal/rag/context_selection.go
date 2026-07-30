@@ -38,7 +38,9 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 		UntrustedContext: true,
 	}
 	if len(matches) == 0 {
-		return []domain.RetrievedDocumentChunk{}, selection, security, nil
+		items, transformation := TransformContext(nil, maxTokens)
+		selection.Transformation = &transformation
+		return items, selection, security, nil
 	}
 	if s == nil || s.store == nil {
 		return nil, selection, security, fmt.Errorf("context selection store is required")
@@ -126,7 +128,10 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 		}
 	}
 
-	return selected, selection, security, nil
+	transformed, transformation := TransformContext(selected, maxTokens)
+	selection.TokensUsed = contextItemsTokens(transformed)
+	selection.Transformation = &transformation
+	return transformed, selection, security, nil
 }
 
 func addContextItem(items *[]domain.RetrievedDocumentChunk, selectedIDs map[string]struct{}, selection *domain.ContextSelectionInfo, item domain.RetrievedDocumentChunk, maxTokens int) bool {

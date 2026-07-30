@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -13,6 +14,68 @@ import (
 	"agentflow-platform/apps/api/internal/knowledge"
 	"agentflow-platform/apps/api/internal/store"
 )
+
+type ragSearchResponseStub struct {
+	response domain.DocumentSearchResponse
+}
+
+func (s *ragSearchResponseStub) Ingest(_ context.Context, _ domain.DocumentIngestRequest) (domain.Document, error) {
+	return domain.Document{}, nil
+}
+
+func (s *ragSearchResponseStub) Search(_ context.Context, _ domain.DocumentSearch, _ int) (domain.DocumentSearchResponse, error) {
+	return s.response, nil
+}
+
+func (s *ragSearchResponseStub) Evaluate(_ context.Context, _ domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error) {
+	return domain.RAGEvaluationRunResponse{}, nil
+}
+
+func TestRAGSearchAPISerializesMergedContextTraceability(t *testing.T) {
+	merged := domain.RetrievedDocumentChunk{
+		Document:         domain.Document{ID: "doc-1", Title: "Runbook"},
+		Chunk:            domain.DocumentChunk{ID: "context_merged_1", DocumentID: "doc-1", Content: "merged context", TokenCount: 8},
+		ContextRole:      domain.ContextRoleMatchedChild,
+		MatchedChunkID:   "child-2",
+		SourceChunkIDs:   []string{"child-1", "child-2"},
+		MatchedChunkIDs:  []string{"child-2"},
+		MergedChunkCount: 2,
+	}
+	handler := &Handler{knowledge: &ragSearchResponseStub{response: domain.DocumentSearchResponse{
+		Items:        []domain.RetrievedDocumentChunk{},
+		ContextItems: []domain.RetrievedDocumentChunk{merged},
+		ContextSelection: domain.ContextSelectionInfo{
+			Version:       "parent-child-v1",
+			MaxTokens:     100,
+			TokensUsed:    8,
+			ScopeFiltered: true,
+			Transformation: &domain.ContextTransformationInfo{
+				Version:        "context-dedup-merge-v1",
+				InputChunks:    2,
+				OutputChunks:   1,
+				AdjacentMerges: 1,
+				DocumentGroups: 1,
+			},
+		},
+	}}}
+	recorder := httptest.NewRecorder()
+	handler.searchDocumentChunks(recorder, httptest.NewRequest(http.MethodPost, "/api/rag/search", strings.NewReader(`{"query":"recovery"}`)))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	for _, field := range []string{
+		`"source_chunk_ids":["child-1","child-2"]`,
+		`"matched_chunk_ids":["child-2"]`,
+		`"merged_chunk_count":2`,
+		`"transformation":{"version":"context-dedup-merge-v1"`,
+		`"adjacent_merges":1`,
+	} {
+		if !strings.Contains(recorder.Body.String(), field) {
+			t.Fatalf("expected %s in RAG response JSON: %s", field, recorder.Body.String())
+		}
+	}
+}
 
 func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
@@ -109,6 +172,10 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if searchResponse.ContextSelection.Version != "parent-child-v1" || searchResponse.ContextSelection.MaxTokens != 100 || searchResponse.ContextSelection.MatchedChildren != 1 || !searchResponse.ContextSelection.ScopeFiltered {
 		t.Fatalf("expected context selection metadata, got %#v", searchResponse.ContextSelection)
 	}
+	transformation := searchResponse.ContextSelection.Transformation
+	if transformation == nil || transformation.Version != "context-dedup-merge-v1" || transformation.InputChunks != 1 || transformation.OutputChunks != 1 || transformation.DocumentGroups != 1 {
+		t.Fatalf("expected context transformation metadata, got %#v", transformation)
+	}
 	if !strings.Contains(items[0].Chunk.Content, "amber-9137") {
 		t.Fatalf("expected launch password chunk, got %#v", items[0])
 	}
@@ -127,7 +194,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if items[0].RRFScore <= 0 {
 		t.Fatalf("expected RRF score on search result, got %#v", items[0])
 	}
-	if !strings.Contains(searchRecorder.Body.String(), `"lexical_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"lexical_score"`) || !strings.Contains(searchRecorder.Body.String(), `"rrf_score"`) || !strings.Contains(searchRecorder.Body.String(), `"fusion_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"rank_constant":60`) || !strings.Contains(searchRecorder.Body.String(), `"policy_version":"rag-prompt-guard-v1"`) || !strings.Contains(searchRecorder.Body.String(), `"context_items"`) || !strings.Contains(searchRecorder.Body.String(), `"context_selection"`) {
+	if !strings.Contains(searchRecorder.Body.String(), `"lexical_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"lexical_score"`) || !strings.Contains(searchRecorder.Body.String(), `"rrf_score"`) || !strings.Contains(searchRecorder.Body.String(), `"fusion_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"rank_constant":60`) || !strings.Contains(searchRecorder.Body.String(), `"policy_version":"rag-prompt-guard-v1"`) || !strings.Contains(searchRecorder.Body.String(), `"context_items"`) || !strings.Contains(searchRecorder.Body.String(), `"context_selection"`) || !strings.Contains(searchRecorder.Body.String(), `"transformation":{"version":"context-dedup-merge-v1"`) {
 		t.Fatalf("expected recall and fusion fields in API JSON, got %s", searchRecorder.Body.String())
 	}
 	if len(items[0].MatchedTerms) == 0 {

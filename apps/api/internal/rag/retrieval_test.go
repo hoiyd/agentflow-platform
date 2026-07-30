@@ -104,6 +104,9 @@ func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
 	if response.ContextSelection.Version != ContextSelectionVersion || response.ContextSelection.MatchedChildren != 1 || !response.ContextSelection.ScopeFiltered {
 		t.Fatalf("expected context selection metadata, got %#v", response.ContextSelection)
 	}
+	if response.ContextSelection.Transformation == nil || response.ContextSelection.Transformation.Version != ContextTransformationVersion || response.ContextSelection.Transformation.InputChunks != 1 || response.ContextSelection.Transformation.OutputChunks != 1 {
+		t.Fatalf("expected context transformation metadata, got %#v", response.ContextSelection.Transformation)
+	}
 	if response.NoMatch {
 		t.Fatal("expected a confident match")
 	}

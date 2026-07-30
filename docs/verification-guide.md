@@ -5,7 +5,7 @@ Backend tests:
 ```bash
 cd apps/api
 source ~/.gvm/scripts/gvm
-gvm use go1.25.5 >/dev/null
+gvm use go1.26.5 >/dev/null
 mkdir -p /private/tmp/agentflow-go-build-cache
 GOCACHE=/private/tmp/agentflow-go-build-cache go test ./...
 ```
@@ -60,6 +60,16 @@ Parent-child retrieval flow:
 5. Reduce the budget so no parent sibling fits and confirm an adjacent chunk is selected only when it fits.
 6. Repeat with a workspace filter and confirm context expansion never returns a chunk from another document or workspace.
 7. Put a prompt-injection phrase in an expandable sibling and confirm it is excluded and added to the security decisions.
+
+Context deduplication and merge flow:
+
+1. Upload a document that produces at least three consecutive chunks and a second document with one relevant chunk.
+2. Search for terms that select multiple chunks from the first document, including repeated or overlapping source candidates.
+3. Confirm `items` still contains the ranked child hits and `context_items` groups the first document into one merged item before the second document.
+4. Confirm the merged item exposes `source_chunk_ids`, `matched_chunk_ids`, and `merged_chunk_count`; repeated Markdown headings and overlap text should appear once.
+5. Confirm `context_selection.transformation` reports the expected input/output, duplicate, merge, and document counts.
+6. Set a small `knowledge_context_max_tokens` and confirm `context_selection.tokens_used` never exceeds `max_tokens` after transformation.
+7. Run the same query through an Agent and confirm Replay displays the transformation summary and merged source details.
 
 Postgres lexical integration test (use only a disposable database):
 
