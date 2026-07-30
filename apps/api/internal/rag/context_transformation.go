@@ -10,12 +10,17 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
+// ContextTransformationVersion identifies the current deduplication and merge
+// policy while the surrounding transformer remains open to additional shaping steps.
 const ContextTransformationVersion = "context-dedup-merge-v1"
 
 type contextDocumentGroup struct {
 	items []domain.RetrievedDocumentChunk
 }
 
+// TransformContext applies the versioned post-selection shaping pipeline.
+// It currently deduplicates sources, groups documents, and merges adjacent chunks;
+// the generic entry point allows later transformations without changing its role.
 func TransformContext(items []domain.RetrievedDocumentChunk, maxTokens int) ([]domain.RetrievedDocumentChunk, domain.ContextTransformationInfo) {
 	info := domain.ContextTransformationInfo{
 		Version:     ContextTransformationVersion,

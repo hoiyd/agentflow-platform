@@ -716,6 +716,9 @@ type ContextSelectionInfo struct {
 	Transformation  *ContextTransformationInfo `json:"transformation,omitempty"`
 }
 
+// ContextTransformationInfo describes versioned post-selection context shaping.
+// The name is intentionally broader than deduplication and merging so future
+// transformers can report operations such as compression, truncation, or reordering.
 type ContextTransformationInfo struct {
 	Version           string `json:"version"`
 	InputChunks       int    `json:"input_chunks"`

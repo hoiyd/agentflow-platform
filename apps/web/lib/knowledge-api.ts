@@ -97,6 +97,10 @@ export type ContextSelectionInfo = {
   transformation?: ContextTransformationInfo;
 };
 
+/**
+ * Versioned post-selection context shaping metadata. The intentionally broad
+ * name leaves room for future compression, truncation, or reordering stages.
+ */
 export type ContextTransformationInfo = {
   version: string;
   input_chunks: number;
