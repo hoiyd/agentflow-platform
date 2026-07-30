@@ -24,7 +24,7 @@ Full-stack AI agent workflow platform with streaming chat, agent runs, persisten
 ## Tech Stack
 
 - Frontend: Next.js, React, TypeScript.
-- Backend: Go.
+- Backend: Go 1.26.5.
 - Storage: local JSON file store by default, optional Postgres with pgvector.
 - AI: OpenAI-compatible chat and embeddings APIs.
 - Agent framework adapter: LangChainGo for optional step-level execution.
@@ -48,7 +48,7 @@ agentflow-platform/
 ```bash
 cd apps/api
 cp .env.example .env
-gvm use go1.25.5
+gvm use go1.26.5
 GOCACHE=/private/tmp/agentflow-go-build-cache go run ./cmd/server
 ```
 

@@ -58,15 +58,15 @@ func TestCompositeCandidateExtractorUsesRuleBeforeModel(t *testing.T) {
 }
 
 func TestAdaptiveCandidateExtractorReturnsGroundedStructuredDraft(t *testing.T) {
-	model := &stubCandidateModel{response: "```json\n{\"decision\":\"add\",\"kind\":\"project_convention\",\"content\":\"The backend uses Go 1.25.5.\",\"confidence\":0.93}\n```"}
+	model := &stubCandidateModel{response: "```json\n{\"decision\":\"add\",\"kind\":\"project_convention\",\"content\":\"The backend uses Go 1.26.5.\",\"confidence\":0.93}\n```"}
 	extractor := AdaptiveCandidateExtractor{Model: model}
 	draft, ok, err := extractor.Extract(context.Background(), domain.Message{
-		Role: "user", Content: "For all backend work we use Go 1.25.5 even when examples mention older versions.",
+		Role: "user", Content: "For all backend work we use Go 1.26.5 even when examples mention older versions.",
 	})
 	if err != nil || !ok {
 		t.Fatalf("adaptive extract: draft=%#v ok=%v err=%v", draft, ok, err)
 	}
-	if draft.Kind != "project_convention" || draft.Content != "The backend uses Go 1.25.5." || draft.Confidence != 0.93 {
+	if draft.Kind != "project_convention" || draft.Content != "The backend uses Go 1.26.5." || draft.Confidence != 0.93 {
 		t.Fatalf("adaptive draft mismatch: %#v", draft)
 	}
 }

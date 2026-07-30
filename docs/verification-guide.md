@@ -5,7 +5,7 @@ Backend tests:
 ```bash
 cd apps/api
 source ~/.gvm/scripts/gvm
-gvm use go1.25.5 >/dev/null
+gvm use go1.26.5 >/dev/null
 mkdir -p /private/tmp/agentflow-go-build-cache
 GOCACHE=/private/tmp/agentflow-go-build-cache go test ./...
 ```

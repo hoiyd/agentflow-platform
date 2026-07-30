@@ -158,14 +158,14 @@ func TestCuratorPersistsAdaptiveCandidateInShadowModeWithoutCommittingMemory(t *
 
 func TestCuratorCommitsHighConfidenceAdaptiveCandidateInAutoMode(t *testing.T) {
 	store := &recordingStore{}
-	model := &stubCandidateModel{response: `{"decision":"add","kind":"project_convention","content":"The backend uses Go 1.25.5.","confidence":0.96}`}
+	model := &stubCandidateModel{response: `{"decision":"add","kind":"project_convention","content":"The backend uses Go 1.26.5.","confidence":0.96}`}
 	curator := NewCuratorWithOptions(store, immediateEmbedder{}, CuratorOptions{
 		QueueSize: 4, JobTimeout: time.Second, AdaptiveMode: AdaptiveModeAuto,
 		Extractor: AdaptiveCandidateExtractor{Model: model},
 	})
 	if err := curator.Enqueue(CurationJob{RunID: "run_auto", Message: domain.Message{
 		ID: "msg_auto", ConversationID: "conv_test", Role: "user",
-		Content: "All backend code in this project must use Go 1.25.5.",
+		Content: "All backend code in this project must use Go 1.26.5.",
 	}}); err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestCuratorCommitsHighConfidenceAdaptiveCandidateInAutoMode(t *testing.T) {
 	if len(store.candidates) != 1 || store.candidates[0].Status != domain.MemoryCandidateAccepted {
 		t.Fatalf("adaptive candidate was not accepted: %#v", store.candidates)
 	}
-	if len(store.memories) != 1 || store.memories[0].Content != "The backend uses Go 1.25.5." {
+	if len(store.memories) != 1 || store.memories[0].Content != "The backend uses Go 1.26.5." {
 		t.Fatalf("adaptive memory mismatch: %#v", store.memories)
 	}
 }
