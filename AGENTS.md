@@ -134,6 +134,12 @@ export PATH="$HOME/.nvm/versions/node/v22.6.0/bin:$PATH"
 npm run build 2>&1 | head -c 30000
 ```
 
+Frontend library coverage:
+
+```bash
+npm run test:coverage
+```
+
 Next.js may rewrite `apps/web/next-env.d.ts` during build. If the only diff is:
 
 ```ts

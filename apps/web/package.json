@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test lib/*.test.mjs",
+    "test:coverage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --experimental-test-coverage --test-coverage-include='lib/**/*.ts' --test lib/*.test.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
