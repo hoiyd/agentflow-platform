@@ -148,15 +148,22 @@ keeps ranked child hits in `items` and returns the actual model context in
 
 - `context_role`: `matched_child`, `parent`, or `adjacent`
 - `matched_chunk_id`: the ranked child that caused the item to be selected
+- `source_chunk_ids`: source chunks represented by a merged context item
+- `matched_chunk_ids`: ranked child hits represented by a merged context item
+- `merged_chunk_count`: number of source chunks combined into the item
 
 The top-level `context_selection` object contains `version`, `max_tokens`,
 `tokens_used`, `matched_children`, `parent_chunks`, `adjacent_chunks`, and
-`scope_filtered`. HTTP search defaults to 16,000 context tokens. Agent runs use
-the frozen per-Run knowledge budget instead.
+`scope_filtered`. Its nested `transformation` object contains `version`,
+`input_chunks`, `output_chunks`, `duplicates_removed`, `adjacent_merges`, and
+`document_groups`. HTTP search defaults to 16,000 context tokens. Agent runs use
+the frozen per-Run knowledge limit instead.
 
 Agent retrieval traces record ranked hits as `matched_chunks` and model context
 as `retrieved_chunks`. `matched_chunk_count` and `chunk_count` report their
 respective sizes, while `context_selection` records the token-limit decision.
+Merged `retrieved_chunks` also carry source and matched chunk IDs so Replay can
+show how a synthetic context item was assembled.
 
 The top-level `security` object reports the prompt-injection policy version,
 candidate counts, and filtering decisions for both direct recall and expanded

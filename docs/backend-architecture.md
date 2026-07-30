@@ -106,6 +106,9 @@ HTTP RAG search or Agent context retrieval
        -> Context Selector
             -> scoped same-parent / adjacent chunk lookup
             -> prompt-injection guard / deduplicate / token-limit selection
+       -> Context Transformer
+            -> source deduplication / document grouping / adjacent merge
+            -> final knowledge token-limit check
 
 HTTP document ingestion
   -> Knowledge Base
@@ -130,6 +133,14 @@ prefer chunks sharing the logical section parent, fall back to an adjacent
 chunk window when no parent chunk can be selected, and never exceed the
 configured knowledge context token limit. Expanded chunks pass through the same
 prompt-injection guard before they can enter model context.
+
+The Context Transformer is a separate post-selection stage. It removes repeated
+sources, groups selected chunks by document in first-seen document order, sorts
+each document by chunk index, and merges consecutive chunks. Merged context
+keeps the contributing and matched child IDs for traceability. Its conservative
+token count is the sum of the source chunk counts, followed by a final limit
+check, so transformation cannot push model knowledge beyond the configured
+maximum.
 
 Document ingestion also owns source traceability generation before persistence. It
 normalizes source text, derives document/chunk SHA-256 hashes and document

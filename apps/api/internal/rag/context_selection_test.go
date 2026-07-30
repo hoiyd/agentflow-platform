@@ -20,14 +20,23 @@ func TestContextSelectorPrefersScopedParentChunks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("select context: %v", err)
 	}
-	if len(items) != 2 || items[0].Chunk.ID != "child-1" || items[1].Chunk.ID != "child-0" {
-		t.Fatalf("expected matched child and parent context, got %#v", items)
+	if len(items) != 1 || items[0].MergedChunkCount != 2 {
+		t.Fatalf("expected adjacent parent and matched chunks to merge, got %#v", items)
 	}
-	if items[0].ContextRole != domain.ContextRoleMatchedChild || items[1].ContextRole != domain.ContextRoleParent || items[1].MatchedChunkID != "child-1" {
-		t.Fatalf("unexpected context roles: %#v", items)
+	if items[0].ContextRole != domain.ContextRoleMatchedChild || items[0].MatchedChunkID != "child-1" {
+		t.Fatalf("expected merged context to preserve matched-child ranking, got %#v", items[0])
+	}
+	if len(items[0].SourceChunkIDs) != 2 || items[0].SourceChunkIDs[0] != "child-0" || items[0].SourceChunkIDs[1] != "child-1" {
+		t.Fatalf("expected merged context source traceability, got %#v", items[0].SourceChunkIDs)
+	}
+	if items[0].Chunk.Content != "parent context\n\nmatched child" {
+		t.Fatalf("unexpected merged context content: %q", items[0].Chunk.Content)
 	}
 	if selection.MatchedChildren != 1 || selection.ParentChunks != 1 || selection.AdjacentChunks != 0 || selection.TokensUsed != 7 || !selection.ScopeFiltered {
 		t.Fatalf("unexpected selection info: %#v", selection)
+	}
+	if selection.Transformation == nil || selection.Transformation.InputChunks != 2 || selection.Transformation.OutputChunks != 1 || selection.Transformation.AdjacentMerges != 1 || selection.Transformation.DocumentGroups != 1 {
+		t.Fatalf("unexpected transformation info: %#v", selection.Transformation)
 	}
 	if security.CheckedCandidates != 2 || security.BlockedCandidates != 0 {
 		t.Fatalf("expected expansion candidates to pass the guard, got %#v", security)
@@ -50,11 +59,17 @@ func TestContextSelectorFallsBackToAdjacentChunk(t *testing.T) {
 	if err != nil {
 		t.Fatalf("select context: %v", err)
 	}
-	if len(items) != 2 || items[1].Chunk.ID != "child-2" || items[1].ContextRole != domain.ContextRoleAdjacent {
-		t.Fatalf("expected adjacent fallback, got %#v", items)
+	if len(items) != 1 || items[0].MergedChunkCount != 2 || items[0].ContextRole != domain.ContextRoleMatchedChild {
+		t.Fatalf("expected matched child and adjacent fallback to merge, got %#v", items)
+	}
+	if len(items[0].SourceChunkIDs) != 2 || items[0].SourceChunkIDs[0] != "child-1" || items[0].SourceChunkIDs[1] != "child-2" {
+		t.Fatalf("expected merged context source traceability, got %#v", items[0].SourceChunkIDs)
 	}
 	if selection.ParentChunks != 0 || selection.AdjacentChunks != 1 {
 		t.Fatalf("unexpected selection info: %#v", selection)
+	}
+	if selection.Transformation == nil || selection.Transformation.InputChunks != 2 || selection.Transformation.OutputChunks != 1 || selection.Transformation.AdjacentMerges != 1 {
+		t.Fatalf("unexpected transformation info: %#v", selection.Transformation)
 	}
 }
 
@@ -74,6 +89,9 @@ func TestContextSelectorPrioritizesRankedChildrenBeforeExpansion(t *testing.T) {
 	if selection.MatchedChildren != 2 || selection.ParentChunks != 0 || selection.TokensUsed != 6 {
 		t.Fatalf("unexpected selection info: %#v", selection)
 	}
+	if selection.Transformation == nil || selection.Transformation.InputChunks != 2 || selection.Transformation.OutputChunks != 2 || selection.Transformation.AdjacentMerges != 0 {
+		t.Fatalf("unexpected transformation info: %#v", selection.Transformation)
+	}
 }
 
 func TestContextSelectorHonorsBudgetAndBlocksUnsafeExpansion(t *testing.T) {
@@ -92,6 +110,9 @@ func TestContextSelectorHonorsBudgetAndBlocksUnsafeExpansion(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].Chunk.ID != "child-1" || selection.TokensUsed != 4 {
 		t.Fatalf("expected only the matched child within budget, got items=%#v selection=%#v", items, selection)
+	}
+	if selection.Transformation == nil || selection.Transformation.InputChunks != 1 || selection.Transformation.OutputChunks != 1 {
+		t.Fatalf("unexpected transformation info: %#v", selection.Transformation)
 	}
 	if security.CheckedCandidates != 2 || security.BlockedCandidates != 1 || len(security.Decisions) != 1 || security.Decisions[0].ChunkID != "child-2" {
 		t.Fatalf("expected unsafe same-scope expansion to be blocked without checking cross-scope data, got %#v", security)

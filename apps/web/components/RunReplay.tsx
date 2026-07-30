@@ -45,6 +45,9 @@ type RetrievedChunkPayload = {
   metadata_boost?: number;
   context_role?: string;
   matched_chunk_id?: string;
+  source_chunk_ids?: string[];
+  matched_chunk_ids?: string[];
+  merged_chunk_count?: number;
   metadata?: Record<string, unknown>;
 };
 
@@ -568,6 +571,7 @@ function RetrievedContext({ memories, chunks }: { memories: RetrievedMemoryPaylo
                   {[
                     sourceDetailsLabel(chunk),
                     chunk.context_role ? contextRoleLabel(chunk.context_role) : "",
+                    chunk.merged_chunk_count && chunk.merged_chunk_count > 1 ? `${chunk.merged_chunk_count} source chunks` : "",
                     chunk.vector_rank ? `semantic #${chunk.vector_rank}` : "",
                     chunk.lexical_rank ? `keyword #${chunk.lexical_rank}` : "",
                     chunk.fusion_rank ? `fusion #${chunk.fusion_rank}` : "",
@@ -631,7 +635,11 @@ function contextSelectionPayload(value: unknown): ContextSelectionInfo | null {
 }
 
 function contextSelectionLabel(selection: ContextSelectionInfo) {
-  return `${selection.version} / ${selection.tokens_used.toLocaleString()} of ${selection.max_tokens.toLocaleString()} tokens / ${selection.parent_chunks} parent / ${selection.adjacent_chunks} adjacent`;
+  const transformation = selection.transformation;
+  const transformationLabel = transformation
+    ? ` / context ${transformation.input_chunks} to ${transformation.output_chunks} / ${transformation.duplicates_removed} duplicates / ${transformation.adjacent_merges} merges`
+    : "";
+  return `${selection.version} / ${selection.tokens_used.toLocaleString()} of ${selection.max_tokens.toLocaleString()} tokens / ${selection.parent_chunks} parent / ${selection.adjacent_chunks} adjacent${transformationLabel}`;
 }
 
 function contextRoleLabel(role: string) {
@@ -709,7 +717,7 @@ function formatScore(value: unknown) {
 
 function sourceDetailsLabel(chunk: RetrievedChunkPayload) {
   const details = [
-    chunk.chunk_id,
+    chunk.source_chunk_ids?.length ? `chunks ${chunk.source_chunk_ids.join(", ")}` : chunk.chunk_id,
     chunk.section_path?.join(" > "),
     sourceRangeLabel(chunk.start_offset, chunk.end_offset),
     shortSourceLabel("version", chunk.document_version),

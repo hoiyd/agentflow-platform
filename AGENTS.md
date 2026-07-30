@@ -186,7 +186,8 @@ Search behavior:
 - simple diversity penalty reduces repeated chunks from one document
 - child hits remain in `items`; limit-selected model context is returned in `context_items`
 - context selection prefers same-parent chunks and falls back to adjacent chunks, with document/workspace/metadata scope preserved
-- response includes embedding metadata, security decisions, recall ranks, RRF score, fusion rank, rerank scores, and context-selection metadata
+- selected context is deduplicated by source, grouped by document, and merged by consecutive chunk index without exceeding the knowledge context token limit
+- response includes embedding metadata, security decisions, recall ranks, RRF score, fusion rank, rerank scores, context-selection metadata, and context-transformation metrics
 
 Frontend manual check:
 

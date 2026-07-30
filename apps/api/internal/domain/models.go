@@ -670,6 +670,9 @@ type RetrievedDocumentChunk struct {
 	FilterReason     string        `json:"filter_reason,omitempty"`
 	ContextRole      string        `json:"context_role,omitempty"`
 	MatchedChunkID   string        `json:"matched_chunk_id,omitempty"`
+	SourceChunkIDs   []string      `json:"source_chunk_ids,omitempty"`
+	MatchedChunkIDs  []string      `json:"matched_chunk_ids,omitempty"`
+	MergedChunkCount int           `json:"merged_chunk_count,omitempty"`
 }
 
 type EmbeddingInfo struct {
@@ -703,13 +706,23 @@ type KnowledgeSecurityInfo struct {
 }
 
 type ContextSelectionInfo struct {
-	Version         string `json:"version"`
-	MaxTokens       int    `json:"max_tokens"`
-	TokensUsed      int    `json:"tokens_used"`
-	MatchedChildren int    `json:"matched_children"`
-	ParentChunks    int    `json:"parent_chunks"`
-	AdjacentChunks  int    `json:"adjacent_chunks"`
-	ScopeFiltered   bool   `json:"scope_filtered"`
+	Version         string                     `json:"version"`
+	MaxTokens       int                        `json:"max_tokens"`
+	TokensUsed      int                        `json:"tokens_used"`
+	MatchedChildren int                        `json:"matched_children"`
+	ParentChunks    int                        `json:"parent_chunks"`
+	AdjacentChunks  int                        `json:"adjacent_chunks"`
+	ScopeFiltered   bool                       `json:"scope_filtered"`
+	Transformation  *ContextTransformationInfo `json:"transformation,omitempty"`
+}
+
+type ContextTransformationInfo struct {
+	Version           string `json:"version"`
+	InputChunks       int    `json:"input_chunks"`
+	OutputChunks      int    `json:"output_chunks"`
+	DuplicatesRemoved int    `json:"duplicates_removed"`
+	AdjacentMerges    int    `json:"adjacent_merges"`
+	DocumentGroups    int    `json:"document_groups"`
 }
 
 type DocumentSearchResponse struct {

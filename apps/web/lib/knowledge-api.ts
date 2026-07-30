@@ -51,6 +51,9 @@ export type RetrievedDocumentChunk = {
   filter_reason?: string;
   context_role?: "matched_child" | "parent" | "adjacent" | string;
   matched_chunk_id?: string;
+  source_chunk_ids?: string[];
+  matched_chunk_ids?: string[];
+  merged_chunk_count?: number;
 };
 
 export type EmbeddingInfo = {
@@ -91,6 +94,16 @@ export type ContextSelectionInfo = {
   parent_chunks: number;
   adjacent_chunks: number;
   scope_filtered: boolean;
+  transformation?: ContextTransformationInfo;
+};
+
+export type ContextTransformationInfo = {
+  version: string;
+  input_chunks: number;
+  output_chunks: number;
+  duplicates_removed: number;
+  adjacent_merges: number;
+  document_groups: number;
 };
 
 export type DocumentSearchResponse = {

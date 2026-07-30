@@ -104,7 +104,14 @@ test("RAG search preserves fusion, security, context selection, and no-match met
   let requestBody = {};
   mockFetch(t, {
     items: [],
-    context_items: [{ document: { id: "doc-1" }, chunk: { id: "chunk-1" }, context_role: "matched_child" }],
+    context_items: [{
+      document: { id: "doc-1" },
+      chunk: { id: "context_merged_1" },
+      context_role: "matched_child",
+      source_chunk_ids: ["chunk-1", "chunk-2"],
+      matched_chunk_ids: ["chunk-2"],
+      merged_chunk_count: 2
+    }],
     context_selection: {
       version: "parent-child-v1",
       max_tokens: 16000,
@@ -112,7 +119,15 @@ test("RAG search preserves fusion, security, context selection, and no-match met
       matched_children: 1,
       parent_chunks: 0,
       adjacent_chunks: 0,
-      scope_filtered: true
+      scope_filtered: true,
+      transformation: {
+        version: "context-dedup-merge-v1",
+        input_chunks: 3,
+        output_chunks: 1,
+        duplicates_removed: 1,
+        adjacent_merges: 1,
+        document_groups: 1
+      }
     },
     embedding: { provider: "local", model: "test", dimensions: 3, estimated: true },
     fusion: { algorithm: "rrf", version: "rrf-v1", rank_constant: 60, dense_weight: 1, lexical_weight: 1 },
@@ -130,8 +145,11 @@ test("RAG search preserves fusion, security, context selection, and no-match met
   assert.equal(response.security?.policy_version, "rag-prompt-guard-v1");
   assert.deepEqual(response.security?.decisions?.[0].reasons, ["instruction_override"]);
   assert.equal(response.context_items?.[0].context_role, "matched_child");
+  assert.deepEqual(response.context_items?.[0].source_chunk_ids, ["chunk-1", "chunk-2"]);
+  assert.equal(response.context_items?.[0].merged_chunk_count, 2);
   assert.equal(response.context_selection?.version, "parent-child-v1");
   assert.equal(response.context_selection?.scope_filtered, true);
+  assert.equal(response.context_selection?.transformation?.adjacent_merges, 1);
   assert.equal(requestBody.knowledge_context_max_tokens, 2400);
   assert.equal(response.no_match, true);
   assert.equal(response.reason, "No confident match found.");
