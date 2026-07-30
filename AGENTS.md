@@ -72,6 +72,13 @@ mkdir -p /private/tmp/agentflow-go-build-cache
 GOCACHE=/private/tmp/agentflow-go-build-cache go test ./... 2>&1 | head -c 30000
 ```
 
+Measure backend statement coverage:
+
+```bash
+GOCACHE=/private/tmp/agentflow-go-build-cache go test ./... -coverprofile=/private/tmp/agentflow-backend.cover
+GOCACHE=/private/tmp/agentflow-go-build-cache go tool cover -func=/private/tmp/agentflow-backend.cover | tail -n 1
+```
+
 Run server:
 
 ```bash

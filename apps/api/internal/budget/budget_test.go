@@ -71,3 +71,68 @@ func TestTokenCostUsesIntegerMicrodollars(t *testing.T) {
 		t.Fatalf("expected 2500 microdollars, got %d", cost)
 	}
 }
+
+func TestCheckCoversEveryLimitedResource(t *testing.T) {
+	tests := []struct {
+		name      string
+		limits    domain.RuntimeRunBudget
+		current   domain.RunUsageTotals
+		requested domain.RunUsageTotals
+		resource  Resource
+	}{
+		{name: "prompt tokens", limits: domain.RuntimeRunBudget{MaxPromptTokens: 10}, current: domain.RunUsageTotals{PromptTokens: 8}, requested: domain.RunUsageTotals{PromptTokens: 3}, resource: ResourcePromptTokens},
+		{name: "completion tokens", limits: domain.RuntimeRunBudget{MaxCompletionTokens: 10}, current: domain.RunUsageTotals{CompletionTokens: 9}, requested: domain.RunUsageTotals{CompletionTokens: 2}, resource: ResourceCompletionTokens},
+		{name: "total tokens", limits: domain.RuntimeRunBudget{MaxTotalTokens: 10}, current: domain.RunUsageTotals{TotalTokens: 7}, requested: domain.RunUsageTotals{TotalTokens: 4}, resource: ResourceTotalTokens},
+		{name: "tool calls", limits: domain.RuntimeRunBudget{MaxToolCalls: 2}, current: domain.RunUsageTotals{ToolCalls: 2}, requested: domain.RunUsageTotals{ToolCalls: 1}, resource: ResourceToolCalls},
+		{name: "estimated cost", limits: domain.RuntimeRunBudget{MaxEstimatedCostMicros: 100}, current: domain.RunUsageTotals{EstimatedCostMicros: 90}, requested: domain.RunUsageTotals{EstimatedCostMicros: 11}, resource: ResourceEstimatedCost},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			exceeded, ok := AsExceeded(Check(test.limits, test.current, test.requested, "operation", domain.UsagePurposeCompaction))
+			if !ok || exceeded.Resource != test.resource || exceeded.OperationID != "operation" || exceeded.Purpose != domain.UsagePurposeCompaction {
+				t.Fatalf("unexpected exceeded error: %#v", exceeded)
+			}
+		})
+	}
+	if err := Check(domain.RuntimeRunBudget{}, domain.RunUsageTotals{}, domain.RunUsageTotals{TotalTokens: 1_000}, "operation", domain.UsagePurposePrimary); err != nil {
+		t.Fatalf("unlimited budget should pass: %v", err)
+	}
+}
+
+func TestLedgerHelpersAndCompletionLimit(t *testing.T) {
+	entry := domain.RunUsageEntry{ModelCalls: 1, ToolCalls: 2, PromptTokens: 3, CompletionTokens: 4, TotalTokens: 7, EstimatedCostMicros: 8}
+	totals := EntryTotals(entry)
+	if totals.ModelCalls != 1 || totals.ToolCalls != 2 || totals.TotalTokens != 7 || totals.EstimatedCostMicros != 8 {
+		t.Fatalf("unexpected entry totals: %#v", totals)
+	}
+	if err := CheckTotals(domain.RuntimeRunBudget{MaxToolCalls: 1}, totals, "operation", domain.UsagePurposePrimary); err == nil {
+		t.Fatal("expected totals check to enforce tool call limit")
+	}
+
+	reservation := domain.RunUsageEntry{PromptTokens: 10, CompletionTokens: 1, TotalTokens: 11, EstimatedCostMicros: 24}
+	tests := []struct {
+		name   string
+		limits domain.RuntimeRunBudget
+		totals domain.RunUsageTotals
+		want   int
+	}{
+		{name: "unlimited", want: 0},
+		{name: "completion", limits: domain.RuntimeRunBudget{MaxCompletionTokens: 20}, totals: domain.RunUsageTotals{CompletionTokens: 1}, want: 20},
+		{name: "total", limits: domain.RuntimeRunBudget{MaxTotalTokens: 30}, totals: domain.RunUsageTotals{TotalTokens: 11}, want: 20},
+		{name: "cost", limits: domain.RuntimeRunBudget{MaxEstimatedCostMicros: 100, InputCostPerMillionTokensMicros: 2_000_000, OutputCostPerMillionTokensMicros: 4_000_000}, totals: domain.RunUsageTotals{EstimatedCostMicros: 24}, want: 20},
+		{name: "minimum one", limits: domain.RuntimeRunBudget{MaxCompletionTokens: 1}, totals: domain.RunUsageTotals{CompletionTokens: 10}, want: 1},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := maxCompletionTokens(test.limits, test.totals, reservation); got != test.want {
+				t.Fatalf("max completion tokens=%d want=%d", got, test.want)
+			}
+		})
+	}
+	if tokenCostMicros(0, 10) != 0 || tokenCostMicros(10, 0) != 0 {
+		t.Fatal("zero tokens or price should have zero cost")
+	}
+	if normalizePurpose(domain.UsagePurposeRouter) != domain.UsagePurposeRouter || normalizePurpose("unknown") != domain.UsagePurposePrimary {
+		t.Fatal("purpose normalization mismatch")
+	}
+}
