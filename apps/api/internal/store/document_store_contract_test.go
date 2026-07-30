@@ -130,6 +130,34 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore) {
 		t.Fatalf("unexpected lexical results: %#v", lexicalResults)
 	}
 
+	contextResults, err := documentStore.ListDocumentContextChunks(domain.DocumentContextSearch{
+		DocumentID:     documentID,
+		WorkspaceID:    workspaceID,
+		ParentID:       "section_authentication",
+		ChunkIndex:     0,
+		NeighborWindow: 1,
+		Metadata:       map[string]string{"project": "agentflow"},
+	})
+	if err != nil {
+		t.Fatalf("list document context: %v", err)
+	}
+	if len(contextResults) != 1 || contextResults[0].Chunk.ID != chunkID || contextResults[0].Document.WorkspaceID != workspaceID {
+		t.Fatalf("unexpected scoped context results: %#v", contextResults)
+	}
+	crossWorkspaceResults, err := documentStore.ListDocumentContextChunks(domain.DocumentContextSearch{
+		DocumentID:     documentID,
+		WorkspaceID:    "another-workspace",
+		ParentID:       "section_authentication",
+		ChunkIndex:     0,
+		NeighborWindow: 1,
+	})
+	if err != nil {
+		t.Fatalf("list cross-workspace context: %v", err)
+	}
+	if len(crossWorkspaceResults) != 0 {
+		t.Fatalf("expected workspace scope to block context expansion, got %#v", crossWorkspaceResults)
+	}
+
 	if err := documentStore.DeleteDocument(documentID); err != nil {
 		t.Fatalf("delete document: %v", err)
 	}

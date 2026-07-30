@@ -311,6 +311,47 @@ func (s *FileStore) SearchDocumentChunksLexical(search domain.DocumentSearch) ([
 	return items, nil
 }
 
+func (s *FileStore) ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	documentID := strings.TrimSpace(search.DocumentID)
+	if documentID == "" {
+		return nil, errors.New("document context search document ID is required")
+	}
+	var document domain.Document
+	found := false
+	for _, candidate := range s.data.Documents {
+		if candidate.ID == documentID {
+			document = candidate
+			found = true
+			break
+		}
+	}
+	if !found || (strings.TrimSpace(search.WorkspaceID) != "" && document.WorkspaceID != strings.TrimSpace(search.WorkspaceID)) {
+		return []domain.RetrievedDocumentChunk{}, nil
+	}
+
+	filter := domain.DocumentSearch{WorkspaceID: search.WorkspaceID, Metadata: search.Metadata}
+	items := make([]domain.RetrievedDocumentChunk, 0)
+	for _, chunk := range s.data.DocumentChunks {
+		if chunk.DocumentID != documentID || !documentChunkMatchesSearch(document, chunk, filter) {
+			continue
+		}
+		sameParent := strings.TrimSpace(search.ParentID) != "" && chunk.ParentID == strings.TrimSpace(search.ParentID)
+		adjacent := search.NeighborWindow > 0 && absInt(chunk.ChunkIndex-search.ChunkIndex) <= search.NeighborWindow
+		if !sameParent && !adjacent {
+			continue
+		}
+		chunk.Document = document
+		items = append(items, domain.RetrievedDocumentChunk{Document: document, Chunk: chunk})
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].Chunk.ChunkIndex < items[j].Chunk.ChunkIndex
+	})
+	return items, nil
+}
+
 func documentChunkMatchesSearch(document domain.Document, chunk domain.DocumentChunk, search domain.DocumentSearch) bool {
 	if search.WorkspaceID != "" && document.WorkspaceID != search.WorkspaceID {
 		return false
@@ -385,4 +426,11 @@ func containsASCIIDigit(value string) bool {
 		}
 	}
 	return false
+}
+
+func absInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }

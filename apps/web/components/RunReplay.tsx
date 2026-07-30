@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { EpisodeReport, RunReplay as RunReplayData, RunEvent } from "../lib/api";
-import type { KnowledgeSecurityInfo } from "../lib/knowledge-api";
+import type { ContextSelectionInfo, KnowledgeSecurityInfo } from "../lib/knowledge-api";
 import { getEpisodeReport, getRunReplay, resumeRun } from "../lib/api";
 import { BudgetEventDetail, RunUsagePanel } from "./RunUsagePanel";
 
@@ -43,6 +43,8 @@ type RetrievedChunkPayload = {
   rerank_score?: number;
   lexical_boost?: number;
   metadata_boost?: number;
+  context_role?: string;
+  matched_chunk_id?: string;
   metadata?: Record<string, unknown>;
 };
 
@@ -394,6 +396,7 @@ function EventDetail({ event }: { event: RunEvent }) {
   const chunks = retrievedChunks(payload);
   const fusion = fusionPayload(payload.fusion);
   const knowledgeSecurity = knowledgeSecurityPayload(payload.knowledge_security);
+  const contextSelection = contextSelectionPayload(payload.context_selection);
   return (
     <div className="event-detail">
       <div className="detail-kv">
@@ -452,6 +455,12 @@ function EventDetail({ event }: { event: RunEvent }) {
           <strong>{knowledgeSecurityLabel(knowledgeSecurity)}</strong>
         </div>
       ) : null}
+      {contextSelection ? (
+        <div className="detail-kv">
+          <span>Context selection</span>
+          <strong>{contextSelectionLabel(contextSelection)}</strong>
+        </div>
+      ) : null}
       {Array.isArray(payload.configured_tools) ? (
         <div className="detail-kv">
           <span>Tools</span>
@@ -494,7 +503,7 @@ function RetrievalOverview({ summary }: { summary: ReturnType<typeof buildRetrie
       <div>
         <div className="panel-title inline">Retrieved context</div>
         <p>
-          {summary.eventCount} retrieval events, {summary.memoryCount} memories, {summary.chunkCount} knowledge chunks.
+          {summary.eventCount} retrieval events, {summary.memoryCount} memories, {summary.matchedChunkCount} matched children, {summary.chunkCount} model-context chunks.
         </p>
       </div>
       <div className="retrieval-model">
@@ -512,6 +521,10 @@ function RetrievalOverview({ summary }: { summary: ReturnType<typeof buildRetrie
       <div className="retrieval-model">
         <span>Knowledge security</span>
         <strong>{summary.knowledgeSecurityLabel}</strong>
+      </div>
+      <div className="retrieval-model">
+        <span>Context selection</span>
+        <strong>{summary.contextSelectionLabel}</strong>
       </div>
     </section>
   );
@@ -554,6 +567,7 @@ function RetrievedContext({ memories, chunks }: { memories: RetrievedMemoryPaylo
                 <small>
                   {[
                     sourceDetailsLabel(chunk),
+                    chunk.context_role ? contextRoleLabel(chunk.context_role) : "",
                     chunk.vector_rank ? `semantic #${chunk.vector_rank}` : "",
                     chunk.lexical_rank ? `keyword #${chunk.lexical_rank}` : "",
                     chunk.fusion_rank ? `fusion #${chunk.fusion_rank}` : "",
@@ -581,6 +595,12 @@ function buildRetrievalSummary(events: RunEvent[]) {
       : events.filter((event) => retrievedMemories(event.payload).length > 0 || retrievedChunks(event.payload).length > 0);
   const memoryCount = retrievalEvents.reduce((total, event) => total + retrievedMemories(event.payload).length, 0);
   const chunkCount = retrievalEvents.reduce((total, event) => total + retrievedChunks(event.payload).length, 0);
+  const matchedChunkCount = retrievalEvents.reduce((total, event) => {
+    if ("matched_chunk_count" in event.payload) {
+      return total + numberPayload(event.payload, "matched_chunk_count");
+    }
+    return total + (Array.isArray(event.payload.matched_chunks) ? event.payload.matched_chunks.length : 0);
+  }, 0);
   const firstPayload = retrievalEvents[0]?.payload ?? {};
   const provider = stringPayload(firstPayload, "embedding_provider");
   const model = stringPayload(firstPayload, "embedding_model");
@@ -589,15 +609,40 @@ function buildRetrievalSummary(events: RunEvent[]) {
   const framework = firstNonEmpty(events.map((event) => stringPayload(event.payload, "framework")));
   const fusion = fusionPayload(firstPayload.fusion);
   const knowledgeSecurity = knowledgeSecurityPayload(firstPayload.knowledge_security);
+  const contextSelection = contextSelectionPayload(firstPayload.context_selection);
   return {
     eventCount: retrievalEvents.length,
     memoryCount,
     chunkCount,
+    matchedChunkCount,
     embeddingLabel: provider || model ? [provider, model, dimensions ? `${dimensions}d` : ""].filter(Boolean).join(" / ") : "not recorded",
     executorLabel: executor || framework ? [executor, framework].filter(Boolean).join(" / ") : "not recorded",
     fusionLabel: fusion ? fusionLabel(fusion) : "not recorded",
-    knowledgeSecurityLabel: knowledgeSecurity ? knowledgeSecurityLabel(knowledgeSecurity) : "not recorded"
+    knowledgeSecurityLabel: knowledgeSecurity ? knowledgeSecurityLabel(knowledgeSecurity) : "not recorded",
+    contextSelectionLabel: contextSelection ? contextSelectionLabel(contextSelection) : "not recorded"
   };
+}
+
+function contextSelectionPayload(value: unknown): ContextSelectionInfo | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as ContextSelectionInfo;
+}
+
+function contextSelectionLabel(selection: ContextSelectionInfo) {
+  return `${selection.version} / ${selection.tokens_used.toLocaleString()} of ${selection.max_tokens.toLocaleString()} tokens / ${selection.parent_chunks} parent / ${selection.adjacent_chunks} adjacent`;
+}
+
+function contextRoleLabel(role: string) {
+  switch (role) {
+    case "parent":
+      return "parent context";
+    case "adjacent":
+      return "adjacent context";
+    default:
+      return "matched child";
+  }
 }
 
 function knowledgeSecurityPayload(value: unknown): KnowledgeSecurityInfo | null {

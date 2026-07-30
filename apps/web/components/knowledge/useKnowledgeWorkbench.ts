@@ -3,6 +3,7 @@
 import type { ChangeEvent } from "react";
 import { useState } from "react";
 import {
+  type ContextSelectionInfo,
   type DocumentDetail,
   type DocumentInfo,
   type EmbeddingInfo,
@@ -41,7 +42,10 @@ export function useKnowledgeWorkbench() {
   const [isUploading, setIsUploading] = useState(false);
   const [query, setQuery] = useState("");
   const [minSimilarity, setMinSimilarity] = useState("0.15");
+  const [knowledgeContextMaxTokens, setKnowledgeContextMaxTokens] = useState("16000");
   const [results, setResults] = useState<RetrievedDocumentChunk[]>([]);
+  const [contextItems, setContextItems] = useState<RetrievedDocumentChunk[]>([]);
+  const [contextSelection, setContextSelection] = useState<ContextSelectionInfo | null>(null);
   const [searchEmbedding, setSearchEmbedding] = useState<EmbeddingInfo | null>(null);
   const [searchFusion, setSearchFusion] = useState<FusionInfo | null>(null);
   const [searchSecurity, setSearchSecurity] = useState<KnowledgeSecurityInfo | null>(null);
@@ -126,12 +130,19 @@ export function useKnowledgeWorkbench() {
     setError("");
     try {
       const parsedMinSimilarity = Number(minSimilarity);
+      const parsedKnowledgeContextMaxTokens = Number(knowledgeContextMaxTokens);
       const response = await searchRAG({
         query: normalizedQuery,
         limit: 5,
-        min_similarity: Number.isFinite(parsedMinSimilarity) ? parsedMinSimilarity : 0
+        min_similarity: Number.isFinite(parsedMinSimilarity) ? parsedMinSimilarity : 0,
+        knowledge_context_max_tokens:
+          Number.isFinite(parsedKnowledgeContextMaxTokens) && parsedKnowledgeContextMaxTokens > 0
+            ? Math.floor(parsedKnowledgeContextMaxTokens)
+            : 16000
       });
       setResults(response.items);
+      setContextItems(response.context_items ?? []);
+      setContextSelection(response.context_selection ?? null);
       setSearchEmbedding(response.embedding ?? null);
       setSearchFusion(response.fusion ?? null);
       setSearchSecurity(response.security ?? null);
@@ -208,6 +219,9 @@ export function useKnowledgeWorkbench() {
 
   return {
     documents,
+    contextItems,
+    contextSelection,
+    knowledgeContextMaxTokens,
     documentTitle,
     documentContent,
     deletingDocumentId,
@@ -240,6 +254,7 @@ export function useKnowledgeWorkbench() {
     selectUploadFile,
     setDocumentContent,
     setDocumentTitle,
+    setKnowledgeContextMaxTokens,
     setEvaluationCases,
     setMinSimilarity,
     setQuery,

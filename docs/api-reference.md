@@ -142,8 +142,25 @@ constant, and source weights used for the response. The same metadata is
 returned by RAG evaluation and recorded in Agent retrieval traces so UI and
 offline checks can reproduce the score without copying server constants.
 
+RAG search accepts an optional positive `knowledge_context_max_tokens`. The response
+keeps ranked child hits in `items` and returns the actual model context in
+`context_items`. Context items add:
+
+- `context_role`: `matched_child`, `parent`, or `adjacent`
+- `matched_chunk_id`: the ranked child that caused the item to be selected
+
+The top-level `context_selection` object contains `version`, `max_tokens`,
+`tokens_used`, `matched_children`, `parent_chunks`, `adjacent_chunks`, and
+`scope_filtered`. HTTP search defaults to 16,000 context tokens. Agent runs use
+the frozen per-Run knowledge budget instead.
+
+Agent retrieval traces record ranked hits as `matched_chunks` and model context
+as `retrieved_chunks`. `matched_chunk_count` and `chunk_count` report their
+respective sizes, while `context_selection` records the token-limit decision.
+
 The top-level `security` object reports the prompt-injection policy version,
-candidate counts, and filtering decisions. Decisions contain source IDs,
+candidate counts, and filtering decisions for both direct recall and expanded
+context candidates. Decisions contain source IDs,
 action, and reason codes but never copy blocked chunk content. Candidates with
 `action: "blocked"` are removed before RRF. Evaluation cases include the same
 security object, and evaluation summaries expose the aggregate

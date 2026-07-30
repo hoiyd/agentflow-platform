@@ -100,11 +100,17 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		if event.Payload["chunk_count"] != len(chunks) {
 			t.Fatalf("expected chunk_count %d, got %#v", len(chunks), event.Payload["chunk_count"])
 		}
+		if event.Payload["matched_chunk_count"] != 1 {
+			t.Fatalf("expected one matched child, got %#v", event.Payload["matched_chunk_count"])
+		}
 		if _, ok := event.Payload["retrieved_memories"]; !ok {
 			t.Fatal("expected retrieved memories in retrieval payload")
 		}
 		if _, ok := event.Payload["retrieved_chunks"]; !ok {
 			t.Fatal("expected retrieved chunks in retrieval payload")
+		}
+		if _, ok := event.Payload["matched_chunks"]; !ok {
+			t.Fatal("expected matched child chunks in retrieval payload")
 		}
 		fusion, ok := event.Payload["fusion"].(domain.FusionInfo)
 		if !ok || fusion.Algorithm != "rrf" || fusion.RankConstant != 60 {
@@ -114,12 +120,19 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		if !ok || security.PolicyVersion != domain.RAGPromptGuardPolicyVersion || !security.UntrustedContext || security.CheckedCandidates == 0 {
 			t.Fatalf("expected knowledge security summary in retrieval trace, got %#v", event.Payload["knowledge_security"])
 		}
+		selection, ok := event.Payload["context_selection"].(domain.ContextSelectionInfo)
+		if !ok || selection.Version != "parent-child-v1" || selection.MatchedChildren != 1 || !selection.ScopeFiltered {
+			t.Fatalf("expected context selection metadata in retrieval trace, got %#v", event.Payload["context_selection"])
+		}
 		retrieved, ok := event.Payload["retrieved_chunks"].([]map[string]any)
 		if !ok || len(retrieved) == 0 || retrieved[0]["lexical_rank"] == nil || retrieved[0]["rrf_score"] == nil || retrieved[0]["fusion_rank"] == nil || retrieved[0]["rerank_rank"] == nil || retrieved[0]["confidence"] == nil {
 			t.Fatalf("expected shared pipeline ranks in retrieval trace, got %#v", event.Payload["retrieved_chunks"])
 		}
 		if retrieved[0]["parent_id"] != "parent-demo" || retrieved[0]["document_version"] != "demo-v1" || retrieved[0]["content_hash"] != "chunk-hash" || retrieved[0]["start_offset"] != 4 || retrieved[0]["end_offset"] != 72 {
 			t.Fatalf("expected chunk source details in retrieval trace, got %#v", retrieved[0])
+		}
+		if retrieved[0]["context_role"] != domain.ContextRoleMatchedChild || retrieved[0]["matched_chunk_id"] != chunks[0].Chunk.ID {
+			t.Fatalf("expected matched-child context trace, got %#v", retrieved[0])
 		}
 		return
 	}

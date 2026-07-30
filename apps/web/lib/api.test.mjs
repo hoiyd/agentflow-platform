@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { getRunReplay, getRunUsage } from "./api.ts";
-import { searchRAG } from "./knowledge-api.ts";
+import {
+  createDocument,
+  deleteDocument,
+  getDocument,
+  listDocuments,
+  runRAGEvaluation,
+  searchRAG,
+  uploadDocument
+} from "./knowledge-api.ts";
 
 function replayPayload(overrides = {}) {
   return {
@@ -18,12 +26,12 @@ function replayPayload(overrides = {}) {
   };
 }
 
-function mockFetch(t, body, onRequest = () => {}) {
+function mockFetch(t, body, onRequest = () => {}, status = 200) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
     onRequest(url, options);
     return new Response(JSON.stringify(body), {
-      status: 200,
+      status,
       headers: { "Content-Type": "application/json" }
     });
   };
@@ -92,22 +100,159 @@ test("run usage client calls the dedicated endpoint", async (t) => {
   assert.equal(ledger.totals.open_reservations, 0);
 });
 
-test("RAG search preserves fusion, security, and no-match metadata", async (t) => {
+test("RAG search preserves fusion, security, context selection, and no-match metadata", async (t) => {
+  let requestBody = {};
   mockFetch(t, {
     items: [],
+    context_items: [{ document: { id: "doc-1" }, chunk: { id: "chunk-1" }, context_role: "matched_child" }],
+    context_selection: {
+      version: "parent-child-v1",
+      max_tokens: 16000,
+      tokens_used: 12,
+      matched_children: 1,
+      parent_chunks: 0,
+      adjacent_chunks: 0,
+      scope_filtered: true
+    },
     embedding: { provider: "local", model: "test", dimensions: 3, estimated: true },
     fusion: { algorithm: "rrf", version: "rrf-v1", rank_constant: 60, dense_weight: 1, lexical_weight: 1 },
     security: { policy_version: "rag-prompt-guard-v1", untrusted_context: true, checked_candidates: 1, blocked_candidates: 1, decisions: [{ document_id: "doc-1", chunk_id: "chunk-1", action: "blocked", reasons: ["instruction_override"] }] },
     no_match: true,
     reason: "No confident match found."
+  }, (_url, options) => {
+    requestBody = JSON.parse(String(options?.body ?? "{}"));
   });
 
-  const response = await searchRAG({ query: "AUTH-7F31" });
+  const response = await searchRAG({ query: "AUTH-7F31", knowledge_context_max_tokens: 2400 });
 
   assert.equal(response.fusion?.algorithm, "rrf");
   assert.equal(response.fusion?.rank_constant, 60);
   assert.equal(response.security?.policy_version, "rag-prompt-guard-v1");
   assert.deepEqual(response.security?.decisions?.[0].reasons, ["instruction_override"]);
+  assert.equal(response.context_items?.[0].context_role, "matched_child");
+  assert.equal(response.context_selection?.version, "parent-child-v1");
+  assert.equal(response.context_selection?.scope_filtered, true);
+  assert.equal(requestBody.knowledge_context_max_tokens, 2400);
   assert.equal(response.no_match, true);
   assert.equal(response.reason, "No confident match found.");
+});
+
+test("document list normalizes a non-array response", async (t) => {
+  mockFetch(t, { documents: [] });
+
+  assert.deepEqual(await listDocuments(), []);
+});
+
+test("document creation sends the complete JSON contract", async (t) => {
+  let request = {};
+  mockFetch(t, { id: "doc-1", title: "Runbook" }, (url, options) => {
+    request = { url: String(url), options, body: JSON.parse(String(options?.body ?? "{}")) };
+  });
+
+  const document = await createDocument({
+    title: "Runbook",
+    version: "v2",
+    content: "Recovery steps",
+    metadata: { project: "agentflow" }
+  });
+
+  assert.match(request.url, /\/api\/documents$/);
+  assert.equal(request.options.method, "POST");
+  assert.equal(request.options.headers["Content-Type"], "application/json");
+  assert.deepEqual(request.body, {
+    title: "Runbook",
+    version: "v2",
+    content: "Recovery steps",
+    metadata: { project: "agentflow" }
+  });
+  assert.equal(document.id, "doc-1");
+});
+
+test("document upload trims an optional title and sends multipart data", async (t) => {
+  let requestBody;
+  mockFetch(t, { id: "doc-upload", title: "Guide" }, (_url, options) => {
+    requestBody = options?.body;
+  });
+  const file = new File(["# Guide"], "guide.md", { type: "text/markdown" });
+
+  const document = await uploadDocument({ file, title: "  Guide  " });
+
+  assert.ok(requestBody instanceof FormData);
+  assert.equal(requestBody.get("title"), "Guide");
+  assert.equal(requestBody.get("file").name, "guide.md");
+  assert.equal(document.id, "doc-upload");
+});
+
+test("document detail normalizes missing chunks", async (t) => {
+  mockFetch(t, { document: { id: "doc-1", title: "Runbook" }, chunks: null });
+
+  const detail = await getDocument("doc-1");
+
+  assert.equal(detail.document.id, "doc-1");
+  assert.deepEqual(detail.chunks, []);
+});
+
+test("document deletion uses the document endpoint and DELETE method", async (t) => {
+  let request = {};
+  mockFetch(t, {}, (url, options) => {
+    request = { url: String(url), method: options?.method };
+  });
+
+  await deleteDocument("doc-42");
+
+  assert.match(request.url, /\/api\/documents\/doc-42$/);
+  assert.equal(request.method, "DELETE");
+});
+
+test("RAG search preserves the legacy array response", async (t) => {
+  const legacyItem = { document: { id: "doc-1" }, chunk: { id: "chunk-1" } };
+  mockFetch(t, [legacyItem]);
+
+  const response = await searchRAG({ query: "legacy" });
+
+  assert.deepEqual(response.items, [legacyItem]);
+  assert.equal(response.context_items, undefined);
+});
+
+test("RAG search normalizes malformed item collections", async (t) => {
+  mockFetch(t, {
+    items: { id: "not-an-array" },
+    context_items: "not-an-array",
+    context_selection: { version: "parent-child-v1", max_tokens: 100, tokens_used: 0 }
+  });
+
+  const response = await searchRAG({ query: "malformed" });
+
+  assert.deepEqual(response.items, []);
+  assert.deepEqual(response.context_items, []);
+  assert.equal(response.context_selection?.max_tokens, 100);
+});
+
+test("RAG search exposes an unsuccessful HTTP status", async (t) => {
+  mockFetch(t, { error: "unavailable" }, () => {}, 503);
+
+  await assert.rejects(() => searchRAG({ query: "failure" }), /Failed to search knowledge: 503/);
+});
+
+test("RAG evaluation sends cases and preserves the result", async (t) => {
+  let requestBody = {};
+  mockFetch(t, {
+    summary: { total: 1, hit_at_1: 1, hit_at_3: 1, hit_at_5: 1, misses: 0 },
+    cases: [{ id: "auth-error", query: "AUTH-7F31", hit: true, items: [] }]
+  }, (_url, options) => {
+    requestBody = JSON.parse(String(options?.body ?? "{}"));
+  });
+
+  const response = await runRAGEvaluation({
+    cases: [{ id: "auth-error", query: "AUTH-7F31" }],
+    top_k: 3,
+    min_similarity: 0.2,
+    metadata: { project: "agentflow" }
+  });
+
+  assert.equal(requestBody.top_k, 3);
+  assert.equal(requestBody.min_similarity, 0.2);
+  assert.deepEqual(requestBody.metadata, { project: "agentflow" });
+  assert.equal(response.summary.hit_at_1, 1);
+  assert.equal(response.cases[0].id, "auth-error");
 });

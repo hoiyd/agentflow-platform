@@ -11,8 +11,10 @@ import (
 type retrievalStoreStub struct {
 	denseSearch   domain.DocumentSearch
 	lexicalSearch domain.DocumentSearch
+	contextSearch []domain.DocumentContextSearch
 	denseItems    []domain.RetrievedDocumentChunk
 	lexicalItems  []domain.RetrievedDocumentChunk
+	contextItems  []domain.RetrievedDocumentChunk
 }
 
 func (s *retrievalStoreStub) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
@@ -24,6 +26,11 @@ func (s *retrievalStoreStub) SearchDocumentChunks(search domain.DocumentSearch) 
 func (s *retrievalStoreStub) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
 	s.lexicalSearch = search
 	return append([]domain.RetrievedDocumentChunk(nil), s.lexicalItems...), nil
+}
+
+func (s *retrievalStoreStub) ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error) {
+	s.contextSearch = append(s.contextSearch, search)
+	return append([]domain.RetrievedDocumentChunk(nil), s.contextItems...), nil
 }
 
 func TestEmbedQueryNormalizesInput(t *testing.T) {
@@ -90,6 +97,12 @@ func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
 	}
 	if response.Items[0].Confidence == "" || response.Items[0].Confidence == "low" {
 		t.Fatalf("expected relevant result to pass the gate, got %#v", response.Items[0])
+	}
+	if len(response.ContextItems) != 1 || response.ContextItems[0].Chunk.ID != "chunk_launch" || response.ContextItems[0].ContextRole != domain.ContextRoleMatchedChild {
+		t.Fatalf("expected the matched child in model context, got %#v", response.ContextItems)
+	}
+	if response.ContextSelection.Version != ContextSelectionVersion || response.ContextSelection.MatchedChildren != 1 || !response.ContextSelection.ScopeFiltered {
+		t.Fatalf("expected context selection metadata, got %#v", response.ContextSelection)
 	}
 	if response.NoMatch {
 		t.Fatal("expected a confident match")

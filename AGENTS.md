@@ -134,6 +134,12 @@ export PATH="$HOME/.nvm/versions/node/v22.6.0/bin:$PATH"
 npm run build 2>&1 | head -c 30000
 ```
 
+Frontend library coverage:
+
+```bash
+npm run test:coverage
+```
+
 Next.js may rewrite `apps/web/next-env.d.ts` during build. If the only diff is:
 
 ```ts
@@ -171,7 +177,9 @@ Search behavior:
 - high-confidence prompt-injection candidates are blocked before fusion and recorded without their raw content
 - backend rerank applies lexical, metadata, and evidence signals to the fused candidates
 - simple diversity penalty reduces repeated chunks from one document
-- response includes embedding metadata, security decisions, recall ranks, RRF score, fusion rank, and rerank scores
+- child hits remain in `items`; limit-selected model context is returned in `context_items`
+- context selection prefers same-parent chunks and falls back to adjacent chunks, with document/workspace/metadata scope preserved
+- response includes embedding metadata, security decisions, recall ranks, RRF score, fusion rank, rerank scores, and context-selection metadata
 
 Frontend manual check:
 
