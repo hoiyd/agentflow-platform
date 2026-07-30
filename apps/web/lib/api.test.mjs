@@ -99,7 +99,7 @@ test("RAG search preserves fusion, security, context selection, and no-match met
     context_items: [{ document: { id: "doc-1" }, chunk: { id: "chunk-1" }, context_role: "matched_child" }],
     context_selection: {
       version: "parent-child-v1",
-      token_budget: 16000,
+      max_tokens: 16000,
       tokens_used: 12,
       matched_children: 1,
       parent_chunks: 0,
@@ -115,7 +115,7 @@ test("RAG search preserves fusion, security, context selection, and no-match met
     requestBody = JSON.parse(String(options?.body ?? "{}"));
   });
 
-  const response = await searchRAG({ query: "AUTH-7F31", context_token_budget: 2400 });
+  const response = await searchRAG({ query: "AUTH-7F31", knowledge_context_max_tokens: 2400 });
 
   assert.equal(response.fusion?.algorithm, "rrf");
   assert.equal(response.fusion?.rank_constant, 60);
@@ -124,7 +124,7 @@ test("RAG search preserves fusion, security, context selection, and no-match met
   assert.equal(response.context_items?.[0].context_role, "matched_child");
   assert.equal(response.context_selection?.version, "parent-child-v1");
   assert.equal(response.context_selection?.scope_filtered, true);
-  assert.equal(requestBody.context_token_budget, 2400);
+  assert.equal(requestBody.knowledge_context_max_tokens, 2400);
   assert.equal(response.no_match, true);
   assert.equal(response.reason, "No confident match found.");
 });

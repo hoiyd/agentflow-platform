@@ -620,16 +620,16 @@ type DocumentIngestRequest struct {
 }
 
 type DocumentSearch struct {
-	Query              string            `json:"query"`
-	Embedding          []float64         `json:"-"`
-	EmbeddingProvider  string            `json:"-"`
-	EmbeddingModel     string            `json:"-"`
-	LexicalTerms       []string          `json:"-"`
-	WorkspaceID        string            `json:"workspace_id,omitempty"`
-	Metadata           map[string]string `json:"metadata,omitempty"`
-	Limit              int               `json:"limit,omitempty"`
-	MinSimilarity      float64           `json:"min_similarity,omitempty"`
-	ContextTokenBudget int               `json:"context_token_budget,omitempty"`
+	Query                     string            `json:"query"`
+	Embedding                 []float64         `json:"-"`
+	EmbeddingProvider         string            `json:"-"`
+	EmbeddingModel            string            `json:"-"`
+	LexicalTerms              []string          `json:"-"`
+	WorkspaceID               string            `json:"workspace_id,omitempty"`
+	Metadata                  map[string]string `json:"metadata,omitempty"`
+	Limit                     int               `json:"limit,omitempty"`
+	MinSimilarity             float64           `json:"min_similarity,omitempty"`
+	KnowledgeContextMaxTokens int               `json:"knowledge_context_max_tokens,omitempty"`
 }
 
 type DocumentContextSearch struct {
@@ -704,7 +704,7 @@ type KnowledgeSecurityInfo struct {
 
 type ContextSelectionInfo struct {
 	Version         string `json:"version"`
-	TokenBudget     int    `json:"token_budget"`
+	MaxTokens       int    `json:"max_tokens"`
 	TokensUsed      int    `json:"tokens_used"`
 	MatchedChildren int    `json:"matched_children"`
 	ParentChunks    int    `json:"parent_chunks"`

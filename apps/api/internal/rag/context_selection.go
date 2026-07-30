@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	ContextSelectionVersion      = "parent-child-v1"
-	DefaultContextTokenBudget    = 16000
-	DefaultContextNeighborWindow = 1
+	ContextSelectionVersion          = "parent-child-v1"
+	DefaultKnowledgeContextMaxTokens = 16000
+	DefaultContextNeighborWindow     = 1
 )
 
 type ContextSelector struct {
@@ -24,13 +24,13 @@ func NewContextSelector(store SearchStore) *ContextSelector {
 }
 
 func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.RetrievedDocumentChunk) ([]domain.RetrievedDocumentChunk, domain.ContextSelectionInfo, domain.KnowledgeSecurityInfo, error) {
-	budget := search.ContextTokenBudget
-	if budget <= 0 {
-		budget = DefaultContextTokenBudget
+	maxTokens := search.KnowledgeContextMaxTokens
+	if maxTokens <= 0 {
+		maxTokens = DefaultKnowledgeContextMaxTokens
 	}
 	selection := domain.ContextSelectionInfo{
 		Version:       ContextSelectionVersion,
-		TokenBudget:   budget,
+		MaxTokens:     maxTokens,
 		ScopeFiltered: true,
 	}
 	security := domain.KnowledgeSecurityInfo{
@@ -63,7 +63,7 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 
 		match.ContextRole = domain.ContextRoleMatchedChild
 		match.MatchedChunkID = match.Chunk.ID
-		if !addContextItem(&selected, selectedIDs, &selection, match, budget) {
+		if !addContextItem(&selected, selectedIDs, &selection, match, maxTokens) {
 			continue
 		}
 		selection.MatchedChildren++
@@ -109,7 +109,7 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 		for _, candidate := range parentCandidates {
 			candidate.ContextRole = domain.ContextRoleParent
 			candidate.MatchedChunkID = match.Chunk.ID
-			if addContextItem(&selected, selectedIDs, &selection, candidate, budget) {
+			if addContextItem(&selected, selectedIDs, &selection, candidate, maxTokens) {
 				selection.ParentChunks++
 				parentSelected = true
 			}
@@ -120,7 +120,7 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 		for _, candidate := range adjacentCandidates {
 			candidate.ContextRole = domain.ContextRoleAdjacent
 			candidate.MatchedChunkID = match.Chunk.ID
-			if addContextItem(&selected, selectedIDs, &selection, candidate, budget) {
+			if addContextItem(&selected, selectedIDs, &selection, candidate, maxTokens) {
 				selection.AdjacentChunks++
 			}
 		}
@@ -129,7 +129,7 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 	return selected, selection, security, nil
 }
 
-func addContextItem(items *[]domain.RetrievedDocumentChunk, selectedIDs map[string]struct{}, selection *domain.ContextSelectionInfo, item domain.RetrievedDocumentChunk, budget int) bool {
+func addContextItem(items *[]domain.RetrievedDocumentChunk, selectedIDs map[string]struct{}, selection *domain.ContextSelectionInfo, item domain.RetrievedDocumentChunk, maxTokens int) bool {
 	if strings.TrimSpace(item.Chunk.ID) == "" {
 		return false
 	}
@@ -137,7 +137,7 @@ func addContextItem(items *[]domain.RetrievedDocumentChunk, selectedIDs map[stri
 		return false
 	}
 	tokens := contextChunkTokens(item.Chunk)
-	if selection.TokensUsed+tokens > budget {
+	if selection.TokensUsed+tokens > maxTokens {
 		return false
 	}
 	item.Chunk.TokenCount = tokens

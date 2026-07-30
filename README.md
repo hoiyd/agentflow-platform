@@ -16,7 +16,7 @@ Full-stack AI agent workflow platform with streaming chat, agent runs, persisten
 - Hybrid document retrieval with independent dense and lexical recall for both the local file store and Postgres/pgvector.
 - Frontend Knowledge page for document upload, document detail, search, similarity threshold, and deletion.
 - Shared RAG pipeline across HTTP, Single-Agent, Multi-Agent, and Autonomous modes, with reciprocal-rank fusion, evidence-aware reranking, and a relevance gate.
-- Parent-child context selection that retrieves with child chunks, then fills same-section or adjacent chunks within the knowledge token budget.
+- Parent-child context selection that retrieves with child chunks, then fills same-section or adjacent chunks within the knowledge context token limit.
 - RAG prompt-injection guard with untrusted-context boundaries, deterministic blocking, and auditable filtering reasons.
 - Optional LangChainGo executor adapter for single-agent chat steps while keeping native orchestration as the default.
 

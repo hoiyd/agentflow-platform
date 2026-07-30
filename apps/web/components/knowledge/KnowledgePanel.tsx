@@ -16,7 +16,7 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
   const {
     contextItems,
     contextSelection,
-    contextTokenBudget,
+    knowledgeContextMaxTokens,
     documents,
     documentTitle,
     documentContent,
@@ -185,13 +185,13 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
             />
           </label>
           <label className="threshold-input">
-            <span>Context budget</span>
+            <span>Knowledge context limit</span>
             <input
               min="1"
-              onChange={(event) => model.setContextTokenBudget(event.target.value)}
+              onChange={(event) => model.setKnowledgeContextMaxTokens(event.target.value)}
               step="100"
               type="number"
-              value={contextTokenBudget}
+              value={knowledgeContextMaxTokens}
             />
           </label>
           <button
@@ -287,7 +287,7 @@ function ContextSelectionStatus({
   return (
     <div className="embedding-status">
       <span>
-        Context: {selection.version} / {selection.tokens_used.toLocaleString()} of {selection.token_budget.toLocaleString()} tokens
+        Context: {selection.version} / {selection.tokens_used.toLocaleString()} of {selection.max_tokens.toLocaleString()} tokens
       </span>
       <span>
         {selection.matched_children} matched / {selection.parent_chunks} parent / {selection.adjacent_chunks} adjacent

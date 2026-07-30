@@ -85,7 +85,7 @@ export type KnowledgeSecurityInfo = {
 
 export type ContextSelectionInfo = {
   version: string;
-  token_budget: number;
+  max_tokens: number;
   tokens_used: number;
   matched_children: number;
   parent_chunks: number;
@@ -226,7 +226,7 @@ export async function searchRAG(input: {
   metadata?: Record<string, string>;
   limit?: number;
   min_similarity?: number;
-  context_token_budget?: number;
+  knowledge_context_max_tokens?: number;
 }): Promise<DocumentSearchResponse> {
   const response = await fetch(`${API_BASE}/api/rag/search`, {
     method: "POST",

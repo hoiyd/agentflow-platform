@@ -295,14 +295,14 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		if r.knowledgeRetriever == nil {
 			payload["rag_error"] = "knowledge retriever is not configured"
 		} else {
-			contextTokenBudget := r.contextAssemblyConfig.KnowledgeMaxTokens
+			knowledgeContextMaxTokens := r.contextAssemblyConfig.KnowledgeMaxTokens
 			if snapshot, snapshotErr := r.snapshotForRun(runID); snapshotErr == nil {
-				contextTokenBudget = snapshot.ContextAssembly.KnowledgeMaxTokens
+				knowledgeContextMaxTokens = snapshot.ContextAssembly.KnowledgeMaxTokens
 			}
 			response, searchErr := r.knowledgeRetriever.Search(domain.DocumentSearch{
-				Query:              query,
-				Limit:              5,
-				ContextTokenBudget: contextTokenBudget,
+				Query:                     query,
+				Limit:                     5,
+				KnowledgeContextMaxTokens: knowledgeContextMaxTokens,
 			}, 5, embedding)
 			if searchErr != nil {
 				payload["rag_error"] = searchErr.Error()

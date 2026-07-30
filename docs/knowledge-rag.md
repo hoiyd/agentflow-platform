@@ -62,7 +62,7 @@ HTTP search, Single-Agent, Multi-Agent, and Autonomous runs use the same
    and document diversity control.
 7. Remove low-confidence results with the relevance gate and return the
    requested top K.
-8. Use the gated child hits to select model context within a token budget:
+8. Use the gated child hits to select model context within a token limit:
    include each matched child, prefer same-parent section chunks, and fall back
    to adjacent chunks when no parent expansion can be selected.
 
@@ -108,7 +108,7 @@ Retrieval and model context now have separate contracts:
 - `context_items` contains the chunks selected for model input. Each item has a
   `context_role` of `matched_child`, `parent`, or `adjacent`, plus the
   `matched_chunk_id` that caused the expansion.
-- `context_selection` reports algorithm version `parent-child-v1`, token budget,
+- `context_selection` reports algorithm version `parent-child-v1`, maximum tokens,
   tokens used, role counts, and whether scoped lookup was applied.
 
 `parent_id` identifies a logical source section rather than a separate parent
@@ -117,7 +117,8 @@ document and section. Candidates nearest to the matched child are considered
 first. If no same-parent chunk fits, the selector tries chunks within one
 adjacent chunk index. Chunk IDs are deduplicated across all matched children.
 
-HTTP search accepts optional `context_token_budget`; the default is 16,000.
+HTTP search accepts optional `knowledge_context_max_tokens`; the default is
+16,000.
 Agent runs use the frozen `ContextAssembly.KnowledgeMaxTokens` value from the
 Run snapshot, so retrieval expansion and final context assembly share the same
 upper bound. Context Assembly still performs its own final packing check.
@@ -132,7 +133,7 @@ feature is supported as single-workspace behavior rather than a multitenant
 security guarantee.
 
 Expanded chunks are untrusted just like direct hits. They pass through the
-prompt-injection guard before budget selection, and their decisions are merged
+prompt-injection guard before limit selection, and their decisions are merged
 into the response and retrieval trace security summary.
 
 ## Prompt-Injection Guard

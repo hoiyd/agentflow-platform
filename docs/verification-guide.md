@@ -54,9 +54,9 @@ RAG prompt-injection flow:
 Parent-child retrieval flow:
 
 1. Upload a Markdown document with at least two chunks under one heading and a neighboring chunk under another heading.
-2. Search for text unique to one child and set a small, explicit `context_token_budget`.
+2. Search for text unique to one child and set a small, explicit `knowledge_context_max_tokens`.
 3. Confirm `items` contains only ranked child hits while `context_items` includes the matched child plus same-parent chunks that fit.
-4. Confirm each context item has `context_role` and `matched_chunk_id`, and `context_selection.tokens_used` does not exceed `token_budget`.
+4. Confirm each context item has `context_role` and `matched_chunk_id`, and `context_selection.tokens_used` does not exceed `max_tokens`.
 5. Reduce the budget so no parent sibling fits and confirm an adjacent chunk is selected only when it fits.
 6. Repeat with a workspace filter and confirm context expansion never returns a chunk from another document or workspace.
 7. Put a prompt-injection phrase in an expandable sibling and confirm it is excluded and added to the security decisions.
@@ -73,7 +73,7 @@ Demo replay flow:
 1. Add or upload a knowledge document with a unique phrase.
 2. Ask a chat question that should use that phrase. In Single Agent mode, optionally switch Executor from Native to LangChainGo.
 3. Open the run replay page from the active run link.
-4. Confirm the Retrieved context panel shows retrieval event count, memory count, matched child count, model-context chunk count, embedding provider/model/dimensions, executor/framework, RRF version/parameters, and context-selection budget.
+4. Confirm the Retrieved context panel shows retrieval event count, memory count, matched child count, model-context chunk count, embedding provider/model/dimensions, executor/framework, RRF version/parameters, and the knowledge context token limit.
 5. Select a `retrieval` or `llm_start` event.
 6. Confirm retrieved memories and knowledge chunks are visible above the raw JSON payload.
 7. For LangChainGo runs, confirm event detail or raw payload includes `executor: "langchaingo"`, `framework: "langchaingo"`, and `framework_path: "chains.LLMChain"`.

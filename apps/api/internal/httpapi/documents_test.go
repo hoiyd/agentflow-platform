@@ -70,7 +70,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 		}
 	}
 
-	searchBody := []byte(`{"query":"What is the launch password?","metadata":{"project":"agentflow"},"limit":3,"min_similarity":0,"context_token_budget":100}`)
+	searchBody := []byte(`{"query":"What is the launch password?","metadata":{"project":"agentflow"},"limit":3,"min_similarity":0,"knowledge_context_max_tokens":100}`)
 	searchReq := httptest.NewRequest(http.MethodPost, "/api/rag/search", bytes.NewReader(searchBody))
 	searchRecorder := httptest.NewRecorder()
 	handler.searchDocumentChunks(searchRecorder, searchReq)
@@ -106,7 +106,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if len(searchResponse.ContextItems) != 1 || searchResponse.ContextItems[0].Chunk.ID != items[0].Chunk.ID || searchResponse.ContextItems[0].ContextRole != domain.ContextRoleMatchedChild {
 		t.Fatalf("expected matched child in model context, got %#v", searchResponse.ContextItems)
 	}
-	if searchResponse.ContextSelection.Version != "parent-child-v1" || searchResponse.ContextSelection.TokenBudget != 100 || searchResponse.ContextSelection.MatchedChildren != 1 || !searchResponse.ContextSelection.ScopeFiltered {
+	if searchResponse.ContextSelection.Version != "parent-child-v1" || searchResponse.ContextSelection.MaxTokens != 100 || searchResponse.ContextSelection.MatchedChildren != 1 || !searchResponse.ContextSelection.ScopeFiltered {
 		t.Fatalf("expected context selection metadata, got %#v", searchResponse.ContextSelection)
 	}
 	if !strings.Contains(items[0].Chunk.Content, "amber-9137") {

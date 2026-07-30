@@ -13,9 +13,9 @@ func TestContextSelectorPrefersScopedParentChunks(t *testing.T) {
 	store := &retrievalStoreStub{contextItems: []domain.RetrievedDocumentChunk{parent, match, adjacent}}
 
 	items, selection, security, err := NewContextSelector(store).Select(domain.DocumentSearch{
-		WorkspaceID:        "workspace-1",
-		Metadata:           map[string]string{"project": "agentflow"},
-		ContextTokenBudget: 20,
+		WorkspaceID:               "workspace-1",
+		Metadata:                  map[string]string{"project": "agentflow"},
+		KnowledgeContextMaxTokens: 20,
 	}, []domain.RetrievedDocumentChunk{match})
 	if err != nil {
 		t.Fatalf("select context: %v", err)
@@ -46,7 +46,7 @@ func TestContextSelectorFallsBackToAdjacentChunk(t *testing.T) {
 	adjacent := contextTestItem("doc-1", "", "child-2", "parent-2", 2, "neighbor context", 4)
 	store := &retrievalStoreStub{contextItems: []domain.RetrievedDocumentChunk{match, adjacent}}
 
-	items, selection, _, err := NewContextSelector(store).Select(domain.DocumentSearch{ContextTokenBudget: 20}, []domain.RetrievedDocumentChunk{match})
+	items, selection, _, err := NewContextSelector(store).Select(domain.DocumentSearch{KnowledgeContextMaxTokens: 20}, []domain.RetrievedDocumentChunk{match})
 	if err != nil {
 		t.Fatalf("select context: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestContextSelectorPrioritizesRankedChildrenBeforeExpansion(t *testing.T) {
 	parent := contextTestItem("doc-1", "", "parent-context", "parent-1", 0, "parent context", 4)
 	store := &retrievalStoreStub{contextItems: []domain.RetrievedDocumentChunk{first, second, parent}}
 
-	items, selection, _, err := NewContextSelector(store).Select(domain.DocumentSearch{ContextTokenBudget: 6}, []domain.RetrievedDocumentChunk{first, second})
+	items, selection, _, err := NewContextSelector(store).Select(domain.DocumentSearch{KnowledgeContextMaxTokens: 6}, []domain.RetrievedDocumentChunk{first, second})
 	if err != nil {
 		t.Fatalf("select context: %v", err)
 	}
@@ -84,8 +84,8 @@ func TestContextSelectorHonorsBudgetAndBlocksUnsafeExpansion(t *testing.T) {
 	store := &retrievalStoreStub{contextItems: []domain.RetrievedDocumentChunk{tooLarge, hostile, crossWorkspace}}
 
 	items, selection, security, err := NewContextSelector(store).Select(domain.DocumentSearch{
-		WorkspaceID:        "workspace-1",
-		ContextTokenBudget: 6,
+		WorkspaceID:               "workspace-1",
+		KnowledgeContextMaxTokens: 6,
 	}, []domain.RetrievedDocumentChunk{match})
 	if err != nil {
 		t.Fatalf("select context: %v", err)

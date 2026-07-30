@@ -42,7 +42,7 @@ export function useKnowledgeWorkbench() {
   const [isUploading, setIsUploading] = useState(false);
   const [query, setQuery] = useState("");
   const [minSimilarity, setMinSimilarity] = useState("0.15");
-  const [contextTokenBudget, setContextTokenBudget] = useState("16000");
+  const [knowledgeContextMaxTokens, setKnowledgeContextMaxTokens] = useState("16000");
   const [results, setResults] = useState<RetrievedDocumentChunk[]>([]);
   const [contextItems, setContextItems] = useState<RetrievedDocumentChunk[]>([]);
   const [contextSelection, setContextSelection] = useState<ContextSelectionInfo | null>(null);
@@ -130,14 +130,14 @@ export function useKnowledgeWorkbench() {
     setError("");
     try {
       const parsedMinSimilarity = Number(minSimilarity);
-      const parsedContextTokenBudget = Number(contextTokenBudget);
+      const parsedKnowledgeContextMaxTokens = Number(knowledgeContextMaxTokens);
       const response = await searchRAG({
         query: normalizedQuery,
         limit: 5,
         min_similarity: Number.isFinite(parsedMinSimilarity) ? parsedMinSimilarity : 0,
-        context_token_budget:
-          Number.isFinite(parsedContextTokenBudget) && parsedContextTokenBudget > 0
-            ? Math.floor(parsedContextTokenBudget)
+        knowledge_context_max_tokens:
+          Number.isFinite(parsedKnowledgeContextMaxTokens) && parsedKnowledgeContextMaxTokens > 0
+            ? Math.floor(parsedKnowledgeContextMaxTokens)
             : 16000
       });
       setResults(response.items);
@@ -221,7 +221,7 @@ export function useKnowledgeWorkbench() {
     documents,
     contextItems,
     contextSelection,
-    contextTokenBudget,
+    knowledgeContextMaxTokens,
     documentTitle,
     documentContent,
     deletingDocumentId,
@@ -254,7 +254,7 @@ export function useKnowledgeWorkbench() {
     selectUploadFile,
     setDocumentContent,
     setDocumentTitle,
-    setContextTokenBudget,
+    setKnowledgeContextMaxTokens,
     setEvaluationCases,
     setMinSimilarity,
     setQuery,

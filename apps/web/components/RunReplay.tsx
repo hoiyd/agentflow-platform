@@ -631,7 +631,7 @@ function contextSelectionPayload(value: unknown): ContextSelectionInfo | null {
 }
 
 function contextSelectionLabel(selection: ContextSelectionInfo) {
-  return `${selection.version} / ${selection.tokens_used.toLocaleString()} of ${selection.token_budget.toLocaleString()} tokens / ${selection.parent_chunks} parent / ${selection.adjacent_chunks} adjacent`;
+  return `${selection.version} / ${selection.tokens_used.toLocaleString()} of ${selection.max_tokens.toLocaleString()} tokens / ${selection.parent_chunks} parent / ${selection.adjacent_chunks} adjacent`;
 }
 
 function contextRoleLabel(role: string) {

@@ -105,7 +105,7 @@ HTTP RAG search or Agent context retrieval
        -> deduplicate / prompt-injection guard / RRF fusion / rerank / relevance gate
        -> Context Selector
             -> scoped same-parent / adjacent chunk lookup
-            -> prompt-injection guard / deduplicate / token-budget selection
+            -> prompt-injection guard / deduplicate / token-limit selection
 
 HTTP document ingestion
   -> Knowledge Base
@@ -128,7 +128,7 @@ knowledge context selected for model input. Expansion lookups are constrained
 to the matched document and preserve workspace and metadata filters. They
 prefer chunks sharing the logical section parent, fall back to an adjacent
 chunk window when no parent chunk can be selected, and never exceed the
-configured knowledge token budget. Expanded chunks pass through the same
+configured knowledge context token limit. Expanded chunks pass through the same
 prompt-injection guard before they can enter model context.
 
 Document ingestion also owns source traceability generation before persistence. It
