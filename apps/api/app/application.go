@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,11 +38,19 @@ func New(cfg config.Config) (*Application, error) {
 		store:         dependencies.store,
 		memoryCurator: dependencies.memoryCurator,
 		server: &http.Server{
-			Addr:              ":" + cfg.Port,
+			Addr:              serverAddress(cfg),
 			Handler:           dependencies.handler.Routes(),
 			ReadHeaderTimeout: 5 * time.Second,
 		},
 	}, nil
+}
+
+func serverAddress(cfg config.Config) string {
+	host := strings.TrimSpace(cfg.BindAddress)
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, cfg.Port)
 }
 
 // Run serves requests until the process context is cancelled or the server exits.
@@ -97,7 +107,7 @@ func normalizeServerError(err error) error {
 
 func (a *Application) logStartup() {
 	cfg := a.config
-	log.Printf("AgentFlow API listening on http://localhost:%s", cfg.Port)
+	log.Printf("AgentFlow API listening on http://%s", serverAddress(cfg))
 	log.Printf("AgentFlow store driver: %s", cfg.StoreDriver)
 	log.Printf("AgentFlow router mode: %s", cfg.RouterMode)
 	log.Printf("AgentFlow autonomous profile: max_iterations=%d max_output_chars=%d run_budget_runtime_cap=%s run_budget_tool_cap=%d", cfg.AutonomousMaxIterations, cfg.AutonomousMaxOutputCharacters, cfg.AutonomousMaxRuntime, cfg.AutonomousMaxToolCalls)

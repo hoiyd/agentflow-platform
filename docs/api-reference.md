@@ -1,4 +1,18 @@
-# API Summary
+# HTTP API Reference
+
+The API exposes persisted conversations, Agent execution, operational replay,
+tools, semantic memory, and RAG knowledge. Streaming chat uses Server-Sent
+Events (SSE); resource and inspection endpoints use JSON.
+
+The current API does not implement authentication or authorization. It is
+intended for local development or deployment behind a trusted access boundary;
+the default `BIND_ADDRESS=127.0.0.1` keeps it local. `ALLOWED_ORIGINS` is a
+browser CORS policy, not an authentication mechanism.
+
+For lifecycle terminology, read [Internal terms](terms.md). For configuration
+and security boundaries, read [Backend configuration](backend-configuration.md).
+
+## Endpoint Map
 
 ```txt
 GET    /health
@@ -38,17 +52,26 @@ POST   /api/documents/upload
 GET    /api/documents/{id}
 DELETE /api/documents/{id}
 POST   /api/rag/search
+POST   /api/rag/evaluations/run
 ```
+
+## Chat, Runs, and Verification
 
 `POST /api/chat` accepts an optional `completion_contract`. This field is the only trigger that opts a new Run into verification; chat mode and `VERIFICATION_*` server settings do not enable it automatically. When present, the server freezes the effective contract before creating the Run and does not publish `run.completed` until fresh Evidence satisfies its policy.
 
 Runs created without the field remain `verification_status=not_required`. A contracted Run carries the same frozen contract through continue/resume operations. The terminal SSE `done` payload includes both the Run `status` and `verification_status`. `POST /api/runs/{id}/verify` only retries an existing contracted Run against its latest persisted assistant output; it returns `409` for an ordinary Run. Replay responses include `verification_evidence` and `verification_artifacts`.
 
+## Usage and Replay
+
 `GET /api/runs/{id}/usage` returns the immutable budget, effective totals, open model reservations, and append-only usage entries. The same `usage_ledger` is included in Replay. A reservation and settlement share one `operation_id`; the settlement replaces its estimate when totals are calculated.
 
 Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, and `citation`. See [Completion Verification](completion-verification.md) for exact config shapes, scope, extension points, and policy semantics.
 
-Example RAG search response:
+## RAG Search Response
+
+The example abbreviates hashes and omits optional fields. The live response also
+includes `context_items` and `context_selection` when the relevance gate accepts
+knowledge for model context.
 
 ```json
 {
@@ -118,12 +141,16 @@ Example RAG search response:
 }
 ```
 
+### Source Traceability
+
 Document and chunk hashes are full lowercase SHA-256 hex strings; the example
 abbreviates them for readability. Chunk offsets are a half-open UTF-8 byte
 range into the normalized source document (`start_offset` inclusive,
 `end_offset` exclusive). An ingest request may provide `version`; otherwise the
 server derives it from the normalized document content hash. The same chunk
 source details are included in Agent `retrieved_chunks` trace payloads.
+
+### Recall, Fusion, and Reranking
 
 `vector_rank` and `lexical_rank` identify which independent recall paths found
 the chunk. Either field can be omitted when that path did not return the chunk.
@@ -141,6 +168,8 @@ The top-level `fusion` object reports the exact algorithm version, rank
 constant, and source weights used for the response. The same metadata is
 returned by RAG evaluation and recorded in Agent retrieval traces so UI and
 offline checks can reproduce the score without copying server constants.
+
+### Context Selection
 
 RAG search accepts an optional positive `knowledge_context_max_tokens`. The response
 keeps ranked child hits in `items` and returns the actual model context in
@@ -165,6 +194,8 @@ respective sizes, while `context_selection` records the token-limit decision.
 Merged `retrieved_chunks` also carry source and matched chunk IDs so Replay can
 show how a synthetic context item was assembled.
 
+### Security and No-Match Semantics
+
 The top-level `security` object reports the prompt-injection policy version,
 candidate counts, and filtering decisions for both direct recall and expanded
 context candidates. Decisions contain source IDs,
@@ -178,3 +209,7 @@ By default, lexical recall may add chunks that are absent from dense Top-K.
 Passing a positive `min_similarity` keeps vector-threshold behavior and excludes
 lexical-only chunks; lexical rank and score can still annotate matching dense
 results.
+
+`no_match=true` is a successful search decision: recalled candidates did not
+pass the current relevance policy. Provider, embedding, and Store failures are
+returned as execution errors instead of being disguised as no-match results.

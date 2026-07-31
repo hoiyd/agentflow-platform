@@ -1,5 +1,8 @@
 # Curated Semantic Memory
 
+The design goal is precision before recall: durable memory should contain facts
+the user intended to persist, not a second copy of the conversation.
+
 AgentFlow treats conversation history and durable memory as different data layers:
 
 ```text
@@ -10,7 +13,7 @@ memories            accepted semantic knowledge used for recall
 
 Completing a Run no longer copies every user and assistant message into `memories`. Assistant output and ordinary conversation remain available through Messages, Replay, and future session-history retrieval.
 
-## Curation flow
+## Curation Flow
 
 After the response has been flushed, the user message is submitted to the background Memory Curator:
 
@@ -52,7 +55,7 @@ The model currently supports only `ADD/NOOP`. It does not replace or remove exis
 
 The deterministic policy rejects low-confidence adaptive proposals, temporary instructions, task-completion logs, oversized content, and potential secrets. Secret-like rejected content is persisted only as `[redacted potential secret]`; the original value is not written to Candidate events or durable Memory.
 
-## Events and failure behavior
+## Events and Failure Behavior
 
 Candidate decisions and accepted writes use typed Run Events:
 
@@ -66,3 +69,14 @@ memory.sync.completed | memory.sync.failed
 The Curator uses a bounded, ordered background queue and drains accepted work during shutdown. Adaptive model requests share the normal model concurrency, rate-limit, retry, and timeout controls. Extraction, embedding, queue, Candidate, or Memory failures are observable, but they do not change a successfully completed Run.
 
 The explicit `POST /api/memories` and `POST /api/memories/search` APIs remain available. Versioned replace/remove mutations are a later feature; this change replaces implicit message copying with conservative curation.
+
+## Trade-offs and Boundaries
+
+- Conservative policy can miss implicit preferences. Shadow mode exists to
+  measure those misses before widening persistence.
+- Accepted Memory is append-only in the current protocol. Replace, merge, and
+  delete require versioned mutation semantics and related-memory retrieval.
+- Model confidence is one input, not authorization. Deterministic policy still
+  controls persistence.
+- Memory Curation is auxiliary platform work. Its failure is observable but
+  cannot retroactively fail an already completed Run.

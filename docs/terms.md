@@ -4,7 +4,11 @@ This document defines the internal execution terminology used by AgentFlow.
 These definitions are architectural contracts: domain models, event names,
 APIs, traces, replay data, and UI labels should use them consistently.
 
-## Core hierarchy
+Use this page when reviewing lifecycle code or traces. For package ownership,
+see [Backend architecture](backend-architecture.md); for control ownership, see
+[Execution controls](execution-controls.md).
+
+## Core Hierarchy
 
 ```text
 Conversation
@@ -179,7 +183,7 @@ Retrieval activity.
 A **Mode** selects how a Run is orchestrated. It does not change the definitions
 of Run, Stage, or Turn.
 
-### Single-agent mode
+### Single-Agent Mode
 
 The user request is handled directly by one Agent Turn. There is no orchestration
 Stage.
@@ -194,7 +198,7 @@ Conversation
         └── Model Call
 ```
 
-### Multi-agent mode
+### Multi-Agent Mode
 
 The Run is divided into named collaboration Stages. Each LLM-backed Stage
 normally executes one Turn.
@@ -209,7 +213,7 @@ Conversation
     └── Stage: finalizer → Turn
 ```
 
-### Autonomous mode
+### Autonomous Mode
 
 The Run advances through a bounded, repeating set of Stages. The Run owns the
 overall limits and may pause for human input before resuming.
@@ -227,7 +231,7 @@ Conversation
         └── ...
 ```
 
-## Event namespace
+## Event Namespace
 
 Unified execution events use the entity that owns the activity:
 
@@ -239,8 +243,10 @@ model.*
 tool.*
 retrieval.*
 memory.*
+context.*
 usage.*
 budget.*
+verification.*
 ```
 
 Overall autonomous budget and iteration status use `run.progress`. Stage events
@@ -252,15 +258,17 @@ proposal and policy decision for an explicitly durable user fact.
 `memory.sync.*` records embedding and persistence of an accepted Candidate.
 Neither activity changes the outcome of a successfully completed Turn.
 
-## Quick reference
+## Quick Reference
 
 | Term | Question it answers |
 | --- | --- |
 | Conversation | Which long-lived chat does this belong to? |
 | Run | Which user request is the system executing? |
+| Runtime Snapshot | Which immutable execution protocol did the Run capture? |
 | Stage | Which orchestration phase is active? |
 | Turn | Which Agent is processing which input? |
 | Iteration | Which autonomous repetition contains these Stages? |
 | Model Call | Which LLM request occurred? |
 | Tool Call | Which registered capability was invoked? |
 | Retrieval | Which context was loaded for the Turn? |
+| Usage Ledger | Which resources were reserved, settled, and charged? |
