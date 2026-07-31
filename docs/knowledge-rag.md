@@ -102,6 +102,16 @@ events record the same object. The Knowledge and Replay interfaces display this
 metadata and retain six decimal places for raw RRF scores so adjacent source
 ranks remain distinguishable during manual verification.
 
+Reranking is injected into the Retrieval Pipeline through the `Reranker`
+interface. The default `HeuristicReranker` preserves the existing lexical,
+metadata, evidence, and document-diversity policy. It reports
+`heuristic-reranker-v1` with configuration `heuristic-default-v1` in search,
+evaluation, and retrieval-trace metadata. The interface accepts a request
+context and returns `RerankResult` with the actual per-request implementation
+metadata, so a future Cross-Encoder can support cancellation, provider failure
+handling, model routing, and fallback without changing the pipeline contract.
+Relevance gating remains the next independent stage.
+
 The UI labels the dense/vector path as **Semantic** and the lexical path as
 **Keyword**. These user-facing names map to the existing `vector_rank`,
 `lexical_rank`, `dense_weight`, and `lexical_weight` API fields; the wire

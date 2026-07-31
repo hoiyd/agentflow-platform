@@ -99,7 +99,7 @@ func (s *KnowledgeBase) Search(ctx context.Context, search domain.DocumentSearch
 	if requestedLimit <= 0 {
 		requestedLimit = search.Limit
 	}
-	return s.retriever.Search(search, requestedLimit, embedding)
+	return s.retriever.Search(ctx, search, requestedLimit, embedding)
 }
 
 func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error) {
@@ -115,6 +115,7 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 	summary := domain.RAGEvaluationSummary{Total: len(request.Cases)}
 	var embedding domain.EmbeddingInfo
 	var fusion domain.FusionInfo
+	var reranker domain.RerankerInfo
 	for _, evaluationCase := range request.Cases {
 		response, err := s.Search(ctx, domain.DocumentSearch{
 			Query:         evaluationCase.Query,
@@ -129,6 +130,7 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 		if embedding.Provider == "" {
 			embedding = response.Embedding
 			fusion = response.Fusion
+			reranker = response.Reranker
 		}
 		caseResult := rag.EvaluateCase(evaluationCase, response.Items)
 		caseResult.Security = response.Security
@@ -147,5 +149,5 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 			summary.Misses++
 		}
 	}
-	return domain.RAGEvaluationRunResponse{Summary: summary, Cases: results, Embedding: embedding, Fusion: fusion}, nil
+	return domain.RAGEvaluationRunResponse{Summary: summary, Cases: results, Embedding: embedding, Fusion: fusion, Reranker: reranker}, nil
 }

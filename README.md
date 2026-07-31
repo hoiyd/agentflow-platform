@@ -86,7 +86,7 @@ orchestration policy.
 | --- | --- | --- |
 | Agent orchestration | Direct, plan-and-review Multi-Agent, and bounded Autonomous modes share one Turn Engine | [Backend architecture](docs/backend-architecture.md) |
 | Reproducibility | Each Run freezes model, agent, tool schema, context policy, and budget in a Runtime Snapshot | [Terms](docs/terms.md#runtime-snapshot) |
-| Hybrid RAG | Independent semantic and keyword recall, Reciprocal Rank Fusion, reranking, relevance gating, context transformation, and native `[S1]` citations | [Knowledge / RAG](docs/knowledge-rag.md) |
+| Hybrid RAG | Independent semantic and keyword recall, Reciprocal Rank Fusion, versioned pluggable reranking, relevance gating, context transformation, and native `[S1]` citations | [Knowledge / RAG](docs/knowledge-rag.md) |
 | Context control | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [Context management](docs/context-management.md) |
 | Resource safety | Run admission, provider RPM/TPM, retry policy, per-Run budget reservations/settlements, tool limits, and autonomous guards have distinct owners | [Execution controls](docs/execution-controls.md) |
 | Durable memory | Explicit rules plus optional shadow-mode model extraction propose auditable candidates before embedding | [Memory management](docs/memory-management.md) |
@@ -100,7 +100,7 @@ orchestration policy.
 | --- | --- | --- |
 | **Implemented** | Agent runtime | Single-Agent, plan-and-review Multi-Agent, bounded Autonomous execution, shared Turn Engine, tools, continue/resume/cancel, and stale-run recovery |
 | **Implemented** | Reliability | Runtime Snapshots, typed events, Replay, Usage Ledger, Run Budget, Context Manifests, compaction, and opt-in Completion Verification |
-| **Implemented** | RAG | Markdown ingestion, source traceability, independent Semantic/Keyword recall, RRF, reranking, relevance gate, parent/adjacent context selection, deduplication, merging, and structured `[S1]` citations |
+| **Implemented** | RAG | Markdown ingestion, source traceability, Semantic/Keyword recall, RRF, modular reranking, relevance gate, parent/adjacent context selection, deduplication, merging, and structured `[S1]` citations |
 | **Implemented** | Memory | Rule-first durable-fact extraction, optional shadow/auto model extraction, candidate audit trail, policy filtering, redaction, and embedding |
 | **Partial** | Workspace isolation | Scope fields and filtered expansion exist; Workspace lifecycle, mandatory production enforcement, and ACL policy are incomplete |
 | **Partial** | RAG safety and evaluation | Deterministic prompt-injection filtering and evaluation API exist; semantic attack detection, versioned Golden Datasets, and calibrated thresholds remain incomplete |

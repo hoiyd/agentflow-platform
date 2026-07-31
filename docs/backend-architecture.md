@@ -145,7 +145,8 @@ These paths can be followed directly from:
 - `apps/api/internal/contextassembly/assembler.go`
 
 The Retrieval Pipeline, rather than an Agent runtime or HTTP handler, owns the
-recall sequence, prompt-injection filtering, reciprocal-rank fusion, and result
+recall sequence, prompt-injection filtering, reciprocal-rank fusion, injected
+versioned reranking, and result
 policy. Stores expose
 separate dense and lexical search operations and remain responsible for
 applying workspace and metadata filters. Fusion consumes only the two source
@@ -186,6 +187,7 @@ Adding another executable should reuse the relevant application wiring instead o
 | --- | --- |
 | Add another model provider | provider adapter behind the existing model client contract |
 | Add a retrieval algorithm | `rag` pipeline stage with versioned response/trace metadata |
+| Add a reranker | implement `rag.Reranker`, report implementation/config identity, and inject it at the composition root |
 | Add storage | implement the capability interfaces consumed by the composition root |
 | Add an agent framework | executor adapter; keep Run, Event, Budget, and Store ownership in AgentFlow |
 | Add a verifier | register one versioned verifier implementation with owned config normalization |

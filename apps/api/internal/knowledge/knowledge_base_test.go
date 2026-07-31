@@ -23,7 +23,7 @@ type knowledgeRetrieverStub struct {
 	embedding rag.Embedding
 }
 
-func (s *knowledgeRetrieverStub) Search(search domain.DocumentSearch, limit int, embedding rag.Embedding) (domain.DocumentSearchResponse, error) {
+func (s *knowledgeRetrieverStub) Search(_ context.Context, search domain.DocumentSearch, limit int, embedding rag.Embedding) (domain.DocumentSearchResponse, error) {
 	s.search = search
 	s.limit = limit
 	s.embedding = embedding
@@ -59,7 +59,7 @@ func TestKnowledgeBaseIngestsSearchesAndEvaluatesKnowledge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("search knowledge: %v", err)
 	}
-	if len(response.Items) != 1 || response.Embedding.Provider != "test" || response.Fusion.Algorithm != "rrf" || response.Security.PolicyVersion != domain.RAGPromptGuardPolicyVersion {
+	if len(response.Items) != 1 || response.Embedding.Provider != "test" || response.Fusion.Algorithm != "rrf" || response.Reranker.Algorithm != "heuristic" || response.Security.PolicyVersion != domain.RAGPromptGuardPolicyVersion {
 		t.Fatalf("unexpected search response: %#v", response)
 	}
 
@@ -76,6 +76,9 @@ func TestKnowledgeBaseIngestsSearchesAndEvaluatesKnowledge(t *testing.T) {
 	}
 	if evaluation.Fusion != response.Fusion {
 		t.Fatalf("expected evaluation fusion metadata %#v, got %#v", response.Fusion, evaluation.Fusion)
+	}
+	if evaluation.Reranker != response.Reranker {
+		t.Fatalf("expected evaluation reranker metadata %#v, got %#v", response.Reranker, evaluation.Reranker)
 	}
 	if len(evaluation.Cases) != 1 || evaluation.Cases[0].Security.PolicyVersion != domain.RAGPromptGuardPolicyVersion {
 		t.Fatalf("expected evaluation case security metadata, got %#v", evaluation.Cases)

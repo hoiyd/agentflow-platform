@@ -711,6 +711,17 @@ type FusionInfo struct {
 	LexicalWeight float64 `json:"lexical_weight"`
 }
 
+// RerankerInfo identifies the active ranking implementation and its immutable
+// configuration. Provider and Model are reserved for future model-backed
+// implementations such as a Cross-Encoder.
+type RerankerInfo struct {
+	Algorithm     string `json:"algorithm"`
+	Version       string `json:"version"`
+	ConfigVersion string `json:"config_version"`
+	Provider      string `json:"provider,omitempty"`
+	Model         string `json:"model,omitempty"`
+}
+
 type KnowledgeSecurityDecision struct {
 	DocumentID string   `json:"document_id"`
 	ChunkID    string   `json:"chunk_id"`
@@ -756,6 +767,7 @@ type DocumentSearchResponse struct {
 	ContextSelection ContextSelectionInfo     `json:"context_selection"`
 	Embedding        EmbeddingInfo            `json:"embedding"`
 	Fusion           FusionInfo               `json:"fusion"`
+	Reranker         RerankerInfo             `json:"reranker"`
 	Security         KnowledgeSecurityInfo    `json:"security"`
 	NoMatch          bool                     `json:"no_match,omitempty"`
 	Reason           string                   `json:"reason,omitempty"`
@@ -810,4 +822,5 @@ type RAGEvaluationRunResponse struct {
 	Cases     []RAGEvaluationCaseResult `json:"cases"`
 	Embedding EmbeddingInfo             `json:"embedding"`
 	Fusion    FusionInfo                `json:"fusion"`
+	Reranker  RerankerInfo              `json:"reranker"`
 }

@@ -120,6 +120,10 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		if !ok || fusion.Algorithm != "rrf" || fusion.RankConstant != 60 {
 			t.Fatalf("expected active fusion configuration in retrieval trace, got %#v", event.Payload["fusion"])
 		}
+		reranker, ok := event.Payload["reranker"].(domain.RerankerInfo)
+		if !ok || reranker.Algorithm != "heuristic" || reranker.Version != "heuristic-reranker-v1" || reranker.ConfigVersion != "heuristic-default-v1" {
+			t.Fatalf("expected active reranker configuration in retrieval trace, got %#v", event.Payload["reranker"])
+		}
 		security, ok := event.Payload["knowledge_security"].(domain.KnowledgeSecurityInfo)
 		if !ok || security.PolicyVersion != domain.RAGPromptGuardPolicyVersion || !security.UntrustedContext || security.CheckedCandidates == 0 {
 			t.Fatalf("expected knowledge security summary in retrieval trace, got %#v", event.Payload["knowledge_security"])

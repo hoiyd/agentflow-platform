@@ -124,6 +124,11 @@ knowledge for model context.
     "dense_weight": 1,
     "lexical_weight": 1
   },
+  "reranker": {
+    "algorithm": "heuristic",
+    "version": "heuristic-reranker-v1",
+    "config_version": "heuristic-default-v1"
+  },
   "security": {
     "policy_version": "rag-prompt-guard-v1",
     "untrusted_context": true,
@@ -168,6 +173,11 @@ The top-level `fusion` object reports the exact algorithm version, rank
 constant, and source weights used for the response. The same metadata is
 returned by RAG evaluation and recorded in Agent retrieval traces so UI and
 offline checks can reproduce the score without copying server constants.
+
+The top-level `reranker` object identifies the active implementation and its
+immutable configuration through `algorithm`, `version`, and `config_version`.
+Optional `provider` and `model` fields are reserved for model-backed rerankers.
+Search, evaluation, and Agent retrieval traces expose the same metadata.
 
 ### Context Selection
 

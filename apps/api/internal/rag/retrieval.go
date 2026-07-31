@@ -3,6 +3,7 @@ package rag
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
@@ -15,7 +16,7 @@ type SearchStore interface {
 }
 
 type Retriever interface {
-	Search(domain.DocumentSearch, int, Embedding) (domain.DocumentSearchResponse, error)
+	Search(context.Context, domain.DocumentSearch, int, Embedding) (domain.DocumentSearchResponse, error)
 }
 
 type EmbedFunc func(context.Context, string) (Embedding, error)
@@ -29,11 +30,19 @@ type Embedding struct {
 }
 
 type RetrievalPipeline struct {
-	store SearchStore
+	store    SearchStore
+	reranker Reranker
 }
 
 func NewRetrievalPipeline(store SearchStore) *RetrievalPipeline {
-	return &RetrievalPipeline{store: store}
+	return NewRetrievalPipelineWithReranker(store, nil)
+}
+
+func NewRetrievalPipelineWithReranker(store SearchStore, reranker Reranker) *RetrievalPipeline {
+	if reranker == nil {
+		reranker = NewHeuristicReranker(DefaultHeuristicRerankerConfig())
+	}
+	return &RetrievalPipeline{store: store, reranker: reranker}
 }
 
 func EmbedQuery(ctx context.Context, query string, embed EmbedFunc) (Embedding, error) {
@@ -56,7 +65,7 @@ func EmbeddingQuery(query string) string {
 	return query[:maxEmbeddingQueryChars]
 }
 
-func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit int, embedding Embedding) (domain.DocumentSearchResponse, error) {
+func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSearch, requestedLimit int, embedding Embedding) (domain.DocumentSearchResponse, error) {
 	search.Query = strings.TrimSpace(search.Query)
 	if search.Query == "" {
 		return domain.DocumentSearchResponse{}, errors.New("query is required")
@@ -82,7 +91,15 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 	items := mergeRecallCandidates(denseItems, lexicalItems, search.MinSimilarity <= 0)
 	items, security := GuardPromptInjection(items)
 	items = ReciprocalRankFusion(items)
-	items = Rerank(search.Query, items, requestedLimit)
+	reranker := p.reranker
+	if reranker == nil {
+		reranker = NewHeuristicReranker(DefaultHeuristicRerankerConfig())
+	}
+	rerankResult, err := reranker.Rerank(ctx, RerankRequest{Query: search.Query, Candidates: items, Limit: requestedLimit})
+	if err != nil {
+		return domain.DocumentSearchResponse{}, fmt.Errorf("rerank candidates: %w", err)
+	}
+	items = rerankResult.Items
 	items = ApplyRelevanceGate(items)
 	contextItems, contextSelection, contextSecurity, err := NewContextSelector(p.store).Select(search, items)
 	if err != nil {
@@ -107,7 +124,8 @@ func (p *RetrievalPipeline) Search(search domain.DocumentSearch, requestedLimit 
 			Dimensions: embedding.Dimensions,
 			Estimated:  embedding.Estimated,
 		},
-		NoMatch: len(items) == 0,
+		Reranker: rerankResult.Info,
+		NoMatch:  len(items) == 0,
 	}
 	if response.NoMatch {
 		if security.BlockedCandidates > 0 && security.BlockedCandidates == security.CheckedCandidates {

@@ -84,6 +84,14 @@ export type FusionInfo = {
   lexical_weight: number;
 };
 
+export type RerankerInfo = {
+  algorithm: string;
+  version: string;
+  config_version: string;
+  provider?: string;
+  model?: string;
+};
+
 export type KnowledgeSecurityDecision = {
   document_id: string;
   chunk_id: string;
@@ -130,6 +138,7 @@ export type DocumentSearchResponse = {
   context_selection?: ContextSelectionInfo;
   embedding?: EmbeddingInfo;
   fusion?: FusionInfo;
+  reranker?: RerankerInfo;
   security?: KnowledgeSecurityInfo;
   no_match?: boolean;
   reason?: string;
@@ -172,6 +181,7 @@ export type RAGEvaluationRunResponse = {
   }>;
   embedding?: EmbeddingInfo;
   fusion?: FusionInfo;
+  reranker?: RerankerInfo;
 };
 
 export type DocumentDetail = {
@@ -279,6 +289,7 @@ export async function searchRAG(input: {
     context_selection: payload.context_selection,
     embedding: payload.embedding,
     fusion: payload.fusion,
+    reranker: payload.reranker,
     security: payload.security,
     no_match: payload.no_match,
     reason: payload.reason

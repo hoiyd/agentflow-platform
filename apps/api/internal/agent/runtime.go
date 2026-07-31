@@ -299,7 +299,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 			if snapshot, snapshotErr := r.snapshotForRun(runID); snapshotErr == nil {
 				knowledgeContextMaxTokens = snapshot.ContextAssembly.KnowledgeMaxTokens
 			}
-			response, searchErr := r.knowledgeRetriever.Search(domain.DocumentSearch{
+			response, searchErr := r.knowledgeRetriever.Search(ctx, domain.DocumentSearch{
 				Query:                     query,
 				Limit:                     5,
 				KnowledgeContextMaxTokens: knowledgeContextMaxTokens,
@@ -314,6 +314,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 					chunks = response.Items
 				}
 				payload["fusion"] = response.Fusion
+				payload["reranker"] = response.Reranker
 				payload["citation_sources"] = response.CitationSources
 				payload["knowledge_security"] = response.Security
 				if response.ContextSelection.Version != "" {
