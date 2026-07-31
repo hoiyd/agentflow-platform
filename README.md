@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/hoiyd/agentflow-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/hoiyd/agentflow-platform/actions/workflows/ci.yml)
 
-AgentFlow is a full-stack AI agent workflow platform built to study the parts
-that make agent systems reliable after the first demo: orchestration, tool
+AgentFlow is a full-stack AI agent workflow platform designed to make agent
+systems reliable beyond the first demo through explicit orchestration, tool
 execution, retrieval, context management, resource control, verification, and
 replay.
 
@@ -131,7 +131,7 @@ persistence, and Replay without provider setup or cost.
 The timed walkthrough and talking points are in
 [`docs/demo.md`](docs/demo.md).
 
-## Evolution and Learning Evidence
+## Engineering Evolution and Evidence
 
 The repository preserves an incremental engineering path rather than presenting
 the current design as a one-shot architecture:
