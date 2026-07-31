@@ -1,5 +1,14 @@
 # Knowledge / RAG
 
+AgentFlow treats retrieval as a staged, observable pipeline. Recall, fusion,
+reranking, relevance policy, context expansion, and context transformation have
+different contracts so each stage can be evaluated independently.
+
+This document describes current single-workspace behavior. End-to-end Workspace
+lifecycle and mandatory multi-tenant isolation remain explicit limitations.
+
+## Ingestion and Inspection
+
 The Knowledge page supports:
 
 - adding a text document from a textarea
@@ -137,7 +146,7 @@ Expanded chunks are untrusted just like direct hits. They pass through the
 prompt-injection guard before limit selection, and their decisions are merged
 into the response and retrieval trace security summary.
 
-## Context Deduplication And Merge
+## Context Deduplication and Merge
 
 After parent-child selection, `context_items` passes through the versioned
 `context-dedup-merge-v1` transformer:
@@ -226,3 +235,23 @@ content boundary, filtering, and audit trail provide defense in depth.
 - A lexical-only result has `similarity: 0` and no `vector_rank`; a dense-only
   result has no `lexical_rank` or `lexical_score`.
 - `no_match` remains true when all recalled candidates fail the relevance gate.
+
+## Failure and Quality Boundaries
+
+- An embedding-provider or Store failure is an execution error, not a
+  low-confidence `no_match` result.
+- `no_match` means recalled candidates did not pass the current relevance
+  policy; it does not prove that the corpus contains no answer.
+- A no-match result supplies no RAG evidence, but the current Agent protocol
+  does not force the model to abstain from using prior knowledge.
+- RRF improves rank robustness but does not calibrate relevance thresholds.
+- Parent and adjacent expansion can improve context completeness while adding
+  noise; the token limit and downstream transformation bound that trade-off.
+- Prompt-injection filtering is defense in depth, not a semantic proof that a
+  document is safe.
+- Threshold calibration and claim-level groundedness evaluation require a
+  versioned Golden Dataset and remain future work.
+
+The manual checks in [Verification guide](verification-guide.md) exercise exact
+identifier recall, RRF reproduction, injection filtering, parent expansion,
+and context transformation.

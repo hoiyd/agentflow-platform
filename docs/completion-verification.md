@@ -1,6 +1,13 @@
 # Completion Verification
 
-AgentFlow treats an assistant response as a candidate result until a frozen Completion Contract is satisfied. Verification is explicitly enabled per Run; ordinary chat does not require verification and keeps `verification_status=not_required`.
+AgentFlow can treat an assistant response as a candidate result until a frozen
+Completion Contract is satisfied. Verification is explicitly enabled per Run;
+ordinary chat does not require it and keeps
+`verification_status=not_required`.
+
+This subsystem answers whether configured outcome invariants passed. It is
+separate from execution success, provider retries, retrieval relevance, and
+subjective factual correctness.
 
 ## When Verification Runs
 
@@ -181,7 +188,7 @@ run.revision_requested
 
 File and Postgres stores use the same domain contract. Postgres creates the verification tables and Run columns through idempotent startup migration.
 
-## Design Basis
+## Design Basis and Limits
 
 The implementation follows three practical evaluation principles:
 

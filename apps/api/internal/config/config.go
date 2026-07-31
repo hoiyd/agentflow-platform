@@ -10,6 +10,7 @@ import (
 )
 
 type Config struct {
+	BindAddress         string
 	Port                string
 	OpenAIAPIKey        string
 	OpenAIBaseURL       string
@@ -113,6 +114,7 @@ func Load() Config {
 	loadDotEnv(".env")
 
 	return Config{
+		BindAddress:                       getEnv("BIND_ADDRESS", "127.0.0.1"),
 		Port:                              getEnv("PORT", "8080"),
 		OpenAIAPIKey:                      getEnv("OPENAI_API_KEY", ""),
 		OpenAIBaseURL:                     getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
