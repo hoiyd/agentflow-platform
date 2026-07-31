@@ -90,7 +90,7 @@ orchestration policy.
    ```
 
 2. Open `http://localhost:3000`, then open **Knowledge**.
-3. Upload [`examples/demo-runbook.md`](examples/demo-runbook.md).
+3. Upload [`examples/example.md`](examples/example.md).
 4. Search for that identifier and inspect Semantic rank, Keyword rank, RRF,
    final rerank, and the transformed model context.
 5. Run a Multi-Agent task against the runbook, then open **View trace** to
