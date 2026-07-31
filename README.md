@@ -12,6 +12,31 @@ and inspecting Single-Agent, Multi-Agent, and bounded Autonomous workflows.
 The project uses OpenAI-compatible model and embedding APIs, with deterministic
 local fallbacks for development.
 
+## Product Walkthrough
+
+![AgentFlow workflow demo](docs/assets/agentflow-demo.gif)
+
+The walkthrough follows one incident task from a reviewed Multi-Agent plan to
+the final cited answer and persisted Run replay. It uses the repository's
+deterministic local path, so no API key is required.
+
+<details>
+<summary>Inspect the retrieval and execution views</summary>
+
+### Hybrid RAG Inspection
+
+![Hybrid RAG inspection](docs/assets/knowledge-rag.png)
+
+### Multi-Agent Result
+
+![Completed Multi-Agent workflow](docs/assets/multi-agent-run.png)
+
+### Run Replay
+
+![Run replay with resource usage](docs/assets/run-replay.png)
+
+</details>
+
 ## Why This Project Exists
 
 A chat completion is easy to demonstrate. A platform must also answer harder
