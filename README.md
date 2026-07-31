@@ -20,7 +20,7 @@ The walkthrough follows one incident task from a reviewed Multi-Agent plan to
 the final cited answer and persisted Run replay. It uses the repository's
 deterministic local path, so no API key is required.
 
-<details>
+<details open>
 <summary>Inspect the retrieval and execution views</summary>
 
 ### Hybrid RAG Inspection
