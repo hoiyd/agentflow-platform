@@ -1,5 +1,7 @@
 # AgentFlow Platform
 
+[![CI](https://github.com/hoiyd/agentflow-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/hoiyd/agentflow-platform/actions/workflows/ci.yml)
+
 AgentFlow is a full-stack AI agent workflow platform built to study the parts
 that make agent systems reliable after the first demo: orchestration, tool
 execution, retrieval, context management, resource control, verification, and
