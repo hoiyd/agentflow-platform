@@ -314,6 +314,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 					chunks = response.Items
 				}
 				payload["fusion"] = response.Fusion
+				payload["citation_sources"] = response.CitationSources
 				payload["knowledge_security"] = response.Security
 				if response.ContextSelection.Version != "" {
 					payload["context_selection"] = response.ContextSelection
@@ -373,6 +374,7 @@ func retrievedChunkTraceItems(chunks []domain.RetrievedDocumentChunk) []map[stri
 	items := make([]map[string]any, 0, len(chunks))
 	for _, chunk := range chunks {
 		items = append(items, map[string]any{
+			"source_id":          chunk.SourceID,
 			"document_id":        chunk.Document.ID,
 			"document_title":     chunk.Document.Title,
 			"document_version":   chunk.Chunk.DocumentVersion,

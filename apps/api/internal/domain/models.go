@@ -6,6 +6,7 @@ import (
 )
 
 const RAGPromptGuardPolicyVersion = "rag-prompt-guard-v1"
+const RAGCitationProtocolVersion = "rag-citation-v1"
 
 type Conversation struct {
 	ID        string    `json:"id"`
@@ -15,11 +16,12 @@ type Conversation struct {
 }
 
 type Message struct {
-	ID             string    `json:"id"`
-	ConversationID string    `json:"conversation_id"`
-	Role           string    `json:"role"`
-	Content        string    `json:"content"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             string        `json:"id"`
+	ConversationID string        `json:"conversation_id"`
+	Role           string        `json:"role"`
+	Content        string        `json:"content"`
+	Citations      []RAGCitation `json:"citations,omitempty"`
+	CreatedAt      time.Time     `json:"created_at"`
 }
 
 type Agent struct {
@@ -237,16 +239,18 @@ type ResumeRunRequest struct {
 }
 
 type ChatChunk struct {
-	Type               string `json:"type"`
-	ConversationID     string `json:"conversation_id,omitempty"`
-	Title              string `json:"title,omitempty"`
-	RunID              string `json:"run_id,omitempty"`
-	AgentID            string `json:"agent_id,omitempty"`
-	Status             string `json:"status,omitempty"`
-	VerificationStatus string `json:"verification_status,omitempty"`
-	MessageID          string `json:"message_id,omitempty"`
-	Delta              string `json:"delta,omitempty"`
-	Error              string `json:"error,omitempty"`
+	Type               string        `json:"type"`
+	ConversationID     string        `json:"conversation_id,omitempty"`
+	Title              string        `json:"title,omitempty"`
+	RunID              string        `json:"run_id,omitempty"`
+	AgentID            string        `json:"agent_id,omitempty"`
+	Status             string        `json:"status,omitempty"`
+	VerificationStatus string        `json:"verification_status,omitempty"`
+	MessageID          string        `json:"message_id,omitempty"`
+	Citations          []RAGCitation `json:"citations,omitempty"`
+	InvalidCitationIDs []string      `json:"invalid_citation_ids,omitempty"`
+	Delta              string        `json:"delta,omitempty"`
+	Error              string        `json:"error,omitempty"`
 }
 
 type RunEventType string
@@ -283,6 +287,7 @@ const (
 	EventRetrievalStarted        RunEventType = "retrieval.started"
 	EventRetrievalCompleted      RunEventType = "retrieval.completed"
 	EventRetrievalFailed         RunEventType = "retrieval.failed"
+	EventCitationResolved        RunEventType = "citation.resolved"
 	EventMemoryCandidateProposed RunEventType = "memory.candidate.proposed"
 	EventMemoryCandidateAccepted RunEventType = "memory.candidate.accepted"
 	EventMemoryCandidateRejected RunEventType = "memory.candidate.rejected"
@@ -302,15 +307,16 @@ const (
 )
 
 type ContextManifestEntry struct {
-	Source          string `json:"source"`
-	ReferenceID     string `json:"reference_id"`
-	Role            string `json:"role,omitempty"`
-	Selected        bool   `json:"selected"`
-	Reason          string `json:"reason"`
-	Transformation  string `json:"transformation,omitempty"`
-	EstimatedTokens int    `json:"estimated_tokens"`
-	OriginalBytes   int    `json:"original_bytes"`
-	IncludedBytes   int    `json:"included_bytes"`
+	Source           string `json:"source"`
+	ReferenceID      string `json:"reference_id"`
+	CitationSourceID string `json:"citation_source_id,omitempty"`
+	Role             string `json:"role,omitempty"`
+	Selected         bool   `json:"selected"`
+	Reason           string `json:"reason"`
+	Transformation   string `json:"transformation,omitempty"`
+	EstimatedTokens  int    `json:"estimated_tokens"`
+	OriginalBytes    int    `json:"original_bytes"`
+	IncludedBytes    int    `json:"included_bytes"`
 }
 
 type ContextManifest struct {
@@ -673,6 +679,21 @@ type RetrievedDocumentChunk struct {
 	SourceChunkIDs   []string      `json:"source_chunk_ids,omitempty"`
 	MatchedChunkIDs  []string      `json:"matched_chunk_ids,omitempty"`
 	MergedChunkCount int           `json:"merged_chunk_count,omitempty"`
+	SourceID         string        `json:"source_id,omitempty"`
+}
+
+// RAGCitation is trusted source metadata resolved by the server. The model may
+// emit only the human-readable SourceID marker; it cannot supply these fields.
+type RAGCitation struct {
+	SourceID        string   `json:"source_id"`
+	DocumentID      string   `json:"document_id"`
+	DocumentTitle   string   `json:"document_title"`
+	DocumentVersion string   `json:"document_version,omitempty"`
+	ChunkID         string   `json:"chunk_id"`
+	SourceChunkIDs  []string `json:"source_chunk_ids,omitempty"`
+	SectionPath     []string `json:"section_path,omitempty"`
+	StartOffset     int      `json:"start_offset"`
+	EndOffset       int      `json:"end_offset"`
 }
 
 type EmbeddingInfo struct {
@@ -731,6 +752,7 @@ type ContextTransformationInfo struct {
 type DocumentSearchResponse struct {
 	Items            []RetrievedDocumentChunk `json:"items"`
 	ContextItems     []RetrievedDocumentChunk `json:"context_items,omitempty"`
+	CitationSources  []RAGCitation            `json:"citation_sources,omitempty"`
 	ContextSelection ContextSelectionInfo     `json:"context_selection"`
 	Embedding        EmbeddingInfo            `json:"embedding"`
 	Fusion           FusionInfo               `json:"fusion"`

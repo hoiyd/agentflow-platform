@@ -15,7 +15,20 @@ export type Message = {
   conversation_id: string;
   role: "user" | "assistant" | "system";
   content: string;
+  citations?: RAGCitation[];
   created_at: string;
+};
+
+export type RAGCitation = {
+  source_id: string;
+  document_id: string;
+  document_title: string;
+  document_version?: string;
+  chunk_id: string;
+  source_chunk_ids?: string[];
+  section_path?: string[];
+  start_offset?: number;
+  end_offset?: number;
 };
 
 export type RunEvent = {
@@ -65,6 +78,8 @@ export type ChatEvent =
         | "blocked"
         | "stale"
         | string;
+      citations?: RAGCitation[];
+      invalid_citation_ids?: string[];
     }
   | { type: "error"; error: string };
 

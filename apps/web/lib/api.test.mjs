@@ -100,17 +100,25 @@ test("run usage client calls the dedicated endpoint", async (t) => {
   assert.equal(ledger.totals.open_reservations, 0);
 });
 
-test("RAG search preserves fusion, security, context selection, and no-match metadata", async (t) => {
+test("RAG search preserves fusion, security, context selection, citations, and no-match metadata", async (t) => {
   let requestBody = {};
   mockFetch(t, {
     items: [],
     context_items: [{
       document: { id: "doc-1" },
       chunk: { id: "context_merged_1" },
+      source_id: "S1",
       context_role: "matched_child",
       source_chunk_ids: ["chunk-1", "chunk-2"],
       matched_chunk_ids: ["chunk-2"],
       merged_chunk_count: 2
+    }],
+    citation_sources: [{
+      source_id: "S1",
+      document_id: "doc-1",
+      document_title: "Runbook",
+      chunk_id: "context_merged_1",
+      source_chunk_ids: ["chunk-1", "chunk-2"]
     }],
     context_selection: {
       version: "parent-child-v1",
@@ -145,6 +153,9 @@ test("RAG search preserves fusion, security, context selection, and no-match met
   assert.equal(response.security?.policy_version, "rag-prompt-guard-v1");
   assert.deepEqual(response.security?.decisions?.[0].reasons, ["instruction_override"]);
   assert.equal(response.context_items?.[0].context_role, "matched_child");
+  assert.equal(response.context_items?.[0].source_id, "S1");
+  assert.equal(response.citation_sources?.[0].source_id, "S1");
+  assert.deepEqual(response.citation_sources?.[0].source_chunk_ids, ["chunk-1", "chunk-2"]);
   assert.deepEqual(response.context_items?.[0].source_chunk_ids, ["chunk-1", "chunk-2"]);
   assert.equal(response.context_items?.[0].merged_chunk_count, 2);
   assert.equal(response.context_selection?.version, "parent-child-v1");

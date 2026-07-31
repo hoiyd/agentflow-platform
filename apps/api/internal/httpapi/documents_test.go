@@ -40,10 +40,15 @@ func TestRAGSearchAPISerializesMergedContextTraceability(t *testing.T) {
 		SourceChunkIDs:   []string{"child-1", "child-2"},
 		MatchedChunkIDs:  []string{"child-2"},
 		MergedChunkCount: 2,
+		SourceID:         "S1",
 	}
 	handler := &Handler{knowledge: &ragSearchResponseStub{response: domain.DocumentSearchResponse{
 		Items:        []domain.RetrievedDocumentChunk{},
 		ContextItems: []domain.RetrievedDocumentChunk{merged},
+		CitationSources: []domain.RAGCitation{{
+			SourceID: "S1", DocumentID: "doc-1", DocumentTitle: "Runbook", ChunkID: "context_merged_1",
+			SourceChunkIDs: []string{"child-1", "child-2"},
+		}},
 		ContextSelection: domain.ContextSelectionInfo{
 			Version:       "parent-child-v1",
 			MaxTokens:     100,
@@ -68,6 +73,8 @@ func TestRAGSearchAPISerializesMergedContextTraceability(t *testing.T) {
 		`"source_chunk_ids":["child-1","child-2"]`,
 		`"matched_chunk_ids":["child-2"]`,
 		`"merged_chunk_count":2`,
+		`"source_id":"S1"`,
+		`"citation_sources":[{"source_id":"S1"`,
 		`"transformation":{"version":"context-dedup-merge-v1"`,
 		`"adjacent_merges":1`,
 	} {
@@ -169,6 +176,9 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if len(searchResponse.ContextItems) != 1 || searchResponse.ContextItems[0].Chunk.ID != items[0].Chunk.ID || searchResponse.ContextItems[0].ContextRole != domain.ContextRoleMatchedChild {
 		t.Fatalf("expected matched child in model context, got %#v", searchResponse.ContextItems)
 	}
+	if searchResponse.ContextItems[0].SourceID != "S1" || len(searchResponse.CitationSources) != 1 || searchResponse.CitationSources[0].SourceID != "S1" || searchResponse.CitationSources[0].ChunkID != items[0].Chunk.ID {
+		t.Fatalf("expected native citation source metadata, got context=%#v sources=%#v", searchResponse.ContextItems, searchResponse.CitationSources)
+	}
 	if searchResponse.ContextSelection.Version != "parent-child-v1" || searchResponse.ContextSelection.MaxTokens != 100 || searchResponse.ContextSelection.MatchedChildren != 1 || !searchResponse.ContextSelection.ScopeFiltered {
 		t.Fatalf("expected context selection metadata, got %#v", searchResponse.ContextSelection)
 	}
@@ -194,7 +204,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if items[0].RRFScore <= 0 {
 		t.Fatalf("expected RRF score on search result, got %#v", items[0])
 	}
-	if !strings.Contains(searchRecorder.Body.String(), `"lexical_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"lexical_score"`) || !strings.Contains(searchRecorder.Body.String(), `"rrf_score"`) || !strings.Contains(searchRecorder.Body.String(), `"fusion_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"rank_constant":60`) || !strings.Contains(searchRecorder.Body.String(), `"policy_version":"rag-prompt-guard-v1"`) || !strings.Contains(searchRecorder.Body.String(), `"context_items"`) || !strings.Contains(searchRecorder.Body.String(), `"context_selection"`) || !strings.Contains(searchRecorder.Body.String(), `"transformation":{"version":"context-dedup-merge-v1"`) {
+	if !strings.Contains(searchRecorder.Body.String(), `"lexical_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"lexical_score"`) || !strings.Contains(searchRecorder.Body.String(), `"rrf_score"`) || !strings.Contains(searchRecorder.Body.String(), `"fusion_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"rank_constant":60`) || !strings.Contains(searchRecorder.Body.String(), `"policy_version":"rag-prompt-guard-v1"`) || !strings.Contains(searchRecorder.Body.String(), `"context_items"`) || !strings.Contains(searchRecorder.Body.String(), `"citation_sources"`) || !strings.Contains(searchRecorder.Body.String(), `"context_selection"`) || !strings.Contains(searchRecorder.Body.String(), `"transformation":{"version":"context-dedup-merge-v1"`) {
 		t.Fatalf("expected recall and fusion fields in API JSON, got %s", searchRecorder.Body.String())
 	}
 	if len(items[0].MatchedTerms) == 0 {

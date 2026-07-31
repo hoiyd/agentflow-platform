@@ -329,6 +329,7 @@ function ModelContextPreview({
                 <div className="tool-source">Source details: {chunkSourceDetails(item)}</div>
               </div>
               <div className="document-metrics">
+				{item.source_id ? <span>[{item.source_id}]</span> : null}
                 <span>{contextRoleLabel(item.context_role)}</span>
                 {item.merged_chunk_count && item.merged_chunk_count > 1 ? (
                   <span>{item.merged_chunk_count} source chunks</span>

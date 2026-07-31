@@ -22,13 +22,30 @@ type runCompletionRequest struct {
 // completeStreamingRun centralizes the durable state transition shared by all
 // streaming modes. The SSE response is flushed before asynchronous memory work.
 func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flusher, ctx context.Context, request runCompletionRequest) bool {
-	message, err := h.store.AddMessage(request.ConversationID, "assistant", request.Assistant)
+	sources, citations, invalidCitationIDs, err := h.resolveRunCitations(request.RunID, request.Assistant)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(request.RunID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
 		flusher.Flush()
 		return false
 	}
+	message, err := h.store.AddMessageWithCitations(request.ConversationID, "assistant", request.Assistant, citations)
+	if err != nil {
+		_, _ = h.agentRuntime.FailRun(request.RunID, err)
+		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		flusher.Flush()
+		return false
+	}
+	_, _ = h.store.CreateRunEvent(domain.RunEvent{
+		Type: domain.EventCitationResolved, RunID: request.RunID, ConversationID: request.ConversationID,
+		Payload: map[string]any{
+			"protocol_version":     domain.RAGCitationProtocolVersion,
+			"available_source_ids": citationSourceIDs(sources),
+			"cited_source_ids":     citationSourceIDs(citations),
+			"invalid_source_ids":   invalidCitationIDs,
+			"message_id":           message.ID,
+		},
+	})
 
 	completed, err := h.resolveRunCompletion(ctx, request.RunID, request.Assistant)
 	if err != nil {
@@ -51,6 +68,8 @@ func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flush
 		Status:             string(completed.Status),
 		VerificationStatus: string(completed.VerificationStatus),
 		MessageID:          message.ID,
+		Citations:          citations,
+		InvalidCitationIDs: invalidCitationIDs,
 	})
 	flusher.Flush()
 
