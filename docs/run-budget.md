@@ -7,6 +7,10 @@ Autonomous, Tool, and Verification controls, see
 Run Budget bounds cumulative work attributable to one Run. It complements the
 shared concurrency and provider controls rather than replacing them.
 
+The key design choice is to separate **logical work** from **physical provider
+attempts**. A retried HTTP request consumes provider rate-limit capacity, but it
+does not become another logical model call in the Run ledger.
+
 ## Control Boundaries
 
 | Control | Scope | Counts |
@@ -124,3 +128,14 @@ Run Events, and the same Usage Ledger.
 Run Budget limits quantity; it does not decide whether work is making progress.
 Repeated tool signatures, repeated results/errors, oscillation detection, and
 `warn -> block_call -> halt_turn` behavior belong to a separate Progress Guard.
+
+## Invariants Worth Testing
+
+- Reservation and settlement for one operation are idempotent.
+- Settlement replaces the reservation estimate in effective totals.
+- An interrupted call leaves an observable conservative reservation.
+- Postgres admission is atomic under concurrent writers.
+- Waiting and queue time do not consume active runtime.
+- Snapshot compatibility does not silently apply new limits to legacy Runs.
+
+Focused commands are listed in [Verification guide](verification-guide.md).

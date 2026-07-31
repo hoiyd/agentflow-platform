@@ -1,11 +1,19 @@
 # Backend Configuration
 
+Configuration is read at process startup, normalized, and passed through the
+application composition root. `.env.example` is the executable reference for
+local defaults; this document explains ownership and interaction between the
+settings.
+
 For the ownership, scope, unit, interaction rules, and tuning order of every
 major limit, start with [Execution Controls](execution-controls.md).
+
+## Baseline Environment
 
 Common environment variables:
 
 ```bash
+BIND_ADDRESS=127.0.0.1
 PORT=8080
 STORE_DRIVER=file
 DATA_PATH=.data/agentflow.json
@@ -47,6 +55,17 @@ ROUTER_MODE=auto
 ALLOWED_ORIGINS=http://localhost:3000
 ```
 
+`BIND_ADDRESS` defaults to loopback because the API has no built-in
+authentication. Set it to `0.0.0.0` only behind an intentional external access
+boundary. `ALLOWED_ORIGINS` controls browser CORS and does not provide access
+control.
+
+Do not commit `.env` files. Runtime Snapshots freeze provider endpoints and
+model identity for reproducibility, but credentials remain live process
+configuration and are never persisted with a Run.
+
+## Concurrency, Rate Limits, and Retry
+
 Concurrency settings control different layers:
 
 - `MAX_CONCURRENT_RUNS` limits active Agent runs. Runs for the same conversation remain single-writer.
@@ -87,7 +106,18 @@ they are folded into the frozen Run Budget by taking the stricter value, then
 only Run Budget enforces those two resources. This avoids competing counters
 while preserving the existing Autonomous safety profile.
 
-If `OPENAI_API_KEY` is empty, chat uses deterministic local fallback for verification. Embeddings call Ollama when `EMBEDDING_BASE_URL` points to `http://localhost:11434/api/embed`; otherwise they use deterministic local fallback. The frontend search panel shows whether RAG search used `ollama / <model>`, `local / local_hash_embedding`, or an OpenAI-compatible embedding provider.
+## Model and Embedding Providers
+
+If `OPENAI_API_KEY` is empty, chat uses deterministic local fallback for
+verification. Embeddings call Ollama when `EMBEDDING_BASE_URL` points to
+`http://localhost:11434/api/embed`; otherwise they use deterministic local
+fallback. The frontend search panel shows whether RAG search used
+`ollama / <model>`, `local / local_hash_embedding`, or an OpenAI-compatible
+embedding provider.
+
+The local fallback is intended to verify workflows and persistence without
+provider cost. It is not a substitute for evaluating model quality or semantic
+retrieval quality.
 
 To split providers, keep chat on a hosted OpenAI-compatible API and point embeddings to local Ollama:
 
@@ -171,3 +201,18 @@ Command verification is disabled when `VERIFICATION_WORKSPACE_ROOT` or `VERIFICA
 HTTP verification permits localhost and loopback IPs. `VERIFICATION_ALLOWED_HTTP_HOSTS` adds comma-separated exact hostname or host:port values. Redirects are checked against the same allowlist. `VERIFICATION_MAX_ARTIFACT_BYTES` caps persisted output for each verifier while the Artifact keeps the output hash, observed byte count, and truncation flag.
 
 See [Completion Verification](completion-verification.md) for contract and Gate behavior.
+
+## Operational Checklist
+
+Before sharing or deploying a configuration:
+
+1. Verify the selected embedding dimension matches the persisted pgvector
+   column dimension.
+2. Reindex documents after changing embedding provider, model, or dimension.
+3. Enable cost enforcement only after configuring prices for the active model.
+4. Keep command verification disabled unless its workspace root and executable
+   allowlist are intentionally scoped.
+5. Confirm allowed origins and HTTP verifier hosts are explicit for the target
+   environment.
+6. Create a new Run after changing frozen settings; existing Runs retain their
+   captured protocol.

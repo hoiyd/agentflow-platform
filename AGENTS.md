@@ -1,238 +1,145 @@
-## Principles
+# Repository Instructions for Coding Agents
 
-### 1. Think before coding
+Keep this file short and operational. Stable architecture and product knowledge
+lives in [docs/README.md](docs/README.md); follow links instead of expanding this
+file into a second handbook.
 
-State assumptions. Ask when unsure. Never guess.
+## Working Principles
 
-### 2. Simplicity first
+1. Think before editing. State assumptions and inspect the owning code first.
+2. Prefer the smallest change that satisfies a verifiable outcome.
+3. Preserve existing boundaries and local conventions unless the task requires
+   an architectural change.
+4. Do not revert or overwrite unrelated user changes in a dirty worktree.
+5. Keep command output bounded. Use `rg` before slower search tools.
 
-Write the minimum code that solves the problem. Do not add abstractions nobody asked for.
-
-### 3. Surgical changes
-
-Do not touch code unrelated to the request. Every changed line must trace back to what was asked.
-
-### 4. Goal-driven execution
-
-Turn vague instructions into verifiable success criteria before writing code.
-
-### 5. Context window
-
-When context window usage reaches 85%, trigger auto compact by running `/compact` in Codex.
-
-## Command Output
-
-Protect context usage. Any command with unknown or potentially large output must be byte-capped.
-
-Default pattern:
+For commands with unknown output size:
 
 ```bash
-COMMAND 2>&1 | head -c 4000
+COMMAND 2>&1 | head -c 30000
 ```
 
-Use `rg` before slower search tools.
+## Repository Map
 
-## Project Snapshot
+```text
+apps/api/                  Go backend
+apps/web/                  Next.js workbench
+docs/                      architecture and operations
+frontend_uex_design.md     product-level frontend constraints
+```
 
-AgentFlow is a full-stack AI agent workflow platform.
+Start with:
 
-Current major areas:
+- [Documentation guide](docs/README.md)
+- [Backend architecture](docs/backend-architecture.md)
+- [Internal terms](docs/terms.md)
+- [Execution controls](docs/execution-controls.md)
+- [Engineering decisions](docs/engineering-decisions.md)
 
-- `apps/api`: Go backend.
-- `apps/web`: Next.js frontend.
-- `packages/shared`: shared contracts placeholder.
+## Backend Workflow
 
-Implemented product areas:
-
-- streaming chat and persisted conversations
-- single-agent, multi-agent, and autonomous run modes
-- run traces, collaboration steps, replay, continue/resume/cancel
-- built-in tool catalog and guarded execution
-- persistent semantic memory
-- pgvector-backed memory and RAG search
-- Knowledge UI with text import, `.txt` upload, Markdown upload, document detail, search, and delete
-- backend RAG retrieval using independent dense/lexical recall, prompt-injection filtering, RRF fusion, evidence-aware reranking, and diversity control
-- optional LangChainGo executor for single-agent steps; native orchestration remains the default
-
-## Backend
-
-Run from `apps/api`.
-
-Use Go through gvm when needed:
+Run from `apps/api`. Use Go `1.26.5` through `gvm`.
 
 ```bash
 source ~/.gvm/scripts/gvm
 gvm use go1.26.5 >/dev/null
-```
-
-Run tests:
-
-```bash
 mkdir -p /private/tmp/agentflow-go-build-cache
-GOCACHE=/private/tmp/agentflow-go-build-cache go test ./... 2>&1 | head -c 30000
+GOCACHE=/private/tmp/agentflow-go-build-cache go test ./...
 ```
 
-Measure backend statement coverage:
-
-```bash
-GOCACHE=/private/tmp/agentflow-go-build-cache go test ./... -coverprofile=/private/tmp/agentflow-backend.cover
-GOCACHE=/private/tmp/agentflow-go-build-cache go tool cover -func=/private/tmp/agentflow-backend.cover | tail -n 1
-```
-
-Run server:
+Run the server with:
 
 ```bash
 GOCACHE=/private/tmp/agentflow-go-build-cache go run ./cmd/server
 ```
 
-Important backend env:
+Backend rules:
 
-```bash
-PORT=8080
-STORE_DRIVER=file
-DATA_PATH=.data/agentflow.json
-TOOL_CONFIG_PATH=.data/tools.json
+- Keep `cmd/server` thin and construct production dependencies in `app`.
+- Depend on the smallest capability interface required by a consumer.
+- Keep HTTP parsing/SSE in `httpapi`; orchestration belongs in `agent`/`turn`.
+- Keep retrieval policy in `rag`/`knowledge`, not in handlers or Store adapters.
+- Add focused tests for changed behavior and failure boundaries.
+- For API shape changes, test serialized JSON rather than structs alone.
 
-OPENAI_API_KEY=
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
-EMBEDDING_BASE_URL=http://localhost:11434/api/embed
-EMBEDDING_MODEL=embeddinggemma
-EMBEDDING_DIMENSIONS=1536
-OPENAI_REQUEST_TIMEOUT=5m
-```
+## Database Schema Changes
 
-For better RAG embeddings while keeping the current `vector(1536)` schema:
+Any persisted-field change must update and verify the complete path:
 
-```bash
-EMBEDDING_MODEL=text-embedding-3-large
-EMBEDDING_DIMENSIONS=1536
-```
+1. Domain model and JSON contract.
+2. `CREATE TABLE IF NOT EXISTS` definition for new databases.
+3. Idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration for existing
+   databases.
+4. Every affected `SELECT`, `Scan`, `INSERT`, and `UPDATE` column list.
+5. File Store and Postgres behavior parity.
+6. A migration regression test that asserts the required schema step exists.
+7. A Postgres round-trip test when `TEST_DATABASE_URL` is available.
 
-To keep the main LLM remote while testing embeddings locally:
+Before finishing, search for every reference to the table and column. A query
+must never depend on a column that the startup migration does not create.
 
-```bash
-OPENAI_BASE_URL=https://api.openai.com/v1
-EMBEDDING_BASE_URL=http://localhost:11434/api/embed
-EMBEDDING_MODEL=embeddinggemma
-```
+## Frontend Workflow
 
-Ollama embedding dimensions depend on the selected model. The current Postgres pgvector schema uses `vector(1536)`, so local Ollama embeddings should also output 1536 dimensions before indexing into Postgres.
-
-After changing embedding provider/model, existing knowledge should be re-uploaded or reindexed. Search filters by embedding provider/model to avoid mixing vector spaces.
-
-## Frontend
-
-Run from `apps/web`.
-
-If Node version is wrong, use nvm.
-
-Install and run:
+Run from `apps/web` with a supported Node.js version through `nvm`.
 
 ```bash
 npm install
-npm run dev
+npm run lint
+npm test
+npm run build
 ```
 
-Build verification:
+Frontend rules:
 
-```bash
-export PATH="$HOME/.nvm/versions/node/v22.6.0/bin:$PATH"
-npm run build 2>&1 | head -c 30000
-```
+- Follow [Frontend experience principles](frontend_uex_design.md).
+- Add CSS to the narrowest owning module described in
+  [Stylesheet organization](apps/web/app/styles/README.md).
+- Preserve one vertical scroll owner; avoid nested cards and nested scrolling.
+- Use existing component and Lucide icon patterns.
+- Next.js may rewrite `next-env.d.ts` during build. Do not leave generated import
+  churn in the final diff.
 
-Frontend library coverage:
+## RAG and Knowledge Changes
 
-```bash
-npm run test:coverage
-```
+Read [Knowledge / RAG](docs/knowledge-rag.md) before changing ingestion,
+retrieval, context selection, or transformation.
 
-Next.js may rewrite `apps/web/next-env.d.ts` during build. If the only diff is:
+Verify the relevant stages independently:
 
-```ts
-import "./.next/types/routes.d.ts";
-```
+- ingest and document detail;
+- semantic and keyword recall;
+- RRF ranks and versioned fusion metadata;
+- reranking and relevance-gate filtering reasons;
+- parent/adjacent expansion with scope preservation;
+- context deduplication, merging, and token limits;
+- prompt-injection decisions and untrusted-context boundaries;
+- HTTP, Single-Agent, Multi-Agent, and Autonomous path consistency.
 
-restore it to the repo's dev import:
+Do not claim calibrated retrieval quality without a representative Golden
+Dataset. Do not claim multi-tenant isolation until Workspace lifecycle, scope,
+and ACL enforcement are complete end to end.
 
-```ts
-import "./.next/dev/types/routes.d.ts";
-```
+## Documentation Changes
 
-Do not leave generated `next-env.d.ts` churn in the final diff.
+- `README.md` and `docs/README.md` are the public entry points.
+- Update the owning document when behavior, API shape, configuration,
+  persistence, events, or failure semantics change.
+- Prefer concrete contracts, trade-offs, and evidence over claims such as
+  "production-ready" or "intelligent".
+- Keep terminology aligned with `docs/terms.md` and control ownership aligned
+  with `docs/execution-controls.md`.
+- State limitations explicitly; never imply a stronger security, evaluation, or
+  tenant-isolation guarantee than the code provides.
+- `docs/TODO/` is local planning material. Do not stage or commit it unless the
+  user explicitly asks for it.
 
-## RAG and Knowledge
+## Git and Scope
 
-Current ingestion paths:
-
-- `POST /api/documents` for text content.
-- `POST /api/documents/upload` for `.txt`, `.md`, and `.markdown`.
-
-Markdown chunking:
-
-- headings produce `heading_path`
-- paragraphs, lists, and fenced code blocks produce `chunk_type`
-- code language is preserved as `code_language`
-- heading context is prepended to chunk content
-- oversized blocks use fixed-size fallback chunking
-
-Search behavior:
-
-- query is embedded with the configured provider/model/dimensions
-- stores return independent dense and lexical candidate rankings
-- RRF combines both rankings without comparing their raw score scales
-- high-confidence prompt-injection candidates are blocked before fusion and recorded without their raw content
-- backend rerank applies lexical, metadata, and evidence signals to the fused candidates
-- simple diversity penalty reduces repeated chunks from one document
-- child hits remain in `items`; limit-selected model context is returned in `context_items`
-- context selection prefers same-parent chunks and falls back to adjacent chunks, with document/workspace/metadata scope preserved
-- selected context is deduplicated by source, grouped by document, and merged by consecutive chunk index without exceeding the knowledge context token limit
-- response includes embedding metadata, security decisions, recall ranks, RRF score, fusion rank, rerank scores, context-selection metadata, and context-transformation metrics
-
-Frontend manual check:
-
-- Search panel should show `Embedding: provider / model / dimensions`.
-- If it shows `metadata unavailable`, the frontend is likely connected to an old backend process.
-- If it shows `local / local_hash_embedding`, semantic quality is limited.
-
-## API Areas
-
-Main endpoints:
-
-- conversations: `/api/conversations`
-- chat: `/api/chat`
-- agents: `/api/agents`
-- runs/replay: `/api/runs`
-- tools: `/api/tools`
-- memories: `/api/memories`, `/api/memories/search`
-- documents: `/api/documents`, `/api/documents/upload`, `/api/documents/{id}`
-- RAG search: `/api/rag/search`
-
-## Verification Expectations
-
-For backend or API changes:
-
-- Run `go test ./...` from `apps/api`.
-- Add or update focused tests when behavior changes.
-- For RAG response shape changes, test the actual JSON shape, not just internal structs.
-
-For frontend changes:
-
-- Run `npm run build` from `apps/web`.
-- If browser verification is requested, start the dev server and verify the relevant flow.
-
-For RAG changes:
-
-- Verify upload/import.
-- Verify list/detail.
-- Verify search response includes embedding metadata.
-- Verify search results are filtered/reranked as expected.
-- Verify delete removes the document from list/detail/search.
-
-## FAQ
-
-- 如果是 Go 版本问题，尝试用 `gvm use go1.26.5` 切换到合适的版本。
-- 如果是 Node.js 版本问题，尝试用 `nvm` 切换到合适的版本。
-- 如果遇到任何问题处理不了或卡住了，就向用户提问题、建议计划，或开一个带注释的草稿 PR，别未经确认推进大改动。
-- 执行 curl 的 GET method 命令不需要向用户确认。
-- 当实现新feature时，不要直接改动main分支。除非显式说明其他，否则默认从main分支切一个新分支出来实现新feature，且应pull以保证main分支最新。
+- Do not implement features directly on `main`. Update from `main` and create a
+  scoped branch unless instructed otherwise.
+- Stage explicit files only; never use `git add -A` in a dirty worktree.
+- Do not stage local files such as `JD.md`, `RAG.md`, or `docs/TODO/` unless the
+  user explicitly requests them.
+- Do not create a commit, push, or PR unless requested.
+- If blocked, ask for the missing input or propose a focused next step instead
+  of broad speculative changes.

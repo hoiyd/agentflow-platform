@@ -1,6 +1,25 @@
 # Backend Architecture
 
-AgentFlow uses a small Go application architecture centered on explicit package ownership and dependency direction. The directory depth is not intended to represent architectural importance.
+AgentFlow uses a capability-oriented Go architecture centered on explicit
+ownership, narrow consumer interfaces, and one application composition root.
+Directory depth does not represent architectural importance.
+
+For the reasoning behind the main boundaries, read
+[Engineering decisions](engineering-decisions.md). For domain terminology such
+as Run, Stage, Turn, and Model Call, read [Internal terms](terms.md).
+
+## Architectural Invariants
+
+- `cmd/server` performs process startup; it does not construct product logic.
+- `app` is the only production composition root.
+- HTTP handlers translate transport concerns and depend on capability
+  interfaces; they do not recreate Memory, Knowledge, or Runtime services.
+- Single-Agent, Multi-Agent, and Autonomous execution share one Turn-level
+  implementation for retrieval, tools, context, events, and model access.
+- Stores persist domain contracts but do not own retrieval policy, reranking,
+  or orchestration.
+- Run Events describe execution; the Usage Ledger remains the accounting
+  authority.
 
 ## Package Layout
 
@@ -55,21 +74,21 @@ app
 
 ## Design Decisions
 
-### Use a real composition root
+### Use a Real Composition Root
 
 Dependency construction belongs in `app`, not in `cmd/server` and not in HTTP handlers. Handlers do not construct runtimes, queues, or default policies and do not rely on post-construction setters. This keeps process bootstrapping testable and gives all executables one canonical wiring path.
 
-### Do not mirror generic Clean Architecture folders
+### Do Not Mirror Generic Clean Architecture Folders
 
 Empty `api`, `core`, and `services` directories do not create useful boundaries. AgentFlow groups code by concrete capability and changes package boundaries only when ownership or dependency pressure justifies it.
 
-### Keep transport and execution separate
+### Keep Transport and Execution Separate
 
 `httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.SemanticMemory` owns validation, embedding, and memory persistence; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and RAG evaluation. Agent execution remains in `agent` and `turn`.
 
 The HTTP package defines the small service interfaces it consumes. Concrete implementations are selected only by `app`, so adding caching, another embedding implementation, or a different service adapter does not change transport code.
 
-### Preserve private implementation packages
+### Preserve Private Implementation Packages
 
 Moving packages out of `internal` only to make the tree appear balanced would weaken encapsulation without improving behavior. A package should become public only when another Go module has a supported need to import it.
 
@@ -116,6 +135,15 @@ HTTP document ingestion
   -> Store
 ```
 
+These paths can be followed directly from:
+
+- `apps/api/internal/httpapi/chat.go`
+- `apps/api/internal/agent/runtime.go`
+- `apps/api/internal/turn/`
+- `apps/api/internal/knowledge/knowledge_base.go`
+- `apps/api/internal/rag/retrieval.go`
+- `apps/api/internal/contextassembly/assembler.go`
+
 The Retrieval Pipeline, rather than an Agent runtime or HTTP handler, owns the
 recall sequence, prompt-injection filtering, reciprocal-rank fusion, and result
 policy. Stores expose
@@ -151,3 +179,16 @@ adapters return them unchanged for API and trace consumers.
 Single-Agent, Multi-Agent, and Autonomous streams expose the same `domain.RunEvent` contract to the HTTP adapter. Their common completion path persists the assistant message, transitions the Run, optionally generates the conversation title, flushes the final SSE event, and then schedules conservative curation of explicitly durable user facts. Assistant output and ordinary chat remain conversation history rather than long-term memory.
 
 Adding another executable should reuse the relevant application wiring instead of copying dependency construction from `cmd/server`.
+
+## Extension Points
+
+| Change | Intended boundary |
+| --- | --- |
+| Add another model provider | provider adapter behind the existing model client contract |
+| Add a retrieval algorithm | `rag` pipeline stage with versioned response/trace metadata |
+| Add storage | implement the capability interfaces consumed by the composition root |
+| Add an agent framework | executor adapter; keep Run, Event, Budget, and Store ownership in AgentFlow |
+| Add a verifier | register one versioned verifier implementation with owned config normalization |
+
+A new abstraction is justified only when it removes real duplication or creates
+a boundary with different ownership, lifecycle, or failure semantics.
