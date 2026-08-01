@@ -40,7 +40,7 @@ the project.
 | --- | --- |
 | [Agent profiles](agent-profiles.md) | How are reusable Agent personas, prompts, Tool permissions, retrieval policy, executors, and Router candidates configured and frozen? |
 | [Execution modes](execution-modes.md) | How do Single, Multi, and Loop execution differ in lifecycle, checkpoints, trace shape, cost, and use case? |
-| [Internal terms](terms.md) | What do Conversation, Run, Stage, Turn, Iteration, and Model Call mean? |
+| [Internal terms](terms.md) | What do the execution entities mean, and how do Run Events, Trace, Replay, and Episode Report differ? |
 | [Execution controls](execution-controls.md) | Which layer owns concurrency, rate limits, retries, budgets, context capacity, and stopping rules? |
 | [Run Budget](run-budget.md) | How are logical calls, provider usage, tools, runtime, and cost accounted for? |
 | [Context management](context-management.md) | How is each model input assembled, bounded, compacted, and explained? |

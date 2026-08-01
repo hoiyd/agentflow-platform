@@ -1,7 +1,7 @@
 # Run Budget and Usage Ledger
 
-For a system-wide comparison with concurrency, RPM/TPM, Retry, Context,
-Autonomous, Tool, and Verification controls, see
+For a system-wide comparison with concurrency, RPM/TPM, Retry, Context, Loop,
+Tool, and Verification controls, see
 [Execution Controls](execution-controls.md).
 
 Run Budget bounds cumulative work attributable to one Run. It complements the
@@ -20,8 +20,8 @@ does not become another logical model call in the Run ledger.
 | Retry Policy | one logical model call | retryable physical attempts and backoff |
 | Run Budget | one persisted Run | logical model calls, tokens, tools, active runtime, and configured cost |
 | Context Assembly | one logical model call | context-window fit and output reserve, not cumulative usage |
-| Autonomous loop guards | one Autonomous Run | iterations and accumulated output characters |
-| Trace summary / Episode | one persisted Run | observational projection only; never admission or enforcement |
+| Loop guards | one Loop (`autonomous`) Run | iterations and accumulated output characters |
+| Trace Summary / Episode Report | one persisted Run | observational projection only; never admission or enforcement |
 
 A retry acquires another model-request permit but does not reserve another Run
 model call. The reservation surrounds the entire Retry Policy operation.

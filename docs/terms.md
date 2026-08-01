@@ -24,8 +24,8 @@ Conversation
         └── Tool Call
 ```
 
-An autonomous Run may repeat a group of Stages. `Iteration` identifies that
-group; it is not another execution entity in this hierarchy.
+A Loop (`autonomous`) Run may repeat a group of Stages. `Iteration` identifies
+that group; it is not another execution entity in this hierarchy.
 
 ## Conversation
 
@@ -80,8 +80,9 @@ instead of reading the current editable configuration.
 
 It includes the Run mode, Agent configuration and system prompt, candidate
 Agents for multi-agent routing, provider/model identity, executor, tool names
-and schemas, router mode, autonomous limits, and the Run Budget. Replay returns the same
-snapshot so an operator can compare what was configured with what happened.
+and schemas, router mode, Loop (`autonomous`) limits, and the Run Budget. Replay
+returns the same snapshot so an operator can compare what was configured with
+what happened.
 
 A Runtime Snapshot never contains API keys, authorization headers, provider
 secrets, or other credentials. The current process supplies
@@ -96,7 +97,7 @@ creates Stages. Single-agent Runs normally do not have them.
 Examples:
 
 - Multi-agent: `planner`, `router`, `worker`, `reviewer`, `finalizer`.
-- Autonomous: `observe`, `plan`, `act`, `review`, `decide`.
+- Loop (`autonomous`): `observe`, `plan`, `act`, `review`, `decide`.
 
 A Stage records the responsibility currently being performed, its input and
 output, status, selected Agent, and optional Iteration number. A Stage usually
@@ -106,6 +107,11 @@ A rule-based router may complete a Stage without creating a Turn.
 
 Model Calls, Tool Calls, Retrievals, retries, and arbitrary implementation
 operations are not Stages.
+
+`CollaborationStep` is the persisted domain/API record for one Stage
+occurrence. Its `id` is used as `stage_id` by related Run Events. It is not a
+separate execution layer below or above Stage; the different name preserves the
+existing storage and API contract.
 
 ## Turn
 
@@ -128,7 +134,7 @@ it normally also belongs to a Stage.
 
 ## Iteration
 
-An **Iteration** is the numbered repetition of an autonomous Stage sequence.
+An **Iteration** is the numbered repetition of a Loop Stage sequence.
 It is a grouping attribute rather than an independently persisted execution
 unit.
 
@@ -185,7 +191,7 @@ of Run, Stage, or Turn. This section defines entity shape; see
 [Execution modes](execution-modes.md) for lifecycle behavior, trade-offs, and
 selection guidance.
 
-### Single-Agent Mode
+### Single Mode (`single`)
 
 The user request is handled directly by one Agent Turn. There is no orchestration
 Stage.
@@ -200,7 +206,7 @@ Conversation
         └── Model Call
 ```
 
-### Multi-Agent Mode
+### Multi Mode (`multi_agent`)
 
 The Run is divided into named collaboration Stages. Each LLM-backed Stage
 normally executes one Turn.
@@ -215,7 +221,7 @@ Conversation
     └── Stage: finalizer → Turn
 ```
 
-### Autonomous Mode
+### Loop Mode (`autonomous`)
 
 The Run advances through a bounded, repeating set of Stages. The Run owns the
 overall limits and may pause for human input before resuming.
@@ -251,7 +257,7 @@ budget.*
 verification.*
 ```
 
-Overall autonomous budget and iteration status use `run.progress`. Stage events
+Overall Loop budget and iteration status use `run.progress`. Stage events
 describe named orchestration phases; they must not use `workflow.*` or overload
 `step.*`.
 
@@ -260,6 +266,18 @@ proposal and policy decision for an explicitly durable user fact.
 `memory.sync.*` records embedding and persistence of an accepted Candidate.
 Neither activity changes the outcome of a successfully completed Turn.
 
+## Observability Records and Views
+
+These names describe different layers over the same Run; they are not
+interchangeable stores:
+
+| Concept | Role |
+| --- | --- |
+| Run Event | Typed execution fact emitted at the boundary where an action occurs. The durable sink persists lifecycle events but intentionally omits streaming `model.delta` events. |
+| Trace | Human-readable view of live and persisted Run Events and their payloads. It does not create a second event history. |
+| Replay | Detailed per-Run aggregate assembled from persisted records: Runtime Snapshot, Messages, Collaboration Steps, Trace Summary, Usage Ledger, durable Run Events, and Verification records. |
+| Episode Report | Compact projection derived from Replay for review, export, or offline evaluation. It summarizes existing records and introduces no new execution facts. |
+
 ## Quick Reference
 
 | Term | Question it answers |
@@ -267,10 +285,14 @@ Neither activity changes the outcome of a successfully completed Turn.
 | Conversation | Which long-lived chat does this belong to? |
 | Run | Which user request is the system executing? |
 | Runtime Snapshot | Which immutable execution protocol did the Run capture? |
-| Stage | Which orchestration phase is active? |
+| Stage / `CollaborationStep` | Which orchestration phase is active, and which record persists that occurrence? |
 | Turn | Which Agent is processing which input? |
-| Iteration | Which autonomous repetition contains these Stages? |
+| Iteration | Which Loop repetition contains these Stages? |
 | Model Call | Which LLM request occurred? |
 | Tool Call | Which registered capability was invoked? |
 | Retrieval | Which context was loaded for the Turn? |
 | Usage Ledger | Which resources were reserved, settled, and charged? |
+| Run Event | Which typed execution fact was emitted, and was it durable or stream-only? |
+| Trace | How are Run Events presented for inspection? |
+| Replay | Which detailed records reconstruct this Run? |
+| Episode Report | Which compact projection summarizes this Run? |

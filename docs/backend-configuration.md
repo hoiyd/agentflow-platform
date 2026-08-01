@@ -164,7 +164,7 @@ DATABASE_URL=postgres://agentflow:agentflow@localhost:5432/agentflow?sslmode=dis
 
 The Postgres store runs idempotent startup migrations for:
 
-- conversations, messages, agents, runs, collaboration steps, and trace events
+- conversations, messages, Agents, Runs, Collaboration Steps, and durable Run Events
 - Run active-runtime state and append-only usage entries
 - memory candidates, curated memories, and `memory_embeddings`
 - documents, document chunks, and document chunk embeddings
@@ -190,7 +190,8 @@ The backend loads enabled tools from `TOOL_CONFIG_PATH`, defaulting to `.data/to
 }
 ```
 
-The tool executor applies typed errors, per-tool timeouts, result-size limits, and trace events to every call.
+The tool executor applies typed errors, per-tool timeouts, result-size limits,
+and typed Run Events to every call.
 
 ## Verification
 

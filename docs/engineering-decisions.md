@@ -161,10 +161,10 @@ calibrated model graders or human review.
 
 ## Observability Is Part of the Domain
 
-Replay is built from typed Run Events, persisted Messages, collaboration Steps,
-Runtime Snapshot, Usage Ledger, and Verification Evidence. These records are
-created at the ownership boundary where the action occurs; they are not inferred
-later from logs.
+Replay is built from durable typed Run Events, persisted Messages,
+Collaboration Steps, Runtime Snapshot, Usage Ledger, and Verification Evidence.
+These records are created at the ownership boundary where the action occurs;
+they are not inferred later from logs.
 
 This enables three different questions to be answered independently:
 

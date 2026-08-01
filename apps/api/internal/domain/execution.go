@@ -143,6 +143,9 @@ const (
 	CollaborationStepFailed    CollaborationStepStatus = "failed"
 )
 
+// CollaborationStep is the persisted record for one orchestration Stage.
+// Related RunEvents reference its ID through StageID; it is not a separate
+// execution layer from Stage.
 type CollaborationStep struct {
 	ID             string                  `json:"id"`
 	RunID          string                  `json:"run_id"`
@@ -280,6 +283,9 @@ type ContextManifest struct {
 
 const CurrentRunEventSchemaVersion = 1
 
+// RunEvent is the typed execution-event contract. Durable sinks persist
+// lifecycle events but may omit stream-only events such as model.delta. Trace,
+// Replay, and Episode Report views do not maintain another event history.
 type RunEvent struct {
 	ID             string         `json:"id"`
 	Type           RunEventType   `json:"type"`
@@ -363,6 +369,7 @@ type RunUsageLedger struct {
 	UpdatedAt *time.Time       `json:"updated_at,omitempty"`
 }
 
+// RunReplay is the detailed aggregate assembled from persisted Run records.
 type RunReplay struct {
 	Run                   Run                    `json:"run"`
 	RuntimeSnapshot       *RuntimeSnapshot       `json:"runtime_snapshot,omitempty"`
@@ -376,6 +383,8 @@ type RunReplay struct {
 	VerificationArtifacts []VerificationArtifact `json:"verification_artifacts"`
 }
 
+// EpisodeReport is a compact projection derived from RunReplay for review,
+// export, and offline evaluation. It is not an independent source of truth.
 type EpisodeReport struct {
 	Run          Run                 `json:"run"`
 	Conversation Conversation        `json:"conversation"`

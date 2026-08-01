@@ -89,7 +89,7 @@ const platformCapabilities = [
     phase: "Inspect",
     title: "Trace, usage, and replay",
     body: "Inspect collaboration steps, retrieval decisions, tool calls, model usage, errors, and verification evidence during and after every run.",
-    details: ["Live status", "Run trace", "Episode replay"]
+    details: ["Live status", "Run trace", "Episode report"]
   }
 ];
 
