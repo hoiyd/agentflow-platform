@@ -19,6 +19,8 @@ jobs:
     name: Backend
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     defaults:
       run:
         working-directory: apps/api
@@ -26,6 +28,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -33,8 +37,18 @@ jobs:
           go-version-file: apps/api/go.mod
           cache-dependency-path: apps/api/go.sum
 
-      - name: Run tests
-        run: go test ./...
+      - name: Run tests with coverage
+        run: go test ./... -covermode=atomic -coverprofile=coverage.out
+
+      - name: Upload backend coverage to Codecov
+        if: env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v5
+        with:
+          files: apps/api/coverage.out
+          flags: backend
+          name: backend
+          fail_ci_if_error: true
+          token: ${{ env.CODECOV_TOKEN }}
 
       - name: Run go vet
         run: go vet ./...
