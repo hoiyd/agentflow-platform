@@ -90,7 +90,7 @@ func TestPostgresRunUsageReservationIsAtomic(t *testing.T) {
 			defer wg.Done()
 			<-start
 			_, _, applyErr := store.ApplyRunUsage(domain.RunUsageEntry{
-				ID: "usage-tool-" + string(rune('a'+index)), RunID: run.ID,
+				ID: "usage-tool-" + run.ID + "-" + string(rune('a'+index)), RunID: run.ID,
 				OperationID: "tool-call-" + string(rune('a'+index)), Kind: domain.UsageToolExecution,
 				Purpose: domain.UsagePurposePrimary, ToolName: "calculator", ToolCalls: 1,
 				Timestamp: time.Now().UTC(),
