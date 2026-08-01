@@ -181,7 +181,9 @@ Retrieval activity.
 ## Mode
 
 A **Mode** selects how a Run is orchestrated. It does not change the definitions
-of Run, Stage, or Turn.
+of Run, Stage, or Turn. This section defines entity shape; see
+[Execution modes](execution-modes.md) for lifecycle behavior, trade-offs, and
+selection guidance.
 
 ### Single-Agent Mode
 

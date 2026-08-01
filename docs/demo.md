@@ -20,9 +20,11 @@ network access.
 
 ### 0:00-0:40 - Platform Boundary
 
-Show the three execution modes. Explain that they share one Turn Engine,
-retrieval pipeline, tool executor, usage ledger, and event model; each mode owns
-only its orchestration policy. Briefly point out that Run admission,
+Show **Single**, **Multi**, and **Loop** and name their execution shapes: one
+direct Turn; plan/approve/route/work/review/finalize; and bounded
+observe/plan/act/review/decide Iterations. Explain that they share one Turn
+Engine, retrieval pipeline, Tool executor, Usage Ledger, and event model; each
+mode owns only its orchestration policy. Briefly point out that Run admission,
 per-Conversation single-writer execution, model-request limits, and Run Budget
 remain shared performance and concurrency controls rather than mode-specific
 implementations.
@@ -80,9 +82,13 @@ planned production hardening.
 - `completion-verification-demo.gif`: Completion Contract configuration,
   `passed` status, Usage/Replay, verification lifecycle events, and immutable
   Evidence details.
+- `multi-agent-run.png`: full-resolution Multi final result for close reading.
+- `run-replay.png`: full-resolution Replay and Usage Ledger for close reading.
 
-The focused recordings remain short and use key state transitions instead of
-high frame rates so labels and trace payloads stay readable on GitHub.
+The GIFs explain state transitions. The PNGs are supporting stills for reading
+dense output and resource details; they are not separate walkthroughs. Focused
+recordings remain short and use key state transitions instead of high frame
+rates so labels and trace payloads stay readable on GitHub.
 
 ## Offline Demo Fallback
 
