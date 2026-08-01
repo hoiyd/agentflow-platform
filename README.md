@@ -13,20 +13,7 @@ and inspecting Single, Multi, and bounded Loop workflows.
 The project uses OpenAI-compatible model and embedding APIs, with deterministic
 local fallbacks for development.
 
-## Technical Evidence at a Glance
-
-Reviewer shortcut: each claim below links directly to an implementation
-boundary and focused regression tests.
-
-| Boundary | Implementation evidence |
-| --- | --- |
-| Shared orchestration runtime | Single, Multi, and Loop converge on the same Turn Engine: [runtime](apps/api/internal/agent/runtime.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
-| Reproducible execution | Each Run freezes model, Agent, Tool, context, and budget policy: [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
-| Retrieval quality | Hybrid recall, RRF, reranking, relevance gating, and evaluation use one production pipeline: [retrieval](apps/api/internal/rag/retrieval.go), [tests](apps/api/internal/rag/retrieval_test.go) |
-| Bounded concurrency | Admission control, per-Conversation serialization, queues, and model permits bound parallel work: [controller](apps/api/internal/concurrency/run_controller.go), [tests](apps/api/internal/concurrency/run_controller_test.go) |
-| Verifiable outcomes | Completion Contracts gate success while typed events support Replay and Episode reports: [verification](apps/api/internal/verification/engine.go), [tests](apps/api/internal/verification/engine_test.go) |
-
-## Three Execution Modes
+## Project at a Glance: Three Execution Modes
 
 AgentFlow exposes three orchestration shapes over one shared Go runtime. The
 mode changes **how work is coordinated**, not which retrieval, Tool, Context,
@@ -67,7 +54,7 @@ visible throughout execution.
 The detailed lifecycle, trade-offs, trace shape, API values, and mode-selection
 guide are in [Execution modes](docs/execution-modes.md).
 
-## Product Walkthrough
+## Example User Story Walkthrough
 
 ### End-to-End Multi Mode
 
@@ -78,7 +65,7 @@ execution, review, finalization, and persisted Replay. It demonstrates **Multi**
 mode; Single and Loop use the same runtime controls and evidence model with the
 different orchestration shapes above. No API key is required.
 
-### Shared RAG Pipeline
+### RAG Pipeline
 
 ![Hybrid RAG retrieval, ranking, and context selection](docs/assets/hybrid-rag-demo.gif)
 
@@ -86,7 +73,7 @@ The focused RAG recording shows document indexing, independent Semantic and
 Keyword ranks, RRF fusion, versioned reranking, Relevance Gate metadata, and
 the merged model context. The same pipeline runs before Turns in all modes.
 
-### Shared Verification and Trace
+### Verification and Trace
 
 ![Completion Contract, verification gate, evidence, and trace](docs/assets/completion-verification-demo.gif)
 
@@ -145,8 +132,8 @@ exact lifecycle of each path.
 | --- | --- | --- |
 | [Agent orchestration](docs/execution-modes.md) | Direct Single, plan-and-review Multi, and bounded Loop modes share one Turn Engine | [runtime](apps/api/internal/agent/runtime.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
 | [Configurable Agent profiles](docs/agent-profiles.md) | Persisted profiles combine a custom responsibility, system prompt, Tool allowlist, Memory/RAG switches, and Native/LangChainGo executor; Multi freezes active profiles as Router candidates | [API](apps/api/internal/httpapi/agents.go), [tests](apps/api/internal/httpapi/agents_test.go) |
-| [Reproducibility](docs/terms.md#runtime-snapshot) | Each Run freezes model, agent, tool schema, context policy, and budget in a Runtime Snapshot | [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
-| [Hybrid RAG](docs/knowledge-rag.md) | Independent semantic and keyword recall, Reciprocal Rank Fusion, versioned pluggable reranking and relevance gating, context transformation, and native `[S1]` citations | [pipeline](apps/api/internal/rag/retrieval.go), [tests](apps/api/internal/rag/retrieval_test.go) |
+| [Reproducibility](docs/terms.md#runtime-snapshot) | Each Run freezes model, Agent, Tool schema, context policy, and budget in a Runtime Snapshot | [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
+| [Hybrid RAG](docs/knowledge-rag.md) | Independent semantic and keyword recall, Reciprocal Rank Fusion, versioned reranking and relevance gating, context transformation, and native `[S1]` citations | [pipeline](apps/api/internal/rag/retrieval.go), [tests](apps/api/internal/rag/retrieval_test.go) |
 | [Retrieval evaluation](docs/api-reference.md#rag-evaluation) | The workbench runs repeatable cases through the production retrieval pipeline and reports Hit@1/3/5, misses, security blocks, and component versions | [evaluation](apps/api/internal/rag/evaluation.go), [tests](apps/api/internal/knowledge/knowledge_base_test.go) |
 | [Context control](docs/context-management.md) | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [assembler](apps/api/internal/contextassembly/assembler.go), [tests](apps/api/internal/contextassembly/assembler_test.go) |
 | [**Performance & resource control**](docs/execution-controls.md) | SSE streaming, bounded context/output, asynchronous Memory curation, and per-Run usage/cost budgets keep work measurable and bounded | [budget](apps/api/internal/budget/budget.go), [tests](apps/api/internal/budget/budget_test.go) |
@@ -157,43 +144,11 @@ exact lifecycle of each path.
 | [**Tracing & replay**](docs/backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed Run/Stage/Turn/Model/Tool/Retrieval/Verification events, usage ledgers, Replay, and Episode reports explain what happened | [episode](apps/api/internal/httpapi/episode_report.go), [tests](apps/api/internal/httpapi/episode_report_test.go) |
 | [Provider and framework compatibility](docs/engineering-decisions.md#openai-compatible-does-not-mean-capability-identical) | Native orchestration keeps policy ownership; LangChainGo stays at the executor edge, while typed capability fallbacks handle provider differences in Tool Calling and stream usage metadata | [executors](apps/api/internal/agent/executor.go), [tests](apps/api/internal/openai/context_integration_test.go) |
 
-### Performance, Concurrency, Tracing, and Verification
-
-- **Performance-aware execution:** AgentFlow does not claim synthetic benchmark
-  numbers. It exposes the mechanisms needed to tune a real deployment: streaming
-  responses, bounded context and output, request/time/token/cost limits,
-  asynchronous curation, and Postgres-backed atomic usage accounting.
-- **Layered concurrency and backpressure:** Run admission, per-Conversation
-  single-writer execution, model-request concurrency, provider RPM/TPM, Tool
-  batch policy, and Run Budget intentionally control different scopes. Queue
-  saturation and timeout paths produce explicit HTTP/SSE outcomes.
-- **End-to-end tracing:** Typed events persist the Run, Stage, Turn, Model,
-  Tool, Retrieval, Context, and Verification lifecycles. Replay and Episode
-  views are projections of stored execution evidence rather than reconstructed
-  frontend state.
-- **Runtime Completion Verification, not test execution:** A frozen Completion
-  Contract evaluates one Run's candidate output using versioned verifiers and
-  immutable Evidence/Artifacts before the Completion Gate permits
-  `run.completed`. Unit and integration tests validate the codebase; Completion
-  Verification validates a configured outcome at runtime.
-
-These contracts are shared by Single, Multi, and Loop modes
-and by File/Postgres persistence. Model, embedding, reranking, storage, and
-verifier adapters can evolve without changing the Run/Event/Budget/Verification
-protocols that make execution inspectable.
-
-## Implementation Status
-
-| Status | Area | Current boundary |
-| --- | --- | --- |
-| **Implemented** | Agent runtime | Persisted custom Agent profiles; per-Agent prompt, Tool, Memory/RAG, and executor policy; Single, plan-and-review Multi, bounded Loop execution; continue/resume/cancel; and stale-run recovery |
-| **Implemented** | Reliability | Runtime Snapshots, typed events, Replay, Usage Ledger, Run Budget, Context Manifests, compaction, and opt-in Completion Verification |
-| **Implemented** | RAG | Markdown ingestion, source traceability, Semantic/Keyword recall, RRF, modular reranking, relevance gate, parent/adjacent context selection, deduplication, merging, and structured `[S1]` citations |
-| **Implemented** | Memory | Rule-first durable-fact extraction, optional shadow/auto model extraction, candidate audit trail, policy filtering, redaction, and embedding |
-| **Partial** | Workspace isolation | Scope fields and filtered expansion exist; Workspace lifecycle, mandatory production enforcement, and ACL policy are incomplete |
-| **Partial** | RAG safety and evaluation | Deterministic prompt-injection filtering and evaluation API exist; semantic attack detection, versioned Golden Datasets, and calibrated thresholds remain incomplete |
-| **Planned** | Grounding validation | Evidence-bound no-answer validation that requires claims to resolve to selected context sources |
-| **Planned** | Runtime quality | Progress guards for repeated actions/oscillation and asynchronous human or calibrated model evidence ingestion |
+Performance statements above describe implemented controls, not synthetic
+benchmark claims. Completion Verification evaluates configured outcomes at
+runtime; unit and integration tests validate the codebase. The same
+Run/Event/Budget/Verification contracts apply across execution modes and
+File/Postgres persistence.
 
 ## Three-to-Five-Minute Demo
 
@@ -267,6 +222,8 @@ These boundaries are documented rather than hidden:
   retrieval-quality evaluation.
 - Completion Verification proves configured invariants; it does not make every
   subjective answer factually correct.
+- Progress guards for repeated actions or oscillation, and asynchronous external
+  evidence ingestion, are planned rather than implemented.
 
 ## Quick Start
 
@@ -335,25 +292,6 @@ make test
 The command runs the complete Go package suite plus frontend lint, library
 tests, and production build. Postgres integration tests remain opt-in and
 require a disposable database through `TEST_DATABASE_URL`.
-
-## Key Modules
-
-| Module | Source |
-| --- | --- |
-| Application composition | [`apps/api/app/wiring.go`](apps/api/app/wiring.go) |
-| Agent profiles and executor adapters | [`agents.go`](apps/api/internal/httpapi/agents.go), [`executor.go`](apps/api/internal/agent/executor.go) |
-| Run lifecycle and shared runtime | [`apps/api/internal/agent/runtime.go`](apps/api/internal/agent/runtime.go) |
-| Multi-Agent orchestration | [`apps/api/internal/agent/orchestrator.go`](apps/api/internal/agent/orchestrator.go) |
-| Bounded Loop (`autonomous`) | [`apps/api/internal/agent/autonomous.go`](apps/api/internal/agent/autonomous.go) |
-| Shared Turn Engine | [`apps/api/internal/turn/engine.go`](apps/api/internal/turn/engine.go) |
-| Retrieval pipeline and RRF | [`apps/api/internal/rag/retrieval.go`](apps/api/internal/rag/retrieval.go), [`fusion.go`](apps/api/internal/rag/fusion.go) |
-| Context selection and transformation | [`context_selection.go`](apps/api/internal/rag/context_selection.go), [`context_transformation.go`](apps/api/internal/rag/context_transformation.go) |
-| Context Assembly | [`apps/api/internal/contextassembly/assembler.go`](apps/api/internal/contextassembly/assembler.go) |
-| Memory Curation | [`apps/api/internal/memory/curator.go`](apps/api/internal/memory/curator.go) |
-| Run Budget and Usage Ledger | [`apps/api/internal/budget/budget.go`](apps/api/internal/budget/budget.go), [`ledger.go`](apps/api/internal/budget/ledger.go) |
-| Completion Verification | [`apps/api/internal/verification/engine.go`](apps/api/internal/verification/engine.go) |
-| Persistence contracts and migrations | [`apps/api/internal/store/store.go`](apps/api/internal/store/store.go), [`postgres_migrations.go`](apps/api/internal/store/postgres_migrations.go) |
-| Workbench and Replay | [`ChatShell.tsx`](apps/web/components/ChatShell.tsx), [`RunReplay.tsx`](apps/web/components/RunReplay.tsx) |
 
 ## Repository Map
 
