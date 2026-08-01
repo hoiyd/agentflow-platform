@@ -72,6 +72,18 @@ are not implemented, and relevance thresholds still need calibration against a
 versioned Golden Dataset. This distinguishes implemented platform behavior from
 planned production hardening.
 
+## Recorded README Assets
+
+- `agentflow-demo.gif`: end-to-end Multi-Agent execution and Replay overview.
+- `hybrid-rag-demo.gif`: ingestion, Hybrid recall, RRF, reranking, Relevance
+  Gate metadata, and final model-context selection.
+- `completion-verification-demo.gif`: Completion Contract configuration,
+  `passed` status, Usage/Replay, verification lifecycle events, and immutable
+  Evidence details.
+
+The focused recordings remain short and use key state transitions instead of
+high frame rates so labels and trace payloads stay readable on GitHub.
+
 ## Offline Demo Fallback
 
 If live execution is unavailable, run:

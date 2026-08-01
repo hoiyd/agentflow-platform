@@ -26,11 +26,15 @@ deterministic local path, so no API key is required.
 
 ### Hybrid RAG Inspection
 
-![Hybrid RAG inspection](docs/assets/knowledge-rag.png)
+![Hybrid RAG retrieval, gating, ranking, and context selection](docs/assets/hybrid-rag-demo.gif)
 
 ### Multi-Agent Result
 
 ![Completed Multi-Agent workflow](docs/assets/multi-agent-run.png)
+
+### Completion Verification and Evidence
+
+![Completion Contract, verification gate, evidence, and trace](docs/assets/completion-verification-demo.gif)
 
 ### Run Replay
 
