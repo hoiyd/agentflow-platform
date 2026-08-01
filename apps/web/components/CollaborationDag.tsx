@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { AgentInfo } from "../lib/api";
-import type { CollaborationRole, CollaborationStepView } from "./ChatShell";
+import type { CollaborationRole, CollaborationStepView } from "./chat/CollaborationPanels";
 
 type CollaborationDagProps = {
   activeRole: string;
