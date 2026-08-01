@@ -82,11 +82,13 @@ planned production hardening.
 - `completion-verification-demo.gif`: Completion Contract configuration,
   `passed` status, Usage/Replay, verification lifecycle events, and immutable
   Evidence details.
-- `multi-agent-run.png`: full-resolution Multi final result for close reading.
-- `run-replay.png`: full-resolution Replay and Usage Ledger for close reading.
+- `single-mode.png`: direct Single-Agent result with the selected Agent visible.
+- `multi-mode.png`: Multi plan approval checkpoint and queued collaboration
+  stages.
+- `loop-mode.png`: bounded Loop Iteration, resource counters, and Stage trace.
 
-The GIFs explain state transitions. The PNGs are supporting stills for reading
-dense output and resource details; they are not separate walkthroughs. Focused
+The GIFs explain state transitions. The PNGs provide one stable, distinguishing
+state for each execution mode; they are not separate walkthroughs. Focused
 recordings remain short and use key state transitions instead of high frame
 rates so labels and trace payloads stay readable on GitHub.
 
