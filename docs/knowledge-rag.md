@@ -100,7 +100,7 @@ Search and evaluation responses include a top-level `fusion` object containing
 the algorithm, version, rank constant, and source weights. Retrieval trace
 events record the same object. The Knowledge and Replay interfaces display this
 metadata and retain six decimal places for raw RRF scores so adjacent source
-ranks remain distinguishable during manual verification.
+ranks remain distinguishable during manual inspection.
 
 Reranking is injected into the Retrieval Pipeline through the `Reranker`
 interface. The default `HeuristicReranker` preserves the existing lexical,
@@ -187,7 +187,7 @@ its text is derived, and adds `source_chunk_ids`, `matched_chunk_ids`, and
 `merged_chunk_count`. Ranking and `context_role` come from the highest-priority
 contributing match. The nested `context_selection.transformation` object records
 input/output counts, removed duplicates, adjacent merges, and included document
-groups for API and Replay verification.
+groups for API and Replay inspection.
 
 ## Native Citation Protocol
 
@@ -273,6 +273,6 @@ content boundary, filtering, and audit trail provide defense in depth.
 - Threshold calibration and claim-level groundedness evaluation require a
   versioned Golden Dataset and remain future work.
 
-The manual checks in [Verification guide](verification-guide.md) exercise exact
+The [Manual tests](manual-tests.md) exercise exact
 identifier recall, RRF reproduction, injection filtering, parent expansion,
 and context transformation.

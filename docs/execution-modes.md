@@ -52,7 +52,7 @@ Choose Single when:
 - retrieval or Tools are useful, but multiple specialist Agents are not.
 
 Single is not a reduced-policy path. Run admission, per-Conversation
-single-writer execution, Runtime Snapshot, Run Budget, Completion Verification,
+single-writer execution, Runtime Snapshot, Run Budget, Verification,
 Replay, and Memory curation remain active.
 
 ## Multi Mode
@@ -144,7 +144,7 @@ The modes deliberately converge below orchestration:
 | Turn Engine | Retrieval, Context Assembly, model/tool loop, usage reservation/settlement, and typed events |
 | RAG and Memory | The same scoped retrieval pipeline and durable-Memory policy feed every Turn |
 | Tracing | Run/Stage/Turn/Model/Tool/Retrieval/Context/Usage/Verification events use one schema |
-| Completion Verification | The same optional frozen contract gates the candidate output from Single, Multi, or Loop |
+| Verification | The same optional frozen contract gates the candidate output from Single, Multi, or Loop |
 | Replay and Episode | File and Postgres stores expose the same persisted evidence and projections |
 
 This boundary prevents a feature from working in one mode while silently

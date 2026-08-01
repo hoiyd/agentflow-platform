@@ -72,7 +72,7 @@ func TestFreezeContractAcceptsWebCompletionVerificationPolicy(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("freeze web completion verification policy: %v", err)
+		t.Fatalf("freeze web verification policy: %v", err)
 	}
 	if contract.Version != domain.CurrentCompletionContractVersion || contract.Hash == "" || len(contract.Verifiers) != 2 {
 		t.Fatalf("unexpected frozen web contract: %#v", contract)

@@ -55,6 +55,8 @@ func (commandVerifier) NormalizeConfig(spec *domain.VerifierSpec) error {
 	return freezeConfig(spec, config)
 }
 
+// Verify executes only the frozen, allowlisted command. It does not discover or
+// select repository tests on its own.
 func (v commandVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _ Subject) Result {
 	config, err := decodeConfig[CommandConfig](&spec)
 	if err != nil || len(config.Args) == 0 {

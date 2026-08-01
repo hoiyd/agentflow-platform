@@ -108,8 +108,8 @@ while preserving the existing Autonomous safety profile.
 
 ## Model and Embedding Providers
 
-If `OPENAI_API_KEY` is empty, chat uses deterministic local fallback for
-verification. Embeddings call Ollama when `EMBEDDING_BASE_URL` points to
+If `OPENAI_API_KEY` is empty, chat uses a deterministic local fallback for
+workflow exercises. Embeddings call Ollama when `EMBEDDING_BASE_URL` points to
 `http://localhost:11434/api/embed`; otherwise they use deterministic local
 fallback. The frontend search panel shows whether RAG search used
 `ollama / <model>`, `local / local_hash_embedding`, or an OpenAI-compatible
@@ -192,15 +192,26 @@ The backend loads enabled tools from `TOOL_CONFIG_PATH`, defaulting to `.data/to
 
 The tool executor applies typed errors, per-tool timeouts, result-size limits, and trace events to every call.
 
-## Completion Verification
+## Verification
 
-Completion verification is enabled per Run by including `completion_contract` in the initial `POST /api/chat` request. These environment variables only define verifier security boundaries and output limits; configuring them does not automatically verify Single, Multi-Agent, or Autonomous chats.
+Verification is enabled per Run by including `completion_contract` in the
+initial `POST /api/chat` request. These environment variables only define
+verifier security boundaries and output limits; configuring them does not
+automatically verify Single, Multi-Agent, or Autonomous chats.
 
-Command verification is disabled when `VERIFICATION_WORKSPACE_ROOT` or `VERIFICATION_ALLOWED_COMMANDS` is empty. The command is an argument vector executed without a shell; its relative working directory cannot escape the configured root. `VERIFICATION_ALLOWED_COMMANDS` is a comma-separated exact executable allowlist.
+The command verifier is disabled when `VERIFICATION_WORKSPACE_ROOT` or
+`VERIFICATION_ALLOWED_COMMANDS` is empty. The command is an argument vector
+executed without a shell; its relative working directory cannot escape the
+configured root. `VERIFICATION_ALLOWED_COMMANDS` is a comma-separated exact
+executable allowlist.
 
-HTTP verification permits localhost and loopback IPs. `VERIFICATION_ALLOWED_HTTP_HOSTS` adds comma-separated exact hostname or host:port values. Redirects are checked against the same allowlist. `VERIFICATION_MAX_ARTIFACT_BYTES` caps persisted output for each verifier while the Artifact keeps the output hash, observed byte count, and truncation flag.
+The HTTP verifier permits localhost and loopback IPs.
+`VERIFICATION_ALLOWED_HTTP_HOSTS` adds comma-separated exact hostname or
+host:port values. Redirects follow the same allowlist.
+`VERIFICATION_MAX_ARTIFACT_BYTES` caps persisted output for each verifier while
+the Artifact keeps the output hash, observed byte count, and truncation flag.
 
-See [Completion Verification](completion-verification.md) for contract and Gate behavior.
+See [Verification](verification.md) for contract and Gate behavior.
 
 ## Operational Checklist
 
@@ -210,7 +221,7 @@ Before sharing or deploying a configuration:
    column dimension.
 2. Reindex documents after changing embedding provider, model, or dimension.
 3. Enable cost enforcement only after configuring prices for the active model.
-4. Keep command verification disabled unless its workspace root and executable
+4. Keep the command verifier disabled unless its workspace root and executable
    allowlist are intentionally scoped.
 5. Confirm allowed origins and HTTP verifier hosts are explicit for the target
    environment.

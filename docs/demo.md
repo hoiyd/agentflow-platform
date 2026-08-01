@@ -73,12 +73,12 @@ Open **View trace**. Connect the visible events to the persisted Run lifecycle:
 retrieval, context selection, model/tool operations, usage settlement, and the
 terminal state. Show that Replay reads stored evidence rather than reconstructing
 the Run from UI state. Point out the Episode Report's task, retrieval, LLM,
-Tool, error, and verification summary, then export its JSON as a compact
+Tool, error, and Verification summary, then export its JSON as a compact
 machine-readable artifact for offline evaluation or incident review.
 
-### Optional - Runtime Completion Verification
+### Optional - Runtime Verification
 
-Enable **Completion verification** for a new Run and select a deterministic
+Enable **Verification** for a new Run and select a deterministic
 text, citation, JSON Schema, HTTP, or allowlisted command verifier. Show that
 the candidate output, Evidence, Artifacts, and `verification.*` events are
 persisted before the Completion Gate permits `run.completed`.
@@ -119,6 +119,6 @@ If live execution is unavailable, run:
 make test
 ```
 
-The command verifies every Go package, frontend lint, frontend contract tests,
-and the Next.js production build. A saved Replay can still demonstrate the
-observability model without making a provider request.
+The command runs every Go package test, frontend lint, frontend contract tests,
+and the Next.js production build. These automated tests validate the codebase;
+a saved Replay demonstrates runtime behavior without a provider request.

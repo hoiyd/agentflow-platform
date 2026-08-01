@@ -4,6 +4,8 @@ import "time"
 
 const CurrentCompletionContractVersion = 2
 
+// VerificationStatus is the Verification state for one Run. It is independent
+// of repository unit, integration, and frontend test results.
 type VerificationStatus string
 
 const (

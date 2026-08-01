@@ -111,7 +111,7 @@ export function ChatComposer(props: ChatComposerProps) {
           onClick={onOpenVerification}
           type="button"
         >
-          <ShieldCheck size={15} /><span>Completion verification</span>
+          <ShieldCheck size={15} /><span>Verification</span>
           <strong>{completionVerificationEnabled ? "On" : "Off"}</strong>
         </button>
       </div>

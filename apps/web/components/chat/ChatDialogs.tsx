@@ -82,7 +82,7 @@ export function ChatDialogs(props: ChatDialogsProps) {
     <>
       {completionVerificationDraft ? (
         <div className="modal-backdrop agent-config-modal-backdrop" role="presentation">
-          <section aria-label="Completion verification" aria-modal="true" className="agent-config-dialog verification-config-dialog" role="dialog">
+          <section aria-label="Verification" aria-modal="true" className="agent-config-dialog verification-config-dialog" role="dialog">
             <CompletionVerificationPanel
               draft={completionVerificationDraft}
               error={completionVerificationError}

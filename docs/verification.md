@@ -1,18 +1,31 @@
-# Completion Verification
+# Verification
 
 AgentFlow can treat an assistant response as a candidate result until a frozen
 Completion Contract is satisfied. Verification is explicitly enabled per Run;
 ordinary chat does not require it and keeps
 `verification_status=not_required`.
 
-> **This is runtime outcome verification, not test execution.** Unit and
-> integration tests validate the AgentFlow codebase. Completion Verification
-> evaluates a specific Run's persisted candidate output against its frozen
-> contract before that Run may be reported as completed.
+> **Verification is not test execution.** Verification evaluates one Run's
+> persisted candidate output against its frozen contract before that Run may be
+> reported as completed. Automated and Manual Tests evaluate system behavior.
 
 This subsystem answers whether configured outcome invariants passed. It is
 separate from execution success, provider retries, retrieval relevance, and
 subjective factual correctness.
+
+## Verification vs. Tests
+
+| Verification | Automated Tests | Manual Tests |
+| --- | --- | --- |
+| Runs inside the product for one opted-in Run. | Run during development or CI. | Are performed by a developer, operator, or reviewer. |
+| Evaluates one persisted candidate output against a frozen Completion Contract. | Evaluate code against automated assertions. | Exercise a documented workflow and inspect its observable result. |
+| Produces `verification.*` events and Evidence/Artifacts that can gate `run.completed`. | Produce test output and determine build health. | Produce human observations and never gate `run.completed`. |
+| Is enabled by `completion_contract`; ordinary Runs skip it. | Start with commands such as `go test` or `make test`. | Follow [Manual Tests](manual-tests.md). |
+
+A command verifier may invoke an allowlisted external test runner as one source
+of runtime evidence. AgentFlow does not discover or run its own repository test
+suite as part of Verification unless an operator explicitly
+allowlists and configures such a command.
 
 ## When Verification Runs
 
@@ -31,7 +44,7 @@ A Run enters the verification lifecycle only when its initial `POST /api/chat` r
 
 `VERIFICATION_WORKSPACE_ROOT`, command allowlists, HTTP host allowlists, and Artifact limits only configure which verifier implementations may run safely. Setting these environment variables does **not** enable verification for any Run by itself.
 
-The chat composer exposes this opt-in under **Completion verification** and
+The chat composer exposes this opt-in under **Verification** and
 supports all five built-in verifier types. The request behavior is identical
 for `single`, `multi_agent`, and `autonomous` Runs.
 
@@ -167,7 +180,8 @@ The execution interface is intentionally small: a verifier declares a stable typ
 
 This supports the common verifier families without forcing them into one scoring method:
 
-- Deterministic outcome checks: command/test execution, HTTP probes, JSON Schema, database assertions, file or state invariants.
+- Deterministic outcome checks: allowlisted commands, HTTP probes, JSON Schema,
+  database assertions, and file or state invariants.
 - Deterministic response checks: text constraints, citation/source policy, parsers, static analyzers, and exact-match rules.
 - Model-based graders: rubric scoring, groundedness, completeness, and pairwise comparison can return scores and claim-level diagnostics through `details` and Artifacts.
 - Human review: expert judgment and calibration should enter through a future asynchronous evidence-ingestion path rather than blocking a synchronous verifier process.
@@ -178,7 +192,12 @@ For subjective outputs such as articles and research reports, combine determinis
 
 ## Security Boundaries
 
-Command verification is disabled unless `VERIFICATION_WORKSPACE_ROOT` and `VERIFICATION_ALLOWED_COMMANDS` are both configured. Working directories must be relative and remain below the root. HTTP verification permits loopback targets by default; other exact hosts require `VERIFICATION_ALLOWED_HTTP_HOSTS`. Redirects are checked against the same policy. HTTP verifiers cannot send mutation methods or persisted authorization headers.
+The command verifier is disabled unless `VERIFICATION_WORKSPACE_ROOT` and
+`VERIFICATION_ALLOWED_COMMANDS` are both configured. Working directories must
+be relative and remain below the root. The HTTP verifier permits loopback
+targets by default; other exact hosts require
+`VERIFICATION_ALLOWED_HTTP_HOSTS`. Redirects follow the same policy. HTTP
+verifiers cannot send mutation methods or persisted authorization headers.
 
 Each verifier Artifact and the structured Evidence details are capped by `VERIFICATION_MAX_ARTIFACT_BYTES` (64 KiB by default). At most eight Artifacts are retained per Evidence record. Artifacts record the observed byte count, content hash, media type, and whether stored content was truncated.
 

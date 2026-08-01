@@ -1,10 +1,15 @@
-# Manual Verification
+# Manual Tests
 
-This guide turns the main architecture claims into reproducible checks. It
-complements automated tests; it is not a release checklist for production or a
+This guide turns the main architecture claims into repeatable manual tests. It
+complements automated tests; it is not a production release checklist or a
 substitute for retrieval-quality evaluation on a Golden Dataset.
 
-## Automated Checks
+Manual Tests are performed by a developer, operator, or reviewer. They are
+separate from **Verification**, the opt-in runtime subsystem that evaluates one
+Run's candidate output against a frozen Completion Contract. Only the Completion
+Gate tests below exercise that subsystem.
+
+## Automated Tests
 
 ### Backend
 
@@ -21,10 +26,12 @@ GOCACHE=/private/tmp/agentflow-go-build-cache go test ./...
 ```bash
 cd apps/web
 export PATH="$HOME/.nvm/versions/node/v22.6.0/bin:$PATH"
+npm run lint
+npm test
 npm run build
 ```
 
-## RAG Verification
+## RAG Tests
 
 ### Basic Ingestion and Hybrid Retrieval
 
@@ -88,7 +95,7 @@ cd apps/api
 TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStoreLexicalRecall
 ```
 
-## Runtime and Replay Verification
+## Runtime and Replay Tests
 
 ### Retrieval Replay
 
@@ -107,7 +114,8 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
 
 ### Completion Gate
 
-1. Send `POST /api/chat` with the JSON Schema contract from [Completion Verification](completion-verification.md).
+1. Send `POST /api/chat` with the JSON Schema contract from
+   [Verification](verification.md).
 2. Return output that does not match the schema and confirm the Run does not become `completed`.
 3. Inspect `GET /api/runs/{id}/replay` and confirm failed Evidence includes contract/verifier versions, Subject Hash, Snapshot Hash, summary, and an Artifact ID.
 4. For an HTTP verifier with remaining attempt budget, restore the target service and call `POST /api/runs/{id}/verify`.
