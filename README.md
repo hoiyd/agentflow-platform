@@ -19,17 +19,37 @@ AgentFlow exposes three orchestration shapes over one shared Go runtime. The
 mode changes **how work is coordinated**, not which retrieval, Tool, Context,
 Budget, Event, Verification, or persistence policies apply.
 
-| Mode | Best fit | Execution shape | Distinguishing behavior |
-| --- | --- | --- | --- |
-| **Single** (`single`) | Focused questions and direct tool-assisted work | One selected Agent executes one Turn | Lowest orchestration overhead; retrieval, model/tool loop, streaming, and optional Completion Verification still apply. |
-| **Multi** (`multi_agent`) | Work that benefits from an explicit plan, delegation, and independent review | Planner -> human plan approval -> Router -> Worker -> Reviewer -> Finalizer | The Run pauses before execution so the user can edit the plan; routing and every handoff are persisted as inspectable Stages. |
-| **Loop** (`autonomous`) | Open-ended work that needs iterative progress within hard limits | Observe -> Plan -> Act -> Review -> Decide, repeated by Iteration | The Decide Stage stops, continues, or requests human input; iteration, output, runtime, Tool, and Run Budget limits bound execution and support resume/recovery. |
+### Single (`single`)
 
-```text
-Single: User -> Agent Turn -> Result
-Multi:  User -> Planner -> Approve -> Router -> Worker -> Reviewer -> Finalizer
-Loop:   User -> [Observe -> Plan -> Act -> Review -> Decide] x N -> Result / Wait
-```
+For focused questions and direct tool-assisted work. One selected Agent executes
+one Turn with the lowest orchestration overhead; retrieval, model/tool loops,
+streaming, budgets, and optional Completion Verification still apply.
+
+`User -> Agent Turn -> Result`
+
+![Single mode direct result](docs/assets/single-mode.png)
+
+### Multi (`multi_agent`)
+
+For work that benefits from an explicit plan, specialist routing, and
+independent review. The Run pauses at `waiting_for_user` so the plan can be
+edited before execution, and every handoff is persisted as an inspectable
+Stage.
+
+`User -> Planner -> Approve -> Router -> Worker -> Reviewer -> Finalizer`
+
+![Multi mode plan approval and collaboration stages](docs/assets/multi-mode.png)
+
+### Loop (`autonomous`)
+
+For open-ended work that needs iterative progress within hard limits. Each
+Iteration observes, plans, acts, reviews, and decides whether to continue,
+stop, or request human input; runtime, output, Tool, and budget limits remain
+visible throughout execution.
+
+`User -> [Observe -> Plan -> Act -> Review -> Decide] x N -> Result / Wait`
+
+![Loop mode iteration trace and resource limits](docs/assets/loop-mode.png)
 
 The detailed lifecycle, trade-offs, trace shape, API values, and mode-selection
 guide are in [Execution modes](docs/execution-modes.md).
@@ -61,22 +81,6 @@ The focused runtime recording shows a frozen Completion Contract, a completed
 Single-mode Run, Usage/Replay, `verification.*` lifecycle events, and immutable
 Evidence. Verification is runtime outcome checking, not unit-test execution,
 and can be enabled for Single, Multi, or Loop Runs.
-
-<details>
-<summary>Open full-resolution execution stills</summary>
-
-The GIFs explain transitions; these 1440x900 stills are retained for reading
-dense result and Replay details without animation.
-
-#### Multi-Agent Final Result
-
-![Completed Multi-Agent workflow](docs/assets/multi-agent-run.png)
-
-#### Run Replay and Resource Usage
-
-![Run replay with resource usage](docs/assets/run-replay.png)
-
-</details>
 
 ## Why This Project Exists
 
