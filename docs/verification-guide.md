@@ -100,7 +100,10 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
 6. Confirm retrieved memories and knowledge chunks are visible above the raw JSON payload.
 7. For LangChainGo runs, confirm event detail or raw payload includes `executor: "langchaingo"`, `framework: "langchaingo"`, and `framework_path: "chains.LLMChain"`.
 8. Ask for a grounded answer and confirm the response uses `[S1]`-style markers, the assistant Message shows matching Source details, and Replay contains `citation.resolved` with no invalid source IDs.
-9. Force an answer marker outside the selected catalog in a test model response and confirm it is excluded from structured `citations` and listed under `invalid_source_ids`.
+9. Force an answer marker outside the selected catalog in a test model response.
+   Confirm it is excluded from structured `citations`, appears as
+   `invalid_citation_ids` in the terminal event, and appears as
+   `invalid_source_ids` in the `citation.resolved` trace event.
 
 ### Completion Gate
 
@@ -119,20 +122,7 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
 4. Pause an Autonomous Run at `waiting_for_user`, wait longer than `RUN_MAX_RUNTIME`, and resume it. Confirm only active execution time is charged.
 5. With Postgres, run `TEST_DATABASE_URL=... go test ./internal/store -run 'TestPostgresRunUsage|TestPostgresActiveRuntime'` to verify atomic reservation and active-runtime round trips.
 
-## Suggested Interview Demo
+## Interview Demo
 
-A focused demonstration can fit in approximately ten minutes:
-
-1. Open the architecture diagram and explain why all modes share one Turn
-   Engine.
-2. Upload a short Markdown runbook containing a normal phrase and an exact
-   identifier.
-3. Search for the identifier and point out Semantic rank, Keyword rank, RRF,
-   final rerank, and selected model context.
-4. Run a Multi-Agent task against the document, then open Replay to connect
-   stages, retrieval, model calls, tools, and usage.
-5. Show a small Run Budget failure or a Completion Contract rejection to
-   demonstrate that stopping and failure behavior are first-class contracts.
-6. Close with one documented limitation, such as uncalibrated relevance
-   thresholds or incomplete tenant isolation, and explain the next engineering
-   step rather than overstating the current guarantee.
+For a timed reviewer walkthrough, use [Interview Demo](demo.md). This guide
+remains the source for manual checks and expected observable results.
