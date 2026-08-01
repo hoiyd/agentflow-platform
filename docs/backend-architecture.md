@@ -6,7 +6,9 @@ Directory depth does not represent architectural importance.
 
 For the reasoning behind the main boundaries, read
 [Engineering decisions](engineering-decisions.md). For domain terminology such
-as Run, Stage, Turn, and Model Call, read [Internal terms](terms.md).
+as Run, Stage, Turn, and Model Call, read [Internal terms](terms.md). For the
+complete Single, Multi, and Loop lifecycles, read
+[Execution modes](execution-modes.md).
 
 ## Architectural Invariants
 

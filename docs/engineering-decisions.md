@@ -29,18 +29,21 @@ letting one framework define persistence, observability, or safety policy.
 small shared Turn Engine, capability-oriented packages, and tests around common
 contracts rather than separate implementations per mode.
 
-## One Execution Model for Three Modes
+## One Execution Model for Single, Multi, and Loop
 
-Single-Agent, Multi-Agent, and Autonomous modes differ in orchestration:
+Single, Multi, and Loop modes differ in orchestration:
 
-- Single-Agent executes one direct Turn.
-- Multi-Agent creates planner, router, worker, reviewer, and finalizer Stages.
-- Autonomous repeats observe, plan, act, review, and decide Stages within
+- Single executes one direct Turn.
+- Multi creates planner, router, worker, reviewer, and finalizer Stages.
+- Loop (`autonomous` in the API) repeats observe, plan, act, review, and decide Stages within
   explicit limits.
 
 They do not implement separate Retrieval, Tool, Context, Event, Budget, or
 Completion stacks. Shared behavior prevents a feature from working in one mode
 while silently bypassing policy in another.
+
+The complete lifecycle, human checkpoints, trace shape, limits, and selection
+guidance are documented in [Execution modes](execution-modes.md).
 
 **Rejected shortcut:** copy a chat loop for each mode and normalize only the UI.
 That makes traces look consistent while runtime semantics drift.

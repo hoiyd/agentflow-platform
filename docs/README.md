@@ -9,9 +9,11 @@ source directory. Start with the path that matches the depth of review you need.
    limitations.
 2. [Interview demo](demo.md): repeatable three-to-five-minute walkthrough and
    fallback path.
-3. [Engineering decisions](engineering-decisions.md): why the platform uses
+3. [Execution modes](execution-modes.md): how Single, Multi, and Loop differ,
+   when to choose each, and which runtime contracts they share.
+4. [Engineering decisions](engineering-decisions.md): why the platform uses
    explicit runtime primitives and how the design evolved.
-4. [Backend architecture](backend-architecture.md): package ownership,
+5. [Backend architecture](backend-architecture.md): package ownership,
    dependency direction, and main call paths.
 
 ## Runtime Systems Review
@@ -25,14 +27,16 @@ For a focused backend or AI-systems review, use this path:
 | **Tracing** | [Backend architecture](backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed lifecycle events, persisted payloads, Usage Ledger separation, Replay, and Episode projections. |
 | **Verification** | [Completion verification](completion-verification.md) | Runtime outcome contracts, versioned verifiers, immutable Evidence/Artifacts, and the Completion Gate. This is separate from unit/integration testing. |
 
-The same runtime contracts apply to Single-Agent, Multi-Agent, and Autonomous
-execution. File/Postgres stores and provider/framework adapters preserve those
-contracts, which is the main portability boundary of the project.
+The same runtime contracts apply to Single, Multi, and Loop execution. The API
+names the Loop path `autonomous`. File/Postgres stores and provider/framework
+adapters preserve those contracts, which is the main portability boundary of
+the project.
 
 ## Runtime and Reliability
 
 | Document | Question answered |
 | --- | --- |
+| [Execution modes](execution-modes.md) | How do Single, Multi, and Loop execution differ in lifecycle, checkpoints, trace shape, cost, and use case? |
 | [Internal terms](terms.md) | What do Conversation, Run, Stage, Turn, Iteration, and Model Call mean? |
 | [Execution controls](execution-controls.md) | Which layer owns concurrency, rate limits, retries, budgets, context capacity, and stopping rules? |
 | [Run Budget](run-budget.md) | How are logical calls, provider usage, tools, runtime, and cost accounted for? |

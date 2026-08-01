@@ -9,34 +9,70 @@ execution, retrieval, context management, resource control, verification, and
 replay.
 
 The backend is written in Go. The frontend is a Next.js workbench for running
-and inspecting Single-Agent, Multi-Agent, and bounded Autonomous workflows.
+and inspecting Single, Multi, and bounded Loop workflows.
 The project uses OpenAI-compatible model and embedding APIs, with deterministic
 local fallbacks for development.
 
+## Three Execution Modes
+
+AgentFlow exposes three orchestration shapes over one shared Go runtime. The
+mode changes **how work is coordinated**, not which retrieval, Tool, Context,
+Budget, Event, Verification, or persistence policies apply.
+
+| Mode | Best fit | Execution shape | Distinguishing behavior |
+| --- | --- | --- | --- |
+| **Single** (`single`) | Focused questions and direct tool-assisted work | One selected Agent executes one Turn | Lowest orchestration overhead; retrieval, model/tool loop, streaming, and optional Completion Verification still apply. |
+| **Multi** (`multi_agent`) | Work that benefits from an explicit plan, delegation, and independent review | Planner -> human plan approval -> Router -> Worker -> Reviewer -> Finalizer | The Run pauses before execution so the user can edit the plan; routing and every handoff are persisted as inspectable Stages. |
+| **Loop** (`autonomous`) | Open-ended work that needs iterative progress within hard limits | Observe -> Plan -> Act -> Review -> Decide, repeated by Iteration | The Decide Stage stops, continues, or requests human input; iteration, output, runtime, Tool, and Run Budget limits bound execution and support resume/recovery. |
+
+```text
+Single: User -> Agent Turn -> Result
+Multi:  User -> Planner -> Approve -> Router -> Worker -> Reviewer -> Finalizer
+Loop:   User -> [Observe -> Plan -> Act -> Review -> Decide] x N -> Result / Wait
+```
+
+The detailed lifecycle, trade-offs, trace shape, API values, and mode-selection
+guide are in [Execution modes](docs/execution-modes.md).
+
 ## Product Walkthrough
 
-![AgentFlow workflow demo](docs/assets/agentflow-demo.gif)
+### End-to-End Multi Mode
 
-The walkthrough follows one incident task from a reviewed Multi-Agent plan to
-the final cited answer and persisted Run replay. It uses the repository's
-deterministic local path, so no API key is required.
+![AgentFlow reviewed Multi-Agent workflow](docs/assets/agentflow-demo.gif)
 
-<details open>
-<summary>Inspect the retrieval and execution views</summary>
+This walkthrough follows one incident task through plan review, worker routing,
+execution, review, finalization, and persisted Replay. It demonstrates **Multi**
+mode; Single and Loop use the same runtime controls and evidence model with the
+different orchestration shapes above. No API key is required.
 
-### Hybrid RAG Inspection
+### Shared RAG Pipeline
 
-![Hybrid RAG retrieval, gating, ranking, and context selection](docs/assets/hybrid-rag-demo.gif)
+![Hybrid RAG retrieval, ranking, and context selection](docs/assets/hybrid-rag-demo.gif)
 
-### Multi-Agent Result
+The focused RAG recording shows document indexing, independent Semantic and
+Keyword ranks, RRF fusion, versioned reranking, Relevance Gate metadata, and
+the merged model context. The same pipeline runs before Turns in all modes.
 
-![Completed Multi-Agent workflow](docs/assets/multi-agent-run.png)
-
-### Completion Verification and Evidence
+### Shared Verification and Trace
 
 ![Completion Contract, verification gate, evidence, and trace](docs/assets/completion-verification-demo.gif)
 
-### Run Replay
+The focused runtime recording shows a frozen Completion Contract, a completed
+Single-mode Run, Usage/Replay, `verification.*` lifecycle events, and immutable
+Evidence. Verification is runtime outcome checking, not unit-test execution,
+and can be enabled for Single, Multi, or Loop Runs.
+
+<details>
+<summary>Open full-resolution execution stills</summary>
+
+The GIFs explain transitions; these 1440x900 stills are retained for reading
+dense result and Replay details without animation.
+
+#### Multi-Agent Final Result
+
+![Completed Multi-Agent workflow](docs/assets/multi-agent-run.png)
+
+#### Run Replay and Resource Usage
 
 ![Run replay with resource usage](docs/assets/run-replay.png)
 
@@ -64,7 +100,7 @@ subsystems rather than hiding them inside prompts.
 flowchart LR
     UI["Next.js workbench"] -->|"HTTP + SSE"| HTTP["Go HTTP adapter"]
     HTTP --> Runtime["Agent Runtime"]
-    Runtime --> Modes["Single / Multi / Autonomous"]
+    Runtime --> Modes["Single / Multi / Loop"]
     Runtime --> Turn["Shared Turn Engine"]
     Turn --> Context["Context Assembly"]
     Turn --> Model["Model adapter"]
@@ -83,13 +119,14 @@ flowchart LR
 
 All three execution modes share the same Turn, Retrieval, Context Assembly,
 Tool, Event, Budget, and Completion paths. Mode-specific code owns only the
-orchestration policy.
+orchestration policy; see [Execution modes](docs/execution-modes.md) for the
+exact lifecycle of each path.
 
 ## Engineering Highlights
 
 | Concern | Implementation | Evidence |
 | --- | --- | --- |
-| Agent orchestration | Direct, plan-and-review Multi-Agent, and bounded Autonomous modes share one Turn Engine | [Backend architecture](docs/backend-architecture.md) |
+| Agent orchestration | Direct Single, plan-and-review Multi, and bounded Loop modes share one Turn Engine | [Execution modes](docs/execution-modes.md) |
 | Reproducibility | Each Run freezes model, agent, tool schema, context policy, and budget in a Runtime Snapshot | [Terms](docs/terms.md#runtime-snapshot) |
 | Hybrid RAG | Independent semantic and keyword recall, Reciprocal Rank Fusion, versioned pluggable reranking and relevance gating, context transformation, and native `[S1]` citations | [Knowledge / RAG](docs/knowledge-rag.md) |
 | Context control | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [Context management](docs/context-management.md) |
@@ -120,7 +157,7 @@ orchestration policy.
   `run.completed`. Unit and integration tests validate the codebase; Completion
   Verification validates a configured outcome at runtime.
 
-These contracts are shared by Single-Agent, Multi-Agent, and Autonomous modes
+These contracts are shared by Single, Multi, and Loop modes
 and by File/Postgres persistence. Model, embedding, reranking, storage, and
 verifier adapters can evolve without changing the Run/Event/Budget/Verification
 protocols that make execution inspectable.
@@ -129,7 +166,7 @@ protocols that make execution inspectable.
 
 | Status | Area | Current boundary |
 | --- | --- | --- |
-| **Implemented** | Agent runtime | Single-Agent, plan-and-review Multi-Agent, bounded Autonomous execution, shared Turn Engine, tools, continue/resume/cancel, and stale-run recovery |
+| **Implemented** | Agent runtime | Single, plan-and-review Multi, and bounded Loop execution; shared Turn Engine; tools; continue/resume/cancel; and stale-run recovery |
 | **Implemented** | Reliability | Runtime Snapshots, typed events, Replay, Usage Ledger, Run Budget, Context Manifests, compaction, and opt-in Completion Verification |
 | **Implemented** | RAG | Markdown ingestion, source traceability, Semantic/Keyword recall, RRF, modular reranking, relevance gate, parent/adjacent context selection, deduplication, merging, and structured `[S1]` citations |
 | **Implemented** | Memory | Rule-first durable-fact extraction, optional shadow/auto model extraction, candidate audit trail, policy filtering, redaction, and embedding |
@@ -168,7 +205,7 @@ The repository preserves an incremental engineering path rather than presenting
 the current design as a one-shot architecture:
 
 1. Retrieval moved from runtime-specific Store calls to one shared pipeline for
-   HTTP, Single-Agent, Multi-Agent, and Autonomous execution.
+   HTTP, Single, Multi, and Loop execution.
 2. Semantic-only recall gained an independent keyword path, then rank-based RRF
    fusion so incomparable raw scores were never mixed directly.
 3. Retrieved child chunks were separated from model context, enabling scoped
@@ -281,7 +318,7 @@ require a disposable database through `TEST_DATABASE_URL`.
 | Application composition | [`apps/api/app/wiring.go`](apps/api/app/wiring.go) |
 | Run lifecycle and shared runtime | [`apps/api/internal/agent/runtime.go`](apps/api/internal/agent/runtime.go) |
 | Multi-Agent orchestration | [`apps/api/internal/agent/orchestrator.go`](apps/api/internal/agent/orchestrator.go) |
-| Bounded Autonomous loop | [`apps/api/internal/agent/autonomous.go`](apps/api/internal/agent/autonomous.go) |
+| Bounded Loop (`autonomous`) | [`apps/api/internal/agent/autonomous.go`](apps/api/internal/agent/autonomous.go) |
 | Shared Turn Engine | [`apps/api/internal/turn/engine.go`](apps/api/internal/turn/engine.go) |
 | Retrieval pipeline and RRF | [`apps/api/internal/rag/retrieval.go`](apps/api/internal/rag/retrieval.go), [`fusion.go`](apps/api/internal/rag/fusion.go) |
 | Context selection and transformation | [`context_selection.go`](apps/api/internal/rag/context_selection.go), [`context_transformation.go`](apps/api/internal/rag/context_transformation.go) |
@@ -310,11 +347,12 @@ agentflow-platform/
 
 For a short technical review:
 
-1. Read [Engineering decisions](docs/engineering-decisions.md).
-2. Follow the [backend call paths](docs/backend-architecture.md#main-call-paths).
-3. Inspect the [retrieval pipeline](docs/knowledge-rag.md#retrieval-pipeline).
-4. Compare [Run Budget](docs/run-budget.md) with single-call
+1. Compare the three [Execution modes](docs/execution-modes.md).
+2. Read [Engineering decisions](docs/engineering-decisions.md).
+3. Follow the [backend call paths](docs/backend-architecture.md#main-call-paths).
+4. Inspect the [retrieval pipeline](docs/knowledge-rag.md#retrieval-pipeline).
+5. Compare [Run Budget](docs/run-budget.md) with single-call
    [Context Management](docs/context-management.md).
-5. Open the workbench Replay view after running a Multi-Agent or Autonomous task.
+6. Open Replay after running a Multi or Loop task.
 
 The complete documentation map is in [docs/README.md](docs/README.md).
