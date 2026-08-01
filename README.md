@@ -1,6 +1,7 @@
 # AgentFlow Platform
 
 [![CI](https://github.com/hoiyd/agentflow-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/hoiyd/agentflow-platform/actions/workflows/ci.yml)
+[![Go Coverage](https://codecov.io/gh/hoiyd/agentflow-platform/branch/main/graph/badge.svg?flag=backend)](https://app.codecov.io/gh/hoiyd/agentflow-platform)
 
 AgentFlow is a full-stack AI agent workflow platform designed to make agent
 systems reliable beyond the first demo through explicit orchestration, tool
