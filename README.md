@@ -89,11 +89,37 @@ orchestration policy.
 | Reproducibility | Each Run freezes model, agent, tool schema, context policy, and budget in a Runtime Snapshot | [Terms](docs/terms.md#runtime-snapshot) |
 | Hybrid RAG | Independent semantic and keyword recall, Reciprocal Rank Fusion, versioned pluggable reranking and relevance gating, context transformation, and native `[S1]` citations | [Knowledge / RAG](docs/knowledge-rag.md) |
 | Context control | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [Context management](docs/context-management.md) |
-| Resource safety | Run admission, provider RPM/TPM, retry policy, per-Run budget reservations/settlements, tool limits, and autonomous guards have distinct owners | [Execution controls](docs/execution-controls.md) |
+| **Performance & resource control** | SSE streaming, bounded context/output, asynchronous Memory curation, and per-Run usage/cost budgets keep work measurable and bounded | [Execution controls](docs/execution-controls.md) |
+| **Concurrency & backpressure** | Global Run admission, per-Conversation single-writer execution, bounded queues, model-request permits, RPM/TPM limits, and retry-aware slot release | [Execution controls](docs/execution-controls.md#1-run-admission-and-conversation-concurrency) |
 | Durable memory | Explicit rules plus optional shadow-mode model extraction propose auditable candidates before embedding | [Memory management](docs/memory-management.md) |
-| Outcome verification | Frozen Completion Contracts produce immutable Evidence and gate `run.completed` | [Completion verification](docs/completion-verification.md) |
-| Observability | Typed events, usage ledgers, replay, collaboration traces, and episode reports explain what happened | [Run budget](docs/run-budget.md) |
+| **Runtime outcome verification** | Frozen Completion Contracts run deterministic verifiers, persist immutable Evidence/Artifacts, and gate `run.completed` | [Completion verification](docs/completion-verification.md) |
+| **Tracing & replay** | Typed Run/Stage/Turn/Model/Tool/Retrieval/Verification events, usage ledgers, Replay, and Episode reports explain what happened | [Backend architecture](docs/backend-architecture.md#performance-concurrency-tracing-and-verification) |
 | Extensibility | Native orchestration is the default; an optional LangChainGo adapter exercises framework integration without owning platform policy | [Engineering decisions](docs/engineering-decisions.md) |
+
+### Performance, Concurrency, Tracing, and Verification
+
+- **Performance-aware execution:** AgentFlow does not claim synthetic benchmark
+  numbers. It exposes the mechanisms needed to tune a real deployment: streaming
+  responses, bounded context and output, request/time/token/cost limits,
+  asynchronous curation, and Postgres-backed atomic usage accounting.
+- **Layered concurrency and backpressure:** Run admission, per-Conversation
+  single-writer execution, model-request concurrency, provider RPM/TPM, Tool
+  batch policy, and Run Budget intentionally control different scopes. Queue
+  saturation and timeout paths produce explicit HTTP/SSE outcomes.
+- **End-to-end tracing:** Typed events persist the Run, Stage, Turn, Model,
+  Tool, Retrieval, Context, and Verification lifecycles. Replay and Episode
+  views are projections of stored execution evidence rather than reconstructed
+  frontend state.
+- **Runtime Completion Verification, not test execution:** A frozen Completion
+  Contract evaluates one Run's candidate output using versioned verifiers and
+  immutable Evidence/Artifacts before the Completion Gate permits
+  `run.completed`. Unit and integration tests validate the codebase; Completion
+  Verification validates a configured outcome at runtime.
+
+These contracts are shared by Single-Agent, Multi-Agent, and Autonomous modes
+and by File/Postgres persistence. Model, embedding, reranking, storage, and
+verifier adapters can evolve without changing the Run/Event/Budget/Verification
+protocols that make execution inspectable.
 
 ## Implementation Status
 

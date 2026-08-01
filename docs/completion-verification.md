@@ -5,6 +5,11 @@ Completion Contract is satisfied. Verification is explicitly enabled per Run;
 ordinary chat does not require it and keeps
 `verification_status=not_required`.
 
+> **This is runtime outcome verification, not test execution.** Unit and
+> integration tests validate the AgentFlow codebase. Completion Verification
+> evaluates a specific Run's persisted candidate output against its frozen
+> contract before that Run may be reported as completed.
+
 This subsystem answers whether configured outcome invariants passed. It is
 separate from execution success, provider retries, retrieval relevance, and
 subjective factual correctness.
