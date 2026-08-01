@@ -7,6 +7,8 @@ import type {
   EmbeddingInfo,
   FusionInfo,
   KnowledgeSecurityInfo,
+  RerankerInfo,
+  RelevanceGateInfo,
   RAGEvaluationRunResponse,
   RetrievedDocumentChunk
 } from "../../lib/knowledge-api";
@@ -36,6 +38,8 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
     results,
     searchEmbedding,
     searchFusion,
+    searchReranker,
+    searchRelevanceGate,
     searchSecurity,
     selectedDocument,
     selectedDocumentId,
@@ -205,6 +209,8 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
         </div>
         <EmbeddingStatus embedding={searchEmbedding} hasSearched={hasSearched} />
         <FusionStatus fusion={searchFusion} hasSearched={hasSearched} />
+        <RerankerStatus hasSearched={hasSearched} reranker={searchReranker} />
+        <RelevanceGateStatus gate={searchRelevanceGate} hasSearched={hasSearched} />
         <KnowledgeSecurityStatus hasSearched={hasSearched} security={searchSecurity} />
         <ContextSelectionStatus hasSearched={hasSearched} selection={contextSelection} />
         {hasSearched && noMatchReason ? <div className="rag-no-match">{noMatchReason}</div> : null}
@@ -391,6 +397,8 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
       </div>
       <EmbeddingStatus embedding={result.embedding ?? null} hasSearched />
       <FusionStatus fusion={result.fusion ?? null} hasSearched />
+      <RerankerStatus hasSearched reranker={result.reranker ?? null} />
+      <RelevanceGateStatus gate={result.relevance_gate ?? null} hasSearched />
       <div className="evaluation-cases">
         {result.cases.map((item) => (
           <article className={`evaluation-case ${item.hit ? "hit" : "miss"}`} key={item.id}>
@@ -561,6 +569,49 @@ function FusionStatus({ fusion, hasSearched }: { fusion: FusionInfo | null; hasS
       <span>
         Semantic {fusion.dense_weight.toFixed(1)} / Keyword {fusion.lexical_weight.toFixed(1)}
       </span>
+    </div>
+  );
+}
+
+function RerankerStatus({ reranker, hasSearched }: { reranker: RerankerInfo | null; hasSearched: boolean }) {
+  if (!hasSearched) {
+    return null;
+  }
+  if (!reranker) {
+    return (
+      <div className="embedding-status warning">
+        <span>Reranker: metadata unavailable</span>
+      </div>
+    );
+  }
+  const provider = [reranker.provider, reranker.model].filter(Boolean).join(" / ");
+  return (
+    <div className="embedding-status">
+      <span>
+        Reranker: {reranker.algorithm} / {reranker.version}
+      </span>
+      <span>{[`Config ${reranker.config_version}`, provider].filter(Boolean).join(" / ")}</span>
+    </div>
+  );
+}
+
+function RelevanceGateStatus({ gate, hasSearched }: { gate: RelevanceGateInfo | null; hasSearched: boolean }) {
+  if (!hasSearched) {
+    return null;
+  }
+  if (!gate) {
+    return (
+      <div className="embedding-status warning">
+        <span>Relevance Gate: metadata unavailable</span>
+      </div>
+    );
+  }
+  return (
+    <div className="embedding-status">
+      <span>
+        Relevance Gate: {gate.policy} / {gate.version}
+      </span>
+      <span>Config {gate.config_version}</span>
     </div>
   );
 }

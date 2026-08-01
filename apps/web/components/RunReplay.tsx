@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { EpisodeReport, RunReplay as RunReplayData, RunEvent } from "../lib/api";
-import type { ContextSelectionInfo, KnowledgeSecurityInfo } from "../lib/knowledge-api";
+import type { ContextSelectionInfo, KnowledgeSecurityInfo, RelevanceGateInfo, RerankerInfo } from "../lib/knowledge-api";
 import { getEpisodeReport, getRunReplay, resumeRun } from "../lib/api";
 import { BudgetEventDetail, RunUsagePanel } from "./RunUsagePanel";
 
@@ -399,6 +399,8 @@ function EventDetail({ event }: { event: RunEvent }) {
   const memories = retrievedMemories(payload);
   const chunks = retrievedChunks(payload);
   const fusion = fusionPayload(payload.fusion);
+  const reranker = rerankerPayload(payload.reranker);
+  const relevanceGate = relevanceGatePayload(payload.relevance_gate);
   const knowledgeSecurity = knowledgeSecurityPayload(payload.knowledge_security);
   const contextSelection = contextSelectionPayload(payload.context_selection);
   return (
@@ -451,6 +453,18 @@ function EventDetail({ event }: { event: RunEvent }) {
         <div className="detail-kv">
           <span>Fusion</span>
           <strong>{fusionLabel(fusion)}</strong>
+        </div>
+      ) : null}
+      {reranker ? (
+        <div className="detail-kv">
+          <span>Reranker</span>
+          <strong>{rerankerLabel(reranker)}</strong>
+        </div>
+      ) : null}
+      {relevanceGate ? (
+        <div className="detail-kv">
+          <span>Relevance Gate</span>
+          <strong>{relevanceGateLabel(relevanceGate)}</strong>
         </div>
       ) : null}
       {knowledgeSecurity ? (
@@ -521,6 +535,14 @@ function RetrievalOverview({ summary }: { summary: ReturnType<typeof buildRetrie
       <div className="retrieval-model">
         <span>Fusion</span>
         <strong>{summary.fusionLabel}</strong>
+      </div>
+      <div className="retrieval-model">
+        <span>Reranker</span>
+        <strong>{summary.rerankerLabel}</strong>
+      </div>
+      <div className="retrieval-model">
+        <span>Relevance Gate</span>
+        <strong>{summary.relevanceGateLabel}</strong>
       </div>
       <div className="retrieval-model">
         <span>Knowledge security</span>
@@ -614,6 +636,8 @@ function buildRetrievalSummary(events: RunEvent[]) {
   const executor = firstNonEmpty(events.map((event) => stringPayload(event.payload, "executor")));
   const framework = firstNonEmpty(events.map((event) => stringPayload(event.payload, "framework")));
   const fusion = fusionPayload(firstPayload.fusion);
+  const reranker = rerankerPayload(firstPayload.reranker);
+  const relevanceGate = relevanceGatePayload(firstPayload.relevance_gate);
   const knowledgeSecurity = knowledgeSecurityPayload(firstPayload.knowledge_security);
   const contextSelection = contextSelectionPayload(firstPayload.context_selection);
   return {
@@ -624,6 +648,8 @@ function buildRetrievalSummary(events: RunEvent[]) {
     embeddingLabel: provider || model ? [provider, model, dimensions ? `${dimensions}d` : ""].filter(Boolean).join(" / ") : "not recorded",
     executorLabel: executor || framework ? [executor, framework].filter(Boolean).join(" / ") : "not recorded",
     fusionLabel: fusion ? fusionLabel(fusion) : "not recorded",
+    rerankerLabel: reranker ? rerankerLabel(reranker) : "not recorded",
+    relevanceGateLabel: relevanceGate ? relevanceGateLabel(relevanceGate) : "not recorded",
     knowledgeSecurityLabel: knowledgeSecurity ? knowledgeSecurityLabel(knowledgeSecurity) : "not recorded",
     contextSelectionLabel: contextSelection ? contextSelectionLabel(contextSelection) : "not recorded"
   };
@@ -684,6 +710,37 @@ function fusionLabel(fusion: FusionPayload) {
       ? `semantic ${fusion.dense_weight.toFixed(1)} / keyword ${fusion.lexical_weight.toFixed(1)}`
       : "weights not recorded";
   return `${algorithm} / ${version} / ${rankConstant} / ${weights}`;
+}
+
+function rerankerPayload(value: unknown): RerankerInfo | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as RerankerInfo;
+}
+
+function rerankerLabel(reranker: RerankerInfo) {
+  const identity = [
+    reranker.algorithm || "unknown",
+    reranker.version || "unversioned",
+    `config ${reranker.config_version || "unversioned"}`
+  ];
+  const provider = [reranker.provider, reranker.model].filter(Boolean).join(" / ");
+  if (provider) {
+    identity.push(provider);
+  }
+  return identity.join(" / ");
+}
+
+function relevanceGatePayload(value: unknown): RelevanceGateInfo | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as RelevanceGateInfo;
+}
+
+function relevanceGateLabel(gate: RelevanceGateInfo) {
+  return `${gate.policy || "unknown"} / ${gate.version || "unversioned"} / config ${gate.config_version || "unversioned"}`;
 }
 
 function retrievedMemories(payload: Record<string, unknown>): RetrievedMemoryPayload[] {

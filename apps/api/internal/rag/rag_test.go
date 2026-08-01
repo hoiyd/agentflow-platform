@@ -1,6 +1,7 @@
 package rag
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -169,7 +170,15 @@ func TestRerankDocumentChunksBoostsLexicalAndMetadataMatches(t *testing.T) {
 		},
 	}
 
-	reranked := Rerank("做饭", ReciprocalRankFusion(items), 2)
+	rerankResult, err := NewHeuristicReranker(DefaultHeuristicRerankerConfig()).Rerank(context.Background(), RerankRequest{
+		Query:      "做饭",
+		Candidates: ReciprocalRankFusion(items),
+		Limit:      2,
+	})
+	if err != nil {
+		t.Fatalf("rerank: %v", err)
+	}
+	reranked := rerankResult.Items
 	if len(reranked) != 2 {
 		t.Fatalf("expected two reranked chunks, got %d", len(reranked))
 	}

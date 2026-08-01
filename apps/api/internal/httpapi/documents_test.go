@@ -170,6 +170,12 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if searchResponse.Fusion.Algorithm != "rrf" || searchResponse.Fusion.RankConstant != 60 || searchResponse.Fusion.DenseWeight != 1 || searchResponse.Fusion.LexicalWeight != 1 {
 		t.Fatalf("expected RRF configuration metadata, got %#v", searchResponse.Fusion)
 	}
+	if searchResponse.Reranker.Algorithm != "heuristic" || searchResponse.Reranker.Version != "heuristic-reranker-v1" || searchResponse.Reranker.ConfigVersion != "heuristic-default-v1" {
+		t.Fatalf("expected reranker configuration metadata, got %#v", searchResponse.Reranker)
+	}
+	if searchResponse.RelevanceGate.Policy != "heuristic" || searchResponse.RelevanceGate.Version != "heuristic-relevance-gate-v1" || searchResponse.RelevanceGate.ConfigVersion != "heuristic-relevance-default-v1" {
+		t.Fatalf("expected relevance gate configuration metadata, got %#v", searchResponse.RelevanceGate)
+	}
 	if searchResponse.Security.PolicyVersion != domain.RAGPromptGuardPolicyVersion || !searchResponse.Security.UntrustedContext || searchResponse.Security.CheckedCandidates != 1 || searchResponse.Security.BlockedCandidates != 0 {
 		t.Fatalf("expected safe knowledge security metadata, got %#v", searchResponse.Security)
 	}
@@ -204,7 +210,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if items[0].RRFScore <= 0 {
 		t.Fatalf("expected RRF score on search result, got %#v", items[0])
 	}
-	if !strings.Contains(searchRecorder.Body.String(), `"lexical_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"lexical_score"`) || !strings.Contains(searchRecorder.Body.String(), `"rrf_score"`) || !strings.Contains(searchRecorder.Body.String(), `"fusion_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"rank_constant":60`) || !strings.Contains(searchRecorder.Body.String(), `"policy_version":"rag-prompt-guard-v1"`) || !strings.Contains(searchRecorder.Body.String(), `"context_items"`) || !strings.Contains(searchRecorder.Body.String(), `"citation_sources"`) || !strings.Contains(searchRecorder.Body.String(), `"context_selection"`) || !strings.Contains(searchRecorder.Body.String(), `"transformation":{"version":"context-dedup-merge-v1"`) {
+	if !strings.Contains(searchRecorder.Body.String(), `"lexical_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"lexical_score"`) || !strings.Contains(searchRecorder.Body.String(), `"rrf_score"`) || !strings.Contains(searchRecorder.Body.String(), `"fusion_rank"`) || !strings.Contains(searchRecorder.Body.String(), `"rank_constant":60`) || !strings.Contains(searchRecorder.Body.String(), `"reranker":{"algorithm":"heuristic","version":"heuristic-reranker-v1","config_version":"heuristic-default-v1"`) || !strings.Contains(searchRecorder.Body.String(), `"relevance_gate":{"policy":"heuristic","version":"heuristic-relevance-gate-v1","config_version":"heuristic-relevance-default-v1"`) || !strings.Contains(searchRecorder.Body.String(), `"policy_version":"rag-prompt-guard-v1"`) || !strings.Contains(searchRecorder.Body.String(), `"context_items"`) || !strings.Contains(searchRecorder.Body.String(), `"citation_sources"`) || !strings.Contains(searchRecorder.Body.String(), `"context_selection"`) || !strings.Contains(searchRecorder.Body.String(), `"transformation":{"version":"context-dedup-merge-v1"`) {
 		t.Fatalf("expected recall and fusion fields in API JSON, got %s", searchRecorder.Body.String())
 	}
 	if len(items[0].MatchedTerms) == 0 {
@@ -271,6 +277,12 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	}
 	if evalResponse.Fusion != searchResponse.Fusion {
 		t.Fatalf("expected search and evaluation to expose the same fusion metadata, got search=%#v evaluation=%#v", searchResponse.Fusion, evalResponse.Fusion)
+	}
+	if evalResponse.Reranker != searchResponse.Reranker {
+		t.Fatalf("expected search and evaluation to expose the same reranker metadata, got search=%#v evaluation=%#v", searchResponse.Reranker, evalResponse.Reranker)
+	}
+	if evalResponse.RelevanceGate != searchResponse.RelevanceGate {
+		t.Fatalf("expected search and evaluation to expose the same relevance gate metadata, got search=%#v evaluation=%#v", searchResponse.RelevanceGate, evalResponse.RelevanceGate)
 	}
 	if len(evalResponse.Cases) != 2 {
 		t.Fatalf("expected two evaluation cases, got %#v", evalResponse.Cases)

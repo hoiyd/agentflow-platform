@@ -9,6 +9,8 @@ import {
   type EmbeddingInfo,
   type FusionInfo,
   type KnowledgeSecurityInfo,
+  type RerankerInfo,
+  type RelevanceGateInfo,
   type RAGEvaluationCase,
   type RAGEvaluationRunResponse,
   type RetrievedDocumentChunk,
@@ -48,6 +50,8 @@ export function useKnowledgeWorkbench() {
   const [contextSelection, setContextSelection] = useState<ContextSelectionInfo | null>(null);
   const [searchEmbedding, setSearchEmbedding] = useState<EmbeddingInfo | null>(null);
   const [searchFusion, setSearchFusion] = useState<FusionInfo | null>(null);
+  const [searchReranker, setSearchReranker] = useState<RerankerInfo | null>(null);
+  const [searchRelevanceGate, setSearchRelevanceGate] = useState<RelevanceGateInfo | null>(null);
   const [searchSecurity, setSearchSecurity] = useState<KnowledgeSecurityInfo | null>(null);
   const [noMatchReason, setNoMatchReason] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
@@ -145,6 +149,8 @@ export function useKnowledgeWorkbench() {
       setContextSelection(response.context_selection ?? null);
       setSearchEmbedding(response.embedding ?? null);
       setSearchFusion(response.fusion ?? null);
+      setSearchReranker(response.reranker ?? null);
+      setSearchRelevanceGate(response.relevance_gate ?? null);
       setSearchSecurity(response.security ?? null);
       setNoMatchReason(response.no_match ? response.reason ?? "No confident match found." : "");
     } catch (searchError) {
@@ -240,6 +246,8 @@ export function useKnowledgeWorkbench() {
     results,
     searchEmbedding,
     searchFusion,
+    searchReranker,
+    searchRelevanceGate,
     searchSecurity,
     selectedDocument,
     selectedDocumentId,

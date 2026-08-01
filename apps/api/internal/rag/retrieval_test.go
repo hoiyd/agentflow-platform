@@ -67,7 +67,7 @@ func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
 	}}
 	pipeline := NewRetrievalPipeline(store)
 
-	response, err := pipeline.Search(domain.DocumentSearch{
+	response, err := pipeline.Search(context.Background(), domain.DocumentSearch{
 		Query: "launch password",
 		Limit: 3,
 	}, 3, Embedding{Vector: []float64{1, 0, 0}, Provider: "test", Model: "embedding-v1", Dimensions: 3})
@@ -94,6 +94,12 @@ func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
 	}
 	if response.Fusion != RRFInfo() {
 		t.Fatalf("expected active fusion metadata, got %#v", response.Fusion)
+	}
+	if response.Reranker != NewHeuristicReranker(DefaultHeuristicRerankerConfig()).Info() {
+		t.Fatalf("expected active reranker metadata, got %#v", response.Reranker)
+	}
+	if response.RelevanceGate != NewHeuristicRelevanceGate(DefaultHeuristicRelevanceGateConfig()).Info() {
+		t.Fatalf("expected active relevance gate metadata, got %#v", response.RelevanceGate)
 	}
 	if response.Items[0].Confidence == "" || response.Items[0].Confidence == "low" {
 		t.Fatalf("expected relevant result to pass the gate, got %#v", response.Items[0])
@@ -130,7 +136,7 @@ func TestRetrievalPipelineRecallsIdentifierOutsideDenseCandidates(t *testing.T) 
 	}
 	pipeline := NewRetrievalPipeline(store)
 
-	response, err := pipeline.Search(domain.DocumentSearch{Query: "AUTH-7F31 怎么解决", Limit: 3}, 3, Embedding{
+	response, err := pipeline.Search(context.Background(), domain.DocumentSearch{Query: "AUTH-7F31 怎么解决", Limit: 3}, 3, Embedding{
 		Vector: []float64{1, 0, 0}, Provider: "test", Model: "embedding-v1", Dimensions: 3,
 	})
 	if err != nil {
@@ -152,7 +158,7 @@ func TestRetrievalPipelineBlocksPromptInjectionBeforeFusion(t *testing.T) {
 	}}}
 	pipeline := NewRetrievalPipeline(store)
 
-	response, err := pipeline.Search(domain.DocumentSearch{Query: "injected instructions", Limit: 3}, 3, Embedding{
+	response, err := pipeline.Search(context.Background(), domain.DocumentSearch{Query: "injected instructions", Limit: 3}, 3, Embedding{
 		Vector: []float64{1}, Provider: "test", Model: "embedding-v1", Dimensions: 1,
 	})
 	if err != nil {
