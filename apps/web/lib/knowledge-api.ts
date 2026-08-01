@@ -92,6 +92,12 @@ export type RerankerInfo = {
   model?: string;
 };
 
+export type RelevanceGateInfo = {
+  policy: string;
+  version: string;
+  config_version: string;
+};
+
 export type KnowledgeSecurityDecision = {
   document_id: string;
   chunk_id: string;
@@ -139,6 +145,7 @@ export type DocumentSearchResponse = {
   embedding?: EmbeddingInfo;
   fusion?: FusionInfo;
   reranker?: RerankerInfo;
+  relevance_gate?: RelevanceGateInfo;
   security?: KnowledgeSecurityInfo;
   no_match?: boolean;
   reason?: string;
@@ -182,6 +189,7 @@ export type RAGEvaluationRunResponse = {
   embedding?: EmbeddingInfo;
   fusion?: FusionInfo;
   reranker?: RerankerInfo;
+  relevance_gate?: RelevanceGateInfo;
 };
 
 export type DocumentDetail = {
@@ -290,6 +298,7 @@ export async function searchRAG(input: {
     embedding: payload.embedding,
     fusion: payload.fusion,
     reranker: payload.reranker,
+    relevance_gate: payload.relevance_gate,
     security: payload.security,
     no_match: payload.no_match,
     reason: payload.reason

@@ -104,13 +104,20 @@ ranks remain distinguishable during manual verification.
 
 Reranking is injected into the Retrieval Pipeline through the `Reranker`
 interface. The default `HeuristicReranker` preserves the existing lexical,
-metadata, evidence, and document-diversity policy. It reports
+metadata, evidence, and document-diversity scoring policy. It reports
 `heuristic-reranker-v1` with configuration `heuristic-default-v1` in search,
 evaluation, and retrieval-trace metadata. The interface accepts a request
 context and returns `RerankResult` with the actual per-request implementation
 metadata, so a future Cross-Encoder can support cancellation, provider failure
 handling, model routing, and fallback without changing the pipeline contract.
-Relevance gating remains the next independent stage.
+
+The versioned `RelevanceGate` is the next independent stage. It ignores any
+incoming `confidence` or `filter_reason`, classifies candidates from validated
+ranking and recall evidence, then owns filtering and final rank compaction. The
+default policy reports `heuristic-relevance-gate-v1` with configuration
+`heuristic-relevance-default-v1`. Model-backed rerankers must return normalized
+scores in `[0,1]`; malformed metadata, unknown/duplicate candidates, invalid
+ranks, or non-finite scores fail the pipeline instead of bypassing the Gate.
 
 The UI labels the dense/vector path as **Semantic** and the lexical path as
 **Keyword**. These user-facing names map to the existing `vector_rank`,

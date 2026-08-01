@@ -98,6 +98,9 @@ func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
 	if response.Reranker != NewHeuristicReranker(DefaultHeuristicRerankerConfig()).Info() {
 		t.Fatalf("expected active reranker metadata, got %#v", response.Reranker)
 	}
+	if response.RelevanceGate != NewHeuristicRelevanceGate(DefaultHeuristicRelevanceGateConfig()).Info() {
+		t.Fatalf("expected active relevance gate metadata, got %#v", response.RelevanceGate)
+	}
 	if response.Items[0].Confidence == "" || response.Items[0].Confidence == "low" {
 		t.Fatalf("expected relevant result to pass the gate, got %#v", response.Items[0])
 	}

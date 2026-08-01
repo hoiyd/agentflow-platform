@@ -102,7 +102,7 @@ func evidenceScore(query string, queryTerms []string, item domain.RetrievedDocum
 	return score
 }
 
-func relevanceConfidence(item domain.RetrievedDocumentChunk) (string, string) {
+func relevanceConfidence(item domain.RetrievedDocumentChunk, reranker domain.RerankerInfo) (string, string) {
 	if item.LexicalRank > 0 && item.LexicalScore >= 0.95 {
 		return "high", "strong lexical recall match"
 	}
@@ -115,10 +115,22 @@ func relevanceConfidence(item domain.RetrievedDocumentChunk) (string, string) {
 	if item.Similarity >= 0.60 {
 		return "medium", "vector similarity passed conservative gate"
 	}
+	if reranker.Algorithm != heuristicRerankerAlgorithm {
+		if item.RerankScore >= 0.75 {
+			return "high", "model reranker score passed high-confidence gate"
+		}
+		if item.RerankScore >= 0.58 {
+			return "medium", "model reranker score passed relevance gate"
+		}
+	}
 	if len(item.MatchedTerms) > 0 && item.Similarity >= 0.30 {
 		return "medium", "evidence terms matched with acceptable similarity"
 	}
-	if item.RerankScore >= 0.58 && len(item.MatchedTerms) > 0 {
+	// The v1 heuristic policy classified before EvidenceScore was added to the
+	// final rank score. Subtract it here to preserve that behavior after the Gate
+	// became an independent stage.
+	heuristicScore := item.RerankScore - item.EvidenceScore
+	if reranker.Algorithm == heuristicRerankerAlgorithm && heuristicScore >= 0.58 && len(item.MatchedTerms) > 0 {
 		return "medium", "rerank score passed with evidence"
 	}
 	if item.LexicalRank > 0 && item.LexicalScore >= 0.20 && len(item.MatchedTerms) > 0 {

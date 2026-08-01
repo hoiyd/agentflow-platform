@@ -129,6 +129,11 @@ knowledge for model context.
     "version": "heuristic-reranker-v1",
     "config_version": "heuristic-default-v1"
   },
+  "relevance_gate": {
+    "policy": "heuristic",
+    "version": "heuristic-relevance-gate-v1",
+    "config_version": "heuristic-relevance-default-v1"
+  },
   "security": {
     "policy_version": "rag-prompt-guard-v1",
     "untrusted_context": true,
@@ -178,6 +183,12 @@ The top-level `reranker` object identifies the active implementation and its
 immutable configuration through `algorithm`, `version`, and `config_version`.
 Optional `provider` and `model` fields are reserved for model-backed rerankers.
 Search, evaluation, and Agent retrieval traces expose the same metadata.
+
+The independent `relevance_gate` object identifies the policy that classified
+and filtered reranked candidates. Reranker-provided confidence is never trusted;
+the Gate owns `confidence` and `filter_reason`. Invalid Reranker output, including
+missing identity metadata, unknown candidates, invalid ranks, non-finite scores,
+or non-normalized model-backed scores, is returned as a pipeline error.
 
 ### Context Selection
 

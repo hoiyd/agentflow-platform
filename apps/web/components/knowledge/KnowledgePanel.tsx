@@ -8,6 +8,7 @@ import type {
   FusionInfo,
   KnowledgeSecurityInfo,
   RerankerInfo,
+  RelevanceGateInfo,
   RAGEvaluationRunResponse,
   RetrievedDocumentChunk
 } from "../../lib/knowledge-api";
@@ -38,6 +39,7 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
     searchEmbedding,
     searchFusion,
     searchReranker,
+    searchRelevanceGate,
     searchSecurity,
     selectedDocument,
     selectedDocumentId,
@@ -208,6 +210,7 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
         <EmbeddingStatus embedding={searchEmbedding} hasSearched={hasSearched} />
         <FusionStatus fusion={searchFusion} hasSearched={hasSearched} />
         <RerankerStatus hasSearched={hasSearched} reranker={searchReranker} />
+        <RelevanceGateStatus gate={searchRelevanceGate} hasSearched={hasSearched} />
         <KnowledgeSecurityStatus hasSearched={hasSearched} security={searchSecurity} />
         <ContextSelectionStatus hasSearched={hasSearched} selection={contextSelection} />
         {hasSearched && noMatchReason ? <div className="rag-no-match">{noMatchReason}</div> : null}
@@ -395,6 +398,7 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
       <EmbeddingStatus embedding={result.embedding ?? null} hasSearched />
       <FusionStatus fusion={result.fusion ?? null} hasSearched />
       <RerankerStatus hasSearched reranker={result.reranker ?? null} />
+      <RelevanceGateStatus gate={result.relevance_gate ?? null} hasSearched />
       <div className="evaluation-cases">
         {result.cases.map((item) => (
           <article className={`evaluation-case ${item.hit ? "hit" : "miss"}`} key={item.id}>
@@ -587,6 +591,27 @@ function RerankerStatus({ reranker, hasSearched }: { reranker: RerankerInfo | nu
         Reranker: {reranker.algorithm} / {reranker.version}
       </span>
       <span>{[`Config ${reranker.config_version}`, provider].filter(Boolean).join(" / ")}</span>
+    </div>
+  );
+}
+
+function RelevanceGateStatus({ gate, hasSearched }: { gate: RelevanceGateInfo | null; hasSearched: boolean }) {
+  if (!hasSearched) {
+    return null;
+  }
+  if (!gate) {
+    return (
+      <div className="embedding-status warning">
+        <span>Relevance Gate: metadata unavailable</span>
+      </div>
+    );
+  }
+  return (
+    <div className="embedding-status">
+      <span>
+        Relevance Gate: {gate.policy} / {gate.version}
+      </span>
+      <span>Config {gate.config_version}</span>
     </div>
   );
 }

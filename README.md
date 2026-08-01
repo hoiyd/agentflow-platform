@@ -86,7 +86,7 @@ orchestration policy.
 | --- | --- | --- |
 | Agent orchestration | Direct, plan-and-review Multi-Agent, and bounded Autonomous modes share one Turn Engine | [Backend architecture](docs/backend-architecture.md) |
 | Reproducibility | Each Run freezes model, agent, tool schema, context policy, and budget in a Runtime Snapshot | [Terms](docs/terms.md#runtime-snapshot) |
-| Hybrid RAG | Independent semantic and keyword recall, Reciprocal Rank Fusion, versioned pluggable reranking, relevance gating, context transformation, and native `[S1]` citations | [Knowledge / RAG](docs/knowledge-rag.md) |
+| Hybrid RAG | Independent semantic and keyword recall, Reciprocal Rank Fusion, versioned pluggable reranking and relevance gating, context transformation, and native `[S1]` citations | [Knowledge / RAG](docs/knowledge-rag.md) |
 | Context control | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [Context management](docs/context-management.md) |
 | Resource safety | Run admission, provider RPM/TPM, retry policy, per-Run budget reservations/settlements, tool limits, and autonomous guards have distinct owners | [Execution controls](docs/execution-controls.md) |
 | Durable memory | Explicit rules plus optional shadow-mode model extraction propose auditable candidates before embedding | [Memory management](docs/memory-management.md) |

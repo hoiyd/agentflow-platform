@@ -63,7 +63,6 @@ func (r *HeuristicReranker) Rerank(_ context.Context, request RerankRequest) (Re
 		items[index].MatchedTerms = matchedTerms(request.Query, queryTerms, items[index])
 		items[index].EvidenceCoverage = evidenceCoverage(queryTerms, items[index].MatchedTerms)
 		items[index].EvidenceScore = evidenceScore(request.Query, queryTerms, items[index])
-		items[index].Confidence, items[index].FilterReason = relevanceConfidence(items[index])
 		items[index].RerankScore += items[index].EvidenceScore
 	}
 	sort.SliceStable(items, func(i, j int) bool {

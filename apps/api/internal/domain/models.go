@@ -722,6 +722,12 @@ type RerankerInfo struct {
 	Model         string `json:"model,omitempty"`
 }
 
+type RelevanceGateInfo struct {
+	Policy        string `json:"policy"`
+	Version       string `json:"version"`
+	ConfigVersion string `json:"config_version"`
+}
+
 type KnowledgeSecurityDecision struct {
 	DocumentID string   `json:"document_id"`
 	ChunkID    string   `json:"chunk_id"`
@@ -768,6 +774,7 @@ type DocumentSearchResponse struct {
 	Embedding        EmbeddingInfo            `json:"embedding"`
 	Fusion           FusionInfo               `json:"fusion"`
 	Reranker         RerankerInfo             `json:"reranker"`
+	RelevanceGate    RelevanceGateInfo        `json:"relevance_gate"`
 	Security         KnowledgeSecurityInfo    `json:"security"`
 	NoMatch          bool                     `json:"no_match,omitempty"`
 	Reason           string                   `json:"reason,omitempty"`
@@ -818,9 +825,10 @@ type RAGEvaluationCaseResult struct {
 }
 
 type RAGEvaluationRunResponse struct {
-	Summary   RAGEvaluationSummary      `json:"summary"`
-	Cases     []RAGEvaluationCaseResult `json:"cases"`
-	Embedding EmbeddingInfo             `json:"embedding"`
-	Fusion    FusionInfo                `json:"fusion"`
-	Reranker  RerankerInfo              `json:"reranker"`
+	Summary       RAGEvaluationSummary      `json:"summary"`
+	Cases         []RAGEvaluationCaseResult `json:"cases"`
+	Embedding     EmbeddingInfo             `json:"embedding"`
+	Fusion        FusionInfo                `json:"fusion"`
+	Reranker      RerankerInfo              `json:"reranker"`
+	RelevanceGate RelevanceGateInfo         `json:"relevance_gate"`
 }

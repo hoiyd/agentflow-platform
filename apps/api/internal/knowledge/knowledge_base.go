@@ -116,6 +116,7 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 	var embedding domain.EmbeddingInfo
 	var fusion domain.FusionInfo
 	var reranker domain.RerankerInfo
+	var relevanceGate domain.RelevanceGateInfo
 	for _, evaluationCase := range request.Cases {
 		response, err := s.Search(ctx, domain.DocumentSearch{
 			Query:         evaluationCase.Query,
@@ -131,6 +132,7 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 			embedding = response.Embedding
 			fusion = response.Fusion
 			reranker = response.Reranker
+			relevanceGate = response.RelevanceGate
 		}
 		caseResult := rag.EvaluateCase(evaluationCase, response.Items)
 		caseResult.Security = response.Security
@@ -149,5 +151,5 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 			summary.Misses++
 		}
 	}
-	return domain.RAGEvaluationRunResponse{Summary: summary, Cases: results, Embedding: embedding, Fusion: fusion, Reranker: reranker}, nil
+	return domain.RAGEvaluationRunResponse{Summary: summary, Cases: results, Embedding: embedding, Fusion: fusion, Reranker: reranker, RelevanceGate: relevanceGate}, nil
 }

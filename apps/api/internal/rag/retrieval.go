@@ -30,8 +30,9 @@ type Embedding struct {
 }
 
 type RetrievalPipeline struct {
-	store    SearchStore
-	reranker Reranker
+	store         SearchStore
+	reranker      Reranker
+	relevanceGate RelevanceGate
 }
 
 func NewRetrievalPipeline(store SearchStore) *RetrievalPipeline {
@@ -39,10 +40,17 @@ func NewRetrievalPipeline(store SearchStore) *RetrievalPipeline {
 }
 
 func NewRetrievalPipelineWithReranker(store SearchStore, reranker Reranker) *RetrievalPipeline {
+	return NewRetrievalPipelineWithStages(store, reranker, nil)
+}
+
+func NewRetrievalPipelineWithStages(store SearchStore, reranker Reranker, relevanceGate RelevanceGate) *RetrievalPipeline {
 	if reranker == nil {
 		reranker = NewHeuristicReranker(DefaultHeuristicRerankerConfig())
 	}
-	return &RetrievalPipeline{store: store, reranker: reranker}
+	if relevanceGate == nil {
+		relevanceGate = NewHeuristicRelevanceGate(DefaultHeuristicRelevanceGateConfig())
+	}
+	return &RetrievalPipeline{store: store, reranker: reranker, relevanceGate: relevanceGate}
 }
 
 func EmbedQuery(ctx context.Context, query string, embed EmbedFunc) (Embedding, error) {
@@ -99,8 +107,22 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 	if err != nil {
 		return domain.DocumentSearchResponse{}, fmt.Errorf("rerank candidates: %w", err)
 	}
+	if err := validateRerankResult(RerankRequest{Query: search.Query, Candidates: items, Limit: requestedLimit}, rerankResult); err != nil {
+		return domain.DocumentSearchResponse{}, fmt.Errorf("validate reranker output: %w", err)
+	}
 	items = rerankResult.Items
-	items = ApplyRelevanceGate(items)
+	relevanceGate := p.relevanceGate
+	if relevanceGate == nil {
+		relevanceGate = NewHeuristicRelevanceGate(DefaultHeuristicRelevanceGateConfig())
+	}
+	gateResult, err := relevanceGate.Evaluate(ctx, RelevanceGateRequest{Query: search.Query, Candidates: items, Reranker: rerankResult.Info})
+	if err != nil {
+		return domain.DocumentSearchResponse{}, fmt.Errorf("apply relevance gate: %w", err)
+	}
+	if err := validateRelevanceGateResult(items, gateResult); err != nil {
+		return domain.DocumentSearchResponse{}, fmt.Errorf("validate relevance gate output: %w", err)
+	}
+	items = gateResult.Items
 	contextItems, contextSelection, contextSecurity, err := NewContextSelector(p.store).Select(search, items)
 	if err != nil {
 		return domain.DocumentSearchResponse{}, err
@@ -124,8 +146,9 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 			Dimensions: embedding.Dimensions,
 			Estimated:  embedding.Estimated,
 		},
-		Reranker: rerankResult.Info,
-		NoMatch:  len(items) == 0,
+		Reranker:      rerankResult.Info,
+		RelevanceGate: gateResult.Info,
+		NoMatch:       len(items) == 0,
 	}
 	if response.NoMatch {
 		if security.BlockedCandidates > 0 && security.BlockedCandidates == security.CheckedCandidates {
