@@ -126,10 +126,10 @@ func relevanceConfidence(item domain.RetrievedDocumentChunk, reranker domain.Rer
 	if len(item.MatchedTerms) > 0 && item.Similarity >= 0.30 {
 		return "medium", "evidence terms matched with acceptable similarity"
 	}
-	// The v1 heuristic policy classified before EvidenceScore was added to the
-	// final rank score. Subtract it here to preserve that behavior after the Gate
-	// became an independent stage.
-	heuristicScore := item.RerankScore - item.EvidenceScore
+	// The v1 heuristic policy classified before EvidenceScore and the later
+	// diversity penalty changed the final score. Undo both transformations to
+	// preserve that behavior after the Gate became an independent stage.
+	heuristicScore := item.RerankScore - item.EvidenceScore + item.DiversityPenalty
 	if reranker.Algorithm == heuristicRerankerAlgorithm && heuristicScore >= 0.58 && len(item.MatchedTerms) > 0 {
 		return "medium", "rerank score passed with evidence"
 	}

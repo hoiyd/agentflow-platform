@@ -51,12 +51,19 @@ func (r *HeuristicReranker) Info() domain.RerankerInfo {
 }
 
 func (r *HeuristicReranker) Rerank(_ context.Context, request RerankRequest) (RerankResult, error) {
-	items := request.Candidates
+	items := append([]domain.RetrievedDocumentChunk(nil), request.Candidates...)
 	if len(items) == 0 {
 		return RerankResult{Items: items, Info: r.Info()}, nil
 	}
+	if request.Limit <= 0 {
+		return RerankResult{Items: []domain.RetrievedDocumentChunk{}, Info: r.Info()}, nil
+	}
 	queryTerms := QueryTerms(request.Query)
 	for index := range items {
+		items[index].RerankRank = 0
+		items[index].DiversityPenalty = 0
+		items[index].Confidence = ""
+		items[index].FilterReason = ""
 		items[index].LexicalBoost = lexicalBoost(request.Query, queryTerms, items[index].Chunk.Content)
 		items[index].MetadataBoost = metadataBoost(request.Query, queryTerms, items[index])
 		items[index].RerankScore = normalizedRRFScore(items[index].RRFScore) + items[index].LexicalBoost + items[index].MetadataBoost

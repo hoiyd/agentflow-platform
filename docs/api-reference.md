@@ -186,9 +186,12 @@ Search, evaluation, and Agent retrieval traces expose the same metadata.
 
 The independent `relevance_gate` object identifies the policy that classified
 and filtered reranked candidates. Reranker-provided confidence is never trusted;
-the Gate owns `confidence` and `filter_reason`. Invalid Reranker output, including
-missing identity metadata, unknown candidates, invalid ranks, non-finite scores,
-or non-normalized model-backed scores, is returned as a pipeline error.
+the Gate recomputes evidence from trusted source data and owns `confidence` and
+`filter_reason`. Rerankers must return a complete ordered Top-K without changing
+source or recall fields, and Gate output must be an ordered subset of that Top-K.
+Invalid stage output, including missing identity metadata, unknown candidates,
+invalid ranks, non-finite scores, or non-normalized model-backed scores, is
+returned as a pipeline error.
 
 ### Context Selection
 

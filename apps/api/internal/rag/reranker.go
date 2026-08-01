@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
@@ -33,8 +34,11 @@ func validateRerankResult(request RerankRequest, result RerankResult) error {
 	if err := validateRerankerInfo(result.Info); err != nil {
 		return err
 	}
-	if request.Limit > 0 && len(result.Items) > request.Limit {
-		return fmt.Errorf("returned %d items for limit %d", len(result.Items), request.Limit)
+	if request.Limit > 0 {
+		expectedItems := minInt(request.Limit, len(request.Candidates))
+		if len(result.Items) != expectedItems {
+			return fmt.Errorf("returned %d items; expected complete top-k of %d", len(result.Items), expectedItems)
+		}
 	}
 
 	candidates := make(map[string]domain.RetrievedDocumentChunk, len(request.Candidates))
@@ -51,6 +55,12 @@ func validateRerankResult(request RerankRequest, result RerankResult) error {
 		candidate, ok := candidates[item.Chunk.ID]
 		if !ok || candidate.Document.ID != item.Document.ID {
 			return fmt.Errorf("item %d references unknown candidate %q", index, item.Chunk.ID)
+		}
+		if item.Confidence != "" || item.FilterReason != "" {
+			return fmt.Errorf("item %d sets relevance-gate-owned classification fields", index)
+		}
+		if !reflect.DeepEqual(withoutRerankerOutput(candidate), withoutRerankerOutput(item)) {
+			return fmt.Errorf("item %d modifies upstream candidate fields", index)
 		}
 		if _, duplicate := seen[item.Chunk.ID]; duplicate {
 			return fmt.Errorf("item %d duplicates chunk %q", index, item.Chunk.ID)
@@ -70,6 +80,20 @@ func validateRerankResult(request RerankRequest, result RerankResult) error {
 		}
 	}
 	return nil
+}
+
+func withoutRerankerOutput(item domain.RetrievedDocumentChunk) domain.RetrievedDocumentChunk {
+	item.RerankRank = 0
+	item.LexicalBoost = 0
+	item.MetadataBoost = 0
+	item.DiversityPenalty = 0
+	item.RerankScore = 0
+	item.MatchedTerms = nil
+	item.EvidenceScore = 0
+	item.EvidenceCoverage = 0
+	item.Confidence = ""
+	item.FilterReason = ""
+	return item
 }
 
 func validateRerankerInfo(info domain.RerankerInfo) error {

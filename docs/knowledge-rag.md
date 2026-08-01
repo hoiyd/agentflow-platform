@@ -110,10 +110,14 @@ evaluation, and retrieval-trace metadata. The interface accepts a request
 context and returns `RerankResult` with the actual per-request implementation
 metadata, so a future Cross-Encoder can support cancellation, provider failure
 handling, model routing, and fallback without changing the pipeline contract.
+Rerankers must return the complete requested Top-K in score order and may only
+change ranking-owned fields; source content and recall evidence remain owned by
+the upstream pipeline.
 
 The versioned `RelevanceGate` is the next independent stage. It ignores any
-incoming `confidence` or `filter_reason`, classifies candidates from validated
-ranking and recall evidence, then owns filtering and final rank compaction. The
+incoming `confidence`, `filter_reason`, or derived evidence, recomputes evidence
+from the query and trusted candidate data, then owns filtering and final rank
+compaction. Gate output must remain an ordered subset of the reranked input. The
 default policy reports `heuristic-relevance-gate-v1` with configuration
 `heuristic-relevance-default-v1`. Model-backed rerankers must return normalized
 scores in `[0,1]`; malformed metadata, unknown/duplicate candidates, invalid
