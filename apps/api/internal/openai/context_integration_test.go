@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 
@@ -72,6 +73,143 @@ func TestToolRoundTripCreatesManifestPerLogicalModelCall(t *testing.T) {
 	}
 	if budgetController.estimates[0].OperationID == budgetController.estimates[1].OperationID {
 		t.Fatalf("tool selection and final response reused operation id %q", budgetController.estimates[0].OperationID)
+	}
+}
+
+func TestToolStreamReturnsDirectModelAnswer(t *testing.T) {
+	client := retryTestClient()
+	attempts := 0
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		attempts++
+		return modelHTTPResponse(200, `{
+			"choices":[{"message":{"role":"assistant","content":"direct answer"}}],
+			"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}
+		}`), nil
+	})}
+
+	events, errs := client.StreamAgentChatWithToolsTrace(
+		context.Background(), "Answer directly when no tool is needed.", nil, "say hello", tools.DefaultCatalog(), nil, "run-1", "stage-1",
+		[]domain.RetrievedMemory{{Memory: domain.Memory{ID: "memory-1", Content: "Remember the preferred greeting."}, Score: 0.9}},
+		[]domain.RetrievedDocumentChunk{{Chunk: domain.DocumentChunk{ID: "chunk-1", Content: "A grounded greeting."}, Score: 0.8}},
+	)
+	var output strings.Builder
+	for event := range events {
+		if event.Type == "delta" {
+			output.WriteString(event.Delta)
+		}
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("stream direct answer: %v", err)
+	}
+	if output.String() != "direct answer" || attempts != 1 {
+		t.Fatalf("unexpected direct answer: output=%q attempts=%d", output.String(), attempts)
+	}
+}
+
+func TestToolStreamFallsBackToJSONToolCallAndSummary(t *testing.T) {
+	client := retryTestClient()
+	attempts := 0
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		attempts++
+		switch attempts {
+		case 1:
+			return modelHTTPResponse(400, `{"error":{"message":"tool_choice is not supported","code":"invalid_request_error"}}`), nil
+		case 2:
+			return modelHTTPResponse(200, `{
+				"choices":[{"message":{"role":"assistant","content":"{\"action\":\"tool_call\",\"tool\":\"calculator\",\"arguments\":{\"expression\":\"2 + 3\"}}"}}]
+			}`), nil
+		default:
+			return modelHTTPResponse(200, "data: [DONE]\n\n"), nil
+		}
+	})}
+
+	events, errs := client.StreamAgentChatWithTools(
+		context.Background(), "Use the calculator when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(),
+	)
+	var output strings.Builder
+	var started, finished bool
+	for event := range events {
+		switch event.Type {
+		case "delta":
+			output.WriteString(event.Delta)
+		case "tool_start":
+			started = event.ToolName == "calculator"
+		case "tool_end":
+			finished = event.ToolName == "calculator" && event.Error == ""
+		}
+	}
+	if err := <-errs; err != nil {
+		t.Fatalf("stream capability fallback: %v", err)
+	}
+	if attempts != 3 || !started || !finished || output.String() != "Tool execution completed." {
+		t.Fatalf("unexpected capability fallback: attempts=%d started=%t finished=%t output=%q", attempts, started, finished, output.String())
+	}
+}
+
+func TestToolStreamReturnsTerminalSelectionError(t *testing.T) {
+	client := retryTestClient()
+	attempts := 0
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		attempts++
+		return modelHTTPResponse(401, `{"error":{"message":"invalid API key","code":"invalid_api_key"}}`), nil
+	})}
+
+	events, errs := client.StreamAgentChatWithTools(
+		context.Background(), "Use tools when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(),
+	)
+	for range events {
+	}
+	modelErr, ok := AsModelError(<-errs)
+	if !ok || modelErr.Kind != ErrorAuthentication || attempts != 1 {
+		t.Fatalf("expected terminal authentication error: attempts=%d err=%#v", attempts, modelErr)
+	}
+}
+
+func TestToolStreamReturnsCapabilityFallbackError(t *testing.T) {
+	client := retryTestClient()
+	attempts := 0
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		attempts++
+		if attempts == 1 {
+			return modelHTTPResponse(400, `{"error":{"message":"tool_choice is not supported","code":"invalid_request_error"}}`), nil
+		}
+		return modelHTTPResponse(401, `{"error":{"message":"invalid API key","code":"invalid_api_key"}}`), nil
+	})}
+
+	events, errs := client.StreamAgentChatWithTools(
+		context.Background(), "Use tools when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(),
+	)
+	for range events {
+	}
+	modelErr, ok := AsModelError(<-errs)
+	if !ok || modelErr.Kind != ErrorAuthentication || attempts != 2 {
+		t.Fatalf("expected capability fallback error: attempts=%d err=%#v", attempts, modelErr)
+	}
+}
+
+func TestToolStreamReturnsFinalStreamError(t *testing.T) {
+	client := retryTestClient()
+	attempts := 0
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		attempts++
+		if attempts == 1 {
+			return modelHTTPResponse(200, `{
+				"choices":[{"message":{"role":"assistant","tool_calls":[{
+					"id":"call-1","type":"function","function":{"name":"calculator","arguments":"{\"expression\":\"2 + 3\"}"}
+				}]}}]
+			}`), nil
+		}
+		return modelHTTPResponse(401, `{"error":{"message":"invalid API key","code":"invalid_api_key"}}`), nil
+	})}
+
+	events, errs := client.StreamAgentChatWithTools(
+		context.Background(), "Use the calculator when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(),
+	)
+	for range events {
+	}
+	modelErr, ok := AsModelError(<-errs)
+	if !ok || modelErr.Kind != ErrorAuthentication || attempts != 2 {
+		t.Fatalf("expected final stream error: attempts=%d err=%#v", attempts, modelErr)
 	}
 }
 
