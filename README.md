@@ -23,7 +23,7 @@ Budget, Event, Verification, or persistence policies apply.
 
 For focused questions and direct tool-assisted work. One selected Agent executes
 one Turn with the lowest orchestration overhead; retrieval, model/tool loops,
-streaming, budgets, and optional Completion Verification still apply.
+streaming, budgets, and optional Verification still apply.
 
 `User -> Agent Turn -> Result`
 
@@ -75,12 +75,13 @@ the merged model context. The same pipeline runs before Turns in all modes.
 
 ### Verification and Trace
 
-![Completion Contract, verification gate, evidence, and trace](docs/assets/completion-verification-demo.gif)
+![Completion Contract, Completion Gate, evidence, and trace](docs/assets/completion-verification-demo.gif)
 
 The focused runtime recording shows a frozen Completion Contract, a completed
 Single-mode Run, Usage/Replay, `verification.*` lifecycle events, and immutable
-Evidence. Verification is runtime outcome checking, not unit-test execution,
-and can be enabled for Single, Multi, or Loop Runs.
+Evidence. Verification checks one runtime outcome; it does not run the
+repository's Automated or Manual Tests. It can be enabled for Single, Multi,
+or Loop Runs.
 
 ## Why This Project Exists
 
@@ -140,20 +141,20 @@ exact lifecycle of each path.
 | [**Concurrency & backpressure**](docs/execution-controls.md#1-run-admission-and-conversation-concurrency) | Global Run admission, per-Conversation single-writer execution, bounded queues, model-request permits, RPM/TPM limits, and retry-aware slot release | [controller](apps/api/internal/concurrency/run_controller.go), [tests](apps/api/internal/concurrency/run_controller_test.go) |
 | [Tool governance](docs/agent-profiles.md#two-tool-control-layers) | Platform enablement and per-Agent allowlists are separate; the executor adds timeout, result limits, panic recovery, tracing, and serial/read-only/keyed concurrency | [executor](apps/api/internal/tools/executor.go), [tests](apps/api/internal/tools/executor_test.go) |
 | [Durable memory](docs/memory-management.md) | Explicit rules plus optional shadow-mode model extraction propose auditable candidates before embedding | [curator](apps/api/internal/memory/curator.go), [tests](apps/api/internal/memory/curator_test.go) |
-| [**Runtime outcome verification**](docs/completion-verification.md) | Frozen Completion Contracts run deterministic verifiers, persist immutable Evidence/Artifacts, and gate `run.completed` | [engine](apps/api/internal/verification/engine.go), [tests](apps/api/internal/verification/engine_test.go) |
+| [**Verification**](docs/verification.md) | Frozen Completion Contracts run deterministic verifiers, persist immutable Evidence/Artifacts, and gate `run.completed` | [engine](apps/api/internal/verification/engine.go), [tests](apps/api/internal/verification/engine_test.go) |
 | [**Tracing & replay**](docs/backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed Run/Stage/Turn/Model/Tool/Retrieval/Verification events, usage ledgers, Replay, and Episode reports explain what happened | [episode](apps/api/internal/httpapi/episode_report.go), [tests](apps/api/internal/httpapi/episode_report_test.go) |
 | [Provider and framework compatibility](docs/engineering-decisions.md#openai-compatible-does-not-mean-capability-identical) | Native orchestration keeps policy ownership; LangChainGo stays at the executor edge, while typed capability fallbacks handle provider differences in Tool Calling and stream usage metadata | [executors](apps/api/internal/agent/executor.go), [tests](apps/api/internal/openai/context_integration_test.go) |
 
 Performance statements above describe implemented controls, not synthetic
-benchmark claims. Completion Verification evaluates configured outcomes at
-runtime; unit and integration tests validate the codebase. The same
-Run/Event/Budget/Verification contracts apply across execution modes and
-File/Postgres persistence.
+benchmark claims. Verification evaluates configured Run outcomes; Automated and
+Manual Tests validate system behavior. The same Run, Event, Budget, and
+Verification contracts apply across execution modes and File/Postgres
+persistence.
 
 ## Three-to-Five-Minute Demo
 
-1. Start the complete local stack. No API key is required for deterministic
-   workflow verification:
+1. Start the complete local stack. No API key is required for the deterministic
+   workflow demonstration:
 
    ```bash
    make quickstart
@@ -223,7 +224,7 @@ These boundaries are documented rather than hidden:
   does not yet force the model to abstain from answering from prior knowledge.
 - The local hash embedding fallback is for deterministic development, not
   retrieval-quality evaluation.
-- Completion Verification proves configured invariants; it does not make every
+- Verification proves configured invariants; it does not make every
   subjective answer factually correct.
 - Progress guards for repeated actions or oscillation, and asynchronous external
   evidence ingestion, are planned rather than implemented.
@@ -273,7 +274,7 @@ GOCACHE=/private/tmp/agentflow-go-build-cache go run ./cmd/server
 
 The API listens on `http://127.0.0.1:8080` by default. Set `BIND_ADDRESS`
 explicitly when a trusted deployment needs another interface. With no API key, the
-backend uses deterministic local behavior suitable for workflow verification.
+backend uses deterministic local behavior suitable for exercising workflows.
 
 Frontend, in another terminal:
 
@@ -286,7 +287,7 @@ npm run dev
 Open `http://localhost:3000`. Set `NEXT_PUBLIC_API_BASE_URL` only when the API
 is hosted elsewhere.
 
-### Verification
+### Automated Tests
 
 ```bash
 make test

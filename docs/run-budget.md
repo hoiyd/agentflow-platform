@@ -120,7 +120,7 @@ GET /api/runs/{id}/usage
 GET /api/runs/{id}/replay
 ```
 
-Replay preserves Context metadata, Completion Verification Evidence/Artifacts,
+Replay preserves Context metadata, Verification Evidence/Artifacts,
 Run Events, and the same Usage Ledger.
 
 ## Progress Guard
@@ -138,4 +138,4 @@ Repeated tool signatures, repeated results/errors, oscillation detection, and
 - Waiting and queue time do not consume active runtime.
 - Snapshot compatibility does not silently apply new limits to legacy Runs.
 
-Focused commands are listed in [Verification guide](verification-guide.md).
+Focused commands are listed in [Manual tests](manual-tests.md).

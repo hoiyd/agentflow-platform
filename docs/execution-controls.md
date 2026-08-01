@@ -18,7 +18,7 @@ capacity, resource consumption, timeouts, and stopping conditions.
 | One prompt does not fit the model context window | Context Assembly | cumulative Run tokens |
 | Autonomous execution loops or expands output | Autonomous Loop Guards | Model Retry |
 | A tool hangs, returns too much, or is unsafe to parallelize | Tool Execution Policy | Run concurrency |
-| Verification retries or artifacts grow without bounds | Verification Contract and boundaries | Model Retry |
+| Verification retries or artifacts grow without bounds | Completion Contract and verifier boundaries | Model Retry |
 | A crashed process leaves a Run in `running` | Recovery stale threshold | Run runtime budget |
 
 ## Control Types
@@ -221,7 +221,7 @@ truncation marker.
 Tool timeout bounds one handler. Run runtime budget bounds cumulative active
 execution; neither substitutes for the other.
 
-## 8. Completion Verification
+## 8. Verification
 
 Verification runs only when the initial request includes a
 `completion_contract`.

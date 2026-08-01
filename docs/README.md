@@ -27,7 +27,7 @@ For a focused backend or AI-systems review, use this path:
 | **Performance** | [Execution controls](execution-controls.md) | Streaming, bounded work, context/output capacity, Run budgets, timeouts, and tuning order. The project makes no unsupported benchmark claim. |
 | **Concurrency** | [Run admission and Conversation concurrency](execution-controls.md#1-run-admission-and-conversation-concurrency) | Global admission, bounded queueing, per-Conversation single-writer behavior, model-request permits, RPM/TPM, and retry slot ownership. |
 | **Tracing** | [Backend architecture](backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed lifecycle events, persisted payloads, Usage Ledger separation, Replay, and Episode projections. |
-| **Verification** | [Completion verification](completion-verification.md) | Runtime outcome contracts, versioned verifiers, immutable Evidence/Artifacts, and the Completion Gate. This is separate from unit/integration testing. |
+| **Verification** | [Verification](verification.md) | Runtime outcome contracts, versioned verifiers, immutable Evidence/Artifacts, and the Completion Gate. This is separate from Automated and Manual Tests. |
 
 The same runtime contracts apply to Single, Multi, and Loop execution. The API
 names the Loop path `autonomous`. File/Postgres stores and provider/framework
@@ -44,7 +44,7 @@ the project.
 | [Execution controls](execution-controls.md) | Which layer owns concurrency, rate limits, retries, budgets, context capacity, and stopping rules? |
 | [Run Budget](run-budget.md) | How are logical calls, provider usage, tools, runtime, and cost accounted for? |
 | [Context management](context-management.md) | How is each model input assembled, bounded, compacted, and explained? |
-| [Completion verification](completion-verification.md) | How can a candidate output be checked before a Run is considered complete? |
+| [Verification](verification.md) | How can a candidate output be checked before a Run is considered complete? |
 
 ## AI Context Systems
 
@@ -57,9 +57,9 @@ the project.
 
 | Document | Question answered |
 | --- | --- |
-| [Backend configuration](backend-configuration.md) | Which environment variables configure providers, storage, limits, tools, and verification? |
+| [Backend configuration](backend-configuration.md) | Which environment variables configure providers, storage, limits, tools, and Verification? |
 | [API reference](api-reference.md) | Which HTTP endpoints and response contracts are available? |
-| [Verification guide](verification-guide.md) | How can the major behaviors be reproduced manually or in integration tests? |
+| [Manual tests](manual-tests.md) | How can the major behaviors be tested manually? |
 | [Frontend design principles](../frontend_uex_design.md) | Which product and interaction constraints guide the workbench UI? |
 | [Stylesheet organization](../apps/web/app/styles/README.md) | Where should frontend style changes be made? |
 

@@ -36,7 +36,7 @@ export function CompletionVerificationPanel({
       <div className="verification-config-header">
         <div>
           <span>Run policy</span>
-          <strong>Completion verification</strong>
+          <strong>Verification</strong>
         </div>
         <label className="verification-enabled-toggle">
           <input

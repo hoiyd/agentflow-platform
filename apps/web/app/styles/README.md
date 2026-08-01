@@ -44,5 +44,5 @@ Add new rules to the narrowest matching module. Shared tokens belong in `foundat
 6. When a legacy rule is fully superseded, remove it and its override together.
 
 The long-term direction is to make the Workbench modules authoritative and
-retire duplicated legacy rules incrementally, with layout verification after
-each ownership move.
+retire duplicated legacy rules incrementally, with layout tests after each
+ownership move.

@@ -87,7 +87,7 @@ remain stable across normal laptop and wide-monitor viewports.
 - The headline describes the literal product category or operating benefit; it
   does not use generic AI transformation language.
 - The runtime visual shows real platform concepts such as stages, retrieval,
-  tools, usage, and verification.
+  tools, usage, and Verification.
 - No badges, metric strips, floating callouts, testimonial blocks, or feature
   card grids belong in the hero.
 - A hint of the next section remains visible to establish page continuation.
@@ -101,4 +101,4 @@ remain stable across normal laptop and wide-monitor viewports.
 - Prefer stable CSS grid tracks, `minmax`, explicit aspect ratios, and bounded
   dimensions over viewport-font scaling.
 - Validate behavior through lint, tests, and production build. Use browser-level
-  visual verification when a task changes layout or interaction geometry.
+  visual tests when a task changes layout or interaction geometry.

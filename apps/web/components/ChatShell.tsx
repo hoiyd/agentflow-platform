@@ -597,7 +597,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     try {
       completionContract = buildCompletionContract(completionVerification);
     } catch (contractError) {
-      setError(contractError instanceof Error ? contractError.message : "Invalid completion verification policy");
+      setError(contractError instanceof Error ? contractError.message : "Invalid verification policy");
       return;
     }
 

@@ -1,3 +1,7 @@
+// Package verification implements opt-in Verification for one Run.
+// It evaluates a persisted candidate output against a frozen Completion
+// Contract and records runtime evidence. Repository unit and integration tests
+// are separate development and CI concerns.
 package verification
 
 import (
@@ -46,6 +50,8 @@ type Result struct {
 	Artifacts []Artifact
 }
 
+// Verifier evaluates one Run subject under a frozen verifier specification.
+// Implementations produce runtime evidence; they are not Go test adapters.
 type Verifier interface {
 	Type() domain.VerifierType
 	Version() string

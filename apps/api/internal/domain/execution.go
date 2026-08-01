@@ -164,8 +164,8 @@ type ChatRequest struct {
 	Message        string `json:"message"`
 	Mode           string `json:"mode"`
 	Executor       string `json:"executor"`
-	// CompletionContract explicitly enables verification for the new Run.
-	// Omitting it leaves verification_status=not_required in every chat mode.
+	// CompletionContract explicitly enables Verification for the new Run.
+	// Omitting it leaves verification_status=not_required in every mode.
 	CompletionContract *CompletionContract `json:"completion_contract,omitempty"`
 }
 
