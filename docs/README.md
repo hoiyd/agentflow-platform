@@ -14,6 +14,21 @@ source directory. Start with the path that matches the depth of review you need.
 4. [Backend architecture](backend-architecture.md): package ownership,
    dependency direction, and main call paths.
 
+## Runtime Systems Review
+
+For a focused backend or AI-systems review, use this path:
+
+| Topic | Start here | What to inspect |
+| --- | --- | --- |
+| **Performance** | [Execution controls](execution-controls.md) | Streaming, bounded work, context/output capacity, Run budgets, timeouts, and tuning order. The project makes no unsupported benchmark claim. |
+| **Concurrency** | [Run admission and Conversation concurrency](execution-controls.md#1-run-admission-and-conversation-concurrency) | Global admission, bounded queueing, per-Conversation single-writer behavior, model-request permits, RPM/TPM, and retry slot ownership. |
+| **Tracing** | [Backend architecture](backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed lifecycle events, persisted payloads, Usage Ledger separation, Replay, and Episode projections. |
+| **Verification** | [Completion verification](completion-verification.md) | Runtime outcome contracts, versioned verifiers, immutable Evidence/Artifacts, and the Completion Gate. This is separate from unit/integration testing. |
+
+The same runtime contracts apply to Single-Agent, Multi-Agent, and Autonomous
+execution. File/Postgres stores and provider/framework adapters preserve those
+contracts, which is the main portability boundary of the project.
+
 ## Runtime and Reliability
 
 | Document | Question answered |

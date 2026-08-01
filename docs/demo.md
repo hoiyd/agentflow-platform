@@ -22,7 +22,10 @@ network access.
 
 Show the three execution modes. Explain that they share one Turn Engine,
 retrieval pipeline, tool executor, usage ledger, and event model; each mode owns
-only its orchestration policy.
+only its orchestration policy. Briefly point out that Run admission,
+per-Conversation single-writer execution, model-request limits, and Run Budget
+remain shared performance and concurrency controls rather than mode-specific
+implementations.
 
 ### 0:40-1:40 - Hybrid Retrieval
 
@@ -52,6 +55,16 @@ retrieval, context selection, model/tool operations, usage settlement, and the
 terminal state. Show that Replay reads stored evidence rather than reconstructing
 the Run from UI state.
 
+### Optional - Runtime Completion Verification
+
+Enable **Completion verification** for a new Run and select a deterministic
+text, citation, JSON Schema, HTTP, or allowlisted command verifier. Show that
+the candidate output, Evidence, Artifacts, and `verification.*` events are
+persisted before the Completion Gate permits `run.completed`.
+
+Emphasize that this is **verification of one runtime outcome**, not execution
+of the repository's unit or integration tests.
+
 ### 4:20-5:00 - Engineering Boundaries
 
 Close with two explicit limits: authentication and complete Workspace lifecycle
@@ -59,7 +72,7 @@ are not implemented, and relevance thresholds still need calibration against a
 versioned Golden Dataset. This distinguishes implemented platform behavior from
 planned production hardening.
 
-## Verification Fallback
+## Offline Demo Fallback
 
 If live execution is unavailable, run:
 
