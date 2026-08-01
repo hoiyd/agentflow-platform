@@ -9,27 +9,17 @@ separate from **Verification**, the opt-in runtime subsystem that evaluates one
 Run's candidate output against a frozen Completion Contract. Only the Completion
 Gate tests below exercise that subsystem.
 
-## Automated Tests
+## Prerequisite
 
-### Backend
-
-```bash
-cd apps/api
-source ~/.gvm/scripts/gvm
-gvm use go1.26.5 >/dev/null
-mkdir -p /private/tmp/agentflow-go-build-cache
-GOCACHE=/private/tmp/agentflow-go-build-cache go test ./...
-```
-
-### Frontend
+Run the repository's [Automated Tests](../README.md#automated-tests) before
+starting the manual cases:
 
 ```bash
-cd apps/web
-export PATH="$HOME/.nvm/versions/node/v22.6.0/bin:$PATH"
-npm run lint
-npm test
-npm run build
+make test
 ```
+
+That suite establishes the automated baseline. The procedures below remain
+Manual Tests and require a person to inspect the documented outcomes.
 
 ## RAG Tests
 

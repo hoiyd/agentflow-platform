@@ -30,14 +30,17 @@ These are cross-cutting runtime capabilities, not mode-specific features:
 | Capability | Runtime design | Adaptation boundary |
 | --- | --- | --- |
 | **Performance** | SSE streams output incrementally; context, output, Tool results, Run usage, and background queues are bounded. Active runtime excludes queue and human-wait time. | Limits and provider policies are configured at composition time and frozen into new Runs where replay stability requires it. No benchmark result is implied. |
-| **Concurrency** | `RunController` combines global admission, bounded queueing, and per-Conversation single-writer execution. The model limiter separately owns in-flight requests and RPM/TPM; Tool bindings declare serial, read-only, or keyed parallelism. | Single, Multi-Agent, and Autonomous modes use the same controls. Provider retries acquire fresh permits without double-counting logical Run usage. |
-| **Tracing** | Typed events cover Run, Stage, Turn, Model, Tool, Retrieval, Context, Memory, Usage, and Verification lifecycles. Events, steps, usage, and artifacts are persisted for Replay and Episode reports. | Event contracts remain stable across File/Postgres stores and native/framework executors; adapters add versioned metadata instead of inventing private trace formats. |
+| **Concurrency** | `RunController` combines global admission, bounded queueing, and per-Conversation single-writer execution. The model limiter separately owns in-flight requests and RPM/TPM; Tool bindings declare serial, read-only, or keyed parallelism. | Single, Multi-Agent, and Loop (`autonomous`) modes use the same controls. Provider retries acquire fresh permits without double-counting logical Run usage. |
+| **Tracing** | Typed Run Events cover Run, Stage, Turn, Model, Tool, Retrieval, Context, Memory, Usage, and Verification lifecycles. Durable Run Events, Collaboration Steps, usage, and artifacts are persisted for Replay and Episode Reports; streaming `model.delta` events are intentionally omitted. | Event contracts remain stable across File/Postgres stores and native/framework executors; adapters add versioned metadata instead of inventing private trace formats. |
 | **Verification** | An opt-in frozen Completion Contract evaluates the persisted candidate output, records immutable Evidence/Artifacts, and gates `run.completed`. | Versioned verifier implementations are registered behind a narrow interface. Verification applies identically to all execution modes and is independent of Automated and Manual Tests. |
 
 Performance controls prevent unbounded work and expose tuning surfaces; tracing
 explains observed execution; Verification judges configured outcome invariants.
 Keeping these responsibilities separate avoids using telemetry as enforcement
 or treating successful execution as proof of a valid result.
+
+See [Observability records and views](terms.md#observability-records-and-views)
+for the distinction between Run Events, Trace, Replay, and Episode Report.
 
 ## Package Layout
 

@@ -103,7 +103,7 @@ AgentFlow separates platform availability from Agent permission:
 2. Each Agent profile selects an allowlist from the currently installed tools.
 
 The Tool Executor then owns per-call timeout, result-size limits, panic
-recovery, typed errors, trace events, and serial/read-only/keyed concurrency.
+recovery, typed errors, Run Events, and serial/read-only/keyed concurrency.
 Tool name, description, and parameter schema are frozen per Run; the handler
 and deployment limits stay live.
 

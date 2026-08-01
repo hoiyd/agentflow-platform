@@ -33,7 +33,7 @@ capacity, resource consumption, timeouts, and stopping conditions.
 | Capacity | Can one request fit a fixed-size resource? | select, compact, cap output |
 | Timeout | How long may one operation wait? | context cancellation, typed timeout |
 | Loop guard | When must an agent loop stop? | iteration or output limit |
-| Observability | What already happened? | events, replay, episode; no enforcement |
+| Observability | What already happened? | Run Events, Trace, Replay, and Episode Report; no enforcement |
 
 ## Ownership Matrix
 
@@ -44,11 +44,11 @@ capacity, resource consumption, timeouts, and stopping conditions.
 | Model Retry | one logical Model Call | physical attempts | `openai.RetryPolicy` | no |
 | Run Budget | one persisted Run | logical calls, provider tokens, tools, active runtime, cost | `budget.Tracker` + Usage Store | yes |
 | Context Assembly | one logical Model Call | context tokens | `contextassembly.Assembler` | config frozen with Run |
-| Autonomous Loop | one Autonomous Run | iterations and accumulated output characters | Autonomous runtime | config frozen with Run |
+| Loop Guard | one Loop (`autonomous`) Run | iterations and accumulated output characters | `autonomous` runtime | config frozen with Run |
 | Tool Policy | one Tool Call or batch | timeout, bytes, parallel group | `tools.Executor` | schema frozen; binding live |
 | Verification | one contracted Run | attempts, timeout, artifacts | `verification.Engine` | contract and evidence |
 | Recovery | startup scan | stale `running` duration | `recovery` | state persisted; threshold live |
-| Trace / Episode | one Run | observed events and projections | Event Store / report builder | yes, no enforcement |
+| Observability | one Run | Run Events and derived Trace, Replay, and Episode Report views | Event Store / projection builders | durable events only; projections do not enforce policy |
 
 ## 1. Run Admission and Conversation Concurrency
 

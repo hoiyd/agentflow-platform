@@ -73,9 +73,10 @@ Planner -> waiting_for_user -> Router -> Worker -> Reviewer -> Finalizer
 5. **Reviewer** evaluates the Worker result against the task and plan.
 6. **Finalizer** synthesizes the candidate final output.
 
-Each responsibility is a persisted Collaboration Step and emits typed Stage
-events. Replay therefore shows the approved plan, routing reason and candidate
-scores, selected Worker, review, final answer, and per-Stage latency.
+Each responsibility is a Stage. Its persisted record is a
+`CollaborationStep`, and its lifecycle emits typed `stage.*` Run Events. Replay
+therefore shows the approved plan, routing reason and candidate scores, selected
+Worker, review, final answer, and per-Stage latency.
 
 Choose Multi when:
 
@@ -90,7 +91,7 @@ still exposing Router and executor extension points.
 
 ## Loop Mode
 
-Loop mode is the bounded Autonomous path. It repeats one five-Stage Iteration:
+Loop mode is the bounded iterative path. It repeats one five-Stage Iteration:
 
 ```text
 Observe -> Plan -> Act -> Review -> Decide
@@ -143,9 +144,9 @@ The modes deliberately converge below orchestration:
 | Runtime Snapshot | Frozen mode, Agent(s), provider/model identity, Tool schemas, Context policy, and Run Budget |
 | Turn Engine | Retrieval, Context Assembly, model/tool loop, usage reservation/settlement, and typed events |
 | RAG and Memory | The same scoped retrieval pipeline and durable-Memory policy feed every Turn |
-| Tracing | Run/Stage/Turn/Model/Tool/Retrieval/Context/Usage/Verification events use one schema |
+| Tracing | Run/Stage/Turn/Model/Tool/Retrieval/Context/Usage/Verification Run Events use one schema |
 | Verification | The same optional frozen contract gates the candidate output from Single, Multi, or Loop |
-| Replay and Episode | File and Postgres stores expose the same persisted evidence and projections |
+| Replay and Episode Report | File and Postgres stores expose the same persisted evidence and projections |
 
 This boundary prevents a feature from working in one mode while silently
 bypassing policy in another. Adding a provider, Store, Reranker, Tool, or

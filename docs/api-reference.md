@@ -97,9 +97,17 @@ Runs created without the field remain `verification_status=not_required`. A cont
 `verification_status` always describes runtime Verification for that Run. It
 does not report Automated or Manual Test results.
 
+`GET /api/runs/{id}/collaboration_steps` returns the persisted records for
+orchestration Stages. Each `CollaborationStep.id` is the `stage_id` used by its
+related Run Events.
+
 ## Usage and Replay
 
 `GET /api/runs/{id}/usage` returns the immutable budget, effective totals, open model reservations, and append-only usage entries. The same `usage_ledger` is included in Replay. A reservation and settlement share one `operation_id`; the settlement replaces its estimate when totals are calculated.
+
+Replay is the detailed aggregate assembled from stored records for one Run.
+Episode Report is a compact projection derived from Replay for review or
+export; it does not create another execution history or accounting source.
 
 Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, and `citation`. See [Verification](verification.md) for exact config shapes, scope, extension points, and policy semantics.
 
