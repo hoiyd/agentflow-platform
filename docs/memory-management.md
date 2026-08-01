@@ -68,7 +68,9 @@ memory.sync.completed | memory.sync.failed
 
 The Curator uses a bounded, ordered background queue and drains accepted work during shutdown. Adaptive model requests share the normal model concurrency, rate-limit, retry, and timeout controls. Extraction, embedding, queue, Candidate, or Memory failures are observable, but they do not change a successfully completed Run.
 
-The explicit `POST /api/memories` and `POST /api/memories/search` APIs remain available. Versioned replace/remove mutations are a later feature; this change replaces implicit message copying with conservative curation.
+The explicit `POST /api/memories` and `POST /api/memories/search` APIs remain
+available. Versioned replace/remove mutations are not implemented; implicit
+message copying has been replaced with conservative curation.
 
 ## Trade-offs and Boundaries
 

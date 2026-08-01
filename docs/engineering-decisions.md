@@ -29,6 +29,30 @@ letting one framework define persistence, observability, or safety policy.
 small shared Turn Engine, capability-oriented packages, and tests around common
 contracts rather than separate implementations per mode.
 
+## OpenAI-Compatible Does Not Mean Capability-Identical
+
+OpenAI-compatible providers often implement the same endpoint shape but differ
+in optional behavior. AgentFlow handles two known capability boundaries
+explicitly:
+
+- if native Tool Calling is rejected as unsupported, the Turn records the
+  failure, rebuilds context without Tool definitions, and falls back to a
+  constrained JSON Tool Call protocol;
+- if streaming usage metadata is unsupported, the client retries the stream
+  without `stream_options.include_usage` while retaining one logical usage
+  reservation.
+
+Ordinary transport and provider failures still follow typed retry policy.
+Streaming retries stop after the first emitted delta so a failed physical
+request cannot duplicate user-visible output. Each physical attempt reacquires
+request concurrency and rate-limit permits; waits do not hold an in-flight
+slot.
+
+**Trade-off:** capability detection relies on classified provider errors and
+must evolve as adapters expose new variants. The fallback is deliberately
+narrow: authentication, quota, content policy, malformed requests, and other
+terminal errors are never disguised as missing capabilities.
+
 ## One Execution Model for Single, Multi, and Loop
 
 Single, Multi, and Loop modes differ in orchestration:

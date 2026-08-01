@@ -18,7 +18,7 @@ network access.
 
 ## Walkthrough
 
-### 0:00-0:40 - Platform Boundary
+### 0:00-0:35 - Platform Boundary
 
 Show **Single**, **Multi**, and **Loop** and name their execution shapes: one
 direct Turn; plan/approve/route/work/review/finalize; and bounded
@@ -29,7 +29,19 @@ per-Conversation single-writer execution, model-request limits, and Run Budget
 remain shared performance and concurrency controls rather than mode-specific
 implementations.
 
-### 0:40-1:40 - Hybrid Retrieval
+### 0:35-1:05 - Configurable Agent Profile
+
+In **Single**, open **New agent** or **Configure**. Show that one persisted
+profile owns its responsibility, system prompt, Tool allowlist, Memory/RAG
+switches, and Native/LangChainGo executor. Explain that starting a Run freezes
+the effective profile; Multi additionally freezes all active profiles as Router
+candidates, so later edits cannot change Resume or Replay semantics.
+
+Briefly distinguish platform Tool enablement from the per-Agent allowlist. The
+Tool Executor still applies timeout, result-size, panic-recovery, tracing, and
+concurrency policy after both layers admit a call.
+
+### 1:05-2:00 - Hybrid Retrieval
 
 Search for `AUTH-7F31`. Point out that keyword recall preserves identifiers that
 semantic similarity may miss. Then search for `login failures after a key
@@ -37,7 +49,12 @@ rotation` to exercise semantic recall. Inspect source details, independent
 recall ranks, RRF score, final rank, relevance decision, and selected model
 context.
 
-### 1:40-3:00 - Multi-Agent Run
+For an AI-systems-focused review, open **Retrieval evaluation** and run the
+sample cases. Show Hit@1/3/5, per-case misses, prompt-injection blocks, and the
+Embedding/Fusion/Reranker/Relevance Gate versions used by the same production
+pipeline.
+
+### 2:00-3:15 - Multi-Agent Run
 
 Start a Multi-Agent task:
 
@@ -50,12 +67,14 @@ Show planning, delegated steps, tool activity, and the final answer. If no model
 provider is configured, use the deterministic fallback to demonstrate lifecycle
 and persistence rather than answer quality.
 
-### 3:00-4:20 - Trace and Replay
+### 3:15-4:25 - Trace, Replay, and Episode Report
 
 Open **View trace**. Connect the visible events to the persisted Run lifecycle:
 retrieval, context selection, model/tool operations, usage settlement, and the
 terminal state. Show that Replay reads stored evidence rather than reconstructing
-the Run from UI state.
+the Run from UI state. Point out the Episode Report's task, retrieval, LLM,
+Tool, error, and verification summary, then export its JSON as a compact
+machine-readable artifact for offline evaluation or incident review.
 
 ### Optional - Runtime Completion Verification
 
@@ -67,7 +86,7 @@ persisted before the Completion Gate permits `run.completed`.
 Emphasize that this is **verification of one runtime outcome**, not execution
 of the repository's unit or integration tests.
 
-### 4:20-5:00 - Engineering Boundaries
+### 4:25-5:00 - Engineering Boundaries
 
 Close with two explicit limits: authentication and complete Workspace lifecycle
 are not implemented, and relevance thresholds still need calibration against a

@@ -31,7 +31,14 @@ A Run enters the verification lifecycle only when its initial `POST /api/chat` r
 
 `VERIFICATION_WORKSPACE_ROOT`, command allowlists, HTTP host allowlists, and Artifact limits only configure which verifier implementations may run safely. Setting these environment variables does **not** enable verification for any Run by itself.
 
-The chat composer exposes this opt-in under **Completion verification**. Its verifier tabs can configure all five built-in types: text constraints, citation policy, JSON Schema, read-only HTTP checks, and allowlisted commands. The same policy applies to the next `single`, `multi_agent`, or `autonomous` Run because all three modes share the same chat request path. HTTP checks still follow the backend host allowlist; command checks require `VERIFICATION_WORKSPACE_ROOT` and an allowlisted executable. The final SSE `done` event includes `verification_status`, and the workspace shows that status separately from the Run lifecycle status. Disabling the control omits `completion_contract` entirely.
+The chat composer exposes this opt-in under **Completion verification** and
+supports all five built-in verifier types. The request behavior is identical
+for `single`, `multi_agent`, and `autonomous` Runs.
+
+HTTP checks follow the backend host allowlist. Command checks also require
+`VERIFICATION_WORKSPACE_ROOT` and an allowlisted executable. The terminal SSE
+`done` event reports `verification_status` separately from Run status.
+Disabling the control omits `completion_contract`.
 
 ## Execution Model
 
@@ -46,7 +53,7 @@ create Run + freeze contract
   -> publish run.completed only when the gate passes
 ```
 
-The first implementation supports:
+The current implementation supports:
 
 - `command`: executes an argument vector directly, without a shell.
 - `http`: performs read-only `GET` or `HEAD` checks.
@@ -201,4 +208,7 @@ The implementation follows three practical evaluation principles:
 - Grade the real outcome separately from the agent transcript, and prefer deterministic code-based graders where possible, as described in [Anthropic's evaluation guide](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents).
 - Give the loop an explicit verification phase, stopping rule, named terminal outcome, and bounded attempt budget, consistent with [recent loop-engineering specification work](https://arxiv.org/abs/2607.00038).
 
-This MVP intentionally omits a generic CI runner, asynchronous human evidence ingestion, and built-in model graders. Deployments that later register model graders should retain deterministic or human checks for high-impact completion decisions rather than relying on an LLM judge alone.
+Current boundaries exclude a generic CI runner, asynchronous human evidence
+ingestion, and built-in model graders. Deployments that register model graders
+should retain deterministic or human checks for high-impact completion
+decisions rather than relying on an LLM judge alone.

@@ -162,42 +162,19 @@ These paths can be followed directly from:
 - `apps/api/internal/rag/retrieval.go`
 - `apps/api/internal/contextassembly/assembler.go`
 
-The Retrieval Pipeline, rather than an Agent runtime or HTTP handler, owns the
-recall sequence, prompt-injection filtering, reciprocal-rank fusion, injected
-versioned reranking, independently injected relevance gating, and result
-policy. Stores expose
-separate dense and lexical search operations and remain responsible for
-applying workspace and metadata filters. Fusion consumes only the two source
-ranks, so File and Postgres adapters can use different score implementations
-without leaking incomparable scales into final ordering. This keeps HTTP,
-Single-Agent, Multi-Agent, and Autonomous retrieval behavior aligned.
+The call paths preserve these ownership boundaries:
 
-The Context Selector runs only after the relevance gate. Ranked child hits stay
-in `items` for evaluation and diagnostics; `context_items` is the actual
-knowledge context selected for model input. Expansion lookups are constrained
-to the matched document and preserve workspace and metadata filters. They
-prefer chunks sharing the logical section parent, fall back to an adjacent
-chunk window when no parent chunk can be selected, and never exceed the
-configured knowledge context token limit. Expanded chunks pass through the same
-prompt-injection guard before they can enter model context.
+| Boundary | Responsibility |
+| --- | --- |
+| Retrieval Pipeline | Owns dense/lexical recall ordering, prompt-injection filtering, rank-based fusion, reranking, and relevance gating. Stores apply scope filters and expose recall results without defining final ranking policy. |
+| Context Selector | Expands gated child hits within the matched document, Workspace/metadata scope, and token limit. Ranked hits remain separate from the context sent to the model. |
+| Context Transformer | Deduplicates sources, groups chunks by document, merges adjacent chunks, preserves contributing IDs, and reapplies the knowledge token limit. |
+| Document ingestion | Normalizes source text and derives versioned hashes, section parents, and UTF-8 byte offsets before persistence. Store adapters preserve these values. |
+| Run completion | Persists the assistant message, transitions the Run, flushes the terminal SSE event, and schedules conservative Memory Curation. All modes emit the same `domain.RunEvent` contract. |
 
-The Context Transformer is a separate post-selection stage. It removes repeated
-sources, groups selected chunks by document in first-seen document order, sorts
-each document by chunk index, and merges consecutive chunks. Merged context
-keeps the contributing and matched child IDs for traceability. Its conservative
-token count is the sum of the source chunk counts, followed by a final limit
-check, so transformation cannot push model knowledge beyond the configured
-maximum.
-
-Document ingestion also owns source traceability generation before persistence. It
-normalizes source text, derives document/chunk SHA-256 hashes and document
-version, and assigns section parents plus UTF-8 byte offsets. FileStore and
-PostgresStore persist these values without recomputing them, and retrieval
-adapters return them unchanged for API and trace consumers.
-
-Single-Agent, Multi-Agent, and Autonomous streams expose the same `domain.RunEvent` contract to the HTTP adapter. Their common completion path persists the assistant message, transitions the Run, optionally generates the conversation title, flushes the final SSE event, and then schedules conservative curation of explicitly durable user facts. Assistant output and ordinary chat remain conversation history rather than long-term memory.
-
-Adding another executable should reuse the relevant application wiring instead of copying dependency construction from `cmd/server`.
+Detailed retrieval algorithms and failure boundaries live in
+[Knowledge / RAG](knowledge-rag.md). New executables should reuse the
+composition root instead of copying dependency construction from `cmd/server`.
 
 ## Extension Points
 
