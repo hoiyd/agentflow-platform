@@ -47,6 +47,29 @@ func TestHeuristicRerankerExposesVersionedConfiguration(t *testing.T) {
 	}
 }
 
+func TestDocumentDiversityPenaltyAffectsTopKSelection(t *testing.T) {
+	t.Parallel()
+
+	candidates := []domain.RetrievedDocumentChunk{
+		{Document: domain.Document{ID: "doc-a"}, Chunk: domain.DocumentChunk{ID: "a1"}, RerankScore: 1.0},
+		{Document: domain.Document{ID: "doc-a"}, Chunk: domain.DocumentChunk{ID: "a2"}, RerankScore: 0.95},
+		{Document: domain.Document{ID: "doc-b"}, Chunk: domain.DocumentChunk{ID: "b1"}, RerankScore: 0.94},
+	}
+
+	topTwo := selectWithDocumentDiversity(candidates, 2)
+	if len(topTwo) != 2 || topTwo[0].Chunk.ID != "a1" || topTwo[1].Chunk.ID != "b1" {
+		t.Fatalf("expected the alternate document to replace the penalized duplicate, got %#v", topTwo)
+	}
+
+	all := selectWithDocumentDiversity(candidates, 3)
+	if len(all) != 3 || all[0].Chunk.ID != "a1" || all[1].Chunk.ID != "b1" || all[2].Chunk.ID != "a2" {
+		t.Fatalf("expected diversity-adjusted ordering, got %#v", all)
+	}
+	if all[2].DiversityPenalty != 0.04 || math.Abs(all[2].RerankScore-0.91) > 1e-9 {
+		t.Fatalf("expected a2 to retain its effective diversity score, got %#v", all[2])
+	}
+}
+
 func TestRetrievalPipelineUsesInjectedReranker(t *testing.T) {
 	t.Parallel()
 

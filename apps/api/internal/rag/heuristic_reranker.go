@@ -69,38 +69,7 @@ func (r *HeuristicReranker) Rerank(_ context.Context, request RerankRequest) (Re
 		return items[i].RerankScore > items[j].RerankScore
 	})
 
-	selected := make([]domain.RetrievedDocumentChunk, 0, minInt(request.Limit, len(items)))
-	usedDocuments := map[string]int{}
-	for _, item := range items {
-		if len(selected) >= request.Limit {
-			break
-		}
-		documentUses := usedDocuments[item.Document.ID]
-		if documentUses > 0 && hasUnselectedDocument(items, usedDocuments) {
-			item.DiversityPenalty = 0.04 * float64(documentUses)
-			item.RerankScore -= item.DiversityPenalty
-			if documentUses >= 2 {
-				continue
-			}
-		}
-		selected = append(selected, item)
-		usedDocuments[item.Document.ID]++
-	}
-	if len(selected) < request.Limit {
-		seenChunks := map[string]bool{}
-		for _, item := range selected {
-			seenChunks[item.Chunk.ID] = true
-		}
-		for _, item := range items {
-			if len(selected) >= request.Limit {
-				break
-			}
-			if seenChunks[item.Chunk.ID] {
-				continue
-			}
-			selected = append(selected, item)
-		}
-	}
+	selected := selectWithDocumentDiversity(items, request.Limit)
 	sort.SliceStable(selected, func(i, j int) bool {
 		return selected[i].RerankScore > selected[j].RerankScore
 	})
@@ -110,9 +79,56 @@ func (r *HeuristicReranker) Rerank(_ context.Context, request RerankRequest) (Re
 	return RerankResult{Items: selected, Info: r.Info()}, nil
 }
 
-func hasUnselectedDocument(items []domain.RetrievedDocumentChunk, usedDocuments map[string]int) bool {
+// selectWithDocumentDiversity recomputes effective scores after every pick so
+// a diversity penalty can change Top-K membership, not only final ordering.
+func selectWithDocumentDiversity(items []domain.RetrievedDocumentChunk, limit int) []domain.RetrievedDocumentChunk {
+	selected := make([]domain.RetrievedDocumentChunk, 0, minInt(limit, len(items)))
+	remaining := append([]domain.RetrievedDocumentChunk(nil), items...)
+	usedDocuments := map[string]int{}
+	multipleDocuments := hasMultipleDocuments(items)
+
+	for len(selected) < limit && len(remaining) > 0 {
+		unusedDocumentAvailable := hasUnusedDocument(remaining, usedDocuments)
+		bestIndex := -1
+		var best domain.RetrievedDocumentChunk
+		for index, candidate := range remaining {
+			documentUses := usedDocuments[candidate.Document.ID]
+			if documentUses >= 2 && unusedDocumentAvailable {
+				continue
+			}
+			if multipleDocuments && documentUses > 0 {
+				candidate.DiversityPenalty = 0.04 * float64(documentUses)
+				candidate.RerankScore -= candidate.DiversityPenalty
+			}
+			if bestIndex == -1 || candidate.RerankScore > best.RerankScore {
+				bestIndex = index
+				best = candidate
+			}
+		}
+
+		selected = append(selected, best)
+		usedDocuments[best.Document.ID]++
+		remaining = append(remaining[:bestIndex], remaining[bestIndex+1:]...)
+	}
+	return selected
+}
+
+func hasUnusedDocument(items []domain.RetrievedDocumentChunk, usedDocuments map[string]int) bool {
 	for _, item := range items {
 		if usedDocuments[item.Document.ID] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMultipleDocuments(items []domain.RetrievedDocumentChunk) bool {
+	if len(items) < 2 {
+		return false
+	}
+	firstDocumentID := items[0].Document.ID
+	for _, item := range items[1:] {
+		if item.Document.ID != firstDocumentID {
 			return true
 		}
 	}
