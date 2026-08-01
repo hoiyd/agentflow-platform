@@ -19,6 +19,7 @@ GET    /health
 
 GET    /api/conversations
 POST   /api/conversations
+PATCH  /api/conversations/{id}
 DELETE /api/conversations/{id}
 GET    /api/conversations/{id}/messages
 
@@ -27,6 +28,8 @@ POST   /api/chat
 GET    /api/agents
 POST   /api/agents
 GET    /api/agents/{id}
+PATCH  /api/agents/{id}
+DELETE /api/agents/{id}
 
 GET    /api/runs
 GET    /api/runs/{id}
@@ -55,6 +58,36 @@ POST   /api/rag/search
 POST   /api/rag/evaluations/run
 ```
 
+## Conversations and Agent Profiles
+
+`PATCH /api/conversations/{id}` accepts `{"title":"..."}`. Deleting a
+Conversation removes its persisted Messages and associated execution state from
+the selected Store.
+
+`POST /api/agents` creates a reusable execution profile. `PATCH
+/api/agents/{id}` updates only supplied fields:
+
+```json
+{
+  "name": "Incident Responder",
+  "description": "Diagnoses production incidents from runbooks and runtime evidence.",
+  "system_prompt": "Separate evidence from assumptions and return ordered recovery steps.",
+  "tools": ["calculator", "get_current_time"],
+  "memory_enabled": true,
+  "retrieval_enabled": true,
+  "executor": "native"
+}
+```
+
+`executor` accepts `native` or `langchaingo`. Tool names must be installed even
+when they are currently disabled at the platform layer. Custom Agents can be
+archived with `DELETE /api/agents/{id}`; built-in Agents cannot be archived.
+Creating a Run freezes the effective profile and, for Multi mode, its candidate
+profiles, so later edits do not change Resume or Replay semantics.
+
+See [Configurable Agent Profiles](agent-profiles.md) for mode behavior, Router
+participation, Snapshot ownership, and current boundaries.
+
 ## Chat, Runs, and Verification
 
 `POST /api/chat` accepts an optional `completion_contract`. This field is the only trigger that opts a new Run into verification; chat mode and `VERIFICATION_*` server settings do not enable it automatically. When present, the server freezes the effective contract before creating the Run and does not publish `run.completed` until fresh Evidence satisfies its policy.
@@ -66,6 +99,36 @@ Runs created without the field remain `verification_status=not_required`. A cont
 `GET /api/runs/{id}/usage` returns the immutable budget, effective totals, open model reservations, and append-only usage entries. The same `usage_ledger` is included in Replay. A reservation and settlement share one `operation_id`; the settlement replaces its estimate when totals are calculated.
 
 Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, and `citation`. See [Completion Verification](completion-verification.md) for exact config shapes, scope, extension points, and policy semantics.
+
+## Tool Governance
+
+`GET /api/tools` returns installed Tool descriptors and their current enabled
+state. The enable/disable endpoints update the Tool Manager configuration and
+persist it at `TOOL_CONFIG_PATH`. This platform-level switch is separate from
+the per-Agent `tools` allowlist.
+
+Tool execution applies timeout, result-size, panic-recovery, tracing, and
+concurrency policy after both layers admit the Tool. See [Configurable Agent Profiles](agent-profiles.md#two-tool-control-layers)
+for the two control layers and [Tool Execution Policy](execution-controls.md#7-tool-execution-policy)
+for per-call enforcement.
+
+## RAG Evaluation
+
+`POST /api/rag/evaluations/run` executes retrieval cases through the same
+embedding, dense/lexical recall, RRF, reranker, relevance gate, and security
+pipeline used by search and Agent Runs.
+
+Each case supplies a query and at least one expected document ID, chunk ID, or
+content fragment. Optional `min_acceptable_rank`, tags, Workspace/metadata
+scope, `top_k`, and `min_similarity` make the evaluation repeatable. The
+response reports aggregate Hit@1/3/5 and misses, plus each case's best rank,
+failure reason, ranked items, and prompt-injection decisions. It also returns
+the exact Embedding, Fusion, Reranker, and Relevance Gate identity used by the
+run.
+
+The workbench exposes this endpoint under **Knowledge -> Retrieval evaluation**.
+These cases are an implemented diagnostic harness; versioned Golden Dataset
+storage and calibrated release thresholds remain future work.
 
 ## RAG Search Response
 
