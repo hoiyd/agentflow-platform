@@ -13,6 +13,19 @@ and inspecting Single, Multi, and bounded Loop workflows.
 The project uses OpenAI-compatible model and embedding APIs, with deterministic
 local fallbacks for development.
 
+## Technical Evidence at a Glance
+
+Reviewer shortcut: each claim below links directly to an implementation
+boundary and focused regression tests.
+
+| Boundary | Implementation evidence |
+| --- | --- |
+| Shared orchestration runtime | Single, Multi, and Loop converge on the same Turn Engine: [runtime](apps/api/internal/agent/runtime.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
+| Reproducible execution | Each Run freezes model, Agent, Tool, context, and budget policy: [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
+| Retrieval quality | Hybrid recall, RRF, reranking, relevance gating, and evaluation use one production pipeline: [retrieval](apps/api/internal/rag/retrieval.go), [tests](apps/api/internal/rag/retrieval_test.go) |
+| Bounded concurrency | Admission control, per-Conversation serialization, queues, and model permits bound parallel work: [controller](apps/api/internal/concurrency/run_controller.go), [tests](apps/api/internal/concurrency/run_controller_test.go) |
+| Verifiable outcomes | Completion Contracts gate success while typed events support Replay and Episode reports: [verification](apps/api/internal/verification/engine.go), [tests](apps/api/internal/verification/engine_test.go) |
+
 ## Three Execution Modes
 
 AgentFlow exposes three orchestration shapes over one shared Go runtime. The
