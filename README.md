@@ -211,6 +211,9 @@ These boundaries are documented rather than hidden:
 - The HTTP API does not yet provide an authentication or authorization layer.
   Run it only in a trusted development environment or behind an external access
   boundary.
+- Customizable workflow is not yet supported. I tried the Temporal workflow engine, 
+  but it didn't bring much benefit considering the large complexity it brings. 
+  It'll be a long-term plan.
 - Prompt-injection detection is a high-precision deterministic layer, not a
   semantic guarantee. Untrusted-context boundaries remain active even when no
   pattern is detected.
