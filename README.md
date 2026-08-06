@@ -204,7 +204,9 @@ capability depended on it. The rationale and rejected shortcuts are recorded in
 
 ## Known Boundaries
 
-These boundaries are documented rather than hidden:
+These boundaries are documented rather than hidden. The prioritized path from
+the current implementation to a controlled multi-workspace beta is documented
+in the [Production Readiness Roadmap](docs/production-readiness-roadmap.md).
 
 - Workspace lifecycle and mandatory production-mode tenant isolation are not
   complete. Current RAG behavior should be treated as single-workspace unless
