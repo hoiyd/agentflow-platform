@@ -1,0 +1,38 @@
+{
+  "schema_version": "rag-golden-dataset-v1",
+  "id": "support-retrieval-baseline",
+  "version": "1.0.0",
+  "description": "Small example covering an exact identifier and a no-answer query.",
+  "tags": ["example", "support"],
+  "cases": [
+    {
+      "id": "auth-7f31-expired-token",
+      "query": "How do I fix AUTH-7F31?",
+      "answerable": true,
+      "expected_sources": [
+        {
+          "source_uri": "kb://support/error-catalog",
+          "content_contains": ["AUTH-7F31", "refresh token"]
+        }
+      ],
+      "forbidden_sources": [
+        {
+          "source_uri": "kb://support/deprecated-auth-guide"
+        }
+      ],
+      "min_acceptable_rank": 3,
+      "tags": ["identifier", "answerable"]
+    },
+    {
+      "id": "unknown-product-code",
+      "query": "How do I fix PRODUCT-NOT-IN-KB?",
+      "answerable": false,
+      "forbidden_sources": [
+        {
+          "source_uri": "kb://internal/private-runbook"
+        }
+      ],
+      "tags": ["no-answer"]
+    }
+  ]
+}

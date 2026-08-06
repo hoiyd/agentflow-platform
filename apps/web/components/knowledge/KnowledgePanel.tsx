@@ -366,9 +366,15 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
   if (!result) {
     return <div className="empty compact">Run evaluation to see hit@k and missed retrieval cases.</div>;
   }
-  const total = result.summary.total || 1;
+  const answerableTotal = result.summary.answerable_cases ?? result.summary.total;
+  const hitRateDenominator = answerableTotal || 1;
   return (
     <div className="evaluation-result">
+      {result.dataset ? (
+        <div className="evaluation-expected">
+          Dataset: {result.dataset.id} / {result.dataset.version} / {result.dataset.schema_version}
+        </div>
+      ) : null}
       <div className="evaluation-summary">
         <div className="metric">
           <span>Total</span>
@@ -376,15 +382,15 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
         </div>
         <div className="metric">
           <span>Hit@1</span>
-          <strong>{formatPercent(result.summary.hit_at_1 / total)}</strong>
+          <strong>{formatPercent(result.summary.hit_at_1 / hitRateDenominator)}</strong>
         </div>
         <div className="metric">
           <span>Hit@3</span>
-          <strong>{formatPercent(result.summary.hit_at_3 / total)}</strong>
+          <strong>{formatPercent(result.summary.hit_at_3 / hitRateDenominator)}</strong>
         </div>
         <div className="metric">
           <span>Hit@5</span>
-          <strong>{formatPercent(result.summary.hit_at_5 / total)}</strong>
+          <strong>{formatPercent(result.summary.hit_at_5 / hitRateDenominator)}</strong>
         </div>
         <div className={`metric ${result.summary.misses > 0 ? "danger" : ""}`}>
           <span>Misses</span>
@@ -408,8 +414,8 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
                 <div className="tool-source">{item.query}</div>
               </div>
               <div className="document-metrics">
-                <span>{item.hit ? "hit" : "miss"}</span>
-                <span>{item.best_rank ? `rank ${item.best_rank}` : "no match"}</span>
+                <span>{item.hit ? (item.answerable === false ? "correct no-answer" : "hit") : "miss"}</span>
+                <span>{item.best_rank ? `rank ${item.best_rank}` : item.answerable === false && item.hit ? "no result" : "no match"}</span>
               </div>
             </div>
             <div className="evaluation-expected">{evaluationExpectedLabel(item)}</div>
@@ -663,12 +669,28 @@ function formatPercent(value: number) {
 }
 
 function evaluationExpectedLabel(item: RAGEvaluationRunResponse["cases"][number]) {
+  const expectedSources = item.expected_sources?.map(goldenSourceLabel).filter(Boolean) ?? [];
+  const forbiddenSources = item.forbidden_sources?.map(goldenSourceLabel).filter(Boolean) ?? [];
   const parts = [
+    item.answerable === false ? "answerable: no" : item.answerable === true ? "answerable: yes" : "",
+    expectedSources.length ? `sources: ${expectedSources.join(", ")}` : "",
+    forbiddenSources.length ? `forbidden: ${forbiddenSources.join(", ")}` : "",
     item.expected_document_ids?.length ? `documents: ${item.expected_document_ids.join(", ")}` : "",
     item.expected_chunk_ids?.length ? `chunks: ${item.expected_chunk_ids.join(", ")}` : "",
     item.expected_chunk_contains?.length ? `contains: ${item.expected_chunk_contains.join(", ")}` : ""
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(" / ") : "No expectations configured";
+}
+
+function goldenSourceLabel(source: NonNullable<RAGEvaluationRunResponse["cases"][number]["expected_sources"]>[number]) {
+  return [
+    source.document_id ? `document ${source.document_id}` : "",
+    source.chunk_id ? `chunk ${source.chunk_id}` : "",
+    source.source_uri ?? "",
+    source.content_contains?.length ? `contains ${source.content_contains.join(" + ")}` : ""
+  ]
+    .filter(Boolean)
+    .join("; ");
 }
 
 function formatBytes(value: number) {

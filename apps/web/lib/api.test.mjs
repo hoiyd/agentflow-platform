@@ -290,3 +290,30 @@ test("RAG evaluation sends cases and preserves the result", async (t) => {
   assert.equal(response.summary.hit_at_1, 1);
   assert.equal(response.cases[0].id, "auth-error");
 });
+
+test("RAG evaluation sends a versioned Golden Dataset", async (t) => {
+  let requestBody = {};
+  mockFetch(t, {
+    dataset: { schema_version: "rag-golden-dataset-v1", id: "support", version: "1.0.0" },
+    summary: { total: 1, answerable_cases: 0, unanswerable_cases: 1, hit_at_1: 0, hit_at_3: 0, hit_at_5: 0, misses: 0 },
+    cases: [{ id: "unknown", query: "unknown", answerable: false, hit: true, items: [] }]
+  }, (_url, options) => {
+    requestBody = JSON.parse(String(options?.body ?? "{}"));
+  });
+
+  const response = await runRAGEvaluation({
+    dataset: {
+      schema_version: "rag-golden-dataset-v1",
+      id: "support",
+      version: "1.0.0",
+      cases: [{ id: "unknown", query: "unknown", answerable: false, forbidden_sources: [{ document_id: "doc-private" }] }]
+    },
+    top_k: 3
+  });
+
+  assert.equal(requestBody.dataset.schema_version, "rag-golden-dataset-v1");
+  assert.equal(requestBody.dataset.cases[0].answerable, false);
+  assert.deepEqual(requestBody.dataset.cases[0].forbidden_sources, [{ document_id: "doc-private" }]);
+  assert.equal(response.dataset.id, "support");
+  assert.equal(response.cases[0].hit, true);
+});

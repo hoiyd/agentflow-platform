@@ -9,6 +9,7 @@ import {
   type EmbeddingInfo,
   type FusionInfo,
   type KnowledgeSecurityInfo,
+  type RAGGoldenDataset,
   type RerankerInfo,
   type RelevanceGateInfo,
   type RAGEvaluationCase,
@@ -23,15 +24,24 @@ import {
   uploadDocument
 } from "../../lib/knowledge-api";
 
-const DEFAULT_RAG_EVAL_CASES = `[
-  {
-    "id": "example_resume_backend",
-    "query": "候选人的后端系统设计经验",
-    "expected_chunk_contains": ["Go", "PostgreSQL"],
-    "min_acceptable_rank": 3,
-    "tags": ["resume", "backend"]
-  }
-]`;
+const DEFAULT_RAG_EVAL_CASES = `{
+  "schema_version": "rag-golden-dataset-v1",
+  "id": "resume-retrieval-example",
+  "version": "1.0.0",
+  "tags": ["example"],
+  "cases": [
+    {
+      "id": "example_resume_backend",
+      "query": "候选人的后端系统设计经验",
+      "answerable": true,
+      "expected_sources": [
+        {"content_contains": ["Go", "PostgreSQL"]}
+      ],
+      "min_acceptable_rank": 3,
+      "tags": ["resume", "backend"]
+    }
+  ]
+}`;
 
 export function useKnowledgeWorkbench() {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
@@ -168,15 +178,18 @@ export function useKnowledgeWorkbench() {
     setError("");
     try {
       const parsed = JSON.parse(evaluationCases) as unknown;
-      if (!Array.isArray(parsed)) {
-        throw new Error("Evaluation cases must be a JSON array");
-      }
       const parsedMinSimilarity = Number(minSimilarity);
-      const response = await runRAGEvaluation({
-        cases: parsed as RAGEvaluationCase[],
+      const options = {
         top_k: 5,
         min_similarity: Number.isFinite(parsedMinSimilarity) ? parsedMinSimilarity : 0
-      });
+      };
+      const response = Array.isArray(parsed)
+        ? await runRAGEvaluation({ cases: parsed as RAGEvaluationCase[], ...options })
+        : isGoldenDataset(parsed)
+          ? await runRAGEvaluation({ dataset: parsed, ...options })
+          : (() => {
+              throw new Error("Evaluation input must be a Golden Dataset object or a legacy case array");
+            })();
       setEvaluationResult(response);
     } catch (evaluationError) {
       setError(evaluationError instanceof Error ? evaluationError.message : "Failed to run retrieval evaluation");
@@ -269,6 +282,14 @@ export function useKnowledgeWorkbench() {
     setUploadTitle,
     uploadKnowledgeDocument
   };
+}
+
+function isGoldenDataset(value: unknown): value is RAGGoldenDataset {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Partial<RAGGoldenDataset>;
+  return candidate.schema_version === "rag-golden-dataset-v1" && typeof candidate.id === "string" && typeof candidate.version === "string" && Array.isArray(candidate.cases);
 }
 
 export type KnowledgeWorkbenchModel = ReturnType<typeof useKnowledgeWorkbench>;

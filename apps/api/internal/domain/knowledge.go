@@ -215,18 +215,48 @@ type DocumentSearchResponse struct {
 	Reason           string                   `json:"reason,omitempty"`
 }
 
+const RAGGoldenDatasetSchemaVersion = "rag-golden-dataset-v1"
+
+type RAGGoldenSource struct {
+	DocumentID      string   `json:"document_id,omitempty"`
+	ChunkID         string   `json:"chunk_id,omitempty"`
+	SourceURI       string   `json:"source_uri,omitempty"`
+	ContentContains []string `json:"content_contains,omitempty"`
+}
+
+type RAGGoldenDataset struct {
+	SchemaVersion string              `json:"schema_version"`
+	ID            string              `json:"id"`
+	Version       string              `json:"version"`
+	Description   string              `json:"description,omitempty"`
+	Tags          []string            `json:"tags,omitempty"`
+	Cases         []RAGEvaluationCase `json:"cases"`
+}
+
+type RAGGoldenDatasetInfo struct {
+	SchemaVersion string   `json:"schema_version"`
+	ID            string   `json:"id"`
+	Version       string   `json:"version"`
+	Description   string   `json:"description,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
+}
+
 type RAGEvaluationCase struct {
-	ID                    string   `json:"id"`
-	Query                 string   `json:"query"`
-	ExpectedDocumentIDs   []string `json:"expected_document_ids,omitempty"`
-	ExpectedChunkIDs      []string `json:"expected_chunk_ids,omitempty"`
-	ExpectedChunkContains []string `json:"expected_chunk_contains,omitempty"`
-	MinAcceptableRank     int      `json:"min_acceptable_rank,omitempty"`
-	Tags                  []string `json:"tags,omitempty"`
+	ID                    string            `json:"id"`
+	Query                 string            `json:"query"`
+	Answerable            *bool             `json:"answerable,omitempty"`
+	ExpectedSources       []RAGGoldenSource `json:"expected_sources,omitempty"`
+	ForbiddenSources      []RAGGoldenSource `json:"forbidden_sources,omitempty"`
+	ExpectedDocumentIDs   []string          `json:"expected_document_ids,omitempty"`
+	ExpectedChunkIDs      []string          `json:"expected_chunk_ids,omitempty"`
+	ExpectedChunkContains []string          `json:"expected_chunk_contains,omitempty"`
+	MinAcceptableRank     int               `json:"min_acceptable_rank,omitempty"`
+	Tags                  []string          `json:"tags,omitempty"`
 }
 
 type RAGEvaluationRunRequest struct {
-	Cases         []RAGEvaluationCase `json:"cases"`
+	Dataset       *RAGGoldenDataset   `json:"dataset,omitempty"`
+	Cases         []RAGEvaluationCase `json:"cases,omitempty"`
 	WorkspaceID   string              `json:"workspace_id,omitempty"`
 	Metadata      map[string]string   `json:"metadata,omitempty"`
 	TopK          int                 `json:"top_k,omitempty"`
@@ -235,6 +265,8 @@ type RAGEvaluationRunRequest struct {
 
 type RAGEvaluationSummary struct {
 	Total             int `json:"total"`
+	AnswerableCases   int `json:"answerable_cases"`
+	UnanswerableCases int `json:"unanswerable_cases"`
 	HitAt1            int `json:"hit_at_1"`
 	HitAt3            int `json:"hit_at_3"`
 	HitAt5            int `json:"hit_at_5"`
@@ -245,6 +277,9 @@ type RAGEvaluationSummary struct {
 type RAGEvaluationCaseResult struct {
 	ID                    string                   `json:"id"`
 	Query                 string                   `json:"query"`
+	Answerable            bool                     `json:"answerable"`
+	ExpectedSources       []RAGGoldenSource        `json:"expected_sources,omitempty"`
+	ForbiddenSources      []RAGGoldenSource        `json:"forbidden_sources,omitempty"`
 	ExpectedDocumentIDs   []string                 `json:"expected_document_ids,omitempty"`
 	ExpectedChunkIDs      []string                 `json:"expected_chunk_ids,omitempty"`
 	ExpectedChunkContains []string                 `json:"expected_chunk_contains,omitempty"`
@@ -260,6 +295,7 @@ type RAGEvaluationCaseResult struct {
 }
 
 type RAGEvaluationRunResponse struct {
+	Dataset       *RAGGoldenDatasetInfo     `json:"dataset,omitempty"`
 	Summary       RAGEvaluationSummary      `json:"summary"`
 	Cases         []RAGEvaluationCaseResult `json:"cases"`
 	Embedding     EmbeddingInfo             `json:"embedding"`

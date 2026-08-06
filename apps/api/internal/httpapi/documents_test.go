@@ -297,6 +297,53 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 		t.Fatalf("expected second evaluation case to miss with reason, got %#v", evalResponse.Cases[1])
 	}
 
+	goldenBody := []byte(`{
+		"top_k": 3,
+		"dataset": {
+			"schema_version": "rag-golden-dataset-v1",
+			"id": "launch-baseline",
+			"version": "1.0.0",
+			"tags": ["smoke"],
+			"cases": [{
+				"id": "launch-password",
+				"query": "What is the launch password?",
+				"answerable": true,
+				"expected_sources": [{
+					"document_id": "` + document.ID + `",
+					"content_contains": ["amber-9137"]
+				}],
+				"forbidden_sources": [{"document_id": "doc-deprecated"}],
+				"tags": ["answerable"]
+			}]
+		}
+	}`)
+	goldenRecorder := httptest.NewRecorder()
+	handler.runRAGEvaluation(goldenRecorder, httptest.NewRequest(http.MethodPost, "/api/rag/evaluations/run", bytes.NewReader(goldenBody)))
+	if goldenRecorder.Code != http.StatusOK {
+		t.Fatalf("expected golden dataset status 200, got %d body=%s", goldenRecorder.Code, goldenRecorder.Body.String())
+	}
+	var goldenResponse domain.RAGEvaluationRunResponse
+	if err := json.Unmarshal(goldenRecorder.Body.Bytes(), &goldenResponse); err != nil {
+		t.Fatalf("decode golden dataset response: %v", err)
+	}
+	if goldenResponse.Dataset == nil || goldenResponse.Dataset.ID != "launch-baseline" || goldenResponse.Dataset.Version != "1.0.0" || len(goldenResponse.Cases) != 1 || !goldenResponse.Cases[0].Hit {
+		t.Fatalf("unexpected golden dataset response: %#v", goldenResponse)
+	}
+
+	invalidGoldenBody := []byte(`{"dataset":{"schema_version":"unsupported","id":"invalid","version":"1","cases":[]}}`)
+	invalidGoldenRecorder := httptest.NewRecorder()
+	handler.runRAGEvaluation(invalidGoldenRecorder, httptest.NewRequest(http.MethodPost, "/api/rag/evaluations/run", bytes.NewReader(invalidGoldenBody)))
+	if invalidGoldenRecorder.Code != http.StatusBadRequest || !strings.Contains(invalidGoldenRecorder.Body.String(), "schema_version") {
+		t.Fatalf("expected invalid dataset status 400, got %d body=%s", invalidGoldenRecorder.Code, invalidGoldenRecorder.Body.String())
+	}
+
+	unknownFieldBody := []byte(`{"dataset":{"schema_version":"rag-golden-dataset-v1","id":"invalid","version":"1","cases":[{"id":"case","query":"query","answerable":false,"forbiden_sources":[]}]}}`)
+	unknownFieldRecorder := httptest.NewRecorder()
+	handler.runRAGEvaluation(unknownFieldRecorder, httptest.NewRequest(http.MethodPost, "/api/rag/evaluations/run", bytes.NewReader(unknownFieldBody)))
+	if unknownFieldRecorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected unknown dataset field status 400, got %d body=%s", unknownFieldRecorder.Code, unknownFieldRecorder.Body.String())
+	}
+
 	thresholdBody := []byte(`{"query":"What is the launch password?","metadata":{"project":"agentflow"},"limit":3,"min_similarity":1.01}`)
 	thresholdReq := httptest.NewRequest(http.MethodPost, "/api/rag/search", bytes.NewReader(thresholdBody))
 	thresholdRecorder := httptest.NewRecorder()

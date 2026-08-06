@@ -51,6 +51,7 @@ the project.
 | Document | Question answered |
 | --- | --- |
 | [Knowledge / RAG](knowledge-rag.md) | How do ingestion, source tracking, hybrid recall, RRF, reranking, gating, and context transformation work? |
+| [Golden Dataset v1 schema](schemas/rag-golden-dataset-v1.schema.json) | Which versioned fields define answerable, expected-source, forbidden-source, and tagged RAG evaluation cases? |
 | [Memory management](memory-management.md) | Which conversation facts become durable semantic memory, and how is unsafe persistence avoided? |
 
 ## Operations and Interfaces
