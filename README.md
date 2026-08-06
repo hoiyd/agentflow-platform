@@ -236,8 +236,9 @@ scope and its expansion path are documented in the
 - Prompt-injection detection is a high-precision deterministic layer, not a
   semantic guarantee. Untrusted-context boundaries remain active even when no
   pattern is detected.
-- Relevance gating is heuristic until thresholds are calibrated against a
-  versioned Golden Dataset.
+- The canonical Golden Dataset v1 makes retrieval behavior repeatable, but
+  relevance and no-answer thresholds remain heuristic until they are calibrated
+  and promoted from diagnostic results to release criteria.
 - RAG `no_match` prevents weak candidates from entering model context, but it
   does not yet force the model to abstain from answering from prior knowledge.
 - The local hash embedding fallback is for deterministic development, not

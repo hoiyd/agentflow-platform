@@ -16,6 +16,15 @@ file is sample knowledge content, not the Demo instructions themselves. Keep one
 completed Multi-Agent Run available if the interview environment has unreliable
 network access.
 
+In a second terminal, seed and run the canonical retrieval baseline once:
+
+```bash
+make golden-eval
+```
+
+The command labels no-answer, ACL, and stale-data cases as diagnostic because
+their calibration or policy prerequisites are intentionally unfinished.
+
 ## Walkthrough
 
 ### 0:00-0:35 - Platform Boundary
@@ -49,8 +58,9 @@ rotation` to exercise semantic recall. Inspect source details, independent
 recall ranks, RRF score, final rank, relevance decision, and selected model
 context.
 
-For an AI-systems-focused review, open **Retrieval evaluation** and run the
-sample cases. Show Hit@1/3/5, per-case misses, prompt-injection blocks, and the
+For an AI-systems-focused review, open **Retrieval evaluation** and show the
+canonical `agentflow-rag-baseline@1.0.0` result. Point out Hit@1/3/5, per-case
+misses, prompt-injection blocks, gating versus diagnostic cases, and the
 Embedding/Fusion/Reranker/Relevance Gate versions used by the same production
 pipeline.
 
@@ -89,9 +99,10 @@ of the repository's unit or integration tests.
 ### 4:25-5:00 - Engineering Boundaries
 
 Close with two explicit limits: authentication and complete Workspace lifecycle
-are not implemented, and relevance thresholds still need calibration against a
-versioned Golden Dataset. This distinguishes implemented platform behavior from
-planned production hardening.
+are not implemented; the canonical Golden Dataset exists, but relevance and
+no-answer thresholds still need calibration and the ACL/stale-data cases are not
+release gates. This distinguishes implemented platform behavior from planned
+production hardening.
 
 ## Recorded README Assets
 

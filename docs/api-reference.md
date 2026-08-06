@@ -169,8 +169,8 @@ The workbench exposes this endpoint under **Knowledge -> Retrieval evaluation**
 and accepts either a Dataset object or a legacy case array. RAG-006 defines and
 validates the schema; the maintained v1 asset and coverage matrix are described
 in [RAG Golden Dataset v1](rag-golden-dataset.md). Immutable Dataset
-storage/changelog (RAG-008), persisted
-Evaluation Runs (RAG-009), and calibrated release thresholds remain future work.
+storage/changelog (RAG-008), persisted Evaluation Runs (RAG-009), and calibrated
+release thresholds remain future work.
 
 ## RAG Search Response
 

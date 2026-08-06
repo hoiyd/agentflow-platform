@@ -20,7 +20,7 @@ a controlled pilot.
 | Persistence | File and Postgres stores persist Runs, Messages, durable Run Events, usage, retrieval data, and Verification records behind shared domain contracts. |
 | Tool execution | [Platform enablement and Agent allowlists](agent-profiles.md#two-tool-control-layers) precede a bounded Executor with typed errors, timeout, result limits, tracing, and conservative concurrency. |
 | RAG | [Hybrid recall, RRF, reranking, relevance gating, scoped context expansion, injection filtering, and citations](knowledge-rag.md) use one observable pipeline. |
-| Evaluation | The [retrieval evaluation API](api-reference.md#rag-evaluation) reports Hit@1/3/5, misses, security decisions, and active component versions. |
+| Evaluation | The [Golden Dataset v1](rag-golden-dataset.md) pairs a versioned schema and canonical corpus with the production retrieval path, reporting Hit@1/3/5, misses, security decisions, and active component versions. |
 | Evidence | [Run Events, Replay, Episode Reports](terms.md#observability-records-and-views), Usage Ledger, and [Verification Evidence](verification.md) explain execution and configured outcome checks. |
 
 These controls are useful now: they bound work, preserve execution evidence,
@@ -39,7 +39,7 @@ evaluation, internal use, or a controlled demonstration:
 | Runtime | Run admission, bounded queueing, Conversation single-writer control, and stale-Run recovery operate within one process. |
 | Tools | Use built-in or operator-reviewed Tools. All calls pass through Agent allowlists, Budget, timeout, result limits, tracing, and conservative concurrency. |
 | Data | File Store supports local operation; Postgres provides durable storage. Automated backup, restore, and migration drills remain deployment responsibilities. |
-| Quality | Retrieval evaluation is repeatable and version-aware. A maintained Golden Dataset and calibrated release thresholds are the next quality step. |
+| Quality | Retrieval evaluation is repeatable against the canonical v1 corpus. Persisted Evaluation Runs, broader representative coverage, and calibrated release thresholds are the next quality steps. |
 
 This profile deliberately excludes untrusted public access, hard multi-tenant
 claims, arbitrary code execution, and distributed Worker ownership.
@@ -88,8 +88,9 @@ model or workload requires them.
 
 ### 3. Quality and Operational Evidence
 
-- Maintain a versioned Golden Dataset covering facts, paraphrases, exact IDs,
-  no-answer cases, stale sources, tenant ACLs, and injection attempts.
+- Extend and maintain the canonical Golden Dataset beyond its current facts,
+  paraphrases, exact IDs, multi-source, no-answer, stale-source, ACL, and
+  injection cases as representative production queries become available.
 - Bind evaluation results to corpus, embedding, fusion, reranker, relevance
   policy, Prompt, and model versions. Security leakage remains a hard failure.
 - Project typed Run Events into OpenTelemetry without making telemetry a second
