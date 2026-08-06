@@ -129,21 +129,37 @@ exact lifecycle of each path.
 
 ## Engineering Highlights
 
+The highlights are grouped by ownership so Agent runtime design, knowledge
+grounding, and cross-cutting platform controls can be reviewed independently.
+
+### Agent Runtime and State
+
 | Concern | Implementation | Implementation evidence |
 | --- | --- | --- |
 | [Agent orchestration](docs/execution-modes.md) | Direct Single, plan-and-review Multi, and bounded Loop modes share one Turn Engine | [runtime](apps/api/internal/agent/runtime.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
 | [Configurable Agent profiles](docs/agent-profiles.md) | Persisted profiles combine a custom responsibility, system prompt, Tool allowlist, Memory/RAG switches, and Native/LangChainGo executor; Multi freezes active profiles as Router candidates | [API](apps/api/internal/httpapi/agents.go), [tests](apps/api/internal/httpapi/agents_test.go) |
 | [Reproducibility](docs/terms.md#runtime-snapshot) | Each Run freezes model, Agent, Tool schema, context policy, and budget in a Runtime Snapshot | [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
-| [Hybrid RAG](docs/knowledge-rag.md) | Independent semantic and keyword recall, Reciprocal Rank Fusion, versioned reranking and relevance gating, context transformation, and native `[S1]` citations | [pipeline](apps/api/internal/rag/retrieval.go), [tests](apps/api/internal/rag/retrieval_test.go) |
-| [Retrieval evaluation](docs/rag-golden-dataset.md) | A versioned Dataset and paired corpus run repeatable fact, exact-ID, multi-source, no-answer, leakage, and injection cases through the production retrieval pipeline | [evaluation](apps/api/internal/rag/evaluation.go), [dataset](examples/knowledge/golden-dataset.v1.json) |
 | [Context control](docs/context-management.md) | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [assembler](apps/api/internal/contextassembly/assembler.go), [tests](apps/api/internal/contextassembly/assembler_test.go) |
+| [Durable memory](docs/memory-management.md) | Explicit rules plus optional shadow-mode model extraction propose auditable candidates before embedding | [curator](apps/api/internal/memory/curator.go), [tests](apps/api/internal/memory/curator_test.go) |
+| [Provider and framework compatibility](docs/engineering-decisions.md#openai-compatible-does-not-mean-capability-identical) | Native orchestration keeps policy ownership; LangChainGo stays at the executor edge, while typed capability fallbacks handle provider differences in Tool Calling and stream usage metadata | [executors](apps/api/internal/agent/executor.go), [tests](apps/api/internal/openai/context_integration_test.go) |
+
+### RAG and Knowledge Grounding
+
+| Concern | Implementation | Implementation evidence |
+| --- | --- | --- |
+| [Hybrid retrieval and ranking](docs/knowledge-rag.md#retrieval-pipeline) | Independent semantic and keyword recall feed Reciprocal Rank Fusion, a versioned Reranker, and a separate Relevance Gate | [pipeline](apps/api/internal/rag/retrieval.go), [tests](apps/api/internal/rag/retrieval_test.go) |
+| [Context selection and citations](docs/knowledge-rag.md#parent-child-context-selection) | Source-traceable child hits drive scoped parent/adjacent expansion, deduplication, merging, token selection, and resolved `[S1]` citations | [selection](apps/api/internal/rag/context_selection.go), [citations](apps/api/internal/rag/citations.go), [tests](apps/api/internal/rag/context_selection_test.go) |
+| [Retrieval safety and evaluation](docs/rag-golden-dataset.md) | Injection filtering runs before ranking; a versioned Dataset and paired corpus exercise fact, exact-ID, multi-source, no-answer, leakage, and injection cases through the same retrieval path | [guard](apps/api/internal/rag/security.go), [evaluation](apps/api/internal/rag/evaluation.go), [dataset](examples/knowledge/golden-dataset.v1.json) |
+
+### Reliability, Governance, and Evidence
+
+| Concern | Implementation | Implementation evidence |
+| --- | --- | --- |
 | [**Performance & resource control**](docs/execution-controls.md) | SSE streaming, bounded context/output, asynchronous Memory curation, and per-Run usage/cost budgets keep work measurable and bounded | [budget](apps/api/internal/budget/budget.go), [tests](apps/api/internal/budget/budget_test.go) |
 | [**Concurrency & backpressure**](docs/execution-controls.md#1-run-admission-and-conversation-concurrency) | Global Run admission, per-Conversation single-writer execution, bounded queues, model-request permits, RPM/TPM limits, and retry-aware slot release | [controller](apps/api/internal/concurrency/run_controller.go), [tests](apps/api/internal/concurrency/run_controller_test.go) |
 | [Tool governance](docs/agent-profiles.md#two-tool-control-layers) | Platform enablement and per-Agent allowlists are separate; the executor adds timeout, result limits, panic recovery, tracing, and serial/read-only/keyed concurrency | [executor](apps/api/internal/tools/executor.go), [tests](apps/api/internal/tools/executor_test.go) |
-| [Durable memory](docs/memory-management.md) | Explicit rules plus optional shadow-mode model extraction propose auditable candidates before embedding | [curator](apps/api/internal/memory/curator.go), [tests](apps/api/internal/memory/curator_test.go) |
 | [**Verification**](docs/verification.md) | Frozen Completion Contracts run deterministic verifiers, persist immutable Evidence/Artifacts, and gate `run.completed` | [engine](apps/api/internal/verification/engine.go), [tests](apps/api/internal/verification/engine_test.go) |
 | [**Tracing & replay**](docs/backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed Run/Stage/Turn/Model/Tool/Retrieval/Verification events, usage ledgers, Replay, and Episode reports explain what happened | [episode](apps/api/internal/httpapi/episode_report.go), [tests](apps/api/internal/httpapi/episode_report_test.go) |
-| [Provider and framework compatibility](docs/engineering-decisions.md#openai-compatible-does-not-mean-capability-identical) | Native orchestration keeps policy ownership; LangChainGo stays at the executor edge, while typed capability fallbacks handle provider differences in Tool Calling and stream usage metadata | [executors](apps/api/internal/agent/executor.go), [tests](apps/api/internal/openai/context_integration_test.go) |
 
 Performance statements above describe implemented controls, not synthetic
 benchmark claims. Verification evaluates configured Run outcomes; Automated and
@@ -220,8 +236,9 @@ scope and its expansion path are documented in the
 - Prompt-injection detection is a high-precision deterministic layer, not a
   semantic guarantee. Untrusted-context boundaries remain active even when no
   pattern is detected.
-- Relevance gating is heuristic until thresholds are calibrated against a
-  versioned Golden Dataset.
+- The canonical Golden Dataset v1 makes retrieval behavior repeatable, but
+  relevance and no-answer thresholds remain heuristic until they are calibrated
+  and promoted from diagnostic results to release criteria.
 - RAG `no_match` prevents weak candidates from entering model context, but it
   does not yet force the model to abstain from answering from prior knowledge.
 - The local hash embedding fallback is for deterministic development, not

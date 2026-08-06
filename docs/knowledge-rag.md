@@ -274,8 +274,8 @@ content boundary, filtering, and audit trail provide defense in depth.
   canonical corpus with fact, paraphrase, exact-ID, multi-source, no-answer,
   ACL, stale-data, and prompt-injection cases. ACL, stale-data, and no-answer
   cases remain diagnostic until their policy/calibration dependencies are
-  implemented. Persisting
-  Dataset/Evaluation Run versions and calibrating thresholds remain future work.
+  implemented. Persisting Dataset/Evaluation Run versions and calibrating
+  thresholds remain future work.
 
 The [Manual tests](manual-tests.md) exercise exact
 identifier recall, RRF reproduction, injection filtering, parent expansion,

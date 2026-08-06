@@ -89,8 +89,8 @@ The RAG path was built as a sequence of narrower contracts:
    made the selected context auditable and less repetitive.
 
 Each stage keeps version and ranking metadata in API and trace output. This
-makes parameter changes reproducible and supports later Golden Dataset
-calibration.
+makes parameter changes reproducible, supports the current Golden Dataset v1
+evaluation, and leaves threshold calibration auditable.
 
 **Trade-off:** more metadata crosses the API. The benefit is that retrieval
 quality can be debugged by stage instead of reduced to one opaque final score.
@@ -178,7 +178,8 @@ an accidental source of truth.
 ## What Remains Deliberately Unfinished
 
 - End-to-end Workspace lifecycle and mandatory multi-tenant isolation.
-- Golden Dataset versioning and calibrated retrieval/no-answer thresholds.
+- Immutable Dataset storage/changelog, persisted Evaluation Runs, and calibrated
+  retrieval/no-answer thresholds.
 - Semantic prompt-injection classification beyond deterministic high-precision
   patterns and trust boundaries.
 - Progress guards for repeated tool signatures, oscillation, and stalled loops.
