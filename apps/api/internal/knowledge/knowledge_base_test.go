@@ -114,3 +114,34 @@ func TestKnowledgeBaseDelegatesSearchToRetrievalPipeline(t *testing.T) {
 		t.Fatalf("expected embedding metadata, got %#v", retriever.embedding)
 	}
 }
+
+func TestKnowledgeBaseEvaluatesVersionedGoldenDataset(t *testing.T) {
+	t.Parallel()
+
+	unanswerable := false
+	retriever := &knowledgeRetrieverStub{}
+	knowledgeBase := NewKnowledgeBaseWithRetriever(nil, embeddingStub{embedding: openai.Embedding{
+		Vector: []float64{1}, Provider: "test", Model: "embedding-v1", Dimensions: 1,
+	}}, retriever)
+
+	response, err := knowledgeBase.Evaluate(context.Background(), domain.RAGEvaluationRunRequest{
+		Dataset: &domain.RAGGoldenDataset{
+			SchemaVersion: domain.RAGGoldenDatasetSchemaVersion,
+			ID:            "no-answer-baseline",
+			Version:       "1.0.0",
+			Cases: []domain.RAGEvaluationCase{{
+				ID: "missing", Query: "unknown product", Answerable: &unanswerable,
+				ForbiddenSources: []domain.RAGGoldenSource{{DocumentID: "doc-secret"}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("evaluate golden dataset: %v", err)
+	}
+	if response.Dataset == nil || response.Dataset.ID != "no-answer-baseline" || response.Dataset.Version != "1.0.0" {
+		t.Fatalf("expected dataset identity in response, got %#v", response.Dataset)
+	}
+	if response.Summary.Total != 1 || response.Summary.AnswerableCases != 0 || response.Summary.UnanswerableCases != 1 || response.Summary.Misses != 0 || len(response.Cases) != 1 || !response.Cases[0].Hit || response.Cases[0].Answerable {
+		t.Fatalf("unexpected no-answer evaluation result: %#v", response)
+	}
+}

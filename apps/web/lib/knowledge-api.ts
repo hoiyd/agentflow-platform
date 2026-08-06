@@ -154,6 +154,9 @@ export type DocumentSearchResponse = {
 export type RAGEvaluationCase = {
   id: string;
   query: string;
+  answerable?: boolean;
+  expected_sources?: RAGGoldenSource[];
+  forbidden_sources?: RAGGoldenSource[];
   expected_document_ids?: string[];
   expected_chunk_ids?: string[];
   expected_chunk_contains?: string[];
@@ -161,9 +164,44 @@ export type RAGEvaluationCase = {
   tags?: string[];
 };
 
+export type RAGGoldenSource = {
+  document_id?: string;
+  chunk_id?: string;
+  source_uri?: string;
+  content_contains?: string[];
+};
+
+type RAGGoldenCaseBase = {
+  id: string;
+  query: string;
+  forbidden_sources?: RAGGoldenSource[];
+  min_acceptable_rank?: number;
+  tags?: string[];
+};
+
+export type RAGGoldenCase = RAGGoldenCaseBase &
+  (
+    | { answerable: true; expected_sources: [RAGGoldenSource, ...RAGGoldenSource[]] }
+    | { answerable: false; expected_sources?: never }
+  );
+
+export type RAGGoldenDataset = {
+  schema_version: "rag-golden-dataset-v1";
+  id: string;
+  version: string;
+  description?: string;
+  tags?: string[];
+  cases: RAGGoldenCase[];
+};
+
+export type RAGGoldenDatasetInfo = Omit<RAGGoldenDataset, "cases">;
+
 export type RAGEvaluationRunResponse = {
+  dataset?: RAGGoldenDatasetInfo;
   summary: {
     total: number;
+    answerable_cases?: number;
+    unanswerable_cases?: number;
     hit_at_1: number;
     hit_at_3: number;
     hit_at_5: number;
@@ -173,6 +211,9 @@ export type RAGEvaluationRunResponse = {
   cases: Array<{
     id: string;
     query: string;
+    answerable?: boolean;
+    expected_sources?: RAGGoldenSource[];
+    forbidden_sources?: RAGGoldenSource[];
     expected_document_ids?: string[];
     expected_chunk_ids?: string[];
     expected_chunk_contains?: string[];
@@ -305,12 +346,16 @@ export async function searchRAG(input: {
   };
 }
 
-export async function runRAGEvaluation(input: {
-  cases: RAGEvaluationCase[];
+type RAGEvaluationRunInput = (
+  | { dataset: RAGGoldenDataset; cases?: never }
+  | { cases: RAGEvaluationCase[]; dataset?: never }
+) & {
   top_k?: number;
   min_similarity?: number;
   metadata?: Record<string, string>;
-}): Promise<RAGEvaluationRunResponse> {
+};
+
+export async function runRAGEvaluation(input: RAGEvaluationRunInput): Promise<RAGEvaluationRunResponse> {
   const response = await fetch(`${API_BASE}/api/rag/evaluations/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

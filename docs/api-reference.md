@@ -129,17 +129,41 @@ for per-call enforcement.
 embedding, dense/lexical recall, RRF, reranker, relevance gate, and security
 pipeline used by search and Agent Runs.
 
-Each case supplies a query and at least one expected document ID, chunk ID, or
-content fragment. Optional `min_acceptable_rank`, tags, Workspace/metadata
-scope, `top_k`, and `min_similarity` make the evaluation repeatable. The
-response reports aggregate Hit@1/3/5 and misses, plus each case's best rank,
+The request accepts exactly one of:
+
+- legacy top-level `cases`, which retain `expected_document_ids`,
+  `expected_chunk_ids`, and `expected_chunk_contains` compatibility;
+- a versioned `dataset` using `rag-golden-dataset-v1`.
+
+The Golden Dataset v1 contract is available as a
+[machine-readable JSON Schema](schemas/rag-golden-dataset-v1.schema.json) and a
+[complete example](../examples/knowledge/golden-dataset.v1.json). A Dataset has
+a stable `id`, explicit `version`, optional tags/description, and uniquely
+identified cases. Every case declares `query`, `answerable`, optional tags and
+forbidden sources. Answerable cases require at least one expected source;
+unanswerable cases cannot define expected sources.
+The evaluation endpoint rejects unknown JSON fields so misspelled safety fields
+cannot be silently ignored.
+
+An expected or forbidden source can match by `document_id`, `chunk_id`,
+`source_uri`, and/or required `content_contains` fragments. Fields inside one
+source are ANDed; multiple sources are alternatives. If any forbidden source
+appears in returned Top-K, the case fails. An `answerable: false` case passes
+only when retrieval returns no result.
+
+Optional `min_acceptable_rank`, Workspace/metadata scope, `top_k`, and
+`min_similarity` make the evaluation repeatable. The response echoes Dataset
+identity and reports aggregate Hit@1/3/5 and misses, plus each case's best rank,
 failure reason, ranked items, and prompt-injection decisions. It also returns
 the exact Embedding, Fusion, Reranker, and Relevance Gate identity used by the
-run.
+run. `answerable_cases` and `unanswerable_cases` make the Hit@K denominator
+explicit: no-answer cases contribute to pass/miss status but not Hit@K.
+Dedicated no-answer Precision/Recall remains part of RAG-010.
 
-The workbench exposes this endpoint under **Knowledge -> Retrieval evaluation**.
-These cases are an implemented diagnostic harness; versioned Golden Dataset
-storage and calibrated release thresholds remain future work.
+The workbench exposes this endpoint under **Knowledge -> Retrieval evaluation**
+and accepts either a Dataset object or a legacy case array. RAG-006 defines and
+validates the schema; immutable Dataset storage/changelog (RAG-008), persisted
+Evaluation Runs (RAG-009), and calibrated release thresholds remain future work.
 
 ## RAG Search Response
 
