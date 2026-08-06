@@ -57,6 +57,7 @@ the project.
 
 | Document | Question answered |
 | --- | --- |
+| [Production readiness roadmap](production-readiness-roadmap.md) | Which implemented controls form the baseline, what blocks a controlled production beta, and what is deliberately deferred? |
 | [Backend configuration](backend-configuration.md) | Which environment variables configure providers, storage, limits, tools, and Verification? |
 | [API reference](api-reference.md) | Which HTTP endpoints and response contracts are available? |
 | [Manual tests](manual-tests.md) | How can the major behaviors be tested manually? |
