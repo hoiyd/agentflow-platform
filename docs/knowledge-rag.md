@@ -270,10 +270,12 @@ content boundary, filtering, and audit trail provide defense in depth.
   noise; the token limit and downstream transformation bound that trade-off.
 - Prompt-injection filtering is defense in depth, not a semantic proof that a
   document is safe.
-- The `rag-golden-dataset-v1` schema now captures answerable/no-answer cases,
-  expected and forbidden sources, tags, and Dataset identity/version. Building
-  the representative v1 corpus, persisting Dataset/Evaluation Run versions,
-  and calibrating thresholds remain future work.
+- The [`agentflow-rag-baseline@1.0.0`](rag-golden-dataset.md) asset pairs a
+  canonical corpus with fact, paraphrase, exact-ID, multi-source, no-answer,
+  ACL, stale-data, and prompt-injection cases. ACL, stale-data, and no-answer
+  cases remain diagnostic until their policy/calibration dependencies are
+  implemented. Persisting
+  Dataset/Evaluation Run versions and calibrating thresholds remain future work.
 
 The [Manual tests](manual-tests.md) exercise exact
 identifier recall, RRF reproduction, injection filtering, parent expansion,

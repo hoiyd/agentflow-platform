@@ -674,6 +674,7 @@ function evaluationExpectedLabel(item: RAGEvaluationRunResponse["cases"][number]
   const parts = [
     item.answerable === false ? "answerable: no" : item.answerable === true ? "answerable: yes" : "",
     expectedSources.length ? `sources: ${expectedSources.join(", ")}` : "",
+    item.required_source_count && item.required_source_count > 1 ? `required sources: ${item.required_source_count}` : "",
     forbiddenSources.length ? `forbidden: ${forbiddenSources.join(", ")}` : "",
     item.expected_document_ids?.length ? `documents: ${item.expected_document_ids.join(", ")}` : "",
     item.expected_chunk_ids?.length ? `chunks: ${item.expected_chunk_ids.join(", ")}` : "",

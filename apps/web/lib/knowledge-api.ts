@@ -157,6 +157,7 @@ export type RAGEvaluationCase = {
   answerable?: boolean;
   expected_sources?: RAGGoldenSource[];
   forbidden_sources?: RAGGoldenSource[];
+  required_source_count?: number;
   expected_document_ids?: string[];
   expected_chunk_ids?: string[];
   expected_chunk_contains?: string[];
@@ -175,6 +176,7 @@ type RAGGoldenCaseBase = {
   id: string;
   query: string;
   forbidden_sources?: RAGGoldenSource[];
+  required_source_count?: number;
   min_acceptable_rank?: number;
   tags?: string[];
 };
@@ -214,6 +216,7 @@ export type RAGEvaluationRunResponse = {
     answerable?: boolean;
     expected_sources?: RAGGoldenSource[];
     forbidden_sources?: RAGGoldenSource[];
+    required_source_count?: number;
     expected_document_ids?: string[];
     expected_chunk_ids?: string[];
     expected_chunk_contains?: string[];
