@@ -135,7 +135,7 @@ exact lifecycle of each path.
 | [Configurable Agent profiles](docs/agent-profiles.md) | Persisted profiles combine a custom responsibility, system prompt, Tool allowlist, Memory/RAG switches, and Native/LangChainGo executor; Multi freezes active profiles as Router candidates | [API](apps/api/internal/httpapi/agents.go), [tests](apps/api/internal/httpapi/agents_test.go) |
 | [Reproducibility](docs/terms.md#runtime-snapshot) | Each Run freezes model, Agent, Tool schema, context policy, and budget in a Runtime Snapshot | [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
 | [Hybrid RAG](docs/knowledge-rag.md) | Independent semantic and keyword recall, Reciprocal Rank Fusion, versioned reranking and relevance gating, context transformation, and native `[S1]` citations | [pipeline](apps/api/internal/rag/retrieval.go), [tests](apps/api/internal/rag/retrieval_test.go) |
-| [Retrieval evaluation](docs/api-reference.md#rag-evaluation) | The workbench runs repeatable cases through the production retrieval pipeline and reports Hit@1/3/5, misses, security blocks, and component versions | [evaluation](apps/api/internal/rag/evaluation.go), [tests](apps/api/internal/knowledge/knowledge_base_test.go) |
+| [Retrieval evaluation](docs/rag-golden-dataset.md) | A versioned Dataset and paired corpus run repeatable fact, exact-ID, multi-source, no-answer, leakage, and injection cases through the production retrieval pipeline | [evaluation](apps/api/internal/rag/evaluation.go), [dataset](examples/knowledge/golden-dataset.v1.json) |
 | [Context control](docs/context-management.md) | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [assembler](apps/api/internal/contextassembly/assembler.go), [tests](apps/api/internal/contextassembly/assembler_test.go) |
 | [**Performance & resource control**](docs/execution-controls.md) | SSE streaming, bounded context/output, asynchronous Memory curation, and per-Run usage/cost budgets keep work measurable and bounded | [budget](apps/api/internal/budget/budget.go), [tests](apps/api/internal/budget/budget_test.go) |
 | [**Concurrency & backpressure**](docs/execution-controls.md#1-run-admission-and-conversation-concurrency) | Global Run admission, per-Conversation single-writer execution, bounded queues, model-request permits, RPM/TPM limits, and retry-aware slot release | [controller](apps/api/internal/concurrency/run_controller.go), [tests](apps/api/internal/concurrency/run_controller_test.go) |
@@ -166,8 +166,8 @@ persistence.
 3. Open **Knowledge** and upload [`examples/example.md`](examples/example.md).
 4. Search for that identifier and inspect Semantic rank, Keyword rank, RRF,
    final rerank, and the transformed model context.
-5. Optionally run the sample Retrieval Evaluation cases to expose Hit@1/3/5,
-   misses, security decisions, and active pipeline versions.
+5. Run `make golden-eval` to seed the canonical retrieval corpus and expose
+   Hit@1/3/5, misses, security decisions, and active pipeline versions.
 6. Run a Multi-Agent task against the runbook, then open **View trace** to
    connect orchestration stages, retrieval, model calls, usage, and final Run
    state. Export the Episode Report when a compact machine-readable review

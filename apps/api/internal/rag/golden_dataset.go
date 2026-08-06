@@ -67,6 +67,15 @@ func ResolveEvaluationCases(request domain.RAGEvaluationRunRequest) ([]domain.RA
 		if !*evalCase.Answerable && len(evalCase.ExpectedSources) > 0 {
 			return nil, nil, fmt.Errorf("unanswerable dataset case %q cannot define expected_sources", caseID)
 		}
+		if !*evalCase.Answerable && evalCase.RequiredSourceCount > 0 {
+			return nil, nil, fmt.Errorf("unanswerable dataset case %q cannot define required_source_count", caseID)
+		}
+		if evalCase.RequiredSourceCount < 0 {
+			return nil, nil, fmt.Errorf("dataset case %q required_source_count must be positive", caseID)
+		}
+		if evalCase.RequiredSourceCount > len(evalCase.ExpectedSources) {
+			return nil, nil, fmt.Errorf("dataset case %q required_source_count cannot exceed expected_sources", caseID)
+		}
 		if err := validateGoldenSources(caseID, "expected_sources", evalCase.ExpectedSources); err != nil {
 			return nil, nil, err
 		}

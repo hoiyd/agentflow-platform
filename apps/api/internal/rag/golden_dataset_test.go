@@ -83,6 +83,18 @@ func TestResolveEvaluationCasesRejectsInvalidGoldenDataset(t *testing.T) {
 			dataset.Cases[0].Answerable = &unanswerable
 			return domain.RAGEvaluationRunRequest{Dataset: dataset}
 		}, match: "cannot define expected_sources"},
+		{name: "unanswerable with required source count", build: func() domain.RAGEvaluationRunRequest {
+			dataset := validDataset()
+			dataset.Cases[0].Answerable = &unanswerable
+			dataset.Cases[0].ExpectedSources = nil
+			dataset.Cases[0].RequiredSourceCount = 1
+			return domain.RAGEvaluationRunRequest{Dataset: dataset}
+		}, match: "cannot define required_source_count"},
+		{name: "required source count exceeds expected sources", build: func() domain.RAGEvaluationRunRequest {
+			dataset := validDataset()
+			dataset.Cases[0].RequiredSourceCount = 2
+			return domain.RAGEvaluationRunRequest{Dataset: dataset}
+		}, match: "cannot exceed expected_sources"},
 		{name: "legacy expectation inside dataset", build: func() domain.RAGEvaluationRunRequest {
 			dataset := validDataset()
 			dataset.Cases[0].ExpectedSources = nil
@@ -109,6 +121,57 @@ func TestResolveEvaluationCasesRejectsInvalidGoldenDataset(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", testCase.match, err)
 			}
 		})
+	}
+}
+
+func TestEvaluateCaseRequiresMultipleExpectedSources(t *testing.T) {
+	t.Parallel()
+
+	answerable := true
+	evalCase := domain.RAGEvaluationCase{
+		ID: "multi-hop", Query: "Who handles the Atlas Checkout escalation?", Answerable: &answerable,
+		ExpectedSources: []domain.RAGGoldenSource{
+			{SourceURI: "service-catalog.md", ContentContains: []string{"Atlas Checkout", "Payments Reliability"}},
+			{SourceURI: "oncall-directory.md", ContentContains: []string{"Payments Reliability", "PAY-PRIMARY"}},
+		},
+		RequiredSourceCount: 2,
+		MinAcceptableRank:   3,
+	}
+	serviceCatalog := domain.RetrievedDocumentChunk{
+		Document: domain.Document{SourceURI: "service-catalog.md"},
+		Chunk:    domain.DocumentChunk{Content: "Atlas Checkout is owned by Payments Reliability."},
+	}
+	oncallDirectory := domain.RetrievedDocumentChunk{
+		Document: domain.Document{SourceURI: "oncall-directory.md"},
+		Chunk:    domain.DocumentChunk{Content: "Payments Reliability uses PAY-PRIMARY."},
+	}
+
+	missingSupport := EvaluateCase(evalCase, []domain.RetrievedDocumentChunk{serviceCatalog})
+	if missingSupport.Hit || !strings.Contains(missingSupport.FailureReason, "matched 1 of 2") {
+		t.Fatalf("expected incomplete multi-source evidence to miss, got %#v", missingSupport)
+	}
+
+	complete := EvaluateCase(evalCase, []domain.RetrievedDocumentChunk{serviceCatalog, oncallDirectory})
+	if !complete.Hit || complete.BestRank != 2 || !complete.HitAt3 || complete.RequiredSourceCount != 2 {
+		t.Fatalf("expected both sources to satisfy multi-hop evidence, got %#v", complete)
+	}
+}
+
+func TestEvaluateCaseDoesNotCountOneItemAsMultipleExpectedSources(t *testing.T) {
+	t.Parallel()
+
+	answerable := true
+	result := EvaluateCase(domain.RAGEvaluationCase{
+		ID: "distinct-evidence", Query: "Payments Reliability", Answerable: &answerable,
+		ExpectedSources: []domain.RAGGoldenSource{
+			{ContentContains: []string{"Payments"}},
+			{ContentContains: []string{"Reliability"}},
+		},
+		RequiredSourceCount: 2,
+	}, []domain.RetrievedDocumentChunk{{Chunk: domain.DocumentChunk{Content: "Payments Reliability"}}})
+
+	if result.Hit || !strings.Contains(result.FailureReason, "matched 1 of 2") {
+		t.Fatalf("expected one item to satisfy at most one required source, got %#v", result)
 	}
 }
 

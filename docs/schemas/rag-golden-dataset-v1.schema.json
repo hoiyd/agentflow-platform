@@ -101,6 +101,11 @@
             "$ref": "#/$defs/source"
           }
         },
+        "required_source_count": {
+          "type": "integer",
+          "minimum": 1,
+          "$comment": "Runtime validation also requires this value not to exceed expected_sources length."
+        },
         "min_acceptable_rank": {
           "type": "integer",
           "minimum": 1
@@ -129,6 +134,9 @@
             "properties": {
               "expected_sources": {
                 "maxItems": 0
+              },
+              "required_source_count": {
+                "not": {}
               }
             }
           }

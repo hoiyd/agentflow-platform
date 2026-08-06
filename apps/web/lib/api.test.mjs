@@ -295,8 +295,8 @@ test("RAG evaluation sends a versioned Golden Dataset", async (t) => {
   let requestBody = {};
   mockFetch(t, {
     dataset: { schema_version: "rag-golden-dataset-v1", id: "support", version: "1.0.0" },
-    summary: { total: 1, answerable_cases: 0, unanswerable_cases: 1, hit_at_1: 0, hit_at_3: 0, hit_at_5: 0, misses: 0 },
-    cases: [{ id: "unknown", query: "unknown", answerable: false, hit: true, items: [] }]
+    summary: { total: 1, answerable_cases: 1, unanswerable_cases: 0, hit_at_1: 0, hit_at_3: 1, hit_at_5: 1, misses: 0 },
+    cases: [{ id: "multi-source", query: "service owner schedule", answerable: true, required_source_count: 2, best_rank: 2, hit: true, items: [] }]
   }, (_url, options) => {
     requestBody = JSON.parse(String(options?.body ?? "{}"));
   });
@@ -306,14 +306,22 @@ test("RAG evaluation sends a versioned Golden Dataset", async (t) => {
       schema_version: "rag-golden-dataset-v1",
       id: "support",
       version: "1.0.0",
-      cases: [{ id: "unknown", query: "unknown", answerable: false, forbidden_sources: [{ document_id: "doc-private" }] }]
+      cases: [
+        {
+          id: "multi-source",
+          query: "service owner schedule",
+          answerable: true,
+          expected_sources: [{ document_id: "doc-service" }, { document_id: "doc-oncall" }],
+          required_source_count: 2
+        }
+      ]
     },
     top_k: 3
   });
 
   assert.equal(requestBody.dataset.schema_version, "rag-golden-dataset-v1");
-  assert.equal(requestBody.dataset.cases[0].answerable, false);
-  assert.deepEqual(requestBody.dataset.cases[0].forbidden_sources, [{ document_id: "doc-private" }]);
+  assert.equal(requestBody.dataset.cases[0].answerable, true);
+  assert.equal(requestBody.dataset.cases[0].required_source_count, 2);
   assert.equal(response.dataset.id, "support");
   assert.equal(response.cases[0].hit, true);
 });

@@ -247,6 +247,7 @@ type RAGEvaluationCase struct {
 	Answerable            *bool             `json:"answerable,omitempty"`
 	ExpectedSources       []RAGGoldenSource `json:"expected_sources,omitempty"`
 	ForbiddenSources      []RAGGoldenSource `json:"forbidden_sources,omitempty"`
+	RequiredSourceCount   int               `json:"required_source_count,omitempty"`
 	ExpectedDocumentIDs   []string          `json:"expected_document_ids,omitempty"`
 	ExpectedChunkIDs      []string          `json:"expected_chunk_ids,omitempty"`
 	ExpectedChunkContains []string          `json:"expected_chunk_contains,omitempty"`
@@ -280,6 +281,7 @@ type RAGEvaluationCaseResult struct {
 	Answerable            bool                     `json:"answerable"`
 	ExpectedSources       []RAGGoldenSource        `json:"expected_sources,omitempty"`
 	ForbiddenSources      []RAGGoldenSource        `json:"forbidden_sources,omitempty"`
+	RequiredSourceCount   int                      `json:"required_source_count,omitempty"`
 	ExpectedDocumentIDs   []string                 `json:"expected_document_ids,omitempty"`
 	ExpectedChunkIDs      []string                 `json:"expected_chunk_ids,omitempty"`
 	ExpectedChunkContains []string                 `json:"expected_chunk_contains,omitempty"`

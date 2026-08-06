@@ -137,7 +137,7 @@ The request accepts exactly one of:
 
 The Golden Dataset v1 contract is available as a
 [machine-readable JSON Schema](schemas/rag-golden-dataset-v1.schema.json) and a
-[complete example](../examples/knowledge/golden-dataset.v1.json). A Dataset has
+[canonical Dataset and corpus](rag-golden-dataset.md). A Dataset has
 a stable `id`, explicit `version`, optional tags/description, and uniquely
 identified cases. Every case declares `query`, `answerable`, optional tags and
 forbidden sources. Answerable cases require at least one expected source;
@@ -151,6 +151,11 @@ source are ANDed; multiple sources are alternatives. If any forbidden source
 appears in returned Top-K, the case fails. An `answerable: false` case passes
 only when retrieval returns no result.
 
+`required_source_count` optionally requires multiple distinct expected-source
+definitions to appear. It defaults to one for backward compatibility and cannot
+exceed the number of `expected_sources`. The Case rank is the first rank at
+which the required number of sources has been accumulated.
+
 Optional `min_acceptable_rank`, Workspace/metadata scope, `top_k`, and
 `min_similarity` make the evaluation repeatable. The response echoes Dataset
 identity and reports aggregate Hit@1/3/5 and misses, plus each case's best rank,
@@ -162,7 +167,9 @@ Dedicated no-answer Precision/Recall remains part of RAG-010.
 
 The workbench exposes this endpoint under **Knowledge -> Retrieval evaluation**
 and accepts either a Dataset object or a legacy case array. RAG-006 defines and
-validates the schema; immutable Dataset storage/changelog (RAG-008), persisted
+validates the schema; the maintained v1 asset and coverage matrix are described
+in [RAG Golden Dataset v1](rag-golden-dataset.md). Immutable Dataset
+storage/changelog (RAG-008), persisted
 Evaluation Runs (RAG-009), and calibrated release thresholds remain future work.
 
 ## RAG Search Response
