@@ -159,7 +159,13 @@ func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
 	var req domain.RAGEvaluationRunRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}

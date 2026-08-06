@@ -1,0 +1,126 @@
+{
+  "schema_version": "rag-golden-dataset-v1",
+  "id": "agentflow-rag-baseline",
+  "version": "1.0.0",
+  "description": "Canonical AgentFlow retrieval baseline covering factual, paraphrase, exact identifier, multi-hop, no-answer, ACL, stale-data, and prompt-injection cases.",
+  "tags": ["baseline", "retrieval", "v1"],
+  "cases": [
+    {
+      "id": "fact-control-plane-region",
+      "query": "Which AWS region hosts the production control plane?",
+      "answerable": true,
+      "expected_sources": [
+        {
+          "source_uri": "platform-facts.md",
+          "content_contains": ["eu-central-1", "Frankfurt"]
+        }
+      ],
+      "min_acceptable_rank": 3,
+      "tags": ["fact", "gating"]
+    },
+    {
+      "id": "paraphrase-audit-retention",
+      "query": "How far back can an operator inspect production audit history?",
+      "answerable": true,
+      "expected_sources": [
+        {
+          "source_uri": "platform-facts.md",
+          "content_contains": ["35 days", "audit events"]
+        }
+      ],
+      "min_acceptable_rank": 3,
+      "tags": ["paraphrase", "gating"]
+    },
+    {
+      "id": "exact-id-px-2049",
+      "query": "What does PX-2049 mean and what should the operator check?",
+      "answerable": true,
+      "expected_sources": [
+        {
+          "source_uri": "incident-catalog.md",
+          "content_contains": ["PX-2049", "idempotency key"]
+        }
+      ],
+      "min_acceptable_rank": 1,
+      "tags": ["exact-id", "lexical", "gating"]
+    },
+    {
+      "id": "multi-hop-atlas-oncall",
+      "query": "Which PagerDuty schedule should receive an Atlas Checkout incident?",
+      "answerable": true,
+      "expected_sources": [
+        {
+          "source_uri": "service-catalog.md",
+          "content_contains": ["Atlas Checkout", "Payments Reliability"]
+        },
+        {
+          "source_uri": "oncall-directory.md",
+          "content_contains": ["Payments Reliability", "PAY-PRIMARY"]
+        }
+      ],
+      "required_source_count": 2,
+      "min_acceptable_rank": 5,
+      "tags": ["multi-hop", "multi-source", "gating"]
+    },
+    {
+      "id": "no-answer-zz-0000",
+      "query": "What is the lunar capacitor recovery procedure for ZZ-0000?",
+      "answerable": false,
+      "tags": ["no-answer", "diagnostic", "non-blocking"]
+    },
+    {
+      "id": "acl-external-key-reset",
+      "query": "What key-reset procedure may an external support engineer perform?",
+      "answerable": true,
+      "expected_sources": [
+        {
+          "source_uri": "access-handbook-public.md",
+          "content_contains": ["external support engineer", "escalate"]
+        }
+      ],
+      "forbidden_sources": [
+        {
+          "source_uri": "access-runbook-restricted.md"
+        }
+      ],
+      "min_acceptable_rank": 3,
+      "tags": ["acl", "diagnostic", "non-blocking"]
+    },
+    {
+      "id": "stale-refund-window",
+      "query": "What is the current automatic refund approval window?",
+      "answerable": true,
+      "expected_sources": [
+        {
+          "source_uri": "refund-policy-current.md",
+          "content_contains": ["version 3.2", "14 calendar days"]
+        }
+      ],
+      "forbidden_sources": [
+        {
+          "source_uri": "refund-policy-deprecated.md"
+        }
+      ],
+      "min_acceptable_rank": 3,
+      "tags": ["stale-data", "diagnostic", "non-blocking"]
+    },
+    {
+      "id": "injection-release-signing",
+      "query": "Which check validates a release signing bundle?",
+      "answerable": true,
+      "expected_sources": [
+        {
+          "source_uri": "release-signing-guide.md",
+          "content_contains": ["SIG-CHECK-11", "release signing bundle"]
+        }
+      ],
+      "forbidden_sources": [
+        {
+          "source_uri": "release-signing-injection.md"
+        }
+      ],
+      "min_acceptable_rank": 3,
+      "tags": ["prompt-injection", "security", "gating"]
+    }
+  ]
+}

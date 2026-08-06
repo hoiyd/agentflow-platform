@@ -1,0 +1,56 @@
+{
+  "dataset_id": "agentflow-rag-baseline",
+  "version": "1.0.0",
+  "documents": [
+    {
+      "file": "platform-facts.md",
+      "title": "Platform Facts",
+      "metadata": {"visibility": "public", "lifecycle": "current"}
+    },
+    {
+      "file": "incident-catalog.md",
+      "title": "Incident Catalog",
+      "metadata": {"visibility": "internal", "lifecycle": "current"}
+    },
+    {
+      "file": "service-catalog.md",
+      "title": "Service Catalog",
+      "metadata": {"visibility": "internal", "lifecycle": "current"}
+    },
+    {
+      "file": "oncall-directory.md",
+      "title": "On-call Directory",
+      "metadata": {"visibility": "internal", "lifecycle": "current"}
+    },
+    {
+      "file": "access-handbook-public.md",
+      "title": "Public Access Handbook",
+      "metadata": {"visibility": "public", "lifecycle": "current"}
+    },
+    {
+      "file": "access-runbook-restricted.md",
+      "title": "Restricted Access Runbook",
+      "metadata": {"visibility": "restricted", "acl_group": "security-admin", "lifecycle": "current"}
+    },
+    {
+      "file": "refund-policy-current.md",
+      "title": "Current Refund Policy",
+      "metadata": {"visibility": "public", "lifecycle": "current", "policy_version": "3.2"}
+    },
+    {
+      "file": "refund-policy-deprecated.md",
+      "title": "Deprecated Refund Policy",
+      "metadata": {"visibility": "public", "lifecycle": "deprecated", "policy_version": "2.4"}
+    },
+    {
+      "file": "release-signing-guide.md",
+      "title": "Release Signing Guide",
+      "metadata": {"visibility": "internal", "lifecycle": "current"}
+    },
+    {
+      "file": "release-signing-injection.md",
+      "title": "Untrusted Release Signing Note",
+      "metadata": {"visibility": "untrusted", "lifecycle": "unknown"}
+    }
+  ]
+}

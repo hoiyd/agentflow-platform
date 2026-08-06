@@ -149,7 +149,7 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 | --- | --- | --- |
 | [Hybrid retrieval and ranking](docs/knowledge-rag.md#retrieval-pipeline) | Independent semantic and keyword recall feed Reciprocal Rank Fusion, a versioned Reranker, and a separate Relevance Gate | [pipeline](apps/api/internal/rag/retrieval.go), [tests](apps/api/internal/rag/retrieval_test.go) |
 | [Context selection and citations](docs/knowledge-rag.md#parent-child-context-selection) | Source-traceable child hits drive scoped parent/adjacent expansion, deduplication, merging, token selection, and resolved `[S1]` citations | [selection](apps/api/internal/rag/context_selection.go), [citations](apps/api/internal/rag/citations.go), [tests](apps/api/internal/rag/context_selection_test.go) |
-| [Retrieval safety and evaluation](docs/api-reference.md#rag-evaluation) | Injection filtering runs before ranking; repeatable cases use the same retrieval path and report Hit@1/3/5, misses, security decisions, and component versions | [guard](apps/api/internal/rag/security.go), [evaluation](apps/api/internal/rag/evaluation.go), [tests](apps/api/internal/knowledge/knowledge_base_test.go) |
+| [Retrieval safety and evaluation](docs/rag-golden-dataset.md) | Injection filtering runs before ranking; a versioned Dataset and paired corpus exercise fact, exact-ID, multi-source, no-answer, leakage, and injection cases through the same retrieval path | [guard](apps/api/internal/rag/security.go), [evaluation](apps/api/internal/rag/evaluation.go), [dataset](examples/knowledge/golden-dataset.v1.json) |
 
 ### Reliability, Governance, and Evidence
 
@@ -182,8 +182,8 @@ persistence.
 3. Open **Knowledge** and upload [`examples/example.md`](examples/example.md).
 4. Search for that identifier and inspect Semantic rank, Keyword rank, RRF,
    final rerank, and the transformed model context.
-5. Optionally run the sample Retrieval Evaluation cases to expose Hit@1/3/5,
-   misses, security decisions, and active pipeline versions.
+5. Run `make golden-eval` to seed the canonical retrieval corpus and expose
+   Hit@1/3/5, misses, security decisions, and active pipeline versions.
 6. Run a Multi-Agent task against the runbook, then open **View trace** to
    connect orchestration stages, retrieval, model calls, usage, and final Run
    state. Export the Episode Report when a compact machine-readable review

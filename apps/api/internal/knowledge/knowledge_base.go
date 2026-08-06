@@ -103,21 +103,24 @@ func (s *KnowledgeBase) Search(ctx context.Context, search domain.DocumentSearch
 }
 
 func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error) {
-	if len(request.Cases) == 0 {
-		return domain.RAGEvaluationRunResponse{}, errors.New("at least one evaluation case is required")
-	}
-	if len(request.Cases) > 50 {
-		return domain.RAGEvaluationRunResponse{}, errors.New("at most 50 evaluation cases are supported")
+	cases, dataset, err := rag.ResolveEvaluationCases(request)
+	if err != nil {
+		return domain.RAGEvaluationRunResponse{}, err
 	}
 
 	topK := rag.NormalizeSearchLimit(request.TopK)
-	results := make([]domain.RAGEvaluationCaseResult, 0, len(request.Cases))
-	summary := domain.RAGEvaluationSummary{Total: len(request.Cases)}
+	results := make([]domain.RAGEvaluationCaseResult, 0, len(cases))
+	summary := domain.RAGEvaluationSummary{Total: len(cases)}
 	var embedding domain.EmbeddingInfo
 	var fusion domain.FusionInfo
 	var reranker domain.RerankerInfo
 	var relevanceGate domain.RelevanceGateInfo
-	for _, evaluationCase := range request.Cases {
+	for _, evaluationCase := range cases {
+		if evaluationCase.Answerable == nil || *evaluationCase.Answerable {
+			summary.AnswerableCases++
+		} else {
+			summary.UnanswerableCases++
+		}
 		response, err := s.Search(ctx, domain.DocumentSearch{
 			Query:         evaluationCase.Query,
 			WorkspaceID:   request.WorkspaceID,
@@ -151,5 +154,5 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 			summary.Misses++
 		}
 	}
-	return domain.RAGEvaluationRunResponse{Summary: summary, Cases: results, Embedding: embedding, Fusion: fusion, Reranker: reranker, RelevanceGate: relevanceGate}, nil
+	return domain.RAGEvaluationRunResponse{Dataset: dataset, Summary: summary, Cases: results, Embedding: embedding, Fusion: fusion, Reranker: reranker, RelevanceGate: relevanceGate}, nil
 }
