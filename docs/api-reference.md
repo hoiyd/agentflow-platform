@@ -109,7 +109,7 @@ Replay is the detailed aggregate assembled from stored records for one Run.
 Episode Report is a compact projection derived from Replay for review or
 export; it does not create another execution history or accounting source.
 
-Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, and `citation`. See [Verification](verification.md) for exact config shapes, scope, extension points, and policy semantics.
+Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, `citation`, and `answer_relevance`. The last type binds the user question to the candidate output and records embedding cosine-similarity evidence; it is not a factuality or groundedness check. See [Verification](verification.md) for exact config shapes, scope, extension points, and policy semantics.
 
 ## Tool Governance
 

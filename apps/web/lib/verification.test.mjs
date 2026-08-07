@@ -12,10 +12,15 @@ test("ordinary chat omits the completion contract", () => {
   assert.equal(buildCompletionContract(DEFAULT_COMPLETION_VERIFICATION), undefined);
 });
 
-test("all five backend verifiers have a compatible frontend contract", () => {
+test("all six backend verifiers have a compatible frontend contract", () => {
   const contract = buildCompletionContract({
     ...structuredClone(DEFAULT_COMPLETION_VERIFICATION),
     enabled: true,
+    answerRelevance: {
+      enabled: true,
+      minimumScore: 0.45,
+      minimumAnswerCharacters: 40
+    },
     textConstraints: {
       ...DEFAULT_COMPLETION_VERIFICATION.textConstraints,
       minimumCharacters: 240,
@@ -49,6 +54,15 @@ test("all five backend verifiers have a compatible frontend contract", () => {
   assert.deepEqual(contract, {
     subject_type: "run_output",
     verifiers: [
+      {
+        id: "answer-relevance",
+        type: "answer_relevance",
+        required: true,
+        config: {
+          minimum_score: 0.45,
+          minimum_answer_characters: 40
+        }
+      },
       {
         id: "response-text",
         type: "text_constraints",
@@ -104,8 +118,8 @@ test("all five backend verifiers have a compatible frontend contract", () => {
 });
 
 test("each verifier can be enabled independently", () => {
-  const verifierKeys = ["textConstraints", "citation", "jsonSchema", "http", "command"];
-  const verifierTypes = ["text_constraints", "citation", "json_schema", "http", "command"];
+  const verifierKeys = ["answerRelevance", "textConstraints", "citation", "jsonSchema", "http", "command"];
+  const verifierTypes = ["answer_relevance", "text_constraints", "citation", "json_schema", "http", "command"];
 
   verifierKeys.forEach((enabledKey, index) => {
     const settings = structuredClone(DEFAULT_COMPLETION_VERIFICATION);
@@ -148,12 +162,16 @@ test("unsafe host and command paths are rejected before the request", () => {
 test("numeric settings are normalized to server limits", () => {
   const settings = structuredClone(DEFAULT_COMPLETION_VERIFICATION);
   settings.textConstraints.minimumCharacters = -1;
+  settings.answerRelevance.minimumScore = 2;
+  settings.answerRelevance.minimumAnswerCharacters = 0;
   settings.citation.minimumCitations = 101;
   settings.citation.minimumUniqueSources = -1;
   settings.http.expectedStatus = 999;
   settings.maxAttempts = 9;
 
   const normalized = normalizeCompletionVerification(settings);
+  assert.equal(normalized.answerRelevance.minimumScore, 1);
+  assert.equal(normalized.answerRelevance.minimumAnswerCharacters, 1);
   assert.equal(normalized.textConstraints.minimumCharacters, 0);
   assert.equal(normalized.citation.minimumCitations, 100);
   assert.equal(normalized.citation.minimumUniqueSources, 0);

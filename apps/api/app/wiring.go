@@ -57,6 +57,16 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		AllowedCommands:  splitCSV(cfg.VerificationAllowedCommands),
 		AllowedHTTPHosts: splitCSV(cfg.VerificationAllowedHTTPHosts),
 		MaxArtifactBytes: cfg.VerificationMaxArtifactBytes,
+		AnswerRelevanceEmbedder: func(ctx context.Context, input string) (verification.AnswerRelevanceEmbedding, error) {
+			embedding, err := modelClient.EmbedText(ctx, input)
+			if err != nil {
+				return verification.AnswerRelevanceEmbedding{}, err
+			}
+			return verification.AnswerRelevanceEmbedding{
+				Vector: embedding.Vector, Model: embedding.Model, Provider: embedding.Provider,
+				Estimated: embedding.Estimated, Dimensions: embedding.Dimensions,
+			}, nil
+		},
 	})
 	verificationEngine := verification.NewEngine(appStore, verifierRegistry)
 	retrievalPipeline := rag.NewRetrievalPipeline(appStore)

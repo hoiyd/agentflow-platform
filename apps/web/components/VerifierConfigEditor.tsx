@@ -8,6 +8,26 @@ type VerifierConfigEditorProps = {
 };
 
 export function VerifierConfigEditor({ disabled, draft, onChange, type }: VerifierConfigEditorProps) {
+  if (type === "answer_relevance") {
+    const settings = draft.answerRelevance;
+    const update = (next: Partial<typeof settings>) =>
+      onChange({ answerRelevance: { ...settings, ...next } });
+    return (
+      <VerifierSection
+        checked={settings.enabled}
+        disabled={disabled}
+        label="Check answer relevance"
+        onToggle={(enabled) => update({ enabled })}
+      >
+        <div className="verifier-field-grid two-columns">
+          <NumberField disabled={disabled || !settings.enabled} label="Minimum cosine similarity" min={0.05} max={1} step={0.05} value={settings.minimumScore} onChange={(minimumScore) => update({ minimumScore })} />
+          <NumberField disabled={disabled || !settings.enabled} label="Minimum answer characters" min={1} max={100000} value={settings.minimumAnswerCharacters} onChange={(minimumAnswerCharacters) => update({ minimumAnswerCharacters })} />
+        </div>
+        <small className="verifier-requirement">Embeds the question and substantive answer with the configured embedding model. Similarity and model metadata are recorded in verification evidence.</small>
+      </VerifierSection>
+    );
+  }
+
   if (type === "text_constraints") {
     const settings = draft.textConstraints;
     const update = (next: Partial<typeof settings>) =>
@@ -122,11 +142,11 @@ function VerifierSection({ checked, children, disabled, label, onToggle }: { che
   );
 }
 
-function NumberField({ disabled, label, max, min, onChange, value }: { disabled: boolean; label: string; max?: number; min: number; onChange: (value: number) => void; value: number }) {
+function NumberField({ disabled, label, max, min, onChange, step, value }: { disabled: boolean; label: string; max?: number; min: number; onChange: (value: number) => void; step?: number; value: number }) {
   return (
     <label className="verifier-field">
       <span>{label}</span>
-      <input disabled={disabled} max={max} min={min} onChange={(event) => onChange(Number(event.target.value))} type="number" value={value} />
+      <input disabled={disabled} max={max} min={min} onChange={(event) => onChange(Number(event.target.value))} step={step} type="number" value={value} />
     </label>
   );
 }
