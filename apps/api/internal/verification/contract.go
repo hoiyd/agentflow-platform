@@ -111,6 +111,21 @@ func SubjectForRunOutput(value string) Subject {
 	return Subject{Type: "run_output", Value: value, Hash: hashBytes([]byte(value))}
 }
 
+// SubjectForQuestionAnswer binds the user question to the candidate output so
+// answer-level verifier evidence cannot be reused across different questions.
+// Output-only verifiers continue to consume Value unchanged.
+func SubjectForQuestionAnswer(question, value string) Subject {
+	question = strings.TrimSpace(question)
+	if question == "" {
+		return SubjectForRunOutput(value)
+	}
+	encoded, _ := json.Marshal(struct {
+		Question string `json:"question"`
+		Answer   string `json:"answer"`
+	}{Question: question, Answer: value})
+	return Subject{Type: "run_output", Value: value, Question: question, Hash: hashBytes(encoded)}
+}
+
 func SnapshotHash(snapshot *domain.RuntimeSnapshot) (string, error) {
 	if snapshot == nil {
 		return hashBytes(nil), nil
