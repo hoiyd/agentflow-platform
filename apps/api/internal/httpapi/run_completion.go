@@ -47,7 +47,7 @@ func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flush
 		},
 	})
 
-	completed, err := h.resolveRunCompletion(ctx, request.RunID, request.Assistant)
+	completed, err := h.resolveRunCompletion(ctx, request.RunID, request.UserInput, request.Assistant)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(request.RunID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
@@ -89,7 +89,7 @@ func (h *Handler) freezeCompletionContract(contract *domain.CompletionContract) 
 	return h.verification.FreezeContract(contract)
 }
 
-func (h *Handler) resolveRunCompletion(ctx context.Context, runID, output string) (domain.Run, error) {
+func (h *Handler) resolveRunCompletion(ctx context.Context, runID, question, output string) (domain.Run, error) {
 	run, ok, err := h.store.GetRun(runID)
 	if err != nil {
 		return domain.Run{}, err
@@ -105,7 +105,14 @@ func (h *Handler) resolveRunCompletion(ctx context.Context, runID, output string
 	if h.verification == nil {
 		return domain.Run{}, errors.New("verification engine is unavailable")
 	}
-	decision, err := h.verification.Verify(ctx, runID, verification.SubjectForRunOutput(output))
+	if strings.TrimSpace(question) == "" {
+		messages, listErr := h.store.ListMessages(run.ConversationID)
+		if listErr != nil {
+			return domain.Run{}, listErr
+		}
+		question = latestUserInput(messages)
+	}
+	decision, err := h.verification.Verify(ctx, runID, verification.SubjectForQuestionAnswer(question, output))
 	if err != nil {
 		_, _ = h.store.UpdateRunVerificationStatus(runID, domain.VerificationBlocked)
 		return domain.Run{}, err
@@ -119,6 +126,15 @@ func (h *Handler) resolveRunCompletion(ctx context.Context, runID, output string
 func latestAssistantOutput(messages []domain.Message) string {
 	for index := len(messages) - 1; index >= 0; index-- {
 		if messages[index].Role == "assistant" && strings.TrimSpace(messages[index].Content) != "" {
+			return messages[index].Content
+		}
+	}
+	return ""
+}
+
+func latestUserInput(messages []domain.Message) string {
+	for index := len(messages) - 1; index >= 0; index-- {
+		if messages[index].Role == "user" && strings.TrimSpace(messages[index].Content) != "" {
 			return messages[index].Content
 		}
 	}

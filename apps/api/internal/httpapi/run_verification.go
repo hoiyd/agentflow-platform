@@ -41,7 +41,7 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "run has no candidate output to verify")
 		return
 	}
-	decision, err := h.verification.Verify(r.Context(), run.ID, verification.SubjectForRunOutput(output))
+	decision, err := h.verification.Verify(r.Context(), run.ID, verification.SubjectForQuestionAnswer(latestUserInput(messages), output))
 	if err != nil {
 		_, _ = h.store.UpdateRunVerificationStatus(run.ID, domain.VerificationBlocked)
 		writeError(w, http.StatusInternalServerError, err.Error())

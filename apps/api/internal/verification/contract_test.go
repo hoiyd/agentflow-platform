@@ -157,6 +157,11 @@ func TestSubjectAndSnapshotHashesBindExactContent(t *testing.T) {
 	if first.Hash == second.Hash {
 		t.Fatal("subject hash ignored a content change")
 	}
+	firstQuestion := SubjectForQuestionAnswer("What are the opening hours?", "Open daily at 9am.")
+	secondQuestion := SubjectForQuestionAnswer("What is on the menu?", "Open daily at 9am.")
+	if firstQuestion.Hash == secondQuestion.Hash || firstQuestion.Question == "" {
+		t.Fatal("question-aware subject hash ignored the user question")
+	}
 	hash, err := SnapshotHash(&domain.RuntimeSnapshot{SchemaVersion: 3, Mode: "single"})
 	if err != nil || hash == "" {
 		t.Fatalf("snapshot hash: %q err=%v", hash, err)

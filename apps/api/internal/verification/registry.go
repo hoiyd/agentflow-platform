@@ -18,17 +18,19 @@ import (
 const defaultArtifactBytes = 64 * 1024
 
 type Options struct {
-	WorkspaceRoot    string
-	AllowedCommands  []string
-	AllowedHTTPHosts []string
-	HTTPClient       *http.Client
-	MaxArtifactBytes int
+	WorkspaceRoot           string
+	AllowedCommands         []string
+	AllowedHTTPHosts        []string
+	HTTPClient              *http.Client
+	MaxArtifactBytes        int
+	AnswerRelevanceEmbedder AnswerRelevanceEmbedder
 }
 
 type Subject struct {
-	Type  string
-	Value string
-	Hash  string
+	Type     string
+	Value    string
+	Question string
+	Hash     string
 }
 
 // Artifact is verifier output that can be persisted independently from the
@@ -76,6 +78,7 @@ func NewRegistry(options Options) *Registry {
 		jsonSchemaVerifier{},
 		textConstraintsVerifier{},
 		citationVerifier{},
+		answerRelevanceVerifier{embed: options.AnswerRelevanceEmbedder},
 	}
 	registry := &Registry{verifiers: make(map[domain.VerifierType]Verifier, len(items)), maxArtifactBytes: options.MaxArtifactBytes}
 	for _, item := range items {

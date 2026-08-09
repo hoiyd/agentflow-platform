@@ -53,10 +53,11 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
 	}
 	verifierRegistry := verification.NewRegistry(verification.Options{
-		WorkspaceRoot:    cfg.VerificationWorkspaceRoot,
-		AllowedCommands:  splitCSV(cfg.VerificationAllowedCommands),
-		AllowedHTTPHosts: splitCSV(cfg.VerificationAllowedHTTPHosts),
-		MaxArtifactBytes: cfg.VerificationMaxArtifactBytes,
+		WorkspaceRoot:           cfg.VerificationWorkspaceRoot,
+		AllowedCommands:         splitCSV(cfg.VerificationAllowedCommands),
+		AllowedHTTPHosts:        splitCSV(cfg.VerificationAllowedHTTPHosts),
+		MaxArtifactBytes:        cfg.VerificationMaxArtifactBytes,
+		AnswerRelevanceEmbedder: newAnswerRelevanceEmbedder(modelClient),
 	})
 	verificationEngine := verification.NewEngine(appStore, verifierRegistry)
 	retrievalPipeline := rag.NewRetrievalPipeline(appStore)
@@ -112,6 +113,23 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 
 	cleanupStore = false
 	return applicationDependencies{store: appStore, handler: handler, memoryCurator: memoryCurator}, nil
+}
+
+type answerRelevanceEmbeddingClient interface {
+	EmbedText(context.Context, string) (openai.Embedding, error)
+}
+
+func newAnswerRelevanceEmbedder(client answerRelevanceEmbeddingClient) verification.AnswerRelevanceEmbedder {
+	return func(ctx context.Context, input string) (verification.AnswerRelevanceEmbedding, error) {
+		embedding, err := client.EmbedText(ctx, input)
+		if err != nil {
+			return verification.AnswerRelevanceEmbedding{}, err
+		}
+		return verification.AnswerRelevanceEmbedding{
+			Vector: embedding.Vector, Model: embedding.Model, Provider: embedding.Provider,
+			Estimated: embedding.Estimated, Dimensions: embedding.Dimensions,
+		}, nil
+	}
 }
 
 func newMemoryCurator(cfg config.Config, appStore store.Store, modelClient *openai.Client) *memorypkg.Curator {

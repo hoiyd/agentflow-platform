@@ -42,6 +42,7 @@ const (
 	VerifierJSONSchema      VerifierType = "json_schema"
 	VerifierTextConstraints VerifierType = "text_constraints"
 	VerifierCitation        VerifierType = "citation"
+	VerifierAnswerRelevance VerifierType = "answer_relevance"
 )
 
 // CompletionContract opts one Run into evidence-gated completion. It must be
