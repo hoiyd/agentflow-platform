@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -9,6 +10,15 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
 )
+
+type sessionHistoryErrorStore struct {
+	*store.FileStore
+	messageErr error
+}
+
+func (s sessionHistoryErrorStore) ListMessages(string) ([]domain.Message, error) {
+	return nil, s.messageErr
+}
 
 func TestRetrieveSessionHistoryRestoresCompactedMessageAndExcludesActiveHistory(t *testing.T) {
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
@@ -82,5 +92,59 @@ func TestRetrieveSessionHistoryKeepsLegacySnapshotDisabled(t *testing.T) {
 	config := contextassembly.NormalizeSnapshotConfig(contextassembly.DefaultConfig(), domain.UnifiedExecutionSnapshotVersion)
 	if config.HistoryRetrievalEnabled {
 		t.Fatalf("legacy snapshot unexpectedly enabled history retrieval: %#v", config)
+	}
+}
+
+func TestRetrieveSessionHistorySkipsMissingRunAndEmptyQuery(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	if items := runtime.retrieveSessionHistory(context.Background(), "missing", "conv", "release-42"); items != nil {
+		t.Fatalf("missing run returned history: %#v", items)
+	}
+
+	conversation, _ := fileStore.CreateConversation("Empty history query")
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if items := runtime.retrieveSessionHistory(context.Background(), run.ID, conversation.ID, "the and what please"); items != nil {
+		t.Fatalf("noise-only query returned history: %#v", items)
+	}
+	events, err := fileStore.ListRunEvents(run.ID)
+	if err != nil || len(events) != 0 {
+		t.Fatalf("noise-only query should not publish events: events=%#v err=%v", events, err)
+	}
+}
+
+func TestRetrieveSessionHistoryPublishesSearchFailure(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, _ := fileStore.CreateConversation("Failed history search")
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	want := errors.New("message history unavailable")
+	runtime := NewRuntime(RuntimeOptions{
+		Store:       sessionHistoryErrorStore{FileStore: fileStore, messageErr: want},
+		ModelClient: newLocalFallbackOpenAIClientForTest(),
+	})
+	if items := runtime.retrieveSessionHistory(context.Background(), run.ID, conversation.ID, "recover release-42"); items != nil {
+		t.Fatalf("failed search returned history: %#v", items)
+	}
+	events, err := fileStore.ListRunEvents(run.ID)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	if len(events) != 2 || events[0].Type != domain.EventHistorySearchStarted || events[1].Type != domain.EventHistorySearchFailed {
+		t.Fatalf("unexpected search lifecycle: %#v", events)
+	}
+	if events[1].Payload["error"] != want.Error() {
+		t.Fatalf("failure payload lost cause: %#v", events[1].Payload)
 	}
 }

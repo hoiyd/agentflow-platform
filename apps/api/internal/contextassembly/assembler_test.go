@@ -231,6 +231,10 @@ func TestLegacySnapshotKeepsCompactionDisabled(t *testing.T) {
 	if v3.CompactionMode != CompactionModeAuto || v3.HistoryRetrievalEnabled {
 		t.Fatalf("v3 snapshot lost its frozen compaction behavior: %#v", v3)
 	}
+	invalid := NormalizeSnapshotConfig(domain.ContextAssemblyConfig{HistoryRetrievalWindow: -1}, domain.CurrentRuntimeSnapshotVersion)
+	if invalid.HistoryRetrievalWindow != DefaultConfig().HistoryRetrievalWindow {
+		t.Fatalf("invalid history window was not normalized: %#v", invalid)
+	}
 }
 
 func TestAssembleInjectsRetrievedHistoryAndRecordsStableReferences(t *testing.T) {
@@ -300,6 +304,20 @@ func TestAssemblePrefersRetrievedOriginalOverDuplicateRecentHistory(t *testing.T
 		if entry.Source == SourceHistory && entry.ReferenceID == "msg-old" && (entry.Selected || entry.Reason != "superseded_by_history_retrieval") {
 			t.Fatalf("duplicate recent history was not suppressed: %#v", entry)
 		}
+	}
+}
+
+func TestHistorySearchCandidatesDiscardInvalidSourcesAndDefaultOriginalSize(t *testing.T) {
+	items := historySearchCandidates([]domain.RetrievedSessionHistory{
+		{Reference: "message:empty", Content: "  "},
+		{Content: "missing reference"},
+		{Reference: "message:valid", Content: " exact value ", MatchReason: "keyword_match"},
+	})
+	if len(items) != 1 {
+		t.Fatalf("unexpected history candidates: %#v", items)
+	}
+	if items[0].entry.ReferenceID != "message:valid" || items[0].entry.OriginalBytes != len(" exact value ") || items[0].selectedReason != "keyword_match" {
+		t.Fatalf("history source metadata was not preserved: %#v", items[0])
 	}
 }
 

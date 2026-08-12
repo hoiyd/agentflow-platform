@@ -209,6 +209,67 @@ func TestSearchOrdersEqualTimestampsByReference(t *testing.T) {
 	}
 }
 
+func TestSearchRejectsCrossSourceAndNonMatchingFilters(t *testing.T) {
+	createdAt := time.Date(2026, 8, 12, 10, 0, 0, 0, time.UTC)
+	store := testStore{
+		messages: []domain.Message{{ID: "msg-1", Role: "user", Content: "release-42", CreatedAt: createdAt}},
+		events: []domain.RunEvent{{
+			ID: "event-1", RunID: "run-1", Type: domain.EventToolFailed,
+			Payload: map[string]any{"error": "release-42"}, Timestamp: createdAt,
+		}},
+	}
+	tests := []Query{
+		{EventTypes: []domain.RunEventType{domain.EventToolFailed}, MessageIDs: []string{"msg-1"}},
+		{MessageIDs: []string{"missing"}},
+		{Roles: []string{"assistant"}},
+		{EventIDs: []string{"missing"}},
+		{Keywords: []string{"not-present"}},
+	}
+	for _, query := range tests {
+		query.MaxResults, query.MaxCharacters, query.MaxTokens = 5, 1000, 250
+		result, err := Search(store, query)
+		if err != nil {
+			t.Fatalf("search %#v: %v", query, err)
+		}
+		if len(result.Items) != 0 {
+			t.Fatalf("filters leaked cross-source results for %#v: %#v", query, result.Items)
+		}
+	}
+}
+
+func TestSearchExcludesAdjacentMessagesOutsideTimeRange(t *testing.T) {
+	base := time.Date(2026, 8, 12, 10, 0, 0, 0, time.UTC)
+	result, err := Search(testStore{messages: []domain.Message{
+		{ID: "outside", Role: "assistant", Content: "prior context", CreatedAt: base},
+		{ID: "match", Role: "user", Content: "release-42", CreatedAt: base.Add(time.Minute)},
+	}}, Query{
+		Keywords: []string{"release-42"}, From: ptrTime(base.Add(time.Minute)), NeighborWindow: 1,
+		MaxResults: 5, MaxCharacters: 1000, MaxTokens: 250,
+	})
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(result.Items) != 1 || result.Items[0].Reference != "message:match" {
+		t.Fatalf("out-of-range neighbor was included: %#v", result.Items)
+	}
+}
+
+func TestApplyLimitsHandlesExhaustedAndEmptyCandidates(t *testing.T) {
+	items, truncated := applyLimits([]candidate{
+		{item: domain.RetrievedSessionHistory{Reference: "message:first", Content: "abcd"}},
+		{item: domain.RetrievedSessionHistory{Reference: "message:second", Content: "efgh"}},
+	}, Query{MaxResults: 2, MaxCharacters: 100, MaxTokens: 1})
+	if len(items) != 1 || !truncated {
+		t.Fatalf("token exhaustion was not enforced: items=%#v truncated=%v", items, truncated)
+	}
+	items, truncated = applyLimits([]candidate{{item: domain.RetrievedSessionHistory{Reference: "message:empty"}}}, Query{
+		MaxResults: 1, MaxCharacters: 100, MaxTokens: 10,
+	})
+	if len(items) != 0 || !truncated {
+		t.Fatalf("empty candidate was not skipped: items=%#v truncated=%v", items, truncated)
+	}
+}
+
 func TestBoundTextAndTokenEstimateHandleEdgeCases(t *testing.T) {
 	if content, truncated := boundText("value", 0, 10); content != "" || !truncated {
 		t.Fatalf("zero character budget: content=%q truncated=%v", content, truncated)

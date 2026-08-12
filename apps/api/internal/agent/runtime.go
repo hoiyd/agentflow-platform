@@ -254,10 +254,7 @@ func (r *Runtime) retrieveSessionHistory(ctx context.Context, runID string, conv
 }
 
 func sessionHistorySearchPayload(payload eventpkg.SessionHistorySearchPayload) map[string]any {
-	encoded, err := eventpkg.Payload(payload)
-	if err != nil {
-		return map[string]any{}
-	}
+	encoded, _ := eventpkg.Payload(payload)
 	return encoded
 }
 
