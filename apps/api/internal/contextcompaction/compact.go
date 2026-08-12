@@ -14,9 +14,16 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/failure"
 )
 
-var ErrSummaryUnavailable = errors.New("context compaction summary is unavailable")
+var ErrSummaryUnavailable = failure.New(failure.Definition{
+	Message: "context compaction summary is unavailable",
+	Info: failure.Info{
+		Code: "context_summary_unavailable", Source: "context_compaction",
+		Category: failure.CategoryAvailability, Retryable: true,
+	},
+})
 
 const AlgorithmVersion = "context-compaction-v1"
 
@@ -102,7 +109,7 @@ func (s *Compactor) CompactIfNeeded(ctx context.Context, request Request) (*doma
 			Trigger: request.Trigger, Status: "failed", BeforeTokens: plan.beforeTokens,
 			ObservedPromptTokens: request.ObservedPromptTokens,
 			AlgorithmVersion:     AlgorithmVersion, Error: err.Error(),
-		})
+		}, err)
 		return nil, err
 	}
 
@@ -110,7 +117,7 @@ func (s *Compactor) CompactIfNeeded(ctx context.Context, request Request) (*doma
 		Trigger: request.Trigger, Status: "running", SourceMessageIDs: plan.sourceIDs,
 		BeforeTokens: plan.beforeTokens, ObservedPromptTokens: request.ObservedPromptTokens,
 		AlgorithmVersion: AlgorithmVersion,
-	})
+	}, nil)
 	result, err := request.Summarizer.Summarize(ctx, SummaryRequest{
 		SystemPrompt: compactionSystemPrompt,
 		Prompt:       compactionPrompt(previous, plan.newSourceMessages, config.CompactionSummaryMaxTokens),
@@ -124,7 +131,7 @@ func (s *Compactor) CompactIfNeeded(ctx context.Context, request Request) (*doma
 			BeforeTokens: plan.beforeTokens, ObservedPromptTokens: request.ObservedPromptTokens,
 			SummaryModel:     result.Model,
 			AlgorithmVersion: AlgorithmVersion, Error: truncateError(err.Error()),
-		})
+		}, err)
 		return nil, err
 	}
 
@@ -143,7 +150,7 @@ func (s *Compactor) CompactIfNeeded(ctx context.Context, request Request) (*doma
 			BeforeTokens: plan.beforeTokens, ObservedPromptTokens: request.ObservedPromptTokens,
 			SummaryModel:     result.Model,
 			AlgorithmVersion: AlgorithmVersion, Error: truncateError(err.Error()),
-		})
+		}, err)
 		return nil, err
 	}
 	s.publish(request, domain.EventCompactionCompleted, eventpkg.ContextCompactionPayload{
@@ -152,7 +159,7 @@ func (s *Compactor) CompactIfNeeded(ctx context.Context, request Request) (*doma
 		AfterTokens: created.AfterTokens, ObservedPromptTokens: request.ObservedPromptTokens,
 		SummaryModel:     created.SummaryModel,
 		AlgorithmVersion: created.AlgorithmVersion,
-	})
+	}, nil)
 	return &created, nil
 }
 
@@ -298,7 +305,7 @@ func uniqueIDs(ids []string) []string {
 	return result
 }
 
-func (s *Compactor) publish(request Request, eventType domain.RunEventType, payload eventpkg.ContextCompactionPayload) {
+func (s *Compactor) publish(request Request, eventType domain.RunEventType, payload eventpkg.ContextCompactionPayload, cause error) {
 	if request.RunID == "" {
 		return
 	}
@@ -306,6 +313,7 @@ func (s *Compactor) publish(request Request, eventType domain.RunEventType, payl
 	if err != nil {
 		return
 	}
+	encoded = failure.Merge(encoded, cause)
 	_, _ = s.store.CreateRunEvent(domain.RunEvent{
 		Type: eventType, RunID: request.RunID, ConversationID: request.ConversationID,
 		Payload: encoded, Timestamp: time.Now().UTC(),

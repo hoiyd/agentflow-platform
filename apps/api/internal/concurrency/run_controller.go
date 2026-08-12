@@ -6,12 +6,24 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"agentflow-platform/apps/api/internal/failure"
 )
 
 var (
-	ErrQueueFull    = errors.New("run queue is full")
-	ErrQueueTimeout = errors.New("run queue wait timed out")
+	ErrQueueFull    error = admissionError{code: "run_queue_full", message: "run queue is full"}
+	ErrQueueTimeout error = admissionError{code: "run_queue_timeout", message: "run queue wait timed out"}
 )
+
+type admissionError struct {
+	code    string
+	message string
+}
+
+func (e admissionError) Error() string { return e.message }
+func (e admissionError) FailureInfo() failure.Info {
+	return failure.Info{Code: e.code, Source: "run_admission", Category: failure.CategoryCapacity, Retryable: true}
+}
 
 const (
 	DefaultMaxConcurrentRuns = 8

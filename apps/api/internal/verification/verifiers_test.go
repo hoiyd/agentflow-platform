@@ -31,6 +31,9 @@ func TestCommandVerifierRunsWithoutShellAndEnforcesBoundaries(t *testing.T) {
 	if blocked.Status != domain.VerificationBlocked {
 		t.Fatalf("expected non-allowlisted command to be blocked, got %#v", blocked)
 	}
+	if blocked.Details["reason_code"] != BlockedPolicyDenied {
+		t.Fatalf("expected stable policy reason, got %#v", blocked.Details)
+	}
 }
 
 func TestHTTPVerifierChecksStatusCapsOutputAndRestrictsHosts(t *testing.T) {
@@ -59,6 +62,9 @@ func TestHTTPVerifierChecksStatusCapsOutputAndRestrictsHosts(t *testing.T) {
 	}}, Subject{})
 	if blocked.Status != domain.VerificationBlocked {
 		t.Fatalf("expected external host to be blocked, got %#v", blocked)
+	}
+	if blocked.Details["reason_code"] != BlockedPolicyDenied {
+		t.Fatalf("expected stable host policy reason, got %#v", blocked.Details)
 	}
 }
 
@@ -89,6 +95,9 @@ func TestJSONSchemaVerifierBlocksRemoteReferences(t *testing.T) {
 	}, SubjectForRunOutput(`{"status":"ok"}`))
 	if result.Status != domain.VerificationBlocked || !strings.Contains(result.Summary, "remote schema reference is disabled") {
 		t.Fatalf("remote schema reference was not blocked: %#v", result)
+	}
+	if result.Details["reason_code"] != BlockedConfigInvalid {
+		t.Fatalf("expected stable schema reason, got %#v", result.Details)
 	}
 }
 

@@ -26,6 +26,7 @@ type Event struct {
 	ToolCallID string
 	Result     *Result
 	Error      string
+	Cause      error
 	Timestamp  time.Time
 }
 

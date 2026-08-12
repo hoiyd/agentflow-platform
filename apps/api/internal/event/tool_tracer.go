@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -55,6 +56,7 @@ func (t *ToolExecutionTracer) ToolFinished(ctx context.Context, result tools.Exe
 	}
 	if result.Error != nil {
 		payload["error_code"] = string(result.Error.Code)
+		payload = failure.Merge(payload, result.Error)
 	}
 	if result.OriginalResultBytes > 0 {
 		payload["original_result_bytes"] = result.OriginalResultBytes

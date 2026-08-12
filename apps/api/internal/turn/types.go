@@ -7,6 +7,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -24,7 +25,13 @@ const (
 	ModelModeText        ModelMode = "text"
 )
 
-var ErrInvalidRequest = errors.New("invalid turn request")
+var ErrInvalidRequest = failure.New(failure.Definition{
+	Message: "invalid turn request",
+	Info: failure.Info{
+		Code: "invalid_turn_request", Source: "turn",
+		Category: failure.CategoryValidation, Retryable: false,
+	},
+})
 
 type Request struct {
 	RunID          string

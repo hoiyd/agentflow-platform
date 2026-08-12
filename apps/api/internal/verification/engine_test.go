@@ -118,6 +118,9 @@ func TestEngineFailsClosedWhenFrozenVerifierImplementationIsUnavailable(t *testi
 	if err != nil || len(evidence) != 1 || evidence[0].Status != domain.VerificationBlocked {
 		t.Fatalf("blocked evidence was not persisted: %#v err=%v", evidence, err)
 	}
+	if evidence[0].Details["reason_code"] != string(BlockedImplementationMissing) {
+		t.Fatalf("blocked reason was not persisted: %#v", evidence[0].Details)
+	}
 }
 
 func TestEnginePersistsStructuredEvidenceFromCustomVerifier(t *testing.T) {

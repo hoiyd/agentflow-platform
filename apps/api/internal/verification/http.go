@@ -73,15 +73,15 @@ func (httpVerifier) NormalizeConfig(spec *domain.VerifierSpec) error {
 func (v httpVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _ Subject) Result {
 	config, err := decodeConfig[HTTPConfig](&spec)
 	if err != nil {
-		return blocked("http config is missing")
+		return blocked(BlockedConfigInvalid, "http config is missing")
 	}
 	parsed, err := url.Parse(config.URL)
 	if err != nil || !v.hostAllowed(parsed) {
-		return blocked("http host is not allowlisted: " + parsedHost(parsed))
+		return blocked(BlockedPolicyDenied, "http host is not allowlisted: "+parsedHost(parsed))
 	}
 	request, err := http.NewRequestWithContext(ctx, config.Method, parsed.String(), nil)
 	if err != nil {
-		return blocked("create http request: " + err.Error())
+		return blocked(BlockedExecutionFailed, "create http request: "+err.Error())
 	}
 	client := *v.client
 	configuredRedirect := client.CheckRedirect
@@ -100,14 +100,14 @@ func (v httpVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _ Su
 	response, err := client.Do(request)
 	if err != nil {
 		if ctx.Err() != nil {
-			return blocked("http request timed out or was canceled")
+			return blockedForContext(ctx, "http request timed out or was canceled")
 		}
-		return blocked("http request failed: " + err.Error())
+		return blocked(BlockedExecutionFailed, "http request failed: "+err.Error())
 	}
 	defer response.Body.Close()
 	output := newCappedBuffer(int(v.outputLimit))
 	if _, readErr := io.Copy(output, response.Body); readErr != nil {
-		return blocked("read http response: " + readErr.Error())
+		return blocked(BlockedExecutionFailed, "read http response: "+readErr.Error())
 	}
 	result := Result{
 		Status: domain.VerificationPassed, Summary: fmt.Sprintf("http status %d matched", response.StatusCode),

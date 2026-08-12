@@ -108,6 +108,10 @@ related Run Events.
 Replay is the detailed aggregate assembled from stored records for one Run.
 Episode Report is a compact projection derived from Replay for review or
 export; it does not create another execution history or accounting source.
+Trace-derived Episode errors include optional `kind`, `category`, and
+`retryable` fields from the common failure contract. Legacy events without
+structured failure metadata remain valid and expose only `source` and
+`message`. The HTTP error envelope remains `{"error":"..."}`.
 
 Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, `citation`, and `answer_relevance`. The last type binds the user question to the candidate output and records embedding cosine-similarity evidence; it is not a factuality or groundedness check. See [Verification](verification.md) for exact config shapes, scope, extension points, and policy semantics.
 

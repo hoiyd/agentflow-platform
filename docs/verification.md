@@ -88,7 +88,7 @@ Each Evidence record binds the contract/version, verifier/version, Runtime Snaps
 - `on_exhausted=fail`: closes the Run as `failed`.
 - `on_exhausted=waiting_for_user`: closes the attempt as `waiting_for_user`.
 
-A failed or blocked check remains `failed_recoverable` while attempt budget remains. `POST /api/runs/{id}/verify` creates a new attempt against the latest persisted assistant output. A verifier that cannot run is `blocked`, never implicitly passed.
+A failed or blocked check remains `failed_recoverable` while attempt budget remains. `POST /api/runs/{id}/verify` creates a new attempt against the latest persisted assistant output. A verifier that cannot run is `blocked`, never implicitly passed. Every blocked Evidence record includes a stable `details.reason_code`; callers use that code rather than parsing its human-readable summary.
 
 ## Contract Example
 

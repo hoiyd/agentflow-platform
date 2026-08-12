@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"log"
 	"strings"
 	"sync"
@@ -12,6 +11,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/openai"
 )
 
@@ -24,8 +24,20 @@ const (
 )
 
 var (
-	ErrCurationQueueFull = errors.New("memory curation queue is full")
-	ErrCuratorClosed     = errors.New("memory curator is closed")
+	ErrCurationQueueFull = failure.New(failure.Definition{
+		Message: "memory curation queue is full",
+		Info: failure.Info{
+			Code: "memory_curation_queue_full", Source: "memory_curator",
+			Category: failure.CategoryCapacity, Retryable: true,
+		},
+	})
+	ErrCuratorClosed = failure.New(failure.Definition{
+		Message: "memory curator is closed",
+		Info: failure.Info{
+			Code: "memory_curator_closed", Source: "memory_curator",
+			Category: failure.CategoryAvailability, Retryable: false,
+		},
+	})
 )
 
 type Embedder interface {
@@ -236,6 +248,7 @@ func (c *Curator) commitCandidate(job CurationJob, candidate domain.MemoryCandid
 		failed := clonePayload(payload)
 		failed["error"] = err.Error()
 		failed["duration_ms"] = time.Since(startedAt).Milliseconds()
+		failed = failure.Merge(failed, err)
 		c.publish(job, domain.EventMemorySyncFailed, failed)
 		log.Printf("memory_curation_failed run_id=%s candidate_id=%s error=%q", job.RunID, candidate.ID, err.Error())
 		return
@@ -273,9 +286,9 @@ func candidatePayload(candidate domain.MemoryCandidate, status string, err error
 		Error:      errorMessage,
 	})
 	if payloadErr != nil {
-		return map[string]any{"status": status, "error": payloadErr.Error()}
+		return failure.Merge(map[string]any{"status": status, "error": payloadErr.Error()}, payloadErr)
 	}
-	return payload
+	return failure.Merge(payload, err)
 }
 
 func normalizeAdaptiveMode(value string) string {

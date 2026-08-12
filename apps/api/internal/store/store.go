@@ -5,12 +5,17 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 )
 
 type ErrNotFound string
 
 func (e ErrNotFound) Error() string {
 	return string(e) + " not found"
+}
+
+func (e ErrNotFound) FailureInfo() failure.Info {
+	return failure.Info{Code: "not_found", Source: "store", Category: failure.CategoryNotFound}
 }
 
 func IsNotFound(err error) bool {

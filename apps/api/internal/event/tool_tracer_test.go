@@ -56,4 +56,8 @@ func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
 	if events[1].Payload["error_code"] != string(tools.ErrorExecutionCanceled) {
 		t.Fatalf("unexpected error code payload: %#v", events[1].Payload)
 	}
+	if events[1].Payload["error_kind"] != string(tools.ErrorExecutionCanceled) ||
+		events[1].Payload["error_source"] != "tool" || events[1].Payload["error_category"] != "canceled" {
+		t.Fatalf("structured failure fields are missing: %#v", events[1].Payload)
+	}
 }

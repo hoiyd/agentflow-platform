@@ -57,10 +57,10 @@ func (textConstraintsVerifier) NormalizeConfig(spec *domain.VerifierSpec) error 
 func (textConstraintsVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, subject Subject) Result {
 	config, err := decodeConfig[TextConstraintsConfig](&spec)
 	if err != nil {
-		return blocked("text constraints config is invalid")
+		return blocked(BlockedConfigInvalid, "text constraints config is invalid")
 	}
 	if err := ctx.Err(); err != nil {
-		return blocked("text constraints verification was canceled")
+		return blockedForContext(ctx, "text constraints verification was canceled")
 	}
 
 	characterCount := utf8.RuneCountInString(subject.Value)

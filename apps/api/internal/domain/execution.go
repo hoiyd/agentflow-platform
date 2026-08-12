@@ -432,10 +432,13 @@ type EpisodeToolCall struct {
 }
 
 type EpisodeError struct {
-	Source  string `json:"source"`
-	EventID string `json:"event_id,omitempty"`
-	StepID  string `json:"step_id,omitempty"`
-	Message string `json:"message"`
+	Source    string `json:"source"`
+	EventID   string `json:"event_id,omitempty"`
+	StepID    string `json:"step_id,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+	Category  string `json:"category,omitempty"`
+	Retryable *bool  `json:"retryable,omitempty"`
+	Message   string `json:"message"`
 }
 
 type EpisodeVerification struct {

@@ -3,11 +3,11 @@ package contextassembly
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/failure"
 )
 
 const (
@@ -30,7 +30,13 @@ const (
 	SourceToolResult     = "tool_result"
 )
 
-var ErrInputBudgetExceeded = errors.New("context input budget exceeded")
+var ErrInputBudgetExceeded = failure.New(failure.Definition{
+	Message: "context input budget exceeded",
+	Info: failure.Info{
+		Code: "context_input_budget_exceeded", Source: "context_assembly",
+		Category: failure.CategoryCapacity, Retryable: false,
+	},
+})
 
 type InputBudgetError struct {
 	RequiredTokens  int
@@ -42,6 +48,16 @@ func (e *InputBudgetError) Error() string {
 }
 
 func (e *InputBudgetError) Unwrap() error { return ErrInputBudgetExceeded }
+
+func (e *InputBudgetError) FailureInfo() failure.Info {
+	if e == nil {
+		return failure.Info{Code: "context_input_budget_exceeded", Source: "context_assembly", Category: failure.CategoryCapacity}
+	}
+	return failure.Info{
+		Code: "context_input_budget_exceeded", Source: "context_assembly", Category: failure.CategoryCapacity,
+		Details: map[string]any{"required_tokens": e.RequiredTokens, "available_tokens": e.AvailableTokens},
+	}
+}
 
 type Message struct {
 	Source      string

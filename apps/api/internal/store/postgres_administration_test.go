@@ -206,7 +206,7 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 		t.Fatalf("list run events: events=%#v err=%v", events, err)
 	}
 	summary, err := postgresStore.GetRunTraceSummary(run.ID)
-	if err != nil || summary.LLMCalls != 1 || summary.ToolCalls != 1 || summary.ErrorCount != 0 || summary.TotalTokens != 18 || !summary.TokenUsageEstimated {
+	if err != nil || summary.LLMCalls != 1 || summary.ToolCalls != 1 || summary.ErrorCount != 1 || summary.TotalTokens != 18 || !summary.TokenUsageEstimated {
 		t.Fatalf("get trace summary: summary=%#v err=%v", summary, err)
 	}
 	replay, found, err := postgresStore.GetRunReplay(run.ID)
