@@ -6,6 +6,12 @@ coverage:
           - backend
         target: auto
         threshold: 1%
+    patch:
+      backend:
+        flags:
+          - backend
+        target: 90%
+        threshold: 0%
 
 flags:
   backend:
