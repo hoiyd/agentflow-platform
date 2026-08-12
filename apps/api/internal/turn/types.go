@@ -26,8 +26,11 @@ const (
 )
 
 var ErrInvalidRequest = failure.New(failure.Definition{
-	Code: "invalid_turn_request", Source: "turn",
-	Category: failure.CategoryValidation, Retryable: false, Message: "invalid turn request",
+	Message: "invalid turn request",
+	Info: failure.Info{
+		Code: "invalid_turn_request", Source: "turn",
+		Category: failure.CategoryValidation, Retryable: false,
+	},
 })
 
 type Request struct {

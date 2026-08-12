@@ -18,9 +18,11 @@ import (
 )
 
 var ErrSummaryUnavailable = failure.New(failure.Definition{
-	Code: "context_summary_unavailable", Source: "context_compaction",
-	Category: failure.CategoryAvailability, Retryable: true,
 	Message: "context compaction summary is unavailable",
+	Info: failure.Info{
+		Code: "context_summary_unavailable", Source: "context_compaction",
+		Category: failure.CategoryAvailability, Retryable: true,
+	},
 })
 
 const AlgorithmVersion = "context-compaction-v1"

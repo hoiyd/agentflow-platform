@@ -31,9 +31,11 @@ const (
 )
 
 var ErrInputBudgetExceeded = failure.New(failure.Definition{
-	Code: "context_input_budget_exceeded", Source: "context_assembly",
-	Category: failure.CategoryCapacity, Retryable: false,
 	Message: "context input budget exceeded",
+	Info: failure.Info{
+		Code: "context_input_budget_exceeded", Source: "context_assembly",
+		Category: failure.CategoryCapacity, Retryable: false,
+	},
 })
 
 type InputBudgetError struct {

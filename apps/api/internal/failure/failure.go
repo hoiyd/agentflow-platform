@@ -56,13 +56,11 @@ type staticError struct {
 func (e *staticError) Error() string     { return e.message }
 func (e *staticError) FailureInfo() Info { return e.info }
 
-// Definition names every property required to create a classified sentinel.
+// Definition combines a stable human-readable message with the structured
+// failure information projected to runtime events.
 type Definition struct {
-	Code      string
-	Source    string
-	Category  Category
-	Retryable bool
-	Message   string
+	Message string
+	Info    Info
 }
 
 // New creates a stable sentinel that supports both errors.Is identity checks
@@ -70,10 +68,7 @@ type Definition struct {
 func New(definition Definition) error {
 	return &staticError{
 		message: definition.Message,
-		info: Info{
-			Code: definition.Code, Source: definition.Source,
-			Category: definition.Category, Retryable: definition.Retryable,
-		},
+		info:    definition.Info,
 	}
 }
 

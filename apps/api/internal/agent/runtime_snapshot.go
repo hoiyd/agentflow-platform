@@ -17,9 +17,11 @@ import (
 )
 
 var ErrRuntimeSnapshotUnavailable = failure.New(failure.Definition{
-	Code: "runtime_snapshot_unavailable", Source: "runtime_snapshot",
-	Category: failure.CategoryAvailability, Retryable: false,
 	Message: "runtime snapshot is unavailable",
+	Info: failure.Info{
+		Code: "runtime_snapshot_unavailable", Source: "runtime_snapshot",
+		Category: failure.CategoryAvailability, Retryable: false,
+	},
 })
 
 type restoredRuntime struct {

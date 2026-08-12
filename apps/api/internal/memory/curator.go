@@ -25,14 +25,18 @@ const (
 
 var (
 	ErrCurationQueueFull = failure.New(failure.Definition{
-		Code: "memory_curation_queue_full", Source: "memory_curator",
-		Category: failure.CategoryCapacity, Retryable: true,
 		Message: "memory curation queue is full",
+		Info: failure.Info{
+			Code: "memory_curation_queue_full", Source: "memory_curator",
+			Category: failure.CategoryCapacity, Retryable: true,
+		},
 	})
 	ErrCuratorClosed = failure.New(failure.Definition{
-		Code: "memory_curator_closed", Source: "memory_curator",
-		Category: failure.CategoryAvailability, Retryable: false,
 		Message: "memory curator is closed",
+		Info: failure.Info{
+			Code: "memory_curator_closed", Source: "memory_curator",
+			Category: failure.CategoryAvailability, Retryable: false,
+		},
 	})
 )
 

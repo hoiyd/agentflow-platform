@@ -42,8 +42,11 @@ func TestMergeCopiesPayloadAndPreservesMessage(t *testing.T) {
 
 func TestNewCreatesClassifiedSentinel(t *testing.T) {
 	err := New(Definition{
-		Code: "queue_full", Source: "scheduler", Category: CategoryCapacity,
-		Retryable: true, Message: "queue is full",
+		Message: "queue is full",
+		Info: Info{
+			Code: "queue_full", Source: "scheduler",
+			Category: CategoryCapacity, Retryable: true,
+		},
 	})
 	info := Describe(fmt.Errorf("reserve: %w", err))
 	if info.Code != "queue_full" || info.Source != "scheduler" || !info.Retryable || err.Error() != "queue is full" {
