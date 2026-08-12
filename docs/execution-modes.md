@@ -144,6 +144,7 @@ The modes deliberately converge below orchestration:
 | Runtime Snapshot | Frozen mode, Agent(s), provider/model identity, Tool schemas, Context policy, and Run Budget |
 | Turn Engine | Retrieval, Context Assembly, model/tool loop, usage reservation/settlement, and typed events |
 | RAG and Memory | The same scoped retrieval pipeline and durable-Memory policy feed every Turn |
+| Workspace namespace | A Run inherits its Conversation Workspace; retrieval, persistence, Replay, and Verification preserve that scope in every mode |
 | Tracing | Run/Stage/Turn/Model/Tool/Retrieval/Context/Usage/Verification Run Events use one schema |
 | Verification | The same optional frozen contract gates the candidate output from Single, Multi, or Loop |
 | Replay and Episode Report | File and Postgres stores expose the same persisted evidence and projections |

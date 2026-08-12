@@ -53,6 +53,11 @@ HTTP checks follow the backend host allowlist. Command checks also require
 `done` event reports `verification_status` separately from Run status.
 Disabling the control omits `completion_contract`.
 
+Run Verification, Evidence, Artifacts, Replay, and Episode access are guarded by
+the resolved Run Workspace. An omitted request scope selects
+`default_workspace`; a Run ID from another namespace is treated as not found.
+This namespace check does not authenticate the caller.
+
 ## Execution Model
 
 ```text

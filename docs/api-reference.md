@@ -11,9 +11,11 @@ browser CORS policy, not an authentication mechanism.
 
 All `/api/*` requests accept `X-Workspace-ID`. When omitted, the request uses
 the reserved `default_workspace` namespace, so workspace isolation remains
-active for every request. A
-`workspace_id` query or JSON field must match an explicit header. Conversation,
-Run, Document, Memory, and RAG operations are scoped to the resolved workspace.
+active for every request. The legacy value `default` is normalized to the same
+namespace. Header, `workspace_id` query, and JSON payload selectors must agree
+when more than one is supplied; conflicting explicit values return `400`.
+Conversation, Message, Run, Document, Memory, RAG, Replay, Usage, Episode, and
+Verification operations are scoped to the resolved Workspace.
 For deployments with user-controlled workspace selection, this header must be
 validated by a trusted boundary because it is not an identity credential by
 itself.

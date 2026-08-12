@@ -177,7 +177,9 @@ an accidental source of truth.
 
 ## What Remains Deliberately Unfinished
 
-- End-to-end Workspace lifecycle and mandatory multi-tenant isolation.
+- Identity-derived Workspace lifecycle, Membership/ACL authorization, and
+  multi-tenant release validation. Mandatory namespace filtering is already
+  implemented, but it is not an authorization boundary by itself.
 - Immutable Dataset storage/changelog, persisted Evaluation Runs, and calibrated
   retrieval/no-answer thresholds.
 - Semantic prompt-injection classification beyond deterministic high-precision

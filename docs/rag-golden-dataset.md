@@ -20,10 +20,12 @@ domain-wide retrieval quality. The paired corpus lives under
 | `injection-release-signing` | Prompt-injection filtering | Safe guide; hostile note forbidden | Gating |
 
 ACL, stale-data, and no-answer cases carry the `non-blocking` tag. They remain
-diagnostic until Workspace ownership/ACL enforcement (RAG-003, RAG-004,
+diagnostic until identity-derived ownership and ACL enforcement (RAG-004,
 RAG-016B), an explicit freshness policy, and Relevance Gate/no-answer
-calibration (RAG-015, RAG-020) are implemented. Their misses must be reported,
-but must not be represented as release-gate regressions yet.
+calibration (RAG-015, RAG-020) are implemented. Workspace namespace filtering
+(RAG-003) is complete, but it cannot decide whether a caller is authorized for
+that namespace. Diagnostic misses must be reported, but must not be represented
+as release-gate regressions yet.
 
 The multi-hop case sets `required_source_count: 2`. The evaluator therefore
 uses the rank at which both required evidence sources have appeared. This

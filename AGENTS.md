@@ -116,8 +116,9 @@ Verify the relevant stages independently:
 - HTTP, Single-Agent, Multi-Agent, and Autonomous path consistency.
 
 Do not claim calibrated retrieval quality without a representative Golden
-Dataset. Do not claim multi-tenant isolation until Workspace lifecycle, scope,
-and ACL enforcement are complete end to end.
+Dataset. Do not claim full multi-tenant authorization until authenticated
+Workspace lifecycle, Membership/ACL enforcement, and cross-tenant release tests
+are complete. Mandatory namespace filtering alone is not authorization.
 
 ## Documentation Changes
 

@@ -4,8 +4,9 @@ AgentFlow treats retrieval as a staged, observable pipeline. Recall, fusion,
 reranking, relevance policy, context expansion, and context transformation have
 different contracts so each stage can be evaluated independently.
 
-This document describes current single-workspace behavior. End-to-end Workspace
-lifecycle and mandatory multi-tenant isolation remain explicit limitations.
+Current retrieval enforces Workspace namespace isolation end to end. It does
+not yet derive Workspace membership from an authenticated identity or enforce
+document/chunk ACL policy; those remain explicit multi-tenant limitations.
 
 ## Ingestion and Inspection
 
@@ -168,13 +169,11 @@ Run snapshot, so retrieval expansion and final context assembly share the same
 upper bound. Context Assembly still performs its own final packing check.
 
 Every expansion query requires the matched `document_id`, preserves metadata
-filters, and adds `workspace_id` filtering whenever a workspace is available.
-The selector validates those fields again before accepting Store results.
-This prevents parent/neighbor expansion from widening the original search
-scope. It does not replace the planned end-to-end workspace lifecycle and
-mandatory production-mode isolation work; until those items are complete, the
-feature is supported as single-workspace behavior rather than a multitenant
-security guarantee.
+filters, and applies the normalized `workspace_id`. The selector validates
+those fields again before accepting Store results. This prevents
+parent/neighbor expansion from widening the original namespace. It does not
+prove that the caller belongs to that Workspace or replace document/chunk ACL;
+those guarantees require authenticated Runtime Scope and authorization policy.
 
 Expanded chunks are untrusted just like direct hits. They pass through the
 prompt-injection guard before limit selection, and their decisions are merged
