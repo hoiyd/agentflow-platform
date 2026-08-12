@@ -18,6 +18,12 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	workspaceID, matches := resolvePayloadWorkspace(r, req.WorkspaceID)
+	if !matches {
+		writeError(w, http.StatusBadRequest, "workspace_id does not match request scope")
+		return
+	}
+	req.WorkspaceID = workspaceID
 	req.Message = strings.TrimSpace(req.Message)
 	if req.Message == "" {
 		writeError(w, http.StatusBadRequest, "message is required")
@@ -37,13 +43,13 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 
 	conversationID := strings.TrimSpace(req.ConversationID)
 	if conversationID == "" {
-		conversation, err := h.store.CreateConversation(req.Message)
+		conversation, err := h.store.CreateConversationInWorkspace(workspaceID, req.Message)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		conversationID = conversation.ID
-	} else if _, ok, err := h.store.GetConversation(conversationID); err != nil {
+	} else if _, ok, err := h.store.GetConversationInWorkspace(workspaceID, conversationID); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	} else if !ok {
@@ -56,13 +62,13 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	defer releaseRun()
 
-	userMessage, err := h.store.AddMessage(conversationID, "user", req.Message)
+	userMessage, err := h.store.AddMessageInWorkspace(workspaceID, conversationID, "user", req.Message)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	history, err := h.store.ListMessages(conversationID)
+	history, err := h.store.ListMessagesInWorkspace(workspaceID, conversationID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -255,7 +261,7 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	run, ok, err := h.store.GetRun(id)
+	run, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -322,7 +328,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	}
 	req.UserInput = strings.TrimSpace(req.UserInput)
 
-	run, ok, err := h.store.GetRun(id)
+	run, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

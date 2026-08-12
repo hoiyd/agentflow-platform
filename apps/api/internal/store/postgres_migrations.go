@@ -15,13 +15,18 @@ var postgresMigrations = []string{
 	`CREATE EXTENSION IF NOT EXISTS vector`,
 	`CREATE TABLE IF NOT EXISTS conversations (
 		id text PRIMARY KEY,
-		workspace_id text,
+		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		user_id text,
 		project_id text,
 		title text NOT NULL,
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS workspace_id text`,
+	`UPDATE conversations SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`,
+	`ALTER TABLE conversations ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
+	`ALTER TABLE conversations ALTER COLUMN workspace_id SET NOT NULL`,
+	`CREATE INDEX IF NOT EXISTS conversations_workspace_updated_idx ON conversations(workspace_id, updated_at DESC)`,
 	`CREATE TABLE IF NOT EXISTS agents (
 		id text PRIMARY KEY,
 		workspace_id text,
@@ -56,7 +61,7 @@ var postgresMigrations = []string{
 	`CREATE TABLE IF NOT EXISTS messages (
 		id text PRIMARY KEY,
 		conversation_id text NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-		workspace_id text,
+		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		user_id text,
 		project_id text,
 		role text NOT NULL,
@@ -64,12 +69,17 @@ var postgresMigrations = []string{
 		citations jsonb NOT NULL DEFAULT '[]'::jsonb,
 		created_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS workspace_id text`,
+	`UPDATE messages m SET workspace_id = c.workspace_id FROM conversations c WHERE c.id = m.conversation_id AND (m.workspace_id IS NULL OR BTRIM(m.workspace_id) = '' OR m.workspace_id = 'default')`,
+	`UPDATE messages SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`,
+	`ALTER TABLE messages ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
+	`ALTER TABLE messages ALTER COLUMN workspace_id SET NOT NULL`,
 	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS citations jsonb NOT NULL DEFAULT '[]'::jsonb`,
 	`CREATE TABLE IF NOT EXISTS runs (
 		id text PRIMARY KEY,
 		agent_id text NOT NULL REFERENCES agents(id),
 		conversation_id text NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-		workspace_id text,
+		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		user_id text,
 		project_id text,
 		status text NOT NULL,
@@ -80,6 +90,12 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS workspace_id text`,
+	`UPDATE runs r SET workspace_id = c.workspace_id FROM conversations c WHERE c.id = r.conversation_id AND (r.workspace_id IS NULL OR BTRIM(r.workspace_id) = '' OR r.workspace_id = 'default')`,
+	`UPDATE runs SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`,
+	`ALTER TABLE runs ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
+	`ALTER TABLE runs ALTER COLUMN workspace_id SET NOT NULL`,
+	`CREATE INDEX IF NOT EXISTS runs_workspace_created_idx ON runs(workspace_id, created_at DESC)`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS heartbeat_at timestamptz`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS runtime_snapshot jsonb`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS completion_contract jsonb`,
@@ -171,7 +187,7 @@ var postgresMigrations = []string{
 	)`,
 	`CREATE TABLE IF NOT EXISTS memories (
 		id text PRIMARY KEY,
-		workspace_id text,
+		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		user_id text,
 		project_id text,
 		conversation_id text REFERENCES conversations(id) ON DELETE SET NULL,
@@ -183,6 +199,11 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE memories ADD COLUMN IF NOT EXISTS workspace_id text`,
+	`UPDATE memories m SET workspace_id = c.workspace_id FROM conversations c WHERE c.id = m.conversation_id AND (m.workspace_id IS NULL OR BTRIM(m.workspace_id) = '' OR m.workspace_id = 'default')`,
+	`UPDATE memories SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`,
+	`ALTER TABLE memories ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
+	`ALTER TABLE memories ALTER COLUMN workspace_id SET NOT NULL`,
 	`CREATE TABLE IF NOT EXISTS memory_candidates (
 		id text PRIMARY KEY,
 		conversation_id text REFERENCES conversations(id) ON DELETE CASCADE,
@@ -197,6 +218,7 @@ var postgresMigrations = []string{
 		confidence double precision NOT NULL DEFAULT 1,
 		created_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE memory_candidates ADD COLUMN IF NOT EXISTS confidence double precision NOT NULL DEFAULT 1`,
 	`CREATE TABLE IF NOT EXISTS memory_embeddings (
 		memory_id text PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
 		provider text NOT NULL,
@@ -205,9 +227,23 @@ var postgresMigrations = []string{
 		embedding vector(1536) NOT NULL,
 		created_at timestamptz NOT NULL
 	)`,
+	`DO $$
+	BEGIN
+		IF EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = current_schema()
+				AND table_name = 'memory_embeddings'
+				AND column_name = 'embedding'
+				AND udt_name <> 'vector'
+		) THEN
+			ALTER TABLE memory_embeddings
+				ALTER COLUMN embedding TYPE vector(1536)
+				USING embedding::vector(1536);
+		END IF;
+	END $$`,
 	`CREATE TABLE IF NOT EXISTS documents (
 		id text PRIMARY KEY,
-		workspace_id text,
+		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		title text NOT NULL,
 		version text NOT NULL DEFAULT '',
 		content_hash text NOT NULL DEFAULT '',
@@ -219,6 +255,10 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS workspace_id text`,
+	`UPDATE documents SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`,
+	`ALTER TABLE documents ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
+	`ALTER TABLE documents ALTER COLUMN workspace_id SET NOT NULL`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS version text NOT NULL DEFAULT ''`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_hash text NOT NULL DEFAULT ''`,
 	`CREATE TABLE IF NOT EXISTS document_chunks (
@@ -250,6 +290,20 @@ var postgresMigrations = []string{
 		embedding vector(1536) NOT NULL,
 		created_at timestamptz NOT NULL
 	)`,
+	`DO $$
+	BEGIN
+		IF EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = current_schema()
+				AND table_name = 'document_chunk_embeddings'
+				AND column_name = 'embedding'
+				AND udt_name <> 'vector'
+		) THEN
+			ALTER TABLE document_chunk_embeddings
+				ALTER COLUMN embedding TYPE vector(1536)
+				USING embedding::vector(1536);
+		END IF;
+	END $$`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_conversation_created ON runs(conversation_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_status_created ON runs(status, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at ASC)`,
@@ -283,6 +337,14 @@ var postgresMigrations = []string{
 	`ALTER TABLE run_usage_entries ADD COLUMN IF NOT EXISTS purpose text`,
 	`UPDATE run_usage_entries SET purpose = 'primary' WHERE purpose IS NULL OR BTRIM(purpose) = ''`,
 	`ALTER TABLE run_usage_entries ALTER COLUMN purpose SET NOT NULL`,
+	`ALTER TABLE run_usage_entries ADD COLUMN IF NOT EXISTS model text`,
+	`UPDATE run_usage_entries SET model = '' WHERE model IS NULL`,
+	`ALTER TABLE run_usage_entries ALTER COLUMN model SET DEFAULT ''`,
+	`ALTER TABLE run_usage_entries ALTER COLUMN model SET NOT NULL`,
+	`ALTER TABLE run_usage_entries ADD COLUMN IF NOT EXISTS tool_name text`,
+	`UPDATE run_usage_entries SET tool_name = '' WHERE tool_name IS NULL`,
+	`ALTER TABLE run_usage_entries ALTER COLUMN tool_name SET DEFAULT ''`,
+	`ALTER TABLE run_usage_entries ALTER COLUMN tool_name SET NOT NULL`,
 	`CREATE UNIQUE INDEX IF NOT EXISTS run_usage_entries_run_operation_kind_idx ON run_usage_entries(run_id, operation_id, kind)`,
 	`CREATE INDEX IF NOT EXISTS run_usage_entries_run_timestamp_idx ON run_usage_entries(run_id, timestamp, id)`,
 	`CREATE INDEX IF NOT EXISTS idx_context_compactions_conversation_created ON context_compactions(conversation_id, created_at ASC)`,

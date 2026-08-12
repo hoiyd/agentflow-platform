@@ -20,7 +20,8 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 	} else if !ok {
 		return domain.Run{}, errors.New("agent not found")
 	}
-	if _, ok, err := s.GetConversation(conversationID); err != nil {
+	conversation, ok, err := s.GetConversation(conversationID)
+	if err != nil {
 		return domain.Run{}, err
 	} else if !ok {
 		return domain.Run{}, errors.New("conversation not found")
@@ -40,6 +41,7 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 	now := time.Now().UTC()
 	run := domain.Run{
 		ID:                 newID("run"),
+		WorkspaceID:        conversation.WorkspaceID,
 		AgentID:            agentID,
 		ConversationID:     conversationID,
 		Status:             domain.RunQueued,
@@ -53,9 +55,9 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 		run.VerificationStatus = domain.VerificationPending
 	}
 	_, err = s.db.Exec(`
-		INSERT INTO runs (id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
-		run.ID, run.AgentID, run.ConversationID, string(run.Status), run.Error, snapshotJSON, contractJSON, string(run.VerificationStatus), run.StartedAt, run.ExecutionStartedAt, run.ActiveRuntimeMS, run.HeartbeatAt, run.CompletedAt, run.CreatedAt, run.UpdatedAt)
+		INSERT INTO runs (id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		run.ID, run.WorkspaceID, run.AgentID, run.ConversationID, string(run.Status), run.Error, snapshotJSON, contractJSON, string(run.VerificationStatus), run.StartedAt, run.ExecutionStartedAt, run.ActiveRuntimeMS, run.HeartbeatAt, run.CompletedAt, run.CreatedAt, run.UpdatedAt)
 	return run, err
 }
 
@@ -69,7 +71,7 @@ func (s *PostgresStore) UpdateRunAgent(id string, agentID string) (domain.Run, e
 		UPDATE runs
 		SET agent_id = $1, updated_at = $2
 		WHERE id = $3
-		RETURNING id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
+		RETURNING id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
 		agentID, time.Now().UTC(), id)
 }
 
@@ -99,7 +101,7 @@ func (s *PostgresStore) UpdateRunStatus(id string, status domain.RunStatus, erro
 			END,
 			updated_at = $3
 		WHERE id = $4
-		RETURNING id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
+		RETURNING id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
 		string(status), strings.TrimSpace(errorMessage), now, id)
 }
 
@@ -108,7 +110,7 @@ func (s *PostgresStore) UpdateRunVerificationStatus(id string, status domain.Ver
 		UPDATE runs
 		SET verification_status = $1, updated_at = $2
 		WHERE id = $3
-		RETURNING id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
+		RETURNING id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
 		string(status), time.Now().UTC(), id)
 }
 
@@ -215,13 +217,13 @@ func (s *PostgresStore) UpdateRunHeartbeat(id string) (domain.Run, error) {
 		UPDATE runs
 		SET heartbeat_at = $1, updated_at = $1
 		WHERE id = $2
-		RETURNING id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
+		RETURNING id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
 		now, id)
 }
 
 func (s *PostgresStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error) {
 	rows, err := s.db.Query(`
-		SELECT id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, COALESCE(workspace_id, 'default_workspace'), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
 		WHERE status = 'running'
 			AND (heartbeat_at IS NULL OR heartbeat_at < $1)
@@ -243,10 +245,23 @@ func (s *PostgresStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, er
 }
 
 func (s *PostgresStore) GetRun(id string) (domain.Run, bool, error) {
-	run, err := s.scanRunQuery(`
-		SELECT id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+	run, err := scanRun(s.db.QueryRow(`
+		SELECT id, COALESCE(workspace_id, 'default_workspace'), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
-		WHERE id = $1`, id)
+		WHERE id = $1`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Run{}, false, nil
+	}
+	if err != nil {
+		return domain.Run{}, false, err
+	}
+	return run, true, nil
+}
+
+func (s *PostgresStore) GetRunInWorkspace(workspaceID string, id string) (domain.Run, bool, error) {
+	run, err := scanRun(s.db.QueryRow(`
+		SELECT id, COALESCE(workspace_id, 'default_workspace'), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		FROM runs WHERE id = $1 AND workspace_id = $2`, id, normalizeWorkspaceID(workspaceID)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Run{}, false, nil
 	}
@@ -258,7 +273,7 @@ func (s *PostgresStore) GetRun(id string) (domain.Run, bool, error) {
 
 func (s *PostgresStore) ListRuns() ([]domain.Run, error) {
 	rows, err := s.db.Query(`
-		SELECT id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, COALESCE(workspace_id, 'default_workspace'), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
 		ORDER BY created_at DESC`)
 	if err != nil {
@@ -271,6 +286,25 @@ func (s *PostgresStore) ListRuns() ([]domain.Run, error) {
 		run, err := scanRun(rows)
 		if err != nil {
 			return nil, err
+		}
+		items = append(items, run)
+	}
+	return items, rows.Err()
+}
+
+func (s *PostgresStore) ListRunsByWorkspace(workspaceID string) ([]domain.Run, error) {
+	rows, err := s.db.Query(`
+		SELECT id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		FROM runs WHERE workspace_id = $1 ORDER BY created_at DESC`, normalizeWorkspaceID(workspaceID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.Run{}
+	for rows.Next() {
+		run, scanErr := scanRun(rows)
+		if scanErr != nil {
+			return nil, scanErr
 		}
 		items = append(items, run)
 	}
@@ -296,7 +330,7 @@ func scanRun(row scanner) (domain.Run, error) {
 	var snapshotJSON []byte
 	var contractJSON []byte
 	var verificationStatus string
-	if err := row.Scan(&run.ID, &run.AgentID, &run.ConversationID, &status, &errorMessage, &snapshotJSON, &contractJSON, &verificationStatus, &startedAt, &executionStartedAt, &run.ActiveRuntimeMS, &heartbeatAt, &completedAt, &run.CreatedAt, &run.UpdatedAt); err != nil {
+	if err := row.Scan(&run.ID, &run.WorkspaceID, &run.AgentID, &run.ConversationID, &status, &errorMessage, &snapshotJSON, &contractJSON, &verificationStatus, &startedAt, &executionStartedAt, &run.ActiveRuntimeMS, &heartbeatAt, &completedAt, &run.CreatedAt, &run.UpdatedAt); err != nil {
 		return domain.Run{}, err
 	}
 	if len(contractJSON) > 0 && string(contractJSON) != "null" {

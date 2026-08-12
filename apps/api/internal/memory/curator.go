@@ -229,6 +229,7 @@ func (c *Curator) commitCandidate(job CurationJob, candidate domain.MemoryCandid
 	if err == nil {
 		_, err = c.store.CreateMemory(domain.Memory{
 			ID:              "mem_curated_" + candidate.ID,
+			WorkspaceID:     job.Message.WorkspaceID,
 			ConversationID:  candidate.ConversationID,
 			RunID:           candidate.RunID,
 			SourceMessageID: candidate.SourceMessageID,

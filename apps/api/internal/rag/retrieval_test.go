@@ -149,7 +149,6 @@ func TestRetrievalPipelineRecallsIdentifierOutsideDenseCandidates(t *testing.T) 
 		t.Fatalf("expected lexical-only rank evidence, got %#v", response.Items[0])
 	}
 }
-
 func TestRetrievalPipelineBlocksPromptInjectionBeforeFusion(t *testing.T) {
 	store := &retrievalStoreStub{denseItems: []domain.RetrievedDocumentChunk{{
 		Document:   domain.Document{ID: "doc-hostile", Title: "Injected instructions"},
@@ -169,5 +168,17 @@ func TestRetrievalPipelineBlocksPromptInjectionBeforeFusion(t *testing.T) {
 	}
 	if !strings.Contains(response.Reason, "blocked by the knowledge security policy") {
 		t.Fatalf("expected security-specific no-match reason, got %q", response.Reason)
+	}
+}
+
+func TestRetrievalPipelineAlwaysAppliesDefaultWorkspace(t *testing.T) {
+	store := &retrievalStoreStub{}
+	pipeline := NewRetrievalPipeline(store)
+	_, err := pipeline.Search(context.Background(), domain.DocumentSearch{Query: "private document"}, 3, Embedding{Vector: []float64{1, 0}})
+	if err != nil {
+		t.Fatalf("search pipeline: %v", err)
+	}
+	if store.denseSearch.WorkspaceID != domain.DefaultWorkspaceID || store.lexicalSearch.WorkspaceID != domain.DefaultWorkspaceID {
+		t.Fatalf("expected default workspace on all recall paths, dense=%q lexical=%q", store.denseSearch.WorkspaceID, store.lexicalSearch.WorkspaceID)
 	}
 }

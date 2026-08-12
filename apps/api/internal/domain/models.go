@@ -7,16 +7,27 @@ import (
 
 const RAGPromptGuardPolicyVersion = "rag-prompt-guard-v1"
 const RAGCitationProtocolVersion = "rag-citation-v1"
+const DefaultWorkspaceID = "default_workspace"
+
+func NormalizeWorkspaceID(workspaceID string) string {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" || workspaceID == "default" {
+		return DefaultWorkspaceID
+	}
+	return workspaceID
+}
 
 type Conversation struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string    `json:"id"`
+	WorkspaceID string    `json:"workspace_id"`
+	Title       string    `json:"title"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type Message struct {
 	ID             string        `json:"id"`
+	WorkspaceID    string        `json:"workspace_id"`
 	ConversationID string        `json:"conversation_id"`
 	Role           string        `json:"role"`
 	Content        string        `json:"content"`

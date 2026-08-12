@@ -73,12 +73,12 @@ func (s *FileStore) load() error {
 	if err := json.Unmarshal(bytes, &s.data); err != nil {
 		return err
 	}
-	s.normalizeLoadedDataLocked()
+	migrated := s.normalizeLoadedDataLocked()
 	if len(s.data.Agents) == 0 {
 		s.seedDefaultAgentsLocked()
 		return s.saveLocked()
 	}
-	if s.migrateDefaultAgentsLocked() {
+	if s.migrateDefaultAgentsLocked() || migrated {
 		return s.saveLocked()
 	}
 	return nil
@@ -99,6 +99,10 @@ func (s *FileStore) hasConversationLocked(id string) bool {
 		}
 	}
 	return false
+}
+
+func normalizeWorkspaceID(workspaceID string) string {
+	return domain.NormalizeWorkspaceID(workspaceID)
 }
 
 func (s *FileStore) hasRunLocked(id string) bool {
@@ -138,9 +142,52 @@ func emptyFileData() fileData {
 	}
 }
 
-func (s *FileStore) normalizeLoadedDataLocked() {
+func (s *FileStore) normalizeLoadedDataLocked() bool {
+	migrated := false
 	if s.data.Conversations == nil {
 		s.data.Conversations = []domain.Conversation{}
+	}
+	for i := range s.data.Conversations {
+		if normalized := normalizeWorkspaceID(s.data.Conversations[i].WorkspaceID); normalized != s.data.Conversations[i].WorkspaceID {
+			s.data.Conversations[i].WorkspaceID = normalized
+			migrated = true
+		}
+	}
+	for i := range s.data.Messages {
+		if normalized := normalizeWorkspaceID(s.data.Messages[i].WorkspaceID); normalized != s.data.Messages[i].WorkspaceID {
+			if conversation, ok := s.getConversationLocked(s.data.Messages[i].ConversationID); ok {
+				s.data.Messages[i].WorkspaceID = conversation.WorkspaceID
+			} else {
+				s.data.Messages[i].WorkspaceID = normalized
+			}
+			migrated = true
+		}
+	}
+	for i := range s.data.Runs {
+		if normalized := normalizeWorkspaceID(s.data.Runs[i].WorkspaceID); normalized != s.data.Runs[i].WorkspaceID {
+			if conversation, ok := s.getConversationLocked(s.data.Runs[i].ConversationID); ok {
+				s.data.Runs[i].WorkspaceID = conversation.WorkspaceID
+			} else {
+				s.data.Runs[i].WorkspaceID = normalized
+			}
+			migrated = true
+		}
+	}
+	for i := range s.data.Documents {
+		if normalized := normalizeWorkspaceID(s.data.Documents[i].WorkspaceID); normalized != s.data.Documents[i].WorkspaceID {
+			s.data.Documents[i].WorkspaceID = normalized
+			migrated = true
+		}
+	}
+	for i := range s.data.Memories {
+		if normalized := normalizeWorkspaceID(s.data.Memories[i].WorkspaceID); normalized != s.data.Memories[i].WorkspaceID {
+			if conversation, ok := s.getConversationLocked(s.data.Memories[i].ConversationID); ok {
+				s.data.Memories[i].WorkspaceID = conversation.WorkspaceID
+			} else {
+				s.data.Memories[i].WorkspaceID = normalized
+			}
+			migrated = true
+		}
 	}
 	if s.data.Messages == nil {
 		s.data.Messages = []domain.Message{}
@@ -184,6 +231,7 @@ func (s *FileStore) normalizeLoadedDataLocked() {
 	if s.data.ChunkEmbeddings == nil {
 		s.data.ChunkEmbeddings = []domain.DocumentChunkEmbedding{}
 	}
+	return migrated
 }
 
 func (s *FileStore) getRunLocked(id string) (domain.Run, bool) {

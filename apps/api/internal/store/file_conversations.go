@@ -23,18 +23,58 @@ func (s *FileStore) ListConversations() ([]domain.Conversation, error) {
 }
 
 func (s *FileStore) CreateConversation(title string) (domain.Conversation, error) {
+	return s.CreateConversationInWorkspace(domain.DefaultWorkspaceID, title)
+}
+
+func (s *FileStore) CreateConversationInWorkspace(workspaceID string, title string) (domain.Conversation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	now := time.Now().UTC()
 	conversation := domain.Conversation{
-		ID:        newID("conv"),
-		Title:     normalizeTitle(title),
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:          newID("conv"),
+		WorkspaceID: normalizeWorkspaceID(workspaceID),
+		Title:       normalizeTitle(title),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	s.data.Conversations = append(s.data.Conversations, conversation)
 	return conversation, s.saveLocked()
+}
+
+func (s *FileStore) ListConversationsByWorkspace(workspaceID string) ([]domain.Conversation, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	workspaceID = normalizeWorkspaceID(workspaceID)
+	items := []domain.Conversation{}
+	for _, item := range s.data.Conversations {
+		if item.WorkspaceID == workspaceID {
+			items = append(items, item)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].UpdatedAt.After(items[j].UpdatedAt) })
+	return items, nil
+}
+
+func (s *FileStore) GetConversationInWorkspace(workspaceID string, id string) (domain.Conversation, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	workspaceID = normalizeWorkspaceID(workspaceID)
+	for _, item := range s.data.Conversations {
+		if item.ID == id && item.WorkspaceID == workspaceID {
+			return item, true, nil
+		}
+	}
+	return domain.Conversation{}, false, nil
+}
+
+func (s *FileStore) DeleteConversationInWorkspace(workspaceID string, id string) error {
+	if _, ok, err := s.GetConversationInWorkspace(workspaceID, id); err != nil {
+		return err
+	} else if !ok {
+		return ErrNotFound("conversation")
+	}
+	return s.DeleteConversation(id)
 }
 
 func (s *FileStore) GetConversation(id string) (domain.Conversation, bool, error) {
@@ -161,13 +201,15 @@ func (s *FileStore) AddMessageWithCitations(conversationID string, role string, 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.hasConversationLocked(conversationID) {
+	conversation, ok := s.getConversationLocked(conversationID)
+	if !ok {
 		return domain.Message{}, errors.New("conversation not found")
 	}
 
 	now := time.Now().UTC()
 	message := domain.Message{
 		ID:             newID("msg"),
+		WorkspaceID:    conversation.WorkspaceID,
 		ConversationID: conversationID,
 		Role:           role,
 		Content:        content,
@@ -182,6 +224,24 @@ func (s *FileStore) AddMessageWithCitations(conversationID string, role string, 
 		}
 	}
 	return message, s.saveLocked()
+}
+
+func (s *FileStore) ListMessagesInWorkspace(workspaceID string, conversationID string) ([]domain.Message, error) {
+	if _, ok, err := s.GetConversationInWorkspace(workspaceID, conversationID); err != nil {
+		return nil, err
+	} else if !ok {
+		return []domain.Message{}, nil
+	}
+	return s.ListMessages(conversationID)
+}
+
+func (s *FileStore) AddMessageInWorkspace(workspaceID string, conversationID string, role string, content string) (domain.Message, error) {
+	if _, ok, err := s.GetConversationInWorkspace(workspaceID, conversationID); err != nil {
+		return domain.Message{}, err
+	} else if !ok {
+		return domain.Message{}, ErrNotFound("conversation")
+	}
+	return s.AddMessage(conversationID, role, content)
 }
 
 func cloneCitations(citations []domain.RAGCitation) []domain.RAGCitation {
@@ -283,4 +343,13 @@ func (s *FileStore) UpdateConversationTitle(id string, title string) error {
 		}
 	}
 	return ErrNotFound("conversation")
+}
+
+func (s *FileStore) UpdateConversationTitleInWorkspace(workspaceID string, id string, title string) error {
+	if _, ok, err := s.GetConversationInWorkspace(workspaceID, id); err != nil {
+		return err
+	} else if !ok {
+		return ErrNotFound("conversation")
+	}
+	return s.UpdateConversationTitle(id, title)
 }

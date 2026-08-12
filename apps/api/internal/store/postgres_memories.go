@@ -70,6 +70,7 @@ func (s *PostgresStore) ListMemoryCandidates(conversationID string) ([]domain.Me
 
 func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
 	now := time.Now().UTC()
+	memory.WorkspaceID = normalizeWorkspaceID(memory.WorkspaceID)
 	memory.ID = strings.TrimSpace(memory.ID)
 	if memory.ID == "" {
 		memory.ID = newID("mem")
@@ -150,6 +151,7 @@ func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.Memo
 }
 
 func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
 	if len(search.Embedding) != 1536 {
 		return nil, fmt.Errorf("memory search embedding dimensions must be 1536, got %d", len(search.Embedding))
 	}
@@ -162,10 +164,8 @@ func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.Ret
 
 	args := []any{vectorLiteral(search.Embedding), limit}
 	conditions := []string{}
-	if strings.TrimSpace(search.WorkspaceID) != "" {
-		args = append(args, search.WorkspaceID)
-		conditions = append(conditions, fmt.Sprintf("m.workspace_id = $%d", len(args)))
-	}
+	args = append(args, search.WorkspaceID)
+	conditions = append(conditions, fmt.Sprintf("m.workspace_id = $%d", len(args)))
 	if strings.TrimSpace(search.UserID) != "" {
 		args = append(args, search.UserID)
 		conditions = append(conditions, fmt.Sprintf("m.user_id = $%d", len(args)))

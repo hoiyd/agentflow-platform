@@ -280,12 +280,15 @@ func (r *Runtime) publishStage(ctx context.Context, step domain.CollaborationSte
 
 func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string, memoryEnabled bool, retrievalEnabled bool, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
 	conversationID := ""
+	workspaceID := ""
 	if run, ok, _ := r.store.GetRun(runID); ok {
 		conversationID = run.ConversationID
+		workspaceID = run.WorkspaceID
 	}
 	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalStarted, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"query": truncateRuntimeText(query, 1200)}})
 	embeddingQuery := rag.EmbeddingQuery(query)
 	payload := map[string]any{
+		"workspace_id":                   workspaceID,
 		"query":                          truncateRuntimeText(query, 1200),
 		"embedding_query_chars":          len(embeddingQuery),
 		"embedding_query_original_chars": len(query),
@@ -327,6 +330,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	if memoryEnabled {
 		var err error
 		memories, err = r.store.SearchMemories(domain.MemorySearch{
+			WorkspaceID:       workspaceID,
 			Query:             query,
 			Embedding:         embedding.Vector,
 			EmbeddingProvider: embedding.Provider,
@@ -349,6 +353,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 				knowledgeContextMaxTokens = snapshot.ContextAssembly.KnowledgeMaxTokens
 			}
 			response, searchErr := r.knowledgeRetriever.Search(ctx, domain.DocumentSearch{
+				WorkspaceID:               workspaceID,
 				Query:                     query,
 				Limit:                     5,
 				KnowledgeContextMaxTokens: knowledgeContextMaxTokens,

@@ -107,7 +107,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	h.registerRoutes(mux)
-	return h.withCORS(mux)
+	return h.withCORS(h.withWorkspace(mux))
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +121,7 @@ func (h *Handler) withCORS(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Workspace-ID")
 		w.Header().Set("Access-Control-Expose-Headers", "Retry-After")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
 

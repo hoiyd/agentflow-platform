@@ -20,10 +20,54 @@ func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
 		"ADD COLUMN IF NOT EXISTS purpose text",
 		"SET purpose = 'primary'",
 		"ALTER COLUMN purpose SET NOT NULL",
+		"ADD COLUMN IF NOT EXISTS model text",
+		"SET model = '' WHERE model IS NULL",
+		"ADD COLUMN IF NOT EXISTS tool_name text",
+		"SET tool_name = '' WHERE tool_name IS NULL",
 		"run_usage_entries_run_operation_kind_idx",
 	} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("missing legacy run usage migration step %q", expected)
+		}
+	}
+}
+
+func TestPostgresMigrationsRepairLegacyVectorAndConfidenceSchema(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"memory_candidates ADD COLUMN IF NOT EXISTS confidence",
+		"table_name = 'memory_embeddings'",
+		"table_name = 'document_chunk_embeddings'",
+		"ALTER COLUMN embedding TYPE vector(1536)",
+		"USING embedding::vector(1536)",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing legacy vector migration step %q", expected)
+		}
+	}
+}
+
+func TestPostgresRequiredSchemaCoversRuntimeColumns(t *testing.T) {
+	columns := map[string]bool{}
+	for _, requirement := range postgresRequiredColumns {
+		columns[requirement.Table+"."+requirement.Column] = true
+	}
+	for _, expected := range []string{
+		"conversations.workspace_id",
+		"messages.workspace_id",
+		"messages.citations",
+		"runs.workspace_id",
+		"memory_candidates.confidence",
+		"memory_embeddings.embedding",
+		"documents.workspace_id",
+		"documents.lexical_vector",
+		"document_chunks.parent_id",
+		"document_chunk_embeddings.embedding",
+		"run_usage_entries.operation_id",
+		"run_usage_entries.purpose",
+	} {
+		if !columns[expected] {
+			t.Fatalf("required schema does not validate %s", expected)
 		}
 	}
 }
@@ -63,6 +107,26 @@ func TestPostgresMigrationsIndexConversationEventHistory(t *testing.T) {
 	joined := strings.Join(postgresMigrations, "\n")
 	if !strings.Contains(joined, "idx_run_events_conversation_timestamp") {
 		t.Fatal("missing source-aware session history event index")
+	}
+}
+
+func TestPostgresMigrationsBackfillAndRequireWorkspaceScope(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"UPDATE conversations SET workspace_id = 'default_workspace'",
+		"UPDATE messages m SET workspace_id",
+		"UPDATE runs r SET workspace_id",
+		"UPDATE memories SET workspace_id = 'default_workspace'",
+		"UPDATE documents SET workspace_id = 'default_workspace'",
+		"conversations ALTER COLUMN workspace_id SET NOT NULL",
+		"messages ALTER COLUMN workspace_id SET NOT NULL",
+		"runs ALTER COLUMN workspace_id SET NOT NULL",
+		"memories ALTER COLUMN workspace_id SET NOT NULL",
+		"documents ALTER COLUMN workspace_id SET NOT NULL",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing workspace migration step %q", expected)
+		}
 	}
 }
 

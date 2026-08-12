@@ -36,14 +36,18 @@ type RetrievalPipeline struct {
 }
 
 func NewRetrievalPipeline(store SearchStore) *RetrievalPipeline {
-	return NewRetrievalPipelineWithReranker(store, nil)
+	return newRetrievalPipeline(store, nil, nil)
 }
 
 func NewRetrievalPipelineWithReranker(store SearchStore, reranker Reranker) *RetrievalPipeline {
-	return NewRetrievalPipelineWithStages(store, reranker, nil)
+	return newRetrievalPipeline(store, reranker, nil)
 }
 
 func NewRetrievalPipelineWithStages(store SearchStore, reranker Reranker, relevanceGate RelevanceGate) *RetrievalPipeline {
+	return newRetrievalPipeline(store, reranker, relevanceGate)
+}
+
+func newRetrievalPipeline(store SearchStore, reranker Reranker, relevanceGate RelevanceGate) *RetrievalPipeline {
 	if reranker == nil {
 		reranker = NewHeuristicReranker(DefaultHeuristicRerankerConfig())
 	}
@@ -81,6 +85,7 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 	if p == nil || p.store == nil {
 		return domain.DocumentSearchResponse{}, errors.New("retrieval store is required")
 	}
+	search.WorkspaceID = domain.NormalizeWorkspaceID(search.WorkspaceID)
 
 	requestedLimit = NormalizeSearchLimit(requestedLimit)
 	search.Limit = CandidateLimit(requestedLimit)

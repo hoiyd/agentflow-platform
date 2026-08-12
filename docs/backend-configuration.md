@@ -60,6 +60,21 @@ authentication. Set it to `0.0.0.0` only behind an intentional external access
 boundary. `ALLOWED_ORIGINS` controls browser CORS and does not provide access
 control.
 
+## Workspace Scope
+
+Conversation, Message, Run, Document, Memory, and retrieval requests always
+carry a non-empty workspace scope. Clients may send `X-Workspace-ID`; when it
+is omitted, both API and web client use the reserved `default_workspace`
+namespace. Workspace isolation has no feature flag and cannot be disabled.
+
+Existing File Store and Postgres records with an empty workspace or the legacy
+reserved value `default` are migrated to `default_workspace`. Explicit custom
+workspace IDs remain unchanged.
+
+Workspace scope is an isolation key, not authentication. Production deployments
+must derive or validate it at a trusted gateway rather than trusting arbitrary
+client-supplied headers.
+
 Do not commit `.env` files. Runtime Snapshots freeze provider endpoints and
 model identity for reproducibility, but credentials remain live process
 configuration and are never persisted with a Run.

@@ -17,6 +17,7 @@ func (s *FileStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEm
 	defer s.mu.Unlock()
 
 	now := time.Now().UTC()
+	memory.WorkspaceID = normalizeWorkspaceID(memory.WorkspaceID)
 	memory.ID = strings.TrimSpace(memory.ID)
 	if memory.ID == "" {
 		memory.ID = newID("mem")
@@ -58,6 +59,7 @@ func (s *FileStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEm
 func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
 
 	limit := search.Limit
 	if limit <= 0 {
@@ -105,7 +107,7 @@ func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.Retriev
 }
 
 func memoryMatchesSearch(memory domain.Memory, search domain.MemorySearch) bool {
-	if search.WorkspaceID != "" && memory.WorkspaceID != search.WorkspaceID {
+	if normalizeWorkspaceID(memory.WorkspaceID) != normalizeWorkspaceID(search.WorkspaceID) {
 		return false
 	}
 	if search.UserID != "" && memory.UserID != search.UserID {
