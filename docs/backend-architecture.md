@@ -20,6 +20,8 @@ complete Single, Multi, and Loop lifecycles, read
   implementation for retrieval, tools, context, events, and model access.
 - Stores persist domain contracts but do not own retrieval policy, reranking,
   or orchestration.
+- Every `/api/*` operation resolves a non-empty Workspace namespace. Store lookups,
+  retrieval expansion, Replay, and Verification preserve it across adapters.
 - Run Events describe execution; the Usage Ledger remains the accounting
   authority.
 
@@ -31,6 +33,7 @@ These are cross-cutting runtime capabilities, not mode-specific features:
 | --- | --- | --- |
 | **Performance** | SSE streams output incrementally; context, output, Tool results, Run usage, and background queues are bounded. Active runtime excludes queue and human-wait time. | Limits and provider policies are configured at composition time and frozen into new Runs where replay stability requires it. No benchmark result is implied. |
 | **Concurrency** | `RunController` combines global admission, bounded queueing, and per-Conversation single-writer execution. The model limiter separately owns in-flight requests and RPM/TPM; Tool bindings declare serial, read-only, or keyed parallelism. | Single, Multi-Agent, and Loop (`autonomous`) modes use the same controls. Provider retries acquire fresh permits without double-counting logical Run usage. |
+| **Workspace scope** | HTTP resolves `X-Workspace-ID`, query, or payload scope to one normalized namespace; omitted and legacy `default` values become `default_workspace`. Persisted Runs inherit Conversation scope. | File and Postgres stores enforce namespace predicates. Authentication, Membership, and ACL remain separate future policy layers. |
 | **Tracing** | Typed Run Events cover Run, Stage, Turn, Model, Tool, Retrieval, Context, Memory, Usage, and Verification lifecycles. Durable Run Events, Collaboration Steps, usage, and artifacts are persisted for Replay and Episode Reports; streaming `model.delta` events are intentionally omitted. | Event contracts remain stable across File/Postgres stores and native/framework executors; adapters add versioned metadata instead of inventing private trace formats. |
 | **Verification** | An opt-in frozen Completion Contract evaluates the persisted candidate output, records immutable Evidence/Artifacts, and gates `run.completed`. | Versioned verifier implementations are registered behind a narrow interface. Verification applies identically to all execution modes and is independent of Automated and Manual Tests. |
 
@@ -130,6 +133,7 @@ Moving packages out of `internal` only to make the tree appear balanced would we
 
 ```text
 HTTP chat request
+  -> Workspace scope resolution
   -> run admission
   -> Agent Runtime
   -> Turn Engine
@@ -138,6 +142,7 @@ HTTP chat request
   -> message persistence and asynchronous memory curation
 
 HTTP RAG search or Agent context retrieval
+  -> request or persisted Run Workspace scope
   -> Knowledge Base
   -> query embedding
   -> Retrieval Pipeline
@@ -152,6 +157,7 @@ HTTP RAG search or Agent context retrieval
             -> final knowledge token-limit check
 
 HTTP document ingestion
+  -> Workspace scope resolution
   -> Knowledge Base
   -> chunking / embedding
   -> Store
@@ -170,6 +176,7 @@ The call paths preserve these ownership boundaries:
 
 | Boundary | Responsibility |
 | --- | --- |
+| Workspace scope | Resolves a non-empty request namespace, rejects conflicting explicit sources, persists scope on owned resources, and keeps Store operations scoped. It is an isolation key, not proof of caller identity. |
 | Retrieval Pipeline | Owns dense/lexical recall ordering, prompt-injection filtering, rank-based fusion, reranking, and relevance gating. Stores apply scope filters and expose recall results without defining final ranking policy. |
 | Context Selector | Expands gated child hits within the matched document, Workspace/metadata scope, and token limit. Ranked hits remain separate from the context sent to the model. |
 | Context Transformer | Deduplicates sources, groups chunks by document, merges adjacent chunks, preserves contributing IDs, and reapplies the knowledge token limit. |

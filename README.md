@@ -104,19 +104,20 @@ subsystems rather than hiding them inside prompts.
 ```mermaid
 flowchart LR
     UI["Next.js workbench"] -->|"HTTP + SSE"| HTTP["Go HTTP adapter"]
-    HTTP --> Runtime["Agent Runtime"]
+    HTTP --> Scope["Workspace scope"]
+    Scope --> Runtime["Agent Runtime"]
     Runtime --> Modes["Single / Multi / Loop"]
     Runtime --> Turn["Shared Turn Engine"]
     Turn --> Context["Context Assembly"]
     Turn --> Model["Model adapter"]
     Turn --> Tools["Guarded tools"]
     Runtime --> Events["Typed Run Events"]
-    HTTP --> Knowledge["Knowledge Base"]
+    Scope --> Knowledge["Knowledge Base"]
     Knowledge --> Retrieval["Semantic + Keyword -> RRF -> Rerank -> Gate"]
     Retrieval --> Transform["Parent/adjacent selection -> Dedup/Merge"]
-    HTTP --> Memory["Memory Curator"]
+    Scope --> Memory["Memory Curator"]
     Memory --> Candidates["Candidate policy"]
-    HTTP --> Store["File Store / Postgres + pgvector"]
+    Scope --> Store["File Store / Postgres + pgvector"]
     Events --> Store
     Candidates --> Store
     Transform --> Store
@@ -157,6 +158,7 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 | --- | --- | --- |
 | [**Performance & resource control**](docs/execution-controls.md) | SSE streaming, bounded context/output, asynchronous Memory curation, and per-Run usage/cost budgets keep work measurable and bounded | [budget](apps/api/internal/budget/budget.go), [tests](apps/api/internal/budget/budget_test.go) |
 | [**Concurrency & backpressure**](docs/execution-controls.md#1-run-admission-and-conversation-concurrency) | Global Run admission, per-Conversation single-writer execution, bounded queues, model-request permits, RPM/TPM limits, and retry-aware slot release | [controller](apps/api/internal/concurrency/run_controller.go), [tests](apps/api/internal/concurrency/run_controller_test.go) |
+| [Workspace namespace isolation](docs/backend-configuration.md#workspace-scope) | Every API request resolves a non-empty Workspace; Conversations, Messages, Runs, Documents, Memory, retrieval, Replay, and Verification remain scoped in File and Postgres stores | [HTTP scope](apps/api/internal/httpapi/workspace.go), [Store contract](apps/api/internal/store/store.go), [tests](apps/api/internal/store/file_store_test.go) |
 | [Tool governance](docs/agent-profiles.md#two-tool-control-layers) | Platform enablement and per-Agent allowlists are separate; the executor adds timeout, result limits, panic recovery, tracing, and serial/read-only/keyed concurrency | [executor](apps/api/internal/tools/executor.go), [tests](apps/api/internal/tools/executor_test.go) |
 | [**Verification**](docs/verification.md) | Frozen Completion Contracts run configured deterministic or model-backed verifiers, persist immutable Evidence/Artifacts, and gate `run.completed` | [engine](apps/api/internal/verification/engine.go), [tests](apps/api/internal/verification/engine_test.go) |
 | [**Tracing & replay**](docs/backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed Run/Stage/Turn/Model/Tool/Retrieval/Verification events, usage ledgers, Replay, and Episode reports explain what happened | [episode](apps/api/internal/httpapi/episode_report.go), [tests](apps/api/internal/httpapi/episode_report_test.go) |
@@ -224,9 +226,10 @@ These boundaries are documented rather than hidden. The supported deployment
 scope and its expansion path are documented in the
 [Production Readiness Roadmap](docs/production-readiness-roadmap.md).
 
-- Workspace lifecycle and mandatory production-mode tenant isolation are not
-  complete. Current RAG behavior should be treated as single-workspace unless
-  a caller supplies and enforces scope consistently.
+- Workspace namespace isolation is mandatory: omitted scope resolves to
+  `default_workspace`, and Store/RAG paths do not perform unscoped reads.
+  Identity, Membership, ACL policy, and Workspace lifecycle are not yet
+  implemented, so this is not an authorization or full multi-tenant guarantee.
 - The HTTP API does not yet provide an authentication or authorization layer.
   Run it only in a trusted development environment or behind an external access
   boundary.

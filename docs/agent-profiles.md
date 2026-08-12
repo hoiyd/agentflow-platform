@@ -111,6 +111,9 @@ and deployment limits stay live.
 
 - Agent profiles are not an authorization boundary. The HTTP API still requires
   a trusted deployment boundary.
+- Agent profiles and the installed Tool catalog are currently global platform
+  resources. `X-Workspace-ID` scopes Runs and data access, but it does not yet
+  create a per-Workspace Agent registry.
 - Profiles select from installed in-process tools; remote tool discovery and
   tenant-specific tool registries are not implemented.
 - The Router can use deterministic profile matching or an LLM-backed policy,

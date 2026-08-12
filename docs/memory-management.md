@@ -72,6 +72,13 @@ The explicit `POST /api/memories` and `POST /api/memories/search` APIs remain
 available. Versioned replace/remove mutations are not implemented; implicit
 message copying has been replaced with conservative curation.
 
+Memory writes and recall always carry a normalized Workspace namespace. The
+Curator inherits it from the source Message/Run; explicit HTTP requests resolve
+it from the request, and omitted scope becomes `default_workspace`. File and
+Postgres search apply that predicate before similarity ranking, so omission is
+never an unfiltered recall. User/Project scope, Membership, and Memory-specific
+ACL/content-trust policy remain future authorization work.
+
 ## Trade-offs and Boundaries
 
 - Conservative policy can miss implicit preferences. Shadow mode exists to
@@ -80,5 +87,7 @@ message copying has been replaced with conservative curation.
   delete require versioned mutation semantics and related-memory retrieval.
 - Model confidence is one input, not authorization. Deterministic policy still
   controls persistence.
+- Workspace namespace isolation is not proof of identity or permission to read
+  that namespace.
 - Memory Curation is auxiliary platform work. Its failure is observable but
   cannot retroactively fail an already completed Run.

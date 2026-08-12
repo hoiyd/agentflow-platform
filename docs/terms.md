@@ -27,6 +27,18 @@ Conversation
 A Loop (`autonomous`) Run may repeat a group of Stages. `Iteration` identifies
 that group; it is not another execution entity in this hierarchy.
 
+## Workspace Namespace
+
+A **Workspace Namespace** is the non-empty isolation key carried by persisted
+Conversation, Message, Run, Document, and Memory records and their scoped
+operations. An omitted scope and the legacy value `default` normalize to the
+reserved `default_workspace` namespace; they never mean "search all data."
+
+Workspace scope limits which records a Store operation can read or mutate. It
+is not an identity credential, Membership decision, or ACL. An untrusted
+deployment must derive or validate it at an authenticated boundary before
+treating namespace isolation as tenant authorization.
+
 ## Conversation
 
 A **Conversation** is the long-lived container for the user-visible chat.

@@ -116,8 +116,9 @@ Verify the relevant stages independently:
 - HTTP, Single-Agent, Multi-Agent, and Autonomous path consistency.
 
 Do not claim calibrated retrieval quality without a representative Golden
-Dataset. Do not claim multi-tenant isolation until Workspace lifecycle, scope,
-and ACL enforcement are complete end to end.
+Dataset. Do not claim full multi-tenant authorization until authenticated
+Workspace lifecycle, Membership/ACL enforcement, and cross-tenant release tests
+are complete. Mandatory namespace filtering alone is not authorization.
 
 ## Documentation Changes
 
@@ -137,6 +138,15 @@ and ACL enforcement are complete end to end.
 
 - Do not implement features directly on `main`. Update from `main` and create a
   scoped branch unless instructed otherwise.
+- When branching from `origin/main`, create the feature branch with `--no-track`.
+  Never leave a feature branch tracking `origin/main`.
+- Before pushing, inspect `@{upstream}`. If it differs from
+  `origin/<current-branch>`, unset it before the first push; do not rely on
+  `push.default` to choose the destination.
+- On the first push, use the explicit refspec
+  `git push -u origin HEAD:refs/heads/<current-branch>`, then verify
+  `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}` returns the same
+  branch name on `origin` before reporting the push as complete.
 - Stage explicit files only; never use `git add -A` in a dirty worktree.
 - Do not stage local files such as `JD.md`, `RAG.md`, or `docs/TODO/` unless the
   user explicitly requests them.

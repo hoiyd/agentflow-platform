@@ -98,11 +98,12 @@ of the repository's unit or integration tests.
 
 ### 4:25-5:00 - Engineering Boundaries
 
-Close with two explicit limits: authentication and complete Workspace lifecycle
-are not implemented; the canonical Golden Dataset exists, but relevance and
-no-answer thresholds still need calibration and the ACL/stale-data cases are not
-release gates. This distinguishes implemented platform behavior from planned
-production hardening.
+Close with two explicit limits: mandatory Workspace namespace filtering is
+implemented, but authentication, Membership, ACL, and complete Workspace
+lifecycle are not; the canonical Golden Dataset exists, but relevance and
+no-answer thresholds still need calibration and the ACL/stale-data cases are
+not release gates. This distinguishes implemented platform behavior from
+planned production hardening.
 
 ## Recorded README Assets
 

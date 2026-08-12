@@ -75,6 +75,10 @@ Workspace scope is an isolation key, not authentication. Production deployments
 must derive or validate it at a trusted gateway rather than trusting arbitrary
 client-supplied headers.
 
+The web client sends `NEXT_PUBLIC_WORKSPACE_ID` when configured and otherwise
+uses `default_workspace`. Changing this value selects a namespace; it does not
+grant access to that namespace.
+
 Do not commit `.env` files. Runtime Snapshots freeze provider endpoints and
 model identity for reproducibility, but credentials remain live process
 configuration and are never persisted with a Run.
