@@ -125,7 +125,7 @@ func eventCandidates(events []domain.RunEvent, query Query) []candidate {
 		if event.RunID == query.ExcludeRunID {
 			continue
 		}
-		if len(query.EventIDs) == 0 && len(query.EventTypes) == 0 && query.From == nil && query.To == nil && len(query.Keywords) > 0 && !defaultSearchableEventType(event.Type) {
+		if usesDefaultEventPolicy(query) && !defaultSearchableEventType(event.Type) {
 			continue
 		}
 		if !withinRange(event.Timestamp, query.From, query.To) || !matchesEventType(event.Type, query.EventTypes) {
@@ -206,7 +206,8 @@ func adjacentEventCandidates(events []domain.RunEvent, direct []candidate, query
 				continue
 			}
 			event := events[index]
-			if event.RunID == query.ExcludeRunID || !withinRange(event.Timestamp, query.From, query.To) {
+			if event.RunID == query.ExcludeRunID || !withinRange(event.Timestamp, query.From, query.To) ||
+				(usesDefaultEventPolicy(query) && !defaultSearchableEventType(event.Type)) {
 				continue
 			}
 			payload, _ := json.Marshal(event.Payload)
@@ -218,6 +219,10 @@ func adjacentEventCandidates(events []domain.RunEvent, direct []candidate, query
 		}
 	}
 	return items
+}
+
+func usesDefaultEventPolicy(query Query) bool {
+	return len(query.EventIDs) == 0 && len(query.EventTypes) == 0 && query.From == nil && query.To == nil && len(query.Keywords) > 0
 }
 
 func matchesKeyword(text string, keywords []string) bool {
