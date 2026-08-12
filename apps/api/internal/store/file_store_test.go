@@ -1,12 +1,51 @@
 package store
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
+
+func TestFileStoreMigratesLegacyDefaultWorkspace(t *testing.T) {
+	path := t.TempDir() + "/agentflow.json"
+	legacy := fileData{
+		Conversations: []domain.Conversation{{ID: "conv-legacy", WorkspaceID: "default", Title: "Legacy"}},
+		Messages:      []domain.Message{{ID: "msg-legacy", WorkspaceID: "default", ConversationID: "conv-legacy", Role: "user", Content: "hello"}},
+		Runs:          []domain.Run{{ID: "run-legacy", WorkspaceID: "default", ConversationID: "conv-legacy"}},
+		Memories:      []domain.Memory{{ID: "mem-legacy", WorkspaceID: "default", ConversationID: "conv-legacy", Kind: "note", Content: "memory"}},
+		Documents:     []domain.Document{{ID: "doc-legacy", WorkspaceID: "default", Title: "Legacy document"}},
+	}
+	data, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatalf("marshal legacy data: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write legacy data: %v", err)
+	}
+
+	fileStore, err := NewFileStore(path)
+	if err != nil {
+		t.Fatalf("open legacy store: %v", err)
+	}
+	conversation, ok, err := fileStore.GetConversation("conv-legacy")
+	if err != nil || !ok || conversation.WorkspaceID != domain.DefaultWorkspaceID {
+		t.Fatalf("conversation workspace migration failed: %#v ok=%v err=%v", conversation, ok, err)
+	}
+	message := fileStore.data.Messages[0]
+	run := fileStore.data.Runs[0]
+	memory := fileStore.data.Memories[0]
+	document := fileStore.data.Documents[0]
+	for name, workspaceID := range map[string]string{
+		"message": message.WorkspaceID, "run": run.WorkspaceID, "memory": memory.WorkspaceID, "document": document.WorkspaceID,
+	} {
+		if workspaceID != domain.DefaultWorkspaceID {
+			t.Fatalf("%s workspace migration: got %q want %q", name, workspaceID, domain.DefaultWorkspaceID)
+		}
+	}
+}
 
 func TestFileStoreListsConversationEventsThroughRunOwnership(t *testing.T) {
 	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
@@ -300,6 +339,7 @@ func TestFileStoreWorkspaceIsolationAcrossConversationRunAndDocument(t *testing.
 	}
 	createDocument("workspace-a", "private alpha term")
 	createDocument("workspace-b", "private beta term")
+	createDocument("", "private default term")
 	results, err := fileStore.SearchDocumentChunksLexical(domain.DocumentSearch{
 		WorkspaceID: "workspace-a", Query: "private", LexicalTerms: []string{"private"}, Limit: 10,
 	})
@@ -308,6 +348,15 @@ func TestFileStoreWorkspaceIsolationAcrossConversationRunAndDocument(t *testing.
 	}
 	if len(results) != 1 || results[0].Document.WorkspaceID != "workspace-a" {
 		t.Fatalf("expected only workspace-a document, got %#v", results)
+	}
+	defaultResults, err := fileStore.SearchDocumentChunksLexical(domain.DocumentSearch{
+		Query: "private", LexicalTerms: []string{"private"}, Limit: 10,
+	})
+	if err != nil {
+		t.Fatalf("default lexical search: %v", err)
+	}
+	if len(defaultResults) != 1 || defaultResults[0].Document.WorkspaceID != domain.DefaultWorkspaceID {
+		t.Fatalf("expected empty scope to search only the reserved workspace, got %#v", defaultResults)
 	}
 	conversations, err := fileStore.ListConversationsByWorkspace("workspace-a")
 	if err != nil || len(conversations) != 1 || conversations[0].ID != conversationA.ID {

@@ -4,28 +4,17 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"agentflow-platform/apps/api/internal/domain"
 )
 
 const WorkspaceHeader = "X-Workspace-ID"
-
-type WorkspacePolicy struct {
-	DefaultID string
-	Required  bool
-}
 
 type workspaceContextKey struct{}
 
 type requestWorkspace struct {
 	ID       string
 	Explicit bool
-}
-
-func normalizeWorkspacePolicy(policy WorkspacePolicy) WorkspacePolicy {
-	policy.DefaultID = strings.TrimSpace(policy.DefaultID)
-	if policy.DefaultID == "" {
-		policy.DefaultID = "default"
-	}
-	return policy
 }
 
 func (h *Handler) withWorkspace(next http.Handler) http.Handler {
@@ -36,7 +25,7 @@ func (h *Handler) withWorkspace(next http.Handler) http.Handler {
 		}
 		headerWorkspaceID := strings.TrimSpace(r.Header.Get(WorkspaceHeader))
 		queryWorkspaceID := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
-		if headerWorkspaceID != "" && queryWorkspaceID != "" && headerWorkspaceID != queryWorkspaceID {
+		if headerWorkspaceID != "" && queryWorkspaceID != "" && domain.NormalizeWorkspaceID(headerWorkspaceID) != domain.NormalizeWorkspaceID(queryWorkspaceID) {
 			writeError(w, http.StatusBadRequest, "workspace_id query does not match request header")
 			return
 		}
@@ -46,13 +35,7 @@ func (h *Handler) withWorkspace(next http.Handler) http.Handler {
 			workspaceID = queryWorkspaceID
 			explicit = workspaceID != ""
 		}
-		if workspaceID == "" && h.workspace.Required {
-			writeError(w, http.StatusBadRequest, "workspace_id is required")
-			return
-		}
-		if workspaceID == "" {
-			workspaceID = h.workspace.DefaultID
-		}
+		workspaceID = domain.NormalizeWorkspaceID(workspaceID)
 		ctx := context.WithValue(r.Context(), workspaceContextKey{}, requestWorkspace{ID: workspaceID, Explicit: explicit})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -66,10 +49,7 @@ func workspaceIDFromRequest(r *http.Request) string {
 	if workspace.ID == "" {
 		workspace.ID = strings.TrimSpace(r.URL.Query().Get("workspace_id"))
 	}
-	if workspace.ID == "" {
-		workspace.ID = "default"
-	}
-	return workspace.ID
+	return domain.NormalizeWorkspaceID(workspace.ID)
 }
 
 func resolvePayloadWorkspace(r *http.Request, payloadWorkspaceID string) (string, bool) {
@@ -79,6 +59,9 @@ func resolvePayloadWorkspace(r *http.Request, payloadWorkspaceID string) (string
 		scope.Explicit = strings.TrimSpace(r.Header.Get(WorkspaceHeader)) != "" || strings.TrimSpace(r.URL.Query().Get("workspace_id")) != ""
 	}
 	payloadWorkspaceID = strings.TrimSpace(payloadWorkspaceID)
+	if payloadWorkspaceID != "" {
+		payloadWorkspaceID = domain.NormalizeWorkspaceID(payloadWorkspaceID)
+	}
 	if payloadWorkspaceID != "" && scope.Explicit && payloadWorkspaceID != scope.ID {
 		return "", false
 	}

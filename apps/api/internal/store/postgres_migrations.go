@@ -15,7 +15,7 @@ var postgresMigrations = []string{
 	`CREATE EXTENSION IF NOT EXISTS vector`,
 	`CREATE TABLE IF NOT EXISTS conversations (
 		id text PRIMARY KEY,
-		workspace_id text NOT NULL DEFAULT 'default',
+		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		user_id text,
 		project_id text,
 		title text NOT NULL,
@@ -23,8 +23,8 @@ var postgresMigrations = []string{
 		updated_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS workspace_id text`,
-	`UPDATE conversations SET workspace_id = 'default' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = ''`,
-	`ALTER TABLE conversations ALTER COLUMN workspace_id SET DEFAULT 'default'`,
+	`UPDATE conversations SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`,
+	`ALTER TABLE conversations ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
 	`ALTER TABLE conversations ALTER COLUMN workspace_id SET NOT NULL`,
 	`CREATE INDEX IF NOT EXISTS conversations_workspace_updated_idx ON conversations(workspace_id, updated_at DESC)`,
 	`CREATE TABLE IF NOT EXISTS agents (
@@ -61,7 +61,7 @@ var postgresMigrations = []string{
 	`CREATE TABLE IF NOT EXISTS messages (
 		id text PRIMARY KEY,
 		conversation_id text NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-		workspace_id text NOT NULL DEFAULT 'default',
+		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		user_id text,
 		project_id text,
 		role text NOT NULL,
@@ -70,15 +70,16 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS workspace_id text`,
-	`UPDATE messages m SET workspace_id = COALESCE(NULLIF(BTRIM(m.workspace_id), ''), c.workspace_id, 'default') FROM conversations c WHERE c.id = m.conversation_id AND (m.workspace_id IS NULL OR BTRIM(m.workspace_id) = '')`,
-	`ALTER TABLE messages ALTER COLUMN workspace_id SET DEFAULT 'default'`,
+	`UPDATE messages m SET workspace_id = c.workspace_id FROM conversations c WHERE c.id = m.conversation_id AND (m.workspace_id IS NULL OR BTRIM(m.workspace_id) = '' OR m.workspace_id = 'default')`,
+	`UPDATE messages SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`,
+	`ALTER TABLE messages ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
 	`ALTER TABLE messages ALTER COLUMN workspace_id SET NOT NULL`,
 	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS citations jsonb NOT NULL DEFAULT '[]'::jsonb`,
 	`CREATE TABLE IF NOT EXISTS runs (
 		id text PRIMARY KEY,
 		agent_id text NOT NULL REFERENCES agents(id),
 		conversation_id text NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-		workspace_id text NOT NULL DEFAULT 'default',
+		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		user_id text,
 		project_id text,
 		status text NOT NULL,
@@ -90,8 +91,9 @@ var postgresMigrations = []string{
 		updated_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS workspace_id text`,
-	`UPDATE runs r SET workspace_id = COALESCE(NULLIF(BTRIM(r.workspace_id), ''), c.workspace_id, 'default') FROM conversations c WHERE c.id = r.conversation_id AND (r.workspace_id IS NULL OR BTRIM(r.workspace_id) = '')`,
-	`ALTER TABLE runs ALTER COLUMN workspace_id SET DEFAULT 'default'`,
+	`UPDATE runs r SET workspace_id = c.workspace_id FROM conversations c WHERE c.id = r.conversation_id AND (r.workspace_id IS NULL OR BTRIM(r.workspace_id) = '' OR r.workspace_id = 'default')`,
+	`UPDATE runs SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`,
+	`ALTER TABLE runs ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
 	`ALTER TABLE runs ALTER COLUMN workspace_id SET NOT NULL`,
 	`CREATE INDEX IF NOT EXISTS runs_workspace_created_idx ON runs(workspace_id, created_at DESC)`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS heartbeat_at timestamptz`,
@@ -185,7 +187,7 @@ var postgresMigrations = []string{
 	)`,
 	`CREATE TABLE IF NOT EXISTS memories (
 		id text PRIMARY KEY,
-		workspace_id text NOT NULL DEFAULT 'default',
+		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		user_id text,
 		project_id text,
 		conversation_id text REFERENCES conversations(id) ON DELETE SET NULL,
@@ -198,8 +200,9 @@ var postgresMigrations = []string{
 		updated_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE memories ADD COLUMN IF NOT EXISTS workspace_id text`,
-	`UPDATE memories SET workspace_id = 'default' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = ''`,
-	`ALTER TABLE memories ALTER COLUMN workspace_id SET DEFAULT 'default'`,
+	`UPDATE memories m SET workspace_id = c.workspace_id FROM conversations c WHERE c.id = m.conversation_id AND (m.workspace_id IS NULL OR BTRIM(m.workspace_id) = '' OR m.workspace_id = 'default')`,
+	`UPDATE memories SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`,
+	`ALTER TABLE memories ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
 	`ALTER TABLE memories ALTER COLUMN workspace_id SET NOT NULL`,
 	`CREATE TABLE IF NOT EXISTS memory_candidates (
 		id text PRIMARY KEY,
@@ -240,7 +243,7 @@ var postgresMigrations = []string{
 	END $$`,
 	`CREATE TABLE IF NOT EXISTS documents (
 		id text PRIMARY KEY,
-		workspace_id text NOT NULL DEFAULT 'default',
+		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		title text NOT NULL,
 		version text NOT NULL DEFAULT '',
 		content_hash text NOT NULL DEFAULT '',
@@ -253,8 +256,8 @@ var postgresMigrations = []string{
 		updated_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS workspace_id text`,
-	`UPDATE documents SET workspace_id = 'default' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = ''`,
-	`ALTER TABLE documents ALTER COLUMN workspace_id SET DEFAULT 'default'`,
+	`UPDATE documents SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`,
+	`ALTER TABLE documents ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
 	`ALTER TABLE documents ALTER COLUMN workspace_id SET NOT NULL`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS version text NOT NULL DEFAULT ''`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_hash text NOT NULL DEFAULT ''`,

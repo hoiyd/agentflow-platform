@@ -47,7 +47,6 @@ type Dependencies struct {
 	RunController  *concurrency.RunController
 	Verification   *verification.Engine
 	AllowedOrigins []string
-	Workspace      WorkspacePolicy
 }
 
 type Handler struct {
@@ -61,7 +60,6 @@ type Handler struct {
 	runController  *concurrency.RunController
 	verification   *verification.Engine
 	allowedOrigins []string
-	workspace      WorkspacePolicy
 }
 
 func NewHandler(dependencies Dependencies) (*Handler, error) {
@@ -103,7 +101,6 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		runController:  dependencies.RunController,
 		verification:   dependencies.Verification,
 		allowedOrigins: append([]string(nil), dependencies.AllowedOrigins...),
-		workspace:      normalizeWorkspacePolicy(dependencies.Workspace),
 	}, nil
 }
 

@@ -97,7 +97,7 @@ test("run usage client calls the dedicated endpoint", async (t) => {
   const ledger = await getRunUsage("run-2");
 
   assert.match(requestedURL, /\/api\/runs\/run-2\/usage$/);
-  assert.equal(workspaceID, "default");
+  assert.equal(workspaceID, "default_workspace");
   assert.equal(ledger.budget.max_tool_calls, 4);
   assert.equal(ledger.totals.tool_calls, 1);
   assert.equal(ledger.totals.open_reservations, 0);
@@ -196,7 +196,7 @@ test("document creation sends the complete JSON contract", async (t) => {
   assert.match(request.url, /\/api\/documents$/);
   assert.equal(request.options.method, "POST");
   assert.equal(new Headers(request.options.headers).get("Content-Type"), "application/json");
-  assert.equal(new Headers(request.options.headers).get("X-Workspace-ID"), "default");
+  assert.equal(new Headers(request.options.headers).get("X-Workspace-ID"), "default_workspace");
   assert.deepEqual(request.body, {
     title: "Runbook",
     version: "v2",

@@ -283,6 +283,7 @@ func (s *PostgresStore) DeleteDocumentInWorkspace(workspaceID string, id string)
 }
 
 func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
 	if len(search.Embedding) != 1536 {
 		return nil, fmt.Errorf("document search embedding dimensions must be 1536, got %d", len(search.Embedding))
 	}
@@ -296,10 +297,8 @@ func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]do
 
 	args := []any{vectorLiteral(search.Embedding), limit}
 	conditions := []string{}
-	if strings.TrimSpace(search.WorkspaceID) != "" {
-		args = append(args, search.WorkspaceID)
-		conditions = append(conditions, fmt.Sprintf("d.workspace_id = $%d", len(args)))
-	}
+	args = append(args, search.WorkspaceID)
+	conditions = append(conditions, fmt.Sprintf("d.workspace_id = $%d", len(args)))
 	if strings.TrimSpace(search.EmbeddingProvider) != "" {
 		args = append(args, search.EmbeddingProvider)
 		conditions = append(conditions, fmt.Sprintf("e.provider = $%d", len(args)))
@@ -352,6 +351,7 @@ func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]do
 }
 
 func (s *PostgresStore) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
 	queryText := strings.TrimSpace(search.Query)
 	if queryText == "" {
 		return nil, errors.New("document lexical search query is required")
@@ -373,10 +373,8 @@ func (s *PostgresStore) SearchDocumentChunksLexical(search domain.DocumentSearch
 		($2 <> '' AND (c.lexical_vector @@ to_tsquery('simple', $2) OR d.lexical_vector @@ to_tsquery('simple', $2)))
 	)`
 	conditions := []string{lexicalMatch}
-	if strings.TrimSpace(search.WorkspaceID) != "" {
-		args = append(args, search.WorkspaceID)
-		conditions = append(conditions, fmt.Sprintf("d.workspace_id = $%d", len(args)))
-	}
+	args = append(args, search.WorkspaceID)
+	conditions = append(conditions, fmt.Sprintf("d.workspace_id = $%d", len(args)))
 	for key, value := range search.Metadata {
 		args = append(args, key, value)
 		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))
@@ -421,6 +419,7 @@ func (s *PostgresStore) SearchDocumentChunksLexical(search domain.DocumentSearch
 }
 
 func (s *PostgresStore) ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error) {
+	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
 	documentID := strings.TrimSpace(search.DocumentID)
 	if documentID == "" {
 		return nil, errors.New("document context search document ID is required")
@@ -428,10 +427,8 @@ func (s *PostgresStore) ListDocumentContextChunks(search domain.DocumentContextS
 
 	args := []any{documentID}
 	conditions := []string{"d.id = $1"}
-	if workspaceID := strings.TrimSpace(search.WorkspaceID); workspaceID != "" {
-		args = append(args, workspaceID)
-		conditions = append(conditions, fmt.Sprintf("d.workspace_id = $%d", len(args)))
-	}
+	args = append(args, search.WorkspaceID)
+	conditions = append(conditions, fmt.Sprintf("d.workspace_id = $%d", len(args)))
 	for key, value := range search.Metadata {
 		args = append(args, key, value)
 		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))

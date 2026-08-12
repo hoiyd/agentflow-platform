@@ -15,9 +15,6 @@ Common environment variables:
 ```bash
 BIND_ADDRESS=127.0.0.1
 PORT=8080
-APP_ENV=development
-DEFAULT_WORKSPACE_ID=default
-REQUIRE_WORKSPACE_ID=false
 STORE_DRIVER=file
 DATA_PATH=.data/agentflow.json
 TOOL_CONFIG_PATH=.data/tools.json
@@ -65,14 +62,14 @@ control.
 
 ## Workspace Scope
 
-Conversation, Message, Run, Document, Memory, and retrieval requests carry a
-workspace scope. Clients send it with `X-Workspace-ID`; the web client uses
-`NEXT_PUBLIC_WORKSPACE_ID` and defaults to `default` for local compatibility.
+Conversation, Message, Run, Document, Memory, and retrieval requests always
+carry a non-empty workspace scope. Clients may send `X-Workspace-ID`; when it
+is omitted, both API and web client use the reserved `default_workspace`
+namespace. Workspace isolation has no feature flag and cannot be disabled.
 
-`APP_ENV=production` always requires an explicit workspace header, regardless
-of `REQUIRE_WORKSPACE_ID`. Development may omit it and falls back to
-`DEFAULT_WORKSPACE_ID`. Existing file and Postgres records without a workspace
-are migrated to `default`.
+Existing File Store and Postgres records with an empty workspace or the legacy
+reserved value `default` are migrated to `default_workspace`. Explicit custom
+workspace IDs remain unchanged.
 
 Workspace scope is an isolation key, not authentication. Production deployments
 must derive or validate it at a trusted gateway rather than trusting arbitrary

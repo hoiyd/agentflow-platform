@@ -83,9 +83,10 @@ Run, which in turn inherits it from the Conversation. Memory and both Semantic
 and Keyword recall receive that same value. File and Postgres stores apply an
 exact workspace predicate before ranking candidates.
 
-In production, an empty workspace is rejected both at the HTTP boundary and by
-the Retrieval Pipeline. This prevents a new internal caller from accidentally
-turning a scoped search into a global search.
+The Retrieval Pipeline always normalizes an empty scope to the reserved
+`default_workspace` namespace before Semantic or Keyword recall. A new internal
+caller therefore cannot accidentally turn an unscoped request into a global
+search.
 
 Dense recall uses cosine similarity against document chunk embeddings. Lexical
 recall can introduce a chunk that is absent from the dense candidate set, which

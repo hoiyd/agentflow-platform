@@ -102,11 +102,7 @@ func (s *FileStore) hasConversationLocked(id string) bool {
 }
 
 func normalizeWorkspaceID(workspaceID string) string {
-	workspaceID = strings.TrimSpace(workspaceID)
-	if workspaceID == "" {
-		return domain.DefaultWorkspaceID
-	}
-	return workspaceID
+	return domain.NormalizeWorkspaceID(workspaceID)
 }
 
 func (s *FileStore) hasRunLocked(id string) bool {
@@ -152,40 +148,44 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 		s.data.Conversations = []domain.Conversation{}
 	}
 	for i := range s.data.Conversations {
-		if strings.TrimSpace(s.data.Conversations[i].WorkspaceID) == "" {
-			s.data.Conversations[i].WorkspaceID = domain.DefaultWorkspaceID
+		if normalized := normalizeWorkspaceID(s.data.Conversations[i].WorkspaceID); normalized != s.data.Conversations[i].WorkspaceID {
+			s.data.Conversations[i].WorkspaceID = normalized
 			migrated = true
 		}
 	}
 	for i := range s.data.Messages {
-		if strings.TrimSpace(s.data.Messages[i].WorkspaceID) == "" {
+		if normalized := normalizeWorkspaceID(s.data.Messages[i].WorkspaceID); normalized != s.data.Messages[i].WorkspaceID {
 			if conversation, ok := s.getConversationLocked(s.data.Messages[i].ConversationID); ok {
 				s.data.Messages[i].WorkspaceID = conversation.WorkspaceID
 			} else {
-				s.data.Messages[i].WorkspaceID = domain.DefaultWorkspaceID
+				s.data.Messages[i].WorkspaceID = normalized
 			}
 			migrated = true
 		}
 	}
 	for i := range s.data.Runs {
-		if strings.TrimSpace(s.data.Runs[i].WorkspaceID) == "" {
+		if normalized := normalizeWorkspaceID(s.data.Runs[i].WorkspaceID); normalized != s.data.Runs[i].WorkspaceID {
 			if conversation, ok := s.getConversationLocked(s.data.Runs[i].ConversationID); ok {
 				s.data.Runs[i].WorkspaceID = conversation.WorkspaceID
 			} else {
-				s.data.Runs[i].WorkspaceID = domain.DefaultWorkspaceID
+				s.data.Runs[i].WorkspaceID = normalized
 			}
 			migrated = true
 		}
 	}
 	for i := range s.data.Documents {
-		if strings.TrimSpace(s.data.Documents[i].WorkspaceID) == "" {
-			s.data.Documents[i].WorkspaceID = domain.DefaultWorkspaceID
+		if normalized := normalizeWorkspaceID(s.data.Documents[i].WorkspaceID); normalized != s.data.Documents[i].WorkspaceID {
+			s.data.Documents[i].WorkspaceID = normalized
 			migrated = true
 		}
 	}
 	for i := range s.data.Memories {
-		if strings.TrimSpace(s.data.Memories[i].WorkspaceID) == "" {
-			s.data.Memories[i].WorkspaceID = domain.DefaultWorkspaceID
+		if normalized := normalizeWorkspaceID(s.data.Memories[i].WorkspaceID); normalized != s.data.Memories[i].WorkspaceID {
+			if conversation, ok := s.getConversationLocked(s.data.Memories[i].ConversationID); ok {
+				s.data.Memories[i].WorkspaceID = conversation.WorkspaceID
+			} else {
+				s.data.Memories[i].WorkspaceID = normalized
+			}
 			migrated = true
 		}
 	}

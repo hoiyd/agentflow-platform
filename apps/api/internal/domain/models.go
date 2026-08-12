@@ -7,7 +7,15 @@ import (
 
 const RAGPromptGuardPolicyVersion = "rag-prompt-guard-v1"
 const RAGCitationProtocolVersion = "rag-citation-v1"
-const DefaultWorkspaceID = "default"
+const DefaultWorkspaceID = "default_workspace"
+
+func NormalizeWorkspaceID(workspaceID string) string {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" || workspaceID == "default" {
+		return DefaultWorkspaceID
+	}
+	return workspaceID
+}
 
 type Conversation struct {
 	ID          string    `json:"id"`

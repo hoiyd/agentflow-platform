@@ -9,12 +9,14 @@ intended for local development or deployment behind a trusted access boundary;
 the default `BIND_ADDRESS=127.0.0.1` keeps it local. `ALLOWED_ORIGINS` is a
 browser CORS policy, not an authentication mechanism.
 
-All `/api/*` requests accept `X-Workspace-ID`. In production it is required;
-development defaults to `default` for legacy and local clients. A
+All `/api/*` requests accept `X-Workspace-ID`. When omitted, the request uses
+the reserved `default_workspace` namespace, so workspace isolation remains
+active for every request. A
 `workspace_id` query or JSON field must match an explicit header. Conversation,
 Run, Document, Memory, and RAG operations are scoped to the resolved workspace.
-This header must be supplied by a trusted deployment boundary because it is not
-an identity credential by itself.
+For deployments with user-controlled workspace selection, this header must be
+validated by a trusted boundary because it is not an identity credential by
+itself.
 
 For lifecycle terminology, read [Internal terms](terms.md). For configuration
 and security boundaries, read [Backend configuration](backend-configuration.md).

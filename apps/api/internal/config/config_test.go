@@ -50,20 +50,6 @@ func TestLoadSessionHistoryRetrievalConfiguration(t *testing.T) {
 	}
 }
 
-func TestLoadRequiresWorkspaceInProduction(t *testing.T) {
-	t.Setenv("APP_ENV", "production")
-	t.Setenv("REQUIRE_WORKSPACE_ID", "false")
-	t.Setenv("DEFAULT_WORKSPACE_ID", "workspace-local")
-
-	cfg := Load()
-	if cfg.Environment != "production" || !cfg.RequireWorkspaceID {
-		t.Fatalf("expected production to require workspace IDs, got environment=%q required=%v", cfg.Environment, cfg.RequireWorkspaceID)
-	}
-	if cfg.DefaultWorkspaceID != "workspace-local" {
-		t.Fatalf("unexpected default workspace %q", cfg.DefaultWorkspaceID)
-	}
-}
-
 func TestGetUnitFloatEnvRejectsOutOfRangeValue(t *testing.T) {
 	t.Setenv("TEST_UNIT_FLOAT", "0.91")
 	if got := getUnitFloatEnv("TEST_UNIT_FLOAT", 0.85); got != 0.91 {

@@ -113,11 +113,11 @@ func TestPostgresMigrationsIndexConversationEventHistory(t *testing.T) {
 func TestPostgresMigrationsBackfillAndRequireWorkspaceScope(t *testing.T) {
 	joined := strings.Join(postgresMigrations, "\n")
 	for _, expected := range []string{
-		"UPDATE conversations SET workspace_id = 'default'",
+		"UPDATE conversations SET workspace_id = 'default_workspace'",
 		"UPDATE messages m SET workspace_id",
 		"UPDATE runs r SET workspace_id",
-		"UPDATE memories SET workspace_id = 'default'",
-		"UPDATE documents SET workspace_id = 'default'",
+		"UPDATE memories SET workspace_id = 'default_workspace'",
+		"UPDATE documents SET workspace_id = 'default_workspace'",
 		"conversations ALTER COLUMN workspace_id SET NOT NULL",
 		"messages ALTER COLUMN workspace_id SET NOT NULL",
 		"runs ALTER COLUMN workspace_id SET NOT NULL",

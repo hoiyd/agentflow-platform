@@ -240,6 +240,7 @@ func (s *FileStore) DeleteDocumentInWorkspace(workspaceID string, id string) err
 func (s *FileStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
 
 	limit := search.Limit
 	if limit <= 0 {
@@ -299,6 +300,7 @@ func (s *FileStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain
 func (s *FileStore) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
 
 	limit := search.Limit
 	if limit <= 0 {
@@ -347,6 +349,7 @@ func (s *FileStore) SearchDocumentChunksLexical(search domain.DocumentSearch) ([
 func (s *FileStore) ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
 
 	documentID := strings.TrimSpace(search.DocumentID)
 	if documentID == "" {
@@ -361,7 +364,7 @@ func (s *FileStore) ListDocumentContextChunks(search domain.DocumentContextSearc
 			break
 		}
 	}
-	if !found || (strings.TrimSpace(search.WorkspaceID) != "" && document.WorkspaceID != strings.TrimSpace(search.WorkspaceID)) {
+	if !found || normalizeWorkspaceID(document.WorkspaceID) != search.WorkspaceID {
 		return []domain.RetrievedDocumentChunk{}, nil
 	}
 
@@ -386,7 +389,7 @@ func (s *FileStore) ListDocumentContextChunks(search domain.DocumentContextSearc
 }
 
 func documentChunkMatchesSearch(document domain.Document, chunk domain.DocumentChunk, search domain.DocumentSearch) bool {
-	if search.WorkspaceID != "" && document.WorkspaceID != search.WorkspaceID {
+	if normalizeWorkspaceID(document.WorkspaceID) != normalizeWorkspaceID(search.WorkspaceID) {
 		return false
 	}
 	for key, expected := range search.Metadata {

@@ -204,14 +204,14 @@ func contextCandidateMatchesScope(candidate domain.RetrievedDocumentChunk, scope
 }
 
 func contextDocumentMatchesWorkspace(document domain.Document, workspaceID string) bool {
-	return strings.TrimSpace(workspaceID) == "" || strings.TrimSpace(document.WorkspaceID) == strings.TrimSpace(workspaceID)
+	return domain.NormalizeWorkspaceID(document.WorkspaceID) == domain.NormalizeWorkspaceID(workspaceID)
 }
 
 func contextWorkspaceID(requested string, matched string) string {
-	if requested = strings.TrimSpace(requested); requested != "" {
-		return requested
+	if strings.TrimSpace(requested) != "" {
+		return domain.NormalizeWorkspaceID(requested)
 	}
-	return strings.TrimSpace(matched)
+	return domain.NormalizeWorkspaceID(matched)
 }
 
 func contextChunkTokens(chunk domain.DocumentChunk) int {

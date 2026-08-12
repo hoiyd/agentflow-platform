@@ -171,10 +171,14 @@ func TestRetrievalPipelineBlocksPromptInjectionBeforeFusion(t *testing.T) {
 	}
 }
 
-func TestRetrievalPipelineRequiresWorkspaceWhenConfigured(t *testing.T) {
-	pipeline := NewRetrievalPipelineWithOptions(&retrievalStoreStub{}, RetrievalOptions{RequireWorkspaceID: true})
+func TestRetrievalPipelineAlwaysAppliesDefaultWorkspace(t *testing.T) {
+	store := &retrievalStoreStub{}
+	pipeline := NewRetrievalPipeline(store)
 	_, err := pipeline.Search(context.Background(), domain.DocumentSearch{Query: "private document"}, 3, Embedding{Vector: []float64{1, 0}})
-	if err == nil || err.Error() != "workspace_id is required for retrieval" {
-		t.Fatalf("expected required workspace error, got %v", err)
+	if err != nil {
+		t.Fatalf("search pipeline: %v", err)
+	}
+	if store.denseSearch.WorkspaceID != domain.DefaultWorkspaceID || store.lexicalSearch.WorkspaceID != domain.DefaultWorkspaceID {
+		t.Fatalf("expected default workspace on all recall paths, dense=%q lexical=%q", store.denseSearch.WorkspaceID, store.lexicalSearch.WorkspaceID)
 	}
 }

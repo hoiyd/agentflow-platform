@@ -30,40 +30,31 @@ type Embedding struct {
 }
 
 type RetrievalPipeline struct {
-	store              SearchStore
-	reranker           Reranker
-	relevanceGate      RelevanceGate
-	requireWorkspaceID bool
-}
-
-type RetrievalOptions struct {
-	RequireWorkspaceID bool
+	store         SearchStore
+	reranker      Reranker
+	relevanceGate RelevanceGate
 }
 
 func NewRetrievalPipeline(store SearchStore) *RetrievalPipeline {
-	return NewRetrievalPipelineWithOptions(store, RetrievalOptions{})
-}
-
-func NewRetrievalPipelineWithOptions(store SearchStore, options RetrievalOptions) *RetrievalPipeline {
-	return newRetrievalPipeline(store, nil, nil, options)
+	return newRetrievalPipeline(store, nil, nil)
 }
 
 func NewRetrievalPipelineWithReranker(store SearchStore, reranker Reranker) *RetrievalPipeline {
-	return newRetrievalPipeline(store, reranker, nil, RetrievalOptions{})
+	return newRetrievalPipeline(store, reranker, nil)
 }
 
 func NewRetrievalPipelineWithStages(store SearchStore, reranker Reranker, relevanceGate RelevanceGate) *RetrievalPipeline {
-	return newRetrievalPipeline(store, reranker, relevanceGate, RetrievalOptions{})
+	return newRetrievalPipeline(store, reranker, relevanceGate)
 }
 
-func newRetrievalPipeline(store SearchStore, reranker Reranker, relevanceGate RelevanceGate, options RetrievalOptions) *RetrievalPipeline {
+func newRetrievalPipeline(store SearchStore, reranker Reranker, relevanceGate RelevanceGate) *RetrievalPipeline {
 	if reranker == nil {
 		reranker = NewHeuristicReranker(DefaultHeuristicRerankerConfig())
 	}
 	if relevanceGate == nil {
 		relevanceGate = NewHeuristicRelevanceGate(DefaultHeuristicRelevanceGateConfig())
 	}
-	return &RetrievalPipeline{store: store, reranker: reranker, relevanceGate: relevanceGate, requireWorkspaceID: options.RequireWorkspaceID}
+	return &RetrievalPipeline{store: store, reranker: reranker, relevanceGate: relevanceGate}
 }
 
 func EmbedQuery(ctx context.Context, query string, embed EmbedFunc) (Embedding, error) {
@@ -94,10 +85,7 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 	if p == nil || p.store == nil {
 		return domain.DocumentSearchResponse{}, errors.New("retrieval store is required")
 	}
-	search.WorkspaceID = strings.TrimSpace(search.WorkspaceID)
-	if p.requireWorkspaceID && search.WorkspaceID == "" {
-		return domain.DocumentSearchResponse{}, errors.New("workspace_id is required for retrieval")
-	}
+	search.WorkspaceID = domain.NormalizeWorkspaceID(search.WorkspaceID)
 
 	requestedLimit = NormalizeSearchLimit(requestedLimit)
 	search.Limit = CandidateLimit(requestedLimit)

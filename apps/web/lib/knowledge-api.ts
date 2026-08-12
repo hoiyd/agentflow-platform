@@ -242,7 +242,8 @@ export type DocumentDetail = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
-const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID?.trim() || "default";
+const CONFIGURED_WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID?.trim();
+const WORKSPACE_ID = !CONFIGURED_WORKSPACE_ID || CONFIGURED_WORKSPACE_ID === "default" ? "default_workspace" : CONFIGURED_WORKSPACE_ID;
 
 function workspaceFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);

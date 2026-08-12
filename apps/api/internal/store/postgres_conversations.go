@@ -11,7 +11,7 @@ import (
 
 func (s *PostgresStore) ListConversations() ([]domain.Conversation, error) {
 	rows, err := s.db.Query(`
-		SELECT id, COALESCE(workspace_id, 'default'), title, created_at, updated_at
+		SELECT id, COALESCE(workspace_id, 'default_workspace'), title, created_at, updated_at
 		FROM conversations
 		ORDER BY updated_at DESC`)
 	if err != nil {
@@ -66,7 +66,7 @@ func (s *PostgresStore) CreateConversationInWorkspace(workspaceID string, title 
 func (s *PostgresStore) GetConversation(id string) (domain.Conversation, bool, error) {
 	var item domain.Conversation
 	err := s.db.QueryRow(`
-		SELECT id, COALESCE(workspace_id, 'default'), title, created_at, updated_at
+		SELECT id, COALESCE(workspace_id, 'default_workspace'), title, created_at, updated_at
 		FROM conversations
 		WHERE id = $1`, id).Scan(&item.ID, &item.WorkspaceID, &item.Title, &item.CreatedAt, &item.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -115,7 +115,7 @@ func (s *PostgresStore) DeleteConversationInWorkspace(workspaceID string, id str
 
 func (s *PostgresStore) ListMessages(conversationID string) ([]domain.Message, error) {
 	rows, err := s.db.Query(`
-		SELECT id, COALESCE(workspace_id, 'default'), conversation_id, role, content, citations, created_at
+		SELECT id, COALESCE(workspace_id, 'default_workspace'), conversation_id, role, content, citations, created_at
 		FROM messages
 		WHERE conversation_id = $1
 		ORDER BY created_at ASC`, conversationID)
