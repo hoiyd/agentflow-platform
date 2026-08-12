@@ -126,6 +126,30 @@ func (s *PostgresStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
 	if err != nil {
 		return nil, err
 	}
+	return scanRunEvents(rows)
+}
+
+func (s *PostgresStore) ListConversationRunEvents(conversationID string) ([]domain.RunEvent, error) {
+	rows, err := s.db.Query(`
+		SELECT e.id,e.run_id,e.conversation_id,e.stage_id,e.turn_id,e.parent_event_id,e.type,e.schema_version,e.sequence,e.payload,e.timestamp
+		FROM run_events e
+		JOIN runs r ON r.id = e.run_id
+		WHERE r.conversation_id=$1
+		ORDER BY e.timestamp,e.run_id,e.sequence`, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	return scanRunEvents(rows)
+}
+
+type runEventRows interface {
+	Next() bool
+	Scan(...any) error
+	Close() error
+	Err() error
+}
+
+func scanRunEvents(rows runEventRows) ([]domain.RunEvent, error) {
 	defer rows.Close()
 	items := []domain.RunEvent{}
 	for rows.Next() {

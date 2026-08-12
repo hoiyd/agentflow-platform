@@ -224,12 +224,100 @@ func TestLegacySnapshotKeepsCompactionDisabled(t *testing.T) {
 		t.Fatalf("legacy snapshot unexpectedly enabled compaction: %#v", legacy)
 	}
 	current := NormalizeSnapshotConfig(domain.ContextAssemblyConfig{}, domain.CurrentRuntimeSnapshotVersion)
-	if current.CompactionMode != CompactionModeAuto {
+	if current.CompactionMode != CompactionModeAuto || !current.HistoryRetrievalEnabled {
 		t.Fatalf("current snapshot did not receive compaction defaults: %#v", current)
 	}
 	v3 := NormalizeSnapshotConfig(domain.ContextAssemblyConfig{}, domain.CompactionRuntimeSnapshotVersion)
-	if v3.CompactionMode != CompactionModeAuto {
+	if v3.CompactionMode != CompactionModeAuto || v3.HistoryRetrievalEnabled {
 		t.Fatalf("v3 snapshot lost its frozen compaction behavior: %#v", v3)
+	}
+	invalid := NormalizeSnapshotConfig(domain.ContextAssemblyConfig{HistoryRetrievalWindow: -1}, domain.CurrentRuntimeSnapshotVersion)
+	if invalid.HistoryRetrievalWindow != DefaultConfig().HistoryRetrievalWindow {
+		t.Fatalf("invalid history window was not normalized: %#v", invalid)
+	}
+}
+
+func TestAssembleInjectsRetrievedHistoryAndRecordsStableReferences(t *testing.T) {
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run", TurnID: "turn"})
+	ctx = WithSession(ctx, Session{Config: DefaultConfig(), HistorySearch: []domain.RetrievedSessionHistory{
+		{Reference: "message:msg-old", SourceKind: domain.SessionHistorySourceMessage, MessageID: "msg-old", Role: "user", Content: "Exact deployment ID is release-2026-08.", OriginalBytes: 44, MatchReason: "keyword_match"},
+		{Reference: "event:event-old", SourceKind: domain.SessionHistorySourceEvent, EventID: "event-old", EventType: domain.EventToolFailed, Content: `{"error":"connection refused"}`, OriginalBytes: 120, MatchReason: "event_type_match", Truncated: true},
+	}})
+	pack, err := Assemble(ctx, Request{Model: "test", Messages: []Message{
+		{Source: SourceSystem, ReferenceID: "system", Role: "system", Content: "system"},
+		{Source: SourceCurrentInput, ReferenceID: "current", Role: "user", Content: "recover exact details"},
+	}})
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	current := messageContent(pack.Messages, "current")
+	if !strings.Contains(current, "release-2026-08") || !strings.Contains(current, "read-only evidence") {
+		t.Fatalf("retrieved history was not safely injected: %q", current)
+	}
+	want := map[string]string{"message:msg-old": "retrieved_original", "event:event-old": "retrieved_truncated"}
+	for _, entry := range pack.Manifest.Entries {
+		transformation, ok := want[entry.ReferenceID]
+		if !ok {
+			continue
+		}
+		if entry.Source != SourceHistorySearch || !entry.Selected || entry.Reason == "" || entry.Transformation != transformation || entry.EstimatedTokens <= 0 {
+			t.Fatalf("unexpected history manifest entry: %#v", entry)
+		}
+		delete(want, entry.ReferenceID)
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing source references in manifest: %#v", want)
+	}
+	encoded, _ := json.Marshal(pack.Manifest)
+	if strings.Contains(string(encoded), "release-2026-08") || strings.Contains(string(encoded), "connection refused") {
+		t.Fatalf("manifest persisted retrieved raw content: %s", encoded)
+	}
+}
+
+func TestAssemblePrefersRetrievedOriginalOverDuplicateRecentHistory(t *testing.T) {
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run", TurnID: "turn"})
+	ctx = WithSession(ctx, Session{
+		Config:       DefaultConfig(),
+		History:      []domain.Message{{ID: "msg-old", Role: "user", Content: "Exact command: deploy --release 42"}},
+		CurrentInput: "recover release 42",
+		HistorySearch: []domain.RetrievedSessionHistory{{
+			Reference: "message:msg-old", SourceKind: domain.SessionHistorySourceMessage,
+			MessageID: "msg-old", Role: "user", Content: "Exact command: deploy --release 42",
+			OriginalBytes: 34, MatchReason: "keyword_match",
+		}},
+	})
+	pack, err := Assemble(ctx, Request{Model: "test", Messages: []Message{
+		{Source: SourceSystem, ReferenceID: "system", Role: "system", Content: "system"},
+		{Source: SourceCurrentInput, ReferenceID: "current", Role: "user", Content: "recover release 42"},
+	}})
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	count := 0
+	for _, message := range pack.Messages {
+		count += strings.Count(message.Content, "deploy --release 42")
+	}
+	if count != 1 {
+		t.Fatalf("expected one exact source injection, got %d in %#v", count, pack.Messages)
+	}
+	for _, entry := range pack.Manifest.Entries {
+		if entry.Source == SourceHistory && entry.ReferenceID == "msg-old" && (entry.Selected || entry.Reason != "superseded_by_history_retrieval") {
+			t.Fatalf("duplicate recent history was not suppressed: %#v", entry)
+		}
+	}
+}
+
+func TestHistorySearchCandidatesDiscardInvalidSourcesAndDefaultOriginalSize(t *testing.T) {
+	items := historySearchCandidates([]domain.RetrievedSessionHistory{
+		{Reference: "message:empty", Content: "  "},
+		{Content: "missing reference"},
+		{Reference: "message:valid", Content: " exact value ", MatchReason: "keyword_match"},
+	})
+	if len(items) != 1 {
+		t.Fatalf("unexpected history candidates: %#v", items)
+	}
+	if items[0].entry.ReferenceID != "message:valid" || items[0].entry.OriginalBytes != len(" exact value ") || items[0].selectedReason != "keyword_match" {
+		t.Fatalf("history source metadata was not preserved: %#v", items[0])
 	}
 }
 

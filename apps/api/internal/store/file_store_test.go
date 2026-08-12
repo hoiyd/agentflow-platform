@@ -8,6 +8,70 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
+func TestFileStoreListsConversationEventsThroughRunOwnership(t *testing.T) {
+	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, _ := fileStore.CreateConversation("Event history")
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	created, err := fileStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventToolFailed, Payload: map[string]any{"error": "exact failure"}})
+	if err != nil {
+		t.Fatalf("create event: %v", err)
+	}
+	events, err := fileStore.ListConversationRunEvents(conversation.ID)
+	if err != nil || len(events) != 1 || events[0].ID != created.ID {
+		t.Fatalf("conversation event history: events=%#v err=%v", events, err)
+	}
+}
+
+func TestFileStoreOrdersConversationEventsAndCountsHistoryFailures(t *testing.T) {
+	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, _ := fileStore.CreateConversation("Ordered event history")
+	otherConversation, _ := fileStore.CreateConversation("Other event history")
+	firstRun, _ := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	secondRun, _ := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	otherRun, _ := fileStore.CreateRun("agent_planner", otherConversation.ID, testRuntimeSnapshot())
+	base := time.Date(2026, 8, 12, 10, 0, 0, 0, time.UTC)
+	created := make([]domain.RunEvent, 0, 5)
+	for _, event := range []domain.RunEvent{
+		{RunID: firstRun.ID, Type: domain.EventHistorySearchFailed, Timestamp: base},
+		{RunID: firstRun.ID, Type: domain.EventToolCompleted, Timestamp: base},
+		{RunID: secondRun.ID, Type: domain.EventToolCompleted, Timestamp: base},
+		{RunID: firstRun.ID, Type: domain.EventModelFailed, Timestamp: base.Add(time.Minute)},
+		{RunID: otherRun.ID, ConversationID: conversation.ID, Type: domain.EventToolCompleted, Timestamp: base},
+	} {
+		item, createErr := fileStore.CreateRunEvent(event)
+		if createErr != nil {
+			t.Fatalf("create event: %v", createErr)
+		}
+		created = append(created, item)
+	}
+
+	events, err := fileStore.ListConversationRunEvents(conversation.ID)
+	if err != nil || len(events) != len(created) {
+		t.Fatalf("conversation events: events=%#v err=%v", events, err)
+	}
+	for index := 1; index < len(events); index++ {
+		previous, current := events[index-1], events[index]
+		if current.Timestamp.Before(previous.Timestamp) ||
+			(current.Timestamp.Equal(previous.Timestamp) && current.RunID < previous.RunID) ||
+			(current.Timestamp.Equal(previous.Timestamp) && current.RunID == previous.RunID && current.Sequence < previous.Sequence) {
+			t.Fatalf("events are not ordered: %#v", events)
+		}
+	}
+	summary, err := fileStore.GetRunTraceSummary(firstRun.ID)
+	if err != nil || summary.ErrorCount != 2 {
+		t.Fatalf("history search failure was not counted: summary=%#v err=%v", summary, err)
+	}
+}
+
 func TestFileStoreMessageCitationsRoundTrip(t *testing.T) {
 	path := t.TempDir() + "/agentflow.json"
 	first, err := NewFileStore(path)

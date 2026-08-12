@@ -59,6 +59,13 @@ func TestPostgresMigrationsAddMessageCitations(t *testing.T) {
 	}
 }
 
+func TestPostgresMigrationsIndexConversationEventHistory(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	if !strings.Contains(joined, "idx_run_events_conversation_timestamp") {
+		t.Fatal("missing source-aware session history event index")
+	}
+}
+
 func TestPostgresRunUsageReservationIsAtomic(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -264,17 +271,21 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create step: %v", err)
 	}
-	if _, err := store.CreateRunEvent(domain.RunEvent{
-		RunID:   run.ID,
-		StageID: step.ID,
-		Type:    domain.EventModelCompleted,
+	modelEvent, err := store.CreateRunEvent(domain.RunEvent{
+		RunID:          run.ID,
+		ConversationID: conversation.ID,
+		StageID:        step.ID,
+		TurnID:         "turn-postgres-trace",
+		ParentEventID:  "event-parent",
+		Type:           domain.EventModelCompleted,
 		Payload: map[string]any{
 			"prompt_tokens":         10,
 			"completion_tokens":     5,
 			"total_tokens":          15,
 			"token_usage_estimated": true,
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("create llm trace: %v", err)
 	}
 	if _, err := store.CreateRunEvent(domain.RunEvent{
@@ -302,6 +313,38 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	}
 	if len(replay.Messages) != 2 || len(replay.Messages[1].Citations) != 1 || replay.Messages[1].Citations[0].SourceID != "S1" || len(replay.Steps) != 1 || len(replay.RunEvents) != 2 {
 		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.RunEvents))
+	}
+	conversationEvents, err := store.ListConversationRunEvents(conversation.ID)
+	if err != nil {
+		t.Fatalf("list conversation events: %v", err)
+	}
+	foundModelEvent := false
+	for _, event := range conversationEvents {
+		if event.ID == modelEvent.ID && event.RunID == run.ID && event.Type == domain.EventModelCompleted &&
+			event.ConversationID == conversation.ID && event.StageID == step.ID &&
+			event.TurnID == "turn-postgres-trace" && event.ParentEventID == "event-parent" {
+			foundModelEvent = true
+		}
+	}
+	if !foundModelEvent {
+		t.Fatalf("conversation history did not include run-owned event: %#v", conversationEvents)
+	}
+}
+
+func TestPostgresListConversationRunEventsReturnsQueryErrorAfterClose(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	store, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatalf("new postgres store: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close postgres store: %v", err)
+	}
+	if _, err := store.ListConversationRunEvents("conversation"); err == nil {
+		t.Fatal("expected query against closed store to fail")
 	}
 }
 

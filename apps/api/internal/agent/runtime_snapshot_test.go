@@ -113,12 +113,13 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	}
 }
 
-func TestRuntimeSnapshotAcceptsV1ThroughV5AndKeepsPreBudgetRunsBudgetless(t *testing.T) {
+func TestRuntimeSnapshotAcceptsV1ThroughV6AndKeepsPreBudgetRunsBudgetless(t *testing.T) {
 	for _, version := range []int{
 		domain.LegacyRuntimeSnapshotVersion,
 		domain.ContextRuntimeSnapshotVersion,
 		domain.CompactionRuntimeSnapshotVersion,
 		domain.RunBudgetRuntimeSnapshotVersion,
+		domain.UnifiedExecutionSnapshotVersion,
 		domain.CurrentRuntimeSnapshotVersion,
 	} {
 		snapshot := &domain.RuntimeSnapshot{

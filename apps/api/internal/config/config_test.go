@@ -38,6 +38,18 @@ func TestLoadRunBudgetConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadSessionHistoryRetrievalConfiguration(t *testing.T) {
+	t.Setenv("CONTEXT_HISTORY_RETRIEVAL_MAX_RESULTS", "6")
+	t.Setenv("CONTEXT_HISTORY_RETRIEVAL_MAX_CHARACTERS", "9000")
+	t.Setenv("CONTEXT_HISTORY_RETRIEVAL_MAX_TOKENS", "2200")
+	t.Setenv("CONTEXT_HISTORY_RETRIEVAL_WINDOW", "2")
+	cfg := Load()
+	if cfg.ContextHistoryRetrievalMaxResults != 6 || cfg.ContextHistoryRetrievalMaxChars != 9000 ||
+		cfg.ContextHistoryRetrievalMaxTokens != 2200 || cfg.ContextHistoryRetrievalWindow != 2 {
+		t.Fatalf("unexpected session history retrieval config: %#v", cfg)
+	}
+}
+
 func TestGetUnitFloatEnvRejectsOutOfRangeValue(t *testing.T) {
 	t.Setenv("TEST_UNIT_FLOAT", "0.91")
 	if got := getUnitFloatEnv("TEST_UNIT_FLOAT", 0.85); got != 0.91 {

@@ -170,7 +170,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 }
 
 func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
-	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CompactionRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.RunBudgetRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
+	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CompactionRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.RunBudgetRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.UnifiedExecutionSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
 		return ErrRuntimeSnapshotUnavailable
 	}
 	switch snapshot.Mode {
@@ -289,7 +289,7 @@ func autonomousLimitsFromSnapshot(snapshot *domain.RuntimeSnapshot) (AutonomousL
 		MaxIterations: frozen.MaxIterations, MaxRuntime: time.Duration(frozen.MaxRuntimeMS) * time.Millisecond,
 		MaxOutputChars: frozen.MaxOutputChars, MaxToolCalls: frozen.MaxToolCalls,
 	})
-	if snapshot.SchemaVersion >= domain.CurrentRuntimeSnapshotVersion && snapshot.RunBudget != nil {
+	if snapshot.SchemaVersion >= domain.UnifiedExecutionSnapshotVersion && snapshot.RunBudget != nil {
 		limits.MaxRuntime = time.Duration(snapshot.RunBudget.MaxRuntimeMS) * time.Millisecond
 		limits.MaxToolCalls = snapshot.RunBudget.MaxToolCalls
 		return limits, false, nil

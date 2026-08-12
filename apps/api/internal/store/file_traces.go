@@ -137,6 +137,33 @@ func (s *FileStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
 	return items, nil
 }
 
+func (s *FileStore) ListConversationRunEvents(conversationID string) ([]domain.RunEvent, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	runIDs := make(map[string]bool)
+	for _, run := range s.data.Runs {
+		if run.ConversationID == conversationID {
+			runIDs[run.ID] = true
+		}
+	}
+	items := []domain.RunEvent{}
+	for _, event := range s.data.RunEvents {
+		if event.ConversationID == conversationID || runIDs[event.RunID] {
+			items = append(items, event)
+		}
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Timestamp.Equal(items[j].Timestamp) {
+			if items[i].RunID == items[j].RunID {
+				return items[i].Sequence < items[j].Sequence
+			}
+			return items[i].RunID < items[j].RunID
+		}
+		return items[i].Timestamp.Before(items[j].Timestamp)
+	})
+	return items, nil
+}
+
 func (s *FileStore) GetRunTraceSummary(runID string) (domain.RunTraceSummary, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -414,7 +441,7 @@ func buildRunTraceSummary(run domain.Run, events []domain.RunEvent) domain.RunTr
 		case domain.EventToolFailed:
 			summary.ToolCalls++
 			summary.ErrorCount++
-		case domain.EventModelFailed, domain.EventRetrievalFailed, domain.EventCompactionFailed, domain.EventMemoryCandidateFailed, domain.EventMemorySyncFailed, domain.EventBudgetExceeded:
+		case domain.EventModelFailed, domain.EventRetrievalFailed, domain.EventHistorySearchFailed, domain.EventCompactionFailed, domain.EventMemoryCandidateFailed, domain.EventMemorySyncFailed, domain.EventBudgetExceeded:
 			summary.ErrorCount++
 		}
 	}
