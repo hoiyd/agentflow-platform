@@ -148,7 +148,7 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 
 | Concern | Implementation | Implementation evidence |
 | --- | --- | --- |
-| [Hybrid retrieval and ranking](docs/knowledge-rag.md#retrieval-pipeline) | Independent semantic and keyword recall feed Reciprocal Rank Fusion, a versioned Reranker, and a separate Relevance Gate | [pipeline](apps/api/internal/rag/retrieval.go), [tests](apps/api/internal/rag/retrieval_test.go) |
+| [Hybrid retrieval and ranking](docs/knowledge-rag.md#retrieval-pipeline) | Independent semantic and keyword recall feed Reciprocal Rank Fusion, a versioned Reranker, and a separate Relevance Gate | [pipeline](apps/api/internal/rag/retrieval.go), [stage tests](apps/api/internal/rag/retrieval_test.go), [API/Runtime regression](apps/api/internal/httpapi/rag_pipeline_regression_test.go) |
 | [Context selection and citations](docs/knowledge-rag.md#parent-child-context-selection) | Source-traceable child hits drive scoped parent/adjacent expansion, deduplication, merging, token selection, and resolved `[S1]` citations | [selection](apps/api/internal/rag/context_selection.go), [citations](apps/api/internal/rag/citations.go), [tests](apps/api/internal/rag/context_selection_test.go) |
 | [Retrieval safety and evaluation](docs/rag-golden-dataset.md) | Injection filtering runs before ranking; a versioned Dataset and paired corpus exercise fact, exact-ID, multi-source, no-answer, leakage, and injection cases through the same retrieval path | [guard](apps/api/internal/rag/security.go), [evaluation](apps/api/internal/rag/evaluation.go), [dataset](examples/knowledge/golden-dataset.v1.json) |
 
