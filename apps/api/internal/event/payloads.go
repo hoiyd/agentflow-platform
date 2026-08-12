@@ -74,6 +74,16 @@ type RetrievalPayload struct {
 	Error       string `json:"error,omitempty"`
 }
 
+type SessionHistorySearchPayload struct {
+	Query            string   `json:"query,omitempty"`
+	Keywords         []string `json:"keywords,omitempty"`
+	ResultCount      int      `json:"result_count"`
+	DirectMatchCount int      `json:"direct_match_count"`
+	Truncated        bool     `json:"truncated"`
+	SourceReferences []string `json:"source_references,omitempty"`
+	Error            string   `json:"error,omitempty"`
+}
+
 type MemoryCandidatePayload struct {
 	CandidateID      string  `json:"candidate_id,omitempty"`
 	SourceMessageID  string  `json:"source_message_id"`

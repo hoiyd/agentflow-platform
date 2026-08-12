@@ -8,6 +8,26 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
+func TestFileStoreListsConversationEventsThroughRunOwnership(t *testing.T) {
+	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, _ := fileStore.CreateConversation("Event history")
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	created, err := fileStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventToolFailed, Payload: map[string]any{"error": "exact failure"}})
+	if err != nil {
+		t.Fatalf("create event: %v", err)
+	}
+	events, err := fileStore.ListConversationRunEvents(conversation.ID)
+	if err != nil || len(events) != 1 || events[0].ID != created.ID {
+		t.Fatalf("conversation event history: events=%#v err=%v", events, err)
+	}
+}
+
 func TestFileStoreMessageCitationsRoundTrip(t *testing.T) {
 	path := t.TempDir() + "/agentflow.json"
 	first, err := NewFileStore(path)

@@ -75,6 +75,11 @@ type RunEventStore interface {
 	GetRunReplay(runID string) (domain.RunReplay, bool, error)
 }
 
+type SessionHistoryStore interface {
+	ListMessages(conversationID string) ([]domain.Message, error)
+	ListConversationRunEvents(conversationID string) ([]domain.RunEvent, error)
+}
+
 type RunUsageStore interface {
 	ApplyRunUsage(domain.RunUsageEntry) (domain.RunUsageLedger, bool, error)
 	GetRunUsageLedger(runID string) (domain.RunUsageLedger, bool, error)
@@ -113,6 +118,7 @@ type Store interface {
 	RunStore
 	CollaborationStore
 	RunEventStore
+	SessionHistoryStore
 	RunUsageStore
 	VerificationStore
 	ContextCompactionStore

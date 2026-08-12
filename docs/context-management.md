@@ -19,6 +19,13 @@ assembler's last input-budget check.
 
 Context compaction is non-destructive. It creates a persisted structured summary for older conversation messages; it never deletes or overwrites the original messages. On subsequent model calls, the assembler injects that summary, excludes the covered raw messages, and keeps the recent raw tail.
 
+Source-aware session history retrieval closes the remaining recovery gap. Before
+each model call, the Runtime searches the durable conversation Messages and
+execution Events using terms from the current input. It can reintroduce exact
+older IDs, commands, errors, and nearby sources even when those Messages were
+covered by compaction. Retrieved sources are a temporary context projection;
+the original Session Log is never changed.
+
 ## Selection Contract
 
 | Source | Treatment |
@@ -29,10 +36,39 @@ Context compaction is non-destructive. It creates a persisted structured summary
 | Curated semantic memory | selected within the memory budget |
 | RAG knowledge | selected within the knowledge budget and wrapped as untrusted data |
 | Persisted conversation summary | required when an active compaction exists |
+| Retrieved original session sources | relevant matches within dedicated result, character, token, and input budgets |
 
 Every assembly emits a Context Manifest containing source IDs, selection
 reasons, transformations, token estimates, and a stable prefix hash without
 copying raw dynamic context into the event.
+
+History entries use stable references such as `message:<message_id>` and
+`event:<event_id>`. The Manifest records the reference, source type, selection
+reason, transformation, and estimated tokens, but not the raw recovered text.
+The injected block labels historical sources as read-only evidence rather than
+instructions and gives the current request and system protocol precedence.
+
+## Session History Retrieval
+
+The internal retrieval contract supports keyword, Message ID, Event ID, Event
+type, role, and inclusive time-range filters. A direct match may include a
+bounded number of adjacent Messages or Events so exact evidence is not returned
+without its local context. Runtime auto-retrieval currently derives keywords
+from the active Turn and excludes active raw Messages plus all Events from the
+current Run. Explicit filters remain available to internal callers.
+
+Only evidence-bearing execution Events are searched automatically, including
+tool failures/results, model failures, completed or failed Stages, failed Runs,
+verification failures, compaction failures, and budget failures. This prevents
+query-bearing retrieval and context trace Events from recursively matching
+themselves. Explicit Event ID/type queries can search any persisted Event type.
+
+Retrieval is best effort. Store or search failures emit
+`session_history.search_failed` and do not block the primary model call.
+Successful calls emit `session_history.search_started` and
+`session_history.search_completed` with references and counts, not raw source
+content. New Runs freeze the limits in Runtime Snapshot v6; Runs created with
+older snapshots keep this behavior disabled when resumed.
 
 ## When Compaction Runs
 
@@ -83,6 +119,10 @@ CONTEXT_HISTORY_MAX_TOKENS=64000
 CONTEXT_MEMORY_MAX_TOKENS=8000
 CONTEXT_KNOWLEDGE_MAX_TOKENS=16000
 CONTEXT_TOOL_RESULT_MAX_TOKENS=2000
+CONTEXT_HISTORY_RETRIEVAL_MAX_RESULTS=8
+CONTEXT_HISTORY_RETRIEVAL_MAX_CHARACTERS=12000
+CONTEXT_HISTORY_RETRIEVAL_MAX_TOKENS=3000
+CONTEXT_HISTORY_RETRIEVAL_WINDOW=1
 
 CONTEXT_COMPACTION_MODE=auto
 CONTEXT_COMPACTION_SOFT_THRESHOLD=0.70
@@ -102,3 +142,6 @@ CONTEXT_COMPACTION_TIMEOUT=45s
 - Soft compaction failure is recorded after completion and never changes the
   completed Run outcome.
 - Original Messages remain authoritative and are never deleted by compaction.
+- Session history retrieval never writes back to Messages or RunEvents. File
+  Store performs a bounded in-process scan; Postgres reads the indexed
+  conversation event timeline before applying the same retrieval policy.

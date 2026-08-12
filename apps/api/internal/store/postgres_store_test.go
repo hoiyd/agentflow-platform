@@ -59,6 +59,13 @@ func TestPostgresMigrationsAddMessageCitations(t *testing.T) {
 	}
 }
 
+func TestPostgresMigrationsIndexConversationEventHistory(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	if !strings.Contains(joined, "idx_run_events_conversation_timestamp") {
+		t.Fatal("missing source-aware session history event index")
+	}
+}
+
 func TestPostgresRunUsageReservationIsAtomic(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {

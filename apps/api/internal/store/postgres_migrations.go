@@ -256,6 +256,7 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_document_chunks_parent_index ON document_chunks(document_id, parent_id, chunk_index)`,
 	`CREATE INDEX IF NOT EXISTS idx_steps_run_created ON collaboration_steps(run_id, created_at ASC)`,
 	`CREATE INDEX IF NOT EXISTS idx_run_events_run_sequence ON run_events(run_id, sequence ASC)`,
+	`CREATE INDEX IF NOT EXISTS idx_run_events_conversation_timestamp ON run_events(conversation_id, timestamp ASC)`,
 	`CREATE TABLE IF NOT EXISTS run_usage_entries (
 		id text PRIMARY KEY,
 		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,

@@ -14,6 +14,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/sessionhistory"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
 	turnpkg "agentflow-platform/apps/api/internal/turn"
@@ -51,6 +52,7 @@ type RuntimeStore interface {
 	eventpkg.RunEventStore
 	ListRunEvents(string) ([]domain.RunEvent, error)
 	store.ContextCompactionStore
+	store.SessionHistoryStore
 	store.RunUsageStore
 	SearchMemories(domain.MemorySearch) ([]domain.RetrievedMemory, error)
 }
@@ -208,6 +210,55 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 		}
 	}()
 	return events, errs
+}
+
+func (r *Runtime) retrieveSessionHistory(ctx context.Context, runID string, conversationID string, queryText string) []domain.RetrievedSessionHistory {
+	snapshot, err := r.snapshotForRun(runID)
+	if err != nil || !snapshot.ContextAssembly.HistoryRetrievalEnabled {
+		return nil
+	}
+	keywords := sessionhistory.Keywords(queryText)
+	if len(keywords) == 0 {
+		return nil
+	}
+	_ = r.runEventSink().Publish(ctx, domain.RunEvent{
+		Type: domain.EventHistorySearchStarted, RunID: runID, ConversationID: conversationID,
+		Payload: sessionHistorySearchPayload(eventpkg.SessionHistorySearchPayload{
+			Query: truncateRuntimeText(queryText, 1200), Keywords: keywords,
+		}),
+	})
+	result, err := sessionhistory.Search(r.store, sessionhistory.Query{
+		ConversationID: conversationID, Keywords: keywords,
+		NeighborWindow: snapshot.ContextAssembly.HistoryRetrievalWindow,
+		MaxResults:     snapshot.ContextAssembly.HistoryRetrievalMaxResults,
+		MaxCharacters:  snapshot.ContextAssembly.HistoryRetrievalMaxChars,
+		MaxTokens:      snapshot.ContextAssembly.HistoryRetrievalMaxTokens,
+		ExcludeRunID:   runID, ExcludeLatestMessage: true,
+	})
+	payload := eventpkg.SessionHistorySearchPayload{
+		Query: truncateRuntimeText(queryText, 1200), Keywords: keywords,
+		ResultCount: len(result.Items), DirectMatchCount: result.DirectMatches, Truncated: result.Truncated,
+	}
+	if err != nil {
+		payload.Error = err.Error()
+		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventHistorySearchFailed, RunID: runID, ConversationID: conversationID, Payload: failure.Merge(sessionHistorySearchPayload(payload), err)})
+		return nil
+	}
+	references := make([]string, 0, len(result.Items))
+	for _, item := range result.Items {
+		references = append(references, item.Reference)
+	}
+	payload.SourceReferences = references
+	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventHistorySearchCompleted, RunID: runID, ConversationID: conversationID, Payload: sessionHistorySearchPayload(payload)})
+	return result.Items
+}
+
+func sessionHistorySearchPayload(payload eventpkg.SessionHistorySearchPayload) map[string]any {
+	encoded, err := eventpkg.Payload(payload)
+	if err != nil {
+		return map[string]any{}
+	}
+	return encoded
 }
 
 func enabledToolCount(catalog *tools.Catalog) int {

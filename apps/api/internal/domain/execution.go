@@ -38,7 +38,9 @@ const (
 	ContextRuntimeSnapshotVersion    = 2
 	CompactionRuntimeSnapshotVersion = 3
 	RunBudgetRuntimeSnapshotVersion  = 4
-	CurrentRuntimeSnapshotVersion    = 5
+	UnifiedExecutionSnapshotVersion  = 5
+	SessionHistorySnapshotVersion    = 6
+	CurrentRuntimeSnapshotVersion    = SessionHistorySnapshotVersion
 )
 
 type RuntimeSnapshot struct {
@@ -64,6 +66,11 @@ type ContextAssemblyConfig struct {
 	MemoryMaxTokens            int     `json:"memory_max_tokens"`
 	KnowledgeMaxTokens         int     `json:"knowledge_max_tokens"`
 	ToolResultMaxTokens        int     `json:"compaction_tool_result_max_tokens"`
+	HistoryRetrievalEnabled    bool    `json:"history_retrieval_enabled"`
+	HistoryRetrievalMaxResults int     `json:"history_retrieval_max_results"`
+	HistoryRetrievalMaxChars   int     `json:"history_retrieval_max_characters"`
+	HistoryRetrievalMaxTokens  int     `json:"history_retrieval_max_tokens"`
+	HistoryRetrievalWindow     int     `json:"history_retrieval_window"`
 	CompactionMode             string  `json:"compaction_mode"`
 	CompactionSoftThreshold    float64 `json:"compaction_soft_threshold"`
 	CompactionHardThreshold    float64 `json:"compaction_hard_threshold"`
@@ -229,6 +236,9 @@ const (
 	EventRetrievalStarted        RunEventType = "retrieval.started"
 	EventRetrievalCompleted      RunEventType = "retrieval.completed"
 	EventRetrievalFailed         RunEventType = "retrieval.failed"
+	EventHistorySearchStarted    RunEventType = "session_history.search_started"
+	EventHistorySearchCompleted  RunEventType = "session_history.search_completed"
+	EventHistorySearchFailed     RunEventType = "session_history.search_failed"
 	EventCitationResolved        RunEventType = "citation.resolved"
 	EventMemoryCandidateProposed RunEventType = "memory.candidate.proposed"
 	EventMemoryCandidateAccepted RunEventType = "memory.candidate.accepted"

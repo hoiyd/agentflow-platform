@@ -44,11 +44,13 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 			compaction = &latest
 		}
 	}
+	historySearch := m.runtime.retrieveSessionHistory(ctx, request.RunID, request.ConversationID, request.Input)
 	ctx = contextassembly.WithSession(ctx, contextassembly.Session{
 		Config: snapshot.ContextAssembly, Sink: request.Sink,
 		History: request.History, CurrentInput: request.Input,
 		Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
-		Compaction: compaction,
+		HistorySearch: historySearch,
+		Compaction:    compaction,
 	})
 	if request.ModelMode == turn.ModelModeText {
 		return m.executeText(ctx, request)

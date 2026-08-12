@@ -69,6 +69,14 @@ type Config struct {
 	ContextKnowledgeMaxTokens int
 	// ContextToolResultMaxTokens caps required tool-result messages deterministically.
 	ContextToolResultMaxTokens int
+	// ContextHistoryRetrievalMaxResults caps original Message/Event sources reintroduced per model call.
+	ContextHistoryRetrievalMaxResults int
+	// ContextHistoryRetrievalMaxChars caps retrieved original-history text per model call.
+	ContextHistoryRetrievalMaxChars int
+	// ContextHistoryRetrievalMaxTokens caps retrieved original-history context per model call.
+	ContextHistoryRetrievalMaxTokens int
+	// ContextHistoryRetrievalWindow includes this many adjacent sources on each side of a direct match.
+	ContextHistoryRetrievalWindow int
 	// ContextCompactionMode supports auto or off.
 	ContextCompactionMode string
 	// ContextCompactionSoftThreshold triggers best-effort post-run compaction.
@@ -148,6 +156,10 @@ func Load() Config {
 		ContextMemoryMaxTokens:            getIntEnv("CONTEXT_MEMORY_MAX_TOKENS", 8000),
 		ContextKnowledgeMaxTokens:         getIntEnv("CONTEXT_KNOWLEDGE_MAX_TOKENS", 16000),
 		ContextToolResultMaxTokens:        getIntEnv("CONTEXT_TOOL_RESULT_MAX_TOKENS", 2000),
+		ContextHistoryRetrievalMaxResults: getIntEnv("CONTEXT_HISTORY_RETRIEVAL_MAX_RESULTS", 8),
+		ContextHistoryRetrievalMaxChars:   getIntEnv("CONTEXT_HISTORY_RETRIEVAL_MAX_CHARACTERS", 12000),
+		ContextHistoryRetrievalMaxTokens:  getIntEnv("CONTEXT_HISTORY_RETRIEVAL_MAX_TOKENS", 3000),
+		ContextHistoryRetrievalWindow:     getNonNegativeIntEnv("CONTEXT_HISTORY_RETRIEVAL_WINDOW", 1),
 		ContextCompactionMode:             normalizeCompactionMode(getEnv("CONTEXT_COMPACTION_MODE", "auto")),
 		ContextCompactionSoftThreshold:    getFloatEnv("CONTEXT_COMPACTION_SOFT_THRESHOLD", 0.70),
 		ContextCompactionHardThreshold:    getFloatEnv("CONTEXT_COMPACTION_HARD_THRESHOLD", 0.85),
