@@ -16,10 +16,11 @@ import (
 	"agentflow-platform/apps/api/internal/tools"
 )
 
-var ErrRuntimeSnapshotUnavailable = failure.New(
-	"runtime_snapshot_unavailable", "runtime_snapshot", failure.CategoryAvailability, false,
-	"runtime snapshot is unavailable",
-)
+var ErrRuntimeSnapshotUnavailable = failure.New(failure.Definition{
+	Code: "runtime_snapshot_unavailable", Source: "runtime_snapshot",
+	Category: failure.CategoryAvailability, Retryable: false,
+	Message: "runtime snapshot is unavailable",
+})
 
 type restoredRuntime struct {
 	mode            string

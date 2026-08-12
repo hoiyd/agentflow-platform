@@ -17,10 +17,11 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 )
 
-var ErrSummaryUnavailable = failure.New(
-	"context_summary_unavailable", "context_compaction", failure.CategoryAvailability, true,
-	"context compaction summary is unavailable",
-)
+var ErrSummaryUnavailable = failure.New(failure.Definition{
+	Code: "context_summary_unavailable", Source: "context_compaction",
+	Category: failure.CategoryAvailability, Retryable: true,
+	Message: "context compaction summary is unavailable",
+})
 
 const AlgorithmVersion = "context-compaction-v1"
 

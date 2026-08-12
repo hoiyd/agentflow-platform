@@ -25,9 +25,10 @@ const (
 	ModelModeText        ModelMode = "text"
 )
 
-var ErrInvalidRequest = failure.New(
-	"invalid_turn_request", "turn", failure.CategoryValidation, false, "invalid turn request",
-)
+var ErrInvalidRequest = failure.New(failure.Definition{
+	Code: "invalid_turn_request", Source: "turn",
+	Category: failure.CategoryValidation, Retryable: false, Message: "invalid turn request",
+})
 
 type Request struct {
 	RunID          string

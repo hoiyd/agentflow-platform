@@ -24,14 +24,16 @@ const (
 )
 
 var (
-	ErrCurationQueueFull = failure.New(
-		"memory_curation_queue_full", "memory_curator", failure.CategoryCapacity, true,
-		"memory curation queue is full",
-	)
-	ErrCuratorClosed = failure.New(
-		"memory_curator_closed", "memory_curator", failure.CategoryAvailability, false,
-		"memory curator is closed",
-	)
+	ErrCurationQueueFull = failure.New(failure.Definition{
+		Code: "memory_curation_queue_full", Source: "memory_curator",
+		Category: failure.CategoryCapacity, Retryable: true,
+		Message: "memory curation queue is full",
+	})
+	ErrCuratorClosed = failure.New(failure.Definition{
+		Code: "memory_curator_closed", Source: "memory_curator",
+		Category: failure.CategoryAvailability, Retryable: false,
+		Message: "memory curator is closed",
+	})
 )
 
 type Embedder interface {

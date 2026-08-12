@@ -41,7 +41,10 @@ func TestMergeCopiesPayloadAndPreservesMessage(t *testing.T) {
 }
 
 func TestNewCreatesClassifiedSentinel(t *testing.T) {
-	err := New("queue_full", "scheduler", CategoryCapacity, true, "queue is full")
+	err := New(Definition{
+		Code: "queue_full", Source: "scheduler", Category: CategoryCapacity,
+		Retryable: true, Message: "queue is full",
+	})
 	info := Describe(fmt.Errorf("reserve: %w", err))
 	if info.Code != "queue_full" || info.Source != "scheduler" || !info.Retryable || err.Error() != "queue is full" {
 		t.Fatalf("unexpected sentinel classification: err=%v info=%#v", err, info)

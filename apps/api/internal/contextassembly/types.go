@@ -30,10 +30,11 @@ const (
 	SourceToolResult     = "tool_result"
 )
 
-var ErrInputBudgetExceeded = failure.New(
-	"context_input_budget_exceeded", "context_assembly", failure.CategoryCapacity, false,
-	"context input budget exceeded",
-)
+var ErrInputBudgetExceeded = failure.New(failure.Definition{
+	Code: "context_input_budget_exceeded", Source: "context_assembly",
+	Category: failure.CategoryCapacity, Retryable: false,
+	Message: "context input budget exceeded",
+})
 
 type InputBudgetError struct {
 	RequiredTokens  int
