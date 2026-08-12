@@ -1,5 +1,7 @@
 package tools
 
+import "agentflow-platform/apps/api/internal/failure"
+
 type ErrorCode string
 
 const (
@@ -30,4 +32,24 @@ func (e *ExecutionError) Unwrap() error {
 		return nil
 	}
 	return e.Cause
+}
+
+func (e *ExecutionError) FailureInfo() failure.Info {
+	if e == nil {
+		return failure.Info{Code: "tool_execution_failed", Source: "tool", Category: failure.CategoryInternal}
+	}
+	info := failure.Info{Code: string(e.Code), Source: "tool", Category: failure.CategoryExecution}
+	switch e.Code {
+	case ErrorToolNotFound:
+		info.Category = failure.CategoryNotFound
+	case ErrorInvalidArgs:
+		info.Category = failure.CategoryValidation
+	case ErrorExecutionTimeout:
+		info.Category, info.Retryable = failure.CategoryTimeout, true
+	case ErrorExecutionCanceled:
+		info.Category = failure.CategoryCanceled
+	case ErrorBudgetExceeded:
+		info.Category = failure.CategoryCapacity
+	}
+	return info
 }

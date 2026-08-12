@@ -54,6 +54,7 @@ apps/api/
     agent/          run orchestration and execution modes
     turn/           shared Turn Engine
     event/          typed execution events and tracing
+    failure/        shared failure classification and event projection
     contextassembly/
     contextcompaction/
     tools/          tool catalog and guarded execution
@@ -190,6 +191,7 @@ composition root instead of copying dependency construction from `cmd/server`.
 | Add storage | implement the capability interfaces consumed by the composition root |
 | Add an agent framework | executor adapter; keep Run, Event, Budget, and Store ownership in AgentFlow |
 | Add a verifier | register one versioned verifier implementation with owned config normalization |
+| Add a failure type | retain the subsystem type, implement `failure.Classified`, and expose only non-secret details |
 
 A new abstraction is justified only when it removes real duplication or creates
 a boundary with different ownership, lifecycle, or failure semantics.

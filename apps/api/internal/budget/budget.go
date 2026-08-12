@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 )
 
 type Resource string
@@ -33,6 +34,20 @@ type ExceededError struct {
 
 func (e *ExceededError) Error() string {
 	return fmt.Sprintf("run budget exceeded: resource=%s limit=%d used=%d requested=%d", e.Resource, e.Limit, e.Used, e.Requested)
+}
+
+func (e *ExceededError) FailureInfo() failure.Info {
+	if e == nil {
+		return failure.Info{Code: "budget_exceeded", Source: "budget", Category: failure.CategoryCapacity}
+	}
+	return failure.Info{
+		Code: "budget_exceeded", Source: "budget", Category: failure.CategoryCapacity,
+		Operation: e.OperationID,
+		Details: map[string]any{
+			"resource": e.Resource, "limit": e.Limit, "used": e.Used,
+			"requested": e.Requested, "purpose": e.Purpose,
+		},
+	}
 }
 
 func AsExceeded(err error) (*ExceededError, bool) {
@@ -246,9 +261,9 @@ func (t *Tracker) publishExceeded(ctx context.Context, err error) {
 	_ = t.sink.Publish(context.WithoutCancel(ctx), domain.RunEvent{
 		Type: domain.EventBudgetExceeded, RunID: t.run.ID, ConversationID: t.run.ConversationID,
 		StageID: scope.StageID, TurnID: scope.TurnID, Timestamp: time.Now().UTC(),
-		Payload: map[string]any{
+		Payload: failure.Merge(map[string]any{
 			"resource": exceeded.Resource, "limit": exceeded.Limit, "used": exceeded.Used,
 			"requested": exceeded.Requested, "operation_id": exceeded.OperationID, "purpose": exceeded.Purpose,
-		},
+		}, exceeded),
 	})
 }

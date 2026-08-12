@@ -129,7 +129,10 @@ func TestBuildEpisodeReportDoesNotInventVerificationForFailedRun(t *testing.T) {
 		},
 		Summary: domain.RunTraceSummary{ErrorCount: 1},
 		RunEvents: []domain.RunEvent{
-			{ID: "event_1", Type: domain.EventModelFailed, Payload: map[string]any{"source": "llm", "error": "429"}},
+			{ID: "event_1", Type: domain.EventModelFailed, Payload: map[string]any{
+				"source": "llm", "error": "429", "error_kind": "rate_limited",
+				"error_source": "model_provider", "error_category": "availability", "retryable": true,
+			}},
 		},
 	}, domain.Agent{ID: "agent_planner"})
 
@@ -138,6 +141,10 @@ func TestBuildEpisodeReportDoesNotInventVerificationForFailedRun(t *testing.T) {
 	}
 	if len(report.Errors) != 2 {
 		t.Fatalf("expected run and trace errors, got %#v", report.Errors)
+	}
+	traceError := report.Errors[1]
+	if traceError.Source != "model_provider" || traceError.Kind != "rate_limited" || traceError.Category != "availability" || traceError.Retryable == nil || !*traceError.Retryable {
+		t.Fatalf("structured trace error was not projected: %#v", traceError)
 	}
 }
 

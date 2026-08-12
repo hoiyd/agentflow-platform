@@ -39,14 +39,14 @@ func (jsonSchemaVerifier) NormalizeConfig(spec *domain.VerifierSpec) error {
 func (jsonSchemaVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, subject Subject) Result {
 	config, err := decodeConfig[JSONSchemaConfig](&spec)
 	if err != nil {
-		return blocked("json schema config is missing")
+		return blocked(BlockedConfigInvalid, "json schema config is missing")
 	}
 	if err := ctx.Err(); err != nil {
-		return blocked("json schema verification was canceled")
+		return blockedForContext(ctx, "json schema verification was canceled")
 	}
 	schema, err := compileJSONSchema(config.Schema)
 	if err != nil {
-		return blocked("compile json schema: " + err.Error())
+		return blocked(BlockedConfigInvalid, "compile json schema: "+err.Error())
 	}
 	decoder := json.NewDecoder(bytes.NewBufferString(subject.Value))
 	decoder.UseNumber()

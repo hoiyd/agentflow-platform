@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 )
 
 const defaultArtifactBytes = 64 * 1024
@@ -164,19 +165,72 @@ func (e *VerificationError) Error() string {
 
 func (e *VerificationError) Unwrap() error { return e.Cause }
 
+func (e *VerificationError) FailureInfo() failure.Info {
+	if e == nil {
+		return failure.Info{Code: "verification_failed", Source: "verification", Category: failure.CategoryInternal}
+	}
+	info := failure.Info{Code: string(e.Kind), Source: "verification", Category: failure.CategoryExecution}
+	switch e.Kind {
+	case ErrorInvalidContract:
+		info.Category = failure.CategoryValidation
+	case ErrorUnavailable:
+		info.Category, info.Retryable = failure.CategoryAvailability, true
+	case ErrorTimedOut:
+		info.Category, info.Retryable = failure.CategoryTimeout, true
+	}
+	if e.VerifierID != "" {
+		info.Details = map[string]any{"verifier_id": e.VerifierID}
+	}
+	return info
+}
+
 func IsKind(err error, kind ErrorKind) bool {
 	var target *VerificationError
 	return errors.As(err, &target) && target.Kind == kind
 }
 
-func blocked(summary string) Result {
+type BlockedReason string
+
+const (
+	BlockedConfigInvalid         BlockedReason = "config_invalid"
+	BlockedPolicyDenied          BlockedReason = "policy_denied"
+	BlockedCanceled              BlockedReason = "canceled"
+	BlockedTimedOut              BlockedReason = "timed_out"
+	BlockedExecutionFailed       BlockedReason = "execution_failed"
+	BlockedUnavailable           BlockedReason = "unavailable"
+	BlockedMissingInput          BlockedReason = "missing_input"
+	BlockedEmbeddingFailed       BlockedReason = "embedding_failed"
+	BlockedEmbeddingEstimated    BlockedReason = "embedding_estimated"
+	BlockedEmbeddingIncompatible BlockedReason = "embedding_incompatible"
+	BlockedEmbeddingInvalid      BlockedReason = "embedding_invalid"
+	BlockedImplementationMissing BlockedReason = "implementation_unavailable"
+	BlockedInvalidResult         BlockedReason = "invalid_result"
+)
+
+func blocked(reason BlockedReason, summary string) Result {
 	summary = strings.TrimSpace(summary)
 	return Result{
 		Status:  domain.VerificationBlocked,
 		Summary: summary,
+		Details: map[string]any{"reason_code": reason},
 		Artifacts: []Artifact{{
 			Kind: "diagnostic", MediaType: "text/plain; charset=utf-8",
 			Content: summary, ByteSize: len(summary),
 		}},
 	}
+}
+
+func withBlockedReason(result Result, reason BlockedReason) Result {
+	if result.Details == nil {
+		result.Details = map[string]any{}
+	}
+	result.Details["reason_code"] = reason
+	return result
+}
+
+func blockedForContext(ctx context.Context, summary string) Result {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return blocked(BlockedTimedOut, summary)
+	}
+	return blocked(BlockedCanceled, summary)
 }

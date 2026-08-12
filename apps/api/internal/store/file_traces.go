@@ -409,9 +409,12 @@ func buildRunTraceSummary(run domain.Run, events []domain.RunEvent) domain.RunTr
 			if boolPayload(event.Payload, "token_usage_estimated") {
 				summary.TokenUsageEstimated = true
 			}
-		case domain.EventToolCompleted, domain.EventToolFailed:
+		case domain.EventToolCompleted:
 			summary.ToolCalls++
-		case domain.EventModelFailed, domain.EventRetrievalFailed, domain.EventMemoryCandidateFailed, domain.EventMemorySyncFailed:
+		case domain.EventToolFailed:
+			summary.ToolCalls++
+			summary.ErrorCount++
+		case domain.EventModelFailed, domain.EventRetrievalFailed, domain.EventCompactionFailed, domain.EventMemoryCandidateFailed, domain.EventMemorySyncFailed, domain.EventBudgetExceeded:
 			summary.ErrorCount++
 		}
 	}

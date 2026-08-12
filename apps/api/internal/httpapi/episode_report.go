@@ -170,7 +170,7 @@ func episodeErrors(replay domain.RunReplay) []domain.EpisodeError {
 		})
 	}
 	for _, event := range replay.RunEvents {
-		if event.Type != domain.EventModelFailed && event.Type != domain.EventToolFailed && event.Type != domain.EventRetrievalFailed && event.Type != domain.EventMemoryCandidateFailed && event.Type != domain.EventMemorySyncFailed && event.Type != domain.EventBudgetExceeded {
+		if event.Type != domain.EventModelFailed && event.Type != domain.EventToolFailed && event.Type != domain.EventRetrievalFailed && event.Type != domain.EventCompactionFailed && event.Type != domain.EventMemoryCandidateFailed && event.Type != domain.EventMemorySyncFailed && event.Type != domain.EventBudgetExceeded {
 			continue
 		}
 		message := stringPayload(event.Payload, "error")
@@ -182,7 +182,10 @@ func episodeErrors(replay domain.RunReplay) []domain.EpisodeError {
 		if message == "" {
 			message = "trace error"
 		}
-		source := stringPayload(event.Payload, "source")
+		source := stringPayload(event.Payload, "error_source")
+		if source == "" {
+			source = stringPayload(event.Payload, "source")
+		}
 		if source == "" {
 			source = "trace"
 			if event.Type == domain.EventBudgetExceeded {
@@ -190,10 +193,10 @@ func episodeErrors(replay domain.RunReplay) []domain.EpisodeError {
 			}
 		}
 		errors = append(errors, domain.EpisodeError{
-			Source:  source,
-			EventID: event.ID,
-			StepID:  event.StageID,
-			Message: message,
+			Source: source, EventID: event.ID, StepID: event.StageID,
+			Kind:      stringPayload(event.Payload, "error_kind"),
+			Category:  stringPayload(event.Payload, "error_category"),
+			Retryable: optionalBoolPayload(event.Payload, "retryable"), Message: message,
 		})
 	}
 	return errors
@@ -269,4 +272,12 @@ func intPayload(payload map[string]any, key string) int {
 func boolPayload(payload map[string]any, key string) bool {
 	value, ok := payload[key].(bool)
 	return ok && value
+}
+
+func optionalBoolPayload(payload map[string]any, key string) *bool {
+	value, ok := payload[key].(bool)
+	if !ok {
+		return nil
+	}
+	return &value
 }

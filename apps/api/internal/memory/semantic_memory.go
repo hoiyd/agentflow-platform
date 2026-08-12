@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 )
 
 type SemanticMemoryStore interface {
@@ -30,6 +31,11 @@ type EmbeddingError struct {
 
 func (e EmbeddingError) Error() string { return e.Err.Error() }
 func (e EmbeddingError) Unwrap() error { return e.Err }
+func (e EmbeddingError) FailureInfo() failure.Info {
+	info := failure.Describe(e.Err)
+	info.Source = "memory_embedding"
+	return info
+}
 
 func IsEmbeddingError(err error) bool {
 	var target EmbeddingError

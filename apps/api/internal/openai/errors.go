@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"agentflow-platform/apps/api/internal/failure"
 )
 
 // ErrorKind identifies the recovery action for a failed model request.
@@ -75,6 +77,54 @@ func (e *ModelError) Unwrap() error {
 		return nil
 	}
 	return e.Cause
+}
+
+func (e *ModelError) FailureInfo() failure.Info {
+	if e == nil {
+		return failure.Info{Code: "model_request_failed", Source: "model_provider", Category: failure.CategoryInternal}
+	}
+	details := map[string]any{"attempts": e.Attempts}
+	if e.ProviderType != "" {
+		details["provider_type"] = e.ProviderType
+	}
+	if e.StatusCode > 0 {
+		details["status_code"] = e.StatusCode
+	}
+	if e.ProviderCode != "" {
+		details["provider_code"] = e.ProviderCode
+	}
+	if e.RetryAfter > 0 {
+		details["retry_after_ms"] = e.RetryAfter.Milliseconds()
+	}
+	return failure.Info{
+		Code: string(e.Kind), Source: "model_provider", Category: modelErrorCategory(e.Kind),
+		Retryable: e.Retryable, Operation: e.Operation, Details: details,
+	}
+}
+
+func modelErrorCategory(kind ErrorKind) failure.Category {
+	switch kind {
+	case ErrorCanceled:
+		return failure.CategoryCanceled
+	case ErrorTimeout:
+		return failure.CategoryTimeout
+	case ErrorTransport, ErrorRateLimited, ErrorProviderUnavailable:
+		return failure.CategoryAvailability
+	case ErrorAuthentication:
+		return failure.CategoryAuthentication
+	case ErrorQuotaExceeded:
+		return failure.CategoryQuota
+	case ErrorModelNotFound:
+		return failure.CategoryNotFound
+	case ErrorRequestTokenCapacity:
+		return failure.CategoryCapacity
+	case ErrorInvalidRequest, ErrorContextLengthExceeded, ErrorContentPolicy:
+		return failure.CategoryValidation
+	case ErrorInvalidResponse:
+		return failure.CategoryExecution
+	default:
+		return failure.CategoryInternal
+	}
 }
 
 // AsModelError extracts the typed model failure from a wrapped error.
@@ -159,26 +209,10 @@ func modelErrorMetadata(err error) map[string]any {
 	if !ok {
 		return nil
 	}
-	metadata := map[string]any{
-		"error_kind": modelErr.Kind,
-		"retryable":  modelErr.Retryable,
-		"attempts":   modelErr.Attempts,
-	}
-	if modelErr.Operation != "" {
-		metadata["operation"] = modelErr.Operation
-	}
-	if modelErr.ProviderType != "" {
-		metadata["provider_type"] = modelErr.ProviderType
-	}
-	if modelErr.StatusCode > 0 {
-		metadata["status_code"] = modelErr.StatusCode
-	}
-	if modelErr.ProviderCode != "" {
-		metadata["provider_code"] = modelErr.ProviderCode
-	}
-	if modelErr.RetryAfter > 0 {
-		metadata["retry_after_ms"] = modelErr.RetryAfter.Milliseconds()
-	}
+	metadata := failure.Fields(err)
+	// Preserve the package-level ErrorKind value for existing Go callers; JSON
+	// serialization remains the same string used by the common contract.
+	metadata["error_kind"] = modelErr.Kind
 	return metadata
 }
 

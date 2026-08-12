@@ -9,6 +9,7 @@ import (
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/failure"
 )
 
 type Engine struct{ model Model }
@@ -43,6 +44,9 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 		}
 		if item.Error != "" {
 			payload["error"] = item.Error
+		}
+		if item.Cause != nil {
+			payload = failure.Merge(payload, item.Cause)
 		}
 		if item.Result != nil {
 			payload["output"] = item.Result.Output
@@ -83,7 +87,7 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 		if errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
 			result.StopReason = StopCanceled
 		}
-		failed := Event{RunID: request.RunID, StepID: request.StepID, Result: &result, Error: err.Error()}
+		failed := Event{RunID: request.RunID, StepID: request.StepID, Result: &result, Error: err.Error(), Cause: err}
 		failed.Type = EventModelFailed
 		emit(handler, failed)
 		failed.Type = EventTurnFailed

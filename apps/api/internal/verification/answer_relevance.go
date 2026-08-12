@@ -65,14 +65,14 @@ func (answerRelevanceVerifier) NormalizeConfig(spec *domain.VerifierSpec) error 
 func (v answerRelevanceVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, subject Subject) Result {
 	config, err := decodeConfig[AnswerRelevanceConfig](&spec)
 	if err != nil {
-		return blocked("answer relevance config is invalid")
+		return blocked(BlockedConfigInvalid, "answer relevance config is invalid")
 	}
 	if err := ctx.Err(); err != nil {
-		return blocked("answer relevance verification was canceled")
+		return blockedForContext(ctx, "answer relevance verification was canceled")
 	}
 	question := strings.TrimSpace(subject.Question)
 	if question == "" {
-		return blocked("answer relevance requires the user question")
+		return blocked(BlockedMissingInput, "answer relevance requires the user question")
 	}
 	answer := strings.TrimSpace(subject.Value)
 	scoringAnswer, questionRepetitionRemoved := withoutRepeatedQuestion(answer, question)
@@ -88,36 +88,36 @@ func (v answerRelevanceVerifier) Verify(ctx context.Context, spec domain.Verifie
 		}
 	}
 	if v.embed == nil {
-		return blocked("answer relevance embedding model is unavailable")
+		return blocked(BlockedUnavailable, "answer relevance embedding model is unavailable")
 	}
 
 	questionEmbedding, err := v.embed(ctx, question)
 	if err != nil {
-		return blocked("answer relevance question embedding failed: " + err.Error())
+		return blocked(BlockedEmbeddingFailed, "answer relevance question embedding failed: "+err.Error())
 	}
 	answerEmbedding, err := v.embed(ctx, scoringAnswer)
 	if err != nil {
-		return blocked("answer relevance answer embedding failed: " + err.Error())
+		return blocked(BlockedEmbeddingFailed, "answer relevance answer embedding failed: "+err.Error())
 	}
 	if questionEmbedding.Estimated || answerEmbedding.Estimated {
-		return blocked("answer relevance requires non-estimated embeddings")
+		return blocked(BlockedEmbeddingEstimated, "answer relevance requires non-estimated embeddings")
 	}
 	if questionEmbedding.Model != "" && answerEmbedding.Model != "" && questionEmbedding.Model != answerEmbedding.Model {
-		return blocked("answer relevance embeddings were produced by different models")
+		return blocked(BlockedEmbeddingIncompatible, "answer relevance embeddings were produced by different models")
 	}
 	if questionEmbedding.Provider != "" && answerEmbedding.Provider != "" && questionEmbedding.Provider != answerEmbedding.Provider {
-		return blocked("answer relevance embeddings were produced by different providers")
+		return blocked(BlockedEmbeddingIncompatible, "answer relevance embeddings were produced by different providers")
 	}
 	if err := validateEmbeddingMetadata(questionEmbedding); err != nil {
-		return blocked("answer relevance question embedding is invalid: " + err.Error())
+		return blocked(BlockedEmbeddingInvalid, "answer relevance question embedding is invalid: "+err.Error())
 	}
 	if err := validateEmbeddingMetadata(answerEmbedding); err != nil {
-		return blocked("answer relevance answer embedding is invalid: " + err.Error())
+		return blocked(BlockedEmbeddingInvalid, "answer relevance answer embedding is invalid: "+err.Error())
 	}
 
 	score, err := cosineSimilarity(questionEmbedding.Vector, answerEmbedding.Vector)
 	if err != nil {
-		return blocked("answer relevance embedding output is invalid: " + err.Error())
+		return blocked(BlockedEmbeddingInvalid, "answer relevance embedding output is invalid: "+err.Error())
 	}
 	details := answerRelevanceDetails(config, answerCharacters, scoringAnswerCharacters, questionRepetitionRemoved)
 	details["score"] = score

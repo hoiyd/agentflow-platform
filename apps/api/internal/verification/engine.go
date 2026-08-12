@@ -163,7 +163,7 @@ func (e *Engine) runVerifier(ctx context.Context, run domain.Run, spec domain.Ve
 		"subject_hash": subject.Hash, "attempt": attempt,
 	})
 	started := time.Now().UTC()
-	result := blocked("frozen verifier implementation is unavailable")
+	result := blocked(BlockedImplementationMissing, "frozen verifier implementation is unavailable")
 	if ok && verifier.Version() == spec.Version {
 		verifyCtx, cancel := context.WithTimeout(ctx, time.Duration(spec.TimeoutMS)*time.Millisecond)
 		result = verifier.Verify(verifyCtx, spec, subject)
@@ -171,7 +171,7 @@ func (e *Engine) runVerifier(ctx context.Context, run domain.Run, spec domain.Ve
 	}
 	completed := time.Now().UTC()
 	if result.Status != domain.VerificationPassed && result.Status != domain.VerificationFailed && result.Status != domain.VerificationBlocked {
-		result = blocked("verifier returned an invalid status")
+		result = blocked(BlockedInvalidResult, "verifier returned an invalid status")
 	}
 
 	evidenceID := newID("evidence")

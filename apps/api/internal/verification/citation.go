@@ -57,10 +57,10 @@ func (citationVerifier) NormalizeConfig(spec *domain.VerifierSpec) error {
 func (citationVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, subject Subject) Result {
 	config, err := decodeConfig[CitationConfig](&spec)
 	if err != nil {
-		return blocked("citation config is invalid")
+		return blocked(BlockedConfigInvalid, "citation config is invalid")
 	}
 	if err := ctx.Err(); err != nil {
-		return blocked("citation verification was canceled")
+		return blockedForContext(ctx, "citation verification was canceled")
 	}
 
 	citations := markdownCitations(subject.Value)

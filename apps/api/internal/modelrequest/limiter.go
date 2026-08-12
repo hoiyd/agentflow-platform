@@ -3,6 +3,8 @@ package modelrequest
 import (
 	"context"
 	"fmt"
+
+	"agentflow-platform/apps/api/internal/failure"
 )
 
 // Limiter controls admission for one physical model HTTP request.
@@ -23,4 +25,14 @@ func (e *TokenBucketCapacityError) Error() string {
 		e.EstimatedTokens,
 		e.Capacity,
 	)
+}
+
+func (e *TokenBucketCapacityError) FailureInfo() failure.Info {
+	if e == nil {
+		return failure.Info{Code: "request_token_capacity_exceeded", Source: "model_request_limiter", Category: failure.CategoryCapacity}
+	}
+	return failure.Info{
+		Code: "request_token_capacity_exceeded", Source: "model_request_limiter", Category: failure.CategoryCapacity,
+		Details: map[string]any{"estimated_tokens": e.EstimatedTokens, "capacity": e.Capacity},
+	}
 }

@@ -60,19 +60,19 @@ func (commandVerifier) NormalizeConfig(spec *domain.VerifierSpec) error {
 func (v commandVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _ Subject) Result {
 	config, err := decodeConfig[CommandConfig](&spec)
 	if err != nil || len(config.Args) == 0 {
-		return blocked("command config is missing")
+		return blocked(BlockedConfigInvalid, "command config is missing")
 	}
 	executable := strings.TrimSpace(config.Args[0])
 	if !v.allowed[executable] {
-		return blocked("command is not allowlisted: " + executable)
+		return blocked(BlockedPolicyDenied, "command is not allowlisted: "+executable)
 	}
 	if v.workspaceRoot == "" {
-		return blocked("verification workspace root is not configured")
+		return blocked(BlockedConfigInvalid, "verification workspace root is not configured")
 	}
 	workingDirectory := filepath.Join(v.workspaceRoot, filepath.Clean(config.WorkingDirectory))
 	relative, err := filepath.Rel(v.workspaceRoot, workingDirectory)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return blocked("working directory escapes verification workspace")
+		return blocked(BlockedPolicyDenied, "working directory escapes verification workspace")
 	}
 
 	command := exec.CommandContext(ctx, executable, config.Args[1:]...)
@@ -96,6 +96,8 @@ func (v commandVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _
 	if ctx.Err() != nil {
 		result.Status = domain.VerificationBlocked
 		result.Summary = "command timed out or was canceled"
+		blockedResult := blockedForContext(ctx, result.Summary)
+		result.Details = blockedResult.Details
 		return result
 	}
 	result.Status = domain.VerificationFailed
@@ -108,5 +110,5 @@ func (v commandVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _
 	}
 	result.Status = domain.VerificationBlocked
 	result.Summary = "command could not start: " + err.Error()
-	return result
+	return withBlockedReason(result, BlockedExecutionFailed)
 }

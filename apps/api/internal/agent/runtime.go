@@ -11,6 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	tracepkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/store"
@@ -253,7 +254,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	}
 	client, err := r.clientForRun(runID)
 	if err != nil {
-		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"error": err.Error()}})
+		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: failure.Merge(map[string]any{"error": err.Error()}, err)})
 		return nil, nil
 	}
 	embedding, err := rag.EmbedQuery(ctx, query, func(ctx context.Context, query string) (rag.Embedding, error) {
@@ -267,7 +268,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		}, embedErr
 	})
 	if err != nil {
-		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"error": err.Error()}})
+		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: failure.Merge(map[string]any{"error": err.Error()}, err)})
 		return nil, nil
 	}
 	payload["embedding_provider"] = embedding.Provider
@@ -434,7 +435,7 @@ func (r *Runtime) FailRun(id string, err error) (domain.Run, error) {
 	}
 	run, updateErr := r.store.UpdateRunStatus(id, domain.RunFailed, message)
 	if updateErr == nil {
-		r.publishRunLifecycle(context.Background(), run, domain.EventRunFailed, map[string]any{"status": run.Status, "error": message})
+		r.publishRunLifecycle(context.Background(), run, domain.EventRunFailed, failure.Merge(map[string]any{"status": run.Status, "error": message}, err))
 	}
 	return run, updateErr
 }

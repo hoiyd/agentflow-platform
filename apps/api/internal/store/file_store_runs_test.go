@@ -493,6 +493,18 @@ func TestFileStoreTraceReplay(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create error trace: %v", err)
 	}
+	if _, err := store.CreateRunEvent(domain.RunEvent{
+		RunID: run.ID, StageID: step.ID, Type: domain.EventToolFailed,
+		Payload: map[string]any{"tool_name": "calculator", "error": "tool failed"},
+	}); err != nil {
+		t.Fatalf("create tool error trace: %v", err)
+	}
+	if _, err := store.CreateRunEvent(domain.RunEvent{
+		RunID: run.ID, Type: domain.EventCompactionFailed,
+		Payload: map[string]any{"error": "summary unavailable"},
+	}); err != nil {
+		t.Fatalf("create compaction error trace: %v", err)
+	}
 
 	summary, err := store.GetRunTraceSummary(run.ID)
 	if err != nil {
@@ -504,7 +516,7 @@ func TestFileStoreTraceReplay(t *testing.T) {
 	if !summary.TokenUsageEstimated {
 		t.Fatalf("expected estimated token summary: %#v", summary)
 	}
-	if summary.LLMCalls != 1 || summary.ToolCalls != 1 || summary.ErrorCount != 1 {
+	if summary.LLMCalls != 1 || summary.ToolCalls != 2 || summary.ErrorCount != 3 {
 		t.Fatalf("unexpected call summary: %#v", summary)
 	}
 
@@ -518,7 +530,7 @@ func TestFileStoreTraceReplay(t *testing.T) {
 	if replay.Run.ID != run.ID || replay.Conversation.ID != conversation.ID {
 		t.Fatalf("unexpected replay identity: %#v", replay)
 	}
-	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.RunEvents) != 3 {
+	if len(replay.Messages) != 1 || len(replay.Steps) != 1 || len(replay.RunEvents) != 5 {
 		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.RunEvents))
 	}
 }
