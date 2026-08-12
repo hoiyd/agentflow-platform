@@ -76,6 +76,12 @@ HTTP search, Single-Agent, Multi-Agent, and Autonomous runs use the same
    include each matched child, prefer same-parent section chunks, and fall back
    to adjacent chunks when no parent expansion can be selected.
 
+The API/Runtime regression fixture runs the same query, Store, Workspace, and
+embedding provider through `POST /api/rag/search` and a Single-Agent Run. It
+compares ranked child IDs, selected Context IDs, citations, stage metadata,
+no-match decisions, and embedding failures so the two entry points cannot
+silently diverge.
+
 ## Workspace Boundary
 
 Document ingestion stores the request workspace on the Document. HTTP search
