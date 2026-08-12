@@ -60,7 +60,9 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		AnswerRelevanceEmbedder: newAnswerRelevanceEmbedder(modelClient),
 	})
 	verificationEngine := verification.NewEngine(appStore, verifierRegistry)
-	retrievalPipeline := rag.NewRetrievalPipeline(appStore)
+	retrievalPipeline := rag.NewRetrievalPipelineWithOptions(appStore, rag.RetrievalOptions{
+		RequireWorkspaceID: cfg.RequireWorkspaceID,
+	})
 	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, modelClient, retrievalPipeline)
 
 	agentRuntime := agent.NewRuntime(agent.RuntimeOptions{
@@ -103,6 +105,10 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		RunController:  runController,
 		Verification:   verificationEngine,
 		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
+		Workspace: httpapi.WorkspacePolicy{
+			DefaultID: cfg.DefaultWorkspaceID,
+			Required:  cfg.RequireWorkspaceID,
+		},
 	})
 	if err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

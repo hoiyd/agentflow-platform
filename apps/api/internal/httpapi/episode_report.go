@@ -15,6 +15,13 @@ func (h *Handler) getEpisodeReport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
+	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	} else if !ok {
+		writeError(w, http.StatusNotFound, "run not found")
+		return
+	}
 
 	replay, ok, err := h.store.GetRunReplay(id)
 	if err != nil {

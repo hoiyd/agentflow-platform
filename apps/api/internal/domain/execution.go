@@ -17,6 +17,7 @@ const (
 
 type Run struct {
 	ID                 string              `json:"id"`
+	WorkspaceID        string              `json:"workspace_id"`
 	AgentID            string              `json:"agent_id"`
 	ConversationID     string              `json:"conversation_id"`
 	Status             RunStatus           `json:"status"`
@@ -169,6 +170,7 @@ type CollaborationStep struct {
 }
 
 type ChatRequest struct {
+	WorkspaceID    string `json:"workspace_id,omitempty"`
 	ConversationID string `json:"conversation_id"`
 	AgentID        string `json:"agent_id"`
 	Message        string `json:"message"`

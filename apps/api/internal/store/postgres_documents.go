@@ -16,6 +16,7 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 		return domain.Document{}, errors.New("document chunks and embeddings length mismatch")
 	}
 	now := time.Now().UTC()
+	document.WorkspaceID = normalizeWorkspaceID(document.WorkspaceID)
 	document.ID = strings.TrimSpace(document.ID)
 	if document.ID == "" {
 		document.ID = newID("doc")
@@ -53,7 +54,7 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 	if _, err := tx.Exec(`
 		INSERT INTO documents (id, workspace_id, title, version, content_hash, source_type, source_uri, mime_type, content, metadata, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		document.ID, nullString(document.WorkspaceID), document.Title, document.Version, document.ContentHash, document.SourceType, nullString(document.SourceURI), nullString(document.MimeType), document.Content, metadataJSON, document.CreatedAt, document.UpdatedAt); err != nil {
+		document.ID, document.WorkspaceID, document.Title, document.Version, document.ContentHash, document.SourceType, nullString(document.SourceURI), nullString(document.MimeType), document.Content, metadataJSON, document.CreatedAt, document.UpdatedAt); err != nil {
 		return domain.Document{}, err
 	}
 
@@ -152,6 +153,29 @@ func (s *PostgresStore) ListDocuments() ([]domain.Document, error) {
 	return items, rows.Err()
 }
 
+func (s *PostgresStore) ListDocumentsByWorkspace(workspaceID string) ([]domain.Document, error) {
+	rows, err := s.db.Query(`
+		SELECT d.id, d.workspace_id, d.title, d.version, d.content_hash, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
+			COUNT(DISTINCT c.id), COUNT(e.chunk_id)
+		FROM documents d
+		LEFT JOIN document_chunks c ON c.document_id = d.id
+		LEFT JOIN document_chunk_embeddings e ON e.chunk_id = c.id
+		WHERE d.workspace_id = $1 GROUP BY d.id ORDER BY d.created_at DESC`, normalizeWorkspaceID(workspaceID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []domain.Document{}
+	for rows.Next() {
+		document, scanErr := scanDocument(rows)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		items = append(items, document)
+	}
+	return items, rows.Err()
+}
+
 func (s *PostgresStore) GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error) {
 	row := s.db.QueryRow(`
 		SELECT d.id, d.workspace_id, d.title, d.version, d.content_hash, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
@@ -192,6 +216,46 @@ func (s *PostgresStore) GetDocument(id string) (domain.Document, []domain.Docume
 	return document, chunks, true, rows.Err()
 }
 
+func (s *PostgresStore) GetDocumentInWorkspace(workspaceID string, id string) (domain.Document, []domain.DocumentChunk, bool, error) {
+	row := s.db.QueryRow(`
+		SELECT d.id, d.workspace_id, d.title, d.version, d.content_hash, d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
+			COUNT(DISTINCT c.id) AS chunk_count,
+			COUNT(e.chunk_id) AS embedding_count
+		FROM documents d
+		LEFT JOIN document_chunks c ON c.document_id = d.id
+		LEFT JOIN document_chunk_embeddings e ON e.chunk_id = c.id
+		WHERE d.id = $1 AND d.workspace_id = $2
+		GROUP BY d.id`, strings.TrimSpace(id), normalizeWorkspaceID(workspaceID))
+	document, err := scanDocument(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Document{}, nil, false, nil
+	}
+	if err != nil {
+		return domain.Document{}, nil, false, err
+	}
+
+	rows, err := s.db.Query(`
+		SELECT c.id, c.document_id, c.parent_id, c.section_path, c.start_offset, c.end_offset, c.document_version, c.content_hash, c.chunk_index, c.content, c.token_count, c.metadata, c.created_at
+		FROM document_chunks c
+		JOIN documents d ON d.id = c.document_id
+		WHERE c.document_id = $1 AND d.workspace_id = $2
+		ORDER BY c.chunk_index ASC`, document.ID, document.WorkspaceID)
+	if err != nil {
+		return domain.Document{}, nil, false, err
+	}
+	defer rows.Close()
+	chunks := []domain.DocumentChunk{}
+	for rows.Next() {
+		chunk, scanErr := scanDocumentChunk(rows)
+		if scanErr != nil {
+			return domain.Document{}, nil, false, scanErr
+		}
+		chunk.Document = document
+		chunks = append(chunks, chunk)
+	}
+	return document, chunks, true, rows.Err()
+}
+
 func (s *PostgresStore) DeleteDocument(id string) error {
 	result, err := s.db.Exec(`DELETE FROM documents WHERE id = $1`, strings.TrimSpace(id))
 	if err != nil {
@@ -202,6 +266,17 @@ func (s *PostgresStore) DeleteDocument(id string) error {
 		return err
 	}
 	if deleted == 0 {
+		return ErrNotFound("document")
+	}
+	return nil
+}
+
+func (s *PostgresStore) DeleteDocumentInWorkspace(workspaceID string, id string) error {
+	result, err := s.db.Exec(`DELETE FROM documents WHERE id = $1 AND workspace_id = $2`, strings.TrimSpace(id), normalizeWorkspaceID(workspaceID))
+	if err != nil {
+		return err
+	}
+	if deleted, affectedErr := result.RowsAffected(); affectedErr == nil && deleted == 0 {
 		return ErrNotFound("document")
 	}
 	return nil

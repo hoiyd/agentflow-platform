@@ -25,13 +25,20 @@ func IsNotFound(err error) bool {
 
 type ConversationStore interface {
 	ListConversations() ([]domain.Conversation, error)
+	ListConversationsByWorkspace(workspaceID string) ([]domain.Conversation, error)
 	CreateConversation(title string) (domain.Conversation, error)
+	CreateConversationInWorkspace(workspaceID string, title string) (domain.Conversation, error)
 	GetConversation(id string) (domain.Conversation, bool, error)
+	GetConversationInWorkspace(workspaceID string, id string) (domain.Conversation, bool, error)
 	DeleteConversation(id string) error
+	DeleteConversationInWorkspace(workspaceID string, id string) error
 	ListMessages(conversationID string) ([]domain.Message, error)
+	ListMessagesInWorkspace(workspaceID string, conversationID string) ([]domain.Message, error)
 	AddMessage(conversationID string, role string, content string) (domain.Message, error)
+	AddMessageInWorkspace(workspaceID string, conversationID string, role string, content string) (domain.Message, error)
 	AddMessageWithCitations(conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error)
 	UpdateConversationTitle(id string, title string) error
+	UpdateConversationTitleInWorkspace(workspaceID string, id string, title string) error
 }
 
 type AgentStore interface {
@@ -51,7 +58,9 @@ type RunStore interface {
 	UpdateRunHeartbeat(id string) (domain.Run, error)
 	ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error)
 	GetRun(id string) (domain.Run, bool, error)
+	GetRunInWorkspace(workspaceID string, id string) (domain.Run, bool, error)
 	ListRuns() ([]domain.Run, error)
+	ListRunsByWorkspace(workspaceID string) ([]domain.Run, error)
 }
 
 type VerificationStore interface {
@@ -103,8 +112,11 @@ type MemoryCandidateStore interface {
 type DocumentStore interface {
 	CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error)
 	ListDocuments() ([]domain.Document, error)
+	ListDocumentsByWorkspace(workspaceID string) ([]domain.Document, error)
 	GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error)
+	GetDocumentInWorkspace(workspaceID string, id string) (domain.Document, []domain.DocumentChunk, bool, error)
 	DeleteDocument(id string) error
+	DeleteDocumentInWorkspace(workspaceID string, id string) error
 	SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 	SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 	ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error)

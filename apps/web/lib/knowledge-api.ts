@@ -242,6 +242,13 @@ export type DocumentDetail = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+const WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID?.trim() || "default";
+
+function workspaceFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set("X-Workspace-ID", WORKSPACE_ID);
+  return fetch(input, { ...init, headers });
+}
 
 async function readJSON<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
@@ -253,7 +260,7 @@ async function readArrayJSON<T>(response: Response): Promise<T[]> {
 }
 
 export async function listDocuments(): Promise<DocumentInfo[]> {
-  const response = await fetch(`${API_BASE}/api/documents`, { cache: "no-store" });
+  const response = await workspaceFetch(`${API_BASE}/api/documents`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load documents: ${response.status}`);
   }
@@ -266,7 +273,7 @@ export async function createDocument(input: {
   content: string;
   metadata?: Record<string, unknown>;
 }): Promise<DocumentInfo> {
-  const response = await fetch(`${API_BASE}/api/documents`, {
+  const response = await workspaceFetch(`${API_BASE}/api/documents`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
@@ -283,7 +290,7 @@ export async function uploadDocument(input: { file: File; title?: string }): Pro
   if (input.title?.trim()) {
     form.append("title", input.title.trim());
   }
-  const response = await fetch(`${API_BASE}/api/documents/upload`, {
+  const response = await workspaceFetch(`${API_BASE}/api/documents/upload`, {
     method: "POST",
     body: form
   });
@@ -294,7 +301,7 @@ export async function uploadDocument(input: { file: File; title?: string }): Pro
 }
 
 export async function getDocument(documentId: string): Promise<DocumentDetail> {
-  const response = await fetch(`${API_BASE}/api/documents/${documentId}`, { cache: "no-store" });
+  const response = await workspaceFetch(`${API_BASE}/api/documents/${documentId}`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to load document: ${response.status}`);
   }
@@ -306,7 +313,7 @@ export async function getDocument(documentId: string): Promise<DocumentDetail> {
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/documents/${documentId}`, {
+  const response = await workspaceFetch(`${API_BASE}/api/documents/${documentId}`, {
     method: "DELETE"
   });
   if (!response.ok) {
@@ -321,7 +328,7 @@ export async function searchRAG(input: {
   min_similarity?: number;
   knowledge_context_max_tokens?: number;
 }): Promise<DocumentSearchResponse> {
-  const response = await fetch(`${API_BASE}/api/rag/search`, {
+  const response = await workspaceFetch(`${API_BASE}/api/rag/search`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
@@ -359,7 +366,7 @@ type RAGEvaluationRunInput = (
 };
 
 export async function runRAGEvaluation(input: RAGEvaluationRunInput): Promise<RAGEvaluationRunResponse> {
-  const response = await fetch(`${API_BASE}/api/rag/evaluations/run`, {
+  const response = await workspaceFetch(`${API_BASE}/api/rag/evaluations/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)

@@ -75,6 +75,18 @@ HTTP search, Single-Agent, Multi-Agent, and Autonomous runs use the same
    include each matched child, prefer same-parent section chunks, and fall back
    to adjacent chunks when no parent expansion can be selected.
 
+## Workspace Boundary
+
+Document ingestion stores the request workspace on the Document. HTTP search
+uses the request workspace, while Agent retrieval derives it from the persisted
+Run, which in turn inherits it from the Conversation. Memory and both Semantic
+and Keyword recall receive that same value. File and Postgres stores apply an
+exact workspace predicate before ranking candidates.
+
+In production, an empty workspace is rejected both at the HTTP boundary and by
+the Retrieval Pipeline. This prevents a new internal caller from accidentally
+turning a scoped search into a global search.
+
 Dense recall uses cosine similarity against document chunk embeddings. Lexical
 recall can introduce a chunk that is absent from the dense candidate set, which
 improves retrieval of exact error codes, product IDs, API paths, and domain

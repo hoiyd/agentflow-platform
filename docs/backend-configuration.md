@@ -15,6 +15,9 @@ Common environment variables:
 ```bash
 BIND_ADDRESS=127.0.0.1
 PORT=8080
+APP_ENV=development
+DEFAULT_WORKSPACE_ID=default
+REQUIRE_WORKSPACE_ID=false
 STORE_DRIVER=file
 DATA_PATH=.data/agentflow.json
 TOOL_CONFIG_PATH=.data/tools.json
@@ -59,6 +62,21 @@ ALLOWED_ORIGINS=http://localhost:3000
 authentication. Set it to `0.0.0.0` only behind an intentional external access
 boundary. `ALLOWED_ORIGINS` controls browser CORS and does not provide access
 control.
+
+## Workspace Scope
+
+Conversation, Message, Run, Document, Memory, and retrieval requests carry a
+workspace scope. Clients send it with `X-Workspace-ID`; the web client uses
+`NEXT_PUBLIC_WORKSPACE_ID` and defaults to `default` for local compatibility.
+
+`APP_ENV=production` always requires an explicit workspace header, regardless
+of `REQUIRE_WORKSPACE_ID`. Development may omit it and falls back to
+`DEFAULT_WORKSPACE_ID`. Existing file and Postgres records without a workspace
+are migrated to `default`.
+
+Workspace scope is an isolation key, not authentication. Production deployments
+must derive or validate it at a trusted gateway rather than trusting arbitrary
+client-supplied headers.
 
 Do not commit `.env` files. Runtime Snapshots freeze provider endpoints and
 model identity for reproducibility, but credentials remain live process

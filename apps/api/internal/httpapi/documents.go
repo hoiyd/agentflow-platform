@@ -16,7 +16,7 @@ import (
 const documentUploadMaxBytes = 2 << 20
 
 func (h *Handler) listDocuments(w http.ResponseWriter, r *http.Request) {
-	documents, err := h.store.ListDocuments()
+	documents, err := h.store.ListDocumentsByWorkspace(workspaceIDFromRequest(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -30,7 +30,7 @@ func (h *Handler) getDocument(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "document id is required")
 		return
 	}
-	document, chunks, ok, err := h.store.GetDocument(id)
+	document, chunks, ok, err := h.store.GetDocumentInWorkspace(workspaceIDFromRequest(r), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -51,7 +51,7 @@ func (h *Handler) deleteDocument(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "document id is required")
 		return
 	}
-	if err := h.store.DeleteDocument(id); err != nil {
+	if err := h.store.DeleteDocumentInWorkspace(workspaceIDFromRequest(r), id); err != nil {
 		status := http.StatusInternalServerError
 		if store.IsNotFound(err) {
 			status = http.StatusNotFound
@@ -68,6 +68,12 @@ func (h *Handler) createDocument(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	workspaceID, matches := resolvePayloadWorkspace(r, req.WorkspaceID)
+	if !matches {
+		writeError(w, http.StatusBadRequest, "workspace_id does not match request scope")
+		return
+	}
+	req.WorkspaceID = workspaceID
 	document, err := h.knowledge.Ingest(r.Context(), req)
 	if err != nil {
 		writeKnowledgeError(w, err)
@@ -129,12 +135,13 @@ func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	document, err := h.knowledge.Ingest(r.Context(), domain.DocumentIngestRequest{
-		Title:      title,
-		Content:    content,
-		SourceType: "file",
-		SourceURI:  filename,
-		MimeType:   mimeType,
-		Metadata:   metadata,
+		WorkspaceID: workspaceIDFromRequest(r),
+		Title:       title,
+		Content:     content,
+		SourceType:  "file",
+		SourceURI:   filename,
+		MimeType:    mimeType,
+		Metadata:    metadata,
 	})
 	if err != nil {
 		writeKnowledgeError(w, err)
@@ -149,6 +156,12 @@ func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	workspaceID, matches := resolvePayloadWorkspace(r, search.WorkspaceID)
+	if !matches {
+		writeError(w, http.StatusBadRequest, "workspace_id does not match request scope")
+		return
+	}
+	search.WorkspaceID = workspaceID
 	response, err := h.knowledge.Search(r.Context(), search, rag.NormalizeSearchLimit(search.Limit))
 	if err != nil {
 		writeKnowledgeError(w, err)
@@ -169,6 +182,12 @@ func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	workspaceID, matches := resolvePayloadWorkspace(r, req.WorkspaceID)
+	if !matches {
+		writeError(w, http.StatusBadRequest, "workspace_id does not match request scope")
+		return
+	}
+	req.WorkspaceID = workspaceID
 	response, err := h.knowledge.Evaluate(r.Context(), req)
 	if err != nil {
 		writeKnowledgeError(w, err)

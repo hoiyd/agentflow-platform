@@ -70,6 +70,7 @@ func (s *PostgresStore) ListMemoryCandidates(conversationID string) ([]domain.Me
 
 func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
 	now := time.Now().UTC()
+	memory.WorkspaceID = normalizeWorkspaceID(memory.WorkspaceID)
 	memory.ID = strings.TrimSpace(memory.ID)
 	if memory.ID == "" {
 		memory.ID = newID("mem")

@@ -83,18 +83,21 @@ test("replay preserves frozen budget and settled usage", async (t) => {
 
 test("run usage client calls the dedicated endpoint", async (t) => {
   let requestedURL = "";
+  let workspaceID = "";
   mockFetch(t, {
     run_id: "run-2",
     budget: { max_tool_calls: 4 },
     totals: { tool_calls: 1 },
     entries: []
-  }, (url) => {
+  }, (url, options) => {
     requestedURL = String(url);
+    workspaceID = new Headers(options?.headers).get("X-Workspace-ID") ?? "";
   });
 
   const ledger = await getRunUsage("run-2");
 
   assert.match(requestedURL, /\/api\/runs\/run-2\/usage$/);
+  assert.equal(workspaceID, "default");
   assert.equal(ledger.budget.max_tool_calls, 4);
   assert.equal(ledger.totals.tool_calls, 1);
   assert.equal(ledger.totals.open_reservations, 0);
@@ -192,7 +195,8 @@ test("document creation sends the complete JSON contract", async (t) => {
 
   assert.match(request.url, /\/api\/documents$/);
   assert.equal(request.options.method, "POST");
-  assert.equal(request.options.headers["Content-Type"], "application/json");
+  assert.equal(new Headers(request.options.headers).get("Content-Type"), "application/json");
+  assert.equal(new Headers(request.options.headers).get("X-Workspace-ID"), "default");
   assert.deepEqual(request.body, {
     title: "Runbook",
     version: "v2",

@@ -17,6 +17,7 @@ func (s *FileStore) CreateDocument(document domain.Document, chunks []domain.Doc
 		return domain.Document{}, errors.New("document chunks and embeddings length mismatch")
 	}
 	now := time.Now().UTC()
+	document.WorkspaceID = normalizeWorkspaceID(document.WorkspaceID)
 	document.ID = strings.TrimSpace(document.ID)
 	if document.ID == "" {
 		document.ID = newID("doc")
@@ -120,6 +121,21 @@ func (s *FileStore) ListDocuments() ([]domain.Document, error) {
 	return documents, nil
 }
 
+func (s *FileStore) ListDocumentsByWorkspace(workspaceID string) ([]domain.Document, error) {
+	documents, err := s.ListDocuments()
+	if err != nil {
+		return nil, err
+	}
+	workspaceID = normalizeWorkspaceID(workspaceID)
+	items := make([]domain.Document, 0, len(documents))
+	for _, document := range documents {
+		if document.WorkspaceID == workspaceID {
+			items = append(items, document)
+		}
+	}
+	return items, nil
+}
+
 func (s *FileStore) GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -155,6 +171,14 @@ func (s *FileStore) GetDocument(id string) (domain.Document, []domain.DocumentCh
 		if embeddingByChunkID[chunk.ID] {
 			document.EmbeddingCount++
 		}
+	}
+	return document, chunks, true, nil
+}
+
+func (s *FileStore) GetDocumentInWorkspace(workspaceID string, id string) (domain.Document, []domain.DocumentChunk, bool, error) {
+	document, chunks, ok, err := s.GetDocument(id)
+	if err != nil || !ok || document.WorkspaceID != normalizeWorkspaceID(workspaceID) {
+		return domain.Document{}, nil, false, err
 	}
 	return document, chunks, true, nil
 }
@@ -202,6 +226,15 @@ func (s *FileStore) DeleteDocument(id string) error {
 	s.data.DocumentChunks = chunks
 	s.data.ChunkEmbeddings = embeddings
 	return s.saveLocked()
+}
+
+func (s *FileStore) DeleteDocumentInWorkspace(workspaceID string, id string) error {
+	if _, _, ok, err := s.GetDocumentInWorkspace(workspaceID, id); err != nil {
+		return err
+	} else if !ok {
+		return ErrNotFound("document")
+	}
+	return s.DeleteDocument(id)
 }
 
 func (s *FileStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {

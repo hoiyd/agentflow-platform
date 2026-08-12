@@ -17,6 +17,7 @@ func (s *FileStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEm
 	defer s.mu.Unlock()
 
 	now := time.Now().UTC()
+	memory.WorkspaceID = normalizeWorkspaceID(memory.WorkspaceID)
 	memory.ID = strings.TrimSpace(memory.ID)
 	if memory.ID == "" {
 		memory.ID = newID("mem")

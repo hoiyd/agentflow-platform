@@ -23,6 +23,7 @@ func (s *FileStore) CreateRunWithContract(agentID string, conversationID string,
 	if !s.hasConversationLocked(conversationID) {
 		return domain.Run{}, errors.New("conversation not found")
 	}
+	conversation, _ := s.getConversationLocked(conversationID)
 	if snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion || snapshot.RunBudget == nil {
 		return domain.Run{}, errors.New("runtime snapshot is required")
 	}
@@ -30,6 +31,7 @@ func (s *FileStore) CreateRunWithContract(agentID string, conversationID string,
 	now := time.Now().UTC()
 	run := domain.Run{
 		ID:                 newID("run"),
+		WorkspaceID:        conversation.WorkspaceID,
 		AgentID:            agentID,
 		ConversationID:     conversationID,
 		Status:             domain.RunQueued,
@@ -208,6 +210,14 @@ func (s *FileStore) GetRun(id string) (domain.Run, bool, error) {
 	return domain.Run{}, false, nil
 }
 
+func (s *FileStore) GetRunInWorkspace(workspaceID string, id string) (domain.Run, bool, error) {
+	run, ok, err := s.GetRun(id)
+	if err != nil || !ok || run.WorkspaceID != normalizeWorkspaceID(workspaceID) {
+		return domain.Run{}, false, err
+	}
+	return run, true, nil
+}
+
 func (s *FileStore) ListRuns() ([]domain.Run, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -222,5 +232,20 @@ func (s *FileStore) ListRuns() ([]domain.Run, error) {
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].CreatedAt.After(items[j].CreatedAt)
 	})
+	return items, nil
+}
+
+func (s *FileStore) ListRunsByWorkspace(workspaceID string) ([]domain.Run, error) {
+	runs, err := s.ListRuns()
+	if err != nil {
+		return nil, err
+	}
+	workspaceID = normalizeWorkspaceID(workspaceID)
+	items := make([]domain.Run, 0, len(runs))
+	for _, run := range runs {
+		if run.WorkspaceID == workspaceID {
+			items = append(items, run)
+		}
+	}
 	return items, nil
 }
