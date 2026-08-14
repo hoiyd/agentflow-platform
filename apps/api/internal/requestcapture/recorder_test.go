@@ -3,6 +3,7 @@ package requestcapture
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -170,6 +171,106 @@ func TestValidateReconstructabilityRejectsDuplicatePreparedEvent(t *testing.T) {
 	if err := ValidateReconstructability(run, records, events); err == nil || !strings.Contains(err.Error(), "duplicate model request prepared event") {
 		t.Fatalf("expected duplicate prepared event error, got %v", err)
 	}
+}
+
+func TestRecorderFailsClosedAndSkipsUnscopedCalls(t *testing.T) {
+	snapshot := domain.RuntimeSnapshot{
+		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single",
+		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Model: domain.RuntimeModelSnapshot{Provider: "test", Model: "test-model"},
+		ContextAssembly: domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1"}, RunBudget: &domain.RuntimeRunBudget{},
+	}
+	validRun := domain.Run{ID: "run-recorder", ConversationID: "conversation-recorder", RuntimeSnapshot: &snapshot}
+	validObservation := modelrequest.Observation{
+		ModelCallID: "call-recorder", Operation: "chat.completion", Provider: "test", Model: "test-model",
+		Payload: []byte(`{"model":"test-model","messages":[{"role":"user","content":"hello"}]}`),
+	}
+	scoped := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: validRun.ID, ConversationID: validRun.ConversationID})
+
+	var nilRecorder *Recorder
+	if err := nilRecorder.Record(scoped, validObservation); err == nil {
+		t.Fatal("nil recorder should fail")
+	}
+	if err := NewRecorder(nil, Options{}).Record(scoped, validObservation); err == nil {
+		t.Fatal("recorder without store should fail")
+	}
+	if err := NewRecorder(&captureStoreStub{run: validRun, ok: true}, Options{}).Record(context.Background(), validObservation); err != nil {
+		t.Fatalf("unscoped auxiliary request should be ignored: %v", err)
+	}
+	if err := NewRecorder(&captureStoreStub{run: validRun, ok: true}, Options{}).Record(scoped, modelrequest.Observation{}); err == nil {
+		t.Fatal("invalid observation should fail")
+	}
+
+	tests := []struct {
+		name        string
+		store       *captureStoreStub
+		observation modelrequest.Observation
+		message     string
+	}{
+		{name: "load run", store: &captureStoreStub{getErr: errors.New("load failed")}, observation: validObservation, message: "load model request run"},
+		{name: "missing run", store: &captureStoreStub{}, observation: validObservation, message: "runtime snapshot not found"},
+		{name: "missing snapshot", store: &captureStoreStub{run: domain.Run{ID: validRun.ID}, ok: true}, observation: validObservation, message: "runtime snapshot not found"},
+		{name: "invalid payload", store: &captureStoreStub{run: validRun, ok: true}, observation: modelrequest.Observation{
+			ModelCallID: "call", Operation: "chat.completion", Model: "test-model", Payload: []byte("not-json"),
+		}, message: "summarize model request payload"},
+		{name: "record persistence", store: &captureStoreStub{run: validRun, ok: true, createErr: errors.New("write failed")}, observation: validObservation, message: "persist model request envelope"},
+		{name: "event persistence", store: &captureStoreStub{run: validRun, ok: true, eventErr: errors.New("event failed")}, observation: validObservation, message: "persist model request event"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := NewRecorder(test.store, Options{}).Record(scoped, test.observation)
+			if err == nil || !strings.Contains(err.Error(), test.message) {
+				t.Fatalf("expected error containing %q, got %v", test.message, err)
+			}
+		})
+	}
+}
+
+func TestCaptureRedactionAndMetadataHelpers(t *testing.T) {
+	now := time.Now().UTC()
+	capture := capturePayload([]byte("not-json"), domain.ModelRequestCaptureRedacted, 1024, time.Hour, now)
+	if !capture.Truncated || capture.Content != "" {
+		t.Fatalf("invalid redacted payload should fail closed: %#v", capture)
+	}
+	if _, _, err := redactJSON([]byte("not-json")); err == nil {
+		t.Fatal("invalid JSON should fail redaction")
+	}
+	parameters, messages, tools, err := summarizePayload([]byte("null"))
+	if err != nil || parameters == nil || messages != 0 || tools != 0 {
+		t.Fatalf("null payload summary should normalize to empty metadata: parameters=%#v messages=%d tools=%d err=%v", parameters, messages, tools, err)
+	}
+	count := 0
+	redacted := redactString("Bearer abcdefghijklmnop", &count)
+	if redacted != "Bearer [REDACTED]" || count != 1 {
+		t.Fatalf("bearer token was not redacted: value=%q count=%d", redacted, count)
+	}
+	breakdown := cloneTokenBreakdown(map[string]int{"system": 2, "": 4, "history": 0})
+	if len(breakdown) != 1 || breakdown["system"] != 2 {
+		t.Fatalf("invalid token sources were retained: %#v", breakdown)
+	}
+}
+
+type captureStoreStub struct {
+	run       domain.Run
+	ok        bool
+	getErr    error
+	createErr error
+	eventErr  error
+}
+
+func (s *captureStoreStub) GetRun(string) (domain.Run, bool, error) {
+	return s.run, s.ok, s.getErr
+}
+
+func (s *captureStoreStub) CreateModelRequestRecord(record domain.ModelRequestRecord) (domain.ModelRequestRecord, error) {
+	if s.createErr != nil {
+		return domain.ModelRequestRecord{}, s.createErr
+	}
+	record.Envelope.Attempt = 1
+	return record, nil
+}
+
+func (s *captureStoreStub) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error) {
+	return event, s.eventErr
 }
 
 func newCaptureTestRun(t *testing.T) (*store.FileStore, domain.Run, string) {

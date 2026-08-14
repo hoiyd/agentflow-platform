@@ -232,6 +232,13 @@ func TestPostgresActiveRuntimeExcludesWaitingForUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
+	emptyRequests, err := store.ListModelRequestRecords(run.ID)
+	if err != nil || len(emptyRequests) != 0 {
+		t.Fatalf("list empty model requests: items=%#v err=%v", emptyRequests, err)
+	}
+	if _, err := store.ListModelRequestRecords("missing-run"); err == nil {
+		t.Fatal("expected missing run model request error")
+	}
 	if _, err = store.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
 		t.Fatalf("start run: %v", err)
 	}
@@ -397,6 +404,11 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 			OriginalBytes: len(payload), StoredBytes: len(payload), Reconstructable: true, ExpiresAt: &expiresAt,
 		},
 	}
+	invalidRequest := requestRecord
+	invalidRequest.Envelope.ID = ""
+	if _, err := store.CreateModelRequestRecord(invalidRequest); err == nil {
+		t.Fatal("expected invalid postgres model request error")
+	}
 	createdRequest, err := store.CreateModelRequestRecord(requestRecord)
 	if err != nil || createdRequest.Envelope.Attempt != 1 {
 		t.Fatalf("create model request record: record=%#v err=%v", createdRequest, err)
@@ -406,9 +418,26 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if err != nil || createdRetry.Envelope.Attempt != 2 {
 		t.Fatalf("create model request retry: record=%#v err=%v", createdRetry, err)
 	}
+	expiredRequest := requestRecord
+	expiredRequest.Envelope.ID += "_expired"
+	expiredRequest.Envelope.ModelCallID = "call-postgres-expired"
+	expiredAt := time.Now().UTC().Add(-time.Minute)
+	expiredRequest.Capture.ExpiresAt = &expiredAt
+	if _, err := store.CreateModelRequestRecord(expiredRequest); err != nil {
+		t.Fatalf("create expired model request: %v", err)
+	}
 	requestRecords, err := store.ListModelRequestRecords(run.ID)
-	if err != nil || len(requestRecords) != 2 || requestRecords[0].Capture.Content != string(payload) {
+	if err != nil || len(requestRecords) != 3 || requestRecords[0].Capture.Content != string(payload) {
 		t.Fatalf("postgres model request round trip: records=%#v err=%v", requestRecords, err)
+	}
+	expiredPurged := false
+	for _, item := range requestRecords {
+		if item.Envelope.ID == expiredRequest.Envelope.ID {
+			expiredPurged = item.Capture.Expired && item.Capture.Content == "" && item.Capture.StoredBytes == 0
+		}
+	}
+	if !expiredPurged {
+		t.Fatalf("expired postgres capture was not purged: %#v", requestRecords)
 	}
 
 	replay, ok, err := store.GetRunReplay(run.ID)

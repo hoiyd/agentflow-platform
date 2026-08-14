@@ -3,14 +3,17 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/modelrequest"
 	"agentflow-platform/apps/api/internal/requestcapture"
+	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestListModelRequestsHidesContentByDefaultAndReturnsManifest(t *testing.T) {
@@ -76,4 +79,97 @@ func TestListModelRequestsEnforcesWorkspaceScope(t *testing.T) {
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("expected workspace-scoped 404, got %d body=%s", recorder.Code, recorder.Body.String())
 	}
+}
+
+func TestListModelRequestsHandlesStoreFailuresAndInvalidProjection(t *testing.T) {
+	fileStore, run := createHTTPTestRun(t)
+	tests := []struct {
+		name       string
+		path       string
+		store      *modelRequestHTTPStore
+		wantStatus int
+		wantBody   string
+	}{
+		{name: "missing id", path: "/api/runs//model_requests", store: &modelRequestHTTPStore{Store: fileStore}, wantStatus: http.StatusBadRequest, wantBody: "run id is required"},
+		{name: "run lookup", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, runErr: errors.New("run lookup failed")}, wantStatus: http.StatusInternalServerError, wantBody: "run lookup failed"},
+		{name: "record list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, recordsErr: errors.New("records failed")}, wantStatus: http.StatusInternalServerError, wantBody: "records failed"},
+		{name: "event list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, eventsErr: errors.New("events failed")}, wantStatus: http.StatusInternalServerError, wantBody: "events failed"},
+		{name: "invalid projection", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{
+			Store: fileStore, run: run, ok: true, records: []domain.ModelRequestRecord{},
+			events: []domain.RunEvent{{Type: domain.EventModelRequestPrepared, Payload: map[string]any{
+				"record_id": "orphan", "model_call_id": "call", "attempt": 1, "payload_hash": "sha256:orphan",
+			}}},
+		}, wantStatus: http.StatusOK, wantBody: `"reconstructability_status":"invalid"`},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			handler := &Handler{store: test.store}
+			response := httptest.NewRecorder()
+			handler.listModelRequests(response, httptest.NewRequest(http.MethodGet, test.path, nil))
+			if response.Code != test.wantStatus || !strings.Contains(response.Body.String(), test.wantBody) {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestModelRequestManifestProjectionHelpers(t *testing.T) {
+	manifest := domain.ContextManifest{ID: "ctx", Entries: []domain.ContextManifestEntry{
+		{Source: "system", Selected: true, EstimatedTokens: 2},
+		{Source: "history", Selected: false, EstimatedTokens: 3},
+		{Source: "ignored", Selected: true, EstimatedTokens: 0},
+	}}
+	selected, excluded := manifestTokenBreakdown(manifest)
+	if selected["system"] != 2 || excluded["history"] != 3 || len(selected) != 1 {
+		t.Fatalf("unexpected breakdown: selected=%#v excluded=%#v", selected, excluded)
+	}
+	if equalIntMap(map[string]int{"system": 1}, map[string]int{}) ||
+		equalIntMap(map[string]int{"system": 1}, map[string]int{"system": 2}) {
+		t.Fatal("different source maps should not match")
+	}
+
+	events := []domain.RunEvent{
+		{Type: domain.EventModelCompleted},
+		{Type: domain.EventContextAssembled, Payload: map[string]any{"manifest": make(chan int)}},
+		{Type: domain.EventContextAssembled, Payload: map[string]any{"manifest": "invalid"}},
+		{Type: domain.EventContextAssembled, Payload: map[string]any{"manifest": domain.ContextManifest{}}},
+		{Type: domain.EventContextAssembled, Payload: map[string]any{"manifest": manifest}},
+	}
+	manifests := modelRequestManifests(events)
+	if len(manifests) != 1 || manifests[manifest.ID].ID != manifest.ID {
+		t.Fatalf("unexpected manifests: %#v", manifests)
+	}
+}
+
+type modelRequestHTTPStore struct {
+	store.Store
+	run        domain.Run
+	ok         bool
+	runErr     error
+	records    []domain.ModelRequestRecord
+	recordsErr error
+	events     []domain.RunEvent
+	eventsErr  error
+}
+
+func (s *modelRequestHTTPStore) GetRunInWorkspace(workspaceID, runID string) (domain.Run, bool, error) {
+	if s.runErr != nil || s.ok {
+		return s.run, s.ok, s.runErr
+	}
+	return s.Store.GetRunInWorkspace(workspaceID, runID)
+}
+
+func (s *modelRequestHTTPStore) ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error) {
+	if s.recordsErr != nil || s.records != nil {
+		return s.records, s.recordsErr
+	}
+	return s.Store.ListModelRequestRecords(runID)
+}
+
+func (s *modelRequestHTTPStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
+	if s.eventsErr != nil || s.events != nil {
+		return s.events, s.eventsErr
+	}
+	return s.Store.ListRunEvents(runID)
 }

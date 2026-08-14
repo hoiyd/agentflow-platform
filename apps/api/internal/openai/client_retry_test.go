@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"reflect"
@@ -132,6 +133,58 @@ func TestPhysicalRetriesCaptureTheExactTransportPayload(t *testing.T) {
 		if observations[index].ModelCallID == "" || observations[index].ModelCallID != observations[0].ModelCallID || observations[index].ContextManifestID == "" {
 			t.Fatalf("attempt identity changed: %#v", observations)
 		}
+	}
+}
+
+func TestRecorderFailurePreventsProviderRequest(t *testing.T) {
+	client := retryTestClient()
+	transportCalls := 0
+	client.SetRequestRecorder(requestRecorderFunc(func(context.Context, modelrequest.Observation) error {
+		return errors.New("capture failed")
+	}))
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		transportCalls++
+		return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","content":"unexpected"}}]}`), nil
+	})}
+
+	_, err := client.CompleteTextDetailed(context.Background(), "system", "hello")
+	if err == nil || transportCalls != 0 {
+		t.Fatalf("request was not failed closed: calls=%d err=%v", transportCalls, err)
+	}
+}
+
+func TestLocalCompletionCapturesCanonicalRequest(t *testing.T) {
+	client := NewClient("", "https://provider.example/v1", "test-model")
+	observations := []modelrequest.Observation{}
+	client.SetRequestRecorder(requestRecorderFunc(func(_ context.Context, observation modelrequest.Observation) error {
+		observations = append(observations, observation)
+		return nil
+	}))
+	prepared := PreparedText{
+		Messages: []Message{{Role: "system", Content: "system"}, {Role: "user", Content: "hello"}},
+		Manifest: domain.ContextManifest{
+			ID: "ctx-local", ModelCallID: "call-local", OutputReserveTokens: 32,
+			Entries: []domain.ContextManifestEntry{{Source: "system", Selected: true, EstimatedTokens: 2}},
+		},
+	}
+
+	completion, err := client.CompletePreparedText(context.Background(), prepared)
+	if err != nil || completion.Model != "local_fallback" || len(observations) != 1 {
+		t.Fatalf("local completion capture failed: completion=%#v observations=%#v err=%v", completion, observations, err)
+	}
+	observation := observations[0]
+	if observation.Operation != "local.completion" || observation.Provider != "local" ||
+		observation.ModelCallID != prepared.Manifest.ModelCallID || observation.ContextManifestID != prepared.Manifest.ID ||
+		observation.SourceTokenBreakdown["system"] != 2 || !json.Valid(observation.Payload) {
+		t.Fatalf("unexpected local request observation: %#v", observation)
+	}
+
+	var nilClient *Client
+	if err := nilClient.recordModelRequest(context.Background(), "call", "operation", "model", []byte(`{}`)); err != nil {
+		t.Fatalf("nil client should have no recorder side effect: %v", err)
+	}
+	if err := NewClient("", "", "model").recordModelRequest(context.Background(), "call", "operation", "model", []byte(`{}`)); err != nil {
+		t.Fatalf("client without recorder should be a no-op: %v", err)
 	}
 }
 
