@@ -37,6 +37,12 @@ type Config struct {
 	ModelRetryBaseDelay time.Duration
 	// ModelRetryMaxDelay caps exponential backoff and provider Retry-After values.
 	ModelRetryMaxDelay time.Duration
+	// ModelRequestCaptureMode controls persisted model payload content: metadata_only, redacted, or full.
+	ModelRequestCaptureMode string
+	// ModelRequestCaptureMaxBytes caps stored full/redacted canonical JSON; the envelope hash is always retained.
+	ModelRequestCaptureMaxBytes int
+	// ModelRequestCaptureRetention limits how long redacted/full payload content remains readable and persisted.
+	ModelRequestCaptureRetention time.Duration
 	// RunMaxModelCalls limits logical LLM calls in one Run; provider retries do not add calls.
 	RunMaxModelCalls int
 	// RunMaxPromptTokens limits cumulative input usage, including open reservations.
@@ -140,6 +146,9 @@ func Load() Config {
 		ModelRetryMaxAttempts:             getIntEnv("MODEL_RETRY_MAX_ATTEMPTS", 3),
 		ModelRetryBaseDelay:               getDurationEnv("MODEL_RETRY_BASE_DELAY", 500*time.Millisecond),
 		ModelRetryMaxDelay:                getDurationEnv("MODEL_RETRY_MAX_DELAY", 5*time.Second),
+		ModelRequestCaptureMode:           normalizeModelRequestCaptureMode(getEnv("MODEL_REQUEST_CAPTURE_MODE", "metadata_only")),
+		ModelRequestCaptureMaxBytes:       getIntEnv("MODEL_REQUEST_CAPTURE_MAX_BYTES", 262144),
+		ModelRequestCaptureRetention:      getDurationEnv("MODEL_REQUEST_CAPTURE_RETENTION", 7*24*time.Hour),
 		RunMaxModelCalls:                  getNonNegativeIntEnv("RUN_MAX_MODEL_CALLS", 32),
 		RunMaxPromptTokens:                getNonNegativeIntEnv("RUN_MAX_PROMPT_TOKENS", 200000),
 		RunMaxCompletionTokens:            getNonNegativeIntEnv("RUN_MAX_COMPLETION_TOKENS", 50000),
@@ -209,6 +218,15 @@ func normalizeCompactionMode(value string) string {
 		return "off"
 	}
 	return "auto"
+}
+
+func normalizeModelRequestCaptureMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "redacted", "full":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return "metadata_only"
+	}
 }
 
 func normalizeAdaptiveMemoryMode(value string) string {

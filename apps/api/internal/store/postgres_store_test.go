@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"sync"
@@ -65,9 +66,31 @@ func TestPostgresRequiredSchemaCoversRuntimeColumns(t *testing.T) {
 		"document_chunk_embeddings.embedding",
 		"run_usage_entries.operation_id",
 		"run_usage_entries.purpose",
+		"model_request_records.model_call_id",
+		"model_request_records.payload_hash",
+		"model_request_records.parameters",
+		"model_request_records.source_token_breakdown",
+		"model_request_records.capture_content",
+		"model_request_records.capture_expired",
 	} {
 		if !columns[expected] {
 			t.Fatalf("required schema does not validate %s", expected)
+		}
+	}
+}
+
+func TestPostgresMigrationsAddModelRequestRecords(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"CREATE TABLE IF NOT EXISTS model_request_records",
+		"UNIQUE(run_id, model_call_id, attempt)",
+		"model_request_records_run_created_idx",
+		"capture_reconstructable boolean",
+		"source_token_breakdown jsonb",
+		"capture_expires_at timestamptz",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing model request migration step %q", expected)
 		}
 	}
 }
@@ -357,6 +380,35 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 		Payload: map[string]any{"manifest": map[string]any{"id": "ctx-1", "assembler_version": "context-assembler-v1", "entries": []any{}}},
 	}); err != nil {
 		t.Fatalf("create context manifest trace: %v", err)
+	}
+	payload := []byte(`{"model":"test","messages":[{"role":"user","content":"postgres capture"}]}`)
+	snapshotJSON, _ := json.Marshal(run.RuntimeSnapshot)
+	expiresAt := time.Now().UTC().Add(time.Hour)
+	requestRecord := domain.ModelRequestRecord{
+		Envelope: domain.ModelRequestEnvelope{
+			ID: "modelreq_" + run.ID, RunID: run.ID, ConversationID: conversation.ID,
+			ModelCallID: "call-postgres", Operation: "chat.completion", Provider: "test", Model: "test",
+			RuntimeSnapshotHash: hashModelRequestBytes(snapshotJSON), PayloadHash: hashModelRequestBytes(payload),
+			PayloadBytes: len(payload), Parameters: map[string]any{"model": "test"},
+			SourceTokenBreakdown: map[string]int{}, MessageCount: 1, CreatedAt: time.Now().UTC(),
+		},
+		Capture: domain.ModelRequestCapture{
+			Mode: domain.ModelRequestCaptureFull, Content: string(payload), ContentHash: hashModelRequestBytes(payload),
+			OriginalBytes: len(payload), StoredBytes: len(payload), Reconstructable: true, ExpiresAt: &expiresAt,
+		},
+	}
+	createdRequest, err := store.CreateModelRequestRecord(requestRecord)
+	if err != nil || createdRequest.Envelope.Attempt != 1 {
+		t.Fatalf("create model request record: record=%#v err=%v", createdRequest, err)
+	}
+	requestRecord.Envelope.ID += "_retry"
+	createdRetry, err := store.CreateModelRequestRecord(requestRecord)
+	if err != nil || createdRetry.Envelope.Attempt != 2 {
+		t.Fatalf("create model request retry: record=%#v err=%v", createdRetry, err)
+	}
+	requestRecords, err := store.ListModelRequestRecords(run.ID)
+	if err != nil || len(requestRecords) != 2 || requestRecords[0].Capture.Content != string(payload) {
+		t.Fatalf("postgres model request round trip: records=%#v err=%v", requestRecords, err)
 	}
 
 	replay, ok, err := store.GetRunReplay(run.ID)

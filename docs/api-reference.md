@@ -51,6 +51,7 @@ POST   /api/runs/{id}/verify
 GET    /api/runs/{id}/collaboration_steps
 GET    /api/runs/{id}/replay
 GET    /api/runs/{id}/usage
+GET    /api/runs/{id}/model_requests
 GET    /api/runs/{id}/episode
 
 GET    /api/tools
@@ -115,6 +116,14 @@ related Run Events.
 ## Usage and Replay
 
 `GET /api/runs/{id}/usage` returns the immutable budget, effective totals, open model reservations, and append-only usage entries. The same `usage_ledger` is included in Replay. A reservation and settlement share one `operation_id`; the settlement replaces its estimate when totals are calculated.
+
+`GET /api/runs/{id}/model_requests` returns physical Model Request Envelopes,
+Capture metadata, referenced Context Manifests, and the reconstructability
+invariant status. Capture content is omitted unless `include_content=true` is
+explicitly supplied. Each record includes a source diff comparing the
+Envelope's selected token totals with selected/excluded Manifest totals.
+Expired Capture content is never returned. Both forms enforce the Run's
+Workspace namespace.
 
 Replay is the detailed aggregate assembled from stored records for one Run.
 Episode Report is a compact projection derived from Replay for review or

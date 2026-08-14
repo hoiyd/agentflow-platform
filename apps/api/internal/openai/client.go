@@ -29,6 +29,7 @@ type Client struct {
 	httpClient          *http.Client
 	timeout             time.Duration
 	requestLimiter      modelrequest.Limiter
+	requestRecorder     modelrequest.Recorder
 	retryPolicy         RetryPolicy
 }
 
@@ -191,6 +192,10 @@ func (c *Client) SetRequestLimiter(limiter modelrequest.Limiter) {
 	c.requestLimiter = limiter
 }
 
+func (c *Client) SetRequestRecorder(recorder modelrequest.Recorder) {
+	c.requestRecorder = recorder
+}
+
 func (c *Client) SetRetryPolicy(policy RetryPolicy) {
 	c.retryPolicy = policy.normalized()
 }
@@ -207,6 +212,7 @@ func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) *Client {
 	client := NewClientWithTimeoutAndEmbeddingModel(c.apiKey, identity.BaseURL, identity.EmbeddingBaseURL,
 		identity.Model, identity.EmbeddingModel, identity.EmbeddingDimensions, c.timeout)
 	client.requestLimiter = c.requestLimiter
+	client.requestRecorder = c.requestRecorder
 	client.retryPolicy = c.retryPolicy
 	return client
 }

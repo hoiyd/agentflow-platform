@@ -17,6 +17,7 @@ import (
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/recovery"
+	"agentflow-platform/apps/api/internal/requestcapture"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
 	"agentflow-platform/apps/api/internal/verification"
@@ -48,6 +49,10 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	}
 
 	modelClient := newModelClient(cfg)
+	modelClient.SetRequestRecorder(requestcapture.NewRecorder(appStore, requestcapture.Options{
+		Mode: domain.ModelRequestCaptureMode(cfg.ModelRequestCaptureMode), MaxBytes: cfg.ModelRequestCaptureMaxBytes,
+		Retention: cfg.ModelRequestCaptureRetention,
+	}))
 	toolManager, err := tools.NewManager(cfg.ToolConfigPath)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)

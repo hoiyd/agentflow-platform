@@ -96,6 +96,7 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	llmSpan := recorder.LLMStart(ctx, runID, stepID, startPayload)
 	decisionCtx := budget.WithOperation(ctx, prepared.manifest.ModelCallID)
 	decisionCtx = withOutputTokenLimit(decisionCtx, prepared.manifest.OutputReserveTokens)
+	decisionCtx = withRequestManifest(decisionCtx, prepared.manifest)
 	decision, err := c.complete(decisionCtx, map[string]any{
 		"model":       c.model,
 		"messages":    messages,
@@ -135,6 +136,7 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		}, contextTracePayload(prepared.manifest)))
 		decisionCtx = budget.WithOperation(ctx, prepared.manifest.ModelCallID)
 		decisionCtx = withOutputTokenLimit(decisionCtx, prepared.manifest.OutputReserveTokens)
+		decisionCtx = withRequestManifest(decisionCtx, prepared.manifest)
 		decision, err = c.complete(decisionCtx, map[string]any{
 			"model":       c.model,
 			"messages":    messages,
@@ -242,6 +244,7 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	}, contextTracePayload(prepared.manifest)))
 	streamCtx := budget.WithOperation(ctx, prepared.manifest.ModelCallID)
 	streamCtx = withOutputTokenLimit(streamCtx, prepared.manifest.OutputReserveTokens)
+	streamCtx = withRequestManifest(streamCtx, prepared.manifest)
 	emitted, finalOutput, finalUsage, err := c.streamMessages(streamCtx, messages, events)
 	if err != nil {
 		recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{

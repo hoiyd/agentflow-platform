@@ -225,6 +225,60 @@ export type RunUsageLedger = {
   updated_at?: string;
 };
 
+export type ModelRequestEnvelope = {
+  id: string;
+  run_id: string;
+  conversation_id: string;
+  stage_id?: string;
+  turn_id?: string;
+  model_call_id: string;
+  attempt: number;
+  operation: string;
+  provider: string;
+  model: string;
+  context_manifest_id?: string;
+  runtime_snapshot_hash: string;
+  payload_hash: string;
+  payload_bytes: number;
+  parameters: Record<string, unknown>;
+  source_token_breakdown: Record<string, number>;
+  message_count: number;
+  tool_count: number;
+  created_at: string;
+};
+
+export type ModelRequestCapture = {
+  mode: "metadata_only" | "redacted" | "full";
+  content?: string;
+  content_hash?: string;
+  original_bytes: number;
+  stored_bytes: number;
+  redacted: boolean;
+  redaction_strategy?: string;
+  redaction_count: number;
+  truncated: boolean;
+  reconstructable: boolean;
+  expires_at?: string;
+  expired: boolean;
+};
+
+export type ModelRequestDebugResponse = {
+  run_id: string;
+  reconstructability_status: "valid" | "invalid";
+  invariant_error?: string;
+  records: Array<{
+    envelope: ModelRequestEnvelope;
+    capture: ModelRequestCapture;
+    manifest?: Record<string, unknown>;
+    source_diff: {
+      envelope_selected_tokens: Record<string, number>;
+      manifest_selected_tokens: Record<string, number>;
+      manifest_excluded_tokens: Record<string, number>;
+      matches_envelope: boolean;
+    };
+  }>;
+};
+
 export type RunReplay = {
   run: RunInfo;
   conversation: Conversation;
@@ -634,6 +688,16 @@ export async function getRunUsage(runId: string): Promise<RunUsageLedger> {
     throw new Error(`Failed to load run usage: ${response.status}`);
   }
   return normalizeRunUsageLedger(await readJSON<unknown>(response), runId);
+}
+
+export async function getRunModelRequests(runId: string, includeContent = false): Promise<ModelRequestDebugResponse> {
+  const query = includeContent ? "?include_content=true" : "";
+  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/model_requests${query}`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`Failed to load model requests: ${response.status}`);
+  }
+  const result = await readJSON<ModelRequestDebugResponse>(response);
+  return { ...result, records: Array.isArray(result.records) ? result.records : [] };
 }
 
 export async function getEpisodeReport(runId: string): Promise<EpisodeReport> {

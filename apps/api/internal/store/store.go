@@ -99,6 +99,11 @@ type ContextCompactionStore interface {
 	GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error)
 }
 
+type ModelRequestStore interface {
+	CreateModelRequestRecord(domain.ModelRequestRecord) (domain.ModelRequestRecord, error)
+	ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error)
+}
+
 type MemoryStore interface {
 	CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error)
 	SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error)
@@ -134,6 +139,7 @@ type Store interface {
 	RunUsageStore
 	VerificationStore
 	ContextCompactionStore
+	ModelRequestStore
 	MemoryStore
 	MemoryCandidateStore
 	DocumentStore

@@ -50,6 +50,19 @@ func TestLoadSessionHistoryRetrievalConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadModelRequestCaptureConfiguration(t *testing.T) {
+	t.Setenv("MODEL_REQUEST_CAPTURE_MODE", " REDACTED ")
+	t.Setenv("MODEL_REQUEST_CAPTURE_MAX_BYTES", "8192")
+	t.Setenv("MODEL_REQUEST_CAPTURE_RETENTION", "48h")
+	cfg := Load()
+	if cfg.ModelRequestCaptureMode != "redacted" || cfg.ModelRequestCaptureMaxBytes != 8192 || cfg.ModelRequestCaptureRetention != 48*time.Hour {
+		t.Fatalf("unexpected model request capture config: %#v", cfg)
+	}
+	if got := normalizeModelRequestCaptureMode("unsafe"); got != "metadata_only" {
+		t.Fatalf("unknown capture mode should fail safe, got %q", got)
+	}
+}
+
 func TestGetUnitFloatEnvRejectsOutOfRangeValue(t *testing.T) {
 	t.Setenv("TEST_UNIT_FLOAT", "0.91")
 	if got := getUnitFloatEnv("TEST_UNIT_FLOAT", 0.85); got != 0.91 {

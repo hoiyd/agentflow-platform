@@ -32,8 +32,12 @@ func (c *Client) complete(ctx context.Context, body map[string]any) (chatComplet
 			return chatCompletionResponse{}, err
 		}
 	}
+	ctx = budget.WithOperation(ctx, reservation.OperationID)
 	const operation = "chat.completion"
 	response, err := executeWithRetry(ctx, c.retryPolicy, operation, func() (chatCompletionResponse, error) {
+		if err := c.recordModelRequest(ctx, reservation.OperationID, operation, c.model, payload); err != nil {
+			return chatCompletionResponse{}, withoutRetry(err, operation)
+		}
 		resp, err := c.doRequest(ctx, payload)
 		if err != nil {
 			return chatCompletionResponse{}, err
@@ -70,6 +74,7 @@ func (c *Client) streamMessages(ctx context.Context, messages []Message, events 
 		return false, "", Usage{}, err
 	}
 	maxCompletionTokens := minPositive(reservation.MaxCompletionTokens, outputTokenLimit(ctx))
+	ctx = budget.WithOperation(ctx, reservation.OperationID)
 	emitted, output, usage, err := c.streamMessagesWithUsageLimit(ctx, messages, events, true, maxCompletionTokens)
 	if err == nil {
 		if !usage.Valid() {
@@ -116,7 +121,11 @@ func (c *Client) streamMessagesWithUsageLimit(ctx context.Context, messages []Me
 func beginBudgetedModelCall(ctx context.Context, model string, estimatedPromptTokens int) (budget.ModelReservation, error) {
 	controller := budget.FromContext(ctx)
 	if controller == nil {
-		return budget.ModelReservation{Model: model, EstimatedPromptTokens: estimatedPromptTokens}, nil
+		operationID := budget.OperationFromContext(ctx)
+		if operationID == "" {
+			operationID = budget.NewOperationID("model")
+		}
+		return budget.ModelReservation{OperationID: operationID, Model: model, EstimatedPromptTokens: estimatedPromptTokens}, nil
 	}
 	operationID := budget.OperationFromContext(ctx)
 	if operationID == "" {
@@ -188,6 +197,10 @@ func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, 
 		return streamAttemptResult{}, err
 	}
 
+	modelCallID := budget.OperationFromContext(ctx)
+	if err := c.recordModelRequest(ctx, modelCallID, operation, c.model, payload); err != nil {
+		return streamAttemptResult{}, withoutRetry(err, operation)
+	}
 	resp, err := c.doRequest(ctx, payload)
 	if err != nil {
 		return streamAttemptResult{}, err

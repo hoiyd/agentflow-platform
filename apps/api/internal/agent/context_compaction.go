@@ -10,6 +10,7 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/contextcompaction"
 	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
 )
 
 func (r *Runtime) scheduleSoftContextCompaction(run domain.Run) {
@@ -32,6 +33,7 @@ func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversat
 	timeout := time.Duration(snapshot.ContextAssembly.CompactionTimeoutMS) * time.Millisecond
 	compactCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	compactCtx = eventpkg.WithScope(compactCtx, eventpkg.Scope{RunID: runID, ConversationID: conversationID})
 
 	var summarizer contextcompaction.Summarizer
 	if r.openAI.HasAPIKey() {

@@ -14,6 +14,7 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/modelrequest"
 )
 
 func TestBudgetWrapsPhysicalRetriesAndCapsCompletion(t *testing.T) {
@@ -92,6 +93,45 @@ func TestPhysicalRetryReusesOneContextManifest(t *testing.T) {
 	completion, err := client.CompleteTextDetailed(ctx, "system", "hello")
 	if err != nil || completion.Text != "ok" || attempts != 2 || manifests != 1 {
 		t.Fatalf("expected two attempts and one manifest, text=%q attempts=%d manifests=%d err=%v", completion.Text, attempts, manifests, err)
+	}
+}
+
+func TestPhysicalRetriesCaptureTheExactTransportPayload(t *testing.T) {
+	client := retryTestClient()
+	observations := []modelrequest.Observation{}
+	transportPayloads := [][]byte{}
+	client.SetRequestRecorder(requestRecorderFunc(func(_ context.Context, observation modelrequest.Observation) error {
+		observations = append(observations, observation)
+		return nil
+	}))
+	attempts := 0
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		attempts++
+		body, _ := io.ReadAll(request.Body)
+		transportPayloads = append(transportPayloads, body)
+		if attempts == 1 {
+			return modelHTTPResponse(503, `{"error":{"message":"temporarily unavailable"}}`), nil
+		}
+		return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`), nil
+	})}
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run-1", TurnID: "turn-1"})
+	ctx = contextassembly.WithSession(ctx, contextassembly.Session{
+		Config: contextassembly.DefaultConfig(), Sink: eventpkg.SinkFunc(func(context.Context, domain.RunEvent) error { return nil }),
+	})
+
+	if _, err := client.CompleteTextDetailed(ctx, "system", "hello"); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	if len(observations) != 2 || len(transportPayloads) != 2 {
+		t.Fatalf("expected two captured attempts, observations=%d transport=%d", len(observations), len(transportPayloads))
+	}
+	for index := range observations {
+		if string(observations[index].Payload) != string(transportPayloads[index]) {
+			t.Fatalf("attempt %d capture differs from transport", index+1)
+		}
+		if observations[index].ModelCallID == "" || observations[index].ModelCallID != observations[0].ModelCallID || observations[index].ContextManifestID == "" {
+			t.Fatalf("attempt identity changed: %#v", observations)
+		}
 	}
 }
 
@@ -216,6 +256,12 @@ type requestLimiterFunc func(context.Context, string, int) (func(), error)
 
 func (f requestLimiterFunc) AcquireRequest(ctx context.Context, apiKey string, estimatedTokens int) (func(), error) {
 	return f(ctx, apiKey, estimatedTokens)
+}
+
+type requestRecorderFunc func(context.Context, modelrequest.Observation) error
+
+func (f requestRecorderFunc) Record(ctx context.Context, observation modelrequest.Observation) error {
+	return f(ctx, observation)
 }
 
 func modelHTTPResponse(status int, body string) *http.Response {
