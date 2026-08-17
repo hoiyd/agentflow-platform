@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"strings"
 	"time"
@@ -71,8 +72,20 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 			}
 			output := fallbackEventResponse(latest)
 			callCtx := budget.WithOperation(ctx, prepared.manifest.ModelCallID)
+			callCtx = withRequestManifest(callCtx, prepared.manifest)
 			reservation, err := beginBudgetedModelCall(callCtx, "local_fallback", estimateTokens(messagesToText(prepared.messages)))
 			if err != nil {
+				errs <- err
+				return
+			}
+			requestPayload, err := json.Marshal(map[string]any{
+				"model": "local_fallback", "messages": prepared.messages, "stream": true, "temperature": 0.4,
+			})
+			if err != nil {
+				errs <- err
+				return
+			}
+			if err := c.recordModelRequest(callCtx, reservation.OperationID, "local.stream", "local_fallback", requestPayload); err != nil {
 				errs <- err
 				return
 			}
@@ -146,11 +159,21 @@ func (c *Client) PrepareText(ctx context.Context, systemPrompt string, prompt st
 func (c *Client) CompletePreparedText(ctx context.Context, prepared PreparedText) (TextCompletion, error) {
 	ctx = budget.WithOperation(ctx, prepared.Manifest.ModelCallID)
 	ctx = withOutputTokenLimit(ctx, prepared.Manifest.OutputReserveTokens)
+	ctx = withRequestManifest(ctx, prepared.Manifest)
 	systemPrompt, prompt := textPromptParts(prepared.Messages)
 	if c.apiKey == "" {
 		text := fallbackCompletion(systemPrompt, prompt)
 		reservation, err := beginBudgetedModelCall(ctx, "local_fallback", estimateTokens(messagesToText(prepared.Messages)))
 		if err != nil {
+			return TextCompletion{}, err
+		}
+		payload, err := json.Marshal(map[string]any{
+			"model": "local_fallback", "messages": prepared.Messages, "temperature": 0.2,
+		})
+		if err != nil {
+			return TextCompletion{}, err
+		}
+		if err := c.recordModelRequest(ctx, reservation.OperationID, "local.completion", "local_fallback", payload); err != nil {
 			return TextCompletion{}, err
 		}
 		usage := estimateUsage(systemPrompt+"\n"+prompt, text)

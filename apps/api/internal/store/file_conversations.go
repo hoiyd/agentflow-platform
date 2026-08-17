@@ -172,6 +172,13 @@ func (s *FileStore) DeleteConversation(id string) error {
 		}
 	}
 	s.data.ContextCompactions = compactions
+	modelRequests := make([]domain.ModelRequestRecord, 0, len(s.data.ModelRequestRecords))
+	for _, record := range s.data.ModelRequestRecords {
+		if !runIDs[record.Envelope.RunID] {
+			modelRequests = append(modelRequests, record)
+		}
+	}
+	s.data.ModelRequestRecords = modelRequests
 
 	return s.saveLocked()
 }

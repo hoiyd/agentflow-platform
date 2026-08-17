@@ -32,6 +32,7 @@ type fileData struct {
 	VerificationEvidence  []domain.VerificationEvidence   `json:"verification_evidence"`
 	VerificationArtifacts []domain.VerificationArtifact   `json:"verification_artifacts"`
 	ContextCompactions    []domain.ContextCompaction      `json:"context_compactions"`
+	ModelRequestRecords   []domain.ModelRequestRecord     `json:"model_request_records"`
 	MemoryCandidates      []domain.MemoryCandidate        `json:"memory_candidates"`
 	Memories              []domain.Memory                 `json:"memories"`
 	MemoryEmbeddings      []domain.MemoryEmbedding        `json:"memory_embeddings"`
@@ -125,20 +126,21 @@ func (s *FileStore) hasAgentLocked(id string) bool {
 
 func emptyFileData() fileData {
 	return fileData{
-		Conversations:      []domain.Conversation{},
-		Messages:           []domain.Message{},
-		Agents:             []domain.Agent{},
-		Runs:               []domain.Run{},
-		CollaborationSteps: []domain.CollaborationStep{},
-		RunEvents:          []domain.RunEvent{},
-		ContextCompactions: []domain.ContextCompaction{},
-		MemoryCandidates:   []domain.MemoryCandidate{},
-		Memories:           []domain.Memory{},
-		MemoryEmbeddings:   []domain.MemoryEmbedding{},
-		Documents:          []domain.Document{},
-		DocumentContents:   map[string]string{},
-		DocumentChunks:     []domain.DocumentChunk{},
-		ChunkEmbeddings:    []domain.DocumentChunkEmbedding{},
+		Conversations:       []domain.Conversation{},
+		Messages:            []domain.Message{},
+		Agents:              []domain.Agent{},
+		Runs:                []domain.Run{},
+		CollaborationSteps:  []domain.CollaborationStep{},
+		RunEvents:           []domain.RunEvent{},
+		ContextCompactions:  []domain.ContextCompaction{},
+		ModelRequestRecords: []domain.ModelRequestRecord{},
+		MemoryCandidates:    []domain.MemoryCandidate{},
+		Memories:            []domain.Memory{},
+		MemoryEmbeddings:    []domain.MemoryEmbedding{},
+		Documents:           []domain.Document{},
+		DocumentContents:    map[string]string{},
+		DocumentChunks:      []domain.DocumentChunk{},
+		ChunkEmbeddings:     []domain.DocumentChunkEmbedding{},
 	}
 }
 
@@ -206,6 +208,9 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 	}
 	if s.data.ContextCompactions == nil {
 		s.data.ContextCompactions = []domain.ContextCompaction{}
+	}
+	if s.data.ModelRequestRecords == nil {
+		s.data.ModelRequestRecords = []domain.ModelRequestRecord{}
 	}
 	if s.data.MemoryCandidates == nil {
 		s.data.MemoryCandidates = []domain.MemoryCandidate{}

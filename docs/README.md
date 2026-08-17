@@ -45,6 +45,7 @@ the project.
 | [Failure handling](failure-handling.md) | How do subsystem errors retain specific types while exposing one structured trace and Episode contract? |
 | [Run Budget](run-budget.md) | How are logical calls, provider usage, tools, runtime, and cost accounted for? |
 | [Context management](context-management.md) | How is each model input assembled, bounded, compacted, and explained? |
+| [Model request reconstruction](model-request-reconstruction.md) | How are final model payloads hashed, optionally captured, and checked against Runtime Snapshot and Context Manifest records? |
 | [Verification](verification.md) | How can a candidate output be checked before a Run is considered complete? |
 
 ## AI Context Systems
@@ -55,6 +56,7 @@ the project.
 | [Golden Dataset v1 schema](schemas/rag-golden-dataset-v1.schema.json) | Which versioned fields define answerable, expected-source, forbidden-source, and tagged RAG evaluation cases? |
 | [RAG Golden Dataset v1](rag-golden-dataset.md) | Which canonical retrieval cases and corpus exercise facts, exact IDs, multi-source recall, no-answer behavior, ACL/staleness leakage, and injection filtering? |
 | [Memory management](memory-management.md) | Which conversation facts become durable semantic memory, and how is unsafe persistence avoided? |
+| [Model request reconstruction](model-request-reconstruction.md) | What did a physical provider attempt actually receive, and when is its content retained? |
 
 ## Operations and Interfaces
 

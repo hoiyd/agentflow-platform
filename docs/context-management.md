@@ -42,6 +42,14 @@ Every assembly emits a Context Manifest containing source IDs, selection
 reasons, transformations, token estimates, and a stable prefix hash without
 copying raw dynamic context into the event.
 
+After assembly and application of effective request limits, the model adapter
+persists a Model Request Envelope for each physical attempt. The Manifest
+explains source selection; the Envelope hashes the exact final transport
+payload; optional Context Capture retains content according to a separate
+process policy. The Envelope also freezes selected token totals by source so
+the debug API can detect drift from the referenced Manifest. See
+[Model request reconstruction](model-request-reconstruction.md).
+
 History entries use stable references such as `message:<message_id>` and
 `event:<event_id>`. The Manifest records the reference, source type, selection
 reason, transformation, and estimated tokens, but not the raw recovered text.

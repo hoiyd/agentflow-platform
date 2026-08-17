@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getRunReplay, getRunUsage } from "./api.ts";
+import { getRunModelRequests, getRunReplay, getRunUsage } from "./api.ts";
 import {
   createDocument,
   deleteDocument,
@@ -101,6 +101,19 @@ test("run usage client calls the dedicated endpoint", async (t) => {
   assert.equal(ledger.budget.max_tool_calls, 4);
   assert.equal(ledger.totals.tool_calls, 1);
   assert.equal(ledger.totals.open_reservations, 0);
+});
+
+test("model request client keeps capture content opt-in", async (t) => {
+  const requestedURLs = [];
+  mockFetch(t, { run_id: "run-3", reconstructability_status: "valid", records: [] }, (url) => {
+    requestedURLs.push(String(url));
+  });
+
+  await getRunModelRequests("run-3");
+  await getRunModelRequests("run-3", true);
+
+  assert.match(requestedURLs[0], /\/api\/runs\/run-3\/model_requests$/);
+  assert.match(requestedURLs[1], /\/api\/runs\/run-3\/model_requests\?include_content=true$/);
 });
 
 test("RAG search preserves fusion, reranker, relevance gate, security, context selection, citations, and no-match metadata", async (t) => {

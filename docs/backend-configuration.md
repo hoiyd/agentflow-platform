@@ -40,6 +40,9 @@ MODEL_TOKENS_PER_MINUTE=120000
 MODEL_RETRY_MAX_ATTEMPTS=3
 MODEL_RETRY_BASE_DELAY=500ms
 MODEL_RETRY_MAX_DELAY=5s
+MODEL_REQUEST_CAPTURE_MODE=metadata_only
+MODEL_REQUEST_CAPTURE_MAX_BYTES=262144
+MODEL_REQUEST_CAPTURE_RETENTION=168h
 
 RUN_MAX_MODEL_CALLS=32
 RUN_MAX_PROMPT_TOKENS=200000
@@ -100,6 +103,26 @@ Concurrency settings control different layers:
 Set either per-minute value to `0` to disable that token bucket.
 
 Model errors are classified before retry. Transport failures, timeouts, rate limits, provider `5xx` responses, and invalid provider responses are retryable. Authentication, quota, model-not-found, invalid request, context-length, content-policy, local request token-bucket capacity, and canceled errors fail immediately. Streaming requests retry only before the first output delta, preventing duplicated assistant text.
+
+## Model Request Capture
+
+Every run-scoped physical chat request persists a secret-free Envelope and the
+SHA-256 hash of the exact canonical JSON passed to the model transport.
+`MODEL_REQUEST_CAPTURE_MODE` controls optional content retention:
+
+- `metadata_only`: no prompt content; production-safe default.
+- `redacted`: bounded canonical JSON after deterministic secret redaction.
+- `full`: exact bounded JSON for trusted local debugging only.
+
+`MODEL_REQUEST_CAPTURE_MAX_BYTES` applies only to stored redacted/full content.
+Oversized content is omitted and marked truncated; hashes, counts, effective
+parameters, Runtime Snapshot hash, and Context Manifest reference remain.
+`MODEL_REQUEST_CAPTURE_RETENTION` controls content lifetime. Expired content is
+purged lazily on File/Postgres reads; durable Envelope and redaction metadata
+remain available.
+Changing this process-level observability policy does not change model input or
+the semantic protocol frozen with a Run. See
+[Model request reconstruction](model-request-reconstruction.md).
 
 ## Run Budget
 
@@ -185,6 +208,7 @@ The Postgres store runs idempotent startup migrations for:
 
 - conversations, messages, Agents, Runs, Collaboration Steps, and durable Run Events
 - Run active-runtime state and append-only usage entries
+- Model Request Envelopes and optional Context Captures
 - memory candidates, curated memories, and `memory_embeddings`
 - documents, document chunks, and document chunk embeddings
 - pgvector HNSW indexes for semantic search

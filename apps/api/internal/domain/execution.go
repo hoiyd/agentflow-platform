@@ -225,6 +225,7 @@ const (
 	EventTurnFailed              RunEventType = "turn.failed"
 	EventTurnCanceled            RunEventType = "turn.canceled"
 	EventModelStarted            RunEventType = "model.started"
+	EventModelRequestPrepared    RunEventType = "model.request_prepared"
 	EventModelDelta              RunEventType = "model.delta"
 	EventModelCompleted          RunEventType = "model.completed"
 	EventModelFailed             RunEventType = "model.failed"
