@@ -33,6 +33,74 @@ func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
 	}
 }
 
+func TestPostgresMigrationsAddDurableRecoveryState(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"CREATE TABLE IF NOT EXISTS stage_checkpoints",
+		"UNIQUE(run_id, stage_id)",
+		"stage_checkpoints_run_cursor_idx",
+		"CREATE TABLE IF NOT EXISTS tool_effects",
+		"idempotency_key text PRIMARY KEY",
+		"tool_effects_run_stage_idx",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing durable recovery migration step %q", expected)
+		}
+	}
+}
+
+func TestPostgresDurableRecoveryRoundTrip(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	postgresStore, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatalf("new postgres store: %v", err)
+	}
+	defer postgresStore.Close()
+	conversation, err := postgresStore.CreateConversation("Postgres durable recovery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = postgresStore.DeleteConversation(conversation.ID) })
+	run, err := postgresStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint, err := postgresStore.SaveStageCheckpoint(domain.StageCheckpoint{
+		Provider: "internal_state_v1", RunID: run.ID, ConversationID: conversation.ID,
+		StageID: "stage-1", Status: domain.CheckpointPrepared, InputHash: "input",
+		RuntimeSnapshotHash: "snapshot", ToolDefinitionsHash: "tools",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint.Status = domain.CheckpointExecuting
+	checkpoint.EventCursor = 1
+	if _, err := postgresStore.SaveStageCheckpoint(checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	effect, execute, err := postgresStore.BeginToolEffect(domain.ToolEffectRecord{
+		IdempotencyKey: "effect-" + run.ID, RunID: run.ID, StageID: "stage-1",
+		ToolCallID: "call-1", ToolName: "write_record", RequestHash: "request",
+	})
+	if err != nil || !execute {
+		t.Fatalf("begin effect: execute=%v effect=%#v err=%v", execute, effect, err)
+	}
+	if _, err := postgresStore.CompleteToolEffect(effect.IdempotencyKey, []byte(`{"ok":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	checkpoints, err := postgresStore.ListStageCheckpoints(run.ID)
+	if err != nil || len(checkpoints) != 1 || checkpoints[0].Status != domain.CheckpointExecuting {
+		t.Fatalf("checkpoint round trip: %#v err=%v", checkpoints, err)
+	}
+	effects, err := postgresStore.ListToolEffects(run.ID)
+	if err != nil || len(effects) != 1 || effects[0].Status != domain.ToolEffectCommitted {
+		t.Fatalf("effect round trip: %#v err=%v", effects, err)
+	}
+}
+
 func TestPostgresMigrationsRepairLegacyVectorAndConfidenceSchema(t *testing.T) {
 	joined := strings.Join(postgresMigrations, "\n")
 	for _, expected := range []string{
@@ -58,6 +126,12 @@ func TestPostgresRequiredSchemaCoversRuntimeColumns(t *testing.T) {
 		"messages.workspace_id",
 		"messages.citations",
 		"runs.workspace_id",
+		"stage_checkpoints.provider",
+		"stage_checkpoints.status",
+		"stage_checkpoints.event_cursor",
+		"tool_effects.idempotency_key",
+		"tool_effects.status",
+		"tool_effects.result",
 		"memory_candidates.confidence",
 		"memory_embeddings.embedding",
 		"documents.workspace_id",

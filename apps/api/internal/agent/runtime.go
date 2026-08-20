@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/contextcompaction"
 	"agentflow-platform/apps/api/internal/domain"
@@ -32,6 +33,7 @@ type Runtime struct {
 	autonomousLimits      AutonomousLimits
 	runBudget             domain.RuntimeRunBudget
 	knowledgeRetriever    rag.Retriever
+	checkpoints           checkpoint.Provider
 }
 
 type RuntimeStore interface {
@@ -54,6 +56,7 @@ type RuntimeStore interface {
 	store.ContextCompactionStore
 	store.SessionHistoryStore
 	store.RunUsageStore
+	store.CheckpointStore
 	SearchMemories(domain.MemorySearch) ([]domain.RetrievedMemory, error)
 }
 
@@ -101,6 +104,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		autonomousLimits:      normalizeAutonomousLimits(options.Autonomous),
 		runBudget:             options.RunBudget,
 		knowledgeRetriever:    knowledgeRetriever,
+		checkpoints:           checkpoint.NewInternalProvider(options.Store),
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime
@@ -271,11 +275,12 @@ func (r *Runtime) publishRunLifecycle(ctx context.Context, run domain.Run, event
 	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: eventType, RunID: run.ID, ConversationID: run.ConversationID, Payload: payload})
 }
 
-func (r *Runtime) publishStage(ctx context.Context, step domain.CollaborationStep, eventType domain.RunEventType) {
-	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: eventType, RunID: step.RunID, ConversationID: step.ConversationID, StageID: step.ID, Payload: map[string]any{
-		"name": step.Role, "agent_id": step.AgentID, "iteration": step.Iteration,
-		"input": step.Input, "output": step.Output, "error": step.Error,
-	}})
+func (r *Runtime) publishStage(ctx context.Context, step domain.CollaborationStep, eventType domain.RunEventType) error {
+	if r.checkpoints == nil {
+		return fmt.Errorf("checkpoint provider is unavailable")
+	}
+	_, err := r.checkpoints.RecordStageTransition(ctx, step, eventType)
+	return err
 }
 
 func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string, memoryEnabled bool, retrievalEnabled bool, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {

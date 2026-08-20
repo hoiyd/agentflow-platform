@@ -27,6 +27,7 @@ type applicationDependencies struct {
 	store         store.Store
 	handler       *httpapi.Handler
 	memoryCurator *memorypkg.Curator
+	runController *concurrency.RunController
 }
 
 func buildDependencies(cfg config.Config) (applicationDependencies, error) {
@@ -43,12 +44,13 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	}()
 
 	if recovered, recoveryErr := recovery.MarkStaleRunningRuns(appStore, cfg.RecoveryStaleRunTimeout); recoveryErr != nil {
-		log.Printf("native recovery scan failed: %v", recoveryErr)
+		return applicationDependencies{}, fmt.Errorf("repair interrupted runs: %w", recoveryErr)
 	} else if recovered > 0 {
-		log.Printf("native recovery marked %d stale running run(s) as failed_recoverable", recovered)
+		log.Printf("native recovery repaired %d stale running run(s) as failed_recoverable", recovered)
 	}
 
 	modelClient := newModelClient(cfg)
+	modelClient.SetToolEffectJournal(appStore)
 	modelClient.SetRequestRecorder(requestcapture.NewRecorder(appStore, requestcapture.Options{
 		Mode: domain.ModelRequestCaptureMode(cfg.ModelRequestCaptureMode), MaxBytes: cfg.ModelRequestCaptureMaxBytes,
 		Retention: cfg.ModelRequestCaptureRetention,
@@ -117,7 +119,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	}
 
 	cleanupStore = false
-	return applicationDependencies{store: appStore, handler: handler, memoryCurator: memoryCurator}, nil
+	return applicationDependencies{store: appStore, handler: handler, memoryCurator: memoryCurator, runController: runController}, nil
 }
 
 type answerRelevanceEmbeddingClient interface {

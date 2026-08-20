@@ -77,7 +77,9 @@ func (r *Runtime) emitAutonomousFinal(ctx context.Context, events chan<- domain.
 		return err
 	}
 	log.Printf("autonomous_final run_id=%s iteration=%d reason=%q output_len=%d", prepared.Run.ID, iteration, reason, len(output))
-	r.publishStage(ctx, step, domain.EventStageCompleted)
+	if err := r.publishStage(ctx, step, domain.EventStageCompleted); err != nil {
+		return err
+	}
 	events <- liveStageEvent(step)
 	emitFinalDeltas(ctx, prepared.Run.ID, output, events)
 	return nil

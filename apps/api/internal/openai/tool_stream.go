@@ -207,11 +207,14 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 			delegate: tracepkg.NewToolExecutionTracer(recorder, runID, stepID),
 			events:   events,
 		},
+		EffectJournal: c.toolEffectJournal,
 	})
+	scope := tracepkg.ScopeFromContext(ctx)
 	requests := make([]tools.ExecutionRequest, 0, len(normalizedCalls))
 	for _, call := range normalizedCalls {
 		requests = append(requests, tools.ExecutionRequest{
-			CallID: call.ID, Tool: call.Function.Name,
+			CallID: call.ID, RunID: runID, StageID: stepID, TurnID: scope.TurnID,
+			Tool:      call.Function.Name,
 			Arguments: json.RawMessage(call.Function.Arguments),
 		})
 	}

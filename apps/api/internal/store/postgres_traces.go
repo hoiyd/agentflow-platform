@@ -345,6 +345,14 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 	if err != nil {
 		return domain.RunReplay{}, false, err
 	}
+	checkpoints, err := s.ListStageCheckpoints(runID)
+	if err != nil {
+		return domain.RunReplay{}, false, err
+	}
+	toolEffects, err := s.ListToolEffects(runID)
+	if err != nil {
+		return domain.RunReplay{}, false, err
+	}
 	return domain.RunReplay{
 		Run:                   run,
 		RuntimeSnapshot:       cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
@@ -354,6 +362,8 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 		Summary:               buildRunTraceSummary(run, runEvents),
 		RunEvents:             runEvents,
 		UsageLedger:           usageLedger,
+		StageCheckpoints:      checkpoints,
+		ToolEffects:           domain.SummarizeToolEffects(toolEffects),
 		VerificationEvidence:  verificationEvidence,
 		VerificationArtifacts: verificationArtifacts,
 	}, true, nil

@@ -84,6 +84,22 @@ type RunEventStore interface {
 	GetRunReplay(runID string) (domain.RunReplay, bool, error)
 }
 
+type RecoveryStore interface {
+	ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error)
+	ListRunEvents(runID string) ([]domain.RunEvent, error)
+	RepairInterruptedRun(domain.InterruptedRunRepair) (domain.InterruptedRunRepairResult, error)
+}
+
+type CheckpointStore interface {
+	SaveStageCheckpoint(domain.StageCheckpoint) (domain.StageCheckpoint, error)
+	GetStageCheckpoint(runID string, stageID string) (domain.StageCheckpoint, bool, error)
+	ListStageCheckpoints(runID string) ([]domain.StageCheckpoint, error)
+	BeginToolEffect(domain.ToolEffectRecord) (domain.ToolEffectRecord, bool, error)
+	CompleteToolEffect(idempotencyKey string, result []byte) (domain.ToolEffectRecord, error)
+	MarkToolEffectNeedsReconciliation(idempotencyKey string, errorMessage string) (domain.ToolEffectRecord, error)
+	ListToolEffects(runID string) ([]domain.ToolEffectRecord, error)
+}
+
 type SessionHistoryStore interface {
 	ListMessages(conversationID string) ([]domain.Message, error)
 	ListConversationRunEvents(conversationID string) ([]domain.RunEvent, error)
@@ -135,6 +151,8 @@ type Store interface {
 	RunStore
 	CollaborationStore
 	RunEventStore
+	RecoveryStore
+	CheckpointStore
 	SessionHistoryStore
 	RunUsageStore
 	VerificationStore

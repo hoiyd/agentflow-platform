@@ -88,3 +88,31 @@ func TestRunControllerTimesOutQueuedRun(t *testing.T) {
 		t.Fatalf("expected queue timeout, got %v", err)
 	}
 }
+
+func TestRunControllerShutdownRejectsNewWorkAndDrainsAcceptedReservations(t *testing.T) {
+	controller := NewRunController(RunOptions{MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second})
+	reservation, err := controller.Reserve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	drained := make(chan error, 1)
+	go func() { drained <- controller.CloseAndWait(context.Background()) }()
+	time.Sleep(10 * time.Millisecond)
+	if _, err := controller.Reserve(); !errors.Is(err, ErrShuttingDown) {
+		t.Fatalf("expected shutdown rejection, got %v", err)
+	}
+	select {
+	case err := <-drained:
+		t.Fatalf("controller drained before reservation release: %v", err)
+	default:
+	}
+	reservation.Cancel()
+	select {
+	case err := <-drained:
+		if err != nil {
+			t.Fatalf("drain: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("controller did not drain")
+	}
+}

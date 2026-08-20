@@ -41,7 +41,8 @@ const (
 	RunBudgetRuntimeSnapshotVersion  = 4
 	UnifiedExecutionSnapshotVersion  = 5
 	SessionHistorySnapshotVersion    = 6
-	CurrentRuntimeSnapshotVersion    = SessionHistorySnapshotVersion
+	RecoveryRuntimeSnapshotVersion   = 7
+	CurrentRuntimeSnapshotVersion    = RecoveryRuntimeSnapshotVersion
 )
 
 type RuntimeSnapshot struct {
@@ -119,6 +120,7 @@ type RuntimeToolSnapshot struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	Parameters  map[string]any `json:"parameters"`
+	SideEffect  string         `json:"side_effect,omitempty"`
 }
 
 type RuntimeLimitsSnapshot struct {
@@ -259,6 +261,12 @@ const (
 	EventRunRevisionRequested    RunEventType = "run.revision_requested"
 	EventUsageRecorded           RunEventType = "usage.recorded"
 	EventBudgetExceeded          RunEventType = "budget.exceeded"
+	EventCheckpointCaptured      RunEventType = "checkpoint.captured"
+	EventCheckpointRestored      RunEventType = "checkpoint.restored"
+	EventCheckpointStale         RunEventType = "checkpoint.stale"
+	EventCompensationStarted     RunEventType = "checkpoint.compensation_started"
+	EventCompensationCompleted   RunEventType = "checkpoint.compensation_completed"
+	EventCompensationFailed      RunEventType = "checkpoint.compensation_failed"
 )
 
 type ContextManifestEntry struct {
@@ -392,6 +400,8 @@ type RunReplay struct {
 	Summary               RunTraceSummary        `json:"summary"`
 	UsageLedger           RunUsageLedger         `json:"usage_ledger"`
 	RunEvents             []RunEvent             `json:"run_events"`
+	StageCheckpoints      []StageCheckpoint      `json:"stage_checkpoints"`
+	ToolEffects           []ToolEffectSummary    `json:"tool_effects"`
 	VerificationEvidence  []VerificationEvidence `json:"verification_evidence"`
 	VerificationArtifacts []VerificationArtifact `json:"verification_artifacts"`
 }

@@ -113,13 +113,14 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	}
 }
 
-func TestRuntimeSnapshotAcceptsV1ThroughV6AndKeepsPreBudgetRunsBudgetless(t *testing.T) {
+func TestRuntimeSnapshotAcceptsV1ThroughV7AndKeepsPreBudgetRunsBudgetless(t *testing.T) {
 	for _, version := range []int{
 		domain.LegacyRuntimeSnapshotVersion,
 		domain.ContextRuntimeSnapshotVersion,
 		domain.CompactionRuntimeSnapshotVersion,
 		domain.RunBudgetRuntimeSnapshotVersion,
 		domain.UnifiedExecutionSnapshotVersion,
+		domain.SessionHistorySnapshotVersion,
 		domain.CurrentRuntimeSnapshotVersion,
 	} {
 		snapshot := &domain.RuntimeSnapshot{
@@ -135,6 +136,24 @@ func TestRuntimeSnapshotAcceptsV1ThroughV6AndKeepsPreBudgetRunsBudgetless(t *tes
 		if version < domain.RunBudgetRuntimeSnapshotVersion && snapshot.RunBudget != nil {
 			t.Fatalf("older snapshot v%d unexpectedly inherited a budget", version)
 		}
+	}
+}
+
+func TestToolDefinitionMatchIncludesSideEffectDeclaration(t *testing.T) {
+	binding := tools.Binding{Descriptor: tools.Descriptor{
+		Name: "writer", Description: "write", Parameters: tools.ObjectSchema(nil, nil),
+		SideEffect: tools.SideEffectPolicy{Mode: tools.SideEffectExternal},
+	}}
+	frozen := domain.RuntimeToolSnapshot{
+		Name: "writer", Description: "write", Parameters: tools.ObjectSchema(nil, nil),
+		SideEffect: string(tools.SideEffectExternal),
+	}
+	if !toolDefinitionMatches(binding, frozen) {
+		t.Fatal("matching side-effect declaration was rejected")
+	}
+	binding.Descriptor.SideEffect.Mode = tools.SideEffectNone
+	if toolDefinitionMatches(binding, frozen) {
+		t.Fatal("changed side-effect declaration must fail closed")
 	}
 }
 

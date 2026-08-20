@@ -132,36 +132,39 @@ func (s *FileStore) UpdateRunStatus(id string, status domain.RunStatus, errorMes
 
 	for i := range s.data.Runs {
 		if s.data.Runs[i].ID == id {
-			now := time.Now().UTC()
-			wasRunning := s.data.Runs[i].Status == domain.RunRunning
-			willRun := status == domain.RunRunning
-			if wasRunning && !willRun && s.data.Runs[i].ExecutionStartedAt != nil {
-				s.data.Runs[i].ActiveRuntimeMS += max(int64(0), now.Sub(*s.data.Runs[i].ExecutionStartedAt).Milliseconds())
-				s.data.Runs[i].ExecutionStartedAt = nil
-			}
-			if !wasRunning && willRun {
-				s.data.Runs[i].ExecutionStartedAt = &now
-			}
-			s.data.Runs[i].Status = status
-			s.data.Runs[i].Error = strings.TrimSpace(errorMessage)
-			s.data.Runs[i].UpdatedAt = now
-			if status == domain.RunRunning && s.data.Runs[i].StartedAt == nil {
-				s.data.Runs[i].StartedAt = &now
-			}
-			if status == domain.RunRunning {
-				s.data.Runs[i].HeartbeatAt = &now
-				s.data.Runs[i].CompletedAt = nil
-			}
-			if status == domain.RunWaitingForUser {
-				s.data.Runs[i].CompletedAt = nil
-			}
-			if status == domain.RunCompleted || status == domain.RunFailed || status == domain.RunFailedRecoverable || status == domain.RunCanceled {
-				s.data.Runs[i].CompletedAt = &now
-			}
+			applyRunStatus(&s.data.Runs[i], status, errorMessage, time.Now().UTC())
 			return cloneRun(s.data.Runs[i]), s.saveLocked()
 		}
 	}
 	return domain.Run{}, errors.New("run not found")
+}
+
+func applyRunStatus(run *domain.Run, status domain.RunStatus, errorMessage string, now time.Time) {
+	wasRunning := run.Status == domain.RunRunning
+	willRun := status == domain.RunRunning
+	if wasRunning && !willRun && run.ExecutionStartedAt != nil {
+		run.ActiveRuntimeMS += max(int64(0), now.Sub(*run.ExecutionStartedAt).Milliseconds())
+		run.ExecutionStartedAt = nil
+	}
+	if !wasRunning && willRun {
+		run.ExecutionStartedAt = &now
+	}
+	run.Status = status
+	run.Error = strings.TrimSpace(errorMessage)
+	run.UpdatedAt = now
+	if status == domain.RunRunning && run.StartedAt == nil {
+		run.StartedAt = &now
+	}
+	if status == domain.RunRunning {
+		run.HeartbeatAt = &now
+		run.CompletedAt = nil
+	}
+	if status == domain.RunWaitingForUser {
+		run.CompletedAt = nil
+	}
+	if status == domain.RunCompleted || status == domain.RunFailed || status == domain.RunFailedRecoverable || status == domain.RunCanceled {
+		run.CompletedAt = &now
+	}
 }
 
 func (s *FileStore) UpdateRunHeartbeat(id string) (domain.Run, error) {

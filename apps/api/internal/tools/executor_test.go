@@ -188,6 +188,62 @@ func TestExecutorEmitsTracingCallbacks(t *testing.T) {
 	}
 }
 
+func TestExecutorReplaysCommittedSideEffectWithoutInvokingHandler(t *testing.T) {
+	var calls atomic.Int32
+	catalog, err := NewCatalog(Binding{
+		Descriptor: Descriptor{
+			Name: "write_record", Parameters: ObjectSchema(nil, nil),
+			SideEffect: SideEffectPolicy{Mode: SideEffectExternal},
+		},
+		Handler: func(context.Context, json.RawMessage) (any, error) {
+			calls.Add(1)
+			return map[string]any{"record_id": "record-1"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("new catalog: %v", err)
+	}
+	journal := &memoryEffectJournal{records: make(map[string]domain.ToolEffectRecord)}
+	executor := NewExecutor(catalog, ExecutorOptions{EffectJournal: journal})
+	request := ExecutionRequest{
+		CallID: "call-1", RunID: "run-1", StageID: "stage-1", TurnID: "turn-1",
+		Tool: "write_record", Arguments: json.RawMessage(`{"value":"a"}`),
+	}
+	first := executor.Execute(context.Background(), request)
+	second := executor.Execute(context.Background(), request)
+	if first.Error != nil || second.Error != nil {
+		t.Fatalf("execute side effect: first=%#v second=%#v", first.Error, second.Error)
+	}
+	if calls.Load() != 1 || !second.Replayed {
+		t.Fatalf("expected one handler call and a replay, calls=%d second=%#v", calls.Load(), second)
+	}
+	if second.Result.(map[string]any)["record_id"] != "record-1" {
+		t.Fatalf("unexpected replayed result: %#v", second.Result)
+	}
+}
+
+func TestExecutorFailsClosedForUncertainSideEffect(t *testing.T) {
+	catalog, err := NewCatalog(Binding{
+		Descriptor: Descriptor{Name: "write_record", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal}},
+		Handler: func(context.Context, json.RawMessage) (any, error) {
+			t.Fatal("uncertain side effect must not execute again")
+			return nil, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := ExecutionRequest{CallID: "call-1", RunID: "run-1", StageID: "stage-1", Tool: "write_record", Arguments: json.RawMessage(`{}`)}
+	key := sideEffectKey(request)
+	journal := &memoryEffectJournal{records: map[string]domain.ToolEffectRecord{
+		key: {IdempotencyKey: key, RunID: request.RunID, StageID: request.StageID, ToolCallID: request.CallID, ToolName: request.Tool, RequestHash: sideEffectRequestHash(request), Status: domain.ToolEffectExecuting},
+	}}
+	result := NewExecutor(catalog, ExecutorOptions{EffectJournal: journal}).Execute(context.Background(), request)
+	if result.Error == nil || result.Error.Code != ErrorEffectReconciliation {
+		t.Fatalf("expected reconciliation error, got %#v", result.Error)
+	}
+}
+
 func TestExecuteBatchDefaultsToSerial(t *testing.T) {
 	var active atomic.Int32
 	var maximum atomic.Int32
@@ -253,6 +309,42 @@ func TestExecutionErrorUnwrapsCause(t *testing.T) {
 type recordingTracer struct {
 	started  ExecutionRequest
 	finished ExecutionResult
+}
+
+type memoryEffectJournal struct {
+	mu      sync.Mutex
+	records map[string]domain.ToolEffectRecord
+}
+
+func (j *memoryEffectJournal) BeginToolEffect(record domain.ToolEffectRecord) (domain.ToolEffectRecord, bool, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if existing, ok := j.records[record.IdempotencyKey]; ok {
+		return existing, false, nil
+	}
+	record.Status = domain.ToolEffectExecuting
+	j.records[record.IdempotencyKey] = record
+	return record, true, nil
+}
+
+func (j *memoryEffectJournal) CompleteToolEffect(key string, result []byte) (domain.ToolEffectRecord, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	record := j.records[key]
+	record.Status = domain.ToolEffectCommitted
+	record.Result = append([]byte(nil), result...)
+	j.records[key] = record
+	return record, nil
+}
+
+func (j *memoryEffectJournal) MarkToolEffectNeedsReconciliation(key string, message string) (domain.ToolEffectRecord, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	record := j.records[key]
+	record.Status = domain.ToolEffectNeedsReconciliation
+	record.Error = message
+	j.records[key] = record
+	return record, nil
 }
 
 func concurrencyTestTool(name string, policy ConcurrencyPolicy, active, maximum *atomic.Int32) Binding {

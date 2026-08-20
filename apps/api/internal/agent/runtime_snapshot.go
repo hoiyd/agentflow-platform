@@ -123,7 +123,7 @@ func snapshotTools(catalog *tools.Catalog, names []string) []domain.RuntimeToolS
 		}
 		items = append(items, domain.RuntimeToolSnapshot{
 			Name: binding.Descriptor.Name, Description: binding.Descriptor.Description,
-			Parameters: binding.Descriptor.Parameters,
+			Parameters: binding.Descriptor.Parameters, SideEffect: string(binding.Descriptor.SideEffect.Mode),
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
@@ -170,7 +170,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 }
 
 func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
-	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CompactionRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.RunBudgetRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.UnifiedExecutionSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
+	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CompactionRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.RunBudgetRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.UnifiedExecutionSnapshotVersion && snapshot.SchemaVersion != domain.SessionHistorySnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
 		return ErrRuntimeSnapshotUnavailable
 	}
 	switch snapshot.Mode {
@@ -220,7 +220,7 @@ func effectiveAutonomousRunBudget(runBudget domain.RuntimeRunBudget, limits Auto
 func toolDefinitionMatches(installed tools.Binding, frozen domain.RuntimeToolSnapshot) bool {
 	currentJSON, err := json.Marshal(domain.RuntimeToolSnapshot{
 		Name: installed.Descriptor.Name, Description: installed.Descriptor.Description,
-		Parameters: installed.Descriptor.Parameters,
+		Parameters: installed.Descriptor.Parameters, SideEffect: string(installed.Descriptor.SideEffect.Mode),
 	})
 	if err != nil {
 		return false

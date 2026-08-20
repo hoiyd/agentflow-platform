@@ -37,7 +37,7 @@ evaluation, internal use, or a controlled demonstration:
 | --- | --- |
 | Access | Deploy behind a trusted network or external access boundary; the API does not yet provide built-in authentication or authorization. |
 | Tenancy | Namespace filtering is mandatory and supports isolated Workspace IDs, but the API trusts the caller-selected ID. Operate as a single tenant or with trusted clients until identity, Membership, and ACL enforcement are complete. |
-| Runtime | Run admission, bounded queueing, Conversation single-writer control, and stale-Run recovery operate within one process. |
+| Runtime | Run admission, bounded queueing, Conversation single-writer control, interrupted lifecycle repair, Stage checkpoints, and Tool effect idempotency operate within one process. |
 | Tools | Use built-in or operator-reviewed Tools. All calls pass through Agent allowlists, Budget, timeout, result limits, tracing, and conservative concurrency. |
 | Data | File Store supports local operation; Postgres provides durable storage. Automated backup, restore, and migration drills remain deployment responsibilities. |
 | Quality | Retrieval evaluation is repeatable against the canonical v1 corpus. Persisted Evaluation Runs, broader representative coverage, and calibrated release thresholds are the next quality steps. |
@@ -51,7 +51,7 @@ claims, arbitrary code execution, and distributed Worker ownership.
 | --- | --- |
 | **Controlled single-tenant pilot** | External identity boundary, Postgres, backup/restore drill, retention and redaction policy, baseline telemetry, Runbooks, and measured capacity. |
 | **Multi-workspace beta** | Bind built-in identity and Membership to the existing mandatory Store/retrieval namespace scope; add ACL, scoped Credentials, Tool network/resource policy, and cross-tenant security tests. |
-| **Distributed deployment** | Durable dispatch, independent Workers, reconnectable event delivery, Lease/Heartbeat/Fencing, Stage checkpoints, and takeover drills. |
+| **Distributed deployment** | Durable dispatch, independent Workers, reconnectable event delivery, Lease/Heartbeat/Fencing, distributed checkpoint ownership, and takeover drills. |
 | **Enterprise or regional scale** | SSO/SCIM, fine-grained RBAC, audited write-capable Sandboxes, online evaluation, Provider failover, regional recovery, and contractual compliance controls. |
 
 The first milestone is intentionally smaller than a general multi-tenant SaaS
@@ -84,8 +84,9 @@ model or workload requires them.
 - Use Lease, Heartbeat, and Fencing to prevent stale Workers from committing;
   promote Conversation single-writer control from a process lock to distributed
   ownership when multiple Workers are introduced.
-- Persist Stage checkpoints and verify recovery through Worker termination,
-  dependency failure, rolling deployment, and takeover drills.
+- Extend the internal Stage checkpoint provider with distributed ownership and
+  verify recovery through Worker termination, dependency failure, rolling
+  deployment, and takeover drills.
 
 ### 3. Quality and Operational Evidence
 
