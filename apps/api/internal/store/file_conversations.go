@@ -141,6 +141,22 @@ func (s *FileStore) DeleteConversation(id string) error {
 	}
 	s.data.RunEvents = runEvents
 
+	checkpoints := make([]domain.StageCheckpoint, 0, len(s.data.StageCheckpoints))
+	for _, checkpoint := range s.data.StageCheckpoints {
+		if !runIDs[checkpoint.RunID] {
+			checkpoints = append(checkpoints, checkpoint)
+		}
+	}
+	s.data.StageCheckpoints = checkpoints
+
+	effects := make([]domain.ToolEffectRecord, 0, len(s.data.ToolEffects))
+	for _, effect := range s.data.ToolEffects {
+		if !runIDs[effect.RunID] {
+			effects = append(effects, effect)
+		}
+	}
+	s.data.ToolEffects = effects
+
 	usageEntries := make([]domain.RunUsageEntry, 0, len(s.data.RunUsageEntries))
 	for _, entry := range s.data.RunUsageEntries {
 		if !runIDs[entry.RunID] {

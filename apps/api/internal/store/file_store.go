@@ -28,6 +28,8 @@ type fileData struct {
 	Runs                  []domain.Run                    `json:"runs"`
 	CollaborationSteps    []domain.CollaborationStep      `json:"collaboration_steps"`
 	RunEvents             []domain.RunEvent               `json:"run_events"`
+	StageCheckpoints      []domain.StageCheckpoint        `json:"stage_checkpoints"`
+	ToolEffects           []domain.ToolEffectRecord       `json:"tool_effects"`
 	RunUsageEntries       []domain.RunUsageEntry          `json:"run_usage_entries"`
 	VerificationEvidence  []domain.VerificationEvidence   `json:"verification_evidence"`
 	VerificationArtifacts []domain.VerificationArtifact   `json:"verification_artifacts"`
@@ -90,7 +92,36 @@ func (s *FileStore) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, bytes, 0o644)
+	directory := filepath.Dir(s.path)
+	temporary, err := os.CreateTemp(directory, ".agentflow-*.tmp")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer func() { _ = os.Remove(temporaryPath) }()
+	if err := temporary.Chmod(0o644); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if _, err := temporary.Write(bytes); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryPath, s.path); err != nil {
+		return err
+	}
+	if handle, err := os.Open(directory); err == nil {
+		_ = handle.Sync()
+		_ = handle.Close()
+	}
+	return nil
 }
 
 func (s *FileStore) hasConversationLocked(id string) bool {
@@ -132,6 +163,8 @@ func emptyFileData() fileData {
 		Runs:                []domain.Run{},
 		CollaborationSteps:  []domain.CollaborationStep{},
 		RunEvents:           []domain.RunEvent{},
+		StageCheckpoints:    []domain.StageCheckpoint{},
+		ToolEffects:         []domain.ToolEffectRecord{},
 		ContextCompactions:  []domain.ContextCompaction{},
 		ModelRequestRecords: []domain.ModelRequestRecord{},
 		MemoryCandidates:    []domain.MemoryCandidate{},
@@ -205,6 +238,12 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 	}
 	if s.data.RunEvents == nil {
 		s.data.RunEvents = []domain.RunEvent{}
+	}
+	if s.data.StageCheckpoints == nil {
+		s.data.StageCheckpoints = []domain.StageCheckpoint{}
+	}
+	if s.data.ToolEffects == nil {
+		s.data.ToolEffects = []domain.ToolEffectRecord{}
 	}
 	if s.data.ContextCompactions == nil {
 		s.data.ContextCompactions = []domain.ContextCompaction{}

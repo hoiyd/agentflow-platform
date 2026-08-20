@@ -44,6 +44,7 @@ the project.
 | [Execution controls](execution-controls.md) | Which layer owns concurrency, rate limits, retries, budgets, context capacity, and stopping rules? |
 | [Failure handling](failure-handling.md) | How do subsystem errors retain specific types while exposing one structured trace and Episode contract? |
 | [Run Budget](run-budget.md) | How are logical calls, provider usage, tools, runtime, and cost accounted for? |
+| [Durable recovery](durable-recovery.md) | How are interrupted lifecycles repaired, Stage boundaries checkpointed, and external Tool effects replayed safely? |
 | [Context management](context-management.md) | How is each model input assembled, bounded, compacted, and explained? |
 | [Model request reconstruction](model-request-reconstruction.md) | How are final model payloads hashed, optionally captured, and checked against Runtime Snapshot and Context Manifest records? |
 | [Verification](verification.md) | How can a candidate output be checked before a Run is considered complete? |

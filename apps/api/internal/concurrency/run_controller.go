@@ -13,6 +13,7 @@ import (
 var (
 	ErrQueueFull    error = admissionError{code: "run_queue_full", message: "run queue is full"}
 	ErrQueueTimeout error = admissionError{code: "run_queue_timeout", message: "run queue wait timed out"}
+	ErrShuttingDown error = admissionError{code: "run_controller_shutting_down", message: "run controller is shutting down"}
 )
 
 type admissionError struct {
@@ -42,6 +43,9 @@ type RunController struct {
 	capacity    chan struct{}
 	waitTimeout time.Duration
 	writers     conversationWriters
+	mu          sync.Mutex
+	closing     bool
+	pending     sync.WaitGroup
 }
 
 type Reservation struct {
@@ -72,8 +76,14 @@ func (c *RunController) Reserve() (*Reservation, error) {
 	if c == nil {
 		return &Reservation{}, nil
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closing {
+		return nil, ErrShuttingDown
+	}
 	select {
 	case c.capacity <- struct{}{}:
+		c.pending.Add(1)
 		return &Reservation{controller: c}, nil
 	default:
 		return nil, ErrQueueFull
@@ -120,7 +130,32 @@ func (r *Reservation) Cancel() {
 	if r == nil || r.controller == nil {
 		return
 	}
-	r.once.Do(func() { <-r.controller.capacity })
+	r.once.Do(func() {
+		<-r.controller.capacity
+		r.controller.pending.Done()
+	})
+}
+
+// CloseAndWait stops admission and waits until all accepted reservations have
+// either completed or been canceled. It is safe to call more than once.
+func (c *RunController) CloseAndWait(ctx context.Context) error {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	c.closing = true
+	c.mu.Unlock()
+	done := make(chan struct{})
+	go func() {
+		c.pending.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func queueWaitError(parent context.Context, err error) error {

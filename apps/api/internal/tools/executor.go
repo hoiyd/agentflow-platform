@@ -3,6 +3,7 @@ package tools
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/budget"
+	"agentflow-platform/apps/api/internal/domain"
 )
 
 const (
@@ -21,9 +23,13 @@ const (
 )
 
 type ExecutionRequest struct {
-	CallID    string          `json:"call_id,omitempty"`
-	Tool      string          `json:"tool"`
-	Arguments json.RawMessage `json:"arguments"`
+	CallID         string          `json:"call_id,omitempty"`
+	RunID          string          `json:"run_id,omitempty"`
+	StageID        string          `json:"stage_id,omitempty"`
+	TurnID         string          `json:"turn_id,omitempty"`
+	IdempotencyKey string          `json:"idempotency_key,omitempty"`
+	Tool           string          `json:"tool"`
+	Arguments      json.RawMessage `json:"arguments"`
 }
 
 type ExecutionResult struct {
@@ -35,6 +41,7 @@ type ExecutionResult struct {
 	DurationMS          int64           `json:"duration_ms"`
 	Truncated           bool            `json:"truncated,omitempty"`
 	OriginalResultBytes int             `json:"original_result_bytes,omitempty"`
+	Replayed            bool            `json:"replayed,omitempty"`
 }
 
 func (r ExecutionResult) ErrorMessage() string {
@@ -49,10 +56,17 @@ type ExecutionTracer interface {
 	ToolFinished(context.Context, ExecutionResult)
 }
 
+type ToolEffectJournal interface {
+	BeginToolEffect(domain.ToolEffectRecord) (domain.ToolEffectRecord, bool, error)
+	CompleteToolEffect(idempotencyKey string, result []byte) (domain.ToolEffectRecord, error)
+	MarkToolEffectNeedsReconciliation(idempotencyKey string, errorMessage string) (domain.ToolEffectRecord, error)
+}
+
 type ExecutorOptions struct {
 	DefaultPolicy  ExecutionPolicy
 	Tracer         ExecutionTracer
 	MaxConcurrency int
+	EffectJournal  ToolEffectJournal
 }
 
 type Executor struct {
@@ -60,6 +74,7 @@ type Executor struct {
 	defaultPolicy  ExecutionPolicy
 	tracer         ExecutionTracer
 	maxConcurrency int
+	effectJournal  ToolEffectJournal
 }
 
 func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
@@ -74,7 +89,7 @@ func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
 	if maxConcurrency <= 0 {
 		maxConcurrency = DefaultMaxConcurrency
 	}
-	return &Executor{catalog: catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency}
+	return &Executor{catalog: catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency, effectJournal: options.EffectJournal}
 }
 
 // ExecuteBatch preserves input order. A serial or unresolved tool makes the whole
@@ -213,6 +228,14 @@ func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) (resul
 			return result
 		}
 	}
+	effectKey := ""
+	if binding.Descriptor.SideEffect.Mode == SideEffectExternal {
+		var execute bool
+		effectKey, execute, result = e.beginSideEffect(request, result)
+		if result.Error != nil || !execute {
+			return result
+		}
+	}
 
 	policy := effectivePolicy(e.defaultPolicy, binding.Policy)
 	executionCtx, cancel := context.WithTimeout(ctx, policy.Timeout)
@@ -239,6 +262,7 @@ func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) (resul
 		} else {
 			result.Error = executionError(ErrorExecutionTimeout, fmt.Sprintf("tool execution exceeded %s", policy.Timeout), executionCtx.Err())
 		}
+		e.markSideEffectUncertain(effectKey, result.ErrorMessage())
 		return result
 	case completed := <-completed:
 		if completed.err != nil {
@@ -250,11 +274,13 @@ func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) (resul
 			default:
 				result.Error = executionError(ErrorExecutionFailed, completed.err.Error(), completed.err)
 			}
+			e.markSideEffectUncertain(effectKey, result.ErrorMessage())
 			return result
 		}
 		encoded, err := json.Marshal(completed.value)
 		if err != nil {
 			result.Error = executionError(ErrorResultEncoding, "tool result is not JSON-compatible", err)
+			e.markSideEffectUncertain(effectKey, result.ErrorMessage())
 			return result
 		}
 		if len(encoded) > policy.MaxResultBytes {
@@ -264,11 +290,83 @@ func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) (resul
 			}
 			result.Truncated = true
 			result.OriginalResultBytes = len(encoded)
-			return result
+		} else {
+			result.Result = completed.value
 		}
-		result.Result = completed.value
+		if effectKey != "" {
+			persisted, err := json.Marshal(result)
+			if err != nil {
+				result.Error = executionError(ErrorEffectJournal, "encode side-effect result", err)
+				e.markSideEffectUncertain(effectKey, result.ErrorMessage())
+				return result
+			}
+			if _, err := e.effectJournal.CompleteToolEffect(effectKey, persisted); err != nil {
+				result.Error = executionError(ErrorEffectJournal, "commit side-effect journal: "+err.Error(), err)
+				e.markSideEffectUncertain(effectKey, result.ErrorMessage())
+				return result
+			}
+		}
 		return result
 	}
+}
+
+func (e *Executor) beginSideEffect(request ExecutionRequest, result ExecutionResult) (string, bool, ExecutionResult) {
+	if e.effectJournal == nil {
+		result.Error = executionError(ErrorIdempotencyRequired, "external side-effect tool requires a durable effect journal", nil)
+		return "", false, result
+	}
+	if strings.TrimSpace(request.RunID) == "" || strings.TrimSpace(request.StageID) == "" || strings.TrimSpace(request.CallID) == "" {
+		result.Error = executionError(ErrorIdempotencyRequired, "external side-effect tool requires run, stage, and call identity", nil)
+		return "", false, result
+	}
+	key := strings.TrimSpace(request.IdempotencyKey)
+	if key == "" {
+		key = sideEffectKey(request)
+	}
+	record, execute, err := e.effectJournal.BeginToolEffect(domain.ToolEffectRecord{
+		IdempotencyKey: key, RunID: request.RunID, StageID: request.StageID,
+		TurnID: request.TurnID, ToolCallID: request.CallID, ToolName: request.Tool,
+		RequestHash: sideEffectRequestHash(request), Status: domain.ToolEffectPrepared,
+	})
+	if err != nil {
+		result.Error = executionError(ErrorEffectJournal, "prepare side-effect journal: "+err.Error(), err)
+		return key, false, result
+	}
+	if execute {
+		return key, true, result
+	}
+	if record.Status != domain.ToolEffectCommitted {
+		result.Error = executionError(ErrorEffectReconciliation, "side effect has an uncertain prior attempt and requires reconciliation", nil)
+		return key, false, result
+	}
+	var replayed ExecutionResult
+	if err := json.Unmarshal(record.Result, &replayed); err != nil {
+		result.Error = executionError(ErrorEffectJournal, "decode committed side-effect result", err)
+		return key, false, result
+	}
+	replayed.Replayed = true
+	return key, false, replayed
+}
+
+func (e *Executor) markSideEffectUncertain(key string, message string) {
+	if key == "" || e.effectJournal == nil {
+		return
+	}
+	_, _ = e.effectJournal.MarkToolEffectNeedsReconciliation(key, message)
+}
+
+func sideEffectKey(request ExecutionRequest) string {
+	return "tool_effect_" + hashExecutionIdentity(request.RunID, request.StageID, request.CallID, request.Tool)
+}
+
+func sideEffectRequestHash(request ExecutionRequest) string {
+	return hashExecutionIdentity(request.Tool, string(normalizeArguments(request.Arguments)))
+}
+
+func hashExecutionIdentity(parts ...string) string {
+	value := strings.Join(parts, "\x00")
+	sum := sha256.Sum256([]byte(value))
+	return fmt.Sprintf("%x", sum[:])
 }
 
 func executionError(code ErrorCode, message string, cause error) *ExecutionError {

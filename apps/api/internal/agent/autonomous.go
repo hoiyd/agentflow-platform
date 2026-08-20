@@ -136,7 +136,10 @@ func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput 
 		}
 		log.Printf("autonomous_resume run_id=%s checkpoint_id=%s input_len=%d", run.ID, checkpoint.ID, len(userInput))
 		r.publishRunLifecycle(ctx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
-		r.publishStage(ctx, completedCheckpoint, domain.EventStageCompleted)
+		if err := r.publishStage(ctx, completedCheckpoint, domain.EventStageCompleted); err != nil {
+			errs <- err
+			return
+		}
 		events <- liveRunEvent(run)
 		events <- liveStageEvent(completedCheckpoint)
 
@@ -189,6 +192,10 @@ func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string,
 			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeAutonomous)
 			return
 		}
+		if _, err := r.checkpoints.RestoreRun(ctx, run); err != nil {
+			errs <- fmt.Errorf("restore durable checkpoints: %w", err)
+			return
+		}
 
 		recoveryStep, err := r.store.CreateCollaborationStep(domain.CollaborationStep{
 			RunID:          run.ID,
@@ -211,7 +218,10 @@ func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string,
 		}
 		log.Printf("autonomous_recovery_resume run_id=%s recovery_step_id=%s note_len=%d", run.ID, recoveryStep.ID, len(recoveryNote))
 		r.publishRunLifecycle(ctx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
-		r.publishStage(ctx, recoveryStep, domain.EventStageCompleted)
+		if err := r.publishStage(ctx, recoveryStep, domain.EventStageCompleted); err != nil {
+			errs <- err
+			return
+		}
 		events <- liveRunEvent(run)
 		events <- liveStageEvent(recoveryStep)
 
@@ -422,7 +432,10 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 					return
 				}
 				log.Printf("autonomous_waiting_for_user run_id=%s iteration=%d question=%q reason=%q", prepared.Run.ID, iteration, question, decision.Reason)
-				r.publishStage(ctx, step, domain.EventStageStarted)
+				if err := r.publishStage(ctx, step, domain.EventStageStarted); err != nil {
+					errs <- err
+					return
+				}
 				r.publishRunLifecycle(ctx, run, domain.EventRunWaitingForUser, map[string]any{"status": run.Status, "question": question})
 				events <- liveStageEvent(step)
 				events <- liveRunEvent(run)
@@ -474,7 +487,9 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 		return "", err
 	}
 	events <- liveStageEvent(step)
-	r.publishStage(ctx, step, domain.EventStageStarted)
+	if err := r.publishStage(ctx, step, domain.EventStageStarted); err != nil {
+		return "", err
+	}
 
 	if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
 		if err != nil {
@@ -506,7 +521,9 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
 		if updateErr == nil {
 			events <- liveStageEvent(failed)
-			r.publishStage(ctx, failed, domain.EventStageFailed)
+			if checkpointErr := r.publishStage(ctx, failed, domain.EventStageFailed); checkpointErr != nil {
+				return "", fmt.Errorf("stage failed: %w; persist checkpoint: %v", err, checkpointErr)
+			}
 		}
 		return "", err
 	}
@@ -525,6 +542,8 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 		return "", err
 	}
 	events <- liveStageEvent(completed)
-	r.publishStage(ctx, completed, domain.EventStageCompleted)
+	if err := r.publishStage(ctx, completed, domain.EventStageCompleted); err != nil {
+		return "", err
+	}
 	return output, nil
 }

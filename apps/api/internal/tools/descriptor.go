@@ -11,6 +11,20 @@ type Descriptor struct {
 	Description string            `json:"description"`
 	Parameters  map[string]any    `json:"parameters"`
 	Concurrency ConcurrencyPolicy `json:"concurrency,omitempty"`
+	SideEffect  SideEffectPolicy  `json:"side_effect,omitempty"`
+}
+
+type SideEffectMode string
+
+const (
+	SideEffectNone     SideEffectMode = "none"
+	SideEffectExternal SideEffectMode = "external"
+)
+
+// SideEffectPolicy is explicit because external writes must use the durable
+// idempotency journal. The zero value is a replay-safe, read-only computation.
+type SideEffectPolicy struct {
+	Mode SideEffectMode `json:"mode,omitempty"`
 }
 
 type ConcurrencyMode string
