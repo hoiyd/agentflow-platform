@@ -81,6 +81,18 @@ test("replay preserves frozen budget and settled usage", async (t) => {
   assert.equal(replay.usage_ledger.entries.length, 1);
 });
 
+test("replay preserves durable recovery metadata", async (t) => {
+  mockFetch(t, replayPayload({
+    stage_checkpoints: [{ stage_id: "stage-1", status: "committed", event_cursor: 9 }],
+    tool_effects: [{ tool_call_id: "call-1", status: "committed", has_result: true }]
+  }));
+
+  const replay = await getRunReplay("run-1");
+
+  assert.equal(replay.stage_checkpoints[0].status, "committed");
+  assert.equal(replay.tool_effects[0].has_result, true);
+});
+
 test("run usage client calls the dedicated endpoint", async (t) => {
   let requestedURL = "";
   let workspaceID = "";

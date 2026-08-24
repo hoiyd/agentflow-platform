@@ -10,6 +10,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
 )
 
 func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
@@ -30,6 +31,179 @@ func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("missing legacy run usage migration step %q", expected)
 		}
+	}
+}
+
+func TestPostgresMigrationsAddDurableRecoveryState(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"CREATE TABLE IF NOT EXISTS stage_checkpoints",
+		"UNIQUE(run_id, stage_id)",
+		"stage_checkpoints_run_cursor_idx",
+		"CREATE TABLE IF NOT EXISTS tool_effects",
+		"idempotency_key text PRIMARY KEY",
+		"tool_effects_run_stage_idx",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing durable recovery migration step %q", expected)
+		}
+	}
+}
+
+func TestPostgresDurableRecoveryRoundTrip(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	postgresStore, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatalf("new postgres store: %v", err)
+	}
+	defer postgresStore.Close()
+	conversation, err := postgresStore.CreateConversation("Postgres durable recovery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = postgresStore.DeleteConversation(conversation.ID) })
+	run, err := postgresStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint, err := postgresStore.SaveStageCheckpoint(domain.StageCheckpoint{
+		Provider: "internal_state_v1", RunID: run.ID, ConversationID: conversation.ID,
+		StageID: "stage-1", Status: domain.CheckpointPrepared, InputHash: "input",
+		RuntimeSnapshotHash: "snapshot", ToolDefinitionsHash: "tools",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found, ok, err := postgresStore.GetStageCheckpoint(run.ID, checkpoint.StageID); err != nil || !ok || found.ID != checkpoint.ID {
+		t.Fatalf("get checkpoint: %#v ok=%v err=%v", found, ok, err)
+	}
+	if _, ok, err := postgresStore.GetStageCheckpoint(run.ID, "missing"); err != nil || ok {
+		t.Fatalf("missing checkpoint: ok=%v err=%v", ok, err)
+	}
+	checkpoint.Status = domain.CheckpointExecuting
+	checkpoint.EventCursor = 1
+	if _, err := postgresStore.SaveStageCheckpoint(checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	effect, execute, err := postgresStore.BeginToolEffect(domain.ToolEffectRecord{
+		IdempotencyKey: "effect-" + run.ID, RunID: run.ID, StageID: "stage-1",
+		ToolCallID: "call-1", ToolName: "write_record", RequestHash: "request",
+	})
+	if err != nil || !execute {
+		t.Fatalf("begin effect: execute=%v effect=%#v err=%v", execute, effect, err)
+	}
+	if duplicate, execute, err := postgresStore.BeginToolEffect(domain.ToolEffectRecord{
+		IdempotencyKey: effect.IdempotencyKey, RunID: run.ID, StageID: "stage-1",
+		ToolCallID: "call-1", ToolName: "write_record", RequestHash: "request",
+	}); err != nil || execute || duplicate.Status != domain.ToolEffectExecuting {
+		t.Fatalf("duplicate effect: execute=%v effect=%#v err=%v", execute, duplicate, err)
+	}
+	if _, err := postgresStore.CompleteToolEffect(effect.IdempotencyKey, []byte(`{"ok":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := postgresStore.CompleteToolEffect(effect.IdempotencyKey, []byte(`{"ok":true}`)); err != nil {
+		t.Fatalf("idempotent effect commit: %v", err)
+	}
+	if _, err := postgresStore.CompleteToolEffect(effect.IdempotencyKey, []byte(`{"ok":false}`)); err == nil {
+		t.Fatal("expected committed result conflict")
+	}
+	if _, err := postgresStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "late failure"); err == nil {
+		t.Fatal("expected committed effect reconciliation error")
+	}
+	uncertain, execute, err := postgresStore.BeginToolEffect(domain.ToolEffectRecord{
+		IdempotencyKey: "uncertain-" + run.ID, RunID: run.ID, StageID: "stage-1",
+		ToolCallID: "call-2", ToolName: "write_record", RequestHash: "request-2",
+	})
+	if err != nil || !execute {
+		t.Fatalf("begin uncertain effect: execute=%v effect=%#v err=%v", execute, uncertain, err)
+	}
+	uncertain, err = postgresStore.MarkToolEffectNeedsReconciliation(uncertain.IdempotencyKey, "timeout")
+	if err != nil || uncertain.Status != domain.ToolEffectNeedsReconciliation {
+		t.Fatalf("mark uncertain effect: %#v err=%v", uncertain, err)
+	}
+	checkpoints, err := postgresStore.ListStageCheckpoints(run.ID)
+	if err != nil || len(checkpoints) != 1 || checkpoints[0].Status != domain.CheckpointExecuting {
+		t.Fatalf("checkpoint round trip: %#v err=%v", checkpoints, err)
+	}
+	effects, err := postgresStore.ListToolEffects(run.ID)
+	if err != nil || len(effects) != 2 || effects[0].Status != domain.ToolEffectCommitted || effects[1].Status != domain.ToolEffectNeedsReconciliation {
+		t.Fatalf("effect round trip: %#v err=%v", effects, err)
+	}
+}
+
+func TestPostgresInterruptedRunRepairIsAtomicAndIdempotent(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	postgresStore, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer postgresStore.Close()
+	conversation, err := postgresStore.CreateConversation("Postgres interrupted repair")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = postgresStore.DeleteConversation(conversation.ID) })
+	run, err := postgresStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := postgresStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
+		t.Fatal(err)
+	}
+	step, err := postgresStore.CreateCollaborationStep(domain.CollaborationStep{
+		RunID: run.ID, ConversationID: conversation.ID, Role: "worker",
+		Status: domain.CollaborationStepRunning, Input: "write update",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []domain.RunEvent{
+		{Type: domain.EventStageStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: step.ID},
+		{Type: domain.EventTurnStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: step.ID, TurnID: "turn-1"},
+		{Type: domain.EventModelStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: step.ID, TurnID: "turn-1"},
+		{Type: domain.EventToolStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: step.ID, TurnID: "turn-1", Payload: map[string]any{"tool_call_id": "call-1"}},
+	} {
+		if _, err := postgresStore.CreateRunEvent(item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	events, err := postgresStore.ListRunEvents(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	terminal, err := eventpkg.PlanInterruptedLifecycleRepair(events, domain.InterruptedWorkerReason)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := domain.InterruptedRunRepair{
+		RunID: run.ID, StaleBefore: time.Now().UTC().Add(time.Hour),
+		ExpectedEventCursor: events[len(events)-1].Sequence, TerminalEvents: terminal,
+		ErrorMessage: "worker interrupted",
+	}
+	result, err := postgresStore.RepairInterruptedRun(request)
+	if err != nil || !result.Applied || result.Run.Status != domain.RunFailedRecoverable || len(result.AppendedEvents) != 4 {
+		t.Fatalf("repair run: %#v err=%v", result, err)
+	}
+	repairedEvents, err := postgresStore.ListRunEvents(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := eventpkg.ValidateLifecycle(repairedEvents); err != nil {
+		t.Fatalf("validate repaired lifecycle: %v", err)
+	}
+	steps, err := postgresStore.ListCollaborationSteps(run.ID)
+	if err != nil || len(steps) != 1 || steps[0].Status != domain.CollaborationStepFailed {
+		t.Fatalf("repaired steps: %#v err=%v", steps, err)
+	}
+	second, err := postgresStore.RepairInterruptedRun(request)
+	if err != nil || second.Applied {
+		t.Fatalf("idempotent repair: %#v err=%v", second, err)
 	}
 }
 
@@ -58,6 +232,12 @@ func TestPostgresRequiredSchemaCoversRuntimeColumns(t *testing.T) {
 		"messages.workspace_id",
 		"messages.citations",
 		"runs.workspace_id",
+		"stage_checkpoints.provider",
+		"stage_checkpoints.status",
+		"stage_checkpoints.event_cursor",
+		"tool_effects.idempotency_key",
+		"tool_effects.status",
+		"tool_effects.result",
 		"memory_candidates.confidence",
 		"memory_embeddings.embedding",
 		"documents.workspace_id",

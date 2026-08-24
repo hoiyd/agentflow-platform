@@ -45,9 +45,9 @@ capacity, resource consumption, timeouts, and stopping conditions.
 | Run Budget | one persisted Run | logical calls, provider tokens, tools, active runtime, cost | `budget.Tracker` + Usage Store | yes |
 | Context Assembly | one logical Model Call | context tokens | `contextassembly.Assembler` | config frozen with Run |
 | Loop Guard | one Loop (`autonomous`) Run | iterations and accumulated output characters | `autonomous` runtime | config frozen with Run |
-| Tool Policy | one Tool Call or batch | timeout, bytes, parallel group | `tools.Executor` | schema frozen; binding live |
+| Tool Policy | one Tool Call or batch | timeout, bytes, parallel group, side-effect idempotency | `tools.Executor` | schema and side-effect declaration frozen; binding live |
 | Verification | one contracted Run | attempts, timeout, artifacts | `verification.Engine` | contract and evidence |
-| Recovery | startup scan | stale `running` duration | `recovery` | state persisted; threshold live |
+| Recovery | startup scan + Resume | stale lifecycle, Stage checkpoints, Tool effects | `recovery` + `checkpoint` | recovery state persisted; threshold live |
 | Observability | one Run | Run Events and derived Trace, Replay, and Episode Report views | Event Store / projection builders | durable events only; projections do not enforce policy |
 
 ## 1. Run Admission and Conversation Concurrency
@@ -221,6 +221,11 @@ truncation marker.
 Tool timeout bounds one handler. Run runtime budget bounds cumulative active
 execution; neither substitutes for the other.
 
+Bindings that write external state must declare `side_effect.mode=external`.
+They execute behind a durable idempotency journal: committed results replay
+without reinvoking the handler, while uncertain attempts require explicit
+reconciliation. See [Durable Recovery and Stage Checkpoints](durable-recovery.md).
+
 ## 8. Verification
 
 Verification runs only when the initial request includes a
@@ -243,9 +248,11 @@ with the Run.
 RECOVERY_STALE_RUN_TIMEOUT=60s
 ```
 
-Startup recovery marks a `running` Run as `failed_recoverable` when its
-heartbeat is older than the threshold. This is neither an execution timeout nor
-a Run Budget value.
+Startup recovery repairs open Tool, Model, Turn, and Stage lifecycles before
+atomically marking a stale `running` Run `failed_recoverable`. Resume validates
+durable Stage checkpoints against the frozen Runtime Snapshot and Tool
+definitions. This is neither an execution timeout nor a Run Budget value. See
+[Durable Recovery and Stage Checkpoints](durable-recovery.md).
 
 ## Frozen Protocol vs. Live Policy
 
@@ -255,7 +262,7 @@ a Run Budget value.
 | Context Assembly and Compaction config | queue size and wait timeout |
 | Autonomous iteration/output config | RPM/TPM buckets |
 | provider/model identity | retry, backoff, and HTTP timeout |
-| tool name, description, parameters | tool handler, timeout, result, concurrency |
+| tool name, description, parameters, side-effect declaration | tool handler, timeout, result, concurrency |
 | Completion Contract | recovery stale threshold |
 
 Frozen values keep Resume and Replay stable. Live values protect the current

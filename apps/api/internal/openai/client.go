@@ -31,6 +31,7 @@ type Client struct {
 	requestLimiter      modelrequest.Limiter
 	requestRecorder     modelrequest.Recorder
 	retryPolicy         RetryPolicy
+	toolEffectJournal   tools.ToolEffectJournal
 }
 
 type RuntimeIdentity struct {
@@ -200,6 +201,10 @@ func (c *Client) SetRetryPolicy(policy RetryPolicy) {
 	c.retryPolicy = policy.normalized()
 }
 
+func (c *Client) SetToolEffectJournal(journal tools.ToolEffectJournal) {
+	c.toolEffectJournal = journal
+}
+
 func (c *Client) RuntimeIdentity() RuntimeIdentity {
 	return RuntimeIdentity{
 		Provider: providerForURL(c.baseURL), BaseURL: safeRuntimeURL(c.baseURL), Model: c.model,
@@ -214,6 +219,7 @@ func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) *Client {
 	client.requestLimiter = c.requestLimiter
 	client.requestRecorder = c.requestRecorder
 	client.retryPolicy = c.retryPolicy
+	client.toolEffectJournal = c.toolEffectJournal
 	return client
 }
 

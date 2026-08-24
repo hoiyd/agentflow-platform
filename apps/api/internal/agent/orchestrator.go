@@ -190,7 +190,10 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			errs <- err
 			return
 		}
-		r.publishStage(ctx, updatedPlan, domain.EventStageCompleted)
+		_ = r.runEventSink().Publish(ctx, domain.RunEvent{
+			Type: domain.EventRunProgress, RunID: run.ID, ConversationID: run.ConversationID,
+			StageID: updatedPlan.ID, Payload: map[string]any{"kind": "plan_approved", "plan": updatedPlan.Output},
+		})
 		events <- liveStageEvent(updatedPlan)
 
 		run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
@@ -214,7 +217,10 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			errs <- err
 			return
 		}
-		r.publishStage(ctx, routerStep, domain.EventStageCompleted)
+		if err := r.publishStage(ctx, routerStep, domain.EventStageCompleted); err != nil {
+			errs <- err
+			return
+		}
 		events <- liveStageEvent(routerStep)
 		run, err = r.store.UpdateRunAgent(run.ID, route.Agent.ID)
 		if err != nil {
@@ -595,7 +601,9 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- domain
 		return "", err
 	}
 	events <- liveStageEvent(step)
-	r.publishStage(ctx, step, domain.EventStageStarted)
+	if err := r.publishStage(ctx, step, domain.EventStageStarted); err != nil {
+		return "", err
+	}
 
 	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input, true, true, map[string]any{
 		"executor":  ExecutorNative,
@@ -612,7 +620,9 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- domain
 		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
 		if updateErr == nil {
 			events <- liveStageEvent(failed)
-			r.publishStage(ctx, failed, domain.EventStageFailed)
+			if checkpointErr := r.publishStage(ctx, failed, domain.EventStageFailed); checkpointErr != nil {
+				return "", fmt.Errorf("stage failed: %w; persist checkpoint: %v", err, checkpointErr)
+			}
 		}
 		return "", err
 	}
@@ -622,7 +632,9 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- domain
 		return "", err
 	}
 	events <- liveStageEvent(completed)
-	r.publishStage(ctx, completed, domain.EventStageCompleted)
+	if err := r.publishStage(ctx, completed, domain.EventStageCompleted); err != nil {
+		return "", err
+	}
 	return output, nil
 }
 

@@ -97,6 +97,21 @@ func (s *FileStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, erro
 	if !s.hasRunLocked(event.RunID) {
 		return domain.RunEvent{}, errors.New("run not found")
 	}
+	var next int64 = 1
+	for _, existing := range s.data.RunEvents {
+		if existing.RunID == event.RunID && existing.Sequence >= next {
+			next = existing.Sequence + 1
+		}
+	}
+	event, err := prepareRunEvent(event, next, time.Now().UTC())
+	if err != nil {
+		return domain.RunEvent{}, err
+	}
+	s.data.RunEvents = append(s.data.RunEvents, event)
+	return event, s.saveLocked()
+}
+
+func prepareRunEvent(event domain.RunEvent, sequence int64, now time.Time) (domain.RunEvent, error) {
 	event.ID = strings.TrimSpace(event.ID)
 	if event.ID == "" {
 		event.ID = newID("event")
@@ -107,21 +122,14 @@ func (s *FileStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, erro
 	if event.SchemaVersion == 0 {
 		event.SchemaVersion = domain.CurrentRunEventSchemaVersion
 	}
-	var next int64 = 1
-	for _, existing := range s.data.RunEvents {
-		if existing.RunID == event.RunID && existing.Sequence >= next {
-			next = existing.Sequence + 1
-		}
-	}
-	event.Sequence = next
+	event.Sequence = sequence
 	if event.Payload == nil {
 		event.Payload = map[string]any{}
 	}
 	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now().UTC()
+		event.Timestamp = now
 	}
-	s.data.RunEvents = append(s.data.RunEvents, event)
-	return event, s.saveLocked()
+	return event, nil
 }
 
 func (s *FileStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
@@ -246,6 +254,18 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	messages := s.messagesForConversationLocked(run.ConversationID)
 	steps := s.stepsForRunLocked(runID)
 	runEvents := s.runEventsForRunLocked(runID)
+	checkpoints := make([]domain.StageCheckpoint, 0)
+	for _, item := range s.data.StageCheckpoints {
+		if item.RunID == runID {
+			checkpoints = append(checkpoints, item)
+		}
+	}
+	toolEffectRecords := make([]domain.ToolEffectRecord, 0)
+	for _, item := range s.data.ToolEffects {
+		if item.RunID == runID {
+			toolEffectRecords = append(toolEffectRecords, cloneToolEffect(item))
+		}
+	}
 	return domain.RunReplay{
 		Run:                   cloneRun(run),
 		RuntimeSnapshot:       cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
@@ -255,6 +275,8 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		Summary:               buildRunTraceSummary(run, runEvents),
 		UsageLedger:           budget.BuildLedger(runID, runBudget(run), s.runUsageEntriesForRunLocked(runID)),
 		RunEvents:             runEvents,
+		StageCheckpoints:      checkpoints,
+		ToolEffects:           domain.SummarizeToolEffects(toolEffectRecords),
 		VerificationEvidence:  verificationEvidenceForRun(s.data.VerificationEvidence, runID),
 		VerificationArtifacts: verificationArtifactsForRun(s.data.VerificationArtifacts, runID),
 	}, true, nil

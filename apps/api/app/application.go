@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/config"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/store"
@@ -21,6 +22,7 @@ type Application struct {
 	config        config.Config
 	store         store.Store
 	memoryCurator *memorypkg.Curator
+	runController *concurrency.RunController
 	server        *http.Server
 
 	closeOnce sync.Once
@@ -37,6 +39,7 @@ func New(cfg config.Config) (*Application, error) {
 		config:        cfg,
 		store:         dependencies.store,
 		memoryCurator: dependencies.memoryCurator,
+		runController: dependencies.runController,
 		server: &http.Server{
 			Addr:              serverAddress(cfg),
 			Handler:           dependencies.handler.Routes(),
@@ -84,13 +87,22 @@ func (a *Application) Close(ctx context.Context) error {
 
 	a.closeOnce.Do(func() {
 		var closeErrors []error
+		drained := true
+		if a.runController != nil {
+			if err := a.runController.CloseAndWait(ctx); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("drain accepted runs: %w", err))
+				drained = false
+			}
+		}
 		if a.memoryCurator != nil {
 			if err := a.memoryCurator.Close(ctx); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("drain memory curation: %w", err))
 			}
 		}
-		if err := closeStore(a.store); err != nil {
-			closeErrors = append(closeErrors, fmt.Errorf("close store: %w", err))
+		if drained {
+			if err := closeStore(a.store); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("close store: %w", err))
+			}
 		}
 		a.closeErr = errors.Join(closeErrors...)
 	})

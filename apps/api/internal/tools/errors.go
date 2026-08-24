@@ -5,13 +5,16 @@ import "agentflow-platform/apps/api/internal/failure"
 type ErrorCode string
 
 const (
-	ErrorToolNotFound      ErrorCode = "tool_not_found"
-	ErrorInvalidArgs       ErrorCode = "invalid_arguments"
-	ErrorExecutionFailed   ErrorCode = "execution_failed"
-	ErrorExecutionTimeout  ErrorCode = "execution_timeout"
-	ErrorExecutionCanceled ErrorCode = "execution_canceled"
-	ErrorResultEncoding    ErrorCode = "result_encoding_failed"
-	ErrorBudgetExceeded    ErrorCode = "budget_exceeded"
+	ErrorToolNotFound         ErrorCode = "tool_not_found"
+	ErrorInvalidArgs          ErrorCode = "invalid_arguments"
+	ErrorExecutionFailed      ErrorCode = "execution_failed"
+	ErrorExecutionTimeout     ErrorCode = "execution_timeout"
+	ErrorExecutionCanceled    ErrorCode = "execution_canceled"
+	ErrorResultEncoding       ErrorCode = "result_encoding_failed"
+	ErrorBudgetExceeded       ErrorCode = "budget_exceeded"
+	ErrorIdempotencyRequired  ErrorCode = "idempotency_required"
+	ErrorEffectReconciliation ErrorCode = "side_effect_reconciliation_required"
+	ErrorEffectJournal        ErrorCode = "side_effect_journal_failed"
 )
 
 type ExecutionError struct {
@@ -50,6 +53,10 @@ func (e *ExecutionError) FailureInfo() failure.Info {
 		info.Category = failure.CategoryCanceled
 	case ErrorBudgetExceeded:
 		info.Category = failure.CategoryCapacity
+	case ErrorIdempotencyRequired:
+		info.Category = failure.CategoryValidation
+	case ErrorEffectReconciliation, ErrorEffectJournal:
+		info.Category = failure.CategoryAvailability
 	}
 	return info
 }

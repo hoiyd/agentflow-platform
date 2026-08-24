@@ -287,6 +287,8 @@ export type RunReplay = {
   summary: RunTraceSummary;
   usage_ledger: RunUsageLedger;
   run_events: RunEvent[];
+  stage_checkpoints: Array<Record<string, unknown>>;
+  tool_effects: Array<Record<string, unknown>>;
   verification_evidence: Array<Record<string, unknown>>;
   verification_artifacts: Array<Record<string, unknown>>;
 };
@@ -374,6 +376,8 @@ function normalizeRunReplay(data: unknown): RunReplay {
     steps: Array.isArray(replay.steps) ? replay.steps : [],
     usage_ledger: normalizeRunUsageLedger(replay.usage_ledger, run?.id ?? ""),
     run_events: Array.isArray(replay.run_events) ? replay.run_events : [],
+    stage_checkpoints: Array.isArray(replay.stage_checkpoints) ? replay.stage_checkpoints : [],
+    tool_effects: Array.isArray(replay.tool_effects) ? replay.tool_effects : [],
     verification_evidence: Array.isArray(replay.verification_evidence) ? replay.verification_evidence : [],
     verification_artifacts: Array.isArray(replay.verification_artifacts) ? replay.verification_artifacts : []
   };
