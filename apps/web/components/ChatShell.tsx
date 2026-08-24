@@ -31,6 +31,7 @@ import {
   validateCompletionVerification
 } from "../lib/verification";
 import type { CompletionVerificationSettings } from "../lib/verification";
+import { createLatestRequestController, type LatestRequestLease } from "../lib/latest-request";
 import { Sidebar, ToolsPanel, Topbar, type ChatView } from "./chat/ChatChrome";
 import { ChatComposer } from "./chat/ChatComposer";
 import { ChatDialogs, type AgentOperationNotice } from "./chat/ChatDialogs";
@@ -93,6 +94,11 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const messagesRef = useRef<HTMLElement | null>(null);
+  const conversationRequestsRef = useRef<ReturnType<typeof createLatestRequestController> | null>(null);
+  if (!conversationRequestsRef.current) {
+    conversationRequestsRef.current = createLatestRequestController();
+  }
+  const conversationRequests = conversationRequestsRef.current;
   const knowledge = useKnowledgeWorkbench();
 
   const activeConversation = useMemo(
@@ -153,6 +159,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => () => conversationRequests.cancel(), [conversationRequests]);
+
   function handleChatModeChange(mode: ChatMode) {
     setChatMode(mode);
     setIsCollaborationPanelOpen(mode === "multi_agent" || mode === "autonomous");
@@ -165,36 +173,59 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   }
 
   async function refreshConversations(nextActiveId?: string) {
-    const items = await listConversations();
-    setConversations(items);
-    if (nextActiveId) {
-      setActiveId(nextActiveId);
-      await loadConversation(nextActiveId);
-      return;
-    }
-    if (!activeId && items[0]) {
-      setActiveId(items[0].id);
-      await loadConversation(items[0].id);
-    }
-  }
-
-  async function loadConversation(conversationId: string) {
-    const loaded = await listMessages(conversationId);
-    setMessages(loaded);
-    await refreshCollaborationSteps(conversationId);
-  }
-
-  async function refreshCollaborationSteps(conversationId: string) {
+    const request = conversationRequests.begin();
     try {
-      const runs = await listRuns();
+      const items = await listConversations(request.signal);
+      if (!request.isCurrent()) {
+        return;
+      }
+      setConversations(items);
+      if (nextActiveId) {
+        setActiveId(nextActiveId);
+        await loadConversation(nextActiveId, request);
+        return;
+      }
+      if (!activeId && items[0]) {
+        setActiveId(items[0].id);
+        await loadConversation(items[0].id, request);
+      }
+    } catch (err) {
+      if (request.isCurrent()) {
+        setError(err instanceof Error ? err.message : "Failed to load conversations");
+      }
+    }
+  }
+
+  async function loadConversation(
+    conversationId: string,
+    request: LatestRequestLease = conversationRequests.begin()
+  ) {
+    try {
+      const loaded = await listMessages(conversationId, request.signal);
+      if (!request.isCurrent()) {
+        return;
+      }
+      setMessages(loaded);
+      await refreshCollaborationSteps(conversationId, request);
+    } catch (err) {
+      if (!request.isCurrent()) {
+        return;
+      }
+      setMessages([]);
+      resetConversationRuntimeState();
+      setError(err instanceof Error ? err.message : "Failed to load conversation");
+    }
+  }
+
+  async function refreshCollaborationSteps(conversationId: string, request: LatestRequestLease) {
+    try {
+      const runs = await listRuns(request.signal);
+      if (!request.isCurrent()) {
+        return;
+      }
       const run = runs.find((item) => item.conversation_id === conversationId);
       if (!run) {
-        setRunState(null);
-        setCollaborationSteps([]);
-        setAutonomousProgress(null);
-        setPlanDraft("");
-        setHumanInputDraft("");
-        setIsCancelingRun(false);
+        resetConversationRuntimeState();
         return;
       }
       setRunState({
@@ -203,7 +234,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         status: run.status,
         verificationStatus: run.verification_status ?? "not_required"
       });
-      const steps = await listCollaborationSteps(run.id);
+      const steps = await listCollaborationSteps(run.id, request.signal);
+      if (!request.isCurrent()) {
+        return;
+      }
       setCollaborationSteps(steps.map(toCollaborationStepView));
       if (steps.some((step) => autonomousRoles.some((role) => role.id === step.role))) {
         handleChatModeChange("autonomous");
@@ -215,13 +249,19 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       const humanInput = steps.find((step) => step.role === "human_input" && step.status === "running");
       setHumanInputDraft((current) => (humanInput ? current : ""));
     } catch {
-      setRunState(null);
-      setCollaborationSteps([]);
-      setAutonomousProgress(null);
-      setPlanDraft("");
-      setHumanInputDraft("");
-      setIsCancelingRun(false);
+      if (request.isCurrent()) {
+        resetConversationRuntimeState();
+      }
     }
+  }
+
+  function resetConversationRuntimeState() {
+    setRunState(null);
+    setCollaborationSteps([]);
+    setAutonomousProgress(null);
+    setPlanDraft("");
+    setHumanInputDraft("");
+    setIsCancelingRun(false);
   }
 
   async function refreshTools() {
@@ -251,30 +291,31 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
 
   async function openConversation(id: string) {
     setError("");
-    setRunState(null);
-    setCollaborationSteps([]);
-    setAutonomousProgress(null);
-    setHumanInputDraft("");
-    setPlanDraft("");
-    setIsCancelingRun(false);
+    resetConversationRuntimeState();
+    setMessages([]);
     setView("chat");
     setActiveId(id);
     await loadConversation(id);
   }
 
   async function startNewConversation() {
+    const request = conversationRequests.begin();
     setError("");
-    setRunState(null);
-    setCollaborationSteps([]);
-    setAutonomousProgress(null);
-    setHumanInputDraft("");
-    setPlanDraft("");
-    setIsCancelingRun(false);
+    resetConversationRuntimeState();
     setView("chat");
-    const conversation = await createConversation("New conversation");
-    setConversations((items) => [conversation, ...items]);
-    setActiveId(conversation.id);
-    setMessages([]);
+    try {
+      const conversation = await createConversation("New conversation");
+      if (!request.isCurrent()) {
+        return;
+      }
+      setConversations((items) => [conversation, ...items]);
+      setActiveId(conversation.id);
+      setMessages([]);
+    } catch (err) {
+      if (request.isCurrent()) {
+        setError(err instanceof Error ? err.message : "Failed to create conversation");
+      }
+    }
   }
 
   async function handleDeleteConversation(conversationId: string) {
@@ -293,13 +334,9 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setConversations(items);
 
       if (conversationId === activeId) {
+        conversationRequests.cancel();
         const nextConversation = items[0];
-        setRunState(null);
-        setCollaborationSteps([]);
-        setAutonomousProgress(null);
-        setHumanInputDraft("");
-        setPlanDraft("");
-        setIsCancelingRun(false);
+        resetConversationRuntimeState();
         setMessages([]);
 
         if (nextConversation) {
@@ -648,6 +685,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           fallbackRunId: "",
           onConversation: (event) => {
             conversationId = event.conversation_id;
+            conversationRequests.cancel();
             setActiveId(event.conversation_id);
           },
           onDone: (event) => applyConversationTitle(event.conversation_id, event.title),
@@ -709,9 +747,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       );
 
       if (activeId) {
-        const persisted = await listMessages(activeId);
-        setMessages(persisted);
-        await refreshCollaborationSteps(activeId);
+        await loadConversation(activeId);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected continue error");
@@ -774,9 +810,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       );
 
       if (activeId) {
-        const persisted = await listMessages(activeId);
-        setMessages(persisted);
-        await refreshCollaborationSteps(activeId);
+        await loadConversation(activeId);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected resume error");

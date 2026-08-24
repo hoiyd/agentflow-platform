@@ -93,6 +93,25 @@ test("replay preserves durable recovery metadata", async (t) => {
   assert.equal(replay.tool_effects[0].has_result, true);
 });
 
+test("replay rejects a response without its required run object", async (t) => {
+  mockFetch(t, replayPayload({ run: null }));
+
+  await assert.rejects(() => getRunReplay("run-invalid"), /Invalid run replay run response/);
+});
+
+test("shared transport rejects invalid JSON at the API boundary", async (t) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("not-json", {
+    status: 200,
+    headers: { "Content-Type": "application/json" }
+  });
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  await assert.rejects(() => getRunUsage("run-invalid-json"), /Failed to load run usage: invalid JSON response/);
+});
+
 test("run usage client calls the dedicated endpoint", async (t) => {
   let requestedURL = "";
   let workspaceID = "";

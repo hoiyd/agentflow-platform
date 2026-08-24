@@ -1,3 +1,5 @@
+import { apiArray, apiJSON, apiObject, apiVoid, expectObject } from "./api-client.ts";
+
 export type DocumentInfo = {
   id: string;
   workspace_id?: string;
@@ -241,31 +243,12 @@ export type DocumentDetail = {
   chunks: RetrievedDocumentChunk["chunk"][];
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
-const CONFIGURED_WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID?.trim();
-const WORKSPACE_ID = !CONFIGURED_WORKSPACE_ID || CONFIGURED_WORKSPACE_ID === "default" ? "default_workspace" : CONFIGURED_WORKSPACE_ID;
-
-function workspaceFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
-  const headers = new Headers(init.headers);
-  headers.set("X-Workspace-ID", WORKSPACE_ID);
-  return fetch(input, { ...init, headers });
-}
-
-async function readJSON<T>(response: Response): Promise<T> {
-  return response.json() as Promise<T>;
-}
-
-async function readArrayJSON<T>(response: Response): Promise<T[]> {
-  const data = await readJSON<unknown>(response);
-  return Array.isArray(data) ? (data as T[]) : [];
-}
-
 export async function listDocuments(): Promise<DocumentInfo[]> {
-  const response = await workspaceFetch(`${API_BASE}/api/documents`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load documents: ${response.status}`);
-  }
-  return readArrayJSON<DocumentInfo>(response);
+  return apiArray<DocumentInfo>(
+    "/api/documents",
+    { cache: "no-store" },
+    { errorMessage: "Failed to load documents" }
+  );
 }
 
 export async function createDocument(input: {
@@ -274,15 +257,16 @@ export async function createDocument(input: {
   content: string;
   metadata?: Record<string, unknown>;
 }): Promise<DocumentInfo> {
-  const response = await workspaceFetch(`${API_BASE}/api/documents`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input)
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to create document: ${response.status}`);
-  }
-  return readJSON<DocumentInfo>(response);
+  return apiObject<DocumentInfo>(
+    "/api/documents",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    },
+    { errorMessage: "Failed to create document" },
+    "document"
+  );
 }
 
 export async function uploadDocument(input: { file: File; title?: string }): Promise<DocumentInfo> {
@@ -291,35 +275,37 @@ export async function uploadDocument(input: { file: File; title?: string }): Pro
   if (input.title?.trim()) {
     form.append("title", input.title.trim());
   }
-  const response = await workspaceFetch(`${API_BASE}/api/documents/upload`, {
-    method: "POST",
-    body: form
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to upload document: ${response.status}`);
-  }
-  return readJSON<DocumentInfo>(response);
+  return apiObject<DocumentInfo>(
+    "/api/documents/upload",
+    { method: "POST", body: form },
+    { errorMessage: "Failed to upload document" },
+    "document"
+  );
 }
 
 export async function getDocument(documentId: string): Promise<DocumentDetail> {
-  const response = await workspaceFetch(`${API_BASE}/api/documents/${documentId}`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load document: ${response.status}`);
+  const data = await apiObject<Record<string, unknown>>(
+    `/api/documents/${documentId}`,
+    { cache: "no-store" },
+    { errorMessage: "Failed to load document" },
+    "document detail"
+  );
+  const document = expectObject<DocumentInfo>(data.document, "document detail document");
+  if (typeof document.id !== "string" || document.id === "") {
+    throw new Error("Invalid document detail document response: id is required");
   }
-  const data = await readJSON<Partial<DocumentDetail>>(response);
   return {
-    document: data.document as DocumentInfo,
+    document,
     chunks: Array.isArray(data.chunks) ? data.chunks : []
   };
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
-  const response = await workspaceFetch(`${API_BASE}/api/documents/${documentId}`, {
-    method: "DELETE"
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to delete document: ${response.status}`);
-  }
+  return apiVoid(
+    `/api/documents/${documentId}`,
+    { method: "DELETE" },
+    { errorMessage: "Failed to delete document" }
+  );
 }
 
 export async function searchRAG(input: {
@@ -329,19 +315,19 @@ export async function searchRAG(input: {
   min_similarity?: number;
   knowledge_context_max_tokens?: number;
 }): Promise<DocumentSearchResponse> {
-  const response = await workspaceFetch(`${API_BASE}/api/rag/search`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input)
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to search knowledge: ${response.status}`);
-  }
-  const data = await readJSON<unknown>(response);
+  const data = await apiJSON(
+    "/api/rag/search",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    },
+    { errorMessage: "Failed to search knowledge" }
+  );
   if (Array.isArray(data)) {
     return { items: data as RetrievedDocumentChunk[] };
   }
-  const payload = data as Partial<DocumentSearchResponse>;
+  const payload = expectObject<Partial<DocumentSearchResponse>>(data, "knowledge search");
   return {
     items: Array.isArray(payload.items) ? payload.items : [],
     context_items: Array.isArray(payload.context_items) ? payload.context_items : [],
@@ -367,13 +353,14 @@ type RAGEvaluationRunInput = (
 };
 
 export async function runRAGEvaluation(input: RAGEvaluationRunInput): Promise<RAGEvaluationRunResponse> {
-  const response = await workspaceFetch(`${API_BASE}/api/rag/evaluations/run`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input)
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to run retrieval evaluation: ${response.status}`);
-  }
-  return readJSON<RAGEvaluationRunResponse>(response);
+  return apiObject<RAGEvaluationRunResponse>(
+    "/api/rag/evaluations/run",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    },
+    { errorMessage: "Failed to run retrieval evaluation" },
+    "retrieval evaluation"
+  );
 }
