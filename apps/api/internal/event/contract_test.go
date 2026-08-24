@@ -1,6 +1,7 @@
 package event
 
 import (
+	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
@@ -82,5 +83,58 @@ func TestValidateLifecycleRequiresStagePairingForCheckpointedStreams(t *testing.
 	}
 	if err := ValidateLifecycle(events); err == nil {
 		t.Fatal("expected unmatched checkpointed stage terminal error")
+	}
+}
+
+func TestValidateLifecycleRejectsInvalidScopeTransitions(t *testing.T) {
+	tests := []struct {
+		name   string
+		events []domain.RunEvent
+		want   string
+	}{
+		{name: "schema", events: []domain.RunEvent{{Sequence: 1, SchemaVersion: 99, Type: domain.EventRunStarted}}, want: "unsupported schema"},
+		{name: "stage id", events: []domain.RunEvent{{Sequence: 1, SchemaVersion: 1, Type: domain.EventStageStarted}}, want: "invalid stage start"},
+		{name: "overlapping stage", events: []domain.RunEvent{
+			{Sequence: 1, SchemaVersion: 1, Type: domain.EventStageStarted, StageID: "stage-1"},
+			{Sequence: 2, SchemaVersion: 1, Type: domain.EventStageStarted, StageID: "stage-1"},
+		}, want: "overlapping stage"},
+		{name: "turn id", events: []domain.RunEvent{{Sequence: 1, SchemaVersion: 1, Type: domain.EventTurnStarted}}, want: "invalid turn start"},
+		{name: "overlapping turn", events: []domain.RunEvent{
+			{Sequence: 1, SchemaVersion: 1, Type: domain.EventTurnStarted, TurnID: "turn-1"},
+			{Sequence: 2, SchemaVersion: 1, Type: domain.EventTurnStarted, TurnID: "turn-1"},
+		}, want: "overlapping turn"},
+		{name: "unmatched turn", events: []domain.RunEvent{{Sequence: 1, SchemaVersion: 1, Type: domain.EventTurnFailed, TurnID: "turn-1"}}, want: "unmatched turn"},
+		{name: "model turn", events: []domain.RunEvent{{Sequence: 1, SchemaVersion: 1, Type: domain.EventModelStarted}}, want: "invalid model start"},
+		{name: "overlapping model", events: []domain.RunEvent{
+			{Sequence: 1, SchemaVersion: 1, Type: domain.EventModelStarted, TurnID: "turn-1"},
+			{Sequence: 2, SchemaVersion: 1, Type: domain.EventModelStarted, TurnID: "turn-1"},
+		}, want: "overlapping model"},
+		{name: "unmatched model", events: []domain.RunEvent{{Sequence: 1, SchemaVersion: 1, Type: domain.EventModelFailed, TurnID: "turn-1"}}, want: "unmatched model"},
+		{name: "tool call id", events: []domain.RunEvent{{Sequence: 1, SchemaVersion: 1, Type: domain.EventToolStarted}}, want: "invalid tool start"},
+		{name: "overlapping tool", events: []domain.RunEvent{
+			{Sequence: 1, SchemaVersion: 1, Type: domain.EventToolStarted, Payload: map[string]any{"tool_call_id": "call-1"}},
+			{Sequence: 2, SchemaVersion: 1, Type: domain.EventToolStarted, Payload: map[string]any{"tool_call_id": "call-1"}},
+		}, want: "overlapping tool"},
+		{name: "unmatched tool", events: []domain.RunEvent{{Sequence: 1, SchemaVersion: 1, Type: domain.EventToolFailed, Payload: map[string]any{"tool_call_id": "call-1"}}}, want: "unmatched tool"},
+		{name: "open stage", events: []domain.RunEvent{{Sequence: 1, SchemaVersion: 1, Type: domain.EventStageStarted, StageID: "stage-1"}}, want: "stage stage-1"},
+		{name: "open model", events: []domain.RunEvent{{Sequence: 1, SchemaVersion: 1, Type: domain.EventModelStarted, TurnID: "turn-1"}}, want: "model call"},
+		{name: "open tool", events: []domain.RunEvent{{Sequence: 1, SchemaVersion: 1, Type: domain.EventToolStarted, Payload: map[string]any{"tool_call_id": "call-1"}}}, want: "tool call"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidateLifecycle(test.events)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("expected %q error, got %v", test.want, err)
+			}
+		})
+	}
+}
+
+func TestPlanInterruptedLifecycleRepairRejectsInvalidEventStream(t *testing.T) {
+	_, err := PlanInterruptedLifecycleRepair([]domain.RunEvent{{
+		Sequence: 2, SchemaVersion: 1, Type: domain.EventRunStarted,
+	}}, domain.InterruptedWorkerReason)
+	if err == nil {
+		t.Fatal("expected invalid event stream error")
 	}
 }

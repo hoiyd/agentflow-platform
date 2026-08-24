@@ -132,6 +132,122 @@ func TestInternalProviderFailsClosedForUncertainToolEffect(t *testing.T) {
 	}
 }
 
+func TestInternalProviderCompensatesInterruptedInternalStage(t *testing.T) {
+	fileStore, run := checkpointTestRun(t)
+	provider := NewInternalProvider(fileStore)
+	step := domain.CollaborationStep{ID: "stage-1", RunID: run.ID, ConversationID: run.ConversationID, Role: "worker", Input: "work"}
+	if _, err := provider.RecordStageTransition(context.Background(), step, domain.EventStageStarted); err != nil {
+		t.Fatalf("start stage: %v", err)
+	}
+
+	report, err := provider.RestoreRun(context.Background(), run)
+	if err != nil {
+		t.Fatalf("restore interrupted stage: %v", err)
+	}
+	if len(report.CompensatedStageIDs) != 1 || report.CompensatedStageIDs[0] != step.ID {
+		t.Fatalf("unexpected compensation report: %#v", report)
+	}
+	checkpoint, ok, err := fileStore.GetStageCheckpoint(run.ID, step.ID)
+	if err != nil || !ok || checkpoint.Status != domain.CheckpointCompensated {
+		t.Fatalf("expected compensated checkpoint: %#v ok=%v err=%v", checkpoint, ok, err)
+	}
+	restoredAgain, err := provider.RestoreRun(context.Background(), run)
+	if err != nil || len(restoredAgain.CompensatedStageIDs) != 1 {
+		t.Fatalf("restore compensated checkpoint: %#v err=%v", restoredAgain, err)
+	}
+}
+
+func TestInternalProviderReconcilesFailedTerminalBeforeCompensation(t *testing.T) {
+	fileStore, run := checkpointTestRun(t)
+	provider := NewInternalProvider(fileStore)
+	step := domain.CollaborationStep{ID: "stage-1", RunID: run.ID, ConversationID: run.ConversationID, Role: "worker", Input: "work"}
+	if _, err := provider.RecordStageTransition(context.Background(), step, domain.EventStageStarted); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+		Type: domain.EventStageFailed, RunID: run.ID, ConversationID: run.ConversationID,
+		StageID: step.ID, Payload: map[string]any{"error": "worker interrupted"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.RestoreRun(context.Background(), run); err != nil {
+		t.Fatalf("restore failed terminal: %v", err)
+	}
+	checkpoint, ok, err := fileStore.GetStageCheckpoint(run.ID, step.ID)
+	if err != nil || !ok || checkpoint.Status != domain.CheckpointCompensated || checkpoint.Error != "worker interrupted" {
+		t.Fatalf("unexpected reconciled checkpoint: %#v ok=%v err=%v", checkpoint, ok, err)
+	}
+}
+
+func TestInternalProviderRecordsFailedAndCanceledTransitions(t *testing.T) {
+	for _, terminal := range []domain.RunEventType{domain.EventStageFailed, domain.EventStageCanceled} {
+		t.Run(string(terminal), func(t *testing.T) {
+			fileStore, run := checkpointTestRun(t)
+			provider := NewInternalProvider(fileStore)
+			step := domain.CollaborationStep{ID: "stage-1", RunID: run.ID, ConversationID: run.ConversationID, Role: "worker", Input: "work"}
+			if _, err := provider.RecordStageTransition(context.Background(), step, domain.EventStageStarted); err != nil {
+				t.Fatal(err)
+			}
+			step.Error = "stopped"
+			if _, err := provider.RecordStageTransition(context.Background(), step, terminal); err != nil {
+				t.Fatalf("record %s: %v", terminal, err)
+			}
+			checkpoint, ok, err := fileStore.GetStageCheckpoint(run.ID, step.ID)
+			if err != nil || !ok || checkpoint.Status != domain.CheckpointNeedsReconciliation || checkpoint.Error != "stopped" {
+				t.Fatalf("unexpected terminal checkpoint: %#v ok=%v err=%v", checkpoint, ok, err)
+			}
+		})
+	}
+}
+
+func TestInternalProviderRejectsInvalidCallsBeforeMutation(t *testing.T) {
+	var nilProvider *InternalProvider
+	if _, err := nilProvider.RecordStageTransition(context.Background(), domain.CollaborationStep{}, domain.EventStageStarted); err == nil {
+		t.Fatal("expected unavailable provider error")
+	}
+	if _, err := nilProvider.RestoreRun(context.Background(), domain.Run{}); err == nil {
+		t.Fatal("expected unavailable provider restore error")
+	}
+	if _, _, err := RuntimeHashes(nil); err == nil {
+		t.Fatal("expected nil snapshot error")
+	}
+
+	fileStore, run := checkpointTestRun(t)
+	provider := NewInternalProvider(fileStore)
+	step := domain.CollaborationStep{ID: "stage-1", RunID: run.ID, ConversationID: run.ConversationID, Role: "worker", Input: "work"}
+	if _, err := provider.RecordStageTransition(context.Background(), step, domain.EventRunProgress); err == nil {
+		t.Fatal("expected unsupported transition error")
+	}
+	checkpoints, err := fileStore.ListStageCheckpoints(run.ID)
+	if err != nil || len(checkpoints) != 0 {
+		t.Fatalf("unsupported event mutated checkpoints: %#v err=%v", checkpoints, err)
+	}
+	if _, err := provider.RecordStageTransition(context.Background(), step, domain.EventStageStarted); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.RecordStageTransition(context.Background(), step, domain.EventStageStarted); err == nil {
+		t.Fatal("expected duplicate stage start error")
+	}
+}
+
+func TestInternalProviderRejectsUnknownCheckpointStatus(t *testing.T) {
+	fileStore, run := checkpointTestRun(t)
+	snapshotHash, toolHash, err := RuntimeHashes(run.RuntimeSnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.SaveStageCheckpoint(domain.StageCheckpoint{
+		Provider: InternalStateProvider, RunID: run.ID, ConversationID: run.ConversationID,
+		StageID: "stage-1", Status: domain.StageCheckpointStatus("unknown"), InputHash: hashValue("work"),
+		RuntimeSnapshotHash: snapshotHash, ToolDefinitionsHash: toolHash,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewInternalProvider(fileStore).RestoreRun(context.Background(), run); err == nil {
+		t.Fatal("expected unknown checkpoint status error")
+	}
+}
+
 func checkpointTestRun(t *testing.T) (*store.FileStore, domain.Run) {
 	t.Helper()
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")

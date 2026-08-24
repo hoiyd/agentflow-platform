@@ -1,6 +1,7 @@
 package recovery
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -82,4 +83,55 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 	if err != nil || count != 0 {
 		t.Fatalf("expected idempotent second scan, count=%d err=%v", count, err)
 	}
+}
+
+func TestMarkStaleRunningRunsHandlesDisabledAndFailurePaths(t *testing.T) {
+	if count, err := MarkStaleRunningRuns(nil, 0); err != nil || count != 0 {
+		t.Fatalf("disabled recovery: count=%d err=%v", count, err)
+	}
+	wantErr := errors.New("store unavailable")
+	tests := []struct {
+		name  string
+		store *recoveryTestStore
+	}{
+		{name: "list stale", store: &recoveryTestStore{listErr: wantErr}},
+		{name: "list events", store: &recoveryTestStore{runs: []domain.Run{{ID: "run-1"}}, eventsErr: wantErr}},
+		{name: "invalid lifecycle", store: &recoveryTestStore{
+			runs:   []domain.Run{{ID: "run-1"}},
+			events: []domain.RunEvent{{Sequence: 2, SchemaVersion: 1, Type: domain.EventRunStarted}},
+		}},
+		{name: "repair", store: &recoveryTestStore{runs: []domain.Run{{ID: "run-1"}}, repairErr: wantErr}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := MarkStaleRunningRuns(test.store, time.Second); err == nil {
+				t.Fatal("expected recovery error")
+			}
+		})
+	}
+	notApplied := &recoveryTestStore{runs: []domain.Run{{ID: "run-1"}}}
+	if count, err := MarkStaleRunningRuns(notApplied, time.Second); err != nil || count != 0 {
+		t.Fatalf("non-applied repair: count=%d err=%v", count, err)
+	}
+}
+
+type recoveryTestStore struct {
+	runs      []domain.Run
+	events    []domain.RunEvent
+	result    domain.InterruptedRunRepairResult
+	listErr   error
+	eventsErr error
+	repairErr error
+}
+
+func (s *recoveryTestStore) ListStaleRunningRuns(time.Time) ([]domain.Run, error) {
+	return s.runs, s.listErr
+}
+
+func (s *recoveryTestStore) ListRunEvents(string) ([]domain.RunEvent, error) {
+	return s.events, s.eventsErr
+}
+
+func (s *recoveryTestStore) RepairInterruptedRun(domain.InterruptedRunRepair) (domain.InterruptedRunRepairResult, error) {
+	return s.result, s.repairErr
 }

@@ -49,6 +49,9 @@ func (p *InternalProvider) RecordStageTransition(ctx context.Context, step domai
 	if p == nil || p.store == nil {
 		return domain.RunEvent{}, errors.New("checkpoint provider is unavailable")
 	}
+	if !isStageTransition(eventType) {
+		return domain.RunEvent{}, fmt.Errorf("unsupported stage checkpoint event %s", eventType)
+	}
 	run, ok, err := p.store.GetRun(step.RunID)
 	if err != nil {
 		return domain.RunEvent{}, err
@@ -137,6 +140,15 @@ func (p *InternalProvider) RecordStageTransition(ctx context.Context, step domai
 		return domain.RunEvent{}, err
 	}
 	return stageEvent, nil
+}
+
+func isStageTransition(eventType domain.RunEventType) bool {
+	switch eventType {
+	case domain.EventStageStarted, domain.EventStageCompleted, domain.EventStageFailed, domain.EventStageCanceled:
+		return true
+	default:
+		return false
+	}
 }
 
 func stageRunEvent(step domain.CollaborationStep, eventType domain.RunEventType) domain.RunEvent {
