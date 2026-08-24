@@ -1,4 +1,5 @@
 import type { CompletionContractInput } from "./verification";
+import { apiArray, apiJSON, apiObject, apiRequest, apiVoid, expectObject, isObject } from "./api-client.ts";
 
 export type Conversation = {
   id: string;
@@ -346,32 +347,13 @@ export type EpisodeReport = {
   };
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
-const CONFIGURED_WORKSPACE_ID = process.env.NEXT_PUBLIC_WORKSPACE_ID?.trim();
-const WORKSPACE_ID = !CONFIGURED_WORKSPACE_ID || CONFIGURED_WORKSPACE_ID === "default" ? "default_workspace" : CONFIGURED_WORKSPACE_ID;
-
-function workspaceFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
-  const headers = new Headers(init.headers);
-  headers.set("X-Workspace-ID", WORKSPACE_ID);
-  return fetch(input, { ...init, headers });
-}
-
-async function readJSON<T>(response: Response): Promise<T> {
-  return response.json() as Promise<T>;
-}
-
-async function readArrayJSON<T>(response: Response): Promise<T[]> {
-  const data = await readJSON<unknown>(response);
-  return Array.isArray(data) ? (data as T[]) : [];
-}
-
 function normalizeRunReplay(data: unknown): RunReplay {
-  const replay = data as Partial<RunReplay>;
-  const run = replay.run as RunInfo;
+  const replay = expectObject<Record<string, unknown>>(data, "run replay");
+  const run = expectRunInfo(replay.run);
   return {
     run,
-    conversation: replay.conversation as Conversation,
-    summary: replay.summary as RunTraceSummary,
+    conversation: expectConversation(replay.conversation),
+    summary: expectRunTraceSummary(replay.summary),
     messages: Array.isArray(replay.messages) ? replay.messages : [],
     steps: Array.isArray(replay.steps) ? replay.steps : [],
     usage_ledger: normalizeRunUsageLedger(replay.usage_ledger, run?.id ?? ""),
@@ -394,68 +376,93 @@ const EMPTY_RUN_USAGE_TOTALS: RunUsageTotals = {
 };
 
 function normalizeRunUsageLedger(value: unknown, runId: string): RunUsageLedger {
-  const ledger = value && typeof value === "object" ? (value as Partial<RunUsageLedger>) : {};
+  const ledger = isObject(value) ? value : {};
   return {
     run_id: typeof ledger.run_id === "string" ? ledger.run_id : runId,
-    budget: ledger.budget && typeof ledger.budget === "object" ? ledger.budget : {},
+    budget: isObject(ledger.budget) ? ledger.budget : {},
     totals: {
       ...EMPTY_RUN_USAGE_TOTALS,
-      ...(ledger.totals && typeof ledger.totals === "object" ? ledger.totals : {})
+      ...(isObject(ledger.totals) ? ledger.totals : {})
     },
     entries: Array.isArray(ledger.entries) ? ledger.entries : [],
     ...(typeof ledger.updated_at === "string" ? { updated_at: ledger.updated_at } : {})
   };
 }
 
-export async function listConversations(): Promise<Conversation[]> {
-  const response = await workspaceFetch(`${API_BASE}/api/conversations`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load conversations: ${response.status}`);
+function expectRunInfo(value: unknown): RunInfo {
+  const run = expectObject<Record<string, unknown>>(value, "run replay run");
+  requireStringFields(run, "run replay run", ["id", "agent_id", "conversation_id", "status"]);
+  return run as unknown as RunInfo;
+}
+
+function expectConversation(value: unknown): Conversation {
+  const conversation = expectObject<Record<string, unknown>>(value, "run replay conversation");
+  requireStringFields(conversation, "run replay conversation", ["id", "title"]);
+  return conversation as unknown as Conversation;
+}
+
+function expectRunTraceSummary(value: unknown): RunTraceSummary {
+  const summary = expectObject<Record<string, unknown>>(value, "run replay summary");
+  requireStringFields(summary, "run replay summary", ["run_id"]);
+  return summary as unknown as RunTraceSummary;
+}
+
+function requireStringFields(value: Record<string, unknown>, responseName: string, fields: string[]) {
+  for (const field of fields) {
+    if (typeof value[field] !== "string" || value[field] === "") {
+      throw new Error(`Invalid ${responseName} response: ${field} is required`);
+    }
   }
-  return readArrayJSON<Conversation>(response);
+}
+
+export async function listConversations(signal?: AbortSignal): Promise<Conversation[]> {
+  return apiArray<Conversation>(
+    "/api/conversations",
+    { cache: "no-store", signal },
+    { errorMessage: "Failed to load conversations" }
+  );
 }
 
 export async function createConversation(title: string): Promise<Conversation> {
-  const response = await workspaceFetch(`${API_BASE}/api/conversations`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title })
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to create conversation: ${response.status}`);
-  }
-  return readJSON<Conversation>(response);
+  return apiObject<Conversation>(
+    "/api/conversations",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title })
+    },
+    { errorMessage: "Failed to create conversation" },
+    "conversation"
+  );
 }
 
 export async function updateConversationTitle(conversationId: string, title: string): Promise<Conversation> {
-  const response = await workspaceFetch(`${API_BASE}/api/conversations/${conversationId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title })
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to update conversation: ${response.status}`);
-  }
-  return readJSON<Conversation>(response);
+  return apiObject<Conversation>(
+    `/api/conversations/${conversationId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title })
+    },
+    { errorMessage: "Failed to update conversation" },
+    "conversation"
+  );
 }
 
 export async function deleteConversation(conversationId: string): Promise<void> {
-  const response = await workspaceFetch(`${API_BASE}/api/conversations/${conversationId}`, {
-    method: "DELETE"
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to delete conversation: ${response.status}`);
-  }
+  return apiVoid(
+    `/api/conversations/${conversationId}`,
+    { method: "DELETE" },
+    { errorMessage: "Failed to delete conversation" }
+  );
 }
 
-export async function listMessages(conversationId: string): Promise<Message[]> {
-  const response = await workspaceFetch(`${API_BASE}/api/conversations/${conversationId}/messages`, {
-    cache: "no-store"
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load messages: ${response.status}`);
-  }
-  return readArrayJSON<Message>(response);
+export async function listMessages(conversationId: string, signal?: AbortSignal): Promise<Message[]> {
+  return apiArray<Message>(
+    `/api/conversations/${conversationId}/messages`,
+    { cache: "no-store", signal },
+    { errorMessage: "Failed to load messages" }
+  );
 }
 
 export async function streamChat(
@@ -469,16 +476,15 @@ export async function streamChat(
   },
   onEvent: (event: ChatEvent) => void
 ) {
-  const response = await workspaceFetch(`${API_BASE}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input)
-  });
-
-  if (!response.ok || !response.body) {
-    const message = await response.text();
-    throw new Error(`Chat request failed: ${response.status}${message ? ` ${message}` : ""}`);
-  }
+  const response = await apiRequest(
+    "/api/chat",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    },
+    { errorMessage: "Chat request failed", includeErrorBody: true, requireBody: true }
+  );
 
   await readChatEventStream(response, onEvent);
 }
@@ -487,15 +493,15 @@ export async function continueRun(
   input: { run_id: string; plan: string },
   onEvent: (event: ChatEvent) => void
 ) {
-  const response = await workspaceFetch(`${API_BASE}/api/runs/${input.run_id}/continue`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ plan: input.plan })
-  });
-
-  if (!response.ok || !response.body) {
-    throw new Error(`Continue request failed: ${response.status}`);
-  }
+  const response = await apiRequest(
+    `/api/runs/${input.run_id}/continue`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan: input.plan })
+    },
+    { errorMessage: "Continue request failed", requireBody: true }
+  );
 
   await readChatEventStream(response, onEvent);
 }
@@ -504,35 +510,35 @@ export async function resumeRun(
   input: { run_id: string; user_input: string },
   onEvent: (event: ChatEvent) => void
 ) {
-  const response = await workspaceFetch(`${API_BASE}/api/runs/${input.run_id}/resume`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_input: input.user_input })
-  });
-
-  if (!response.ok || !response.body) {
-    throw new Error(`Resume request failed: ${response.status}`);
-  }
+  const response = await apiRequest(
+    `/api/runs/${input.run_id}/resume`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_input: input.user_input })
+    },
+    { errorMessage: "Resume request failed", requireBody: true }
+  );
 
   await readChatEventStream(response, onEvent);
 }
 
 export async function cancelRun(runId: string): Promise<RunInfo> {
-  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/cancel`, {
-    method: "POST"
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to cancel run: ${response.status}`);
-  }
-  return readJSON<RunInfo>(response);
+  return apiObject<RunInfo>(
+    `/api/runs/${runId}/cancel`,
+    { method: "POST" },
+    { errorMessage: "Failed to cancel run" },
+    "run"
+  );
 }
 
 export async function verifyRun(runId: string): Promise<{ run: RunInfo; decision: Record<string, unknown> }> {
-  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/verify`, { method: "POST" });
-  if (!response.ok) {
-    throw new Error(`Verify request failed: ${response.status}`);
-  }
-  return readJSON<{ run: RunInfo; decision: Record<string, unknown> }>(response);
+  return apiObject<{ run: RunInfo; decision: Record<string, unknown> }>(
+    `/api/runs/${runId}/verify`,
+    { method: "POST" },
+    { errorMessage: "Verify request failed" },
+    "verification"
+  );
 }
 
 async function readChatEventStream(response: Response, onEvent: (event: ChatEvent) => void) {
@@ -593,53 +599,53 @@ function stringValue(value: unknown): string | undefined { return typeof value =
 function numberValue(value: unknown): number | undefined { return typeof value === "number" ? value : undefined; }
 
 export async function listAgents(): Promise<AgentInfo[]> {
-  const response = await workspaceFetch(`${API_BASE}/api/agents`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load agents: ${response.status}`);
-  }
-  const agents = await readArrayJSON<AgentInfo>(response);
+  const agents = await apiArray<AgentInfo>(
+    "/api/agents",
+    { cache: "no-store" },
+    { errorMessage: "Failed to load agents" }
+  );
   return agents.map(normalizeAgentInfo);
 }
 
 export async function createAgent(
   input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
 ): Promise<AgentInfo> {
-  const response = await workspaceFetch(`${API_BASE}/api/agents`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input)
-  });
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Failed to create agent: ${response.status}${message ? ` ${message}` : ""}`);
-  }
-  return normalizeAgentInfo(await readJSON<AgentInfo>(response));
+  const agent = await apiObject<AgentInfo>(
+    "/api/agents",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    },
+    { errorMessage: "Failed to create agent", includeErrorBody: true },
+    "agent"
+  );
+  return normalizeAgentInfo(agent);
 }
 
 export async function updateAgent(
   agentId: string,
   input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
 ): Promise<AgentInfo> {
-  const response = await workspaceFetch(`${API_BASE}/api/agents/${agentId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input)
-  });
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Failed to update agent: ${response.status}${message ? ` ${message}` : ""}`);
-  }
-  return normalizeAgentInfo(await readJSON<AgentInfo>(response));
+  const agent = await apiObject<AgentInfo>(
+    `/api/agents/${agentId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    },
+    { errorMessage: "Failed to update agent", includeErrorBody: true },
+    "agent"
+  );
+  return normalizeAgentInfo(agent);
 }
 
 export async function archiveAgent(agentId: string): Promise<void> {
-  const response = await workspaceFetch(`${API_BASE}/api/agents/${agentId}`, {
-    method: "DELETE"
-  });
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Failed to archive agent: ${response.status}${message ? ` ${message}` : ""}`);
-  }
+  return apiVoid(
+    `/api/agents/${agentId}`,
+    { method: "DELETE" },
+    { errorMessage: "Failed to archive agent", includeErrorBody: true }
+  );
 }
 
 function normalizeAgentInfo(agent: AgentInfo): AgentInfo {
@@ -653,72 +659,68 @@ function normalizeAgentInfo(agent: AgentInfo): AgentInfo {
 }
 
 export async function listTools(): Promise<ToolInfo[]> {
-  const response = await workspaceFetch(`${API_BASE}/api/tools`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load tools: ${response.status}`);
-  }
-  return readArrayJSON<ToolInfo>(response);
+  return apiArray<ToolInfo>("/api/tools", { cache: "no-store" }, { errorMessage: "Failed to load tools" });
 }
 
-export async function listRuns(): Promise<RunInfo[]> {
-  const response = await workspaceFetch(`${API_BASE}/api/runs`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load runs: ${response.status}`);
-  }
-  return readArrayJSON<RunInfo>(response);
+export async function listRuns(signal?: AbortSignal): Promise<RunInfo[]> {
+  return apiArray<RunInfo>(
+    "/api/runs",
+    { cache: "no-store", signal },
+    { errorMessage: "Failed to load runs" }
+  );
 }
 
-export async function listCollaborationSteps(runId: string): Promise<CollaborationStepInfo[]> {
-  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/collaboration_steps`, {
-    cache: "no-store"
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to load collaboration steps: ${response.status}`);
-  }
-  return readArrayJSON<CollaborationStepInfo>(response);
+export async function listCollaborationSteps(runId: string, signal?: AbortSignal): Promise<CollaborationStepInfo[]> {
+  return apiArray<CollaborationStepInfo>(
+    `/api/runs/${runId}/collaboration_steps`,
+    { cache: "no-store", signal },
+    { errorMessage: "Failed to load collaboration steps" }
+  );
 }
 
 export async function getRunReplay(runId: string): Promise<RunReplay> {
-  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/replay`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load run replay: ${response.status}`);
-  }
-  return normalizeRunReplay(await readJSON<unknown>(response));
+  const data = await apiJSON(
+    `/api/runs/${runId}/replay`,
+    { cache: "no-store" },
+    { errorMessage: "Failed to load run replay" }
+  );
+  return normalizeRunReplay(data);
 }
 
 export async function getRunUsage(runId: string): Promise<RunUsageLedger> {
-  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/usage`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load run usage: ${response.status}`);
-  }
-  return normalizeRunUsageLedger(await readJSON<unknown>(response), runId);
+  const data = await apiJSON(
+    `/api/runs/${runId}/usage`,
+    { cache: "no-store" },
+    { errorMessage: "Failed to load run usage" }
+  );
+  return normalizeRunUsageLedger(data, runId);
 }
 
 export async function getRunModelRequests(runId: string, includeContent = false): Promise<ModelRequestDebugResponse> {
   const query = includeContent ? "?include_content=true" : "";
-  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/model_requests${query}`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load model requests: ${response.status}`);
-  }
-  const result = await readJSON<ModelRequestDebugResponse>(response);
+  const result = await apiObject<ModelRequestDebugResponse>(
+    `/api/runs/${runId}/model_requests${query}`,
+    { cache: "no-store" },
+    { errorMessage: "Failed to load model requests" },
+    "model request debug"
+  );
   return { ...result, records: Array.isArray(result.records) ? result.records : [] };
 }
 
 export async function getEpisodeReport(runId: string): Promise<EpisodeReport> {
-  const response = await workspaceFetch(`${API_BASE}/api/runs/${runId}/episode`, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`Failed to load episode report: ${response.status}`);
-  }
-  return readJSON<EpisodeReport>(response);
+  return apiObject<EpisodeReport>(
+    `/api/runs/${runId}/episode`,
+    { cache: "no-store" },
+    { errorMessage: "Failed to load episode report" },
+    "episode report"
+  );
 }
 
 export async function setToolEnabled(name: string, enabled: boolean): Promise<ToolInfo[]> {
   const action = enabled ? "enable" : "disable";
-  const response = await workspaceFetch(`${API_BASE}/api/tools/${encodeURIComponent(name)}/${action}`, {
-    method: "POST"
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to update tool: ${response.status}`);
-  }
-  return readArrayJSON<ToolInfo>(response);
+  return apiArray<ToolInfo>(
+    `/api/tools/${encodeURIComponent(name)}/${action}`,
+    { method: "POST" },
+    { errorMessage: "Failed to update tool" }
+  );
 }
