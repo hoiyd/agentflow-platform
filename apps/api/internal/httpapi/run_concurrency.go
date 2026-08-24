@@ -15,7 +15,7 @@ func (h *Handler) reserveRunCapacity(w http.ResponseWriter) (*concurrency.Reserv
 		return reservation, true
 	}
 	w.Header().Set("Retry-After", overloadRetryAfterSeconds)
-	writeError(w, http.StatusTooManyRequests, err.Error())
+	writeFailure(w, http.StatusTooManyRequests, err)
 	return nil, false
 }
 
@@ -32,6 +32,6 @@ func (h *Handler) acquireRunSlot(w http.ResponseWriter, r *http.Request, reserva
 	if errors.Is(err, concurrency.ErrQueueFull) {
 		status = http.StatusTooManyRequests
 	}
-	writeError(w, status, err.Error())
+	writeFailure(w, status, err)
 	return nil, false
 }

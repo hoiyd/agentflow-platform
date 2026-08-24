@@ -11,7 +11,7 @@ import (
 func (h *Handler) listConversations(w http.ResponseWriter, r *http.Request) {
 	conversations, err := h.scopedStore(r).ListConversations()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, conversations)
@@ -25,7 +25,7 @@ func (h *Handler) createConversation(w http.ResponseWriter, r *http.Request) {
 
 	conversation, err := h.scopedStore(r).CreateConversation(body.Title)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, conversation)
@@ -56,12 +56,12 @@ func (h *Handler) updateConversation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "conversation not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	conversation, ok, err := scoped.GetConversation(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -84,7 +84,7 @@ func (h *Handler) deleteConversation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "conversation not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -99,7 +99,7 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	scoped := h.scopedStore(r)
 	if _, ok, err := scoped.GetConversation(id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	} else if !ok {
 		writeError(w, http.StatusNotFound, "conversation not found")
@@ -108,7 +108,7 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 
 	messages, err := scoped.ListMessages(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, messages)

@@ -1,0 +1,80 @@
+package httpapi
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"agentflow-platform/apps/api/internal/failure"
+)
+
+func TestWriteFailureRedactsInternalDetailsAndAddsRequestID(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeFailure(recorder, http.StatusInternalServerError, errors.New(`pq: column "secret_token" does not exist`))
+
+	response := decodeAPIErrorResponse(t, recorder)
+	if response.Error != http.StatusText(http.StatusInternalServerError) ||
+		response.Code != "internal_error" || response.Category != string(failure.CategoryInternal) ||
+		response.RequestID == "" || response.RequestID != recorder.Header().Get(RequestIDHeader) {
+		t.Fatalf("unexpected internal error response: %#v", response)
+	}
+	if strings.Contains(recorder.Body.String(), "secret_token") || strings.Contains(recorder.Body.String(), "pq:") {
+		t.Fatalf("internal details leaked in response: %s", recorder.Body.String())
+	}
+}
+
+func TestWriteFailurePreservesStructuredClassification(t *testing.T) {
+	err := failure.New(failure.Definition{
+		Message: "raw provider response",
+		Info: failure.Info{
+			Code: "provider_unavailable", Source: "model_provider", Category: failure.CategoryAvailability,
+			Retryable: true, Operation: "embedding",
+		},
+	})
+	recorder := httptest.NewRecorder()
+	writeFailure(recorder, http.StatusBadGateway, err)
+
+	response := decodeAPIErrorResponse(t, recorder)
+	if response.Error != http.StatusText(http.StatusBadGateway) || response.Code != "provider_unavailable" ||
+		response.Source != "model_provider" || response.Category != string(failure.CategoryAvailability) ||
+		!response.Retryable || response.Operation != "embedding" {
+		t.Fatalf("unexpected classified error response: %#v", response)
+	}
+	if strings.Contains(recorder.Body.String(), "raw provider response") {
+		t.Fatalf("provider details leaked in response: %s", recorder.Body.String())
+	}
+}
+
+func TestWriteErrorReturnsStructuredValidationEnvelope(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeError(recorder, http.StatusBadRequest, "message is required")
+
+	response := decodeAPIErrorResponse(t, recorder)
+	if response.Error != "message is required" || response.Code != "invalid_request" ||
+		response.Source != "http_api" || response.Category != string(failure.CategoryValidation) || response.Retryable {
+		t.Fatalf("unexpected validation response: %#v", response)
+	}
+}
+
+func TestFailureChatChunkUsesTheSameSafeContract(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	chunk := failureChatChunk(recorder, http.StatusInternalServerError, errors.New("database password leaked"))
+
+	if chunk.Error != http.StatusText(http.StatusInternalServerError) || chunk.ErrorCode != "internal_error" ||
+		chunk.ErrorCategory != string(failure.CategoryInternal) || chunk.RequestID == "" ||
+		chunk.Retryable == nil || *chunk.Retryable {
+		t.Fatalf("unexpected SSE failure chunk: %#v", chunk)
+	}
+}
+
+func decodeAPIErrorResponse(t *testing.T, recorder *httptest.ResponseRecorder) apiErrorResponse {
+	t.Helper()
+	var response apiErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode API error response: %v body=%s", err, recorder.Body.String())
+	}
+	return response
+}

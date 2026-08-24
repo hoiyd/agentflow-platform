@@ -204,6 +204,11 @@ type ChatChunk struct {
 	InvalidCitationIDs []string      `json:"invalid_citation_ids,omitempty"`
 	Delta              string        `json:"delta,omitempty"`
 	Error              string        `json:"error,omitempty"`
+	ErrorCode          string        `json:"code,omitempty"`
+	ErrorSource        string        `json:"source,omitempty"`
+	ErrorCategory      string        `json:"category,omitempty"`
+	Retryable          *bool         `json:"retryable,omitempty"`
+	RequestID          string        `json:"request_id,omitempty"`
 }
 
 type RunEventType string

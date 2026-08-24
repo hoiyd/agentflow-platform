@@ -63,15 +63,20 @@ func TestRAGPipelineAPIAndAgentRuntimeRemainConsistent(t *testing.T) {
 		fixture.failEmbeddings.Store(true)
 
 		query := "alpha-4242 recovery protocol"
-		apiError := fixture.searchError(t, query)
+		apiFailure := fixture.searchError(t, query)
 		runtimeEvent := fixture.runAgentAndGetRetrievalEvent(t, query, domain.EventRetrievalFailed)
 
 		runtimeError, _ := runtimeEvent.Payload["error"].(string)
-		if runtimeError == "" || runtimeError != apiError {
-			t.Fatalf("embedding error mismatch: api=%q runtime=%q payload=%#v", apiError, runtimeError, runtimeEvent.Payload)
+		if runtimeError == "" || apiFailure.Error != http.StatusText(http.StatusBadGateway) ||
+			strings.Contains(apiFailure.Error, "embedding service unavailable") {
+			t.Fatalf("embedding failure was not safely projected: api=%#v runtime=%q", apiFailure, runtimeError)
 		}
-		if runtimeEvent.Payload["error_source"] != "model_provider" || runtimeEvent.Payload["error_category"] != "availability" {
-			t.Fatalf("expected classified embedding failure, got %#v", runtimeEvent.Payload)
+		if apiFailure.Code != stringValue(runtimeEvent.Payload["error_kind"]) ||
+			apiFailure.Source != stringValue(runtimeEvent.Payload["error_source"]) ||
+			apiFailure.Category != stringValue(runtimeEvent.Payload["error_category"]) ||
+			apiFailure.Operation != stringValue(runtimeEvent.Payload["operation"]) ||
+			apiFailure.Retryable != boolValue(runtimeEvent.Payload["retryable"]) {
+			t.Fatalf("embedding failure classification mismatch: api=%#v runtime=%#v", apiFailure, runtimeEvent.Payload)
 		}
 	})
 }
@@ -179,19 +184,17 @@ func (f *pipelineRegressionFixture) search(t *testing.T, query string) domain.Do
 	return response
 }
 
-func (f *pipelineRegressionFixture) searchError(t *testing.T, query string) string {
+func (f *pipelineRegressionFixture) searchError(t *testing.T, query string) apiErrorResponse {
 	t.Helper()
 	recorder := f.request(t, http.MethodPost, "/api/rag/search", `{"query":`+quotedJSON(t, query)+`,"limit":5}`)
 	if recorder.Code != http.StatusBadGateway {
 		t.Fatalf("expected embedding failure status 502, got %d body=%s", recorder.Code, recorder.Body.String())
 	}
-	var response struct {
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil || response.Error == "" {
+	var response apiErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil || response.Error == "" || response.Code == "" {
 		t.Fatalf("decode RAG search error: response=%#v err=%v", response, err)
 	}
-	return response.Error
+	return response
 }
 
 func (f *pipelineRegressionFixture) runAgentAndGetRetrievalEvent(t *testing.T, query string, eventType domain.RunEventType) domain.RunEvent {

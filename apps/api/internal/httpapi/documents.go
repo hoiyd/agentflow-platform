@@ -18,7 +18,7 @@ const documentUploadMaxBytes = 2 << 20
 func (h *Handler) listDocuments(w http.ResponseWriter, r *http.Request) {
 	documents, err := h.scopedStore(r).ListDocuments()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, documents)
@@ -32,7 +32,7 @@ func (h *Handler) getDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	document, chunks, ok, err := h.scopedStore(r).GetDocument(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -56,7 +56,7 @@ func (h *Handler) deleteDocument(w http.ResponseWriter, r *http.Request) {
 		if store.IsNotFound(err) {
 			status = http.StatusNotFound
 		}
-		writeError(w, status, err.Error())
+		writeFailure(w, status, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -201,5 +201,5 @@ func writeKnowledgeError(w http.ResponseWriter, err error) {
 	if knowledge.IsEmbeddingError(err) {
 		status = http.StatusBadGateway
 	}
-	writeError(w, status, err.Error())
+	writeFailure(w, status, err)
 }

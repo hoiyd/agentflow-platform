@@ -32,7 +32,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	contract, err := h.freezeCompletionContract(req.CompletionContract)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeFailure(w, http.StatusBadRequest, err)
 		return
 	}
 	req.CompletionContract = contract
@@ -46,12 +46,12 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	if conversationID == "" {
 		conversation, err := scoped.CreateConversation(req.Message)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeFailure(w, http.StatusInternalServerError, err)
 			return
 		}
 		conversationID = conversation.ID
 	} else if _, ok, err := scoped.GetConversation(conversationID); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	} else if !ok {
 		writeError(w, http.StatusNotFound, "conversation not found")
@@ -65,13 +65,13 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 
 	userMessage, err := scoped.AddMessage(conversationID, "user", req.Message)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 
 	history, err := scoped.ListMessages(conversationID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -104,7 +104,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		if store.IsNotFound(err) {
 			status = http.StatusNotFound
 		}
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: http.StatusText(status) + ": " + err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, status, err))
 		flusher.Flush()
 		return
 	}
@@ -118,14 +118,14 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 
 	if err := <-errs; err != nil {
 		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return
 	}
 
 	currentRun, ok, err := scoped.GetRun(prepared.Run.ID)
 	if err != nil {
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return
 	}
@@ -149,7 +149,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 		if store.IsNotFound(err) {
 			status = http.StatusNotFound
 		}
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: http.StatusText(status) + ": " + err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, status, err))
 		flusher.Flush()
 		return
 	}
@@ -164,7 +164,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 
 	if err := <-errs; err != nil {
 		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return
 	}
@@ -172,12 +172,12 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 	run, ok, err := scoped.GetRun(prepared.Run.ID)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return
 	}
 	if !ok {
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: "run not found"})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusNotFound, store.ErrNotFound("run")))
 		flusher.Flush()
 		return
 	}
@@ -201,7 +201,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 		if store.IsNotFound(err) {
 			status = http.StatusNotFound
 		}
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: http.StatusText(status) + ": " + err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, status, err))
 		flusher.Flush()
 		return
 	}
@@ -221,7 +221,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 			return
 		}
 		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return
 	}
@@ -229,12 +229,12 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 	run, ok, err := scoped.GetRun(prepared.Run.ID)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return
 	}
 	if !ok {
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: "run not found"})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusNotFound, store.ErrNotFound("run")))
 		flusher.Flush()
 		return
 	}
@@ -267,7 +267,7 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 	scoped := h.scopedStore(r)
 	run, ok, err := scoped.GetRun(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -307,7 +307,7 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(err.Error(), "not waiting for user input") {
 			_, _ = h.agentRuntime.FailRun(id, err)
 		}
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return
 	}
@@ -335,7 +335,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	scoped := h.scopedStore(r)
 	run, ok, err := scoped.GetRun(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -387,7 +387,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(err.Error(), "not waiting for user input") && !strings.Contains(err.Error(), "not recoverable") {
 			_, _ = h.agentRuntime.FailRun(id, err)
 		}
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return
 	}
@@ -395,12 +395,12 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	current, ok, err := scoped.GetRun(id)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(id, err)
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return
 	}
 	if !ok {
-		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: "run not found"})
+		writeSSE(w, "error", failureChatChunk(w, http.StatusNotFound, store.ErrNotFound("run")))
 		flusher.Flush()
 		return
 	}

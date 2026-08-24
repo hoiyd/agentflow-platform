@@ -84,7 +84,7 @@ export type ChatEvent =
       citations?: RAGCitation[];
       invalid_citation_ids?: string[];
     }
-  | { type: "error"; error: string };
+  | { type: "error"; error: string; code?: string; source?: string; category?: string; retryable?: boolean; request_id?: string };
 
 export type AgentInfo = {
   id: string;

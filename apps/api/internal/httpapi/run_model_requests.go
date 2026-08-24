@@ -40,7 +40,7 @@ func (h *Handler) listModelRequests(w http.ResponseWriter, r *http.Request) {
 	scoped := h.scopedStore(r)
 	run, ok, err := scoped.GetRun(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -49,12 +49,12 @@ func (h *Handler) listModelRequests(w http.ResponseWriter, r *http.Request) {
 	}
 	records, err := scoped.ListModelRequestRecords(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	events, err := scoped.ListRunEvents(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, http.StatusInternalServerError, err)
 		return
 	}
 	manifests := modelRequestManifests(events)

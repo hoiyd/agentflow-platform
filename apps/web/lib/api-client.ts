@@ -10,6 +10,48 @@ type APIRequestPolicy = {
   requireBody?: boolean;
 };
 
+type APIErrorOptions = {
+  status: number;
+  code?: string;
+  source?: string;
+  category?: string;
+  retryable?: boolean;
+  operation?: string;
+  requestId?: string;
+};
+
+type APIErrorEnvelope = {
+  error?: string;
+  code?: string;
+  source?: string;
+  category?: string;
+  retryable?: boolean;
+  operation?: string;
+  request_id?: string;
+};
+
+export class APIError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly source: string;
+  readonly category: string;
+  readonly retryable: boolean;
+  readonly operation?: string;
+  readonly requestId?: string;
+
+  constructor(message: string, options: APIErrorOptions) {
+    super(message);
+    this.name = "APIError";
+    this.status = options.status;
+    this.code = options.code ?? "request_failed";
+    this.source = options.source ?? "http_api";
+    this.category = options.category ?? "execution";
+    this.retryable = options.retryable ?? false;
+    this.operation = options.operation;
+    this.requestId = options.requestId;
+  }
+}
+
 export async function apiRequest(
   path: string,
   init: RequestInit,
@@ -22,8 +64,21 @@ export async function apiRequest(
     return response;
   }
 
-  const detail = policy.includeErrorBody ? (await response.text()).trim() : "";
-  throw new Error(`${policy.errorMessage}: ${response.status}${detail ? ` ${detail}` : ""}`);
+  const body = await response.text();
+  const envelope = parseErrorEnvelope(body);
+  const detail = policy.includeErrorBody ? envelope.error ?? body.trim() : "";
+  throw new APIError(
+    `${policy.errorMessage}: ${response.status}${detail ? ` ${detail}` : ""}`,
+    {
+      status: response.status,
+      code: envelope.code,
+      source: envelope.source,
+      category: envelope.category,
+      retryable: envelope.retryable,
+      operation: envelope.operation,
+      requestId: envelope.request_id ?? response.headers.get("X-Request-ID") ?? undefined
+    }
+  );
 }
 
 export async function apiJSON(
@@ -74,4 +129,26 @@ export function expectObject<T extends object>(value: unknown, responseName: str
 
 export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseErrorEnvelope(body: string): APIErrorEnvelope {
+  try {
+    const value = JSON.parse(body) as unknown;
+    if (!isObject(value)) return {};
+    return {
+      error: stringValue(value.error),
+      code: stringValue(value.code),
+      source: stringValue(value.source),
+      category: stringValue(value.category),
+      retryable: typeof value.retryable === "boolean" ? value.retryable : undefined,
+      operation: stringValue(value.operation),
+      request_id: stringValue(value.request_id)
+    };
+  } catch {
+    return {};
+  }
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
 }

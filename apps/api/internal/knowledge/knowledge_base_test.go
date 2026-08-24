@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/store"
@@ -95,6 +96,26 @@ func TestKnowledgeBaseClassifiesEmbeddingFailure(t *testing.T) {
 	_, err := knowledgeBase.Search(context.Background(), domain.DocumentSearch{Query: "launch"}, 1)
 	if !IsEmbeddingError(err) || !errors.Is(err, want) {
 		t.Fatalf("expected typed embedding error, got %v", err)
+	}
+	if info := failure.Describe(err); info.Source != "knowledge_embedding" {
+		t.Fatalf("expected unclassified embedding source, got %#v", info)
+	}
+}
+
+func TestKnowledgeBasePreservesClassifiedEmbeddingSource(t *testing.T) {
+	want := failure.New(failure.Definition{
+		Message: "embedding provider unavailable",
+		Info: failure.Info{
+			Code: "provider_unavailable", Source: "model_provider",
+			Category: failure.CategoryAvailability, Retryable: true,
+		},
+	})
+	knowledgeBase := NewKnowledgeBase(nil, embeddingStub{err: want})
+
+	_, err := knowledgeBase.Search(context.Background(), domain.DocumentSearch{Query: "launch"}, 1)
+	info := failure.Describe(err)
+	if info.Source != "model_provider" || info.Code != "provider_unavailable" || !info.Retryable {
+		t.Fatalf("expected provider failure classification to survive embedding wrapper, got %#v", info)
 	}
 }
 

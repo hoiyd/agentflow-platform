@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { APIError } from "./api-client.ts";
 import { getRunModelRequests, getRunReplay, getRunUsage } from "./api.ts";
 import {
   createDocument,
@@ -311,9 +312,28 @@ test("RAG search normalizes malformed item collections", async (t) => {
 });
 
 test("RAG search exposes an unsuccessful HTTP status", async (t) => {
-  mockFetch(t, { error: "unavailable" }, () => {}, 503);
+  mockFetch(t, {
+    error: "Service Unavailable",
+    code: "embedding_unavailable",
+    source: "model_provider",
+    category: "availability",
+    retryable: true,
+    request_id: "req_test"
+  }, () => {}, 503);
 
-  await assert.rejects(() => searchRAG({ query: "failure" }), /Failed to search knowledge: 503/);
+  await assert.rejects(
+    () => searchRAG({ query: "failure" }),
+    (error) => {
+      assert.equal(error instanceof APIError, true);
+      assert.match(error.message, /Failed to search knowledge: 503/);
+      assert.equal(error.code, "embedding_unavailable");
+      assert.equal(error.source, "model_provider");
+      assert.equal(error.category, "availability");
+      assert.equal(error.retryable, true);
+      assert.equal(error.requestId, "req_test");
+      return true;
+    }
+  );
 });
 
 test("RAG evaluation sends cases and preserves the result", async (t) => {

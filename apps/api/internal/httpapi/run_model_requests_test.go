@@ -89,11 +89,12 @@ func TestListModelRequestsHandlesStoreFailuresAndInvalidProjection(t *testing.T)
 		store      *modelRequestHTTPStore
 		wantStatus int
 		wantBody   string
+		absentBody string
 	}{
 		{name: "missing id", path: "/api/runs//model_requests", store: &modelRequestHTTPStore{Store: fileStore}, wantStatus: http.StatusBadRequest, wantBody: "run id is required"},
-		{name: "run lookup", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, runErr: errors.New("run lookup failed")}, wantStatus: http.StatusInternalServerError, wantBody: "run lookup failed"},
-		{name: "record list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, recordsErr: errors.New("records failed")}, wantStatus: http.StatusInternalServerError, wantBody: "records failed"},
-		{name: "event list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, eventsErr: errors.New("events failed")}, wantStatus: http.StatusInternalServerError, wantBody: "events failed"},
+		{name: "run lookup", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, runErr: errors.New("run lookup failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "run lookup failed"},
+		{name: "record list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, recordsErr: errors.New("records failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "records failed"},
+		{name: "event list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, eventsErr: errors.New("events failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "events failed"},
 		{name: "invalid projection", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{
 			Store: fileStore, run: run, ok: true, records: []domain.ModelRequestRecord{},
 			events: []domain.RunEvent{{Type: domain.EventModelRequestPrepared, Payload: map[string]any{
@@ -107,7 +108,9 @@ func TestListModelRequestsHandlesStoreFailuresAndInvalidProjection(t *testing.T)
 			handler := &Handler{store: test.store}
 			response := httptest.NewRecorder()
 			handler.listModelRequests(response, httptest.NewRequest(http.MethodGet, test.path, nil))
-			if response.Code != test.wantStatus || !strings.Contains(response.Body.String(), test.wantBody) {
+			body := response.Body.String()
+			if response.Code != test.wantStatus || !strings.Contains(body, test.wantBody) ||
+				(test.absentBody != "" && strings.Contains(body, test.absentBody)) {
 				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 			}
 		})
