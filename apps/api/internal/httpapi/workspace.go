@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
 )
 
 const WorkspaceHeader = "X-Workspace-ID"
@@ -50,6 +51,14 @@ func workspaceIDFromRequest(r *http.Request) string {
 		workspace.ID = strings.TrimSpace(r.URL.Query().Get("workspace_id"))
 	}
 	return domain.NormalizeWorkspaceID(workspace.ID)
+}
+
+func (h *Handler) scopedStore(r *http.Request) store.WorkspaceStore {
+	return h.store.ForWorkspace(domain.NewWorkspaceScope(workspaceIDFromRequest(r)))
+}
+
+func (h *Handler) scopedStoreForID(workspaceID string) store.WorkspaceStore {
+	return h.store.ForWorkspace(domain.NewWorkspaceScope(workspaceID))
 }
 
 func resolvePayloadWorkspace(r *http.Request, payloadWorkspaceID string) (string, bool) {

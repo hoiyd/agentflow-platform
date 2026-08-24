@@ -7,10 +7,12 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/verification"
 )
 
 type runCompletionRequest struct {
+	WorkspaceID    string
 	RunID          string
 	ConversationID string
 	UserInput      string
@@ -22,21 +24,22 @@ type runCompletionRequest struct {
 // completeStreamingRun centralizes the durable state transition shared by all
 // streaming modes. The SSE response is flushed before asynchronous memory work.
 func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flusher, ctx context.Context, request runCompletionRequest) bool {
-	sources, citations, invalidCitationIDs, err := h.resolveRunCitations(request.RunID, request.Assistant)
+	scoped := h.scopedStoreForID(request.WorkspaceID)
+	sources, citations, invalidCitationIDs, err := h.resolveRunCitations(scoped, request.RunID, request.Assistant)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(request.RunID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
 		flusher.Flush()
 		return false
 	}
-	message, err := h.store.AddMessageWithCitations(request.ConversationID, "assistant", request.Assistant, citations)
+	message, err := scoped.AddMessageWithCitations(request.ConversationID, "assistant", request.Assistant, citations)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(request.RunID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
 		flusher.Flush()
 		return false
 	}
-	_, _ = h.store.CreateRunEvent(domain.RunEvent{
+	_, _ = scoped.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventCitationResolved, RunID: request.RunID, ConversationID: request.ConversationID,
 		Payload: map[string]any{
 			"protocol_version":     domain.RAGCitationProtocolVersion,
@@ -47,7 +50,7 @@ func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flush
 		},
 	})
 
-	completed, err := h.resolveRunCompletion(ctx, request.RunID, request.UserInput, request.Assistant)
+	completed, err := h.resolveRunCompletion(ctx, scoped, request.RunID, request.UserInput, request.Assistant)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(request.RunID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
@@ -57,7 +60,7 @@ func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flush
 
 	title := ""
 	if request.GenerateTitle {
-		title = h.summarizeConversationTitleBestEffort(ctx, request.ConversationID, request.UserInput, request.Assistant)
+		title = h.summarizeConversationTitleBestEffort(ctx, scoped, request.ConversationID, request.UserInput, request.Assistant)
 	}
 	writeSSE(w, "done", domain.ChatChunk{
 		Type:               "done",
@@ -89,8 +92,8 @@ func (h *Handler) freezeCompletionContract(contract *domain.CompletionContract) 
 	return h.verification.FreezeContract(contract)
 }
 
-func (h *Handler) resolveRunCompletion(ctx context.Context, runID, question, output string) (domain.Run, error) {
-	run, ok, err := h.store.GetRun(runID)
+func (h *Handler) resolveRunCompletion(ctx context.Context, scoped store.WorkspaceStore, runID, question, output string) (domain.Run, error) {
+	run, ok, err := scoped.GetRun(runID)
 	if err != nil {
 		return domain.Run{}, err
 	}
@@ -106,7 +109,7 @@ func (h *Handler) resolveRunCompletion(ctx context.Context, runID, question, out
 		return domain.Run{}, errors.New("verification engine is unavailable")
 	}
 	if strings.TrimSpace(question) == "" {
-		messages, listErr := h.store.ListMessages(run.ConversationID)
+		messages, listErr := scoped.ListMessages(run.ConversationID)
 		if listErr != nil {
 			return domain.Run{}, listErr
 		}
@@ -114,7 +117,7 @@ func (h *Handler) resolveRunCompletion(ctx context.Context, runID, question, out
 	}
 	decision, err := h.verification.Verify(ctx, runID, verification.SubjectForQuestionAnswer(question, output))
 	if err != nil {
-		_, _ = h.store.UpdateRunVerificationStatus(runID, domain.VerificationBlocked)
+		_, _ = scoped.UpdateRunVerificationStatus(runID, domain.VerificationBlocked)
 		return domain.Run{}, err
 	}
 	if decision.AllowCompletion {

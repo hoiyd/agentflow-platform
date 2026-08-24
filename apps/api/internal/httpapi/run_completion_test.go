@@ -20,7 +20,7 @@ type recordingMemoryCurationQueue struct {
 }
 
 type listMessagesErrorStore struct {
-	store.Store
+	store.WorkspaceStore
 	err error
 }
 
@@ -148,10 +148,14 @@ func TestResolveRunCompletionReturnsQuestionLookupError(t *testing.T) {
 	want := fmt.Errorf("list messages failed")
 	runtime := agent.NewRuntime(agent.RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	handler := &Handler{
-		store: listMessagesErrorStore{Store: fileStore, err: want}, agentRuntime: runtime,
+		store: fileStore, agentRuntime: runtime,
 		verification: verification.NewEngine(fileStore, registry),
 	}
-	if _, err := handler.resolveRunCompletion(context.Background(), run.ID, "", "candidate"); err != want {
+	scoped := listMessagesErrorStore{
+		WorkspaceStore: fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
+		err:            want,
+	}
+	if _, err := handler.resolveRunCompletion(context.Background(), scoped, run.ID, "", "candidate"); err != want {
 		t.Fatalf("expected question lookup error, got %v", err)
 	}
 }

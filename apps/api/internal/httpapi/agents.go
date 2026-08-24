@@ -187,7 +187,7 @@ func applyAgentConfigRequest(agent *domain.Agent, req agentConfigRequest) {
 }
 
 func (h *Handler) listRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := h.store.ListRunsByWorkspace(workspaceIDFromRequest(r))
+	runs, err := h.scopedStore(r).ListRuns()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -205,7 +205,7 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	run, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id)
+	run, ok, err := h.scopedStore(r).GetRun(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -225,7 +225,7 @@ func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
-	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
+	if _, ok, err := h.scopedStore(r).GetRun(id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	} else if !ok {
@@ -254,7 +254,8 @@ func (h *Handler) listCollaborationSteps(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
+	scoped := h.scopedStore(r)
+	if _, ok, err := scoped.GetRun(id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	} else if !ok {
@@ -262,7 +263,7 @@ func (h *Handler) listCollaborationSteps(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	steps, err := h.store.ListCollaborationSteps(id)
+	steps, err := scoped.ListCollaborationSteps(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -277,7 +278,8 @@ func (h *Handler) getRunReplay(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
-	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
+	scoped := h.scopedStore(r)
+	if _, ok, err := scoped.GetRun(id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	} else if !ok {
@@ -285,7 +287,7 @@ func (h *Handler) getRunReplay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	replay, ok, err := h.store.GetRunReplay(id)
+	replay, ok, err := scoped.GetRunReplay(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -304,14 +306,15 @@ func (h *Handler) getRunUsage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
-	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
+	scoped := h.scopedStore(r)
+	if _, ok, err := scoped.GetRun(id); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	} else if !ok {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
-	ledger, ok, err := h.store.GetRunUsageLedger(id)
+	ledger, ok, err := scoped.GetRunUsageLedger(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

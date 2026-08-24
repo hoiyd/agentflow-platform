@@ -24,6 +24,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.WorkspaceID = workspaceID
+	scoped := h.scopedStoreForID(workspaceID)
 	req.Message = strings.TrimSpace(req.Message)
 	if req.Message == "" {
 		writeError(w, http.StatusBadRequest, "message is required")
@@ -43,13 +44,13 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 
 	conversationID := strings.TrimSpace(req.ConversationID)
 	if conversationID == "" {
-		conversation, err := h.store.CreateConversationInWorkspace(workspaceID, req.Message)
+		conversation, err := scoped.CreateConversation(req.Message)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		conversationID = conversation.ID
-	} else if _, ok, err := h.store.GetConversationInWorkspace(workspaceID, conversationID); err != nil {
+	} else if _, ok, err := scoped.GetConversation(conversationID); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	} else if !ok {
@@ -62,13 +63,13 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	defer releaseRun()
 
-	userMessage, err := h.store.AddMessageInWorkspace(workspaceID, conversationID, "user", req.Message)
+	userMessage, err := scoped.AddMessage(conversationID, "user", req.Message)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	history, err := h.store.ListMessagesInWorkspace(workspaceID, conversationID)
+	history, err := scoped.ListMessages(conversationID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -122,7 +123,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	currentRun, ok, err := h.store.GetRun(prepared.Run.ID)
+	currentRun, ok, err := scoped.GetRun(prepared.Run.ID)
 	if err != nil {
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
 		flusher.Flush()
@@ -135,12 +136,13 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.completeStreamingRun(w, flusher, r.Context(), runCompletionRequest{
-		RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
+		WorkspaceID: workspaceID, RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
 		Assistant: assistant.String(), UserMessage: &userMessage, GenerateTitle: true,
 	})
 }
 
 func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
+	scoped := h.scopedStoreForID(req.WorkspaceID)
 	prepared, err := h.agentRuntime.PrepareCollaborationRunWithContract(r.Context(), req.AgentID, conversationID, req.CompletionContract)
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -167,7 +169,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 		return
 	}
 
-	run, ok, err := h.store.GetRun(prepared.Run.ID)
+	run, ok, err := scoped.GetRun(prepared.Run.ID)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
@@ -186,12 +188,13 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 	}
 
 	h.completeStreamingRun(w, flusher, r.Context(), runCompletionRequest{
-		RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
+		WorkspaceID: req.WorkspaceID, RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
 		Assistant: assistant.String(), UserMessage: &userMessage, GenerateTitle: true,
 	})
 }
 
 func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
+	scoped := h.scopedStoreForID(req.WorkspaceID)
 	prepared, err := h.agentRuntime.PrepareAutonomousRunWithContract(r.Context(), req.AgentID, conversationID, req.CompletionContract)
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -212,7 +215,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 	}
 
 	if err := <-errs; err != nil {
-		currentRun, ok, getErr := h.store.GetRun(prepared.Run.ID)
+		currentRun, ok, getErr := scoped.GetRun(prepared.Run.ID)
 		if getErr == nil && ok && currentRun.Status == domain.RunCanceled {
 			writeTerminalRunDone(w, flusher, currentRun)
 			return
@@ -223,7 +226,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 		return
 	}
 
-	run, ok, err := h.store.GetRun(prepared.Run.ID)
+	run, ok, err := scoped.GetRun(prepared.Run.ID)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
@@ -242,7 +245,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 	}
 
 	h.completeStreamingRun(w, flusher, r.Context(), runCompletionRequest{
-		RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
+		WorkspaceID: req.WorkspaceID, RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
 		Assistant: assistant.String(), UserMessage: &userMessage, GenerateTitle: true,
 	})
 }
@@ -261,7 +264,8 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	run, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id)
+	scoped := h.scopedStore(r)
+	run, ok, err := scoped.GetRun(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -309,7 +313,7 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.completeStreamingRun(w, flusher, r.Context(), runCompletionRequest{
-		RunID: id, ConversationID: run.ConversationID, Assistant: assistant.String(),
+		WorkspaceID: run.WorkspaceID, RunID: id, ConversationID: run.ConversationID, Assistant: assistant.String(),
 	})
 }
 
@@ -328,7 +332,8 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	}
 	req.UserInput = strings.TrimSpace(req.UserInput)
 
-	run, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id)
+	scoped := h.scopedStore(r)
+	run, ok, err := scoped.GetRun(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -387,7 +392,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	current, ok, err := h.store.GetRun(id)
+	current, ok, err := scoped.GetRun(id)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(id, err)
 		writeSSE(w, "error", domain.ChatChunk{Type: "error", Error: err.Error()})
@@ -405,7 +410,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.completeStreamingRun(w, flusher, r.Context(), runCompletionRequest{
-		RunID: id, ConversationID: current.ConversationID, Assistant: assistant.String(),
+		WorkspaceID: current.WorkspaceID, RunID: id, ConversationID: current.ConversationID, Assistant: assistant.String(),
 	})
 }
 

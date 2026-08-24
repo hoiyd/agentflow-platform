@@ -14,8 +14,8 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
-	workspaceID := workspaceIDFromRequest(r)
-	run, ok, err := h.store.GetRunInWorkspace(workspaceID, runID)
+	scoped := h.scopedStore(r)
+	run, ok, err := scoped.GetRun(runID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -32,7 +32,7 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "terminal run cannot be reverified")
 		return
 	}
-	messages, err := h.store.ListMessagesInWorkspace(workspaceID, run.ConversationID)
+	messages, err := scoped.ListMessages(run.ConversationID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -44,7 +44,7 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 	}
 	decision, err := h.verification.Verify(r.Context(), run.ID, verification.SubjectForQuestionAnswer(latestUserInput(messages), output))
 	if err != nil {
-		_, _ = h.store.UpdateRunVerificationStatus(run.ID, domain.VerificationBlocked)
+		_, _ = scoped.UpdateRunVerificationStatus(run.ID, domain.VerificationBlocked)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

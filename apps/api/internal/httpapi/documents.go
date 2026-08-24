@@ -16,7 +16,7 @@ import (
 const documentUploadMaxBytes = 2 << 20
 
 func (h *Handler) listDocuments(w http.ResponseWriter, r *http.Request) {
-	documents, err := h.store.ListDocumentsByWorkspace(workspaceIDFromRequest(r))
+	documents, err := h.scopedStore(r).ListDocuments()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -30,7 +30,7 @@ func (h *Handler) getDocument(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "document id is required")
 		return
 	}
-	document, chunks, ok, err := h.store.GetDocumentInWorkspace(workspaceIDFromRequest(r), id)
+	document, chunks, ok, err := h.scopedStore(r).GetDocument(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -51,7 +51,7 @@ func (h *Handler) deleteDocument(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "document id is required")
 		return
 	}
-	if err := h.store.DeleteDocumentInWorkspace(workspaceIDFromRequest(r), id); err != nil {
+	if err := h.scopedStore(r).DeleteDocument(id); err != nil {
 		status := http.StatusInternalServerError
 		if store.IsNotFound(err) {
 			status = http.StatusNotFound

@@ -153,6 +153,23 @@ type modelRequestHTTPStore struct {
 	eventsErr  error
 }
 
+func (s *modelRequestHTTPStore) ForWorkspace(scope domain.WorkspaceScope) store.WorkspaceStore {
+	return &modelRequestWorkspaceStore{WorkspaceStore: s.Store.ForWorkspace(scope), parent: s}
+}
+
+type modelRequestWorkspaceStore struct {
+	store.WorkspaceStore
+	parent *modelRequestHTTPStore
+}
+
+func (s *modelRequestWorkspaceStore) GetRun(runID string) (domain.Run, bool, error) {
+	parent := s.parent
+	if parent.runErr != nil || parent.ok {
+		return parent.run, parent.ok, parent.runErr
+	}
+	return s.WorkspaceStore.GetRun(runID)
+}
+
 func (s *modelRequestHTTPStore) GetRunInWorkspace(workspaceID, runID string) (domain.Run, bool, error) {
 	if s.runErr != nil || s.ok {
 		return s.run, s.ok, s.runErr
@@ -160,16 +177,18 @@ func (s *modelRequestHTTPStore) GetRunInWorkspace(workspaceID, runID string) (do
 	return s.Store.GetRunInWorkspace(workspaceID, runID)
 }
 
-func (s *modelRequestHTTPStore) ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error) {
-	if s.recordsErr != nil || s.records != nil {
-		return s.records, s.recordsErr
+func (s *modelRequestWorkspaceStore) ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error) {
+	parent := s.parent
+	if parent.recordsErr != nil || parent.records != nil {
+		return parent.records, parent.recordsErr
 	}
-	return s.Store.ListModelRequestRecords(runID)
+	return s.WorkspaceStore.ListModelRequestRecords(runID)
 }
 
-func (s *modelRequestHTTPStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
-	if s.eventsErr != nil || s.events != nil {
-		return s.events, s.eventsErr
+func (s *modelRequestWorkspaceStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
+	parent := s.parent
+	if parent.eventsErr != nil || parent.events != nil {
+		return parent.events, parent.eventsErr
 	}
-	return s.Store.ListRunEvents(runID)
+	return s.WorkspaceStore.ListRunEvents(runID)
 }

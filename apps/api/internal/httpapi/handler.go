@@ -34,6 +34,13 @@ type KnowledgeOperations interface {
 	Evaluate(context.Context, domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error)
 }
 
+// HTTPStore deliberately exposes only global Agent configuration and a
+// mandatory Workspace-scoped view for user-owned persistence.
+type HTTPStore interface {
+	store.AgentStore
+	store.WorkspaceStoreProvider
+}
+
 // Dependencies is the complete production dependency set for the HTTP adapter.
 // Construction and lifecycle ownership remain in the app composition root.
 type Dependencies struct {
@@ -50,7 +57,7 @@ type Dependencies struct {
 }
 
 type Handler struct {
-	store          store.Store
+	store          HTTPStore
 	openAI         *openai.Client
 	tools          *tools.Manager
 	agentRuntime   *agent.Runtime

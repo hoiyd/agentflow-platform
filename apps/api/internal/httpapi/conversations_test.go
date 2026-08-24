@@ -155,6 +155,7 @@ func TestSummarizeConversationTitleBestEffortDoesNotOverwriteManualTitle(t *test
 
 	title := handler.summarizeConversationTitleBestEffort(
 		httptest.NewRequest(http.MethodGet, "/", nil).Context(),
+		fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
 		conversation.ID,
 		"Please explain vector search in RAG.",
 		"Vector search retrieves semantically similar chunks.",
@@ -177,6 +178,7 @@ func TestSummarizeConversationTitleBestEffortUpdatesTemporaryTitle(t *testing.T)
 
 	title := handler.summarizeConversationTitleBestEffort(
 		httptest.NewRequest(http.MethodGet, "/", nil).Context(),
+		fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
 		conversation.ID,
 		"Explain vector search in RAG",
 		"Vector search retrieves semantically similar chunks.",

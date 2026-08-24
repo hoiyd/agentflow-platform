@@ -9,6 +9,18 @@ const RAGPromptGuardPolicyVersion = "rag-prompt-guard-v1"
 const RAGCitationProtocolVersion = "rag-citation-v1"
 const DefaultWorkspaceID = "default_workspace"
 
+// WorkspaceScope is the mandatory namespace carried by user-facing storage
+// operations. Its ID is normalized at construction and can never be empty.
+type WorkspaceScope struct{ id string }
+
+func NewWorkspaceScope(workspaceID string) WorkspaceScope {
+	return WorkspaceScope{id: NormalizeWorkspaceID(workspaceID)}
+}
+
+func (s WorkspaceScope) ID() string {
+	return NormalizeWorkspaceID(s.id)
+}
+
 func NormalizeWorkspaceID(workspaceID string) string {
 	workspaceID = strings.TrimSpace(workspaceID)
 	if workspaceID == "" || workspaceID == "default" {

@@ -39,6 +39,10 @@ is not an identity credential, Membership decision, or ACL. An untrusted
 deployment must derive or validate it at an authenticated boundary before
 treating namespace isolation as tenant authorization.
 
+HTTP adapters operate through a mandatory `WorkspaceScope` and a scoped Store
+view. Trusted Runtime and Recovery code may use internal ID-based capabilities,
+but those capabilities are not part of the HTTP persistence interface.
+
 ## Conversation
 
 A **Conversation** is the long-lived container for the user-visible chat.

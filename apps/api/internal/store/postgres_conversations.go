@@ -214,12 +214,16 @@ func (s *PostgresStore) AddMessageWithCitations(conversationID string, role stri
 }
 
 func (s *PostgresStore) AddMessageInWorkspace(workspaceID string, conversationID string, role string, content string) (domain.Message, error) {
+	return s.AddMessageWithCitationsInWorkspace(workspaceID, conversationID, role, content, nil)
+}
+
+func (s *PostgresStore) AddMessageWithCitationsInWorkspace(workspaceID string, conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error) {
 	if _, ok, err := s.GetConversationInWorkspace(workspaceID, conversationID); err != nil {
 		return domain.Message{}, err
 	} else if !ok {
 		return domain.Message{}, ErrNotFound("conversation")
 	}
-	return s.AddMessage(conversationID, role, content)
+	return s.AddMessageWithCitations(conversationID, role, content, citations)
 }
 
 func (s *PostgresStore) CreateContextCompaction(compaction domain.ContextCompaction) (domain.ContextCompaction, error) {

@@ -37,7 +37,8 @@ func (h *Handler) listModelRequests(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
-	run, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id)
+	scoped := h.scopedStore(r)
+	run, ok, err := scoped.GetRun(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -46,12 +47,12 @@ func (h *Handler) listModelRequests(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
-	records, err := h.store.ListModelRequestRecords(id)
+	records, err := scoped.ListModelRequestRecords(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	events, err := h.store.ListRunEvents(id)
+	events, err := scoped.ListRunEvents(id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

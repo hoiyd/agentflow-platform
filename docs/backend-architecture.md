@@ -20,7 +20,9 @@ complete Single, Multi, and Loop lifecycles, read
   implementation for retrieval, tools, context, events, and model access.
 - Stores persist domain contracts but do not own retrieval policy, reranking,
   or orchestration.
-- Every `/api/*` operation resolves a non-empty Workspace namespace. Store lookups,
+- Every `/api/*` operation resolves a non-empty Workspace namespace. HTTP handlers
+  receive only a `WorkspaceStore` view, so unscoped resource access is unavailable
+  at compile time. Store lookups,
   retrieval expansion, Replay, and Verification preserve it across adapters.
 - Run Events describe execution; the Usage Ledger remains the accounting
   authority.
