@@ -14,7 +14,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
 	"agentflow-platform/apps/api/internal/verification"
@@ -48,7 +48,7 @@ type HTTPStore interface {
 // Construction and lifecycle ownership remain in the app composition root.
 type Dependencies struct {
 	Store          store.Store
-	ModelClient    *openai.Client
+	ModelClient    modelprovider.TextCompleter
 	Tools          *tools.Manager
 	AgentRuntime   *agent.Runtime
 	Memory         MemoryOperations
@@ -61,7 +61,7 @@ type Dependencies struct {
 
 type Handler struct {
 	store          HTTPStore
-	openAI         *openai.Client
+	modelClient    modelprovider.TextCompleter
 	tools          *tools.Manager
 	agentRuntime   *agent.Runtime
 	memories       MemoryOperations
@@ -102,7 +102,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 	}
 	return &Handler{
 		store:          dependencies.Store,
-		openAI:         dependencies.ModelClient,
+		modelClient:    dependencies.ModelClient,
 		tools:          dependencies.Tools,
 		agentRuntime:   dependencies.AgentRuntime,
 		memories:       dependencies.Memory,

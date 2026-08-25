@@ -70,7 +70,7 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 	}
 	client := newLocalFallbackOpenAIClientForTest()
 	memoryCurator := memorypkg.NewCurator(fileStore, client)
-	handler := &Handler{store: fileStore, openAI: client, memoryCuration: memoryCurator}
+	handler := &Handler{store: fileStore, modelClient: client, memoryCuration: memoryCurator}
 	conversation, err := fileStore.CreateConversation("memory sync")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -93,7 +93,7 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 	if err := memoryCurator.Close(ctx); err != nil {
 		t.Fatalf("drain memory curation: %v", err)
 	}
-	queryEmbedding, err := handler.openAI.EmbedText(context.Background(), "pgvector semantic memory embeddings")
+	queryEmbedding, err := client.EmbedText(context.Background(), "pgvector semantic memory embeddings")
 	if err != nil {
 		t.Fatalf("embed query: %v", err)
 	}

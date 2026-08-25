@@ -12,7 +12,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/modelprovider"
 )
 
 const (
@@ -41,7 +41,7 @@ var (
 )
 
 type Embedder interface {
-	EmbedText(context.Context, string) (openai.Embedding, error)
+	EmbedText(context.Context, string) (modelprovider.Embedding, error)
 }
 
 type CuratorStore interface {

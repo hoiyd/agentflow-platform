@@ -39,7 +39,7 @@ func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, scop
 }
 
 func (h *Handler) generateConversationTitle(ctx context.Context, userMessage string, assistantMessage string) (string, error) {
-	if h.openAI == nil {
+	if h.modelClient == nil {
 		return cleanConversationTitle(userMessage), nil
 	}
 
@@ -48,7 +48,7 @@ func (h *Handler) generateConversationTitle(ctx context.Context, userMessage str
 
 	systemPrompt := "Generate a concise conversation title. Return only the title, no quotes, no punctuation-only wrappers. Use the same language as the user when possible. Keep it under 8 words or 20 Chinese characters."
 	prompt := "User message:\n" + truncateForTitle(userMessage, 900) + "\n\nAssistant response:\n" + truncateForTitle(assistantMessage, 900)
-	completion, err := h.openAI.CompleteTextDetailed(titleCtx, systemPrompt, prompt)
+	completion, err := h.modelClient.CompleteTextDetailed(titleCtx, systemPrompt, prompt)
 	if err != nil {
 		return "", err
 	}
