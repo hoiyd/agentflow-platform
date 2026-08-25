@@ -33,6 +33,10 @@ POST   /api/conversations
 PATCH  /api/conversations/{id}
 DELETE /api/conversations/{id}
 GET    /api/conversations/{id}/messages
+GET    /api/conversations/{id}/task-state
+PATCH  /api/conversations/{id}/task-state
+GET    /api/conversations/{id}/task-state/revisions
+GET    /api/conversations/{id}/task-state/revisions/{version}
 
 POST   /api/chat
 
@@ -75,6 +79,28 @@ POST   /api/rag/evaluations/run
 `PATCH /api/conversations/{id}` accepts `{"title":"..."}`. Deleting a
 Conversation removes its persisted Messages and associated execution state from
 the selected Store.
+
+### Structured Task State
+
+`GET /api/conversations/{id}/task-state` returns the latest structured state or
+an empty version-0 state before the first update. `PATCH` accepts an
+`expected_version` and ordered typed operations; stale versions return `409`
+with `code=task_state_version_conflict` and do not modify the state.
+
+The revision collection endpoint returns the immutable timeline in ascending
+version order. The version endpoint returns one historical Revision directly.
+Each Revision contains the submitted patch, resulting state snapshot, previous
+and current versions, source actor/Run metadata, and commit time. These
+Conversation-scoped endpoints enforce the same Workspace scope as Messages and
+Runs.
+
+New Runtime Snapshot v8 Runs receive Structured Task State context. Native
+Agent execution also receives the runtime-owned `update_task_state` Tool; the
+text-only LangChainGo executor does not. The Tool applies the same patch
+contract and derives source identity from the active Run rather than model
+arguments. See
+[Structured Durable Task State](task-state.md) for supported operations and
+Context/Replay semantics.
 
 `POST /api/agents` creates a reusable execution profile. `PATCH
 /api/agents/{id}` updates only supplied fields:
@@ -125,7 +151,9 @@ Envelope's selected token totals with selected/excluded Manifest totals.
 Expired Capture content is never returned. Both forms enforce the Run's
 Workspace namespace.
 
-Replay is the detailed aggregate assembled from stored records for one Run.
+Replay is the detailed aggregate assembled from stored records for one Run. It
+includes the Conversation's ordered `task_state_revisions`; Context Manifest
+references identify which version was visible to each Model Call.
 Episode Report is a compact projection derived from Replay for review or
 export; it does not create another execution history or accounting source.
 Trace-derived Episode errors include optional `kind`, `category`, and

@@ -127,6 +127,32 @@ func (c *Catalog) EnabledNames() []string {
 	return c.sortedNamesLocked(true)
 }
 
+// CloneWith creates an isolated catalog while preserving installed bindings
+// and enablement. Runtime-owned harness tools can be added without mutating the
+// user-configurable Manager catalog.
+func (c *Catalog) CloneWith(bindings ...Binding) (*Catalog, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	cloned, err := NewCatalog()
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range c.sortedNamesLocked(false) {
+		if err := cloned.Register(c.bindings[name]); err != nil {
+			return nil, err
+		}
+		if err := cloned.SetEnabled(name, c.enabled[name]); err != nil {
+			return nil, err
+		}
+	}
+	for _, binding := range bindings {
+		if err := cloned.Register(binding); err != nil {
+			return nil, err
+		}
+	}
+	return cloned, nil
+}
+
 func (c *Catalog) Definitions() []map[string]any {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

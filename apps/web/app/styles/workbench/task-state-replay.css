@@ -1,0 +1,107 @@
+/* Task State revision projection on Run Replay */
+
+.task-state-changes {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #ffffff;
+  margin-bottom: 20px;
+}
+
+.task-state-changes-header {
+  min-height: 54px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 14px;
+}
+
+.task-state-changes-header .panel-title.inline {
+  border: 0;
+  padding: 0 0 3px;
+}
+
+.task-state-changes-header p {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0;
+}
+
+.task-state-changes-header > code {
+  color: var(--muted-strong);
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.task-state-change-list { display: grid; }
+
+.task-state-change {
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 110px minmax(220px, 1fr) minmax(280px, 0.8fr);
+  align-items: center;
+  gap: 16px;
+  padding: 11px 14px;
+}
+
+.task-state-change:last-child { border-bottom: 0; }
+
+.task-state-change-version {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.task-state-change-version code,
+.task-state-change-version span { color: var(--muted); }
+.task-state-change-version strong { color: var(--ink); font-size: 12px; }
+
+.task-state-change-operations {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+}
+
+.task-state-change-operations span {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.task-state-change-source {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  justify-content: end;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+}
+
+.task-state-change-source span:first-child {
+  border-left: 2px solid var(--border-strong);
+  color: var(--muted-strong);
+  padding-left: 6px;
+}
+
+.task-state-change-source span.this-run {
+  border-left-color: var(--accent);
+  color: var(--accent-dark);
+}
+
+.task-state-change-source time {
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

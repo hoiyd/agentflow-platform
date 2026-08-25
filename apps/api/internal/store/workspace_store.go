@@ -96,6 +96,34 @@ func (s workspaceStore) GetRunUsageLedger(runID string) (domain.RunUsageLedger, 
 	return s.backend.GetRunUsageLedger(runID)
 }
 
+func (s workspaceStore) GetTaskState(conversationID string) (domain.TaskState, bool, error) {
+	if err := s.requireConversation(conversationID); err != nil {
+		return domain.TaskState{}, false, err
+	}
+	return s.backend.GetTaskState(conversationID)
+}
+
+func (s workspaceStore) GetTaskStateRevision(conversationID string, version int64) (domain.TaskStateRevision, bool, error) {
+	if err := s.requireConversation(conversationID); err != nil {
+		return domain.TaskStateRevision{}, false, err
+	}
+	return s.backend.GetTaskStateRevision(conversationID, version)
+}
+
+func (s workspaceStore) ListTaskStateRevisions(conversationID string) ([]domain.TaskStateRevision, error) {
+	if err := s.requireConversation(conversationID); err != nil {
+		return nil, err
+	}
+	return s.backend.ListTaskStateRevisions(conversationID)
+}
+
+func (s workspaceStore) ApplyTaskStatePatch(conversationID string, patch domain.TaskStatePatch, source domain.TaskStateSource) (domain.TaskStateRevision, error) {
+	if err := s.requireConversation(conversationID); err != nil {
+		return domain.TaskStateRevision{}, err
+	}
+	return s.backend.ApplyTaskStatePatch(conversationID, patch, source)
+}
+
 func (s workspaceStore) ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error) {
 	if err := s.requireRun(runID); err != nil {
 		return nil, err
@@ -129,6 +157,17 @@ func (s workspaceStore) requireRun(runID string) error {
 	}
 	if !ok {
 		return ErrNotFound("run")
+	}
+	return nil
+}
+
+func (s workspaceStore) requireConversation(conversationID string) error {
+	_, ok, err := s.backend.GetConversationInWorkspace(s.workspaceID, conversationID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotFound("conversation")
 	}
 	return nil
 }

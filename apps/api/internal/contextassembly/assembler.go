@@ -39,6 +39,16 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	}
 	config := NormalizeConfig(session.Config)
 	inputBudget := config.ContextWindowTokens - config.OutputReserveTokens - config.SafetyMarginTokens
+	var taskState *domain.TaskState
+	if session.LoadTaskState != nil {
+		loaded, ok, err := session.LoadTaskState()
+		if err != nil {
+			return Pack{}, fmt.Errorf("load structured task state: %w", err)
+		}
+		if ok {
+			taskState = &loaded
+		}
+	}
 	messages := normalizeMessages(mergeSessionHistory(request.Messages, session))
 	messages = applyKnowledgeTrustPolicy(messages)
 	entries := make([]domain.ContextManifestEntry, 0, len(messages)+len(request.Tools)+len(session.Memories)+len(session.Knowledge)+1)
@@ -82,10 +92,15 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	knowledgeCandidates := knowledgeCandidates(session.Knowledge)
 	historySearchCandidates := historySearchCandidates(session.HistorySearch)
 	compactionCandidate := contextCompactionCandidate(session.Compaction)
+	taskStateCandidate := structuredTaskStateCandidate(taskState)
 	selectedTokens := requiredTokens
 	if compactionCandidate != nil {
 		selectedTokens += compactionCandidate.entry.EstimatedTokens
 		requiredTokens += compactionCandidate.entry.EstimatedTokens
+	}
+	if taskStateCandidate != nil {
+		selectedTokens += taskStateCandidate.entry.EstimatedTokens
+		requiredTokens += taskStateCandidate.entry.EstimatedTokens
 	}
 	if requiredTokens <= inputBudget {
 		selectedTokens += selectRelevant(historySearchCandidates, config.HistoryRetrievalMaxTokens, inputBudget-selectedTokens, "history_retrieval_budget_exceeded")
@@ -116,7 +131,10 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	if compactionCandidate != nil {
 		entries = append(entries, compactionCandidate.entry)
 	}
-	packedMessages = injectSelectedContext(packedMessages, compactionCandidate, historySearchCandidates, memoryCandidates, knowledgeCandidates)
+	if taskStateCandidate != nil {
+		entries = append(entries, taskStateCandidate.entry)
+	}
+	packedMessages = injectSelectedContext(packedMessages, taskStateCandidate, compactionCandidate, historySearchCandidates, memoryCandidates, knowledgeCandidates)
 
 	manifest := newManifest(ctx, request.Model, config, inputBudget, selectedTokens, entries, prefixHash(messages, request.Tools), session.Compaction)
 	if err := publishManifest(ctx, session.Sink, manifest); err != nil {
@@ -380,8 +398,36 @@ func contextCompactionCandidate(compaction *domain.ContextCompaction) *candidate
 	}}
 }
 
-func injectSelectedContext(messages []Message, compaction *candidate, historySearch []candidate, memories []candidate, knowledge []candidate) []Message {
-	sections := make([]string, 0, 4)
+func structuredTaskStateCandidate(state *domain.TaskState) *candidate {
+	if state == nil || state.Version <= 0 {
+		return nil
+	}
+	visible := struct {
+		Version      int64                   `json:"version"`
+		Goal         string                  `json:"goal,omitempty"`
+		Tasks        []domain.TaskItem       `json:"tasks"`
+		Decisions    []domain.TaskDecision   `json:"decisions"`
+		Constraints  []domain.TaskConstraint `json:"constraints"`
+		Blockers     []domain.TaskBlocker    `json:"blockers"`
+		ArtifactRefs []string                `json:"artifact_refs"`
+	}{
+		Version: state.Version, Goal: state.Goal, Tasks: state.Tasks, Decisions: state.Decisions,
+		Constraints: state.Constraints, Blockers: state.Blockers, ArtifactRefs: state.ArtifactRefs,
+	}
+	encoded, _ := json.Marshal(visible)
+	formatted := `<task_state policy="Durable structured execution context. The current user request wins on conflict. When update_task_state is available, update only through that tool with expected_version; never infer that an omitted field was deleted.">` + "\n" + string(encoded) + "\n</task_state>"
+	return &candidate{formatted: formatted, entry: domain.ContextManifestEntry{
+		Source: SourceTaskState, ReferenceID: fmt.Sprintf("%s:v%d", state.ConversationID, state.Version),
+		Selected: true, Reason: "required", Transformation: "structured_json",
+		EstimatedTokens: EstimateTokens(formatted), OriginalBytes: len(encoded), IncludedBytes: len(formatted),
+	}}
+}
+
+func injectSelectedContext(messages []Message, taskState *candidate, compaction *candidate, historySearch []candidate, memories []candidate, knowledge []candidate) []Message {
+	sections := make([]string, 0, 5)
+	if taskState != nil {
+		sections = append(sections, taskState.formatted)
+	}
 	if compaction != nil {
 		sections = append(sections, compaction.formatted)
 	}

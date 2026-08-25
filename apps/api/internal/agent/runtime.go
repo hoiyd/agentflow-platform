@@ -17,6 +17,7 @@ import (
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/sessionhistory"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/tools"
 	turnpkg "agentflow-platform/apps/api/internal/turn"
 )
@@ -34,6 +35,7 @@ type Runtime struct {
 	runBudget             domain.RuntimeRunBudget
 	knowledgeRetriever    rag.Retriever
 	checkpoints           checkpoint.Provider
+	taskStates            *taskstate.Service
 }
 
 type RuntimeStore interface {
@@ -98,6 +100,10 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 	if checkpointProvider == nil {
 		checkpointProvider = checkpoint.NewInternalProvider(options.Store)
 	}
+	var taskStates *taskstate.Service
+	if taskStore, ok := options.Store.(taskstate.Store); ok {
+		taskStates = taskstate.NewService(taskStore, eventpkg.StoreSink{Store: options.Store})
+	}
 	runtime := &Runtime{
 		store:                 options.Store,
 		modelClient:           options.ModelClient,
@@ -110,6 +116,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		runBudget:             options.RunBudget,
 		knowledgeRetriever:    knowledgeRetriever,
 		checkpoints:           checkpointProvider,
+		taskStates:            taskStates,
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime

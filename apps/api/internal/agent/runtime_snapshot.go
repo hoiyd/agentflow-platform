@@ -13,6 +13,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -42,10 +43,12 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 	if executor := strings.TrimSpace(executorOverride); executor != "" {
 		agent.Executor = NormalizeExecutorKind(executor)
 	}
+	agent.Tools = r.withHarnessTools(agent.Executor, agent.Tools)
 	candidateSnapshots := make([]domain.RuntimeAgentSnapshot, 0, len(candidates))
 	toolNames := append([]string(nil), agent.Tools...)
 	for _, candidate := range candidates {
 		candidate = domain.NormalizeAgentConfig(candidate)
+		candidate.Tools = r.withHarnessTools(candidate.Executor, candidate.Tools)
 		candidateSnapshots = append(candidateSnapshots, snapshotAgent(candidate))
 		toolNames = append(toolNames, candidate.Tools...)
 	}
@@ -81,10 +84,33 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 }
 
 func (r *Runtime) currentCatalog() (*tools.Catalog, error) {
+	var catalog *tools.Catalog
+	var err error
 	if r.tools == nil {
-		return tools.DefaultCatalog(), nil
+		catalog = tools.DefaultCatalog()
+	} else {
+		catalog, err = r.tools.Catalog()
+		if err != nil {
+			return nil, err
+		}
 	}
-	return r.tools.Catalog()
+	if r.taskStates == nil {
+		return catalog, nil
+	}
+	return catalog.CloneWith(r.taskStates.ToolBinding())
+}
+
+func (r *Runtime) withHarnessTools(executor string, names []string) []string {
+	result := append([]string(nil), names...)
+	if r.taskStates == nil || NormalizeExecutorKind(executor) != ExecutorNative {
+		return result
+	}
+	for _, name := range result {
+		if name == taskstate.UpdateToolName {
+			return result
+		}
+	}
+	return append(result, taskstate.UpdateToolName)
 }
 
 func snapshotAgent(agent domain.Agent) domain.RuntimeAgentSnapshot {
@@ -170,7 +196,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 }
 
 func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
-	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CompactionRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.RunBudgetRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.UnifiedExecutionSnapshotVersion && snapshot.SchemaVersion != domain.SessionHistorySnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
+	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CompactionRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.RunBudgetRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.UnifiedExecutionSnapshotVersion && snapshot.SchemaVersion != domain.SessionHistorySnapshotVersion && snapshot.SchemaVersion != domain.RecoveryRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
 		return ErrRuntimeSnapshotUnavailable
 	}
 	switch snapshot.Mode {

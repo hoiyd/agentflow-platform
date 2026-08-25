@@ -220,6 +220,18 @@ type SessionHistorySearchPayload struct {
 	Error            string   `json:"error,omitempty"`
 }
 
+type TaskStatePayload struct {
+	RevisionID      string   `json:"revision_id"`
+	Version         int64    `json:"version"`
+	PreviousVersion int64    `json:"previous_version"`
+	OperationTypes  []string `json:"operation_types"`
+	ActorType       string   `json:"actor_type"`
+}
+
+func (TaskStatePayload) supports(eventType domain.RunEventType) bool {
+	return eventType == domain.EventTaskStateUpdated
+}
+
 func (SessionHistorySearchPayload) supports(eventType domain.RunEventType) bool {
 	switch eventType {
 	case domain.EventHistorySearchStarted, domain.EventHistorySearchCompleted, domain.EventHistorySearchFailed:

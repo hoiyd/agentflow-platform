@@ -266,6 +266,13 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 			toolEffectRecords = append(toolEffectRecords, cloneToolEffect(item))
 		}
 	}
+	taskStateRevisions := make([]domain.TaskStateRevision, 0)
+	for _, item := range s.data.TaskStateRevisions {
+		if item.ConversationID == run.ConversationID {
+			taskStateRevisions = append(taskStateRevisions, cloneTaskStateRevision(item))
+		}
+	}
+	sort.Slice(taskStateRevisions, func(i, j int) bool { return taskStateRevisions[i].Version < taskStateRevisions[j].Version })
 	return domain.RunReplay{
 		Run:                   cloneRun(run),
 		RuntimeSnapshot:       cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
@@ -279,6 +286,7 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		ToolEffects:           domain.SummarizeToolEffects(toolEffectRecords),
 		VerificationEvidence:  verificationEvidenceForRun(s.data.VerificationEvidence, runID),
 		VerificationArtifacts: verificationArtifactsForRun(s.data.VerificationArtifacts, runID),
+		TaskStateRevisions:    taskStateRevisions,
 	}, true, nil
 }
 

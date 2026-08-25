@@ -16,6 +16,7 @@ import {
   formatTokenValue,
   stepDuration
 } from "./run-replay/RunEventDetails";
+import { TaskStateChanges } from "./run-replay/TaskStateChanges";
 
 type Props = {
   runId: string;
@@ -177,6 +178,8 @@ export function RunReplay({ runId }: Props) {
       />
 
       {episodeReport ? <EpisodeReportPanel report={episodeReport} /> : null}
+
+      <TaskStateChanges revisions={replay.task_state_revisions} runId={replay.run.id} />
 
       <RetrievalOverview summary={retrievalSummary} />
 

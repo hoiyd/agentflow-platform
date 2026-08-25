@@ -188,6 +188,13 @@ func (s *FileStore) DeleteConversation(id string) error {
 		}
 	}
 	s.data.ContextCompactions = compactions
+	taskStateRevisions := make([]domain.TaskStateRevision, 0, len(s.data.TaskStateRevisions))
+	for _, revision := range s.data.TaskStateRevisions {
+		if revision.ConversationID != id {
+			taskStateRevisions = append(taskStateRevisions, revision)
+		}
+	}
+	s.data.TaskStateRevisions = taskStateRevisions
 	modelRequests := make([]domain.ModelRequestRecord, 0, len(s.data.ModelRequestRecords))
 	for _, record := range s.data.ModelRequestRecords {
 		if !runIDs[record.Envelope.RunID] {

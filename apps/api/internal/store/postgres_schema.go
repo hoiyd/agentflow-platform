@@ -55,6 +55,12 @@ var postgresRequiredColumns = []postgresColumnRequirement{
 	{Table: "model_request_records", Column: "source_token_breakdown", UDTName: "jsonb", NotNull: true},
 	{Table: "model_request_records", Column: "capture_content", UDTName: "text", NotNull: true},
 	{Table: "model_request_records", Column: "capture_expired", UDTName: "bool", NotNull: true},
+	{Table: "task_state_revisions", Column: "workspace_id", UDTName: "text", NotNull: true},
+	{Table: "task_state_revisions", Column: "conversation_id", UDTName: "text", NotNull: true},
+	{Table: "task_state_revisions", Column: "version", UDTName: "int8", NotNull: true},
+	{Table: "task_state_revisions", Column: "patch", UDTName: "jsonb", NotNull: true},
+	{Table: "task_state_revisions", Column: "state", UDTName: "jsonb", NotNull: true},
+	{Table: "task_state_revisions", Column: "source", UDTName: "jsonb", NotNull: true},
 }
 
 func (s *PostgresStore) validateSchema(ctx context.Context) error {

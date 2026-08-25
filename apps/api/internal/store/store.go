@@ -116,6 +116,13 @@ type ContextCompactionStore interface {
 	GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error)
 }
 
+type TaskStateStore interface {
+	GetTaskState(conversationID string) (domain.TaskState, bool, error)
+	GetTaskStateRevision(conversationID string, version int64) (domain.TaskStateRevision, bool, error)
+	ListTaskStateRevisions(conversationID string) ([]domain.TaskStateRevision, error)
+	ApplyTaskStatePatch(conversationID string, patch domain.TaskStatePatch, source domain.TaskStateSource) (domain.TaskStateRevision, error)
+}
+
 type ModelRequestStore interface {
 	CreateModelRequestRecord(domain.ModelRequestRecord) (domain.ModelRequestRecord, error)
 	ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error)
@@ -163,6 +170,10 @@ type WorkspaceStore interface {
 	CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error)
 	GetRunReplay(runID string) (domain.RunReplay, bool, error)
 	GetRunUsageLedger(runID string) (domain.RunUsageLedger, bool, error)
+	GetTaskState(conversationID string) (domain.TaskState, bool, error)
+	GetTaskStateRevision(conversationID string, version int64) (domain.TaskStateRevision, bool, error)
+	ListTaskStateRevisions(conversationID string) ([]domain.TaskStateRevision, error)
+	ApplyTaskStatePatch(conversationID string, patch domain.TaskStatePatch, source domain.TaskStateSource) (domain.TaskStateRevision, error)
 	ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error)
 	UpdateRunVerificationStatus(runID string, status domain.VerificationStatus) (domain.Run, error)
 	ListDocuments() ([]domain.Document, error)
@@ -189,6 +200,7 @@ type Store interface {
 	RunUsageStore
 	VerificationStore
 	ContextCompactionStore
+	TaskStateStore
 	ModelRequestStore
 	MemoryStore
 	MemoryCandidateStore
