@@ -89,11 +89,12 @@ func TestListModelRequestsHandlesStoreFailuresAndInvalidProjection(t *testing.T)
 		store      *modelRequestHTTPStore
 		wantStatus int
 		wantBody   string
+		absentBody string
 	}{
 		{name: "missing id", path: "/api/runs//model_requests", store: &modelRequestHTTPStore{Store: fileStore}, wantStatus: http.StatusBadRequest, wantBody: "run id is required"},
-		{name: "run lookup", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, runErr: errors.New("run lookup failed")}, wantStatus: http.StatusInternalServerError, wantBody: "run lookup failed"},
-		{name: "record list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, recordsErr: errors.New("records failed")}, wantStatus: http.StatusInternalServerError, wantBody: "records failed"},
-		{name: "event list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, eventsErr: errors.New("events failed")}, wantStatus: http.StatusInternalServerError, wantBody: "events failed"},
+		{name: "run lookup", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, runErr: errors.New("run lookup failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "run lookup failed"},
+		{name: "record list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, recordsErr: errors.New("records failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "records failed"},
+		{name: "event list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, eventsErr: errors.New("events failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "events failed"},
 		{name: "invalid projection", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{
 			Store: fileStore, run: run, ok: true, records: []domain.ModelRequestRecord{},
 			events: []domain.RunEvent{{Type: domain.EventModelRequestPrepared, Payload: map[string]any{
@@ -107,7 +108,9 @@ func TestListModelRequestsHandlesStoreFailuresAndInvalidProjection(t *testing.T)
 			handler := &Handler{store: test.store}
 			response := httptest.NewRecorder()
 			handler.listModelRequests(response, httptest.NewRequest(http.MethodGet, test.path, nil))
-			if response.Code != test.wantStatus || !strings.Contains(response.Body.String(), test.wantBody) {
+			body := response.Body.String()
+			if response.Code != test.wantStatus || !strings.Contains(body, test.wantBody) ||
+				(test.absentBody != "" && strings.Contains(body, test.absentBody)) {
 				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
 			}
 		})
@@ -153,6 +156,23 @@ type modelRequestHTTPStore struct {
 	eventsErr  error
 }
 
+func (s *modelRequestHTTPStore) ForWorkspace(scope domain.WorkspaceScope) store.WorkspaceStore {
+	return &modelRequestWorkspaceStore{WorkspaceStore: s.Store.ForWorkspace(scope), parent: s}
+}
+
+type modelRequestWorkspaceStore struct {
+	store.WorkspaceStore
+	parent *modelRequestHTTPStore
+}
+
+func (s *modelRequestWorkspaceStore) GetRun(runID string) (domain.Run, bool, error) {
+	parent := s.parent
+	if parent.runErr != nil || parent.ok {
+		return parent.run, parent.ok, parent.runErr
+	}
+	return s.WorkspaceStore.GetRun(runID)
+}
+
 func (s *modelRequestHTTPStore) GetRunInWorkspace(workspaceID, runID string) (domain.Run, bool, error) {
 	if s.runErr != nil || s.ok {
 		return s.run, s.ok, s.runErr
@@ -160,16 +180,18 @@ func (s *modelRequestHTTPStore) GetRunInWorkspace(workspaceID, runID string) (do
 	return s.Store.GetRunInWorkspace(workspaceID, runID)
 }
 
-func (s *modelRequestHTTPStore) ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error) {
-	if s.recordsErr != nil || s.records != nil {
-		return s.records, s.recordsErr
+func (s *modelRequestWorkspaceStore) ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error) {
+	parent := s.parent
+	if parent.recordsErr != nil || parent.records != nil {
+		return parent.records, parent.recordsErr
 	}
-	return s.Store.ListModelRequestRecords(runID)
+	return s.WorkspaceStore.ListModelRequestRecords(runID)
 }
 
-func (s *modelRequestHTTPStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
-	if s.eventsErr != nil || s.events != nil {
-		return s.events, s.eventsErr
+func (s *modelRequestWorkspaceStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
+	parent := s.parent
+	if parent.eventsErr != nil || parent.events != nil {
+		return parent.events, parent.eventsErr
 	}
-	return s.Store.ListRunEvents(runID)
+	return s.WorkspaceStore.ListRunEvents(runID)
 }

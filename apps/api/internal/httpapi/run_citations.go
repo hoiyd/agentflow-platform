@@ -5,10 +5,11 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/store"
 )
 
-func (h *Handler) resolveRunCitations(runID, answer string) ([]domain.RAGCitation, []domain.RAGCitation, []string, error) {
-	sources, err := h.citationSourcesForRun(runID)
+func (h *Handler) resolveRunCitations(scoped store.WorkspaceStore, runID, answer string) ([]domain.RAGCitation, []domain.RAGCitation, []string, error) {
+	sources, err := h.citationSourcesForRun(scoped, runID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -16,8 +17,8 @@ func (h *Handler) resolveRunCitations(runID, answer string) ([]domain.RAGCitatio
 	return sources, citations, invalidSourceIDs, nil
 }
 
-func (h *Handler) citationSourcesForRun(runID string) ([]domain.RAGCitation, error) {
-	events, err := h.store.ListRunEvents(runID)
+func (h *Handler) citationSourcesForRun(scoped store.WorkspaceStore, runID string) ([]domain.RAGCitation, error) {
+	events, err := scoped.ListRunEvents(runID)
 	if err != nil {
 		return nil, err
 	}

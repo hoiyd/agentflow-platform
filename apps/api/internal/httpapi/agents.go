@@ -25,7 +25,7 @@ type agentConfigRequest struct {
 func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
 	agents, err := h.store.ListAgents()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, agents)
@@ -45,13 +45,13 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	applyAgentConfigRequest(&agent, req)
 	if err := h.validateAgentTools(agent.Tools); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeFailure(w, r, http.StatusBadRequest, err)
 		return
 	}
 
 	created, err := h.store.CreateAgent(agent)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeFailure(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
@@ -66,7 +66,7 @@ func (h *Handler) getAgent(w http.ResponseWriter, r *http.Request) {
 
 	agent, ok, err := h.store.GetAgent(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -95,7 +95,7 @@ func (h *Handler) archiveAgent(w http.ResponseWriter, r *http.Request) {
 		if store.IsNotFound(err) {
 			status = http.StatusNotFound
 		}
-		writeError(w, status, err.Error())
+		writeFailure(w, r, status, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -109,7 +109,7 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	existing, ok, err := h.store.GetAgent(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -128,12 +128,12 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 	agent := domain.NormalizeAgentConfig(existing)
 	applyAgentConfigRequest(&agent, req)
 	if err := h.validateAgentTools(agent.Tools); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeFailure(w, r, http.StatusBadRequest, err)
 		return
 	}
 	updated, err := h.store.UpdateAgent(agent)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeFailure(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
@@ -187,9 +187,9 @@ func applyAgentConfigRequest(agent *domain.Agent, req agentConfigRequest) {
 }
 
 func (h *Handler) listRuns(w http.ResponseWriter, r *http.Request) {
-	runs, err := h.store.ListRunsByWorkspace(workspaceIDFromRequest(r))
+	runs, err := h.scopedStore(r).ListRuns()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	for i := range runs {
@@ -205,9 +205,9 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	run, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id)
+	run, ok, err := h.scopedStore(r).GetRun(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -225,8 +225,8 @@ func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
-	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	if _, ok, err := h.scopedStore(r).GetRun(id); err != nil {
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	} else if !ok {
 		writeError(w, http.StatusNotFound, "run not found")
@@ -239,7 +239,7 @@ func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "run not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	run.RuntimeSnapshot = nil
@@ -254,17 +254,18 @@ func (h *Handler) listCollaborationSteps(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	scoped := h.scopedStore(r)
+	if _, ok, err := scoped.GetRun(id); err != nil {
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	} else if !ok {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
 
-	steps, err := h.store.ListCollaborationSteps(id)
+	steps, err := scoped.ListCollaborationSteps(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, steps)
@@ -277,17 +278,18 @@ func (h *Handler) getRunReplay(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
-	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	scoped := h.scopedStore(r)
+	if _, ok, err := scoped.GetRun(id); err != nil {
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	} else if !ok {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
 
-	replay, ok, err := h.store.GetRunReplay(id)
+	replay, ok, err := scoped.GetRunReplay(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -304,16 +306,17 @@ func (h *Handler) getRunUsage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
-	if _, ok, err := h.store.GetRunInWorkspace(workspaceIDFromRequest(r), id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	scoped := h.scopedStore(r)
+	if _, ok, err := scoped.GetRun(id); err != nil {
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	} else if !ok {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
-	ledger, ok, err := h.store.GetRunUsageLedger(id)
+	ledger, ok, err := scoped.GetRunUsageLedger(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {

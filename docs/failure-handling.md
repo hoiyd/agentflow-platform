@@ -49,6 +49,41 @@ Episode Report projects these fields into each trace-derived error as `kind`,
 `source`, `category`, and `retryable`. Legacy persisted events remain readable;
 their new fields are simply empty.
 
+## HTTP Projection
+
+JSON API errors preserve the original `error` field and add a machine-readable
+projection of the same failure contract:
+
+```json
+{
+  "error": "Service Unavailable",
+  "code": "provider_unavailable",
+  "source": "model_provider",
+  "category": "availability",
+  "retryable": true,
+  "operation": "embedding",
+  "request_id": "req_..."
+}
+```
+
+Static request validation receives deterministic HTTP-owned classifications.
+Classified subsystem errors preserve their code, source, category, retryability,
+and operation. Unclassified errors fall back to the HTTP status classification.
+Dynamic `5xx` messages are redacted to standard HTTP text; raw database,
+provider, path, and implementation details are never returned to the client.
+The `X-Request-ID` response header matches `request_id` for correlation.
+
+Every dynamic JSON or SSE failure also emits one server-side `http_failure`
+log entry. It contains the request ID, transport, method, URL path, status,
+failure classification, retryability, operation, and the original lower-level
+error. Query parameters are excluded. Use `request_id` to correlate a safe
+client response with its detailed server log. Because the log intentionally
+retains the original error, production access and retention must follow the
+same controls as other sensitive operational logs.
+
+Streaming chat error chunks use the same fields. Existing clients that only
+read the human-readable `error` field remain compatible.
+
 ## Verification Blocked Reasons
 
 `blocked` means a verifier could not produce a pass/fail judgment. Evidence
@@ -59,7 +94,7 @@ remain explanatory text and must not be parsed for control flow.
 
 ## Compatibility Boundary
 
-This contract is additive. Existing error strings, concrete Go error types,
-Run statuses, and the HTTP error envelope `{"error":"..."}` are unchanged.
-Transport-level typed error responses can be versioned separately if the API
-later needs machine-readable errors outside Replay and Episode Report.
+This contract is additive. Existing concrete Go error types and Run statuses
+are unchanged. The HTTP and streaming envelopes retain `error`; new fields may
+be ignored by legacy clients. Dynamic `5xx` text is intentionally redacted and
+must not be used as a machine-readable contract.

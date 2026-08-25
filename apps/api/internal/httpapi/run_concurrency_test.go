@@ -21,7 +21,7 @@ func TestReserveRunReturnsRetryAfterWhenFull(t *testing.T) {
 
 	handler := &Handler{runController: controller}
 	recorder := httptest.NewRecorder()
-	if _, ok := handler.reserveRunCapacity(recorder); ok {
+	if _, ok := handler.reserveRunCapacity(recorder, nil); ok {
 		t.Fatal("expected overloaded request to be rejected")
 	}
 	if recorder.Code != http.StatusTooManyRequests {

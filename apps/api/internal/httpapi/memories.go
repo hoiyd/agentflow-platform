@@ -28,7 +28,7 @@ func (h *Handler) createMemory(w http.ResponseWriter, r *http.Request) {
 		if memorypkg.IsEmbeddingError(err) {
 			status = http.StatusBadGateway
 		}
-		writeError(w, status, err.Error())
+		writeFailure(w, r, status, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
@@ -52,7 +52,7 @@ func (h *Handler) searchMemories(w http.ResponseWriter, r *http.Request) {
 		if memorypkg.IsEmbeddingError(err) {
 			status = http.StatusBadGateway
 		}
-		writeError(w, status, err.Error())
+		writeFailure(w, r, status, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, items)

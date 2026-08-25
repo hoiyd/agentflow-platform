@@ -20,7 +20,7 @@ type recordingMemoryCurationQueue struct {
 }
 
 type listMessagesErrorStore struct {
-	store.Store
+	store.WorkspaceStore
 	err error
 }
 
@@ -58,7 +58,7 @@ func TestCompleteStreamingRunRequiresFreshPassingEvidence(t *testing.T) {
 	handler := &Handler{store: fileStore, agentRuntime: runtime, verification: verification.NewEngine(fileStore, registry)}
 	response := httptest.NewRecorder()
 
-	ok := handler.completeStreamingRun(response, response, context.Background(), runCompletionRequest{
+	ok := handler.completeStreamingRun(response, response, nil, context.Background(), runCompletionRequest{
 		RunID: run.ID, ConversationID: conversation.ID, Assistant: `{"status":"wrong"}`,
 	})
 	if !ok {
@@ -111,7 +111,7 @@ func TestCompleteStreamingRunProvidesQuestionToAnswerRelevanceVerifier(t *testin
 	handler := &Handler{store: fileStore, agentRuntime: runtime, verification: verification.NewEngine(fileStore, registry)}
 	response := httptest.NewRecorder()
 
-	if !handler.completeStreamingRun(response, response, context.Background(), runCompletionRequest{
+	if !handler.completeStreamingRun(response, response, nil, context.Background(), runCompletionRequest{
 		RunID: run.ID, ConversationID: conversation.ID,
 		Assistant: "We are open from 9am to 10pm every day.",
 	}) {
@@ -148,10 +148,14 @@ func TestResolveRunCompletionReturnsQuestionLookupError(t *testing.T) {
 	want := fmt.Errorf("list messages failed")
 	runtime := agent.NewRuntime(agent.RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	handler := &Handler{
-		store: listMessagesErrorStore{Store: fileStore, err: want}, agentRuntime: runtime,
+		store: fileStore, agentRuntime: runtime,
 		verification: verification.NewEngine(fileStore, registry),
 	}
-	if _, err := handler.resolveRunCompletion(context.Background(), run.ID, "", "candidate"); err != want {
+	scoped := listMessagesErrorStore{
+		WorkspaceStore: fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
+		err:            want,
+	}
+	if _, err := handler.resolveRunCompletion(context.Background(), scoped, run.ID, "", "candidate"); err != want {
 		t.Fatalf("expected question lookup error, got %v", err)
 	}
 }
@@ -193,7 +197,7 @@ func TestVerifyRunRetriesRecoverableEvidenceAndCompletes(t *testing.T) {
 	runtime := agent.NewRuntime(agent.RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	handler := &Handler{store: fileStore, agentRuntime: runtime, verification: verification.NewEngine(fileStore, registry)}
 	first := httptest.NewRecorder()
-	if !handler.completeStreamingRun(first, first, context.Background(), runCompletionRequest{
+	if !handler.completeStreamingRun(first, first, nil, context.Background(), runCompletionRequest{
 		RunID: run.ID, ConversationID: conversation.ID, Assistant: " candidate ",
 	}) {
 		t.Fatalf("first verification failed unexpectedly: %s", first.Body.String())
@@ -252,7 +256,7 @@ func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
 		Content: "Remember that AgentFlow uses typed events.",
 	}
 
-	ok := handler.completeStreamingRun(response, response, context.Background(), runCompletionRequest{
+	ok := handler.completeStreamingRun(response, response, nil, context.Background(), runCompletionRequest{
 		RunID: run.ID, ConversationID: conversation.ID, Assistant: "Completed response.",
 		UserMessage: &userMessage,
 	})
@@ -299,7 +303,7 @@ func TestCompleteStreamingRunPersistsOnlyCitationsSelectedForModelContext(t *tes
 	runtime := agent.NewRuntime(agent.RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	handler := &Handler{store: fileStore, agentRuntime: runtime}
 	response := httptest.NewRecorder()
-	if !handler.completeStreamingRun(response, response, context.Background(), runCompletionRequest{
+	if !handler.completeStreamingRun(response, response, nil, context.Background(), runCompletionRequest{
 		RunID: run.ID, ConversationID: conversation.ID, Assistant: "Supported [S1], excluded [S2], invented [S9].",
 	}) {
 		t.Fatalf("complete streaming run: %s", response.Body.String())

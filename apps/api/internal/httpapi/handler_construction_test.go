@@ -98,12 +98,13 @@ func TestCORSAllowlistAndKnowledgeErrorMapping(t *testing.T) {
 	}
 
 	badRequest := httptest.NewRecorder()
-	writeKnowledgeError(badRequest, errors.New("invalid document"))
+	request := httptest.NewRequest(http.MethodPost, "/api/documents", nil)
+	writeKnowledgeError(badRequest, request, errors.New("invalid document"))
 	if badRequest.Code != http.StatusBadRequest {
 		t.Fatalf("expected knowledge validation status 400, got %d", badRequest.Code)
 	}
 	badGateway := httptest.NewRecorder()
-	writeKnowledgeError(badGateway, knowledgepkg.EmbeddingError{Err: errors.New("embedding unavailable")})
+	writeKnowledgeError(badGateway, request, knowledgepkg.EmbeddingError{Err: errors.New("embedding unavailable")})
 	if badGateway.Code != http.StatusBadGateway {
 		t.Fatalf("expected embedding status 502, got %d", badGateway.Code)
 	}

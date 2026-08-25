@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -50,6 +51,16 @@ func TestMemoryCreateAndSearchAPI(t *testing.T) {
 	if len(items) != 1 || items[0].Memory.ID != created.ID {
 		t.Fatalf("unexpected memory search result: %#v", items)
 	}
+}
+
+func TestMemoryHandlersProjectDependencyFailures(t *testing.T) {
+	want := errors.New("memory dependency failed")
+	handler := &Handler{memories: memoryFailureOperations{err: want}}
+
+	create := httptest.NewRequest(http.MethodPost, "/api/memories", bytes.NewBufferString(`{"kind":"note","content":"coverage"}`))
+	assertHandlerFailure(t, handler.createMemory, create, http.StatusBadRequest)
+	search := httptest.NewRequest(http.MethodPost, "/api/memories/search", bytes.NewBufferString(`{"query":"coverage"}`))
+	assertHandlerFailure(t, handler.searchMemories, search, http.StatusBadRequest)
 }
 
 func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
@@ -123,4 +134,14 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 	if err != nil || len(candidates) != 1 || candidates[0].Status != domain.MemoryCandidateAccepted {
 		t.Fatalf("accepted candidate was not persisted: candidates=%#v err=%v", candidates, err)
 	}
+}
+
+type memoryFailureOperations struct{ err error }
+
+func (s memoryFailureOperations) Create(context.Context, domain.Memory) (domain.Memory, error) {
+	return domain.Memory{}, s.err
+}
+
+func (s memoryFailureOperations) Search(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+	return nil, s.err
 }

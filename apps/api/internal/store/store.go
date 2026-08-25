@@ -37,6 +37,7 @@ type ConversationStore interface {
 	AddMessage(conversationID string, role string, content string) (domain.Message, error)
 	AddMessageInWorkspace(workspaceID string, conversationID string, role string, content string) (domain.Message, error)
 	AddMessageWithCitations(conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error)
+	AddMessageWithCitationsInWorkspace(workspaceID string, conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error)
 	UpdateConversationTitle(id string, title string) error
 	UpdateConversationTitleInWorkspace(workspaceID string, id string, title string) error
 }
@@ -143,9 +144,40 @@ type DocumentStore interface {
 	ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error)
 }
 
+// WorkspaceStore is the only persistence surface exposed to HTTP handlers for
+// Workspace-owned resources. Run-owned child records are authorized through
+// the parent Run before the backend operation is executed.
+type WorkspaceStore interface {
+	ListConversations() ([]domain.Conversation, error)
+	CreateConversation(title string) (domain.Conversation, error)
+	GetConversation(id string) (domain.Conversation, bool, error)
+	DeleteConversation(id string) error
+	ListMessages(conversationID string) ([]domain.Message, error)
+	AddMessage(conversationID string, role string, content string) (domain.Message, error)
+	AddMessageWithCitations(conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error)
+	UpdateConversationTitle(id string, title string) error
+	GetRun(id string) (domain.Run, bool, error)
+	ListRuns() ([]domain.Run, error)
+	ListCollaborationSteps(runID string) ([]domain.CollaborationStep, error)
+	ListRunEvents(runID string) ([]domain.RunEvent, error)
+	CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error)
+	GetRunReplay(runID string) (domain.RunReplay, bool, error)
+	GetRunUsageLedger(runID string) (domain.RunUsageLedger, bool, error)
+	ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error)
+	UpdateRunVerificationStatus(runID string, status domain.VerificationStatus) (domain.Run, error)
+	ListDocuments() ([]domain.Document, error)
+	GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error)
+	DeleteDocument(id string) error
+}
+
+type WorkspaceStoreProvider interface {
+	ForWorkspace(domain.WorkspaceScope) WorkspaceStore
+}
+
 // Store is the application-level persistence contract. Consumers should depend
 // on the smallest capability interface above that satisfies their use case.
 type Store interface {
+	WorkspaceStoreProvider
 	ConversationStore
 	AgentStore
 	RunStore

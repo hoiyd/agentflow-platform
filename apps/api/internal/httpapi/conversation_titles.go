@@ -7,10 +7,12 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"agentflow-platform/apps/api/internal/store"
 )
 
-func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, conversationID string, userMessage string, assistantMessage string) string {
-	conversation, ok, err := h.store.GetConversation(conversationID)
+func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, scoped store.WorkspaceStore, conversationID string, userMessage string, assistantMessage string) string {
+	conversation, ok, err := scoped.GetConversation(conversationID)
 	if err != nil || !ok {
 		if err != nil {
 			log.Printf("conversation_title skip=get_conversation_failed conversation_id=%s error=%v", conversationID, err)
@@ -29,7 +31,7 @@ func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, conv
 	if title == "" || strings.EqualFold(title, conversation.Title) {
 		return conversation.Title
 	}
-	if err := h.store.UpdateConversationTitle(conversationID, title); err != nil {
+	if err := scoped.UpdateConversationTitle(conversationID, title); err != nil {
 		log.Printf("conversation_title skip=update_failed conversation_id=%s error=%v", conversationID, err)
 		return conversation.Title
 	}

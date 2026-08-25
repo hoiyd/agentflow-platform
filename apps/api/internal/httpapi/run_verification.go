@@ -14,10 +14,10 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
-	workspaceID := workspaceIDFromRequest(r)
-	run, ok, err := h.store.GetRunInWorkspace(workspaceID, runID)
+	scoped := h.scopedStore(r)
+	run, ok, err := scoped.GetRun(runID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -32,9 +32,9 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "terminal run cannot be reverified")
 		return
 	}
-	messages, err := h.store.ListMessagesInWorkspace(workspaceID, run.ConversationID)
+	messages, err := scoped.ListMessages(run.ConversationID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	output := latestAssistantOutput(messages)
@@ -44,8 +44,8 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 	}
 	decision, err := h.verification.Verify(r.Context(), run.ID, verification.SubjectForQuestionAnswer(latestUserInput(messages), output))
 	if err != nil {
-		_, _ = h.store.UpdateRunVerificationStatus(run.ID, domain.VerificationBlocked)
-		writeError(w, http.StatusInternalServerError, err.Error())
+		_, _ = scoped.UpdateRunVerificationStatus(run.ID, domain.VerificationBlocked)
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if decision.AllowCompletion {
@@ -54,7 +54,7 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 		run, err = h.agentRuntime.RejectRunCompletion(run.ID, decision.RunStatus, decision.Summary)
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"run": run, "decision": decision})

@@ -49,7 +49,9 @@ func (e EmbeddingError) Error() string { return e.Err.Error() }
 func (e EmbeddingError) Unwrap() error { return e.Err }
 func (e EmbeddingError) FailureInfo() failure.Info {
 	info := failure.Describe(e.Err)
-	info.Source = "knowledge_embedding"
+	if info.Source == "application" {
+		info.Source = "knowledge_embedding"
+	}
 	return info
 }
 
