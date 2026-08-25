@@ -139,3 +139,12 @@ func completeHandlerDependencies(t *testing.T) Dependencies {
 		AllowedOrigins: []string{"https://app.example.com"},
 	}
 }
+
+func fullStoreForTest(t *testing.T, dependencies Dependencies) store.Store {
+	t.Helper()
+	fullStore, ok := dependencies.Store.(store.Store)
+	if !ok {
+		t.Fatal("test dependencies do not expose the full store fixture")
+	}
+	return fullStore
+}

@@ -60,7 +60,7 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 		},
 	})
 	handler := &Handler{
-		store: fileStore, openAI: client, agentRuntime: runtime,
+		store: fileStore, modelClient: client, agentRuntime: runtime,
 		runController: concurrency.NewRunController(concurrency.RunOptions{
 			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
 		}),

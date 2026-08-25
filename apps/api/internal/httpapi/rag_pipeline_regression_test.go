@@ -17,6 +17,7 @@ import (
 	"agentflow-platform/apps/api/internal/knowledge"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/store"
 )
 
 const pipelineRegressionWorkspace = "workspace-pipeline-regression"
@@ -24,6 +25,7 @@ const pipelineRegressionWorkspace = "workspace-pipeline-regression"
 type pipelineRegressionFixture struct {
 	routes         http.Handler
 	dependencies   Dependencies
+	store          store.Store
 	knowledge      *knowledge.KnowledgeBase
 	failEmbeddings atomic.Bool
 }
@@ -139,12 +141,13 @@ func newPipelineRegressionFixture(t *testing.T) *pipelineRegressionFixture {
 	client.SetRetryPolicy(openai.RetryPolicy{MaxAttempts: 1})
 
 	dependencies := completeHandlerDependencies(t)
-	pipeline := rag.NewRetrievalPipeline(dependencies.Store)
-	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(dependencies.Store, client, pipeline)
+	fullStore := fullStoreForTest(t, dependencies)
+	pipeline := rag.NewRetrievalPipeline(fullStore)
+	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(fullStore, client, pipeline)
 	dependencies.ModelClient = client
 	dependencies.Knowledge = knowledgeBase
 	dependencies.AgentRuntime = agentpkg.NewRuntime(agentpkg.RuntimeOptions{
-		Store:              dependencies.Store,
+		Store:              fullStore,
 		ModelClient:        client,
 		KnowledgeRetriever: pipeline,
 	})
@@ -154,6 +157,7 @@ func newPipelineRegressionFixture(t *testing.T) *pipelineRegressionFixture {
 	}
 	fixture.routes = handler.Routes()
 	fixture.dependencies = dependencies
+	fixture.store = fullStore
 	fixture.knowledge = knowledgeBase
 	return fixture
 }
@@ -203,7 +207,7 @@ func (f *pipelineRegressionFixture) runAgentAndGetRetrievalEvent(t *testing.T, q
 	if chat.Code != http.StatusOK || !strings.Contains(chat.Body.String(), "event: done") {
 		t.Fatalf("Agent Runtime chat failed: status=%d body=%s", chat.Code, chat.Body.String())
 	}
-	runs, err := f.dependencies.Store.ListRunsByWorkspace(pipelineRegressionWorkspace)
+	runs, err := f.store.ListRunsByWorkspace(pipelineRegressionWorkspace)
 	if err != nil || len(runs) != 1 {
 		t.Fatalf("list Agent Runtime runs: runs=%#v err=%v", runs, err)
 	}

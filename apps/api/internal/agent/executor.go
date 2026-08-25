@@ -8,7 +8,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	tracepkg "agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/tools"
 
 	"github.com/tmc/langchaingo/chains"
@@ -39,12 +39,12 @@ type ExecutorInput struct {
 type AgentExecutor interface {
 	Kind() string
 	Framework() string
-	Stream(ctx context.Context, input ExecutorInput) (<-chan openai.StreamEvent, <-chan error)
+	Stream(ctx context.Context, input ExecutorInput) (<-chan modelprovider.StreamEvent, <-chan error)
 }
 
 type NativeExecutor struct {
-	openAI *openai.Client
-	trace  *tracepkg.Recorder
+	modelClient modelprovider.Client
+	trace       *tracepkg.Recorder
 }
 
 func (e NativeExecutor) Kind() string {
@@ -55,8 +55,8 @@ func (e NativeExecutor) Framework() string {
 	return "agentflow-native"
 }
 
-func (e NativeExecutor) Stream(ctx context.Context, input ExecutorInput) (<-chan openai.StreamEvent, <-chan error) {
-	return e.openAI.StreamAgentChatWithToolsTrace(
+func (e NativeExecutor) Stream(ctx context.Context, input ExecutorInput) (<-chan modelprovider.StreamEvent, <-chan error) {
+	return e.modelClient.StreamAgentChatWithToolsTrace(
 		ctx,
 		input.Agent.SystemPrompt,
 		input.History,
@@ -71,8 +71,8 @@ func (e NativeExecutor) Stream(ctx context.Context, input ExecutorInput) (<-chan
 }
 
 type LangChainGoExecutor struct {
-	openAI *openai.Client
-	trace  *tracepkg.Recorder
+	modelClient modelprovider.Client
+	trace       *tracepkg.Recorder
 }
 
 func (e LangChainGoExecutor) Kind() string {
@@ -83,8 +83,8 @@ func (e LangChainGoExecutor) Framework() string {
 	return frameworkLangChainGo
 }
 
-func (e LangChainGoExecutor) Stream(ctx context.Context, input ExecutorInput) (<-chan openai.StreamEvent, <-chan error) {
-	events := make(chan openai.StreamEvent)
+func (e LangChainGoExecutor) Stream(ctx context.Context, input ExecutorInput) (<-chan modelprovider.StreamEvent, <-chan error) {
+	events := make(chan modelprovider.StreamEvent)
 	errs := make(chan error, 1)
 
 	go func() {
@@ -118,8 +118,8 @@ func (e LangChainGoExecutor) Stream(ctx context.Context, input ExecutorInput) (<
 		var span tracepkg.Span
 		spanStarted := false
 		model := langChainGoModel{
-			client: e.openAI, systemPrompt: input.Agent.SystemPrompt,
-			onPrepared: func(prepared openai.PreparedText) {
+			client: e.modelClient, systemPrompt: input.Agent.SystemPrompt,
+			onPrepared: func(prepared modelprovider.PreparedText) {
 				if prepared.Manifest.ID != "" {
 					startPayload["manifest_id"] = prepared.Manifest.ID
 					startPayload["model_call_id"] = prepared.Manifest.ModelCallID
@@ -175,20 +175,20 @@ func (e LangChainGoExecutor) Stream(ctx context.Context, input ExecutorInput) (<
 	return events, errs
 }
 
-func (e LangChainGoExecutor) streamText(ctx context.Context, output string, events chan<- openai.StreamEvent) {
+func (e LangChainGoExecutor) streamText(ctx context.Context, output string, events chan<- modelprovider.StreamEvent) {
 	for _, token := range strings.Fields(output) {
 		select {
 		case <-ctx.Done():
 			return
-		case events <- openai.StreamEvent{Type: "delta", Delta: token + " "}:
+		case events <- modelprovider.StreamEvent{Type: "delta", Delta: token + " "}:
 		}
 	}
 }
 
 type langChainGoModel struct {
-	client       *openai.Client
+	client       modelprovider.Client
 	systemPrompt string
-	onPrepared   func(openai.PreparedText)
+	onPrepared   func(modelprovider.PreparedText)
 }
 
 func (m langChainGoModel) GenerateContent(ctx context.Context, messages []llms.MessageContent, _ ...llms.CallOption) (*llms.ContentResponse, error) {

@@ -13,7 +13,7 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	tracepkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/sessionhistory"
 	"agentflow-platform/apps/api/internal/store"
@@ -23,7 +23,7 @@ import (
 
 type Runtime struct {
 	store                 RuntimeStore
-	openAI                *openai.Client
+	modelClient           modelprovider.Client
 	tools                 *tools.Manager
 	trace                 *eventpkg.Recorder
 	turnEngine            *turnpkg.Engine
@@ -77,13 +77,14 @@ type PreparedRun struct {
 // new Runs can freeze one coherent snapshot without post-construction setters.
 type RuntimeOptions struct {
 	Store              RuntimeStore
-	ModelClient        *openai.Client
+	ModelClient        modelprovider.Client
 	Tools              *tools.Manager
 	RouterMode         string
 	ContextAssembly    domain.ContextAssemblyConfig
 	Autonomous         AutonomousLimits
 	RunBudget          domain.RuntimeRunBudget
 	KnowledgeRetriever rag.Retriever
+	CheckpointProvider checkpoint.Provider
 }
 
 func NewRuntime(options RuntimeOptions) *Runtime {
@@ -93,9 +94,13 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 			knowledgeRetriever = rag.NewRetrievalPipeline(searchStore)
 		}
 	}
+	checkpointProvider := options.CheckpointProvider
+	if checkpointProvider == nil {
+		checkpointProvider = checkpoint.NewInternalProvider(options.Store)
+	}
 	runtime := &Runtime{
 		store:                 options.Store,
-		openAI:                options.ModelClient,
+		modelClient:           options.ModelClient,
 		tools:                 options.Tools,
 		trace:                 tracepkg.NewRecorder(options.Store),
 		routerMode:            NormalizeRouterMode(options.RouterMode),
@@ -104,7 +109,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		autonomousLimits:      normalizeAutonomousLimits(options.Autonomous),
 		runBudget:             options.RunBudget,
 		knowledgeRetriever:    knowledgeRetriever,
-		checkpoints:           checkpoint.NewInternalProvider(options.Store),
+		checkpoints:           checkpointProvider,
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime
@@ -400,12 +405,12 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	return memories, chunks
 }
 
-func (r *Runtime) executorFor(kind string, client *openai.Client) AgentExecutor {
+func (r *Runtime) executorFor(kind string, client modelprovider.Client) AgentExecutor {
 	switch NormalizeExecutorKind(kind) {
 	case ExecutorLangChainGo:
-		return LangChainGoExecutor{openAI: client, trace: r.trace}
+		return LangChainGoExecutor{modelClient: client, trace: r.trace}
 	default:
-		return NativeExecutor{openAI: client, trace: r.trace}
+		return NativeExecutor{modelClient: client, trace: r.trace}
 	}
 }
 

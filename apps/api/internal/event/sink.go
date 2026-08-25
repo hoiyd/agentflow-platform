@@ -44,7 +44,10 @@ func (s MultiSink) Publish(ctx context.Context, event domain.RunEvent) error {
 	return nil
 }
 
-func Payload(value any) (map[string]any, error) {
+func Payload(value PayloadContract) (map[string]any, error) {
+	if trace, ok := value.(TracePayload); ok {
+		return sanitizePayload(trace.Fields), nil
+	}
 	data, err := json.Marshal(value)
 	if err != nil {
 		return nil, err

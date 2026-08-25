@@ -145,10 +145,6 @@ func deterministicEmbedding(input string, dimensions int) []float64 {
 	return vector
 }
 
-func (u Usage) Valid() bool {
-	return u.PromptTokens > 0 || u.CompletionTokens > 0 || u.TotalTokens > 0
-}
-
 func tokenPayload(payload map[string]any, usage Usage) map[string]any {
 	payload["prompt_tokens"] = usage.PromptTokens
 	payload["completion_tokens"] = usage.CompletionTokens

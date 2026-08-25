@@ -14,7 +14,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
 	"agentflow-platform/apps/api/internal/verification"
@@ -44,31 +44,64 @@ type HTTPStore interface {
 	store.WorkspaceStoreProvider
 }
 
+// AgentRuntimeOperations is the transport-facing execution capability. HTTP
+// handlers do not depend on Runtime construction or its internal collaborators.
+type AgentRuntimeOperations interface {
+	PrepareChatRunWithContract(context.Context, string, string, string, *domain.CompletionContract) (agent.PreparedRun, error)
+	PrepareCollaborationRunWithContract(context.Context, string, string, *domain.CompletionContract) (agent.PreparedCollaborationRun, error)
+	PrepareAutonomousRunWithContract(context.Context, string, string, *domain.CompletionContract) (agent.PreparedCollaborationRun, error)
+	StreamChat(context.Context, agent.PreparedRun, []domain.Message, string, string) (<-chan domain.RunEvent, <-chan error)
+	RunCollaboration(context.Context, agent.PreparedCollaborationRun, string) (<-chan domain.RunEvent, <-chan error)
+	ContinueCollaboration(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)
+	RunAutonomous(context.Context, agent.PreparedCollaborationRun, string) (<-chan domain.RunEvent, <-chan error)
+	ResumeAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)
+	ResumeRecoverableAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)
+	CompleteRun(string) (domain.Run, error)
+	FailRun(string, error) (domain.Run, error)
+	RejectRunCompletion(string, domain.RunStatus, string) (domain.Run, error)
+	CancelRun(string) (domain.Run, error)
+}
+
+type ToolOperations interface {
+	Catalog() (*tools.Catalog, error)
+	List() ([]tools.ToolInfo, error)
+	SetEnabled(string, bool) ([]tools.ToolInfo, error)
+}
+
+type RunCapacity interface {
+	Reserve() (*concurrency.Reservation, error)
+}
+
+type VerificationOperations interface {
+	FreezeContract(*domain.CompletionContract) (*domain.CompletionContract, error)
+	Verify(context.Context, string, verification.Subject) (verification.Decision, error)
+}
+
 // Dependencies is the complete production dependency set for the HTTP adapter.
 // Construction and lifecycle ownership remain in the app composition root.
 type Dependencies struct {
-	Store          store.Store
-	ModelClient    *openai.Client
-	Tools          *tools.Manager
-	AgentRuntime   *agent.Runtime
+	Store          HTTPStore
+	ModelClient    modelprovider.TextCompleter
+	Tools          ToolOperations
+	AgentRuntime   AgentRuntimeOperations
 	Memory         MemoryOperations
 	Knowledge      KnowledgeOperations
 	MemoryCuration MemoryCurationQueue
-	RunController  *concurrency.RunController
-	Verification   *verification.Engine
+	RunController  RunCapacity
+	Verification   VerificationOperations
 	AllowedOrigins []string
 }
 
 type Handler struct {
 	store          HTTPStore
-	openAI         *openai.Client
-	tools          *tools.Manager
-	agentRuntime   *agent.Runtime
+	modelClient    modelprovider.TextCompleter
+	tools          ToolOperations
+	agentRuntime   AgentRuntimeOperations
 	memories       MemoryOperations
 	knowledge      KnowledgeOperations
 	memoryCuration MemoryCurationQueue
-	runController  *concurrency.RunController
-	verification   *verification.Engine
+	runController  RunCapacity
+	verification   VerificationOperations
 	allowedOrigins []string
 }
 
@@ -102,7 +135,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 	}
 	return &Handler{
 		store:          dependencies.Store,
-		openAI:         dependencies.ModelClient,
+		modelClient:    dependencies.ModelClient,
 		tools:          dependencies.Tools,
 		agentRuntime:   dependencies.AgentRuntime,
 		memories:       dependencies.Memory,

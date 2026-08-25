@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/modelrequest"
 	"agentflow-platform/apps/api/internal/tools"
 )
@@ -34,42 +34,13 @@ type Client struct {
 	toolEffectJournal   tools.ToolEffectJournal
 }
 
-type RuntimeIdentity struct {
-	Provider            string
-	BaseURL             string
-	Model               string
-	EmbeddingBaseURL    string
-	EmbeddingModel      string
-	EmbeddingDimensions int
-}
+var _ modelprovider.Client = (*Client)(nil)
 
-type Message struct {
-	Role        string     `json:"role"`
-	Content     string     `json:"content,omitempty"`
-	ToolCallID  string     `json:"tool_call_id,omitempty"`
-	ToolCalls   []ToolCall `json:"tool_calls,omitempty"`
-	Source      string     `json:"-"`
-	ReferenceID string     `json:"-"`
-}
-
-type ToolCall struct {
-	ID       string       `json:"id"`
-	Type     string       `json:"type"`
-	Function FunctionCall `json:"function"`
-}
-
-type FunctionCall struct {
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
-}
-
-type StreamEvent struct {
-	Type       string
-	Delta      string
-	ToolName   string
-	ToolCallID string
-	Error      string
-}
+type RuntimeIdentity = modelprovider.RuntimeIdentity
+type Message = modelprovider.Message
+type ToolCall = modelprovider.ToolCall
+type FunctionCall = modelprovider.FunctionCall
+type StreamEvent = modelprovider.StreamEvent
 
 type streamToolExecutionTracer struct {
 	delegate tools.ExecutionTracer
@@ -111,31 +82,10 @@ func (t *streamToolExecutionTracer) ToolFinished(ctx context.Context, result too
 	)
 }
 
-type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
-	Estimated        bool
-}
-
-type TextCompletion struct {
-	Text  string
-	Model string
-	Usage Usage
-}
-
-type PreparedText struct {
-	Messages []Message
-	Manifest domain.ContextManifest
-}
-
-type Embedding struct {
-	Vector     []float64
-	Model      string
-	Provider   string
-	Estimated  bool
-	Dimensions int
-}
+type Usage = modelprovider.Usage
+type TextCompletion = modelprovider.TextCompletion
+type PreparedText = modelprovider.PreparedText
+type Embedding = modelprovider.Embedding
 
 func NewClient(apiKey string, baseURL string, model string) *Client {
 	return NewClientWithTimeout(apiKey, baseURL, model, 5*time.Minute)
@@ -213,7 +163,7 @@ func (c *Client) RuntimeIdentity() RuntimeIdentity {
 	}
 }
 
-func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) *Client {
+func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) modelprovider.Client {
 	client := NewClientWithTimeoutAndEmbeddingModel(c.apiKey, identity.BaseURL, identity.EmbeddingBaseURL,
 		identity.Model, identity.EmbeddingModel, identity.EmbeddingDimensions, c.timeout)
 	client.requestLimiter = c.requestLimiter

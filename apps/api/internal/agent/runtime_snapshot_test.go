@@ -171,7 +171,7 @@ func TestEffectiveAutonomousRunBudgetUsesStricterModeProfile(t *testing.T) {
 
 func TestCaptureAutonomousSnapshotStoresRuntimeAndToolsOnlyInRunBudget(t *testing.T) {
 	runtime := &Runtime{
-		openAI: openai.NewClient("", "", "test-model"),
+		modelClient: openai.NewClient("", "", "test-model"),
 		autonomousLimits: AutonomousLimits{
 			MaxIterations: 5, MaxRuntime: 5 * time.Minute,
 			MaxOutputChars: 1000, MaxToolCalls: 20,
@@ -255,7 +255,7 @@ func TestClientForRunRejectsMissingSnapshot(t *testing.T) {
 }
 
 func TestClientFromSnapshotRejectsCurrentCredentialForAnotherProvider(t *testing.T) {
-	runtime := &Runtime{openAI: openai.NewClient("current-key", "https://api.openai.com/v1", "current-model")}
+	runtime := &Runtime{modelClient: openai.NewClient("current-key", "https://api.openai.com/v1", "current-model")}
 	snapshot := &domain.RuntimeSnapshot{Model: domain.RuntimeModelSnapshot{
 		Provider: "openrouter", BaseURL: "https://openrouter.ai/api/v1", Model: "frozen-model",
 	}}

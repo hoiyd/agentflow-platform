@@ -12,7 +12,7 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -29,7 +29,7 @@ type restoredRuntime struct {
 	agent           domain.Agent
 	candidateAgents []domain.Agent
 	catalog         *tools.Catalog
-	client          *openai.Client
+	client          modelprovider.Client
 	routerMode      string
 }
 
@@ -50,7 +50,7 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		toolNames = append(toolNames, candidate.Tools...)
 	}
 	toolSnapshots := snapshotTools(catalog, toolNames)
-	identity := r.openAI.RuntimeIdentity()
+	identity := r.modelClient.RuntimeIdentity()
 	runBudget := r.runBudget
 	snapshot := domain.RuntimeSnapshot{
 		SchemaVersion:   domain.CurrentRuntimeSnapshotVersion,
@@ -244,7 +244,7 @@ func (r *Runtime) snapshotForRun(runID string) (*domain.RuntimeSnapshot, error) 
 	return run.RuntimeSnapshot, nil
 }
 
-func (r *Runtime) clientForRun(runID string) (*openai.Client, error) {
+func (r *Runtime) clientForRun(runID string) (modelprovider.Client, error) {
 	snapshot, err := r.snapshotForRun(runID)
 	if err != nil {
 		return nil, err
@@ -252,13 +252,13 @@ func (r *Runtime) clientForRun(runID string) (*openai.Client, error) {
 	return r.clientFromSnapshot(snapshot)
 }
 
-func (r *Runtime) clientFromSnapshot(snapshot *domain.RuntimeSnapshot) (*openai.Client, error) {
-	current := r.openAI.RuntimeIdentity()
+func (r *Runtime) clientFromSnapshot(snapshot *domain.RuntimeSnapshot) (modelprovider.Client, error) {
+	current := r.modelClient.RuntimeIdentity()
 	model := snapshot.Model
-	if r.openAI.HasAPIKey() && current.Provider != model.Provider {
+	if r.modelClient.HasAPIKey() && current.Provider != model.Provider {
 		return nil, fmt.Errorf("credential for frozen provider %q is unavailable; current provider is %q", model.Provider, current.Provider)
 	}
-	return r.openAI.WithRuntimeIdentity(openai.RuntimeIdentity{
+	return r.modelClient.WithRuntimeIdentity(modelprovider.RuntimeIdentity{
 		Provider: model.Provider, BaseURL: model.BaseURL, Model: model.Model,
 		EmbeddingBaseURL: model.EmbeddingBaseURL, EmbeddingModel: model.EmbeddingModel,
 		EmbeddingDimensions: model.EmbeddingDimensions,

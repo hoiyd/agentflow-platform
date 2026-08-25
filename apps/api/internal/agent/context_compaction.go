@@ -36,7 +36,7 @@ func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversat
 	compactCtx = eventpkg.WithScope(compactCtx, eventpkg.Scope{RunID: runID, ConversationID: conversationID})
 
 	var summarizer contextcompaction.Summarizer
-	if r.openAI.HasAPIKey() {
+	if r.modelClient.HasAPIKey() {
 		summarizer = contextcompaction.SummarizerFunc(func(ctx context.Context, request contextcompaction.SummaryRequest) (contextcompaction.SummaryResult, error) {
 			ctx = budget.WithPurpose(ctx, domain.UsagePurposeCompaction)
 			client, err := r.clientFromSnapshot(snapshot)
