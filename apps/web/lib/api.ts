@@ -280,6 +280,62 @@ export type ModelRequestDebugResponse = {
   }>;
 };
 
+export type TaskItemStatus = "pending" | "in_progress" | "completed" | "canceled";
+export type TaskBlockerStatus = "open" | "resolved";
+
+export type TaskState = {
+  schema_version: number;
+  workspace_id: string;
+  conversation_id: string;
+  version: number;
+  goal?: string;
+  tasks: Array<{ id: string; title: string; details?: string; status: TaskItemStatus; artifact_refs?: string[] }>;
+  decisions: Array<{ id: string; statement: string; rationale?: string; supersedes_id?: string }>;
+  constraints: Array<{ id: string; statement: string }>;
+  blockers: Array<{ id: string; description: string; status: TaskBlockerStatus }>;
+  artifact_refs: string[];
+  updated_at: string;
+};
+
+export type TaskStateOperation =
+  | { type: "set_goal"; goal: string }
+  | { type: "clear_goal" }
+  | { type: "upsert_task"; task: TaskState["tasks"][number] }
+  | { type: "set_task_status"; task_id: string; task_status: TaskItemStatus }
+  | { type: "remove_task"; task_id: string }
+  | { type: "add_decision"; decision: TaskState["decisions"][number] }
+  | { type: "upsert_constraint"; constraint: TaskState["constraints"][number] }
+  | { type: "remove_constraint"; constraint_id: string }
+  | { type: "upsert_blocker"; blocker: TaskState["blockers"][number] }
+  | { type: "resolve_blocker"; blocker_id: string }
+  | { type: "remove_blocker"; blocker_id: string }
+  | { type: "add_artifact_ref"; artifact_ref: string }
+  | { type: "remove_artifact_ref"; artifact_ref: string };
+
+export type TaskStatePatch = {
+  expected_version: number;
+  operations: TaskStateOperation[];
+};
+
+export type TaskStateRevision = {
+  id: string;
+  workspace_id: string;
+  conversation_id: string;
+  version: number;
+  previous_version: number;
+  patch: TaskStatePatch;
+  state: TaskState;
+  source: {
+    actor_type: string;
+    actor_id?: string;
+    run_id?: string;
+    stage_id?: string;
+    turn_id?: string;
+    source_message_id?: string;
+  };
+  created_at: string;
+};
+
 export type RunReplay = {
   run: RunInfo;
   conversation: Conversation;
@@ -292,6 +348,7 @@ export type RunReplay = {
   tool_effects: Array<Record<string, unknown>>;
   verification_evidence: Array<Record<string, unknown>>;
   verification_artifacts: Array<Record<string, unknown>>;
+  task_state_revisions: TaskStateRevision[];
 };
 
 export type EpisodeReport = {
@@ -361,7 +418,8 @@ function normalizeRunReplay(data: unknown): RunReplay {
     stage_checkpoints: Array.isArray(replay.stage_checkpoints) ? replay.stage_checkpoints : [],
     tool_effects: Array.isArray(replay.tool_effects) ? replay.tool_effects : [],
     verification_evidence: Array.isArray(replay.verification_evidence) ? replay.verification_evidence : [],
-    verification_artifacts: Array.isArray(replay.verification_artifacts) ? replay.verification_artifacts : []
+    verification_artifacts: Array.isArray(replay.verification_artifacts) ? replay.verification_artifacts : [],
+    task_state_revisions: Array.isArray(replay.task_state_revisions) ? replay.task_state_revisions : []
   };
 }
 
@@ -462,6 +520,41 @@ export async function listMessages(conversationId: string, signal?: AbortSignal)
     `/api/conversations/${conversationId}/messages`,
     { cache: "no-store", signal },
     { errorMessage: "Failed to load messages" }
+  );
+}
+
+export async function getTaskState(conversationId: string, signal?: AbortSignal): Promise<TaskState> {
+  return apiObject<TaskState>(
+    `/api/conversations/${conversationId}/task-state`,
+    { cache: "no-store", signal },
+    { errorMessage: "Failed to load task state" },
+    "task state"
+  );
+}
+
+export async function patchTaskState(conversationId: string, patch: TaskStatePatch): Promise<TaskStateRevision> {
+  return apiObject<TaskStateRevision>(
+    `/api/conversations/${conversationId}/task-state`,
+    { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) },
+    { errorMessage: "Failed to patch task state", includeErrorBody: true },
+    "task state revision"
+  );
+}
+
+export async function listTaskStateRevisions(conversationId: string, signal?: AbortSignal): Promise<TaskStateRevision[]> {
+  return apiArray<TaskStateRevision>(
+    `/api/conversations/${conversationId}/task-state/revisions`,
+    { cache: "no-store", signal },
+    { errorMessage: "Failed to load task state revisions" }
+  );
+}
+
+export async function getTaskStateRevision(conversationId: string, version: number): Promise<TaskStateRevision> {
+  return apiObject<TaskStateRevision>(
+    `/api/conversations/${conversationId}/task-state/revisions/${version}`,
+    { cache: "no-store" },
+    { errorMessage: "Failed to load task state revision" },
+    "task state revision"
   );
 }
 

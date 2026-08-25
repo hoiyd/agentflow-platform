@@ -34,6 +34,7 @@ type fileData struct {
 	VerificationEvidence  []domain.VerificationEvidence   `json:"verification_evidence"`
 	VerificationArtifacts []domain.VerificationArtifact   `json:"verification_artifacts"`
 	ContextCompactions    []domain.ContextCompaction      `json:"context_compactions"`
+	TaskStateRevisions    []domain.TaskStateRevision      `json:"task_state_revisions"`
 	ModelRequestRecords   []domain.ModelRequestRecord     `json:"model_request_records"`
 	MemoryCandidates      []domain.MemoryCandidate        `json:"memory_candidates"`
 	Memories              []domain.Memory                 `json:"memories"`
@@ -166,6 +167,7 @@ func emptyFileData() fileData {
 		StageCheckpoints:    []domain.StageCheckpoint{},
 		ToolEffects:         []domain.ToolEffectRecord{},
 		ContextCompactions:  []domain.ContextCompaction{},
+		TaskStateRevisions:  []domain.TaskStateRevision{},
 		ModelRequestRecords: []domain.ModelRequestRecord{},
 		MemoryCandidates:    []domain.MemoryCandidate{},
 		Memories:            []domain.Memory{},
@@ -208,6 +210,17 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 			migrated = true
 		}
 	}
+	for i := range s.data.TaskStateRevisions {
+		revision := &s.data.TaskStateRevisions[i]
+		if conversation, ok := s.getConversationLocked(revision.ConversationID); ok {
+			workspaceID := normalizeWorkspaceID(conversation.WorkspaceID)
+			if revision.WorkspaceID != workspaceID || revision.State.WorkspaceID != workspaceID {
+				revision.WorkspaceID = workspaceID
+				revision.State.WorkspaceID = workspaceID
+				migrated = true
+			}
+		}
+	}
 	for i := range s.data.Documents {
 		if normalized := normalizeWorkspaceID(s.data.Documents[i].WorkspaceID); normalized != s.data.Documents[i].WorkspaceID {
 			s.data.Documents[i].WorkspaceID = normalized
@@ -247,6 +260,9 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 	}
 	if s.data.ContextCompactions == nil {
 		s.data.ContextCompactions = []domain.ContextCompaction{}
+	}
+	if s.data.TaskStateRevisions == nil {
+		s.data.TaskStateRevisions = []domain.TaskStateRevision{}
 	}
 	if s.data.ModelRequestRecords == nil {
 		s.data.ModelRequestRecords = []domain.ModelRequestRecord{}

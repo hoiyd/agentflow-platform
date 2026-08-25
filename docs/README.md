@@ -46,6 +46,7 @@ the project.
 | [Run Budget](run-budget.md) | How are logical calls, provider usage, tools, runtime, and cost accounted for? |
 | [Durable recovery](durable-recovery.md) | How are interrupted lifecycles repaired, Stage boundaries checkpointed, and external Tool effects replayed safely? |
 | [Context management](context-management.md) | How is each model input assembled, bounded, compacted, and explained? |
+| [Structured Task State](task-state.md) | How do goals, tasks, decisions, constraints, blockers, and Artifact references remain versioned across Runs and compaction? |
 | [Model request reconstruction](model-request-reconstruction.md) | How are final model payloads hashed, optionally captured, and checked against Runtime Snapshot and Context Manifest records? |
 | [Verification](verification.md) | How can a candidate output be checked before a Run is considered complete? |
 

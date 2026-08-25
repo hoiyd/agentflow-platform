@@ -88,6 +88,19 @@ one.
 
 A Run may contain one Turn or many Stages and Turns, depending on its Mode.
 
+## Structured Task State
+
+**Structured Task State** is the Conversation-scoped, versioned projection of
+the current goal, tasks, decisions, constraints, blockers, and Artifact
+references. It is durable execution context, not another summary and not part
+of one Run's mutable lifecycle.
+
+Every update is an immutable Revision produced by a typed patch with optimistic
+version checking. Context Assembly injects the latest non-empty version before
+each Model Call and records that version in the Context Manifest. Replay exposes
+the Revision timeline; a Model or client cannot replace the entire state or
+change its ownership and version metadata.
+
 ## Runtime Snapshot
 
 A **Runtime Snapshot** is the immutable execution protocol captured when a Run
@@ -291,7 +304,7 @@ interchangeable stores:
 | --- | --- |
 | Run Event | Typed execution fact emitted at the boundary where an action occurs. The durable sink persists lifecycle events but intentionally omits streaming `model.delta` events. |
 | Trace | Human-readable view of live and persisted Run Events and their payloads. It does not create a second event history. |
-| Replay | Detailed per-Run aggregate assembled from persisted records: Runtime Snapshot, Messages, Collaboration Steps, Trace Summary, Usage Ledger, durable Run Events, and Verification records. |
+| Replay | Detailed per-Run aggregate assembled from persisted records: Runtime Snapshot, Messages, Collaboration Steps, Trace Summary, Usage Ledger, durable Run Events, Structured Task State revisions, and Verification records. |
 | Episode Report | Compact projection derived from Replay for review, export, or offline evaluation. It summarizes existing records and introduces no new execution facts. |
 
 ## Quick Reference
@@ -299,6 +312,7 @@ interchangeable stores:
 | Term | Question it answers |
 | --- | --- |
 | Conversation | Which long-lived chat does this belong to? |
+| Structured Task State | Which versioned task facts remain active across Runs and compaction? |
 | Run | Which user request is the system executing? |
 | Runtime Snapshot | Which immutable execution protocol did the Run capture? |
 | Stage / `CollaborationStep` | Which orchestration phase is active, and which record persists that occurrence? |

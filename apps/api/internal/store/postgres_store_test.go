@@ -50,6 +50,71 @@ func TestPostgresMigrationsAddDurableRecoveryState(t *testing.T) {
 	}
 }
 
+func TestPostgresMigrationsAddStructuredTaskState(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"CREATE TABLE IF NOT EXISTS task_state_revisions",
+		"UNIQUE(conversation_id, version)",
+		"task_state_revisions_conversation_version_idx",
+		"patch jsonb NOT NULL",
+		"state jsonb NOT NULL",
+		"source jsonb NOT NULL",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing structured task state migration step %q", expected)
+		}
+	}
+}
+
+func TestPostgresStructuredTaskStateRoundTrip(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	postgresStore, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatalf("new postgres store: %v", err)
+	}
+	defer postgresStore.Close()
+	conversation, err := postgresStore.CreateConversationInWorkspace("workspace-task-state", "Postgres task state")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = postgresStore.DeleteConversation(conversation.ID) })
+	run, err := postgresStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := postgresStore.ApplyTaskStatePatch(conversation.ID, domain.TaskStatePatch{ExpectedVersion: 0, Operations: []domain.TaskStateOperation{
+		{Type: domain.TaskStateSetGoal, Goal: "Persist exact task facts"},
+		{Type: domain.TaskStateUpsertConstraint, Constraint: &domain.TaskConstraint{ID: "scope", Statement: "Stay workspace scoped"}},
+	}}, domain.TaskStateSource{ActorType: "model", RunID: run.ID})
+	if err != nil || first.Version != 1 || first.State.WorkspaceID != "workspace-task-state" {
+		t.Fatalf("first postgres revision: revision=%#v err=%v", first, err)
+	}
+	if _, err := postgresStore.ApplyTaskStatePatch(conversation.ID, domain.TaskStatePatch{ExpectedVersion: 0, Operations: []domain.TaskStateOperation{{Type: domain.TaskStateClearGoal}}}, domain.TaskStateSource{ActorType: "user"}); !IsTaskStateVersionConflict(err) {
+		t.Fatalf("expected postgres version conflict, got %v", err)
+	}
+	second, err := postgresStore.ApplyTaskStatePatch(conversation.ID, domain.TaskStatePatch{ExpectedVersion: 1, Operations: []domain.TaskStateOperation{
+		{Type: domain.TaskStateUpsertTask, Task: &domain.TaskItem{ID: "tests", Title: "Verify Postgres", Status: domain.TaskItemCompleted}},
+	}}, domain.TaskStateSource{ActorType: "user"})
+	if err != nil || second.Version != 2 {
+		t.Fatalf("second postgres revision: revision=%#v err=%v", second, err)
+	}
+	state, ok, err := postgresStore.GetTaskState(conversation.ID)
+	if err != nil || !ok || state.Version != 2 || len(state.Tasks) != 1 {
+		t.Fatalf("postgres current task state: state=%#v ok=%v err=%v", state, ok, err)
+	}
+	historical, ok, err := postgresStore.GetTaskStateRevision(conversation.ID, 1)
+	if err != nil || !ok || historical.State.Goal == "" {
+		t.Fatalf("postgres historical task state: revision=%#v ok=%v err=%v", historical, ok, err)
+	}
+	replay, ok, err := postgresStore.GetRunReplay(run.ID)
+	if err != nil || !ok || len(replay.TaskStateRevisions) != 2 {
+		t.Fatalf("postgres task state replay: revisions=%#v ok=%v err=%v", replay.TaskStateRevisions, ok, err)
+	}
+}
+
 func TestPostgresDurableRecoveryRoundTrip(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -252,6 +317,12 @@ func TestPostgresRequiredSchemaCoversRuntimeColumns(t *testing.T) {
 		"model_request_records.source_token_breakdown",
 		"model_request_records.capture_content",
 		"model_request_records.capture_expired",
+		"task_state_revisions.workspace_id",
+		"task_state_revisions.conversation_id",
+		"task_state_revisions.version",
+		"task_state_revisions.patch",
+		"task_state_revisions.state",
+		"task_state_revisions.source",
 	} {
 		if !columns[expected] {
 			t.Fatalf("required schema does not validate %s", expected)

@@ -194,6 +194,62 @@ func TestAssembleUsesPersistedCompactionAndExcludesCoveredHistory(t *testing.T) 
 	}
 }
 
+func TestAssembleInjectsLatestStructuredTaskStateAndRecordsVersion(t *testing.T) {
+	state := domain.TaskState{
+		SchemaVersion: domain.CurrentTaskStateSchemaVersion, ConversationID: "conversation-1", Version: 1,
+		Goal:      "Implement durable task state",
+		Tasks:     []domain.TaskItem{{ID: "persist", Title: "Persist revisions", Status: domain.TaskItemInProgress}},
+		Decisions: []domain.TaskDecision{}, Constraints: []domain.TaskConstraint{{ID: "compat", Statement: "Preserve behavior"}},
+		Blockers: []domain.TaskBlocker{}, ArtifactRefs: []string{},
+	}
+	loads := 0
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{ConversationID: state.ConversationID, RunID: "run", TurnID: "turn"})
+	ctx = WithSession(ctx, Session{Config: DefaultConfig(), LoadTaskState: func() (domain.TaskState, bool, error) {
+		loads++
+		return state, true, nil
+	}})
+	request := Request{Model: "test", Messages: []Message{
+		{Source: SourceSystem, ReferenceID: "system", Role: "system", Content: "system"},
+		{Source: SourceCurrentInput, ReferenceID: "current", Role: "user", Content: "continue"},
+	}}
+	first, err := Assemble(ctx, request)
+	if err != nil {
+		t.Fatalf("assemble first task state: %v", err)
+	}
+	current := messageContent(first.Messages, "current")
+	if !strings.Contains(current, `<task_state policy=`) || !strings.Contains(current, `"version":1`) || !strings.Contains(current, "Persist revisions") {
+		t.Fatalf("structured task state was not injected: %q", current)
+	}
+	if !selectedEntry(first.Manifest, "conversation-1:v1") {
+		t.Fatalf("manifest did not capture task state version: %#v", first.Manifest.Entries)
+	}
+	encoded, _ := json.Marshal(first.Manifest)
+	if strings.Contains(string(encoded), "Persist revisions") || strings.Contains(string(encoded), "Preserve behavior") {
+		t.Fatalf("manifest leaked task state content: %s", encoded)
+	}
+
+	state.Version = 2
+	state.Tasks[0].Status = domain.TaskItemCompleted
+	second, err := Assemble(ctx, request)
+	if err != nil {
+		t.Fatalf("assemble updated task state: %v", err)
+	}
+	if loads != 2 || !selectedEntry(second.Manifest, "conversation-1:v2") || !strings.Contains(messageContent(second.Messages, "current"), `"status":"completed"`) {
+		t.Fatalf("assembler did not reload latest task state: loads=%d manifest=%#v messages=%#v", loads, second.Manifest, second.Messages)
+	}
+}
+
+func TestAssemblePropagatesTaskStateLoadFailure(t *testing.T) {
+	want := errors.New("task state storage unavailable")
+	ctx := WithSession(context.Background(), Session{Config: DefaultConfig(), LoadTaskState: func() (domain.TaskState, bool, error) {
+		return domain.TaskState{}, false, want
+	}})
+	_, err := Assemble(ctx, Request{Model: "test", Messages: []Message{{Source: SourceCurrentInput, Role: "user", Content: "continue"}}})
+	if !errors.Is(err, want) {
+		t.Fatalf("expected task state load failure, got %v", err)
+	}
+}
+
 func TestAssembleCompactsOversizedRequiredToolResult(t *testing.T) {
 	config := DefaultConfig()
 	config.ToolResultMaxTokens = 20

@@ -45,13 +45,19 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		}
 	}
 	historySearch := m.runtime.retrieveSessionHistory(ctx, request.RunID, request.ConversationID, request.Input)
-	ctx = contextassembly.WithSession(ctx, contextassembly.Session{
+	session := contextassembly.Session{
 		Config: snapshot.ContextAssembly, Sink: request.Sink,
 		History: request.History, CurrentInput: request.Input,
 		Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
 		HistorySearch: historySearch,
 		Compaction:    compaction,
-	})
+	}
+	if m.runtime.taskStates != nil && snapshot.SchemaVersion >= domain.TaskStateRuntimeSnapshotVersion {
+		session.LoadTaskState = func() (domain.TaskState, bool, error) {
+			return m.runtime.taskStates.Get(request.ConversationID)
+		}
+	}
+	ctx = contextassembly.WithSession(ctx, session)
 	if request.ModelMode == turn.ModelModeText {
 		return m.executeText(ctx, request)
 	}

@@ -29,6 +29,7 @@ const (
 	SourceHistorySearch  = "session_history_retrieval"
 	SourceToolCall       = "tool_call"
 	SourceToolResult     = "tool_result"
+	SourceTaskState      = "task_state"
 )
 
 var ErrInputBudgetExceeded = failure.New(failure.Definition{
@@ -94,6 +95,7 @@ type Session struct {
 	Knowledge     []domain.RetrievedDocumentChunk
 	HistorySearch []domain.RetrievedSessionHistory
 	Compaction    *domain.ContextCompaction
+	LoadTaskState func() (domain.TaskState, bool, error)
 }
 
 type sessionKey struct{}

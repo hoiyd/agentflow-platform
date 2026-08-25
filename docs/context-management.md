@@ -10,7 +10,7 @@ Every model call is assembled against an explicit input budget:
 input budget = model context window - output reserve - safety margin
 ```
 
-The assembler always keeps required protocol content such as the system prompt, current input, tool calls, and tool results. Optional conversation history, semantic memory, and RAG knowledge are selected within their source budgets. Each call emits a Context Manifest describing what was selected, excluded, or transformed without persisting raw prompt content in the manifest.
+The assembler always keeps required protocol content such as the system prompt, current input, tool calls, tool results, and the current non-empty Structured Task State. Optional conversation history, semantic memory, and RAG knowledge are selected within their source budgets. Each call emits a Context Manifest describing what was selected, excluded, or transformed without persisting raw prompt content in the manifest.
 
 Selected RAG knowledge also carries a per-context citation source ID such as
 `S1`. The manifest records that alias on each knowledge entry, allowing final
@@ -32,6 +32,7 @@ the original Session Log is never changed.
 | --- | --- |
 | System protocol and current input | required |
 | Tool definitions and active tool results | required, with result compaction when oversized |
+| Structured Task State | required when a Revision exists; reloaded before every physical Model Call |
 | Recent conversation history | selected within the history budget |
 | Curated semantic memory | selected within the memory budget |
 | RAG knowledge | selected within the knowledge budget and wrapped as untrusted data |
@@ -41,6 +42,12 @@ the original Session Log is never changed.
 Every assembly emits a Context Manifest containing source IDs, selection
 reasons, transformations, token estimates, and a stable prefix hash without
 copying raw dynamic context into the event.
+
+Structured Task State is injected as bounded JSON and recorded in the Manifest
+with a versioned reference such as `conversation_id:v3`. Its raw facts remain in
+the immutable Revision snapshot rather than the Manifest. See
+[Structured Durable Task State](task-state.md). New Runs enable this protocol
+through Runtime Snapshot v8; v1-v7 Runs keep it disabled when resumed.
 
 After assembly and application of effective request limits, the model adapter
 persists a Model Request Envelope for each physical attempt. The Manifest

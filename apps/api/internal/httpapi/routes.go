@@ -24,6 +24,10 @@ func (h *Handler) registerConversationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/conversations/{id}", h.updateConversation)
 	mux.HandleFunc("DELETE /api/conversations/{id}", h.deleteConversation)
 	mux.HandleFunc("GET /api/conversations/{id}/messages", h.listMessages)
+	mux.HandleFunc("GET /api/conversations/{id}/task-state", h.getTaskState)
+	mux.HandleFunc("PATCH /api/conversations/{id}/task-state", h.patchTaskState)
+	mux.HandleFunc("GET /api/conversations/{id}/task-state/revisions", h.listTaskStateRevisions)
+	mux.HandleFunc("GET /api/conversations/{id}/task-state/revisions/{version}", h.getTaskStateRevision)
 }
 
 func (h *Handler) registerMemoryRoutes(mux *http.ServeMux) {

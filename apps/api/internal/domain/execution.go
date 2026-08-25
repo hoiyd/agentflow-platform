@@ -42,7 +42,8 @@ const (
 	UnifiedExecutionSnapshotVersion  = 5
 	SessionHistorySnapshotVersion    = 6
 	RecoveryRuntimeSnapshotVersion   = 7
-	CurrentRuntimeSnapshotVersion    = RecoveryRuntimeSnapshotVersion
+	TaskStateRuntimeSnapshotVersion  = 8
+	CurrentRuntimeSnapshotVersion    = TaskStateRuntimeSnapshotVersion
 )
 
 type RuntimeSnapshot struct {
@@ -249,6 +250,7 @@ const (
 	EventHistorySearchStarted    RunEventType = "session_history.search_started"
 	EventHistorySearchCompleted  RunEventType = "session_history.search_completed"
 	EventHistorySearchFailed     RunEventType = "session_history.search_failed"
+	EventTaskStateUpdated        RunEventType = "task_state.updated"
 	EventCitationResolved        RunEventType = "citation.resolved"
 	EventMemoryCandidateProposed RunEventType = "memory.candidate.proposed"
 	EventMemoryCandidateAccepted RunEventType = "memory.candidate.accepted"
@@ -409,6 +411,7 @@ type RunReplay struct {
 	ToolEffects           []ToolEffectSummary    `json:"tool_effects"`
 	VerificationEvidence  []VerificationEvidence `json:"verification_evidence"`
 	VerificationArtifacts []VerificationArtifact `json:"verification_artifacts"`
+	TaskStateRevisions    []TaskStateRevision    `json:"task_state_revisions"`
 }
 
 // EpisodeReport is a compact projection derived from RunReplay for review,

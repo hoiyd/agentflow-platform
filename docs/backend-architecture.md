@@ -74,6 +74,7 @@ apps/api/
     budget/         per-Run resource accounting and enforcement
     recovery/       stale-run recovery
     checkpoint/     Stage checkpoint capture, validation, and internal compensation
+    taskstate/      versioned Conversation task facts and runtime Tool binding
     config/         environment configuration
 ```
 
@@ -142,6 +143,7 @@ HTTP chat request
   -> run admission
   -> Agent Runtime
   -> Turn Engine
+  -> Context Assembly loads current Structured Task State
   -> typed Run Events
   -> shared Run completion
   -> message persistence and asynchronous memory curation

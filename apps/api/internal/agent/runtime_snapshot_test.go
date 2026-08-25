@@ -13,6 +13,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -74,6 +75,9 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if prepared.Run.RuntimeSnapshot.RunBudget == nil || prepared.Run.RuntimeSnapshot.RunBudget.MaxModelCalls != 12 || prepared.Run.RuntimeSnapshot.RunBudget.MaxRuntimeMS != 90_000 {
 		t.Fatalf("run budget was not frozen: %#v", prepared.Run.RuntimeSnapshot.RunBudget)
 	}
+	if !containsString(prepared.Run.RuntimeSnapshot.Agent.Tools, taskstate.UpdateToolName) || !containsFrozenTool(prepared.Run.RuntimeSnapshot.Tools, taskstate.UpdateToolName) {
+		t.Fatalf("runtime-owned task state tool was not frozen: agent=%#v tools=%#v", prepared.Run.RuntimeSnapshot.Agent.Tools, prepared.Run.RuntimeSnapshot.Tools)
+	}
 	runtime.runBudget.MaxModelCalls = 99
 	if prepared.Run.RuntimeSnapshot.RunBudget.MaxModelCalls != 12 {
 		t.Fatal("runtime budget mutation changed the frozen snapshot")
@@ -102,6 +106,9 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if _, ok := restored.catalog.Resolve("calculator"); !ok {
 		t.Fatal("expected frozen tool to remain available after current config disabled it")
 	}
+	if _, ok := restored.catalog.Resolve(taskstate.UpdateToolName); !ok {
+		t.Fatal("expected frozen task state tool to remain available")
+	}
 	identity := restored.client.RuntimeIdentity()
 	if identity.Model != "test-model-v1" || identity.Provider != "openrouter" {
 		t.Fatalf("unexpected restored model identity: %#v", identity)
@@ -113,7 +120,25 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	}
 }
 
-func TestRuntimeSnapshotAcceptsV1ThroughV7AndKeepsPreBudgetRunsBudgetless(t *testing.T) {
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsFrozenTool(items []domain.RuntimeToolSnapshot, want string) bool {
+	for _, item := range items {
+		if item.Name == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRuntimeSnapshotAcceptsAllVersionsAndKeepsPreBudgetRunsBudgetless(t *testing.T) {
 	for _, version := range []int{
 		domain.LegacyRuntimeSnapshotVersion,
 		domain.ContextRuntimeSnapshotVersion,
@@ -121,6 +146,7 @@ func TestRuntimeSnapshotAcceptsV1ThroughV7AndKeepsPreBudgetRunsBudgetless(t *tes
 		domain.RunBudgetRuntimeSnapshotVersion,
 		domain.UnifiedExecutionSnapshotVersion,
 		domain.SessionHistorySnapshotVersion,
+		domain.RecoveryRuntimeSnapshotVersion,
 		domain.CurrentRuntimeSnapshotVersion,
 	} {
 		snapshot := &domain.RuntimeSnapshot{
@@ -136,6 +162,25 @@ func TestRuntimeSnapshotAcceptsV1ThroughV7AndKeepsPreBudgetRunsBudgetless(t *tes
 		if version < domain.RunBudgetRuntimeSnapshotVersion && snapshot.RunBudget != nil {
 			t.Fatalf("older snapshot v%d unexpectedly inherited a budget", version)
 		}
+	}
+}
+
+func TestTaskStateRuntimeProtocolStartsAtSnapshotV8(t *testing.T) {
+	if domain.RecoveryRuntimeSnapshotVersion >= domain.TaskStateRuntimeSnapshotVersion {
+		t.Fatal("task state protocol must not affect recovery-era snapshots")
+	}
+	if domain.CurrentRuntimeSnapshotVersion != domain.TaskStateRuntimeSnapshotVersion {
+		t.Fatal("new runs must capture the task state protocol")
+	}
+}
+
+func TestTaskStateToolIsOnlyAddedToNativeExecutor(t *testing.T) {
+	runtime := &Runtime{taskStates: taskstate.NewService(nil, nil)}
+	if !containsString(runtime.withHarnessTools(ExecutorNative, nil), taskstate.UpdateToolName) {
+		t.Fatal("native executor did not receive the task state tool")
+	}
+	if containsString(runtime.withHarnessTools(ExecutorLangChainGo, nil), taskstate.UpdateToolName) {
+		t.Fatal("text-only LangChainGo executor received an unavailable task state tool")
 	}
 }
 

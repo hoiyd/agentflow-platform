@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { APIError } from "./api-client.ts";
-import { getRunModelRequests, getRunReplay, getRunUsage } from "./api.ts";
+import { getRunModelRequests, getRunReplay, getRunUsage, getTaskState, patchTaskState } from "./api.ts";
 import {
   createDocument,
   deleteDocument,
@@ -92,6 +92,54 @@ test("replay preserves durable recovery metadata", async (t) => {
 
   assert.equal(replay.stage_checkpoints[0].status, "committed");
   assert.equal(replay.tool_effects[0].has_result, true);
+});
+
+test("replay preserves structured task state revisions", async (t) => {
+  mockFetch(t, replayPayload({
+    task_state_revisions: [{ id: "revision-1", version: 1, state: { version: 1, tasks: [] } }]
+  }));
+
+  const replay = await getRunReplay("run-1");
+
+  assert.equal(replay.task_state_revisions.length, 1);
+  assert.equal(replay.task_state_revisions[0].version, 1);
+});
+
+test("task state client uses conversation-scoped get and patch endpoints", async (t) => {
+  let requestedURL = "";
+  mockFetch(t, {
+    schema_version: 1,
+    workspace_id: "default_workspace",
+    conversation_id: "conversation-1",
+    version: 0,
+    tasks: [], decisions: [], constraints: [], blockers: [], artifact_refs: [],
+    updated_at: "0001-01-01T00:00:00Z"
+  }, (url) => { requestedURL = String(url); });
+
+  const state = await getTaskState("conversation-1");
+
+  assert.equal(state.version, 0);
+  assert.match(requestedURL, /\/api\/conversations\/conversation-1\/task-state$/);
+});
+
+test("task state patch client sends the optimistic version contract", async (t) => {
+  let body = "";
+  mockFetch(t, {
+    id: "revision-1", workspace_id: "default_workspace", conversation_id: "conversation-1",
+    version: 1, previous_version: 0, patch: { expected_version: 0, operations: [] },
+    state: { version: 1 }, source: { actor_type: "user" }, created_at: "2026-08-25T00:00:00Z"
+  }, (_url, options) => { body = String(options.body); });
+
+  const revision = await patchTaskState("conversation-1", {
+    expected_version: 0,
+    operations: [{ type: "set_goal", goal: "Keep exact state" }]
+  });
+
+  assert.equal(revision.version, 1);
+  assert.deepEqual(JSON.parse(body), {
+    expected_version: 0,
+    operations: [{ type: "set_goal", goal: "Keep exact state" }]
+  });
 });
 
 test("replay rejects a response without its required run object", async (t) => {
