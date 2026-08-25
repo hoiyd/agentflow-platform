@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 import { GitBranch, PanelRightOpen } from "lucide-react";
 
-import type { AgentInfo, ChatMode, Message } from "../../lib/api";
+import type { AgentInfo, ChatMode, Message, TaskState } from "../../lib/api";
 import { CollaborationDag } from "../CollaborationDag";
 import {
   AutonomousPanel,
@@ -12,6 +12,7 @@ import {
 } from "./CollaborationPanels";
 import { MessageCitations, renderMarkdown } from "./MarkdownContent";
 import { ModeChooser } from "./ModeChooser";
+import { TaskStatePanel } from "./TaskStatePanel";
 
 type ChatWorkspaceProps = {
   agents: AgentInfo[];
@@ -24,6 +25,7 @@ type ChatWorkspaceProps = {
   isContinuing: boolean;
   isResuming: boolean;
   isStreaming: boolean;
+  isTaskStatePanelOpen: boolean;
   messages: Message[];
   messagesRef: RefObject<HTMLElement | null>;
   onCancel: () => void;
@@ -34,6 +36,8 @@ type ChatWorkspaceProps = {
   onPromptSelect: (prompt: string) => void;
   onResume: (value?: string) => void;
   onRoleSelect: (role: string) => void;
+  onTaskStateClose: () => void;
+  onTaskStateRefresh: () => void;
   onPlanDraftChange: (value: string) => void;
   planDraft: string;
   runStatus: string;
@@ -41,6 +45,9 @@ type ChatWorkspaceProps = {
   showAutonomousTrace: boolean;
   showCollaborationDag: boolean;
   showCollaborationPanel: boolean;
+  taskState: TaskState | null;
+  taskStateError: string;
+  taskStateLoading: boolean;
   useExpandedConversationWidth: boolean;
 };
 
@@ -56,6 +63,7 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
     isContinuing,
     isResuming,
     isStreaming,
+    isTaskStatePanelOpen,
     messages,
     messagesRef,
     onCancel,
@@ -67,12 +75,17 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
     onPromptSelect,
     onResume,
     onRoleSelect,
+    onTaskStateClose,
+    onTaskStateRefresh,
     planDraft,
     runStatus,
     selectedRole,
     showAutonomousTrace,
     showCollaborationDag,
     showCollaborationPanel,
+    taskState,
+    taskStateError,
+    taskStateLoading,
     useExpandedConversationWidth
   } = props;
   const awaitingPlanApproval = chatMode === "multi_agent" && runStatus === "waiting_for_user";
@@ -81,7 +94,7 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
     <section
       className={`chat-workspace ${useExpandedConversationWidth ? "expanded-content" : ""} ${
         showCollaborationPanel && isCollaborationPanelOpen ? "with-collaboration" : ""
-      } ${showCollaborationDag && isCollaborationPanelOpen ? "with-collaboration-dag" : ""}`}
+      } ${isTaskStatePanelOpen ? "with-task-state" : ""} ${showCollaborationDag && isCollaborationPanelOpen ? "with-collaboration-dag" : ""}`}
     >
       {showCollaborationDag && isCollaborationPanelOpen ? (
         <CollaborationDag
@@ -155,6 +168,15 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
             steps={collaborationSteps}
           />
         )
+      ) : null}
+      {isTaskStatePanelOpen ? (
+        <TaskStatePanel
+          error={taskStateError}
+          isLoading={taskStateLoading}
+          onClose={onTaskStateClose}
+          onRefresh={onTaskStateRefresh}
+          state={taskState}
+        />
       ) : null}
     </section>
   );

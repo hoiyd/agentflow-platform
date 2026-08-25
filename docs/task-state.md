@@ -108,6 +108,21 @@ GET   /api/conversations/{id}/task-state/revisions/{version}
 Workspace-scoped Store view; a Conversation outside the resolved Workspace is
 reported as not found.
 
+## Frontend Inspection
+
+The Conversation top bar opens a read-only Task State Inspector with the
+current Goal, Task status, Decisions, Constraints, Blockers, Artifact
+references, and Revision version. Conversation loads and completed execution
+paths refresh the projection; users can also refresh it explicitly.
+
+Run Replay shows version transitions and operation types. It labels Revisions
+created by the selected Run separately from the wider Conversation history so
+later or user-originated changes are not attributed to that Run. Rendering is
+bounded while the API remains the complete historical source.
+
+The first UI remains inspect-only. Manual correction continues through the
+typed PATCH API; a richer conflict-aware editor is intentionally deferred.
+
 Example patch:
 
 ```json

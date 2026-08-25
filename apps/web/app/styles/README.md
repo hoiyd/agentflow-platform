@@ -16,10 +16,12 @@ Global styles load in two ordered layers from `app/layout.tsx`:
 - `home.css`: product home page.
 - `shell.css`: workspace navigation, top bar, and task status.
 - `chat.css`: mode chooser, messages, markdown, and empty state.
+- `task-state.css`: Conversation Task State trigger, inspector layout, and fact rows.
 - `composer.css`: composer, agent selector, and agent dialogs.
 - `tools-knowledge.css`: tools and knowledge workspace refinements.
 - `collaboration.css`: multi-agent DAG, Loop Trace, and trace controls.
 - `replay-overlays.css`: run replay, event details, and shared overlays.
+- `task-state-replay.css`: bounded Task State Revision projection on Run Replay.
 - `responsive.css`: breakpoint-specific overrides; keep this last.
 
 Add new rules to the narrowest matching module. Shared tokens belong in `foundation.css`; avoid creating another cross-feature override file.

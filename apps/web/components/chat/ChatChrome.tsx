@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import {
   Activity,
+  ClipboardList,
   Database,
   Menu,
   MessageSquare,
@@ -172,9 +173,12 @@ type TopbarProps = {
   onCancelRun: () => void;
   onConversationTitleDraftChange: (value: string) => void;
   onOpenNavigation: () => void;
+  onTaskStateToggle: () => void;
   onSaveTitle: () => void;
   onStartEdit: (conversation: Conversation) => void;
   runState: VisibleRunState | null;
+  taskStateOpen: boolean;
+  taskStateVersion: number;
   toolCount: number;
   view: ChatView;
 };
@@ -192,9 +196,12 @@ export function Topbar({
   onCancelRun,
   onConversationTitleDraftChange,
   onOpenNavigation,
+  onTaskStateToggle,
   onSaveTitle,
   onStartEdit,
   runState,
+  taskStateOpen,
+  taskStateVersion,
   toolCount,
   view
 }: TopbarProps) {
@@ -238,6 +245,18 @@ export function Topbar({
         </div>
       )}
       <div className="topbar-actions">
+        {view === "chat" && activeConversation ? (
+          <button
+            aria-expanded={taskStateOpen}
+            className={`task-state-toggle ${taskStateOpen ? "active" : ""}`}
+            onClick={onTaskStateToggle}
+            type="button"
+          >
+            <ClipboardList size={14} />
+            <span>Task state</span>
+            <code>v{taskStateVersion}</code>
+          </button>
+        ) : null}
         {view === "chat" && runState ? <RunStatus runState={runState} /> : null}
         {view === "chat" && runState && runState.verificationStatus !== "not_required" ? (
           <span

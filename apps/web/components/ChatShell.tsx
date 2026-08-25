@@ -6,6 +6,7 @@ import {
   ChatMode,
   Conversation,
   ToolInfo,
+  TaskState,
   archiveAgent,
   cancelRun,
   continueRun,
@@ -18,6 +19,7 @@ import {
   listRuns,
   listTools,
   listMessages,
+  getTaskState,
   resumeRun,
   setToolEnabled,
   streamChat,
@@ -46,6 +48,8 @@ type ChatShellProps = {
   initialConversationId?: string;
 };
 
+type ChatSidePanel = "trace" | "task_state" | "closed";
+
 export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string>("");
@@ -60,7 +64,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const [collaborationSteps, setCollaborationSteps] = useState<CollaborationStepView[]>([]);
   const [autonomousProgress, setAutonomousProgress] = useState<AutonomousProgress | null>(null);
   const [humanInputDraft, setHumanInputDraft] = useState("");
-  const [isCollaborationPanelOpen, setIsCollaborationPanelOpen] = useState(true);
+  const [sidePanel, setSidePanel] = useState<ChatSidePanel>("trace");
+  const [taskState, setTaskState] = useState<TaskState | null>(null);
+  const [taskStateError, setTaskStateError] = useState("");
+  const [isTaskStateLoading, setIsTaskStateLoading] = useState(false);
   const [selectedCollaborationRole, setSelectedCollaborationRole] = useState("planner");
   const [planDraft, setPlanDraft] = useState("");
   const [isContinuingRun, setIsContinuingRun] = useState(false);
@@ -112,8 +119,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const showCollaborationPanel = chatMode === "multi_agent" || chatMode === "autonomous";
   const showCollaborationDag = chatMode === "multi_agent";
   const showAutonomousTrace = chatMode === "autonomous";
+  const isCollaborationPanelOpen = showCollaborationPanel && sidePanel === "trace";
+  const isTaskStatePanelOpen = sidePanel === "task_state";
   const useExpandedConversationWidth =
-    chatMode === "single" || (showCollaborationPanel && !isCollaborationPanelOpen);
+    !isTaskStatePanelOpen && (chatMode === "single" || (showCollaborationPanel && !isCollaborationPanelOpen));
   const isAwaitingPlanApproval = chatMode === "multi_agent" && runState?.status === "waiting_for_user";
   const isAwaitingHumanInput =
     chatMode === "autonomous" &&
@@ -161,9 +170,15 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
 
   useEffect(() => () => conversationRequests.cancel(), [conversationRequests]);
 
-  function handleChatModeChange(mode: ChatMode) {
+  function handleChatModeChange(mode: ChatMode, preserveTaskState = false) {
     setChatMode(mode);
-    setIsCollaborationPanelOpen(mode === "multi_agent" || mode === "autonomous");
+    setSidePanel((current) =>
+      preserveTaskState && current === "task_state"
+        ? current
+        : mode === "multi_agent" || mode === "autonomous"
+          ? "trace"
+          : "closed"
+    );
     if (mode !== "single") {
       setIsAgentConfigOpen(false);
       setIsNewAgentFormOpen(false);
@@ -200,12 +215,26 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     conversationId: string,
     request: LatestRequestLease = conversationRequests.begin()
   ) {
+    setIsTaskStateLoading(true);
     try {
-      const loaded = await listMessages(conversationId, request.signal);
+      const [messagesResult, taskStateResult] = await Promise.allSettled([
+        listMessages(conversationId, request.signal),
+        getTaskState(conversationId, request.signal)
+      ]);
       if (!request.isCurrent()) {
         return;
       }
-      setMessages(loaded);
+      if (messagesResult.status === "rejected") {
+        throw messagesResult.reason;
+      }
+      setMessages(messagesResult.value);
+      if (taskStateResult.status === "fulfilled") {
+        setTaskState(taskStateResult.value);
+        setTaskStateError("");
+      } else {
+        setTaskState(null);
+        setTaskStateError(taskStateResult.reason instanceof Error ? taskStateResult.reason.message : "Failed to load task state");
+      }
       await refreshCollaborationSteps(conversationId, request);
     } catch (err) {
       if (!request.isCurrent()) {
@@ -214,6 +243,37 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setMessages([]);
       resetConversationRuntimeState();
       setError(err instanceof Error ? err.message : "Failed to load conversation");
+    } finally {
+      if (request.isCurrent()) {
+        setIsTaskStateLoading(false);
+      }
+    }
+  }
+
+  async function refreshTaskState(
+    conversationId = activeId,
+    request: LatestRequestLease = conversationRequests.begin()
+  ) {
+    if (!conversationId) {
+      setTaskState(null);
+      setTaskStateError("");
+      return;
+    }
+    setIsTaskStateLoading(true);
+    setTaskStateError("");
+    try {
+      const loaded = await getTaskState(conversationId, request.signal);
+      if (request.isCurrent()) {
+        setTaskState(loaded);
+      }
+    } catch (err) {
+      if (request.isCurrent()) {
+        setTaskStateError(err instanceof Error ? err.message : "Failed to load task state");
+      }
+    } finally {
+      if (request.isCurrent()) {
+        setIsTaskStateLoading(false);
+      }
     }
   }
 
@@ -240,9 +300,9 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       }
       setCollaborationSteps(steps.map(toCollaborationStepView));
       if (steps.some((step) => autonomousRoles.some((role) => role.id === step.role))) {
-        handleChatModeChange("autonomous");
+        handleChatModeChange("autonomous", true);
       } else if (steps.length > 0) {
-        handleChatModeChange("multi_agent");
+        handleChatModeChange("multi_agent", true);
       }
       const planner = steps.find((step) => step.role === "planner");
       setPlanDraft(planner?.output ?? "");
@@ -293,6 +353,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     setError("");
     resetConversationRuntimeState();
     setMessages([]);
+    setTaskState(null);
+    setTaskStateError("");
     setView("chat");
     setActiveId(id);
     await loadConversation(id);
@@ -311,6 +373,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setConversations((items) => [conversation, ...items]);
       setActiveId(conversation.id);
       setMessages([]);
+      await refreshTaskState(conversation.id, request);
     } catch (err) {
       if (request.isCurrent()) {
         setError(err instanceof Error ? err.message : "Failed to create conversation");
@@ -338,6 +401,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         const nextConversation = items[0];
         resetConversationRuntimeState();
         setMessages([]);
+        setTaskState(null);
+        setTaskStateError("");
 
         if (nextConversation) {
           setActiveId(nextConversation.id);
@@ -346,6 +411,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         } else {
           setActiveId("");
           setView("chat");
+          setSidePanel("closed");
         }
       }
     } catch (err) {
@@ -646,9 +712,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     setHumanInputDraft("");
     setPlanDraft("");
     setIsCancelingRun(false);
-    if (chatMode === "multi_agent" || chatMode === "autonomous") {
-      setIsCollaborationPanelOpen(true);
-    }
+    setSidePanel(chatMode === "multi_agent" || chatMode === "autonomous" ? "trace" : "closed");
     setIsStreaming(true);
 
     const optimisticUser: DraftMessage = {
@@ -884,9 +948,12 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           onCancelRun={() => void handleCancelRun()}
           onConversationTitleDraftChange={setConversationTitleDraft}
           onOpenNavigation={() => setIsSidebarOpen(true)}
+          onTaskStateToggle={() => setSidePanel((current) => current === "task_state" ? "closed" : "task_state")}
           onSaveTitle={() => void saveConversationTitle()}
           onStartEdit={startEditingConversationTitle}
           runState={runState}
+          taskStateOpen={isTaskStatePanelOpen}
+          taskStateVersion={taskState?.version ?? 0}
           toolCount={tools.filter((tool) => tool.enabled).length}
           view={view}
         />
@@ -907,23 +974,29 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
             isContinuing={isContinuingRun}
             isResuming={isResumingRun}
             isStreaming={isStreaming}
+            isTaskStatePanelOpen={isTaskStatePanelOpen}
             messages={messages}
             messagesRef={messagesRef}
             onCancel={() => void handleCancelRun()}
             onContinue={handleContinuePlan}
             onHumanInputChange={setHumanInputDraft}
             onModeChange={handleChatModeChange}
-            onPanelOpenChange={setIsCollaborationPanelOpen}
+            onPanelOpenChange={(open) => setSidePanel(open ? "trace" : "closed")}
             onPlanDraftChange={setPlanDraft}
             onPromptSelect={setInput}
             onResume={handleResumeAutonomous}
             onRoleSelect={setSelectedCollaborationRole}
+            onTaskStateClose={() => setSidePanel("closed")}
+            onTaskStateRefresh={() => void refreshTaskState()}
             planDraft={planDraft}
             runStatus={runState?.status ?? ""}
             selectedRole={visibleCollaborationRole}
             showAutonomousTrace={showAutonomousTrace}
             showCollaborationDag={showCollaborationDag}
             showCollaborationPanel={showCollaborationPanel}
+            taskState={taskState}
+            taskStateError={taskStateError}
+            taskStateLoading={isTaskStateLoading}
             useExpandedConversationWidth={useExpandedConversationWidth}
           />
         )}
