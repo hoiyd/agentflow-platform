@@ -61,6 +61,33 @@ func TestWriteErrorReturnsStructuredValidationEnvelope(t *testing.T) {
 	}
 }
 
+func TestFailureInfoForHTTPStatusCoversStableClientClassifications(t *testing.T) {
+	tests := []struct {
+		name      string
+		status    int
+		code      string
+		category  failure.Category
+		retryable bool
+	}{
+		{name: "unauthenticated", status: http.StatusUnauthorized, code: "unauthenticated", category: failure.CategoryAuthentication},
+		{name: "forbidden", status: http.StatusForbidden, code: "forbidden", category: failure.CategoryAuthentication},
+		{name: "not found", status: http.StatusNotFound, code: "not_found", category: failure.CategoryNotFound},
+		{name: "conflict", status: http.StatusConflict, code: "conflict", category: failure.CategoryExecution},
+		{name: "capacity", status: http.StatusTooManyRequests, code: "capacity_exceeded", category: failure.CategoryCapacity, retryable: true},
+		{name: "availability", status: http.StatusServiceUnavailable, code: "service_unavailable", category: failure.CategoryAvailability, retryable: true},
+		{name: "timeout", status: http.StatusGatewayTimeout, code: failure.CodeTimeout, category: failure.CategoryTimeout, retryable: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			info := failureInfoForHTTPStatus(test.status)
+			if info.Code != test.code || info.Category != test.category || info.Retryable != test.retryable || info.Source != "http_api" {
+				t.Fatalf("unexpected status classification: %#v", info)
+			}
+		})
+	}
+}
+
 func TestFailureChatChunkUsesTheSameSafeContract(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/chat", nil)

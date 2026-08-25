@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	toolpkg "agentflow-platform/apps/api/internal/tools"
 )
@@ -70,6 +72,26 @@ func TestToolHandlerRejectsMissingAndUnknownTools(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestListToolsProjectsReloadFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tools.json")
+	if err := toolpkg.SaveConfig(path, toolpkg.DefaultConfig()); err != nil {
+		t.Fatalf("save tool config: %v", err)
+	}
+	manager, err := toolpkg.NewManager(path)
+	if err != nil {
+		t.Fatalf("new tool manager: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
+		t.Fatalf("corrupt tool config: %v", err)
+	}
+	changedAt := time.Now().Add(time.Second)
+	if err := os.Chtimes(path, changedAt, changedAt); err != nil {
+		t.Fatalf("advance tool config timestamp: %v", err)
+	}
+	handler := &Handler{tools: manager}
+	assertHandlerFailure(t, handler.listTools, httptest.NewRequest(http.MethodGet, "/api/tools", nil), http.StatusInternalServerError)
 }
 
 func toolEnabled(items []toolpkg.ToolInfo, name string) bool {
