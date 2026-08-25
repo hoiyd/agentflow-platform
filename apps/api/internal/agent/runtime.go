@@ -84,6 +84,7 @@ type RuntimeOptions struct {
 	Autonomous         AutonomousLimits
 	RunBudget          domain.RuntimeRunBudget
 	KnowledgeRetriever rag.Retriever
+	CheckpointProvider checkpoint.Provider
 }
 
 func NewRuntime(options RuntimeOptions) *Runtime {
@@ -92,6 +93,10 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		if searchStore, ok := options.Store.(rag.SearchStore); ok {
 			knowledgeRetriever = rag.NewRetrievalPipeline(searchStore)
 		}
+	}
+	checkpointProvider := options.CheckpointProvider
+	if checkpointProvider == nil {
+		checkpointProvider = checkpoint.NewInternalProvider(options.Store)
 	}
 	runtime := &Runtime{
 		store:                 options.Store,
@@ -104,7 +109,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		autonomousLimits:      normalizeAutonomousLimits(options.Autonomous),
 		runBudget:             options.RunBudget,
 		knowledgeRetriever:    knowledgeRetriever,
-		checkpoints:           checkpoint.NewInternalProvider(options.Store),
+		checkpoints:           checkpointProvider,
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime
