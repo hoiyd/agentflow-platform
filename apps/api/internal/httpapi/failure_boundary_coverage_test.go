@@ -8,8 +8,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/verification"
 )
 
 func TestAgentAndRunHandlersProjectStoreFailures(t *testing.T) {
@@ -114,6 +116,44 @@ func TestConversationAndDocumentHandlersProjectWorkspaceFailures(t *testing.T) {
 	assertHandlerFailure(t, handler.getDocument, httptest.NewRequest(http.MethodGet, "/api/documents/document-1", nil), http.StatusInternalServerError)
 }
 
+func TestChatProjectsContractAndConversationPersistenceFailures(t *testing.T) {
+	httpStore, workspace, fileStore := newBoundaryHTTPStore(t)
+	dependencies := completeHandlerDependencies(t)
+	handler, err := NewHandler(dependencies)
+	if err != nil {
+		t.Fatalf("new handler: %v", err)
+	}
+	handler.store = httpStore
+	want := errors.New("chat persistence failed")
+
+	handler.verification = nil
+	assertHandlerFailure(t, handler.chat, httptest.NewRequest(http.MethodPost, "/api/chat", bytes.NewBufferString(
+		`{"message":"hello","completion_contract":{"subject_type":"run_output"}}`,
+	)), http.StatusBadRequest)
+	handler.verification = dependencies.Verification
+
+	workspace.createConversationErr = want
+	assertHandlerFailure(t, handler.chat, httptest.NewRequest(http.MethodPost, "/api/chat", bytes.NewBufferString(`{"message":"hello"}`)), http.StatusInternalServerError)
+	workspace.createConversationErr = nil
+	workspace.getConversationErr = want
+	assertHandlerFailure(t, handler.chat, httptest.NewRequest(http.MethodPost, "/api/chat", bytes.NewBufferString(`{"conversation_id":"conv-1","message":"hello"}`)), http.StatusInternalServerError)
+	workspace.getConversationErr = nil
+
+	conversation, err := fileStore.CreateConversation("chat failures")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	workspace.addMessageErr = want
+	assertHandlerFailure(t, handler.chat, httptest.NewRequest(http.MethodPost, "/api/chat", bytes.NewBufferString(
+		`{"conversation_id":"`+conversation.ID+`","message":"hello"}`,
+	)), http.StatusInternalServerError)
+	workspace.addMessageErr = nil
+	workspace.listMessagesErr = want
+	assertHandlerFailure(t, handler.chat, httptest.NewRequest(http.MethodPost, "/api/chat", bytes.NewBufferString(
+		`{"conversation_id":"`+conversation.ID+`","message":"hello"}`,
+	)), http.StatusInternalServerError)
+}
+
 func TestKnowledgeAndEpisodeHandlersProjectDependencyFailures(t *testing.T) {
 	want := errors.New("dependency failed")
 	knowledge := &boundaryKnowledgeOperations{err: want}
@@ -145,6 +185,75 @@ func TestKnowledgeAndEpisodeHandlersProjectDependencyFailures(t *testing.T) {
 	assertHandlerFailure(t, episodeHandler.getEpisodeReport, request(), http.StatusInternalServerError)
 }
 
+func TestCompleteStreamingRunProjectsPersistenceAndResolutionFailures(t *testing.T) {
+	tests := []struct {
+		name      string
+		configure func(*boundaryWorkspaceStore, error)
+	}{
+		{name: "citation lookup", configure: func(store *boundaryWorkspaceStore, err error) { store.listRunEventsErr = err }},
+		{name: "assistant message", configure: func(store *boundaryWorkspaceStore, err error) { store.addMessageWithCitationsErr = err }},
+		{name: "run resolution", configure: func(store *boundaryWorkspaceStore, err error) { store.getRunErr = err }},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			handler, workspace, run, conversation := newBoundaryRunningRun(t, nil)
+			test.configure(workspace, errors.New("completion dependency failed"))
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/api/chat", nil)
+
+			if handler.completeStreamingRun(response, response, request, request.Context(), runCompletionRequest{
+				WorkspaceID: domain.DefaultWorkspaceID, RunID: run.ID,
+				ConversationID: conversation.ID, UserInput: "question", Assistant: "answer",
+			}) {
+				t.Fatalf("completion should fail: %s", response.Body.String())
+			}
+			if !bytes.Contains(response.Body.Bytes(), []byte(`"type":"error"`)) {
+				t.Fatalf("expected SSE failure chunk: %s", response.Body.String())
+			}
+		})
+	}
+}
+
+func TestResolveRunCompletionMarksVerificationInfrastructureFailureBlocked(t *testing.T) {
+	contract := &domain.CompletionContract{SubjectType: "run_output"}
+	handler, workspace, run, _ := newBoundaryRunningRun(t, contract)
+	handler.verification = verification.NewEngine(nil, nil)
+
+	if _, err := handler.resolveRunCompletion(context.Background(), workspace, run.ID, "question", "answer"); err == nil {
+		t.Fatal("expected verification infrastructure failure")
+	}
+	updated, ok, err := workspace.GetRun(run.ID)
+	if err != nil || !ok || updated.VerificationStatus != domain.VerificationBlocked {
+		t.Fatalf("verification failure was not marked blocked: run=%#v ok=%t err=%v", updated, ok, err)
+	}
+}
+
+func TestVerifyRunProjectsWorkspaceAndVerificationFailures(t *testing.T) {
+	contract := &domain.CompletionContract{SubjectType: "run_output"}
+	handler, workspace, run, conversation := newBoundaryRunningRun(t, contract)
+	request := func() *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "/api/runs/"+run.ID+"/verify", nil)
+		r.SetPathValue("id", run.ID)
+		return r
+	}
+
+	workspace.getRunErr = errors.New("run lookup failed")
+	assertHandlerFailure(t, handler.verifyRun, request(), http.StatusInternalServerError)
+	workspace.getRunErr = nil
+	workspace.listMessagesErr = errors.New("message lookup failed")
+	assertHandlerFailure(t, handler.verifyRun, request(), http.StatusInternalServerError)
+	workspace.listMessagesErr = nil
+	if _, err := workspace.AddMessage(conversation.ID, "user", "question"); err != nil {
+		t.Fatalf("add user message: %v", err)
+	}
+	if _, err := workspace.AddMessage(conversation.ID, "assistant", "answer"); err != nil {
+		t.Fatalf("add assistant message: %v", err)
+	}
+	handler.verification = verification.NewEngine(nil, nil)
+	assertHandlerFailure(t, handler.verifyRun, request(), http.StatusInternalServerError)
+}
+
 func assertHandlerFailure(t *testing.T, invoke func(http.ResponseWriter, *http.Request), request *http.Request, status int) {
 	t.Helper()
 	recorder := httptest.NewRecorder()
@@ -168,6 +277,24 @@ func newBoundaryHTTPStore(t *testing.T) (*boundaryHTTPStore, *boundaryWorkspaceS
 		WorkspaceStore: fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
 	}
 	return &boundaryHTTPStore{Store: fileStore, workspace: workspace}, workspace, fileStore
+}
+
+func newBoundaryRunningRun(t *testing.T, contract *domain.CompletionContract) (*Handler, *boundaryWorkspaceStore, domain.Run, domain.Conversation) {
+	t.Helper()
+	httpStore, workspace, fileStore := newBoundaryHTTPStore(t)
+	conversation, err := fileStore.CreateConversation("boundary run")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), contract)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if _, err := fileStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
+		t.Fatalf("start run: %v", err)
+	}
+	runtime := agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	return &Handler{store: httpStore, agentRuntime: runtime}, workspace, run, conversation
 }
 
 type boundaryHTTPStore struct {
@@ -222,9 +349,12 @@ type boundaryWorkspaceStore struct {
 	deleteConversationErr      error
 	updateConversationTitleErr error
 	listMessagesErr            error
+	addMessageErr              error
+	addMessageWithCitationsErr error
 	getRunErr                  error
 	listRunsErr                error
 	listCollaborationStepsErr  error
+	listRunEventsErr           error
 	getRunReplayErr            error
 	getRunUsageErr             error
 	listDocumentsErr           error
@@ -267,6 +397,18 @@ func (s *boundaryWorkspaceStore) ListMessages(id string) ([]domain.Message, erro
 	}
 	return s.WorkspaceStore.ListMessages(id)
 }
+func (s *boundaryWorkspaceStore) AddMessage(id string, role string, content string) (domain.Message, error) {
+	if s.addMessageErr != nil {
+		return domain.Message{}, s.addMessageErr
+	}
+	return s.WorkspaceStore.AddMessage(id, role, content)
+}
+func (s *boundaryWorkspaceStore) AddMessageWithCitations(id string, role string, content string, citations []domain.RAGCitation) (domain.Message, error) {
+	if s.addMessageWithCitationsErr != nil {
+		return domain.Message{}, s.addMessageWithCitationsErr
+	}
+	return s.WorkspaceStore.AddMessageWithCitations(id, role, content, citations)
+}
 func (s *boundaryWorkspaceStore) GetRun(id string) (domain.Run, bool, error) {
 	if s.getRunErr != nil {
 		return domain.Run{}, false, s.getRunErr
@@ -284,6 +426,12 @@ func (s *boundaryWorkspaceStore) ListCollaborationSteps(id string) ([]domain.Col
 		return nil, s.listCollaborationStepsErr
 	}
 	return s.WorkspaceStore.ListCollaborationSteps(id)
+}
+func (s *boundaryWorkspaceStore) ListRunEvents(id string) ([]domain.RunEvent, error) {
+	if s.listRunEventsErr != nil {
+		return nil, s.listRunEventsErr
+	}
+	return s.WorkspaceStore.ListRunEvents(id)
 }
 func (s *boundaryWorkspaceStore) GetRunReplay(id string) (domain.RunReplay, bool, error) {
 	if s.getRunReplayErr != nil {
