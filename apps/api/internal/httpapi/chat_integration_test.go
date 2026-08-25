@@ -12,6 +12,7 @@ import (
 
 func TestChatRoutesExecuteDirectAndCollaborationLifecycles(t *testing.T) {
 	dependencies := completeHandlerDependencies(t)
+	fullStore := fullStoreForTest(t, dependencies)
 	handler, err := NewHandler(dependencies)
 	if err != nil {
 		t.Fatalf("new handler: %v", err)
@@ -22,7 +23,7 @@ func TestChatRoutesExecuteDirectAndCollaborationLifecycles(t *testing.T) {
 	if direct.Code != http.StatusOK || !strings.Contains(direct.Body.String(), "event: done") || !strings.Contains(direct.Body.String(), "event: model.delta") {
 		t.Fatalf("unexpected direct chat response: status=%d body=%s", direct.Code, direct.Body.String())
 	}
-	runs, err := dependencies.Store.ListRuns()
+	runs, err := fullStore.ListRuns()
 	if err != nil || len(runs) != 1 || runs[0].Status != domain.RunCompleted {
 		t.Fatalf("direct run lifecycle: runs=%#v err=%v", runs, err)
 	}
@@ -31,7 +32,7 @@ func TestChatRoutesExecuteDirectAndCollaborationLifecycles(t *testing.T) {
 	if multi.Code != http.StatusOK || !strings.Contains(multi.Body.String(), "event: done") || !strings.Contains(multi.Body.String(), `"status":"waiting_for_user"`) {
 		t.Fatalf("unexpected collaboration response: status=%d body=%s", multi.Code, multi.Body.String())
 	}
-	runs, err = dependencies.Store.ListRuns()
+	runs, err = fullStore.ListRuns()
 	if err != nil {
 		t.Fatalf("list collaboration runs: %v", err)
 	}
@@ -44,7 +45,7 @@ func TestChatRoutesExecuteDirectAndCollaborationLifecycles(t *testing.T) {
 	if continued.Code != http.StatusOK || !strings.Contains(continued.Body.String(), "event: done") {
 		t.Fatalf("unexpected continuation response: status=%d body=%s", continued.Code, continued.Body.String())
 	}
-	completed, found, err := dependencies.Store.GetRun(waiting.ID)
+	completed, found, err := fullStore.GetRun(waiting.ID)
 	if err != nil || !found || completed.Status != domain.RunCompleted {
 		t.Fatalf("continued run lifecycle: found=%v run=%#v err=%v", found, completed, err)
 	}
@@ -52,6 +53,7 @@ func TestChatRoutesExecuteDirectAndCollaborationLifecycles(t *testing.T) {
 
 func TestChatRouteExecutesBoundedAutonomousLifecycle(t *testing.T) {
 	dependencies := completeHandlerDependencies(t)
+	fullStore := fullStoreForTest(t, dependencies)
 	handler, err := NewHandler(dependencies)
 	if err != nil {
 		t.Fatalf("new handler: %v", err)
@@ -61,7 +63,7 @@ func TestChatRouteExecutesBoundedAutonomousLifecycle(t *testing.T) {
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "event: run.progress") || !strings.Contains(response.Body.String(), `"mode":"autonomous"`) || !strings.Contains(response.Body.String(), "event: done") {
 		t.Fatalf("unexpected autonomous response: status=%d body=%s", response.Code, response.Body.String())
 	}
-	runs, err := dependencies.Store.ListRuns()
+	runs, err := fullStore.ListRuns()
 	if err != nil || len(runs) != 1 || runs[0].Status != domain.RunCompleted {
 		t.Fatalf("autonomous run lifecycle: runs=%#v err=%v", runs, err)
 	}
