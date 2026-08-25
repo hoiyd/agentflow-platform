@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -173,8 +175,10 @@ type apiErrorResponse struct {
 	RequestID string `json:"request_id"`
 }
 
-func writeFailure(w http.ResponseWriter, status int, err error) {
+func writeFailure(w http.ResponseWriter, r *http.Request, status int, err error) {
 	info := describeHTTPFailure(status, err)
+	requestID := ensureRequestID(w)
+	logHTTPFailure(r, requestID, "json", status, err, info)
 	writeAPIError(w, status, publicFailureMessage(status, err), info)
 }
 
@@ -197,14 +201,11 @@ func publicFailureMessage(status int, err error) string {
 	return message
 }
 
-func failureChatChunk(w http.ResponseWriter, status int, err error) domain.ChatChunk {
+func failureChatChunk(w http.ResponseWriter, r *http.Request, status int, err error) domain.ChatChunk {
 	info := describeHTTPFailure(status, err)
 	retryable := info.Retryable
-	requestID := w.Header().Get(RequestIDHeader)
-	if requestID == "" {
-		requestID = newRequestID()
-		w.Header().Set(RequestIDHeader, requestID)
-	}
+	requestID := ensureRequestID(w)
+	logHTTPFailure(r, requestID, "sse", status, err, info)
 	return domain.ChatChunk{
 		Type: "error", Error: publicFailureMessage(status, err), ErrorCode: info.Code,
 		ErrorSource: info.Source, ErrorCategory: string(info.Category), Retryable: &retryable, RequestID: requestID,
@@ -212,15 +213,40 @@ func failureChatChunk(w http.ResponseWriter, status int, err error) domain.ChatC
 }
 
 func writeAPIError(w http.ResponseWriter, status int, message string, info failure.Info) {
+	requestID := ensureRequestID(w)
+	writeJSON(w, status, apiErrorResponse{
+		Error: message, Code: info.Code, Source: info.Source,
+		Category: string(info.Category), Retryable: info.Retryable, Operation: info.Operation, RequestID: requestID,
+	})
+}
+
+func ensureRequestID(w http.ResponseWriter) string {
 	requestID := w.Header().Get(RequestIDHeader)
 	if requestID == "" {
 		requestID = newRequestID()
 		w.Header().Set(RequestIDHeader, requestID)
 	}
-	writeJSON(w, status, apiErrorResponse{
-		Error: message, Code: info.Code, Source: info.Source,
-		Category: string(info.Category), Retryable: info.Retryable, Operation: info.Operation, RequestID: requestID,
-	})
+	return requestID
+}
+
+func logHTTPFailure(r *http.Request, requestID string, transport string, status int, err error, info failure.Info) {
+	log.Print(formatHTTPFailureLog(r, requestID, transport, status, err, info))
+}
+
+func formatHTTPFailureLog(r *http.Request, requestID string, transport string, status int, err error, info failure.Info) string {
+	method, path := "", ""
+	if r != nil {
+		method = r.Method
+		path = r.URL.Path
+	}
+	errorMessage := ""
+	if err != nil {
+		errorMessage = err.Error()
+	}
+	return fmt.Sprintf(
+		"http_failure request_id=%q transport=%q method=%q path=%q status=%d code=%q source=%q category=%q retryable=%t operation=%q error=%q",
+		requestID, transport, method, path, status, info.Code, info.Source, info.Category, info.Retryable, info.Operation, errorMessage,
+	)
 }
 
 func failureInfoForHTTPStatus(status int) failure.Info {

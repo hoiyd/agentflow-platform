@@ -13,7 +13,8 @@ import (
 
 func TestWriteFailureRedactsInternalDetailsAndAddsRequestID(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	writeFailure(recorder, http.StatusInternalServerError, errors.New(`pq: column "secret_token" does not exist`))
+	request := httptest.NewRequest(http.MethodGet, "/api/runs/run-secret/replay", nil)
+	writeFailure(recorder, request, http.StatusInternalServerError, errors.New(`pq: column "secret_token" does not exist`))
 
 	response := decodeAPIErrorResponse(t, recorder)
 	if response.Error != http.StatusText(http.StatusInternalServerError) ||
@@ -35,7 +36,8 @@ func TestWriteFailurePreservesStructuredClassification(t *testing.T) {
 		},
 	})
 	recorder := httptest.NewRecorder()
-	writeFailure(recorder, http.StatusBadGateway, err)
+	request := httptest.NewRequest(http.MethodPost, "/api/rag/search", nil)
+	writeFailure(recorder, request, http.StatusBadGateway, err)
 
 	response := decodeAPIErrorResponse(t, recorder)
 	if response.Error != http.StatusText(http.StatusBadGateway) || response.Code != "provider_unavailable" ||
@@ -61,12 +63,39 @@ func TestWriteErrorReturnsStructuredValidationEnvelope(t *testing.T) {
 
 func TestFailureChatChunkUsesTheSameSafeContract(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	chunk := failureChatChunk(recorder, http.StatusInternalServerError, errors.New("database password leaked"))
+	request := httptest.NewRequest(http.MethodPost, "/api/chat", nil)
+	chunk := failureChatChunk(recorder, request, http.StatusInternalServerError, errors.New("database password leaked"))
 
 	if chunk.Error != http.StatusText(http.StatusInternalServerError) || chunk.ErrorCode != "internal_error" ||
 		chunk.ErrorCategory != string(failure.CategoryInternal) || chunk.RequestID == "" ||
 		chunk.Retryable == nil || *chunk.Retryable {
 		t.Fatalf("unexpected SSE failure chunk: %#v", chunk)
+	}
+}
+
+func TestFormatHTTPFailureLogKeepsRawErrorAndCorrelationFields(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/api/rag/search?query=private", nil)
+	info := failure.Info{
+		Code: "provider_unavailable", Source: "model_provider", Category: failure.CategoryAvailability,
+		Retryable: true, Operation: "embedding.openai_compatible",
+	}
+	line := formatHTTPFailureLog(
+		request, "req_debug", "json", http.StatusBadGateway,
+		errors.New("embedding provider returned upstream detail"), info,
+	)
+
+	for _, fragment := range []string{
+		`request_id="req_debug"`, `transport="json"`, `method="POST"`, `path="/api/rag/search"`,
+		`status=502`, `code="provider_unavailable"`, `source="model_provider"`,
+		`category="availability"`, `retryable=true`, `operation="embedding.openai_compatible"`,
+		`error="embedding provider returned upstream detail"`,
+	} {
+		if !strings.Contains(line, fragment) {
+			t.Fatalf("failure log missing %q: %s", fragment, line)
+		}
+	}
+	if strings.Contains(line, "query=private") {
+		t.Fatalf("failure log should not include URL query values: %s", line)
 	}
 }
 

@@ -18,7 +18,7 @@ const documentUploadMaxBytes = 2 << 20
 func (h *Handler) listDocuments(w http.ResponseWriter, r *http.Request) {
 	documents, err := h.scopedStore(r).ListDocuments()
 	if err != nil {
-		writeFailure(w, http.StatusInternalServerError, err)
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, documents)
@@ -32,7 +32,7 @@ func (h *Handler) getDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	document, chunks, ok, err := h.scopedStore(r).GetDocument(id)
 	if err != nil {
-		writeFailure(w, http.StatusInternalServerError, err)
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -56,7 +56,7 @@ func (h *Handler) deleteDocument(w http.ResponseWriter, r *http.Request) {
 		if store.IsNotFound(err) {
 			status = http.StatusNotFound
 		}
-		writeFailure(w, status, err)
+		writeFailure(w, r, status, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -76,7 +76,7 @@ func (h *Handler) createDocument(w http.ResponseWriter, r *http.Request) {
 	req.WorkspaceID = workspaceID
 	document, err := h.knowledge.Ingest(r.Context(), req)
 	if err != nil {
-		writeKnowledgeError(w, err)
+		writeKnowledgeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, document)
@@ -144,7 +144,7 @@ func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
 		Metadata:    metadata,
 	})
 	if err != nil {
-		writeKnowledgeError(w, err)
+		writeKnowledgeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, document)
@@ -164,7 +164,7 @@ func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
 	search.WorkspaceID = workspaceID
 	response, err := h.knowledge.Search(r.Context(), search, rag.NormalizeSearchLimit(search.Limit))
 	if err != nil {
-		writeKnowledgeError(w, err)
+		writeKnowledgeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -190,16 +190,16 @@ func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
 	req.WorkspaceID = workspaceID
 	response, err := h.knowledge.Evaluate(r.Context(), req)
 	if err != nil {
-		writeKnowledgeError(w, err)
+		writeKnowledgeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
 }
 
-func writeKnowledgeError(w http.ResponseWriter, err error) {
+func writeKnowledgeError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusBadRequest
 	if knowledge.IsEmbeddingError(err) {
 		status = http.StatusBadGateway
 	}
-	writeFailure(w, status, err)
+	writeFailure(w, r, status, err)
 }

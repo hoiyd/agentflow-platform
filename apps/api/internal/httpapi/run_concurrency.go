@@ -9,13 +9,13 @@ import (
 
 const overloadRetryAfterSeconds = "1"
 
-func (h *Handler) reserveRunCapacity(w http.ResponseWriter) (*concurrency.Reservation, bool) {
+func (h *Handler) reserveRunCapacity(w http.ResponseWriter, r *http.Request) (*concurrency.Reservation, bool) {
 	reservation, err := h.runController.Reserve()
 	if err == nil {
 		return reservation, true
 	}
 	w.Header().Set("Retry-After", overloadRetryAfterSeconds)
-	writeFailure(w, http.StatusTooManyRequests, err)
+	writeFailure(w, r, http.StatusTooManyRequests, err)
 	return nil, false
 }
 
@@ -32,6 +32,6 @@ func (h *Handler) acquireRunSlot(w http.ResponseWriter, r *http.Request, reserva
 	if errors.Is(err, concurrency.ErrQueueFull) {
 		status = http.StatusTooManyRequests
 	}
-	writeFailure(w, status, err)
+	writeFailure(w, r, status, err)
 	return nil, false
 }

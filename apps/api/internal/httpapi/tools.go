@@ -9,7 +9,7 @@ import (
 func (h *Handler) listTools(w http.ResponseWriter, r *http.Request) {
 	items, err := h.tools.List()
 	if err != nil {
-		writeFailure(w, http.StatusInternalServerError, err)
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -30,7 +30,7 @@ func (h *Handler) setToolEnabled(w http.ResponseWriter, r *http.Request, enabled
 
 	items, err := h.tools.SetEnabled(name, enabled)
 	if err != nil {
-		writeFailure(w, http.StatusNotFound, err)
+		writeFailure(w, r, http.StatusNotFound, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, items)

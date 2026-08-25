@@ -73,6 +73,14 @@ Dynamic `5xx` messages are redacted to standard HTTP text; raw database,
 provider, path, and implementation details are never returned to the client.
 The `X-Request-ID` response header matches `request_id` for correlation.
 
+Every dynamic JSON or SSE failure also emits one server-side `http_failure`
+log entry. It contains the request ID, transport, method, URL path, status,
+failure classification, retryability, operation, and the original lower-level
+error. Query parameters are excluded. Use `request_id` to correlate a safe
+client response with its detailed server log. Because the log intentionally
+retains the original error, production access and retention must follow the
+same controls as other sensitive operational logs.
+
 Streaming chat error chunks use the same fields. Existing clients that only
 read the human-readable `error` field remain compatible.
 

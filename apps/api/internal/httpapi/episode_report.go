@@ -17,7 +17,7 @@ func (h *Handler) getEpisodeReport(w http.ResponseWriter, r *http.Request) {
 	}
 	scoped := h.scopedStore(r)
 	if _, ok, err := scoped.GetRun(id); err != nil {
-		writeFailure(w, http.StatusInternalServerError, err)
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	} else if !ok {
 		writeError(w, http.StatusNotFound, "run not found")
@@ -26,7 +26,7 @@ func (h *Handler) getEpisodeReport(w http.ResponseWriter, r *http.Request) {
 
 	replay, ok, err := scoped.GetRunReplay(id)
 	if err != nil {
-		writeFailure(w, http.StatusInternalServerError, err)
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -35,7 +35,7 @@ func (h *Handler) getEpisodeReport(w http.ResponseWriter, r *http.Request) {
 	}
 	agent, ok, err := h.store.GetAgent(replay.Run.AgentID)
 	if err != nil {
-		writeFailure(w, http.StatusInternalServerError, err)
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {

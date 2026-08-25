@@ -23,19 +23,19 @@ type runCompletionRequest struct {
 
 // completeStreamingRun centralizes the durable state transition shared by all
 // streaming modes. The SSE response is flushed before asynchronous memory work.
-func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flusher, ctx context.Context, request runCompletionRequest) bool {
+func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flusher, r *http.Request, ctx context.Context, request runCompletionRequest) bool {
 	scoped := h.scopedStoreForID(request.WorkspaceID)
 	sources, citations, invalidCitationIDs, err := h.resolveRunCitations(scoped, request.RunID, request.Assistant)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(request.RunID, err)
-		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
+		writeSSE(w, "error", failureChatChunk(w, r, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return false
 	}
 	message, err := scoped.AddMessageWithCitations(request.ConversationID, "assistant", request.Assistant, citations)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(request.RunID, err)
-		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
+		writeSSE(w, "error", failureChatChunk(w, r, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return false
 	}
@@ -53,7 +53,7 @@ func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flush
 	completed, err := h.resolveRunCompletion(ctx, scoped, request.RunID, request.UserInput, request.Assistant)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(request.RunID, err)
-		writeSSE(w, "error", failureChatChunk(w, http.StatusInternalServerError, err))
+		writeSSE(w, "error", failureChatChunk(w, r, http.StatusInternalServerError, err))
 		flusher.Flush()
 		return false
 	}
