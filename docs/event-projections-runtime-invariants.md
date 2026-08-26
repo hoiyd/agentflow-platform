@@ -4,6 +4,24 @@ AgentFlow treats persisted Run Events as execution facts and derives read
 models from them. This layer does not introduce event-sourcing infrastructure,
 projection tables, or a second source of truth.
 
+## Terminology: projection
+
+In this project, a **projection** is an event-derived read model: a deterministic
+function folds ordered durable events together with authoritative records into
+a shape optimized for querying, replay inspection, and diagnostics.
+
+The term does **not** mean a database projection table, a mutable copy of Run
+state, or a runtime snapshot used to resume execution. Projections are rebuilt
+on demand and are never written back as authoritative state. `as_of_sequence`
+records the last durable event included in the result, so readers can tell
+exactly which event boundary the view represents.
+
+In practical terms:
+
+- **Events and authoritative records** answer "what facts were persisted?"
+- **A projection** answers "what read-only view follows from those facts?"
+- **A runtime snapshot/checkpoint** answers "what data is needed to resume?"
+
 ## Event protocol
 
 Every Run Event is registered in the executable
@@ -24,8 +42,8 @@ documenting it fails CI.
 
 ## Canonical projections
 
-`projection.BuildSnapshot` builds three pure read models from one durable event
-watermark:
+`projection.BuildSnapshot` builds three pure, non-persisted read models from
+one durable event watermark:
 
 | Projection | Source | Purpose |
 | --- | --- | --- |

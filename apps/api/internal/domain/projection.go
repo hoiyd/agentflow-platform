@@ -1,7 +1,9 @@
 package domain
 
-// RunProjection is the canonical execution read model derived from durable
-// RunEvents plus the authoritative Run record.
+// RunProjection is the canonical, read-only execution model derived from
+// durable RunEvents plus the authoritative Run record. "Projection" means a
+// deterministic event-derived view here; this value is not independently
+// persisted or mutated.
 type RunProjection struct {
 	RunID              string             `json:"run_id"`
 	ConversationID     string             `json:"conversation_id"`
@@ -15,11 +17,15 @@ type RunProjection struct {
 	AsOfSequence       int64              `json:"as_of_sequence"`
 }
 
+// UsageProjection exposes the authoritative Usage Ledger at the same durable
+// event watermark as the other Run projections.
 type UsageProjection struct {
 	Ledger       RunUsageLedger `json:"ledger"`
 	AsOfSequence int64          `json:"as_of_sequence"`
 }
 
+// VerificationProjection is the read-only verification state derived from the
+// Run and its immutable Verification Evidence at a durable event watermark.
 type VerificationProjection struct {
 	Status             VerificationStatus `json:"status"`
 	LatestAttempt      int                `json:"latest_attempt"`
@@ -38,9 +44,11 @@ type RuntimeInvariantFailure struct {
 	Message  string `json:"message"`
 }
 
-// RunProjectionSnapshot groups projections built at one durable event
-// watermark. InvariantFailures is populated at the API boundary because some
-// checks also require model-request records that are not part of RunReplay.
+// RunProjectionSnapshot groups independently derived read models at one
+// durable event watermark. It is a coherent query response, not a persisted
+// runtime snapshot. InvariantFailures is populated at the API boundary because
+// some checks also require model-request records that are not part of
+// RunReplay.
 type RunProjectionSnapshot struct {
 	Run               RunProjection             `json:"run"`
 	Usage             UsageProjection           `json:"usage"`

@@ -142,7 +142,7 @@ related Run Events.
 
 ## Usage and Replay
 
-`GET /api/runs/{id}/projection` returns the canonical Run, Usage, and Verification read models at one `as_of_sequence` watermark, plus stable runtime-invariant failures. Replay includes the same projection and retains its top-level `summary` and `usage_ledger` compatibility fields.
+`GET /api/runs/{id}/projection` returns the canonical Run, Usage, and Verification read models at one `as_of_sequence` watermark, plus stable runtime-invariant failures. Here, "projection" means a deterministic, non-persisted view derived from durable events and authoritative records; it is not a second source of truth or a resume checkpoint. Replay includes the same projection and retains its top-level `summary` and `usage_ledger` compatibility fields.
 
 `GET /api/runs/{id}/usage` returns the immutable budget, effective totals, open model reservations, and append-only usage entries. The same `usage_ledger` is included in Replay. A reservation and settlement share one `operation_id`; the settlement replaces its estimate when totals are calculated.
 

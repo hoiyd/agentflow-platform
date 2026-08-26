@@ -7,6 +7,9 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
+// BuildSnapshot derives the canonical read models at the highest durable event
+// sequence supplied by the caller. It performs no writes and is deterministic
+// for equivalent inputs.
 func BuildSnapshot(run domain.Run, events []domain.RunEvent, ledger domain.RunUsageLedger, evidence []domain.VerificationEvidence) domain.RunProjectionSnapshot {
 	watermark := eventWatermark(events)
 	return domain.RunProjectionSnapshot{
@@ -18,6 +21,9 @@ func BuildSnapshot(run domain.Run, events []domain.RunEvent, ledger domain.RunUs
 	}
 }
 
+// BuildRunProjection folds ordered durable events into execution state that is
+// convenient for APIs and diagnostics. The Run record remains authoritative
+// for persisted status fields.
 func BuildRunProjection(run domain.Run, events []domain.RunEvent) domain.RunProjection {
 	stages := map[string]bool{}
 	turns := map[string]bool{}
@@ -72,10 +78,14 @@ func ConsumesRunEvent(eventType domain.RunEventType) bool {
 	}
 }
 
+// BuildUsageProjection associates the authoritative ledger with the event
+// watermark used by the surrounding projection snapshot.
 func BuildUsageProjection(ledger domain.RunUsageLedger, watermark int64) domain.UsageProjection {
 	return domain.UsageProjection{Ledger: ledger, AsOfSequence: watermark}
 }
 
+// BuildVerificationProjection derives the current verification view from the
+// Run and immutable evidence without creating another mutable status store.
 func BuildVerificationProjection(run domain.Run, evidence []domain.VerificationEvidence, watermark int64) domain.VerificationProjection {
 	result := domain.VerificationProjection{
 		Status: run.VerificationStatus, EvidenceCount: len(evidence), AsOfSequence: watermark,
