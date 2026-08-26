@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,40 +10,44 @@ import (
 )
 
 func TestRunBudgetResumeIgnoresWaitingWallClock(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	conversation, err := fileStore.CreateConversation("resume budget")
-	if err != nil {
-		t.Fatalf("create conversation: %v", err)
-	}
+	now := time.Now().UTC()
+	createdAt := now.Add(-time.Hour)
+	resumedAt := now.Add(-10 * time.Millisecond)
 	snapshot := testRuntimeSnapshot()
-	snapshot.RunBudget = &domain.RuntimeRunBudget{MaxRuntimeMS: 50}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, snapshot)
-	if err != nil {
-		t.Fatalf("create run: %v", err)
+	snapshot.RunBudget = &domain.RuntimeRunBudget{MaxRuntimeMS: 30_000}
+	run := domain.Run{
+		ID: "run-1", Status: domain.RunRunning, RuntimeSnapshot: &snapshot,
+		StartedAt: &createdAt, ExecutionStartedAt: &resumedAt, ActiveRuntimeMS: 25,
 	}
-	if _, err = fileStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
-		t.Fatalf("start run: %v", err)
-	}
-	time.Sleep(5 * time.Millisecond)
-	if _, err = fileStore.UpdateRunStatus(run.ID, domain.RunWaitingForUser, ""); err != nil {
-		t.Fatalf("pause run: %v", err)
-	}
-	time.Sleep(70 * time.Millisecond)
-	if _, err = fileStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
-		t.Fatalf("resume run: %v", err)
-	}
-	runtime := &Runtime{store: fileStore}
+	runtime := &Runtime{store: &fixedRunBudgetStore{run: run}}
 	ctx, cancel, err := runtime.contextWithRunBudget(context.Background(), run.ID)
-	defer cancel()
 	if err != nil {
 		t.Fatalf("waiting wall clock exhausted runtime budget: %v", err)
 	}
+	defer cancel()
 	select {
 	case <-ctx.Done():
 		t.Fatalf("resumed budget context was already expired: %v", context.Cause(ctx))
 	default:
 	}
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		t.Fatal("runtime budget did not set a deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining < 20*time.Second || remaining > 30*time.Second {
+		t.Fatalf("remaining runtime = %s; waiting wall clock appears to have been counted", remaining)
+	}
+}
+
+type fixedRunBudgetStore struct {
+	store.Store
+	run domain.Run
+}
+
+func (s *fixedRunBudgetStore) GetRun(id string) (domain.Run, bool, error) {
+	if id != s.run.ID {
+		return domain.Run{}, false, nil
+	}
+	return s.run, true, nil
 }

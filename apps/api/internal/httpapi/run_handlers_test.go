@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -116,6 +117,46 @@ func TestRunProjectionInvariantPolicyReportsOrFailsLoud(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetRunProjectionHandlesInvalidMissingAndStoreFailures(t *testing.T) {
+	t.Run("missing id", func(t *testing.T) {
+		fileStore, _ := createHTTPTestRun(t)
+		recorder := httptest.NewRecorder()
+		(&Handler{store: fileStore}).getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs//projection", nil))
+		if recorder.Code != http.StatusBadRequest {
+			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+		}
+	})
+
+	t.Run("unknown run", func(t *testing.T) {
+		fileStore, _ := createHTTPTestRun(t)
+		recorder := httptest.NewRecorder()
+		(&Handler{store: fileStore}).getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/missing/projection", nil))
+		if recorder.Code != http.StatusNotFound {
+			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+		}
+	})
+
+	t.Run("replay failure", func(t *testing.T) {
+		httpStore, workspace, _ := newBoundaryHTTPStore(t)
+		workspace.getRunReplayErr = errors.New("replay unavailable")
+		recorder := httptest.NewRecorder()
+		(&Handler{store: httpStore}).getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/run-1/projection", nil))
+		if recorder.Code != http.StatusInternalServerError {
+			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+		}
+	})
+
+	t.Run("invariant dependency failure", func(t *testing.T) {
+		fileStore, run := createHTTPTestRun(t)
+		wrapped := &modelRequestHTTPStore{Store: fileStore, recordsErr: errors.New("model requests unavailable")}
+		recorder := httptest.NewRecorder()
+		(&Handler{store: wrapped}).getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/projection", nil))
+		if recorder.Code != http.StatusInternalServerError {
+			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+		}
+	})
 }
 
 func createHTTPTestRun(t *testing.T) (*store.FileStore, domain.Run) {

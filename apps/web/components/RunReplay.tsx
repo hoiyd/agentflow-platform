@@ -17,6 +17,7 @@ import {
   stepDuration
 } from "./run-replay/RunEventDetails";
 import { TaskStateChanges } from "./run-replay/TaskStateChanges";
+import { RuntimeDiagnostics } from "./run-replay/RuntimeDiagnostics";
 
 type Props = {
   runId: string;
@@ -113,6 +114,16 @@ export function RunReplay({ runId }: Props) {
     }
   }
 
+  function inspectDiagnosticEvent(eventId: string) {
+    if (!replay?.run_events.some((event) => event.id === eventId)) {
+      return;
+    }
+    setSelectedEventId(eventId);
+    requestAnimationFrame(() => {
+      document.getElementById("run-event-detail")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   if (error) {
     return (
       <main className="replay-page">
@@ -159,6 +170,12 @@ export function RunReplay({ runId }: Props) {
           This run stopped unexpectedly and can be resumed from saved collaboration steps.
         </section>
       ) : null}
+
+      <RuntimeDiagnostics
+        asOfSequence={replay.projection.as_of_sequence}
+        failures={replay.projection.invariant_failures}
+        onInspectEvent={inspectDiagnosticEvent}
+      />
 
       <section className="replay-summary">
         <Metric label="Total duration" value={formatDuration(replay.summary.total_duration_ms)} />
@@ -234,7 +251,7 @@ export function RunReplay({ runId }: Props) {
           )}
         </div>
 
-        <div className="detail-panel">
+        <div className="detail-panel" id="run-event-detail">
           <div className="panel-title">Event detail</div>
           {selectedEvent ? (
             <EventDetail event={selectedEvent} />
