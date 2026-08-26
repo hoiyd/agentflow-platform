@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -54,4 +55,54 @@ func TestObservableStorePublishesCommittedEventWithAssignedSequence(t *testing.T
 	case <-time.After(time.Second):
 		t.Fatal("committed event was not published")
 	}
+
+	scoped := observed.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID))
+	workspaceCreated, err := scoped.CreateRunEvent(domain.RunEvent{Type: domain.EventRunCompleted, RunID: run.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case delivered := <-subscription.Events:
+		if delivered.ID != workspaceCreated.ID || delivered.Sequence != 2 {
+			t.Fatalf("workspace subscriber received unexpected event: %#v", delivered)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("workspace-scoped committed event was not published")
+	}
 }
+
+func TestObservableStoreDoesNotPublishFailedCommit(t *testing.T) {
+	base, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := event.NewHub(1)
+	observed := newObservableStore(base, hub)
+	_, err = observed.CreateRunEvent(domain.RunEvent{Type: domain.RunEventType("unknown.event"), RunID: "run-1"})
+	if err == nil {
+		t.Fatal("invalid event commit should fail")
+	}
+}
+
+func TestObservableStoreCloseDelegatesWhenSupported(t *testing.T) {
+	base, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := newObservableStore(base, event.NewHub(1)).Close(); err != nil {
+		t.Fatalf("store without Close should be a no-op: %v", err)
+	}
+
+	wantErr := errors.New("close failed")
+	wrapped := &closingStore{Store: base, closeErr: wantErr}
+	if err := newObservableStore(wrapped, event.NewHub(1)).Close(); !errors.Is(err, wantErr) {
+		t.Fatalf("close error=%v want %v", err, wantErr)
+	}
+}
+
+type closingStore struct {
+	store.Store
+	closeErr error
+}
+
+func (s *closingStore) Close() error { return s.closeErr }

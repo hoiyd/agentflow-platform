@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/projection"
 )
 
@@ -83,5 +84,84 @@ func TestGeneratedCatalogIsCurrent(t *testing.T) {
 	}
 	if string(want) != CatalogMarkdown() {
 		t.Fatal("docs/event-catalog.md is stale; run go run ./cmd/generate-event-catalog")
+	}
+}
+
+func TestDefinitionAccessorsReturnDefensiveCopies(t *testing.T) {
+	definition, ok := DefinitionFor(domain.EventRunCreated)
+	if !ok || len(definition.Consumers) == 0 {
+		t.Fatalf("missing run.created definition: %#v", definition)
+	}
+	definition.Consumers[0] = "mutated"
+	again, _ := DefinitionFor(domain.EventRunCreated)
+	if again.Consumers[0] == "mutated" {
+		t.Fatal("DefinitionFor leaked the registry consumer slice")
+	}
+	if _, ok := DefinitionFor(domain.RunEventType("unknown.event")); ok {
+		t.Fatal("unknown event should not have a definition")
+	}
+
+	definitions := Definitions()
+	definitions[0].Consumers[0] = "mutated"
+	fresh := Definitions()
+	if fresh[0].Consumers[0] == "mutated" {
+		t.Fatal("Definitions leaked the registry consumer slice")
+	}
+}
+
+func TestValidateEnvelopeEnforcesRegisteredSchemaAndScope(t *testing.T) {
+	valid := domain.RunEvent{
+		Type: domain.EventStageStarted, SchemaVersion: domain.CurrentRunEventSchemaVersion,
+		RunID: "run-1", StageID: "stage-1",
+	}
+	tests := []struct {
+		name   string
+		mutate func(*domain.RunEvent)
+		want   string
+	}{
+		{name: "unregistered", mutate: func(item *domain.RunEvent) { item.Type = domain.RunEventType("unknown.event") }, want: "not registered"},
+		{name: "missing run", mutate: func(item *domain.RunEvent) { item.RunID = " " }, want: "requires run_id"},
+		{name: "unsupported schema", mutate: func(item *domain.RunEvent) { item.SchemaVersion++ }, want: "unsupported"},
+		{name: "missing stage", mutate: func(item *domain.RunEvent) { item.StageID = "" }, want: "requires stage_id"},
+		{name: "missing turn", mutate: func(item *domain.RunEvent) {
+			item.Type = domain.EventTurnStarted
+			item.StageID = ""
+		}, want: "requires turn_id"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			item := valid
+			test.mutate(&item)
+			if err := ValidateEnvelope(item); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error=%v want text %q", err, test.want)
+			}
+		})
+	}
+	if err := ValidateEnvelope(valid); err != nil {
+		t.Fatalf("valid event was rejected: %v", err)
+	}
+}
+
+func TestValidateDurabilityAndLookup(t *testing.T) {
+	durable := domain.RunEvent{
+		Type: domain.EventRunCreated, SchemaVersion: domain.CurrentRunEventSchemaVersion, RunID: "run-1",
+	}
+	if err := ValidateDurableFact(durable); err != nil || !IsDurable(durable.Type) {
+		t.Fatalf("durable event validation failed: durable=%t err=%v", IsDurable(durable.Type), err)
+	}
+	live := domain.RunEvent{
+		Type: domain.EventModelDelta, SchemaVersion: domain.CurrentRunEventSchemaVersion,
+		RunID: "run-1", Payload: map[string]any{"delta": "chunk"},
+	}
+	if err := ValidateDurableFact(live); err == nil || !strings.Contains(err.Error(), "live-only") {
+		t.Fatalf("live event persistence error=%v", err)
+	}
+	if IsDurable(live.Type) || IsDurable(domain.RunEventType("unknown.event")) {
+		t.Fatal("live and unknown event types must not be durable")
+	}
+	invalid := durable
+	invalid.RunID = ""
+	if err := ValidateDurableFact(invalid); err == nil {
+		t.Fatal("invalid envelope should be rejected before durability lookup")
 	}
 }

@@ -48,3 +48,52 @@ func TestBuildSnapshotProducesDeterministicReadModelsAtOneWatermark(t *testing.T
 		t.Fatalf("unexpected verification projection: %#v", first.Verification)
 	}
 }
+
+func TestProjectionCoverageContractRejectsLiveAndUnknownEvents(t *testing.T) {
+	if !ConsumesRunEvent(domain.EventRunCreated) || !ConsumesRunEvent(domain.EventBudgetExceeded) {
+		t.Fatal("durable projection inputs should be consumed")
+	}
+	if ConsumesRunEvent(domain.EventModelDelta) || ConsumesRunEvent(domain.RunEventType("unknown.event")) {
+		t.Fatal("live and unknown events should not be consumed by the Run projection")
+	}
+}
+
+func TestBuildRunTraceSummaryCountsFailuresAndNumericPayloads(t *testing.T) {
+	started := time.Date(2026, 8, 26, 1, 0, 0, 0, time.UTC)
+	updated := started.Add(2 * time.Second)
+	run := domain.Run{ID: "run-1", Status: domain.RunFailed, StartedAt: &started, UpdatedAt: updated}
+	events := []domain.RunEvent{
+		{Type: domain.EventModelCompleted, Payload: map[string]any{
+			"prompt_tokens": float64(3), "completion_tokens": int64(2), "total_tokens": json.Number("5"), "token_usage_estimated": true,
+		}},
+		{Type: domain.EventToolCompleted},
+		{Type: domain.EventToolFailed},
+		{Type: domain.EventModelFailed},
+		{Type: domain.EventBudgetExceeded},
+	}
+	summary := BuildRunTraceSummary(run, events)
+	if summary.TotalDurationMS != 2000 || summary.LLMCalls != 1 || summary.ToolCalls != 2 || summary.ErrorCount != 3 {
+		t.Fatalf("unexpected trace totals: %#v", summary)
+	}
+	if summary.PromptTokens != 3 || summary.CompletionTokens != 2 || summary.TotalTokens != 5 || !summary.TokenUsageEstimated {
+		t.Fatalf("unexpected token totals: %#v", summary)
+	}
+}
+
+func TestBuildVerificationProjectionHandlesEmptyAndSupersededEvidence(t *testing.T) {
+	run := domain.Run{ID: "run-1", VerificationStatus: domain.VerificationRunning}
+	empty := BuildVerificationProjection(run, nil, 4)
+	if empty.CurrentSubjectHash != "" || empty.FreshEvidenceCount != 0 || empty.AsOfSequence != 4 {
+		t.Fatalf("unexpected empty projection: %#v", empty)
+	}
+	now := time.Date(2026, 8, 26, 2, 0, 0, 0, time.UTC)
+	evidence := []domain.VerificationEvidence{
+		{ID: "old", Attempt: 1, SubjectHash: "old-subject", Status: domain.VerificationPassed, CompletedAt: now},
+		{ID: "stale", Attempt: 2, SubjectHash: "new-subject", Status: domain.VerificationStale, SupersedesEvidenceID: "old", CompletedAt: now.Add(time.Second)},
+		{ID: "new", Attempt: 2, SubjectHash: "new-subject", Status: domain.VerificationPassed, CompletedAt: now.Add(2 * time.Second)},
+	}
+	result := BuildVerificationProjection(run, evidence, 7)
+	if result.LatestAttempt != 2 || result.CurrentSubjectHash != "new-subject" || result.FreshEvidenceCount != 1 || result.EvidenceCount != 3 {
+		t.Fatalf("unexpected superseded evidence projection: %#v", result)
+	}
+}
