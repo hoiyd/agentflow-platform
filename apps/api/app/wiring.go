@@ -11,6 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/httpapi"
 	"agentflow-platform/apps/api/internal/knowledge"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
@@ -31,10 +32,12 @@ type applicationDependencies struct {
 }
 
 func buildDependencies(cfg config.Config) (applicationDependencies, error) {
-	appStore, err := newStore(cfg)
+	baseStore, err := newStore(cfg)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create store: %w", err)
 	}
+	eventHub := event.NewHub(256)
+	appStore := newObservableStore(baseStore, eventHub)
 
 	cleanupStore := true
 	defer func() {
@@ -91,6 +94,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			OutputCostPerMillionTokensMicros: cfg.ModelOutputCostPerMillionMicros,
 		},
 		KnowledgeRetriever: retrievalPipeline,
+		LiveEvents:         eventHub,
 	})
 	semanticMemory := memorypkg.NewSemanticMemory(appStore, modelClient)
 	memoryCurator := newMemoryCurator(cfg, appStore, modelClient)
@@ -100,16 +104,17 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		WaitTimeout:   cfg.RunQueueWaitTimeout,
 	})
 	handler, err := httpapi.NewHandler(httpapi.Dependencies{
-		Store:          appStore,
-		ModelClient:    modelClient,
-		Tools:          toolManager,
-		AgentRuntime:   agentRuntime,
-		Memory:         semanticMemory,
-		Knowledge:      knowledgeBase,
-		MemoryCuration: memoryCurator,
-		RunController:  runController,
-		Verification:   verificationEngine,
-		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
+		Store:                appStore,
+		ModelClient:          modelClient,
+		Tools:                toolManager,
+		AgentRuntime:         agentRuntime,
+		Memory:               semanticMemory,
+		Knowledge:            knowledgeBase,
+		MemoryCuration:       memoryCurator,
+		RunController:        runController,
+		Verification:         verificationEngine,
+		RuntimeInvariantMode: cfg.RuntimeInvariantMode,
+		AllowedOrigins:       splitOrigins(cfg.AllowedOrigins),
 	})
 	if err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

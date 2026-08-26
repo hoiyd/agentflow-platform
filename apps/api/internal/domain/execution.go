@@ -400,6 +400,7 @@ type RunUsageLedger struct {
 // RunReplay is the detailed aggregate assembled from persisted Run records.
 type RunReplay struct {
 	Run                   Run                    `json:"run"`
+	Projection            RunProjectionSnapshot  `json:"projection"`
 	RuntimeSnapshot       *RuntimeSnapshot       `json:"runtime_snapshot,omitempty"`
 	Conversation          Conversation           `json:"conversation"`
 	Messages              []Message              `json:"messages"`

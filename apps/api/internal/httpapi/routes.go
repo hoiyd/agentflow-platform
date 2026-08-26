@@ -61,6 +61,7 @@ func (h *Handler) registerRunRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/runs/{id}/cancel", h.cancelRun)
 	mux.HandleFunc("POST /api/runs/{id}/verify", h.verifyRun)
 	mux.HandleFunc("GET /api/runs/{id}/replay", h.getRunReplay)
+	mux.HandleFunc("GET /api/runs/{id}/projection", h.getRunProjection)
 	mux.HandleFunc("GET /api/runs/{id}/usage", h.getRunUsage)
 	mux.HandleFunc("GET /api/runs/{id}/model_requests", h.listModelRequests)
 	mux.HandleFunc("GET /api/runs/{id}/episode", h.getEpisodeReport)

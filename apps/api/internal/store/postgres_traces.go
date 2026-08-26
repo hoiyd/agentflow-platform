@@ -9,6 +9,8 @@ import (
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/eventcatalog"
+	"agentflow-platform/apps/api/internal/projection"
 )
 
 func (s *PostgresStore) CreateCollaborationStep(step domain.CollaborationStep) (domain.CollaborationStep, error) {
@@ -96,6 +98,9 @@ func (s *PostgresStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, 
 	}
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now().UTC()
+	}
+	if err := eventcatalog.ValidateDurableFact(event); err != nil {
+		return domain.RunEvent{}, err
 	}
 	payload, err := json.Marshal(event.Payload)
 	if err != nil {
@@ -306,7 +311,7 @@ func (s *PostgresStore) GetRunTraceSummary(runID string) (domain.RunTraceSummary
 	if err != nil {
 		return domain.RunTraceSummary{}, err
 	}
-	return buildRunTraceSummary(run, events), nil
+	return projection.BuildRunTraceSummary(run, events), nil
 }
 
 func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
@@ -357,15 +362,17 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 	if err != nil {
 		return domain.RunReplay{}, false, err
 	}
+	readModel := projection.BuildSnapshot(run, runEvents, usageLedger, verificationEvidence)
 	return domain.RunReplay{
 		Run:                   run,
+		Projection:            readModel,
 		RuntimeSnapshot:       cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
 		Conversation:          conversation,
 		Messages:              messages,
 		Steps:                 steps,
-		Summary:               buildRunTraceSummary(run, runEvents),
+		Summary:               readModel.Run.Summary,
 		RunEvents:             runEvents,
-		UsageLedger:           usageLedger,
+		UsageLedger:           readModel.Usage.Ledger,
 		StageCheckpoints:      checkpoints,
 		ToolEffects:           domain.SummarizeToolEffects(toolEffects),
 		VerificationEvidence:  verificationEvidence,

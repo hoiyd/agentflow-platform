@@ -54,6 +54,7 @@ POST   /api/runs/{id}/cancel
 POST   /api/runs/{id}/verify
 GET    /api/runs/{id}/collaboration_steps
 GET    /api/runs/{id}/replay
+GET    /api/runs/{id}/projection
 GET    /api/runs/{id}/usage
 GET    /api/runs/{id}/model_requests
 GET    /api/runs/{id}/episode
@@ -140,6 +141,8 @@ orchestration Stages. Each `CollaborationStep.id` is the `stage_id` used by its
 related Run Events.
 
 ## Usage and Replay
+
+`GET /api/runs/{id}/projection` returns the canonical Run, Usage, and Verification read models at one `as_of_sequence` watermark, plus stable runtime-invariant failures. Replay includes the same projection and retains its top-level `summary` and `usage_ledger` compatibility fields.
 
 `GET /api/runs/{id}/usage` returns the immutable budget, effective totals, open model reservations, and append-only usage entries. The same `usage_ledger` is included in Replay. A reservation and settlement share one `operation_id`; the settlement replaces its estimate when totals are calculated.
 

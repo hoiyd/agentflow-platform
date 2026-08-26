@@ -8,6 +8,7 @@ import (
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/runtimeinvariant"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -60,6 +61,60 @@ func TestListCollaborationStepsHandler(t *testing.T) {
 	handler.listCollaborationSteps(missingRecorder, httptest.NewRequest(http.MethodGet, "/api/runs/missing/collaboration_steps", nil))
 	if missingRecorder.Code != http.StatusNotFound {
 		t.Fatalf("expected missing run status 404, got %d", missingRecorder.Code)
+	}
+}
+
+func TestGetRunProjectionReturnsCanonicalWatermarkAndDiagnostics(t *testing.T) {
+	fileStore, run := createHTTPTestRun(t)
+	if _, err := fileStore.CreateRunEvent(domain.RunEvent{Type: domain.EventRunCreated, RunID: run.ID, ConversationID: run.ConversationID}); err != nil {
+		t.Fatal(err)
+	}
+	handler := &Handler{store: fileStore}
+	recorder := httptest.NewRecorder()
+
+	handler.getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/projection", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("projection status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var projection domain.RunProjectionSnapshot
+	if err := json.Unmarshal(recorder.Body.Bytes(), &projection); err != nil {
+		t.Fatal(err)
+	}
+	if projection.AsOfSequence != 1 || projection.Run.RunID != run.ID || projection.InvariantFailures == nil {
+		t.Fatalf("unexpected projection: %#v", projection)
+	}
+}
+
+func TestRunProjectionInvariantPolicyReportsOrFailsLoud(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		mode       runtimeinvariant.Mode
+		wantStatus int
+	}{
+		{name: "report", mode: runtimeinvariant.ModeReport, wantStatus: http.StatusOK},
+		{name: "fail", mode: runtimeinvariant.ModeFail, wantStatus: http.StatusInternalServerError},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fileStore, run := createHTTPTestRun(t)
+			if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+				Type: domain.EventToolFailed, RunID: run.ID, Payload: map[string]any{"tool_call_id": "orphan-call"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+			handler := &Handler{store: fileStore, runtimeInvariantMode: test.mode}
+			recorder := httptest.NewRecorder()
+			handler.getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/projection", nil))
+			if recorder.Code != test.wantStatus {
+				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+			}
+			if test.mode == runtimeinvariant.ModeReport {
+				var snapshot domain.RunProjectionSnapshot
+				if err := json.Unmarshal(recorder.Body.Bytes(), &snapshot); err != nil || len(snapshot.InvariantFailures) != 1 || snapshot.InvariantFailures[0].Code != "tool_terminal_orphan" {
+					t.Fatalf("diagnostics=%#v err=%v", snapshot.InvariantFailures, err)
+				}
+			}
+		})
 	}
 }
 

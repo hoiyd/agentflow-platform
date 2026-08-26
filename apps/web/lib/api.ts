@@ -226,6 +226,41 @@ export type RunUsageLedger = {
   updated_at?: string;
 };
 
+export type RuntimeInvariantFailure = {
+  code: string;
+  owner: string;
+  run_id: string;
+  event_id?: string;
+  sequence?: number;
+  message: string;
+};
+
+export type RunProjectionSnapshot = {
+  run: {
+    run_id: string;
+    conversation_id: string;
+    status: string;
+    verification_status: string;
+    active_stage_ids: string[];
+    active_turn_ids: string[];
+    active_model_call_ids: string[];
+    active_tool_call_ids: string[];
+    summary: RunTraceSummary;
+    as_of_sequence: number;
+  };
+  usage: { ledger: RunUsageLedger; as_of_sequence: number };
+  verification: {
+    status: string;
+    latest_attempt: number;
+    current_subject_hash?: string;
+    evidence_count: number;
+    fresh_evidence_count: number;
+    as_of_sequence: number;
+  };
+  as_of_sequence: number;
+  invariant_failures: RuntimeInvariantFailure[];
+};
+
 export type ModelRequestEnvelope = {
   id: string;
   run_id: string;
@@ -338,6 +373,7 @@ export type TaskStateRevision = {
 
 export type RunReplay = {
   run: RunInfo;
+  projection: RunProjectionSnapshot;
   conversation: Conversation;
   messages: Message[];
   steps: CollaborationStepInfo[];
@@ -409,6 +445,7 @@ function normalizeRunReplay(data: unknown): RunReplay {
   const run = expectRunInfo(replay.run);
   return {
     run,
+    projection: normalizeRunProjection(replay.projection, run, replay.summary, replay.usage_ledger),
     conversation: expectConversation(replay.conversation),
     summary: expectRunTraceSummary(replay.summary),
     messages: Array.isArray(replay.messages) ? replay.messages : [],
@@ -420,6 +457,45 @@ function normalizeRunReplay(data: unknown): RunReplay {
     verification_evidence: Array.isArray(replay.verification_evidence) ? replay.verification_evidence : [],
     verification_artifacts: Array.isArray(replay.verification_artifacts) ? replay.verification_artifacts : [],
     task_state_revisions: Array.isArray(replay.task_state_revisions) ? replay.task_state_revisions : []
+  };
+}
+
+function normalizeRunProjection(value: unknown, run: RunInfo, summaryValue: unknown, ledgerValue: unknown): RunProjectionSnapshot {
+  const projection = isObject(value) ? value : {};
+  const runProjection = isObject(projection.run) ? projection.run : {};
+  const usage = isObject(projection.usage) ? projection.usage : {};
+  const verification = isObject(projection.verification) ? projection.verification : {};
+  const watermark = numberValue(projection.as_of_sequence) ?? 0;
+  const strings = (input: unknown): string[] => Array.isArray(input) ? input.filter((item): item is string => typeof item === "string") : [];
+  return {
+    run: {
+      run_id: stringValue(runProjection.run_id) ?? run.id,
+      conversation_id: stringValue(runProjection.conversation_id) ?? run.conversation_id,
+      status: stringValue(runProjection.status) ?? run.status,
+      verification_status: stringValue(runProjection.verification_status) ?? run.verification_status ?? "not_required",
+      active_stage_ids: strings(runProjection.active_stage_ids),
+      active_turn_ids: strings(runProjection.active_turn_ids),
+      active_model_call_ids: strings(runProjection.active_model_call_ids),
+      active_tool_call_ids: strings(runProjection.active_tool_call_ids),
+      summary: expectRunTraceSummary(runProjection.summary ?? summaryValue),
+      as_of_sequence: numberValue(runProjection.as_of_sequence) ?? watermark
+    },
+    usage: {
+      ledger: normalizeRunUsageLedger(usage.ledger ?? ledgerValue, run.id),
+      as_of_sequence: numberValue(usage.as_of_sequence) ?? watermark
+    },
+    verification: {
+      status: stringValue(verification.status) ?? run.verification_status ?? "not_required",
+      latest_attempt: numberValue(verification.latest_attempt) ?? 0,
+      current_subject_hash: stringValue(verification.current_subject_hash),
+      evidence_count: numberValue(verification.evidence_count) ?? 0,
+      fresh_evidence_count: numberValue(verification.fresh_evidence_count) ?? 0,
+      as_of_sequence: numberValue(verification.as_of_sequence) ?? watermark
+    },
+    as_of_sequence: watermark,
+    invariant_failures: Array.isArray(projection.invariant_failures)
+      ? projection.invariant_failures.filter((item): item is RuntimeInvariantFailure => isObject(item) && typeof item.code === "string")
+      : []
   };
 }
 
@@ -778,6 +854,26 @@ export async function getRunReplay(runId: string): Promise<RunReplay> {
     { errorMessage: "Failed to load run replay" }
   );
   return normalizeRunReplay(data);
+}
+
+export async function getRunProjection(runId: string): Promise<RunProjectionSnapshot> {
+  const data = await apiJSON(
+    `/api/runs/${runId}/projection`,
+    { cache: "no-store" },
+    { errorMessage: "Failed to load run projection" }
+  );
+  const projection = expectObject<Record<string, unknown>>(data, "run projection");
+  const runProjection = expectObject<Record<string, unknown>>(projection.run, "run projection state");
+  const run = {
+    id: stringValue(runProjection.run_id) ?? runId,
+    agent_id: "",
+    conversation_id: stringValue(runProjection.conversation_id) ?? "",
+    status: stringValue(runProjection.status) ?? "",
+    verification_status: stringValue(runProjection.verification_status),
+    created_at: "",
+    updated_at: ""
+  } satisfies RunInfo;
+  return normalizeRunProjection(projection, run, runProjection.summary, isObject(projection.usage) ? projection.usage.ledger : undefined);
 }
 
 export async function getRunUsage(runId: string): Promise<RunUsageLedger> {

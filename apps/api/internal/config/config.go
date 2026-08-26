@@ -109,10 +109,12 @@ type Config struct {
 	// AutonomousMaxToolCalls is folded into the frozen Run Budget for new Autonomous Runs.
 	AutonomousMaxToolCalls  int
 	RecoveryStaleRunTimeout time.Duration
-	StoreDriver             string
-	DatabaseURL             string
-	DataPath                string
-	ToolConfigPath          string
+	// RuntimeInvariantMode reports isolated diagnostics by default; fail makes projection reads fail loud.
+	RuntimeInvariantMode string
+	StoreDriver          string
+	DatabaseURL          string
+	DataPath             string
+	ToolConfigPath       string
 	// VerificationWorkspaceRoot bounds command verifier working directories. Empty disables command execution.
 	VerificationWorkspaceRoot string
 	// VerificationAllowedCommands is a comma-separated executable allowlist for command verifiers.
@@ -183,6 +185,7 @@ func Load() Config {
 		AutonomousMaxOutputCharacters:     getIntEnv("AUTONOMOUS_MAX_OUTPUT_CHARS", 60000),
 		AutonomousMaxToolCalls:            getIntEnv("AUTONOMOUS_MAX_TOOL_CALLS", 20),
 		RecoveryStaleRunTimeout:           getDurationEnv("RECOVERY_STALE_RUN_TIMEOUT", 60*time.Second),
+		RuntimeInvariantMode:              normalizeRuntimeInvariantMode(getEnv("RUNTIME_INVARIANT_MODE", "report")),
 		StoreDriver:                       normalizeStoreDriver(getEnv("STORE_DRIVER", "file")),
 		DatabaseURL:                       getEnv("DATABASE_URL", ""),
 		DataPath:                          getEnv("DATA_PATH", ".data/agentflow.json"),
@@ -193,6 +196,13 @@ func Load() Config {
 		VerificationMaxArtifactBytes:      getIntEnv("VERIFICATION_MAX_ARTIFACT_BYTES", 65536),
 		AllowedOrigins:                    getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 	}
+}
+
+func normalizeRuntimeInvariantMode(value string) string {
+	if strings.EqualFold(strings.TrimSpace(value), "fail") {
+		return "fail"
+	}
+	return "report"
 }
 
 func normalizeStoreDriver(value string) string {

@@ -69,6 +69,15 @@ func TestValidateReconstructabilityRejectsBrokenRelationships(t *testing.T) {
 	}
 }
 
+func TestRuntimeInvariantUsesStablePayloadHashCode(t *testing.T) {
+	run, records, events := reconstructabilityFixture(t)
+	records[0].Capture.Content = `{"changed":true}`
+	failures := CheckRuntimeInvariants(run, records, events)
+	if len(failures) != 1 || failures[0].Code != "model_request_payload_hash_mismatch" || failures[0].Owner != "requestcapture" {
+		t.Fatalf("unexpected failures: %#v", failures)
+	}
+}
+
 func TestInvariantDecodersAndComparators(t *testing.T) {
 	if sameTokenBreakdown(map[string]int{"system": 1}, map[string]int{}) {
 		t.Fatal("different map lengths should not match")

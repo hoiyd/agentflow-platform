@@ -48,6 +48,7 @@ the project.
 | [Context management](context-management.md) | How is each model input assembled, bounded, compacted, and explained? |
 | [Structured Task State](task-state.md) | How do goals, tasks, decisions, constraints, blockers, and Artifact references remain versioned across Runs and compaction? |
 | [Model request reconstruction](model-request-reconstruction.md) | How are final model payloads hashed, optionally captured, and checked against Runtime Snapshot and Context Manifest records? |
+| [Event projections and runtime invariants](event-projections-runtime-invariants.md) | How are typed events converted into one read model, checked as an executable protocol, and handed off to live subscribers without a read/subscribe gap? |
 | [Verification](verification.md) | How can a candidate output be checked before a Run is considered complete? |
 
 ## AI Context Systems

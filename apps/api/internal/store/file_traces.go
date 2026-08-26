@@ -9,6 +9,8 @@ import (
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/eventcatalog"
+	"agentflow-platform/apps/api/internal/projection"
 )
 
 func (s *FileStore) CreateCollaborationStep(step domain.CollaborationStep) (domain.CollaborationStep, error) {
@@ -129,6 +131,9 @@ func prepareRunEvent(event domain.RunEvent, sequence int64, now time.Time) (doma
 	if event.Timestamp.IsZero() {
 		event.Timestamp = now
 	}
+	if err := eventcatalog.ValidateDurableFact(event); err != nil {
+		return domain.RunEvent{}, err
+	}
 	return event, nil
 }
 
@@ -180,7 +185,7 @@ func (s *FileStore) GetRunTraceSummary(runID string) (domain.RunTraceSummary, er
 	if !ok {
 		return domain.RunTraceSummary{}, ErrNotFound("run")
 	}
-	return buildRunTraceSummary(run, s.runEventsForRunLocked(runID)), nil
+	return projection.BuildRunTraceSummary(run, s.runEventsForRunLocked(runID)), nil
 }
 
 func (s *FileStore) ApplyRunUsage(entry domain.RunUsageEntry) (domain.RunUsageLedger, bool, error) {
@@ -254,6 +259,9 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	messages := s.messagesForConversationLocked(run.ConversationID)
 	steps := s.stepsForRunLocked(runID)
 	runEvents := s.runEventsForRunLocked(runID)
+	usageLedger := budget.BuildLedger(runID, runBudget(run), s.runUsageEntriesForRunLocked(runID))
+	verificationEvidence := verificationEvidenceForRun(s.data.VerificationEvidence, runID)
+	readModel := projection.BuildSnapshot(run, runEvents, usageLedger, verificationEvidence)
 	checkpoints := make([]domain.StageCheckpoint, 0)
 	for _, item := range s.data.StageCheckpoints {
 		if item.RunID == runID {
@@ -275,16 +283,17 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	sort.Slice(taskStateRevisions, func(i, j int) bool { return taskStateRevisions[i].Version < taskStateRevisions[j].Version })
 	return domain.RunReplay{
 		Run:                   cloneRun(run),
+		Projection:            readModel,
 		RuntimeSnapshot:       cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
 		Conversation:          conversation,
 		Messages:              messages,
 		Steps:                 steps,
-		Summary:               buildRunTraceSummary(run, runEvents),
-		UsageLedger:           budget.BuildLedger(runID, runBudget(run), s.runUsageEntriesForRunLocked(runID)),
+		Summary:               readModel.Run.Summary,
+		UsageLedger:           readModel.Usage.Ledger,
 		RunEvents:             runEvents,
 		StageCheckpoints:      checkpoints,
 		ToolEffects:           domain.SummarizeToolEffects(toolEffectRecords),
-		VerificationEvidence:  verificationEvidenceForRun(s.data.VerificationEvidence, runID),
+		VerificationEvidence:  verificationEvidence,
 		VerificationArtifacts: verificationArtifactsForRun(s.data.VerificationArtifacts, runID),
 		TaskStateRevisions:    taskStateRevisions,
 	}, true, nil
@@ -440,61 +449,4 @@ func (s *FileStore) runEventsForRunLocked(runID string) []domain.RunEvent {
 	}
 	sort.Slice(events, func(i, j int) bool { return events[i].Sequence < events[j].Sequence })
 	return events
-}
-
-func buildRunTraceSummary(run domain.Run, events []domain.RunEvent) domain.RunTraceSummary {
-	summary := domain.RunTraceSummary{
-		RunID:  run.ID,
-		Status: run.Status,
-	}
-	if run.StartedAt != nil {
-		end := time.Now().UTC()
-		if run.CompletedAt != nil {
-			end = *run.CompletedAt
-		}
-		if end.After(*run.StartedAt) {
-			summary.TotalDurationMS = end.Sub(*run.StartedAt).Milliseconds()
-		}
-	}
-	for _, event := range events {
-		switch event.Type {
-		case domain.EventModelCompleted:
-			summary.LLMCalls++
-			summary.PromptTokens += intPayload(event.Payload, "prompt_tokens")
-			summary.CompletionTokens += intPayload(event.Payload, "completion_tokens")
-			summary.TotalTokens += intPayload(event.Payload, "total_tokens")
-			if boolPayload(event.Payload, "token_usage_estimated") {
-				summary.TokenUsageEstimated = true
-			}
-		case domain.EventToolCompleted:
-			summary.ToolCalls++
-		case domain.EventToolFailed:
-			summary.ToolCalls++
-			summary.ErrorCount++
-		case domain.EventModelFailed, domain.EventRetrievalFailed, domain.EventHistorySearchFailed, domain.EventCompactionFailed, domain.EventMemoryCandidateFailed, domain.EventMemorySyncFailed, domain.EventBudgetExceeded:
-			summary.ErrorCount++
-		}
-	}
-	return summary
-}
-
-func intPayload(payload map[string]any, key string) int {
-	switch value := payload[key].(type) {
-	case int:
-		return value
-	case int64:
-		return int(value)
-	case float64:
-		return int(value)
-	case json.Number:
-		i, _ := value.Int64()
-		return int(i)
-	default:
-		return 0
-	}
-}
-
-func boolPayload(payload map[string]any, key string) bool {
-	value, ok := payload[key].(bool)
-	return ok && value
 }

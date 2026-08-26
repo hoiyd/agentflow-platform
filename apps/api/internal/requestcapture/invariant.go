@@ -13,7 +13,7 @@ import (
 // explain and, for full captures, exactly rebuild model requests.
 func ValidateReconstructability(run domain.Run, records []domain.ModelRequestRecord, events []domain.RunEvent) error {
 	if run.RuntimeSnapshot == nil {
-		return errors.New("runtime snapshot is required")
+		return reconstructabilityFailure("model_request_snapshot_missing", "", "", "runtime snapshot is required")
 	}
 	wantSnapshotHash, err := hashJSON(run.RuntimeSnapshot)
 	if err != nil {
@@ -29,50 +29,95 @@ func ValidateReconstructability(run domain.Run, records []domain.ModelRequestRec
 	for _, record := range records {
 		envelope := record.Envelope
 		if envelope.RunID != run.ID || envelope.RuntimeSnapshotHash != wantSnapshotHash {
-			return fmt.Errorf("model request %s does not match run snapshot", envelope.ID)
+			return reconstructabilityFailure("model_request_snapshot_mismatch", envelope.ID, "", fmt.Sprintf("model request %s does not match run snapshot", envelope.ID))
 		}
 		if seenIDs[envelope.ID] {
-			return fmt.Errorf("duplicate model request record %s", envelope.ID)
+			return reconstructabilityFailure("model_request_record_duplicate", envelope.ID, "", fmt.Sprintf("duplicate model request record %s", envelope.ID))
 		}
 		seenIDs[envelope.ID] = true
 		if envelope.Attempt <= 0 {
-			return fmt.Errorf("model request %s has invalid attempt", envelope.ID)
+			return reconstructabilityFailure("model_request_attempt_invalid", envelope.ID, "", fmt.Sprintf("model request %s has invalid attempt", envelope.ID))
 		}
 		for len(attempts[envelope.ModelCallID]) < envelope.Attempt {
 			attempts[envelope.ModelCallID] = append(attempts[envelope.ModelCallID], false)
 		}
 		if attempts[envelope.ModelCallID][envelope.Attempt-1] {
-			return fmt.Errorf("model call %s has duplicate attempt %d", envelope.ModelCallID, envelope.Attempt)
+			return reconstructabilityFailure("model_request_attempt_duplicate", envelope.ID, "", fmt.Sprintf("model call %s has duplicate attempt %d", envelope.ModelCallID, envelope.Attempt))
 		}
 		attempts[envelope.ModelCallID][envelope.Attempt-1] = true
 		if envelope.ContextManifestID != "" {
 			manifest, exists := manifests[envelope.ContextManifestID]
 			if !exists {
-				return fmt.Errorf("model request %s references missing context manifest %s", envelope.ID, envelope.ContextManifestID)
+				return reconstructabilityFailure("model_request_manifest_missing", envelope.ID, "", fmt.Sprintf("model request %s references missing context manifest %s", envelope.ID, envelope.ContextManifestID))
 			}
 			if !sameTokenBreakdown(envelope.SourceTokenBreakdown, selectedTokenBreakdown(manifest)) {
-				return fmt.Errorf("model request %s source token breakdown does not match context manifest", envelope.ID)
+				return reconstructabilityFailure("model_request_manifest_mismatch", envelope.ID, "", fmt.Sprintf("model request %s source token breakdown does not match context manifest", envelope.ID))
 			}
 		}
 		if record.Capture.Reconstructable && hashBytes([]byte(record.Capture.Content)) != envelope.PayloadHash {
-			return fmt.Errorf("model request %s reconstructable capture hash mismatch", envelope.ID)
+			return reconstructabilityFailure("model_request_payload_hash_mismatch", envelope.ID, "", fmt.Sprintf("model request %s reconstructable capture hash mismatch", envelope.ID))
 		}
 		eventRecord, ok := eventRecords[envelope.ID]
 		if !ok || eventRecord.PayloadHash != envelope.PayloadHash || eventRecord.ModelCallID != envelope.ModelCallID || eventRecord.Attempt != envelope.Attempt {
-			return fmt.Errorf("model request %s has no matching prepared event", envelope.ID)
+			return reconstructabilityFailure("model_request_prepared_event_missing", envelope.ID, "", fmt.Sprintf("model request %s has no matching prepared event", envelope.ID))
 		}
 	}
 	for modelCallID, values := range attempts {
 		for index, present := range values {
 			if !present {
-				return fmt.Errorf("model call %s is missing attempt %d", modelCallID, index+1)
+				return reconstructabilityFailure("model_request_attempt_gap", "", "", fmt.Sprintf("model call %s is missing attempt %d", modelCallID, index+1))
 			}
 		}
 	}
 	if len(eventRecords) != len(records) {
-		return errors.New("model request record and prepared event counts differ")
+		return reconstructabilityFailure("model_request_record_count_mismatch", "", "", "model request record and prepared event counts differ")
 	}
 	return nil
+}
+
+// CheckRuntimeInvariants adapts reconstructability validation to the shared,
+// stable runtime-invariant contract. ValidateReconstructability remains the
+// hard-gate API used by capture-specific tests and maintenance commands.
+func CheckRuntimeInvariants(run domain.Run, records []domain.ModelRequestRecord, events []domain.RunEvent) []domain.RuntimeInvariantFailure {
+	err := ValidateReconstructability(run, records, events)
+	if err == nil {
+		return []domain.RuntimeInvariantFailure{}
+	}
+	var violation *reconstructabilityViolation
+	if !errors.As(err, &violation) {
+		return []domain.RuntimeInvariantFailure{{
+			Code: "model_request_reconstructability_failed", Owner: "requestcapture", RunID: run.ID, Message: err.Error(),
+		}}
+	}
+	eventID := violation.eventID
+	if eventID == "" && violation.recordID != "" {
+		eventID = preparedEventID(events, violation.recordID)
+	}
+	return []domain.RuntimeInvariantFailure{{
+		Code: violation.code, Owner: "requestcapture", RunID: run.ID, EventID: eventID, Message: violation.message,
+	}}
+}
+
+type reconstructabilityViolation struct {
+	code     string
+	recordID string
+	eventID  string
+	message  string
+}
+
+func (e *reconstructabilityViolation) Error() string { return e.message }
+
+func reconstructabilityFailure(code, recordID, eventID, message string) error {
+	return &reconstructabilityViolation{code: code, recordID: recordID, eventID: eventID, message: message}
+}
+
+func preparedEventID(events []domain.RunEvent, recordID string) string {
+	for _, item := range events {
+		if item.Type == domain.EventModelRequestPrepared && item.Payload["record_id"] == recordID {
+			return item.ID
+		}
+	}
+	return ""
 }
 
 type preparedEventRecord struct {
@@ -94,7 +139,7 @@ func preparedEventRecords(events []domain.RunEvent) (map[string]preparedEventRec
 			continue
 		}
 		if _, exists := result[recordID]; exists {
-			return nil, fmt.Errorf("duplicate model request prepared event %s", recordID)
+			return nil, reconstructabilityFailure("model_request_prepared_event_duplicate", recordID, item.ID, fmt.Sprintf("duplicate model request prepared event %s", recordID))
 		}
 		result[recordID] = preparedEventRecord{ModelCallID: modelCallID, Attempt: payloadInt(item.Payload["attempt"]), PayloadHash: payloadHash}
 	}
