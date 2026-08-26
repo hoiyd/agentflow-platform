@@ -252,7 +252,7 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			errs <- err
 			return
 		}
-		emitFinalDeltas(ctx, prepared.Run.ID, final, events)
+		r.emitFinalDeltas(ctx, prepared.Run.ID, final, events)
 	}()
 
 	return events, errs
@@ -658,16 +658,18 @@ func finalizerPrompt() string {
 	return "You are the Finalizer collaboration role. Produce the final user-facing answer by combining the plan, worker result, and reviewer notes. Be concise and do not mention internal implementation details unless relevant."
 }
 
-func emitFinalDeltas(ctx context.Context, runID string, text string, events chan<- domain.RunEvent) {
+func (r *Runtime) emitFinalDeltas(ctx context.Context, runID string, text string, events chan<- domain.RunEvent) {
 	parts := strings.SplitAfter(strings.TrimSpace(text), " ")
 	for _, part := range parts {
 		if part == "" {
 			continue
 		}
+		item := liveDeltaEvent(runID, part)
 		select {
 		case <-ctx.Done():
 			return
-		case events <- liveDeltaEvent(runID, part):
+		case events <- item:
+			r.publishLive(item)
 			time.Sleep(15 * time.Millisecond)
 		}
 	}

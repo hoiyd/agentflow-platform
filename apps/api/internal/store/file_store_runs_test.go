@@ -1,12 +1,38 @@
 package store
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
 )
+
+func TestFileStoreRejectsLiveOnlyRunEvents(t *testing.T) {
+	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := fileStore.CreateConversation("live events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, eventType := range []domain.RunEventType{domain.EventModelDelta, domain.EventRunProgress} {
+		_, err = fileStore.CreateRunEvent(domain.RunEvent{Type: eventType, RunID: run.ID, Payload: map[string]any{"delta": "hello"}})
+		if err == nil || !strings.Contains(err.Error(), "live-only") {
+			t.Fatalf("expected %s live-only persistence error, got %v", eventType, err)
+		}
+	}
+	items, listErr := fileStore.ListRunEvents(run.ID)
+	if listErr != nil || len(items) != 0 {
+		t.Fatalf("live event reached replay: items=%#v err=%v", items, listErr)
+	}
+}
 
 func TestFileStoreUsageLedgerIsIdempotentAndPersistsSettlementOverage(t *testing.T) {
 	path := t.TempDir() + "/agentflow.json"

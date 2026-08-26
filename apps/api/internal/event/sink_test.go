@@ -31,3 +31,30 @@ func TestPayloadUsesJSONFieldNames(t *testing.T) {
 		t.Fatalf("unexpected payload: %#v", payload)
 	}
 }
+
+type sinkStoreStub struct{ calls int }
+
+func (s *sinkStoreStub) CreateRunEvent(item domain.RunEvent) (domain.RunEvent, error) {
+	s.calls++
+	item.Sequence = int64(s.calls)
+	return item, nil
+}
+
+type livePublisherStub struct{ item domain.RunEvent }
+
+func (s *livePublisherStub) PublishLive(item domain.RunEvent) { s.item = item }
+
+func TestStoreSinkRoutesNormalizedLiveEventsWithoutPersistence(t *testing.T) {
+	backend := &sinkStoreStub{}
+	live := &livePublisherStub{}
+	sink := StoreSink{Store: backend, Live: live}
+	if err := sink.Publish(context.Background(), domain.RunEvent{Type: domain.EventRunProgress, RunID: "run-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if backend.calls != 0 {
+		t.Fatalf("live event was persisted %d time(s)", backend.calls)
+	}
+	if live.item.SchemaVersion != domain.CurrentRunEventSchemaVersion || live.item.Timestamp.IsZero() || live.item.Payload == nil {
+		t.Fatalf("live event was not normalized: %#v", live.item)
+	}
+}

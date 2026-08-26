@@ -81,7 +81,7 @@ func (r *Runtime) emitAutonomousFinal(ctx context.Context, events chan<- domain.
 		return err
 	}
 	events <- liveStageEvent(step)
-	emitFinalDeltas(ctx, prepared.Run.ID, output, events)
+	r.emitFinalDeltas(ctx, prepared.Run.ID, output, events)
 	return nil
 }
 

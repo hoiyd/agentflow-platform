@@ -36,6 +36,7 @@ type Runtime struct {
 	knowledgeRetriever    rag.Retriever
 	checkpoints           checkpoint.Provider
 	taskStates            *taskstate.Service
+	liveEvents            eventpkg.LivePublisher
 }
 
 type RuntimeStore interface {
@@ -87,6 +88,7 @@ type RuntimeOptions struct {
 	RunBudget          domain.RuntimeRunBudget
 	KnowledgeRetriever rag.Retriever
 	CheckpointProvider checkpoint.Provider
+	LiveEvents         eventpkg.LivePublisher
 }
 
 func NewRuntime(options RuntimeOptions) *Runtime {
@@ -117,6 +119,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		knowledgeRetriever:    knowledgeRetriever,
 		checkpoints:           checkpointProvider,
 		taskStates:            taskStates,
+		liveEvents:            options.LiveEvents,
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime
@@ -211,7 +214,7 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 			Sink: r.runEventSink(),
 		}, func(event turnpkg.Event) {
 			if event.Type == turnpkg.EventModelDelta {
-				events <- domain.RunEvent{
+				live := domain.RunEvent{
 					Type:           domain.EventModelDelta,
 					SchemaVersion:  domain.CurrentRunEventSchemaVersion,
 					RunID:          prepared.Run.ID,
@@ -219,6 +222,8 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 					Payload:        map[string]any{"delta": event.Delta},
 					Timestamp:      event.Timestamp,
 				}
+				r.publishLive(live)
+				events <- live
 			}
 		})
 		if err != nil {
@@ -281,7 +286,15 @@ func enabledToolCount(catalog *tools.Catalog) int {
 	return len(catalog.EnabledNames())
 }
 
-func (r *Runtime) runEventSink() eventpkg.Sink { return eventpkg.StoreSink{Store: r.store} }
+func (r *Runtime) runEventSink() eventpkg.Sink {
+	return eventpkg.StoreSink{Store: r.store, Live: r.liveEvents}
+}
+
+func (r *Runtime) publishLive(item domain.RunEvent) {
+	if r != nil && r.liveEvents != nil {
+		r.liveEvents.PublishLive(item)
+	}
+}
 
 func (r *Runtime) publishRunLifecycle(ctx context.Context, run domain.Run, eventType domain.RunEventType, payload map[string]any) {
 	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: eventType, RunID: run.ID, ConversationID: run.ConversationID, Payload: payload})

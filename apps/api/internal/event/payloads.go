@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/eventcatalog"
 )
 
 // PayloadContract marks payloads whose JSON shape and compatible event family
@@ -37,12 +38,16 @@ func NewRunEvent(eventType domain.RunEventType, metadata EventMetadata, payload 
 	if timestamp.IsZero() {
 		timestamp = time.Now().UTC()
 	}
-	return domain.RunEvent{
+	item := domain.RunEvent{
 		Type: eventType, SchemaVersion: domain.CurrentRunEventSchemaVersion,
 		ConversationID: metadata.ConversationID, RunID: metadata.RunID,
 		StageID: metadata.StageID, TurnID: metadata.TurnID, ParentEventID: metadata.ParentEventID,
 		Payload: encoded, Timestamp: timestamp,
-	}, nil
+	}
+	if err := eventcatalog.ValidateEnvelope(item); err != nil {
+		return domain.RunEvent{}, err
+	}
+	return item, nil
 }
 
 // TracePayload is the explicit escape hatch for extensible observability

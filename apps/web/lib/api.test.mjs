@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { APIError } from "./api-client.ts";
-import { getRunModelRequests, getRunReplay, getRunUsage, getTaskState, patchTaskState } from "./api.ts";
+import { getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, patchTaskState } from "./api.ts";
 import {
   createDocument,
   deleteDocument,
@@ -103,6 +103,47 @@ test("replay preserves structured task state revisions", async (t) => {
 
   assert.equal(replay.task_state_revisions.length, 1);
   assert.equal(replay.task_state_revisions[0].version, 1);
+});
+
+test("replay preserves the canonical projection and invariant diagnostics", async (t) => {
+  mockFetch(t, replayPayload({
+    projection: {
+      run: {
+        run_id: "run-1", conversation_id: "conversation-1", status: "completed", verification_status: "not_required",
+        active_stage_ids: [], active_turn_ids: [], active_model_call_ids: [], active_tool_call_ids: [],
+        summary: replayPayload().summary, as_of_sequence: 7
+      },
+      usage: { ledger: { run_id: "run-1", budget: {}, totals: {}, entries: [] }, as_of_sequence: 7 },
+      verification: { status: "not_required", latest_attempt: 0, evidence_count: 0, fresh_evidence_count: 0, as_of_sequence: 7 },
+      as_of_sequence: 7,
+      invariant_failures: [{ code: "tool_terminal_orphan", owner: "event", run_id: "run-1", sequence: 7, message: "orphan" }]
+    }
+  }));
+
+  const replay = await getRunReplay("run-1");
+
+  assert.equal(replay.projection.as_of_sequence, 7);
+  assert.equal(replay.projection.invariant_failures[0].code, "tool_terminal_orphan");
+});
+
+test("projection client reads the dedicated read-model endpoint", async (t) => {
+  let requestedURL = "";
+  mockFetch(t, {
+    run: {
+      run_id: "run-1", conversation_id: "conversation-1", status: "completed", verification_status: "not_required",
+      active_stage_ids: [], active_turn_ids: [], active_model_call_ids: [], active_tool_call_ids: [],
+      summary: replayPayload().summary, as_of_sequence: 2
+    },
+    usage: { ledger: { run_id: "run-1", budget: {}, totals: {}, entries: [] }, as_of_sequence: 2 },
+    verification: { status: "not_required", latest_attempt: 0, evidence_count: 0, fresh_evidence_count: 0, as_of_sequence: 2 },
+    as_of_sequence: 2,
+    invariant_failures: []
+  }, (url) => { requestedURL = String(url); });
+
+  const projection = await getRunProjection("run-1");
+
+  assert.equal(projection.as_of_sequence, 2);
+  assert.match(requestedURL, /\/api\/runs\/run-1\/projection$/);
 });
 
 test("task state client uses conversation-scoped get and patch endpoints", async (t) => {
