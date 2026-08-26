@@ -28,6 +28,7 @@ import "./styles/workbench/verification.css";
 import "./styles/workbench/tools-knowledge.css";
 import "./styles/workbench/collaboration.css";
 import "./styles/workbench/replay-overlays.css";
+import "./styles/workbench/runtime-diagnostics.css";
 import "./styles/workbench/task-state-replay.css";
 import "./styles/workbench/responsive.css";
 
