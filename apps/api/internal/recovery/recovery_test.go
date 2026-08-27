@@ -85,6 +85,79 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 	}
 }
 
+func TestReconcileChildRunDelegationRebuildsCompletedResult(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := fileStore.CreateConversation("delegation recovery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := domain.RuntimeSnapshot{
+		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single",
+		Agent:     domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
+		Model:     domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
+		RunBudget: &domain.RuntimeRunBudget{}, CreatedAt: time.Now().UTC(),
+	}
+	parent, err := fileStore.CreateRun("agent_planner", conversation.ID, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parentStep, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+		ID: "parent-worker", RunID: parent.ID, ConversationID: conversation.ID,
+		Role: "worker", Status: domain.CollaborationStepRunning, Input: "work",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	childSnapshot := base
+	childSnapshot.Delegation = &domain.RuntimeDelegation{
+		DelegationID: "delegation-1", ParentRunID: parent.ID, ParentTurnID: "turn-1",
+		ParentStageID: parentStep.ID, Depth: 1, IsolatedContext: true,
+		TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 32,
+	}
+	child, relation, err := fileStore.CreateChildRun(domain.ChildRunRequest{
+		Delegation: domain.RunDelegation{
+			ID: "delegation-1", ParentRunID: parent.ID, ParentTurnID: "turn-1",
+			ParentStageID: parentStep.ID, AgentID: "agent_planner", Depth: 1, Task: "work", TimeoutMS: time.Minute.Milliseconds(),
+		},
+		RuntimeSnapshot: childSnapshot,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+		ID: "child-worker", RunID: child.ID, ConversationID: conversation.ID,
+		Role: "worker", Status: domain.CollaborationStepCompleted,
+		Input: "work", Output: "This is a completed child result that exceeds the parent summary limit.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.UpdateRunStatus(child.ID, domain.RunCompleted, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	count, err := ReconcileChildRunDelegations(fileStore)
+	if err != nil || count != 1 {
+		t.Fatalf("reconcile count=%d err=%v", count, err)
+	}
+	updated, ok, err := fileStore.GetRunDelegation(relation.ID)
+	if err != nil || !ok {
+		t.Fatalf("relation ok=%v err=%v", ok, err)
+	}
+	if updated.Status != domain.DelegationCompleted || !updated.SummaryTruncated || updated.OutputRef == "" {
+		t.Fatalf("reconciled relation = %#v", updated)
+	}
+	step, err := fileStore.ListCollaborationSteps(parent.ID)
+	if err != nil || len(step) != 1 || step[0].Status != domain.CollaborationStepCompleted {
+		t.Fatalf("parent step=%#v err=%v", step, err)
+	}
+	if count, err := ReconcileChildRunDelegations(fileStore); err != nil || count != 0 {
+		t.Fatalf("idempotent reconcile count=%d err=%v", count, err)
+	}
+}
+
 func TestMarkStaleRunningRunsHandlesDisabledAndFailurePaths(t *testing.T) {
 	if count, err := MarkStaleRunningRuns(nil, 0); err != nil || count != 0 {
 		t.Fatalf("disabled recovery: count=%d err=%v", count, err)

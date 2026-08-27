@@ -50,6 +50,80 @@ func TestPostgresMigrationsAddDurableRecoveryState(t *testing.T) {
 	}
 }
 
+func TestPostgresMigrationsAddRunDelegations(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"CREATE TABLE IF NOT EXISTS run_delegations",
+		"parent_run_id text NOT NULL REFERENCES runs(id)",
+		"child_run_id text NOT NULL UNIQUE REFERENCES runs(id)",
+		"block_reason text NOT NULL DEFAULT ''",
+		"idx_run_delegations_parent_created",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing run delegation migration step %q", expected)
+		}
+	}
+}
+
+func TestPostgresRunDelegationRoundTrip(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	postgresStore, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer postgresStore.Close()
+	conversation, err := postgresStore.CreateConversationInWorkspace("workspace-delegation", "Postgres delegation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := testRuntimeSnapshot()
+	base.Mode = "single"
+	base.AutonomousLimits = nil
+	parent, err := postgresStore.CreateRun("agent_planner", conversation.ID, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	childSnapshot := base
+	childSnapshot.Delegation = &domain.RuntimeDelegation{
+		DelegationID: "delegation-postgres-" + parent.ID, ParentRunID: parent.ID,
+		ParentTurnID: "turn-postgres", Depth: 1, IsolatedContext: true,
+		TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+	}
+	child, relation, err := postgresStore.CreateChildRun(domain.ChildRunRequest{
+		Delegation: domain.RunDelegation{
+			ID: childSnapshot.Delegation.DelegationID, ParentRunID: parent.ID,
+			ParentTurnID: "turn-postgres", AgentID: "agent_planner", Depth: 1, Task: "work", TimeoutMS: time.Minute.Milliseconds(),
+		}, RuntimeSnapshot: childSnapshot,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked, err := postgresStore.UpdateRunDelegation(relation.ID, domain.DelegationResult{
+		Status: domain.DelegationBlocked, BlockReason: domain.DelegationBlockReasonChildRecoveryRequired,
+	})
+	if err != nil || blocked.BlockReason != domain.DelegationBlockReasonChildRecoveryRequired {
+		t.Fatalf("blocked postgres delegation=%#v err=%v", blocked, err)
+	}
+	updated, err := postgresStore.UpdateRunDelegation(relation.ID, domain.DelegationResult{
+		Status: domain.DelegationCompleted, Summary: "done", OutputRef: "run://" + child.ID + "/stages/worker",
+		OutputHash: "hash", OutputBytes: 4,
+	})
+	if err != nil || updated.ChildRunID != child.ID {
+		t.Fatalf("updated=%#v err=%v", updated, err)
+	}
+	parentReplay, ok, err := postgresStore.GetRunReplay(parent.ID)
+	if err != nil || !ok || len(parentReplay.ChildDelegations) != 1 {
+		t.Fatalf("parent replay=%#v ok=%v err=%v", parentReplay.ChildDelegations, ok, err)
+	}
+	childReplay, ok, err := postgresStore.GetRunReplay(child.ID)
+	if err != nil || !ok || childReplay.ParentDelegation == nil || childReplay.ParentDelegation.ID != relation.ID {
+		t.Fatalf("child replay parent=%#v ok=%v err=%v", childReplay.ParentDelegation, ok, err)
+	}
+}
+
 func TestPostgresMigrationsAddStructuredTaskState(t *testing.T) {
 	joined := strings.Join(postgresMigrations, "\n")
 	for _, expected := range []string{

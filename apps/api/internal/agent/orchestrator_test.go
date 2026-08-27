@@ -2,13 +2,18 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/taskstate"
+	"agentflow-platform/apps/api/internal/tools"
 )
 
 func TestSelectWorkerAgentChoosesCodingForImplementationTask(t *testing.T) {
@@ -114,6 +119,384 @@ func TestPreparedRunsUseRequestedAgent(t *testing.T) {
 	if autonomous.WorkerAgent.ID != custom.ID || autonomous.Run.AgentID != custom.ID {
 		t.Fatalf("expected autonomous to use requested agent, got agent=%s run_agent=%s", autonomous.WorkerAgent.ID, autonomous.Run.AgentID)
 	}
+}
+
+func TestMultiAgentWorkerUsesBoundedIsolatedChildRun(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := fileStore.CreateConversation("delegated collaboration")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+		ChildRuns: ChildRunLimits{
+			MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute, SummaryMaxChars: 80,
+			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000, MaxToolCalls: 1},
+		},
+	})
+	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Deployment changes after plan creation must not alter this parent's frozen child contract.
+	runtime.childRunLimits.Timeout = 5 * time.Second
+	runtime.childRunLimits.SummaryMaxChars = 500
+	runtime.childRunLimits.RunBudget.MaxModelCalls = 99
+	events, errs := runtime.RunCollaboration(context.Background(), prepared, "Implement and test a Go API change")
+	for range events {
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Inspect, implement, and test the change.")
+	for range events {
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+
+	delegations, err := fileStore.ListRunDelegations(prepared.Run.ID)
+	if err != nil || len(delegations) != 1 {
+		t.Fatalf("delegations=%#v err=%v", delegations, err)
+	}
+	relation := delegations[0]
+	if relation.Status != domain.DelegationCompleted || relation.OutputRef == "" || !relation.SummaryTruncated {
+		t.Fatalf("unexpected completed delegation: %#v", relation)
+	}
+	if len([]rune(relation.Summary)) > 80 {
+		t.Fatalf("summary is not bounded: %d", len([]rune(relation.Summary)))
+	}
+	child, ok, err := fileStore.GetRun(relation.ChildRunID)
+	if err != nil || !ok {
+		t.Fatalf("child run: ok=%v err=%v", ok, err)
+	}
+	if child.Status != domain.RunCompleted || child.RuntimeSnapshot == nil || child.RuntimeSnapshot.Delegation == nil || !child.RuntimeSnapshot.Delegation.IsolatedContext {
+		t.Fatalf("child run boundary = %#v", child)
+	}
+	if child.RuntimeSnapshot.RunBudget.MaxModelCalls != 2 || child.RuntimeSnapshot.RunBudget.MaxTotalTokens != 4000 {
+		t.Fatalf("child budget = %#v", child.RuntimeSnapshot.RunBudget)
+	}
+	if child.RuntimeSnapshot.Delegation.TimeoutMS != time.Minute.Milliseconds() || child.RuntimeSnapshot.Delegation.SummaryMaxChars != 80 {
+		t.Fatalf("child did not use parent-frozen delegation policy: %#v", child.RuntimeSnapshot.Delegation)
+	}
+	for _, name := range child.RuntimeSnapshot.Agent.Tools {
+		if name == taskstate.UpdateToolName {
+			t.Fatal("child inherited parent task-state authority")
+		}
+	}
+	parentEvents, err := fileStore.ListRunEvents(prepared.Run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[domain.RunEventType]bool{}
+	for _, item := range parentEvents {
+		seen[item.Type] = true
+	}
+	for _, eventType := range []domain.RunEventType{domain.EventDelegationCreated, domain.EventDelegationStarted, domain.EventDelegationCompleted} {
+		if !seen[eventType] {
+			t.Fatalf("missing parent event %s", eventType)
+		}
+	}
+}
+
+func TestCancelParentRunPropagatesToActiveChild(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := fileStore.CreateConversation("cancel delegated collaboration")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &blockingAgentClient{
+		Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1),
+	}
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: client, RouterMode: RouterModeQuery,
+		ChildRuns: ChildRunLimits{MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute, SummaryMaxChars: 100,
+			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000}},
+	})
+	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, errs := runtime.RunCollaboration(context.Background(), prepared, "Implement a Go API change")
+	for range events {
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Implement and test.")
+	drained := make(chan struct{})
+	go func() {
+		for range events {
+		}
+		close(drained)
+	}()
+	select {
+	case <-client.started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("child worker did not start")
+	}
+	if canceled, err := runtime.CancelRun(prepared.Run.ID); err != nil || canceled.Status != domain.RunCanceling {
+		t.Fatalf("cancel parent: run=%#v err=%v", canceled, err)
+	}
+	runErr := <-errs
+	if !errors.Is(runErr, context.Canceled) {
+		t.Fatalf("continuation error = %v", runErr)
+	}
+	<-drained
+	if final, err := runtime.FailRun(prepared.Run.ID, runErr); err != nil || final.Status != domain.RunCanceled {
+		t.Fatalf("finalize canceled parent: run=%#v err=%v", final, err)
+	}
+	items, err := fileStore.ListRunDelegations(prepared.Run.ID)
+	if err != nil || len(items) != 1 || items[0].Status != domain.DelegationCanceled {
+		t.Fatalf("delegation after cancel=%#v err=%v", items, err)
+	}
+	child, ok, err := fileStore.GetRun(items[0].ChildRunID)
+	if err != nil || !ok || child.Status != domain.RunCanceled {
+		t.Fatalf("child after cancel=%#v ok=%v err=%v", child, ok, err)
+	}
+}
+
+func TestResumeRecoverableCollaborationReusesInterruptedChild(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := fileStore.CreateConversation("resume delegated collaboration")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+		ChildRuns: ChildRunLimits{MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute, SummaryMaxChars: 120,
+			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000}},
+	})
+	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, errs := runtime.RunCollaboration(context.Background(), prepared, "Implement a recoverable Go change")
+	for range events {
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	parent, ok, err := fileStore.GetRun(prepared.Run.ID)
+	if err != nil || !ok {
+		t.Fatalf("parent ok=%v err=%v", ok, err)
+	}
+	routerStep, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+		RunID: parent.ID, ConversationID: conversation.ID, Role: "router", AgentID: "agent_planner",
+		Status: domain.CollaborationStepCompleted, Input: "route", Output: "agent_planner",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	workerStep, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+		RunID: parent.ID, ConversationID: conversation.ID, Role: "worker", AgentID: "agent_planner",
+		Status: domain.CollaborationStepFailed, Input: "delegated work", Error: "worker interrupted",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected, found := findAgentByID(restoreCandidates(parent.RuntimeSnapshot.CandidateAgents), routerStep.AgentID)
+	if !found {
+		t.Fatal("frozen worker candidate not found")
+	}
+	childSnapshot, err := runtime.childRuntimeSnapshot(parent, selected, "delegation-resume", "turn-resume", workerStep.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, relation, err := fileStore.CreateChildRun(domain.ChildRunRequest{
+		Delegation: domain.RunDelegation{
+			ID: "delegation-resume", ParentRunID: parent.ID, ParentTurnID: "turn-resume",
+			ParentStageID: workerStep.ID, AgentID: selected.ID, Depth: 1, Task: workerStep.Input, TimeoutMS: time.Minute.Milliseconds(),
+		}, RuntimeSnapshot: childSnapshot,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.UpdateRunStatus(child.ID, domain.RunFailedRecoverable, "worker interrupted"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.UpdateRunDelegation(relation.ID, domain.DelegationResult{Status: domain.DelegationBlocked, BlockReason: domain.DelegationBlockReasonChildRecoveryRequired, Error: "worker interrupted"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.UpdateRunStatus(parent.ID, domain.RunFailedRecoverable, "worker interrupted"); err != nil {
+		t.Fatal(err)
+	}
+
+	events, errs = runtime.ResumeRecoverableCollaboration(context.Background(), parent.ID)
+	for range events {
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	updated, ok, err := fileStore.GetRunDelegation(relation.ID)
+	if err != nil || !ok || updated.Status != domain.DelegationCompleted || updated.ChildRunID != child.ID {
+		t.Fatalf("resumed relation=%#v ok=%v err=%v", updated, ok, err)
+	}
+	updatedChild, ok, err := fileStore.GetRun(child.ID)
+	if err != nil || !ok || updatedChild.Status != domain.RunCompleted {
+		t.Fatalf("resumed child=%#v ok=%v err=%v", updatedChild, ok, err)
+	}
+	steps, err := fileStore.ListCollaborationSteps(parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := findCollaborationStep(steps, "reviewer"); !ok {
+		t.Fatal("reviewer did not run after child resume")
+	}
+	if _, ok := findCollaborationStep(steps, "finalizer"); !ok {
+		t.Fatal("finalizer did not run after child resume")
+	}
+}
+
+func TestFailedChildDoesNotEnterParentReviewContext(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := fileStore.CreateConversation("failed delegated collaboration")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &failingAgentClient{Client: newLocalFallbackOpenAIClientForTest()}
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: client, RouterMode: RouterModeQuery,
+		ChildRuns: ChildRunLimits{MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute,
+			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000}},
+	})
+	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, errs := runtime.RunCollaboration(context.Background(), prepared, "Implement a failing delegated task")
+	for range events {
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Execute once.")
+	for range events {
+	}
+	if err := <-errs; err == nil || !strings.Contains(err.Error(), "forced child failure") {
+		t.Fatalf("continuation error = %v", err)
+	}
+	steps, err := fileStore.ListCollaborationSteps(prepared.Run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, found := findCollaborationStep(steps, "reviewer"); found {
+		t.Fatal("reviewer received failed child output")
+	}
+	if _, found := findCollaborationStep(steps, "finalizer"); found {
+		t.Fatal("finalizer ran after failed child")
+	}
+	worker, found := findCollaborationStep(steps, "worker")
+	if !found || worker.Output != "" || worker.Status != domain.CollaborationStepFailed {
+		t.Fatalf("parent worker stage = %#v", worker)
+	}
+	items, err := fileStore.ListRunDelegations(prepared.Run.ID)
+	if err != nil || len(items) != 1 || items[0].Status != domain.DelegationFailed || items[0].Summary != "" {
+		t.Fatalf("failed delegation=%#v err=%v", items, err)
+	}
+}
+
+func TestChildBackpressureLeavesParentWaitingForRetry(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := fileStore.CreateConversation("delegation backpressure")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+		ChildRuns: ChildRunLimits{MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute,
+			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2}},
+	})
+	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, errs := runtime.RunCollaboration(context.Background(), prepared, "Wait for child capacity")
+	for range events {
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	blocker, err := runtime.delegations.Reserve("other-parent", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blocker.Release()
+	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Approved plan")
+	for range events {
+	}
+	runErr := <-errs
+	info := failure.Describe(runErr)
+	if info.Code != "child_run_capacity_exhausted" || !info.Retryable {
+		t.Fatalf("backpressure = %#v err=%v", info, runErr)
+	}
+	parent, ok, err := fileStore.GetRun(prepared.Run.ID)
+	if err != nil || !ok || parent.Status != domain.RunWaitingForUser {
+		t.Fatalf("parent after backpressure=%#v ok=%v err=%v", parent, ok, err)
+	}
+}
+
+func restoreCandidates(items []domain.RuntimeAgentSnapshot) []domain.Agent {
+	result := make([]domain.Agent, 0, len(items))
+	for _, item := range items {
+		result = append(result, restoreAgent(item))
+	}
+	return result
+}
+
+type blockingAgentClient struct {
+	modelprovider.Client
+	started chan struct{}
+}
+
+type failingAgentClient struct{ modelprovider.Client }
+
+func (c *failingAgentClient) WithRuntimeIdentity(identity modelprovider.RuntimeIdentity) modelprovider.Client {
+	return &failingAgentClient{Client: c.Client.WithRuntimeIdentity(identity)}
+}
+
+func (c *failingAgentClient) StreamAgentChatWithToolsTrace(context.Context, string, []domain.Message, string, *tools.Catalog, *eventpkg.Recorder, string, string, []domain.RetrievedMemory, []domain.RetrievedDocumentChunk) (<-chan modelprovider.StreamEvent, <-chan error) {
+	events := make(chan modelprovider.StreamEvent)
+	errs := make(chan error, 1)
+	close(events)
+	errs <- errors.New("forced child failure")
+	close(errs)
+	return events, errs
+}
+
+func (c *blockingAgentClient) WithRuntimeIdentity(identity modelprovider.RuntimeIdentity) modelprovider.Client {
+	return &blockingAgentClient{Client: c.Client.WithRuntimeIdentity(identity), started: c.started}
+}
+
+func (c *blockingAgentClient) StreamAgentChatWithToolsTrace(ctx context.Context, _ string, _ []domain.Message, _ string, _ *tools.Catalog, _ *eventpkg.Recorder, _, _ string, _ []domain.RetrievedMemory, _ []domain.RetrievedDocumentChunk) (<-chan modelprovider.StreamEvent, <-chan error) {
+	events := make(chan modelprovider.StreamEvent)
+	errs := make(chan error, 1)
+	select {
+	case c.started <- struct{}{}:
+	default:
+	}
+	go func() {
+		defer close(events)
+		defer close(errs)
+		<-ctx.Done()
+		errs <- ctx.Err()
+	}()
+	return events, errs
 }
 
 func TestParseAutonomousDecision(t *testing.T) {

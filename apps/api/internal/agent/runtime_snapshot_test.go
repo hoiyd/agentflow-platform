@@ -147,6 +147,7 @@ func TestRuntimeSnapshotAcceptsAllVersionsAndKeepsPreBudgetRunsBudgetless(t *tes
 		domain.UnifiedExecutionSnapshotVersion,
 		domain.SessionHistorySnapshotVersion,
 		domain.RecoveryRuntimeSnapshotVersion,
+		domain.TaskStateRuntimeSnapshotVersion,
 		domain.CurrentRuntimeSnapshotVersion,
 	} {
 		snapshot := &domain.RuntimeSnapshot{
@@ -169,8 +170,8 @@ func TestTaskStateRuntimeProtocolStartsAtSnapshotV8(t *testing.T) {
 	if domain.RecoveryRuntimeSnapshotVersion >= domain.TaskStateRuntimeSnapshotVersion {
 		t.Fatal("task state protocol must not affect recovery-era snapshots")
 	}
-	if domain.CurrentRuntimeSnapshotVersion != domain.TaskStateRuntimeSnapshotVersion {
-		t.Fatal("new runs must capture the task state protocol")
+	if domain.CurrentRuntimeSnapshotVersion < domain.TaskStateRuntimeSnapshotVersion {
+		t.Fatal("new runs must retain the task state protocol")
 	}
 }
 

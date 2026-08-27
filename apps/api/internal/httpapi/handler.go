@@ -57,6 +57,7 @@ type AgentRuntimeOperations interface {
 	RunAutonomous(context.Context, agent.PreparedCollaborationRun, string) (<-chan domain.RunEvent, <-chan error)
 	ResumeAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)
 	ResumeRecoverableAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)
+	ResumeRecoverableCollaboration(context.Context, string) (<-chan domain.RunEvent, <-chan error)
 	CompleteRun(string) (domain.Run, error)
 	FailRun(string, error) (domain.Run, error)
 	RejectRunCompletion(string, domain.RunStatus, string) (domain.Run, error)

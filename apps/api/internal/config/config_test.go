@@ -38,6 +38,22 @@ func TestLoadRunBudgetConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadChildRunDelegationConfiguration(t *testing.T) {
+	t.Setenv("MAX_CONCURRENT_CHILD_RUNS", "3")
+	t.Setenv("MAX_CHILD_RUNS_PER_PARENT", "2")
+	t.Setenv("CHILD_RUN_TIMEOUT", "75s")
+	t.Setenv("CHILD_RUN_SUMMARY_MAX_CHARACTERS", "900")
+	t.Setenv("CHILD_RUN_MAX_MODEL_CALLS", "4")
+	t.Setenv("CHILD_RUN_MAX_TOTAL_TOKENS", "6000")
+	t.Setenv("CHILD_RUN_MAX_TOOL_CALLS", "3")
+	cfg := Load()
+	if cfg.MaxConcurrentChildRuns != 3 || cfg.MaxChildRunsPerParent != 2 || cfg.ChildRunTimeout != 75*time.Second ||
+		cfg.ChildRunSummaryMaxCharacters != 900 || cfg.ChildRunMaxModelCalls != 4 ||
+		cfg.ChildRunMaxTotalTokens != 6000 || cfg.ChildRunMaxToolCalls != 3 {
+		t.Fatalf("unexpected child run config: %#v", cfg)
+	}
+}
+
 func TestLoadSessionHistoryRetrievalConfiguration(t *testing.T) {
 	t.Setenv("CONTEXT_HISTORY_RETRIEVAL_MAX_RESULTS", "6")
 	t.Setenv("CONTEXT_HISTORY_RETRIEVAL_MAX_CHARACTERS", "9000")

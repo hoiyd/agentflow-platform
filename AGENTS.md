@@ -148,7 +148,7 @@ are complete. Mandatory namespace filtering alone is not authorization.
   `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}` returns the same
   branch name on `origin` before reporting the push as complete.
 - Stage explicit files only; never use `git add -A` in a dirty worktree.
-- Do not stage local files such as `JD.md`, `RAG.md`, or `docs/TODO/` unless the
+- Do not stage local files such as `RAG.md`, or `docs/TODO/` unless the
   user explicitly requests them.
 - Do not create a commit, push, or PR unless requested.
 - If blocked, ask for the missing input or propose a focused next step instead

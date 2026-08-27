@@ -43,7 +43,8 @@ const (
 	SessionHistorySnapshotVersion    = 6
 	RecoveryRuntimeSnapshotVersion   = 7
 	TaskStateRuntimeSnapshotVersion  = 8
-	CurrentRuntimeSnapshotVersion    = TaskStateRuntimeSnapshotVersion
+	DelegationRuntimeSnapshotVersion = 9
+	CurrentRuntimeSnapshotVersion    = DelegationRuntimeSnapshotVersion
 )
 
 type RuntimeSnapshot struct {
@@ -57,7 +58,34 @@ type RuntimeSnapshot struct {
 	RouterMode       string                 `json:"router_mode,omitempty"`
 	AutonomousLimits *RuntimeLimitsSnapshot `json:"autonomous_limits,omitempty"`
 	RunBudget        *RuntimeRunBudget      `json:"run_budget,omitempty"`
+	ChildRunPolicy   *RuntimeChildRunPolicy `json:"child_run_policy,omitempty"`
+	Delegation       *RuntimeDelegation     `json:"delegation,omitempty"`
 	CreatedAt        time.Time              `json:"created_at"`
+}
+
+// RuntimeChildRunPolicy is frozen with a parent Multi-Agent Run. Process-level
+// concurrency remains live deployment policy, while semantic authority and
+// resource bounds cannot change while the parent waits for plan approval.
+type RuntimeChildRunPolicy struct {
+	MaxDepth              int              `json:"max_depth"`
+	TimeoutMS             int64            `json:"timeout_ms"`
+	SummaryMaxChars       int              `json:"summary_max_chars"`
+	AgentDefinitionSource string           `json:"agent_definition_source"`
+	RunBudget             RuntimeRunBudget `json:"run_budget"`
+}
+
+// RuntimeDelegation freezes the authority and isolation boundary of a child
+// Run. A child receives only its explicit task and selected agent snapshot; it
+// does not implicitly inherit parent conversation history or durable task state.
+type RuntimeDelegation struct {
+	DelegationID    string `json:"delegation_id"`
+	ParentRunID     string `json:"parent_run_id"`
+	ParentTurnID    string `json:"parent_turn_id"`
+	ParentStageID   string `json:"parent_stage_id,omitempty"`
+	Depth           int    `json:"depth"`
+	IsolatedContext bool   `json:"isolated_context"`
+	TimeoutMS       int64  `json:"timeout_ms"`
+	SummaryMaxChars int    `json:"summary_max_chars"`
 }
 
 type ContextAssemblyConfig struct {
@@ -274,6 +302,12 @@ const (
 	EventCompensationStarted     RunEventType = "checkpoint.compensation_started"
 	EventCompensationCompleted   RunEventType = "checkpoint.compensation_completed"
 	EventCompensationFailed      RunEventType = "checkpoint.compensation_failed"
+	EventDelegationCreated       RunEventType = "delegation.created"
+	EventDelegationStarted       RunEventType = "delegation.started"
+	EventDelegationBlocked       RunEventType = "delegation.blocked"
+	EventDelegationCompleted     RunEventType = "delegation.completed"
+	EventDelegationFailed        RunEventType = "delegation.failed"
+	EventDelegationCanceled      RunEventType = "delegation.canceled"
 )
 
 type ContextManifestEntry struct {
@@ -413,6 +447,8 @@ type RunReplay struct {
 	VerificationEvidence  []VerificationEvidence `json:"verification_evidence"`
 	VerificationArtifacts []VerificationArtifact `json:"verification_artifacts"`
 	TaskStateRevisions    []TaskStateRevision    `json:"task_state_revisions"`
+	ParentDelegation      *RunDelegation         `json:"parent_delegation,omitempty"`
+	ChildDelegations      []RunDelegation        `json:"child_delegations"`
 }
 
 // EpisodeReport is a compact projection derived from RunReplay for review,

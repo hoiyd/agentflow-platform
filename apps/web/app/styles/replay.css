@@ -85,6 +85,48 @@
   margin-bottom: 20px;
 }
 
+.delegation-topology {
+  border-top: 1px solid var(--border);
+  padding: 18px 0;
+}
+
+.delegation-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto auto;
+  gap: 8px 16px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.delegation-identity,
+.delegation-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.delegation-identity > span,
+.delegation-agent,
+.delegation-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.delegation-row p,
+.delegation-meta {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.delegation-row p {
+  white-space: pre-wrap;
+}
+
+.delegation-row .delegation-error {
+  color: var(--danger);
+}
+
 .episode-report {
   display: grid;
   gap: 14px;

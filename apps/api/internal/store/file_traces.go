@@ -281,6 +281,18 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		}
 	}
 	sort.Slice(taskStateRevisions, func(i, j int) bool { return taskStateRevisions[i].Version < taskStateRevisions[j].Version })
+	childDelegations := []domain.RunDelegation{}
+	var parentDelegation *domain.RunDelegation
+	for _, item := range s.data.RunDelegations {
+		if item.ParentRunID == runID {
+			childDelegations = append(childDelegations, item)
+		}
+		if item.ChildRunID == runID {
+			copy := item
+			parentDelegation = &copy
+		}
+	}
+	sort.Slice(childDelegations, func(i, j int) bool { return childDelegations[i].CreatedAt.Before(childDelegations[j].CreatedAt) })
 	return domain.RunReplay{
 		Run:                   cloneRun(run),
 		Projection:            readModel,
@@ -296,6 +308,8 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		VerificationEvidence:  verificationEvidence,
 		VerificationArtifacts: verificationArtifactsForRun(s.data.VerificationArtifacts, runID),
 		TaskStateRevisions:    taskStateRevisions,
+		ParentDelegation:      parentDelegation,
+		ChildDelegations:      childDelegations,
 	}, true, nil
 }
 

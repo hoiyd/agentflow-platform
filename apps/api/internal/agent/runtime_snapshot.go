@@ -80,6 +80,15 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 			MaxOutputChars: limits.MaxOutputChars,
 		}
 	}
+	if mode == ChatModeMultiAgent {
+		limits := normalizeChildRunLimits(r.childRunLimits)
+		snapshot.ChildRunPolicy = &domain.RuntimeChildRunPolicy{
+			MaxDepth: 1, TimeoutMS: limits.Timeout.Milliseconds(),
+			SummaryMaxChars:       limits.SummaryMaxChars,
+			AgentDefinitionSource: "runtime_snapshot.candidate_agents",
+			RunBudget:             limits.RunBudget,
+		}
+	}
 	return snapshot, nil
 }
 
@@ -196,7 +205,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 }
 
 func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
-	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CompactionRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.RunBudgetRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.UnifiedExecutionSnapshotVersion && snapshot.SchemaVersion != domain.SessionHistorySnapshotVersion && snapshot.SchemaVersion != domain.RecoveryRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
+	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CompactionRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.RunBudgetRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.UnifiedExecutionSnapshotVersion && snapshot.SchemaVersion != domain.SessionHistorySnapshotVersion && snapshot.SchemaVersion != domain.RecoveryRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.TaskStateRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
 		return ErrRuntimeSnapshotUnavailable
 	}
 	switch snapshot.Mode {
@@ -204,6 +213,9 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	case ChatModeMultiAgent:
 		if len(snapshot.CandidateAgents) == 0 {
 			return errors.New("multi-agent runtime snapshot has no candidate agents")
+		}
+		if snapshot.SchemaVersion >= domain.DelegationRuntimeSnapshotVersion && (snapshot.ChildRunPolicy == nil || snapshot.ChildRunPolicy.MaxDepth != 1 || snapshot.ChildRunPolicy.TimeoutMS <= 0 || snapshot.ChildRunPolicy.SummaryMaxChars <= 0 || strings.TrimSpace(snapshot.ChildRunPolicy.AgentDefinitionSource) == "") {
+			return errors.New("multi-agent runtime snapshot has no valid child run policy")
 		}
 	case ChatModeAutonomous:
 		if snapshot.AutonomousLimits == nil {
@@ -220,6 +232,14 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	}
 	if snapshot.SchemaVersion >= domain.RunBudgetRuntimeSnapshotVersion && snapshot.RunBudget == nil {
 		return errors.New("runtime snapshot has no run budget")
+	}
+	if snapshot.Delegation != nil {
+		if snapshot.SchemaVersion < domain.DelegationRuntimeSnapshotVersion || snapshot.Mode != ChatModeSingle {
+			return errors.New("delegated runtime snapshot has an invalid schema or mode")
+		}
+		if strings.TrimSpace(snapshot.Delegation.DelegationID) == "" || strings.TrimSpace(snapshot.Delegation.ParentRunID) == "" || strings.TrimSpace(snapshot.Delegation.ParentTurnID) == "" || snapshot.Delegation.Depth != 1 || !snapshot.Delegation.IsolatedContext {
+			return errors.New("delegated runtime snapshot has an invalid isolation boundary")
+		}
 	}
 	return nil
 }

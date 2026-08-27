@@ -18,6 +18,7 @@ import {
 } from "./run-replay/RunEventDetails";
 import { TaskStateChanges } from "./run-replay/TaskStateChanges";
 import { RuntimeDiagnostics } from "./run-replay/RuntimeDiagnostics";
+import { DelegationTopology } from "./run-replay/DelegationTopology";
 
 type Props = {
   runId: string;
@@ -61,7 +62,7 @@ export function RunReplay({ runId }: Props) {
     [replay, selectedEventId]
   );
   const retrievalSummary = useMemo(() => buildRetrievalSummary(replay?.run_events ?? []), [replay?.run_events]);
-  const canResumeRecoverable = replay?.run.status === "failed_recoverable";
+  const canResumeRecoverable = replay?.run.status === "failed_recoverable" && !replay.parent_delegation;
 
   async function handleResumeRecoverable() {
     if (!replay || isResuming) {
@@ -176,6 +177,8 @@ export function RunReplay({ runId }: Props) {
         failures={replay.projection.invariant_failures}
         onInspectEvent={inspectDiagnosticEvent}
       />
+
+      <DelegationTopology parent={replay.parent_delegation} childRuns={replay.child_delegations} />
 
       <section className="replay-summary">
         <Metric label="Total duration" value={formatDuration(replay.summary.total_duration_ms)} />

@@ -40,6 +40,7 @@ capacity, resource consumption, timeouts, and stopping conditions.
 | Control | Scope | Unit | Owner | Persisted? |
 | --- | --- | --- | --- | --- |
 | Run Admission | process + Conversation | active and queued Runs | `concurrency.RunController` | no |
+| Child Run Admission | process + parent Run | active delegated Runs; no queue | `delegation.Controller` | relationship persisted; permits are not |
 | Model Request Limiter | process + API key | physical HTTP requests and approximate input tokens | `concurrency.ModelRequestLimiter` | no |
 | Model Retry | one logical Model Call | physical attempts | `openai.RetryPolicy` | no |
 | Run Budget | one persisted Run | logical calls, provider tokens, tools, active runtime, cost | `budget.Tracker` + Usage Store | yes |
@@ -68,6 +69,19 @@ RUN_QUEUE_WAIT_TIMEOUT=30s
 
 Admission does not count Model Calls or limit the number of steps inside an
 admitted Run.
+
+Child Runs use a separate, no-wait admission boundary:
+
+```env
+MAX_CONCURRENT_CHILD_RUNS=2
+MAX_CHILD_RUNS_PER_PARENT=1
+CHILD_RUN_TIMEOUT=2m
+```
+
+These values do not increase `MAX_CONCURRENT_RUNS` or create another queue.
+Child model calls still acquire the global Model Request Limiter. Child Budget
+and bounded result settings are documented in
+[Bounded Child Run Delegation](child-run-delegation.md).
 
 ## 2. Model Request Limiter
 

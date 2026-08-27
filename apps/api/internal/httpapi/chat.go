@@ -9,6 +9,7 @@ import (
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -304,10 +305,16 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := <-errs; err != nil {
-		if !strings.Contains(err.Error(), "not waiting for user input") {
+		failureInfo := failure.Describe(err)
+		delegationBackpressure := failureInfo.Source == "delegation" && failureInfo.Category == failure.CategoryCapacity
+		if !strings.Contains(err.Error(), "not waiting for user input") && !delegationBackpressure {
 			_, _ = h.agentRuntime.FailRun(id, err)
 		}
-		writeSSE(w, "error", failureChatChunk(w, r, http.StatusInternalServerError, err))
+		status := http.StatusInternalServerError
+		if delegationBackpressure {
+			status = http.StatusServiceUnavailable
+		}
+		writeSSE(w, "error", failureChatChunk(w, r, status, err))
 		flusher.Flush()
 		return
 	}
@@ -376,7 +383,11 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	resumeCtx := detachedRequestContext(r)
 	events, errs := h.agentRuntime.ResumeAutonomous(resumeCtx, id, req.UserInput)
 	if run.Status == domain.RunFailedRecoverable {
-		events, errs = h.agentRuntime.ResumeRecoverableAutonomous(resumeCtx, id, req.UserInput)
+		if run.RuntimeSnapshot != nil && run.RuntimeSnapshot.Mode == agentpkg.ChatModeMultiAgent {
+			events, errs = h.agentRuntime.ResumeRecoverableCollaboration(resumeCtx, id)
+		} else {
+			events, errs = h.agentRuntime.ResumeRecoverableAutonomous(resumeCtx, id, req.UserInput)
+		}
 	}
 	var assistant strings.Builder
 	for event := range events {

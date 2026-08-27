@@ -69,7 +69,8 @@ Planner -> waiting_for_user -> Router -> Worker -> Reviewer -> Finalizer
 3. **Router** scores the frozen candidate Agents and selects one Worker. Auto
    routing uses the model when available and falls back to deterministic
    query/profile matching.
-4. **Worker** executes the approved plan using the selected Agent profile.
+4. **Worker** executes the approved plan in an isolated, bounded Child Run using
+   the selected Agent profile.
 5. **Reviewer** evaluates the Worker result against the task and plan.
 6. **Finalizer** synthesizes the candidate final output.
 
@@ -84,6 +85,11 @@ Choose Multi when:
 - specialist routing or explicit delegation improves the result;
 - independent review is worth additional latency and model usage;
 - handoffs and responsibility boundaries must be explainable afterward.
+
+The Worker Child Run has its own frozen Tool allowlist, Context, Budget, Usage
+Ledger, timeout, heartbeat, and Trace. The parent receives only a bounded
+summary and Child Trace reference. See
+[Bounded Child Run Delegation](child-run-delegation.md).
 
 The current topology is intentionally fixed rather than a generic arbitrary
 DAG. This keeps lifecycle, continue semantics, and Replay predictable while
