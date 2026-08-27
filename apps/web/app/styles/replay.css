@@ -52,6 +52,11 @@
   color: var(--accent-dark);
 }
 
+.replay-status.blocked {
+  border-color: rgba(180, 95, 60, 0.34);
+  color: var(--accent-dark);
+}
+
 .replay-header-actions {
   display: flex;
   align-items: center;
