@@ -305,14 +305,9 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := <-errs; err != nil {
-		failureInfo := failure.Describe(err)
-		delegationBackpressure := failureInfo.Source == "delegation" && failureInfo.Category == failure.CategoryCapacity
-		if !strings.Contains(err.Error(), "not waiting for user input") && !delegationBackpressure {
+		status, failRun := continuationFailurePolicy(err)
+		if failRun {
 			_, _ = h.agentRuntime.FailRun(id, err)
-		}
-		status := http.StatusInternalServerError
-		if delegationBackpressure {
-			status = http.StatusServiceUnavailable
 		}
 		writeSSE(w, "error", failureChatChunk(w, r, status, err))
 		flusher.Flush()
@@ -322,6 +317,14 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 	h.completeStreamingRun(w, flusher, r, r.Context(), runCompletionRequest{
 		WorkspaceID: run.WorkspaceID, RunID: id, ConversationID: run.ConversationID, Assistant: assistant.String(),
 	})
+}
+
+func continuationFailurePolicy(err error) (status int, failRun bool) {
+	info := failure.Describe(err)
+	if info.Source == "delegation" && info.Category == failure.CategoryCapacity {
+		return http.StatusServiceUnavailable, false
+	}
+	return http.StatusInternalServerError, !strings.Contains(err.Error(), "not waiting for user input")
 }
 
 func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {

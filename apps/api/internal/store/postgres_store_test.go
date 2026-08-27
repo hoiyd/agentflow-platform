@@ -92,12 +92,14 @@ func TestPostgresRunDelegationRoundTrip(t *testing.T) {
 		ParentTurnID: "turn-postgres", Depth: 1, IsolatedContext: true,
 		TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
 	}
-	child, relation, err := postgresStore.CreateChildRun(domain.ChildRunRequest{
+	request := domain.ChildRunRequest{
 		Delegation: domain.RunDelegation{
 			ID: childSnapshot.Delegation.DelegationID, ParentRunID: parent.ID,
 			ParentTurnID: "turn-postgres", AgentID: "agent_planner", Depth: 1, Task: "work", TimeoutMS: time.Minute.Milliseconds(),
-		}, RuntimeSnapshot: childSnapshot,
-	})
+		},
+		RuntimeSnapshot: childSnapshot,
+	}
+	child, relation, err := postgresStore.CreateChildRun(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,6 +124,78 @@ func TestPostgresRunDelegationRoundTrip(t *testing.T) {
 	if err != nil || !ok || childReplay.ParentDelegation == nil || childReplay.ParentDelegation.ID != relation.ID {
 		t.Fatalf("child replay parent=%#v ok=%v err=%v", childReplay.ParentDelegation, ok, err)
 	}
+	if item, ok, err := postgresStore.GetRunDelegation(relation.ID); err != nil || !ok || item.ChildRunID != child.ID {
+		t.Fatalf("get delegation=%#v ok=%v err=%v", item, ok, err)
+	}
+	if item, ok, err := postgresStore.GetParentDelegation(child.ID); err != nil || !ok || item.ID != relation.ID {
+		t.Fatalf("get parent delegation=%#v ok=%v err=%v", item, ok, err)
+	}
+	if _, ok, err := postgresStore.GetRunDelegation("missing"); err != nil || ok {
+		t.Fatalf("missing delegation: ok=%v err=%v", ok, err)
+	}
+	if _, ok, err := postgresStore.GetParentDelegation("missing"); err != nil || ok {
+		t.Fatalf("missing parent delegation: ok=%v err=%v", ok, err)
+	}
+	items, err := postgresStore.ListRunDelegations(parent.ID)
+	if err != nil || len(items) != 1 || items[0].ID != relation.ID {
+		t.Fatalf("list delegations=%#v err=%v", items, err)
+	}
+	active, err := postgresStore.ListActiveRunDelegations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range active {
+		if item.ID == relation.ID {
+			t.Fatal("completed delegation remained active")
+		}
+	}
+
+	second := validChildRunRequest(parent, "delegation-postgres-active-"+parent.ID)
+	secondChild, secondRelation, err := postgresStore.CreateChildRun(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err = postgresStore.ListActiveRunDelegations()
+	if err != nil || !containsDelegation(active, secondRelation.ID) {
+		t.Fatalf("active delegations=%#v err=%v", active, err)
+	}
+	if _, err := postgresStore.UpdateRunDelegation(secondRelation.ID, domain.DelegationResult{Status: domain.DelegationRunning}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := postgresStore.CreateChildRun(second); err == nil {
+		t.Fatal("expected duplicate delegation transaction to roll back")
+	}
+	if _, ok, err := postgresStore.GetRun(secondChild.ID); err != nil || !ok {
+		t.Fatalf("duplicate rollback damaged existing child: ok=%v err=%v", ok, err)
+	}
+	if _, err := postgresStore.UpdateRunDelegation("missing", domain.DelegationResult{Status: domain.DelegationRunning}); err == nil {
+		t.Fatal("expected missing delegation update to fail")
+	}
+	if _, err := postgresStore.UpdateRunDelegation(secondRelation.ID, domain.DelegationResult{}); err == nil {
+		t.Fatal("expected invalid delegation result to fail")
+	}
+	if _, _, err := postgresStore.CreateChildRun(domain.ChildRunRequest{}); err == nil {
+		t.Fatal("expected invalid child request to fail")
+	}
+	missingParent := validChildRunRequest(domain.Run{ID: "missing-parent"}, "delegation-postgres-missing-parent-"+parent.ID)
+	if _, _, err := postgresStore.CreateChildRun(missingParent); err == nil {
+		t.Fatal("expected missing parent to fail")
+	}
+	missingAgent := validChildRunRequest(parent, "delegation-postgres-missing-agent-"+parent.ID)
+	missingAgent.Delegation.AgentID = "missing-agent"
+	missingAgent.RuntimeSnapshot.Agent.ID = "missing-agent"
+	if _, _, err := postgresStore.CreateChildRun(missingAgent); err == nil {
+		t.Fatal("expected missing agent to fail")
+	}
+}
+
+func containsDelegation(items []domain.RunDelegation, id string) bool {
+	for _, item := range items {
+		if item.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func TestPostgresMigrationsAddStructuredTaskState(t *testing.T) {

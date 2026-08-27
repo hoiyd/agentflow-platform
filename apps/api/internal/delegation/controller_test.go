@@ -74,3 +74,56 @@ func TestReservationReleaseKeepsSiblingCancellationRegistered(t *testing.T) {
 		t.Fatal("released child was canceled through stale registration")
 	}
 }
+
+func TestControllerDefaultsAndNoopBoundaries(t *testing.T) {
+	controller := NewController(Options{})
+	first, err := controller.Reserve("parent-1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := controller.Reserve("parent-2", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := controller.Reserve("parent-3", 1); !errors.Is(err, ErrCapacity) {
+		t.Fatalf("expected default global capacity, got %v", err)
+	}
+	first.Bind("", func(error) {})
+	first.Bind("child", nil)
+	first.Release()
+	first.Release()
+	second.Release()
+
+	var nilController *Controller
+	reservation, err := nilController.Reserve("parent", 99)
+	if err != nil {
+		t.Fatalf("nil controller reserve: %v", err)
+	}
+	reservation.Bind("child", func(error) {})
+	reservation.Release()
+	var nilReservation *Reservation
+	nilReservation.Bind("child", func(error) {})
+	nilReservation.Release()
+	nilController.CancelParent("parent", errors.New("ignored"))
+}
+
+func TestControllerReleaseRemovesLastChildRegistration(t *testing.T) {
+	controller := NewController(Options{MaxConcurrent: 1, MaxPerParent: 1, MaxDepth: 1})
+	reservation, err := controller.Reserve("parent", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	reservation.Bind("child", cancel)
+	reservation.Release()
+	controller.CancelParent("parent", errors.New("late cancellation"))
+	if ctx.Err() != nil {
+		t.Fatal("released child remained registered")
+	}
+
+	again, err := controller.Reserve("parent", 1)
+	if err != nil {
+		t.Fatalf("released capacity was not restored: %v", err)
+	}
+	again.Release()
+}
