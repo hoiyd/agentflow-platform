@@ -25,6 +25,18 @@ type Config struct {
 	RunQueueSize int
 	// RunQueueWaitTimeout limits how long an admitted run may wait for execution.
 	RunQueueWaitTimeout time.Duration
+	// MaxConcurrentChildRuns caps active delegated Runs. Child admission never queues.
+	MaxConcurrentChildRuns int
+	// MaxChildRunsPerParent bounds fan-out from one parent Run.
+	MaxChildRunsPerParent int
+	// ChildRunTimeout is frozen into each delegated Run.
+	ChildRunTimeout time.Duration
+	// ChildRunSummaryMaxCharacters bounds output admitted back into the parent context.
+	ChildRunSummaryMaxCharacters int
+	// ChildRunMaxModelCalls, tokens, and tools form the independent child Run budget.
+	ChildRunMaxModelCalls  int
+	ChildRunMaxTotalTokens int
+	ChildRunMaxToolCalls   int
 	// MaxConcurrentModelRequests caps in-flight Chat and Embedding HTTP requests.
 	MaxConcurrentModelRequests int
 	// ModelRequestsPerMinute configures the per-API-key request token bucket; zero disables it.
@@ -142,6 +154,13 @@ func Load() Config {
 		MaxConcurrentRuns:                 getIntEnv("MAX_CONCURRENT_RUNS", 8),
 		RunQueueSize:                      getNonNegativeIntEnv("RUN_QUEUE_SIZE", 32),
 		RunQueueWaitTimeout:               getDurationEnv("RUN_QUEUE_WAIT_TIMEOUT", 30*time.Second),
+		MaxConcurrentChildRuns:            getIntEnv("MAX_CONCURRENT_CHILD_RUNS", 2),
+		MaxChildRunsPerParent:             getIntEnv("MAX_CHILD_RUNS_PER_PARENT", 1),
+		ChildRunTimeout:                   getDurationEnv("CHILD_RUN_TIMEOUT", 2*time.Minute),
+		ChildRunSummaryMaxCharacters:      getIntEnv("CHILD_RUN_SUMMARY_MAX_CHARACTERS", 4000),
+		ChildRunMaxModelCalls:             getIntEnv("CHILD_RUN_MAX_MODEL_CALLS", 8),
+		ChildRunMaxTotalTokens:            getIntEnv("CHILD_RUN_MAX_TOTAL_TOKENS", 12000),
+		ChildRunMaxToolCalls:              getIntEnv("CHILD_RUN_MAX_TOOL_CALLS", 8),
 		MaxConcurrentModelRequests:        getIntEnv("MAX_CONCURRENT_MODEL_REQUESTS", 8),
 		ModelRequestsPerMinute:            getNonNegativeIntEnv("MODEL_REQUESTS_PER_MINUTE", 60),
 		ModelTokensPerMinute:              getNonNegativeIntEnv("MODEL_TOKENS_PER_MINUTE", 120000),

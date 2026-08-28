@@ -94,6 +94,23 @@ test("replay preserves durable recovery metadata", async (t) => {
   assert.equal(replay.tool_effects[0].has_result, true);
 });
 
+test("replay preserves parent and child delegation topology", async (t) => {
+  const relation = {
+    id: "delegation-1", workspace_id: "workspace-1", conversation_id: "conversation-1",
+    parent_run_id: "run-1", parent_turn_id: "turn-1", child_run_id: "run-child",
+    agent_id: "agent-worker", depth: 1, status: "blocked", block_reason: "child_recovery_required", task: "work",
+    summary: "done", output_ref: "run://run-child/stages/worker", timeout_ms: 120000,
+    created_at: "2026-08-27T00:00:00Z", updated_at: "2026-08-27T00:00:01Z"
+  };
+  mockFetch(t, replayPayload({ parent_delegation: relation, child_delegations: [relation] }));
+
+  const replay = await getRunReplay("run-1");
+
+  assert.equal(replay.parent_delegation.child_run_id, "run-child");
+  assert.equal(replay.parent_delegation.block_reason, "child_recovery_required");
+  assert.equal(replay.child_delegations[0].output_ref, "run://run-child/stages/worker");
+});
+
 test("replay preserves structured task state revisions", async (t) => {
   mockFetch(t, replayPayload({
     task_state_revisions: [{ id: "revision-1", version: 1, state: { version: 1, tasks: [] } }]

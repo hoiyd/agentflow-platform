@@ -34,7 +34,7 @@ These are cross-cutting runtime capabilities, not mode-specific features:
 | Capability | Runtime design | Adaptation boundary |
 | --- | --- | --- |
 | **Performance** | SSE streams output incrementally; context, output, Tool results, Run usage, and background queues are bounded. Active runtime excludes queue and human-wait time. | Limits and provider policies are configured at composition time and frozen into new Runs where replay stability requires it. No benchmark result is implied. |
-| **Concurrency** | `RunController` combines global admission, bounded queueing, and per-Conversation single-writer execution. The model limiter separately owns in-flight requests and RPM/TPM; Tool bindings declare serial, read-only, or keyed parallelism. | Single, Multi-Agent, and Loop (`autonomous`) modes use the same controls. Provider retries acquire fresh permits without double-counting logical Run usage. |
+| **Concurrency** | `RunController` combines global admission, bounded queueing, and per-Conversation single-writer execution. `delegation.Controller` separately provides no-wait Child Run admission and parent cancellation. The model limiter owns in-flight requests and RPM/TPM; Tool bindings declare serial, read-only, or keyed parallelism. | Single, Multi-Agent, and Loop (`autonomous`) modes use the shared controls; Multi-Agent Workers additionally use isolated Child Runs. Provider retries acquire fresh permits without double-counting logical Run usage. |
 | **Workspace scope** | HTTP resolves `X-Workspace-ID`, query, or payload scope to one normalized namespace; omitted and legacy `default` values become `default_workspace`. Persisted Runs inherit Conversation scope. | File and Postgres stores enforce namespace predicates. Authentication, Membership, and ACL remain separate future policy layers. |
 | **Tracing** | Typed Run Events cover Run, Stage, Turn, Model, Tool, Retrieval, Context, Memory, Usage, Verification, and recovery lifecycles. `ModelRequestEnvelope` records each physical provider attempt against its Runtime Snapshot and Context Manifest. Durable records are persisted for Replay and debug views; streaming `model.delta` events are intentionally omitted. | Event contracts remain stable across File/Postgres stores and native/framework executors; adapters add versioned metadata instead of inventing private trace formats. |
 | **Verification** | An opt-in frozen Completion Contract evaluates the persisted candidate output, records immutable Evidence/Artifacts, and gates `run.completed`. | Versioned verifier implementations are registered behind a narrow interface. Verification applies identically to all execution modes and is independent of Automated and Manual Tests. |
@@ -71,6 +71,7 @@ apps/api/
     knowledge/      knowledge-base ingestion, embedding, search, and RAG evaluation
     rag/            chunking and shared recall, reranking, and relevance gating
     concurrency/    run and model-request limits
+    delegation/     no-wait Child Run admission and parent cancellation
     budget/         per-Run resource accounting and enforcement
     recovery/       stale-run recovery
     checkpoint/     Stage checkpoint capture, validation, and internal compensation

@@ -9,6 +9,7 @@ import (
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -304,10 +305,11 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := <-errs; err != nil {
-		if !strings.Contains(err.Error(), "not waiting for user input") {
+		status, failRun := continuationFailurePolicy(err)
+		if failRun {
 			_, _ = h.agentRuntime.FailRun(id, err)
 		}
-		writeSSE(w, "error", failureChatChunk(w, r, http.StatusInternalServerError, err))
+		writeSSE(w, "error", failureChatChunk(w, r, status, err))
 		flusher.Flush()
 		return
 	}
@@ -315,6 +317,14 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 	h.completeStreamingRun(w, flusher, r, r.Context(), runCompletionRequest{
 		WorkspaceID: run.WorkspaceID, RunID: id, ConversationID: run.ConversationID, Assistant: assistant.String(),
 	})
+}
+
+func continuationFailurePolicy(err error) (status int, failRun bool) {
+	info := failure.Describe(err)
+	if info.Source == "delegation" && info.Category == failure.CategoryCapacity {
+		return http.StatusServiceUnavailable, false
+	}
+	return http.StatusInternalServerError, !strings.Contains(err.Error(), "not waiting for user input")
 }
 
 func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
@@ -376,7 +386,11 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	resumeCtx := detachedRequestContext(r)
 	events, errs := h.agentRuntime.ResumeAutonomous(resumeCtx, id, req.UserInput)
 	if run.Status == domain.RunFailedRecoverable {
-		events, errs = h.agentRuntime.ResumeRecoverableAutonomous(resumeCtx, id, req.UserInput)
+		if run.RuntimeSnapshot != nil && run.RuntimeSnapshot.Mode == agentpkg.ChatModeMultiAgent {
+			events, errs = h.agentRuntime.ResumeRecoverableCollaboration(resumeCtx, id)
+		} else {
+			events, errs = h.agentRuntime.ResumeRecoverableAutonomous(resumeCtx, id, req.UserInput)
+		}
 	}
 	var assistant strings.Builder
 	for event := range events {

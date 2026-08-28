@@ -16,6 +16,12 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 | `context.compaction_completed` | durable | 1 | run | contextcompaction | `event.ContextCompactionPayload` | compaction:terminal | `context.compaction_started` | replay |
 | `context.compaction_failed` | durable | 1 | run | contextcompaction | `event.ContextCompactionPayload` | compaction:terminal | `context.compaction_started` | run_projection, replay |
 | `context.compaction_started` | durable | 1 | run | contextcompaction | `event.ContextCompactionPayload` | compaction:start | `` | replay |
+| `delegation.blocked` | durable | 1 | run+stage | delegation | `event.TracePayload` | delegation:transition | `` | delegation, recovery, replay |
+| `delegation.canceled` | durable | 1 | run+stage | delegation | `event.TracePayload` | delegation:terminal | `delegation.created` | delegation, replay |
+| `delegation.completed` | durable | 1 | run+stage | delegation | `event.TracePayload` | delegation:terminal | `delegation.created` | delegation, replay |
+| `delegation.created` | durable | 1 | run+stage | delegation | `event.TracePayload` | delegation:start | `` | delegation, replay |
+| `delegation.failed` | durable | 1 | run+stage | delegation | `event.TracePayload` | delegation:terminal | `delegation.created` | delegation, replay |
+| `delegation.started` | durable | 1 | run+stage | delegation | `event.TracePayload` | delegation:transition | `` | delegation, replay |
 | `memory.candidate.accepted` | durable | 1 | run | memory | `event.MemoryCandidatePayload` | memory_candidate:terminal | `memory.candidate.proposed` | replay |
 | `memory.candidate.failed` | durable | 1 | run | memory | `event.MemoryCandidatePayload` | memory_candidate:terminal | `memory.candidate.proposed` | run_projection, replay |
 | `memory.candidate.proposed` | durable | 1 | run | memory | `event.MemoryCandidatePayload` | memory_candidate:start | `` | replay |

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/contextcompaction"
+	"agentflow-platform/apps/api/internal/delegation"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	tracepkg "agentflow-platform/apps/api/internal/event"
@@ -37,6 +39,8 @@ type Runtime struct {
 	checkpoints           checkpoint.Provider
 	taskStates            *taskstate.Service
 	liveEvents            eventpkg.LivePublisher
+	delegations           *delegation.Controller
+	childRunLimits        ChildRunLimits
 }
 
 type RuntimeStore interface {
@@ -60,6 +64,7 @@ type RuntimeStore interface {
 	store.SessionHistoryStore
 	store.RunUsageStore
 	store.CheckpointStore
+	store.DelegationStore
 	SearchMemories(domain.MemorySearch) ([]domain.RetrievedMemory, error)
 }
 
@@ -68,6 +73,14 @@ type AutonomousLimits struct {
 	MaxRuntime     time.Duration
 	MaxOutputChars int
 	MaxToolCalls   int
+}
+
+type ChildRunLimits struct {
+	MaxConcurrent   int
+	MaxPerParent    int
+	Timeout         time.Duration
+	SummaryMaxChars int
+	RunBudget       domain.RuntimeRunBudget
 }
 
 type PreparedRun struct {
@@ -89,6 +102,7 @@ type RuntimeOptions struct {
 	KnowledgeRetriever rag.Retriever
 	CheckpointProvider checkpoint.Provider
 	LiveEvents         eventpkg.LivePublisher
+	ChildRuns          ChildRunLimits
 }
 
 func NewRuntime(options RuntimeOptions) *Runtime {
@@ -120,9 +134,34 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		checkpoints:           checkpointProvider,
 		taskStates:            taskStates,
 		liveEvents:            options.LiveEvents,
+		childRunLimits:        normalizeChildRunLimits(options.ChildRuns),
 	}
+	runtime.delegations = delegation.NewController(delegation.Options{
+		MaxConcurrent: runtime.childRunLimits.MaxConcurrent,
+		MaxPerParent:  runtime.childRunLimits.MaxPerParent,
+		MaxDepth:      1,
+	})
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime
+}
+
+func normalizeChildRunLimits(limits ChildRunLimits) ChildRunLimits {
+	if limits.MaxConcurrent <= 0 {
+		limits.MaxConcurrent = 2
+	}
+	if limits.MaxPerParent <= 0 {
+		limits.MaxPerParent = 1
+	}
+	if limits.Timeout <= 0 {
+		limits.Timeout = 2 * time.Minute
+	}
+	if limits.SummaryMaxChars <= 0 {
+		limits.SummaryMaxChars = 4000
+	}
+	if limits.RunBudget.MaxRuntimeMS <= 0 || limits.RunBudget.MaxRuntimeMS > limits.Timeout.Milliseconds() {
+		limits.RunBudget.MaxRuntimeMS = limits.Timeout.Milliseconds()
+	}
+	return limits
 }
 
 func DefaultAutonomousLimits() AutonomousLimits {
@@ -516,6 +555,13 @@ func (r *Runtime) FailRun(id string, err error) (domain.Run, error) {
 	if err != nil {
 		message = err.Error()
 	}
+	if current, ok, loadErr := r.store.GetRun(id); loadErr == nil && ok && current.Status == domain.RunCanceling && errors.Is(err, context.Canceled) {
+		run, updateErr := r.store.UpdateRunStatus(id, domain.RunCanceled, message)
+		if updateErr == nil {
+			r.publishRunLifecycle(context.Background(), run, domain.EventRunCanceled, failure.Merge(map[string]any{"status": run.Status, "error": message}, err))
+		}
+		return run, updateErr
+	}
 	run, updateErr := r.store.UpdateRunStatus(id, domain.RunFailed, message)
 	if updateErr == nil {
 		r.publishRunLifecycle(context.Background(), run, domain.EventRunFailed, failure.Merge(map[string]any{"status": run.Status, "error": message}, err))
@@ -549,6 +595,7 @@ func (r *Runtime) CancelRun(id string) (domain.Run, error) {
 	if !ok {
 		return domain.Run{}, store.ErrNotFound("run")
 	}
+	r.delegations.CancelParent(run.ID, context.Canceled)
 	switch run.Status {
 	case domain.RunCompleted, domain.RunFailed, domain.RunCanceled:
 		return run, nil

@@ -34,6 +34,13 @@ OPENAI_REQUEST_TIMEOUT=5m
 MAX_CONCURRENT_RUNS=8
 RUN_QUEUE_SIZE=32
 RUN_QUEUE_WAIT_TIMEOUT=30s
+MAX_CONCURRENT_CHILD_RUNS=2
+MAX_CHILD_RUNS_PER_PARENT=1
+CHILD_RUN_TIMEOUT=2m
+CHILD_RUN_SUMMARY_MAX_CHARACTERS=4000
+CHILD_RUN_MAX_MODEL_CALLS=8
+CHILD_RUN_MAX_TOTAL_TOKENS=12000
+CHILD_RUN_MAX_TOOL_CALLS=8
 MAX_CONCURRENT_MODEL_REQUESTS=8
 MODEL_REQUESTS_PER_MINUTE=60
 MODEL_TOKENS_PER_MINUTE=120000
@@ -94,6 +101,10 @@ Concurrency settings control different layers:
 - `MAX_CONCURRENT_RUNS` limits active Agent runs. Runs for the same conversation remain single-writer.
 - `RUN_QUEUE_SIZE` adds bounded waiting capacity beyond active runs. Excess requests receive `429` with `Retry-After`.
 - `RUN_QUEUE_WAIT_TIMEOUT` limits queue waiting time. Timed-out requests receive `503` with `Retry-After`.
+- `MAX_CONCURRENT_CHILD_RUNS` caps delegated Worker Runs across the process. Child admission never queues.
+- `MAX_CHILD_RUNS_PER_PARENT` caps one parent Run's active fan-out; delegation depth is fixed at one.
+- `CHILD_RUN_TIMEOUT` and `CHILD_RUN_MAX_*` values are frozen into the Child Runtime Snapshot and enforced by its independent Run Budget.
+- `CHILD_RUN_SUMMARY_MAX_CHARACTERS` limits model-visible output returned to the parent; complete output remains in the Child Trace.
 - `MAX_CONCURRENT_MODEL_REQUESTS` limits model HTTP requests currently in flight across Chat and Embeddings. It is a request limit, not a model-count or connection-pool setting. Streaming responses hold a slot until the response body closes.
 - `MODEL_REQUESTS_PER_MINUTE` is the per-API-key request token-bucket capacity and refill rate.
 - `MODEL_TOKENS_PER_MINUTE` is the per-API-key approximate input-token bucket based on serialized request size; streamed output tokens are not included.

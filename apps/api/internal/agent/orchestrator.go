@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -195,6 +196,12 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			StageID: updatedPlan.ID, Payload: map[string]any{"kind": "plan_approved", "plan": updatedPlan.Output},
 		})
 		events <- liveStageEvent(updatedPlan)
+		childReservation, err := r.delegations.Reserve(run.ID, 1)
+		if err != nil {
+			errs <- err
+			return
+		}
+		defer childReservation.Release()
 
 		run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
 		if err != nil {
@@ -233,29 +240,172 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 		prepared := PreparedCollaborationRun{WorkerAgent: route.Agent, Run: run}
 
 		workerInput := fmt.Sprintf("User task:\n%s\n\nPlanner output:\n%s\n\nRouter-selected worker:\n%s (%s)\nSelection reason: %s", task, plan, route.Agent.Name, route.Agent.ID, route.Reason)
-		worker, err := r.runCollaborationStep(ctx, events, prepared, "worker", prepared.WorkerAgent.ID, workerPrompt(prepared.WorkerAgent), workerInput)
+		worker, err := r.runDelegatedWorker(ctx, events, prepared, workerInput, childReservation)
+		childReservation.Release()
 		if err != nil {
 			errs <- err
 			return
 		}
 
-		reviewInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s", task, plan, worker)
-		review, err := r.runCollaborationStep(ctx, events, prepared, "reviewer", "", reviewerPrompt(), reviewInput)
-		if err != nil {
+		if err := r.finishCollaboration(ctx, events, prepared, task, plan, worker); err != nil {
 			errs <- err
 			return
 		}
-
-		finalInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s\n\nReview:\n%s", task, plan, worker, review)
-		final, err := r.runCollaborationStep(ctx, events, prepared, "finalizer", "", finalizerPrompt(), finalInput)
-		if err != nil {
-			errs <- err
-			return
-		}
-		r.emitFinalDeltas(ctx, prepared.Run.ID, final, events)
 	}()
 
 	return events, errs
+}
+
+func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID string) (<-chan domain.RunEvent, <-chan error) {
+	events := make(chan domain.RunEvent)
+	errs := make(chan error, 1)
+	go func() {
+		defer close(events)
+		defer close(errs)
+		run, ok, err := r.store.GetRun(strings.TrimSpace(runID))
+		if err != nil {
+			errs <- err
+			return
+		}
+		if !ok {
+			errs <- store.ErrNotFound("run")
+			return
+		}
+		if run.Status != domain.RunFailedRecoverable {
+			errs <- errors.New("run is not recoverable")
+			return
+		}
+		restored, err := r.restoreRuntime(run)
+		if err != nil {
+			errs <- err
+			return
+		}
+		if restored.mode != ChatModeMultiAgent {
+			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeMultiAgent)
+			return
+		}
+		steps, err := r.store.ListCollaborationSteps(run.ID)
+		if err != nil {
+			errs <- err
+			return
+		}
+		planner, found := findCollaborationStep(steps, "planner")
+		if !found {
+			errs <- errors.New("planner step not found")
+			return
+		}
+		router, found := findCollaborationStep(steps, "router")
+		if !found {
+			errs <- errors.New("router step not found; recover from the plan approval boundary")
+			return
+		}
+		workerAgent, found := findAgentByID(restored.candidateAgents, router.AgentID)
+		if !found {
+			errs <- errors.New("frozen routed worker not found")
+			return
+		}
+		relations, err := r.store.ListRunDelegations(run.ID)
+		if err != nil {
+			errs <- err
+			return
+		}
+		if len(relations) != 1 {
+			errs <- fmt.Errorf("recoverable collaboration requires exactly one delegation, got %d", len(relations))
+			return
+		}
+		relation := relations[0]
+		workerStep, found := findCollaborationStepByID(steps, relation.ParentStageID)
+		if !found {
+			errs <- errors.New("parent worker delegation stage not found")
+			return
+		}
+		var childRun domain.Run
+		releaseChild := func() {}
+		var resumeReservation interface {
+			Bind(string, context.CancelCauseFunc)
+		}
+		switch relation.Status {
+		case domain.DelegationCompleted:
+			if relation.OutputRef == "" {
+				errs <- errors.New("completed delegation has no child output reference")
+				return
+			}
+		case domain.DelegationBlocked:
+			if relation.BlockReason != domain.DelegationBlockReasonChildRecoveryRequired {
+				errs <- fmt.Errorf("delegation %s has unsupported block reason %q", relation.ID, relation.BlockReason)
+				return
+			}
+			reservation, reserveErr := r.delegations.Reserve(run.ID, relation.Depth)
+			if reserveErr != nil {
+				errs <- reserveErr
+				return
+			}
+			defer reservation.Release()
+			releaseChild = reservation.Release
+			resumeReservation = reservation
+			var childFound bool
+			childRun, childFound, err = r.store.GetRun(relation.ChildRunID)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if !childFound || childRun.Status != domain.RunFailedRecoverable {
+				errs <- errors.New("blocked child run is not recoverable")
+				return
+			}
+		default:
+			errs <- fmt.Errorf("delegation %s is not resumable from status %q", relation.ID, relation.Status)
+			return
+		}
+		run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
+		if err != nil {
+			errs <- err
+			return
+		}
+		r.publishRunLifecycle(ctx, run, domain.EventRunResumed, map[string]any{"status": run.Status, "delegation_id": relation.ID})
+		events <- liveRunEvent(run)
+		prepared := PreparedCollaborationRun{WorkerAgent: workerAgent, Run: run}
+		workerOutput := relation.Summary + "\n\nChild trace: " + relation.OutputRef
+		switch relation.Status {
+		case domain.DelegationCompleted:
+		case domain.DelegationBlocked:
+			workerStep, err = r.store.UpdateCollaborationStep(workerStep.ID, domain.CollaborationStepRunning, "", "")
+			if err != nil {
+				errs <- err
+				return
+			}
+			events <- liveStageEvent(workerStep)
+			if err := r.publishStage(ctx, workerStep, domain.EventStageStarted); err != nil {
+				errs <- err
+				return
+			}
+			workerOutput, err = r.executeDelegatedChild(ctx, events, prepared, workerStep, childRun, relation, resumeReservation)
+			releaseChild()
+			if err != nil {
+				errs <- err
+				return
+			}
+		}
+		if err := r.finishCollaboration(ctx, events, prepared, planner.Input, planner.Output, workerOutput); err != nil {
+			errs <- err
+		}
+	}()
+	return events, errs
+}
+
+func (r *Runtime) finishCollaboration(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, task, plan, worker string) error {
+	reviewInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s", task, plan, worker)
+	review, err := r.runCollaborationStep(ctx, events, prepared, "reviewer", "", reviewerPrompt(), reviewInput)
+	if err != nil {
+		return err
+	}
+	finalInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s\n\nReview:\n%s", task, plan, worker, review)
+	final, err := r.runCollaborationStep(ctx, events, prepared, "finalizer", "", finalizerPrompt(), finalInput)
+	if err != nil {
+		return err
+	}
+	r.emitFinalDeltas(ctx, prepared.Run.ID, final, events)
+	return nil
 }
 
 func findCollaborationStep(steps []domain.CollaborationStep, role string) (domain.CollaborationStep, bool) {
@@ -265,6 +415,24 @@ func findCollaborationStep(steps []domain.CollaborationStep, role string) (domai
 		}
 	}
 	return domain.CollaborationStep{}, false
+}
+
+func findCollaborationStepByID(steps []domain.CollaborationStep, id string) (domain.CollaborationStep, bool) {
+	for _, step := range steps {
+		if step.ID == id {
+			return step, true
+		}
+	}
+	return domain.CollaborationStep{}, false
+}
+
+func findAgentByID(agents []domain.Agent, id string) (domain.Agent, bool) {
+	for _, item := range agents {
+		if item.ID == id {
+			return item, true
+		}
+	}
+	return domain.Agent{}, false
 }
 
 type routeDecision struct {

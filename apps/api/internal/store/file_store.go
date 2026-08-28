@@ -26,6 +26,7 @@ type fileData struct {
 	Messages              []domain.Message                `json:"messages"`
 	Agents                []domain.Agent                  `json:"agents"`
 	Runs                  []domain.Run                    `json:"runs"`
+	RunDelegations        []domain.RunDelegation          `json:"run_delegations"`
 	CollaborationSteps    []domain.CollaborationStep      `json:"collaboration_steps"`
 	RunEvents             []domain.RunEvent               `json:"run_events"`
 	StageCheckpoints      []domain.StageCheckpoint        `json:"stage_checkpoints"`
@@ -162,6 +163,7 @@ func emptyFileData() fileData {
 		Messages:            []domain.Message{},
 		Agents:              []domain.Agent{},
 		Runs:                []domain.Run{},
+		RunDelegations:      []domain.RunDelegation{},
 		CollaborationSteps:  []domain.CollaborationStep{},
 		RunEvents:           []domain.RunEvent{},
 		StageCheckpoints:    []domain.StageCheckpoint{},
@@ -251,6 +253,9 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 	}
 	if s.data.RunEvents == nil {
 		s.data.RunEvents = []domain.RunEvent{}
+	}
+	if s.data.RunDelegations == nil {
+		s.data.RunDelegations = []domain.RunDelegation{}
 	}
 	if s.data.StageCheckpoints == nil {
 		s.data.StageCheckpoints = []domain.StageCheckpoint{}

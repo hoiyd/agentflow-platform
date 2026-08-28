@@ -185,6 +185,10 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventCheckpointCaptured, domain.EventCheckpointRestored, domain.EventCheckpointStale}, DurableFact, stage, "event.TracePayload", transition("checkpoint"), "recovery", "replay")
 	add([]domain.RunEventType{domain.EventCompensationStarted}, DurableFact, stage, "event.TracePayload", start("compensation"), "recovery", "replay")
 	add([]domain.RunEventType{domain.EventCompensationCompleted, domain.EventCompensationFailed}, DurableFact, stage, "event.TracePayload", terminal("compensation", domain.EventCompensationStarted), "recovery", "replay")
+	add([]domain.RunEventType{domain.EventDelegationCreated}, DurableFact, stage, "event.TracePayload", start("delegation"), "delegation", "replay")
+	add([]domain.RunEventType{domain.EventDelegationStarted}, DurableFact, stage, "event.TracePayload", transition("delegation"), "delegation", "replay")
+	add([]domain.RunEventType{domain.EventDelegationBlocked}, DurableFact, stage, "event.TracePayload", transition("delegation"), "delegation", "recovery", "replay")
+	add([]domain.RunEventType{domain.EventDelegationCompleted, domain.EventDelegationFailed, domain.EventDelegationCanceled}, DurableFact, stage, "event.TracePayload", terminal("delegation", domain.EventDelegationCreated), "delegation", "replay")
 	return items
 }
 
@@ -219,6 +223,9 @@ func producerFor(eventType domain.RunEventType) string {
 	case domain.EventCheckpointCaptured, domain.EventCheckpointRestored, domain.EventCheckpointStale,
 		domain.EventCompensationStarted, domain.EventCompensationCompleted, domain.EventCompensationFailed:
 		return "checkpoint/recovery"
+	case domain.EventDelegationCreated, domain.EventDelegationStarted, domain.EventDelegationBlocked, domain.EventDelegationCompleted,
+		domain.EventDelegationFailed, domain.EventDelegationCanceled:
+		return "delegation"
 	default:
 		return "agent/httpapi"
 	}

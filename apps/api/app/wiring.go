@@ -51,6 +51,11 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	} else if recovered > 0 {
 		log.Printf("native recovery repaired %d stale running run(s) as failed_recoverable", recovered)
 	}
+	if reconciled, recoveryErr := recovery.ReconcileChildRunDelegations(appStore); recoveryErr != nil {
+		return applicationDependencies{}, fmt.Errorf("reconcile child run delegations: %w", recoveryErr)
+	} else if reconciled > 0 {
+		log.Printf("native recovery reconciled %d child run delegation(s)", reconciled)
+	}
 
 	modelClient := newModelClient(cfg)
 	modelClient.SetToolEffectJournal(appStore)
@@ -95,6 +100,16 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		},
 		KnowledgeRetriever: retrievalPipeline,
 		LiveEvents:         eventHub,
+		ChildRuns: agent.ChildRunLimits{
+			MaxConcurrent: cfg.MaxConcurrentChildRuns, MaxPerParent: cfg.MaxChildRunsPerParent,
+			Timeout: cfg.ChildRunTimeout, SummaryMaxChars: cfg.ChildRunSummaryMaxCharacters,
+			RunBudget: domain.RuntimeRunBudget{
+				MaxModelCalls: cfg.ChildRunMaxModelCalls, MaxTotalTokens: cfg.ChildRunMaxTotalTokens,
+				MaxToolCalls: cfg.ChildRunMaxToolCalls, MaxRuntimeMS: cfg.ChildRunTimeout.Milliseconds(),
+				InputCostPerMillionTokensMicros:  cfg.ModelInputCostPerMillionMicros,
+				OutputCostPerMillionTokensMicros: cfg.ModelOutputCostPerMillionMicros,
+			},
+		},
 	})
 	semanticMemory := memorypkg.NewSemanticMemory(appStore, modelClient)
 	memoryCurator := newMemoryCurator(cfg, appStore, modelClient)

@@ -37,14 +37,20 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 			err = runBudgetCause(ctx, err)
 		}
 	}()
-	m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerHard)
+	isolatedChild := snapshot.Delegation != nil && snapshot.Delegation.IsolatedContext
+	if !isolatedChild {
+		m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerHard)
+	}
 	var compaction *domain.ContextCompaction
-	if snapshot.ContextAssembly.CompactionMode != contextassembly.CompactionModeOff {
+	if !isolatedChild && snapshot.ContextAssembly.CompactionMode != contextassembly.CompactionModeOff {
 		if latest, ok, loadErr := m.runtime.store.GetLatestContextCompaction(request.ConversationID); loadErr == nil && ok {
 			compaction = &latest
 		}
 	}
-	historySearch := m.runtime.retrieveSessionHistory(ctx, request.RunID, request.ConversationID, request.Input)
+	var historySearch []domain.RetrievedSessionHistory
+	if !isolatedChild {
+		historySearch = m.runtime.retrieveSessionHistory(ctx, request.RunID, request.ConversationID, request.Input)
+	}
 	session := contextassembly.Session{
 		Config: snapshot.ContextAssembly, Sink: request.Sink,
 		History: request.History, CurrentInput: request.Input,
@@ -52,7 +58,7 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		HistorySearch: historySearch,
 		Compaction:    compaction,
 	}
-	if m.runtime.taskStates != nil && snapshot.SchemaVersion >= domain.TaskStateRuntimeSnapshotVersion {
+	if !isolatedChild && m.runtime.taskStates != nil && snapshot.SchemaVersion >= domain.TaskStateRuntimeSnapshotVersion {
 		session.LoadTaskState = func() (domain.TaskState, bool, error) {
 			return m.runtime.taskStates.Get(request.ConversationID)
 		}

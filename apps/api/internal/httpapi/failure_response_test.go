@@ -100,6 +100,22 @@ func TestFailureChatChunkUsesTheSameSafeContract(t *testing.T) {
 	}
 }
 
+func TestContinuationFailurePolicyPreservesRetryableRunState(t *testing.T) {
+	backpressure := failure.New(failure.Definition{
+		Message: "child capacity exhausted",
+		Info:    failure.Info{Code: "child_run_capacity_exhausted", Source: "delegation", Category: failure.CategoryCapacity, Retryable: true},
+	})
+	if status, failRun := continuationFailurePolicy(backpressure); status != http.StatusServiceUnavailable || failRun {
+		t.Fatalf("backpressure policy: status=%d fail_run=%t", status, failRun)
+	}
+	if status, failRun := continuationFailurePolicy(errors.New("run is not waiting for user input")); status != http.StatusInternalServerError || failRun {
+		t.Fatalf("state conflict policy: status=%d fail_run=%t", status, failRun)
+	}
+	if status, failRun := continuationFailurePolicy(errors.New("worker failed")); status != http.StatusInternalServerError || !failRun {
+		t.Fatalf("terminal failure policy: status=%d fail_run=%t", status, failRun)
+	}
+}
+
 func TestFormatHTTPFailureLogKeepsRawErrorAndCorrelationFields(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/api/rag/search?query=private", nil)
 	info := failure.Info{

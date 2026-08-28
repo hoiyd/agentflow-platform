@@ -147,6 +147,7 @@ func TestRuntimeSnapshotAcceptsAllVersionsAndKeepsPreBudgetRunsBudgetless(t *tes
 		domain.UnifiedExecutionSnapshotVersion,
 		domain.SessionHistorySnapshotVersion,
 		domain.RecoveryRuntimeSnapshotVersion,
+		domain.TaskStateRuntimeSnapshotVersion,
 		domain.CurrentRuntimeSnapshotVersion,
 	} {
 		snapshot := &domain.RuntimeSnapshot{
@@ -169,8 +170,8 @@ func TestTaskStateRuntimeProtocolStartsAtSnapshotV8(t *testing.T) {
 	if domain.RecoveryRuntimeSnapshotVersion >= domain.TaskStateRuntimeSnapshotVersion {
 		t.Fatal("task state protocol must not affect recovery-era snapshots")
 	}
-	if domain.CurrentRuntimeSnapshotVersion != domain.TaskStateRuntimeSnapshotVersion {
-		t.Fatal("new runs must capture the task state protocol")
+	if domain.CurrentRuntimeSnapshotVersion < domain.TaskStateRuntimeSnapshotVersion {
+		t.Fatal("new runs must retain the task state protocol")
 	}
 }
 
@@ -307,5 +308,84 @@ func TestClientFromSnapshotRejectsCurrentCredentialForAnotherProvider(t *testing
 
 	if _, err := runtime.clientFromSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "credential for frozen provider") {
 		t.Fatalf("expected provider credential mismatch, got %v", err)
+	}
+}
+
+func TestValidateRuntimeSnapshotRequiresFrozenChildRunPolicy(t *testing.T) {
+	base := testRuntimeSnapshot()
+	base.Mode = ChatModeMultiAgent
+	base.AutonomousLimits = nil
+	base.CandidateAgents = []domain.RuntimeAgentSnapshot{{ID: "agent_planner", Executor: domain.DefaultAgentExecutor}}
+	validPolicy := domain.RuntimeChildRunPolicy{
+		MaxDepth: 1, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+		AgentDefinitionSource: "runtime_snapshot.candidate_agents", RunBudget: domain.RuntimeRunBudget{},
+	}
+	tests := []struct {
+		name   string
+		mutate func(*domain.RuntimeSnapshot)
+	}{
+		{name: "missing policy", mutate: func(snapshot *domain.RuntimeSnapshot) { snapshot.ChildRunPolicy = nil }},
+		{name: "invalid depth", mutate: func(snapshot *domain.RuntimeSnapshot) { snapshot.ChildRunPolicy.MaxDepth = 2 }},
+		{name: "missing timeout", mutate: func(snapshot *domain.RuntimeSnapshot) { snapshot.ChildRunPolicy.TimeoutMS = 0 }},
+		{name: "missing summary bound", mutate: func(snapshot *domain.RuntimeSnapshot) { snapshot.ChildRunPolicy.SummaryMaxChars = 0 }},
+		{name: "missing source", mutate: func(snapshot *domain.RuntimeSnapshot) { snapshot.ChildRunPolicy.AgentDefinitionSource = " " }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			snapshot := base
+			policy := validPolicy
+			snapshot.ChildRunPolicy = &policy
+			test.mutate(&snapshot)
+			if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "child run policy") {
+				t.Fatalf("expected child policy error, got %v", err)
+			}
+		})
+	}
+	base.ChildRunPolicy = &validPolicy
+	if err := validateRuntimeSnapshot(&base); err != nil {
+		t.Fatalf("valid multi-agent snapshot: %v", err)
+	}
+}
+
+func TestValidateRuntimeSnapshotEnforcesDelegationIsolationBoundary(t *testing.T) {
+	base := testRuntimeSnapshot()
+	base.Mode = ChatModeSingle
+	base.AutonomousLimits = nil
+	base.Delegation = &domain.RuntimeDelegation{
+		DelegationID: "delegation-1", ParentRunID: "parent", ParentTurnID: "turn-1",
+		Depth: 1, IsolatedContext: true, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+	}
+	if err := validateRuntimeSnapshot(&base); err != nil {
+		t.Fatalf("valid delegated snapshot: %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*domain.RuntimeSnapshot)
+		want   string
+	}{
+		{name: "legacy schema", mutate: func(snapshot *domain.RuntimeSnapshot) { snapshot.SchemaVersion = domain.RecoveryRuntimeSnapshotVersion }, want: "invalid schema or mode"},
+		{name: "multi-agent mode", mutate: func(snapshot *domain.RuntimeSnapshot) {
+			snapshot.Mode = ChatModeMultiAgent
+			snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{snapshot.Agent}
+			snapshot.ChildRunPolicy = &domain.RuntimeChildRunPolicy{
+				MaxDepth: 1, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+				AgentDefinitionSource: "runtime_snapshot.candidate_agents",
+			}
+		}, want: "invalid schema or mode"},
+		{name: "missing identity", mutate: func(snapshot *domain.RuntimeSnapshot) { snapshot.Delegation.DelegationID = "" }, want: "invalid isolation boundary"},
+		{name: "invalid depth", mutate: func(snapshot *domain.RuntimeSnapshot) { snapshot.Delegation.Depth = 2 }, want: "invalid isolation boundary"},
+		{name: "shared context", mutate: func(snapshot *domain.RuntimeSnapshot) { snapshot.Delegation.IsolatedContext = false }, want: "invalid isolation boundary"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			snapshot := base
+			delegation := *base.Delegation
+			snapshot.Delegation = &delegation
+			test.mutate(&snapshot)
+			if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("expected %q error, got %v", test.want, err)
+			}
+		})
 	}
 }

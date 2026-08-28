@@ -50,6 +50,154 @@ func TestPostgresMigrationsAddDurableRecoveryState(t *testing.T) {
 	}
 }
 
+func TestPostgresMigrationsAddRunDelegations(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"CREATE TABLE IF NOT EXISTS run_delegations",
+		"parent_run_id text NOT NULL REFERENCES runs(id)",
+		"child_run_id text NOT NULL UNIQUE REFERENCES runs(id)",
+		"block_reason text NOT NULL DEFAULT ''",
+		"idx_run_delegations_parent_created",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing run delegation migration step %q", expected)
+		}
+	}
+}
+
+func TestPostgresRunDelegationRoundTrip(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	postgresStore, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer postgresStore.Close()
+	conversation, err := postgresStore.CreateConversationInWorkspace("workspace-delegation", "Postgres delegation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := testRuntimeSnapshot()
+	base.Mode = "single"
+	base.AutonomousLimits = nil
+	parent, err := postgresStore.CreateRun("agent_planner", conversation.ID, base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	childSnapshot := base
+	childSnapshot.Delegation = &domain.RuntimeDelegation{
+		DelegationID: "delegation-postgres-" + parent.ID, ParentRunID: parent.ID,
+		ParentTurnID: "turn-postgres", Depth: 1, IsolatedContext: true,
+		TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+	}
+	request := domain.ChildRunRequest{
+		Delegation: domain.RunDelegation{
+			ID: childSnapshot.Delegation.DelegationID, ParentRunID: parent.ID,
+			ParentTurnID: "turn-postgres", AgentID: "agent_planner", Depth: 1, Task: "work", TimeoutMS: time.Minute.Milliseconds(),
+		},
+		RuntimeSnapshot: childSnapshot,
+	}
+	child, relation, err := postgresStore.CreateChildRun(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked, err := postgresStore.UpdateRunDelegation(relation.ID, domain.DelegationResult{
+		Status: domain.DelegationBlocked, BlockReason: domain.DelegationBlockReasonChildRecoveryRequired,
+	})
+	if err != nil || blocked.BlockReason != domain.DelegationBlockReasonChildRecoveryRequired {
+		t.Fatalf("blocked postgres delegation=%#v err=%v", blocked, err)
+	}
+	updated, err := postgresStore.UpdateRunDelegation(relation.ID, domain.DelegationResult{
+		Status: domain.DelegationCompleted, Summary: "done", OutputRef: "run://" + child.ID + "/stages/worker",
+		OutputHash: "hash", OutputBytes: 4,
+	})
+	if err != nil || updated.ChildRunID != child.ID {
+		t.Fatalf("updated=%#v err=%v", updated, err)
+	}
+	parentReplay, ok, err := postgresStore.GetRunReplay(parent.ID)
+	if err != nil || !ok || len(parentReplay.ChildDelegations) != 1 {
+		t.Fatalf("parent replay=%#v ok=%v err=%v", parentReplay.ChildDelegations, ok, err)
+	}
+	childReplay, ok, err := postgresStore.GetRunReplay(child.ID)
+	if err != nil || !ok || childReplay.ParentDelegation == nil || childReplay.ParentDelegation.ID != relation.ID {
+		t.Fatalf("child replay parent=%#v ok=%v err=%v", childReplay.ParentDelegation, ok, err)
+	}
+	if item, ok, err := postgresStore.GetRunDelegation(relation.ID); err != nil || !ok || item.ChildRunID != child.ID {
+		t.Fatalf("get delegation=%#v ok=%v err=%v", item, ok, err)
+	}
+	if item, ok, err := postgresStore.GetParentDelegation(child.ID); err != nil || !ok || item.ID != relation.ID {
+		t.Fatalf("get parent delegation=%#v ok=%v err=%v", item, ok, err)
+	}
+	if _, ok, err := postgresStore.GetRunDelegation("missing"); err != nil || ok {
+		t.Fatalf("missing delegation: ok=%v err=%v", ok, err)
+	}
+	if _, ok, err := postgresStore.GetParentDelegation("missing"); err != nil || ok {
+		t.Fatalf("missing parent delegation: ok=%v err=%v", ok, err)
+	}
+	items, err := postgresStore.ListRunDelegations(parent.ID)
+	if err != nil || len(items) != 1 || items[0].ID != relation.ID {
+		t.Fatalf("list delegations=%#v err=%v", items, err)
+	}
+	active, err := postgresStore.ListActiveRunDelegations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range active {
+		if item.ID == relation.ID {
+			t.Fatal("completed delegation remained active")
+		}
+	}
+
+	second := validChildRunRequest(parent, "delegation-postgres-active-"+parent.ID)
+	secondChild, secondRelation, err := postgresStore.CreateChildRun(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err = postgresStore.ListActiveRunDelegations()
+	if err != nil || !containsDelegation(active, secondRelation.ID) {
+		t.Fatalf("active delegations=%#v err=%v", active, err)
+	}
+	if _, err := postgresStore.UpdateRunDelegation(secondRelation.ID, domain.DelegationResult{Status: domain.DelegationRunning}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := postgresStore.CreateChildRun(second); err == nil {
+		t.Fatal("expected duplicate delegation transaction to roll back")
+	}
+	if _, ok, err := postgresStore.GetRun(secondChild.ID); err != nil || !ok {
+		t.Fatalf("duplicate rollback damaged existing child: ok=%v err=%v", ok, err)
+	}
+	if _, err := postgresStore.UpdateRunDelegation("missing", domain.DelegationResult{Status: domain.DelegationRunning}); err == nil {
+		t.Fatal("expected missing delegation update to fail")
+	}
+	if _, err := postgresStore.UpdateRunDelegation(secondRelation.ID, domain.DelegationResult{}); err == nil {
+		t.Fatal("expected invalid delegation result to fail")
+	}
+	if _, _, err := postgresStore.CreateChildRun(domain.ChildRunRequest{}); err == nil {
+		t.Fatal("expected invalid child request to fail")
+	}
+	missingParent := validChildRunRequest(domain.Run{ID: "missing-parent"}, "delegation-postgres-missing-parent-"+parent.ID)
+	if _, _, err := postgresStore.CreateChildRun(missingParent); err == nil {
+		t.Fatal("expected missing parent to fail")
+	}
+	missingAgent := validChildRunRequest(parent, "delegation-postgres-missing-agent-"+parent.ID)
+	missingAgent.Delegation.AgentID = "missing-agent"
+	missingAgent.RuntimeSnapshot.Agent.ID = "missing-agent"
+	if _, _, err := postgresStore.CreateChildRun(missingAgent); err == nil {
+		t.Fatal("expected missing agent to fail")
+	}
+}
+
+func containsDelegation(items []domain.RunDelegation, id string) bool {
+	for _, item := range items {
+		if item.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func TestPostgresMigrationsAddStructuredTaskState(t *testing.T) {
 	joined := strings.Join(postgresMigrations, "\n")
 	for _, expected := range []string{

@@ -118,6 +118,125 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	}
 }
 
+func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := fileStore.CreateConversation("Recoverable collaboration API resume")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := newLocalFallbackOpenAIClientForTest()
+	runtime := agent.NewRuntime(agent.RuntimeOptions{
+		Store: fileStore, ModelClient: client, RouterMode: agent.RouterModeQuery,
+		ChildRuns: agent.ChildRunLimits{
+			MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute, SummaryMaxChars: 100,
+			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000},
+		},
+	})
+	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planner, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+		RunID: prepared.Run.ID, ConversationID: conversation.ID, Role: "planner",
+		AgentID: "agent_planner", Status: domain.CollaborationStepCompleted,
+		Input: "Implement the API change", Output: "Inspect, implement, and test.",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+		RunID: prepared.Run.ID, ConversationID: conversation.ID, Role: "router",
+		AgentID: "agent_planner", Status: domain.CollaborationStepCompleted,
+		Input: "route", Output: "agent_planner",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	worker, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+		RunID: prepared.Run.ID, ConversationID: conversation.ID, Role: "worker",
+		AgentID: "agent_planner", Status: domain.CollaborationStepFailed,
+		Input: "delegated work", Error: "worker interrupted",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected := prepared.Run.RuntimeSnapshot.Agent
+	for _, candidate := range prepared.Run.RuntimeSnapshot.CandidateAgents {
+		if candidate.ID == "agent_planner" {
+			selected = candidate
+			break
+		}
+	}
+	delegationID := "delegation-api-resume"
+	childSnapshot := domain.RuntimeSnapshot{
+		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: agent.ChatModeSingle,
+		Agent: selected, Model: prepared.Run.RuntimeSnapshot.Model,
+		ContextAssembly: prepared.Run.RuntimeSnapshot.ContextAssembly,
+		RunBudget:       &domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000},
+		Delegation: &domain.RuntimeDelegation{
+			DelegationID: delegationID, ParentRunID: prepared.Run.ID, ParentTurnID: "turn-api-resume",
+			ParentStageID: worker.ID, Depth: 1, IsolatedContext: true,
+			TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+		},
+		CreatedAt: time.Now().UTC(),
+	}
+	child, relation, err := fileStore.CreateChildRun(domain.ChildRunRequest{
+		Delegation: domain.RunDelegation{
+			ID: delegationID, ParentRunID: prepared.Run.ID, ParentTurnID: "turn-api-resume",
+			ParentStageID: worker.ID, AgentID: selected.ID, Depth: 1,
+			Task: worker.Input, TimeoutMS: time.Minute.Milliseconds(),
+		},
+		RuntimeSnapshot: childSnapshot,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.UpdateRunDelegation(relation.ID, domain.DelegationResult{
+		Status: domain.DelegationCompleted, Summary: "durable worker result",
+		OutputRef: "run://" + child.ID + "/stages/worker", OutputHash: "hash", OutputBytes: 21,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.UpdateRunStatus(prepared.Run.ID, domain.RunFailedRecoverable, "worker interrupted"); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := &Handler{
+		store: fileStore, modelClient: client, agentRuntime: runtime,
+		runController: concurrency.NewRunController(concurrency.RunOptions{
+			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
+		}),
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/runs/"+prepared.Run.ID+"/resume", bytes.NewReader([]byte(`{}`)))
+	recorder := httptest.NewRecorder()
+	handler.resumeRun(recorder, req)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "event: done") {
+		t.Fatalf("resume response: status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	updated, ok, err := fileStore.GetRun(prepared.Run.ID)
+	if err != nil || !ok || updated.Status != domain.RunCompleted {
+		t.Fatalf("resumed parent=%#v ok=%v err=%v", updated, ok, err)
+	}
+	steps, err := fileStore.ListCollaborationSteps(prepared.Run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasStepRole(steps, "reviewer") || !hasStepRole(steps, "finalizer") || planner.ID == "" {
+		t.Fatalf("resumed collaboration steps=%#v", steps)
+	}
+}
+
+func hasStepRole(steps []domain.CollaborationStep, role string) bool {
+	for _, step := range steps {
+		if step.Role == role {
+			return true
+		}
+	}
+	return false
+}
+
 func TestDetachedRequestContextIgnoresCancellationAndKeepsValues(t *testing.T) {
 	type contextKey string
 	ctx := context.WithValue(context.Background(), contextKey("request-id"), "req_test")
