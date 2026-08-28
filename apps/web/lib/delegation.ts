@@ -7,16 +7,17 @@ const delegationStatusLabels: Record<string, string> = {
   canceled: "Canceled"
 };
 
-const delegationBlockReasonLabels: Record<string, string> = {
-  child_recovery_required: "Child recovery required"
-};
-
 export function delegationStatusLabel(status: string): string {
   return delegationStatusLabels[status] ?? humanize(status);
 }
 
-export function delegationBlockReasonLabel(reason: string): string {
-  return delegationBlockReasonLabels[reason] ?? humanize(reason);
+export function delegationBlockReasonLabel(reason: string, perspective: "parent" | "child"): string {
+  if (reason === "child_recovery_required") {
+    return perspective === "child"
+      ? "This run requires recovery before its parent can continue"
+      : "Child run requires recovery";
+  }
+  return humanize(reason);
 }
 
 function humanize(value: string): string {

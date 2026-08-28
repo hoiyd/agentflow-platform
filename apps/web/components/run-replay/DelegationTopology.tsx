@@ -15,16 +15,26 @@ export function DelegationTopology({ parent, childRuns }: Props) {
     <section className="delegation-topology" aria-labelledby="delegation-topology-title">
       <div className="panel-title" id="delegation-topology-title">Child run delegation</div>
       {parent ? (
-        <DelegationRow item={parent} label="Parent run" runId={parent.parent_run_id} />
+        <DelegationRow item={parent} label="Parent run" perspective="child" runId={parent.parent_run_id} />
       ) : null}
       {childRuns.map((item) => (
-        <DelegationRow item={item} key={item.id} label="Child run" runId={item.child_run_id} />
+        <DelegationRow item={item} key={item.id} label="Child run" perspective="parent" runId={item.child_run_id} />
       ))}
     </section>
   );
 }
 
-function DelegationRow({ item, label, runId }: { item: RunDelegation; label: string; runId: string }) {
+function DelegationRow({
+  item,
+  label,
+  perspective,
+  runId
+}: {
+  item: RunDelegation;
+  label: string;
+  perspective: "parent" | "child";
+  runId: string;
+}) {
   return (
     <div className="delegation-row">
       <div className="delegation-identity">
@@ -40,7 +50,7 @@ function DelegationRow({ item, label, runId }: { item: RunDelegation; label: str
       <div className="delegation-meta">
         <span>Depth {item.depth}</span>
         <span>{item.timeout_ms > 0 ? `${Math.round(item.timeout_ms / 1000)}s timeout` : "No timeout recorded"}</span>
-        {item.block_reason ? <span>Recovery reason: {delegationBlockReasonLabel(item.block_reason)}</span> : null}
+        {item.block_reason ? <span>Blocked reason: {delegationBlockReasonLabel(item.block_reason, perspective)}</span> : null}
         {item.summary_truncated ? <span>Summary bounded; full output in child trace</span> : null}
       </div>
     </div>
