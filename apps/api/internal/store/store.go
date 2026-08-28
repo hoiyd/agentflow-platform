@@ -122,6 +122,7 @@ type RunUsageStore interface {
 
 type ContextCompactionStore interface {
 	CreateContextCompaction(domain.ContextCompaction) (domain.ContextCompaction, error)
+	CommitContextCompaction(domain.ContextCompaction, domain.RunEvent) (domain.ContextCompaction, domain.RunEvent, error)
 	GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error)
 }
 

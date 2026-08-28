@@ -145,8 +145,10 @@ func TestFileStoreContextCompactionRoundTrip(t *testing.T) {
 	run, _ := first.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
 	created, err := first.CreateContextCompaction(domain.ContextCompaction{
 		ConversationID: conversation.ID, RunID: run.ID, Trigger: "soft", Summary: "structured summary",
-		SourceMessageIDs: []string{"msg-1", "msg-2"}, SourceHash: "hash-1", BeforeTokens: 100,
-		AfterTokens: 25, SummaryModel: "test", AlgorithmVersion: "context-compaction-v1",
+		SourceMessageIDs: []string{"msg-1", "msg-2"}, SourceEventIDs: []string{"event-1"},
+		ShadowedMessageRange: domain.ContextShadowedRange{FirstMessageID: "msg-1", LastMessageID: "msg-2", MessageCount: 2},
+		SourceHash:           "hash-1", BeforeTokens: 100, AfterTokens: 25, TargetSummaryTokens: 20,
+		ReductionRatio: 0.75, SummaryModel: "test", AlgorithmVersion: "context-compaction-v2",
 	})
 	if err != nil {
 		t.Fatalf("create compaction: %v", err)
@@ -156,8 +158,84 @@ func TestFileStoreContextCompactionRoundTrip(t *testing.T) {
 		t.Fatalf("reopen store: %v", err)
 	}
 	latest, ok, err := second.GetLatestContextCompaction(conversation.ID)
-	if err != nil || !ok || latest.ID != created.ID || len(latest.SourceMessageIDs) != 2 {
+	if err != nil || !ok || latest.ID != created.ID || latest.Status != domain.ContextCompactionCompleted ||
+		latest.Generation != 1 || latest.ReplacementSummaryID != "summary:"+created.ID ||
+		len(latest.SourceMessageIDs) != 2 || len(latest.SourceEventIDs) != 1 || latest.SurfaceReplacedAt == nil {
 		t.Fatalf("compaction did not round trip: ok=%v err=%v item=%#v", ok, err, latest)
+	}
+}
+
+func TestFileStoreCommitsCompactionAndTerminalEventAtomically(t *testing.T) {
+	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, _ := fileStore.CreateConversation("atomic compaction")
+	run, _ := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	started, err := fileStore.CreateRunEvent(domain.RunEvent{
+		Type: domain.EventCompactionStarted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": "cmp_atomic", "trigger": "hard", "status": "running", "algorithm_version": "v2"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	compaction := domain.ContextCompaction{
+		ID: "cmp_atomic", ConversationID: conversation.ID, RunID: run.ID, Trigger: "hard",
+		Summary: "summary", SourceMessageIDs: []string{"msg-1"}, SourceHash: "atomic-hash",
+		BeforeTokens: 100, AfterTokens: 25, AlgorithmVersion: "v2",
+	}
+	terminal := domain.RunEvent{
+		Type: domain.EventCompactionCompleted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": "cmp_atomic", "trigger": "hard", "status": "completed", "algorithm_version": "v2"},
+	}
+	if _, _, err := fileStore.CommitContextCompaction(compaction, domain.RunEvent{Type: domain.EventCompactionFailed, RunID: run.ID, ConversationID: conversation.ID}); err == nil {
+		t.Fatal("mismatched terminal event should be rejected")
+	}
+	created, completed, err := fileStore.CommitContextCompaction(compaction, terminal)
+	if err != nil || completed.Sequence != started.Sequence+1 || created.Status != domain.ContextCompactionCompleted {
+		t.Fatalf("atomic commit failed: compaction=%#v event=%#v err=%v", created, completed, err)
+	}
+	duplicate, duplicateEvent, err := fileStore.CommitContextCompaction(compaction, terminal)
+	if err != nil || duplicate.ID != created.ID || duplicateEvent.ID != "" {
+		t.Fatalf("duplicate commit was not idempotent: compaction=%#v event=%#v err=%v", duplicate, duplicateEvent, err)
+	}
+}
+
+func TestFileStoreContextCompactionFailureAndLegacyPaths(t *testing.T) {
+	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, _ := fileStore.CreateConversation("compaction failures")
+	run, _ := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	compaction := domain.ContextCompaction{
+		ID: "cmp-failure", ConversationID: conversation.ID, RunID: run.ID, Trigger: "hard",
+		Summary: "summary", SourceMessageIDs: []string{"m1", "m2"}, SourceHash: "failure-hash",
+		BeforeTokens: 10, AfterTokens: 2, AlgorithmVersion: "v2",
+	}
+	terminal := domain.RunEvent{
+		Type: domain.EventCompactionCompleted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": compaction.ID, "trigger": "hard", "status": "completed", "algorithm_version": "v2"},
+	}
+	missingConversation := compaction
+	missingConversation.ConversationID = "missing"
+	if _, _, err := fileStore.CommitContextCompaction(missingConversation, terminal); err == nil {
+		t.Fatal("missing conversation should fail")
+	}
+	missingRun := terminal
+	missingRun.RunID = "missing"
+	if _, _, err := fileStore.CommitContextCompaction(compaction, missingRun); err == nil {
+		t.Fatal("missing run should fail")
+	}
+	if _, err := fileStore.CreateContextCompaction(domain.ContextCompaction{ConversationID: "missing"}); err == nil {
+		t.Fatal("direct create with missing conversation should fail")
+	}
+	if _, ok, err := fileStore.GetLatestContextCompaction("missing"); err != nil || ok {
+		t.Fatalf("missing latest compaction: ok=%v err=%v", ok, err)
+	}
+	legacy := cloneContextCompaction(domain.ContextCompaction{ID: "cmp-legacy", SourceMessageIDs: []string{"m1", "m2"}})
+	if legacy.Status != domain.ContextCompactionCompleted || legacy.Generation != 1 || legacy.ReplacementSummaryID != "summary:cmp-legacy" || legacy.ShadowedMessageRange.MessageCount != 2 {
+		t.Fatalf("legacy compaction was not normalized: %#v", legacy)
 	}
 }
 

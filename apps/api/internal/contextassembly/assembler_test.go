@@ -162,7 +162,7 @@ func TestAssembleAddsSessionHistoryWithoutRepeatingCurrentInput(t *testing.T) {
 
 func TestAssembleUsesPersistedCompactionAndExcludesCoveredHistory(t *testing.T) {
 	compaction := domain.ContextCompaction{
-		ID: "cmp-1", Summary: "## Goal\nShip the release safely.",
+		ID: "cmp-1", Generation: 3, Summary: "## Goal\nShip the release safely.",
 		SourceMessageIDs: []string{"old-user", "old-assistant"},
 	}
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "run", TurnID: "turn"})
@@ -186,10 +186,10 @@ func TestAssembleUsesPersistedCompactionAndExcludesCoveredHistory(t *testing.T) 
 		t.Fatalf("covered history remained active: %#v", pack.Messages)
 	}
 	current := messageContent(pack.Messages, "current-input")
-	if !strings.Contains(current, "<conversation_summary") || !strings.Contains(current, "Ship the release safely") {
+	if !strings.Contains(current, `<conversation_summary id="cmp-1" generation="3"`) || !strings.Contains(current, "current user request") || !strings.Contains(current, "Ship the release safely") {
 		t.Fatalf("compaction summary was not injected: %q", current)
 	}
-	if pack.Manifest.CompactionID != "cmp-1" || !selectedEntry(pack.Manifest, "cmp-1") {
+	if pack.Manifest.CompactionID != "cmp-1" || pack.Manifest.CompactionGeneration != 3 || !selectedEntry(pack.Manifest, "cmp-1") {
 		t.Fatalf("manifest did not reference compaction: %#v", pack.Manifest)
 	}
 }

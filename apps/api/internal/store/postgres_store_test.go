@@ -753,6 +753,44 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if err != nil || !ok || latest.ID != compaction.ID {
 		t.Fatalf("postgres compaction round trip: ok=%v err=%v item=%#v", ok, err, latest)
 	}
+	atomicCompactionID := "cmp-postgres-atomic-" + run.ID
+	started, err := store.CreateRunEvent(domain.RunEvent{
+		Type: domain.EventCompactionStarted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": atomicCompactionID, "trigger": "hard", "status": "running", "algorithm_version": "v2"},
+	})
+	if err != nil {
+		t.Fatalf("create postgres compaction start: %v", err)
+	}
+	committed, terminal, err := store.CommitContextCompaction(domain.ContextCompaction{
+		ID: atomicCompactionID, ConversationID: conversation.ID, RunID: run.ID, Trigger: "hard",
+		Generation: 2, Summary: "atomic summary", SourceMessageIDs: []string{"message-1"},
+		SourceEventIDs: []string{started.ID}, ShadowedMessageRange: domain.ContextShadowedRange{FirstMessageID: "message-1", LastMessageID: "message-1", MessageCount: 1},
+		SourceHash: "source-hash-atomic-" + run.ID, BeforeTokens: 120, AfterTokens: 30,
+		TargetSummaryTokens: 24, ReductionRatio: 0.75, SummaryModel: "test", AlgorithmVersion: "v2",
+	}, domain.RunEvent{
+		Type: domain.EventCompactionCompleted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": atomicCompactionID, "trigger": "hard", "status": "completed", "algorithm_version": "v2"},
+	})
+	if err != nil || terminal.Sequence != started.Sequence+1 || committed.Generation != 2 || len(committed.SourceEventIDs) != 1 {
+		t.Fatalf("postgres atomic compaction commit: compaction=%#v terminal=%#v err=%v", committed, terminal, err)
+	}
+	duplicate, duplicateTerminal, err := store.CommitContextCompaction(committed, domain.RunEvent{
+		Type: domain.EventCompactionCompleted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": atomicCompactionID, "trigger": "hard", "status": "completed", "algorithm_version": "v2"},
+	})
+	if err != nil || duplicate.ID != committed.ID || duplicateTerminal.ID != "" {
+		t.Fatalf("postgres duplicate compaction was not idempotent: compaction=%#v terminal=%#v err=%v", duplicate, duplicateTerminal, err)
+	}
+	generationConflict := committed
+	generationConflict.ID += "-conflict"
+	generationConflict.SourceHash += "-conflict"
+	generationConflict.ReplacementSummaryID = ""
+	if _, _, err := store.CommitContextCompaction(generationConflict, domain.RunEvent{
+		Type: domain.EventCompactionCompleted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": generationConflict.ID, "trigger": "hard", "status": "completed", "algorithm_version": "v2"},
+	}); err == nil {
+		t.Fatal("duplicate compaction generation should fail")
+	}
 	step, err := store.CreateCollaborationStep(domain.CollaborationStep{
 		RunID:          run.ID,
 		ConversationID: conversation.ID,
@@ -855,7 +893,7 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if replay.RuntimeSnapshot.ContextAssembly.AssemblerVersion != "context-assembler-v1" {
 		t.Fatalf("expected context assembly config round trip, got %#v", replay.RuntimeSnapshot.ContextAssembly)
 	}
-	if len(replay.Messages) != 2 || len(replay.Messages[1].Citations) != 1 || replay.Messages[1].Citations[0].SourceID != "S1" || len(replay.Steps) != 1 || len(replay.RunEvents) != 2 {
+	if len(replay.Messages) != 2 || len(replay.Messages[1].Citations) != 1 || replay.Messages[1].Citations[0].SourceID != "S1" || len(replay.Steps) != 1 || len(replay.RunEvents) != 4 {
 		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.RunEvents))
 	}
 	conversationEvents, err := store.ListConversationRunEvents(conversation.ID)
@@ -872,6 +910,79 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	}
 	if !foundModelEvent {
 		t.Fatalf("conversation history did not include run-owned event: %#v", conversationEvents)
+	}
+}
+
+func TestPostgresContextCompactionFailurePaths(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	postgresStore, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, _ := postgresStore.CreateConversation("compaction failures")
+	run, _ := postgresStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	compaction := domain.ContextCompaction{
+		ID: "cmp-failure-" + run.ID, ConversationID: conversation.ID, RunID: run.ID,
+		Trigger: "hard", Generation: 1, Summary: "summary", SourceMessageIDs: []string{"m1"},
+		SourceHash: "failure-hash-" + run.ID, BeforeTokens: 10, AfterTokens: 2,
+		SummaryModel: "test", AlgorithmVersion: "v2",
+	}
+	validTerminal := domain.RunEvent{
+		Type: domain.EventCompactionCompleted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": compaction.ID, "trigger": "hard", "status": "completed", "algorithm_version": "v2"},
+	}
+	if _, _, err := postgresStore.CommitContextCompaction(compaction, domain.RunEvent{
+		Type: domain.EventCompactionFailed, RunID: run.ID, ConversationID: conversation.ID,
+	}); err == nil {
+		t.Fatal("mismatched terminal event should fail")
+	}
+	invalidPayload := validTerminal
+	invalidPayload.Payload = map[string]any{"unsupported": make(chan int)}
+	if _, _, err := postgresStore.CommitContextCompaction(compaction, invalidPayload); err == nil {
+		t.Fatal("unencodable terminal payload should fail")
+	}
+	if _, ok, err := postgresStore.GetLatestContextCompaction("missing-conversation"); err != nil || ok {
+		t.Fatalf("missing compaction lookup: ok=%v err=%v", ok, err)
+	}
+	created, _, err := postgresStore.CommitContextCompaction(compaction, validTerminal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := postgresStore.db.Exec(`UPDATE context_compactions SET source_event_ids = '{}'::jsonb WHERE id = $1`, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := postgresStore.GetLatestContextCompaction(conversation.ID); err == nil {
+		t.Fatal("invalid source event ids should fail scanning")
+	}
+	if _, err := postgresStore.db.Exec(`UPDATE context_compactions SET source_event_ids = '[]'::jsonb, source_message_ids = '{}'::jsonb WHERE id = $1`, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := postgresStore.GetLatestContextCompaction(conversation.ID); err == nil {
+		t.Fatal("invalid source message ids should fail scanning")
+	}
+	if _, err := postgresStore.db.Exec(`UPDATE context_compactions SET source_message_ids = '["m1"]'::jsonb WHERE id = $1`, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := postgresStore.Close(); err != nil {
+		t.Fatal(err)
+	}
+	closedCompaction := compaction
+	closedCompaction.Generation = 0
+	if _, err := postgresStore.CreateContextCompaction(closedCompaction); err == nil {
+		t.Fatal("generation query on closed database should fail")
+	}
+	closedCompaction.Generation = 1
+	if _, err := postgresStore.CreateContextCompaction(closedCompaction); err == nil {
+		t.Fatal("insert on closed database should fail")
+	}
+	if _, _, err := postgresStore.CommitContextCompaction(closedCompaction, validTerminal); err == nil {
+		t.Fatal("transaction begin on closed database should fail")
+	}
+	if _, _, err := postgresStore.GetLatestContextCompaction(conversation.ID); err == nil {
+		t.Fatal("lookup on closed database should fail")
 	}
 }
 

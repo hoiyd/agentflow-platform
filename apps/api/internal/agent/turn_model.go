@@ -8,6 +8,7 @@ import (
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/turn"
 )
 
@@ -39,8 +40,30 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	}()
 	isolatedChild := snapshot.Delegation != nil && snapshot.Delegation.IsolatedContext
 	if !isolatedChild {
-		m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerHard)
+		m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerHard, request.TurnID)
 	}
+	modelCtx := ctx
+	ctx, compaction := m.withContextSession(modelCtx, request, snapshot, isolatedChild)
+	if request.ModelMode == turn.ModelModeText {
+		result, executeErr := m.executeText(ctx, request)
+		if executeErr == nil || isolatedChild || failure.Describe(executeErr).Code != "context_length_exceeded" {
+			return result, executeErr
+		}
+		beforeGeneration := int64(0)
+		if compaction != nil {
+			beforeGeneration = compaction.Generation
+		}
+		advanced, compactErr := m.runtime.compactContext(modelCtx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerOverflow, request.TurnID)
+		if compactErr != nil || advanced == nil || advanced.Generation <= beforeGeneration {
+			return result, executeErr
+		}
+		retryCtx, _ := m.withContextSession(modelCtx, request, snapshot, isolatedChild)
+		return m.executeText(retryCtx, request)
+	}
+	return m.executeStream(ctx, request, emit)
+}
+
+func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.Request, snapshot *domain.RuntimeSnapshot, isolatedChild bool) (context.Context, *domain.ContextCompaction) {
 	var compaction *domain.ContextCompaction
 	if !isolatedChild && snapshot.ContextAssembly.CompactionMode != contextassembly.CompactionModeOff {
 		if latest, ok, loadErr := m.runtime.store.GetLatestContextCompaction(request.ConversationID); loadErr == nil && ok {
@@ -63,10 +86,10 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 			return m.runtime.taskStates.Get(request.ConversationID)
 		}
 	}
-	ctx = contextassembly.WithSession(ctx, session)
-	if request.ModelMode == turn.ModelModeText {
-		return m.executeText(ctx, request)
-	}
+	return contextassembly.WithSession(ctx, session), compaction
+}
+
+func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, emit func(turn.ModelEvent)) (turn.Result, error) {
 	client, err := m.runtime.clientForRun(request.RunID)
 	if err != nil {
 		return turn.Result{}, err

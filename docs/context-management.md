@@ -89,19 +89,22 @@ older snapshots keep this behavior disabled when resumed.
 
 - **Soft compaction** runs asynchronously after a completed Run when context usage reaches 70% of the available model input budget. It prefers the highest real `prompt_tokens` value observed in the Run and falls back to local token estimation.
 - **Hard compaction** runs as a best-effort preflight before each model call when estimated conversation context reaches 85% of the available input budget.
+- **Provider-overflow compaction** is forced after a text-only Model Call returns `context_length_exceeded`. AgentFlow retries that logical input once, and only when the persisted compaction generation advanced. Agent streams that may have executed Tools are not replayed automatically.
 - Compaction is skipped when fewer than two new source messages can be summarized, when `CONTEXT_COMPACTION_MODE=off`, or for legacy v1/v2 Runtime Snapshots.
 - A failed or timed-out compaction does not block the main model call. AgentFlow records `context.compaction_failed` and falls back to normal recent-history selection.
+- Temporary summarizer failures use a one-minute cooldown; authentication, quota, validation, and missing-model configuration failures use a 15-minute cooldown. Two consecutive compactions below 10% reduction suspend automatic compaction for 30 minutes.
 
 ## Compaction Algorithm
 
 1. Load the original conversation messages and the latest persisted compaction, if one exists.
 2. Exclude message IDs already covered by the previous compaction and carry its summary forward as the starting state.
-3. Protect the recent raw tail up to `CONTEXT_COMPACTION_RECENT_TOKENS`. At least four messages are retained, and a `user -> assistant` pair is not split at the compaction boundary.
-4. Send only the previous summary and newly eligible older messages to the frozen Run model. The model returns a structured summary covering goals, constraints, decisions, facts, completed and pending work, important tool results, errors, and source references.
-5. Limit the persisted summary to `CONTEXT_COMPACTION_SUMMARY_MAX_TOKENS` and calculate a source hash for idempotency.
-6. Persist the new compaction in File Store or Postgres and emit `context.compaction_started` followed by `context.compaction_completed` or `context.compaction_failed`.
+3. Protect the recent raw tail up to `CONTEXT_COMPACTION_RECENT_TOKENS`. At least four messages are retained. A user exchange, including assistant Tool Calls and their Tool Results, is an indivisible protocol group and is never split at the compaction boundary.
+4. Send only the previous summary and newly eligible older messages to the frozen Run model. The schema explicitly records superseded instructions, uncertainties, conflicts, exact references, and missing evidence. Newer corrections override older summary statements, while the current user request remains outside the historical summary and always has priority when assembled.
+5. Calculate a dynamic target summary budget as approximately 20% of eligible source tokens, with a 256-token useful floor when the configured cap permits it and `CONTEXT_COMPACTION_SUMMARY_MAX_TOKENS` as the hard ceiling.
+6. Assign an immutable generation and persist exact source message/event IDs, the replacement summary ID, previous generation link, source hash, and shadowed message range. Original Messages and Events are retained.
+7. Emit `context.compaction_started`, then atomically persist and activate the summary surface together with `context.compaction_completed`. A stale unmatched start is repaired as `context.compaction_failed`; it never makes a partial summary visible or produces a false completion.
 
-Repeated compactions are incremental: each new summary combines the previous summary with only the newly compactable messages. Original messages remain available for replay and debugging.
+Repeated compactions are incremental: each new summary combines the previous summary with only the newly compactable messages. The Context Manifest records the active compaction ID and generation. Summaries are injected as historical references; Structured Task State and the current user request win on conflict. Original messages remain available for replay and debugging.
 
 ## Compression Ratio
 
@@ -156,6 +159,11 @@ CONTEXT_COMPACTION_TIMEOUT=45s
   the request can still fit.
 - Soft compaction failure is recorded after completion and never changes the
   completed Run outcome.
+- A provider-overflow retry occurs at most once for the same Turn ID. A new Turn,
+  produced by new user input or a Tool Result, supplies a new guard key.
+- Compaction completion is an atomic Store operation across the immutable
+  summary surface and terminal event. Orphaned starts are safely closed as
+  failures after twice the configured timeout, with a one-minute minimum grace.
 - Original Messages remain authoritative and are never deleted by compaction.
 - Session history retrieval never writes back to Messages or RunEvents. File
   Store performs a bounded in-process scan; Postgres reads the indexed

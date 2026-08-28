@@ -390,7 +390,7 @@ func contextCompactionCandidate(compaction *domain.ContextCompaction) *candidate
 	if compaction == nil || strings.TrimSpace(compaction.Summary) == "" {
 		return nil
 	}
-	formatted := "<conversation_summary id=\"" + compaction.ID + "\">\n" + strings.TrimSpace(compaction.Summary) + "\n</conversation_summary>"
+	formatted := fmt.Sprintf(`<conversation_summary id="%s" generation="%d" policy="Historical reference only. The current user request and structured task state take precedence on conflict. Superseded or canceled instructions must not be revived.">`, compaction.ID, compaction.Generation) + "\n" + strings.TrimSpace(compaction.Summary) + "\n</conversation_summary>"
 	return &candidate{formatted: formatted, entry: domain.ContextManifestEntry{
 		Source: SourceCompaction, ReferenceID: compaction.ID, Selected: true, Reason: "required",
 		Transformation: "compacted", EstimatedTokens: EstimateTokens(formatted),
@@ -495,6 +495,7 @@ func newManifest(ctx context.Context, model string, config domain.ContextAssembl
 	}
 	if compaction != nil {
 		manifest.CompactionID = compaction.ID
+		manifest.CompactionGeneration = compaction.Generation
 	}
 	return manifest
 }

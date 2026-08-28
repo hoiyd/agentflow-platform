@@ -302,15 +302,48 @@ func (s *FileStore) CreateContextCompaction(compaction domain.ContextCompaction)
 			return cloneContextCompaction(existing), nil
 		}
 	}
-	if compaction.ID == "" {
-		compaction.ID = newID("cmp")
-	}
-	if compaction.CreatedAt.IsZero() {
-		compaction.CreatedAt = time.Now().UTC()
-	}
-	compaction.SourceMessageIDs = append([]string(nil), compaction.SourceMessageIDs...)
+	compaction = s.prepareContextCompactionLocked(compaction, domain.ContextCompactionCompleted)
 	s.data.ContextCompactions = append(s.data.ContextCompactions, compaction)
 	return cloneContextCompaction(compaction), s.saveLocked()
+}
+
+// CommitContextCompaction atomically activates the immutable summary surface
+// and appends its terminal event. A crash before this commit leaves only the
+// started event, which the compactor can safely classify as an orphan.
+func (s *FileStore) CommitContextCompaction(compaction domain.ContextCompaction, completion domain.RunEvent) (domain.ContextCompaction, domain.RunEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.hasConversationLocked(compaction.ConversationID) {
+		return domain.ContextCompaction{}, domain.RunEvent{}, ErrNotFound("conversation")
+	}
+	if !s.hasRunLocked(completion.RunID) {
+		return domain.ContextCompaction{}, domain.RunEvent{}, ErrNotFound("run")
+	}
+	if completion.Type != domain.EventCompactionCompleted || completion.RunID != compaction.RunID || completion.ConversationID != compaction.ConversationID {
+		return domain.ContextCompaction{}, domain.RunEvent{}, errors.New("compaction completion event does not match compaction")
+	}
+	for _, existing := range s.data.ContextCompactions {
+		if existing.ConversationID == compaction.ConversationID && existing.SourceHash == compaction.SourceHash {
+			return cloneContextCompaction(existing), domain.RunEvent{}, nil
+		}
+	}
+	compaction = s.prepareContextCompactionLocked(compaction, domain.ContextCompactionCompleted)
+	var next int64 = 1
+	for _, existing := range s.data.RunEvents {
+		if existing.RunID == completion.RunID && existing.Sequence >= next {
+			next = existing.Sequence + 1
+		}
+	}
+	preparedEvent, err := prepareRunEvent(completion, next, compaction.CreatedAt)
+	if err != nil {
+		return domain.ContextCompaction{}, domain.RunEvent{}, err
+	}
+	s.data.ContextCompactions = append(s.data.ContextCompactions, compaction)
+	s.data.RunEvents = append(s.data.RunEvents, preparedEvent)
+	if err := s.saveLocked(); err != nil {
+		return domain.ContextCompaction{}, domain.RunEvent{}, err
+	}
+	return cloneContextCompaction(compaction), preparedEvent, nil
 }
 
 func (s *FileStore) GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error) {
@@ -319,7 +352,7 @@ func (s *FileStore) GetLatestContextCompaction(conversationID string) (domain.Co
 	var latest domain.ContextCompaction
 	found := false
 	for _, item := range s.data.ContextCompactions {
-		if item.ConversationID != conversationID {
+		if item.ConversationID != conversationID || !completedContextCompaction(item) {
 			continue
 		}
 		if !found || item.CreatedAt.After(latest.CreatedAt) || (item.CreatedAt.Equal(latest.CreatedAt) && item.ID > latest.ID) {
@@ -331,8 +364,59 @@ func (s *FileStore) GetLatestContextCompaction(conversationID string) (domain.Co
 }
 
 func cloneContextCompaction(item domain.ContextCompaction) domain.ContextCompaction {
+	if item.Status == "" {
+		item.Status = domain.ContextCompactionCompleted
+	}
+	if item.Generation <= 0 {
+		item.Generation = 1
+	}
+	if item.ReplacementSummaryID == "" && item.ID != "" {
+		item.ReplacementSummaryID = "summary:" + item.ID
+	}
+	if item.ShadowedMessageRange.MessageCount == 0 && len(item.SourceMessageIDs) > 0 {
+		item.ShadowedMessageRange = domain.ContextShadowedRange{
+			FirstMessageID: item.SourceMessageIDs[0], LastMessageID: item.SourceMessageIDs[len(item.SourceMessageIDs)-1],
+			MessageCount: len(item.SourceMessageIDs),
+		}
+	}
 	item.SourceMessageIDs = append([]string(nil), item.SourceMessageIDs...)
+	item.SourceEventIDs = append([]string(nil), item.SourceEventIDs...)
 	return item
+}
+
+func (s *FileStore) prepareContextCompactionLocked(compaction domain.ContextCompaction, status domain.ContextCompactionStatus) domain.ContextCompaction {
+	if compaction.ID == "" {
+		compaction.ID = newID("cmp")
+	}
+	if compaction.Generation <= 0 {
+		for _, existing := range s.data.ContextCompactions {
+			if existing.ConversationID == compaction.ConversationID && existing.Generation >= compaction.Generation {
+				compaction.Generation = existing.Generation + 1
+			}
+		}
+		if compaction.Generation <= 0 {
+			compaction.Generation = 1
+		}
+	}
+	if compaction.ReplacementSummaryID == "" {
+		compaction.ReplacementSummaryID = "summary:" + compaction.ID
+	}
+	if compaction.CreatedAt.IsZero() {
+		compaction.CreatedAt = time.Now().UTC()
+	}
+	compaction.Status = status
+	if status == domain.ContextCompactionCompleted && compaction.SurfaceReplacedAt == nil {
+		replacedAt := compaction.CreatedAt
+		compaction.SurfaceReplacedAt = &replacedAt
+	}
+	compaction.SourceMessageIDs = append([]string(nil), compaction.SourceMessageIDs...)
+	compaction.SourceEventIDs = append([]string(nil), compaction.SourceEventIDs...)
+	return compaction
+}
+
+func completedContextCompaction(item domain.ContextCompaction) bool {
+	// Empty status is the pre-H-06 file format and is treated as completed.
+	return item.Status == "" || item.Status == domain.ContextCompactionCompleted
 }
 
 func (s *FileStore) CreateMemoryCandidate(candidate domain.MemoryCandidate) (domain.MemoryCandidate, bool, error) {
