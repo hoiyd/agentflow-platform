@@ -106,6 +106,170 @@ older snapshots keep this behavior disabled when resumed.
 
 Repeated compactions are incremental: each new summary combines the previous summary with only the newly compactable messages. The Context Manifest records the active compaction ID and generation. Summaries are injected as historical references; Structured Task State and the current user request win on conflict. Original messages remain available for replay and debugging.
 
+### Exact v2 Selection Algorithm
+
+The current implementation is `context-compaction-v2`. It decides whether to
+compact using the following values:
+
+```txt
+input_budget = context_window - output_reserve - safety_margin
+estimated_surface = tokens(previous_summary) + tokens(uncovered_messages)
+trigger_tokens = max(estimated_surface, observed_provider_prompt_tokens)
+
+soft_threshold = input_budget * CONTEXT_COMPACTION_SOFT_THRESHOLD
+hard_threshold = input_budget * CONTEXT_COMPACTION_HARD_THRESHOLD
+```
+
+`observed_provider_prompt_tokens` is available to the asynchronous soft trigger
+and can include system prompts, Tools, Memory, and RAG sources. The local
+`estimated_surface` only measures the rolling conversation summary and original
+Conversation Messages. A provider-overflow trigger is forced and does not use a
+percentage threshold.
+
+After loading the latest completed generation, the planner performs these steps:
+
+1. Build `covered_ids` from the previous generation's cumulative
+   `source_message_ids`.
+2. Build `active_messages` from original Messages whose IDs are not covered.
+   Covered Messages remain in storage; they are excluded only from the visible
+   model-input surface.
+3. Form protocol groups. A `user` Message starts a group, and every following
+   assistant or Tool protocol Message remains in that group until the next
+   `user` Message. The compaction boundary can only fall between groups.
+4. Walk groups from newest to oldest to construct the protected raw tail. Keep
+   at least four Messages. After that minimum is satisfied, stop before adding
+   the next group when it would exceed `CONTEXT_COMPACTION_RECENT_TOKENS`.
+   Preserving a complete group may therefore exceed the configured target.
+5. Select everything before the protected tail as `new_source_messages`.
+   Compaction is skipped when fewer than two new Messages are eligible.
+6. Build cumulative source lineage as `previous source IDs + new source IDs`,
+   remove duplicate IDs while preserving order, and hash each selected
+   `(message_id, role, content)` tuple for idempotency.
+
+In simplified pseudocode:
+
+```txt
+active = original_messages - previous.source_message_ids
+groups = group_from_each_user_until_next_user(active)
+protected_tail = take_complete_groups_from_newest(
+  minimum_messages = 4,
+  target_tokens = CONTEXT_COMPACTION_RECENT_TOKENS,
+)
+new_sources = active before protected_tail
+
+if len(new_sources) < 2:
+  skip
+```
+
+### Dynamic Summary Budget
+
+The summary target scales with the newly eligible source surface instead of
+always requesting the configured maximum:
+
+```txt
+eligible_source_tokens = before_tokens - protected_tail_tokens
+
+when summary_max_tokens >= 256:
+  target_summary_tokens = clamp(
+    eligible_source_tokens / 5,
+    256,
+    summary_max_tokens,
+  )
+
+when summary_max_tokens < 256:
+  target_summary_tokens = summary_max_tokens
+```
+
+This targets roughly 20% of eligible source tokens, uses 256 tokens as a useful
+floor when the hard cap permits it, and always treats
+`CONTEXT_COMPACTION_SUMMARY_MAX_TOKENS` as the ceiling. A response above the
+target is deterministically truncated before persistence.
+
+The summarizer receives only the previous summary and newly eligible Messages.
+It must return the standard operational sections plus:
+
+- `Superseded Instructions`: corrections, canceled tasks, and instructions that
+  must not be revived;
+- `Uncertainties`: facts that remain uncertain;
+- `Conflicts`: incompatible claims that cannot be resolved from the sources;
+- `Exact References`: identifiers, commands, paths, and values that must remain
+  verbatim;
+- `Evidence Needed`: missing evidence required to resolve open work.
+
+Newer source Messages override conflicting statements in the previous summary.
+The resulting summary is still historical evidence: Structured Task State and
+the current user request take priority when the assembler injects it.
+
+### Generation And Commit Protocol
+
+Every successful compaction creates one immutable generation:
+
+```txt
+generation = previous_generation + 1
+replacement_summary_id = "summary:" + compaction_id
+```
+
+The durable record includes the previous compaction ID, cumulative source
+Message IDs, exact shadowed first/last Message IDs, source count, source hash,
+target budget, token estimates, reduction ratio, summary model, and algorithm
+version. Postgres also enforces one generation number per Conversation.
+
+The lifecycle is deliberately asymmetric around the model request:
+
+```txt
+repair stale unmatched starts
+  -> persist context.compaction_started
+  -> call summarizer
+  -> atomically commit completed summary surface + context.compaction_completed
+```
+
+If summarization fails, AgentFlow writes `context.compaction_failed` and does not
+create a visible summary. If the process crashes after `started` but before the
+atomic commit, the attempt is an orphan. A later preflight closes it as failed
+after `max(1 minute, 2 * CONTEXT_COMPACTION_TIMEOUT)`. The assembler reads only
+completed generations, so an orphan cannot become the active surface.
+
+### Effectiveness And Retry Guards
+
+After a successful commit:
+
+```txt
+after_tokens = tokens(summary) + protected_tail_tokens
+reduction_ratio = (before_tokens - after_tokens) / before_tokens
+```
+
+A reduction below 10% is low yield. Two consecutive low-yield generations pause
+automatic compaction for 30 minutes. The counter resets when that cooldown
+expires or a useful compaction succeeds.
+
+Summarizer timeouts and temporary availability failures use a one-minute
+cooldown. Authentication, quota, validation, missing-model, and missing
+summarizer configuration failures use a 15-minute cooldown. Cooldown metadata is
+recorded in lifecycle events and restored after process restart.
+
+For a text-only Model Call rejected with `context_length_exceeded`, AgentFlow:
+
+1. forces one compaction attempt for the current Turn ID;
+2. reloads the persisted generation;
+3. retries the Model Call only when the generation increased;
+4. refuses another automatic recovery for the same Turn ID.
+
+Agent streams are not automatically replayed because Tool side effects may have
+already occurred. A new logical Turn supplies a new overflow guard key.
+
+### Current Scope
+
+The v2 rolling summarizer currently selects persisted Conversation Messages as
+its semantic sources, so `source_event_ids` is an exact empty set today. Runtime
+Events remain available for replay and tracing but are not summarized into the
+conversation surface. Memory, RAG context, Tool definitions, and oversized Tool
+Results use their own assembler budgets and transformations; they are not folded
+into the rolling summary.
+
+Compaction is intentionally lossy. Generation lineage and retained originals
+make the transformation explainable and reversible for debugging, but they do
+not make a generated summary semantically lossless.
+
 ## Compression Ratio
 
 AgentFlow does not promise a fixed compression ratio. Each persisted compaction records `before_tokens` and `after_tokens`, where:
