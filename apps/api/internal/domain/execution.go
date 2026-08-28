@@ -111,18 +111,44 @@ type ContextAssemblyConfig struct {
 }
 
 type ContextCompaction struct {
-	ID               string    `json:"id"`
-	ConversationID   string    `json:"conversation_id"`
-	RunID            string    `json:"run_id"`
-	Trigger          string    `json:"trigger"`
-	Summary          string    `json:"summary"`
-	SourceMessageIDs []string  `json:"source_message_ids"`
-	SourceHash       string    `json:"source_hash"`
-	BeforeTokens     int       `json:"before_tokens"`
-	AfterTokens      int       `json:"after_tokens"`
-	SummaryModel     string    `json:"summary_model"`
-	AlgorithmVersion string    `json:"algorithm_version"`
-	CreatedAt        time.Time `json:"created_at"`
+	ID                   string                  `json:"id"`
+	ConversationID       string                  `json:"conversation_id"`
+	RunID                string                  `json:"run_id"`
+	Trigger              string                  `json:"trigger"`
+	Status               ContextCompactionStatus `json:"status"`
+	Generation           int64                   `json:"generation"`
+	PreviousCompactionID string                  `json:"previous_compaction_id,omitempty"`
+	ReplacementSummaryID string                  `json:"replacement_summary_id"`
+	Summary              string                  `json:"summary"`
+	SourceMessageIDs     []string                `json:"source_message_ids"`
+	SourceEventIDs       []string                `json:"source_event_ids"`
+	ShadowedMessageRange ContextShadowedRange    `json:"shadowed_message_range"`
+	SourceHash           string                  `json:"source_hash"`
+	BeforeTokens         int                     `json:"before_tokens"`
+	AfterTokens          int                     `json:"after_tokens"`
+	TargetSummaryTokens  int                     `json:"target_summary_tokens"`
+	ReductionRatio       float64                 `json:"reduction_ratio"`
+	ConsecutiveLowYield  int                     `json:"consecutive_low_yield"`
+	SummaryModel         string                  `json:"summary_model"`
+	AlgorithmVersion     string                  `json:"algorithm_version"`
+	SurfaceReplacedAt    *time.Time              `json:"surface_replaced_at,omitempty"`
+	CreatedAt            time.Time               `json:"created_at"`
+}
+
+type ContextCompactionStatus string
+
+const (
+	// Completed means the summary surface and terminal event were committed atomically.
+	ContextCompactionCompleted ContextCompactionStatus = "completed"
+)
+
+// ContextShadowedRange identifies the exact original message interval replaced
+// by a compaction summary in the assembled context. Original messages remain
+// durable and retrievable.
+type ContextShadowedRange struct {
+	FirstMessageID string `json:"first_message_id,omitempty"`
+	LastMessageID  string `json:"last_message_id,omitempty"`
+	MessageCount   int    `json:"message_count"`
 }
 
 type RuntimeAgentSnapshot struct {
@@ -339,6 +365,7 @@ type ContextManifest struct {
 	ExcludedTokens       int                    `json:"excluded_tokens"`
 	PrefixHash           string                 `json:"prefix_hash"`
 	CompactionID         string                 `json:"compaction_id,omitempty"`
+	CompactionGeneration int64                  `json:"compaction_generation,omitempty"`
 	Entries              []ContextManifestEntry `json:"entries"`
 	CreatedAt            time.Time              `json:"created_at"`
 }

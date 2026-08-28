@@ -231,17 +231,64 @@ var postgresMigrations = []string{
 		id text PRIMARY KEY,
 		conversation_id text NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
 		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-		trigger text NOT NULL,
-		summary text NOT NULL,
-		source_message_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
-		source_hash text NOT NULL,
-		before_tokens integer NOT NULL,
-		after_tokens integer NOT NULL,
-		summary_model text NOT NULL,
-		algorithm_version text NOT NULL,
-		created_at timestamptz NOT NULL,
-		UNIQUE(conversation_id, source_hash)
-	)`,
+			trigger text NOT NULL,
+			status text NOT NULL DEFAULT 'completed',
+			generation bigint NOT NULL DEFAULT 1,
+			previous_compaction_id text NOT NULL DEFAULT '',
+			replacement_summary_id text NOT NULL DEFAULT '',
+			summary text NOT NULL,
+			source_message_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+			source_event_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+			shadowed_first_message_id text NOT NULL DEFAULT '',
+			shadowed_last_message_id text NOT NULL DEFAULT '',
+			shadowed_message_count integer NOT NULL DEFAULT 0,
+			source_hash text NOT NULL,
+			before_tokens integer NOT NULL,
+			after_tokens integer NOT NULL,
+			target_summary_tokens integer NOT NULL DEFAULT 0,
+			reduction_ratio double precision NOT NULL DEFAULT 0,
+			consecutive_low_yield integer NOT NULL DEFAULT 0,
+			summary_model text NOT NULL,
+			algorithm_version text NOT NULL,
+			surface_replaced_at timestamptz,
+			created_at timestamptz NOT NULL,
+			UNIQUE(conversation_id, source_hash)
+		)`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'completed'`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS generation bigint NOT NULL DEFAULT 1`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS previous_compaction_id text NOT NULL DEFAULT ''`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS replacement_summary_id text NOT NULL DEFAULT ''`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS source_event_ids jsonb NOT NULL DEFAULT '[]'::jsonb`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS shadowed_first_message_id text NOT NULL DEFAULT ''`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS shadowed_last_message_id text NOT NULL DEFAULT ''`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS shadowed_message_count integer NOT NULL DEFAULT 0`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS target_summary_tokens integer NOT NULL DEFAULT 0`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS reduction_ratio double precision NOT NULL DEFAULT 0`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS consecutive_low_yield integer NOT NULL DEFAULT 0`,
+	`ALTER TABLE context_compactions ADD COLUMN IF NOT EXISTS surface_replaced_at timestamptz`,
+	`UPDATE context_compactions SET replacement_summary_id = 'summary:' || id WHERE replacement_summary_id = ''`,
+	`DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'context_compactions_generation_idx') THEN
+				WITH ranked AS (
+					SELECT id, ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY created_at, id) AS generation
+					FROM context_compactions
+				) UPDATE context_compactions SET generation = ranked.generation FROM ranked WHERE context_compactions.id = ranked.id;
+			END IF;
+		END $$`,
+	`WITH ordered AS (
+			SELECT id, LAG(id) OVER (PARTITION BY conversation_id ORDER BY generation, created_at, id) AS previous_id
+			FROM context_compactions
+		) UPDATE context_compactions
+		SET previous_compaction_id = COALESCE(ordered.previous_id, '')
+		FROM ordered
+		WHERE context_compactions.id = ordered.id AND context_compactions.previous_compaction_id = ''`,
+	`UPDATE context_compactions
+		SET shadowed_first_message_id = COALESCE(source_message_ids->>0, ''),
+			shadowed_last_message_id = COALESCE(source_message_ids->>(jsonb_array_length(source_message_ids)-1), ''),
+			shadowed_message_count = jsonb_array_length(source_message_ids)
+		WHERE shadowed_message_count = 0 AND jsonb_array_length(source_message_ids) > 0`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS context_compactions_generation_idx ON context_compactions(conversation_id, generation)`,
+	`CREATE INDEX IF NOT EXISTS context_compactions_active_idx ON context_compactions(conversation_id, generation DESC) WHERE status = 'completed'`,
 	`CREATE TABLE IF NOT EXISTS model_request_records (
 		id text PRIMARY KEY,
 		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,

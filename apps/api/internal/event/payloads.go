@@ -160,16 +160,28 @@ func (ContextAssembledPayload) supports(eventType domain.RunEventType) bool {
 }
 
 type ContextCompactionPayload struct {
-	CompactionID         string   `json:"compaction_id,omitempty"`
-	Trigger              string   `json:"trigger"`
-	Status               string   `json:"status"`
-	SourceMessageIDs     []string `json:"source_message_ids,omitempty"`
-	BeforeTokens         int      `json:"before_tokens,omitempty"`
-	AfterTokens          int      `json:"after_tokens,omitempty"`
-	ObservedPromptTokens int      `json:"observed_prompt_tokens,omitempty"`
-	SummaryModel         string   `json:"summary_model,omitempty"`
-	AlgorithmVersion     string   `json:"algorithm_version"`
-	Error                string   `json:"error,omitempty"`
+	CompactionID         string                      `json:"compaction_id,omitempty"`
+	Generation           int64                       `json:"generation,omitempty"`
+	PreviousCompactionID string                      `json:"previous_compaction_id,omitempty"`
+	ReplacementSummaryID string                      `json:"replacement_summary_id,omitempty"`
+	Trigger              string                      `json:"trigger"`
+	TriggerKey           string                      `json:"trigger_key,omitempty"`
+	Status               string                      `json:"status"`
+	SourceMessageIDs     []string                    `json:"source_message_ids,omitempty"`
+	SourceEventIDs       []string                    `json:"source_event_ids,omitempty"`
+	ShadowedMessageRange domain.ContextShadowedRange `json:"shadowed_message_range,omitempty"`
+	BeforeTokens         int                         `json:"before_tokens,omitempty"`
+	AfterTokens          int                         `json:"after_tokens,omitempty"`
+	TargetSummaryTokens  int                         `json:"target_summary_tokens,omitempty"`
+	ReductionRatio       float64                     `json:"reduction_ratio,omitempty"`
+	ConsecutiveLowYield  int                         `json:"consecutive_low_yield,omitempty"`
+	ObservedPromptTokens int                         `json:"observed_prompt_tokens,omitempty"`
+	SummaryModel         string                      `json:"summary_model,omitempty"`
+	AlgorithmVersion     string                      `json:"algorithm_version"`
+	CooldownReason       string                      `json:"cooldown_reason,omitempty"`
+	CooldownUntil        *time.Time                  `json:"cooldown_until,omitempty"`
+	RecoveredFromOrphan  bool                        `json:"recovered_from_orphan,omitempty"`
+	Error                string                      `json:"error,omitempty"`
 }
 
 func (ContextCompactionPayload) supports(eventType domain.RunEventType) bool {

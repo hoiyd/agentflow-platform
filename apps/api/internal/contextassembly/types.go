@@ -16,6 +16,9 @@ const (
 	CompactionModeOff     = "off"
 	CompactionTriggerSoft = "soft"
 	CompactionTriggerHard = "hard"
+	// CompactionTriggerOverflow is a forced, single-attempt recovery after the
+	// provider rejects an otherwise assembled request for context length.
+	CompactionTriggerOverflow = "provider_overflow"
 )
 
 const (

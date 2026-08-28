@@ -83,26 +83,7 @@ func (s *PostgresStore) ListCollaborationSteps(runID string) ([]domain.Collabora
 }
 
 func (s *PostgresStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error) {
-	event.ID = strings.TrimSpace(event.ID)
-	if event.ID == "" {
-		event.ID = newID("event")
-	}
-	if event.Type == "" {
-		return domain.RunEvent{}, errors.New("run event type is required")
-	}
-	if event.SchemaVersion == 0 {
-		event.SchemaVersion = domain.CurrentRunEventSchemaVersion
-	}
-	if event.Payload == nil {
-		event.Payload = map[string]any{}
-	}
-	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now().UTC()
-	}
-	if err := eventcatalog.ValidateDurableFact(event); err != nil {
-		return domain.RunEvent{}, err
-	}
-	payload, err := json.Marshal(event.Payload)
+	event, payload, err := preparePostgresRunEvent(event, time.Now().UTC())
 	if err != nil {
 		return domain.RunEvent{}, err
 	}
@@ -124,6 +105,33 @@ func (s *PostgresStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, 
 		return domain.RunEvent{}, err
 	}
 	return event, tx.Commit()
+}
+
+func preparePostgresRunEvent(event domain.RunEvent, now time.Time) (domain.RunEvent, []byte, error) {
+	event.ID = strings.TrimSpace(event.ID)
+	if event.ID == "" {
+		event.ID = newID("event")
+	}
+	if event.Type == "" {
+		return domain.RunEvent{}, nil, errors.New("run event type is required")
+	}
+	if event.SchemaVersion == 0 {
+		event.SchemaVersion = domain.CurrentRunEventSchemaVersion
+	}
+	if event.Payload == nil {
+		event.Payload = map[string]any{}
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = now
+	}
+	if err := eventcatalog.ValidateDurableFact(event); err != nil {
+		return domain.RunEvent{}, nil, err
+	}
+	payload, err := json.Marshal(event.Payload)
+	if err != nil {
+		return domain.RunEvent{}, nil, err
+	}
+	return event, payload, nil
 }
 
 func (s *PostgresStore) ListRunEvents(runID string) ([]domain.RunEvent, error) {
