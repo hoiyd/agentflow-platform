@@ -8,26 +8,6 @@ type VerifierConfigEditorProps = {
 };
 
 export function VerifierConfigEditor({ disabled, draft, onChange, type }: VerifierConfigEditorProps) {
-  if (type === "answer_relevance") {
-    const settings = draft.answerRelevance;
-    const update = (next: Partial<typeof settings>) =>
-      onChange({ answerRelevance: { ...settings, ...next } });
-    return (
-      <VerifierSection
-        checked={settings.enabled}
-        disabled={disabled}
-        label="Check answer relevance"
-        onToggle={(enabled) => update({ enabled })}
-      >
-        <div className="verifier-field-grid two-columns">
-          <NumberField disabled={disabled || !settings.enabled} label="Minimum cosine similarity" min={0.05} max={1} step={0.05} value={settings.minimumScore} onChange={(minimumScore) => update({ minimumScore })} />
-          <NumberField disabled={disabled || !settings.enabled} label="Minimum answer characters" min={1} max={100000} value={settings.minimumAnswerCharacters} onChange={(minimumAnswerCharacters) => update({ minimumAnswerCharacters })} />
-        </div>
-        <small className="verifier-requirement">Embeds the question and substantive answer with the configured embedding model. Similarity and model metadata are recorded in verification evidence.</small>
-      </VerifierSection>
-    );
-  }
-
   if (type === "text_constraints") {
     const settings = draft.textConstraints;
     const update = (next: Partial<typeof settings>) =>

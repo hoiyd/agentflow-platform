@@ -1,11 +1,5 @@
 export type VerificationFailureAction = "fail" | "waiting_for_user";
-export type VerifierTypeInput = "command" | "http" | "json_schema" | "text_constraints" | "citation" | "answer_relevance";
-
-export type AnswerRelevanceSettings = {
-  enabled: boolean;
-  minimumScore: number;
-  minimumAnswerCharacters: number;
-};
+export type VerifierTypeInput = "command" | "http" | "json_schema" | "text_constraints" | "citation";
 
 export type TextConstraintsSettings = {
   enabled: boolean;
@@ -49,7 +43,6 @@ export type CommandVerifierSettings = {
 
 export type CompletionVerificationSettings = {
   enabled: boolean;
-  answerRelevance: AnswerRelevanceSettings;
   textConstraints: TextConstraintsSettings;
   citation: CitationSettings;
   jsonSchema: JSONSchemaSettings;
@@ -78,11 +71,6 @@ export type CompletionContractInput = {
 
 export const DEFAULT_COMPLETION_VERIFICATION: CompletionVerificationSettings = {
   enabled: false,
-  answerRelevance: {
-    enabled: false,
-    minimumScore: 0.65,
-    minimumAnswerCharacters: 20
-  },
   textConstraints: {
     enabled: true,
     minimumCharacters: 120,
@@ -139,17 +127,6 @@ export function buildCompletionContract(
   }
 
   const verifiers: VerifierSpecInput[] = [];
-  if (normalized.answerRelevance.enabled) {
-    verifiers.push({
-      id: "answer-relevance",
-      type: "answer_relevance",
-      required: true,
-      config: {
-        minimum_score: normalized.answerRelevance.minimumScore,
-        minimum_answer_characters: normalized.answerRelevance.minimumAnswerCharacters
-      }
-    });
-  }
   if (normalized.textConstraints.enabled) {
     verifiers.push({
       id: "response-text",
@@ -229,11 +206,6 @@ export function normalizeCompletionVerification(
 ): CompletionVerificationSettings {
   return {
     ...settings,
-    answerRelevance: {
-      ...settings.answerRelevance,
-      minimumScore: clampNumber(settings.answerRelevance.minimumScore, 0.05, 1),
-      minimumAnswerCharacters: clampInteger(settings.answerRelevance.minimumAnswerCharacters, 1, 100_000)
-    },
     textConstraints: {
       ...settings.textConstraints,
       minimumCharacters: clampInteger(settings.textConstraints.minimumCharacters, 0, 100_000),
@@ -335,18 +307,12 @@ export function validateCompletionVerification(settings: CompletionVerificationS
 
 export function enabledVerifierCount(settings: CompletionVerificationSettings): number {
   return [
-    settings.answerRelevance.enabled,
     settings.textConstraints.enabled,
     settings.citation.enabled,
     settings.jsonSchema.enabled,
     settings.http.enabled,
     settings.command.enabled
   ].filter(Boolean).length;
-}
-
-function clampNumber(value: number, minimum: number, maximum: number): number {
-  if (!Number.isFinite(value)) return minimum;
-  return Math.min(maximum, Math.max(minimum, value));
 }
 
 function parseJSONObject(value: string): Record<string, unknown> {

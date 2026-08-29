@@ -79,54 +79,6 @@ func TestCompleteStreamingRunRequiresFreshPassingEvidence(t *testing.T) {
 	}
 }
 
-func TestCompleteStreamingRunProvidesQuestionToAnswerRelevanceVerifier(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	conversation, _ := fileStore.CreateConversation("answer relevance")
-	if _, err := fileStore.AddMessage(conversation.ID, "user", "What are your opening hours?"); err != nil {
-		t.Fatalf("add user message: %v", err)
-	}
-	registry := verification.NewRegistry(verification.Options{AnswerRelevanceEmbedder: func(_ context.Context, input string) (verification.AnswerRelevanceEmbedding, error) {
-		vector := []float64{1, 0}
-		if strings.Contains(strings.ToLower(input), "open from") {
-			vector = []float64{0.98, 0.1}
-		}
-		return verification.AnswerRelevanceEmbedding{Vector: vector, Model: "test-embedding", Provider: "test", Dimensions: len(vector)}, nil
-	}})
-	contract, err := registry.FreezeContract(&domain.CompletionContract{
-		Verifiers: []domain.VerifierSpec{{
-			ID: "answer-relevance", Type: domain.VerifierAnswerRelevance, Required: true,
-			Config: map[string]any{"minimum_score": 0.65, "minimum_answer_characters": 10},
-		}},
-		Policy: domain.VerificationPolicy{Mode: domain.VerificationAllMustPass, MaxAttempts: 1, OnExhausted: domain.VerificationFailRun},
-	})
-	if err != nil {
-		t.Fatalf("freeze contract: %v", err)
-	}
-	run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), contract)
-	_, _ = fileStore.UpdateRunStatus(run.ID, domain.RunRunning, "")
-	runtime := agent.NewRuntime(agent.RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
-	handler := &Handler{store: fileStore, agentRuntime: runtime, verification: verification.NewEngine(fileStore, registry)}
-	response := httptest.NewRecorder()
-
-	if !handler.completeStreamingRun(response, response, nil, context.Background(), runCompletionRequest{
-		RunID: run.ID, ConversationID: conversation.ID,
-		Assistant: "We are open from 9am to 10pm every day.",
-	}) {
-		t.Fatalf("complete verified run: %s", response.Body.String())
-	}
-	completed, _, _ := fileStore.GetRun(run.ID)
-	if completed.Status != domain.RunCompleted || completed.VerificationStatus != domain.VerificationPassed {
-		t.Fatalf("answer relevance did not open completion gate: %#v", completed)
-	}
-	evidence, err := fileStore.ListVerificationEvidence(run.ID)
-	if err != nil || len(evidence) != 1 || evidence[0].Details["algorithm"] != "cosine_similarity" {
-		t.Fatalf("answer relevance evidence missing: %#v err=%v", evidence, err)
-	}
-}
-
 func TestResolveRunCompletionReturnsQuestionLookupError(t *testing.T) {
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

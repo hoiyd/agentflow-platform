@@ -19,12 +19,11 @@ import (
 const defaultArtifactBytes = 64 * 1024
 
 type Options struct {
-	WorkspaceRoot           string
-	AllowedCommands         []string
-	AllowedHTTPHosts        []string
-	HTTPClient              *http.Client
-	MaxArtifactBytes        int
-	AnswerRelevanceEmbedder AnswerRelevanceEmbedder
+	WorkspaceRoot    string
+	AllowedCommands  []string
+	AllowedHTTPHosts []string
+	HTTPClient       *http.Client
+	MaxArtifactBytes int
 }
 
 type Subject struct {
@@ -79,7 +78,6 @@ func NewRegistry(options Options) *Registry {
 		jsonSchemaVerifier{},
 		textConstraintsVerifier{},
 		citationVerifier{},
-		answerRelevanceVerifier{embed: options.AnswerRelevanceEmbedder},
 	}
 	registry := &Registry{verifiers: make(map[domain.VerifierType]Verifier, len(items)), maxArtifactBytes: options.MaxArtifactBytes}
 	for _, item := range items {

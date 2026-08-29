@@ -1,4 +1,4 @@
-import { Braces, Globe2, Quote, Target, Terminal, TextCursorInput, X } from "lucide-react";
+import { Braces, Globe2, Quote, Terminal, TextCursorInput, X } from "lucide-react";
 import { useState } from "react";
 
 import type { CompletionVerificationSettings, VerifierTypeInput } from "../lib/verification";
@@ -14,7 +14,6 @@ type CompletionVerificationPanelProps = {
 };
 
 const VERIFIER_TABS: Array<{ type: VerifierTypeInput; label: string }> = [
-  { type: "answer_relevance", label: "Relevance" },
   { type: "text_constraints", label: "Text" },
   { type: "citation", label: "Citations" },
   { type: "json_schema", label: "JSON Schema" },
@@ -120,7 +119,6 @@ export function CompletionVerificationPanel({
 }
 
 function isVerifierEnabled(settings: CompletionVerificationSettings, type: VerifierTypeInput): boolean {
-  if (type === "answer_relevance") return settings.answerRelevance.enabled;
   if (type === "text_constraints") return settings.textConstraints.enabled;
   if (type === "citation") return settings.citation.enabled;
   if (type === "json_schema") return settings.jsonSchema.enabled;
@@ -129,7 +127,6 @@ function isVerifierEnabled(settings: CompletionVerificationSettings, type: Verif
 }
 
 function verifierIcon(type: VerifierTypeInput) {
-  if (type === "answer_relevance") return <Target size={14} />;
   if (type === "text_constraints") return <TextCursorInput size={14} />;
   if (type === "citation") return <Quote size={14} />;
   if (type === "json_schema") return <Braces size={14} />;

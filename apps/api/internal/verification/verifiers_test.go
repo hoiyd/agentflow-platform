@@ -145,107 +145,17 @@ func TestCitationVerifierChecksMarkdownLinksAndSourcePolicy(t *testing.T) {
 	}
 }
 
-func TestAnswerRelevanceVerifierScoresQuestionCoverage(t *testing.T) {
-	registry := NewRegistry(Options{AnswerRelevanceEmbedder: answerRelevanceTestEmbedder})
-	verifier, _ := registry.Resolve(domain.VerifierAnswerRelevance)
-	spec := domain.VerifierSpec{ID: "answer-relevance", Config: map[string]any{
-		"minimum_score": 0.65, "minimum_answer_characters": 10,
-	}}
-	if err := verifier.NormalizeConfig(&spec); err != nil {
-		t.Fatalf("normalize answer relevance: %v", err)
+func TestDefaultRegistryExcludesRetiredAnswerRelevanceVerifier(t *testing.T) {
+	registry := NewRegistry(Options{})
+	if _, ok := registry.Resolve(domain.VerifierAnswerRelevance); ok {
+		t.Fatal("answer relevance must not be registered in the default verifier surface")
 	}
-
-	passed := verifier.Verify(context.Background(), spec, SubjectForQuestionAnswer(
-		"What are your opening hours?", "We are open from 9am to 10pm every day."))
-	if passed.Status != domain.VerificationPassed || passed.Details["score"].(float64) < 0.65 || passed.Details["embedding_model"] != "test-embedding" {
-		t.Fatalf("expected relevant answer to pass: %#v", passed)
-	}
-
-	failed := verifier.Verify(context.Background(), spec, SubjectForQuestionAnswer(
-		"What are your opening hours?", "The stock market closed higher after the earnings report."))
-	if failed.Status != domain.VerificationFailed || failed.Details["score"].(float64) >= 0.65 {
-		t.Fatalf("expected unrelated answer to fail: %#v", failed)
-	}
-
-	parroted := verifier.Verify(context.Background(), spec, SubjectForQuestionAnswer(
-		"What are your opening hours?", "What are your opening hours? I received your question."))
-	if parroted.Status != domain.VerificationFailed || parroted.Details["question_repetition_removed"] != true {
-		t.Fatalf("question repetition must not satisfy answer relevance: %#v", parroted)
-	}
-}
-
-func TestAnswerRelevanceVerifierFreezesEmbeddingDefaults(t *testing.T) {
-	registry := NewRegistry(Options{AnswerRelevanceEmbedder: answerRelevanceTestEmbedder})
-	contract, err := registry.FreezeContract(&domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
+	_, err := registry.FreezeContract(&domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
 		ID: "answer-relevance", Type: domain.VerifierAnswerRelevance, Required: true,
 	}}})
-	if err != nil {
-		t.Fatalf("freeze answer relevance contract: %v", err)
+	if !IsKind(err, ErrorInvalidContract) || !strings.Contains(err.Error(), "unsupported verifier type") {
+		t.Fatalf("new answer relevance contract must be rejected: %v", err)
 	}
-	spec := contract.Verifiers[0]
-	if spec.Version != "answer-relevance-embedding-v1" || spec.Config["minimum_score"] != 0.65 || spec.Config["minimum_answer_characters"] != float64(20) {
-		t.Fatalf("unexpected embedding verifier defaults: %#v", spec)
-	}
-}
-
-func TestAnswerRelevanceVerifierSupportsCJKAndRequiresQuestion(t *testing.T) {
-	registry := NewRegistry(Options{AnswerRelevanceEmbedder: answerRelevanceTestEmbedder})
-	verifier, _ := registry.Resolve(domain.VerifierAnswerRelevance)
-	spec := domain.VerifierSpec{ID: "answer-relevance", Config: map[string]any{
-		"minimum_score": 0.65, "minimum_answer_characters": 8,
-	}}
-	if err := verifier.NormalizeConfig(&spec); err != nil {
-		t.Fatalf("normalize answer relevance: %v", err)
-	}
-
-	passed := verifier.Verify(context.Background(), spec, SubjectForQuestionAnswer(
-		"披萨店的营业时间是什么？", "披萨店每天的营业时间是上午九点到晚上十点。"))
-	if passed.Status != domain.VerificationPassed {
-		t.Fatalf("expected relevant CJK answer to pass: %#v", passed)
-	}
-	blocked := verifier.Verify(context.Background(), spec, SubjectForRunOutput("We are open every day."))
-	if blocked.Status != domain.VerificationBlocked {
-		t.Fatalf("missing question must block relevance verification: %#v", blocked)
-	}
-}
-
-func TestAnswerRelevanceVerifierRejectsEstimatedOrInvalidEmbeddings(t *testing.T) {
-	spec := domain.VerifierSpec{ID: "answer-relevance", Config: map[string]any{
-		"minimum_score": 0.65, "minimum_answer_characters": 5,
-	}}
-	estimated := answerRelevanceVerifier{embed: func(context.Context, string) (AnswerRelevanceEmbedding, error) {
-		return AnswerRelevanceEmbedding{Vector: []float64{1, 0}, Model: "local-hash", Provider: "local", Estimated: true}, nil
-	}}
-	if result := estimated.Verify(context.Background(), spec, SubjectForQuestionAnswer("opening hours", "open every day")); result.Status != domain.VerificationBlocked {
-		t.Fatalf("estimated embedding must not produce relevance evidence: %#v", result)
-	}
-	if result := (answerRelevanceVerifier{}).Verify(context.Background(), spec, SubjectForQuestionAnswer("opening hours", "open every day")); result.Status != domain.VerificationBlocked {
-		t.Fatalf("missing embedding model must block relevance verification: %#v", result)
-	}
-	invalid := answerRelevanceVerifier{embed: func(_ context.Context, input string) (AnswerRelevanceEmbedding, error) {
-		vector := []float64{1, 0}
-		if strings.Contains(input, "answer") {
-			vector = []float64{1}
-		}
-		return AnswerRelevanceEmbedding{Vector: vector, Model: "test", Provider: "test"}, nil
-	}}
-	if result := invalid.Verify(context.Background(), spec, SubjectForQuestionAnswer("question", "long enough answer")); result.Status != domain.VerificationBlocked {
-		t.Fatalf("dimension mismatch must block relevance verification: %#v", result)
-	}
-}
-
-func answerRelevanceTestEmbedder(_ context.Context, input string) (AnswerRelevanceEmbedding, error) {
-	lower := strings.ToLower(input)
-	vector := []float64{0, 1, 0}
-	switch {
-	case strings.Contains(input, "营业时间") || strings.Contains(input, "上午九点"):
-		vector = []float64{0, 0, 1}
-	case strings.Contains(lower, "opening hours"):
-		vector = []float64{1, 0, 0}
-	case strings.Contains(lower, "open from"):
-		vector = []float64{0.98, 0.1, 0}
-	}
-	return AnswerRelevanceEmbedding{Vector: vector, Model: "test-embedding", Provider: "test", Dimensions: len(vector)}, nil
 }
 
 func TestVerifierNormalizationRejectsUnknownConfigFields(t *testing.T) {

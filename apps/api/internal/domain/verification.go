@@ -42,6 +42,8 @@ const (
 	VerifierJSONSchema      VerifierType = "json_schema"
 	VerifierTextConstraints VerifierType = "text_constraints"
 	VerifierCitation        VerifierType = "citation"
+	// VerifierAnswerRelevance is retained so historical frozen contracts and
+	// evidence remain decodable. It is not registered as a built-in verifier.
 	VerifierAnswerRelevance VerifierType = "answer_relevance"
 )
 

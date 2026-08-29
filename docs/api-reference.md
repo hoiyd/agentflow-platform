@@ -166,7 +166,7 @@ structured failure metadata remain valid and expose only `source` and
 the original internal error remains in server diagnostics rather than the
 client payload. Streaming chat error chunks use the same fields.
 
-Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, `citation`, and `answer_relevance`. The last type binds the user question to the candidate output and records embedding cosine-similarity evidence; it is not a factuality or groundedness check. See [Verification](verification.md) for exact config shapes, scope, extension points, and policy semantics.
+Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, and `citation`. Historical `answer_relevance` contracts remain readable but cannot be selected for new Runs; re-execution records unavailable Evidence. See [Verification](verification.md) for exact config shapes, scope, extension points, and policy semantics.
 
 ## Tool Governance
 

@@ -45,7 +45,7 @@ A Run enters the verification lifecycle only when its initial `POST /api/chat` r
 `VERIFICATION_WORKSPACE_ROOT`, command allowlists, HTTP host allowlists, and Artifact limits only configure which verifier implementations may run safely. Setting these environment variables does **not** enable verification for any Run by itself.
 
 The chat composer exposes this opt-in under **Verification** and
-supports all six built-in verifier types. The request behavior is identical
+supports all five built-in verifier types. The request behavior is identical
 for `single`, `multi_agent`, and `autonomous` Runs.
 
 HTTP checks follow the backend host allowlist. Command checks also require
@@ -78,8 +78,6 @@ The current implementation supports:
 - `json_schema`: validates the final Run output with JSON Schema 2020-12.
 - `text_constraints`: checks character/word bounds, required or forbidden phrases, and required Markdown headings.
 - `citation`: checks explicit Markdown citation count, HTTPS use, and allowed or blocked source hosts.
-- `answer_relevance`: embeds the user question and substantive final answer,
-  then checks their cosine similarity against a frozen threshold.
 
 Each Evidence record binds the contract/version, verifier/version, Runtime Snapshot hash, exact candidate Subject Hash, attempt number, status, duration, exit code, summary, structured details, and Artifact IDs. For question-aware checks, the Subject Hash binds both the user question and candidate answer. One verifier may emit multiple bounded Artifacts, such as a score report and diagnostics. Evidence is append-only. When a later candidate has a different Subject Hash, AgentFlow appends a `stale` marker that references the superseded Evidence rather than rewriting history.
 
@@ -179,31 +177,6 @@ All verifier-specific settings live under `config`. Each registered verifier str
 }
 ```
 
-The Answer Relevance MVP can be added to any contract as follows:
-
-```json
-{
-  "id": "answer-relevance",
-  "type": "answer_relevance",
-  "required": true,
-  "config": {
-    "minimum_score": 0.65,
-    "minimum_answer_characters": 20
-  }
-}
-```
-
-Version `answer-relevance-embedding-v1` uses the platform's configured
-embedding provider and records cosine similarity, threshold, model, provider,
-dimensions, and question-repetition handling in Evidence. Verbatim question
-repetition is removed before the answer is embedded. Missing embedding service,
-estimated local-hash vectors, mixed models/providers, malformed vectors, and
-timeouts produce `blocked` rather than silently falling back to lexical
-matching. The threshold is embedding-model-specific and must be calibrated on
-representative outputs before it is used as a strict production quality gate.
-The verifier adds two embedding requests per attempt; those calls are not yet
-represented as generation-token usage in the Run Usage Ledger.
-
 `citation` counts unique external URLs from explicit Markdown links and CommonMark autolinks. Relative links, images, and bare URL-like text are not citations. Host rules match the configured host and its subdomains. This verifier does not fetch sources or judge whether a source supports a claim; source reachability and claim groundedness belong in separate verifiers.
 
 ## Extension Model
@@ -219,6 +192,13 @@ This supports the common verifier families without forcing them into one scoring
 - Human review: expert judgment and calibration should enter through a future asynchronous evidence-ingestion path rather than blocking a synchronous verifier process.
 
 The Completion Gate deliberately consumes only `passed`, `failed`, or `blocked`; verifier-specific scores remain evidence details. Thresholds and rubric weighting belong inside the verifier that owns their semantics. The gate policy stays limited to required checks, `all_must_pass`/`any_may_pass`, attempt bounds, and exhaustion behavior.
+
+`answer_relevance` remains a recognized historical type so Replay can decode
+previous Contracts and Evidence. It is no longer registered by default because
+uncalibrated embedding similarity is not a reliable completion criterion. A
+new Contract that requests it is rejected as unsupported. Re-running a frozen
+historical Contract records `blocked` Evidence with
+`reason_code=implementation_unavailable`; persisted Replay remains readable.
 
 For subjective outputs such as articles and research reports, combine deterministic checks with an appropriately calibrated model or human grader. Deterministic structure and citation checks are useful evidence, but they are not substitutes for factuality, source quality, argument coherence, or editorial judgment.
 
