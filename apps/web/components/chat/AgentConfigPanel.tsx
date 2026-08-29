@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 
-import type { AgentInfo, ChatExecutor, ToolInfo } from "../../lib/api";
+import type { AgentInfo, ToolInfo } from "../../lib/api";
 
 export type AgentConfigDraft = {
   name: string;
@@ -9,7 +9,6 @@ export type AgentConfigDraft = {
   tools: string[];
   memory_enabled: boolean;
   retrieval_enabled: boolean;
-  executor: ChatExecutor;
 };
 
 export function isDefaultAgent(agent: AgentInfo) {
@@ -54,27 +53,14 @@ export function AgentConfigPanel({
       <div className="agent-config-header">
         <strong>{title}</strong>
       </div>
-      <div className="agent-config-grid">
-        <label>
-          <span>Name</span>
-          <input
-            disabled={disabled}
-            value={draft.name}
-            onChange={(event) => onChange({ name: event.target.value })}
-          />
-        </label>
-        <label>
-          <span>Executor</span>
-          <select
-            disabled={disabled}
-            value={draft.executor}
-            onChange={(event) => onChange({ executor: event.target.value as ChatExecutor })}
-          >
-            <option value="native">Native</option>
-            <option value="langchaingo">LangChainGo</option>
-          </select>
-        </label>
-      </div>
+      <label>
+        <span>Name</span>
+        <input
+          disabled={disabled}
+          value={draft.name}
+          onChange={(event) => onChange({ name: event.target.value })}
+        />
+      </label>
       <label>
         <span>Description</span>
         <textarea

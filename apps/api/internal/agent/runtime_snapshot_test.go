@@ -11,6 +11,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/taskstate"
@@ -45,7 +46,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	})
 	agent, err := fileStore.CreateAgent(domain.Agent{
 		Name: "Frozen agent", SystemPrompt: "original prompt", Tools: []string{"calculator"},
-		MemoryEnabled: true, RetrievalEnabled: true, Executor: ExecutorNative,
+		MemoryEnabled: true, RetrievalEnabled: true, Executor: domain.DefaultAgentExecutor,
 	})
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
@@ -54,7 +55,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	prepared, err := runtime.PrepareChatRun(ctx, agent.ID, conversation.ID, ExecutorNative)
+	prepared, err := runtime.PrepareChatRun(ctx, agent.ID, conversation.ID)
 	if err != nil {
 		t.Fatalf("prepare run: %v", err)
 	}
@@ -175,13 +176,10 @@ func TestTaskStateRuntimeProtocolStartsAtSnapshotV8(t *testing.T) {
 	}
 }
 
-func TestTaskStateToolIsOnlyAddedToNativeExecutor(t *testing.T) {
+func TestTaskStateToolIsAddedToNativeRuntime(t *testing.T) {
 	runtime := &Runtime{taskStates: taskstate.NewService(nil, nil)}
-	if !containsString(runtime.withHarnessTools(ExecutorNative, nil), taskstate.UpdateToolName) {
+	if !containsString(runtime.withHarnessTools(nil), taskstate.UpdateToolName) {
 		t.Fatal("native executor did not receive the task state tool")
-	}
-	if containsString(runtime.withHarnessTools(ExecutorLangChainGo, nil), taskstate.UpdateToolName) {
-		t.Fatal("text-only LangChainGo executor received an unavailable task state tool")
 	}
 }
 
@@ -226,7 +224,7 @@ func TestCaptureAutonomousSnapshotStoresRuntimeAndToolsOnlyInRunBudget(t *testin
 			MaxRuntimeMS: (15 * time.Minute).Milliseconds(), MaxToolCalls: 50,
 		},
 	}
-	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeAutonomous, domain.Agent{ID: "agent"}, nil, "")
+	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeAutonomous, domain.Agent{ID: "agent"}, nil)
 	if err != nil {
 		t.Fatalf("capture snapshot: %v", err)
 	}
@@ -308,6 +306,16 @@ func TestClientFromSnapshotRejectsCurrentCredentialForAnotherProvider(t *testing
 
 	if _, err := runtime.clientFromSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "credential for frozen provider") {
 		t.Fatalf("expected provider credential mismatch, got %v", err)
+	}
+}
+
+func TestValidateRuntimeSnapshotRejectsRetiredExecutorProtocol(t *testing.T) {
+	snapshot := testRuntimeSnapshot()
+	snapshot.Agent.Executor = "retired-framework"
+
+	err := validateRuntimeSnapshot(&snapshot)
+	if !errors.Is(err, ErrRuntimeExecutorUnsupported) || failure.Describe(err).Code != "runtime_executor_unsupported" {
+		t.Fatalf("expected typed unsupported executor error, got %v", err)
 	}
 }
 

@@ -53,7 +53,7 @@ const platformCapabilities = [
     icon: Layers3,
     phase: "Configure",
     title: "Agents and execution policy",
-    body: "Create reusable agents, choose native or LangChainGo execution, attach tools, and freeze completion and budget policy per run.",
+    body: "Create reusable agents, attach tools, and freeze completion and budget policy per run.",
     details: ["Agent profiles", "Tool catalog", "Frozen run snapshot"]
   },
   {
@@ -94,7 +94,7 @@ const platformCapabilities = [
 ];
 
 const architectureRows = [
-  { label: "Runtime", value: "Go orchestration", detail: "Native core · optional LangChainGo adapter" },
+  { label: "Runtime", value: "Go orchestration", detail: "Native Turn Engine" },
   { label: "Models", value: "OpenAI-compatible", detail: "Chat and embedding providers" },
   { label: "State", value: "File or PostgreSQL", detail: "pgvector semantic retrieval" },
   { label: "Transport", value: "HTTP + SSE", detail: "Persisted events and replay projections" }

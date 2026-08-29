@@ -94,7 +94,6 @@ export type AgentInfo = {
   tools: string[];
   memory_enabled: boolean;
   retrieval_enabled: boolean;
-  executor: ChatExecutor;
   archived?: boolean;
   created_at: string;
   updated_at: string;
@@ -108,7 +107,6 @@ export type ToolInfo = {
 };
 
 export type ChatMode = "single" | "multi_agent" | "autonomous";
-export type ChatExecutor = "native" | "langchaingo";
 
 export type RunInfo = {
   workspace_id?: string;
@@ -668,7 +666,6 @@ export async function streamChat(
     agent_id?: string;
     message: string;
     mode?: ChatMode;
-    executor?: ChatExecutor;
     completion_contract?: CompletionContractInput;
   },
   onEvent: (event: ChatEvent) => void
@@ -805,7 +802,7 @@ export async function listAgents(): Promise<AgentInfo[]> {
 }
 
 export async function createAgent(
-  input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
+  input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled">>
 ): Promise<AgentInfo> {
   const agent = await apiObject<AgentInfo>(
     "/api/agents",
@@ -822,7 +819,7 @@ export async function createAgent(
 
 export async function updateAgent(
   agentId: string,
-  input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled" | "executor">>
+  input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled">>
 ): Promise<AgentInfo> {
   const agent = await apiObject<AgentInfo>(
     `/api/agents/${agentId}`,
@@ -850,8 +847,7 @@ function normalizeAgentInfo(agent: AgentInfo): AgentInfo {
     ...agent,
     tools: Array.isArray(agent.tools) ? agent.tools : [],
     memory_enabled: agent.memory_enabled ?? true,
-    retrieval_enabled: agent.retrieval_enabled ?? true,
-    executor: agent.executor ?? "native"
+    retrieval_enabled: agent.retrieval_enabled ?? true
   };
 }
 

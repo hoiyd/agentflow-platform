@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"agentflow-platform/apps/api/internal/failure"
 )
 
 func TestModelErrorClassifiesProviderResponses(t *testing.T) {
@@ -77,18 +79,30 @@ func TestAuthenticationErrorDoesNotExposeProviderMessage(t *testing.T) {
 	}
 }
 
-func TestCapabilityFallbackRequiresMatchingInvalidRequest(t *testing.T) {
+func TestCapabilityDetectionRequiresMatchingInvalidRequest(t *testing.T) {
 	streamUnsupported := &ModelError{Kind: ErrorInvalidRequest, Message: "stream_options.include_usage is not supported"}
 	if !isStreamUsageUnsupported(streamUnsupported) {
 		t.Fatal("expected stream usage capability fallback")
 	}
 	toolUnsupported := &ModelError{Kind: ErrorInvalidRequest, Message: "tool_choice is not supported"}
 	if !isToolCallingUnsupported(toolUnsupported) {
-		t.Fatal("expected tool calling capability fallback")
+		t.Fatal("expected unsupported tool calling capability")
 	}
 	auth := &ModelError{Kind: ErrorAuthentication, Message: "tools request rejected"}
 	if isToolCallingUnsupported(auth) {
-		t.Fatal("authentication errors must not trigger capability fallback")
+		t.Fatal("authentication errors must not become capability errors")
+	}
+	malformed := &ModelError{Kind: ErrorInvalidRequest, Message: "tools must be an array"}
+	if isToolCallingUnsupported(malformed) {
+		t.Fatal("malformed tool definitions must remain invalid requests")
+	}
+	typed := toolCallingUnsupportedError(toolUnsupported)
+	if typed.Kind != ErrorToolCallingUnsupported || typed.Retryable || typed.Cause != toolUnsupported {
+		t.Fatalf("unexpected typed capability error: %#v", typed)
+	}
+	info := typed.FailureInfo()
+	if info.Code != "tool_calling_unsupported" || info.Category != failure.CategoryAvailability {
+		t.Fatalf("unexpected capability failure info: %#v", info)
 	}
 }
 

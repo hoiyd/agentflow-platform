@@ -15,7 +15,7 @@ Parent Run
 
 Child Run 冻结并独立持有：
 
-- selected Agent 的 system prompt、executor 和显式 Tool allowlist；
+- selected Agent 的 system prompt、native execution protocol 和显式 Tool allowlist；
 - 父 Run 已冻结的 provider/model identity；
 - 独立 Run Budget、timeout、Context Assembly 配置和 Usage Ledger；
 - `delegation_id`、`parent_run_id`、`parent_turn_id`、父 Stage 和 depth。

@@ -51,10 +51,9 @@ than silently overwriting another actor's change.
 
 New Runs enable Structured Task State context through Runtime Snapshot v8.
 Runs created with v1-v7 snapshots keep Task State context and its Tool disabled
-when resumed, preserving their original protocol. Native executors also freeze
-the runtime-owned `update_task_state` Tool; the text-only LangChainGo executor
-can read Task State but does not advertise a Tool it cannot execute. The Tool
-is not user-toggleable: it is a harness capability backed by the same versioned
+when resumed, preserving their original protocol. Current snapshots freeze the
+runtime-owned `update_task_state` Tool. The Tool is not user-toggleable: it is a
+harness capability backed by the same versioned
 Store contract as the HTTP API. Tool calls derive Conversation, Run, Stage,
 Turn, and Agent provenance from trusted runtime scope instead of accepting
 those identities from model arguments.

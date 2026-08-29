@@ -39,7 +39,7 @@ func TestRuntimeTurnModelRetriesTextOverflowOnlyAfterGenerationAdvances(t *testi
 	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: client, ContextAssembly: config})
 	result, err := (runtimeTurnModel{runtime: runtime}).Execute(context.Background(), turn.Request{
 		RunID: run.ID, TurnID: "turn-overflow-1", ConversationID: conversation.ID,
-		Agent: domain.Agent{ID: "agent_planner", SystemPrompt: "help", Executor: ExecutorNative},
+		Agent: domain.Agent{ID: "agent_planner", SystemPrompt: "help", Executor: domain.DefaultAgentExecutor},
 		Role:  "primary", SystemPrompt: "help", History: history, Input: "continue",
 		ModelMode: turn.ModelModeText,
 	}, func(turn.ModelEvent) {})
@@ -72,7 +72,7 @@ func TestRuntimeTurnModelDoesNotRetryOverflowWhenCompactionFails(t *testing.T) {
 	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: client, ContextAssembly: config})
 	_, err = (runtimeTurnModel{runtime: runtime}).Execute(context.Background(), turn.Request{
 		RunID: run.ID, TurnID: "turn-overflow-failed", ConversationID: conversation.ID,
-		Agent: domain.Agent{ID: "agent_planner", SystemPrompt: "help", Executor: ExecutorNative},
+		Agent: domain.Agent{ID: "agent_planner", SystemPrompt: "help", Executor: domain.DefaultAgentExecutor},
 		Role:  "primary", SystemPrompt: "help", History: history, Input: "continue",
 		ModelMode: turn.ModelModeText,
 	}, func(turn.ModelEvent) {})

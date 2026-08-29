@@ -108,8 +108,8 @@ is created. Resume and recovery reconstruct the runtime from this snapshot
 instead of reading the current editable configuration.
 
 It includes the Run mode, Agent configuration and system prompt, candidate
-Agents for multi-agent routing, provider/model identity, executor, tool names
-and schemas, router mode, Loop (`autonomous`) limits, and the Run Budget. Replay
+Agents for multi-agent routing, provider/model identity, native execution
+protocol, tool names and schemas, router mode, Loop (`autonomous`) limits, and the Run Budget. Replay
 returns the same snapshot so an operator can compare what was configured with
 what happened.
 

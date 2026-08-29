@@ -25,6 +25,14 @@ var ErrRuntimeSnapshotUnavailable = failure.New(failure.Definition{
 	},
 })
 
+var ErrRuntimeExecutorUnsupported = failure.New(failure.Definition{
+	Message: "runtime executor protocol is no longer supported",
+	Info: failure.Info{
+		Code: "runtime_executor_unsupported", Source: "runtime_snapshot",
+		Category: failure.CategoryAvailability, Retryable: false,
+	},
+})
+
 type restoredRuntime struct {
 	mode            string
 	agent           domain.Agent
@@ -34,21 +42,18 @@ type restoredRuntime struct {
 	routerMode      string
 }
 
-func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candidates []domain.Agent, executorOverride string) (domain.RuntimeSnapshot, error) {
+func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candidates []domain.Agent) (domain.RuntimeSnapshot, error) {
 	catalog, err := r.currentCatalog()
 	if err != nil {
 		return domain.RuntimeSnapshot{}, err
 	}
 	agent = domain.NormalizeAgentConfig(agent)
-	if executor := strings.TrimSpace(executorOverride); executor != "" {
-		agent.Executor = NormalizeExecutorKind(executor)
-	}
-	agent.Tools = r.withHarnessTools(agent.Executor, agent.Tools)
+	agent.Tools = r.withHarnessTools(agent.Tools)
 	candidateSnapshots := make([]domain.RuntimeAgentSnapshot, 0, len(candidates))
 	toolNames := append([]string(nil), agent.Tools...)
 	for _, candidate := range candidates {
 		candidate = domain.NormalizeAgentConfig(candidate)
-		candidate.Tools = r.withHarnessTools(candidate.Executor, candidate.Tools)
+		candidate.Tools = r.withHarnessTools(candidate.Tools)
 		candidateSnapshots = append(candidateSnapshots, snapshotAgent(candidate))
 		toolNames = append(toolNames, candidate.Tools...)
 	}
@@ -109,9 +114,9 @@ func (r *Runtime) currentCatalog() (*tools.Catalog, error) {
 	return catalog.CloneWith(r.taskStates.ToolBinding())
 }
 
-func (r *Runtime) withHarnessTools(executor string, names []string) []string {
+func (r *Runtime) withHarnessTools(names []string) []string {
 	result := append([]string(nil), names...)
-	if r.taskStates == nil || NormalizeExecutorKind(executor) != ExecutorNative {
+	if r.taskStates == nil {
 		return result
 	}
 	for _, name := range result {
@@ -126,7 +131,7 @@ func snapshotAgent(agent domain.Agent) domain.RuntimeAgentSnapshot {
 	return domain.RuntimeAgentSnapshot{
 		ID: agent.ID, Name: agent.Name, Description: agent.Description, SystemPrompt: agent.SystemPrompt,
 		Tools: append([]string(nil), agent.Tools...), MemoryEnabled: agent.MemoryEnabled,
-		RetrievalEnabled: agent.RetrievalEnabled, Executor: agent.Executor,
+		RetrievalEnabled: agent.RetrievalEnabled, Executor: domain.DefaultAgentExecutor,
 	}
 }
 
@@ -139,7 +144,7 @@ func restoreAgent(snapshot domain.RuntimeAgentSnapshot) domain.Agent {
 		Tools:            append([]string(nil), snapshot.Tools...),
 		MemoryEnabled:    snapshot.MemoryEnabled,
 		RetrievalEnabled: snapshot.RetrievalEnabled,
-		Executor:         snapshot.Executor,
+		Executor:         domain.DefaultAgentExecutor,
 	}
 }
 
@@ -227,6 +232,14 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	if strings.TrimSpace(snapshot.Agent.ID) == "" {
 		return errors.New("runtime snapshot has no agent")
 	}
+	if err := validateRuntimeExecutor(snapshot.Agent); err != nil {
+		return err
+	}
+	for _, candidate := range snapshot.CandidateAgents {
+		if err := validateRuntimeExecutor(candidate); err != nil {
+			return err
+		}
+	}
 	if strings.TrimSpace(snapshot.Model.Model) == "" {
 		return errors.New("runtime snapshot has no model")
 	}
@@ -242,6 +255,14 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 		}
 	}
 	return nil
+}
+
+func validateRuntimeExecutor(agent domain.RuntimeAgentSnapshot) error {
+	executor := strings.TrimSpace(agent.Executor)
+	if executor == "" || executor == domain.DefaultAgentExecutor {
+		return nil
+	}
+	return errors.Join(ErrRuntimeExecutorUnsupported, fmt.Errorf("agent %q captured executor %q", agent.ID, executor))
 }
 
 func cloneRunBudget(value domain.RuntimeRunBudget) *domain.RuntimeRunBudget {

@@ -12,7 +12,7 @@ source directory. Start with the path that matches the depth of review you need.
 3. [Execution modes](execution-modes.md): how Single, Multi, and Loop differ,
    when to choose each, and which runtime contracts they share.
 4. [Agent profiles](agent-profiles.md): how custom prompts, Tool/RAG/Memory
-   policy, executors, Router candidates, and frozen Run semantics fit together.
+   policy, Router candidates, and frozen Run semantics fit together.
 5. [Engineering decisions](engineering-decisions.md): why the platform uses
    explicit runtime primitives and how the design evolved.
 6. [Backend architecture](backend-architecture.md): package ownership,
@@ -38,7 +38,7 @@ the project.
 
 | Document | Question answered |
 | --- | --- |
-| [Agent profiles](agent-profiles.md) | How are reusable Agent personas, prompts, Tool permissions, retrieval policy, executors, and Router candidates configured and frozen? |
+| [Agent profiles](agent-profiles.md) | How are reusable Agent personas, prompts, Tool permissions, retrieval policy, and Router candidates configured and frozen? |
 | [Execution modes](execution-modes.md) | How do Single, Multi, and Loop execution differ in lifecycle, checkpoints, trace shape, cost, and use case? |
 | [Internal terms](terms.md) | What do the execution entities mean, and how do Run Events, Trace, Replay, and Episode Report differ? |
 | [Execution controls](execution-controls.md) | Which layer owns concurrency, rate limits, retries, budgets, context capacity, and stopping rules? |

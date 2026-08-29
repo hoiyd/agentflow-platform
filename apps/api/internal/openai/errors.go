@@ -20,19 +20,20 @@ import (
 type ErrorKind string
 
 const (
-	ErrorCanceled              ErrorKind = "canceled"
-	ErrorTimeout               ErrorKind = "timeout"
-	ErrorTransport             ErrorKind = "transport"
-	ErrorRateLimited           ErrorKind = "rate_limited"
-	ErrorProviderUnavailable   ErrorKind = "provider_unavailable"
-	ErrorAuthentication        ErrorKind = "authentication"
-	ErrorQuotaExceeded         ErrorKind = "quota_exceeded"
-	ErrorModelNotFound         ErrorKind = "model_not_found"
-	ErrorInvalidRequest        ErrorKind = "invalid_request"
-	ErrorContextLengthExceeded ErrorKind = "context_length_exceeded"
-	ErrorContentPolicy         ErrorKind = "content_policy"
-	ErrorRequestTokenCapacity  ErrorKind = "request_token_capacity_exceeded"
-	ErrorInvalidResponse       ErrorKind = "invalid_response"
+	ErrorCanceled               ErrorKind = "canceled"
+	ErrorTimeout                ErrorKind = "timeout"
+	ErrorTransport              ErrorKind = "transport"
+	ErrorRateLimited            ErrorKind = "rate_limited"
+	ErrorProviderUnavailable    ErrorKind = "provider_unavailable"
+	ErrorAuthentication         ErrorKind = "authentication"
+	ErrorQuotaExceeded          ErrorKind = "quota_exceeded"
+	ErrorModelNotFound          ErrorKind = "model_not_found"
+	ErrorInvalidRequest         ErrorKind = "invalid_request"
+	ErrorContextLengthExceeded  ErrorKind = "context_length_exceeded"
+	ErrorContentPolicy          ErrorKind = "content_policy"
+	ErrorToolCallingUnsupported ErrorKind = "tool_calling_unsupported"
+	ErrorRequestTokenCapacity   ErrorKind = "request_token_capacity_exceeded"
+	ErrorInvalidResponse        ErrorKind = "invalid_response"
 )
 
 // ModelError preserves provider details without exposing credentials or raw bodies.
@@ -108,7 +109,7 @@ func modelErrorCategory(kind ErrorKind) failure.Category {
 		return failure.CategoryCanceled
 	case ErrorTimeout:
 		return failure.CategoryTimeout
-	case ErrorTransport, ErrorRateLimited, ErrorProviderUnavailable:
+	case ErrorTransport, ErrorRateLimited, ErrorProviderUnavailable, ErrorToolCallingUnsupported:
 		return failure.CategoryAvailability
 	case ErrorAuthentication:
 		return failure.CategoryAuthentication
@@ -300,7 +301,29 @@ func isStreamUsageUnsupported(err error) bool {
 }
 
 func isToolCallingUnsupported(err error) bool {
-	return isInvalidRequestCapabilityError(err, "tool_choice", "tools", "function calling")
+	modelErr, ok := AsModelError(err)
+	if !ok || modelErr.Kind != ErrorInvalidRequest {
+		return false
+	}
+	fingerprint := strings.ToLower(strings.Join([]string{modelErr.ProviderType, modelErr.ProviderCode, modelErr.Message}, " "))
+	mentionsCapability := containsAny(fingerprint, "tool_choice", "tools", "function calling", "tool calling")
+	declaresUnsupported := containsAny(fingerprint, "not supported", "unsupported", "does not support", "unavailable")
+	return mentionsCapability && declaresUnsupported
+}
+
+func toolCallingUnsupportedError(err error) *ModelError {
+	modelErr := classifyModelError("chat.completion", err)
+	return &ModelError{
+		Kind:         ErrorToolCallingUnsupported,
+		Operation:    modelErr.Operation,
+		StatusCode:   modelErr.StatusCode,
+		ProviderType: modelErr.ProviderType,
+		ProviderCode: modelErr.ProviderCode,
+		Message:      "configured model does not support native tool calling",
+		Retryable:    false,
+		Attempts:     modelErr.Attempts,
+		Cause:        err,
+	}
 }
 
 func isInvalidRequestCapabilityError(err error, markers ...string) bool {

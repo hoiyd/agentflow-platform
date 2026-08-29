@@ -221,12 +221,12 @@ func (r *Runtime) runChildWorkerStep(ctx context.Context, run domain.Run, agent 
 		return "", err
 	}
 	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, run.ID, input, agent.MemoryEnabled, agent.RetrievalEnabled, map[string]any{
-		"executor": agent.Executor, "framework": "agentflow-native", "delegated": true,
+		"executor": domain.DefaultAgentExecutor, "framework": "agentflow-native", "delegated": true,
 	})
 	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{
 		RunID: run.ID, StepID: step.ID, ConversationID: run.ConversationID,
 		Agent: agent, Role: "worker", SystemPrompt: workerPrompt(agent), Input: input,
-		ExecutorKind: agent.Executor, Catalog: catalog,
+		Catalog: catalog,
 		Context: turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks}, Sink: r.runEventSink(),
 	}, nil)
 	if err != nil {

@@ -4,10 +4,10 @@ This document explains the decisions that are easiest to miss when reading the
 feature list. It focuses on boundaries, trade-offs, and the sequence in which
 the platform learned to handle more realistic agent workloads.
 
-## Native Orchestration, Framework-Compatible Edges
+## Native Orchestration Owns the Execution Protocol
 
-AgentFlow implements its core orchestration primitives directly in Go and keeps
-LangChainGo as an optional executor adapter.
+AgentFlow implements its orchestration primitives directly in Go and uses one
+native Turn Engine across every execution mode.
 
 This is not an argument that frameworks are unnecessary. The project uses the
 native path to make the underlying contracts inspectable:
@@ -22,8 +22,8 @@ native path to make the underlying contracts inspectable:
 
 If a framework owned those concerns, the project could demonstrate framework
 usage but would provide less evidence that its failure modes were understood.
-Keeping adapters at the executor boundary allows framework integration without
-letting one framework define persistence, observability, or safety policy.
+Provider adapters remain below the Turn Engine and cannot redefine persistence,
+observability, or safety policy.
 
 **Trade-off:** more platform code must be maintained. The countermeasure is a
 small shared Turn Engine, capability-oriented packages, and tests around common
@@ -35,9 +35,9 @@ OpenAI-compatible providers often implement the same endpoint shape but differ
 in optional behavior. AgentFlow handles two known capability boundaries
 explicitly:
 
-- if native Tool Calling is rejected as unsupported, the Turn records the
-  failure, rebuilds context without Tool definitions, and falls back to a
-  constrained JSON Tool Call protocol;
+- if native Tool Calling is rejected as unsupported, the Turn stops with the
+  typed, non-retryable `tool_calling_unsupported` error; ordinary model text is
+  never parsed as an executable Tool Call;
 - if streaming usage metadata is unsupported, the client retries the stream
   without `stream_options.include_usage` while retaining one logical usage
   reservation.

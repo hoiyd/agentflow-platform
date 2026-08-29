@@ -49,7 +49,7 @@ func (r *Runtime) PrepareAutonomousRunWithContract(ctx context.Context, agentID 
 		return PreparedCollaborationRun{}, err
 	}
 
-	snapshot, err := r.captureRuntimeSnapshot(ChatModeAutonomous, agent, nil, "")
+	snapshot, err := r.captureRuntimeSnapshot(ChatModeAutonomous, agent, nil)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
@@ -498,7 +498,7 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 		return "", errRunCanceled
 	}
 	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input, true, true, map[string]any{
-		"executor":  ExecutorNative,
+		"executor":  domain.DefaultAgentExecutor,
 		"framework": "agentflow-native",
 	})
 	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{

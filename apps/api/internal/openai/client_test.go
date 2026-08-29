@@ -141,12 +141,6 @@ func TestClientHelperContracts(t *testing.T) {
 	if normalized[0].ID != "call_1" || normalized[0].Type != "function" || normalized[0].Function.Arguments != "{}" {
 		t.Fatalf("normalize tool calls: %#v", normalized)
 	}
-	if _, ok := parseFallbackToolCall("not json"); ok {
-		t.Fatal("expected non-JSON fallback call rejection")
-	}
-	if _, ok := parseFallbackToolCall(`{"action":"answer"}`); ok {
-		t.Fatal("expected non-tool fallback action rejection")
-	}
 	if summarizeToolResults(nil) != "Tool execution completed." || summarizeToolResults([]tools.ExecutionResult{{Tool: "calculator"}}) != "Tool execution completed." {
 		t.Fatal("unexpected tool result summary")
 	}
@@ -206,29 +200,6 @@ func TestRetrievedChunkPayloadIncludesFusionRanksAndSourceDetails(t *testing.T) 
 	}
 	if items[0]["parent_id"] != "parent-1" || items[0]["document_version"] != "v1" || items[0]["content_hash"] != "hash-1" || items[0]["start_offset"] != 12 || items[0]["end_offset"] != 48 {
 		t.Fatalf("expected source details, got %#v", items[0])
-	}
-}
-
-func TestParseFallbackToolCall(t *testing.T) {
-	call, ok := parseFallbackToolCall(`{"action":"tool_call","tool":"calculator","arguments":{"expression":"128 * 37"}}`)
-	if !ok {
-		t.Fatal("expected fallback tool call")
-	}
-	if call.Function.Name != "calculator" {
-		t.Fatalf("expected calculator, got %s", call.Function.Name)
-	}
-	if call.Function.Arguments != `{"expression":"128 * 37"}` {
-		t.Fatalf("unexpected arguments: %s", call.Function.Arguments)
-	}
-}
-
-func TestParseFallbackToolCallFromFence(t *testing.T) {
-	call, ok := parseFallbackToolCall("```json\n{\"action\":\"tool_call\",\"tool\":\"get_current_time\",\"arguments\":{\"timezone\":\"Asia/Shanghai\"}}\n```")
-	if !ok {
-		t.Fatal("expected fallback tool call")
-	}
-	if call.Function.Name != "get_current_time" {
-		t.Fatalf("expected get_current_time, got %s", call.Function.Name)
 	}
 }
 

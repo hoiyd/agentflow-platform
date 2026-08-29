@@ -43,7 +43,6 @@ type Request struct {
 	SystemPrompt   string
 	History        []domain.Message
 	Input          string
-	ExecutorKind   string
 	ModelMode      ModelMode
 	Catalog        *tools.Catalog
 	Context        Context

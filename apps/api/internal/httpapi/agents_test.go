@@ -26,7 +26,7 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 		"tools": ["calculator"],
 		"memory_enabled": false,
 		"retrieval_enabled": true,
-		"executor": "langchaingo"
+			"executor": "retired-framework"
 	}`)
 	req := httptest.NewRequest(http.MethodPatch, "/api/agents/agent_planner", bytes.NewReader(body))
 	recorder := httptest.NewRecorder()
@@ -41,7 +41,7 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 	if agent.Name != "Configurable Agent" || agent.SystemPrompt != "Use a concise style." {
 		t.Fatalf("expected updated text fields, got %#v", agent)
 	}
-	if agent.MemoryEnabled || !agent.RetrievalEnabled || agent.Executor != "langchaingo" {
+	if agent.MemoryEnabled || !agent.RetrievalEnabled || agent.Executor != domain.DefaultAgentExecutor {
 		t.Fatalf("expected updated runtime config, got %#v", agent)
 	}
 	if len(agent.Tools) != 1 || agent.Tools[0] != "calculator" {
@@ -55,7 +55,7 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 	if !ok {
 		t.Fatal("expected updated agent")
 	}
-	if persisted.MemoryEnabled || !persisted.RetrievalEnabled || persisted.Executor != "langchaingo" {
+	if persisted.MemoryEnabled || !persisted.RetrievalEnabled || persisted.Executor != domain.DefaultAgentExecutor {
 		t.Fatalf("expected persisted config, got %#v", persisted)
 	}
 }
@@ -108,8 +108,7 @@ func TestCreateAgentConfigAPI(t *testing.T) {
 		"system_prompt": "Review resume evidence.",
 		"tools": ["get_current_time"],
 		"memory_enabled": true,
-		"retrieval_enabled": true,
-		"executor": "native"
+			"retrieval_enabled": true
 	}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/agents", bytes.NewReader(body))
 	recorder := httptest.NewRecorder()

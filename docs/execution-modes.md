@@ -93,7 +93,7 @@ summary and Child Trace reference. See
 
 The current topology is intentionally fixed rather than a generic arbitrary
 DAG. This keeps lifecycle, continue semantics, and Replay predictable while
-still exposing Router and executor extension points.
+still exposing a bounded Router extension point.
 
 ## Loop Mode
 
