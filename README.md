@@ -144,7 +144,7 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 | [Context control](docs/context-management.md) | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [assembler](apps/api/internal/contextassembly/assembler.go), [tests](apps/api/internal/contextassembly/assembler_test.go) |
 | [Structured durable task state](docs/task-state.md) | Conversation-scoped goals, tasks, decisions, constraints, blockers, and Artifact references evolve through optimistic typed patches rather than summaries | [domain](apps/api/internal/domain/task_state.go), [Store tests](apps/api/internal/store/file_task_states_test.go) |
 | [Durable memory](docs/memory-management.md) | Explicit rules plus optional shadow-mode model extraction propose auditable candidates before embedding | [curator](apps/api/internal/memory/curator.go), [tests](apps/api/internal/memory/curator_test.go) |
-| [Provider compatibility](docs/engineering-decisions.md#openai-compatible-does-not-mean-capability-identical) | The native Turn Engine keeps policy ownership while typed capability fallbacks handle provider differences in Tool Calling and stream usage metadata | [provider adapter](apps/api/internal/openai), [tests](apps/api/internal/openai/context_integration_test.go) |
+| [Provider compatibility](docs/engineering-decisions.md#openai-compatible-does-not-mean-capability-identical) | The native Turn Engine requires structured Tool Calling and reports unsupported models explicitly; stream usage metadata has a bounded transport fallback | [provider adapter](apps/api/internal/openai), [tests](apps/api/internal/openai/context_integration_test.go) |
 
 ### RAG and Knowledge Grounding
 

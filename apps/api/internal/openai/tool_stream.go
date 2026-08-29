@@ -105,67 +105,20 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		"temperature": 0.2,
 	})
 	if err != nil {
-		if !isToolCallingUnsupported(err) {
-			recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
-				"source": "llm",
-				"stage":  "tool_selection",
-				"model":  c.model,
-				"error":  err.Error(),
-			}, err))
-			return err
+		if isToolCallingUnsupported(err) {
+			err = toolCallingUnsupportedError(err)
 		}
-		log.Printf(
-			"chat_capability_fallback capability=tool_calling reason=%q model=%s enabled_tools=%q history_messages=%d",
-			err.Error(),
-			c.model,
-			strings.Join(enabledTools, ","),
-			len(messages),
-		)
 		recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
-			"source": "llm", "stage": "tool_selection", "model": c.model,
-			"manifest_id": prepared.manifest.ID, "error": err.Error(),
+			"source": "llm",
+			"stage":  "tool_selection",
+			"model":  c.model,
+			"error":  err.Error(),
 		}, err))
-		prepared, err = c.prepareModelContext(ctx, rawMessages, nil)
-		if err != nil {
-			return err
-		}
-		messages = prepared.messages
-		llmSpan = recorder.LLMStart(ctx, runID, stepID, mergePayload(map[string]any{
-			"model": c.model, "call_kind": "text_capability_fallback", "messages": messages,
-			"input_chars": messagesTextLength(messages),
-		}, contextTracePayload(prepared.manifest)))
-		decisionCtx = budget.WithOperation(ctx, prepared.manifest.ModelCallID)
-		decisionCtx = withOutputTokenLimit(decisionCtx, prepared.manifest.OutputReserveTokens)
-		decisionCtx = withRequestManifest(decisionCtx, prepared.manifest)
-		decision, err = c.complete(decisionCtx, map[string]any{
-			"model":       c.model,
-			"messages":    messages,
-			"temperature": 0.2,
-		})
-		if err != nil {
-			recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
-				"source": "llm",
-				"stage":  "text_fallback",
-				"model":  c.model,
-				"error":  err.Error(),
-			}, err))
-			return err
-		}
+		return err
 	}
 
 	choice := decision.Choices[0]
 	toolCalls := choice.Message.ToolCalls
-	if len(toolCalls) == 0 {
-		if fallback, ok := parseFallbackToolCall(choice.Message.Content); ok {
-			log.Printf(
-				"chat_fallback mode=json_tool_call tool=%s arguments=%q content_len=%d",
-				fallback.Function.Name,
-				fallback.Function.Arguments,
-				len(choice.Message.Content),
-			)
-			toolCalls = []ToolCall{fallback}
-		}
-	}
 
 	if len(toolCalls) == 0 {
 		err := emitText(ctx, choice.Message.Content, events)

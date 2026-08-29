@@ -50,10 +50,8 @@ func buildMessagesWithToolNames(history []domain.Message, toolNames []string) []
 
 func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message, toolNames []string) []Message {
 	available := "No tools are currently enabled."
-	fallbackInstruction := ""
 	if len(toolNames) > 0 {
 		available = "Available tools include " + strings.Join(toolNames, ", ") + "."
-		fallbackInstruction = " If native tool calling is unavailable, output only JSON like {\"action\":\"tool_call\",\"tool\":\"calculator\",\"arguments\":{\"expression\":\"128 * 37\"}}."
 	}
 	systemPrompt = strings.TrimSpace(systemPrompt)
 	if systemPrompt == "" {
@@ -61,7 +59,7 @@ func buildMessagesWithSystemPrompt(systemPrompt string, history []domain.Message
 	}
 	messages := []Message{
 		{
-			Role: "system", Content: systemPrompt + " " + available + fallbackInstruction,
+			Role: "system", Content: systemPrompt + " " + available,
 			Source: contextassembly.SourceSystem, ReferenceID: "system_prompt",
 		},
 	}

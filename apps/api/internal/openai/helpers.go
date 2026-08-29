@@ -2,57 +2,11 @@ package openai
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"math"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
-
-func parseFallbackToolCall(content string) (ToolCall, bool) {
-	var payload struct {
-		Action    string          `json:"action"`
-		Tool      string          `json:"tool"`
-		Arguments json.RawMessage `json:"arguments"`
-	}
-	candidate := extractJSONObject(content)
-	if candidate == "" {
-		return ToolCall{}, false
-	}
-	if err := json.Unmarshal([]byte(candidate), &payload); err != nil {
-		return ToolCall{}, false
-	}
-	if payload.Action != "tool_call" || payload.Tool == "" {
-		return ToolCall{}, false
-	}
-	if len(payload.Arguments) == 0 {
-		payload.Arguments = json.RawMessage(`{}`)
-	}
-	return ToolCall{
-		ID:   "fallback_call_1",
-		Type: "function",
-		Function: FunctionCall{
-			Name:      payload.Tool,
-			Arguments: string(payload.Arguments),
-		},
-	}, true
-}
-
-func extractJSONObject(content string) string {
-	content = strings.TrimSpace(content)
-	if strings.HasPrefix(content, "```") {
-		content = strings.TrimPrefix(content, "```json")
-		content = strings.TrimPrefix(content, "```")
-		content = strings.TrimSuffix(content, "```")
-		content = strings.TrimSpace(content)
-	}
-	start := strings.Index(content, "{")
-	end := strings.LastIndex(content, "}")
-	if start < 0 || end < start {
-		return ""
-	}
-	return content[start : end+1]
-}
 
 func suffix(index int, total int) string {
 	if index == total-1 {

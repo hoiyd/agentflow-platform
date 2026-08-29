@@ -35,9 +35,9 @@ OpenAI-compatible providers often implement the same endpoint shape but differ
 in optional behavior. AgentFlow handles two known capability boundaries
 explicitly:
 
-- if native Tool Calling is rejected as unsupported, the Turn records the
-  failure, rebuilds context without Tool definitions, and falls back to a
-  constrained JSON Tool Call protocol;
+- if native Tool Calling is rejected as unsupported, the Turn stops with the
+  typed, non-retryable `tool_calling_unsupported` error; ordinary model text is
+  never parsed as an executable Tool Call;
 - if streaming usage metadata is unsupported, the client retries the stream
   without `stream_options.include_usage` while retaining one logical usage
   reservation.

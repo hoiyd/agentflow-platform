@@ -46,9 +46,10 @@ headers are applied after the payload observation boundary.
 
 A provider retry reuses one `model_call_id` and receives the next `attempt`
 number. The Run Budget counts the logical call once, while each physical
-attempt has its own envelope and `model.request_prepared` event. A stream usage
-capability fallback also creates another attempt because its effective payload
-differs from the original request.
+attempt has its own envelope and `model.request_prepared` event. The bounded
+stream-usage metadata fallback also creates another attempt because its
+effective payload differs from the original request. Unsupported Tool Calling
+does not trigger a second text request.
 
 The recorder runs before the provider request. A run-scoped persistence failure
 fails closed rather than sending an unrecorded request. File and Postgres stores

@@ -106,43 +106,25 @@ func TestToolStreamReturnsDirectModelAnswer(t *testing.T) {
 	}
 }
 
-func TestToolStreamFallsBackToJSONToolCallAndSummary(t *testing.T) {
+func TestToolStreamReturnsTypedUnsupportedCapability(t *testing.T) {
 	client := retryTestClient()
 	attempts := 0
 	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
 		attempts++
-		switch attempts {
-		case 1:
-			return modelHTTPResponse(400, `{"error":{"message":"tool_choice is not supported","code":"invalid_request_error"}}`), nil
-		case 2:
-			return modelHTTPResponse(200, `{
-				"choices":[{"message":{"role":"assistant","content":"{\"action\":\"tool_call\",\"tool\":\"calculator\",\"arguments\":{\"expression\":\"2 + 3\"}}"}}]
-			}`), nil
-		default:
-			return modelHTTPResponse(200, "data: [DONE]\n\n"), nil
-		}
+		return modelHTTPResponse(400, `{"error":{"message":"tool_choice is not supported","code":"invalid_request_error"}}`), nil
 	})}
 
 	events, errs := client.StreamAgentChatWithTools(
 		context.Background(), "Use the calculator when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(),
 	)
-	var output strings.Builder
-	var started, finished bool
-	for event := range events {
-		switch event.Type {
-		case "delta":
-			output.WriteString(event.Delta)
-		case "tool_start":
-			started = event.ToolName == "calculator"
-		case "tool_end":
-			finished = event.ToolName == "calculator" && event.Error == ""
-		}
+	for range events {
 	}
-	if err := <-errs; err != nil {
-		t.Fatalf("stream capability fallback: %v", err)
+	modelErr, ok := AsModelError(<-errs)
+	if !ok || modelErr.Kind != ErrorToolCallingUnsupported || modelErr.Retryable || attempts != 1 {
+		t.Fatalf("expected terminal capability error: attempts=%d err=%#v", attempts, modelErr)
 	}
-	if attempts != 3 || !started || !finished || output.String() != "Tool execution completed." {
-		t.Fatalf("unexpected capability fallback: attempts=%d started=%t finished=%t output=%q", attempts, started, finished, output.String())
+	if info := modelErr.FailureInfo(); info.Code != "tool_calling_unsupported" {
+		t.Fatalf("unexpected capability failure info: %#v", info)
 	}
 }
 
@@ -162,28 +144,6 @@ func TestToolStreamReturnsTerminalSelectionError(t *testing.T) {
 	modelErr, ok := AsModelError(<-errs)
 	if !ok || modelErr.Kind != ErrorAuthentication || attempts != 1 {
 		t.Fatalf("expected terminal authentication error: attempts=%d err=%#v", attempts, modelErr)
-	}
-}
-
-func TestToolStreamReturnsCapabilityFallbackError(t *testing.T) {
-	client := retryTestClient()
-	attempts := 0
-	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
-		attempts++
-		if attempts == 1 {
-			return modelHTTPResponse(400, `{"error":{"message":"tool_choice is not supported","code":"invalid_request_error"}}`), nil
-		}
-		return modelHTTPResponse(401, `{"error":{"message":"invalid API key","code":"invalid_api_key"}}`), nil
-	})}
-
-	events, errs := client.StreamAgentChatWithTools(
-		context.Background(), "Use tools when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(),
-	)
-	for range events {
-	}
-	modelErr, ok := AsModelError(<-errs)
-	if !ok || modelErr.Kind != ErrorAuthentication || attempts != 2 {
-		t.Fatalf("expected capability fallback error: attempts=%d err=%#v", attempts, modelErr)
 	}
 }
 
