@@ -7,7 +7,6 @@ func (h *Handler) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/chat", h.chat)
 
 	h.registerConversationRoutes(mux)
-	h.registerMemoryRoutes(mux)
 	h.registerDocumentRoutes(mux)
 	h.registerAgentRoutes(mux)
 	h.registerRunRoutes(mux)
@@ -28,11 +27,6 @@ func (h *Handler) registerConversationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/conversations/{id}/task-state", h.patchTaskState)
 	mux.HandleFunc("GET /api/conversations/{id}/task-state/revisions", h.listTaskStateRevisions)
 	mux.HandleFunc("GET /api/conversations/{id}/task-state/revisions/{version}", h.getTaskStateRevision)
-}
-
-func (h *Handler) registerMemoryRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/memories", h.createMemory)
-	mux.HandleFunc("POST /api/memories/search", h.searchMemories)
 }
 
 func (h *Handler) registerDocumentRoutes(mux *http.ServeMux) {

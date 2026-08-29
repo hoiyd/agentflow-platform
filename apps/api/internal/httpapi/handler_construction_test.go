@@ -19,15 +19,6 @@ import (
 	"agentflow-platform/apps/api/internal/verification"
 )
 
-type memoryOperationsStub struct{}
-
-func (*memoryOperationsStub) Create(_ context.Context, memory domain.Memory) (domain.Memory, error) {
-	return memory, nil
-}
-func (*memoryOperationsStub) Search(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
-	return nil, nil
-}
-
 type knowledgeOperationsStub struct{}
 
 func (*knowledgeOperationsStub) Ingest(_ context.Context, request domain.DocumentIngestRequest) (domain.Document, error) {
@@ -57,7 +48,6 @@ func TestNewHandlerValidatesEveryRequiredDependency(t *testing.T) {
 		{name: "model client", edit: func(d *Dependencies) { d.ModelClient = nil }, want: "http api model client is required"},
 		{name: "tools", edit: func(d *Dependencies) { d.Tools = nil }, want: "http api tools manager is required"},
 		{name: "agent runtime", edit: func(d *Dependencies) { d.AgentRuntime = nil }, want: "http api agent runtime is required"},
-		{name: "memory", edit: func(d *Dependencies) { d.Memory = nil }, want: "http api memory operations are required"},
 		{name: "knowledge", edit: func(d *Dependencies) { d.Knowledge = nil }, want: "http api knowledge operations are required"},
 		{name: "curation", edit: func(d *Dependencies) { d.MemoryCuration = nil }, want: "http api memory curation queue is required"},
 		{name: "run controller", edit: func(d *Dependencies) { d.RunController = nil }, want: "http api run controller is required"},
@@ -126,7 +116,6 @@ func completeHandlerDependencies(t *testing.T) Dependencies {
 	return Dependencies{
 		Store: fileStore, ModelClient: client, Tools: manager,
 		AgentRuntime:   agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fileStore, ModelClient: client}),
-		Memory:         &memoryOperationsStub{},
 		Knowledge:      &knowledgeOperationsStub{},
 		MemoryCuration: &memoryQueueStub{},
 		RunController: concurrency.NewRunController(concurrency.RunOptions{

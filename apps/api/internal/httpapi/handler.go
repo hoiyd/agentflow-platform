@@ -25,12 +25,6 @@ type MemoryCurationQueue interface {
 	Enqueue(memorypkg.CurationJob) error
 }
 
-// MemoryOperations is the transport-facing subset of semantic memory behavior.
-type MemoryOperations interface {
-	Create(context.Context, domain.Memory) (domain.Memory, error)
-	Search(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error)
-}
-
 // KnowledgeOperations is the transport-facing subset of knowledge-base behavior.
 type KnowledgeOperations interface {
 	Ingest(context.Context, domain.DocumentIngestRequest) (domain.Document, error)
@@ -85,7 +79,6 @@ type Dependencies struct {
 	ModelClient          modelprovider.TextCompleter
 	Tools                ToolOperations
 	AgentRuntime         AgentRuntimeOperations
-	Memory               MemoryOperations
 	Knowledge            KnowledgeOperations
 	MemoryCuration       MemoryCurationQueue
 	RunController        RunCapacity
@@ -99,7 +92,6 @@ type Handler struct {
 	modelClient          modelprovider.TextCompleter
 	tools                ToolOperations
 	agentRuntime         AgentRuntimeOperations
-	memories             MemoryOperations
 	knowledge            KnowledgeOperations
 	memoryCuration       MemoryCurationQueue
 	runController        RunCapacity
@@ -121,9 +113,6 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 	if dependencies.AgentRuntime == nil {
 		return nil, errors.New("http api agent runtime is required")
 	}
-	if dependencies.Memory == nil {
-		return nil, errors.New("http api memory operations are required")
-	}
 	if dependencies.Knowledge == nil {
 		return nil, errors.New("http api knowledge operations are required")
 	}
@@ -141,7 +130,6 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		modelClient:          dependencies.ModelClient,
 		tools:                dependencies.Tools,
 		agentRuntime:         dependencies.AgentRuntime,
-		memories:             dependencies.Memory,
 		knowledge:            dependencies.Knowledge,
 		memoryCuration:       dependencies.MemoryCuration,
 		runController:        dependencies.RunController,

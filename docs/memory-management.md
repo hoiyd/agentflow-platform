@@ -68,16 +68,19 @@ memory.sync.completed | memory.sync.failed
 
 The Curator uses a bounded, ordered background queue and drains accepted work during shutdown. Adaptive model requests share the normal model concurrency, rate-limit, retry, and timeout controls. Extraction, embedding, queue, Candidate, or Memory failures are observable, but they do not change a successfully completed Run.
 
-The explicit `POST /api/memories` and `POST /api/memories/search` APIs remain
-available. Versioned replace/remove mutations are not implemented; implicit
-message copying has been replaced with conservative curation.
+Memory creation and recall are internal capabilities. The former unauthenticated
+`POST /api/memories` and `POST /api/memories/search` administration routes were
+removed because they had no product consumer and bypassed Curator provenance.
+External consumers must migrate away from those endpoints. A future operator
+surface requires authentication, audit records, and versioned mutation
+semantics before it can expose manual Memory management again.
 
 Memory writes and recall always carry a normalized Workspace namespace. The
-Curator inherits it from the source Message/Run; explicit HTTP requests resolve
-it from the request, and omitted scope becomes `default_workspace`. File and
-Postgres search apply that predicate before similarity ranking, so omission is
-never an unfiltered recall. User/Project scope, Membership, and Memory-specific
-ACL/content-trust policy remain future authorization work.
+Curator inherits it from the source Message/Run, and runtime recall derives it
+from the Run. File and Postgres search apply that predicate before similarity
+ranking, so omission is never an unfiltered recall. User/Project scope,
+Membership, and Memory-specific ACL/content-trust policy remain future
+authorization work.
 
 ## Trade-offs and Boundaries
 

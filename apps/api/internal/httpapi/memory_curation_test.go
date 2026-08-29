@@ -1,12 +1,7 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -14,54 +9,6 @@ import (
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/store"
 )
-
-func TestMemoryCreateAndSearchAPI(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	client := newLocalFallbackOpenAIClientForTest()
-	handler := &Handler{memories: memorypkg.NewSemanticMemory(fileStore, client)}
-
-	createRequest := httptest.NewRequest(http.MethodPost, "/api/memories", bytes.NewBufferString(`{
-		"kind":"note","content":"AgentFlow uses typed run events."
-	}`))
-	createResponse := httptest.NewRecorder()
-	handler.createMemory(createResponse, createRequest)
-	if createResponse.Code != http.StatusCreated {
-		t.Fatalf("create memory: status=%d body=%s", createResponse.Code, createResponse.Body.String())
-	}
-	var created domain.Memory
-	if err := json.Unmarshal(createResponse.Body.Bytes(), &created); err != nil {
-		t.Fatalf("decode created memory: %v", err)
-	}
-
-	searchRequest := httptest.NewRequest(http.MethodPost, "/api/memories/search", bytes.NewBufferString(`{
-		"query":"typed run events","limit":1
-	}`))
-	searchResponse := httptest.NewRecorder()
-	handler.searchMemories(searchResponse, searchRequest)
-	if searchResponse.Code != http.StatusOK {
-		t.Fatalf("search memory: status=%d body=%s", searchResponse.Code, searchResponse.Body.String())
-	}
-	var items []domain.RetrievedMemory
-	if err := json.Unmarshal(searchResponse.Body.Bytes(), &items); err != nil {
-		t.Fatalf("decode memory search: %v", err)
-	}
-	if len(items) != 1 || items[0].Memory.ID != created.ID {
-		t.Fatalf("unexpected memory search result: %#v", items)
-	}
-}
-
-func TestMemoryHandlersProjectDependencyFailures(t *testing.T) {
-	want := errors.New("memory dependency failed")
-	handler := &Handler{memories: memoryFailureOperations{err: want}}
-
-	create := httptest.NewRequest(http.MethodPost, "/api/memories", bytes.NewBufferString(`{"kind":"note","content":"coverage"}`))
-	assertHandlerFailure(t, handler.createMemory, create, http.StatusBadRequest)
-	search := httptest.NewRequest(http.MethodPost, "/api/memories/search", bytes.NewBufferString(`{"query":"coverage"}`))
-	assertHandlerFailure(t, handler.searchMemories, search, http.StatusBadRequest)
-}
 
 func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
@@ -134,14 +81,4 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 	if err != nil || len(candidates) != 1 || candidates[0].Status != domain.MemoryCandidateAccepted {
 		t.Fatalf("accepted candidate was not persisted: candidates=%#v err=%v", candidates, err)
 	}
-}
-
-type memoryFailureOperations struct{ err error }
-
-func (s memoryFailureOperations) Create(context.Context, domain.Memory) (domain.Memory, error) {
-	return domain.Memory{}, s.err
-}
-
-func (s memoryFailureOperations) Search(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
-	return nil, s.err
 }

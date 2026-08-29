@@ -110,7 +110,6 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			},
 		},
 	})
-	semanticMemory := memorypkg.NewSemanticMemory(appStore, modelClient)
 	memoryCurator := newMemoryCurator(cfg, appStore, modelClient)
 	runController := concurrency.NewRunController(concurrency.RunOptions{
 		MaxConcurrent: cfg.MaxConcurrentRuns,
@@ -122,7 +121,6 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		ModelClient:          modelClient,
 		Tools:                toolManager,
 		AgentRuntime:         agentRuntime,
-		Memory:               semanticMemory,
 		Knowledge:            knowledgeBase,
 		MemoryCuration:       memoryCurator,
 		RunController:        runController,

@@ -63,9 +63,6 @@ GET    /api/tools
 POST   /api/tools/{name}/enable
 POST   /api/tools/{name}/disable
 
-POST   /api/memories
-POST   /api/memories/search
-
 GET    /api/documents
 POST   /api/documents
 POST   /api/documents/upload
