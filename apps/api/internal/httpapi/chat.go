@@ -99,7 +99,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prepared, err := h.agentRuntime.PrepareChatRunWithContract(r.Context(), req.AgentID, conversationID, req.Executor, req.CompletionContract)
+	prepared, err := h.agentRuntime.PrepareChatRunWithContract(r.Context(), req.AgentID, conversationID, req.CompletionContract)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if store.IsNotFound(err) {
@@ -111,7 +111,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	writeRunStateSSE(w, flusher, conversationID, prepared.Run.ID, prepared.Agent.ID, prepared.Run.Status)
 
-	events, errs := h.agentRuntime.StreamChat(r.Context(), prepared, history, req.Message, req.Executor)
+	events, errs := h.agentRuntime.StreamChat(r.Context(), prepared, history, req.Message)
 	var assistant strings.Builder
 	for event := range events {
 		writeUnifiedRunEvent(w, flusher, event, &assistant)

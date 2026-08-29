@@ -139,12 +139,12 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 | --- | --- | --- |
 | [Agent orchestration](docs/execution-modes.md) | Direct Single, plan-and-review Multi, and bounded Loop modes share one Turn Engine | [runtime](apps/api/internal/agent/runtime.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
 | [Bounded Child Run delegation](docs/child-run-delegation.md) | Multi-Agent Workers execute in isolated Child Runs with frozen Tool authority, independent budgets, no-wait backpressure, bounded result handoff, cancellation, and replayable parent-child topology | [runtime](apps/api/internal/agent/child_run.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
-| [Configurable Agent profiles](docs/agent-profiles.md) | Persisted profiles combine a custom responsibility, system prompt, Tool allowlist, Memory/RAG switches, and Native/LangChainGo executor; Multi freezes active profiles as Router candidates | [API](apps/api/internal/httpapi/agents.go), [tests](apps/api/internal/httpapi/agents_test.go) |
+| [Configurable Agent profiles](docs/agent-profiles.md) | Persisted profiles combine a custom responsibility, system prompt, Tool allowlist, and Memory/RAG switches; Multi freezes active profiles as Router candidates | [API](apps/api/internal/httpapi/agents.go), [tests](apps/api/internal/httpapi/agents_test.go) |
 | [Reproducibility](docs/terms.md#runtime-snapshot) | Each Run freezes model, Agent, Tool schema, context policy, and budget in a Runtime Snapshot | [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
 | [Context control](docs/context-management.md) | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [assembler](apps/api/internal/contextassembly/assembler.go), [tests](apps/api/internal/contextassembly/assembler_test.go) |
 | [Structured durable task state](docs/task-state.md) | Conversation-scoped goals, tasks, decisions, constraints, blockers, and Artifact references evolve through optimistic typed patches rather than summaries | [domain](apps/api/internal/domain/task_state.go), [Store tests](apps/api/internal/store/file_task_states_test.go) |
 | [Durable memory](docs/memory-management.md) | Explicit rules plus optional shadow-mode model extraction propose auditable candidates before embedding | [curator](apps/api/internal/memory/curator.go), [tests](apps/api/internal/memory/curator_test.go) |
-| [Provider and framework compatibility](docs/engineering-decisions.md#openai-compatible-does-not-mean-capability-identical) | Native orchestration keeps policy ownership; LangChainGo stays at the executor edge, while typed capability fallbacks handle provider differences in Tool Calling and stream usage metadata | [executors](apps/api/internal/agent/executor.go), [tests](apps/api/internal/openai/context_integration_test.go) |
+| [Provider compatibility](docs/engineering-decisions.md#openai-compatible-does-not-mean-capability-identical) | The native Turn Engine keeps policy ownership while typed capability fallbacks handle provider differences in Tool Calling and stream usage metadata | [provider adapter](apps/api/internal/openai), [tests](apps/api/internal/openai/context_integration_test.go) |
 
 ### RAG and Knowledge Grounding
 
@@ -181,8 +181,8 @@ persistence.
    ```
 
 2. Open `http://localhost:3000`. In **Single**, create or edit an Agent and
-   point out its system prompt, Tool allowlist, Memory/RAG switches, and
-   executor. The same effective profile is frozen when the Run starts.
+   point out its system prompt, Tool allowlist, and Memory/RAG switches. The
+   same effective profile is frozen when the Run starts.
 3. Open **Knowledge** and upload [`examples/example.md`](examples/example.md).
 4. Search for that identifier and inspect Semantic rank, Keyword rank, RRF,
    final rerank, and the transformed model context.
@@ -341,7 +341,7 @@ For a short technical review:
 
 1. Compare the three [Execution modes](docs/execution-modes.md).
 2. Inspect how [Agent profiles](docs/agent-profiles.md) become Single/Loop
-   executors and frozen Multi Router candidates.
+   runtime inputs and frozen Multi Router candidates.
 3. Read [Engineering decisions](docs/engineering-decisions.md).
 4. Follow the [backend call paths](docs/backend-architecture.md#main-call-paths).
 5. Inspect the [retrieval pipeline](docs/knowledge-rag.md#retrieval-pipeline)

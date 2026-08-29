@@ -106,12 +106,12 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
 ### Retrieval Replay
 
 1. Add or upload a knowledge document with a unique phrase.
-2. Ask a chat question that should use that phrase. In Single Agent mode, optionally switch Executor from Native to LangChainGo.
+2. Ask a chat question that should use that phrase in Single Agent mode.
 3. Open the run replay page from the active run link.
 4. Confirm the Retrieved context panel shows retrieval event count, memory count, matched child count, model-context chunk count, embedding provider/model/dimensions, executor/framework, RRF version/parameters, Reranker implementation/config version, Relevance Gate policy/config version, and the knowledge context token limit.
 5. Select a `retrieval` or `llm_start` event.
 6. Confirm retrieved memories and knowledge chunks are visible above the raw JSON payload.
-7. For LangChainGo runs, confirm event detail or raw payload includes `executor: "langchaingo"`, `framework: "langchaingo"`, and `framework_path: "chains.LLMChain"`.
+7. Confirm event detail or raw payload identifies the native execution protocol.
 8. Ask for a grounded answer and confirm the response uses `[S1]`-style markers, the assistant Message shows matching Source details, and Replay contains `citation.resolved` with no invalid source IDs.
 9. Force an answer marker outside the selected catalog in a test model response.
    Confirm it is excluded from structured `citations`, appears as

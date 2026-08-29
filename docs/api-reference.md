@@ -95,11 +95,10 @@ and current versions, source actor/Run metadata, and commit time. These
 Conversation-scoped endpoints enforce the same Workspace scope as Messages and
 Runs.
 
-New Runtime Snapshot v8 Runs receive Structured Task State context. Native
-Agent execution also receives the runtime-owned `update_task_state` Tool; the
-text-only LangChainGo executor does not. The Tool applies the same patch
-contract and derives source identity from the active Run rather than model
-arguments. See
+New Runtime Snapshot v8 Runs receive Structured Task State context. Agent
+execution also receives the runtime-owned `update_task_state` Tool. The Tool
+applies the same patch contract and derives source identity from the active Run
+rather than model arguments. See
 [Structured Durable Task State](task-state.md) for supported operations and
 Context/Replay semantics.
 
@@ -113,13 +112,12 @@ Context/Replay semantics.
   "system_prompt": "Separate evidence from assumptions and return ordered recovery steps.",
   "tools": ["calculator", "get_current_time"],
   "memory_enabled": true,
-  "retrieval_enabled": true,
-  "executor": "native"
+  "retrieval_enabled": true
 }
 ```
 
-`executor` accepts `native` or `langchaingo`. Tool names must be installed even
-when they are currently disabled at the platform layer. Custom Agents can be
+AgentFlow uses its native Turn Engine for every Agent. Tool names must be
+installed even when they are currently disabled at the platform layer. Custom Agents can be
 archived with `DELETE /api/agents/{id}`; built-in Agents cannot be archived.
 Creating a Run freezes the effective profile and, for Multi mode, its candidate
 profiles, so later edits do not change Resume or Replay semantics.

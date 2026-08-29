@@ -173,17 +173,17 @@ func DefaultAutonomousLimits() AutonomousLimits {
 	}
 }
 
-func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversationID string, executorKind string) (PreparedRun, error) {
-	return r.PrepareChatRunWithContract(ctx, agentID, conversationID, executorKind, nil)
+func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversationID string) (PreparedRun, error) {
+	return r.PrepareChatRunWithContract(ctx, agentID, conversationID, nil)
 }
 
-func (r *Runtime) PrepareChatRunWithContract(ctx context.Context, agentID string, conversationID string, executorKind string, contract *domain.CompletionContract) (PreparedRun, error) {
+func (r *Runtime) PrepareChatRunWithContract(ctx context.Context, agentID string, conversationID string, contract *domain.CompletionContract) (PreparedRun, error) {
 	agent, err := r.resolveAgent(strings.TrimSpace(agentID))
 	if err != nil {
 		return PreparedRun{}, err
 	}
 
-	snapshot, err := r.captureRuntimeSnapshot(ChatModeSingle, agent, nil, executorKind)
+	snapshot, err := r.captureRuntimeSnapshot(ChatModeSingle, agent, nil)
 	if err != nil {
 		return PreparedRun{}, err
 	}
@@ -208,18 +208,15 @@ func (r *Runtime) PrepareChatRunWithContract(ctx context.Context, agentID string
 	return PreparedRun{Agent: agent, Run: run, Catalog: restored.catalog}, nil
 }
 
-func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string, executorKind string) (<-chan domain.RunEvent, <-chan error) {
+func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string) (<-chan domain.RunEvent, <-chan error) {
 	events := make(chan domain.RunEvent)
 	errs := make(chan error, 1)
-	client, err := r.clientForRun(prepared.Run.ID)
-	if err != nil {
+	if _, err := r.clientForRun(prepared.Run.ID); err != nil {
 		close(events)
 		errs <- err
 		close(errs)
 		return events, errs
 	}
-	executorKind = prepared.Agent.Executor
-	executor := r.executorFor(executorKind, client)
 	catalog := prepared.Catalog
 	if catalog == nil {
 		catalog, _ = tools.NewCatalog()
@@ -227,8 +224,8 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, latest, prepared.Agent.MemoryEnabled, prepared.Agent.RetrievalEnabled, map[string]any{
 		"agent_id":           prepared.Agent.ID,
 		"agent_name":         prepared.Agent.Name,
-		"executor":           executor.Kind(),
-		"framework":          executor.Framework(),
+		"executor":           domain.DefaultAgentExecutor,
+		"framework":          "agentflow-native",
 		"memory_enabled":     prepared.Agent.MemoryEnabled,
 		"retrieval_enabled":  prepared.Agent.RetrievalEnabled,
 		"configured_tools":   prepared.Agent.Tools,
@@ -244,7 +241,6 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 			SystemPrompt:   prepared.Agent.SystemPrompt,
 			History:        history,
 			Input:          latest,
-			ExecutorKind:   executor.Kind(),
 			Catalog:        catalog,
 			Context: turnpkg.Context{
 				Memories: retrievedMemories,
@@ -462,15 +458,6 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	}
 	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
 	return memories, chunks
-}
-
-func (r *Runtime) executorFor(kind string, client modelprovider.Client) AgentExecutor {
-	switch NormalizeExecutorKind(kind) {
-	case ExecutorLangChainGo:
-		return LangChainGoExecutor{modelClient: client, trace: r.trace}
-	default:
-		return NativeExecutor{modelClient: client, trace: r.trace}
-	}
 }
 
 func retrievalTracePayload(memories []domain.RetrievedMemory, chunks []domain.RetrievedDocumentChunk) map[string]any {

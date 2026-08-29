@@ -554,8 +554,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       system_prompt: base?.system_prompt ?? "You are a helpful AgentFlow agent.",
       tools: base?.tools ?? [],
       memory_enabled: base?.memory_enabled ?? true,
-      retrieval_enabled: base?.retrieval_enabled ?? true,
-      executor: base?.executor ?? "native"
+      retrieval_enabled: base?.retrieval_enabled ?? true
     });
     setIsNewAgentFormOpen(true);
     setIsAgentConfigOpen(false);
@@ -1090,7 +1089,6 @@ function agentToConfigDraft(agent: AgentInfo): AgentConfigDraft {
     system_prompt: agent.system_prompt,
     tools: agent.tools ?? [],
     memory_enabled: agent.memory_enabled ?? true,
-    retrieval_enabled: agent.retrieval_enabled ?? true,
-    executor: agent.executor ?? "native"
+    retrieval_enabled: agent.retrieval_enabled ?? true
   };
 }

@@ -41,8 +41,8 @@ implementations.
 ### 0:35-1:05 - Configurable Agent Profile
 
 In **Single**, open **New agent** or **Configure**. Show that one persisted
-profile owns its responsibility, system prompt, Tool allowlist, Memory/RAG
-switches, and Native/LangChainGo executor. Explain that starting a Run freezes
+profile owns its responsibility, system prompt, Tool allowlist, and Memory/RAG
+switches. Explain that starting a Run freezes
 the effective profile; Multi additionally freezes all active profiles as Router
 candidates, so later edits cannot change Resume or Replay semantics.
 

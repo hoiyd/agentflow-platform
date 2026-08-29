@@ -15,7 +15,6 @@ participates in a Run.
 | `tools` | Per-Agent allowlist drawn from installed platform tools. Unknown tools are rejected when the profile is saved. |
 | `memory_enabled` | Enables scoped semantic Memory retrieval before a Turn. |
 | `retrieval_enabled` | Enables Knowledge/RAG retrieval before a Turn. |
-| `executor` | Selects the native AgentFlow executor or the optional `langchaingo` adapter. |
 
 The workbench can create, edit, select, and archive custom profiles. The four
 built-in profiles remain available as stable defaults and cannot be archived.
@@ -23,7 +22,7 @@ built-in profiles remain available as stable defaults and cannot be archived.
 ## Behavior by Execution Mode
 
 - **Single:** the selected Agent executes one direct Turn with its prompt,
-  tools, retrieval policies, and executor.
+  tools, and retrieval policies.
 - **Multi:** all active profiles are frozen as Router candidates. After plan
   approval, the Router selects a Worker from those candidates using the task,
   approved plan, Agent description, and routing policy. An explicitly requested
@@ -40,9 +39,9 @@ Tracing.
 
 Creating a Run captures the effective Agent profile in its Runtime Snapshot.
 Multi mode also captures every candidate profile. The Snapshot includes Agent
-identity, description, system prompt, tool names, Memory/RAG switches, and
-executor, together with the model identity, tool schemas, context policy, and
-Run Budget.
+identity, description, system prompt, tool names, and Memory/RAG switches,
+together with the native execution protocol, model identity, tool schemas,
+context policy, and Run Budget.
 
 Editing or archiving a profile later does not rewrite an existing Run. Resume
 restores the frozen Agent configuration and verifies that every required tool is
@@ -65,8 +64,7 @@ Content-Type: application/json
   "system_prompt": "Act as a concise incident responder. Separate evidence from assumptions and return ordered recovery steps.",
   "tools": ["calculator", "get_current_time"],
   "memory_enabled": true,
-  "retrieval_enabled": true,
-  "executor": "native"
+  "retrieval_enabled": true
 }
 ```
 

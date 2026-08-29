@@ -94,17 +94,18 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 	if err != nil {
 		return turn.Result{}, err
 	}
-	executor := m.runtime.executorFor(request.ExecutorKind, client)
-	events, errs := executor.Stream(ctx, ExecutorInput{
-		Agent:             request.Agent,
-		History:           request.History,
-		Latest:            request.Input,
-		Catalog:           request.Catalog,
-		RunID:             request.RunID,
-		StepID:            request.StepID,
-		RetrievedMemories: request.Context.Memories,
-		RetrievedChunks:   request.Context.Chunks,
-	})
+	events, errs := client.StreamAgentChatWithToolsTrace(
+		ctx,
+		request.Agent.SystemPrompt,
+		request.History,
+		request.Input,
+		request.Catalog,
+		m.runtime.trace,
+		request.RunID,
+		request.StepID,
+		request.Context.Memories,
+		request.Context.Chunks,
+	)
 
 	var output strings.Builder
 	for events != nil || errs != nil {

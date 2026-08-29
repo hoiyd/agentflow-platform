@@ -94,7 +94,7 @@ func TestPreparedRunsUseRequestedAgent(t *testing.T) {
 		SystemPrompt:     "Review resume evidence.",
 		MemoryEnabled:    true,
 		RetrievalEnabled: true,
-		Executor:         ExecutorNative,
+		Executor:         domain.DefaultAgentExecutor,
 	})
 	if err != nil {
 		t.Fatalf("create agent: %v", err)

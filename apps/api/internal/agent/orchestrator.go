@@ -91,7 +91,7 @@ func (r *Runtime) PrepareCollaborationRunWithContract(ctx context.Context, agent
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
-	snapshot, err := r.captureRuntimeSnapshot(ChatModeMultiAgent, agent, agents, "")
+	snapshot, err := r.captureRuntimeSnapshot(ChatModeMultiAgent, agent, agents)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
@@ -774,7 +774,7 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- domain
 	}
 
 	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input, true, true, map[string]any{
-		"executor":  ExecutorNative,
+		"executor":  domain.DefaultAgentExecutor,
 		"framework": "agentflow-native",
 	})
 	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{

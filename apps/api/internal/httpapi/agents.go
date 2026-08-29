@@ -19,7 +19,6 @@ type agentConfigRequest struct {
 	Tools            []string `json:"tools,omitempty"`
 	MemoryEnabled    *bool    `json:"memory_enabled,omitempty"`
 	RetrievalEnabled *bool    `json:"retrieval_enabled,omitempty"`
-	Executor         *string  `json:"executor,omitempty"`
 }
 
 func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
@@ -178,12 +177,7 @@ func applyAgentConfigRequest(agent *domain.Agent, req agentConfigRequest) {
 	if req.RetrievalEnabled != nil {
 		agent.RetrievalEnabled = *req.RetrievalEnabled
 	}
-	if req.Executor != nil {
-		agent.Executor = strings.TrimSpace(*req.Executor)
-	}
-	if strings.TrimSpace(agent.Executor) == "" {
-		agent.Executor = domain.DefaultAgentExecutor
-	}
+	agent.Executor = domain.DefaultAgentExecutor
 }
 
 func (h *Handler) listRuns(w http.ResponseWriter, r *http.Request) {
