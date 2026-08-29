@@ -68,7 +68,7 @@ apps/api/
     openai/         model-provider adapter
     store/          File and Postgres persistence adapters
     memory/         semantic memory operations and asynchronous curation
-    knowledge/      knowledge-base ingestion, embedding, search, and RAG evaluation
+    knowledge/      knowledge-base ingestion, embedding, search, and offline RAG evaluation
     rag/            chunking and shared recall, reranking, and relevance gating
     concurrency/    run and model-request limits
     delegation/     no-wait Child Run admission and parent cancellation
@@ -82,7 +82,7 @@ apps/api/
 ## Dependency Direction
 
 ```text
-cmd/server
+cmd/server or cmd/eval-rag
     |
     v
 app
@@ -98,7 +98,7 @@ app
     +--> store, recovery, concurrency, config
 ```
 
-`cmd/server` is deliberately thin. It reads process configuration, creates the application, binds OS signals, and reports lifecycle errors.
+`cmd/server` and `cmd/eval-rag` are deliberately thin process adapters. The first serves the online product; the second runs Golden Dataset evaluation without exposing a production HTTP route.
 
 `app` is the composition root. It creates every long-lived service and concrete adapter, applies runtime policies, injects a complete dependency set into the HTTP handler, owns the HTTP server, and closes background work before persistence.
 
@@ -116,7 +116,7 @@ Empty `api`, `core`, and `services` directories do not create useful boundaries.
 
 ### Keep Transport and Execution Separate
 
-`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.SemanticMemory` owns validation, embedding, and memory persistence; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and RAG evaluation. Agent execution remains in `agent` and `turn`.
+`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.SemanticMemory` owns validation, embedding, and memory persistence; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and offline RAG evaluation. Agent execution remains in `agent` and `turn`.
 
 The HTTP package defines the small service interfaces it consumes. Concrete implementations are selected only by `app`, so adding caching, another embedding implementation, or a different service adapter does not change transport code.
 

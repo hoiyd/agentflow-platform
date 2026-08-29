@@ -9,39 +9,16 @@ import {
   type EmbeddingInfo,
   type FusionInfo,
   type KnowledgeSecurityInfo,
-  type RAGGoldenDataset,
   type RerankerInfo,
   type RelevanceGateInfo,
-  type RAGEvaluationCase,
-  type RAGEvaluationRunResponse,
   type RetrievedDocumentChunk,
   createDocument,
   deleteDocument,
   getDocument,
   listDocuments,
-  runRAGEvaluation,
   searchRAG,
   uploadDocument
 } from "../../lib/knowledge-api";
-
-const DEFAULT_RAG_EVAL_CASES = `{
-  "schema_version": "rag-golden-dataset-v1",
-  "id": "resume-retrieval-example",
-  "version": "1.0.0",
-  "tags": ["example"],
-  "cases": [
-    {
-      "id": "example_resume_backend",
-      "query": "候选人的后端系统设计经验",
-      "answerable": true,
-      "expected_sources": [
-        {"content_contains": ["Go", "PostgreSQL"]}
-      ],
-      "min_acceptable_rank": 3,
-      "tags": ["resume", "backend"]
-    }
-  ]
-}`;
 
 export function useKnowledgeWorkbench() {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
@@ -66,9 +43,6 @@ export function useKnowledgeWorkbench() {
   const [noMatchReason, setNoMatchReason] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
-  const [evaluationCases, setEvaluationCases] = useState(DEFAULT_RAG_EVAL_CASES);
-  const [evaluationResult, setEvaluationResult] = useState<RAGEvaluationRunResponse | null>(null);
-  const [isRunningEvaluation, setIsRunningEvaluation] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<DocumentDetail | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [isLoadingDocumentDetail, setIsLoadingDocumentDetail] = useState(false);
@@ -170,34 +144,6 @@ export function useKnowledgeWorkbench() {
     }
   }
 
-  async function runEvaluation() {
-    if (isRunningEvaluation) {
-      return;
-    }
-    setIsRunningEvaluation(true);
-    setError("");
-    try {
-      const parsed = JSON.parse(evaluationCases) as unknown;
-      const parsedMinSimilarity = Number(minSimilarity);
-      const options = {
-        top_k: 5,
-        min_similarity: Number.isFinite(parsedMinSimilarity) ? parsedMinSimilarity : 0
-      };
-      const response = Array.isArray(parsed)
-        ? await runRAGEvaluation({ cases: parsed as RAGEvaluationCase[], ...options })
-        : isGoldenDataset(parsed)
-          ? await runRAGEvaluation({ dataset: parsed, ...options })
-          : (() => {
-              throw new Error("Evaluation input must be a Golden Dataset object or a legacy case array");
-            })();
-      setEvaluationResult(response);
-    } catch (evaluationError) {
-      setError(evaluationError instanceof Error ? evaluationError.message : "Failed to run retrieval evaluation");
-    } finally {
-      setIsRunningEvaluation(false);
-    }
-  }
-
   async function selectDocument(documentId: string) {
     setSelectedDocumentId(documentId);
     setIsLoadingDocumentDetail(true);
@@ -245,12 +191,9 @@ export function useKnowledgeWorkbench() {
     documentContent,
     deletingDocumentId,
     error,
-    evaluationCases,
-    evaluationResult,
     hasSearched,
     isCreating,
     isLoadingDocumentDetail,
-    isRunningEvaluation,
     isSearching,
     isUploading,
     minSimilarity,
@@ -269,27 +212,17 @@ export function useKnowledgeWorkbench() {
     createTextDocument,
     refreshDocuments,
     removeDocument,
-    runEvaluation,
     searchKnowledge,
     selectDocument,
     selectUploadFile,
     setDocumentContent,
     setDocumentTitle,
     setKnowledgeContextMaxTokens,
-    setEvaluationCases,
     setMinSimilarity,
     setQuery,
     setUploadTitle,
     uploadKnowledgeDocument
   };
-}
-
-function isGoldenDataset(value: unknown): value is RAGGoldenDataset {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  const candidate = value as Partial<RAGGoldenDataset>;
-  return candidate.schema_version === "rag-golden-dataset-v1" && typeof candidate.id === "string" && typeof candidate.version === "string" && Array.isArray(candidate.cases);
 }
 
 export type KnowledgeWorkbenchModel = ReturnType<typeof useKnowledgeWorkbench>;

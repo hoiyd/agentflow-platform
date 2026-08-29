@@ -40,11 +40,9 @@
 
 .knowledge-grid,
 .knowledge-search,
-.rag-evaluation,
 .knowledge-column,
 .document-card,
 .rag-result-card,
-.evaluation-case,
 .document-detail-inline,
 .chunk-card,
 .embedding-status {
@@ -52,16 +50,13 @@
 }
 
 .knowledge-column,
-.knowledge-search,
-.rag-evaluation {
+.knowledge-search {
   background: #ffffff;
   box-shadow: none;
 }
 
 .document-card,
 .rag-result-card,
-.evaluation-case,
 .chunk-card {
   background: #f9fafb;
 }
-

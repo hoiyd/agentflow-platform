@@ -153,91 +153,6 @@ export type DocumentSearchResponse = {
   reason?: string;
 };
 
-export type RAGEvaluationCase = {
-  id: string;
-  query: string;
-  answerable?: boolean;
-  expected_sources?: RAGGoldenSource[];
-  forbidden_sources?: RAGGoldenSource[];
-  required_source_count?: number;
-  expected_document_ids?: string[];
-  expected_chunk_ids?: string[];
-  expected_chunk_contains?: string[];
-  min_acceptable_rank?: number;
-  tags?: string[];
-};
-
-export type RAGGoldenSource = {
-  document_id?: string;
-  chunk_id?: string;
-  source_uri?: string;
-  content_contains?: string[];
-};
-
-type RAGGoldenCaseBase = {
-  id: string;
-  query: string;
-  forbidden_sources?: RAGGoldenSource[];
-  required_source_count?: number;
-  min_acceptable_rank?: number;
-  tags?: string[];
-};
-
-export type RAGGoldenCase = RAGGoldenCaseBase &
-  (
-    | { answerable: true; expected_sources: [RAGGoldenSource, ...RAGGoldenSource[]] }
-    | { answerable: false; expected_sources?: never }
-  );
-
-export type RAGGoldenDataset = {
-  schema_version: "rag-golden-dataset-v1";
-  id: string;
-  version: string;
-  description?: string;
-  tags?: string[];
-  cases: RAGGoldenCase[];
-};
-
-export type RAGGoldenDatasetInfo = Omit<RAGGoldenDataset, "cases">;
-
-export type RAGEvaluationRunResponse = {
-  dataset?: RAGGoldenDatasetInfo;
-  summary: {
-    total: number;
-    answerable_cases?: number;
-    unanswerable_cases?: number;
-    hit_at_1: number;
-    hit_at_3: number;
-    hit_at_5: number;
-    misses: number;
-    blocked_candidates?: number;
-  };
-  cases: Array<{
-    id: string;
-    query: string;
-    answerable?: boolean;
-    expected_sources?: RAGGoldenSource[];
-    forbidden_sources?: RAGGoldenSource[];
-    required_source_count?: number;
-    expected_document_ids?: string[];
-    expected_chunk_ids?: string[];
-    expected_chunk_contains?: string[];
-    tags?: string[];
-    hit: boolean;
-    hit_at_1: boolean;
-    hit_at_3: boolean;
-    hit_at_5: boolean;
-    best_rank?: number;
-    failure_reason?: string;
-    items: RetrievedDocumentChunk[];
-    security?: KnowledgeSecurityInfo;
-  }>;
-  embedding?: EmbeddingInfo;
-  fusion?: FusionInfo;
-  reranker?: RerankerInfo;
-  relevance_gate?: RelevanceGateInfo;
-};
-
 export type DocumentDetail = {
   document: DocumentInfo;
   chunks: RetrievedDocumentChunk["chunk"][];
@@ -341,26 +256,4 @@ export async function searchRAG(input: {
     no_match: payload.no_match,
     reason: payload.reason
   };
-}
-
-type RAGEvaluationRunInput = (
-  | { dataset: RAGGoldenDataset; cases?: never }
-  | { cases: RAGEvaluationCase[]; dataset?: never }
-) & {
-  top_k?: number;
-  min_similarity?: number;
-  metadata?: Record<string, string>;
-};
-
-export async function runRAGEvaluation(input: RAGEvaluationRunInput): Promise<RAGEvaluationRunResponse> {
-  return apiObject<RAGEvaluationRunResponse>(
-    "/api/rag/evaluations/run",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input)
-    },
-    { errorMessage: "Failed to run retrieval evaluation" },
-    "retrieval evaluation"
-  );
 }

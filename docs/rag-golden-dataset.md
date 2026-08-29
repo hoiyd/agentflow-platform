@@ -34,20 +34,16 @@ need separate answer-level evaluation.
 
 ## Run locally
 
-Start AgentFlow in one terminal:
-
-```bash
-make dev
-```
-
-Seed the corpus and run the Dataset from another terminal:
+Seed the corpus and run the Dataset through the offline evaluator:
 
 ```bash
 make golden-eval
 ```
 
-For a non-default API port, set `AGENTFLOW_API_BASE_URL`, for example
-`AGENTFLOW_API_BASE_URL=http://127.0.0.1:18080 make golden-eval`.
+The command uses the same Store, Embedding client, retrieval pipeline, and
+environment configuration as the API, but it does not start or call the HTTP
+server. `STORE_DRIVER`, `DATA_PATH`, `DATABASE_URL`, and embedding settings
+therefore select the evaluation target in the same way as normal runtime.
 
 The runner is idempotent by `source_uri`: files already indexed with the same
 name are skipped. Use a clean local data store when validating a changed corpus,
@@ -57,12 +53,16 @@ The command reports every Case as `PASS` or `MISS`. Diagnostic cases are labeled
 separately. To return a non-zero exit code when a gating Case misses, run:
 
 ```bash
-node scripts/run-golden-dataset-v1.mjs --enforce
+make golden-eval-enforce
 ```
 
-The same Dataset can be pasted into **Knowledge -> Retrieval evaluation** in the
-workbench after the corpus files have been indexed. The text area expects the
-Dataset object itself; the frontend wraps it in the API request.
+For CI or custom datasets, call `go run ./cmd/eval-rag` from `apps/api`; use
+`--help` for Dataset, corpus, Workspace, threshold, enforcement, and JSON-output
+options.
+
+RAG evaluation is intentionally an operator/CI surface. The former production
+`POST /api/rag/evaluations/run` endpoint and workbench JSON editor were removed;
+API consumers should invoke this command in their evaluation environment.
 
 ## Interpretation
 

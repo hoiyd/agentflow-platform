@@ -27,10 +27,6 @@ func (s *ragSearchResponseStub) Search(_ context.Context, _ domain.DocumentSearc
 	return s.response, nil
 }
 
-func (s *ragSearchResponseStub) Evaluate(_ context.Context, _ domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error) {
-	return domain.RAGEvaluationRunResponse{}, nil
-}
-
 func TestRAGSearchAPISerializesMergedContextTraceability(t *testing.T) {
 	merged := domain.RetrievedDocumentChunk{
 		Document:         domain.Document{ID: "doc-1", Title: "Runbook"},
@@ -236,112 +232,6 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	}
 	if !unrelatedResponse.NoMatch || unrelatedResponse.Reason == "" || len(unrelatedResponse.Items) != 0 {
 		t.Fatalf("expected unrelated query to be filtered by relevance gate, got %#v", unrelatedResponse)
-	}
-
-	evalBody := []byte(`{
-		"top_k": 5,
-		"min_similarity": 0,
-		"metadata": {"project": "agentflow"},
-		"cases": [
-			{
-				"id": "launch_password",
-				"query": "What is the launch password?",
-				"expected_document_ids": ["` + document.ID + `"],
-				"expected_chunk_contains": ["amber-9137"],
-				"min_acceptable_rank": 3,
-				"tags": ["smoke"]
-			},
-			{
-				"id": "missing_case",
-				"query": "What is the launch password?",
-				"expected_chunk_contains": ["not-in-the-document"],
-				"min_acceptable_rank": 3
-			}
-		]
-	}`)
-	evalReq := httptest.NewRequest(http.MethodPost, "/api/rag/evaluations/run", bytes.NewReader(evalBody))
-	evalRecorder := httptest.NewRecorder()
-	handler.runRAGEvaluation(evalRecorder, evalReq)
-	if evalRecorder.Code != http.StatusOK {
-		t.Fatalf("expected evaluation status 200, got %d body=%s", evalRecorder.Code, evalRecorder.Body.String())
-	}
-	var evalResponse domain.RAGEvaluationRunResponse
-	if err := json.Unmarshal(evalRecorder.Body.Bytes(), &evalResponse); err != nil {
-		t.Fatalf("decode evaluation response: %v", err)
-	}
-	if evalResponse.Summary.Total != 2 || evalResponse.Summary.HitAt1 != 1 || evalResponse.Summary.HitAt3 != 1 || evalResponse.Summary.HitAt5 != 1 || evalResponse.Summary.Misses != 1 {
-		t.Fatalf("unexpected evaluation summary: %#v", evalResponse.Summary)
-	}
-	if evalResponse.Embedding.Provider != "local" || evalResponse.Embedding.Model == "" {
-		t.Fatalf("expected evaluation embedding metadata, got %#v", evalResponse.Embedding)
-	}
-	if evalResponse.Fusion != searchResponse.Fusion {
-		t.Fatalf("expected search and evaluation to expose the same fusion metadata, got search=%#v evaluation=%#v", searchResponse.Fusion, evalResponse.Fusion)
-	}
-	if evalResponse.Reranker != searchResponse.Reranker {
-		t.Fatalf("expected search and evaluation to expose the same reranker metadata, got search=%#v evaluation=%#v", searchResponse.Reranker, evalResponse.Reranker)
-	}
-	if evalResponse.RelevanceGate != searchResponse.RelevanceGate {
-		t.Fatalf("expected search and evaluation to expose the same relevance gate metadata, got search=%#v evaluation=%#v", searchResponse.RelevanceGate, evalResponse.RelevanceGate)
-	}
-	if len(evalResponse.Cases) != 2 {
-		t.Fatalf("expected two evaluation cases, got %#v", evalResponse.Cases)
-	}
-	if !evalResponse.Cases[0].Hit || evalResponse.Cases[0].BestRank != 1 || len(evalResponse.Cases[0].Items) == 0 {
-		t.Fatalf("expected first evaluation case to hit at rank 1, got %#v", evalResponse.Cases[0])
-	}
-	if evalResponse.Cases[0].Security.PolicyVersion != domain.RAGPromptGuardPolicyVersion {
-		t.Fatalf("expected evaluation security metadata, got %#v", evalResponse.Cases[0].Security)
-	}
-	if evalResponse.Cases[1].Hit || evalResponse.Cases[1].FailureReason == "" {
-		t.Fatalf("expected second evaluation case to miss with reason, got %#v", evalResponse.Cases[1])
-	}
-
-	goldenBody := []byte(`{
-		"top_k": 3,
-		"dataset": {
-			"schema_version": "rag-golden-dataset-v1",
-			"id": "launch-baseline",
-			"version": "1.0.0",
-			"tags": ["smoke"],
-			"cases": [{
-				"id": "launch-password",
-				"query": "What is the launch password?",
-				"answerable": true,
-				"expected_sources": [{
-					"document_id": "` + document.ID + `",
-					"content_contains": ["amber-9137"]
-				}],
-				"forbidden_sources": [{"document_id": "doc-deprecated"}],
-				"tags": ["answerable"]
-			}]
-		}
-	}`)
-	goldenRecorder := httptest.NewRecorder()
-	handler.runRAGEvaluation(goldenRecorder, httptest.NewRequest(http.MethodPost, "/api/rag/evaluations/run", bytes.NewReader(goldenBody)))
-	if goldenRecorder.Code != http.StatusOK {
-		t.Fatalf("expected golden dataset status 200, got %d body=%s", goldenRecorder.Code, goldenRecorder.Body.String())
-	}
-	var goldenResponse domain.RAGEvaluationRunResponse
-	if err := json.Unmarshal(goldenRecorder.Body.Bytes(), &goldenResponse); err != nil {
-		t.Fatalf("decode golden dataset response: %v", err)
-	}
-	if goldenResponse.Dataset == nil || goldenResponse.Dataset.ID != "launch-baseline" || goldenResponse.Dataset.Version != "1.0.0" || len(goldenResponse.Cases) != 1 || !goldenResponse.Cases[0].Hit {
-		t.Fatalf("unexpected golden dataset response: %#v", goldenResponse)
-	}
-
-	invalidGoldenBody := []byte(`{"dataset":{"schema_version":"unsupported","id":"invalid","version":"1","cases":[]}}`)
-	invalidGoldenRecorder := httptest.NewRecorder()
-	handler.runRAGEvaluation(invalidGoldenRecorder, httptest.NewRequest(http.MethodPost, "/api/rag/evaluations/run", bytes.NewReader(invalidGoldenBody)))
-	if invalidGoldenRecorder.Code != http.StatusBadRequest || !strings.Contains(invalidGoldenRecorder.Body.String(), "schema_version") {
-		t.Fatalf("expected invalid dataset status 400, got %d body=%s", invalidGoldenRecorder.Code, invalidGoldenRecorder.Body.String())
-	}
-
-	unknownFieldBody := []byte(`{"dataset":{"schema_version":"rag-golden-dataset-v1","id":"invalid","version":"1","cases":[{"id":"case","query":"query","answerable":false,"forbiden_sources":[]}]}}`)
-	unknownFieldRecorder := httptest.NewRecorder()
-	handler.runRAGEvaluation(unknownFieldRecorder, httptest.NewRequest(http.MethodPost, "/api/rag/evaluations/run", bytes.NewReader(unknownFieldBody)))
-	if unknownFieldRecorder.Code != http.StatusBadRequest {
-		t.Fatalf("expected unknown dataset field status 400, got %d body=%s", unknownFieldRecorder.Code, unknownFieldRecorder.Body.String())
 	}
 
 	thresholdBody := []byte(`{"query":"What is the launch password?","metadata":{"project":"agentflow"},"limit":3,"min_similarity":1.01}`)

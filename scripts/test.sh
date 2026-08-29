@@ -31,9 +31,6 @@ printf 'Running frontend lint and tests...\n'
   npm test
 )
 
-printf 'Checking Golden Dataset runner syntax...\n'
-node --check "${ROOT_DIR}/scripts/run-golden-dataset-v1.mjs"
-
 # Next.js rewrites next-env.d.ts for production route types. Preserve the
 # checkout's original generated import so verification leaves the tree clean.
 next_env="${ROOT_DIR}/apps/web/next-env.d.ts"

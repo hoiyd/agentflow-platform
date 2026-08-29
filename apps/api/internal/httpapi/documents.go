@@ -170,32 +170,6 @@ func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
-	var req domain.RAGEvaluationRunRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
-		return
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		writeError(w, http.StatusBadRequest, "invalid json body")
-		return
-	}
-	workspaceID, matches := resolvePayloadWorkspace(r, req.WorkspaceID)
-	if !matches {
-		writeError(w, http.StatusBadRequest, "workspace_id does not match request scope")
-		return
-	}
-	req.WorkspaceID = workspaceID
-	response, err := h.knowledge.Evaluate(r.Context(), req)
-	if err != nil {
-		writeKnowledgeError(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, response)
-}
-
 func writeKnowledgeError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusBadRequest
 	if knowledge.IsEmbeddingError(err) {

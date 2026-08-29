@@ -72,7 +72,6 @@ POST   /api/documents/upload
 GET    /api/documents/{id}
 DELETE /api/documents/{id}
 POST   /api/rag/search
-POST   /api/rag/evaluations/run
 ```
 
 ## Conversations and Agent Profiles
@@ -179,55 +178,6 @@ Tool execution applies timeout, result-size, panic-recovery, tracing, and
 concurrency policy after both layers admit the Tool. See [Configurable Agent Profiles](agent-profiles.md#two-tool-control-layers)
 for the two control layers and [Tool Execution Policy](execution-controls.md#7-tool-execution-policy)
 for per-call enforcement.
-
-## RAG Evaluation
-
-`POST /api/rag/evaluations/run` executes retrieval cases through the same
-embedding, dense/lexical recall, RRF, reranker, relevance gate, and security
-pipeline used by search and Agent Runs.
-
-The request accepts exactly one of:
-
-- legacy top-level `cases`, which retain `expected_document_ids`,
-  `expected_chunk_ids`, and `expected_chunk_contains` compatibility;
-- a versioned `dataset` using `rag-golden-dataset-v1`.
-
-The Golden Dataset v1 contract is available as a
-[machine-readable JSON Schema](schemas/rag-golden-dataset-v1.schema.json) and a
-[canonical Dataset and corpus](rag-golden-dataset.md). A Dataset has
-a stable `id`, explicit `version`, optional tags/description, and uniquely
-identified cases. Every case declares `query`, `answerable`, optional tags and
-forbidden sources. Answerable cases require at least one expected source;
-unanswerable cases cannot define expected sources.
-The evaluation endpoint rejects unknown JSON fields so misspelled safety fields
-cannot be silently ignored.
-
-An expected or forbidden source can match by `document_id`, `chunk_id`,
-`source_uri`, and/or required `content_contains` fragments. Fields inside one
-source are ANDed; multiple sources are alternatives. If any forbidden source
-appears in returned Top-K, the case fails. An `answerable: false` case passes
-only when retrieval returns no result.
-
-`required_source_count` optionally requires multiple distinct expected-source
-definitions to appear. It defaults to one for backward compatibility and cannot
-exceed the number of `expected_sources`. The Case rank is the first rank at
-which the required number of sources has been accumulated.
-
-Optional `min_acceptable_rank`, Workspace/metadata scope, `top_k`, and
-`min_similarity` make the evaluation repeatable. The response echoes Dataset
-identity and reports aggregate Hit@1/3/5 and misses, plus each case's best rank,
-failure reason, ranked items, and prompt-injection decisions. It also returns
-the exact Embedding, Fusion, Reranker, and Relevance Gate identity used by the
-run. `answerable_cases` and `unanswerable_cases` make the Hit@K denominator
-explicit: no-answer cases contribute to pass/miss status but not Hit@K.
-Dedicated no-answer Precision/Recall remains part of RAG-010.
-
-The workbench exposes this endpoint under **Knowledge -> Retrieval evaluation**
-and accepts either a Dataset object or a legacy case array. RAG-006 defines and
-validates the schema; the maintained v1 asset and coverage matrix are described
-in [RAG Golden Dataset v1](rag-golden-dataset.md). Immutable Dataset
-storage/changelog (RAG-008), persisted Evaluation Runs (RAG-009), and calibrated
-release thresholds remain future work.
 
 ## RAG Search Response
 

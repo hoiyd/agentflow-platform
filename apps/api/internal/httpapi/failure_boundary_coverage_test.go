@@ -466,6 +466,3 @@ func (s *boundaryKnowledgeOperations) Ingest(context.Context, domain.DocumentIng
 func (s *boundaryKnowledgeOperations) Search(context.Context, domain.DocumentSearch, int) (domain.DocumentSearchResponse, error) {
 	return domain.DocumentSearchResponse{}, s.err
 }
-func (s *boundaryKnowledgeOperations) Evaluate(context.Context, domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error) {
-	return domain.RAGEvaluationRunResponse{}, s.err
-}

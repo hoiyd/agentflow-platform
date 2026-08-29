@@ -9,7 +9,6 @@ import type {
   KnowledgeSecurityInfo,
   RerankerInfo,
   RelevanceGateInfo,
-  RAGEvaluationRunResponse,
   RetrievedDocumentChunk
 } from "../../lib/knowledge-api";
 import type { KnowledgeWorkbenchModel } from "./useKnowledgeWorkbench";
@@ -24,12 +23,9 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
     documentContent,
     deletingDocumentId,
     error,
-    evaluationCases,
-    evaluationResult,
     hasSearched,
     isCreating,
     isLoadingDocumentDetail,
-    isRunningEvaluation,
     isSearching,
     isUploading,
     minSimilarity,
@@ -249,26 +245,6 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
         <ModelContextPreview items={contextItems} selection={contextSelection} />
       </section>
 
-      <section className="knowledge-search rag-evaluation">
-        <div className="knowledge-header-row">
-          <div className="panel-title">Retrieval evaluation</div>
-          <button
-            className="send compact-send"
-            disabled={isRunningEvaluation || evaluationCases.trim().length === 0}
-            onClick={model.runEvaluation}
-            type="button"
-          >
-            {isRunningEvaluation ? "Running..." : "Run Eval"}
-          </button>
-        </div>
-        <textarea
-          className="evaluation-cases-input"
-          onChange={(event) => model.setEvaluationCases(event.target.value)}
-          spellCheck={false}
-          value={evaluationCases}
-        />
-        <EvaluationResult result={evaluationResult} />
-      </section>
     </section>
   );
 }
@@ -360,97 +336,6 @@ function contextRoleLabel(role: RetrievedDocumentChunk["context_role"]) {
     default:
       return "Matched child";
   }
-}
-
-function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null }) {
-  if (!result) {
-    return <div className="empty compact">Run evaluation to see hit@k and missed retrieval cases.</div>;
-  }
-  const answerableTotal = result.summary.answerable_cases ?? result.summary.total;
-  const hitRateDenominator = answerableTotal || 1;
-  return (
-    <div className="evaluation-result">
-      {result.dataset ? (
-        <div className="evaluation-expected">
-          Dataset: {result.dataset.id} / {result.dataset.version} / {result.dataset.schema_version}
-        </div>
-      ) : null}
-      <div className="evaluation-summary">
-        <div className="metric">
-          <span>Total</span>
-          <strong>{result.summary.total}</strong>
-        </div>
-        <div className="metric">
-          <span>Hit@1</span>
-          <strong>{formatPercent(result.summary.hit_at_1 / hitRateDenominator)}</strong>
-        </div>
-        <div className="metric">
-          <span>Hit@3</span>
-          <strong>{formatPercent(result.summary.hit_at_3 / hitRateDenominator)}</strong>
-        </div>
-        <div className="metric">
-          <span>Hit@5</span>
-          <strong>{formatPercent(result.summary.hit_at_5 / hitRateDenominator)}</strong>
-        </div>
-        <div className={`metric ${result.summary.misses > 0 ? "danger" : ""}`}>
-          <span>Misses</span>
-          <strong>{result.summary.misses}</strong>
-        </div>
-        <div className={`metric ${(result.summary.blocked_candidates ?? 0) > 0 ? "danger" : ""}`}>
-          <span>Blocked</span>
-          <strong>{result.summary.blocked_candidates ?? 0}</strong>
-        </div>
-      </div>
-      <EmbeddingStatus embedding={result.embedding ?? null} hasSearched />
-      <FusionStatus fusion={result.fusion ?? null} hasSearched />
-      <RerankerStatus hasSearched reranker={result.reranker ?? null} />
-      <RelevanceGateStatus gate={result.relevance_gate ?? null} hasSearched />
-      <div className="evaluation-cases">
-        {result.cases.map((item) => (
-          <article className={`evaluation-case ${item.hit ? "hit" : "miss"}`} key={item.id}>
-            <div className="rag-result-header">
-              <div>
-                <h3>{item.id}</h3>
-                <div className="tool-source">{item.query}</div>
-              </div>
-              <div className="document-metrics">
-                <span>{item.hit ? (item.answerable === false ? "correct no-answer" : "hit") : "miss"}</span>
-                <span>{item.best_rank ? `rank ${item.best_rank}` : item.answerable === false && item.hit ? "no result" : "no match"}</span>
-              </div>
-            </div>
-            <div className="evaluation-expected">{evaluationExpectedLabel(item)}</div>
-            {item.failure_reason ? <div className="evaluation-failure">{item.failure_reason}</div> : null}
-            {item.security && item.security.blocked_candidates > 0 ? (
-              <div className="evaluation-failure">{knowledgeSecurityLabel(item.security)}</div>
-            ) : null}
-            <div className="rag-results compact-results">
-              {item.items.slice(0, 5).map((resultItem) => (
-                <article className="rag-result-card" key={resultItem.chunk.id}>
-                  <div className="rag-result-header">
-                    <div>
-                      <h3>{resultItem.document.title}</h3>
-                      <div className="tool-source">Source details: {chunkSourceDetails(resultItem)}</div>
-                    </div>
-                    <div className="document-metrics">
-                      <span>Semantic #{resultItem.vector_rank ?? "-"}</span>
-                      <span>Keyword #{resultItem.lexical_rank ?? "-"}</span>
-                      <span>Fusion #{resultItem.fusion_rank ?? "-"}</span>
-                      <span>Final #{resultItem.rerank_rank ?? "-"}</span>
-                      {resultItem.confidence ? <span>{resultItem.confidence}</span> : null}
-                      <span>sim {formatScore(resultItem.similarity)}</span>
-                      <span>final {formatScore(resultItem.rerank_score ?? resultItem.score)}</span>
-                    </div>
-                  </div>
-                  <ScoreBreakdown result={resultItem} />
-                  <p>{resultItem.chunk.content}</p>
-                </article>
-              ))}
-            </div>
-          </article>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function ScoreBreakdown({ result }: { result: RetrievedDocumentChunk }) {
@@ -666,32 +551,6 @@ function formatRRFScore(value: number) {
 
 function formatPercent(value: number) {
   return Number.isFinite(value) ? `${Math.round(value * 100)}%` : "0%";
-}
-
-function evaluationExpectedLabel(item: RAGEvaluationRunResponse["cases"][number]) {
-  const expectedSources = item.expected_sources?.map(goldenSourceLabel).filter(Boolean) ?? [];
-  const forbiddenSources = item.forbidden_sources?.map(goldenSourceLabel).filter(Boolean) ?? [];
-  const parts = [
-    item.answerable === false ? "answerable: no" : item.answerable === true ? "answerable: yes" : "",
-    expectedSources.length ? `sources: ${expectedSources.join(", ")}` : "",
-    item.required_source_count && item.required_source_count > 1 ? `required sources: ${item.required_source_count}` : "",
-    forbiddenSources.length ? `forbidden: ${forbiddenSources.join(", ")}` : "",
-    item.expected_document_ids?.length ? `documents: ${item.expected_document_ids.join(", ")}` : "",
-    item.expected_chunk_ids?.length ? `chunks: ${item.expected_chunk_ids.join(", ")}` : "",
-    item.expected_chunk_contains?.length ? `contains: ${item.expected_chunk_contains.join(", ")}` : ""
-  ].filter(Boolean);
-  return parts.length > 0 ? parts.join(" / ") : "No expectations configured";
-}
-
-function goldenSourceLabel(source: NonNullable<RAGEvaluationRunResponse["cases"][number]["expected_sources"]>[number]) {
-  return [
-    source.document_id ? `document ${source.document_id}` : "",
-    source.chunk_id ? `chunk ${source.chunk_id}` : "",
-    source.source_uri ?? "",
-    source.content_contains?.length ? `contains ${source.content_contains.join(" + ")}` : ""
-  ]
-    .filter(Boolean)
-    .join("; ");
 }
 
 function formatBytes(value: number) {

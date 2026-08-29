@@ -58,11 +58,11 @@ rotation` to exercise semantic recall. Inspect source details, independent
 recall ranks, RRF score, final rank, relevance decision, and selected model
 context.
 
-For an AI-systems-focused review, open **Retrieval evaluation** and show the
-canonical `agentflow-rag-baseline@1.0.0` result. Point out Hit@1/3/5, per-case
-misses, prompt-injection blocks, gating versus diagnostic cases, and the
-Embedding/Fusion/Reranker/Relevance Gate versions used by the same production
-pipeline.
+For an AI-systems-focused review, run `make golden-eval` before the UI demo and
+show the canonical `agentflow-rag-baseline@1.0.0` report. Point out Hit@1/3/5,
+per-case misses, prompt-injection blocks, gating versus diagnostic cases, and
+the Embedding/Fusion/Reranker/Relevance Gate versions used by the same
+production retrieval pipeline.
 
 ### 2:00-3:15 - Multi-Agent Run
 

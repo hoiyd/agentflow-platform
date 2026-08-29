@@ -42,7 +42,6 @@ func (h *Handler) registerDocumentRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/documents/{id}", h.getDocument)
 	mux.HandleFunc("DELETE /api/documents/{id}", h.deleteDocument)
 	mux.HandleFunc("POST /api/rag/search", h.searchDocumentChunks)
-	mux.HandleFunc("POST /api/rag/evaluations/run", h.runRAGEvaluation)
 }
 
 func (h *Handler) registerAgentRoutes(mux *http.ServeMux) {

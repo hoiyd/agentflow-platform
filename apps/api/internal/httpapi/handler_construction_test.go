@@ -36,9 +36,6 @@ func (*knowledgeOperationsStub) Ingest(_ context.Context, request domain.Documen
 func (*knowledgeOperationsStub) Search(context.Context, domain.DocumentSearch, int) (domain.DocumentSearchResponse, error) {
 	return domain.DocumentSearchResponse{}, nil
 }
-func (*knowledgeOperationsStub) Evaluate(context.Context, domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error) {
-	return domain.RAGEvaluationRunResponse{}, nil
-}
 
 type memoryQueueStub struct{}
 

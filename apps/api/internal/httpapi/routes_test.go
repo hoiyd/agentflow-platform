@@ -18,6 +18,7 @@ func TestRoutesMatchOnlyDeclaredResourceShapes(t *testing.T) {
 		{name: "health", method: http.MethodGet, path: "/health", status: http.StatusOK},
 		{name: "unknown nested agent path", method: http.MethodGet, path: "/api/agents/agent-1/extra", status: http.StatusNotFound},
 		{name: "unknown nested run path", method: http.MethodGet, path: "/api/runs/run-1/replay/extra", status: http.StatusNotFound},
+		{name: "offline RAG evaluation is not exposed", method: http.MethodPost, path: "/api/rag/evaluations/run", status: http.StatusNotFound},
 		{name: "unsupported method", method: http.MethodPost, path: "/health", status: http.StatusNotFound},
 		{name: "cors preflight", method: http.MethodOptions, path: "/api/chat", status: http.StatusNoContent},
 	}

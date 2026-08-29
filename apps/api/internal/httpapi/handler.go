@@ -35,7 +35,6 @@ type MemoryOperations interface {
 type KnowledgeOperations interface {
 	Ingest(context.Context, domain.DocumentIngestRequest) (domain.Document, error)
 	Search(context.Context, domain.DocumentSearch, int) (domain.DocumentSearchResponse, error)
-	Evaluate(context.Context, domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error)
 }
 
 // HTTPStore deliberately exposes only global Agent configuration and a
