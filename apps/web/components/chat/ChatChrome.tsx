@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import {
   Activity,
+  BrainCircuit,
   ClipboardList,
   Database,
   Menu,
@@ -19,7 +20,7 @@ import {
 
 import type { Conversation, ToolInfo } from "../../lib/api";
 
-export type ChatView = "chat" | "tools" | "knowledge";
+export type ChatView = "chat" | "tools" | "knowledge" | "memory";
 
 export type VisibleRunState = {
   id: string;
@@ -95,6 +96,7 @@ export function Sidebar({
           <div className="sidebar-section-title">Operate</div>
           <NavButton active={view === "chat"} icon={<MessageSquare size={16} />} label="Chat" onClick={() => selectView("chat")} />
           <NavButton active={view === "tools"} icon={<Wrench size={16} />} label="Tools" onClick={() => selectView("tools")} />
+          <NavButton active={view === "memory"} icon={<BrainCircuit size={16} />} label="Memory" onClick={() => selectView("memory")} />
           <NavButton active={view === "knowledge"} icon={<Database size={16} />} label="Knowledge" onClick={() => selectView("knowledge")} />
         </div>
         <div className="sidebar-section-title conversation-section-title">Recent runs</div>
@@ -169,6 +171,7 @@ type TopbarProps = {
   isCancelingRun: boolean;
   isRunStreaming: boolean;
   isSavingConversationTitle: boolean;
+  memoryStatus: string;
   onCancelEdit: () => void;
   onCancelRun: () => void;
   onConversationTitleDraftChange: (value: string) => void;
@@ -192,6 +195,7 @@ export function Topbar({
   isCancelingRun,
   isRunStreaming,
   isSavingConversationTitle,
+  memoryStatus,
   onCancelEdit,
   onCancelRun,
   onConversationTitleDraftChange,
@@ -241,7 +245,7 @@ export function Topbar({
       ) : (
         <div className="topbar-heading">
           <span className="topbar-eyebrow">Workspace</span>
-          <h2>{view === "tools" ? "Tools" : view === "knowledge" ? "Knowledge" : "New conversation"}</h2>
+          <h2>{view === "tools" ? "Tools" : view === "memory" ? "Memory" : view === "knowledge" ? "Knowledge" : "New conversation"}</h2>
         </div>
       )}
       <div className="topbar-actions">
@@ -284,7 +288,7 @@ export function Topbar({
         {view !== "chat" || !runState ? (
           <span className={`status ${isRunStreaming ? "active" : ""}`}>
             <i />
-            {view === "tools" ? `${toolCount} enabled` : view === "knowledge" ? `${documentCount} documents` : isRunStreaming ? "Streaming..." : "Ready"}
+            {view === "tools" ? `${toolCount} enabled` : view === "memory" ? memoryStatus : view === "knowledge" ? `${documentCount} documents` : isRunStreaming ? "Streaming..." : "Ready"}
           </span>
         ) : null}
       </div>

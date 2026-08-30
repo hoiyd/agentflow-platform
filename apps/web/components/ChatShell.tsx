@@ -43,6 +43,8 @@ import { isDefaultAgent, type AgentConfigDraft } from "./chat/AgentConfigPanel";
 import { autonomousRoles, toCollaborationStepView, type AutonomousProgress, type CollaborationStepView } from "./chat/CollaborationPanels";
 import { KnowledgePanel } from "./knowledge/KnowledgePanel";
 import { useKnowledgeWorkbench } from "./knowledge/useKnowledgeWorkbench";
+import { MemoryPanel } from "./memory/MemoryPanel";
+import { useMemoryWorkbench } from "./memory/useMemoryWorkbench";
 
 type ChatShellProps = {
   initialConversationId?: string;
@@ -107,6 +109,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   }
   const conversationRequests = conversationRequestsRef.current;
   const knowledge = useKnowledgeWorkbench();
+  const memory = useMemoryWorkbench();
 
   const activeConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === activeId),
@@ -943,6 +946,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           isCancelingRun={isCancelingRun}
           isRunStreaming={isRunStreaming}
           isSavingConversationTitle={isSavingConversationTitle}
+          memoryStatus={memory.hasSearched ? `${memory.results.length} matches` : "Recall ready"}
           onCancelEdit={cancelEditingConversationTitle}
           onCancelRun={() => void handleCancelRun()}
           onConversationTitleDraftChange={setConversationTitleDraft}
@@ -961,6 +965,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           <ToolsPanel error={toolsError} onToggle={(tool) => void toggleTool(tool)} tools={tools} updatingTool={updatingTool} />
         ) : view === "knowledge" ? (
           <KnowledgePanel model={knowledge} />
+        ) : view === "memory" ? (
+          <MemoryPanel model={memory} />
         ) : (
           <ChatWorkspace
             agents={agents}
