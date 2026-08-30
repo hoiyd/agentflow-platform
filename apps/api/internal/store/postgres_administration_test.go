@@ -133,9 +133,16 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 		Type: domain.EventCompactionCompleted, RunID: run.ID, ConversationID: conversation.ID,
 		Payload: map[string]any{"compaction_id": compaction.ID, "trigger": "soft", "status": "completed", "algorithm_version": "v1"},
 	}
-	first, _, err := postgresStore.CommitContextCompaction(compaction, terminal)
+	compactionStarted, err := postgresStore.CreateRunEvent(domain.RunEvent{
+		Type: domain.EventCompactionStarted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": compaction.ID, "trigger": "soft", "status": "running", "algorithm_version": "v1"},
+	})
 	if err != nil {
-		t.Fatalf("commit compaction: %v", err)
+		t.Fatalf("start compaction: %v", err)
+	}
+	first, compactionCompleted, err := postgresStore.CommitContextCompaction(compaction, terminal)
+	if err != nil || compactionCompleted.Sequence != compactionStarted.Sequence+1 {
+		t.Fatalf("commit compaction: event=%#v err=%v", compactionCompleted, err)
 	}
 	duplicate, duplicateTerminal, err := postgresStore.CommitContextCompaction(compaction, terminal)
 	if err != nil || duplicate.ID != first.ID || duplicateTerminal.ID != "" {
@@ -195,22 +202,23 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 			"token_usage_estimated": true,
 		},
 	})
-	if err != nil || modelEvent.Sequence != 1 || modelEvent.SchemaVersion != domain.CurrentRunEventSchemaVersion {
+	if err != nil || modelEvent.Sequence != compactionCompleted.Sequence+1 || modelEvent.SchemaVersion != domain.CurrentRunEventSchemaVersion {
 		t.Fatalf("create model event: event=%#v err=%v", modelEvent, err)
 	}
 	toolEvent, err := postgresStore.CreateRunEvent(domain.RunEvent{
 		RunID: run.ID, StageID: step.ID, ParentEventID: modelEvent.ID,
 		Type: domain.EventToolFailed, Payload: map[string]any{"tool_name": "coverage"},
 	})
-	if err != nil || toolEvent.Sequence != 2 {
+	if err != nil || toolEvent.Sequence != modelEvent.Sequence+1 {
 		t.Fatalf("create tool event: event=%#v err=%v", toolEvent, err)
 	}
 	events, err := postgresStore.ListRunEvents(run.ID)
-	if err != nil || len(events) != 2 || events[0].ID != modelEvent.ID || events[1].ParentEventID != modelEvent.ID {
+	if err != nil || len(events) != 4 || events[0].ID != compactionStarted.ID || events[1].ID != compactionCompleted.ID ||
+		events[2].ID != modelEvent.ID || events[3].ParentEventID != modelEvent.ID {
 		t.Fatalf("list run events: events=%#v err=%v", events, err)
 	}
 	replay, found, err := postgresStore.GetRunReplay(run.ID)
-	if err != nil || !found || len(replay.Steps) != 1 || len(replay.RunEvents) != 2 ||
+	if err != nil || !found || len(replay.Steps) != 1 || len(replay.RunEvents) != 4 ||
 		replay.Summary.LLMCalls != 1 || replay.Summary.ToolCalls != 1 || replay.Summary.ErrorCount != 1 ||
 		replay.Summary.TotalTokens != 18 || !replay.Summary.TokenUsageEstimated {
 		t.Fatalf("get run replay: found=%v replay=%#v err=%v", found, replay, err)
