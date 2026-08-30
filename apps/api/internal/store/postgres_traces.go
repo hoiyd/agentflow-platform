@@ -307,21 +307,6 @@ func listRunUsageEntries(queryer usageQueryer, runID string) ([]domain.RunUsageE
 	return entries, rows.Err()
 }
 
-func (s *PostgresStore) GetRunTraceSummary(runID string) (domain.RunTraceSummary, error) {
-	run, ok, err := s.GetRun(runID)
-	if err != nil {
-		return domain.RunTraceSummary{}, err
-	}
-	if !ok {
-		return domain.RunTraceSummary{}, ErrNotFound("run")
-	}
-	events, err := s.ListRunEvents(runID)
-	if err != nil {
-		return domain.RunTraceSummary{}, err
-	}
-	return projection.BuildRunTraceSummary(run, events), nil
-}
-
 func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	run, ok, err := s.GetRun(runID)
 	if err != nil || !ok {

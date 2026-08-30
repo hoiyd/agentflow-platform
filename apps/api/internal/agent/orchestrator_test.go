@@ -104,7 +104,7 @@ func TestPreparedRunsUseRequestedAgent(t *testing.T) {
 		t.Fatalf("create conversation: %v", err)
 	}
 
-	collaboration, err := runtime.PrepareCollaborationRun(context.Background(), custom.ID, conversation.ID)
+	collaboration, err := runtime.PrepareCollaborationRunWithContract(context.Background(), custom.ID, conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare collaboration: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestPreparedRunsUseRequestedAgent(t *testing.T) {
 		t.Fatalf("expected collaboration to use requested agent, got agent=%s run_agent=%s", collaboration.WorkerAgent.ID, collaboration.Run.AgentID)
 	}
 
-	autonomous, err := runtime.PrepareAutonomousRun(context.Background(), custom.ID, conversation.ID)
+	autonomous, err := runtime.PrepareAutonomousRunWithContract(context.Background(), custom.ID, conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestMultiAgentWorkerUsesBoundedIsolatedChildRun(t *testing.T) {
 			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000, MaxToolCalls: 1},
 		},
 	})
-	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestCancelParentRunPropagatesToActiveChild(t *testing.T) {
 		ChildRuns: ChildRunLimits{MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute, SummaryMaxChars: 100,
 			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000}},
 	})
-	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestResumeRecoverableCollaborationReusesInterruptedChild(t *testing.T) {
 		ChildRuns: ChildRunLimits{MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute, SummaryMaxChars: 120,
 			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000}},
 	})
-	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +372,7 @@ func TestFailedChildDoesNotEnterParentReviewContext(t *testing.T) {
 		ChildRuns: ChildRunLimits{MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute,
 			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000}},
 	})
-	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,7 +422,7 @@ func TestChildBackpressureLeavesParentWaitingForRetry(t *testing.T) {
 		ChildRuns: ChildRunLimits{MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute,
 			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2}},
 	})
-	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -502,7 +502,7 @@ func TestResumeRecoverableCollaborationRejectsRunPreconditions(t *testing.T) {
 	snapshot := testRuntimeSnapshot()
 	snapshot.Mode = ChatModeSingle
 	snapshot.AutonomousLimits = nil
-	single, err := fileStore.CreateRun("agent_planner", conversation.ID, snapshot)
+	single, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -753,7 +753,7 @@ func newRecoverableCollaborationForTest(t *testing.T) (*Runtime, *store.FileStor
 		ChildRuns: ChildRunLimits{MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute, SummaryMaxChars: 100,
 			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000}},
 	})
-	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -924,7 +924,7 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 			MaxIterations: 1, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
 		},
 	})
-	prepared, err := runtime.PrepareAutonomousRun(context.Background(), "", conversation.ID)
+	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
 	}
@@ -980,7 +980,7 @@ func TestAutonomousRunCanBeCanceledBeforeLoop(t *testing.T) {
 			MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
 		},
 	})
-	prepared, err := runtime.PrepareAutonomousRun(context.Background(), "", conversation.ID)
+	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
 	}
@@ -1025,7 +1025,7 @@ func TestResumeAutonomousCompletesHumanInputCheckpoint(t *testing.T) {
 			MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
 		},
 	})
-	prepared, err := runtime.PrepareAutonomousRun(context.Background(), "", conversation.ID)
+	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
 	}
@@ -1089,7 +1089,7 @@ func TestResumeRecoverableAutonomousContinuesFromSavedSteps(t *testing.T) {
 			MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
 		},
 	})
-	prepared, err := runtime.PrepareAutonomousRun(context.Background(), "", conversation.ID)
+	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
 	}

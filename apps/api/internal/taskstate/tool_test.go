@@ -17,7 +17,7 @@ func TestUpdateTaskStateToolAppliesPatchAndPublishesEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	conversation, _ := fileStore.CreateConversation("tool test")
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, taskStateTestSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, taskStateTestSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

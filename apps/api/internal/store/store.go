@@ -52,7 +52,6 @@ type AgentStore interface {
 }
 
 type RunStore interface {
-	CreateRun(agentID string, conversationID string, snapshot domain.RuntimeSnapshot) (domain.Run, error)
 	CreateRunWithContract(agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error)
 	UpdateRunAgent(id string, agentID string) (domain.Run, error)
 	UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error)
@@ -90,7 +89,6 @@ type CollaborationStore interface {
 type RunEventStore interface {
 	CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error)
 	ListRunEvents(runID string) ([]domain.RunEvent, error)
-	GetRunTraceSummary(runID string) (domain.RunTraceSummary, error)
 	GetRunReplay(runID string) (domain.RunReplay, bool, error)
 }
 
@@ -121,7 +119,6 @@ type RunUsageStore interface {
 }
 
 type ContextCompactionStore interface {
-	CreateContextCompaction(domain.ContextCompaction) (domain.ContextCompaction, error)
 	CommitContextCompaction(domain.ContextCompaction, domain.RunEvent) (domain.ContextCompaction, domain.RunEvent, error)
 	GetLatestContextCompaction(conversationID string) (domain.ContextCompaction, bool, error)
 }

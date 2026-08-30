@@ -29,7 +29,7 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	if _, err := fileStore.AddMessage(conversation.ID, "user", "Write a concise recovery demo."); err != nil {
 		t.Fatalf("add message: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testi
 			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000},
 		},
 	})
-	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,6 +250,13 @@ func TestDetachedRequestContextIgnoresCancellationAndKeepsValues(t *testing.T) {
 	}
 	if value := detached.Value(contextKey("request-id")); value != "req_test" {
 		t.Fatalf("expected detached context to keep request values, got %#v", value)
+	}
+}
+
+func TestResumeFailurePolicyKeepsReplayOnlyRunRecoverable(t *testing.T) {
+	status, failRun := resumeFailurePolicy(agent.ErrRuntimeSnapshotResumeUnsupported)
+	if status != http.StatusConflict || failRun {
+		t.Fatalf("replay-only resume policy: status=%d fail_run=%t", status, failRun)
 	}
 }
 

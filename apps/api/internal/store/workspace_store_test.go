@@ -16,7 +16,7 @@ func TestWorkspaceStoreRejectsCrossScopeOwnedResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestWorkspaceStoreCoversRunOwnedMissingAndSuccessfulOperations(t *testing.T
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

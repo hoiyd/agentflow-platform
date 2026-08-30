@@ -94,7 +94,7 @@ func TestEngineDoesNotRequireVerificationWithoutContract(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	conversation, _ := fileStore.CreateConversation("no verification")
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, verificationSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, verificationSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

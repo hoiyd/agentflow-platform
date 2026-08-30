@@ -108,7 +108,7 @@ func preparedCollaborationForChildTest(t *testing.T) (*Runtime, *store.FileStore
 			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000},
 		},
 	})
-	prepared, err := runtime.PrepareCollaborationRun(context.Background(), "agent_planner", conversation.ID)
+	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

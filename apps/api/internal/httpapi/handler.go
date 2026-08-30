@@ -15,7 +15,6 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/modelprovider"
-	"agentflow-platform/apps/api/internal/runtimeinvariant"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
 	"agentflow-platform/apps/api/internal/verification"
@@ -82,31 +81,29 @@ type VerificationOperations interface {
 // Dependencies is the complete production dependency set for the HTTP adapter.
 // Construction and lifecycle ownership remain in the app composition root.
 type Dependencies struct {
-	Store                HTTPStore
-	ModelClient          modelprovider.TextCompleter
-	Tools                ToolOperations
-	AgentRuntime         AgentRuntimeOperations
-	Memory               MemoryOperations
-	Knowledge            KnowledgeOperations
-	MemoryCuration       MemoryCurationQueue
-	RunController        RunCapacity
-	Verification         VerificationOperations
-	RuntimeInvariantMode string
-	AllowedOrigins       []string
+	Store          HTTPStore
+	ModelClient    modelprovider.TextCompleter
+	Tools          ToolOperations
+	AgentRuntime   AgentRuntimeOperations
+	Memory         MemoryOperations
+	Knowledge      KnowledgeOperations
+	MemoryCuration MemoryCurationQueue
+	RunController  RunCapacity
+	Verification   VerificationOperations
+	AllowedOrigins []string
 }
 
 type Handler struct {
-	store                HTTPStore
-	modelClient          modelprovider.TextCompleter
-	tools                ToolOperations
-	agentRuntime         AgentRuntimeOperations
-	memories             MemoryOperations
-	knowledge            KnowledgeOperations
-	memoryCuration       MemoryCurationQueue
-	runController        RunCapacity
-	verification         VerificationOperations
-	runtimeInvariantMode runtimeinvariant.Mode
-	allowedOrigins       []string
+	store          HTTPStore
+	modelClient    modelprovider.TextCompleter
+	tools          ToolOperations
+	agentRuntime   AgentRuntimeOperations
+	memories       MemoryOperations
+	knowledge      KnowledgeOperations
+	memoryCuration MemoryCurationQueue
+	runController  RunCapacity
+	verification   VerificationOperations
+	allowedOrigins []string
 }
 
 func NewHandler(dependencies Dependencies) (*Handler, error) {
@@ -138,17 +135,16 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		return nil, errors.New("http api verification engine is required")
 	}
 	return &Handler{
-		store:                dependencies.Store,
-		modelClient:          dependencies.ModelClient,
-		tools:                dependencies.Tools,
-		agentRuntime:         dependencies.AgentRuntime,
-		memories:             dependencies.Memory,
-		knowledge:            dependencies.Knowledge,
-		memoryCuration:       dependencies.MemoryCuration,
-		runController:        dependencies.RunController,
-		verification:         dependencies.Verification,
-		runtimeInvariantMode: runtimeinvariant.NormalizeMode(dependencies.RuntimeInvariantMode),
-		allowedOrigins:       append([]string(nil), dependencies.AllowedOrigins...),
+		store:          dependencies.Store,
+		modelClient:    dependencies.ModelClient,
+		tools:          dependencies.Tools,
+		agentRuntime:   dependencies.AgentRuntime,
+		memories:       dependencies.Memory,
+		knowledge:      dependencies.Knowledge,
+		memoryCuration: dependencies.MemoryCuration,
+		runController:  dependencies.RunController,
+		verification:   dependencies.Verification,
+		allowedOrigins: append([]string(nil), dependencies.AllowedOrigins...),
 	}, nil
 }
 

@@ -115,8 +115,15 @@ what happened.
 
 A Runtime Snapshot never contains API keys, authorization headers, provider
 secrets, or other credentials. The current process supplies
-credentials when it reconnects to the frozen provider endpoint. A legacy Run
-without a snapshot remains replayable but cannot be resumed safely.
+credentials when it reconnects to the frozen provider endpoint.
+
+Replay and Resume have different compatibility promises. Replay preserves the
+persisted Snapshot, events, usage, evidence, and other read-model inputs for all
+historical schema versions. Resume executes only the current Runtime Snapshot
+schema and its immediately preceding version (currently v9 and v8). Older Runs
+and Runs without a Snapshot are Replay-only. An unsupported Resume returns the
+stable `runtime_snapshot_resume_unsupported` error; AgentFlow never substitutes
+current configuration for an older frozen protocol.
 
 ## Stage
 

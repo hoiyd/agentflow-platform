@@ -26,7 +26,7 @@ func TestRuntimeTurnModelRetriesTextOverflowOnlyAfterGenerationAdvances(t *testi
 	snapshot.ContextAssembly = config
 	snapshot.Model.Provider = "test"
 	snapshot.Model.Model = "test-model"
-	run, _ := fileStore.CreateRun("agent_planner", conversation.ID, snapshot)
+	run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	for index := 0; index < 8; index++ {
 		role := "user"
 		if index%2 == 1 {
@@ -63,7 +63,7 @@ func TestRuntimeTurnModelDoesNotRetryOverflowWhenCompactionFails(t *testing.T) {
 	snapshot.ContextAssembly = config
 	snapshot.Model.Provider = "test"
 	snapshot.Model.Model = "test-model"
-	run, _ := fileStore.CreateRun("agent_planner", conversation.ID, snapshot)
+	run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	for index := 0; index < 6; index++ {
 		_, _ = fileStore.AddMessage(conversation.ID, "user", "compactable historical context")
 	}
@@ -100,7 +100,7 @@ func TestCompactContextBestEffortReturnsSuccessAndSuppressesFailure(t *testing.T
 		snapshot.Model.Provider = "test"
 		snapshot.Model.Model = "test-model"
 		snapshot.ContextAssembly = config
-		run, _ := fileStore.CreateRun("agent_planner", conversation.ID, snapshot)
+		run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 		for index := 0; index < 8; index++ {
 			_, _ = fileStore.AddMessage(conversation.ID, "user", "compactable context repeated several times")
 		}

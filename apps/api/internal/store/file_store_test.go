@@ -53,7 +53,7 @@ func TestFileStoreListsConversationEventsThroughRunOwnership(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	conversation, _ := fileStore.CreateConversation("Event history")
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -74,9 +74,9 @@ func TestFileStoreOrdersConversationEventsAndCountsHistoryFailures(t *testing.T)
 	}
 	conversation, _ := fileStore.CreateConversation("Ordered event history")
 	otherConversation, _ := fileStore.CreateConversation("Other event history")
-	firstRun, _ := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
-	secondRun, _ := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
-	otherRun, _ := fileStore.CreateRun("agent_planner", otherConversation.ID, testRuntimeSnapshot())
+	firstRun, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	secondRun, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	otherRun, _ := fileStore.CreateRunWithContract("agent_planner", otherConversation.ID, testRuntimeSnapshot(), nil)
 	base := time.Date(2026, 8, 12, 10, 0, 0, 0, time.UTC)
 	created := make([]domain.RunEvent, 0, 5)
 	for _, event := range []domain.RunEvent{
@@ -105,9 +105,9 @@ func TestFileStoreOrdersConversationEventsAndCountsHistoryFailures(t *testing.T)
 			t.Fatalf("events are not ordered: %#v", events)
 		}
 	}
-	summary, err := fileStore.GetRunTraceSummary(firstRun.ID)
-	if err != nil || summary.ErrorCount != 2 {
-		t.Fatalf("history search failure was not counted: summary=%#v err=%v", summary, err)
+	replay, ok, err := fileStore.GetRunReplay(firstRun.ID)
+	if err != nil || !ok || replay.Summary.ErrorCount != 2 {
+		t.Fatalf("history search failure was not counted: replay=%#v ok=%v err=%v", replay, ok, err)
 	}
 }
 
@@ -142,16 +142,27 @@ func TestFileStoreContextCompactionRoundTrip(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	conversation, _ := first.CreateConversation("compaction round trip")
-	run, _ := first.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
-	created, err := first.CreateContextCompaction(domain.ContextCompaction{
-		ConversationID: conversation.ID, RunID: run.ID, Trigger: "soft", Summary: "structured summary",
-		SourceMessageIDs: []string{"msg-1", "msg-2"}, SourceEventIDs: []string{"event-1"},
+	run, _ := first.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	compactionID := "cmp-round-trip"
+	started, err := first.CreateRunEvent(domain.RunEvent{
+		Type: domain.EventCompactionStarted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": compactionID, "trigger": "soft", "status": "running", "algorithm_version": "context-compaction-v2"},
+	})
+	if err != nil {
+		t.Fatalf("create compaction start: %v", err)
+	}
+	created, completed, err := first.CommitContextCompaction(domain.ContextCompaction{
+		ID: compactionID, ConversationID: conversation.ID, RunID: run.ID, Trigger: "soft", Summary: "structured summary",
+		SourceMessageIDs: []string{"msg-1", "msg-2"}, SourceEventIDs: []string{started.ID},
 		ShadowedMessageRange: domain.ContextShadowedRange{FirstMessageID: "msg-1", LastMessageID: "msg-2", MessageCount: 2},
 		SourceHash:           "hash-1", BeforeTokens: 100, AfterTokens: 25, TargetSummaryTokens: 20,
 		ReductionRatio: 0.75, SummaryModel: "test", AlgorithmVersion: "context-compaction-v2",
+	}, domain.RunEvent{
+		Type: domain.EventCompactionCompleted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": compactionID, "trigger": "soft", "status": "completed", "algorithm_version": "context-compaction-v2"},
 	})
-	if err != nil {
-		t.Fatalf("create compaction: %v", err)
+	if err != nil || completed.Sequence != started.Sequence+1 {
+		t.Fatalf("commit compaction: event=%#v err=%v", completed, err)
 	}
 	second, err := NewFileStore(path)
 	if err != nil {
@@ -171,7 +182,7 @@ func TestFileStoreCommitsCompactionAndTerminalEventAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 	conversation, _ := fileStore.CreateConversation("atomic compaction")
-	run, _ := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	started, err := fileStore.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventCompactionStarted, RunID: run.ID, ConversationID: conversation.ID,
 		Payload: map[string]any{"compaction_id": "cmp_atomic", "trigger": "hard", "status": "running", "algorithm_version": "v2"},
@@ -207,7 +218,7 @@ func TestFileStoreContextCompactionFailureAndLegacyPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	conversation, _ := fileStore.CreateConversation("compaction failures")
-	run, _ := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	compaction := domain.ContextCompaction{
 		ID: "cmp-failure", ConversationID: conversation.ID, RunID: run.ID, Trigger: "hard",
 		Summary: "summary", SourceMessageIDs: []string{"m1", "m2"}, SourceHash: "failure-hash",
@@ -226,9 +237,6 @@ func TestFileStoreContextCompactionFailureAndLegacyPaths(t *testing.T) {
 	missingRun.RunID = "missing"
 	if _, _, err := fileStore.CommitContextCompaction(compaction, missingRun); err == nil {
 		t.Fatal("missing run should fail")
-	}
-	if _, err := fileStore.CreateContextCompaction(domain.ContextCompaction{ConversationID: "missing"}); err == nil {
-		t.Fatal("direct create with missing conversation should fail")
 	}
 	if _, ok, err := fileStore.GetLatestContextCompaction("missing"); err != nil || ok {
 		t.Fatalf("missing latest compaction: ok=%v err=%v", ok, err)
@@ -393,7 +401,7 @@ func TestFileStoreWorkspaceIsolationAcrossConversationRunAndDocument(t *testing.
 	if _, err := fileStore.AddMessageInWorkspace("workspace-b", conversationA.ID, "user", "cross workspace"); !IsNotFound(err) {
 		t.Fatalf("expected cross-workspace message write to be hidden, got %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversationA.ID, testRuntimeSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversationA.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

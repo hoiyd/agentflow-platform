@@ -25,6 +25,14 @@ var ErrRuntimeSnapshotUnavailable = failure.New(failure.Definition{
 	},
 })
 
+var ErrRuntimeSnapshotResumeUnsupported = failure.New(failure.Definition{
+	Message: "runtime snapshot version is not supported for resume",
+	Info: failure.Info{
+		Code: "runtime_snapshot_resume_unsupported", Source: "runtime_snapshot",
+		Category: failure.CategoryValidation, Retryable: false,
+	},
+})
+
 var ErrRuntimeExecutorUnsupported = failure.New(failure.Definition{
 	Message: "runtime executor protocol is no longer supported",
 	Info: failure.Info{
@@ -172,10 +180,10 @@ func snapshotTools(catalog *tools.Catalog, names []string) []domain.RuntimeToolS
 
 func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 	if err := validateRuntimeSnapshot(run.RuntimeSnapshot); err != nil {
-		return restoredRuntime{}, fmt.Errorf("%w for run %s: %v; run cannot be resumed safely", ErrRuntimeSnapshotUnavailable, run.ID, err)
+		return restoredRuntime{}, fmt.Errorf("run %s cannot be resumed safely: %w", run.ID, err)
 	}
 	snapshot := run.RuntimeSnapshot
-	snapshot.ContextAssembly = contextassembly.NormalizeSnapshotConfig(snapshot.ContextAssembly, snapshot.SchemaVersion)
+	snapshot.ContextAssembly = contextassembly.NormalizeConfig(snapshot.ContextAssembly)
 	current, err := r.currentCatalog()
 	if err != nil {
 		return restoredRuntime{}, err
@@ -210,8 +218,14 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 }
 
 func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
-	if snapshot == nil || (snapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.ContextRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CompactionRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.RunBudgetRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.UnifiedExecutionSnapshotVersion && snapshot.SchemaVersion != domain.SessionHistorySnapshotVersion && snapshot.SchemaVersion != domain.RecoveryRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.TaskStateRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion) {
+	if snapshot == nil {
 		return ErrRuntimeSnapshotUnavailable
+	}
+	if snapshot.SchemaVersion != domain.PreviousRuntimeSnapshotVersion && snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion {
+		return errors.Join(
+			ErrRuntimeSnapshotResumeUnsupported,
+			fmt.Errorf("snapshot schema version %d is replay-only; resumable versions are %d and %d", snapshot.SchemaVersion, domain.PreviousRuntimeSnapshotVersion, domain.CurrentRuntimeSnapshotVersion),
+		)
 	}
 	switch snapshot.Mode {
 	case ChatModeSingle:
@@ -243,7 +257,7 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	if strings.TrimSpace(snapshot.Model.Model) == "" {
 		return errors.New("runtime snapshot has no model")
 	}
-	if snapshot.SchemaVersion >= domain.RunBudgetRuntimeSnapshotVersion && snapshot.RunBudget == nil {
+	if snapshot.RunBudget == nil {
 		return errors.New("runtime snapshot has no run budget")
 	}
 	if snapshot.Delegation != nil {
@@ -305,9 +319,9 @@ func (r *Runtime) snapshotForRun(runID string) (*domain.RuntimeSnapshot, error) 
 		return nil, fmt.Errorf("%w for run %s", ErrRuntimeSnapshotUnavailable, runID)
 	}
 	if err := validateRuntimeSnapshot(run.RuntimeSnapshot); err != nil {
-		return nil, fmt.Errorf("%w for run %s: %v", ErrRuntimeSnapshotUnavailable, runID, err)
+		return nil, fmt.Errorf("runtime snapshot for run %s is invalid: %w", runID, err)
 	}
-	run.RuntimeSnapshot.ContextAssembly = contextassembly.NormalizeSnapshotConfig(run.RuntimeSnapshot.ContextAssembly, run.RuntimeSnapshot.SchemaVersion)
+	run.RuntimeSnapshot.ContextAssembly = contextassembly.NormalizeConfig(run.RuntimeSnapshot.ContextAssembly)
 	return run.RuntimeSnapshot, nil
 }
 
@@ -332,34 +346,34 @@ func (r *Runtime) clientFromSnapshot(snapshot *domain.RuntimeSnapshot) (modelpro
 	}), nil
 }
 
-func (r *Runtime) limitsForRun(runID string) (AutonomousLimits, bool, error) {
+func (r *Runtime) limitsForRun(runID string) (AutonomousLimits, error) {
 	snapshot, err := r.snapshotForRun(runID)
 	if err != nil {
-		return AutonomousLimits{}, false, err
+		return AutonomousLimits{}, err
 	}
-	limits, legacyResourceGuards, err := autonomousLimitsFromSnapshot(snapshot)
+	limits, err := autonomousLimitsFromSnapshot(snapshot)
 	if err != nil {
-		return AutonomousLimits{}, false, fmt.Errorf("%w for autonomous run %s: %v", ErrRuntimeSnapshotUnavailable, runID, err)
+		return AutonomousLimits{}, fmt.Errorf("%w for autonomous run %s: %v", ErrRuntimeSnapshotUnavailable, runID, err)
 	}
-	return limits, legacyResourceGuards, nil
+	return limits, nil
 }
 
-func autonomousLimitsFromSnapshot(snapshot *domain.RuntimeSnapshot) (AutonomousLimits, bool, error) {
+func autonomousLimitsFromSnapshot(snapshot *domain.RuntimeSnapshot) (AutonomousLimits, error) {
 	if snapshot == nil {
-		return AutonomousLimits{}, false, errors.New("snapshot is missing")
+		return AutonomousLimits{}, errors.New("snapshot is missing")
 	}
 	if snapshot.AutonomousLimits == nil {
-		return AutonomousLimits{}, false, errors.New("limits are missing")
+		return AutonomousLimits{}, errors.New("limits are missing")
+	}
+	if snapshot.RunBudget == nil {
+		return AutonomousLimits{}, errors.New("run budget is missing")
 	}
 	frozen := snapshot.AutonomousLimits
 	limits := normalizeAutonomousLimits(AutonomousLimits{
-		MaxIterations: frozen.MaxIterations, MaxRuntime: time.Duration(frozen.MaxRuntimeMS) * time.Millisecond,
-		MaxOutputChars: frozen.MaxOutputChars, MaxToolCalls: frozen.MaxToolCalls,
+		MaxIterations:  frozen.MaxIterations,
+		MaxOutputChars: frozen.MaxOutputChars,
 	})
-	if snapshot.SchemaVersion >= domain.UnifiedExecutionSnapshotVersion && snapshot.RunBudget != nil {
-		limits.MaxRuntime = time.Duration(snapshot.RunBudget.MaxRuntimeMS) * time.Millisecond
-		limits.MaxToolCalls = snapshot.RunBudget.MaxToolCalls
-		return limits, false, nil
-	}
-	return limits, true, nil
+	limits.MaxRuntime = time.Duration(snapshot.RunBudget.MaxRuntimeMS) * time.Millisecond
+	limits.MaxToolCalls = snapshot.RunBudget.MaxToolCalls
+	return limits, nil
 }

@@ -284,11 +284,12 @@ func newCaptureTestRun(t *testing.T) (*store.FileStore, domain.Run, string) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single",
 		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Model: domain.RuntimeModelSnapshot{Provider: "test", Model: "test-model"},
 		ContextAssembly: domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1"}, RunBudget: &domain.RuntimeRunBudget{},
-	})
+	}, nil)
+
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

@@ -25,7 +25,7 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 	if _, err := fileStore.AddMessage(conversation.ID, "assistant", "You have Go and Postgres experience."); err != nil {
 		t.Fatalf("add assistant message: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

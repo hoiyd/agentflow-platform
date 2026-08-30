@@ -9,10 +9,6 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-func (s *FileStore) CreateRun(agentID string, conversationID string, snapshot domain.RuntimeSnapshot) (domain.Run, error) {
-	return s.CreateRunWithContract(agentID, conversationID, snapshot, nil)
-}
-
 func (s *FileStore) CreateRunWithContract(agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -41,15 +41,9 @@ func (r *Runtime) stopIfCanceled(events chan<- domain.RunEvent, runID string) (b
 	return true, errRunCanceled
 }
 
-func limitStopReason(limits AutonomousLimits, startedAt time.Time, outputChars int, toolCalls int, enforceLegacyResourceLimits bool) string {
-	if enforceLegacyResourceLimits && time.Since(startedAt) >= limits.MaxRuntime {
-		return "max_runtime reached"
-	}
+func limitStopReason(limits AutonomousLimits, outputChars int) string {
 	if outputChars >= limits.MaxOutputChars {
 		return "max_output_chars reached"
-	}
-	if enforceLegacyResourceLimits && toolCalls >= limits.MaxToolCalls {
-		return "max_tool_calls reached"
 	}
 	return ""
 }

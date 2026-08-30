@@ -248,9 +248,10 @@ func TestMemoryCurationFailureDoesNotChangeCompletedRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
-	})
+	}, nil)
+
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -278,12 +279,12 @@ func TestMemoryCurationFailureDoesNotChangeCompletedRun(t *testing.T) {
 	if current.Status != domain.RunCompleted || current.Error != "" {
 		t.Fatalf("memory failure changed primary run outcome: %#v", current)
 	}
-	summary, err := fileStore.GetRunTraceSummary(run.ID)
-	if err != nil {
-		t.Fatalf("trace summary: %v", err)
+	replay, ok, err := fileStore.GetRunReplay(run.ID)
+	if err != nil || !ok {
+		t.Fatalf("run replay: ok=%v err=%v", ok, err)
 	}
-	if summary.ErrorCount != 1 {
-		t.Fatalf("expected observable auxiliary failure, got %#v", summary)
+	if replay.Summary.ErrorCount != 1 {
+		t.Fatalf("expected observable auxiliary failure, got %#v", replay.Summary)
 	}
 }
 

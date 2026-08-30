@@ -42,7 +42,7 @@ func TestFileStoreAdministrativeMutationsAndLists(t *testing.T) {
 
 	snapshot := testRuntimeSnapshot()
 	snapshot.Agent.ID = agent.ID
-	run, err := fileStore.CreateRun(agent.ID, conversation.ID, snapshot)
+	run, err := fileStore.CreateRunWithContract(agent.ID, conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

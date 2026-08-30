@@ -195,16 +195,3 @@ func NormalizeConfig(config domain.ContextAssemblyConfig) domain.ContextAssembly
 	}
 	return config
 }
-
-func NormalizeSnapshotConfig(config domain.ContextAssemblyConfig, schemaVersion int) domain.ContextAssemblyConfig {
-	config = NormalizeConfig(config)
-	if schemaVersion < domain.CompactionRuntimeSnapshotVersion {
-		config.CompactionMode = CompactionModeOff
-	}
-	if schemaVersion < domain.SessionHistorySnapshotVersion {
-		config.HistoryRetrievalEnabled = false
-	} else {
-		config.HistoryRetrievalEnabled = true
-	}
-	return config
-}

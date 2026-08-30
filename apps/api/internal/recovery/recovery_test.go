@@ -18,9 +18,10 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
-	})
+	}, nil)
+
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -100,7 +101,7 @@ func TestReconcileChildRunDelegationRebuildsCompletedResult(t *testing.T) {
 		Model:     domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
 		RunBudget: &domain.RuntimeRunBudget{}, CreatedAt: time.Now().UTC(),
 	}
-	parent, err := fileStore.CreateRun("agent_planner", conversation.ID, base)
+	parent, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, base, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +265,7 @@ func createDelegationForRecovery(t *testing.T, completedChildStep bool) (*store.
 		Model:     domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
 		RunBudget: &domain.RuntimeRunBudget{}, CreatedAt: time.Now().UTC(),
 	}
-	parent, err := fileStore.CreateRun("agent_planner", conversation.ID, base)
+	parent, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, base, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -20,7 +20,7 @@ func TestFileStoreCheckpointAndToolEffectRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func checkpointFileTestRunAtPath(t *testing.T, path string) (*FileStore, domain.
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

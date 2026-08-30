@@ -47,7 +47,8 @@ Structured Task State is injected as bounded JSON and recorded in the Manifest
 with a versioned reference such as `conversation_id:v3`. Its raw facts remain in
 the immutable Revision snapshot rather than the Manifest. See
 [Structured Durable Task State](task-state.md). New Runs enable this protocol
-through Runtime Snapshot v8; v1-v7 Runs keep it disabled when resumed.
+through Runtime Snapshot v8; the resumable Snapshot window (v8-v9) always uses
+this protocol.
 
 After assembly and application of effective request limits, the model adapter
 persists a Model Request Envelope for each physical attempt. The Manifest
@@ -90,7 +91,7 @@ older snapshots keep this behavior disabled when resumed.
 - **Soft compaction** runs asynchronously after a completed Run when context usage reaches 70% of the available model input budget. It prefers the highest real `prompt_tokens` value observed in the Run and falls back to local token estimation.
 - **Hard compaction** runs as a best-effort preflight before each model call when estimated conversation context reaches 85% of the available input budget.
 - **Provider-overflow compaction** is forced after a text-only Model Call returns `context_length_exceeded`. AgentFlow retries that logical input once, and only when the persisted compaction generation advanced. Agent streams that may have executed Tools are not replayed automatically.
-- Compaction is skipped when fewer than two new source messages can be summarized, when `CONTEXT_COMPACTION_MODE=off`, or for legacy v1/v2 Runtime Snapshots.
+- Compaction is skipped when fewer than two new source messages can be summarized or when `CONTEXT_COMPACTION_MODE=off`.
 - A failed or timed-out compaction does not block the main model call. AgentFlow records `context.compaction_failed` and falls back to normal recent-history selection.
 - Temporary summarizer failures use a one-minute cooldown; authentication, quota, validation, and missing-model configuration failures use a 15-minute cooldown. Two consecutive compactions below 10% reduction suspend automatic compaction for 30 minutes.
 

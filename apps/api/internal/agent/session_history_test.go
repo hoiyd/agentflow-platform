@@ -41,11 +41,11 @@ func TestRetrieveSessionHistoryRestoresCompactedMessageAndExcludesActiveHistory(
 	snapshot.Mode = ChatModeSingle
 	snapshot.AutonomousLimits = nil
 	snapshot.ContextAssembly = contextassembly.DefaultConfig()
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, snapshot)
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	previousRun, err := fileStore.CreateRun("agent_planner", conversation.ID, snapshot)
+	previousRun, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create previous run: %v", err)
 	}
@@ -88,13 +88,6 @@ func TestRetrieveSessionHistoryRestoresCompactedMessageAndExcludesActiveHistory(
 	}
 }
 
-func TestRetrieveSessionHistoryKeepsLegacySnapshotDisabled(t *testing.T) {
-	config := contextassembly.NormalizeSnapshotConfig(contextassembly.DefaultConfig(), domain.UnifiedExecutionSnapshotVersion)
-	if config.HistoryRetrievalEnabled {
-		t.Fatalf("legacy snapshot unexpectedly enabled history retrieval: %#v", config)
-	}
-}
-
 func TestRetrieveSessionHistorySkipsMissingRunAndEmptyQuery(t *testing.T) {
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {
@@ -106,7 +99,9 @@ func TestRetrieveSessionHistorySkipsMissingRunAndEmptyQuery(t *testing.T) {
 	}
 
 	conversation, _ := fileStore.CreateConversation("Empty history query")
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	snapshot := testRuntimeSnapshot()
+	snapshot.ContextAssembly = contextassembly.DefaultConfig()
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -125,7 +120,9 @@ func TestRetrieveSessionHistoryPublishesSearchFailure(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	conversation, _ := fileStore.CreateConversation("Failed history search")
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	snapshot := testRuntimeSnapshot()
+	snapshot.ContextAssembly = contextassembly.DefaultConfig()
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

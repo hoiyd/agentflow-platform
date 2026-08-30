@@ -82,7 +82,7 @@ func TestPostgresRunDelegationRoundTrip(t *testing.T) {
 	base := testRuntimeSnapshot()
 	base.Mode = "single"
 	base.AutonomousLimits = nil
-	parent, err := postgresStore.CreateRun("agent_planner", conversation.ID, base)
+	parent, err := postgresStore.CreateRunWithContract("agent_planner", conversation.ID, base, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func TestPostgresStructuredTaskStateRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = postgresStore.DeleteConversation(conversation.ID) })
-	run, err := postgresStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := postgresStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestPostgresDurableRecoveryRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = postgresStore.DeleteConversation(conversation.ID) })
-	run, err := postgresStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := postgresStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +362,7 @@ func TestPostgresInterruptedRunRepairIsAtomicAndIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = postgresStore.DeleteConversation(conversation.ID) })
-	run, err := postgresStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := postgresStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -569,7 +569,7 @@ func TestPostgresRunUsageReservationIsAtomic(t *testing.T) {
 	t.Cleanup(func() { _ = store.DeleteConversation(conversation.ID) })
 	snapshot := testRuntimeSnapshot()
 	snapshot.RunBudget = &domain.RuntimeRunBudget{MaxToolCalls: 1}
-	run, err := store.CreateRun("agent_planner", conversation.ID, snapshot)
+	run, err := store.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -627,7 +627,7 @@ func TestPostgresActiveRuntimeExcludesWaitingForUser(t *testing.T) {
 		t.Fatalf("create conversation: %v", err)
 	}
 	t.Cleanup(func() { _ = store.DeleteConversation(conversation.ID) })
-	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := store.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -651,6 +651,42 @@ func TestPostgresActiveRuntimeExcludesWaitingForUser(t *testing.T) {
 	resumed, err := store.UpdateRunStatus(run.ID, domain.RunRunning, "")
 	if err != nil || resumed.ActiveRuntimeMS != activeBeforeWait || resumed.ExecutionStartedAt == nil {
 		t.Fatalf("waiting time leaked into postgres active runtime: before=%d resumed=%#v err=%v", activeBeforeWait, resumed, err)
+	}
+}
+
+func TestPostgresReplayKeepsHistoricalRuntimeSnapshotReadable(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	postgresStore, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatalf("new postgres store: %v", err)
+	}
+	defer postgresStore.Close()
+	conversation, err := postgresStore.CreateConversation("Postgres historical snapshot replay")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	t.Cleanup(func() { _ = postgresStore.DeleteConversation(conversation.ID) })
+	run, err := postgresStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if _, err := postgresStore.db.Exec(
+		`UPDATE runs SET runtime_snapshot = jsonb_set(runtime_snapshot, '{schema_version}', to_jsonb($1::int)) WHERE id = $2`,
+		domain.LegacyRuntimeSnapshotVersion,
+		run.ID,
+	); err != nil {
+		t.Fatalf("persist historical fixture: %v", err)
+	}
+
+	replay, ok, err := postgresStore.GetRunReplay(run.ID)
+	if err != nil || !ok {
+		t.Fatalf("get historical replay: ok=%v err=%v", ok, err)
+	}
+	if replay.RuntimeSnapshot == nil || replay.RuntimeSnapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion {
+		t.Fatalf("historical snapshot was not preserved: %#v", replay.RuntimeSnapshot)
 	}
 }
 
@@ -683,7 +719,7 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("add cited message: %v", err)
 	}
-	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := store.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -741,18 +777,6 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if err != nil || len(candidates) != 1 || candidates[0].ID != candidate.ID || candidates[0].Confidence != candidate.Confidence {
 		t.Fatalf("postgres memory candidate round trip: candidates=%#v err=%v", candidates, err)
 	}
-	compaction, err := store.CreateContextCompaction(domain.ContextCompaction{
-		ConversationID: conversation.ID, RunID: run.ID, Trigger: "soft", Summary: "summary",
-		SourceMessageIDs: []string{"message-1"}, SourceHash: "source-hash", BeforeTokens: 100,
-		AfterTokens: 20, SummaryModel: "test", AlgorithmVersion: "context-compaction-v1",
-	})
-	if err != nil {
-		t.Fatalf("create context compaction: %v", err)
-	}
-	latest, ok, err := store.GetLatestContextCompaction(conversation.ID)
-	if err != nil || !ok || latest.ID != compaction.ID {
-		t.Fatalf("postgres compaction round trip: ok=%v err=%v item=%#v", ok, err, latest)
-	}
 	atomicCompactionID := "cmp-postgres-atomic-" + run.ID
 	started, err := store.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventCompactionStarted, RunID: run.ID, ConversationID: conversation.ID,
@@ -773,6 +797,10 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	})
 	if err != nil || terminal.Sequence != started.Sequence+1 || committed.Generation != 2 || len(committed.SourceEventIDs) != 1 {
 		t.Fatalf("postgres atomic compaction commit: compaction=%#v terminal=%#v err=%v", committed, terminal, err)
+	}
+	latest, ok, err := store.GetLatestContextCompaction(conversation.ID)
+	if err != nil || !ok || latest.ID != committed.ID {
+		t.Fatalf("postgres compaction round trip: ok=%v err=%v item=%#v", ok, err, latest)
 	}
 	duplicate, duplicateTerminal, err := store.CommitContextCompaction(committed, domain.RunEvent{
 		Type: domain.EventCompactionCompleted, RunID: run.ID, ConversationID: conversation.ID,
@@ -923,7 +951,7 @@ func TestPostgresContextCompactionFailurePaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	conversation, _ := postgresStore.CreateConversation("compaction failures")
-	run, _ := postgresStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, _ := postgresStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	compaction := domain.ContextCompaction{
 		ID: "cmp-failure-" + run.ID, ConversationID: conversation.ID, RunID: run.ID,
 		Trigger: "hard", Generation: 1, Summary: "summary", SourceMessageIDs: []string{"m1"},
@@ -971,13 +999,10 @@ func TestPostgresContextCompactionFailurePaths(t *testing.T) {
 	}
 	closedCompaction := compaction
 	closedCompaction.Generation = 0
-	if _, err := postgresStore.CreateContextCompaction(closedCompaction); err == nil {
+	if _, _, err := postgresStore.CommitContextCompaction(closedCompaction, validTerminal); err == nil {
 		t.Fatal("generation query on closed database should fail")
 	}
 	closedCompaction.Generation = 1
-	if _, err := postgresStore.CreateContextCompaction(closedCompaction); err == nil {
-		t.Fatal("insert on closed database should fail")
-	}
 	if _, _, err := postgresStore.CommitContextCompaction(closedCompaction, validTerminal); err == nil {
 		t.Fatal("transaction begin on closed database should fail")
 	}

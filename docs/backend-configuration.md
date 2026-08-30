@@ -50,8 +50,6 @@ MODEL_RETRY_MAX_DELAY=5s
 MODEL_REQUEST_CAPTURE_MODE=metadata_only
 MODEL_REQUEST_CAPTURE_MAX_BYTES=262144
 MODEL_REQUEST_CAPTURE_RETENTION=168h
-RUNTIME_INVARIANT_MODE=report
-
 RUN_MAX_MODEL_CALLS=32
 RUN_MAX_PROMPT_TOKENS=200000
 RUN_MAX_COMPLETION_TOKENS=50000
@@ -138,15 +136,10 @@ the semantic protocol frozen with a Run. See
 
 ## Runtime Invariants
 
-`RUNTIME_INVARIANT_MODE` controls projection and Replay diagnostics:
-
-- `report` logs stable invariant codes and returns them in
-  `projection.invariant_failures` without changing the Run result;
-- `fail` makes projection and Replay reads fail when a violation is present,
-  which is useful for local development and CI fixtures.
-
-Unknown values normalize to `report`. Invariant checks never mutate model
-requests, Tool results, persisted events, or Run completion state.
+Runtime invariants always log stable codes and return them in
+`projection.invariant_failures` without changing the Run result or making
+Replay unreadable. Invariant checks never mutate model requests, Tool results,
+persisted events, or Run completion state.
 
 ## Run Budget
 

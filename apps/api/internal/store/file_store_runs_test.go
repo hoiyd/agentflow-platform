@@ -18,7 +18,7 @@ func TestFileStoreRejectsLiveOnlyRunEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestFileStoreUsageLedgerIsIdempotentAndPersistsSettlementOverage(t *testing
 	}
 	snapshot := testRuntimeSnapshot()
 	snapshot.RunBudget = &domain.RuntimeRunBudget{MaxModelCalls: 1, MaxTotalTokens: 10}
-	run, err := store.CreateRun("agent_planner", conversation.ID, snapshot)
+	run, err := store.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestFileStoreActiveRuntimeExcludesWaitingForUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := store.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestFileStoreRuntimeSnapshotRoundTripAndReplay(t *testing.T) {
 	}
 	snapshot := testRuntimeSnapshot()
 	snapshot.Agent.SystemPrompt = "frozen prompt"
-	run, err := first.CreateRun("agent_planner", conversation.ID, snapshot)
+	run, err := first.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -180,6 +180,46 @@ func TestFileStoreRuntimeSnapshotRoundTripAndReplay(t *testing.T) {
 	}
 	if replay.RuntimeSnapshot.ContextAssembly.AssemblerVersion != "context-assembler-v1" || len(replay.RunEvents) != 1 || replay.RunEvents[0].Type != domain.EventContextAssembled {
 		t.Fatalf("context assembly config or manifest event did not round trip: snapshot=%#v events=%#v", replay.RuntimeSnapshot, replay.RunEvents)
+	}
+}
+
+func TestFileStoreReplayKeepsHistoricalRuntimeSnapshotReadable(t *testing.T) {
+	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := fileStore.CreateConversation("historical snapshot replay")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+
+	fileStore.mu.Lock()
+	for index := range fileStore.data.Runs {
+		if fileStore.data.Runs[index].ID == run.ID {
+			fileStore.data.Runs[index].RuntimeSnapshot.SchemaVersion = domain.LegacyRuntimeSnapshotVersion
+			break
+		}
+	}
+	err = fileStore.saveLocked()
+	fileStore.mu.Unlock()
+	if err != nil {
+		t.Fatalf("persist historical fixture: %v", err)
+	}
+
+	reopened, err := NewFileStore(fileStore.path)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	replay, ok, err := reopened.GetRunReplay(run.ID)
+	if err != nil || !ok {
+		t.Fatalf("get historical replay: ok=%v err=%v", ok, err)
+	}
+	if replay.RuntimeSnapshot == nil || replay.RuntimeSnapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion {
+		t.Fatalf("historical snapshot was not preserved: %#v", replay.RuntimeSnapshot)
 	}
 }
 
@@ -265,7 +305,7 @@ func TestFileStoreRunLifecycle(t *testing.T) {
 		t.Fatalf("create conversation: %v", err)
 	}
 
-	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := store.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -310,7 +350,7 @@ func TestFileStoreRunEventsHaveStrictSequence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := store.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +389,7 @@ func TestFileStoreListStaleRunningRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	staleRun, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	staleRun, err := store.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create stale run: %v", err)
 	}
@@ -357,14 +397,14 @@ func TestFileStoreListStaleRunningRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("mark stale run running: %v", err)
 	}
-	freshRun, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	freshRun, err := store.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create fresh run: %v", err)
 	}
 	if _, err := store.UpdateRunStatus(freshRun.ID, domain.RunRunning, ""); err != nil {
 		t.Fatalf("mark fresh run running: %v", err)
 	}
-	completedRun, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	completedRun, err := store.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create completed run: %v", err)
 	}
@@ -403,7 +443,7 @@ func TestFileStoreDeleteConversationCascades(t *testing.T) {
 	if _, err := store.AddMessage(conversation.ID, "user", "hello"); err != nil {
 		t.Fatalf("add message: %v", err)
 	}
-	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := store.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -471,7 +511,7 @@ func TestFileStoreTraceReplay(t *testing.T) {
 	if _, err := store.AddMessage(conversation.ID, "user", "hello"); err != nil {
 		t.Fatalf("add message: %v", err)
 	}
-	run, err := store.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := store.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -532,10 +572,11 @@ func TestFileStoreTraceReplay(t *testing.T) {
 		t.Fatalf("create compaction error trace: %v", err)
 	}
 
-	summary, err := store.GetRunTraceSummary(run.ID)
-	if err != nil {
-		t.Fatalf("trace summary: %v", err)
+	replay, ok, err := store.GetRunReplay(run.ID)
+	if err != nil || !ok {
+		t.Fatalf("run replay: ok=%v err=%v", ok, err)
 	}
+	summary := replay.Summary
 	if summary.TotalTokens != 15 || summary.PromptTokens != 10 || summary.CompletionTokens != 5 {
 		t.Fatalf("unexpected token summary: %#v", summary)
 	}
@@ -546,13 +587,6 @@ func TestFileStoreTraceReplay(t *testing.T) {
 		t.Fatalf("unexpected call summary: %#v", summary)
 	}
 
-	replay, ok, err := store.GetRunReplay(run.ID)
-	if err != nil {
-		t.Fatalf("run replay: %v", err)
-	}
-	if !ok {
-		t.Fatal("expected replay")
-	}
 	if replay.Run.ID != run.ID || replay.Conversation.ID != conversation.ID {
 		t.Fatalf("unexpected replay identity: %#v", replay)
 	}

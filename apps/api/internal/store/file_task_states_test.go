@@ -17,7 +17,7 @@ func TestFileStoreTaskStateRevisionRoundTripConflictAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := first.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := first.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestFileStoreTaskStateRejectsCrossConversationSource(t *testing.T) {
 	}
 	first, _ := fileStore.CreateConversation("first")
 	second, _ := fileStore.CreateConversation("second")
-	run, _ := fileStore.CreateRun("agent_planner", second.ID, testRuntimeSnapshot())
+	run, _ := fileStore.CreateRunWithContract("agent_planner", second.ID, testRuntimeSnapshot(), nil)
 	_, err = fileStore.ApplyTaskStatePatch(first.ID, domain.TaskStatePatch{ExpectedVersion: 0, Operations: []domain.TaskStateOperation{{Type: domain.TaskStateSetGoal, Goal: "invalid"}}}, domain.TaskStateSource{ActorType: "model", RunID: run.ID})
 	if err == nil || !strings.Contains(err.Error(), "does not belong") {
 		t.Fatalf("expected cross-conversation source rejection, got %v", err)

@@ -23,9 +23,6 @@ func (h *Handler) attachRuntimeInvariants(scoped store.WorkspaceStore, replay *d
 	for _, failure := range failures {
 		log.Printf("runtime_invariant_failure code=%s owner=%s run_id=%s event_id=%s sequence=%d", failure.Code, failure.Owner, failure.RunID, failure.EventID, failure.Sequence)
 	}
-	if len(failures) > 0 && h.runtimeInvariantMode == runtimeinvariant.ModeFail {
-		return &runtimeinvariant.FailureError{Failures: failures}
-	}
 	return nil
 }
 

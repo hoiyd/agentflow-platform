@@ -44,6 +44,7 @@ const (
 	RecoveryRuntimeSnapshotVersion   = 7
 	TaskStateRuntimeSnapshotVersion  = 8
 	DelegationRuntimeSnapshotVersion = 9
+	PreviousRuntimeSnapshotVersion   = TaskStateRuntimeSnapshotVersion
 	CurrentRuntimeSnapshotVersion    = DelegationRuntimeSnapshotVersion
 )
 

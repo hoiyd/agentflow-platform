@@ -17,7 +17,7 @@ func TestFileStoreChildRunRoundTripAndReplayTopology(t *testing.T) {
 		t.Fatal(err)
 	}
 	parentSnapshot := testRuntimeSnapshot()
-	parent, err := fileStore.CreateRun("agent_planner", conversation.ID, parentSnapshot)
+	parent, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, parentSnapshot, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestFileStoreChildRunValidationAndLookupBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	parentSnapshot := testRuntimeSnapshot()
-	parent, err := fileStore.CreateRun("agent_planner", conversation.ID, parentSnapshot)
+	parent, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, parentSnapshot, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

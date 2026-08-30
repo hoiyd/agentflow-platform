@@ -291,22 +291,6 @@ func cloneCitations(citations []domain.RAGCitation) []domain.RAGCitation {
 	return cloned
 }
 
-func (s *FileStore) CreateContextCompaction(compaction domain.ContextCompaction) (domain.ContextCompaction, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.hasConversationLocked(compaction.ConversationID) {
-		return domain.ContextCompaction{}, ErrNotFound("conversation")
-	}
-	for _, existing := range s.data.ContextCompactions {
-		if existing.ConversationID == compaction.ConversationID && existing.SourceHash == compaction.SourceHash {
-			return cloneContextCompaction(existing), nil
-		}
-	}
-	compaction = s.prepareContextCompactionLocked(compaction, domain.ContextCompactionCompleted)
-	s.data.ContextCompactions = append(s.data.ContextCompactions, compaction)
-	return cloneContextCompaction(compaction), s.saveLocked()
-}
-
 // CommitContextCompaction atomically activates the immutable summary surface
 // and appends its terminal event. A crash before this commit leaves only the
 // started event, which the compactor can safely classify as an orphan.

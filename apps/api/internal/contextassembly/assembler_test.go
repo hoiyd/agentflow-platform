@@ -274,20 +274,8 @@ func TestAssembleCompactsOversizedRequiredToolResult(t *testing.T) {
 	}
 }
 
-func TestLegacySnapshotKeepsCompactionDisabled(t *testing.T) {
-	legacy := NormalizeSnapshotConfig(domain.ContextAssemblyConfig{}, domain.ContextRuntimeSnapshotVersion)
-	if legacy.CompactionMode != CompactionModeOff {
-		t.Fatalf("legacy snapshot unexpectedly enabled compaction: %#v", legacy)
-	}
-	current := NormalizeSnapshotConfig(domain.ContextAssemblyConfig{}, domain.CurrentRuntimeSnapshotVersion)
-	if current.CompactionMode != CompactionModeAuto || !current.HistoryRetrievalEnabled {
-		t.Fatalf("current snapshot did not receive compaction defaults: %#v", current)
-	}
-	v3 := NormalizeSnapshotConfig(domain.ContextAssemblyConfig{}, domain.CompactionRuntimeSnapshotVersion)
-	if v3.CompactionMode != CompactionModeAuto || v3.HistoryRetrievalEnabled {
-		t.Fatalf("v3 snapshot lost its frozen compaction behavior: %#v", v3)
-	}
-	invalid := NormalizeSnapshotConfig(domain.ContextAssemblyConfig{HistoryRetrievalWindow: -1}, domain.CurrentRuntimeSnapshotVersion)
+func TestNormalizeConfigRepairsInvalidHistoryWindow(t *testing.T) {
+	invalid := NormalizeConfig(domain.ContextAssemblyConfig{HistoryRetrievalWindow: -1})
 	if invalid.HistoryRetrievalWindow != DefaultConfig().HistoryRetrievalWindow {
 		t.Fatalf("invalid history window was not normalized: %#v", invalid)
 	}

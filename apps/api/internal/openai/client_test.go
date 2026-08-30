@@ -30,20 +30,14 @@ func TestLocalClientPublicFallbacks(t *testing.T) {
 		t.Fatalf("unexpected derived runtime identity: %#v", derived.RuntimeIdentity())
 	}
 
-	chunks, streamErrors := client.StreamChat(context.Background(), []domain.Message{{Role: "user", Content: "earlier"}}, "hello")
-	var streamed strings.Builder
-	for chunk := range chunks {
-		streamed.WriteString(chunk)
-	}
-	if err := <-streamErrors; err != nil || !strings.Contains(streamed.String(), "You said: hello") {
-		t.Fatalf("local stream: output=%q err=%v", streamed.String(), err)
-	}
-
 	catalog, err := tools.NewCatalog()
 	if err != nil {
 		t.Fatalf("new empty tool catalog: %v", err)
 	}
-	events, eventErrors := client.StreamChatWithTools(context.Background(), nil, "tool-free", catalog)
+	events, eventErrors := client.StreamAgentChatWithToolsTrace(
+		context.Background(), "You are AgentFlow's assistant. Use tools when they help.", nil, "tool-free", catalog,
+		nil, "", "", nil, nil,
+	)
 	var eventOutput strings.Builder
 	for event := range events {
 		if event.Type == "delta" {
@@ -162,7 +156,6 @@ func TestClientHelperContracts(t *testing.T) {
 	if err := emitText(canceled, "cancel me", make(chan StreamEvent)); err != context.Canceled {
 		t.Fatalf("expected canceled emit, got %v", err)
 	}
-	NewClient("", "", "").streamFallbackEvents(canceled, "cancel me", make(chan StreamEvent))
 
 	payload := retrievedMemoryPayload([]domain.RetrievedMemory{{
 		Memory:     domain.Memory{ID: "memory-1", Kind: "fact", Content: strings.Repeat("x", 1300), Metadata: map[string]any{"topic": "coverage"}, ConversationID: "conversation-1", RunID: "run-1"},

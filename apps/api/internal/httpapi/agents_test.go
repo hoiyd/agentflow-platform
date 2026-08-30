@@ -71,7 +71,7 @@ func TestRunUsageAPIExposesLedger(t *testing.T) {
 	}
 	snapshot := testRuntimeSnapshot()
 	snapshot.RunBudget = &domain.RuntimeRunBudget{MaxToolCalls: 3}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, snapshot)
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestRunAPIReturnsSnapshotOnlyFromReplay(t *testing.T) {
 	}
 	snapshot := testRuntimeSnapshot()
 	snapshot.Agent.SystemPrompt = "private frozen prompt"
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, snapshot)
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
