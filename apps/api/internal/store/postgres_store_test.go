@@ -654,6 +654,42 @@ func TestPostgresActiveRuntimeExcludesWaitingForUser(t *testing.T) {
 	}
 }
 
+func TestPostgresReplayKeepsHistoricalRuntimeSnapshotReadable(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	postgresStore, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatalf("new postgres store: %v", err)
+	}
+	defer postgresStore.Close()
+	conversation, err := postgresStore.CreateConversation("Postgres historical snapshot replay")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	t.Cleanup(func() { _ = postgresStore.DeleteConversation(conversation.ID) })
+	run, err := postgresStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if _, err := postgresStore.db.Exec(
+		`UPDATE runs SET runtime_snapshot = jsonb_set(runtime_snapshot, '{schema_version}', to_jsonb($1::int)) WHERE id = $2`,
+		domain.LegacyRuntimeSnapshotVersion,
+		run.ID,
+	); err != nil {
+		t.Fatalf("persist historical fixture: %v", err)
+	}
+
+	replay, ok, err := postgresStore.GetRunReplay(run.ID)
+	if err != nil || !ok {
+		t.Fatalf("get historical replay: ok=%v err=%v", ok, err)
+	}
+	if replay.RuntimeSnapshot == nil || replay.RuntimeSnapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion {
+		t.Fatalf("historical snapshot was not preserved: %#v", replay.RuntimeSnapshot)
+	}
+}
+
 func TestPostgresStoreTraceReplay(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {

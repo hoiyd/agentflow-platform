@@ -81,7 +81,7 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 		HistorySearch: historySearch,
 		Compaction:    compaction,
 	}
-	if !isolatedChild && m.runtime.taskStates != nil && snapshot.SchemaVersion >= domain.TaskStateRuntimeSnapshotVersion {
+	if !isolatedChild && m.runtime.taskStates != nil {
 		session.LoadTaskState = func() (domain.TaskState, bool, error) {
 			return m.runtime.taskStates.Get(request.ConversationID)
 		}

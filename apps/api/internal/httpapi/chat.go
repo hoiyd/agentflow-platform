@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -398,10 +399,11 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := <-errs; err != nil {
-		if !strings.Contains(err.Error(), "not waiting for user input") && !strings.Contains(err.Error(), "not recoverable") {
+		status, failRun := resumeFailurePolicy(err)
+		if failRun {
 			_, _ = h.agentRuntime.FailRun(id, err)
 		}
-		writeSSE(w, "error", failureChatChunk(w, r, http.StatusInternalServerError, err))
+		writeSSE(w, "error", failureChatChunk(w, r, status, err))
 		flusher.Flush()
 		return
 	}
@@ -426,6 +428,18 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	h.completeStreamingRun(w, flusher, r, r.Context(), runCompletionRequest{
 		WorkspaceID: current.WorkspaceID, RunID: id, ConversationID: current.ConversationID, Assistant: assistant.String(),
 	})
+}
+
+func resumeFailurePolicy(err error) (status int, failRun bool) {
+	if errors.Is(err, agentpkg.ErrRuntimeSnapshotResumeUnsupported) ||
+		errors.Is(err, agentpkg.ErrRuntimeSnapshotUnavailable) ||
+		errors.Is(err, agentpkg.ErrRuntimeExecutorUnsupported) {
+		return http.StatusConflict, false
+	}
+	if strings.Contains(err.Error(), "not waiting for user input") || strings.Contains(err.Error(), "not recoverable") {
+		return http.StatusBadRequest, false
+	}
+	return http.StatusInternalServerError, true
 }
 
 func writeUnifiedRunEvent(w http.ResponseWriter, flusher http.Flusher, event domain.RunEvent, assistant *strings.Builder) {

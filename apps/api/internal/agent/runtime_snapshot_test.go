@@ -139,30 +139,22 @@ func containsFrozenTool(items []domain.RuntimeToolSnapshot, want string) bool {
 	return false
 }
 
-func TestRuntimeSnapshotAcceptsAllVersionsAndKeepsPreBudgetRunsBudgetless(t *testing.T) {
-	for _, version := range []int{
-		domain.LegacyRuntimeSnapshotVersion,
-		domain.ContextRuntimeSnapshotVersion,
-		domain.CompactionRuntimeSnapshotVersion,
-		domain.RunBudgetRuntimeSnapshotVersion,
-		domain.UnifiedExecutionSnapshotVersion,
-		domain.SessionHistorySnapshotVersion,
-		domain.RecoveryRuntimeSnapshotVersion,
-		domain.TaskStateRuntimeSnapshotVersion,
-		domain.CurrentRuntimeSnapshotVersion,
-	} {
+func TestRuntimeSnapshotResumeSupportsOnlyCurrentAndPreviousVersions(t *testing.T) {
+	for _, version := range []int{domain.PreviousRuntimeSnapshotVersion, domain.CurrentRuntimeSnapshotVersion} {
 		snapshot := &domain.RuntimeSnapshot{
 			SchemaVersion: version, Mode: ChatModeSingle,
 			Agent: domain.RuntimeAgentSnapshot{ID: "agent"}, Model: domain.RuntimeModelSnapshot{Model: "model"},
-		}
-		if version >= domain.RunBudgetRuntimeSnapshotVersion {
-			snapshot.RunBudget = &domain.RuntimeRunBudget{}
+			RunBudget: &domain.RuntimeRunBudget{},
 		}
 		if err := validateRuntimeSnapshot(snapshot); err != nil {
-			t.Fatalf("snapshot v%d should remain readable: %v", version, err)
+			t.Fatalf("snapshot v%d should be resumable: %v", version, err)
 		}
-		if version < domain.RunBudgetRuntimeSnapshotVersion && snapshot.RunBudget != nil {
-			t.Fatalf("older snapshot v%d unexpectedly inherited a budget", version)
+	}
+	for version := domain.LegacyRuntimeSnapshotVersion; version < domain.PreviousRuntimeSnapshotVersion; version++ {
+		snapshot := &domain.RuntimeSnapshot{SchemaVersion: version}
+		err := validateRuntimeSnapshot(snapshot)
+		if !errors.Is(err, ErrRuntimeSnapshotResumeUnsupported) || failure.Describe(err).Code != "runtime_snapshot_resume_unsupported" {
+			t.Fatalf("snapshot v%d should be replay-only, got %v", version, err)
 		}
 	}
 }
@@ -246,35 +238,15 @@ func TestCurrentAutonomousSnapshotUsesRunBudgetAsSingleResourceOwner(t *testing.
 			MaxRuntimeMS: (90 * time.Second).Milliseconds(), MaxToolCalls: 7,
 		},
 	}
-	limits, legacyResourceGuards, err := autonomousLimitsFromSnapshot(snapshot)
-	if err != nil || legacyResourceGuards {
-		t.Fatalf("current snapshot retained duplicate resource guards: legacy=%t err=%v", legacyResourceGuards, err)
+	limits, err := autonomousLimitsFromSnapshot(snapshot)
+	if err != nil {
+		t.Fatalf("current snapshot limits: %v", err)
 	}
 	if limits.MaxRuntime != 90*time.Second || limits.MaxToolCalls != 7 {
 		t.Fatalf("progress limits were not projected from Run Budget: %#v", limits)
 	}
-	if reason := limitStopReason(limits, time.Now().Add(-2*time.Minute), 0, 7, legacyResourceGuards); reason != "" {
+	if reason := limitStopReason(limits, 0); reason != "" {
 		t.Fatalf("current loop duplicated Run Budget enforcement: %q", reason)
-	}
-}
-
-func TestV4AutonomousSnapshotKeepsItsRuntimeAndToolGuards(t *testing.T) {
-	snapshot := &domain.RuntimeSnapshot{
-		SchemaVersion: domain.RunBudgetRuntimeSnapshotVersion,
-		AutonomousLimits: &domain.RuntimeLimitsSnapshot{
-			MaxIterations: 5, MaxRuntimeMS: (3 * time.Minute).Milliseconds(),
-			MaxOutputChars: 1000, MaxToolCalls: 12,
-		},
-		RunBudget: &domain.RuntimeRunBudget{
-			MaxRuntimeMS: (10 * time.Minute).Milliseconds(), MaxToolCalls: 40,
-		},
-	}
-	limits, legacyResourceGuards, err := autonomousLimitsFromSnapshot(snapshot)
-	if err != nil || !legacyResourceGuards {
-		t.Fatalf("legacy resource guards were not preserved: legacy=%t err=%v", legacyResourceGuards, err)
-	}
-	if limits.MaxRuntime != 3*time.Minute || limits.MaxToolCalls != 12 {
-		t.Fatalf("legacy limits changed during restore: %#v", limits)
 	}
 }
 
@@ -283,6 +255,16 @@ func TestRestoreRuntimeRejectsLegacyRunWithoutSnapshot(t *testing.T) {
 	_, err := runtime.restoreRuntime(domain.Run{ID: "legacy"})
 	if !strings.Contains(err.Error(), "run cannot be resumed safely") {
 		t.Fatalf("expected explicit legacy run error, got %v", err)
+	}
+}
+
+func TestRestoreRuntimeRejectsReplayOnlySnapshotWithTypedError(t *testing.T) {
+	snapshot := testRuntimeSnapshot()
+	snapshot.SchemaVersion = domain.RecoveryRuntimeSnapshotVersion
+	runtime := &Runtime{}
+	_, err := runtime.restoreRuntime(domain.Run{ID: "run_replay_only", RuntimeSnapshot: &snapshot})
+	if !errors.Is(err, ErrRuntimeSnapshotResumeUnsupported) || failure.Describe(err).Code != "runtime_snapshot_resume_unsupported" {
+		t.Fatalf("expected typed replay-only error, got %v", err)
 	}
 }
 
@@ -372,7 +354,6 @@ func TestValidateRuntimeSnapshotEnforcesDelegationIsolationBoundary(t *testing.T
 		mutate func(*domain.RuntimeSnapshot)
 		want   string
 	}{
-		{name: "legacy schema", mutate: func(snapshot *domain.RuntimeSnapshot) { snapshot.SchemaVersion = domain.RecoveryRuntimeSnapshotVersion }, want: "invalid schema or mode"},
 		{name: "multi-agent mode", mutate: func(snapshot *domain.RuntimeSnapshot) {
 			snapshot.Mode = ChatModeMultiAgent
 			snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{snapshot.Agent}

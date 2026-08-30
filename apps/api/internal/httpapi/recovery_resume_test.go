@@ -253,6 +253,13 @@ func TestDetachedRequestContextIgnoresCancellationAndKeepsValues(t *testing.T) {
 	}
 }
 
+func TestResumeFailurePolicyKeepsReplayOnlyRunRecoverable(t *testing.T) {
+	status, failRun := resumeFailurePolicy(agent.ErrRuntimeSnapshotResumeUnsupported)
+	if status != http.StatusConflict || failRun {
+		t.Fatalf("replay-only resume policy: status=%d fail_run=%t", status, failRun)
+	}
+}
+
 type sseChunk struct {
 	Event    string
 	Chunk    domain.ChatChunk

@@ -77,6 +77,12 @@ emits `checkpoint.stale` and fails closed. A committed Stage emits
 external effect is marked `compensated`; an uncertain effect blocks Resume with
 a reconciliation error.
 
+Resume compatibility is intentionally bounded to the current Runtime Snapshot
+schema and its immediately preceding version (currently v9 and v8). Older Runs
+remain readable through Replay, but attempting to Resume them returns
+`runtime_snapshot_resume_unsupported`. This prevents old execution protocols
+from silently inheriting current model, Tool, context, or budget behavior.
+
 ## Tool Side-Effect Idempotency
 
 Tool descriptors default to `side_effect.mode=none`. A write-capable Binding

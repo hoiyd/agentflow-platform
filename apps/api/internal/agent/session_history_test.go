@@ -88,13 +88,6 @@ func TestRetrieveSessionHistoryRestoresCompactedMessageAndExcludesActiveHistory(
 	}
 }
 
-func TestRetrieveSessionHistoryKeepsLegacySnapshotDisabled(t *testing.T) {
-	config := contextassembly.NormalizeSnapshotConfig(contextassembly.DefaultConfig(), domain.UnifiedExecutionSnapshotVersion)
-	if config.HistoryRetrievalEnabled {
-		t.Fatalf("legacy snapshot unexpectedly enabled history retrieval: %#v", config)
-	}
-}
-
 func TestRetrieveSessionHistorySkipsMissingRunAndEmptyQuery(t *testing.T) {
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

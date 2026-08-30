@@ -183,6 +183,46 @@ func TestFileStoreRuntimeSnapshotRoundTripAndReplay(t *testing.T) {
 	}
 }
 
+func TestFileStoreReplayKeepsHistoricalRuntimeSnapshotReadable(t *testing.T) {
+	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := fileStore.CreateConversation("historical snapshot replay")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+
+	fileStore.mu.Lock()
+	for index := range fileStore.data.Runs {
+		if fileStore.data.Runs[index].ID == run.ID {
+			fileStore.data.Runs[index].RuntimeSnapshot.SchemaVersion = domain.LegacyRuntimeSnapshotVersion
+			break
+		}
+	}
+	err = fileStore.saveLocked()
+	fileStore.mu.Unlock()
+	if err != nil {
+		t.Fatalf("persist historical fixture: %v", err)
+	}
+
+	reopened, err := NewFileStore(fileStore.path)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	replay, ok, err := reopened.GetRunReplay(run.ID)
+	if err != nil || !ok {
+		t.Fatalf("get historical replay: ok=%v err=%v", ok, err)
+	}
+	if replay.RuntimeSnapshot == nil || replay.RuntimeSnapshot.SchemaVersion != domain.LegacyRuntimeSnapshotVersion {
+		t.Fatalf("historical snapshot was not preserved: %#v", replay.RuntimeSnapshot)
+	}
+}
+
 func TestFileStoreVerificationContractEvidenceAndArtifactsRoundTrip(t *testing.T) {
 	path := t.TempDir() + "/agentflow.json"
 	first, err := NewFileStore(path)

@@ -246,7 +246,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 		defer close(events)
 		defer close(errs)
 
-		limits, enforceLegacyResourceLimits, err := r.limitsForRun(prepared.Run.ID)
+		limits, err := r.limitsForRun(prepared.Run.ID)
 		if err != nil {
 			errs <- err
 			return
@@ -288,7 +288,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				}
 				return
 			}
-			if reason := limitStopReason(limits, startedAt, outputChars, toolCalls, enforceLegacyResourceLimits); reason != "" {
+			if reason := limitStopReason(limits, outputChars); reason != "" {
 				r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, iteration, outputChars, toolCalls, reason)
 				if err := r.finishAutonomous(ctx, events, prepared, iteration, task, lastAct, lastReview, reason); err != nil {
 					errs <- err
@@ -389,7 +389,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				}
 				log.Printf("autonomous_decision_fallback run_id=%s iteration=%d reason=%q", prepared.Run.ID, iteration, decision.Reason)
 			}
-			limitReason := limitStopReason(limits, startedAt, outputChars, toolCalls, enforceLegacyResourceLimits)
+			limitReason := limitStopReason(limits, outputChars)
 			if limitReason != "" {
 				decision.Decision = "stop"
 				decision.Reason = limitReason
