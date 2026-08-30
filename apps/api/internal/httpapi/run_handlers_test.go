@@ -9,7 +9,6 @@ import (
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/runtimeinvariant"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -87,35 +86,41 @@ func TestGetRunProjectionReturnsCanonicalWatermarkAndDiagnostics(t *testing.T) {
 	}
 }
 
-func TestRunProjectionInvariantPolicyReportsOrFailsLoud(t *testing.T) {
-	for _, test := range []struct {
-		name       string
-		mode       runtimeinvariant.Mode
-		wantStatus int
-	}{
-		{name: "report", mode: runtimeinvariant.ModeReport, wantStatus: http.StatusOK},
-		{name: "fail", mode: runtimeinvariant.ModeFail, wantStatus: http.StatusInternalServerError},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			fileStore, run := createHTTPTestRun(t)
-			if _, err := fileStore.CreateRunEvent(domain.RunEvent{
-				Type: domain.EventToolFailed, RunID: run.ID, Payload: map[string]any{"tool_call_id": "orphan-call"},
-			}); err != nil {
-				t.Fatal(err)
-			}
-			handler := &Handler{store: fileStore, runtimeInvariantMode: test.mode}
-			recorder := httptest.NewRecorder()
-			handler.getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/projection", nil))
-			if recorder.Code != test.wantStatus {
-				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
-			}
-			if test.mode == runtimeinvariant.ModeReport {
-				var snapshot domain.RunProjectionSnapshot
-				if err := json.Unmarshal(recorder.Body.Bytes(), &snapshot); err != nil || len(snapshot.InvariantFailures) != 1 || snapshot.InvariantFailures[0].Code != "tool_terminal_orphan" {
-					t.Fatalf("diagnostics=%#v err=%v", snapshot.InvariantFailures, err)
-				}
-			}
-		})
+func TestRunProjectionAlwaysReturnsInvariantDiagnostics(t *testing.T) {
+	fileStore, run := createHTTPTestRun(t)
+	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+		Type: domain.EventToolFailed, RunID: run.ID, Payload: map[string]any{"tool_call_id": "orphan-call"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	handler := &Handler{store: fileStore}
+	recorder := httptest.NewRecorder()
+	handler.getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/projection", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var snapshot domain.RunProjectionSnapshot
+	if err := json.Unmarshal(recorder.Body.Bytes(), &snapshot); err != nil || len(snapshot.InvariantFailures) != 1 || snapshot.InvariantFailures[0].Code != "tool_terminal_orphan" {
+		t.Fatalf("diagnostics=%#v err=%v", snapshot.InvariantFailures, err)
+	}
+}
+
+func TestRunReplayAlwaysReturnsInvariantDiagnostics(t *testing.T) {
+	fileStore, run := createHTTPTestRun(t)
+	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+		Type: domain.EventToolFailed, RunID: run.ID, Payload: map[string]any{"tool_call_id": "orphan-call"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	handler := &Handler{store: fileStore}
+	recorder := httptest.NewRecorder()
+	handler.getRunReplay(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/replay", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var replay domain.RunReplay
+	if err := json.Unmarshal(recorder.Body.Bytes(), &replay); err != nil || len(replay.Projection.InvariantFailures) != 1 || replay.Projection.InvariantFailures[0].Code != "tool_terminal_orphan" {
+		t.Fatalf("diagnostics=%#v err=%v", replay.Projection.InvariantFailures, err)
 	}
 }
 

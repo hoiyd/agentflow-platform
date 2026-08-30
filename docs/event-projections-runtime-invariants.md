@@ -75,10 +75,11 @@ The initial checks cover:
 - Verification Evidence freshness for the latest subject.
 
 Execution/recovery code can still use hard gates such as `ValidateLifecycle`.
-The Replay and projection APIs use diagnostic mode so a corrupt historical Run
-can be inspected and repaired. `RUNTIME_INVARIANT_MODE=report` is the default:
-it logs and returns isolated diagnostics without changing the Run result. Local
-or CI environments can use `fail` to make projection reads fail loud.
+The Replay and projection APIs always log and return diagnostics so a corrupt
+historical Run can be inspected and repaired. Runtime invariant failures never
+make these read APIs unavailable or change the Run result. CI should assert the
+returned failure codes directly instead of turning diagnostics into transport
+errors.
 
 ## Snapshot and live handoff
 

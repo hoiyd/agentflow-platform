@@ -119,17 +119,16 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		WaitTimeout:   cfg.RunQueueWaitTimeout,
 	})
 	handler, err := httpapi.NewHandler(httpapi.Dependencies{
-		Store:                appStore,
-		ModelClient:          modelClient,
-		Tools:                toolManager,
-		AgentRuntime:         agentRuntime,
-		Memory:               semanticMemory,
-		Knowledge:            knowledgeBase,
-		MemoryCuration:       memoryCurator,
-		RunController:        runController,
-		Verification:         verificationEngine,
-		RuntimeInvariantMode: cfg.RuntimeInvariantMode,
-		AllowedOrigins:       splitOrigins(cfg.AllowedOrigins),
+		Store:          appStore,
+		ModelClient:    modelClient,
+		Tools:          toolManager,
+		AgentRuntime:   agentRuntime,
+		Memory:         semanticMemory,
+		Knowledge:      knowledgeBase,
+		MemoryCuration: memoryCurator,
+		RunController:  runController,
+		Verification:   verificationEngine,
+		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
 	})
 	if err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

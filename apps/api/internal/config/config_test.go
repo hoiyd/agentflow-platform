@@ -79,15 +79,6 @@ func TestLoadModelRequestCaptureConfiguration(t *testing.T) {
 	}
 }
 
-func TestNormalizeRuntimeInvariantMode(t *testing.T) {
-	if got := normalizeRuntimeInvariantMode(" FAIL "); got != "fail" {
-		t.Fatalf("strict mode = %q", got)
-	}
-	if got := normalizeRuntimeInvariantMode("unknown"); got != "report" {
-		t.Fatalf("unknown mode should remain isolated, got %q", got)
-	}
-}
-
 func TestGetUnitFloatEnvRejectsOutOfRangeValue(t *testing.T) {
 	t.Setenv("TEST_UNIT_FLOAT", "0.91")
 	if got := getUnitFloatEnv("TEST_UNIT_FLOAT", 0.85); got != 0.91 {
