@@ -14,46 +14,6 @@ import (
 	"agentflow-platform/apps/api/internal/tools"
 )
 
-func (c *Client) StreamChat(ctx context.Context, history []domain.Message, latest string) (<-chan string, <-chan error) {
-	chunks := make(chan string)
-	errs := make(chan error, 1)
-
-	go func() {
-		defer close(chunks)
-		defer close(errs)
-
-		if c.apiKey == "" {
-			log.Printf("chat_fallback mode=local_no_api_key latest_len=%d", len(latest))
-			c.streamFallback(ctx, latest, chunks)
-			return
-		}
-
-		messages := buildMessages(history)
-		events := make(chan StreamEvent)
-		go func() {
-			defer close(events)
-			if _, _, _, err := c.streamMessages(ctx, messages, events); err != nil {
-				errs <- err
-			}
-		}()
-		for event := range events {
-			if event.Type == "delta" {
-				chunks <- event.Delta
-			}
-		}
-	}()
-
-	return chunks, errs
-}
-
-func (c *Client) StreamChatWithTools(ctx context.Context, history []domain.Message, latest string, catalog *tools.Catalog) (<-chan StreamEvent, <-chan error) {
-	return c.StreamAgentChatWithTools(ctx, "You are AgentFlow's assistant. Use tools when they help.", history, latest, catalog)
-}
-
-func (c *Client) StreamAgentChatWithTools(ctx context.Context, systemPrompt string, history []domain.Message, latest string, catalog *tools.Catalog) (<-chan StreamEvent, <-chan error) {
-	return c.StreamAgentChatWithToolsTrace(ctx, systemPrompt, history, latest, catalog, nil, "", "", nil, nil)
-}
-
 func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt string, history []domain.Message, latest string, catalog *tools.Catalog, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) (<-chan StreamEvent, <-chan error) {
 	events := make(chan StreamEvent)
 	errs := make(chan error, 1)

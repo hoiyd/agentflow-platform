@@ -421,11 +421,22 @@ func TestLongSessionSemanticFidelityFixturePreservesCorrectionsAndCancellation(t
 	fileStore, conversation, run := newCompactionTestStore(t)
 	oldUser, _ := fileStore.AddMessage(conversation.ID, "user", "Use model A and deploy the legacy task.")
 	oldAssistant, _ := fileStore.AddMessage(conversation.ID, "assistant", "Model A and deployment are active.")
-	_, err := fileStore.CreateContextCompaction(domain.ContextCompaction{
-		ConversationID: conversation.ID, RunID: run.ID, Trigger: "fixture",
+	fixtureID := "cmp-semantic-fidelity-fixture"
+	started, err := fileStore.CreateRunEvent(domain.RunEvent{
+		Type: domain.EventCompactionStarted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": fixtureID, "trigger": "fixture", "status": "running", "algorithm_version": AlgorithmVersion},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = fileStore.CommitContextCompaction(domain.ContextCompaction{
+		ID: fixtureID, ConversationID: conversation.ID, RunID: run.ID, Trigger: "fixture",
 		Generation: 1, Summary: "## Key Decisions\nUse model A.\n## Pending Work\nDeploy the legacy task.",
-		SourceMessageIDs: []string{oldUser.ID, oldAssistant.ID}, SourceHash: "fixture-generation-1",
+		SourceMessageIDs: []string{oldUser.ID, oldAssistant.ID}, SourceEventIDs: []string{started.ID}, SourceHash: "fixture-generation-1",
 		BeforeTokens: 80, AfterTokens: 25, AlgorithmVersion: AlgorithmVersion,
+	}, domain.RunEvent{
+		Type: domain.EventCompactionCompleted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": fixtureID, "trigger": "fixture", "status": "completed", "algorithm_version": AlgorithmVersion},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -533,11 +544,12 @@ func newCompactionTestStore(t *testing.T) (*store.FileStore, domain.Conversation
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single", RunBudget: &domain.RuntimeRunBudget{},
 		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Model: domain.RuntimeModelSnapshot{Model: "test"},
 		ContextAssembly: compactionTestConfig(),
-	})
+	}, nil)
+
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

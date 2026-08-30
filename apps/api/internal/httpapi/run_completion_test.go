@@ -238,7 +238,7 @@ func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestCompleteStreamingRunPersistsOnlyCitationsSelectedForModelContext(t *tes
 		t.Fatalf("new store: %v", err)
 	}
 	conversation, _ := fileStore.CreateConversation("citation completion")
-	run, _ := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	_, _ = fileStore.UpdateRunStatus(run.ID, domain.RunRunning, "")
 	sources := []domain.RAGCitation{
 		{SourceID: "S1", DocumentID: "doc-1", DocumentTitle: "Selected", ChunkID: "chunk-1"},

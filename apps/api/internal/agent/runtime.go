@@ -48,7 +48,6 @@ type RuntimeStore interface {
 	ListMessages(string) ([]domain.Message, error)
 	GetAgent(string) (domain.Agent, bool, error)
 	GetDefaultAgent() (domain.Agent, bool, error)
-	CreateRun(string, string, domain.RuntimeSnapshot) (domain.Run, error)
 	CreateRunWithContract(string, string, domain.RuntimeSnapshot, *domain.CompletionContract) (domain.Run, error)
 	UpdateRunAgent(string, string) (domain.Run, error)
 	UpdateRunStatus(string, domain.RunStatus, string) (domain.Run, error)
@@ -171,10 +170,6 @@ func DefaultAutonomousLimits() AutonomousLimits {
 		MaxOutputChars: 60000,
 		MaxToolCalls:   20,
 	}
-}
-
-func (r *Runtime) PrepareChatRun(ctx context.Context, agentID string, conversationID string) (PreparedRun, error) {
-	return r.PrepareChatRunWithContract(ctx, agentID, conversationID, nil)
 }
 
 func (r *Runtime) PrepareChatRunWithContract(ctx context.Context, agentID string, conversationID string, contract *domain.CompletionContract) (PreparedRun, error) {

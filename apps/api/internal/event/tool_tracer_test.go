@@ -20,9 +20,10 @@ func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
-	})
+	}, nil)
+
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

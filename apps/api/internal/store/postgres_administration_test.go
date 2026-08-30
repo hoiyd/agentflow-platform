@@ -120,22 +120,26 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 		t.Fatalf("list all memory candidates: items=%#v err=%v", allCandidates, err)
 	}
 
-	run, err := postgresStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := postgresStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create compaction run: %v", err)
 	}
 	compaction := domain.ContextCompaction{
-		ConversationID: conversation.ID, RunID: run.ID, Trigger: "soft", Summary: "summary",
+		ID: "cmp-admin-" + fmt.Sprint(suffix), ConversationID: conversation.ID, RunID: run.ID, Trigger: "soft", Summary: "summary",
 		SourceMessageIDs: []string{messages[0].ID}, SourceHash: "hash-" + fmt.Sprint(suffix),
 		BeforeTokens: 100, AfterTokens: 20, SummaryModel: "local", AlgorithmVersion: "v1",
 	}
-	first, err := postgresStore.CreateContextCompaction(compaction)
-	if err != nil {
-		t.Fatalf("create compaction: %v", err)
+	terminal := domain.RunEvent{
+		Type: domain.EventCompactionCompleted, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"compaction_id": compaction.ID, "trigger": "soft", "status": "completed", "algorithm_version": "v1"},
 	}
-	duplicate, err := postgresStore.CreateContextCompaction(compaction)
-	if err != nil || duplicate.ID != first.ID {
-		t.Fatalf("idempotent compaction: first=%#v duplicate=%#v err=%v", first, duplicate, err)
+	first, _, err := postgresStore.CommitContextCompaction(compaction, terminal)
+	if err != nil {
+		t.Fatalf("commit compaction: %v", err)
+	}
+	duplicate, duplicateTerminal, err := postgresStore.CommitContextCompaction(compaction, terminal)
+	if err != nil || duplicate.ID != first.ID || duplicateTerminal.ID != "" {
+		t.Fatalf("idempotent compaction: first=%#v duplicate=%#v event=%#v err=%v", first, duplicate, duplicateTerminal, err)
 	}
 
 	run, err = postgresStore.UpdateRunAgent(run.ID, "agent_data")
@@ -205,12 +209,10 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 	if err != nil || len(events) != 2 || events[0].ID != modelEvent.ID || events[1].ParentEventID != modelEvent.ID {
 		t.Fatalf("list run events: events=%#v err=%v", events, err)
 	}
-	summary, err := postgresStore.GetRunTraceSummary(run.ID)
-	if err != nil || summary.LLMCalls != 1 || summary.ToolCalls != 1 || summary.ErrorCount != 1 || summary.TotalTokens != 18 || !summary.TokenUsageEstimated {
-		t.Fatalf("get trace summary: summary=%#v err=%v", summary, err)
-	}
 	replay, found, err := postgresStore.GetRunReplay(run.ID)
-	if err != nil || !found || len(replay.Steps) != 1 || len(replay.RunEvents) != 2 {
+	if err != nil || !found || len(replay.Steps) != 1 || len(replay.RunEvents) != 2 ||
+		replay.Summary.LLMCalls != 1 || replay.Summary.ToolCalls != 1 || replay.Summary.ErrorCount != 1 ||
+		replay.Summary.TotalTokens != 18 || !replay.Summary.TokenUsageEstimated {
 		t.Fatalf("get run replay: found=%v replay=%#v err=%v", found, replay, err)
 	}
 	run, err = postgresStore.UpdateRunStatus(run.ID, domain.RunCompleted, "")
@@ -253,9 +255,6 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 	}
 	if _, err := postgresStore.CreateRunEvent(domain.RunEvent{RunID: run.ID}); err == nil {
 		t.Fatal("expected blank run event type rejection")
-	}
-	if _, err := postgresStore.GetRunTraceSummary("missing"); err == nil {
-		t.Fatalf("expected missing trace summary rejection, got %v", err)
 	}
 }
 

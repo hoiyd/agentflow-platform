@@ -27,7 +27,7 @@ func TestFileAndPostgresProduceByteEquivalentProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fileRun, err := fileStore.CreateRun("agent_planner", fileConversation.ID, testRuntimeSnapshot())
+	fileRun, err := fileStore.CreateRunWithContract("agent_planner", fileConversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

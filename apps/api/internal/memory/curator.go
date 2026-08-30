@@ -81,10 +81,6 @@ type Curator struct {
 	wg     sync.WaitGroup
 }
 
-func NewCurator(store CuratorStore, embedder Embedder) *Curator {
-	return NewCuratorWithOptions(store, embedder, CuratorOptions{})
-}
-
 func NewCuratorWithOptions(store CuratorStore, embedder Embedder, options CuratorOptions) *Curator {
 	if options.QueueSize <= 0 {
 		options.QueueSize = defaultCurationQueueSize

@@ -226,47 +226,6 @@ func (s *PostgresStore) AddMessageWithCitationsInWorkspace(workspaceID string, c
 	return s.AddMessageWithCitations(conversationID, role, content, citations)
 }
 
-func (s *PostgresStore) CreateContextCompaction(compaction domain.ContextCompaction) (domain.ContextCompaction, error) {
-	var err error
-	compaction, err = s.preparePostgresContextCompaction(compaction, domain.ContextCompactionCompleted)
-	if err != nil {
-		return domain.ContextCompaction{}, err
-	}
-	sourceMessageIDs, err := json.Marshal(compaction.SourceMessageIDs)
-	if err != nil {
-		return domain.ContextCompaction{}, err
-	}
-	sourceEventIDs, err := json.Marshal(compaction.SourceEventIDs)
-	if err != nil {
-		return domain.ContextCompaction{}, err
-	}
-	result, err := s.db.Exec(`
-			INSERT INTO context_compactions (
-				id, conversation_id, run_id, trigger, status, generation,
-				previous_compaction_id, replacement_summary_id, summary, source_message_ids,
-				source_event_ids, shadowed_first_message_id, shadowed_last_message_id,
-				shadowed_message_count, source_hash, before_tokens, after_tokens,
-				target_summary_tokens, reduction_ratio, consecutive_low_yield,
-				summary_model, algorithm_version, surface_replaced_at, created_at
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
-			ON CONFLICT (conversation_id, source_hash) DO NOTHING`,
-		compaction.ID, compaction.ConversationID, compaction.RunID, compaction.Trigger,
-		compaction.Status, compaction.Generation, compaction.PreviousCompactionID,
-		compaction.ReplacementSummaryID, compaction.Summary, sourceMessageIDs, sourceEventIDs,
-		compaction.ShadowedMessageRange.FirstMessageID, compaction.ShadowedMessageRange.LastMessageID,
-		compaction.ShadowedMessageRange.MessageCount, compaction.SourceHash, compaction.BeforeTokens,
-		compaction.AfterTokens, compaction.TargetSummaryTokens, compaction.ReductionRatio,
-		compaction.ConsecutiveLowYield, compaction.SummaryModel, compaction.AlgorithmVersion,
-		compaction.SurfaceReplacedAt, compaction.CreatedAt)
-	if err != nil {
-		return domain.ContextCompaction{}, err
-	}
-	if affected, _ := result.RowsAffected(); affected == 0 {
-		return s.getContextCompactionByHash(compaction.ConversationID, compaction.SourceHash)
-	}
-	return compaction, nil
-}
-
 func (s *PostgresStore) CommitContextCompaction(compaction domain.ContextCompaction, completion domain.RunEvent) (domain.ContextCompaction, domain.RunEvent, error) {
 	if completion.Type != domain.EventCompactionCompleted || completion.RunID != compaction.RunID || completion.ConversationID != compaction.ConversationID {
 		return domain.ContextCompaction{}, domain.RunEvent{}, errors.New("compaction completion event does not match compaction")

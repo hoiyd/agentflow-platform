@@ -55,7 +55,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	prepared, err := runtime.PrepareChatRun(ctx, agent.ID, conversation.ID)
+	prepared, err := runtime.PrepareChatRunWithContract(ctx, agent.ID, conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare run: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestCurrentAutonomousSnapshotUsesRunBudgetAsSingleResourceOwner(t *testing.
 func TestRestoreRuntimeRejectsLegacyRunWithoutSnapshot(t *testing.T) {
 	runtime := &Runtime{}
 	_, err := runtime.restoreRuntime(domain.Run{ID: "legacy"})
-	if !strings.Contains(err.Error(), "run cannot be resumed safely") {
+	if !errors.Is(err, ErrRuntimeSnapshotUnavailable) || !strings.Contains(err.Error(), "cannot be resumed safely") {
 		t.Fatalf("expected explicit legacy run error, got %v", err)
 	}
 }

@@ -69,13 +69,13 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	client := newLocalFallbackOpenAIClientForTest()
-	memoryCurator := memorypkg.NewCurator(fileStore, client)
+	memoryCurator := memorypkg.NewCuratorWithOptions(fileStore, client, memorypkg.CuratorOptions{})
 	handler := &Handler{store: fileStore, modelClient: client, memoryCuration: memoryCurator}
 	conversation, err := fileStore.CreateConversation("memory sync")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, testRuntimeSnapshot())
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

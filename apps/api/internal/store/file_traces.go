@@ -177,17 +177,6 @@ func (s *FileStore) ListConversationRunEvents(conversationID string) ([]domain.R
 	return items, nil
 }
 
-func (s *FileStore) GetRunTraceSummary(runID string) (domain.RunTraceSummary, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	run, ok := s.getRunLocked(runID)
-	if !ok {
-		return domain.RunTraceSummary{}, ErrNotFound("run")
-	}
-	return projection.BuildRunTraceSummary(run, s.runEventsForRunLocked(runID)), nil
-}
-
 func (s *FileStore) ApplyRunUsage(entry domain.RunUsageEntry) (domain.RunUsageLedger, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

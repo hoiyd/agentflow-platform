@@ -258,7 +258,7 @@ func checkpointTestRun(t *testing.T) (*store.FileStore, domain.Run) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRun("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion:    domain.CurrentRuntimeSnapshotVersion,
 		Mode:             "autonomous",
 		Agent:            domain.RuntimeAgentSnapshot{ID: "agent_planner"},
@@ -266,7 +266,8 @@ func checkpointTestRun(t *testing.T) (*store.FileStore, domain.Run) {
 		Tools:            []domain.RuntimeToolSnapshot{},
 		AutonomousLimits: &domain.RuntimeLimitsSnapshot{MaxIterations: 2},
 		RunBudget:        &domain.RuntimeRunBudget{},
-	})
+	}, nil)
+
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}

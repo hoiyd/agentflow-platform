@@ -10,10 +10,6 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-func (s *PostgresStore) CreateRun(agentID string, conversationID string, snapshot domain.RuntimeSnapshot) (domain.Run, error) {
-	return s.CreateRunWithContract(agentID, conversationID, snapshot, nil)
-}
-
 func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
 	if _, ok, err := s.GetAgent(agentID); err != nil {
 		return domain.Run{}, err

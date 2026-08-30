@@ -77,10 +77,6 @@ func liveDeltaEvent(runID, delta string) domain.RunEvent {
 	return domain.RunEvent{Type: domain.EventModelDelta, SchemaVersion: domain.CurrentRunEventSchemaVersion, RunID: runID, Payload: map[string]any{"delta": delta}}
 }
 
-func (r *Runtime) PrepareCollaborationRun(ctx context.Context, agentID string, conversationID string) (PreparedCollaborationRun, error) {
-	return r.PrepareCollaborationRunWithContract(ctx, agentID, conversationID, nil)
-}
-
 func (r *Runtime) PrepareCollaborationRunWithContract(ctx context.Context, agentID string, conversationID string, contract *domain.CompletionContract) (PreparedCollaborationRun, error) {
 	agent, err := r.resolveAgent(agentID)
 	if err != nil {

@@ -114,9 +114,9 @@ func TestToolStreamReturnsTypedUnsupportedCapability(t *testing.T) {
 		return modelHTTPResponse(400, `{"error":{"message":"tool_choice is not supported","code":"invalid_request_error"}}`), nil
 	})}
 
-	events, errs := client.StreamAgentChatWithTools(
-		context.Background(), "Use the calculator when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(),
-	)
+	events, errs := client.StreamAgentChatWithToolsTrace(
+		context.Background(), "Use the calculator when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(), nil, "", "", nil, nil)
+
 	for range events {
 	}
 	modelErr, ok := AsModelError(<-errs)
@@ -136,9 +136,9 @@ func TestToolStreamReturnsTerminalSelectionError(t *testing.T) {
 		return modelHTTPResponse(401, `{"error":{"message":"invalid API key","code":"invalid_api_key"}}`), nil
 	})}
 
-	events, errs := client.StreamAgentChatWithTools(
-		context.Background(), "Use tools when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(),
-	)
+	events, errs := client.StreamAgentChatWithToolsTrace(
+		context.Background(), "Use tools when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(), nil, "", "", nil, nil)
+
 	for range events {
 	}
 	modelErr, ok := AsModelError(<-errs)
@@ -162,9 +162,9 @@ func TestToolStreamReturnsFinalStreamError(t *testing.T) {
 		return modelHTTPResponse(401, `{"error":{"message":"invalid API key","code":"invalid_api_key"}}`), nil
 	})}
 
-	events, errs := client.StreamAgentChatWithTools(
-		context.Background(), "Use the calculator when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(),
-	)
+	events, errs := client.StreamAgentChatWithToolsTrace(
+		context.Background(), "Use the calculator when needed.", nil, "calculate 2 + 3", tools.DefaultCatalog(), nil, "", "", nil, nil)
+
 	for range events {
 	}
 	modelErr, ok := AsModelError(<-errs)

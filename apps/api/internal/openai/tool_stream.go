@@ -14,19 +14,6 @@ import (
 	"agentflow-platform/apps/api/internal/tools"
 )
 
-func (c *Client) streamFallback(ctx context.Context, latest string, chunks chan<- string) {
-	response := "Local fallback response: backend streaming is working. Add OPENAI_API_KEY in apps/api/.env to enable real OpenAI responses. You said: " + latest
-	words := strings.Split(response, " ")
-	for i, word := range words {
-		select {
-		case <-ctx.Done():
-			return
-		case chunks <- word + suffix(i, len(words)):
-			time.Sleep(45 * time.Millisecond)
-		}
-	}
-}
-
 func fallbackCompletion(systemPrompt string, prompt string) string {
 	lower := strings.ToLower(systemPrompt)
 	switch {
@@ -49,10 +36,6 @@ func truncateText(value string, limit int) string {
 		return value
 	}
 	return value[:limit] + "..."
-}
-
-func (c *Client) streamFallbackEvents(ctx context.Context, latest string, events chan<- StreamEvent) {
-	c.streamText(ctx, fallbackEventResponse(latest), 45*time.Millisecond, events)
 }
 
 func fallbackEventResponse(latest string) string {
