@@ -19,6 +19,7 @@ Global styles load in two ordered layers from `app/layout.tsx`:
 - `task-state.css`: Conversation Task State trigger, inspector layout, and fact rows.
 - `composer.css`: composer, agent selector, and agent dialogs.
 - `tools-knowledge.css`: tools and knowledge workspace refinements.
+- `memory.css`: manual semantic-memory write and recall workspace.
 - `collaboration.css`: multi-agent DAG, Loop Trace, and trace controls.
 - `replay-overlays.css`: run replay, event details, and shared overlays.
 - `runtime-diagnostics.css`: event-derived protocol diagnostics shown on Run Replay.

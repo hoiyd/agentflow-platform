@@ -1,0 +1,232 @@
+.memory-panel {
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+  padding: 24px;
+}
+
+.memory-workbench {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.memory-operations {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.72fr) minmax(520px, 1.28fr);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.memory-operation {
+  min-width: 0;
+  padding: 24px 0;
+}
+
+.memory-write {
+  border-right: 1px solid var(--border);
+  padding-right: 26px;
+}
+
+.memory-recall {
+  padding-left: 26px;
+}
+
+.memory-operation-header {
+  min-height: 44px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.memory-operation-header > div > span,
+.memory-field > span,
+.memory-limit > span {
+  display: block;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.memory-operation-header h2 {
+  margin: 5px 0 0;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 680;
+}
+
+.memory-field {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.memory-field select,
+.memory-field textarea,
+.memory-limit select,
+.memory-search input {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #ffffff;
+  color: var(--ink);
+  outline: none;
+}
+
+.memory-field select,
+.memory-limit select,
+.memory-search input {
+  min-height: 40px;
+  padding: 0 11px;
+}
+
+.memory-content-field textarea {
+  min-height: 168px;
+  resize: vertical;
+  padding: 11px;
+  line-height: 1.5;
+}
+
+.memory-field select:focus,
+.memory-field textarea:focus,
+.memory-limit select:focus,
+.memory-search input:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+.memory-action-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.memory-primary-action {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 5px;
+  padding: 0 15px;
+}
+
+.memory-saved {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  padding-top: 15px;
+  color: var(--teal);
+}
+
+.memory-saved div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.memory-saved span {
+  color: var(--muted-strong);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.memory-saved code {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.memory-limit {
+  display: grid;
+  grid-template-columns: auto 70px;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.memory-empty {
+  min-height: 132px;
+  display: grid;
+  place-items: center;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.memory-results {
+  border-top: 1px solid var(--border);
+}
+
+.memory-result {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding: 17px 0;
+}
+
+.memory-rank {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.memory-rank i {
+  display: block;
+  height: 3px;
+  max-width: 100%;
+  background: var(--teal);
+}
+
+.memory-result-main {
+  min-width: 0;
+}
+
+.memory-result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.memory-result-heading strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.memory-result-heading code {
+  color: var(--muted-strong);
+  font-size: 11px;
+}
+
+.memory-result p {
+  margin: 8px 0 10px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.memory-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}

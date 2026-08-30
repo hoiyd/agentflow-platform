@@ -26,6 +26,7 @@ import "./styles/workbench/task-state.css";
 import "./styles/workbench/composer.css";
 import "./styles/workbench/verification.css";
 import "./styles/workbench/tools-knowledge.css";
+import "./styles/workbench/memory.css";
 import "./styles/workbench/collaboration.css";
 import "./styles/workbench/replay-overlays.css";
 import "./styles/workbench/runtime-diagnostics.css";
