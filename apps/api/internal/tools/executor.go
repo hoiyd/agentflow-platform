@@ -205,31 +205,16 @@ func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) (resul
 		CallID: request.CallID, Tool: request.Tool,
 		Arguments: append(json.RawMessage(nil), request.Arguments...),
 	}
-	var binding Binding
-	if e.catalog == nil {
-		result.Error = executionError(ErrorToolNotFound, fmt.Sprintf("tool %q not found", request.Tool), nil)
-	} else {
-		var ok bool
-		binding, ok = e.catalog.Resolve(request.Tool)
-		if !ok {
-			result.Error = executionError(ErrorToolNotFound, fmt.Sprintf("tool %q not found", request.Tool), nil)
-		} else if binding.contract == nil {
-			result.Error = executionError(ErrorExecutionFailed, "tool argument contract is unavailable", nil)
-		} else {
-			canonical, issue := binding.contract.validate(request.Arguments)
-			if canonical != nil {
-				request.Arguments = canonical
-				result.Arguments = append(json.RawMessage(nil), canonical...)
-				request.DefinitionRevision = binding.contract.definitionRevision
-				request.ArgumentsHash = argumentsHash(request.DefinitionRevision, canonical)
-				result.DefinitionRevision = request.DefinitionRevision
-				result.ArgumentsHash = request.ArgumentsHash
-			}
-			if issue != nil {
-				result.Error = invalidArgumentsError(issue)
-			}
-		}
+	binding, call, callErr := e.catalog.prepareCall(request.Tool, request.Arguments)
+	request.Arguments = call.Arguments
+	result.Arguments = append(json.RawMessage(nil), call.Arguments...)
+	if call.DefinitionRevision != "" {
+		request.DefinitionRevision = call.DefinitionRevision
+		request.ArgumentsHash = call.ArgumentsHash
+		result.DefinitionRevision = call.DefinitionRevision
+		result.ArgumentsHash = call.ArgumentsHash
 	}
+	result.Error = callErr
 	if e.tracer != nil {
 		e.tracer.ToolStarted(ctx, request)
 		defer func() { e.tracer.ToolFinished(ctx, result) }()
