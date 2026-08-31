@@ -73,7 +73,7 @@ The ledger classifies in-Run model work as:
 - `router`: LLM-backed agent routing;
 - `compaction`: hard preflight Context Compaction required by the active Turn.
 
-Soft post-completion compaction, asynchronous Memory Curation, conversation
+Soft post-completion compaction, asynchronous Memory synchronization, conversation
 title generation, and embeddings are auxiliary platform work. They continue to
 use global concurrency/RPM/TPM controls but do not retroactively fail a completed
 Run or use chat-model token pricing in its ledger.

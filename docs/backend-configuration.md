@@ -199,9 +199,26 @@ EMBEDDING_DIMENSIONS=1536
 
 After changing embedding model/provider, re-upload or reindex documents. Search filters candidates by embedding provider/model so old chunks are not mixed with the new query vector space.
 
-## Adaptive Memory Extraction
+## Memory Provider
 
-The Memory Curator always recognizes explicit durability signals through deterministic rules. Optional adaptive extraction runs only after the rule path returns no Candidate:
+The built-in Memory Provider owns Recall, proposal, explicit commit,
+asynchronous Turn synchronization, and graceful shutdown. Its sync queue is
+bounded and ordered; provider retries cover transient embedding and persistence
+failures:
+
+```bash
+MEMORY_SYNC_QUEUE_SIZE=256
+MEMORY_SYNC_JOB_TIMEOUT=30s
+MEMORY_PROVIDER_MAX_ATTEMPTS=3
+MEMORY_PROVIDER_RETRY_BASE_DELAY=100ms
+```
+
+`MEMORY_PROVIDER_MAX_ATTEMPTS` includes the initial call. Accepted Turn sync
+jobs are drained during shutdown. A full queue rejects only auxiliary sync
+work; it does not retroactively fail the completed Run. Runtime Recall failure
+degrades to no recalled Memory and emits a typed diagnostic event.
+
+The provider always recognizes explicit durability signals through deterministic rules. Optional adaptive extraction runs only after the rule path returns no Candidate:
 
 ```bash
 MEMORY_ADAPTIVE_EXTRACTION_MODE=shadow

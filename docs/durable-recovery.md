@@ -116,8 +116,9 @@ and result-size policy.
 
 `RunController.CloseAndWait` rejects new reservations and waits for all accepted
 reservations to complete or cancel. Application shutdown drains accepted Runs
-and Memory Curation before closing persistence. If Run drain times out, the
-Store is not closed underneath active work and shutdown returns an error.
+and Memory Provider synchronization before closing persistence. If either
+drain times out, the Store is not closed underneath active work and shutdown
+returns an error.
 
 ## Current Boundary
 
