@@ -61,4 +61,7 @@ func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
 		events[1].Payload["error_source"] != "tool" || events[1].Payload["error_category"] != "canceled" {
 		t.Fatalf("structured failure fields are missing: %#v", events[1].Payload)
 	}
+	if events[0].Payload["arguments_hash"] == "" || events[0].Payload["definition_revision"] == "" {
+		t.Fatalf("tool contract identity is missing from trace: %#v", events[0].Payload)
+	}
 }

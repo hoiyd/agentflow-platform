@@ -192,7 +192,9 @@ func TestExecutorReplaysCommittedSideEffectWithoutInvokingHandler(t *testing.T) 
 	var calls atomic.Int32
 	catalog, err := NewCatalog(Binding{
 		Descriptor: Descriptor{
-			Name: "write_record", Parameters: ObjectSchema(nil, nil),
+			Name: "write_record", Parameters: ObjectSchema(map[string]any{
+				"value": map[string]any{"type": "string"},
+			}, []string{"value"}),
 			SideEffect: SideEffectPolicy{Mode: SideEffectExternal},
 		},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
@@ -216,6 +218,9 @@ func TestExecutorReplaysCommittedSideEffectWithoutInvokingHandler(t *testing.T) 
 	}
 	if calls.Load() != 1 || !second.Replayed {
 		t.Fatalf("expected one handler call and a replay, calls=%d second=%#v", calls.Load(), second)
+	}
+	if second.ArgumentsHash == "" || second.DefinitionRevision == "" {
+		t.Fatalf("replayed result lost contract identity: %#v", second)
 	}
 	if second.Result.(map[string]any)["record_id"] != "record-1" {
 		t.Fatalf("unexpected replayed result: %#v", second.Result)

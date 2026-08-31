@@ -223,14 +223,29 @@ detect repetition, oscillation, and lack of progress.
 | Control | Default | Scope |
 | --- | --- | --- |
 | Execution timeout | 30s | one Tool Call |
+| Maximum argument schema | 65,536 bytes | one registered Tool |
+| Maximum arguments | 65,536 bytes | one Tool Call |
 | Maximum result | 20,000 bytes | one Tool Result |
 | Batch concurrency | 4 workers | one Tool batch |
 
-Tool name, description, and parameter schema are frozen with the Run. The live
-Binding owns handler, timeout, result-size, and concurrency policy. Execution is
-serial unless a Binding declares a safe `read_only` or keyed parallel group.
-Oversized results retain a UTF-8-safe preview, original byte count, and
-truncation marker.
+Catalog registration normalizes and compiles each parameter schema as JSON
+Schema 2020-12. The normalized schema is the single source used for the model
+definition, argument validation, definition revision, and Runtime Snapshot.
+Unsupported drafts, remote references, non-object roots, invalid schemas, and
+oversized schemas fail registration.
+
+Before budget accounting or handler execution, Tool arguments are bounded,
+decoded once, canonicalized, and validated against that compiled contract.
+Validation failures return a stable code, JSON Pointer path, and non-secret
+message. The canonical argument hash and frozen definition revision are reused
+by tracing and the side-effect journal.
+
+Tool name, description, normalized parameter schema, schema version, and
+definition revision are frozen with new Snapshot v10 Runs. Snapshot v9 remains
+resumable through its legacy full-definition comparison. The live Binding owns
+handler, timeout, result-size, and concurrency policy. Execution is serial
+unless a Binding declares a safe `read_only` or keyed parallel group. Oversized
+results retain a UTF-8-safe preview, original byte count, and truncation marker.
 
 Tool timeout bounds one handler. Run runtime budget bounds cumulative active
 execution; neither substitutes for the other.

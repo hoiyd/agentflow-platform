@@ -7,11 +7,13 @@ import (
 )
 
 type Descriptor struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Parameters  map[string]any    `json:"parameters"`
-	Concurrency ConcurrencyPolicy `json:"concurrency,omitempty"`
-	SideEffect  SideEffectPolicy  `json:"side_effect,omitempty"`
+	Name               string            `json:"name"`
+	Description        string            `json:"description"`
+	Parameters         map[string]any    `json:"parameters"`
+	SchemaVersion      string            `json:"schema_version"`
+	DefinitionRevision string            `json:"definition_revision"`
+	Concurrency        ConcurrencyPolicy `json:"concurrency,omitempty"`
+	SideEffect         SideEffectPolicy  `json:"side_effect,omitempty"`
 }
 
 type SideEffectMode string
@@ -51,6 +53,7 @@ type Binding struct {
 	Descriptor Descriptor
 	Handler    Handler
 	Policy     ExecutionPolicy
+	contract   *argumentContract
 }
 
 type ToolInfo struct {
@@ -61,6 +64,12 @@ type ToolInfo struct {
 }
 
 func ObjectSchema(properties map[string]any, required []string) map[string]any {
+	if properties == nil {
+		properties = map[string]any{}
+	}
+	if required == nil {
+		required = []string{}
+	}
 	return map[string]any{
 		"type":                 "object",
 		"properties":           properties,

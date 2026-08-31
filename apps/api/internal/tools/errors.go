@@ -18,9 +18,10 @@ const (
 )
 
 type ExecutionError struct {
-	Code    ErrorCode `json:"code"`
-	Message string    `json:"message"`
-	Cause   error     `json:"-"`
+	Code     ErrorCode                `json:"code"`
+	Message  string                   `json:"message"`
+	Argument *ArgumentValidationIssue `json:"argument,omitempty"`
+	Cause    error                    `json:"-"`
 }
 
 func (e *ExecutionError) Error() string {

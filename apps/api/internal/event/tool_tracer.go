@@ -28,9 +28,11 @@ func (t *ToolExecutionTracer) ToolStarted(ctx context.Context, request tools.Exe
 		return
 	}
 	span := t.recorder.ToolStart(traceContext(ctx), t.runID, t.stepID, map[string]any{
-		"tool_call_id": request.CallID,
-		"tool_name":    request.Tool,
-		"arguments":    string(request.Arguments),
+		"tool_call_id":        request.CallID,
+		"tool_name":           request.Tool,
+		"arguments":           string(request.Arguments),
+		"arguments_hash":      request.ArgumentsHash,
+		"definition_revision": request.DefinitionRevision,
 	})
 	t.mu.Lock()
 	t.spans[t.spanKey(request.CallID, request.Tool)] = span
@@ -47,16 +49,21 @@ func (t *ToolExecutionTracer) ToolFinished(ctx context.Context, result tools.Exe
 	delete(t.spans, key)
 	t.mu.Unlock()
 	payload := map[string]any{
-		"tool_call_id": result.CallID,
-		"tool_name":    result.Tool,
-		"arguments":    string(result.Arguments),
-		"result":       result.Result,
-		"error":        result.ErrorMessage(),
-		"truncated":    result.Truncated,
-		"replayed":     result.Replayed,
+		"tool_call_id":        result.CallID,
+		"tool_name":           result.Tool,
+		"arguments":           string(result.Arguments),
+		"arguments_hash":      result.ArgumentsHash,
+		"definition_revision": result.DefinitionRevision,
+		"result":              result.Result,
+		"error":               result.ErrorMessage(),
+		"truncated":           result.Truncated,
+		"replayed":            result.Replayed,
 	}
 	if result.Error != nil {
 		payload["error_code"] = string(result.Error.Code)
+		if result.Error.Argument != nil {
+			payload["argument_error"] = result.Error.Argument
+		}
 		payload = failure.Merge(payload, result.Error)
 	}
 	if result.OriginalResultBytes > 0 {

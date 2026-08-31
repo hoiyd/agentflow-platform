@@ -35,17 +35,18 @@ type Run struct {
 }
 
 const (
-	LegacyRuntimeSnapshotVersion     = 1
-	ContextRuntimeSnapshotVersion    = 2
-	CompactionRuntimeSnapshotVersion = 3
-	RunBudgetRuntimeSnapshotVersion  = 4
-	UnifiedExecutionSnapshotVersion  = 5
-	SessionHistorySnapshotVersion    = 6
-	RecoveryRuntimeSnapshotVersion   = 7
-	TaskStateRuntimeSnapshotVersion  = 8
-	DelegationRuntimeSnapshotVersion = 9
-	PreviousRuntimeSnapshotVersion   = TaskStateRuntimeSnapshotVersion
-	CurrentRuntimeSnapshotVersion    = DelegationRuntimeSnapshotVersion
+	LegacyRuntimeSnapshotVersion       = 1
+	ContextRuntimeSnapshotVersion      = 2
+	CompactionRuntimeSnapshotVersion   = 3
+	RunBudgetRuntimeSnapshotVersion    = 4
+	UnifiedExecutionSnapshotVersion    = 5
+	SessionHistorySnapshotVersion      = 6
+	RecoveryRuntimeSnapshotVersion     = 7
+	TaskStateRuntimeSnapshotVersion    = 8
+	DelegationRuntimeSnapshotVersion   = 9
+	ToolContractRuntimeSnapshotVersion = 10
+	PreviousRuntimeSnapshotVersion     = DelegationRuntimeSnapshotVersion
+	CurrentRuntimeSnapshotVersion      = ToolContractRuntimeSnapshotVersion
 )
 
 type RuntimeSnapshot struct {
@@ -173,10 +174,12 @@ type RuntimeModelSnapshot struct {
 }
 
 type RuntimeToolSnapshot struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
-	SideEffect  string         `json:"side_effect,omitempty"`
+	Name               string         `json:"name"`
+	Description        string         `json:"description"`
+	Parameters         map[string]any `json:"parameters"`
+	SchemaVersion      string         `json:"schema_version,omitempty"`
+	DefinitionRevision string         `json:"definition_revision,omitempty"`
+	SideEffect         string         `json:"side_effect,omitempty"`
 }
 
 type RuntimeLimitsSnapshot struct {
