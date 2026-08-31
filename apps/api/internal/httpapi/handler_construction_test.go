@@ -21,12 +21,13 @@ import (
 
 type memoryOperationsStub struct{}
 
-func (*memoryOperationsStub) Create(_ context.Context, memory domain.Memory) (domain.Memory, error) {
+func (*memoryOperationsStub) Commit(_ context.Context, memory domain.Memory) (domain.Memory, error) {
 	return memory, nil
 }
-func (*memoryOperationsStub) Search(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+func (*memoryOperationsStub) Recall(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
 	return nil, nil
 }
+func (*memoryOperationsStub) SyncTurn(memorypkg.TurnSyncRequest) error { return nil }
 
 type knowledgeOperationsStub struct{}
 
@@ -39,10 +40,6 @@ func (*knowledgeOperationsStub) Search(context.Context, domain.DocumentSearch, i
 func (*knowledgeOperationsStub) Evaluate(context.Context, domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error) {
 	return domain.RAGEvaluationRunResponse{}, nil
 }
-
-type memoryQueueStub struct{}
-
-func (*memoryQueueStub) Enqueue(memorypkg.CurationJob) error { return nil }
 
 func TestNewHandlerValidatesEveryRequiredDependency(t *testing.T) {
 	dependencies := completeHandlerDependencies(t)
@@ -62,7 +59,6 @@ func TestNewHandlerValidatesEveryRequiredDependency(t *testing.T) {
 		{name: "agent runtime", edit: func(d *Dependencies) { d.AgentRuntime = nil }, want: "http api agent runtime is required"},
 		{name: "memory", edit: func(d *Dependencies) { d.Memory = nil }, want: "http api memory operations are required"},
 		{name: "knowledge", edit: func(d *Dependencies) { d.Knowledge = nil }, want: "http api knowledge operations are required"},
-		{name: "curation", edit: func(d *Dependencies) { d.MemoryCuration = nil }, want: "http api memory curation queue is required"},
 		{name: "run controller", edit: func(d *Dependencies) { d.RunController = nil }, want: "http api run controller is required"},
 		{name: "verification", edit: func(d *Dependencies) { d.Verification = nil }, want: "http api verification engine is required"},
 	}
@@ -128,10 +124,9 @@ func completeHandlerDependencies(t *testing.T) Dependencies {
 	registry := verification.NewRegistry(verification.Options{})
 	return Dependencies{
 		Store: fileStore, ModelClient: client, Tools: manager,
-		AgentRuntime:   agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fileStore, ModelClient: client}),
-		Memory:         &memoryOperationsStub{},
-		Knowledge:      &knowledgeOperationsStub{},
-		MemoryCuration: &memoryQueueStub{},
+		AgentRuntime: agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fileStore, ModelClient: client}),
+		Memory:       &memoryOperationsStub{},
+		Knowledge:    &knowledgeOperationsStub{},
 		RunController: concurrency.NewRunController(concurrency.RunOptions{
 			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
 		}),

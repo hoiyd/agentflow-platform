@@ -22,7 +22,7 @@ func (h *Handler) createMemory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	memory.WorkspaceID = workspaceID
-	created, err := h.memories.Create(r.Context(), memory)
+	created, err := h.memories.Commit(r.Context(), memory)
 	if err != nil {
 		status := http.StatusBadRequest
 		if memorypkg.IsEmbeddingError(err) {
@@ -46,7 +46,7 @@ func (h *Handler) searchMemories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	search.WorkspaceID = workspaceID
-	items, err := h.memories.Search(r.Context(), search)
+	items, err := h.memories.Recall(r.Context(), search)
 	if err != nil {
 		status := http.StatusBadRequest
 		if memorypkg.IsEmbeddingError(err) {
@@ -58,11 +58,17 @@ func (h *Handler) searchMemories(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
-func (h *Handler) enqueueMemoryCuration(message domain.Message, runID string) {
-	if h.memoryCuration == nil {
+func (h *Handler) syncMemoryTurn(message domain.Message, runID string) {
+	if h.memories == nil {
 		return
 	}
-	if err := h.memoryCuration.Enqueue(memorypkg.CurationJob{RunID: strings.TrimSpace(runID), Message: message}); err != nil {
-		log.Printf("memory_curation_enqueue_failed run_id=%s message_id=%s error=%q", runID, message.ID, err.Error())
+	idempotencyKey := ""
+	if messageID := strings.TrimSpace(message.ID); messageID != "" {
+		idempotencyKey = "message:" + messageID
+	}
+	if err := h.memories.SyncTurn(memorypkg.TurnSyncRequest{
+		RunID: strings.TrimSpace(runID), IdempotencyKey: idempotencyKey, Message: message,
+	}); err != nil {
+		log.Printf("memory_turn_sync_rejected run_id=%s message_id=%s error=%q", runID, message.ID, err.Error())
 	}
 }

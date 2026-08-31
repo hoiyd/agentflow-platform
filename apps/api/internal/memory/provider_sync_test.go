@@ -64,6 +64,10 @@ func (s *recordingStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent,
 	return event, nil
 }
 
+func (s *recordingStore) SearchMemories(domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+	return nil, nil
+}
+
 func (s *recordingStore) eventTypes() []domain.RunEventType {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -74,14 +78,20 @@ func (s *recordingStore) eventTypes() []domain.RunEventType {
 	return types
 }
 
-func TestCuratorEnqueueDoesNotWaitAndFailureIsObservable(t *testing.T) {
+func (s *recordingStore) counts() (int, int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.candidates), len(s.memories), len(s.events)
+}
+
+func TestProviderSyncTurnDoesNotWaitAndFailureIsObservable(t *testing.T) {
 	store := &recordingStore{}
 	embedder := &blockingEmbedder{
 		started: make(chan struct{}), release: make(chan struct{}), err: errors.New("embedding unavailable"),
 	}
-	curator := NewCuratorWithOptions(store, embedder, CuratorOptions{QueueSize: 4, JobTimeout: time.Second})
+	provider := newTestProvider(t, store, embedder, ProviderOptions{QueueSize: 4, JobTimeout: time.Second})
 
-	if err := curator.Enqueue(CurationJob{RunID: "run_test", Message: domain.Message{
+	if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_test", Message: domain.Message{
 		ID: "msg_test", ConversationID: "conv_test", Role: "user",
 		Content: "Remember that AgentFlow uses typed events.",
 	}}); err != nil {
@@ -94,7 +104,7 @@ func TestCuratorEnqueueDoesNotWaitAndFailureIsObservable(t *testing.T) {
 	}
 
 	close(embedder.release)
-	closeCurator(t, curator)
+	closeProvider(t, provider)
 
 	want := []domain.RunEventType{
 		domain.EventMemoryCandidateProposed, domain.EventMemoryCandidateAccepted,
@@ -109,42 +119,42 @@ func TestCuratorEnqueueDoesNotWaitAndFailureIsObservable(t *testing.T) {
 	}
 }
 
-func TestCuratorIgnoresOrdinaryChatAndAssistantOutput(t *testing.T) {
+func TestProviderSyncTurnIgnoresOrdinaryChatAndAssistantOutput(t *testing.T) {
 	store := &recordingStore{}
 	embedder := &blockingEmbedder{started: make(chan struct{}), release: make(chan struct{})}
-	curator := NewCuratorWithOptions(store, embedder, CuratorOptions{QueueSize: 4, JobTimeout: time.Second})
-	if err := curator.Enqueue(CurationJob{RunID: "run_test", Message: domain.Message{
+	provider := newTestProvider(t, store, embedder, ProviderOptions{QueueSize: 4, JobTimeout: time.Second})
+	if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_test", Message: domain.Message{
 		ID: "user", Role: "user", Content: "Can you explain typed events?",
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := curator.Enqueue(CurationJob{RunID: "run_test", Message: domain.Message{
+	if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_test", Message: domain.Message{
 		ID: "assistant", Role: "assistant", Content: "Remember that this answer is correct.",
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	closeCurator(t, curator)
+	closeProvider(t, provider)
 	if len(store.candidates) != 0 || len(store.memories) != 0 || len(store.events) != 0 {
 		t.Fatalf("ordinary chat became durable memory: candidates=%#v memories=%#v events=%#v", store.candidates, store.memories, store.events)
 	}
 }
 
-func TestCuratorPersistsAdaptiveCandidateInShadowModeWithoutCommittingMemory(t *testing.T) {
+func TestProviderPersistsAdaptiveCandidateInShadowModeWithoutCommittingMemory(t *testing.T) {
 	store := &recordingStore{}
 	model := &stubCandidateModel{response: `{"decision":"add","kind":"preference","content":"User prefers concise implementation notes.","confidence":0.94}`}
-	curator := NewCuratorWithOptions(store, immediateEmbedder{}, CuratorOptions{
+	provider := newTestProvider(t, store, immediateEmbedder{}, ProviderOptions{
 		QueueSize: 4, JobTimeout: time.Second, AdaptiveMode: AdaptiveModeShadow,
 		Extractor: CompositeCandidateExtractor{
 			Primary: RuleBasedCandidateExtractor{}, Fallback: AdaptiveCandidateExtractor{Model: model},
 		},
 	})
-	if err := curator.Enqueue(CurationJob{RunID: "run_shadow", Message: domain.Message{
+	if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_shadow", Message: domain.Message{
 		ID: "msg_shadow", ConversationID: "conv_test", Role: "user",
 		Content: "Concise implementation notes are much easier for me to review later.",
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	closeCurator(t, curator)
+	closeProvider(t, provider)
 	if len(store.candidates) != 1 || store.candidates[0].PolicyReason != PolicyRejectShadowMode || store.candidates[0].Confidence != 0.94 {
 		t.Fatalf("adaptive shadow candidate mismatch: %#v", store.candidates)
 	}
@@ -156,20 +166,20 @@ func TestCuratorPersistsAdaptiveCandidateInShadowModeWithoutCommittingMemory(t *
 	})
 }
 
-func TestCuratorCommitsHighConfidenceAdaptiveCandidateInAutoMode(t *testing.T) {
+func TestProviderCommitsHighConfidenceAdaptiveCandidateInAutoMode(t *testing.T) {
 	store := &recordingStore{}
 	model := &stubCandidateModel{response: `{"decision":"add","kind":"project_convention","content":"The backend uses Go 1.26.5.","confidence":0.96}`}
-	curator := NewCuratorWithOptions(store, immediateEmbedder{}, CuratorOptions{
+	provider := newTestProvider(t, store, immediateEmbedder{}, ProviderOptions{
 		QueueSize: 4, JobTimeout: time.Second, AdaptiveMode: AdaptiveModeAuto,
 		Extractor: AdaptiveCandidateExtractor{Model: model},
 	})
-	if err := curator.Enqueue(CurationJob{RunID: "run_auto", Message: domain.Message{
+	if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_auto", Message: domain.Message{
 		ID: "msg_auto", ConversationID: "conv_test", Role: "user",
 		Content: "All backend code in this project must use Go 1.26.5.",
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	closeCurator(t, curator)
+	closeProvider(t, provider)
 	if len(store.candidates) != 1 || store.candidates[0].Status != domain.MemoryCandidateAccepted {
 		t.Fatalf("adaptive candidate was not accepted: %#v", store.candidates)
 	}
@@ -178,35 +188,35 @@ func TestCuratorCommitsHighConfidenceAdaptiveCandidateInAutoMode(t *testing.T) {
 	}
 }
 
-func TestCuratorPublishesAdaptiveExtractionFailure(t *testing.T) {
+func TestProviderPublishesAdaptiveExtractionFailure(t *testing.T) {
 	store := &recordingStore{}
 	model := &stubCandidateModel{response: "not json"}
-	curator := NewCuratorWithOptions(store, immediateEmbedder{}, CuratorOptions{
+	provider := newTestProvider(t, store, immediateEmbedder{}, ProviderOptions{
 		QueueSize: 4, JobTimeout: time.Second, AdaptiveMode: AdaptiveModeShadow,
 		Extractor: AdaptiveCandidateExtractor{Model: model},
 	})
-	if err := curator.Enqueue(CurationJob{RunID: "run_failed", Message: domain.Message{
+	if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_failed", Message: domain.Message{
 		ID: "msg_failed", Role: "user", Content: "The backend always uses a typed event contract for observability.",
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	closeCurator(t, curator)
+	closeProvider(t, provider)
 	if len(store.candidates) != 0 || len(store.memories) != 0 {
 		t.Fatalf("failed extraction persisted state: candidates=%#v memories=%#v", store.candidates, store.memories)
 	}
 	assertEventTypes(t, store.eventTypes(), []domain.RunEventType{domain.EventMemoryCandidateFailed})
 }
 
-func TestCuratorPersistsRejectedSensitiveCandidate(t *testing.T) {
+func TestProviderPersistsRejectedSensitiveCandidate(t *testing.T) {
 	store := &recordingStore{}
 	embedder := &blockingEmbedder{started: make(chan struct{}), release: make(chan struct{})}
-	curator := NewCuratorWithOptions(store, embedder, CuratorOptions{QueueSize: 4, JobTimeout: time.Second})
-	if err := curator.Enqueue(CurationJob{RunID: "run_test", Message: domain.Message{
+	provider := newTestProvider(t, store, embedder, ProviderOptions{QueueSize: 4, JobTimeout: time.Second})
+	if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_test", Message: domain.Message{
 		ID: "secret", Role: "user", Content: "Remember that my API key is sk-test-value.",
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	closeCurator(t, curator)
+	closeProvider(t, provider)
 	if len(store.candidates) != 1 || store.candidates[0].Status != domain.MemoryCandidateRejected || store.candidates[0].PolicyReason != PolicyRejectSecret {
 		t.Fatalf("sensitive candidate was not rejected: %#v", store.candidates)
 	}
@@ -219,27 +229,104 @@ func TestCuratorPersistsRejectedSensitiveCandidate(t *testing.T) {
 	}
 }
 
-func TestCuratorPreservesAcceptedCandidateOrder(t *testing.T) {
+func TestProviderPreservesAcceptedTurnOrder(t *testing.T) {
 	store := &recordingStore{}
 	embedder := &blockingEmbedder{started: make(chan struct{}), release: make(chan struct{})}
-	curator := NewCuratorWithOptions(store, embedder, CuratorOptions{QueueSize: 4, JobTimeout: time.Second})
+	provider := newTestProvider(t, store, embedder, ProviderOptions{QueueSize: 4, JobTimeout: time.Second})
 	for _, message := range []domain.Message{
 		{ID: "first", Role: "user", Content: "Remember that the API is written in Go."},
 		{ID: "second", Role: "user", Content: "I prefer concise engineering explanations."},
 	} {
-		if err := curator.Enqueue(CurationJob{RunID: "run_test", Message: message}); err != nil {
+		if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_test", Message: message}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	<-embedder.started
 	close(embedder.release)
-	closeCurator(t, curator)
+	closeProvider(t, provider)
 	if len(store.memories) != 2 || store.memories[0].SourceMessageID != "first" || store.memories[1].SourceMessageID != "second" {
 		t.Fatalf("queued candidates lost order: %#v", store.memories)
 	}
 }
 
-func TestMemoryCurationFailureDoesNotChangeCompletedRun(t *testing.T) {
+func TestProviderSyncTurnIsIdempotentAfterWorkerCompletion(t *testing.T) {
+	store := &recordingStore{}
+	provider := newTestProvider(t, store, immediateEmbedder{}, ProviderOptions{QueueSize: 2, JobTimeout: time.Second})
+	request := TurnSyncRequest{RunID: "run_retry", IdempotencyKey: "run_retry:turn_1", Message: domain.Message{
+		ID: "msg_retry", ConversationID: "conv_retry", Role: "user",
+		Content: "Remember that durable turn sync must be idempotent.",
+	}}
+	if err := provider.SyncTurn(request); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		_, memories, _ := store.counts()
+		if memories == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("first sync did not commit memory")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := provider.SyncTurn(request); err != nil {
+		t.Fatalf("duplicate sync: %v", err)
+	}
+	closeProvider(t, provider)
+	candidates, memories, _ := store.counts()
+	if candidates != 1 || memories != 1 {
+		t.Fatalf("duplicate turn created duplicate state: candidates=%d memories=%d", candidates, memories)
+	}
+}
+
+func TestProviderRejectsSyncWhenBoundedQueueIsFull(t *testing.T) {
+	store := &recordingStore{}
+	embedder := &blockingEmbedder{started: make(chan struct{}), release: make(chan struct{})}
+	provider := newTestProvider(t, store, embedder, ProviderOptions{QueueSize: 1, JobTimeout: time.Second})
+	request := func(id string) TurnSyncRequest {
+		return TurnSyncRequest{RunID: "run_capacity", Message: domain.Message{
+			ID: id, Role: "user", Content: "Remember that message " + id + " is durable.",
+		}}
+	}
+	if err := provider.SyncTurn(request("one")); err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+	<-embedder.started
+	if err := provider.SyncTurn(request("two")); err != nil {
+		t.Fatalf("queued sync: %v", err)
+	}
+	if err := provider.SyncTurn(request("three")); !errors.Is(err, ErrSyncQueueFull) {
+		t.Fatalf("full queue error=%v want=%v", err, ErrSyncQueueFull)
+	}
+	if !containsEventType(store.eventTypes(), domain.EventMemorySyncRejected) {
+		t.Fatalf("queue rejection was not observable: %#v", store.eventTypes())
+	}
+	close(embedder.release)
+	closeProvider(t, provider)
+}
+
+func TestProviderCloseReportsTimeoutAndCanFinishDrain(t *testing.T) {
+	store := &recordingStore{}
+	embedder := &blockingEmbedder{started: make(chan struct{}), release: make(chan struct{})}
+	provider := newTestProvider(t, store, embedder, ProviderOptions{QueueSize: 1, JobTimeout: time.Second})
+	if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_close", Message: domain.Message{
+		ID: "msg_close", Role: "user", Content: "Remember that shutdown drains accepted work.",
+	}}); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	<-embedder.started
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	err := provider.Close(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("close error=%v want deadline exceeded", err)
+	}
+	close(embedder.release)
+	closeProvider(t, provider)
+}
+
+func TestMemoryProviderSyncFailureDoesNotChangeCompletedRun(t *testing.T) {
 	fileStore, err := storepkg.NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {
 		t.Fatalf("new file store: %v", err)
@@ -261,8 +348,8 @@ func TestMemoryCurationFailureDoesNotChangeCompletedRun(t *testing.T) {
 	embedder := &blockingEmbedder{
 		started: make(chan struct{}), release: make(chan struct{}), err: errors.New("embedding unavailable"),
 	}
-	curator := NewCuratorWithOptions(fileStore, embedder, CuratorOptions{QueueSize: 4, JobTimeout: time.Second})
-	if err := curator.Enqueue(CurationJob{RunID: run.ID, Message: domain.Message{
+	provider := newTestProvider(t, fileStore, embedder, ProviderOptions{QueueSize: 4, JobTimeout: time.Second})
+	if err := provider.SyncTurn(TurnSyncRequest{RunID: run.ID, Message: domain.Message{
 		ID: "msg_failed", ConversationID: conversation.ID, Role: "user",
 		Content: "Remember that AgentFlow uses Postgres for durable state.",
 	}}); err != nil {
@@ -270,7 +357,7 @@ func TestMemoryCurationFailureDoesNotChangeCompletedRun(t *testing.T) {
 	}
 	<-embedder.started
 	close(embedder.release)
-	closeCurator(t, curator)
+	closeProvider(t, provider)
 
 	current, ok, err := fileStore.GetRun(run.ID)
 	if err != nil || !ok {
@@ -288,12 +375,21 @@ func TestMemoryCurationFailureDoesNotChangeCompletedRun(t *testing.T) {
 	}
 }
 
-func closeCurator(t *testing.T, curator *Curator) {
+func newTestProvider(t *testing.T, store ProviderStore, embedder Embedder, options ProviderOptions) *BuiltinProvider {
+	t.Helper()
+	provider := NewBuiltinProvider(store, embedder, options)
+	if err := provider.Initialize(context.Background()); err != nil {
+		t.Fatalf("initialize provider: %v", err)
+	}
+	return provider
+}
+
+func closeProvider(t *testing.T, provider *BuiltinProvider) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if err := curator.Close(ctx); err != nil {
-		t.Fatalf("close curator: %v", err)
+	if err := provider.Close(ctx); err != nil {
+		t.Fatalf("close provider: %v", err)
 	}
 }
 
@@ -307,4 +403,13 @@ func assertEventTypes(t *testing.T, got, want []domain.RunEventType) {
 			t.Fatalf("event types=%#v want=%#v", got, want)
 		}
 	}
+}
+
+func containsEventType(items []domain.RunEventType, want domain.RunEventType) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }

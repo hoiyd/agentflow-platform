@@ -51,6 +51,26 @@ func (s *FileStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEm
 		embedding.CreatedAt = now
 	}
 
+	for index := range s.data.Memories {
+		if s.data.Memories[index].ID != memory.ID {
+			continue
+		}
+		memory.CreatedAt = s.data.Memories[index].CreatedAt
+		s.data.Memories[index] = memory
+		replacedEmbedding := false
+		for embeddingIndex := range s.data.MemoryEmbeddings {
+			if s.data.MemoryEmbeddings[embeddingIndex].MemoryID == memory.ID {
+				s.data.MemoryEmbeddings[embeddingIndex] = embedding
+				replacedEmbedding = true
+				break
+			}
+		}
+		if !replacedEmbedding {
+			s.data.MemoryEmbeddings = append(s.data.MemoryEmbeddings, embedding)
+		}
+		return memory, s.saveLocked()
+	}
+
 	s.data.Memories = append(s.data.Memories, memory)
 	s.data.MemoryEmbeddings = append(s.data.MemoryEmbeddings, embedding)
 	return memory, s.saveLocked()

@@ -2,12 +2,19 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
 )
+
+type memoryRecallFunc func(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error)
+
+func (fn memoryRecallFunc) Recall(ctx context.Context, search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+	return fn(ctx, search)
+}
 
 func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 	ctx := context.Background()
@@ -16,7 +23,12 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	client := newLocalFallbackOpenAIClientForTest()
-	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: client})
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: client,
+		MemoryRecall: memoryRecallFunc(func(_ context.Context, search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+			return fileStore.SearchMemories(search)
+		}),
+	})
 
 	conversation, err := fileStore.CreateConversation("Demo retrieval")
 	if err != nil {
@@ -154,6 +166,51 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		return
 	}
 	t.Fatal("expected retrieval trace event")
+}
+
+func TestRetrieveContextDegradesMemoryRecallFailureToEmptySet(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	conversation, err := fileStore.CreateConversation("memory recall failure")
+	if err != nil {
+		t.Fatalf("create conversation: %v", err)
+	}
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	want := errors.New("memory provider unavailable")
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(),
+		MemoryRecall: memoryRecallFunc(func(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+			return nil, want
+		}),
+	})
+
+	memories, chunks := runtime.retrieveContext(context.Background(), run.ID, "continue without memory", true, false, nil)
+	if len(memories) != 0 || len(chunks) != 0 {
+		t.Fatalf("recall failure should degrade to empty context: memories=%#v chunks=%#v", memories, chunks)
+	}
+	events, err := fileStore.ListRunEvents(run.ID)
+	if err != nil {
+		t.Fatalf("list events: %v", err)
+	}
+	var recallFailed, retrievalCompleted bool
+	for _, event := range events {
+		switch event.Type {
+		case domain.EventMemoryRecallFailed:
+			recallFailed = event.Payload["error"] == want.Error()
+		case domain.EventRetrievalCompleted:
+			retrievalCompleted = event.Payload["memory_count"] == 0 && event.Payload["memory_error"] == want.Error()
+		case domain.EventRetrievalFailed:
+			t.Fatalf("auxiliary recall failure became primary retrieval failure: %#v", event)
+		}
+	}
+	if !recallFailed || !retrievalCompleted {
+		t.Fatalf("missing degraded recall evidence: recall_failed=%v retrieval_completed=%v events=%#v", recallFailed, retrievalCompleted, events)
+	}
 }
 
 func TestRetrievedChunkTraceItemsIncludesMergedContextSources(t *testing.T) {

@@ -71,7 +71,7 @@ func ConsumesRunEvent(eventType domain.RunEventType) bool {
 		domain.EventModelStarted, domain.EventModelCompleted, domain.EventModelFailed,
 		domain.EventToolStarted, domain.EventToolCompleted, domain.EventToolFailed,
 		domain.EventRetrievalFailed, domain.EventHistorySearchFailed, domain.EventCompactionFailed,
-		domain.EventMemoryCandidateFailed, domain.EventMemorySyncFailed, domain.EventBudgetExceeded:
+		domain.EventMemoryCandidateFailed, domain.EventMemoryRecallFailed, domain.EventMemorySyncRejected, domain.EventMemorySyncFailed, domain.EventBudgetExceeded:
 		return true
 	default:
 		return false
@@ -147,7 +147,7 @@ func BuildRunTraceSummary(run domain.Run, events []domain.RunEvent) domain.RunTr
 			summary.ToolCalls++
 			summary.ErrorCount++
 		case domain.EventModelFailed, domain.EventRetrievalFailed, domain.EventHistorySearchFailed,
-			domain.EventCompactionFailed, domain.EventMemoryCandidateFailed, domain.EventMemorySyncFailed,
+			domain.EventCompactionFailed, domain.EventMemoryCandidateFailed, domain.EventMemoryRecallFailed, domain.EventMemorySyncRejected, domain.EventMemorySyncFailed,
 			domain.EventBudgetExceeded:
 			summary.ErrorCount++
 		}
