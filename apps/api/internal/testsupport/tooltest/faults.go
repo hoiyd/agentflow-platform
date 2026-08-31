@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -144,11 +145,18 @@ var _ budget.Controller = deniedBudgetController{}
 
 func AssertTypedFailure(t *testing.T, result tools.ExecutionResult, code tools.ErrorCode) {
 	t.Helper()
+	if err := validateTypedFailure(result, code); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func validateTypedFailure(result tools.ExecutionResult, code tools.ErrorCode) error {
 	if result.Error == nil || result.Error.Code != code {
-		t.Fatalf("error = %#v, want %s", result.Error, code)
+		return fmt.Errorf("error = %#v, want %s", result.Error, code)
 	}
 	info := result.Error.FailureInfo()
 	if info.Code != string(code) || info.Source != "tool" || info.Category == "" {
-		t.Fatalf("failure classification is incomplete: %#v", info)
+		return fmt.Errorf("failure classification is incomplete: %#v", info)
 	}
+	return nil
 }

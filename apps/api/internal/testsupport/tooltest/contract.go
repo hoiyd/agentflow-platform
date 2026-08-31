@@ -3,7 +3,9 @@ package tooltest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"reflect"
 	"sync/atomic"
 	"testing"
 
@@ -37,7 +39,9 @@ type BindingContract struct {
 // side-effect replay boundary agree on one Tool contract.
 func RunBindingContract(t *testing.T, spec BindingContract) {
 	t.Helper()
-	validateContractSpec(t, spec)
+	if err := validateContractSpec(spec); err != nil {
+		t.Fatal(err)
+	}
 
 	var handlerCalls atomic.Int32
 	binding := spec.Binding
@@ -53,7 +57,9 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 	if !ok || installed.Descriptor.SchemaVersion != tools.ToolSchemaVersion || installed.Descriptor.DefinitionRevision == "" {
 		t.Fatalf("binding has no compiled schema identity: %#v", installed.Descriptor)
 	}
-	assertModelSchemaMatchesContract(t, catalog, installed)
+	if err := validateModelSchemaContract(catalog.Definitions(), installed.Descriptor.Parameters); err != nil {
+		t.Fatal(err)
+	}
 
 	tracer := &recordingTracer{}
 	journal := newMemoryEffectJournal()
@@ -116,34 +122,31 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 	}
 }
 
-func validateContractSpec(t *testing.T, spec BindingContract) {
-	t.Helper()
+func validateContractSpec(spec BindingContract) error {
 	if spec.Binding.Descriptor.Name == "" || spec.Binding.Descriptor.Parameters == nil || spec.Binding.Handler == nil {
-		t.Fatal("binding contract requires a complete Binding")
+		return errors.New("binding contract requires a complete Binding")
 	}
 	if len(spec.ValidArguments) == 0 || len(spec.InvalidCalls) == 0 {
-		t.Fatal("binding contract requires valid and invalid argument cases")
+		return errors.New("binding contract requires valid and invalid argument cases")
 	}
 	if spec.ValidateResult == nil || len(spec.BadResults) == 0 {
-		t.Fatal("binding contract requires a deterministic result sensor and known-bad result")
+		return errors.New("binding contract requires a deterministic result sensor and known-bad result")
 	}
+	return nil
 }
 
-func assertModelSchemaMatchesContract(t *testing.T, catalog *tools.Catalog, binding tools.Binding) {
-	t.Helper()
-	definitions := catalog.Definitions()
+func validateModelSchemaContract(definitions []map[string]any, contractSchema map[string]any) error {
 	if len(definitions) != 1 {
-		t.Fatalf("model definition count = %d, want 1", len(definitions))
+		return fmt.Errorf("model definition count = %d, want 1", len(definitions))
 	}
 	function, ok := definitions[0]["function"].(map[string]any)
 	if !ok {
-		t.Fatalf("invalid model definition: %#v", definitions[0])
+		return fmt.Errorf("invalid model definition: %#v", definitions[0])
 	}
-	modelSchema, _ := json.Marshal(function["parameters"])
-	contractSchema, _ := json.Marshal(binding.Descriptor.Parameters)
-	if string(modelSchema) != string(contractSchema) {
-		t.Fatalf("model schema differs from compiled contract: %s != %s", modelSchema, contractSchema)
+	if !reflect.DeepEqual(function["parameters"], contractSchema) {
+		return errors.New("model schema differs from compiled contract")
 	}
+	return nil
 }
 
 type recordingTracer struct {

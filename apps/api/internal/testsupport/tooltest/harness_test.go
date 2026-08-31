@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/tools"
 )
@@ -41,6 +42,54 @@ func TestBindingContractHarness(t *testing.T) {
 			return nil
 		},
 	})
+}
+
+func TestBindingContractSpecValidation(t *testing.T) {
+	complete := BindingContract{
+		Binding: tools.Binding{
+			Descriptor: tools.Descriptor{Name: "lookup", Parameters: tools.ObjectSchema(nil, nil)},
+			Handler:    func(context.Context, json.RawMessage) (any, error) { return nil, nil },
+		},
+		ValidArguments: json.RawMessage(`{}`),
+		InvalidCalls:   []InvalidCall{{Name: "invalid", Arguments: json.RawMessage(`[]`)}},
+		BadResults:     []BadResult{{Name: "bad", Value: nil}},
+		ValidateResult: func(any) error { return nil },
+	}
+	if err := validateContractSpec(complete); err != nil {
+		t.Fatalf("complete contract rejected: %v", err)
+	}
+	tests := []BindingContract{
+		{},
+		{Binding: complete.Binding},
+		{Binding: complete.Binding, ValidArguments: complete.ValidArguments, InvalidCalls: complete.InvalidCalls},
+	}
+	for index, spec := range tests {
+		if err := validateContractSpec(spec); err == nil {
+			t.Fatalf("incomplete contract %d was accepted", index)
+		}
+	}
+}
+
+func TestModelSchemaContractValidation(t *testing.T) {
+	schema := tools.ObjectSchema(nil, nil)
+	tests := []struct {
+		name        string
+		definitions []map[string]any
+		wantError   bool
+	}{
+		{name: "matching", definitions: []map[string]any{{"function": map[string]any{"parameters": schema}}}},
+		{name: "missing definition", wantError: true},
+		{name: "malformed function", definitions: []map[string]any{{"function": "invalid"}}, wantError: true},
+		{name: "different schema", definitions: []map[string]any{{"function": map[string]any{"parameters": map[string]any{"type": "string"}}}}, wantError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateModelSchemaContract(test.definitions, schema)
+			if (err != nil) != test.wantError {
+				t.Fatalf("error = %v, wantError=%t", err, test.wantError)
+			}
+		})
+	}
 }
 
 func TestEffectGateFixtureLifecycle(t *testing.T) {
@@ -96,6 +145,45 @@ func TestEffectGateFixtureFailureInjection(t *testing.T) {
 	AssertTypedFailure(t, result, tools.ErrorEffectJournal)
 	if completeFailure.Record().Status != domain.ToolEffectNeedsReconciliation {
 		t.Fatalf("settlement failure was not marked for reconciliation: %#v", completeFailure.Record())
+	}
+}
+
+func TestEffectGateFixtureDefensiveBoundaries(t *testing.T) {
+	fixture := NewEffectGateFixture()
+	fixture.Release(EffectIntentPersisted)
+	record := domain.ToolEffectRecord{IdempotencyKey: "effect-1"}
+	first, started, err := fixture.BeginToolEffect(record)
+	if err != nil || !started || first.Status != domain.ToolEffectExecuting {
+		t.Fatalf("begin effect: record=%#v started=%t err=%v", first, started, err)
+	}
+	replayed, started, err := fixture.BeginToolEffect(record)
+	if err != nil || started || replayed.IdempotencyKey != record.IdempotencyKey {
+		t.Fatalf("repeat effect: record=%#v started=%t err=%v", replayed, started, err)
+	}
+	fixture.Release(EffectSettlementPending)
+	if _, err := fixture.CompleteToolEffect("wrong", nil); err == nil {
+		t.Fatal("wrong settlement key was accepted")
+	}
+	if _, err := fixture.MarkToolEffectNeedsReconciliation("wrong", "failed"); err == nil {
+		t.Fatal("wrong reconciliation key was accepted")
+	}
+	if err := fixture.Wait(context.Background(), EffectPhase("unknown")); err == nil {
+		t.Fatal("unknown wait phase was accepted")
+	}
+	if err := fixture.reach(context.Background(), EffectPhase("unknown")); err == nil {
+		t.Fatal("unknown reached phase was accepted")
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := fixture.Wait(canceled, EffectApplied); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled wait = %v", err)
+	}
+	if err := fixture.reach(canceled, EffectApplied); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled reach = %v", err)
+	}
+	binding := NewEffectGateFixture().Binding("canceled_write")
+	if _, err := binding.Handler(canceled, json.RawMessage(`{"value":"x"}`)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled effect handler = %v", err)
 	}
 }
 
@@ -173,12 +261,46 @@ func TestSelectionDatasetRejectsMalformedContracts(t *testing.T) {
 		[]byte(`{"schema_version":"tool-selection-v1","id":"x","cases":[{"id":"x","task":"t","expected":{"decision":"unsupported","outcome":"no_tool"}}]}`),
 		[]byte(`{"schema_version":"tool-selection-v1","id":"x","cases":[{"id":"x","task":"t","expected":{"decision":"no_tool","tool":"lookup","outcome":"no_tool"}}]}`),
 		[]byte(`{"schema_version":"tool-selection-v1","id":"x","cases":[{"id":"x","task":"t","expected":{"decision":"tool","tool":"lookup","arguments":{},"outcome":"policy_denied"}}]}`),
+		[]byte(`{"schema_version":"tool-selection-v1","id":"x","cases":[{"id":"","task":"t","expected":{"decision":"no_tool","outcome":"no_tool"}}]}`),
+		[]byte(`{"schema_version":"tool-selection-v1","id":"x","cases":[{"id":"x","task":"t","expected":{"decision":"tool","outcome":"success"}}]}`),
 		[]byte(`{"schema_version":"tool-selection-v1","id":"x","cases":[{"id":"x","task":"t","expected":{"decision":"no_tool","outcome":"no_tool"}}]} {}`),
+		[]byte(`{"schema_version":"tool-selection-v1","id":"x","cases":[{"id":"x","task":"t","expected":{"decision":"no_tool","outcome":"no_tool"}}]} ]`),
 	}
 	for index, data := range tests {
 		if _, err := ParseSelectionDataset(data); err == nil {
 			t.Fatalf("malformed dataset %d was accepted", index)
 		}
+	}
+}
+
+func TestTypedFailureValidation(t *testing.T) {
+	valid := tools.ExecutionResult{Error: &tools.ExecutionError{Code: tools.ErrorExecutionFailed, Message: "failed"}}
+	if err := validateTypedFailure(valid, tools.ErrorExecutionFailed); err != nil {
+		t.Fatalf("valid failure rejected: %v", err)
+	}
+	if err := validateTypedFailure(tools.ExecutionResult{}, tools.ErrorExecutionFailed); err == nil {
+		t.Fatal("missing failure was accepted")
+	}
+	if err := validateTypedFailure(valid, tools.ErrorExecutionTimeout); err == nil {
+		t.Fatal("wrong failure code was accepted")
+	}
+}
+
+func TestDeniedBudgetControllerOnlyDeniesToolCalls(t *testing.T) {
+	controller := deniedBudgetController{}
+	if _, err := controller.BeginModelCall(context.Background(), budget.ModelCallEstimate{}); err != nil {
+		t.Fatalf("begin model call: %v", err)
+	}
+	if err := controller.SettleModelCall(context.Background(), budget.ModelReservation{}, budget.ModelUsage{}); err != nil {
+		t.Fatalf("settle model call: %v", err)
+	}
+	if err := controller.RecordToolCall(context.Background(), budget.ToolCall{}); err == nil {
+		t.Fatal("Tool call was not denied")
+	}
+	binding := successBinding("success")
+	result, err := binding.Handler(context.Background(), json.RawMessage(`{}`))
+	if err != nil || result == nil {
+		t.Fatalf("success fixture: result=%#v err=%v", result, err)
 	}
 }
 

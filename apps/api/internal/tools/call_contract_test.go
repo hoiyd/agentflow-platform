@@ -47,6 +47,13 @@ func TestCatalogValidateCallReturnsTypedContractFailures(t *testing.T) {
 		t.Fatalf("new catalog: %v", err)
 	}
 
+	brokenCatalog, err := catalog.CloneWith()
+	if err != nil {
+		t.Fatalf("clone catalog: %v", err)
+	}
+	brokenBinding := brokenCatalog.bindings["lookup"]
+	brokenBinding.contract = nil
+	brokenCatalog.bindings["lookup"] = brokenBinding
 	tests := []struct {
 		name      string
 		catalog   *Catalog
@@ -57,6 +64,7 @@ func TestCatalogValidateCallReturnsTypedContractFailures(t *testing.T) {
 		{name: "nil catalog", tool: "lookup", arguments: json.RawMessage(`{}`), wantCode: ErrorToolNotFound},
 		{name: "missing Tool", catalog: catalog, tool: "missing", arguments: json.RawMessage(`{}`), wantCode: ErrorToolNotFound},
 		{name: "invalid arguments", catalog: catalog, tool: "lookup", arguments: json.RawMessage(`{}`), wantCode: ErrorInvalidArgs},
+		{name: "missing compiled contract", catalog: brokenCatalog, tool: "lookup", arguments: json.RawMessage(`{"query":"status"}`), wantCode: ErrorExecutionFailed},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
