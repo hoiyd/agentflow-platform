@@ -69,17 +69,8 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 		Tool: binding.Descriptor.Name, Arguments: spec.ValidArguments,
 	}
 	result := executor.Execute(context.Background(), request)
-	if result.Error != nil {
-		t.Fatalf("valid call failed: %#v", result.Error)
-	}
-	if handlerCalls.Load() != 1 {
-		t.Fatalf("valid call invoked handler %d times", handlerCalls.Load())
-	}
-	if result.ArgumentsHash == "" || result.DefinitionRevision != installed.Descriptor.DefinitionRevision {
-		t.Fatalf("valid call lost canonical identity: %#v", result)
-	}
-	if err := spec.ValidateResult(result.Result); err != nil {
-		t.Fatalf("good result failed deterministic sensor: %v", err)
+	if err := validateSuccessfulExecution(result, handlerCalls.Load(), installed.Descriptor.DefinitionRevision, spec.ValidateResult); err != nil {
+		t.Fatal(err)
 	}
 	for _, bad := range spec.BadResults {
 		t.Run("reject result "+bad.Name, func(t *testing.T) {
@@ -114,12 +105,35 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 			t.Fatalf("side-effect replay violated contract: result=%#v calls=%d", replayed, handlerCalls.Load())
 		}
 	}
+	if err := validateContractTrace(tracer, installed.Descriptor.DefinitionRevision); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func validateSuccessfulExecution(result tools.ExecutionResult, handlerCalls int32, revision string, sensor func(any) error) error {
+	if result.Error != nil {
+		return fmt.Errorf("valid call failed: %#v", result.Error)
+	}
+	if handlerCalls != 1 {
+		return fmt.Errorf("valid call invoked handler %d times", handlerCalls)
+	}
+	if result.ArgumentsHash == "" || result.DefinitionRevision != revision {
+		return errors.New("valid call lost canonical identity")
+	}
+	if err := sensor(result.Result); err != nil {
+		return fmt.Errorf("good result failed deterministic sensor: %w", err)
+	}
+	return nil
+}
+
+func validateContractTrace(tracer *recordingTracer, revision string) error {
 	if tracer.starts.Load() == 0 || tracer.starts.Load() != tracer.finishes.Load() {
-		t.Fatalf("trace callbacks are not paired: starts=%d finishes=%d", tracer.starts.Load(), tracer.finishes.Load())
+		return fmt.Errorf("trace callbacks are not paired: starts=%d finishes=%d", tracer.starts.Load(), tracer.finishes.Load())
 	}
-	if tracer.validHash == "" || tracer.validRevision != installed.Descriptor.DefinitionRevision {
-		t.Fatalf("trace lost contract identity: hash=%q revision=%q", tracer.validHash, tracer.validRevision)
+	if tracer.validHash == "" || tracer.validRevision != revision {
+		return fmt.Errorf("trace lost contract identity: hash=%q revision=%q", tracer.validHash, tracer.validRevision)
 	}
+	return nil
 }
 
 func validateContractSpec(spec BindingContract) error {

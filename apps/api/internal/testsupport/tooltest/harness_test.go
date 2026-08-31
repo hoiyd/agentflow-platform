@@ -92,6 +92,58 @@ func TestModelSchemaContractValidation(t *testing.T) {
 	}
 }
 
+func TestSuccessfulExecutionValidation(t *testing.T) {
+	valid := tools.ExecutionResult{
+		DefinitionRevision: "revision-1", ArgumentsHash: "hash-1", Result: map[string]any{"ok": true},
+	}
+	sensor := func(value any) error {
+		if value == nil {
+			return errors.New("missing result")
+		}
+		return nil
+	}
+	if err := validateSuccessfulExecution(valid, 1, "revision-1", sensor); err != nil {
+		t.Fatalf("valid execution rejected: %v", err)
+	}
+	tests := []struct {
+		name   string
+		result tools.ExecutionResult
+		calls  int32
+		sensor func(any) error
+	}{
+		{name: "execution error", result: tools.ExecutionResult{Error: &tools.ExecutionError{Code: tools.ErrorExecutionFailed}}, calls: 1, sensor: sensor},
+		{name: "handler count", result: valid, calls: 2, sensor: sensor},
+		{name: "contract identity", result: tools.ExecutionResult{DefinitionRevision: "wrong", ArgumentsHash: "hash-1"}, calls: 1, sensor: sensor},
+		{name: "result sensor", result: tools.ExecutionResult{DefinitionRevision: "revision-1", ArgumentsHash: "hash-1"}, calls: 1, sensor: sensor},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := validateSuccessfulExecution(test.result, test.calls, "revision-1", test.sensor); err == nil {
+				t.Fatal("invalid execution was accepted")
+			}
+		})
+	}
+}
+
+func TestContractTraceValidation(t *testing.T) {
+	valid := &recordingTracer{validHash: "hash-1", validRevision: "revision-1"}
+	valid.starts.Store(1)
+	valid.finishes.Store(1)
+	if err := validateContractTrace(valid, "revision-1"); err != nil {
+		t.Fatalf("valid trace rejected: %v", err)
+	}
+	unpaired := &recordingTracer{}
+	if err := validateContractTrace(unpaired, "revision-1"); err == nil {
+		t.Fatal("empty trace was accepted")
+	}
+	wrongIdentity := &recordingTracer{validRevision: "revision-1"}
+	wrongIdentity.starts.Store(1)
+	wrongIdentity.finishes.Store(1)
+	if err := validateContractTrace(wrongIdentity, "revision-1"); err == nil {
+		t.Fatal("trace without an argument hash was accepted")
+	}
+}
+
 func TestEffectGateFixtureLifecycle(t *testing.T) {
 	fixture := NewEffectGateFixture()
 	catalog, err := tools.NewCatalog(fixture.Binding("write_value"))

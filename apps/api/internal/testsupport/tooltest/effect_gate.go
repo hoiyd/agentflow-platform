@@ -77,16 +77,12 @@ func (f *EffectGateFixture) BeginToolEffect(record domain.ToolEffectRecord) (dom
 	record.Status = domain.ToolEffectExecuting
 	f.record = record
 	f.mu.Unlock()
-	if err := f.reach(context.Background(), EffectIntentPersisted); err != nil {
-		return domain.ToolEffectRecord{}, false, err
-	}
+	f.waitForRelease(EffectIntentPersisted)
 	return record, true, nil
 }
 
 func (f *EffectGateFixture) CompleteToolEffect(key string, result []byte) (domain.ToolEffectRecord, error) {
-	if err := f.reach(context.Background(), EffectSettlementPending); err != nil {
-		return domain.ToolEffectRecord{}, err
-	}
+	f.waitForRelease(EffectSettlementPending)
 	if f.completeErr != nil {
 		return domain.ToolEffectRecord{}, f.completeErr
 	}
@@ -157,4 +153,10 @@ func (f *EffectGateFixture) reach(ctx context.Context, phase EffectPhase) error 
 	case <-gate.release:
 		return nil
 	}
+}
+
+func (f *EffectGateFixture) waitForRelease(phase EffectPhase) {
+	gate := f.gates[phase]
+	gate.reachedOnce.Do(func() { close(gate.reached) })
+	<-gate.release
 }
