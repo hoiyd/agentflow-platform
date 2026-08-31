@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -53,9 +52,7 @@ func (c *Catalog) Register(binding Binding) error {
 	if binding.Descriptor.Parameters == nil {
 		return fmt.Errorf("tool %q parameters are required", name)
 	}
-	if _, err := json.Marshal(binding.Descriptor.Parameters); err != nil {
-		return fmt.Errorf("tool %q parameters must be JSON-compatible: %w", name, err)
-	}
+	binding.Descriptor.Name = name
 	concurrency := binding.Descriptor.Concurrency
 	switch concurrency.Mode {
 	case "", ConcurrencySerial, ConcurrencyReadOnly:
@@ -70,10 +67,14 @@ func (c *Catalog) Register(binding Binding) error {
 	default:
 		return fmt.Errorf("tool %q has unsupported concurrency mode %q", name, concurrency.Mode)
 	}
+	contract, err := compileArgumentContract(&binding.Descriptor)
+	if err != nil {
+		return fmt.Errorf("tool %q has invalid parameters: %w", name, err)
+	}
 	if _, exists := c.bindings[name]; exists {
 		return fmt.Errorf("tool %q already registered", name)
 	}
-	binding.Descriptor.Name = name
+	binding.contract = contract
 	c.bindings[name] = binding
 	c.enabled[name] = true
 	return nil

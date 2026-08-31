@@ -47,8 +47,8 @@ Structured Task State is injected as bounded JSON and recorded in the Manifest
 with a versioned reference such as `conversation_id:v3`. Its raw facts remain in
 the immutable Revision snapshot rather than the Manifest. See
 [Structured Durable Task State](task-state.md). New Runs enable this protocol
-through Runtime Snapshot v8; the resumable Snapshot window (v8-v9) always uses
-this protocol.
+through Runtime Snapshot v8; the current resumable Snapshot window (v9-v10)
+always uses this protocol.
 
 After assembly and application of effective request limits, the model adapter
 persists a Model Request Envelope for each physical attempt. The Manifest

@@ -79,6 +79,11 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if !containsString(prepared.Run.RuntimeSnapshot.Agent.Tools, taskstate.UpdateToolName) || !containsFrozenTool(prepared.Run.RuntimeSnapshot.Tools, taskstate.UpdateToolName) {
 		t.Fatalf("runtime-owned task state tool was not frozen: agent=%#v tools=%#v", prepared.Run.RuntimeSnapshot.Agent.Tools, prepared.Run.RuntimeSnapshot.Tools)
 	}
+	for _, frozen := range prepared.Run.RuntimeSnapshot.Tools {
+		if frozen.SchemaVersion != tools.ToolSchemaVersion || frozen.DefinitionRevision == "" {
+			t.Fatalf("tool schema contract was not frozen: %#v", frozen)
+		}
+	}
 	runtime.runBudget.MaxModelCalls = 99
 	if prepared.Run.RuntimeSnapshot.RunBudget.MaxModelCalls != 12 {
 		t.Fatal("runtime budget mutation changed the frozen snapshot")
@@ -190,6 +195,41 @@ func TestToolDefinitionMatchIncludesSideEffectDeclaration(t *testing.T) {
 	binding.Descriptor.SideEffect.Mode = tools.SideEffectNone
 	if toolDefinitionMatches(binding, frozen) {
 		t.Fatal("changed side-effect declaration must fail closed")
+	}
+}
+
+func TestToolDefinitionMatchUsesFrozenSchemaRevision(t *testing.T) {
+	catalog, err := tools.NewCatalog(tools.Binding{
+		Descriptor: tools.Descriptor{Name: "reader", Description: "read", Parameters: tools.ObjectSchema(nil, nil)},
+		Handler:    func(context.Context, json.RawMessage) (any, error) { return nil, nil },
+	})
+	if err != nil {
+		t.Fatalf("new catalog: %v", err)
+	}
+	binding, _ := catalog.Installed("reader")
+	frozen := domain.RuntimeToolSnapshot{
+		Name: binding.Descriptor.Name, Description: binding.Descriptor.Description,
+		Parameters: binding.Descriptor.Parameters, SchemaVersion: binding.Descriptor.SchemaVersion,
+		DefinitionRevision: binding.Descriptor.DefinitionRevision,
+	}
+	if !toolDefinitionMatches(binding, frozen) {
+		t.Fatal("matching schema revision was rejected")
+	}
+	frozen.DefinitionRevision = "sha256:changed"
+	if toolDefinitionMatches(binding, frozen) {
+		t.Fatal("changed schema revision must fail closed")
+	}
+}
+
+func TestCurrentRuntimeSnapshotRequiresToolSchemaContract(t *testing.T) {
+	snapshot := testRuntimeSnapshot()
+	snapshot.Tools = []domain.RuntimeToolSnapshot{{Name: "reader", Parameters: tools.ObjectSchema(nil, nil)}}
+	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "schema contract") {
+		t.Fatalf("expected missing tool contract error, got %v", err)
+	}
+	snapshot.SchemaVersion = domain.PreviousRuntimeSnapshotVersion
+	if err := validateRuntimeSnapshot(&snapshot); err != nil {
+		t.Fatalf("previous snapshot must retain legacy tool compatibility: %v", err)
 	}
 }
 

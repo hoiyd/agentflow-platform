@@ -68,7 +68,7 @@ func TestRunChildWorkerStepPropagatesStagePersistenceFailures(t *testing.T) {
 	}
 }
 
-func TestChildRuntimeSnapshotRejectsInvalidParentAndUsesLegacyFallbackPolicy(t *testing.T) {
+func TestChildRuntimeSnapshotRejectsInvalidAndReplayOnlyParents(t *testing.T) {
 	runtime, _, prepared := preparedCollaborationForChildTest(t)
 	invalid := prepared.Run
 	invalid.RuntimeSnapshot = nil
@@ -82,12 +82,8 @@ func TestChildRuntimeSnapshotRejectsInvalidParentAndUsesLegacyFallbackPolicy(t *
 	legacy := prepared.Run
 	legacy.RuntimeSnapshot.SchemaVersion = domain.TaskStateRuntimeSnapshotVersion
 	legacy.RuntimeSnapshot.ChildRunPolicy = nil
-	snapshot, err := runtime.childRuntimeSnapshot(legacy, prepared.WorkerAgent, "delegation", "turn", "stage")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if snapshot.Delegation == nil || snapshot.Delegation.TimeoutMS != runtime.childRunLimits.Timeout.Milliseconds() || snapshot.RunBudget == nil {
-		t.Fatalf("legacy fallback child policy=%#v budget=%#v", snapshot.Delegation, snapshot.RunBudget)
+	if _, err := runtime.childRuntimeSnapshot(legacy, prepared.WorkerAgent, "delegation", "turn", "stage"); !errors.Is(err, ErrRuntimeSnapshotResumeUnsupported) {
+		t.Fatalf("expected replay-only parent rejection, got %v", err)
 	}
 }
 

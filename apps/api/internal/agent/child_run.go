@@ -188,13 +188,6 @@ func (r *Runtime) childRuntimeSnapshot(parent domain.Run, selected domain.Agent,
 	contextConfig.HistoryRetrievalEnabled = false
 	contextConfig.CompactionMode = "off"
 	childPolicy := parent.RuntimeSnapshot.ChildRunPolicy
-	if childPolicy == nil {
-		limits := normalizeChildRunLimits(r.childRunLimits)
-		childPolicy = &domain.RuntimeChildRunPolicy{
-			MaxDepth: 1, TimeoutMS: limits.Timeout.Milliseconds(), SummaryMaxChars: limits.SummaryMaxChars,
-			AgentDefinitionSource: "runtime_snapshot.candidate_agents", RunBudget: limits.RunBudget,
-		}
-	}
 	return domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: ChatModeSingle,
 		Agent: selectedSnapshot, Model: parent.RuntimeSnapshot.Model, Tools: toolSnapshots,

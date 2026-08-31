@@ -23,19 +23,23 @@ const (
 )
 
 type ExecutionRequest struct {
-	CallID         string          `json:"call_id,omitempty"`
-	RunID          string          `json:"run_id,omitempty"`
-	StageID        string          `json:"stage_id,omitempty"`
-	TurnID         string          `json:"turn_id,omitempty"`
-	IdempotencyKey string          `json:"idempotency_key,omitempty"`
-	Tool           string          `json:"tool"`
-	Arguments      json.RawMessage `json:"arguments"`
+	CallID             string          `json:"call_id,omitempty"`
+	RunID              string          `json:"run_id,omitempty"`
+	StageID            string          `json:"stage_id,omitempty"`
+	TurnID             string          `json:"turn_id,omitempty"`
+	IdempotencyKey     string          `json:"idempotency_key,omitempty"`
+	Tool               string          `json:"tool"`
+	Arguments          json.RawMessage `json:"arguments"`
+	DefinitionRevision string          `json:"definition_revision,omitempty"`
+	ArgumentsHash      string          `json:"arguments_hash,omitempty"`
 }
 
 type ExecutionResult struct {
 	CallID              string          `json:"call_id,omitempty"`
 	Tool                string          `json:"tool"`
 	Arguments           json.RawMessage `json:"arguments"`
+	DefinitionRevision  string          `json:"-"`
+	ArgumentsHash       string          `json:"-"`
 	Result              any             `json:"result,omitempty"`
 	Error               *ExecutionError `json:"error,omitempty"`
 	DurationMS          int64           `json:"duration_ms"`
@@ -201,23 +205,38 @@ func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) (resul
 		CallID: request.CallID, Tool: request.Tool,
 		Arguments: append(json.RawMessage(nil), request.Arguments...),
 	}
+	var binding Binding
+	if e.catalog == nil {
+		result.Error = executionError(ErrorToolNotFound, fmt.Sprintf("tool %q not found", request.Tool), nil)
+	} else {
+		var ok bool
+		binding, ok = e.catalog.Resolve(request.Tool)
+		if !ok {
+			result.Error = executionError(ErrorToolNotFound, fmt.Sprintf("tool %q not found", request.Tool), nil)
+		} else if binding.contract == nil {
+			result.Error = executionError(ErrorExecutionFailed, "tool argument contract is unavailable", nil)
+		} else {
+			canonical, issue := binding.contract.validate(request.Arguments)
+			if canonical != nil {
+				request.Arguments = canonical
+				result.Arguments = append(json.RawMessage(nil), canonical...)
+				request.DefinitionRevision = binding.contract.definitionRevision
+				request.ArgumentsHash = argumentsHash(request.DefinitionRevision, canonical)
+				result.DefinitionRevision = request.DefinitionRevision
+				result.ArgumentsHash = request.ArgumentsHash
+			}
+			if issue != nil {
+				result.Error = invalidArgumentsError(issue)
+			}
+		}
+	}
 	if e.tracer != nil {
 		e.tracer.ToolStarted(ctx, request)
 		defer func() { e.tracer.ToolFinished(ctx, result) }()
 	}
 	defer func() { result.DurationMS = time.Since(started).Milliseconds() }()
 
-	if e.catalog == nil {
-		result.Error = executionError(ErrorToolNotFound, fmt.Sprintf("tool %q not found", request.Tool), nil)
-		return result
-	}
-	binding, ok := e.catalog.Resolve(request.Tool)
-	if !ok {
-		result.Error = executionError(ErrorToolNotFound, fmt.Sprintf("tool %q not found", request.Tool), nil)
-		return result
-	}
-	if !validObjectArguments(request.Arguments) {
-		result.Error = executionError(ErrorInvalidArgs, "tool arguments must be a JSON object", nil)
+	if result.Error != nil {
 		return result
 	}
 	if controller := budget.FromContext(ctx); controller != nil {
@@ -344,6 +363,8 @@ func (e *Executor) beginSideEffect(request ExecutionRequest, result ExecutionRes
 		result.Error = executionError(ErrorEffectJournal, "decode committed side-effect result", err)
 		return key, false, result
 	}
+	replayed.DefinitionRevision = request.DefinitionRevision
+	replayed.ArgumentsHash = request.ArgumentsHash
 	replayed.Replayed = true
 	return key, false, replayed
 }
@@ -360,6 +381,9 @@ func sideEffectKey(request ExecutionRequest) string {
 }
 
 func sideEffectRequestHash(request ExecutionRequest) string {
+	if request.ArgumentsHash != "" {
+		return request.ArgumentsHash
+	}
 	return hashExecutionIdentity(request.Tool, string(normalizeArguments(request.Arguments)))
 }
 
@@ -373,16 +397,19 @@ func executionError(code ErrorCode, message string, cause error) *ExecutionError
 	return &ExecutionError{Code: code, Message: message, Cause: cause}
 }
 
+func invalidArgumentsError(issue *ArgumentValidationIssue) *ExecutionError {
+	message := "tool arguments are invalid"
+	if issue != nil && issue.Path != "" {
+		message += " at " + issue.Path
+	}
+	return &ExecutionError{Code: ErrorInvalidArgs, Message: message, Argument: issue}
+}
+
 func normalizeArguments(args json.RawMessage) json.RawMessage {
 	if len(bytes.TrimSpace(args)) == 0 {
 		return json.RawMessage(`{}`)
 	}
 	return args
-}
-
-func validObjectArguments(args json.RawMessage) bool {
-	var object map[string]any
-	return json.Unmarshal(args, &object) == nil && object != nil
 }
 
 func effectivePolicy(defaults, override ExecutionPolicy) ExecutionPolicy {

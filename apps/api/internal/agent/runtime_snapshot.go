@@ -171,7 +171,10 @@ func snapshotTools(catalog *tools.Catalog, names []string) []domain.RuntimeToolS
 		}
 		items = append(items, domain.RuntimeToolSnapshot{
 			Name: binding.Descriptor.Name, Description: binding.Descriptor.Description,
-			Parameters: binding.Descriptor.Parameters, SideEffect: string(binding.Descriptor.SideEffect.Mode),
+			Parameters:         binding.Descriptor.Parameters,
+			SchemaVersion:      binding.Descriptor.SchemaVersion,
+			DefinitionRevision: binding.Descriptor.DefinitionRevision,
+			SideEffect:         string(binding.Descriptor.SideEffect.Mode),
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
@@ -260,6 +263,13 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	if snapshot.RunBudget == nil {
 		return errors.New("runtime snapshot has no run budget")
 	}
+	if snapshot.SchemaVersion >= domain.ToolContractRuntimeSnapshotVersion {
+		for _, tool := range snapshot.Tools {
+			if tool.SchemaVersion != tools.ToolSchemaVersion || strings.TrimSpace(tool.DefinitionRevision) == "" {
+				return fmt.Errorf("runtime snapshot tool %q has no valid schema contract", tool.Name)
+			}
+		}
+	}
 	if snapshot.Delegation != nil {
 		if snapshot.SchemaVersion < domain.DelegationRuntimeSnapshotVersion || snapshot.Mode != ChatModeSingle {
 			return errors.New("delegated runtime snapshot has an invalid schema or mode")
@@ -299,10 +309,15 @@ func effectiveAutonomousRunBudget(runBudget domain.RuntimeRunBudget, limits Auto
 }
 
 func toolDefinitionMatches(installed tools.Binding, frozen domain.RuntimeToolSnapshot) bool {
-	currentJSON, err := json.Marshal(domain.RuntimeToolSnapshot{
+	current := domain.RuntimeToolSnapshot{
 		Name: installed.Descriptor.Name, Description: installed.Descriptor.Description,
 		Parameters: installed.Descriptor.Parameters, SideEffect: string(installed.Descriptor.SideEffect.Mode),
-	})
+	}
+	if frozen.DefinitionRevision != "" || frozen.SchemaVersion != "" {
+		current.SchemaVersion = installed.Descriptor.SchemaVersion
+		current.DefinitionRevision = installed.Descriptor.DefinitionRevision
+	}
+	currentJSON, err := json.Marshal(current)
 	if err != nil {
 		return false
 	}
