@@ -116,7 +116,7 @@ Empty `api`, `core`, and `services` directories do not create useful boundaries.
 
 ### Keep Transport and Execution Separate
 
-`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.SemanticMemory` owns validation, embedding, and memory persistence; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and RAG evaluation. Agent execution remains in `agent` and `turn`.
+`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.Provider` separates Recall, proposal, explicit commit, asynchronous Turn sync, and lifecycle ownership behind narrow consumer interfaces; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and RAG evaluation. Agent execution remains in `agent` and `turn`.
 
 The HTTP package defines the small service interfaces it consumes. Concrete implementations are selected only by `app`, so adding caching, another embedding implementation, or a different service adapter does not change transport code.
 
@@ -131,10 +131,10 @@ Moving packages out of `internal` only to make the tree appear balanced would we
 1. Store selection and stale-run recovery.
 2. Model client limits, retry policy, and frozen Run Budget policy.
 3. Tool Manager and Agent Runtime configuration.
-4. Memory and Knowledge capabilities plus asynchronous Memory Curation.
+4. Memory Provider and Knowledge capabilities plus asynchronous Turn synchronization.
 5. Run admission and Context Assembly policy.
 6. HTTP server startup and graceful shutdown.
-7. Accepted Run drain, Memory Curator drain, then Store close.
+7. Accepted Run drain, Memory Provider drain, then Store close. Store remains open if either drain times out.
 
 ## Main Call Paths
 
@@ -147,7 +147,7 @@ HTTP chat request
   -> Context Assembly loads current Structured Task State
   -> typed Run Events
   -> shared Run completion
-  -> message persistence and asynchronous memory curation
+  -> message persistence and asynchronous memory synchronization
 
 HTTP RAG search or Agent context retrieval
   -> request or persisted Run Workspace scope
@@ -189,7 +189,7 @@ The call paths preserve these ownership boundaries:
 | Context Selector | Expands gated child hits within the matched document, Workspace/metadata scope, and token limit. Ranked hits remain separate from the context sent to the model. |
 | Context Transformer | Deduplicates sources, groups chunks by document, merges adjacent chunks, preserves contributing IDs, and reapplies the knowledge token limit. |
 | Document ingestion | Normalizes source text and derives versioned hashes, section parents, and UTF-8 byte offsets before persistence. Store adapters preserve these values. |
-| Run completion | Persists the assistant message, transitions the Run, flushes the terminal SSE event, and schedules conservative Memory Curation. All modes emit the same `domain.RunEvent` contract. |
+| Run completion | Persists the assistant message, transitions the Run, flushes the terminal SSE event, and schedules conservative Memory synchronization. All modes emit the same `domain.RunEvent` contract. |
 
 Detailed retrieval algorithms and failure boundaries live in
 [Knowledge / RAG](knowledge-rag.md). New executables should reuse the

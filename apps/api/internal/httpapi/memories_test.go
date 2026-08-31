@@ -21,7 +21,12 @@ func TestMemoryCreateAndSearchAPI(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	client := newLocalFallbackOpenAIClientForTest()
-	handler := &Handler{memories: memorypkg.NewSemanticMemory(fileStore, client)}
+	provider := memorypkg.NewBuiltinProvider(fileStore, client, memorypkg.ProviderOptions{})
+	if err := provider.Initialize(context.Background()); err != nil {
+		t.Fatalf("initialize memory provider: %v", err)
+	}
+	defer closeMemoryProvider(t, provider)
+	handler := &Handler{memories: provider}
 
 	createRequest := httptest.NewRequest(http.MethodPost, "/api/memories", bytes.NewBufferString(`{
 		"kind":"note","content":"AgentFlow uses typed run events."
@@ -69,8 +74,11 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	client := newLocalFallbackOpenAIClientForTest()
-	memoryCurator := memorypkg.NewCuratorWithOptions(fileStore, client, memorypkg.CuratorOptions{})
-	handler := &Handler{store: fileStore, modelClient: client, memoryCuration: memoryCurator}
+	provider := memorypkg.NewBuiltinProvider(fileStore, client, memorypkg.ProviderOptions{})
+	if err := provider.Initialize(context.Background()); err != nil {
+		t.Fatalf("initialize memory provider: %v", err)
+	}
+	handler := &Handler{store: fileStore, modelClient: client, memories: provider}
 	conversation, err := fileStore.CreateConversation("memory sync")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -87,11 +95,11 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 		CreatedAt:      time.Now().UTC(),
 	}
 
-	handler.enqueueMemoryCuration(message, run.ID)
+	handler.syncMemoryTurn(message, run.ID)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if err := memoryCurator.Close(ctx); err != nil {
-		t.Fatalf("drain memory curation: %v", err)
+	if err := provider.Close(ctx); err != nil {
+		t.Fatalf("drain memory provider: %v", err)
 	}
 	queryEmbedding, err := client.EmbedText(context.Background(), "pgvector semantic memory embeddings")
 	if err != nil {
@@ -123,7 +131,7 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 		domain.EventMemorySyncRequested, domain.EventMemorySyncCompleted,
 	}
 	if len(events) != len(wantEvents) {
-		t.Fatalf("unexpected memory curation events: %#v", events)
+		t.Fatalf("unexpected memory synchronization events: %#v", events)
 	}
 	for index, want := range wantEvents {
 		if events[index].Type != want {
@@ -138,10 +146,21 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 
 type memoryFailureOperations struct{ err error }
 
-func (s memoryFailureOperations) Create(context.Context, domain.Memory) (domain.Memory, error) {
+func (s memoryFailureOperations) Commit(context.Context, domain.Memory) (domain.Memory, error) {
 	return domain.Memory{}, s.err
 }
 
-func (s memoryFailureOperations) Search(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+func (s memoryFailureOperations) Recall(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
 	return nil, s.err
+}
+
+func (s memoryFailureOperations) SyncTurn(memorypkg.TurnSyncRequest) error { return s.err }
+
+func closeMemoryProvider(t *testing.T, provider memorypkg.Provider) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := provider.Close(ctx); err != nil {
+		t.Fatalf("close memory provider: %v", err)
+	}
 }

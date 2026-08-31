@@ -13,9 +13,21 @@ memories            accepted semantic knowledge used for recall
 
 Completing a Run no longer copies every user and assistant message into `memories`. Assistant output and ordinary conversation remain available through Messages, Replay, and future session-history retrieval.
 
-## Curation Flow
+## Provider Lifecycle and Curation Flow
 
-After the response has been flushed, the user message is submitted to the background Memory Curator:
+Memory is exposed through one replaceable lifecycle boundary:
+
+```text
+Initialize -> Recall / Propose / Commit / SyncTurn -> Close
+```
+
+Agent Runtime depends only on `Recall`; explicit Memory APIs depend on
+`Recall` and `Commit`; the post-response path submits `SyncTurn`. Provider
+construction, initialization, and shutdown remain in the application
+composition root, so changing the provider does not change the Turn Engine.
+
+After the response has been flushed, the user message is submitted to the
+built-in provider's background sync worker:
 
 ```text
 completed response
@@ -64,9 +76,19 @@ memory.candidate.proposed
 memory.candidate.accepted | memory.candidate.rejected | memory.candidate.failed
 memory.sync.requested
 memory.sync.completed | memory.sync.failed
+memory.sync.rejected
+memory.recall.failed
 ```
 
-The Curator uses a bounded, ordered background queue and drains accepted work during shutdown. Adaptive model requests share the normal model concurrency, rate-limit, retry, and timeout controls. Extraction, embedding, queue, Candidate, or Memory failures are observable, but they do not change a successfully completed Run.
+The provider uses a bounded, ordered background queue and drains accepted work
+during shutdown. A stable Turn sync key and Candidate ID make duplicate
+delivery idempotent across queue attempts and process retries. Transient
+provider operations use bounded exponential retries. Adaptive model requests
+share the normal model concurrency, rate-limit, retry, and timeout controls.
+Extraction, embedding, queue, Candidate, or Memory failures are observable,
+but they do not change a successfully completed Run. Recall failure degrades
+to an empty Memory set and emits `memory.recall.failed`; ordinary Chat can
+therefore continue without silently hiding the auxiliary failure.
 
 The explicit `POST /api/memories` and `POST /api/memories/search` APIs remain
 available and are consumed by the **Memory** workspace. Operators can save an
@@ -77,7 +99,7 @@ replace/remove mutations are not implemented; implicit message copying has
 been replaced with conservative curation.
 
 Memory writes and recall always carry a normalized Workspace namespace. The
-Curator inherits it from the source Message/Run; explicit HTTP requests resolve
+provider inherits it from the source Message/Run; explicit HTTP requests resolve
 it from the request, and omitted scope becomes `default_workspace`. File and
 Postgres search apply that predicate before similarity ranking, so omission is
 never an unfiltered recall. User/Project scope, Membership, and Memory-specific
@@ -93,5 +115,5 @@ ACL/content-trust policy remain future authorization work.
   controls persistence.
 - Workspace namespace isolation is not proof of identity or permission to read
   that namespace.
-- Memory Curation is auxiliary platform work. Its failure is observable but
+- Memory synchronization is auxiliary platform work. Its failure is observable but
   cannot retroactively fail an already completed Run.

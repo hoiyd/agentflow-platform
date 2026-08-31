@@ -115,7 +115,7 @@ flowchart LR
     Scope --> Knowledge["Knowledge Base"]
     Knowledge --> Retrieval["Semantic + Keyword -> RRF -> Rerank -> Gate"]
     Retrieval --> Transform["Parent/adjacent selection -> Dedup/Merge"]
-    Scope --> Memory["Memory Curator"]
+    Scope --> Memory["Memory Provider"]
     Memory --> Candidates["Candidate policy"]
     Scope --> Store["File Store / Postgres + pgvector"]
     Events --> Store

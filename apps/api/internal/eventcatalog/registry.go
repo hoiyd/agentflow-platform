@@ -170,8 +170,10 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventCitationResolved}, DurableFact, optional, "event.TracePayload", none, "replay")
 	add([]domain.RunEventType{domain.EventMemoryCandidateProposed}, DurableFact, optional, "event.MemoryCandidatePayload", start("memory_candidate"), "replay")
 	add([]domain.RunEventType{domain.EventMemoryCandidateAccepted, domain.EventMemoryCandidateRejected}, DurableFact, optional, "event.MemoryCandidatePayload", terminal("memory_candidate", domain.EventMemoryCandidateProposed), "replay")
-	add([]domain.RunEventType{domain.EventMemoryCandidateFailed}, DurableFact, optional, "event.MemoryCandidatePayload", terminal("memory_candidate", domain.EventMemoryCandidateProposed), "run_projection", "replay")
+	add([]domain.RunEventType{domain.EventMemoryCandidateFailed}, DurableFact, optional, "event.MemoryCandidatePayload", none, "run_projection", "replay")
+	add([]domain.RunEventType{domain.EventMemoryRecallFailed}, DurableFact, optional, "event.TracePayload", none, "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventMemorySyncRequested}, DurableFact, optional, "event.TracePayload", start("memory_sync"), "replay")
+	add([]domain.RunEventType{domain.EventMemorySyncRejected}, DurableFact, optional, "event.TracePayload", none, "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventMemorySyncCompleted}, DurableFact, optional, "event.TracePayload", terminal("memory_sync", domain.EventMemorySyncRequested), "replay")
 	add([]domain.RunEventType{domain.EventMemorySyncFailed}, DurableFact, optional, "event.TracePayload", terminal("memory_sync", domain.EventMemorySyncRequested), "run_projection", "replay")
 
@@ -212,7 +214,8 @@ func producerFor(eventType domain.RunEventType) string {
 	case domain.EventTaskStateUpdated:
 		return "taskstate"
 	case domain.EventMemoryCandidateProposed, domain.EventMemoryCandidateAccepted, domain.EventMemoryCandidateRejected,
-		domain.EventMemoryCandidateFailed, domain.EventMemorySyncRequested, domain.EventMemorySyncCompleted, domain.EventMemorySyncFailed:
+		domain.EventMemoryCandidateFailed, domain.EventMemoryRecallFailed,
+		domain.EventMemorySyncRequested, domain.EventMemorySyncRejected, domain.EventMemorySyncCompleted, domain.EventMemorySyncFailed:
 		return "memory"
 	case domain.EventVerificationRequested, domain.EventVerificationStarted, domain.EventVerificationPassed,
 		domain.EventVerificationFailed, domain.EventVerificationBlocked, domain.EventVerificationStale,

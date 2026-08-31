@@ -23,11 +23,13 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 | `delegation.failed` | durable | 1 | run+stage | delegation | `event.TracePayload` | delegation:terminal | `delegation.created` | delegation, replay |
 | `delegation.started` | durable | 1 | run+stage | delegation | `event.TracePayload` | delegation:transition | `` | delegation, replay |
 | `memory.candidate.accepted` | durable | 1 | run | memory | `event.MemoryCandidatePayload` | memory_candidate:terminal | `memory.candidate.proposed` | replay |
-| `memory.candidate.failed` | durable | 1 | run | memory | `event.MemoryCandidatePayload` | memory_candidate:terminal | `memory.candidate.proposed` | run_projection, replay |
+| `memory.candidate.failed` | durable | 1 | run | memory | `event.MemoryCandidatePayload` | none | `` | run_projection, replay |
 | `memory.candidate.proposed` | durable | 1 | run | memory | `event.MemoryCandidatePayload` | memory_candidate:start | `` | replay |
 | `memory.candidate.rejected` | durable | 1 | run | memory | `event.MemoryCandidatePayload` | memory_candidate:terminal | `memory.candidate.proposed` | replay |
+| `memory.recall.failed` | durable | 1 | run | memory | `event.TracePayload` | none | `` | run_projection, replay |
 | `memory.sync.completed` | durable | 1 | run | memory | `event.TracePayload` | memory_sync:terminal | `memory.sync.requested` | replay |
 | `memory.sync.failed` | durable | 1 | run | memory | `event.TracePayload` | memory_sync:terminal | `memory.sync.requested` | run_projection, replay |
+| `memory.sync.rejected` | durable | 1 | run | memory | `event.TracePayload` | none | `` | run_projection, replay |
 | `memory.sync.requested` | durable | 1 | run | memory | `event.TracePayload` | memory_sync:start | `` | replay |
 | `model.completed` | durable | 1 | run | agent/turn | `event.ModelPayload` | model:terminal | `model.started` | run_projection, replay |
 | `model.delta` | live | 1 | run | agent/turn | `event.ModelPayload` | none | `` | live_ui |

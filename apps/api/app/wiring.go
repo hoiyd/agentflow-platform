@@ -25,10 +25,10 @@ import (
 )
 
 type applicationDependencies struct {
-	store         store.Store
-	handler       *httpapi.Handler
-	memoryCurator *memorypkg.Curator
-	runController *concurrency.RunController
+	store          store.Store
+	handler        *httpapi.Handler
+	memoryProvider memorypkg.Provider
+	runController  *concurrency.RunController
 }
 
 func buildDependencies(cfg config.Config) (applicationDependencies, error) {
@@ -77,6 +77,10 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	verificationEngine := verification.NewEngine(appStore, verifierRegistry)
 	retrievalPipeline := rag.NewRetrievalPipeline(appStore)
 	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, modelClient, retrievalPipeline)
+	memoryProvider := newMemoryProvider(cfg, appStore, modelClient)
+	if err := memoryProvider.Initialize(context.Background()); err != nil {
+		return applicationDependencies{}, fmt.Errorf("initialize memory provider: %w", err)
+	}
 
 	agentRuntime := agent.NewRuntime(agent.RuntimeOptions{
 		Store:           appStore,
@@ -99,6 +103,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			OutputCostPerMillionTokensMicros: cfg.ModelOutputCostPerMillionMicros,
 		},
 		KnowledgeRetriever: retrievalPipeline,
+		MemoryRecall:       memoryProvider,
 		LiveEvents:         eventHub,
 		ChildRuns: agent.ChildRunLimits{
 			MaxConcurrent: cfg.MaxConcurrentChildRuns, MaxPerParent: cfg.MaxChildRunsPerParent,
@@ -111,8 +116,6 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			},
 		},
 	})
-	semanticMemory := memorypkg.NewSemanticMemory(appStore, modelClient)
-	memoryCurator := newMemoryCurator(cfg, appStore, modelClient)
 	runController := concurrency.NewRunController(concurrency.RunOptions{
 		MaxConcurrent: cfg.MaxConcurrentRuns,
 		QueueSize:     cfg.RunQueueSize,
@@ -123,9 +126,8 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		ModelClient:    modelClient,
 		Tools:          toolManager,
 		AgentRuntime:   agentRuntime,
-		Memory:         semanticMemory,
+		Memory:         memoryProvider,
 		Knowledge:      knowledgeBase,
-		MemoryCuration: memoryCurator,
 		RunController:  runController,
 		Verification:   verificationEngine,
 		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
@@ -133,12 +135,12 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	if err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = memoryCurator.Close(ctx)
+		_ = memoryProvider.Close(ctx)
 		return applicationDependencies{}, fmt.Errorf("create http handler: %w", err)
 	}
 
 	cleanupStore = false
-	return applicationDependencies{store: appStore, handler: handler, memoryCurator: memoryCurator, runController: runController}, nil
+	return applicationDependencies{store: appStore, handler: handler, memoryProvider: memoryProvider, runController: runController}, nil
 }
 
 type answerRelevanceEmbeddingClient interface {
@@ -158,13 +160,15 @@ func newAnswerRelevanceEmbedder(client answerRelevanceEmbeddingClient) verificat
 	}
 }
 
-func newMemoryCurator(cfg config.Config, appStore store.Store, modelClient *openai.Client) *memorypkg.Curator {
+func newMemoryProvider(cfg config.Config, appStore store.Store, modelClient *openai.Client) *memorypkg.BuiltinProvider {
 	var fallback memorypkg.CandidateExtractor
 	adaptiveEnabled := cfg.MemoryAdaptiveExtractionMode == memorypkg.AdaptiveModeShadow || cfg.MemoryAdaptiveExtractionMode == memorypkg.AdaptiveModeAuto
 	if strings.TrimSpace(cfg.OpenAIAPIKey) != "" && adaptiveEnabled {
 		fallback = memorypkg.AdaptiveCandidateExtractor{Model: modelClient}
 	}
-	return memorypkg.NewCuratorWithOptions(appStore, modelClient, memorypkg.CuratorOptions{
+	return memorypkg.NewBuiltinProvider(appStore, modelClient, memorypkg.ProviderOptions{
+		QueueSize: cfg.MemorySyncQueueSize, JobTimeout: cfg.MemorySyncJobTimeout,
+		MaxAttempts: cfg.MemoryProviderMaxAttempts, RetryBaseDelay: cfg.MemoryProviderRetryBaseDelay,
 		Extractor: memorypkg.CompositeCandidateExtractor{
 			Primary: memorypkg.RuleBasedCandidateExtractor{}, Fallback: fallback,
 		},

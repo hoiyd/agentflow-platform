@@ -15,6 +15,7 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	tracepkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
+	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/sessionhistory"
@@ -41,6 +42,7 @@ type Runtime struct {
 	liveEvents            eventpkg.LivePublisher
 	delegations           *delegation.Controller
 	childRunLimits        ChildRunLimits
+	memoryRecall          memorypkg.Recaller
 }
 
 type RuntimeStore interface {
@@ -64,7 +66,6 @@ type RuntimeStore interface {
 	store.RunUsageStore
 	store.CheckpointStore
 	store.DelegationStore
-	SearchMemories(domain.MemorySearch) ([]domain.RetrievedMemory, error)
 }
 
 type AutonomousLimits struct {
@@ -102,6 +103,7 @@ type RuntimeOptions struct {
 	CheckpointProvider checkpoint.Provider
 	LiveEvents         eventpkg.LivePublisher
 	ChildRuns          ChildRunLimits
+	MemoryRecall       memorypkg.Recaller
 }
 
 func NewRuntime(options RuntimeOptions) *Runtime {
@@ -134,6 +136,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		taskStates:            taskStates,
 		liveEvents:            options.LiveEvents,
 		childRunLimits:        normalizeChildRunLimits(options.ChildRuns),
+		memoryRecall:          options.MemoryRecall,
 	}
 	runtime.delegations = delegation.NewController(delegation.Options{
 		MaxConcurrent: runtime.childRunLimits.MaxConcurrent,
@@ -388,18 +391,32 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	payload["embedding_estimated"] = embedding.Estimated
 	var memories []domain.RetrievedMemory
 	if memoryEnabled {
-		var err error
-		memories, err = r.store.SearchMemories(domain.MemorySearch{
-			WorkspaceID:       workspaceID,
-			Query:             query,
-			Embedding:         embedding.Vector,
-			EmbeddingProvider: embedding.Provider,
-			EmbeddingModel:    embedding.Model,
-			Limit:             5,
-		})
-		if err != nil {
-			payload["memory_error"] = err.Error()
+		var recallErr error
+		if r.memoryRecall == nil {
+			recallErr = memorypkg.ErrProviderNotInitialized
+		} else {
+			memories, recallErr = r.memoryRecall.Recall(ctx, domain.MemorySearch{
+				WorkspaceID:       workspaceID,
+				Query:             query,
+				Embedding:         embedding.Vector,
+				EmbeddingProvider: embedding.Provider,
+				EmbeddingModel:    embedding.Model,
+				Limit:             5,
+			})
+		}
+		if recallErr != nil {
+			payload["memory_error"] = recallErr.Error()
 			memories = nil
+			_ = r.runEventSink().Publish(ctx, domain.RunEvent{
+				Type:           domain.EventMemoryRecallFailed,
+				RunID:          runID,
+				ConversationID: conversationID,
+				Payload: failure.Merge(map[string]any{
+					"workspace_id": workspaceID,
+					"query":        truncateRuntimeText(query, 1200),
+					"error":        recallErr.Error(),
+				}, recallErr),
+			})
 		}
 	}
 	var chunks []domain.RetrievedDocumentChunk

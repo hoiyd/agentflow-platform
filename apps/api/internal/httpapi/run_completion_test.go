@@ -15,8 +15,16 @@ import (
 	"agentflow-platform/apps/api/internal/verification"
 )
 
-type recordingMemoryCurationQueue struct {
-	jobs []memorypkg.CurationJob
+type recordingMemoryOperations struct {
+	jobs []memorypkg.TurnSyncRequest
+}
+
+func (m *recordingMemoryOperations) Commit(_ context.Context, item domain.Memory) (domain.Memory, error) {
+	return item, nil
+}
+
+func (m *recordingMemoryOperations) Recall(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+	return nil, nil
 }
 
 type listMessagesErrorStore struct {
@@ -224,7 +232,7 @@ func TestVerifyRunRetriesRecoverableEvidenceAndCompletes(t *testing.T) {
 	}
 }
 
-func (q *recordingMemoryCurationQueue) Enqueue(job memorypkg.CurationJob) error {
+func (q *recordingMemoryOperations) SyncTurn(job memorypkg.TurnSyncRequest) error {
 	q.jobs = append(q.jobs, job)
 	return nil
 }
@@ -248,8 +256,8 @@ func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
 	runtime := agent.NewRuntime(agent.RuntimeOptions{
 		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(),
 	})
-	memoryCuration := &recordingMemoryCurationQueue{}
-	handler := &Handler{store: fileStore, agentRuntime: runtime, memoryCuration: memoryCuration}
+	memoryProvider := &recordingMemoryOperations{}
+	handler := &Handler{store: fileStore, agentRuntime: runtime, memories: memoryProvider}
 	response := httptest.NewRecorder()
 	userMessage := domain.Message{
 		ID: "msg_user", ConversationID: conversation.ID, Role: "user",
@@ -275,8 +283,8 @@ func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
 	if len(messages) != 1 || messages[0].Role != "assistant" || messages[0].Content != "Completed response." {
 		t.Fatalf("unexpected persisted messages: %#v", messages)
 	}
-	if len(memoryCuration.jobs) != 1 || memoryCuration.jobs[0].Message.ID != userMessage.ID || memoryCuration.jobs[0].Message.Role != "user" {
-		t.Fatalf("completion should curate only the user message: %#v", memoryCuration.jobs)
+	if len(memoryProvider.jobs) != 1 || memoryProvider.jobs[0].Message.ID != userMessage.ID || memoryProvider.jobs[0].Message.Role != "user" {
+		t.Fatalf("completion should sync only the user message: %#v", memoryProvider.jobs)
 	}
 }
 

@@ -111,7 +111,15 @@ type Config struct {
 	MemoryAdaptiveExtractionMode string
 	// MemoryAdaptiveMinConfidence is the commit threshold for model-proposed candidates.
 	MemoryAdaptiveMinConfidence float64
-	RouterMode                  string
+	// MemorySyncQueueSize bounds accepted post-response turn synchronization work.
+	MemorySyncQueueSize int
+	// MemorySyncJobTimeout bounds proposal and commit work for one accepted turn.
+	MemorySyncJobTimeout time.Duration
+	// MemoryProviderMaxAttempts includes the initial provider operation attempt.
+	MemoryProviderMaxAttempts int
+	// MemoryProviderRetryBaseDelay is the first exponential retry delay.
+	MemoryProviderRetryBaseDelay time.Duration
+	RouterMode                   string
 	// AutonomousMaxIterations is a mode-owned loop bound, independent of model-call count.
 	AutonomousMaxIterations int
 	// AutonomousMaxRuntime is folded into the frozen Run Budget for new Autonomous Runs.
@@ -196,6 +204,10 @@ func Load() Config {
 		ContextCompactionTimeout:          getDurationEnv("CONTEXT_COMPACTION_TIMEOUT", 45*time.Second),
 		MemoryAdaptiveExtractionMode:      normalizeAdaptiveMemoryMode(getEnv("MEMORY_ADAPTIVE_EXTRACTION_MODE", "shadow")),
 		MemoryAdaptiveMinConfidence:       getUnitFloatEnv("MEMORY_ADAPTIVE_MIN_CONFIDENCE", 0.85),
+		MemorySyncQueueSize:               getIntEnv("MEMORY_SYNC_QUEUE_SIZE", 256),
+		MemorySyncJobTimeout:              getDurationEnv("MEMORY_SYNC_JOB_TIMEOUT", 30*time.Second),
+		MemoryProviderMaxAttempts:         getIntEnv("MEMORY_PROVIDER_MAX_ATTEMPTS", 3),
+		MemoryProviderRetryBaseDelay:      getDurationEnv("MEMORY_PROVIDER_RETRY_BASE_DELAY", 100*time.Millisecond),
 		RouterMode:                        normalizeRouterMode(getEnv("ROUTER_MODE", "auto")),
 		AutonomousMaxIterations:           getIntEnv("AUTONOMOUS_MAX_ITERATIONS", 5),
 		AutonomousMaxRuntime:              getAutonomousRuntime(),

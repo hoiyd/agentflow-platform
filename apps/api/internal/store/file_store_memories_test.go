@@ -97,3 +97,24 @@ func TestFileStoreMemoryCandidateRoundTripIsIdempotent(t *testing.T) {
 		t.Fatalf("candidate round trip: items=%#v err=%v", items, err)
 	}
 }
+
+func TestFileStoreMemoryWriteIsIdempotentByID(t *testing.T) {
+	store, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	item := domain.Memory{ID: "mem_retry", Kind: "fact", Content: "first value"}
+	if _, err := store.CreateMemory(item, domain.MemoryEmbedding{Provider: "test", Model: "v1", Embedding: []float64{1, 0}}); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	item.Content = "retry value"
+	if _, err := store.CreateMemory(item, domain.MemoryEmbedding{Provider: "test", Model: "v1", Embedding: []float64{0, 1}}); err != nil {
+		t.Fatalf("retry write: %v", err)
+	}
+	if len(store.data.Memories) != 1 || len(store.data.MemoryEmbeddings) != 1 {
+		t.Fatalf("retry created duplicate rows: memories=%d embeddings=%d", len(store.data.Memories), len(store.data.MemoryEmbeddings))
+	}
+	if store.data.Memories[0].Content != "retry value" || store.data.MemoryEmbeddings[0].Embedding[1] != 1 {
+		t.Fatalf("retry did not upsert state: memory=%#v embedding=%#v", store.data.Memories[0], store.data.MemoryEmbeddings[0])
+	}
+}
