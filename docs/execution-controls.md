@@ -46,7 +46,7 @@ capacity, resource consumption, timeouts, and stopping conditions.
 | Run Budget | one persisted Run | logical calls, provider tokens, tools, active runtime, cost | `budget.Tracker` + Usage Store | yes |
 | Context Assembly | one logical Model Call | context tokens | `contextassembly.Assembler` | config frozen with Run |
 | Loop Guard | one Loop (`autonomous`) Run | iterations and accumulated output characters | `autonomous` runtime | config frozen with Run |
-| Tool Policy | one Tool Call or batch | timeout, bytes, parallel group, side-effect idempotency | `tools.Executor` | schema and side-effect declaration frozen; binding live |
+| Tool Policy | one Tool Call or batch | timeout, bytes, parallel group, side-effect idempotency, artifact spill | `tools.Executor` | schema and side-effect declaration frozen; artifact metadata durable |
 | Verification | one contracted Run | attempts, timeout, artifacts | `verification.Engine` | contract and evidence |
 | Recovery | startup scan + Resume | stale lifecycle, Stage checkpoints, Tool effects | `recovery` + `checkpoint` | recovery state persisted; threshold live |
 | Observability | one Run | Run Events and derived Trace, Replay, and Episode Report views | Event Store / projection builders | durable events only; projections do not enforce policy |
@@ -226,6 +226,9 @@ detect repetition, oscillation, and lack of progress.
 | Maximum argument schema | 65,536 bytes | one registered Tool |
 | Maximum arguments | 65,536 bytes | one Tool Call |
 | Maximum result | 20,000 bytes | one Tool Result |
+| `TOOL_RESULT_MAX_BATCH_BYTES` | 8,000 bytes | one source-ordered Tool batch |
+| `TOOL_ARTIFACT_MAX_BYTES` | 5 MiB | one persisted Tool Artifact |
+| `TOOL_ARTIFACT_PREVIEW_BYTES` | 1,000 bytes | one model-visible spill preview |
 | Batch concurrency | 4 workers | one Tool batch |
 
 Catalog registration normalizes and compiles each parameter schema as JSON
@@ -252,7 +255,10 @@ definition revision are frozen with new Snapshot v10 Runs. Snapshot v9 remains
 resumable through its legacy full-definition comparison. The live Binding owns
 handler, timeout, result-size, and concurrency policy. Execution is serial
 unless a Binding declares a safe `read_only` or keyed parallel group. Oversized
-results retain a UTF-8-safe preview, original byte count, and truncation marker.
+results are redacted and persisted as immutable Tool Artifacts; model Context
+receives a UTF-8-safe bounded preview and opaque recovery reference. Batch
+accounting includes both raw results and previews, so adding more Tools cannot
+silently multiply Context usage. See [Tool Result Artifact Governance](tool-result-artifacts.md).
 
 Tool timeout bounds one handler. Run runtime budget bounds cumulative active
 execution; neither substitutes for the other.

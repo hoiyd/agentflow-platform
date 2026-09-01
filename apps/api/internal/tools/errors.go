@@ -15,6 +15,7 @@ const (
 	ErrorIdempotencyRequired  ErrorCode = "idempotency_required"
 	ErrorEffectReconciliation ErrorCode = "side_effect_reconciliation_required"
 	ErrorEffectJournal        ErrorCode = "side_effect_journal_failed"
+	ErrorArtifactUnavailable  ErrorCode = "artifact_unavailable"
 )
 
 type ExecutionError struct {
@@ -57,6 +58,8 @@ func (e *ExecutionError) FailureInfo() failure.Info {
 	case ErrorIdempotencyRequired:
 		info.Category = failure.CategoryValidation
 	case ErrorEffectReconciliation, ErrorEffectJournal:
+		info.Category = failure.CategoryAvailability
+	case ErrorArtifactUnavailable:
 		info.Category = failure.CategoryAvailability
 	}
 	return info

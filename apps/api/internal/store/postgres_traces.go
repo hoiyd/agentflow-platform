@@ -351,6 +351,10 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 	if err != nil {
 		return domain.RunReplay{}, false, err
 	}
+	toolArtifacts, err := s.ListToolArtifacts(runID)
+	if err != nil {
+		return domain.RunReplay{}, false, err
+	}
 	taskStateRevisions, err := s.ListTaskStateRevisions(run.ConversationID)
 	if err != nil {
 		return domain.RunReplay{}, false, err
@@ -380,6 +384,7 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 		UsageLedger:           readModel.Usage.Ledger,
 		StageCheckpoints:      checkpoints,
 		ToolEffects:           domain.SummarizeToolEffects(toolEffects),
+		ToolArtifacts:         toolArtifacts,
 		VerificationEvidence:  verificationEvidence,
 		VerificationArtifacts: verificationArtifacts,
 		TaskStateRevisions:    taskStateRevisions,

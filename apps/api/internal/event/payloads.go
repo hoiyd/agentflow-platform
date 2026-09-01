@@ -202,6 +202,28 @@ type ToolPayload struct {
 	Error      string `json:"error,omitempty"`
 }
 
+type ToolArtifactPayload struct {
+	ArtifactID    string `json:"artifact_id"`
+	ToolCallID    string `json:"tool_call_id,omitempty"`
+	ToolName      string `json:"tool_name,omitempty"`
+	Operation     string `json:"operation"`
+	Offset        int    `json:"offset,omitempty"`
+	Limit         int    `json:"limit,omitempty"`
+	ReturnedBytes int    `json:"returned_bytes,omitempty"`
+	MatchCount    int    `json:"match_count,omitempty"`
+	ContentHash   string `json:"content_hash,omitempty"`
+	StoredBytes   int    `json:"stored_bytes,omitempty"`
+}
+
+func (ToolArtifactPayload) supports(eventType domain.RunEventType) bool {
+	switch eventType {
+	case domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired:
+		return true
+	default:
+		return false
+	}
+}
+
 func (ToolPayload) supports(eventType domain.RunEventType) bool {
 	switch eventType {
 	case domain.EventToolStarted, domain.EventToolCompleted, domain.EventToolFailed:

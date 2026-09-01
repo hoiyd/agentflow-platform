@@ -37,6 +37,7 @@ type fileData struct {
 	ContextCompactions    []domain.ContextCompaction      `json:"context_compactions"`
 	TaskStateRevisions    []domain.TaskStateRevision      `json:"task_state_revisions"`
 	ModelRequestRecords   []domain.ModelRequestRecord     `json:"model_request_records"`
+	ToolArtifacts         []domain.ToolArtifact           `json:"tool_artifacts"`
 	MemoryCandidates      []domain.MemoryCandidate        `json:"memory_candidates"`
 	Memories              []domain.Memory                 `json:"memories"`
 	MemoryEmbeddings      []domain.MemoryEmbedding        `json:"memory_embeddings"`
@@ -51,6 +52,9 @@ var _ Store = (*FileStore)(nil)
 func NewFileStore(path string) (*FileStore, error) {
 	store := &FileStore{path: path}
 	if err := store.load(); err != nil {
+		return nil, err
+	}
+	if err := store.purgeExpiredToolArtifactContent(time.Now().UTC()); err != nil {
 		return nil, err
 	}
 	return store, nil
@@ -171,6 +175,7 @@ func emptyFileData() fileData {
 		ContextCompactions:  []domain.ContextCompaction{},
 		TaskStateRevisions:  []domain.TaskStateRevision{},
 		ModelRequestRecords: []domain.ModelRequestRecord{},
+		ToolArtifacts:       []domain.ToolArtifact{},
 		MemoryCandidates:    []domain.MemoryCandidate{},
 		Memories:            []domain.Memory{},
 		MemoryEmbeddings:    []domain.MemoryEmbedding{},
@@ -247,6 +252,9 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 	}
 	if s.data.Runs == nil {
 		s.data.Runs = []domain.Run{}
+	}
+	if s.data.ToolArtifacts == nil {
+		s.data.ToolArtifacts = []domain.ToolArtifact{}
 	}
 	if s.data.CollaborationSteps == nil {
 		s.data.CollaborationSteps = []domain.CollaborationStep{}

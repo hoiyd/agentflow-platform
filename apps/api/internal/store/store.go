@@ -135,6 +135,15 @@ type ModelRequestStore interface {
 	ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error)
 }
 
+// ToolArtifactStore persists oversized tool results outside model context and
+// exposes only bounded retrieval operations to runtime and HTTP consumers.
+type ToolArtifactStore interface {
+	CreateToolArtifact(domain.ToolArtifact, []byte) (domain.ToolArtifact, error)
+	ListToolArtifacts(runID string) ([]domain.ToolArtifact, error)
+	ReadToolArtifact(runID string, artifactID string, offset int, limit int) (domain.ToolArtifactRead, error)
+	SearchToolArtifact(runID string, artifactID string, query string, maxMatches int) (domain.ToolArtifactSearchResult, error)
+}
+
 type MemoryStore interface {
 	CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error)
 	SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error)
@@ -210,6 +219,7 @@ type Store interface {
 	ContextCompactionStore
 	TaskStateStore
 	ModelRequestStore
+	ToolArtifactStore
 	MemoryStore
 	MemoryCandidateStore
 	DocumentStore

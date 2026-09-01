@@ -190,6 +190,28 @@ var postgresMigrations = []string{
 		updated_at timestamptz NOT NULL
 	)`,
 	`CREATE INDEX IF NOT EXISTS tool_effects_run_stage_idx ON tool_effects(run_id, stage_id, created_at)`,
+	`CREATE TABLE IF NOT EXISTS tool_artifacts (
+		id text PRIMARY KEY,
+		schema_version integer NOT NULL,
+		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+		stage_id text NOT NULL DEFAULT '',
+		turn_id text NOT NULL DEFAULT '',
+		tool_call_id text NOT NULL,
+		tool_name text NOT NULL,
+		definition_revision text NOT NULL DEFAULT '',
+		media_type text NOT NULL,
+		content_hash text NOT NULL,
+		original_byte_size integer NOT NULL,
+		stored_byte_size integer NOT NULL,
+		redacted boolean NOT NULL DEFAULT false,
+		redaction_strategy text NOT NULL DEFAULT '',
+		redaction_count integer NOT NULL DEFAULT 0,
+		content bytea NOT NULL,
+		created_at timestamptz NOT NULL,
+		expires_at timestamptz
+	)`,
+	`CREATE INDEX IF NOT EXISTS tool_artifacts_run_created_idx ON tool_artifacts(run_id, created_at, id)`,
+	`CREATE INDEX IF NOT EXISTS tool_artifacts_call_idx ON tool_artifacts(run_id, tool_call_id)`,
 	`CREATE TABLE IF NOT EXISTS verification_evidence (
 		id text PRIMARY KEY,
 		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,

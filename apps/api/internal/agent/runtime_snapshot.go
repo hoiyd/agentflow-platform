@@ -116,23 +116,41 @@ func (r *Runtime) currentCatalog() (*tools.Catalog, error) {
 			return nil, err
 		}
 	}
-	if r.taskStates == nil {
+	bindings := make([]tools.Binding, 0, 3)
+	if r.taskStates != nil {
+		bindings = append(bindings, r.taskStates.ToolBinding())
+	}
+	if r.toolArtifacts != nil {
+		bindings = append(bindings, r.toolArtifacts.ToolBindings()...)
+	}
+	if len(bindings) == 0 {
 		return catalog, nil
 	}
-	return catalog.CloneWith(r.taskStates.ToolBinding())
+	return catalog.CloneWith(bindings...)
 }
 
 func (r *Runtime) withHarnessTools(names []string) []string {
 	result := append([]string(nil), names...)
-	if r.taskStates == nil {
-		return result
+	harnessNames := make([]string, 0, 3)
+	if r.taskStates != nil {
+		harnessNames = append(harnessNames, taskstate.UpdateToolName)
 	}
-	for _, name := range result {
-		if name == taskstate.UpdateToolName {
-			return result
+	if r.toolArtifacts != nil {
+		harnessNames = append(harnessNames, r.toolArtifacts.ToolNames()...)
+	}
+	for _, harnessName := range harnessNames {
+		found := false
+		for _, name := range result {
+			if name == harnessName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			result = append(result, harnessName)
 		}
 	}
-	return append(result, taskstate.UpdateToolName)
+	return result
 }
 
 func snapshotAgent(agent domain.Agent) domain.RuntimeAgentSnapshot {

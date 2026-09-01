@@ -159,6 +159,7 @@ func buildRegistry() map[domain.RunEventType]Definition {
 
 	add([]domain.RunEventType{domain.EventToolStarted}, DurableFact, optional, "event.ToolPayload", start("tool"), "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventToolCompleted, domain.EventToolFailed}, DurableFact, optional, "event.ToolPayload", terminal("tool", domain.EventToolStarted), "run_projection", "replay")
+	add([]domain.RunEventType{domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired}, DurableFact, optional, "event.ToolArtifactPayload", none, "artifact_governance", "replay")
 	add([]domain.RunEventType{domain.EventRetrievalStarted}, DurableFact, optional, "event.RetrievalPayload", start("retrieval"), "replay")
 	add([]domain.RunEventType{domain.EventRetrievalCompleted}, DurableFact, optional, "event.RetrievalPayload", terminal("retrieval", domain.EventRetrievalStarted), "replay")
 	add([]domain.RunEventType{domain.EventRetrievalFailed}, DurableFact, optional, "event.RetrievalPayload", terminal("retrieval", domain.EventRetrievalStarted), "run_projection", "replay")
@@ -204,7 +205,8 @@ func producerFor(eventType domain.RunEventType) string {
 		return "requestcapture/contextassembly"
 	case domain.EventCompactionStarted, domain.EventCompactionCompleted, domain.EventCompactionFailed:
 		return "contextcompaction"
-	case domain.EventToolStarted, domain.EventToolCompleted, domain.EventToolFailed:
+	case domain.EventToolStarted, domain.EventToolCompleted, domain.EventToolFailed,
+		domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired:
 		return "tools"
 	case domain.EventRetrievalStarted, domain.EventRetrievalCompleted, domain.EventRetrievalFailed,
 		domain.EventCitationResolved:

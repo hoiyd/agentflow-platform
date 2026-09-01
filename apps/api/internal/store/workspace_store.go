@@ -131,6 +131,27 @@ func (s workspaceStore) ListModelRequestRecords(runID string) ([]domain.ModelReq
 	return s.backend.ListModelRequestRecords(runID)
 }
 
+func (s workspaceStore) ListToolArtifacts(runID string) ([]domain.ToolArtifact, error) {
+	if err := s.requireRun(runID); err != nil {
+		return nil, err
+	}
+	return s.backend.ListToolArtifacts(runID)
+}
+
+func (s workspaceStore) ReadToolArtifact(runID string, artifactID string, offset int, limit int) (domain.ToolArtifactRead, error) {
+	if err := s.requireRun(runID); err != nil {
+		return domain.ToolArtifactRead{}, err
+	}
+	return s.backend.ReadToolArtifact(runID, artifactID, offset, limit)
+}
+
+func (s workspaceStore) SearchToolArtifact(runID string, artifactID string, query string, maxMatches int) (domain.ToolArtifactSearchResult, error) {
+	if err := s.requireRun(runID); err != nil {
+		return domain.ToolArtifactSearchResult{}, err
+	}
+	return s.backend.SearchToolArtifact(runID, artifactID, query, maxMatches)
+}
+
 func (s workspaceStore) UpdateRunVerificationStatus(runID string, status domain.VerificationStatus) (domain.Run, error) {
 	if err := s.requireRun(runID); err != nil {
 		return domain.Run{}, err

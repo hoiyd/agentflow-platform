@@ -64,6 +64,9 @@ func (h *Handler) registerRunRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/runs/{id}/projection", h.getRunProjection)
 	mux.HandleFunc("GET /api/runs/{id}/usage", h.getRunUsage)
 	mux.HandleFunc("GET /api/runs/{id}/model_requests", h.listModelRequests)
+	mux.HandleFunc("GET /api/runs/{id}/artifacts", h.listToolArtifacts)
+	mux.HandleFunc("GET /api/runs/{id}/artifacts/{artifact_id}", h.readToolArtifact)
+	mux.HandleFunc("GET /api/runs/{id}/artifacts/{artifact_id}/search", h.searchToolArtifact)
 	mux.HandleFunc("GET /api/runs/{id}/episode", h.getEpisodeReport)
 	mux.HandleFunc("GET /api/runs/{id}/collaboration_steps", h.listCollaborationSteps)
 }

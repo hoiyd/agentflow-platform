@@ -294,6 +294,7 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		RunEvents:             runEvents,
 		StageCheckpoints:      checkpoints,
 		ToolEffects:           domain.SummarizeToolEffects(toolEffectRecords),
+		ToolArtifacts:         toolArtifactsForRun(s.data.ToolArtifacts, runID),
 		VerificationEvidence:  verificationEvidence,
 		VerificationArtifacts: verificationArtifactsForRun(s.data.VerificationArtifacts, runID),
 		TaskStateRevisions:    taskStateRevisions,
