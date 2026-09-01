@@ -78,6 +78,62 @@ func TestArtifactToolRecordsExpiredAccess(t *testing.T) {
 	}
 }
 
+func TestArtifactServiceOptionalAndFailurePaths(t *testing.T) {
+	if service := NewService(nil, nil); service != nil {
+		t.Fatalf("nil store created service: %#v", service)
+	}
+	var nilService *Service
+	if nilService.ToolBindings() != nil || nilService.ToolNames() != nil {
+		t.Fatal("nil service exposed artifact tools")
+	}
+
+	fileStore, run, artifact := artifactFixture(t, time.Now().UTC().Add(time.Hour))
+	service := NewService(fileStore, nil)
+	if names := service.ToolNames(); len(names) != 2 || names[0] != ReadToolName || names[1] != SearchToolName {
+		t.Fatalf("artifact tool names = %#v", names)
+	}
+	readBinding := service.readBinding()
+	searchBinding := service.searchBinding()
+	if _, err := readBinding.Handler(context.Background(), json.RawMessage(`{`)); err == nil {
+		t.Fatal("malformed read arguments were accepted")
+	}
+	if _, err := searchBinding.Handler(context.Background(), json.RawMessage(`{`)); err == nil {
+		t.Fatal("malformed search arguments were accepted")
+	}
+	if _, err := readBinding.Handler(context.Background(), json.RawMessage(`{"artifact_id":"`+artifact.ID+`"}`)); err == nil {
+		t.Fatal("artifact read without run scope was accepted")
+	}
+	if _, err := searchBinding.Handler(context.Background(), json.RawMessage(`{"artifact_id":"`+artifact.ID+`","query":"needle"}`)); err == nil {
+		t.Fatal("artifact search without run scope was accepted")
+	}
+
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
+	read, err := readBinding.Handler(ctx, json.RawMessage(`{"artifact_id":"`+artifact.ID+`"}`))
+	if err != nil || !read.(domain.ToolArtifactRead).Complete {
+		t.Fatalf("default bounded read failed: result=%#v err=%v", read, err)
+	}
+	if _, err := readBinding.Handler(ctx, json.RawMessage(`{"artifact_id":"missing"}`)); !store.IsNotFound(err) {
+		t.Fatalf("missing artifact read error = %v", err)
+	}
+}
+
+func TestArtifactSearchRecordsExpiredAccess(t *testing.T) {
+	fileStore, run, artifact := artifactFixture(t, time.Now().UTC().Add(-time.Minute))
+	service := NewService(fileStore, eventpkg.NewRecorder(fileStore))
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
+	_, err := service.searchBinding().Handler(ctx, json.RawMessage(`{"artifact_id":"`+artifact.ID+`","query":"needle"}`))
+	if !errors.Is(err, store.ErrToolArtifactExpired) {
+		t.Fatalf("expired search error = %v", err)
+	}
+	events, err := fileStore.ListRunEvents(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Type != domain.EventArtifactExpired || events[0].Payload["operation"] != "search" {
+		t.Fatalf("expired search event = %#v", events)
+	}
+}
+
 func artifactFixture(t *testing.T, expires time.Time) (*store.FileStore, domain.Run, domain.ToolArtifact) {
 	t.Helper()
 	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))

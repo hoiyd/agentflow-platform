@@ -118,3 +118,171 @@ func TestToolArtifactMigrationAndSchemaRequirements(t *testing.T) {
 		t.Fatal("postgres schema validation does not cover tool artifact content")
 	}
 }
+
+func TestToolArtifactValidationAndBounds(t *testing.T) {
+	content := []byte(`{"result":"needle one needle two"}`)
+	now := time.Now().UTC()
+	valid := domain.ToolArtifact{
+		ID: "tool_artifact_validation", SchemaVersion: domain.CurrentToolArtifactSchemaVersion,
+		RunID: "run-1", ToolCallID: "call-1", ToolName: "reader", MediaType: "application/json",
+		ContentHash: toolArtifactContentHash(content), OriginalByteSize: len(content), StoredByteSize: len(content), CreatedAt: now,
+	}
+
+	invalidArtifacts := []domain.ToolArtifact{
+		{},
+		func() domain.ToolArtifact { item := valid; item.SchemaVersion++; return item }(),
+		func() domain.ToolArtifact { item := valid; item.MediaType = "application/octet-stream"; return item }(),
+		func() domain.ToolArtifact { item := valid; item.StoredByteSize++; return item }(),
+		func() domain.ToolArtifact { item := valid; item.ContentHash = "sha256:wrong"; return item }(),
+		func() domain.ToolArtifact { item := valid; item.CreatedAt = time.Time{}; return item }(),
+	}
+	for index, artifact := range invalidArtifacts {
+		if err := validateToolArtifact(artifact, content); err == nil {
+			t.Fatalf("invalid artifact %d passed validation", index)
+		}
+	}
+
+	for _, test := range []struct {
+		name          string
+		offset, limit int
+		wantError     bool
+	}{
+		{name: "defaults", limit: 0},
+		{name: "negative offset", offset: -1, limit: 1, wantError: true},
+		{name: "oversized limit", limit: MaxToolArtifactReadBytes + 1, wantError: true},
+	} {
+		t.Run("read_"+test.name, func(t *testing.T) {
+			_, normalized, err := normalizeArtifactRead(test.offset, test.limit)
+			if (err != nil) != test.wantError {
+				t.Fatalf("normalize read error = %v", err)
+			}
+			if test.name == "defaults" && normalized != 8*1024 {
+				t.Fatalf("default read limit = %d", normalized)
+			}
+		})
+	}
+
+	for _, test := range []struct {
+		name      string
+		query     string
+		matches   int
+		wantError bool
+	}{
+		{name: "defaults", query: " needle "},
+		{name: "empty", query: " ", wantError: true},
+		{name: "long query", query: strings.Repeat("x", MaxToolArtifactSearchQuery+1), wantError: true},
+		{name: "too many matches", query: "needle", matches: MaxToolArtifactMatches + 1, wantError: true},
+	} {
+		t.Run("search_"+test.name, func(t *testing.T) {
+			query, matches, err := normalizeArtifactSearch(test.query, test.matches)
+			if (err != nil) != test.wantError {
+				t.Fatalf("normalize search error = %v", err)
+			}
+			if test.name == "defaults" && (query != "needle" || matches != 5) {
+				t.Fatalf("normalized search = %q, %d", query, matches)
+			}
+		})
+	}
+
+	search := searchToolArtifact(valid, content, "needle", 1)
+	if len(search.Matches) != 1 || !search.Truncated || search.Matches[0].Offset <= 0 {
+		t.Fatalf("bounded search did not report truncation: %#v", search)
+	}
+	expiredAt := now.Add(-time.Minute)
+	expired := valid
+	expired.ID = "tool_artifact_expired_metadata"
+	expired.ExpiresAt = &expiredAt
+	items := toolArtifactsForRun([]domain.ToolArtifact{expired, valid, {ID: "other", RunID: "other-run"}}, valid.RunID)
+	if len(items) != 2 || !items[0].Expired || items[1].Expired {
+		t.Fatalf("run artifact metadata was not filtered and marked: %#v", items)
+	}
+}
+
+func TestFileToolArtifactFailurePathsAndConversationCleanup(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agentflow.json")
+	fileStore, err := NewFileStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, _ := fileStore.CreateConversation("artifact failures")
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := []byte(`{"result":"needle"}`)
+	artifact := domain.ToolArtifact{
+		ID: "tool_artifact_failures", SchemaVersion: domain.CurrentToolArtifactSchemaVersion,
+		RunID: run.ID, ToolCallID: "call-1", ToolName: "reader", MediaType: "application/json",
+		ContentHash: toolArtifactContentHash(content), OriginalByteSize: len(content), StoredByteSize: len(content), CreatedAt: time.Now().UTC(),
+	}
+
+	invalid := artifact
+	invalid.SchemaVersion++
+	if _, err := fileStore.CreateToolArtifact(invalid, content); err == nil {
+		t.Fatal("invalid artifact schema was accepted")
+	}
+	missingRun := artifact
+	missingRun.ID = "tool_artifact_missing_run"
+	missingRun.RunID = "missing"
+	if _, err := fileStore.CreateToolArtifact(missingRun, content); !IsNotFound(err) {
+		t.Fatalf("missing run error = %v", err)
+	}
+	invalidID := artifact
+	invalidID.ID = "invalid/path"
+	if _, err := fileStore.CreateToolArtifact(invalidID, content); err == nil {
+		t.Fatal("unsafe artifact path was accepted")
+	}
+	if _, err := fileStore.CreateToolArtifact(artifact, content); err != nil {
+		t.Fatal(err)
+	}
+	if existing, err := fileStore.CreateToolArtifact(artifact, content); err != nil || existing.ID != artifact.ID {
+		t.Fatalf("idempotent create failed: artifact=%#v err=%v", existing, err)
+	}
+	conflictingContent := []byte(`{"result":"different"}`)
+	conflict := artifact
+	conflict.ContentHash = toolArtifactContentHash(conflictingContent)
+	conflict.OriginalByteSize = len(conflictingContent)
+	conflict.StoredByteSize = len(conflictingContent)
+	if _, err := fileStore.CreateToolArtifact(conflict, conflictingContent); err == nil {
+		t.Fatal("idempotency conflict was accepted")
+	}
+
+	if _, err := fileStore.ListToolArtifacts("missing"); !IsNotFound(err) {
+		t.Fatalf("missing run list error = %v", err)
+	}
+	if _, err := fileStore.ReadToolArtifact(run.ID, artifact.ID, -1, 1); err == nil {
+		t.Fatal("negative read offset was accepted")
+	}
+	if _, err := fileStore.ReadToolArtifact(run.ID, "missing", 0, 1); !IsNotFound(err) {
+		t.Fatalf("missing artifact read error = %v", err)
+	}
+	if _, err := fileStore.ReadToolArtifact(run.ID, artifact.ID, len(content)+1, 1); !errors.Is(err, ErrToolArtifactRange) {
+		t.Fatalf("out-of-range read error = %v", err)
+	}
+	if _, err := fileStore.SearchToolArtifact(run.ID, artifact.ID, "", 1); err == nil {
+		t.Fatal("empty artifact search was accepted")
+	}
+	if _, err := fileStore.SearchToolArtifact(run.ID, "missing", "needle", 1); !IsNotFound(err) {
+		t.Fatalf("missing artifact search error = %v", err)
+	}
+
+	contentPath := filepath.Join(path+".tool-artifacts", artifact.ID+".bin")
+	if err := os.WriteFile(contentPath, []byte(strings.Repeat("x", len(content))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.SearchToolArtifact(run.ID, artifact.ID, "needle", 1); err == nil {
+		t.Fatal("corrupt artifact content was accepted")
+	}
+	if _, err := fileStore.CreateToolArtifact(artifact, content); err == nil {
+		t.Fatal("idempotent create accepted corrupt existing content")
+	}
+	if err := os.WriteFile(contentPath, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := fileStore.DeleteConversation(conversation.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(contentPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("conversation deletion retained artifact content: %v", err)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -79,4 +80,149 @@ func TestToolArtifactHandlersListReadSearchAndEnforceWorkspace(t *testing.T) {
 	if foreignResponse.Code != http.StatusNotFound {
 		t.Fatalf("cross-workspace artifact list status = %d, want 404", foreignResponse.Code)
 	}
+	for _, invoke := range []struct {
+		name   string
+		target string
+		handle func(http.ResponseWriter, *http.Request)
+	}{
+		{name: "read", target: "/api/runs/" + run.ID + "/artifacts/" + artifact.ID, handle: handler.readToolArtifact},
+		{name: "search", target: "/api/runs/" + run.ID + "/artifacts/" + artifact.ID + "/search?q=needle", handle: handler.searchToolArtifact},
+	} {
+		t.Run("cross workspace "+invoke.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, invoke.target, nil)
+			request.Header.Set(WorkspaceHeader, "workspace-b")
+			request.SetPathValue("id", run.ID)
+			request.SetPathValue("artifact_id", artifact.ID)
+			response := httptest.NewRecorder()
+			invoke.handle(response, request)
+			if response.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404; body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestToolArtifactHandlersRejectInvalidQueries(t *testing.T) {
+	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := &Handler{store: fileStore}
+	tests := []struct {
+		name   string
+		target string
+		handle func(http.ResponseWriter, *http.Request)
+	}{
+		{name: "read offset is not an integer", target: "/api/runs/run-1/artifacts/a?offset=nope", handle: handler.readToolArtifact},
+		{name: "read limit is not an integer", target: "/api/runs/run-1/artifacts/a?limit=nope", handle: handler.readToolArtifact},
+		{name: "read offset is negative", target: "/api/runs/run-1/artifacts/a?offset=-1", handle: handler.readToolArtifact},
+		{name: "read limit is zero", target: "/api/runs/run-1/artifacts/a?limit=0", handle: handler.readToolArtifact},
+		{name: "read limit is too large", target: "/api/runs/run-1/artifacts/a?limit=65537", handle: handler.readToolArtifact},
+		{name: "search max matches is not an integer", target: "/api/runs/run-1/artifacts/a/search?q=needle&max_matches=nope", handle: handler.searchToolArtifact},
+		{name: "search query is empty", target: "/api/runs/run-1/artifacts/a/search", handle: handler.searchToolArtifact},
+		{name: "search query is too large", target: "/api/runs/run-1/artifacts/a/search?q=" + strings.Repeat("x", store.MaxToolArtifactSearchQuery+1), handle: handler.searchToolArtifact},
+		{name: "search max matches is zero", target: "/api/runs/run-1/artifacts/a/search?q=needle&max_matches=0", handle: handler.searchToolArtifact},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, test.target, nil)
+			request.SetPathValue("id", "run-1")
+			request.SetPathValue("artifact_id", "a")
+			response := httptest.NewRecorder()
+			test.handle(response, request)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestToolArtifactHandlersMapStorageFailures(t *testing.T) {
+	base, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseWorkspace := base.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID))
+
+	unavailable := &Handler{store: &toolArtifactHTTPStore{
+		Store:     base,
+		workspace: &workspaceWithoutToolArtifacts{WorkspaceStore: baseWorkspace},
+	}}
+	request := artifactHandlerRequest("/api/runs/run-1/artifacts")
+	response := httptest.NewRecorder()
+	unavailable.listToolArtifacts(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unavailable artifact store status = %d", response.Code)
+	}
+
+	tests := []struct {
+		name     string
+		err      error
+		expected int
+	}{
+		{name: "not found", err: store.ErrNotFound("tool artifact"), expected: http.StatusNotFound},
+		{name: "expired", err: store.ErrToolArtifactExpired, expected: http.StatusGone},
+		{name: "range", err: store.ErrToolArtifactRange, expected: http.StatusRequestedRangeNotSatisfiable},
+		{name: "internal", err: errors.New("storage unavailable"), expected: http.StatusInternalServerError},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			workspace := &failingToolArtifactWorkspace{WorkspaceStore: baseWorkspace, err: test.err}
+			handler := &Handler{store: &toolArtifactHTTPStore{Store: base, workspace: workspace}}
+			for _, invoke := range []struct {
+				name   string
+				target string
+				handle func(http.ResponseWriter, *http.Request)
+			}{
+				{name: "list", target: "/api/runs/run-1/artifacts", handle: handler.listToolArtifacts},
+				{name: "read", target: "/api/runs/run-1/artifacts/a", handle: handler.readToolArtifact},
+				{name: "search", target: "/api/runs/run-1/artifacts/a/search?q=needle", handle: handler.searchToolArtifact},
+			} {
+				t.Run(invoke.name, func(t *testing.T) {
+					response := httptest.NewRecorder()
+					invoke.handle(response, artifactHandlerRequest(invoke.target))
+					if response.Code != test.expected {
+						t.Fatalf("status = %d, want %d; body=%s", response.Code, test.expected, response.Body.String())
+					}
+				})
+			}
+		})
+	}
+}
+
+func artifactHandlerRequest(target string) *http.Request {
+	request := httptest.NewRequest(http.MethodGet, target, nil)
+	request.SetPathValue("id", "run-1")
+	request.SetPathValue("artifact_id", "a")
+	return request
+}
+
+type toolArtifactHTTPStore struct {
+	store.Store
+	workspace store.WorkspaceStore
+}
+
+func (s *toolArtifactHTTPStore) ForWorkspace(domain.WorkspaceScope) store.WorkspaceStore {
+	return s.workspace
+}
+
+type workspaceWithoutToolArtifacts struct {
+	store.WorkspaceStore
+}
+
+type failingToolArtifactWorkspace struct {
+	store.WorkspaceStore
+	err error
+}
+
+func (s *failingToolArtifactWorkspace) ListToolArtifacts(string) ([]domain.ToolArtifact, error) {
+	return nil, s.err
+}
+
+func (s *failingToolArtifactWorkspace) ReadToolArtifact(string, string, int, int) (domain.ToolArtifactRead, error) {
+	return domain.ToolArtifactRead{}, s.err
+}
+
+func (s *failingToolArtifactWorkspace) SearchToolArtifact(string, string, string, int) (domain.ToolArtifactSearchResult, error) {
+	return domain.ToolArtifactSearchResult{}, s.err
 }

@@ -87,6 +87,81 @@ func TestExecutorAppliesAggregateBatchResultBudget(t *testing.T) {
 	}
 }
 
+func TestExecutorArtifactGovernanceFailurePaths(t *testing.T) {
+	catalog, err := NewCatalog(Binding{
+		Descriptor: Descriptor{Name: "large", Parameters: ObjectSchema(nil, nil)},
+		Handler:    func(context.Context, json.RawMessage) (any, error) { return strings.Repeat("private", 100), nil },
+		Policy:     ExecutionPolicy{MaxResultBytes: 16},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name    string
+		options ExecutorOptions
+		request ExecutionRequest
+	}{
+		{
+			name: "redaction failure",
+			options: ExecutorOptions{ArtifactStore: &artifactWriterStub{}, RedactArtifactJSON: func([]byte) ([]byte, int, error) {
+				return nil, 0, errors.New("redaction unavailable")
+			}},
+			request: ExecutionRequest{RunID: "run-1", CallID: "call-1", Tool: "large"},
+		},
+		{
+			name:    "artifact size limit",
+			options: ExecutorOptions{ArtifactStore: &artifactWriterStub{}, MaxArtifactBytes: 32},
+			request: ExecutionRequest{RunID: "run-1", CallID: "call-1", Tool: "large"},
+		},
+		{
+			name:    "store unavailable",
+			options: ExecutorOptions{},
+			request: ExecutionRequest{RunID: "run-1", CallID: "call-1", Tool: "large"},
+		},
+		{
+			name:    "missing execution identity",
+			options: ExecutorOptions{ArtifactStore: &artifactWriterStub{}},
+			request: ExecutionRequest{Tool: "large"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := NewExecutor(catalog, test.options).Execute(context.Background(), test.request)
+			if result.Error != nil || result.Artifact != nil || result.ArtifactError == nil || result.ArtifactError.Code != ErrorArtifactUnavailable {
+				t.Fatalf("artifact degradation = %#v", result)
+			}
+			visible, ok := result.Result.(map[string]any)
+			if !ok || visible["content_complete"] != false || visible["artifact_unavailable"] != true {
+				t.Fatalf("degraded model result = %#v", result.Result)
+			}
+		})
+	}
+}
+
+func TestArtifactPreviewHelpersRespectExhaustedBudget(t *testing.T) {
+	if boundArtifactPreview(nil, 1) != 0 {
+		t.Fatal("nil result consumed preview budget")
+	}
+	nonArtifact := ExecutionResult{Result: "plain"}
+	if boundArtifactPreview(&nonArtifact, 1) != 0 {
+		t.Fatal("plain result consumed artifact preview budget")
+	}
+	artifactResult := ExecutionResult{Result: map[string]any{"preview": "bounded"}}
+	if used := boundArtifactPreview(&artifactResult, 0); used != 0 || artifactResult.Result.(map[string]any)["preview"] != "" {
+		t.Fatalf("exhausted preview budget result=%#v used=%d", artifactResult.Result, used)
+	}
+
+	placeholder := artifactPreview(nil, 12, nil, executionError(ErrorArtifactUnavailable, "missing", nil))
+	preview, _ := placeholder["preview"].(string)
+	if len([]byte(preview)) > 12 || placeholder["artifact_error_code"] != string(ErrorArtifactUnavailable) {
+		t.Fatalf("bounded placeholder = %#v", placeholder)
+	}
+	empty := artifactPreview([]byte("content"), 0, nil, nil)
+	if empty["preview"] != "" {
+		t.Fatalf("zero preview limit leaked content: %#v", empty)
+	}
+}
+
 type artifactWriterStub struct {
 	artifact domain.ToolArtifact
 	content  []byte
