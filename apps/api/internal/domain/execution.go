@@ -301,6 +301,9 @@ const (
 	EventToolStarted             RunEventType = "tool.started"
 	EventToolCompleted           RunEventType = "tool.completed"
 	EventToolFailed              RunEventType = "tool.failed"
+	EventToolResultPersisted     RunEventType = "tool.result.persisted"
+	EventArtifactRead            RunEventType = "artifact.read"
+	EventArtifactExpired         RunEventType = "artifact.expired"
 	EventRetrievalStarted        RunEventType = "retrieval.started"
 	EventRetrievalCompleted      RunEventType = "retrieval.completed"
 	EventRetrievalFailed         RunEventType = "retrieval.failed"
@@ -342,16 +345,17 @@ const (
 )
 
 type ContextManifestEntry struct {
-	Source           string `json:"source"`
-	ReferenceID      string `json:"reference_id"`
-	CitationSourceID string `json:"citation_source_id,omitempty"`
-	Role             string `json:"role,omitempty"`
-	Selected         bool   `json:"selected"`
-	Reason           string `json:"reason"`
-	Transformation   string `json:"transformation,omitempty"`
-	EstimatedTokens  int    `json:"estimated_tokens"`
-	OriginalBytes    int    `json:"original_bytes"`
-	IncludedBytes    int    `json:"included_bytes"`
+	Source           string   `json:"source"`
+	ReferenceID      string   `json:"reference_id"`
+	CitationSourceID string   `json:"citation_source_id,omitempty"`
+	Role             string   `json:"role,omitempty"`
+	Selected         bool     `json:"selected"`
+	Reason           string   `json:"reason"`
+	Transformation   string   `json:"transformation,omitempty"`
+	EstimatedTokens  int      `json:"estimated_tokens"`
+	OriginalBytes    int      `json:"original_bytes"`
+	IncludedBytes    int      `json:"included_bytes"`
+	ArtifactIDs      []string `json:"artifact_ids,omitempty"`
 }
 
 type ContextManifest struct {
@@ -476,6 +480,7 @@ type RunReplay struct {
 	RunEvents             []RunEvent             `json:"run_events"`
 	StageCheckpoints      []StageCheckpoint      `json:"stage_checkpoints"`
 	ToolEffects           []ToolEffectSummary    `json:"tool_effects"`
+	ToolArtifacts         []ToolArtifact         `json:"tool_artifacts"`
 	VerificationEvidence  []VerificationEvidence `json:"verification_evidence"`
 	VerificationArtifacts []VerificationArtifact `json:"verification_artifacts"`
 	TaskStateRevisions    []TaskStateRevision    `json:"task_state_revisions"`

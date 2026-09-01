@@ -8,13 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/modelrequest"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 const DefaultMaxCaptureBytes = 256 * 1024
@@ -133,14 +133,14 @@ func capturePayload(payload []byte, mode domain.ModelRequestCaptureMode, maxByte
 	}
 	content := append([]byte(nil), payload...)
 	if mode == domain.ModelRequestCaptureRedacted {
-		redacted, redactionCount, err := redactJSON(content)
+		redacted, redactionCount, err := redaction.JSON(content)
 		if err != nil {
 			capture.Truncated = true
 			return capture
 		}
 		content = redacted
 		capture.Redacted = true
-		capture.RedactionStrategy = "deterministic-v1"
+		capture.RedactionStrategy = redaction.DeterministicStrategy
 		capture.RedactionCount = redactionCount
 	}
 	if len(content) > maxBytes {
@@ -165,86 +165,34 @@ func summarizePayload(payload []byte) (map[string]any, int, int, error) {
 	tools, _ := body["tools"].([]any)
 	delete(body, "messages")
 	delete(body, "tools")
-	redacted, _ := redactValue(body, nil).(map[string]any)
-	if redacted == nil {
-		redacted = map[string]any{}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	redactedJSON, _, err := redaction.JSON(encoded)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	redacted := map[string]any{}
+	if string(redactedJSON) == "null" {
+		return redacted, len(messages), len(tools), nil
+	}
+	if err := json.Unmarshal(redactedJSON, &redacted); err != nil {
+		return nil, 0, 0, err
 	}
 	return redacted, len(messages), len(tools), nil
 }
 
 func redactJSON(payload []byte) ([]byte, int, error) {
-	var value any
-	if err := json.Unmarshal(payload, &value); err != nil {
-		return nil, 0, err
-	}
-	count := 0
-	redacted, err := json.Marshal(redactValue(value, &count))
-	return redacted, count, err
-}
-
-func redactValue(value any, count *int) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		result := make(map[string]any, len(typed))
-		for key, item := range typed {
-			if sensitiveKey(key) {
-				result[key] = "[REDACTED]"
-				increment(count)
-				continue
-			}
-			result[key] = redactValue(item, count)
-		}
-		return result
-	case []any:
-		result := make([]any, len(typed))
-		for index, item := range typed {
-			result[index] = redactValue(item, count)
-		}
-		return result
-	case string:
-		return redactString(typed, count)
-	default:
-		return value
-	}
-}
-
-func sensitiveKey(value string) bool {
-	normalized := strings.NewReplacer("-", "_", ".", "_").Replace(strings.ToLower(strings.TrimSpace(value)))
-	for _, marker := range []string{"api_key", "apikey", "authorization", "password", "secret", "token", "credential", "cookie"} {
-		if normalized == marker || strings.HasSuffix(normalized, "_"+marker) {
-			return true
-		}
-	}
-	return false
-}
-
-var secretPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)\bbearer\s+[a-z0-9._~+/=-]+`),
-	regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{8,}\b`),
-	regexp.MustCompile(`\b(?:ghp|github_pat)_[A-Za-z0-9_]{8,}\b`),
-	regexp.MustCompile(`(?i)\b(api[_-]?key|token|password|secret)\s*[:=]\s*[^\s,;]+`),
+	return redaction.JSON(payload)
 }
 
 func redactString(value string, count *int) string {
-	for _, pattern := range secretPatterns {
-		value = pattern.ReplaceAllStringFunc(value, func(match string) string {
-			increment(count)
-			if index := strings.IndexAny(match, ":="); index >= 0 {
-				return match[:index+1] + "[REDACTED]"
-			}
-			if strings.HasPrefix(strings.ToLower(match), "bearer ") {
-				return "Bearer [REDACTED]"
-			}
-			return "[REDACTED]"
-		})
+	redacted, matches := redaction.Text(value)
+	if count != nil {
+		*count += matches
 	}
-	return value
-}
-
-func increment(value *int) {
-	if value != nil {
-		(*value)++
-	}
+	return redacted
 }
 
 func cloneTokenBreakdown(value map[string]int) map[string]int {

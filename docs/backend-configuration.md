@@ -18,6 +18,10 @@ PORT=8080
 STORE_DRIVER=file
 DATA_PATH=.data/agentflow.json
 TOOL_CONFIG_PATH=.data/tools.json
+TOOL_RESULT_MAX_BATCH_BYTES=8000
+TOOL_ARTIFACT_MAX_BYTES=5242880
+TOOL_ARTIFACT_PREVIEW_BYTES=1000
+TOOL_ARTIFACT_RETENTION=168h
 VERIFICATION_WORKSPACE_ROOT=
 VERIFICATION_ALLOWED_COMMANDS=
 VERIFICATION_ALLOWED_HTTP_HOSTS=
@@ -257,6 +261,11 @@ persisted text index.
 ## Tool Configuration
 
 The backend loads enabled tools from `TOOL_CONFIG_PATH`, defaulting to `.data/tools.json`. If the file is missing, all built-in tools are enabled.
+
+Oversized Tool results use the centralized Artifact boundary. The batch setting
+caps aggregate model-visible result content, the Artifact maximum caps one
+persisted result, preview bytes cap each model-visible preview, and retention is
+stored on each Artifact. See [Tool Result Artifact Governance](tool-result-artifacts.md).
 
 ```json
 {

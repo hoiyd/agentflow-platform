@@ -32,6 +32,8 @@ type Client struct {
 	requestRecorder     modelrequest.Recorder
 	retryPolicy         RetryPolicy
 	toolEffectJournal   tools.ToolEffectJournal
+	toolArtifactStore   tools.ToolArtifactWriter
+	toolArtifactPolicy  ToolArtifactPolicy
 }
 
 var _ modelprovider.Client = (*Client)(nil)
@@ -86,6 +88,13 @@ type Usage = modelprovider.Usage
 type TextCompletion = modelprovider.TextCompletion
 type PreparedText = modelprovider.PreparedText
 type Embedding = modelprovider.Embedding
+
+type ToolArtifactPolicy struct {
+	MaxBatchResultBytes int
+	MaxArtifactBytes    int
+	PreviewBytes        int
+	Retention           time.Duration
+}
 
 func NewClient(apiKey string, baseURL string, model string) *Client {
 	return NewClientWithTimeout(apiKey, baseURL, model, 5*time.Minute)
@@ -155,6 +164,14 @@ func (c *Client) SetToolEffectJournal(journal tools.ToolEffectJournal) {
 	c.toolEffectJournal = journal
 }
 
+func (c *Client) SetToolArtifactStore(artifactStore tools.ToolArtifactWriter) {
+	c.toolArtifactStore = artifactStore
+}
+
+func (c *Client) SetToolArtifactPolicy(policy ToolArtifactPolicy) {
+	c.toolArtifactPolicy = policy
+}
+
 func (c *Client) RuntimeIdentity() RuntimeIdentity {
 	return RuntimeIdentity{
 		Provider: providerForURL(c.baseURL), BaseURL: safeRuntimeURL(c.baseURL), Model: c.model,
@@ -170,6 +187,8 @@ func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) modelprovider.Cli
 	client.requestRecorder = c.requestRecorder
 	client.retryPolicy = c.retryPolicy
 	client.toolEffectJournal = c.toolEffectJournal
+	client.toolArtifactStore = c.toolArtifactStore
+	client.toolArtifactPolicy = c.toolArtifactPolicy
 	return client
 }
 

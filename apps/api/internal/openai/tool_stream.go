@@ -143,7 +143,12 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 			delegate: tracepkg.NewToolExecutionTracer(recorder, runID, stepID),
 			events:   events,
 		},
-		EffectJournal: c.toolEffectJournal,
+		EffectJournal:        c.toolEffectJournal,
+		ArtifactStore:        c.toolArtifactStore,
+		MaxBatchResultBytes:  c.toolArtifactPolicy.MaxBatchResultBytes,
+		MaxArtifactBytes:     c.toolArtifactPolicy.MaxArtifactBytes,
+		ArtifactPreviewBytes: c.toolArtifactPolicy.PreviewBytes,
+		ArtifactRetention:    c.toolArtifactPolicy.Retention,
 	})
 	scope := tracepkg.ScopeFromContext(ctx)
 	requests := make([]tools.ExecutionRequest, 0, len(normalizedCalls))

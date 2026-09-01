@@ -58,9 +58,17 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	for index := range messages {
 		transformation := "original"
 		originalBytes := len(messages[index].Content)
+		artifactIDs := toolArtifactIDs(messages[index])
+		if len(artifactIDs) > 0 {
+			transformation = "tool_result_artifact_preview"
+		}
 		if (messages[index].Source == SourceToolResult || messages[index].Role == "tool") && EstimateTokens(messages[index].Content) > config.ToolResultMaxTokens {
 			messages[index].Content = compactText(messages[index].Content, config.ToolResultMaxTokens)
-			transformation = "tool_result_compacted"
+			if len(artifactIDs) > 0 {
+				transformation = "tool_result_artifact_preview_compacted"
+			} else {
+				transformation = "tool_result_compacted"
+			}
 		}
 		message := messages[index]
 		tokens := estimateMessageTokens(message)
@@ -69,6 +77,7 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 			Source: message.Source, ReferenceID: message.ReferenceID, Role: message.Role,
 			Selected: required, Reason: reasonForMessage(message.Source, required),
 			Transformation: transformation, EstimatedTokens: tokens, OriginalBytes: originalBytes,
+			ArtifactIDs: artifactIDs,
 		}
 		if required {
 			entry.IncludedBytes = len(message.Content)
@@ -144,6 +153,34 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 		return Pack{Messages: packedMessages, Manifest: manifest}, &InputBudgetError{RequiredTokens: requiredTokens, AvailableTokens: inputBudget}
 	}
 	return Pack{Messages: packedMessages, Manifest: manifest}, nil
+}
+
+func toolArtifactIDs(message Message) []string {
+	if message.Source != SourceToolResult && message.Role != "tool" {
+		return nil
+	}
+	var envelope struct {
+		Artifact *struct {
+			ID string `json:"id"`
+		} `json:"artifact"`
+		Result struct {
+			Artifact *struct {
+				ID string `json:"id"`
+			} `json:"artifact"`
+		} `json:"result"`
+	}
+	if json.Unmarshal([]byte(message.Content), &envelope) != nil {
+		return nil
+	}
+	ids := make([]string, 0, 2)
+	if envelope.Artifact != nil && strings.TrimSpace(envelope.Artifact.ID) != "" {
+		ids = append(ids, envelope.Artifact.ID)
+	}
+	if envelope.Result.Artifact != nil && strings.TrimSpace(envelope.Result.Artifact.ID) != "" &&
+		(len(ids) == 0 || ids[0] != envelope.Result.Artifact.ID) {
+		ids = append(ids, envelope.Result.Artifact.ID)
+	}
+	return ids
 }
 
 func suppressRetrievedHistoryDuplicates(messages []candidate, retrieved []candidate) {

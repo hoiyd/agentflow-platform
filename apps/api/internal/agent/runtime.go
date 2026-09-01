@@ -21,6 +21,7 @@ import (
 	"agentflow-platform/apps/api/internal/sessionhistory"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/taskstate"
+	"agentflow-platform/apps/api/internal/toolartifact"
 	"agentflow-platform/apps/api/internal/tools"
 	turnpkg "agentflow-platform/apps/api/internal/turn"
 )
@@ -39,6 +40,7 @@ type Runtime struct {
 	knowledgeRetriever    rag.Retriever
 	checkpoints           checkpoint.Provider
 	taskStates            *taskstate.Service
+	toolArtifacts         *toolartifact.Service
 	liveEvents            eventpkg.LivePublisher
 	delegations           *delegation.Controller
 	childRunLimits        ChildRunLimits
@@ -121,6 +123,10 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 	if taskStore, ok := options.Store.(taskstate.Store); ok {
 		taskStates = taskstate.NewService(taskStore, eventpkg.StoreSink{Store: options.Store})
 	}
+	var toolArtifacts *toolartifact.Service
+	if artifactStore, ok := options.Store.(store.ToolArtifactStore); ok {
+		toolArtifacts = toolartifact.NewService(artifactStore, tracepkg.NewRecorder(options.Store))
+	}
 	runtime := &Runtime{
 		store:                 options.Store,
 		modelClient:           options.ModelClient,
@@ -134,6 +140,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		knowledgeRetriever:    knowledgeRetriever,
 		checkpoints:           checkpointProvider,
 		taskStates:            taskStates,
+		toolArtifacts:         toolArtifacts,
 		liveEvents:            options.LiveEvents,
 		childRunLimits:        normalizeChildRunLimits(options.ChildRuns),
 		memoryRecall:          options.MemoryRecall,

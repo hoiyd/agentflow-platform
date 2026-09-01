@@ -59,6 +59,13 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 
 	modelClient := newModelClient(cfg)
 	modelClient.SetToolEffectJournal(appStore)
+	modelClient.SetToolArtifactStore(appStore)
+	modelClient.SetToolArtifactPolicy(openai.ToolArtifactPolicy{
+		MaxBatchResultBytes: cfg.ToolResultMaxBatchBytes,
+		MaxArtifactBytes:    cfg.ToolArtifactMaxBytes,
+		PreviewBytes:        cfg.ToolArtifactPreviewBytes,
+		Retention:           cfg.ToolArtifactRetention,
+	})
 	modelClient.SetRequestRecorder(requestcapture.NewRecorder(appStore, requestcapture.Options{
 		Mode: domain.ModelRequestCaptureMode(cfg.ModelRequestCaptureMode), MaxBytes: cfg.ModelRequestCaptureMaxBytes,
 		Retention: cfg.ModelRequestCaptureRetention,

@@ -133,6 +133,14 @@ type Config struct {
 	DatabaseURL             string
 	DataPath                string
 	ToolConfigPath          string
+	// ToolResultMaxBatchBytes caps aggregate raw Tool results returned by one model Tool-call batch.
+	ToolResultMaxBatchBytes int
+	// ToolArtifactMaxBytes rejects persistence beyond this hard per-artifact bound.
+	ToolArtifactMaxBytes int
+	// ToolArtifactPreviewBytes caps model-visible content when a full result becomes an Artifact.
+	ToolArtifactPreviewBytes int
+	// ToolArtifactRetention is persisted with each Artifact; expiry survives process restarts.
+	ToolArtifactRetention time.Duration
 	// VerificationWorkspaceRoot bounds command verifier working directories. Empty disables command execution.
 	VerificationWorkspaceRoot string
 	// VerificationAllowedCommands is a comma-separated executable allowlist for command verifiers.
@@ -218,6 +226,10 @@ func Load() Config {
 		DatabaseURL:                       getEnv("DATABASE_URL", ""),
 		DataPath:                          getEnv("DATA_PATH", ".data/agentflow.json"),
 		ToolConfigPath:                    getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
+		ToolResultMaxBatchBytes:           getIntEnv("TOOL_RESULT_MAX_BATCH_BYTES", 8000),
+		ToolArtifactMaxBytes:              getIntEnv("TOOL_ARTIFACT_MAX_BYTES", 5*1024*1024),
+		ToolArtifactPreviewBytes:          getIntEnv("TOOL_ARTIFACT_PREVIEW_BYTES", 1000),
+		ToolArtifactRetention:             getDurationEnv("TOOL_ARTIFACT_RETENTION", 7*24*time.Hour),
 		VerificationWorkspaceRoot:         getEnv("VERIFICATION_WORKSPACE_ROOT", ""),
 		VerificationAllowedCommands:       getEnv("VERIFICATION_ALLOWED_COMMANDS", ""),
 		VerificationAllowedHTTPHosts:      getEnv("VERIFICATION_ALLOWED_HTTP_HOSTS", ""),

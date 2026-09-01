@@ -57,6 +57,9 @@ GET    /api/runs/{id}/replay
 GET    /api/runs/{id}/projection
 GET    /api/runs/{id}/usage
 GET    /api/runs/{id}/model_requests
+GET    /api/runs/{id}/artifacts
+GET    /api/runs/{id}/artifacts/{artifact_id}
+GET    /api/runs/{id}/artifacts/{artifact_id}/search
 GET    /api/runs/{id}/episode
 
 GET    /api/tools
@@ -154,7 +157,12 @@ Workspace namespace.
 
 Replay is the detailed aggregate assembled from stored records for one Run. It
 includes the Conversation's ordered `task_state_revisions`; Context Manifest
-references identify which version was visible to each Model Call.
+references identify which version was visible to each Model Call. Replay also
+includes `tool_artifacts` metadata for oversized Tool results. Artifact content
+is opt-in through bounded, Workspace-scoped read/search endpoints; list and
+Replay never include full content. `offset`/`limit` control reads, while `q` and
+`max_matches` control search. Expired content returns `410 Gone`.
+
 Episode Report is a compact projection derived from Replay for review or
 export; it does not create another execution history or accounting source.
 Trace-derived Episode errors include optional `kind`, `category`, and

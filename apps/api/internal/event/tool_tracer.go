@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/tools"
 )
@@ -69,7 +70,32 @@ func (t *ToolExecutionTracer) ToolFinished(ctx context.Context, result tools.Exe
 	if result.OriginalResultBytes > 0 {
 		payload["original_result_bytes"] = result.OriginalResultBytes
 	}
+	if result.Artifact != nil {
+		payload["artifact"] = result.Artifact
+	}
+	if result.ArtifactError != nil {
+		payload["artifact_error"] = result.ArtifactError.Message
+		payload["artifact_error_code"] = string(result.ArtifactError.Code)
+	}
 	t.recorder.ToolEnd(traceContext(ctx), span, payload)
+	if result.Artifact != nil {
+		t.recorder.ToolArtifact(t.artifactContext(ctx), domain.EventToolResultPersisted, ToolArtifactPayload{
+			ArtifactID: result.Artifact.ID, ToolCallID: result.CallID, ToolName: result.Tool,
+			Operation: "persist", ContentHash: result.Artifact.ContentHash, StoredBytes: result.Artifact.ByteSize,
+		})
+	}
+}
+
+func (t *ToolExecutionTracer) artifactContext(ctx context.Context) context.Context {
+	base := traceContext(ctx)
+	scope := ScopeFromContext(base)
+	if scope.RunID == "" {
+		scope.RunID = t.runID
+	}
+	if scope.StageID == "" {
+		scope.StageID = t.stepID
+	}
+	return WithScope(base, scope)
 }
 
 func (t *ToolExecutionTracer) spanKey(callID, tool string) string {

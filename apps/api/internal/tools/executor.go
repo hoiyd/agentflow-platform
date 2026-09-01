@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	DefaultExecutionTimeout = 30 * time.Second
-	DefaultMaxResultBytes   = 20_000
-	DefaultMaxConcurrency   = 4
+	DefaultExecutionTimeout    = 30 * time.Second
+	DefaultMaxResultBytes      = 20_000
+	DefaultMaxBatchResultBytes = 8_000
+	DefaultMaxConcurrency      = 4
 )
 
 type ExecutionRequest struct {
@@ -35,17 +36,20 @@ type ExecutionRequest struct {
 }
 
 type ExecutionResult struct {
-	CallID              string          `json:"call_id,omitempty"`
-	Tool                string          `json:"tool"`
-	Arguments           json.RawMessage `json:"arguments"`
-	DefinitionRevision  string          `json:"-"`
-	ArgumentsHash       string          `json:"-"`
-	Result              any             `json:"result,omitempty"`
-	Error               *ExecutionError `json:"error,omitempty"`
-	DurationMS          int64           `json:"duration_ms"`
-	Truncated           bool            `json:"truncated,omitempty"`
-	OriginalResultBytes int             `json:"original_result_bytes,omitempty"`
-	Replayed            bool            `json:"replayed,omitempty"`
+	CallID              string                        `json:"call_id,omitempty"`
+	Tool                string                        `json:"tool"`
+	Arguments           json.RawMessage               `json:"arguments"`
+	DefinitionRevision  string                        `json:"-"`
+	ArgumentsHash       string                        `json:"-"`
+	Result              any                           `json:"result,omitempty"`
+	Error               *ExecutionError               `json:"error,omitempty"`
+	DurationMS          int64                         `json:"duration_ms"`
+	Truncated           bool                          `json:"truncated,omitempty"`
+	OriginalResultBytes int                           `json:"original_result_bytes,omitempty"`
+	Replayed            bool                          `json:"replayed,omitempty"`
+	Artifact            *domain.ToolArtifactReference `json:"artifact,omitempty"`
+	ArtifactError       *ExecutionError               `json:"artifact_error,omitempty"`
+	encodedResult       []byte
 }
 
 func (r ExecutionResult) ErrorMessage() string {
@@ -67,18 +71,26 @@ type ToolEffectJournal interface {
 }
 
 type ExecutorOptions struct {
-	DefaultPolicy  ExecutionPolicy
-	Tracer         ExecutionTracer
-	MaxConcurrency int
-	EffectJournal  ToolEffectJournal
+	DefaultPolicy        ExecutionPolicy
+	Tracer               ExecutionTracer
+	MaxConcurrency       int
+	EffectJournal        ToolEffectJournal
+	ArtifactStore        ToolArtifactWriter
+	MaxBatchResultBytes  int
+	MaxArtifactBytes     int
+	ArtifactPreviewBytes int
+	ArtifactRetention    time.Duration
+	RedactArtifactJSON   func([]byte) ([]byte, int, error)
 }
 
 type Executor struct {
-	catalog        *Catalog
-	defaultPolicy  ExecutionPolicy
-	tracer         ExecutionTracer
-	maxConcurrency int
-	effectJournal  ToolEffectJournal
+	catalog             *Catalog
+	defaultPolicy       ExecutionPolicy
+	tracer              ExecutionTracer
+	maxConcurrency      int
+	effectJournal       ToolEffectJournal
+	artifactGovernor    *resultArtifactGovernor
+	maxBatchResultBytes int
 }
 
 func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
@@ -93,7 +105,15 @@ func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
 	if maxConcurrency <= 0 {
 		maxConcurrency = DefaultMaxConcurrency
 	}
-	return &Executor{catalog: catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency, effectJournal: options.EffectJournal}
+	maxBatchResultBytes := options.MaxBatchResultBytes
+	if maxBatchResultBytes <= 0 {
+		maxBatchResultBytes = DefaultMaxBatchResultBytes
+	}
+	return &Executor{
+		catalog: catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency,
+		effectJournal: options.EffectJournal, maxBatchResultBytes: maxBatchResultBytes,
+		artifactGovernor: newResultArtifactGovernor(options),
+	}
 }
 
 // ExecuteBatch preserves input order. A serial or unresolved tool makes the whole
@@ -104,7 +124,7 @@ func (e *Executor) ExecuteBatch(ctx context.Context, requests []ExecutionRequest
 	}
 	groups, parallel := e.concurrentGroups(requests)
 	if !parallel || len(groups) == 1 {
-		return e.executeSequential(ctx, requests)
+		return e.finishBatch(ctx, requests, e.executeSequential(ctx, requests))
 	}
 
 	results := make([]ExecutionResult, len(requests))
@@ -117,7 +137,7 @@ func (e *Executor) ExecuteBatch(ctx context.Context, requests []ExecutionRequest
 			defer workers.Done()
 			for group := range jobs {
 				for _, item := range group {
-					results[item.index] = e.Execute(ctx, item.request)
+					results[item.index] = e.execute(ctx, item.request, false)
 				}
 			}
 		}()
@@ -127,7 +147,7 @@ func (e *Executor) ExecuteBatch(ctx context.Context, requests []ExecutionRequest
 	}
 	close(jobs)
 	workers.Wait()
-	return results
+	return e.finishBatch(ctx, requests, results)
 }
 
 type indexedExecutionRequest struct {
@@ -138,7 +158,7 @@ type indexedExecutionRequest struct {
 func (e *Executor) executeSequential(ctx context.Context, requests []ExecutionRequest) []ExecutionResult {
 	results := make([]ExecutionResult, len(requests))
 	for index, request := range requests {
-		results[index] = e.Execute(ctx, request)
+		results[index] = e.execute(ctx, request, false)
 	}
 	return results
 }
@@ -198,7 +218,13 @@ func concurrencyKey(policy ConcurrencyPolicy, arguments json.RawMessage) (string
 	}
 }
 
-func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) (result ExecutionResult) {
+func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) ExecutionResult {
+	result := e.execute(ctx, request, true)
+	result.encodedResult = nil
+	return result
+}
+
+func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finishTrace bool) (result ExecutionResult) {
 	started := time.Now()
 	request.Arguments = normalizeArguments(request.Arguments)
 	result = ExecutionResult{
@@ -217,7 +243,9 @@ func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) (resul
 	result.Error = callErr
 	if e.tracer != nil {
 		e.tracer.ToolStarted(ctx, request)
-		defer func() { e.tracer.ToolFinished(ctx, result) }()
+		if finishTrace {
+			defer func() { e.tracer.ToolFinished(ctx, result) }()
+		}
 	}
 	defer func() { result.DurationMS = time.Since(started).Milliseconds() }()
 
@@ -287,13 +315,9 @@ func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) (resul
 			e.markSideEffectUncertain(effectKey, result.ErrorMessage())
 			return result
 		}
+		result.encodedResult = append([]byte(nil), encoded...)
 		if len(encoded) > policy.MaxResultBytes {
-			result.Result = map[string]any{
-				"preview":   truncateUTF8(encoded, policy.MaxResultBytes),
-				"truncated": true,
-			}
-			result.Truncated = true
-			result.OriginalResultBytes = len(encoded)
+			result = e.artifactGovernor.govern(ctx, request, result, encoded, policy.MaxResultBytes)
 		} else {
 			result.Result = completed.value
 		}

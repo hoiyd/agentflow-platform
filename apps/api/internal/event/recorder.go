@@ -45,6 +45,29 @@ func (r *Recorder) ToolEnd(ctx context.Context, span Span, payload map[string]an
 	r.end(ctx, span, eventType, payload)
 }
 
+func (r *Recorder) ToolArtifact(ctx context.Context, eventType domain.RunEventType, payload ToolArtifactPayload) {
+	if r == nil || r.store == nil || ctx == nil || ctx.Err() != nil {
+		return
+	}
+	scope := ScopeFromContext(ctx)
+	if scope.RunID == "" {
+		return
+	}
+	event, err := NewRunEvent(eventType, EventMetadata{
+		RunID: scope.RunID, ConversationID: scope.ConversationID,
+		StageID: scope.StageID, TurnID: scope.TurnID,
+	}, payload)
+	if err != nil {
+		log.Printf("event_record_error type=%s run_id=%s error=%q", eventType, scope.RunID, err.Error())
+		return
+	}
+	if created, err := r.store.CreateRunEvent(event); err != nil {
+		log.Printf("event_record_error type=%s run_id=%s error=%q", eventType, scope.RunID, err.Error())
+	} else {
+		logRunEvent(created)
+	}
+}
+
 func (r *Recorder) Retrieval(ctx context.Context, runID string, stepID string, payload map[string]any) {
 	r.event(ctx, runID, stepID, domain.EventRetrievalCompleted, payload)
 }

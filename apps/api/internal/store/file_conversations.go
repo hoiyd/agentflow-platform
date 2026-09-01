@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"os"
 	"sort"
 	"time"
 
@@ -202,8 +203,26 @@ func (s *FileStore) DeleteConversation(id string) error {
 		}
 	}
 	s.data.ModelRequestRecords = modelRequests
+	toolArtifactIDs := make([]string, 0)
+	toolArtifacts := make([]domain.ToolArtifact, 0, len(s.data.ToolArtifacts))
+	for _, artifact := range s.data.ToolArtifacts {
+		if runIDs[artifact.RunID] {
+			toolArtifactIDs = append(toolArtifactIDs, artifact.ID)
+			continue
+		}
+		toolArtifacts = append(toolArtifacts, artifact)
+	}
+	s.data.ToolArtifacts = toolArtifacts
 
-	return s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		return err
+	}
+	for _, artifactID := range toolArtifactIDs {
+		if path, err := s.toolArtifactPath(artifactID); err == nil {
+			_ = os.Remove(path)
+		}
+	}
+	return nil
 }
 
 func (s *FileStore) ListMessages(conversationID string) ([]domain.Message, error) {

@@ -393,6 +393,43 @@ export type RunDelegation = {
   updated_at: string;
 };
 
+export type ToolArtifact = {
+	id: string;
+	schema_version: number;
+	run_id: string;
+	stage_id?: string;
+	turn_id?: string;
+	tool_call_id: string;
+	tool_name: string;
+	definition_revision?: string;
+	media_type: string;
+	content_hash: string;
+	original_byte_size: number;
+	stored_byte_size: number;
+	redacted: boolean;
+	redaction_strategy?: string;
+	redaction_count: number;
+	created_at: string;
+	expires_at?: string;
+	expired?: boolean;
+};
+
+export type ToolArtifactRead = {
+	artifact: ToolArtifact;
+	offset: number;
+	content: string;
+	next_offset: number;
+	complete: boolean;
+};
+
+export type ToolArtifactSearchResult = {
+	artifact: ToolArtifact;
+	query: string;
+	matches: Array<{ offset: number; preview: string }>;
+	scanned_bytes: number;
+	truncated: boolean;
+};
+
 export type RunReplay = {
   run: RunInfo;
   projection: RunProjectionSnapshot;
@@ -403,7 +440,8 @@ export type RunReplay = {
   usage_ledger: RunUsageLedger;
   run_events: RunEvent[];
   stage_checkpoints: Array<Record<string, unknown>>;
-  tool_effects: Array<Record<string, unknown>>;
+	tool_effects: Array<Record<string, unknown>>;
+	tool_artifacts: ToolArtifact[];
   verification_evidence: Array<Record<string, unknown>>;
   verification_artifacts: Array<Record<string, unknown>>;
   task_state_revisions: TaskStateRevision[];
@@ -477,7 +515,8 @@ function normalizeRunReplay(data: unknown): RunReplay {
     usage_ledger: normalizeRunUsageLedger(replay.usage_ledger, run?.id ?? ""),
     run_events: Array.isArray(replay.run_events) ? replay.run_events : [],
     stage_checkpoints: Array.isArray(replay.stage_checkpoints) ? replay.stage_checkpoints : [],
-    tool_effects: Array.isArray(replay.tool_effects) ? replay.tool_effects : [],
+		tool_effects: Array.isArray(replay.tool_effects) ? replay.tool_effects : [],
+		tool_artifacts: Array.isArray(replay.tool_artifacts) ? replay.tool_artifacts as ToolArtifact[] : [],
     verification_evidence: Array.isArray(replay.verification_evidence) ? replay.verification_evidence : [],
     verification_artifacts: Array.isArray(replay.verification_artifacts) ? replay.verification_artifacts : [],
     task_state_revisions: Array.isArray(replay.task_state_revisions) ? replay.task_state_revisions : [],
@@ -878,6 +917,36 @@ export async function getRunReplay(runId: string): Promise<RunReplay> {
     { errorMessage: "Failed to load run replay" }
   );
   return normalizeRunReplay(data);
+}
+
+export async function listToolArtifacts(runId: string): Promise<ToolArtifact[]> {
+	const response = await apiObject<{ artifacts?: ToolArtifact[] }>(
+		`/api/runs/${encodeURIComponent(runId)}/artifacts`,
+		{ cache: "no-store" },
+		{ errorMessage: "Failed to load tool artifacts" },
+		"tool artifact list"
+	);
+	return Array.isArray(response.artifacts) ? response.artifacts : [];
+}
+
+export async function readToolArtifact(runId: string, artifactId: string, offset = 0, limit = 8192): Promise<ToolArtifactRead> {
+	const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+	return apiObject<ToolArtifactRead>(
+		`/api/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}?${query}`,
+		{ cache: "no-store" },
+		{ errorMessage: "Failed to read tool artifact", includeErrorBody: true },
+		"tool artifact read"
+	);
+}
+
+export async function searchToolArtifact(runId: string, artifactId: string, queryText: string, maxMatches = 5): Promise<ToolArtifactSearchResult> {
+	const query = new URLSearchParams({ q: queryText, max_matches: String(maxMatches) });
+	return apiObject<ToolArtifactSearchResult>(
+		`/api/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifactId)}/search?${query}`,
+		{ cache: "no-store" },
+		{ errorMessage: "Failed to search tool artifact", includeErrorBody: true },
+		"tool artifact search"
+	);
 }
 
 export async function getRunProjection(runId: string): Promise<RunProjectionSnapshot> {

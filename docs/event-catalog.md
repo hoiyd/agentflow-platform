@@ -4,6 +4,8 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 
 | Event | Durability | Schema | Scope | Producer | Payload schema | Lifecycle | Terminal for | Consumers |
 | --- | --- | ---: | --- | --- | --- | --- | --- | --- |
+| `artifact.expired` | durable | 1 | run | tools | `event.ToolArtifactPayload` | none | `` | artifact_governance, replay |
+| `artifact.read` | durable | 1 | run | tools | `event.ToolArtifactPayload` | none | `` | artifact_governance, replay |
 | `budget.exceeded` | durable | 1 | run | budget | `event.BudgetExceededPayload` | none | `` | run_projection, usage_ledger, replay |
 | `checkpoint.captured` | durable | 1 | run+stage | checkpoint/recovery | `event.TracePayload` | checkpoint:transition | `` | recovery, replay |
 | `checkpoint.compensation_completed` | durable | 1 | run+stage | checkpoint/recovery | `event.TracePayload` | compensation:terminal | `checkpoint.compensation_started` | recovery, replay |
@@ -59,6 +61,7 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 | `task_state.updated` | durable | 1 | run | taskstate | `event.TaskStatePayload` | none | `` | replay |
 | `tool.completed` | durable | 1 | run | tools | `event.ToolPayload` | tool:terminal | `tool.started` | run_projection, replay |
 | `tool.failed` | durable | 1 | run | tools | `event.ToolPayload` | tool:terminal | `tool.started` | run_projection, replay |
+| `tool.result.persisted` | durable | 1 | run | tools | `event.ToolArtifactPayload` | none | `` | artifact_governance, replay |
 | `tool.started` | durable | 1 | run | tools | `event.ToolPayload` | tool:start | `` | run_projection, replay |
 | `turn.canceled` | durable | 1 | run+turn | agent/turn | `event.TracePayload` | turn:terminal | `turn.started` | run_projection, replay |
 | `turn.completed` | durable | 1 | run+turn | agent/turn | `event.TracePayload` | turn:terminal | `turn.started` | run_projection, replay |

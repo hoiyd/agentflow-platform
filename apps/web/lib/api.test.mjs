@@ -94,6 +94,18 @@ test("replay preserves durable recovery metadata", async (t) => {
   assert.equal(replay.tool_effects[0].has_result, true);
 });
 
+test("replay preserves tool artifact recovery metadata", async (t) => {
+  mockFetch(t, replayPayload({
+    tool_artifacts: [{ id: "tool_artifact_1", run_id: "run-1", tool_call_id: "call-1", tool_name: "search", stored_byte_size: 100000 }]
+  }));
+
+  const replay = await getRunReplay("run-1");
+
+  assert.equal(replay.tool_artifacts.length, 1);
+  assert.equal(replay.tool_artifacts[0].id, "tool_artifact_1");
+  assert.equal(replay.tool_artifacts[0].stored_byte_size, 100000);
+});
+
 test("replay preserves parent and child delegation topology", async (t) => {
   const relation = {
     id: "delegation-1", workspace_id: "workspace-1", conversation_id: "conversation-1",
