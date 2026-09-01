@@ -240,6 +240,13 @@ Validation failures return a stable code, JSON Pointer path, and non-secret
 message. The canonical argument hash and frozen definition revision are reused
 by tracing and the side-effect journal.
 
+Offline Tool selection evaluation calls the same side-effect-free Catalog
+validation path, so its schema decisions cannot drift from Executor behavior.
+Every production Binding is covered by a shared contract/sensor suite, while a
+deterministic fault harness exercises timeout, cancel, panic, result limits,
+Budget denial, tracing, and effect-journal boundaries. See
+[Tool Contract and Fault Testing](tool-contract-testing.md).
+
 Tool name, description, normalized parameter schema, schema version, and
 definition revision are frozen with new Snapshot v10 Runs. Snapshot v9 remains
 resumable through its legacy full-definition comparison. The live Binding owns

@@ -42,6 +42,7 @@ the project.
 | [Execution modes](execution-modes.md) | How do Single, Multi, and Loop execution differ in lifecycle, checkpoints, trace shape, cost, and use case? |
 | [Internal terms](terms.md) | What do the execution entities mean, and how do Run Events, Trace, Replay, and Episode Report differ? |
 | [Execution controls](execution-controls.md) | Which layer owns concurrency, rate limits, retries, budgets, context capacity, and stopping rules? |
+| [Tool contract testing](tool-contract-testing.md) | How are Binding contracts, runtime failure paths, durable effects, and Tool selection regressions tested without a network or model? |
 | [Failure handling](failure-handling.md) | How do subsystem errors retain specific types while exposing one structured trace and Episode contract? |
 | [Run Budget](run-budget.md) | How are logical calls, provider usage, tools, runtime, and cost accounted for? |
 | [Durable recovery](durable-recovery.md) | How are interrupted lifecycles repaired, Stage boundaries checkpointed, and external Tool effects replayed safely? |

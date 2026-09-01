@@ -1,0 +1,91 @@
+{
+  "schema_version": "tool-selection-v1",
+  "id": "built-in-tool-selection-v1",
+  "cases": [
+    {
+      "id": "no-tool-greeting",
+      "task": "Say hello and briefly introduce yourself.",
+      "expected": {
+        "decision": "no_tool",
+        "outcome": "no_tool"
+      }
+    },
+    {
+      "id": "calculator-basic",
+      "task": "Calculate (128 * 37) / 4.",
+      "expected": {
+        "decision": "tool",
+        "tool": "calculator",
+        "arguments": {"expression": "(128 * 37) / 4"},
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "time-not-calculator",
+      "task": "What time is it in Asia/Shanghai?",
+      "expected": {
+        "decision": "tool",
+        "tool": "get_current_time",
+        "arguments": {"timezone": "Asia/Shanghai"},
+        "outcome": "success"
+      }
+    },
+    {
+      "id": "calculator-invalid-arguments",
+      "task": "Use the calculator, but the candidate omitted its required expression.",
+      "expected": {
+        "decision": "tool",
+        "tool": "calculator",
+        "arguments": {},
+        "outcome": "invalid_arguments",
+        "recovery_action": "correct_arguments"
+      }
+    },
+    {
+      "id": "calculator-execution-failure",
+      "task": "Calculate 1 / 0 and stop if the operation is undefined.",
+      "expected": {
+        "decision": "tool",
+        "tool": "calculator",
+        "arguments": {"expression": "1 / 0"},
+        "outcome": "execution_failed",
+        "recovery_action": "stop_and_explain"
+      }
+    },
+    {
+      "id": "calculator-required-evidence",
+      "task": "Calculate 21 * 2 and retain evidence of the numeric result.",
+      "expected": {
+        "decision": "tool",
+        "tool": "calculator",
+        "arguments": {"expression": "21 * 2"},
+        "outcome": "success",
+        "required_evidence": ["numeric_result"]
+      }
+    },
+    {
+      "id": "task-state-goal",
+      "task": "Persist the confirmed project goal in durable task state at version 0.",
+      "expected": {
+        "decision": "tool",
+        "tool": "update_task_state",
+        "arguments": {
+          "expected_version": 0,
+          "operations": [
+            {"type": "set_goal", "goal": "Ship the Tool contract harness"}
+          ]
+        },
+        "outcome": "success",
+        "required_evidence": ["durable_state_revision"]
+      }
+    },
+    {
+      "id": "unsupported-stock-price",
+      "task": "Look up the latest stock price using only the available built-in tools.",
+      "expected": {
+        "decision": "no_tool",
+        "outcome": "no_tool"
+      }
+    }
+  ]
+}
