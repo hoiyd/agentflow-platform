@@ -8,6 +8,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/toolpolicy"
+	"agentflow-platform/apps/api/internal/toolprogress"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -60,6 +61,45 @@ func NewToolExecutionTracer(recorder *Recorder, runID, stepID string) *ToolExecu
 	}
 }
 
+func (t *ToolExecutionTracer) ToolProgressEvaluated(ctx context.Context, request tools.ExecutionRequest, decision toolprogress.Decision) {
+	if t == nil || t.recorder == nil || t.recorder.store == nil {
+		return
+	}
+	eventType := domain.EventToolGuardWarned
+	switch decision.Action {
+	case toolprogress.ActionBlockCall:
+		eventType = domain.EventToolGuardBlocked
+	case toolprogress.ActionHaltTurn:
+		eventType = domain.EventTurnNoProgress
+	case toolprogress.ActionWarn:
+	default:
+		return
+	}
+	scope := ScopeFromContext(traceContext(ctx))
+	if scope.RunID == "" {
+		scope.RunID = t.runID
+	}
+	if scope.StageID == "" {
+		scope.StageID = t.stepID
+	}
+	if scope.TurnID == "" {
+		scope.TurnID = request.TurnID
+	}
+	event, err := NewRunEvent(eventType, EventMetadata{
+		RunID: scope.RunID, ConversationID: scope.ConversationID,
+		StageID: scope.StageID, TurnID: scope.TurnID,
+	}, ToolProgressPayload{
+		ToolCallID: request.CallID, ToolName: request.Tool, GuardVersion: decision.Version,
+		Rule: string(decision.Rule), Action: string(decision.Action), Count: decision.Count,
+		Reason: decision.Reason, SignatureHash: decision.SignatureHash,
+		OutcomeFingerprint: decision.OutcomeFingerprint,
+	})
+	if err != nil {
+		return
+	}
+	_, _ = t.recorder.store.CreateRunEvent(event)
+}
+
 func (t *ToolExecutionTracer) ToolStarted(ctx context.Context, request tools.ExecutionRequest) {
 	if t == nil || t.recorder == nil {
 		return
@@ -108,6 +148,18 @@ func (t *ToolExecutionTracer) ToolFinished(ctx context.Context, result tools.Exe
 		payload["policy_rule_id"] = result.PolicyDecision.RuleID
 		payload["policy_action"] = string(result.PolicyDecision.Action)
 		payload["policy_reason"] = result.PolicyDecision.Reason
+	}
+	if result.ProgressDecision != nil {
+		decision := result.ProgressDecision
+		payload["progress_guard_version"] = decision.Version
+		payload["progress_guard_rule"] = string(decision.Rule)
+		payload["progress_guard_action"] = string(decision.Action)
+		payload["progress_guard_count"] = decision.Count
+		payload["progress_guard_reason"] = decision.Reason
+		payload["progress_guard_signature"] = decision.SignatureHash
+		payload["progress_guard_outcome"] = decision.OutcomeFingerprint
+		payload["progress_guard_trackable"] = decision.Trackable
+		payload["progress_guard_executed"] = decision.Executed
 	}
 	if result.OriginalResultBytes > 0 {
 		payload["original_result_bytes"] = result.OriginalResultBytes

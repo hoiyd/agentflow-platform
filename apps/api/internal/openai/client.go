@@ -13,6 +13,7 @@ import (
 	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/modelrequest"
 	"agentflow-platform/apps/api/internal/toolpolicy"
+	"agentflow-platform/apps/api/internal/toolprogress"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -92,6 +93,12 @@ func (t *streamToolExecutionTracer) ToolPolicyEvaluated(ctx context.Context, req
 		return errors.New("durable Tool policy tracer is unavailable")
 	}
 	return delegate.ToolPolicyEvaluated(ctx, request, decision)
+}
+
+func (t *streamToolExecutionTracer) ToolProgressEvaluated(ctx context.Context, request tools.ExecutionRequest, decision toolprogress.Decision) {
+	if delegate, ok := t.delegate.(tools.ProgressDecisionTracer); ok {
+		delegate.ToolProgressEvaluated(ctx, request, decision)
+	}
 }
 
 type Usage = modelprovider.Usage

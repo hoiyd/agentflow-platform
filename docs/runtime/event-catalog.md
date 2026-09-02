@@ -61,12 +61,15 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 | `task_state.updated` | durable | 1 | run | taskstate | `event.TaskStatePayload` | none | `` | replay |
 | `tool.completed` | durable | 1 | run | tools | `event.ToolPayload` | tool:terminal | `tool.started` | run_projection, replay |
 | `tool.failed` | durable | 1 | run | tools | `event.ToolPayload` | tool:terminal | `tool.started` | run_projection, replay |
+| `tool.guard.blocked` | durable | 1 | run | tools | `event.ToolProgressPayload` | none | `` | tool_progress_guard, replay |
+| `tool.guard.warned` | durable | 1 | run | tools | `event.ToolProgressPayload` | none | `` | tool_progress_guard, replay |
 | `tool.policy_evaluated` | durable | 1 | run | tools | `event.ToolPolicyPayload` | none | `` | tool_policy, replay |
 | `tool.result.persisted` | durable | 1 | run | tools | `event.ToolArtifactPayload` | none | `` | artifact_governance, replay |
 | `tool.started` | durable | 1 | run | tools | `event.ToolPayload` | tool:start | `` | run_projection, replay |
 | `turn.canceled` | durable | 1 | run+turn | agent/turn | `event.TracePayload` | turn:terminal | `turn.started` | run_projection, replay |
 | `turn.completed` | durable | 1 | run+turn | agent/turn | `event.TracePayload` | turn:terminal | `turn.started` | run_projection, replay |
 | `turn.failed` | durable | 1 | run+turn | agent/turn | `event.TracePayload` | turn:terminal | `turn.started` | run_projection, replay |
+| `turn.no_progress` | durable | 1 | run+turn | tools | `event.ToolProgressPayload` | turn:transition | `` | tool_progress_guard, replay |
 | `turn.started` | durable | 1 | run+turn | agent/turn | `event.TracePayload` | turn:start | `` | run_projection, replay |
 | `usage.recorded` | durable | 1 | run | budget | `event.UsagePayload` | none | `` | usage_ledger, replay |
 | `verification.blocked` | durable | 1 | run | verification | `event.TracePayload` | verifier:terminal | `verification.started` | verification_evidence, replay |

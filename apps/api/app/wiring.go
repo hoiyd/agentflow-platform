@@ -20,6 +20,7 @@ import (
 	"agentflow-platform/apps/api/internal/recovery"
 	"agentflow-platform/apps/api/internal/requestcapture"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/toolprogress"
 	"agentflow-platform/apps/api/internal/tools"
 	"agentflow-platform/apps/api/internal/verification"
 )
@@ -108,6 +109,11 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			MaxEstimatedCostMicros:           cfg.RunMaxEstimatedCostMicros,
 			InputCostPerMillionTokensMicros:  cfg.ModelInputCostPerMillionMicros,
 			OutputCostPerMillionTokensMicros: cfg.ModelOutputCostPerMillionMicros,
+		},
+		ToolProgressGuard: toolprogress.Config{
+			Version: toolprogress.CurrentVersion, Enabled: cfg.ToolProgressGuardEnabled,
+			WarnAfter: cfg.ToolProgressWarnAfter, BlockAfter: cfg.ToolProgressBlockAfter,
+			HaltAfter: cfg.ToolProgressHaltAfter, HistoryMax: 8,
 		},
 		KnowledgeRetriever: retrievalPipeline,
 		MemoryRecall:       memoryProvider,

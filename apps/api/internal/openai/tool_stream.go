@@ -11,6 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	tracepkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/toolprogress"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -149,6 +150,7 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		MaxArtifactBytes:     c.toolArtifactPolicy.MaxArtifactBytes,
 		ArtifactPreviewBytes: c.toolArtifactPolicy.PreviewBytes,
 		ArtifactRetention:    c.toolArtifactPolicy.Retention,
+		ProgressGuard:        toolprogress.FromContext(ctx),
 	})
 	scope := tracepkg.ScopeFromContext(ctx)
 	requests := make([]tools.ExecutionRequest, 0, len(normalizedCalls))
@@ -163,6 +165,9 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 	for _, result := range results {
 		if exceeded, ok := budget.AsExceeded(result.Error); ok {
 			return exceeded
+		}
+		if result.Error != nil && result.Error.Code == tools.ErrorNoProgress {
+			return result.Error
 		}
 	}
 	for index, result := range results {

@@ -47,6 +47,7 @@ capacity, resource consumption, timeouts, and stopping conditions.
 | Context Assembly | one logical Model Call | context tokens | `contextassembly.Assembler` | config frozen with Run |
 | Loop Guard | one Loop (`autonomous`) Run | iterations and accumulated output characters | `autonomous` runtime | config frozen with Run |
 | Tool Policy | one Tool Call or batch | timeout, bytes, parallel group, side-effect idempotency, artifact spill | `tools.Executor` | schema and side-effect declaration frozen; artifact metadata durable |
+| Tool Progress Guard | one Run | repeated typed failures, unchanged read-only results, alternating loops | `toolprogress.Guard` through `tools.Executor` | thresholds frozen; decisions durable |
 | Verification | one contracted Run | attempts, timeout, artifacts | `verification.Engine` | contract and evidence |
 | Recovery | startup scan + Resume | stale lifecycle, Stage checkpoints, Tool effects | `recovery` + `checkpoint` | recovery state persisted; threshold live |
 | Observability | one Run | Run Events and derived Trace, Replay, and Episode Report views | Event Store / projection builders | durable events only; projections do not enforce policy |
@@ -215,8 +216,9 @@ AUTONOMOUS_MAX_TOOL_CALLS=20
 - Snapshot v4 and older Runs resume under their historical protocol.
 
 With defaults, the effective Autonomous runtime/tool caps are `5m/20`, not the
-general `15m/50`. Run Budget limits quantity; a future Progress Guard must
-detect repetition, oscillation, and lack of progress.
+general `15m/50`. Run Budget limits quantity; the Tool Progress Guard detects
+repeated work independently and can block a call before it consumes Tool
+Budget. See [Tool Progress Guard](../tools/tool-progress-guard.md).
 
 ## 7. Tool Execution Policy
 

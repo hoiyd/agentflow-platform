@@ -16,6 +16,7 @@ import (
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/toolpolicy"
+	"agentflow-platform/apps/api/internal/toolprogress"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -39,7 +40,8 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	)
 	runtime := NewRuntime(RuntimeOptions{
 		Store: fileStore, ModelClient: client, Tools: manager,
-		RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 12, MaxRuntimeMS: 90_000, MaxToolCalls: 7},
+		RunBudget:         domain.RuntimeRunBudget{MaxModelCalls: 12, MaxRuntimeMS: 90_000, MaxToolCalls: 7},
+		ToolProgressGuard: toolprogress.DefaultConfig(),
 		ContextAssembly: domain.ContextAssemblyConfig{
 			AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 32000, OutputReserveTokens: 2048,
 			SafetyMarginTokens: 1024, HistoryMaxTokens: 12000, MemoryMaxTokens: 2000, KnowledgeMaxTokens: 4000,
@@ -88,6 +90,9 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if prepared.Run.RuntimeSnapshot.ToolSecurityPolicy.Version != toolpolicy.CurrentVersion {
 		t.Fatalf("Tool security policy was not frozen: %#v", prepared.Run.RuntimeSnapshot.ToolSecurityPolicy)
 	}
+	if !prepared.Run.RuntimeSnapshot.ToolProgressGuard.Enabled || prepared.Run.RuntimeSnapshot.ToolProgressGuard.BlockAfter != 4 {
+		t.Fatalf("Tool Progress Guard was not frozen: %#v", prepared.Run.RuntimeSnapshot.ToolProgressGuard)
+	}
 	runtime.runBudget.MaxModelCalls = 99
 	if prepared.Run.RuntimeSnapshot.RunBudget.MaxModelCalls != 12 {
 		t.Fatal("runtime budget mutation changed the frozen snapshot")
@@ -95,6 +100,10 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	runtime.contextAssemblyConfig = contextassembly.NormalizeConfig(domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 64000})
 	if prepared.Run.RuntimeSnapshot.ContextAssembly.ContextWindowTokens != 32000 {
 		t.Fatal("runtime config mutation changed the frozen context assembly config")
+	}
+	runtime.toolProgressConfig.BlockAfter = 99
+	if prepared.Run.RuntimeSnapshot.ToolProgressGuard.BlockAfter != 4 {
+		t.Fatal("runtime Guard mutation changed the frozen snapshot")
 	}
 
 	agent.SystemPrompt = "mutated prompt"
@@ -173,6 +182,9 @@ func TestRuntimeSnapshotResumeSupportsOnlyCurrentAndPreviousVersions(t *testing.
 		if version >= domain.ToolSecurityRuntimeSnapshotVersion {
 			snapshot.ToolSecurityPolicy = toolpolicy.DefaultPolicy()
 		}
+		if version >= domain.ToolProgressRuntimeSnapshotVersion {
+			snapshot.ToolProgressGuard = toolprogress.DefaultConfig()
+		}
 		if err := validateRuntimeSnapshot(snapshot); err != nil {
 			t.Fatalf("snapshot v%d should be resumable: %v", version, err)
 		}
@@ -203,6 +215,14 @@ func TestCurrentRuntimeSnapshotRejectsInvalidToolSecurityCapability(t *testing.T
 	}}
 	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "security capability") {
 		t.Fatalf("invalid frozen Tool capability must fail closed: %v", err)
+	}
+}
+
+func TestCurrentRuntimeSnapshotRequiresFrozenToolProgressGuard(t *testing.T) {
+	snapshot := testRuntimeSnapshot()
+	snapshot.ToolProgressGuard = toolprogress.Config{}
+	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "Progress Guard") {
+		t.Fatalf("missing frozen Tool Progress Guard must fail closed: %v", err)
 	}
 }
 

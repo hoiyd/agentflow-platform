@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/toolpolicy"
+	"agentflow-platform/apps/api/internal/toolprogress"
 )
 
 type RunStatus string
@@ -50,8 +51,9 @@ const (
 	DelegationRuntimeSnapshotVersion   = 9
 	ToolContractRuntimeSnapshotVersion = 10
 	ToolSecurityRuntimeSnapshotVersion = 11
-	PreviousRuntimeSnapshotVersion     = ToolContractRuntimeSnapshotVersion
-	CurrentRuntimeSnapshotVersion      = ToolSecurityRuntimeSnapshotVersion
+	ToolProgressRuntimeSnapshotVersion = 12
+	PreviousRuntimeSnapshotVersion     = ToolSecurityRuntimeSnapshotVersion
+	CurrentRuntimeSnapshotVersion      = ToolProgressRuntimeSnapshotVersion
 )
 
 type RuntimeSnapshot struct {
@@ -62,6 +64,7 @@ type RuntimeSnapshot struct {
 	Model              RuntimeModelSnapshot   `json:"model"`
 	Tools              []RuntimeToolSnapshot  `json:"tools"`
 	ToolSecurityPolicy toolpolicy.Policy      `json:"tool_security_policy"`
+	ToolProgressGuard  toolprogress.Config    `json:"tool_progress_guard"`
 	ContextAssembly    ContextAssemblyConfig  `json:"context_assembly"`
 	RouterMode         string                 `json:"router_mode,omitempty"`
 	AutonomousLimits   *RuntimeLimitsSnapshot `json:"autonomous_limits,omitempty"`
@@ -309,6 +312,9 @@ const (
 	EventToolCompleted           RunEventType = "tool.completed"
 	EventToolFailed              RunEventType = "tool.failed"
 	EventToolPolicyEvaluated     RunEventType = "tool.policy_evaluated"
+	EventToolGuardWarned         RunEventType = "tool.guard.warned"
+	EventToolGuardBlocked        RunEventType = "tool.guard.blocked"
+	EventTurnNoProgress          RunEventType = "turn.no_progress"
 	EventToolResultPersisted     RunEventType = "tool.result.persisted"
 	EventArtifactRead            RunEventType = "artifact.read"
 	EventArtifactExpired         RunEventType = "artifact.expired"

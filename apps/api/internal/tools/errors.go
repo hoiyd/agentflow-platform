@@ -21,6 +21,8 @@ const (
 	ErrorCredentialScope      ErrorCode = "credential_scope_unavailable"
 	ErrorApprovalRequired     ErrorCode = "approval_required"
 	ErrorSecurityAudit        ErrorCode = "security_audit_failed"
+	ErrorProgressBlocked      ErrorCode = "tool_progress_blocked"
+	ErrorNoProgress           ErrorCode = "turn_no_progress"
 )
 
 type ExecutionError struct {

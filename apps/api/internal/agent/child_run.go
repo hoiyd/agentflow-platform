@@ -115,6 +115,7 @@ func (r *Runtime) executeDelegatedChild(ctx context.Context, events chan<- domai
 		return "", r.failDelegation(ctx, events, parentStep, childRun, relation, err)
 	}
 	r.publishRunLifecycle(ctx, childRun, domain.EventRunCompleted, map[string]any{"status": childRun.Status, "parent_run_id": parent.Run.ID, "delegation_id": relation.ID})
+	r.forgetProgressGuard(childRun.ID)
 	relation, err = r.store.UpdateRunDelegation(relation.ID, result)
 	if err != nil {
 		return "", r.failDelegatedParentStep(ctx, events, parentStep, err)
@@ -192,6 +193,7 @@ func (r *Runtime) childRuntimeSnapshot(parent domain.Run, selected domain.Agent,
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: ChatModeSingle,
 		Agent: selectedSnapshot, Model: parent.RuntimeSnapshot.Model, Tools: toolSnapshots,
 		ToolSecurityPolicy: parent.RuntimeSnapshot.ToolSecurityPolicy,
+		ToolProgressGuard:  parent.RuntimeSnapshot.ToolProgressGuard,
 		ContextAssembly:    contextConfig, RunBudget: cloneRunBudget(childPolicy.RunBudget),
 		Delegation: &domain.RuntimeDelegation{
 			DelegationID: delegationID, ParentRunID: parent.ID, ParentTurnID: parentTurnID,

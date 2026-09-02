@@ -10,6 +10,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/toolpolicy"
+	"agentflow-platform/apps/api/internal/toolprogress"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -108,6 +109,61 @@ func TestToolPolicyTracePersistsDecisionWithoutSensitiveScopeNames(t *testing.T)
 	}
 	if events[0].Payload["credential_scope_count"] != float64(1) || events[0].Payload["network_target_count"] != float64(1) {
 		t.Fatalf("policy event lost bounded metadata: %#v", events[0].Payload)
+	}
+}
+
+func TestToolProgressTracePersistsEscalationsAndTerminalRecoveryMetadata(t *testing.T) {
+	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, _ := fileStore.CreateConversation("progress trace")
+	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tracer := NewToolExecutionTracer(NewRecorder(fileStore), run.ID, "stage-1")
+	ctx := WithScope(context.Background(), Scope{RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1", TurnID: "turn-1"})
+	request := tools.ExecutionRequest{CallID: "call-1", Tool: "reader", TurnID: "turn-1"}
+	base := toolprogress.Decision{
+		Version: toolprogress.CurrentVersion, Rule: toolprogress.RuleRepeatedFailure,
+		Count: 2, Reason: "bounded reason", SignatureHash: strings.Repeat("a", 64),
+		OutcomeFingerprint: strings.Repeat("b", 64), Trackable: true, Executed: true,
+	}
+	for _, action := range []toolprogress.Action{toolprogress.ActionWarn, toolprogress.ActionBlockCall, toolprogress.ActionHaltTurn} {
+		decision := base
+		decision.Action = action
+		tracer.ToolProgressEvaluated(ctx, request, decision)
+	}
+	tracer.ToolStarted(ctx, request)
+	terminal := base
+	terminal.Action = toolprogress.ActionBlockCall
+	terminal.Executed = false
+	tracer.ToolFinished(ctx, tools.ExecutionResult{
+		CallID: request.CallID, Tool: request.Tool,
+		Error:            &tools.ExecutionError{Code: tools.ErrorProgressBlocked, Message: "blocked"},
+		ProgressDecision: &terminal,
+	})
+
+	events, err := fileStore.ListRunEvents(run.ID)
+	if err != nil || len(events) != 5 {
+		t.Fatalf("progress events=%#v err=%v", events, err)
+	}
+	want := []domain.RunEventType{
+		domain.EventToolGuardWarned, domain.EventToolGuardBlocked, domain.EventTurnNoProgress,
+		domain.EventToolStarted, domain.EventToolFailed,
+	}
+	for index, eventType := range want {
+		if events[index].Type != eventType {
+			t.Fatalf("event %d=%s, want %s", index, events[index].Type, eventType)
+		}
+	}
+	if events[4].Payload["progress_guard_action"] != string(toolprogress.ActionBlockCall) ||
+		events[4].Payload["progress_guard_signature"] != terminal.SignatureHash ||
+		events[4].Payload["progress_guard_executed"] != false {
+		t.Fatalf("terminal recovery metadata missing: %#v", events[4].Payload)
 	}
 }
 
