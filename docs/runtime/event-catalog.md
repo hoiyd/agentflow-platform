@@ -1,6 +1,6 @@
 # Run Event Catalog
 
-This file is generated from `apps/api/internal/eventcatalog`. Producers must use a registered event and typed payload contract; durable stores reject live-only and unregistered events.
+This file is generated from `apps/api/internal/eventcatalog`. Producers must use a registered event. Structured payloads are matched to the catalog, while `TracePayload` is explicitly bound to one event type; durable stores reject live-only and unregistered events.
 
 | Event | Durability | Schema | Scope | Producer | Payload schema | Lifecycle | Terminal for | Consumers |
 | --- | --- | ---: | --- | --- | --- | --- | --- | --- |

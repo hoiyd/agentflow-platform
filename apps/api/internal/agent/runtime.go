@@ -43,7 +43,7 @@ type Runtime struct {
 	toolProgressMu        sync.Mutex
 	toolProgressGuards    map[string]*toolprogress.Guard
 	knowledgeRetriever    rag.Retriever
-	checkpoints           checkpoint.Provider
+	checkpoints           *checkpoint.InternalProvider
 	taskStates            *taskstate.Service
 	toolArtifacts         *toolartifact.Service
 	liveEvents            eventpkg.LivePublisher
@@ -108,7 +108,6 @@ type RuntimeOptions struct {
 	RunBudget          domain.RuntimeRunBudget
 	ToolProgressGuard  toolprogress.Config
 	KnowledgeRetriever rag.Retriever
-	CheckpointProvider checkpoint.Provider
 	LiveEvents         eventpkg.LivePublisher
 	ChildRuns          ChildRunLimits
 	MemoryRecall       memorypkg.Recaller
@@ -126,10 +125,6 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		if searchStore, ok := options.Store.(rag.SearchStore); ok {
 			knowledgeRetriever = rag.NewRetrievalPipeline(searchStore)
 		}
-	}
-	checkpointProvider := options.CheckpointProvider
-	if checkpointProvider == nil {
-		checkpointProvider = checkpoint.NewInternalProvider(options.Store)
 	}
 	var taskStates *taskstate.Service
 	if taskStore, ok := options.Store.(taskstate.Store); ok {
@@ -152,7 +147,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		toolProgressConfig:    progressConfig,
 		toolProgressGuards:    map[string]*toolprogress.Guard{},
 		knowledgeRetriever:    knowledgeRetriever,
-		checkpoints:           checkpointProvider,
+		checkpoints:           checkpoint.NewInternalProvider(options.Store),
 		taskStates:            taskStates,
 		toolArtifacts:         toolArtifacts,
 		liveEvents:            options.LiveEvents,

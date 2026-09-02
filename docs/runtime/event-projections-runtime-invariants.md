@@ -61,10 +61,10 @@ compatibility, but both are now populated from the canonical projection.
 
 ## Runtime invariants
 
-The lightweight invariant registry runs package-owned checks and reports
-stable diagnostics without making historical Replay unreadable. A failure has
-`code`, `owner`, `run_id`, optional `event_id` and `sequence`, and a human
-message.
+The runtime invariant evaluator directly composes package-owned checks and
+reports stable diagnostics without making historical Replay unreadable. A
+failure has `code`, `owner`, `run_id`, optional `event_id` and `sequence`,
+and a human message.
 
 The initial checks cover:
 

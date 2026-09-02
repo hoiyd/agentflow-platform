@@ -29,11 +29,6 @@ type Store interface {
 	ListToolEffects(string) ([]domain.ToolEffectRecord, error)
 }
 
-type Provider interface {
-	RecordStageTransition(context.Context, domain.CollaborationStep, domain.RunEventType) (domain.RunEvent, error)
-	RestoreRun(context.Context, domain.Run) (RestoreReport, error)
-}
-
 type RestoreReport struct {
 	CommittedStageIDs   []string
 	CompensatedStageIDs []string

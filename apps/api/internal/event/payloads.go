@@ -2,18 +2,12 @@ package event
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/eventcatalog"
 )
-
-// PayloadContract marks payloads whose JSON shape and compatible event family
-// are known. RunEvent continues to persist a map for API compatibility, while
-// producers use this contract to avoid untyped event construction.
-type PayloadContract interface {
-	supports(domain.RunEventType) bool
-}
 
 type EventMetadata struct {
 	ConversationID string
@@ -26,8 +20,8 @@ type EventMetadata struct {
 
 // NewRunEvent validates the event/payload pairing before converting the typed
 // payload to the durable map representation.
-func NewRunEvent(eventType domain.RunEventType, metadata EventMetadata, payload PayloadContract) (domain.RunEvent, error) {
-	if payload == nil || !payload.supports(eventType) {
+func NewRunEvent(eventType domain.RunEventType, metadata EventMetadata, payload any) (domain.RunEvent, error) {
+	if !payloadSupports(eventType, payload) {
 		return domain.RunEvent{}, fmt.Errorf("payload contract does not support event type %s", eventType)
 	}
 	encoded, err := Payload(payload)
@@ -50,6 +44,21 @@ func NewRunEvent(eventType domain.RunEventType, metadata EventMetadata, payload 
 	return item, nil
 }
 
+func payloadSupports(eventType domain.RunEventType, payload any) bool {
+	definition, ok := eventcatalog.DefinitionFor(eventType)
+	if !ok || payload == nil {
+		return false
+	}
+	if trace, ok := payload.(TracePayload); ok {
+		return trace.EventType == eventType
+	}
+	payloadType := reflect.TypeOf(payload)
+	if payloadType.Kind() == reflect.Pointer {
+		payloadType = payloadType.Elem()
+	}
+	return "event."+payloadType.Name() == definition.PayloadSchema
+}
+
 // TracePayload is the explicit escape hatch for extensible observability
 // metadata. It remains bound to one event type, so it cannot be reused across
 // incompatible event families accidentally.
@@ -58,22 +67,9 @@ type TracePayload struct {
 	Fields    map[string]any
 }
 
-func (p TracePayload) supports(eventType domain.RunEventType) bool { return p.EventType == eventType }
-
 type RunStatusPayload struct {
 	Status string `json:"status"`
 	Error  string `json:"error,omitempty"`
-}
-
-func (RunStatusPayload) supports(eventType domain.RunEventType) bool {
-	switch eventType {
-	case domain.EventRunCreated, domain.EventRunStarted, domain.EventRunWaitingForUser,
-		domain.EventRunResumed, domain.EventRunCancelRequested, domain.EventRunCanceled,
-		domain.EventRunCompleted, domain.EventRunFailed:
-		return true
-	default:
-		return false
-	}
 }
 
 type RunProgressPayload struct {
@@ -89,10 +85,6 @@ type RunProgressPayload struct {
 	StopReason        string `json:"stop_reason,omitempty"`
 }
 
-func (RunProgressPayload) supports(eventType domain.RunEventType) bool {
-	return eventType == domain.EventRunProgress
-}
-
 type StagePayload struct {
 	Name      string `json:"name"`
 	AgentID   string `json:"agent_id,omitempty"`
@@ -100,15 +92,6 @@ type StagePayload struct {
 	Input     string `json:"input,omitempty"`
 	Output    string `json:"output,omitempty"`
 	Error     string `json:"error,omitempty"`
-}
-
-func (StagePayload) supports(eventType domain.RunEventType) bool {
-	switch eventType {
-	case domain.EventStageStarted, domain.EventStageCompleted, domain.EventStageFailed, domain.EventStageCanceled:
-		return true
-	default:
-		return false
-	}
 }
 
 type ModelPayload struct {
@@ -121,15 +104,6 @@ type ModelPayload struct {
 	TokenUsageEstimated bool   `json:"token_usage_estimated,omitempty"`
 	DurationMS          int64  `json:"duration_ms,omitempty"`
 	Error               string `json:"error,omitempty"`
-}
-
-func (ModelPayload) supports(eventType domain.RunEventType) bool {
-	switch eventType {
-	case domain.EventModelStarted, domain.EventModelDelta, domain.EventModelCompleted, domain.EventModelFailed:
-		return true
-	default:
-		return false
-	}
 }
 
 type ModelRequestPreparedPayload struct {
@@ -147,16 +121,8 @@ type ModelRequestPreparedPayload struct {
 	CaptureReconstructable bool   `json:"capture_reconstructable"`
 }
 
-func (ModelRequestPreparedPayload) supports(eventType domain.RunEventType) bool {
-	return eventType == domain.EventModelRequestPrepared
-}
-
 type ContextAssembledPayload struct {
 	Manifest domain.ContextManifest `json:"manifest"`
-}
-
-func (ContextAssembledPayload) supports(eventType domain.RunEventType) bool {
-	return eventType == domain.EventContextAssembled
 }
 
 type ContextCompactionPayload struct {
@@ -182,15 +148,6 @@ type ContextCompactionPayload struct {
 	CooldownUntil        *time.Time                  `json:"cooldown_until,omitempty"`
 	RecoveredFromOrphan  bool                        `json:"recovered_from_orphan,omitempty"`
 	Error                string                      `json:"error,omitempty"`
-}
-
-func (ContextCompactionPayload) supports(eventType domain.RunEventType) bool {
-	switch eventType {
-	case domain.EventCompactionStarted, domain.EventCompactionCompleted, domain.EventCompactionFailed:
-		return true
-	default:
-		return false
-	}
 }
 
 type ToolPayload struct {
@@ -226,10 +183,6 @@ type ToolPolicyPayload struct {
 	CredentialScopeCount int    `json:"credential_scope_count"`
 }
 
-func (ToolPolicyPayload) supports(eventType domain.RunEventType) bool {
-	return eventType == domain.EventToolPolicyEvaluated
-}
-
 // ToolProgressPayload explains a Guard escalation without retaining Tool
 // arguments, result bodies, or raw error messages.
 type ToolProgressPayload struct {
@@ -242,15 +195,6 @@ type ToolProgressPayload struct {
 	Reason             string `json:"reason"`
 	SignatureHash      string `json:"signature_hash"`
 	OutcomeFingerprint string `json:"outcome_fingerprint"`
-}
-
-func (ToolProgressPayload) supports(eventType domain.RunEventType) bool {
-	switch eventType {
-	case domain.EventToolGuardWarned, domain.EventToolGuardBlocked, domain.EventTurnNoProgress:
-		return true
-	default:
-		return false
-	}
 }
 
 type ToolArtifactPayload struct {
@@ -266,38 +210,11 @@ type ToolArtifactPayload struct {
 	StoredBytes   int    `json:"stored_bytes,omitempty"`
 }
 
-func (ToolArtifactPayload) supports(eventType domain.RunEventType) bool {
-	switch eventType {
-	case domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired:
-		return true
-	default:
-		return false
-	}
-}
-
-func (ToolPayload) supports(eventType domain.RunEventType) bool {
-	switch eventType {
-	case domain.EventToolStarted, domain.EventToolCompleted, domain.EventToolFailed:
-		return true
-	default:
-		return false
-	}
-}
-
 type RetrievalPayload struct {
 	Query       string `json:"query,omitempty"`
 	MemoryCount int    `json:"memory_count"`
 	ChunkCount  int    `json:"chunk_count"`
 	Error       string `json:"error,omitempty"`
-}
-
-func (RetrievalPayload) supports(eventType domain.RunEventType) bool {
-	switch eventType {
-	case domain.EventRetrievalStarted, domain.EventRetrievalCompleted, domain.EventRetrievalFailed:
-		return true
-	default:
-		return false
-	}
 }
 
 type SessionHistorySearchPayload struct {
@@ -318,19 +235,6 @@ type TaskStatePayload struct {
 	ActorType       string   `json:"actor_type"`
 }
 
-func (TaskStatePayload) supports(eventType domain.RunEventType) bool {
-	return eventType == domain.EventTaskStateUpdated
-}
-
-func (SessionHistorySearchPayload) supports(eventType domain.RunEventType) bool {
-	switch eventType {
-	case domain.EventHistorySearchStarted, domain.EventHistorySearchCompleted, domain.EventHistorySearchFailed:
-		return true
-	default:
-		return false
-	}
-}
-
 type MemoryCandidatePayload struct {
 	CandidateID      string  `json:"candidate_id,omitempty"`
 	SourceMessageID  string  `json:"source_message_id"`
@@ -341,16 +245,6 @@ type MemoryCandidatePayload struct {
 	PolicyReason     string  `json:"policy_reason,omitempty"`
 	Confidence       float64 `json:"confidence,omitempty"`
 	Error            string  `json:"error,omitempty"`
-}
-
-func (MemoryCandidatePayload) supports(eventType domain.RunEventType) bool {
-	switch eventType {
-	case domain.EventMemoryCandidateProposed, domain.EventMemoryCandidateAccepted,
-		domain.EventMemoryCandidateRejected, domain.EventMemoryCandidateFailed:
-		return true
-	default:
-		return false
-	}
 }
 
 type UsagePayload struct {
@@ -370,10 +264,6 @@ type UsagePayload struct {
 	UsageEstimated      bool   `json:"usage_estimated"`
 }
 
-func (UsagePayload) supports(eventType domain.RunEventType) bool {
-	return eventType == domain.EventUsageRecorded
-}
-
 type BudgetExceededPayload struct {
 	Resource    string `json:"resource"`
 	Limit       int64  `json:"limit"`
@@ -381,8 +271,4 @@ type BudgetExceededPayload struct {
 	Requested   int64  `json:"requested"`
 	OperationID string `json:"operation_id,omitempty"`
 	Purpose     string `json:"purpose,omitempty"`
-}
-
-func (BudgetExceededPayload) supports(eventType domain.RunEventType) bool {
-	return eventType == domain.EventBudgetExceeded
 }

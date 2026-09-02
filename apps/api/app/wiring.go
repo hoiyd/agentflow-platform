@@ -28,7 +28,7 @@ import (
 type applicationDependencies struct {
 	store          store.Store
 	handler        *httpapi.Handler
-	memoryProvider memorypkg.Provider
+	memoryProvider *memorypkg.BuiltinProvider
 	runController  *concurrency.RunController
 }
 

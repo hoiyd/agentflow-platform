@@ -14,8 +14,9 @@ complete Single, Multi, and Loop lifecycles, read
 
 - `cmd/server` performs process startup; it does not construct product logic.
 - `app` is the only production composition root.
-- HTTP handlers translate transport concerns and depend on capability
-  interfaces; they do not recreate Memory, Knowledge, or Runtime services.
+- HTTP handlers translate transport concerns and receive a scoped Store plus
+  explicit capabilities from `app`; they do not recreate Memory, Knowledge,
+  or Runtime services.
 - Single-Agent, Multi-Agent, and Autonomous execution share one Turn-level
   implementation for retrieval, tools, context, events, and model access.
 - Stores persist domain contracts but do not own retrieval policy, reranking,
@@ -87,7 +88,7 @@ cmd/server
     v
 app
     |
-    +--> internal/httpapi --> consumer-defined service interfaces
+    +--> internal/httpapi --> scoped Store + explicit capabilities
     |             |                    |
     |             |                    +--> memory, knowledge
     |             |
@@ -116,9 +117,12 @@ Empty `api`, `core`, and `services` directories do not create useful boundaries.
 
 ### Keep Transport and Execution Separate
 
-`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.Provider` separates Recall, proposal, explicit commit, asynchronous Turn sync, and lifecycle ownership behind narrow consumer interfaces; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and RAG evaluation. Agent execution remains in `agent` and `turn`.
+`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.BuiltinProvider` owns Recall, proposal, explicit commit, asynchronous Turn sync, and lifecycle management, while Runtime and HTTP depend on its narrower consumer interfaces; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and RAG evaluation. Agent execution remains in `agent` and `turn`.
 
-The HTTP package defines the small service interfaces it consumes. Concrete implementations are selected only by `app`, so adding caching, another embedding implementation, or a different service adapter does not change transport code.
+The HTTP package keeps narrow interfaces where they enforce Workspace scope or
+support real boundary substitution, and otherwise receives concrete long-lived
+services from `app`. New interfaces are introduced only when a second
+implementation or test boundary requires one.
 
 ### Preserve Private Implementation Packages
 
