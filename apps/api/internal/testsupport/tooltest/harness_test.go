@@ -146,7 +146,7 @@ func TestContractTraceValidation(t *testing.T) {
 
 func TestEffectGateFixtureLifecycle(t *testing.T) {
 	fixture := NewEffectGateFixture()
-	catalog, err := tools.NewCatalog(fixture.Binding("write_value"))
+	catalog, _, err := NewAuthorizedCatalog(fixture.Binding("write_value"))
 	if err != nil {
 		t.Fatalf("new catalog: %v", err)
 	}
@@ -358,7 +358,7 @@ func TestDeniedBudgetControllerOnlyDeniesToolCalls(t *testing.T) {
 
 func executeEffectGateFixture(t *testing.T, fixture *EffectGateFixture) tools.ExecutionResult {
 	t.Helper()
-	catalog, err := tools.NewCatalog(fixture.Binding("write_value"))
+	catalog, _, err := NewAuthorizedCatalog(fixture.Binding("write_value"))
 	if err != nil {
 		t.Fatalf("new catalog: %v", err)
 	}

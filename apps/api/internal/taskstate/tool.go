@@ -7,6 +7,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -19,7 +20,14 @@ func (s *Service) ToolBinding() tools.Binding {
 			Description: "Apply a version-checked patch to durable conversation task state. Use the version shown in <task_state>; use 0 when no task state exists. Patch only facts that actually changed.",
 			Concurrency: tools.ConcurrencyPolicy{Mode: tools.ConcurrencySerial},
 			SideEffect:  tools.SideEffectPolicy{Mode: tools.SideEffectExternal},
-			Parameters:  taskStatePatchSchema(),
+			Security: toolpolicy.NormalizeCapability(toolpolicy.Capability{
+				Scope: toolpolicy.Scope{Resources: []toolpolicy.ResourceScope{{
+					Kind: toolpolicy.ResourceConversation, Name: "task_state", Access: toolpolicy.AccessWrite,
+				}}},
+				SideEffect: toolpolicy.SideEffectInternalWrite, Reversibility: toolpolicy.Compensatable,
+				Visibility: toolpolicy.VisibilityUser, Audit: toolpolicy.AuditFull,
+			}),
+			Parameters: taskStatePatchSchema(),
 		},
 		Handler: func(ctx context.Context, arguments json.RawMessage) (any, error) {
 			if s == nil || s.store == nil {

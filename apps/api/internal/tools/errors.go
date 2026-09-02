@@ -16,6 +16,11 @@ const (
 	ErrorEffectReconciliation ErrorCode = "side_effect_reconciliation_required"
 	ErrorEffectJournal        ErrorCode = "side_effect_journal_failed"
 	ErrorArtifactUnavailable  ErrorCode = "artifact_unavailable"
+	ErrorSecurityPolicyDenied ErrorCode = "security_policy_denied"
+	ErrorSecurityScopeInvalid ErrorCode = "security_scope_invalid"
+	ErrorCredentialScope      ErrorCode = "credential_scope_unavailable"
+	ErrorApprovalRequired     ErrorCode = "approval_required"
+	ErrorSecurityAudit        ErrorCode = "security_audit_failed"
 )
 
 type ExecutionError struct {
@@ -60,6 +65,10 @@ func (e *ExecutionError) FailureInfo() failure.Info {
 	case ErrorEffectReconciliation, ErrorEffectJournal:
 		info.Category = failure.CategoryAvailability
 	case ErrorArtifactUnavailable:
+		info.Category = failure.CategoryAvailability
+	case ErrorSecurityPolicyDenied, ErrorSecurityScopeInvalid, ErrorCredentialScope, ErrorApprovalRequired:
+		info.Category = failure.CategoryValidation
+	case ErrorSecurityAudit:
 		info.Category = failure.CategoryAvailability
 	}
 	return info

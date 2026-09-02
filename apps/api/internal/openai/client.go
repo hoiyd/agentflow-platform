@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/modelrequest"
+	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -82,6 +84,14 @@ func (t *streamToolExecutionTracer) ToolFinished(ctx context.Context, result too
 		marshalResult(result),
 		result.ErrorMessage(),
 	)
+}
+
+func (t *streamToolExecutionTracer) ToolPolicyEvaluated(ctx context.Context, request tools.ExecutionRequest, decision toolpolicy.Decision) error {
+	delegate, ok := t.delegate.(tools.PolicyDecisionTracer)
+	if !ok {
+		return errors.New("durable Tool policy tracer is unavailable")
+	}
+	return delegate.ToolPolicyEvaluated(ctx, request, decision)
 }
 
 type Usage = modelprovider.Usage

@@ -8,15 +8,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"agentflow-platform/apps/api/internal/toolpolicy"
 )
 
 type Config struct {
-	EnabledTools []string `json:"enabled_tools"`
+	EnabledTools   []string          `json:"enabled_tools"`
+	SecurityPolicy toolpolicy.Policy `json:"security_policy"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		EnabledTools: []string{"calculator", "get_current_time"},
+		EnabledTools:   []string{"calculator", "get_current_time"},
+		SecurityPolicy: toolpolicy.DefaultPolicy(),
 	}
 }
 
@@ -45,6 +49,10 @@ func LoadConfig(path string) (Config, error) {
 	}
 	if cfg.EnabledTools == nil {
 		cfg.EnabledTools = DefaultConfig().EnabledTools
+	}
+	cfg.SecurityPolicy = toolpolicy.NormalizePolicy(cfg.SecurityPolicy)
+	if err := toolpolicy.ValidatePolicy(cfg.SecurityPolicy); err != nil {
+		return Config{}, fmt.Errorf("validate Tool security policy: %w", err)
 	}
 	return cfg, nil
 }

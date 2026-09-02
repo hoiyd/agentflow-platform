@@ -3,10 +3,19 @@ package tools
 import (
 	"fmt"
 	"strings"
+
+	"agentflow-platform/apps/api/internal/toolpolicy"
 )
 
 func BuildCatalog(config Config) (*Catalog, error) {
-	catalog := DefaultCatalog()
+	securityPolicy := config.SecurityPolicy
+	if securityPolicy.Version == "" && securityPolicy.DefaultAction == "" && len(securityPolicy.Rules) == 0 {
+		securityPolicy = toolpolicy.DefaultPolicy()
+	}
+	catalog, err := NewCatalogWithPolicy(securityPolicy, CalculatorTool(), CurrentTimeTool())
+	if err != nil {
+		return nil, err
+	}
 	enabled := make(map[string]bool, len(config.EnabledTools))
 	for _, name := range config.EnabledTools {
 		if name = strings.TrimSpace(name); name != "" {

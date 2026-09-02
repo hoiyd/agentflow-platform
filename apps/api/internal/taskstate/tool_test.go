@@ -8,6 +8,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -30,7 +31,7 @@ func TestUpdateTaskStateToolAppliesPatchAndPublishesEvent(t *testing.T) {
 		ConversationID: conversation.ID, RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
 	})
 	arguments := json.RawMessage(`{"expected_version":0,"operations":[{"type":"set_goal","goal":"Keep exact task facts durable"}]}`)
-	executor := tools.NewExecutor(catalog, tools.ExecutorOptions{EffectJournal: fileStore})
+	executor := tools.NewExecutor(catalog, tools.ExecutorOptions{EffectJournal: fileStore, Tracer: taskStateAuditTracer{}})
 	request := tools.ExecutionRequest{
 		CallID: "call-1", RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
 		Tool: UpdateToolName, Arguments: arguments,
@@ -66,6 +67,14 @@ func TestUpdateTaskStateToolAppliesPatchAndPublishesEvent(t *testing.T) {
 	if stale.Error == nil || stale.Error.Message == "" {
 		t.Fatalf("expected stale tool patch to return an error: %#v", stale)
 	}
+}
+
+type taskStateAuditTracer struct{}
+
+func (taskStateAuditTracer) ToolStarted(context.Context, tools.ExecutionRequest) {}
+func (taskStateAuditTracer) ToolFinished(context.Context, tools.ExecutionResult) {}
+func (taskStateAuditTracer) ToolPolicyEvaluated(context.Context, tools.ExecutionRequest, toolpolicy.Decision) error {
+	return nil
 }
 
 func taskStateTestSnapshot() domain.RuntimeSnapshot {

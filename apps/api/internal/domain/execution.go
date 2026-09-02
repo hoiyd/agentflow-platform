@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"agentflow-platform/apps/api/internal/toolpolicy"
+)
 
 type RunStatus string
 
@@ -45,24 +49,26 @@ const (
 	TaskStateRuntimeSnapshotVersion    = 8
 	DelegationRuntimeSnapshotVersion   = 9
 	ToolContractRuntimeSnapshotVersion = 10
-	PreviousRuntimeSnapshotVersion     = DelegationRuntimeSnapshotVersion
-	CurrentRuntimeSnapshotVersion      = ToolContractRuntimeSnapshotVersion
+	ToolSecurityRuntimeSnapshotVersion = 11
+	PreviousRuntimeSnapshotVersion     = ToolContractRuntimeSnapshotVersion
+	CurrentRuntimeSnapshotVersion      = ToolSecurityRuntimeSnapshotVersion
 )
 
 type RuntimeSnapshot struct {
-	SchemaVersion    int                    `json:"schema_version"`
-	Mode             string                 `json:"mode"`
-	Agent            RuntimeAgentSnapshot   `json:"agent"`
-	CandidateAgents  []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
-	Model            RuntimeModelSnapshot   `json:"model"`
-	Tools            []RuntimeToolSnapshot  `json:"tools"`
-	ContextAssembly  ContextAssemblyConfig  `json:"context_assembly"`
-	RouterMode       string                 `json:"router_mode,omitempty"`
-	AutonomousLimits *RuntimeLimitsSnapshot `json:"autonomous_limits,omitempty"`
-	RunBudget        *RuntimeRunBudget      `json:"run_budget,omitempty"`
-	ChildRunPolicy   *RuntimeChildRunPolicy `json:"child_run_policy,omitempty"`
-	Delegation       *RuntimeDelegation     `json:"delegation,omitempty"`
-	CreatedAt        time.Time              `json:"created_at"`
+	SchemaVersion      int                    `json:"schema_version"`
+	Mode               string                 `json:"mode"`
+	Agent              RuntimeAgentSnapshot   `json:"agent"`
+	CandidateAgents    []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
+	Model              RuntimeModelSnapshot   `json:"model"`
+	Tools              []RuntimeToolSnapshot  `json:"tools"`
+	ToolSecurityPolicy toolpolicy.Policy      `json:"tool_security_policy"`
+	ContextAssembly    ContextAssemblyConfig  `json:"context_assembly"`
+	RouterMode         string                 `json:"router_mode,omitempty"`
+	AutonomousLimits   *RuntimeLimitsSnapshot `json:"autonomous_limits,omitempty"`
+	RunBudget          *RuntimeRunBudget      `json:"run_budget,omitempty"`
+	ChildRunPolicy     *RuntimeChildRunPolicy `json:"child_run_policy,omitempty"`
+	Delegation         *RuntimeDelegation     `json:"delegation,omitempty"`
+	CreatedAt          time.Time              `json:"created_at"`
 }
 
 // RuntimeChildRunPolicy is frozen with a parent Multi-Agent Run. Process-level
@@ -174,12 +180,13 @@ type RuntimeModelSnapshot struct {
 }
 
 type RuntimeToolSnapshot struct {
-	Name               string         `json:"name"`
-	Description        string         `json:"description"`
-	Parameters         map[string]any `json:"parameters"`
-	SchemaVersion      string         `json:"schema_version,omitempty"`
-	DefinitionRevision string         `json:"definition_revision,omitempty"`
-	SideEffect         string         `json:"side_effect,omitempty"`
+	Name               string                `json:"name"`
+	Description        string                `json:"description"`
+	Parameters         map[string]any        `json:"parameters"`
+	SchemaVersion      string                `json:"schema_version,omitempty"`
+	DefinitionRevision string                `json:"definition_revision,omitempty"`
+	SideEffect         string                `json:"side_effect,omitempty"`
+	Security           toolpolicy.Capability `json:"security,omitempty"`
 }
 
 type RuntimeLimitsSnapshot struct {
@@ -301,6 +308,7 @@ const (
 	EventToolStarted             RunEventType = "tool.started"
 	EventToolCompleted           RunEventType = "tool.completed"
 	EventToolFailed              RunEventType = "tool.failed"
+	EventToolPolicyEvaluated     RunEventType = "tool.policy_evaluated"
 	EventToolResultPersisted     RunEventType = "tool.result.persisted"
 	EventArtifactRead            RunEventType = "artifact.read"
 	EventArtifactExpired         RunEventType = "artifact.expired"

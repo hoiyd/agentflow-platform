@@ -14,6 +14,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/taskstate"
+	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -78,11 +79,12 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 			EmbeddingBaseURL: identity.EmbeddingBaseURL, EmbeddingModel: identity.EmbeddingModel,
 			EmbeddingDimensions: identity.EmbeddingDimensions,
 		},
-		Tools:           toolSnapshots,
-		ContextAssembly: contextassembly.NormalizeConfig(r.contextAssemblyConfig),
-		RouterMode:      r.routerMode,
-		RunBudget:       cloneRunBudget(runBudget),
-		CreatedAt:       time.Now().UTC(),
+		Tools:              toolSnapshots,
+		ToolSecurityPolicy: catalog.SecurityPolicy(),
+		ContextAssembly:    contextassembly.NormalizeConfig(r.contextAssemblyConfig),
+		RouterMode:         r.routerMode,
+		RunBudget:          cloneRunBudget(runBudget),
+		CreatedAt:          time.Now().UTC(),
 	}
 	if mode == ChatModeAutonomous {
 		limits := normalizeAutonomousLimits(r.autonomousLimits)
@@ -193,6 +195,7 @@ func snapshotTools(catalog *tools.Catalog, names []string) []domain.RuntimeToolS
 			SchemaVersion:      binding.Descriptor.SchemaVersion,
 			DefinitionRevision: binding.Descriptor.DefinitionRevision,
 			SideEffect:         string(binding.Descriptor.SideEffect.Mode),
+			Security:           binding.Descriptor.Security,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
@@ -220,7 +223,11 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 		}
 		restoredBindings = append(restoredBindings, installed)
 	}
-	catalog, err := tools.NewCatalog(restoredBindings...)
+	securityPolicy := current.SecurityPolicy()
+	if snapshot.SchemaVersion >= domain.ToolSecurityRuntimeSnapshotVersion {
+		securityPolicy = snapshot.ToolSecurityPolicy
+	}
+	catalog, err := tools.NewCatalogWithPolicy(securityPolicy, restoredBindings...)
 	if err != nil {
 		return restoredRuntime{}, err
 	}
@@ -288,6 +295,16 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 			}
 		}
 	}
+	if snapshot.SchemaVersion >= domain.ToolSecurityRuntimeSnapshotVersion {
+		if err := toolpolicy.ValidatePolicy(snapshot.ToolSecurityPolicy); err != nil {
+			return fmt.Errorf("runtime snapshot has invalid Tool security policy: %w", err)
+		}
+		for _, tool := range snapshot.Tools {
+			if err := toolpolicy.ValidateCapability(tool.Security); err != nil {
+				return fmt.Errorf("runtime snapshot tool %q has invalid security capability: %w", tool.Name, err)
+			}
+		}
+	}
 	if snapshot.Delegation != nil {
 		if snapshot.SchemaVersion < domain.DelegationRuntimeSnapshotVersion || snapshot.Mode != ChatModeSingle {
 			return errors.New("delegated runtime snapshot has an invalid schema or mode")
@@ -331,9 +348,22 @@ func toolDefinitionMatches(installed tools.Binding, frozen domain.RuntimeToolSna
 		Name: installed.Descriptor.Name, Description: installed.Descriptor.Description,
 		Parameters: installed.Descriptor.Parameters, SideEffect: string(installed.Descriptor.SideEffect.Mode),
 	}
+	if frozen.Security.Source != "" {
+		current.Security = installed.Descriptor.Security
+	}
 	if frozen.DefinitionRevision != "" || frozen.SchemaVersion != "" {
 		current.SchemaVersion = installed.Descriptor.SchemaVersion
-		current.DefinitionRevision = installed.Descriptor.DefinitionRevision
+		if frozen.Security.Source == "" {
+			// Version 10 snapshots predate Tool security in the definition digest.
+			// Structural fields still have to match before a fail-closed live policy is applied.
+			legacyRevision, err := tools.LegacyDefinitionRevision(installed.Descriptor)
+			if err != nil || (frozen.DefinitionRevision != legacyRevision && frozen.DefinitionRevision != installed.Descriptor.DefinitionRevision) {
+				return false
+			}
+			current.DefinitionRevision = frozen.DefinitionRevision
+		} else {
+			current.DefinitionRevision = installed.Descriptor.DefinitionRevision
+		}
 	}
 	currentJSON, err := json.Marshal(current)
 	if err != nil {

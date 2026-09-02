@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"agentflow-platform/apps/api/internal/toolpolicy"
 )
 
 func CurrentTimeTool() Binding {
@@ -13,6 +15,7 @@ func CurrentTimeTool() Binding {
 			Name:        "get_current_time",
 			Description: "Return the current time for an IANA timezone.",
 			Concurrency: ConcurrencyPolicy{Mode: ConcurrencyReadOnly},
+			Security:    toolpolicy.NormalizeCapability(toolpolicy.Capability{}),
 			Parameters: ObjectSchema(map[string]any{
 				"timezone": map[string]any{
 					"type":        "string",

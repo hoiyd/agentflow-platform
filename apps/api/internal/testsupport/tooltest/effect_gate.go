@@ -53,6 +53,7 @@ func (f *EffectGateFixture) Binding(name string) tools.Binding {
 				"value": map[string]any{"type": "string", "minLength": 1},
 			}, []string{"value"}),
 			SideEffect: tools.SideEffectPolicy{Mode: tools.SideEffectExternal},
+			Security:   testExternalWriteCapability(),
 		},
 		Handler: func(ctx context.Context, arguments json.RawMessage) (any, error) {
 			f.handlerCalls.Add(1)

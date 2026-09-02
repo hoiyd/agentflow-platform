@@ -183,10 +183,12 @@ state. The enable/disable endpoints update the Tool Manager configuration and
 persist it at `TOOL_CONFIG_PATH`. This platform-level switch is separate from
 the per-Agent `tools` allowlist.
 
-Tool execution applies timeout, result-size, panic-recovery, tracing, and
-concurrency policy after both layers admit the Tool. See [Configurable Agent Profiles](agent-profiles.md#two-tool-control-layers)
-for the two control layers and [Tool Execution Policy](execution-controls.md#7-tool-execution-policy)
-for per-call enforcement.
+Tool execution applies security scope authorization, timeout, result-size,
+panic-recovery, tracing, and concurrency policy after both selection layers
+admit the Tool. Agent allowlists cannot expand operator-granted Resource,
+Network, or Credential scope. See [Tool Security Policy and Scope](tool-security-policy.md),
+[Configurable Agent Profiles](agent-profiles.md#two-tool-control-layers), and
+[Tool Execution Policy](execution-controls.md#7-tool-execution-policy).
 
 ## RAG Evaluation
 

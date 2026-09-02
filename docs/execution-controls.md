@@ -238,7 +238,10 @@ Unsupported drafts, remote references, non-object roots, invalid schemas, and
 oversized schemas fail registration.
 
 Before budget accounting or handler execution, Tool arguments are bounded,
-decoded once, canonicalized, and validated against that compiled contract.
+decoded once, canonicalized, validated against that compiled contract, and
+authorized against the frozen Tool Security Policy. Policy rejection therefore
+does not consume Tool Budget or create a side effect. See
+[Tool Security Policy and Scope](tool-security-policy.md).
 Validation failures return a stable code, JSON Pointer path, and non-secret
 message. The canonical argument hash and frozen definition revision are reused
 by tracing and the side-effect journal.
@@ -250,9 +253,9 @@ deterministic fault harness exercises timeout, cancel, panic, result limits,
 Budget denial, tracing, and effect-journal boundaries. See
 [Tool Contract and Fault Testing](tool-contract-testing.md).
 
-Tool name, description, normalized parameter schema, schema version, and
-definition revision are frozen with new Snapshot v10 Runs. Snapshot v9 remains
-resumable through its legacy full-definition comparison. The live Binding owns
+Tool name, description, normalized parameter schema, schema version, definition
+revision, capability, and operator policy are frozen with new Snapshot v11
+Runs. Snapshot v10 remains resumable with the current fail-closed policy. The live Binding owns
 handler, timeout, result-size, and concurrency policy. Execution is serial
 unless a Binding declares a safe `read_only` or keyed parallel group. Oversized
 results are redacted and persisted as immutable Tool Artifacts; model Context

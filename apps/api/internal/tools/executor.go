@@ -14,6 +14,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/toolpolicy"
 )
 
 const (
@@ -33,6 +34,8 @@ type ExecutionRequest struct {
 	Arguments          json.RawMessage `json:"arguments"`
 	DefinitionRevision string          `json:"definition_revision,omitempty"`
 	ArgumentsHash      string          `json:"arguments_hash,omitempty"`
+	// CredentialScopes contains logical grants from a trusted resolver, never Secret values.
+	CredentialScopes []string `json:"-"`
 }
 
 type ExecutionResult struct {
@@ -49,6 +52,7 @@ type ExecutionResult struct {
 	Replayed            bool                          `json:"replayed,omitempty"`
 	Artifact            *domain.ToolArtifactReference `json:"artifact,omitempty"`
 	ArtifactError       *ExecutionError               `json:"artifact_error,omitempty"`
+	PolicyDecision      *toolpolicy.Decision          `json:"-"`
 	encodedResult       []byte
 }
 
@@ -62,6 +66,12 @@ func (r ExecutionResult) ErrorMessage() string {
 type ExecutionTracer interface {
 	ToolStarted(context.Context, ExecutionRequest)
 	ToolFinished(context.Context, ExecutionResult)
+}
+
+// PolicyDecisionTracer persists or exports a non-sensitive authorization
+// decision. allow_and_log fails closed when this callback is unavailable.
+type PolicyDecisionTracer interface {
+	ToolPolicyEvaluated(context.Context, ExecutionRequest, toolpolicy.Decision) error
 }
 
 type ToolEffectJournal interface {
@@ -91,6 +101,7 @@ type Executor struct {
 	effectJournal       ToolEffectJournal
 	artifactGovernor    *resultArtifactGovernor
 	maxBatchResultBytes int
+	securityPolicy      toolpolicy.Policy
 }
 
 func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
@@ -109,10 +120,12 @@ func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
 	if maxBatchResultBytes <= 0 {
 		maxBatchResultBytes = DefaultMaxBatchResultBytes
 	}
+	securityPolicy := catalog.SecurityPolicy()
 	return &Executor{
 		catalog: catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency,
 		effectJournal: options.EffectJournal, maxBatchResultBytes: maxBatchResultBytes,
 		artifactGovernor: newResultArtifactGovernor(options),
+		securityPolicy:   securityPolicy,
 	}
 }
 
@@ -252,6 +265,17 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 	if result.Error != nil {
 		return result
 	}
+	decision, policyErr := e.evaluateSecurity(ctx, request, binding)
+	result.PolicyDecision = &decision
+	auditErr := e.tracePolicyDecision(ctx, request, decision)
+	if policyErr != nil {
+		result.Error = policyErr
+		return result
+	}
+	if decision.AuditRequired() && auditErr != nil {
+		result.Error = executionError(ErrorSecurityAudit, "required Tool security audit could not be persisted", auditErr)
+		return result
+	}
 	if controller := budget.FromContext(ctx); controller != nil {
 		if err := controller.RecordToolCall(ctx, budget.ToolCall{
 			OperationID: request.CallID, Purpose: budget.PurposeFromContext(ctx), ToolName: request.Tool,
@@ -336,6 +360,58 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 		}
 		return result
 	}
+}
+
+func (e *Executor) evaluateSecurity(ctx context.Context, request ExecutionRequest, binding Binding) (toolpolicy.Decision, *ExecutionError) {
+	requestedScope := binding.Descriptor.Security.Scope
+	if binding.ResolveScope != nil {
+		resolved, err := resolveToolScope(ctx, binding.ResolveScope, request.Arguments)
+		if err != nil {
+			decision := toolpolicy.Decision{
+				Action: toolpolicy.ActionDeny, PolicyVersion: e.securityPolicy.Version,
+				Reason: "scope_resolution_failed", Capability: binding.Descriptor.Security,
+			}
+			return decision, executionError(ErrorSecurityScopeInvalid, "Tool security scope could not be resolved", err)
+		}
+		requestedScope = resolved
+	}
+	decision := toolpolicy.Evaluate(e.securityPolicy, toolpolicy.Request{
+		Tool: request.Tool, Declared: binding.Descriptor.Security, RequestedScope: requestedScope,
+		AvailableCredentialScopes: request.CredentialScopes,
+	})
+	if decision.Allowed {
+		return decision, nil
+	}
+	code := ErrorSecurityPolicyDenied
+	switch decision.Reason {
+	case "credential_scope_unavailable":
+		code = ErrorCredentialScope
+	case "binding_scope_expansion", "capability_invalid", "scope_resolution_failed":
+		code = ErrorSecurityScopeInvalid
+	case "human_approval_required", "approval_policy_not_satisfied":
+		code = ErrorApprovalRequired
+	}
+	return decision, executionError(code, "Tool call denied by security policy: "+decision.Reason, nil)
+}
+
+func resolveToolScope(ctx context.Context, resolver ScopeResolver, arguments json.RawMessage) (scope toolpolicy.Scope, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("Tool scope resolver panicked: %v", recovered)
+		}
+	}()
+	return resolver(ctx, arguments)
+}
+
+func (e *Executor) tracePolicyDecision(ctx context.Context, request ExecutionRequest, decision toolpolicy.Decision) error {
+	tracer, ok := e.tracer.(PolicyDecisionTracer)
+	if !ok {
+		if decision.AuditRequired() {
+			return errors.New("Tool policy decision tracer is unavailable")
+		}
+		return nil
+	}
+	return tracer.ToolPolicyEvaluated(ctx, request, decision)
 }
 
 func (e *Executor) beginSideEffect(request ExecutionRequest, result ExecutionResult) (string, bool, ExecutionResult) {

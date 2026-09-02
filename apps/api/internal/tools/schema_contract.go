@@ -132,15 +132,40 @@ func toolDefinitionRevision(descriptor Descriptor) (string, error) {
 		Parameters    map[string]any    `json:"parameters"`
 		Concurrency   ConcurrencyPolicy `json:"concurrency"`
 		SideEffect    SideEffectPolicy  `json:"side_effect"`
+		Security      any               `json:"security"`
 	}{
 		SchemaVersion: descriptor.SchemaVersion,
 		Name:          descriptor.Name, Description: descriptor.Description,
 		Parameters: descriptor.Parameters, Concurrency: descriptor.Concurrency,
 		SideEffect: descriptor.SideEffect,
+		Security:   descriptor.Security,
 	}
 	encoded, err := json.Marshal(definition)
 	if err != nil {
 		return "", fmt.Errorf("encode tool definition: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// LegacyDefinitionRevision reconstructs the version 10 digest, before Tool
+// security capability became part of the frozen definition.
+func LegacyDefinitionRevision(descriptor Descriptor) (string, error) {
+	definition := struct {
+		SchemaVersion string            `json:"schema_version"`
+		Name          string            `json:"name"`
+		Description   string            `json:"description"`
+		Parameters    map[string]any    `json:"parameters"`
+		Concurrency   ConcurrencyPolicy `json:"concurrency"`
+		SideEffect    SideEffectPolicy  `json:"side_effect"`
+	}{
+		SchemaVersion: descriptor.SchemaVersion, Name: descriptor.Name,
+		Description: descriptor.Description, Parameters: descriptor.Parameters,
+		Concurrency: descriptor.Concurrency, SideEffect: descriptor.SideEffect,
+	}
+	encoded, err := json.Marshal(definition)
+	if err != nil {
+		return "", fmt.Errorf("encode legacy Tool definition: %w", err)
 	}
 	sum := sha256.Sum256(encoded)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil

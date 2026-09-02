@@ -191,7 +191,8 @@ func (r *Runtime) childRuntimeSnapshot(parent domain.Run, selected domain.Agent,
 	return domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: ChatModeSingle,
 		Agent: selectedSnapshot, Model: parent.RuntimeSnapshot.Model, Tools: toolSnapshots,
-		ContextAssembly: contextConfig, RunBudget: cloneRunBudget(childPolicy.RunBudget),
+		ToolSecurityPolicy: parent.RuntimeSnapshot.ToolSecurityPolicy,
+		ContextAssembly:    contextConfig, RunBudget: cloneRunBudget(childPolicy.RunBudget),
 		Delegation: &domain.RuntimeDelegation{
 			DelegationID: delegationID, ParentRunID: parent.ID, ParentTurnID: parentTurnID,
 			ParentStageID: parentStageID, Depth: 1, IsolatedContext: true,

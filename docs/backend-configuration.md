@@ -260,7 +260,9 @@ persisted text index.
 
 ## Tool Configuration
 
-The backend loads enabled tools from `TOOL_CONFIG_PATH`, defaulting to `.data/tools.json`. If the file is missing, all built-in tools are enabled.
+The backend loads enabled Tools and the operator-owned Tool Security Policy from
+`TOOL_CONFIG_PATH`, defaulting to `.data/tools.json`. If the file is missing,
+all built-in Tools are enabled with the fail-closed default security policy.
 
 Oversized Tool results use the centralized Artifact boundary. The batch setting
 caps aggregate model-visible result content, the Artifact maximum caps one
@@ -276,8 +278,10 @@ stored on each Artifact. See [Tool Result Artifact Governance](tool-result-artif
 }
 ```
 
-The tool executor applies typed errors, per-tool timeouts, result-size limits,
-and typed Run Events to every call.
+The Tool Executor applies scope authorization before Budget accounting or
+handler execution, then typed errors, per-Tool timeouts, result-size limits,
+and typed Run Events. See [Tool Security Policy and Scope](tool-security-policy.md)
+for policy JSON, defaults, Frozen Runtime behavior, and decision evidence.
 
 ## Verification
 

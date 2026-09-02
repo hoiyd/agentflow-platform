@@ -7,6 +7,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/toolpolicy"
 )
 
 func TestFileStoreRejectsLiveOnlyRunEvents(t *testing.T) {
@@ -129,11 +130,14 @@ func TestFileStoreActiveRuntimeExcludesWaitingForUser(t *testing.T) {
 
 func testRuntimeSnapshot() domain.RuntimeSnapshot {
 	return domain.RuntimeSnapshot{
-		SchemaVersion:   domain.CurrentRuntimeSnapshotVersion,
-		RunBudget:       &domain.RuntimeRunBudget{},
-		Mode:            "single",
-		Agent:           domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
-		Model:           domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
+		SchemaVersion: domain.CurrentRuntimeSnapshotVersion,
+		RunBudget:     &domain.RuntimeRunBudget{},
+		Mode:          "single",
+		Agent:         domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
+		Model:         domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
+		ToolSecurityPolicy: toolpolicy.Policy{
+			Version: "round-trip-policy-v1", DefaultAction: toolpolicy.ActionDeny,
+		},
 		ContextAssembly: domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 128000, OutputReserveTokens: 8192, SafetyMarginTokens: 4096, HistoryMaxTokens: 64000, MemoryMaxTokens: 8000, KnowledgeMaxTokens: 16000},
 	}
 }
@@ -171,12 +175,18 @@ func TestFileStoreRuntimeSnapshotRoundTripAndReplay(t *testing.T) {
 	if loaded.RuntimeSnapshot == nil || loaded.RuntimeSnapshot.Agent.SystemPrompt != "frozen prompt" {
 		t.Fatalf("unexpected loaded snapshot: %#v", loaded.RuntimeSnapshot)
 	}
+	if loaded.RuntimeSnapshot.ToolSecurityPolicy.Version != "round-trip-policy-v1" || loaded.RuntimeSnapshot.ToolSecurityPolicy.DefaultAction != toolpolicy.ActionDeny {
+		t.Fatalf("Tool security policy did not round trip: %#v", loaded.RuntimeSnapshot.ToolSecurityPolicy)
+	}
 	replay, ok, err := second.GetRunReplay(run.ID)
 	if err != nil || !ok {
 		t.Fatalf("get replay: ok=%v err=%v", ok, err)
 	}
 	if replay.RuntimeSnapshot == nil || replay.RuntimeSnapshot.Agent.SystemPrompt != "frozen prompt" {
 		t.Fatalf("replay did not return snapshot: %#v", replay.RuntimeSnapshot)
+	}
+	if replay.RuntimeSnapshot.ToolSecurityPolicy.Version != "round-trip-policy-v1" {
+		t.Fatalf("replay did not return frozen Tool policy: %#v", replay.RuntimeSnapshot.ToolSecurityPolicy)
 	}
 	if replay.RuntimeSnapshot.ContextAssembly.AssemblerVersion != "context-assembler-v1" || len(replay.RunEvents) != 1 || replay.RunEvents[0].Type != domain.EventContextAssembled {
 		t.Fatalf("context assembly config or manifest event did not round trip: snapshot=%#v events=%#v", replay.RuntimeSnapshot, replay.RunEvents)
