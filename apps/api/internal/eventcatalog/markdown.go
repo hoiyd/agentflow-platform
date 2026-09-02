@@ -8,7 +8,7 @@ import (
 func CatalogMarkdown() string {
 	var output strings.Builder
 	output.WriteString("# Run Event Catalog\n\n")
-	output.WriteString("This file is generated from `apps/api/internal/eventcatalog`. Producers must use a registered event and typed payload contract; durable stores reject live-only and unregistered events.\n\n")
+	output.WriteString("This file is generated from `apps/api/internal/eventcatalog`. Producers must use a registered event. Structured payloads are matched to the catalog, while `TracePayload` is explicitly bound to one event type; durable stores reject live-only and unregistered events.\n\n")
 	output.WriteString("| Event | Durability | Schema | Scope | Producer | Payload schema | Lifecycle | Terminal for | Consumers |\n")
 	output.WriteString("| --- | --- | ---: | --- | --- | --- | --- | --- | --- |\n")
 	for _, item := range Definitions() {
