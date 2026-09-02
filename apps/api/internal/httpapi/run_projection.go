@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/invariant"
 	"agentflow-platform/apps/api/internal/runtimeinvariant"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -16,7 +15,7 @@ func (h *Handler) attachRuntimeInvariants(scoped store.WorkspaceStore, replay *d
 	if err != nil {
 		return err
 	}
-	failures := runtimeinvariant.DefaultRegistry().Evaluate(invariant.Input{
+	failures := runtimeinvariant.Evaluate(runtimeinvariant.Input{
 		Replay: *replay, ModelRequests: records,
 	})
 	replay.Projection.InvariantFailures = failures

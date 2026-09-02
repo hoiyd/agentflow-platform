@@ -21,7 +21,7 @@ import (
 type Application struct {
 	config         config.Config
 	store          store.Store
-	memoryProvider memorypkg.Provider
+	memoryProvider *memorypkg.BuiltinProvider
 	runController  *concurrency.RunController
 	server         *http.Server
 

@@ -43,8 +43,9 @@ type LifecycleContract struct {
 }
 
 // Definition is the executable protocol contract for one RunEvent type.
-// Consumers is documentation metadata; durability, schema, and scope are
-// enforced at producer and persistence boundaries.
+// Producer and Consumers are documentation metadata. PayloadSchema is enforced
+// by event.NewRunEvent; durability, schema version, and scope are enforced at
+// producer and persistence boundaries.
 type Definition struct {
 	Type          domain.RunEventType `json:"type"`
 	Durability    Durability          `json:"durability"`

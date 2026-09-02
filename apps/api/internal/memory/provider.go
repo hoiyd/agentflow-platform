@@ -72,17 +72,6 @@ type TurnSyncer interface {
 	SyncTurn(TurnSyncRequest) error
 }
 
-// Provider is the replaceable Memory lifecycle boundary. Callers depend on
-// narrower capabilities when they do not own the complete lifecycle.
-type Provider interface {
-	Recall(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error)
-	Propose(context.Context, ProposalRequest) (ProposalResult, error)
-	Commit(context.Context, domain.Memory) (domain.Memory, error)
-	SyncTurn(TurnSyncRequest) error
-	Initialize(context.Context) error
-	Close(context.Context) error
-}
-
 type ProviderOptions struct {
 	QueueSize      int
 	JobTimeout     time.Duration
@@ -123,7 +112,6 @@ type BuiltinProvider struct {
 }
 
 var (
-	_ Provider   = (*BuiltinProvider)(nil)
 	_ Operations = (*BuiltinProvider)(nil)
 	_ Recaller   = (*BuiltinProvider)(nil)
 	_ TurnSyncer = (*BuiltinProvider)(nil)

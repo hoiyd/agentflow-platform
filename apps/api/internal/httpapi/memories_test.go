@@ -156,7 +156,7 @@ func (s memoryFailureOperations) Recall(context.Context, domain.MemorySearch) ([
 
 func (s memoryFailureOperations) SyncTurn(memorypkg.TurnSyncRequest) error { return s.err }
 
-func closeMemoryProvider(t *testing.T, provider memorypkg.Provider) {
+func closeMemoryProvider(t *testing.T, provider *memorypkg.BuiltinProvider) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
