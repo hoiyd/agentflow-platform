@@ -67,7 +67,7 @@ Completion stacks. Shared behavior prevents a feature from working in one mode
 while silently bypassing policy in another.
 
 The complete lifecycle, human checkpoints, trace shape, limits, and selection
-guidance are documented in [Execution modes](execution-modes.md).
+guidance are documented in [Execution modes](../runtime/execution-modes.md).
 
 **Rejected shortcut:** copy a chat loop for each mode and normalize only the UI.
 That makes traces look consistent while runtime semantics drift.
@@ -107,7 +107,7 @@ keeps their scopes separate:
 - operation timeouts bound one provider, tool, or verifier call.
 
 The owner of each control is documented in
-[Execution controls](execution-controls.md). When two configuration inputs
+[Execution controls](../runtime/execution-controls.md). When two configuration inputs
 affect one resource, they are resolved into one effective owner instead of
 maintaining competing counters.
 

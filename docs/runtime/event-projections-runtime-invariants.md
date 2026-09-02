@@ -25,7 +25,7 @@ In practical terms:
 ## Event protocol
 
 Every Run Event is registered in the executable
-[`eventcatalog`](../apps/api/internal/eventcatalog) with:
+[`eventcatalog`](../../apps/api/internal/eventcatalog) with:
 
 - durability: `durable` or `live`;
 - schema version and legal Run/Stage/Turn scope;

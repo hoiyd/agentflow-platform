@@ -31,10 +31,10 @@ frontend_uex_design.md     product-level frontend constraints
 Start with:
 
 - [Documentation guide](docs/README.md)
-- [Backend architecture](docs/backend-architecture.md)
-- [Internal terms](docs/terms.md)
-- [Execution controls](docs/execution-controls.md)
-- [Engineering decisions](docs/engineering-decisions.md)
+- [Backend architecture](docs/architecture/backend-architecture.md)
+- [Internal terms](docs/architecture/terms.md)
+- [Execution controls](docs/runtime/execution-controls.md)
+- [Engineering decisions](docs/architecture/engineering-decisions.md)
 
 ## Backend Workflow
 
@@ -101,7 +101,7 @@ Frontend rules:
 
 ## RAG and Knowledge Changes
 
-Read [Knowledge / RAG](docs/knowledge-rag.md) before changing ingestion,
+Read [Knowledge / RAG](docs/knowledge/knowledge-rag.md) before changing ingestion,
 retrieval, context selection, or transformation.
 
 Verify the relevant stages independently:
@@ -127,8 +127,8 @@ are complete. Mandatory namespace filtering alone is not authorization.
   persistence, events, or failure semantics change.
 - Prefer concrete contracts, trade-offs, and evidence over claims such as
   "production-ready" or "intelligent".
-- Keep terminology aligned with `docs/terms.md` and control ownership aligned
-  with `docs/execution-controls.md`.
+- Keep terminology aligned with `docs/architecture/terms.md` and control
+  ownership aligned with `docs/runtime/execution-controls.md`.
 - State limitations explicitly; never imply a stronger security, evaluation, or
   tenant-isolation guarantee than the code provides.
 - `docs/TODO/` is local planning material. Do not stage or commit it unless the

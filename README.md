@@ -52,7 +52,7 @@ visible throughout execution.
 ![Loop mode iteration trace and resource limits](docs/assets/loop-mode.png)
 
 The detailed lifecycle, trade-offs, trace shape, API values, and mode-selection
-guide are in [Execution modes](docs/execution-modes.md).
+guide are in [Execution modes](docs/runtime/execution-modes.md).
 
 ## Example User Story Walkthrough
 
@@ -125,7 +125,7 @@ flowchart LR
 
 All three execution modes share the same Turn, Retrieval, Context Assembly,
 Tool, Event, Budget, and Completion paths. Mode-specific code owns only the
-orchestration policy; see [Execution modes](docs/execution-modes.md) for the
+orchestration policy; see [Execution modes](docs/runtime/execution-modes.md) for the
 exact lifecycle of each path.
 
 ## Engineering Highlights
@@ -137,33 +137,33 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 
 | Concern | Implementation | Implementation evidence |
 | --- | --- | --- |
-| [Agent orchestration](docs/execution-modes.md) | Direct Single, plan-and-review Multi, and bounded Loop modes share one Turn Engine | [runtime](apps/api/internal/agent/runtime.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
-| [Bounded Child Run delegation](docs/child-run-delegation.md) | Multi-Agent Workers execute in isolated Child Runs with frozen Tool authority, independent budgets, no-wait backpressure, bounded result handoff, cancellation, and replayable parent-child topology | [runtime](apps/api/internal/agent/child_run.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
-| [Configurable Agent profiles](docs/agent-profiles.md) | Persisted profiles combine a custom responsibility, system prompt, Tool allowlist, and Memory/RAG switches; Multi freezes active profiles as Router candidates | [API](apps/api/internal/httpapi/agents.go), [tests](apps/api/internal/httpapi/agents_test.go) |
-| [Reproducibility](docs/terms.md#runtime-snapshot) | Each Run freezes model, Agent, Tool schema, context policy, and budget in a Runtime Snapshot | [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
-| [Context control](docs/context-management.md) | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [assembler](apps/api/internal/contextassembly/assembler.go), [tests](apps/api/internal/contextassembly/assembler_test.go) |
-| [Structured durable task state](docs/task-state.md) | Conversation-scoped goals, tasks, decisions, constraints, blockers, and Artifact references evolve through optimistic typed patches rather than summaries | [domain](apps/api/internal/domain/task_state.go), [Store tests](apps/api/internal/store/file_task_states_test.go) |
-| [Durable memory](docs/memory-management.md) | Explicit rules plus optional shadow-mode model extraction propose auditable candidates before embedding | [curator](apps/api/internal/memory/curator.go), [tests](apps/api/internal/memory/curator_test.go) |
-| [Provider compatibility](docs/engineering-decisions.md#openai-compatible-does-not-mean-capability-identical) | The native Turn Engine requires structured Tool Calling and reports unsupported models explicitly; stream usage metadata has a bounded transport fallback | [provider adapter](apps/api/internal/openai), [tests](apps/api/internal/openai/context_integration_test.go) |
+| [Agent orchestration](docs/runtime/execution-modes.md) | Direct Single, plan-and-review Multi, and bounded Loop modes share one Turn Engine | [runtime](apps/api/internal/agent/runtime.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
+| [Bounded Child Run delegation](docs/runtime/child-run-delegation.md) | Multi-Agent Workers execute in isolated Child Runs with frozen Tool authority, independent budgets, no-wait backpressure, bounded result handoff, cancellation, and replayable parent-child topology | [runtime](apps/api/internal/agent/child_run.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
+| [Configurable Agent profiles](docs/runtime/agent-profiles.md) | Persisted profiles combine a custom responsibility, system prompt, Tool allowlist, and Memory/RAG switches; Multi freezes active profiles as Router candidates | [API](apps/api/internal/httpapi/agents.go), [tests](apps/api/internal/httpapi/agents_test.go) |
+| [Reproducibility](docs/architecture/terms.md#runtime-snapshot) | Each Run freezes model, Agent, Tool schema, context policy, and budget in a Runtime Snapshot | [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
+| [Context control](docs/context/context-management.md) | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [assembler](apps/api/internal/contextassembly/assembler.go), [tests](apps/api/internal/contextassembly/assembler_test.go) |
+| [Structured durable task state](docs/runtime/task-state.md) | Conversation-scoped goals, tasks, decisions, constraints, blockers, and Artifact references evolve through optimistic typed patches rather than summaries | [domain](apps/api/internal/domain/task_state.go), [Store tests](apps/api/internal/store/file_task_states_test.go) |
+| [Durable memory](docs/context/memory-management.md) | Explicit rules plus optional shadow-mode model extraction propose auditable candidates before embedding | [curator](apps/api/internal/memory/provider_sync.go), [tests](apps/api/internal/memory/provider_sync_test.go) |
+| [Provider compatibility](docs/architecture/engineering-decisions.md#openai-compatible-does-not-mean-capability-identical) | The native Turn Engine requires structured Tool Calling and reports unsupported models explicitly; stream usage metadata has a bounded transport fallback | [provider adapter](apps/api/internal/openai), [tests](apps/api/internal/openai/context_integration_test.go) |
 
 ### RAG and Knowledge Grounding
 
 | Concern | Implementation | Implementation evidence |
 | --- | --- | --- |
-| [Hybrid retrieval and ranking](docs/knowledge-rag.md#retrieval-pipeline) | Independent semantic and keyword recall feed Reciprocal Rank Fusion, a versioned Reranker, and a separate Relevance Gate | [pipeline](apps/api/internal/rag/retrieval.go), [stage tests](apps/api/internal/rag/retrieval_test.go), [API/Runtime regression](apps/api/internal/httpapi/rag_pipeline_regression_test.go) |
-| [Context selection and citations](docs/knowledge-rag.md#parent-child-context-selection) | Source-traceable child hits drive scoped parent/adjacent expansion, deduplication, merging, token selection, and resolved `[S1]` citations | [selection](apps/api/internal/rag/context_selection.go), [citations](apps/api/internal/rag/citations.go), [tests](apps/api/internal/rag/context_selection_test.go) |
-| [Retrieval safety and evaluation](docs/rag-golden-dataset.md) | Injection filtering runs before ranking; a versioned Dataset and paired corpus exercise fact, exact-ID, multi-source, no-answer, leakage, and injection cases through the same retrieval path | [guard](apps/api/internal/rag/security.go), [evaluation](apps/api/internal/rag/evaluation.go), [dataset](examples/knowledge/golden-dataset.v1.json) |
+| [Hybrid retrieval and ranking](docs/knowledge/knowledge-rag.md#retrieval-pipeline) | Independent semantic and keyword recall feed Reciprocal Rank Fusion, a versioned Reranker, and a separate Relevance Gate | [pipeline](apps/api/internal/rag/retrieval.go), [stage tests](apps/api/internal/rag/retrieval_test.go), [API/Runtime regression](apps/api/internal/httpapi/rag_pipeline_regression_test.go) |
+| [Context selection and citations](docs/knowledge/knowledge-rag.md#parent-child-context-selection) | Source-traceable child hits drive scoped parent/adjacent expansion, deduplication, merging, token selection, and resolved `[S1]` citations | [selection](apps/api/internal/rag/context_selection.go), [citations](apps/api/internal/rag/citations.go), [tests](apps/api/internal/rag/context_selection_test.go) |
+| [Retrieval safety and evaluation](docs/knowledge/rag-golden-dataset.md) | Injection filtering runs before ranking; a versioned Dataset and paired corpus exercise fact, exact-ID, multi-source, no-answer, leakage, and injection cases through the same retrieval path | [guard](apps/api/internal/rag/security.go), [evaluation](apps/api/internal/rag/evaluation.go), [dataset](examples/knowledge/golden-dataset.v1.json) |
 
 ### Reliability, Governance, and Evidence
 
 | Concern | Implementation | Implementation evidence |
 | --- | --- | --- |
-| [**Performance & resource control**](docs/execution-controls.md) | SSE streaming, bounded context/output, asynchronous Memory curation, and per-Run usage/cost budgets keep work measurable and bounded | [budget](apps/api/internal/budget/budget.go), [tests](apps/api/internal/budget/budget_test.go) |
-| [**Concurrency & backpressure**](docs/execution-controls.md#1-run-admission-and-conversation-concurrency) | Global Run admission, per-Conversation single-writer execution, bounded queues, model-request permits, RPM/TPM limits, and retry-aware slot release | [controller](apps/api/internal/concurrency/run_controller.go), [tests](apps/api/internal/concurrency/run_controller_test.go) |
-| [Workspace namespace isolation](docs/backend-configuration.md#workspace-scope) | Every API request resolves a non-empty Workspace; Conversations, Messages, Runs, Documents, Memory, retrieval, Replay, and Verification remain scoped in File and Postgres stores | [HTTP scope](apps/api/internal/httpapi/workspace.go), [Store contract](apps/api/internal/store/store.go), [tests](apps/api/internal/store/file_store_test.go) |
-| [Tool governance](docs/tool-security-policy.md) | Platform enablement, Agent allowlists, frozen capability scope, operator policy, Budget, side-effect recovery, and concurrency remain explicit independent controls | [policy](apps/api/internal/toolpolicy/policy.go), [executor](apps/api/internal/tools/executor.go), [tests](apps/api/internal/tools/security_executor_test.go) |
-| [**Verification**](docs/verification.md) | Frozen Completion Contracts run configured deterministic or model-backed verifiers, persist immutable Evidence/Artifacts, and gate `run.completed` | [engine](apps/api/internal/verification/engine.go), [tests](apps/api/internal/verification/engine_test.go) |
-| [**Tracing & replay**](docs/backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed Run/Stage/Turn/Model/Tool/Retrieval/Verification events, usage ledgers, Replay, and Episode reports explain what happened | [episode](apps/api/internal/httpapi/episode_report.go), [tests](apps/api/internal/httpapi/episode_report_test.go) |
+| [**Performance & resource control**](docs/runtime/execution-controls.md) | SSE streaming, bounded context/output, asynchronous Memory curation, and per-Run usage/cost budgets keep work measurable and bounded | [budget](apps/api/internal/budget/budget.go), [tests](apps/api/internal/budget/budget_test.go) |
+| [**Concurrency & backpressure**](docs/runtime/execution-controls.md#1-run-admission-and-conversation-concurrency) | Global Run admission, per-Conversation single-writer execution, bounded queues, model-request permits, RPM/TPM limits, and retry-aware slot release | [controller](apps/api/internal/concurrency/run_controller.go), [tests](apps/api/internal/concurrency/run_controller_test.go) |
+| [Workspace namespace isolation](docs/operations/backend-configuration.md#workspace-scope) | Every API request resolves a non-empty Workspace; Conversations, Messages, Runs, Documents, Memory, retrieval, Replay, and Verification remain scoped in File and Postgres stores | [HTTP scope](apps/api/internal/httpapi/workspace.go), [Store contract](apps/api/internal/store/store.go), [tests](apps/api/internal/store/file_store_test.go) |
+| [Tool governance](docs/tools/tool-security-policy.md) | Platform enablement, Agent allowlists, frozen capability scope, operator policy, Budget, side-effect recovery, and concurrency remain explicit independent controls | [policy](apps/api/internal/toolpolicy/policy.go), [executor](apps/api/internal/tools/executor.go), [tests](apps/api/internal/tools/security_executor_test.go) |
+| [**Verification**](docs/runtime/verification.md) | Frozen Completion Contracts run configured deterministic or model-backed verifiers, persist immutable Evidence/Artifacts, and gate `run.completed` | [engine](apps/api/internal/verification/engine.go), [tests](apps/api/internal/verification/engine_test.go) |
+| [**Tracing & replay**](docs/architecture/backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed Run/Stage/Turn/Model/Tool/Retrieval/Verification events, usage ledgers, Replay, and Episode reports explain what happened | [episode](apps/api/internal/httpapi/episode_report.go), [tests](apps/api/internal/httpapi/episode_report_test.go) |
 
 Performance statements above describe implemented controls, not synthetic
 benchmark claims. Verification evaluates configured Run outcomes; Automated and
@@ -198,7 +198,7 @@ model. The key is optional so an interviewer can still inspect runtime behavior,
 persistence, and Replay without provider setup or cost.
 
 The timed walkthrough and talking points are in
-[`docs/demo.md`](docs/demo.md).
+[`docs/guides/demo.md`](docs/guides/demo.md).
 
 ## Engineering Evolution and Evidence
 
@@ -220,13 +220,13 @@ the current design as a one-shot architecture:
 
 Each step introduced a narrower contract and regression tests before the next
 capability depended on it. The rationale and rejected shortcuts are recorded in
-[Engineering decisions](docs/engineering-decisions.md).
+[Engineering decisions](docs/architecture/engineering-decisions.md).
 
 ## Known Boundaries
 
 These boundaries are documented rather than hidden. The supported deployment
 scope and its expansion path are documented in the
-[Production Readiness Roadmap](docs/production-readiness-roadmap.md).
+[Production Readiness Roadmap](docs/operations/production-readiness-roadmap.md).
 
 - Workspace namespace isolation is mandatory: omitted scope resolves to
   `default_workspace`, and Store/RAG paths do not perform unscoped reads.
@@ -339,15 +339,15 @@ agentflow-platform/
 
 For a short technical review:
 
-1. Compare the three [Execution modes](docs/execution-modes.md).
-2. Inspect how [Agent profiles](docs/agent-profiles.md) become Single/Loop
+1. Compare the three [Execution modes](docs/runtime/execution-modes.md).
+2. Inspect how [Agent profiles](docs/runtime/agent-profiles.md) become Single/Loop
    runtime inputs and frozen Multi Router candidates.
-3. Read [Engineering decisions](docs/engineering-decisions.md).
-4. Follow the [backend call paths](docs/backend-architecture.md#main-call-paths).
-5. Inspect the [retrieval pipeline](docs/knowledge-rag.md#retrieval-pipeline)
-   and run the [evaluation harness](docs/api-reference.md#rag-evaluation).
-6. Compare [Run Budget](docs/run-budget.md) with single-call
-   [Context Management](docs/context-management.md).
+3. Read [Engineering decisions](docs/architecture/engineering-decisions.md).
+4. Follow the [backend call paths](docs/architecture/backend-architecture.md#main-call-paths).
+5. Inspect the [retrieval pipeline](docs/knowledge/knowledge-rag.md#retrieval-pipeline)
+   and run the [evaluation harness](docs/reference/api-reference.md#rag-evaluation).
+6. Compare [Run Budget](docs/runtime/run-budget.md) with single-call
+   [Context Management](docs/context/context-management.md).
 7. Open Replay and export its Episode Report after running a Multi or Loop task.
 
 The complete documentation map is in [docs/README.md](docs/README.md).

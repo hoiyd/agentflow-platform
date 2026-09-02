@@ -295,6 +295,6 @@ content boundary, filtering, and audit trail provide defense in depth.
   implemented. Persisting Dataset/Evaluation Run versions and calibrating
   thresholds remain future work.
 
-The [Manual tests](manual-tests.md) exercise exact
+The [Manual tests](../operations/manual-tests.md) exercise exact
 identifier recall, RRF reproduction, injection filtering, parent expansion,
 and context transformation.

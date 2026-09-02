@@ -122,4 +122,4 @@ deployment limits stay live.
 
 See [Execution modes](execution-modes.md) for orchestration behavior,
 [Tool Execution Policy](execution-controls.md#7-tool-execution-policy), and
-[Internal terms](terms.md#runtime-snapshot) for Snapshot ownership.
+[Internal terms](../architecture/terms.md#runtime-snapshot) for Snapshot ownership.

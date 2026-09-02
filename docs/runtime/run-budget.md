@@ -138,4 +138,4 @@ Repeated tool signatures, repeated results/errors, oscillation detection, and
 - Waiting and queue time do not consume active runtime.
 - Snapshot compatibility does not silently apply new limits to legacy Runs.
 
-Focused commands are listed in [Manual tests](manual-tests.md).
+Focused commands are listed in [Manual tests](../operations/manual-tests.md).

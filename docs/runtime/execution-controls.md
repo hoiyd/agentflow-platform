@@ -194,7 +194,7 @@ other protects cumulative Run usage.
 
 Soft Compaction runs asynchronously after completion. Hard Compaction is Turn
 preflight work and is recorded with `compaction` purpose in the Run Ledger. See
-[Context Management](context-management.md).
+[Context Management](../context/context-management.md).
 
 ## 6. Autonomous Loop Guards
 
@@ -241,7 +241,7 @@ Before budget accounting or handler execution, Tool arguments are bounded,
 decoded once, canonicalized, validated against that compiled contract, and
 authorized against the frozen Tool Security Policy. Policy rejection therefore
 does not consume Tool Budget or create a side effect. See
-[Tool Security Policy and Scope](tool-security-policy.md).
+[Tool Security Policy and Scope](../tools/tool-security-policy.md).
 Validation failures return a stable code, JSON Pointer path, and non-secret
 message. The canonical argument hash and frozen definition revision are reused
 by tracing and the side-effect journal.
@@ -251,7 +251,7 @@ validation path, so its schema decisions cannot drift from Executor behavior.
 Every production Binding is covered by a shared contract/sensor suite, while a
 deterministic fault harness exercises timeout, cancel, panic, result limits,
 Budget denial, tracing, and effect-journal boundaries. See
-[Tool Contract and Fault Testing](tool-contract-testing.md).
+[Tool Contract and Fault Testing](../tools/tool-contract-testing.md).
 
 Tool name, description, normalized parameter schema, schema version, definition
 revision, capability, and operator policy are frozen with new Snapshot v11
@@ -261,7 +261,7 @@ unless a Binding declares a safe `read_only` or keyed parallel group. Oversized
 results are redacted and persisted as immutable Tool Artifacts; model Context
 receives a UTF-8-safe bounded preview and opaque recovery reference. Batch
 accounting includes both raw results and previews, so adding more Tools cannot
-silently multiply Context usage. See [Tool Result Artifact Governance](tool-result-artifacts.md).
+silently multiply Context usage. See [Tool Result Artifact Governance](../tools/tool-result-artifacts.md).
 
 Tool timeout bounds one handler. Run runtime budget bounds cumulative active
 execution; neither substitutes for the other.

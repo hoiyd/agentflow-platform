@@ -20,7 +20,7 @@ subjective factual correctness.
 | Runs inside the product for one opted-in Run. | Run during development or CI. | Are performed by a developer, operator, or reviewer. |
 | Evaluates one persisted candidate output against a frozen Completion Contract. | Evaluate code against automated assertions. | Exercise a documented workflow and inspect its observable result. |
 | Produces `verification.*` events and Evidence/Artifacts that can gate `run.completed`. | Produce test output and determine build health. | Produce human observations and never gate `run.completed`. |
-| Is enabled by `completion_contract`; ordinary Runs skip it. | Start with commands such as `go test` or `make test`. | Follow [Manual Tests](manual-tests.md). |
+| Is enabled by `completion_contract`; ordinary Runs skip it. | Start with commands such as `go test` or `make test`. | Follow [Manual Tests](../operations/manual-tests.md). |
 
 A command verifier may invoke an allowlisted external test runner as one source
 of runtime evidence. AgentFlow does not discover or run its own repository test
