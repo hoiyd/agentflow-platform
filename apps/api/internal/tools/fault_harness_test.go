@@ -18,7 +18,7 @@ func TestExecutorFaultHarness(t *testing.T) {
 
 func TestEffectGateExposesIntentEffectAndSettlementBoundaries(t *testing.T) {
 	fixture := tooltest.NewEffectGateFixture()
-	catalog, err := tools.NewCatalog(fixture.Binding("write_record"))
+	catalog, _, err := tooltest.NewAuthorizedCatalog(fixture.Binding("write_record"))
 	if err != nil {
 		t.Fatalf("new catalog: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestEffectGateInjectsJournalFailuresWithoutNetwork(t *testing.T) {
 
 func executeEffectFixture(t *testing.T, fixture *tooltest.EffectGateFixture) tools.ExecutionResult {
 	t.Helper()
-	catalog, err := tools.NewCatalog(fixture.Binding("write_record"))
+	catalog, _, err := tooltest.NewAuthorizedCatalog(fixture.Binding("write_record"))
 	if err != nil {
 		t.Fatalf("new catalog: %v", err)
 	}

@@ -8,7 +8,7 @@ For the reasoning behind the main boundaries, read
 [Engineering decisions](engineering-decisions.md). For domain terminology such
 as Run, Stage, Turn, and Model Call, read [Internal terms](terms.md). For the
 complete Single, Multi, and Loop lifecycles, read
-[Execution modes](execution-modes.md).
+[Execution modes](../runtime/execution-modes.md).
 
 ## Architectural Invariants
 
@@ -192,7 +192,7 @@ The call paths preserve these ownership boundaries:
 | Run completion | Persists the assistant message, transitions the Run, flushes the terminal SSE event, and schedules conservative Memory synchronization. All modes emit the same `domain.RunEvent` contract. |
 
 Detailed retrieval algorithms and failure boundaries live in
-[Knowledge / RAG](knowledge-rag.md). New executables should reuse the
+[Knowledge / RAG](../knowledge/knowledge-rag.md). New executables should reuse the
 composition root instead of copying dependency construction from `cmd/server`.
 
 ## Extension Points

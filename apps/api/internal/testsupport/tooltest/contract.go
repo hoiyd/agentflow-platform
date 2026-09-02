@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -49,7 +50,7 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 		handlerCalls.Add(1)
 		return spec.GoodResult, nil
 	}
-	catalog, err := tools.NewCatalog(binding)
+	catalog, binding, err := NewAuthorizedCatalog(binding)
 	if err != nil {
 		t.Fatalf("register binding: %v", err)
 	}
@@ -108,6 +109,21 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 	if err := validateContractTrace(tracer, installed.Descriptor.DefinitionRevision); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// NewAuthorizedCatalog gives failure/contract fixtures the minimum explicit
+// test-only grant required by their declared capability.
+func NewAuthorizedCatalog(binding tools.Binding) (*tools.Catalog, tools.Binding, error) {
+	policy := toolpolicy.DefaultPolicy()
+	if binding.Descriptor.SideEffect.Mode == tools.SideEffectExternal && binding.Descriptor.Name != "update_task_state" {
+		binding.Descriptor.Security = testExternalWriteCapability()
+		policy.Rules = append(policy.Rules, toolpolicy.Rule{
+			ID: "contract-" + binding.Descriptor.Name, Tool: binding.Descriptor.Name,
+			Action: toolpolicy.ActionAllow, Capability: binding.Descriptor.Security,
+		})
+	}
+	catalog, err := tools.NewCatalogWithPolicy(policy, binding)
+	return catalog, binding, err
 }
 
 func validateSuccessfulExecution(result tools.ExecutionResult, handlerCalls int32, revision string, sensor func(any) error) error {
@@ -180,6 +196,20 @@ func (t *recordingTracer) ToolStarted(_ context.Context, request tools.Execution
 
 func (t *recordingTracer) ToolFinished(context.Context, tools.ExecutionResult) {
 	t.finishes.Add(1)
+}
+
+func (t *recordingTracer) ToolPolicyEvaluated(context.Context, tools.ExecutionRequest, toolpolicy.Decision) error {
+	return nil
+}
+
+func testExternalWriteCapability() toolpolicy.Capability {
+	return toolpolicy.NormalizeCapability(toolpolicy.Capability{
+		Scope: toolpolicy.Scope{Resources: []toolpolicy.ResourceScope{{
+			Kind: toolpolicy.ResourceExternal, Name: "test_fixture", Access: toolpolicy.AccessWrite,
+		}}},
+		SideEffect: toolpolicy.SideEffectExternalWrite, Reversibility: toolpolicy.Compensatable,
+		Visibility: toolpolicy.VisibilityOperator, Audit: toolpolicy.AuditFull,
+	})
 }
 
 type memoryEffectJournal struct {

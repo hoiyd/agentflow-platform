@@ -2,7 +2,7 @@
 
 Context Assembly owns the input of one logical Model Call. It is a capacity and
 explainability mechanism, not a cumulative cost budget. For the distinction,
-see [Execution controls](execution-controls.md) and [Run Budget](run-budget.md).
+see [Execution controls](../runtime/execution-controls.md) and [Run Budget](../runtime/run-budget.md).
 
 Every model call is assembled against an explicit input budget:
 
@@ -46,7 +46,7 @@ copying raw dynamic context into the event.
 Structured Task State is injected as bounded JSON and recorded in the Manifest
 with a versioned reference such as `conversation_id:v3`. Its raw facts remain in
 the immutable Revision snapshot rather than the Manifest. See
-[Structured Durable Task State](task-state.md). New Runs enable this protocol
+[Structured Durable Task State](../runtime/task-state.md). New Runs enable this protocol
 through Runtime Snapshot v8; the current resumable Snapshot window (v9-v10)
 always uses this protocol.
 

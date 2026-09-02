@@ -174,6 +174,6 @@ More orchestration is not automatically more capable. Multi and Loop trade
 additional calls, latency, and state for stronger coordination or iterative
 control.
 
-For entity semantics, see [Internal terms](terms.md). For limits and ownership,
+For entity semantics, see [Internal terms](../architecture/terms.md). For limits and ownership,
 see [Execution controls](execution-controls.md). For package boundaries, see
-[Backend architecture](backend-architecture.md).
+[Backend architecture](../architecture/backend-architecture.md).

@@ -173,8 +173,9 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testi
 	childSnapshot := domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: agent.ChatModeSingle,
 		Agent: selected, Model: prepared.Run.RuntimeSnapshot.Model,
-		ContextAssembly: prepared.Run.RuntimeSnapshot.ContextAssembly,
-		RunBudget:       &domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000},
+		ContextAssembly:    prepared.Run.RuntimeSnapshot.ContextAssembly,
+		RunBudget:          &domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000},
+		ToolSecurityPolicy: prepared.Run.RuntimeSnapshot.ToolSecurityPolicy,
 		Delegation: &domain.RuntimeDelegation{
 			DelegationID: delegationID, ParentRunID: prepared.Run.ID, ParentTurnID: "turn-api-resume",
 			ParentStageID: worker.ID, Depth: 1, IsolatedContext: true,

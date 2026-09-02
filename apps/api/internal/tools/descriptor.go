@@ -4,16 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"agentflow-platform/apps/api/internal/toolpolicy"
 )
 
 type Descriptor struct {
-	Name               string            `json:"name"`
-	Description        string            `json:"description"`
-	Parameters         map[string]any    `json:"parameters"`
-	SchemaVersion      string            `json:"schema_version"`
-	DefinitionRevision string            `json:"definition_revision"`
-	Concurrency        ConcurrencyPolicy `json:"concurrency,omitempty"`
-	SideEffect         SideEffectPolicy  `json:"side_effect,omitempty"`
+	Name               string                `json:"name"`
+	Description        string                `json:"description"`
+	Parameters         map[string]any        `json:"parameters"`
+	SchemaVersion      string                `json:"schema_version"`
+	DefinitionRevision string                `json:"definition_revision"`
+	Concurrency        ConcurrencyPolicy     `json:"concurrency,omitempty"`
+	SideEffect         SideEffectPolicy      `json:"side_effect,omitempty"`
+	Security           toolpolicy.Capability `json:"security"`
 }
 
 type SideEffectMode string
@@ -44,16 +47,21 @@ type ConcurrencyPolicy struct {
 
 type Handler func(ctx context.Context, args json.RawMessage) (any, error)
 
+// ScopeResolver derives the concrete scope requested by one call from trusted
+// Binding code. It may narrow, but never widen, Descriptor.Security.Scope.
+type ScopeResolver func(ctx context.Context, args json.RawMessage) (toolpolicy.Scope, error)
+
 type ExecutionPolicy struct {
 	Timeout        time.Duration
 	MaxResultBytes int
 }
 
 type Binding struct {
-	Descriptor Descriptor
-	Handler    Handler
-	Policy     ExecutionPolicy
-	contract   *argumentContract
+	Descriptor   Descriptor
+	Handler      Handler
+	Policy       ExecutionPolicy
+	ResolveScope ScopeResolver
+	contract     *argumentContract
 }
 
 type ToolInfo struct {

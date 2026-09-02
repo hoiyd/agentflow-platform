@@ -11,7 +11,7 @@ Gate tests below exercise that subsystem.
 
 ## Prerequisite
 
-Run the repository's [Automated Tests](../README.md#automated-tests) before
+Run the repository's [Automated Tests](../../README.md#automated-tests) before
 starting the manual cases:
 
 ```bash
@@ -121,7 +121,7 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
 ### Completion Gate
 
 1. Send `POST /api/chat` with the JSON Schema contract from
-   [Verification](verification.md).
+   [Verification](../runtime/verification.md).
 2. Return output that does not match the schema and confirm the Run does not become `completed`.
 3. Inspect `GET /api/runs/{id}/replay` and confirm failed Evidence includes contract/verifier versions, Subject Hash, Snapshot Hash, summary, and an Artifact ID.
 4. For an HTTP verifier with remaining attempt budget, restore the target service and call `POST /api/runs/{id}/verify`.
@@ -138,5 +138,5 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
 
 ## Interview Demo
 
-For a timed reviewer walkthrough, use [Interview Demo](demo.md). This guide
+For a timed reviewer walkthrough, use [Interview Demo](../guides/demo.md). This guide
 remains the source for manual checks and expected observable results.

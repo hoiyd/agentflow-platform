@@ -1,10 +1,10 @@
 # RAG Golden Dataset v1
 
 AgentFlow's canonical retrieval dataset is
-[`agentflow-rag-baseline@1.0.0`](../examples/knowledge/golden-dataset.v1.json).
+[`agentflow-rag-baseline@1.0.0`](../../examples/knowledge/golden-dataset.v1.json).
 It is a small, versioned engineering baseline rather than a claim of
 domain-wide retrieval quality. The paired corpus lives under
-[`examples/knowledge/golden-v1`](../examples/knowledge/golden-v1).
+[`examples/knowledge/golden-v1`](../../examples/knowledge/golden-v1).
 
 ## Coverage
 

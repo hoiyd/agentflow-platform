@@ -921,6 +921,9 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if replay.RuntimeSnapshot.ContextAssembly.AssemblerVersion != "context-assembler-v1" {
 		t.Fatalf("expected context assembly config round trip, got %#v", replay.RuntimeSnapshot.ContextAssembly)
 	}
+	if replay.RuntimeSnapshot.ToolSecurityPolicy.Version != "round-trip-policy-v1" || replay.RuntimeSnapshot.ToolSecurityPolicy.DefaultAction != "deny" {
+		t.Fatalf("expected Tool security policy round trip, got %#v", replay.RuntimeSnapshot.ToolSecurityPolicy)
+	}
 	if len(replay.Messages) != 2 || len(replay.Messages[1].Citations) != 1 || replay.Messages[1].Citations[0].SourceID != "S1" || len(replay.Steps) != 1 || len(replay.RunEvents) != 4 {
 		t.Fatalf("unexpected replay counts: messages=%d steps=%d events=%d", len(replay.Messages), len(replay.Steps), len(replay.RunEvents))
 	}

@@ -11,7 +11,7 @@ make quickstart
 ```
 
 Open `http://localhost:3000`. Upload
-[`examples/example.md`](../examples/example.md) from the **Knowledge** view. This
+[`examples/example.md`](../../examples/example.md) from the **Knowledge** view. This
 file is sample knowledge content, not the Demo instructions themselves. Keep one
 completed Multi-Agent Run available if the interview environment has unreliable
 network access.

@@ -15,6 +15,7 @@ import (
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/taskstate"
+	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -80,9 +81,12 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 		t.Fatalf("runtime-owned task state tool was not frozen: agent=%#v tools=%#v", prepared.Run.RuntimeSnapshot.Agent.Tools, prepared.Run.RuntimeSnapshot.Tools)
 	}
 	for _, frozen := range prepared.Run.RuntimeSnapshot.Tools {
-		if frozen.SchemaVersion != tools.ToolSchemaVersion || frozen.DefinitionRevision == "" {
+		if frozen.SchemaVersion != tools.ToolSchemaVersion || frozen.DefinitionRevision == "" || frozen.Security.Source == "" {
 			t.Fatalf("tool schema contract was not frozen: %#v", frozen)
 		}
+	}
+	if prepared.Run.RuntimeSnapshot.ToolSecurityPolicy.Version != toolpolicy.CurrentVersion {
+		t.Fatalf("Tool security policy was not frozen: %#v", prepared.Run.RuntimeSnapshot.ToolSecurityPolicy)
 	}
 	runtime.runBudget.MaxModelCalls = 99
 	if prepared.Run.RuntimeSnapshot.RunBudget.MaxModelCalls != 12 {
@@ -101,6 +105,18 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if _, err := manager.SetEnabled("calculator", false); err != nil {
 		t.Fatalf("disable calculator: %v", err)
 	}
+	changedConfig, err := tools.LoadConfig(toolPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedConfig.SecurityPolicy = toolpolicy.Policy{Version: "operator-v2", DefaultAction: toolpolicy.ActionDeny}
+	time.Sleep(2 * time.Millisecond)
+	if err := tools.SaveConfig(toolPath, changedConfig); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.ReloadIfChanged(); err != nil {
+		t.Fatal(err)
+	}
 
 	restored, err := runtime.restoreRuntime(prepared.Run)
 	if err != nil {
@@ -114,6 +130,9 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	}
 	if _, ok := restored.catalog.Resolve(taskstate.UpdateToolName); !ok {
 		t.Fatal("expected frozen task state tool to remain available")
+	}
+	if restored.catalog.SecurityPolicy().Version != toolpolicy.CurrentVersion {
+		t.Fatalf("current operator config changed frozen Tool policy: %#v", restored.catalog.SecurityPolicy())
 	}
 	identity := restored.client.RuntimeIdentity()
 	if identity.Model != "test-model-v1" || identity.Provider != "openrouter" {
@@ -151,6 +170,9 @@ func TestRuntimeSnapshotResumeSupportsOnlyCurrentAndPreviousVersions(t *testing.
 			Agent: domain.RuntimeAgentSnapshot{ID: "agent"}, Model: domain.RuntimeModelSnapshot{Model: "model"},
 			RunBudget: &domain.RuntimeRunBudget{},
 		}
+		if version >= domain.ToolSecurityRuntimeSnapshotVersion {
+			snapshot.ToolSecurityPolicy = toolpolicy.DefaultPolicy()
+		}
 		if err := validateRuntimeSnapshot(snapshot); err != nil {
 			t.Fatalf("snapshot v%d should be resumable: %v", version, err)
 		}
@@ -161,6 +183,26 @@ func TestRuntimeSnapshotResumeSupportsOnlyCurrentAndPreviousVersions(t *testing.
 		if !errors.Is(err, ErrRuntimeSnapshotResumeUnsupported) || failure.Describe(err).Code != "runtime_snapshot_resume_unsupported" {
 			t.Fatalf("snapshot v%d should be replay-only, got %v", version, err)
 		}
+	}
+}
+
+func TestCurrentRuntimeSnapshotRequiresFrozenToolSecurityPolicy(t *testing.T) {
+	snapshot := testRuntimeSnapshot()
+	snapshot.ToolSecurityPolicy = toolpolicy.Policy{}
+	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "Tool security policy") {
+		t.Fatalf("missing frozen Tool policy must fail closed: %v", err)
+	}
+}
+
+func TestCurrentRuntimeSnapshotRejectsInvalidToolSecurityCapability(t *testing.T) {
+	snapshot := testRuntimeSnapshot()
+	snapshot.ToolSecurityPolicy = toolpolicy.DefaultPolicy()
+	snapshot.Tools = []domain.RuntimeToolSnapshot{{
+		Name: "unsafe", SchemaVersion: tools.ToolSchemaVersion, DefinitionRevision: "sha256:test",
+		Security: toolpolicy.Capability{Source: "invalid"},
+	}}
+	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "security capability") {
+		t.Fatalf("invalid frozen Tool capability must fail closed: %v", err)
 	}
 }
 
@@ -228,8 +270,8 @@ func TestCurrentRuntimeSnapshotRequiresToolSchemaContract(t *testing.T) {
 		t.Fatalf("expected missing tool contract error, got %v", err)
 	}
 	snapshot.SchemaVersion = domain.PreviousRuntimeSnapshotVersion
-	if err := validateRuntimeSnapshot(&snapshot); err != nil {
-		t.Fatalf("previous snapshot must retain legacy tool compatibility: %v", err)
+	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "schema contract") {
+		t.Fatalf("version 10 snapshot must retain its Tool schema contract: %v", err)
 	}
 }
 

@@ -6,18 +6,30 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"agentflow-platform/apps/api/internal/toolpolicy"
 )
 
 type Catalog struct {
-	mu       sync.RWMutex
-	bindings map[string]Binding
-	enabled  map[string]bool
+	mu             sync.RWMutex
+	bindings       map[string]Binding
+	enabled        map[string]bool
+	securityPolicy toolpolicy.Policy
 }
 
 func NewCatalog(bindings ...Binding) (*Catalog, error) {
+	return NewCatalogWithPolicy(toolpolicy.DefaultPolicy(), bindings...)
+}
+
+func NewCatalogWithPolicy(policy toolpolicy.Policy, bindings ...Binding) (*Catalog, error) {
+	policy = toolpolicy.NormalizePolicy(policy)
+	if err := toolpolicy.ValidatePolicy(policy); err != nil {
+		return nil, fmt.Errorf("invalid Tool security policy: %w", err)
+	}
 	catalog := &Catalog{
-		bindings: map[string]Binding{},
-		enabled:  map[string]bool{},
+		bindings:       map[string]Binding{},
+		enabled:        map[string]bool{},
+		securityPolicy: policy,
 	}
 	for _, binding := range bindings {
 		if err := catalog.Register(binding); err != nil {
@@ -28,7 +40,7 @@ func NewCatalog(bindings ...Binding) (*Catalog, error) {
 }
 
 func DefaultCatalog() *Catalog {
-	catalog, err := NewCatalog(
+	catalog, err := NewCatalogWithPolicy(toolpolicy.DefaultPolicy(),
 		CalculatorTool(),
 		CurrentTimeTool(),
 	)
@@ -53,6 +65,13 @@ func (c *Catalog) Register(binding Binding) error {
 		return fmt.Errorf("tool %q parameters are required", name)
 	}
 	binding.Descriptor.Name = name
+	binding.Descriptor.Security = toolpolicy.NormalizeCapability(binding.Descriptor.Security)
+	if err := toolpolicy.ValidateCapability(binding.Descriptor.Security); err != nil {
+		return fmt.Errorf("tool %q has invalid security capability: %w", name, err)
+	}
+	if binding.Descriptor.SideEffect.Mode == SideEffectExternal && binding.Descriptor.Security.SideEffect == toolpolicy.SideEffectNone {
+		return fmt.Errorf("tool %q external side effect requires an explicit security side-effect class", name)
+	}
 	concurrency := binding.Descriptor.Concurrency
 	switch concurrency.Mode {
 	case "", ConcurrencySerial, ConcurrencyReadOnly:
@@ -128,13 +147,19 @@ func (c *Catalog) EnabledNames() []string {
 	return c.sortedNamesLocked(true)
 }
 
+func (c *Catalog) SecurityPolicy() toolpolicy.Policy {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return toolpolicy.NormalizePolicy(c.securityPolicy)
+}
+
 // CloneWith creates an isolated catalog while preserving installed bindings
 // and enablement. Runtime-owned harness tools can be added without mutating the
 // user-configurable Manager catalog.
 func (c *Catalog) CloneWith(bindings ...Binding) (*Catalog, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	cloned, err := NewCatalog()
+	cloned, err := NewCatalogWithPolicy(c.securityPolicy)
 	if err != nil {
 		return nil, err
 	}

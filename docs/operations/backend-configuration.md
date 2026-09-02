@@ -6,7 +6,7 @@ local defaults; this document explains ownership and interaction between the
 settings.
 
 For the ownership, scope, unit, interaction rules, and tuning order of every
-major limit, start with [Execution Controls](execution-controls.md).
+major limit, start with [Execution Controls](../runtime/execution-controls.md).
 
 ## Baseline Environment
 
@@ -136,7 +136,7 @@ purged lazily on File/Postgres reads; durable Envelope and redaction metadata
 remain available.
 Changing this process-level observability policy does not change model input or
 the semantic protocol frozen with a Run. See
-[Model request reconstruction](model-request-reconstruction.md).
+[Model request reconstruction](../context/model-request-reconstruction.md).
 
 ## Runtime Invariants
 
@@ -159,7 +159,7 @@ selected model before enabling it.
 
 Run model calls are logical operations. Provider retries continue to consume
 request concurrency and RPM/TPM, but reuse one Run reservation. See
-[Run Budget and Usage Ledger](run-budget.md) for purpose scope, settlement,
+[Run Budget and Usage Ledger](../runtime/run-budget.md) for purpose scope, settlement,
 output caps, Autonomous precedence, and observed-overage semantics.
 
 `AUTONOMOUS_MAX_ITERATIONS` and `AUTONOMOUS_MAX_OUTPUT_CHARS` are mode-owned
@@ -260,12 +260,14 @@ persisted text index.
 
 ## Tool Configuration
 
-The backend loads enabled tools from `TOOL_CONFIG_PATH`, defaulting to `.data/tools.json`. If the file is missing, all built-in tools are enabled.
+The backend loads enabled Tools and the operator-owned Tool Security Policy from
+`TOOL_CONFIG_PATH`, defaulting to `.data/tools.json`. If the file is missing,
+all built-in Tools are enabled with the fail-closed default security policy.
 
 Oversized Tool results use the centralized Artifact boundary. The batch setting
 caps aggregate model-visible result content, the Artifact maximum caps one
 persisted result, preview bytes cap each model-visible preview, and retention is
-stored on each Artifact. See [Tool Result Artifact Governance](tool-result-artifacts.md).
+stored on each Artifact. See [Tool Result Artifact Governance](../tools/tool-result-artifacts.md).
 
 ```json
 {
@@ -276,8 +278,10 @@ stored on each Artifact. See [Tool Result Artifact Governance](tool-result-artif
 }
 ```
 
-The tool executor applies typed errors, per-tool timeouts, result-size limits,
-and typed Run Events to every call.
+The Tool Executor applies scope authorization before Budget accounting or
+handler execution, then typed errors, per-Tool timeouts, result-size limits,
+and typed Run Events. See [Tool Security Policy and Scope](../tools/tool-security-policy.md)
+for policy JSON, defaults, Frozen Runtime behavior, and decision evidence.
 
 ## Verification
 
@@ -298,7 +302,7 @@ host:port values. Redirects follow the same allowlist.
 `VERIFICATION_MAX_ARTIFACT_BYTES` caps persisted output for each verifier while
 the Artifact keeps the output hash, observed byte count, and truncation flag.
 
-See [Verification](verification.md) for contract and Gate behavior.
+See [Verification](../runtime/verification.md) for contract and Gate behavior.
 
 ## Operational Checklist
 

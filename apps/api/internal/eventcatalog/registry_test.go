@@ -77,13 +77,13 @@ func contains(items []string, want string) bool {
 
 func TestGeneratedCatalogIsCurrent(t *testing.T) {
 	_, currentFile, _, _ := runtime.Caller(0)
-	docPath := filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "..", "docs", "event-catalog.md")
+	docPath := filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "..", "docs", "runtime", "event-catalog.md")
 	want, err := os.ReadFile(docPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(want) != CatalogMarkdown() {
-		t.Fatal("docs/event-catalog.md is stale; run go run ./cmd/generate-event-catalog")
+		t.Fatal("docs/runtime/event-catalog.md is stale; run go run ./cmd/generate-event-catalog")
 	}
 }
 

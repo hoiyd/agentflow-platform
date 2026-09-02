@@ -20,8 +20,8 @@ For deployments with user-controlled workspace selection, this header must be
 validated by a trusted boundary because it is not an identity credential by
 itself.
 
-For lifecycle terminology, read [Internal terms](terms.md). For configuration
-and security boundaries, read [Backend configuration](backend-configuration.md).
+For lifecycle terminology, read [Internal terms](../architecture/terms.md). For configuration
+and security boundaries, read [Backend configuration](../operations/backend-configuration.md).
 
 ## Endpoint Map
 
@@ -102,7 +102,7 @@ New Runtime Snapshot v8 Runs receive Structured Task State context. Agent
 execution also receives the runtime-owned `update_task_state` Tool. The Tool
 applies the same patch contract and derives source identity from the active Run
 rather than model arguments. See
-[Structured Durable Task State](task-state.md) for supported operations and
+[Structured Durable Task State](../runtime/task-state.md) for supported operations and
 Context/Replay semantics.
 
 `POST /api/agents` creates a reusable execution profile. `PATCH
@@ -125,7 +125,7 @@ archived with `DELETE /api/agents/{id}`; built-in Agents cannot be archived.
 Creating a Run freezes the effective profile and, for Multi mode, its candidate
 profiles, so later edits do not change Resume or Replay semantics.
 
-See [Configurable Agent Profiles](agent-profiles.md) for mode behavior, Router
+See [Configurable Agent Profiles](../runtime/agent-profiles.md) for mode behavior, Router
 participation, Snapshot ownership, and current boundaries.
 
 ## Chat, Runs, and Verification
@@ -174,7 +174,7 @@ structured failure metadata remain valid and expose only `source` and
 the original internal error remains in server diagnostics rather than the
 client payload. Streaming chat error chunks use the same fields.
 
-Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, `citation`, and `answer_relevance`. The last type binds the user question to the candidate output and records embedding cosine-similarity evidence; it is not a factuality or groundedness check. See [Verification](verification.md) for exact config shapes, scope, extension points, and policy semantics.
+Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, `citation`, and `answer_relevance`. The last type binds the user question to the candidate output and records embedding cosine-similarity evidence; it is not a factuality or groundedness check. See [Verification](../runtime/verification.md) for exact config shapes, scope, extension points, and policy semantics.
 
 ## Tool Governance
 
@@ -183,10 +183,12 @@ state. The enable/disable endpoints update the Tool Manager configuration and
 persist it at `TOOL_CONFIG_PATH`. This platform-level switch is separate from
 the per-Agent `tools` allowlist.
 
-Tool execution applies timeout, result-size, panic-recovery, tracing, and
-concurrency policy after both layers admit the Tool. See [Configurable Agent Profiles](agent-profiles.md#two-tool-control-layers)
-for the two control layers and [Tool Execution Policy](execution-controls.md#7-tool-execution-policy)
-for per-call enforcement.
+Tool execution applies security scope authorization, timeout, result-size,
+panic-recovery, tracing, and concurrency policy after both selection layers
+admit the Tool. Agent allowlists cannot expand operator-granted Resource,
+Network, or Credential scope. See [Tool Security Policy and Scope](../tools/tool-security-policy.md),
+[Configurable Agent Profiles](../runtime/agent-profiles.md#two-tool-control-layers), and
+[Tool Execution Policy](../runtime/execution-controls.md#7-tool-execution-policy).
 
 ## RAG Evaluation
 
@@ -201,8 +203,8 @@ The request accepts exactly one of:
 - a versioned `dataset` using `rag-golden-dataset-v1`.
 
 The Golden Dataset v1 contract is available as a
-[machine-readable JSON Schema](schemas/rag-golden-dataset-v1.schema.json) and a
-[canonical Dataset and corpus](rag-golden-dataset.md). A Dataset has
+[machine-readable JSON Schema](../schemas/rag-golden-dataset-v1.schema.json) and a
+[canonical Dataset and corpus](../knowledge/rag-golden-dataset.md). A Dataset has
 a stable `id`, explicit `version`, optional tags/description, and uniquely
 identified cases. Every case declares `query`, `answerable`, optional tags and
 forbidden sources. Answerable cases require at least one expected source;
@@ -233,7 +235,7 @@ Dedicated no-answer Precision/Recall remains part of RAG-010.
 The workbench exposes this endpoint under **Knowledge -> Retrieval evaluation**
 and accepts either a Dataset object or a legacy case array. RAG-006 defines and
 validates the schema; the maintained v1 asset and coverage matrix are described
-in [RAG Golden Dataset v1](rag-golden-dataset.md). Immutable Dataset
+in [RAG Golden Dataset v1](../knowledge/rag-golden-dataset.md). Immutable Dataset
 storage/changelog (RAG-008), persisted Evaluation Runs (RAG-009), and calibrated
 release thresholds remain future work.
 
@@ -358,7 +360,7 @@ The independent `relevance_gate` object identifies the policy that filtered
 reranked candidates. The Gate derives `confidence` and `filter_reason` from
 trusted source data rather than accepting reranker-provided values. Invalid
 stage output is returned as a pipeline error, not a `no_match` result. See
-[Knowledge / RAG](knowledge-rag.md#retrieval-pipeline) for the stage contracts.
+[Knowledge / RAG](../knowledge/knowledge-rag.md#retrieval-pipeline) for the stage contracts.
 
 ### Context Selection
 

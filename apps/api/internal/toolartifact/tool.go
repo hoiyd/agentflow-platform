@@ -8,6 +8,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -37,6 +38,9 @@ func (s *Service) readBinding() tools.Binding {
 			Name:        ReadToolName,
 			Description: "Read a bounded byte range from an immutable tool-result artifact. Continue with next_offset until complete; never guess storage paths.",
 			Concurrency: tools.ConcurrencyPolicy{Mode: tools.ConcurrencyReadOnly},
+			Security: toolpolicy.NormalizeCapability(toolpolicy.Capability{Scope: toolpolicy.Scope{Resources: []toolpolicy.ResourceScope{{
+				Kind: toolpolicy.ResourceRun, Name: "tool_artifact", Access: toolpolicy.AccessRead,
+			}}}}),
 			Parameters: tools.ObjectSchema(map[string]any{
 				"artifact_id": map[string]any{"type": "string", "minLength": 1, "maxLength": 128},
 				"offset":      map[string]any{"type": "integer", "minimum": 0},
@@ -79,6 +83,9 @@ func (s *Service) searchBinding() tools.Binding {
 			Name:        SearchToolName,
 			Description: "Search text within one immutable tool-result artifact and return bounded previews with byte offsets.",
 			Concurrency: tools.ConcurrencyPolicy{Mode: tools.ConcurrencyReadOnly},
+			Security: toolpolicy.NormalizeCapability(toolpolicy.Capability{Scope: toolpolicy.Scope{Resources: []toolpolicy.ResourceScope{{
+				Kind: toolpolicy.ResourceRun, Name: "tool_artifact", Access: toolpolicy.AccessRead,
+			}}}}),
 			Parameters: tools.ObjectSchema(map[string]any{
 				"artifact_id": map[string]any{"type": "string", "minLength": 1, "maxLength": 128},
 				"query":       map[string]any{"type": "string", "minLength": 1, "maxLength": store.MaxToolArtifactSearchQuery},

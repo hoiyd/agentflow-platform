@@ -1,6 +1,10 @@
 package tools
 
-import "testing"
+import (
+	"testing"
+
+	"agentflow-platform/apps/api/internal/toolpolicy"
+)
 
 func TestBuildCatalogEnablesOnlyConfiguredTools(t *testing.T) {
 	catalog, err := BuildCatalog(Config{EnabledTools: []string{"calculator"}})
@@ -15,5 +19,15 @@ func TestBuildCatalogEnablesOnlyConfiguredTools(t *testing.T) {
 func TestBuildCatalogRejectsUnknownConfiguredTool(t *testing.T) {
 	if _, err := BuildCatalog(Config{EnabledTools: []string{"calculator", "removed_tool"}}); err == nil {
 		t.Fatal("expected unknown configured tool to fail")
+	}
+}
+
+func TestBuildCatalogRejectsInvalidSecurityPolicy(t *testing.T) {
+	_, err := BuildCatalog(Config{
+		EnabledTools:   []string{"calculator"},
+		SecurityPolicy: toolpolicy.Policy{Version: "v1", DefaultAction: "invalid"},
+	})
+	if err == nil {
+		t.Fatal("expected invalid Tool security policy to fail")
 	}
 }

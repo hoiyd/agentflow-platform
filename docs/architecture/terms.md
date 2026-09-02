@@ -6,7 +6,7 @@ APIs, traces, replay data, and UI labels should use them consistently.
 
 Use this page when reviewing lifecycle code or traces. For package ownership,
 see [Backend architecture](backend-architecture.md); for control ownership, see
-[Execution controls](execution-controls.md).
+[Execution controls](../runtime/execution-controls.md).
 
 ## Core Hierarchy
 
@@ -224,7 +224,7 @@ Retrieval activity.
 
 A **Mode** selects how a Run is orchestrated. It does not change the definitions
 of Run, Stage, or Turn. This section defines entity shape; see
-[Execution modes](execution-modes.md) for lifecycle behavior, trade-offs, and
+[Execution modes](../runtime/execution-modes.md) for lifecycle behavior, trade-offs, and
 selection guidance.
 
 ### Single Mode (`single`)

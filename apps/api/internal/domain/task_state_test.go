@@ -14,7 +14,7 @@ func TestApplyTaskStatePatchBuildsVersionedStructuredState(t *testing.T) {
 		{Type: TaskStateAddDecision, Decision: &TaskDecision{ID: "scope", Statement: "Task state belongs to the conversation"}},
 		{Type: TaskStateUpsertConstraint, Constraint: &TaskConstraint{ID: "compat", Statement: "Preserve existing behavior"}},
 		{Type: TaskStateUpsertBlocker, Blocker: &TaskBlocker{ID: "tests", Description: "Postgres tests pending", Status: TaskBlockerOpen}},
-		{Type: TaskStateAddArtifactRef, ArtifactRef: "docs/task-state.md"},
+		{Type: TaskStateAddArtifactRef, ArtifactRef: "docs/runtime/task-state.md"},
 	}}, time.Unix(100, 0))
 	if err != nil {
 		t.Fatalf("apply first patch: %v", err)

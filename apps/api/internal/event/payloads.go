@@ -202,6 +202,34 @@ type ToolPayload struct {
 	Error      string `json:"error,omitempty"`
 }
 
+// ToolPolicyPayload deliberately records only bounded classifications and
+// counts. Resource names, network targets, credential scopes, and Secret values
+// never enter the durable event.
+type ToolPolicyPayload struct {
+	ToolCallID           string `json:"tool_call_id,omitempty"`
+	ToolName             string `json:"tool_name"`
+	PolicyVersion        string `json:"policy_version"`
+	RuleID               string `json:"rule_id,omitempty"`
+	Action               string `json:"action"`
+	Allowed              bool   `json:"allowed"`
+	Reason               string `json:"reason"`
+	Source               string `json:"source"`
+	SideEffectClass      string `json:"side_effect_class"`
+	RateClass            string `json:"rate_class"`
+	Reversibility        string `json:"reversibility"`
+	Visibility           string `json:"visibility"`
+	ApprovalMode         string `json:"approval_mode"`
+	AuditLevel           string `json:"audit_level"`
+	ResourceScopeCount   int    `json:"resource_scope_count"`
+	NetworkMode          string `json:"network_mode"`
+	NetworkTargetCount   int    `json:"network_target_count"`
+	CredentialScopeCount int    `json:"credential_scope_count"`
+}
+
+func (ToolPolicyPayload) supports(eventType domain.RunEventType) bool {
+	return eventType == domain.EventToolPolicyEvaluated
+}
+
 type ToolArtifactPayload struct {
 	ArtifactID    string `json:"artifact_id"`
 	ToolCallID    string `json:"tool_call_id,omitempty"`

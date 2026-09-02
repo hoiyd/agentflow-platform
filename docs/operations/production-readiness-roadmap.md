@@ -15,14 +15,14 @@ a controlled pilot.
 
 | Area | Implemented control and evidence |
 | --- | --- |
-| Execution | [Single, Multi, and Loop](execution-modes.md) share one Turn Engine, frozen Runtime Snapshot, bounded lifecycle, and common completion path. |
-| Resource control | [Admission, backpressure, rate limits, retries, context limits, Run Budget, and timeouts](execution-controls.md) have distinct scopes and enforcement owners. |
+| Execution | [Single, Multi, and Loop](../runtime/execution-modes.md) share one Turn Engine, frozen Runtime Snapshot, bounded lifecycle, and common completion path. |
+| Resource control | [Admission, backpressure, rate limits, retries, context limits, Run Budget, and timeouts](../runtime/execution-controls.md) have distinct scopes and enforcement owners. |
 | Persistence | File and Postgres stores persist Runs, Messages, durable Run Events, usage, retrieval data, and Verification records behind shared domain contracts. |
 | Workspace scope | Every request resolves a non-empty Workspace namespace. Conversation, Message, Run, Document, Memory, retrieval, Replay, and Verification paths preserve that scope in File and Postgres stores. |
-| Tool execution | [Platform enablement and Agent allowlists](agent-profiles.md#two-tool-control-layers) precede a bounded Executor with typed errors, timeout, result limits, tracing, and conservative concurrency. |
-| RAG | [Hybrid recall, RRF, reranking, relevance gating, scoped context expansion, injection filtering, and citations](knowledge-rag.md) use one observable pipeline. |
-| Evaluation | The [Golden Dataset v1](rag-golden-dataset.md) pairs a versioned schema and canonical corpus with the production retrieval path, reporting Hit@1/3/5, misses, security decisions, and active component versions. |
-| Evidence | [Run Events, Replay, Episode Reports](terms.md#observability-records-and-views), Usage Ledger, and [Verification Evidence](verification.md) explain execution and configured outcome checks. |
+| Tool execution | [Platform enablement and Agent allowlists](../runtime/agent-profiles.md#two-tool-control-layers) precede a bounded Executor with typed errors, timeout, result limits, tracing, and conservative concurrency. |
+| RAG | [Hybrid recall, RRF, reranking, relevance gating, scoped context expansion, injection filtering, and citations](../knowledge/knowledge-rag.md) use one observable pipeline. |
+| Evaluation | The [Golden Dataset v1](../knowledge/rag-golden-dataset.md) pairs a versioned schema and canonical corpus with the production retrieval path, reporting Hit@1/3/5, misses, security decisions, and active component versions. |
+| Evidence | [Run Events, Replay, Episode Reports](../architecture/terms.md#observability-records-and-views), Usage Ledger, and [Verification Evidence](../runtime/verification.md) explain execution and configured outcome checks. |
 
 These controls are useful now: they bound work, preserve execution evidence,
 and expose failure behavior. The remaining work expands where and at what scale

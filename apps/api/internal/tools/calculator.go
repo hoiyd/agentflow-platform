@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"agentflow-platform/apps/api/internal/toolpolicy"
 )
 
 func CalculatorTool() Binding {
@@ -17,6 +19,7 @@ func CalculatorTool() Binding {
 			Name:        "calculator",
 			Description: "Evaluate a basic arithmetic expression with +, -, *, /, and parentheses.",
 			Concurrency: ConcurrencyPolicy{Mode: ConcurrencyReadOnly},
+			Security:    toolpolicy.NormalizeCapability(toolpolicy.Capability{}),
 			Parameters: ObjectSchema(map[string]any{
 				"expression": map[string]any{
 					"type":        "string",

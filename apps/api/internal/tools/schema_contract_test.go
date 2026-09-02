@@ -143,6 +143,9 @@ func TestSchemaContractAcceptsSupportedDraftAndMatchingRevision(t *testing.T) {
 	if _, err := toolDefinitionRevision(Descriptor{Parameters: map[string]any{"invalid": make(chan struct{})}}); err == nil {
 		t.Fatal("expected non-JSON definition revision error")
 	}
+	if _, err := LegacyDefinitionRevision(Descriptor{Parameters: map[string]any{"invalid": make(chan struct{})}}); err == nil {
+		t.Fatal("expected non-JSON legacy definition revision error")
+	}
 }
 
 func TestExecutorRejectsSchemaViolationsBeforeHandler(t *testing.T) {
