@@ -9,6 +9,7 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/toolprogress"
 	"agentflow-platform/apps/api/internal/turn"
 )
 
@@ -28,6 +29,11 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		return turn.Result{}, err
 	}
 	defer cancel()
+	guard, err := m.runtime.progressGuardForRun(request.RunID, snapshot)
+	if err != nil {
+		return turn.Result{}, err
+	}
+	ctx = toolprogress.WithGuard(ctx, guard)
 	if request.Role == "router" {
 		ctx = budget.WithPurpose(ctx, domain.UsagePurposeRouter)
 	} else {

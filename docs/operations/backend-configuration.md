@@ -22,6 +22,10 @@ TOOL_RESULT_MAX_BATCH_BYTES=8000
 TOOL_ARTIFACT_MAX_BYTES=5242880
 TOOL_ARTIFACT_PREVIEW_BYTES=1000
 TOOL_ARTIFACT_RETENTION=168h
+TOOL_PROGRESS_GUARD_ENABLED=true
+TOOL_PROGRESS_WARN_AFTER=2
+TOOL_PROGRESS_BLOCK_AFTER=4
+TOOL_PROGRESS_HALT_AFTER=5
 VERIFICATION_WORKSPACE_ROOT=
 VERIFICATION_ALLOWED_COMMANDS=
 VERIFICATION_ALLOWED_HTTP_HOSTS=
@@ -282,6 +286,11 @@ The Tool Executor applies scope authorization before Budget accounting or
 handler execution, then typed errors, per-Tool timeouts, result-size limits,
 and typed Run Events. See [Tool Security Policy and Scope](../tools/tool-security-policy.md)
 for policy JSON, defaults, Frozen Runtime behavior, and decision evidence.
+
+The Progress Guard thresholds govern repeated typed failures, unchanged
+read-only results, and bounded oscillation. They are frozen into each new Run;
+blocking occurs before Tool Budget and Handler execution. See
+[Tool Progress Guard](../tools/tool-progress-guard.md).
 
 ## Verification
 

@@ -79,6 +79,21 @@ func TestLoadModelRequestCaptureConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadToolProgressGuardConfiguration(t *testing.T) {
+	t.Setenv("TOOL_PROGRESS_GUARD_ENABLED", "false")
+	t.Setenv("TOOL_PROGRESS_WARN_AFTER", "3")
+	t.Setenv("TOOL_PROGRESS_BLOCK_AFTER", "5")
+	t.Setenv("TOOL_PROGRESS_HALT_AFTER", "7")
+	cfg := Load()
+	if cfg.ToolProgressGuardEnabled || cfg.ToolProgressWarnAfter != 3 || cfg.ToolProgressBlockAfter != 5 || cfg.ToolProgressHaltAfter != 7 {
+		t.Fatalf("unexpected Tool Progress Guard config: %#v", cfg)
+	}
+	t.Setenv("TOOL_PROGRESS_GUARD_ENABLED", "not-a-bool")
+	if !getBoolEnv("TOOL_PROGRESS_GUARD_ENABLED", true) {
+		t.Fatal("invalid bool did not use fallback")
+	}
+}
+
 func TestGetUnitFloatEnvRejectsOutOfRangeValue(t *testing.T) {
 	t.Setenv("TEST_UNIT_FLOAT", "0.91")
 	if got := getUnitFloatEnv("TEST_UNIT_FLOAT", 0.85); got != 0.91 {

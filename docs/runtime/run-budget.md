@@ -126,8 +126,12 @@ Run Events, and the same Usage Ledger.
 ## Progress Guard
 
 Run Budget limits quantity; it does not decide whether work is making progress.
-Repeated tool signatures, repeated results/errors, oscillation detection, and
-`warn -> block_call -> halt_turn` behavior belong to a separate Progress Guard.
+The Run-scoped Tool Progress Guard separately detects repeated typed failures,
+unchanged read-only results, and bounded alternating loops. Its default
+`allow -> warn -> block_call -> halt_turn` policy runs before Tool Budget once a
+stable repeated outcome has been established, so blocked calls do not consume
+Budget or execute a Handler. See
+[Tool Progress Guard](../tools/tool-progress-guard.md).
 
 ## Invariants Worth Testing
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"agentflow-platform/apps/api/internal/checkpoint"
@@ -22,6 +23,7 @@ import (
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/toolartifact"
+	"agentflow-platform/apps/api/internal/toolprogress"
 	"agentflow-platform/apps/api/internal/tools"
 	turnpkg "agentflow-platform/apps/api/internal/turn"
 )
@@ -37,6 +39,9 @@ type Runtime struct {
 	contextCompactor      *contextcompaction.Compactor
 	autonomousLimits      AutonomousLimits
 	runBudget             domain.RuntimeRunBudget
+	toolProgressConfig    toolprogress.Config
+	toolProgressMu        sync.Mutex
+	toolProgressGuards    map[string]*toolprogress.Guard
 	knowledgeRetriever    rag.Retriever
 	checkpoints           checkpoint.Provider
 	taskStates            *taskstate.Service
@@ -101,6 +106,7 @@ type RuntimeOptions struct {
 	ContextAssembly    domain.ContextAssemblyConfig
 	Autonomous         AutonomousLimits
 	RunBudget          domain.RuntimeRunBudget
+	ToolProgressGuard  toolprogress.Config
 	KnowledgeRetriever rag.Retriever
 	CheckpointProvider checkpoint.Provider
 	LiveEvents         eventpkg.LivePublisher
@@ -109,6 +115,12 @@ type RuntimeOptions struct {
 }
 
 func NewRuntime(options RuntimeOptions) *Runtime {
+	progressConfig := options.ToolProgressGuard
+	if strings.TrimSpace(progressConfig.Version) == "" {
+		progressConfig = toolprogress.DefaultConfig()
+	} else {
+		progressConfig = toolprogress.NormalizeConfig(progressConfig)
+	}
 	knowledgeRetriever := options.KnowledgeRetriever
 	if knowledgeRetriever == nil {
 		if searchStore, ok := options.Store.(rag.SearchStore); ok {
@@ -137,6 +149,8 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		contextCompactor:      contextcompaction.NewCompactor(options.Store),
 		autonomousLimits:      normalizeAutonomousLimits(options.Autonomous),
 		runBudget:             options.RunBudget,
+		toolProgressConfig:    progressConfig,
+		toolProgressGuards:    map[string]*toolprogress.Guard{},
 		knowledgeRetriever:    knowledgeRetriever,
 		checkpoints:           checkpointProvider,
 		taskStates:            taskStates,
@@ -552,6 +566,7 @@ func (r *Runtime) CompleteRun(id string) (domain.Run, error) {
 	if err == nil {
 		r.publishRunLifecycle(context.Background(), run, domain.EventRunCompleted, map[string]any{"status": run.Status})
 		r.scheduleSoftContextCompaction(run)
+		r.forgetProgressGuard(run.ID)
 	}
 	return run, err
 }
@@ -565,12 +580,14 @@ func (r *Runtime) FailRun(id string, err error) (domain.Run, error) {
 		run, updateErr := r.store.UpdateRunStatus(id, domain.RunCanceled, message)
 		if updateErr == nil {
 			r.publishRunLifecycle(context.Background(), run, domain.EventRunCanceled, failure.Merge(map[string]any{"status": run.Status, "error": message}, err))
+			r.forgetProgressGuard(run.ID)
 		}
 		return run, updateErr
 	}
 	run, updateErr := r.store.UpdateRunStatus(id, domain.RunFailed, message)
 	if updateErr == nil {
 		r.publishRunLifecycle(context.Background(), run, domain.EventRunFailed, failure.Merge(map[string]any{"status": run.Status, "error": message}, err))
+		r.forgetProgressGuard(run.ID)
 	}
 	return run, updateErr
 }
@@ -604,6 +621,7 @@ func (r *Runtime) CancelRun(id string) (domain.Run, error) {
 	r.delegations.CancelParent(run.ID, context.Canceled)
 	switch run.Status {
 	case domain.RunCompleted, domain.RunFailed, domain.RunCanceled:
+		r.forgetProgressGuard(run.ID)
 		return run, nil
 	case domain.RunRunning:
 		updated, err := r.store.UpdateRunStatus(run.ID, domain.RunCanceling, "cancel requested by user")
@@ -615,6 +633,7 @@ func (r *Runtime) CancelRun(id string) (domain.Run, error) {
 		updated, err := r.store.UpdateRunStatus(run.ID, domain.RunCanceled, "canceled by user")
 		if err == nil {
 			r.publishRunLifecycle(context.Background(), updated, domain.EventRunCanceled, map[string]any{"status": updated.Status})
+			r.forgetProgressGuard(updated.ID)
 		}
 		return updated, err
 	}

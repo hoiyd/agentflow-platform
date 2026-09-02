@@ -160,6 +160,8 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventToolStarted}, DurableFact, optional, "event.ToolPayload", start("tool"), "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventToolCompleted, domain.EventToolFailed}, DurableFact, optional, "event.ToolPayload", terminal("tool", domain.EventToolStarted), "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventToolPolicyEvaluated}, DurableFact, optional, "event.ToolPolicyPayload", none, "tool_policy", "replay")
+	add([]domain.RunEventType{domain.EventToolGuardWarned, domain.EventToolGuardBlocked}, DurableFact, optional, "event.ToolProgressPayload", none, "tool_progress_guard", "replay")
+	add([]domain.RunEventType{domain.EventTurnNoProgress}, DurableFact, turn, "event.ToolProgressPayload", transition("turn"), "tool_progress_guard", "replay")
 	add([]domain.RunEventType{domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired}, DurableFact, optional, "event.ToolArtifactPayload", none, "artifact_governance", "replay")
 	add([]domain.RunEventType{domain.EventRetrievalStarted}, DurableFact, optional, "event.RetrievalPayload", start("retrieval"), "replay")
 	add([]domain.RunEventType{domain.EventRetrievalCompleted}, DurableFact, optional, "event.RetrievalPayload", terminal("retrieval", domain.EventRetrievalStarted), "replay")
@@ -207,6 +209,7 @@ func producerFor(eventType domain.RunEventType) string {
 	case domain.EventCompactionStarted, domain.EventCompactionCompleted, domain.EventCompactionFailed:
 		return "contextcompaction"
 	case domain.EventToolStarted, domain.EventToolCompleted, domain.EventToolFailed, domain.EventToolPolicyEvaluated,
+		domain.EventToolGuardWarned, domain.EventToolGuardBlocked, domain.EventTurnNoProgress,
 		domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired:
 		return "tools"
 	case domain.EventRetrievalStarted, domain.EventRetrievalCompleted, domain.EventRetrievalFailed,

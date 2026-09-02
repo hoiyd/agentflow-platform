@@ -119,6 +119,10 @@ func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput 
 			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeAutonomous)
 			return
 		}
+		if err := r.resetProgressGuard(run); err != nil {
+			errs <- err
+			return
+		}
 
 		completedCheckpoint, err := r.store.UpdateCollaborationStep(checkpoint.ID, domain.CollaborationStepCompleted, userInput, "")
 		if err != nil {
@@ -187,6 +191,12 @@ func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string,
 		if restored.mode != ChatModeAutonomous {
 			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeAutonomous)
 			return
+		}
+		if strings.TrimSpace(recoveryNote) != "" {
+			if err := r.resetProgressGuard(run); err != nil {
+				errs <- err
+				return
+			}
 		}
 		if _, err := r.checkpoints.RestoreRun(ctx, run); err != nil {
 			errs <- fmt.Errorf("restore durable checkpoints: %w", err)

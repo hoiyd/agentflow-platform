@@ -15,6 +15,7 @@ import (
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/toolpolicy"
+	"agentflow-platform/apps/api/internal/toolprogress"
 )
 
 const (
@@ -53,6 +54,8 @@ type ExecutionResult struct {
 	Artifact            *domain.ToolArtifactReference `json:"artifact,omitempty"`
 	ArtifactError       *ExecutionError               `json:"artifact_error,omitempty"`
 	PolicyDecision      *toolpolicy.Decision          `json:"-"`
+	ProgressDecision    *toolprogress.Decision        `json:"-"`
+	ProgressWarning     string                        `json:"progress_warning,omitempty"`
 	encodedResult       []byte
 }
 
@@ -74,6 +77,12 @@ type PolicyDecisionTracer interface {
 	ToolPolicyEvaluated(context.Context, ExecutionRequest, toolpolicy.Decision) error
 }
 
+// ProgressDecisionTracer records only escalated no-progress decisions. Every
+// terminal Tool event also carries the complete bounded decision for recovery.
+type ProgressDecisionTracer interface {
+	ToolProgressEvaluated(context.Context, ExecutionRequest, toolprogress.Decision)
+}
+
 type ToolEffectJournal interface {
 	BeginToolEffect(domain.ToolEffectRecord) (domain.ToolEffectRecord, bool, error)
 	CompleteToolEffect(idempotencyKey string, result []byte) (domain.ToolEffectRecord, error)
@@ -91,6 +100,7 @@ type ExecutorOptions struct {
 	ArtifactPreviewBytes int
 	ArtifactRetention    time.Duration
 	RedactArtifactJSON   func([]byte) ([]byte, int, error)
+	ProgressGuard        *toolprogress.Guard
 }
 
 type Executor struct {
@@ -102,6 +112,7 @@ type Executor struct {
 	artifactGovernor    *resultArtifactGovernor
 	maxBatchResultBytes int
 	securityPolicy      toolpolicy.Policy
+	progressGuard       *toolprogress.Guard
 }
 
 func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
@@ -126,6 +137,7 @@ func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
 		effectJournal: options.EffectJournal, maxBatchResultBytes: maxBatchResultBytes,
 		artifactGovernor: newResultArtifactGovernor(options),
 		securityPolicy:   securityPolicy,
+		progressGuard:    options.ProgressGuard,
 	}
 }
 
@@ -263,6 +275,13 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 	defer func() { result.DurationMS = time.Since(started).Milliseconds() }()
 
 	if result.Error != nil {
+		if e.progressGuard != nil {
+			progressCall := e.progressCall(request, binding)
+			if blocked := e.applyProgressBefore(ctx, request, progressCall, &result); blocked {
+				return result
+			}
+			e.observeProgress(ctx, request, binding, progressCall, &result)
+		}
 		return result
 	}
 	decision, policyErr := e.evaluateSecurity(ctx, request, binding)
@@ -275,6 +294,13 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 	if decision.AuditRequired() && auditErr != nil {
 		result.Error = executionError(ErrorSecurityAudit, "required Tool security audit could not be persisted", auditErr)
 		return result
+	}
+	progressCall := e.progressCall(request, binding)
+	if e.applyProgressBefore(ctx, request, progressCall, &result) {
+		return result
+	}
+	if e.progressGuard != nil {
+		defer func() { e.observeProgress(ctx, request, binding, progressCall, &result) }()
 	}
 	if controller := budget.FromContext(ctx); controller != nil {
 		if err := controller.RecordToolCall(ctx, budget.ToolCall{

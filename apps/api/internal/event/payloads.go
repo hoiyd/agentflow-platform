@@ -230,6 +230,29 @@ func (ToolPolicyPayload) supports(eventType domain.RunEventType) bool {
 	return eventType == domain.EventToolPolicyEvaluated
 }
 
+// ToolProgressPayload explains a Guard escalation without retaining Tool
+// arguments, result bodies, or raw error messages.
+type ToolProgressPayload struct {
+	ToolCallID         string `json:"tool_call_id,omitempty"`
+	ToolName           string `json:"tool_name"`
+	GuardVersion       string `json:"guard_version"`
+	Rule               string `json:"rule"`
+	Action             string `json:"action"`
+	Count              int    `json:"count"`
+	Reason             string `json:"reason"`
+	SignatureHash      string `json:"signature_hash"`
+	OutcomeFingerprint string `json:"outcome_fingerprint"`
+}
+
+func (ToolProgressPayload) supports(eventType domain.RunEventType) bool {
+	switch eventType {
+	case domain.EventToolGuardWarned, domain.EventToolGuardBlocked, domain.EventTurnNoProgress:
+		return true
+	default:
+		return false
+	}
+}
+
 type ToolArtifactPayload struct {
 	ArtifactID    string `json:"artifact_id"`
 	ToolCallID    string `json:"tool_call_id,omitempty"`

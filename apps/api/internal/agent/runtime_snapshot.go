@@ -15,6 +15,7 @@ import (
 	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/toolpolicy"
+	"agentflow-platform/apps/api/internal/toolprogress"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -81,6 +82,7 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		},
 		Tools:              toolSnapshots,
 		ToolSecurityPolicy: catalog.SecurityPolicy(),
+		ToolProgressGuard:  toolprogress.NormalizeConfig(r.toolProgressConfig),
 		ContextAssembly:    contextassembly.NormalizeConfig(r.contextAssemblyConfig),
 		RouterMode:         r.routerMode,
 		RunBudget:          cloneRunBudget(runBudget),
@@ -304,6 +306,9 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 				return fmt.Errorf("runtime snapshot tool %q has invalid security capability: %w", tool.Name, err)
 			}
 		}
+	}
+	if snapshot.SchemaVersion >= domain.ToolProgressRuntimeSnapshotVersion && !toolprogress.ValidateConfig(snapshot.ToolProgressGuard) {
+		return errors.New("runtime snapshot has invalid Tool Progress Guard config")
 	}
 	if snapshot.Delegation != nil {
 		if snapshot.SchemaVersion < domain.DelegationRuntimeSnapshotVersion || snapshot.Mode != ChatModeSingle {

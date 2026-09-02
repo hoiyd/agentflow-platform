@@ -141,6 +141,14 @@ type Config struct {
 	ToolArtifactPreviewBytes int
 	// ToolArtifactRetention is persisted with each Artifact; expiry survives process restarts.
 	ToolArtifactRetention time.Duration
+	// ToolProgressGuardEnabled controls no-progress detection for new Runs.
+	ToolProgressGuardEnabled bool
+	// ToolProgressWarnAfter emits model-visible and durable diagnostics after this repeat count.
+	ToolProgressWarnAfter int
+	// ToolProgressBlockAfter prevents this repeated Tool Call before it consumes Budget.
+	ToolProgressBlockAfter int
+	// ToolProgressHaltAfter terminates the Turn when blocked attempts continue.
+	ToolProgressHaltAfter int
 	// VerificationWorkspaceRoot bounds command verifier working directories. Empty disables command execution.
 	VerificationWorkspaceRoot string
 	// VerificationAllowedCommands is a comma-separated executable allowlist for command verifiers.
@@ -230,6 +238,10 @@ func Load() Config {
 		ToolArtifactMaxBytes:              getIntEnv("TOOL_ARTIFACT_MAX_BYTES", 5*1024*1024),
 		ToolArtifactPreviewBytes:          getIntEnv("TOOL_ARTIFACT_PREVIEW_BYTES", 1000),
 		ToolArtifactRetention:             getDurationEnv("TOOL_ARTIFACT_RETENTION", 7*24*time.Hour),
+		ToolProgressGuardEnabled:          getBoolEnv("TOOL_PROGRESS_GUARD_ENABLED", true),
+		ToolProgressWarnAfter:             getIntEnv("TOOL_PROGRESS_WARN_AFTER", 2),
+		ToolProgressBlockAfter:            getIntEnv("TOOL_PROGRESS_BLOCK_AFTER", 4),
+		ToolProgressHaltAfter:             getIntEnv("TOOL_PROGRESS_HALT_AFTER", 5),
 		VerificationWorkspaceRoot:         getEnv("VERIFICATION_WORKSPACE_ROOT", ""),
 		VerificationAllowedCommands:       getEnv("VERIFICATION_ALLOWED_COMMANDS", ""),
 		VerificationAllowedHTTPHosts:      getEnv("VERIFICATION_ALLOWED_HTTP_HOSTS", ""),
@@ -291,6 +303,18 @@ func getDurationEnv(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return duration
+}
+
+func getBoolEnv(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func getIntEnv(key string, fallback int) int {
