@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
@@ -101,7 +102,7 @@ func TestFailedRetryRemainsQueryableAndDoesNotRepeatCommand(t *testing.T) {
 		ExpectedVersion: effect.Version, Actor: "operator", Reason: "retry after outage",
 	}
 	first, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command)
-	if err != nil || first.Outcome != "failed" || first.Effect.Status != domain.ToolEffectNeedsReconciliation || first.Effect.Version != effect.Version+1 || calls != 1 {
+	if err != nil || first.Outcome != "failed" || first.Effect.Status != domain.ToolEffectNeedsReconciliation || first.Effect.Version != effect.Version+2 || calls != 1 {
 		t.Fatalf("failed retry: outcome=%#v calls=%d err=%v", first, calls, err)
 	}
 	second, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command)
@@ -109,7 +110,7 @@ func TestFailedRetryRemainsQueryableAndDoesNotRepeatCommand(t *testing.T) {
 		t.Fatalf("duplicate failed retry: outcome=%#v calls=%d err=%v", second, calls, err)
 	}
 	events, _ := fileStore.ListRunEvents(run.ID)
-	if len(events) != 1 || events[0].Type != domain.EventToolEffectReconciliationFailed || events[0].Payload["error"] != "provider still unavailable" {
+	if len(events) != 2 || events[0].Type != domain.EventToolEffectReconciliationStarted || events[1].Type != domain.EventToolEffectReconciliationFailed || events[1].Payload["error"] != "provider still unavailable" {
 		t.Fatalf("unexpected failure audit: %#v", events)
 	}
 }
@@ -161,6 +162,7 @@ func TestReconciliationValidationAndHelpers(t *testing.T) {
 		{name: "missing result", key: "effect", mutate: func(item *ToolEffectReconciliationCommand) { item.Action = domain.ToolEffectConfirmCommitted }},
 		{name: "unexpected result", key: "effect", mutate: func(item *ToolEffectReconciliationCommand) { item.Result = json.RawMessage(`{}`) }},
 		{name: "unknown action", key: "effect", mutate: func(item *ToolEffectReconciliationCommand) { item.Action = "unknown" }},
+		{name: "credential in command ID", key: "effect", mutate: func(item *ToolEffectReconciliationCommand) { item.CommandID = "sk-command-secret-1234" }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			command := valid
@@ -292,7 +294,11 @@ func reconciliationFixture(t *testing.T, recovery tools.SideEffectReconciliation
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := tools.NewCatalog(externalBinding(recovery, "writes a record"))
+	external := externalBinding(recovery, "writes a record")
+	catalog, err := tools.NewCatalogWithPolicy(toolpolicy.Policy{
+		Version: toolpolicy.CurrentVersion, DefaultAction: toolpolicy.ActionDeny,
+		Rules: []toolpolicy.Rule{{ID: "operator-recovery", Tool: external.Descriptor.Name, Action: toolpolicy.ActionAllowAndLog, Capability: external.Descriptor.Security}},
+	}, external)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,4 +343,66 @@ func reconciliationCode(err error) string {
 		return typed.Code
 	}
 	return ""
+}
+
+func TestReconciliationRecoveryReadFailuresAndRedactionExpansion(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := boundedReconciliationAction(ctx, nil, domain.ToolEffectRecord{}, ToolEffectReconciliationCommand{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled dispatch: %v", err)
+	}
+	record := domain.ToolEffectRecord{IdempotencyKey: "effect", RunID: "run", Status: domain.ToolEffectReconciling}
+	for _, failRead := range []bool{false, true} {
+		stub := &reconciliationStoreStub{events: []domain.RunEvent{{
+			Type:    domain.EventToolEffectReconciliationStarted,
+			Payload: map[string]any{"command_id": "command", "command_hash": "hash", "idempotency_key": "effect", "outcome": "pending"},
+		}}}
+		if failRead {
+			stub.listErr = errors.New("read failed")
+		}
+		_, err := reconciliationCommandOutcome(stub, nil, "run", record, "command", "hash")
+		if failRead && !errors.Is(err, stub.listErr) || !failRead && reconciliationCode(err) != ReconciliationNotFound {
+			t.Fatalf("read failure after duplicate event: %v", err)
+		}
+	}
+	// Redaction can expand many empty credential fields. Enforce the limit on
+	// the final stored bytes as well as the original envelope.
+	values := make([]any, tools.DefaultMaxResultBytes/20)
+	for index := range values {
+		values[index] = map[string]any{"token": ""}
+	}
+	if _, err := encodeReconciledResult(record, values); err == nil || !strings.Contains(err.Error(), "safely persisted") {
+		t.Fatalf("redaction expansion should fail closed: %v", err)
+	}
+}
+
+type panicJSONResult struct{}
+
+func (panicJSONResult) MarshalJSON() ([]byte, error) { panic("secret marshal failure") }
+
+func TestReconciliationGuardsResultEncodingAndBindingLimit(t *testing.T) {
+	for _, variant := range []string{"marshal panic", "binding limit"} {
+		t.Run(variant, func(t *testing.T) {
+			target, run, catalog, effect := reconciliationFixture(t, tools.SideEffectReconciliation{
+				RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
+					if variant == "marshal panic" {
+						return panicJSONResult{}, nil
+					}
+					return map[string]any{"ok": true}, nil
+				},
+			})
+			binding, _ := catalog.Resolve(effect.ToolName)
+			binding.Policy.MaxResultBytes = 1
+			catalog, err := tools.NewCatalogWithPolicy(catalog.SecurityPolicy(), binding)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, ToolEffectReconciliationCommand{
+				CommandID: "retry", Action: domain.ToolEffectRetrySameKey, ExpectedVersion: effect.Version, Actor: "operator", Reason: "checked",
+			})
+			if err != nil || result.Outcome != "failed" || result.Effect.HasResult || strings.Contains(result.Effect.Error, "secret marshal failure") {
+				t.Fatalf("unsafe callback result: %#v %v", result, err)
+			}
+		})
+	}
 }

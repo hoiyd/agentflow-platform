@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/toolreconciliation"
 	toolpkg "agentflow-platform/apps/api/internal/tools"
@@ -139,6 +140,52 @@ func TestToolEffectReconciliationHTTPRejectsInvalidRequests(t *testing.T) {
 	handler.reconcileToolEffect(response, missingRunReconcile)
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("missing run reconcile status=%d", response.Code)
+	}
+}
+
+func TestToolEffectClaimHTTPAndReplayContract(t *testing.T) {
+	fileStore, run := createHTTPTestRun(t)
+	effect, _, err := fileStore.BeginToolEffect(domain.ToolEffectRecord{
+		IdempotencyKey: "claimed-http", RunID: run.ID, StageID: "stage-1", ToolCallID: "call-1",
+		ToolName: "external_writer", DefinitionRevision: "revision-1", RequestHash: "request",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	effect, err = fileStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "uncertain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimEvent, err := event.NewRunEvent(domain.EventToolEffectReconciliationStarted, event.EventMetadata{
+		RunID: run.ID, ConversationID: run.ConversationID, StageID: effect.StageID,
+	}, event.ToolEffectReconciliationPayload{
+		CommandID: "claim", CommandHash: "hash", IdempotencyKey: effect.IdempotencyKey, Action: string(domain.ToolEffectRetrySameKey),
+		ExpectedVersion: effect.Version, Outcome: "pending", Status: string(domain.ToolEffectReconciling),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimEvent.ID = "claim-http-event"
+	if _, _, _, err := fileStore.CommitToolEffectReconciliation(domain.ToolEffectReconciliation{
+		CommandID: "claim", IdempotencyKey: effect.IdempotencyKey, ExpectedVersion: effect.Version,
+		Action: domain.ToolEffectRetrySameKey, NextStatus: domain.ToolEffectReconciling, Event: claimEvent,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	handler := &Handler{store: fileStore, tools: toolManagerForEffectTest(t)}
+	request := httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/tool-effects?status=reconciling", nil)
+	request.SetPathValue("id", run.ID)
+	response := httptest.NewRecorder()
+	handler.listToolEffects(response, request)
+	var body struct {
+		Effects []toolreconciliation.ToolEffectView `json:"effects"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || len(body.Effects) != 1 || body.Effects[0].Status != domain.ToolEffectReconciling || len(body.Effects[0].AvailableActions) != 2 {
+		t.Fatalf("claim list contract: %d %s", response.Code, response.Body.String())
+	}
+	replay, ok, err := fileStore.GetRunReplay(run.ID)
+	if err != nil || !ok || len(replay.ToolEffects) != 1 || replay.ToolEffects[0].Status != domain.ToolEffectReconciling {
+		t.Fatalf("replay claim: %#v %v", replay.ToolEffects, err)
 	}
 }
 

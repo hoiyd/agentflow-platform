@@ -41,6 +41,15 @@ func IsToolEffectConflict(err error) bool {
 	return errors.As(err, &version) || errors.As(err, &state)
 }
 
+func validateReconciliationDuplicate(previous domain.RunEvent, mutation domain.ToolEffectReconciliation) error {
+	for _, key := range []string{"command_id", "idempotency_key", "action", "command_hash"} {
+		if previous.Payload[key] != mutation.Event.Payload[key] {
+			return &ToolEffectStateConflict{Status: "command_identity_conflict"}
+		}
+	}
+	return nil
+}
+
 func prepareToolEffectReconciliation(existing domain.ToolEffectRecord, mutation domain.ToolEffectReconciliation) (domain.ToolEffectReconciliation, error) {
 	existing.Version = max(existing.Version, 1)
 	if strings.TrimSpace(mutation.CommandID) == "" || strings.TrimSpace(mutation.IdempotencyKey) == "" || mutation.ExpectedVersion <= 0 {
@@ -56,7 +65,14 @@ func prepareToolEffectReconciliation(existing domain.ToolEffectRecord, mutation 
 	if mutation.ExpectedVersion != existing.Version {
 		return mutation, &ToolEffectVersionConflict{Expected: mutation.ExpectedVersion, Actual: existing.Version}
 	}
-	if existing.Status != domain.ToolEffectNeedsReconciliation {
+	if existing.Status != domain.ToolEffectNeedsReconciliation && existing.Status != domain.ToolEffectReconciling {
+		return mutation, &ToolEffectStateConflict{Status: string(existing.Status)}
+	}
+	if mutation.Event.Type == domain.EventToolEffectReconciliationStarted && existing.Status != domain.ToolEffectNeedsReconciliation {
+		return mutation, &ToolEffectStateConflict{Status: string(existing.Status)}
+	}
+	if mutation.Event.Type != domain.EventToolEffectReconciliationStarted &&
+		(mutation.Action == domain.ToolEffectRetrySameKey || mutation.Action == domain.ToolEffectCompensate) && existing.Status != domain.ToolEffectReconciling {
 		return mutation, &ToolEffectStateConflict{Status: string(existing.Status)}
 	}
 	if !validToolEffectSettlement(mutation) {
@@ -81,8 +97,13 @@ func payloadInt64(value any) (int64, bool) {
 }
 
 func validToolEffectSettlement(mutation domain.ToolEffectReconciliation) bool {
+	if mutation.Event.Type == domain.EventToolEffectReconciliationStarted {
+		return mutation.NextStatus == domain.ToolEffectReconciling && len(mutation.Result) == 0 &&
+			(mutation.Action == domain.ToolEffectRetrySameKey || mutation.Action == domain.ToolEffectCompensate) &&
+			mutation.Event.Payload["outcome"] == "pending" && mutation.Event.Payload["command_hash"] != nil && mutation.Event.Payload["command_hash"] != ""
+	}
 	if mutation.Event.Type == domain.EventToolEffectReconciliationFailed {
-		return mutation.NextStatus == domain.ToolEffectNeedsReconciliation
+		return (mutation.NextStatus == domain.ToolEffectNeedsReconciliation || mutation.NextStatus == domain.ToolEffectReconciling) && len(mutation.Result) == 0
 	}
 	if mutation.Event.Type != domain.EventToolEffectReconciled {
 		return false

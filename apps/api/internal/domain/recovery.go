@@ -59,6 +59,9 @@ const (
 	ToolEffectFailed              ToolEffectStatus = "failed"
 	ToolEffectCompensated         ToolEffectStatus = "compensated"
 	ToolEffectNeedsReconciliation ToolEffectStatus = "needs_reconciliation"
+	// Reconciling is a durable callback claim, not proof the callback is still alive.
+	// Unknown outcomes require manual confirmation; callbacks are never reclaimed.
+	ToolEffectReconciling ToolEffectStatus = "reconciling"
 )
 
 type ToolEffectReconciliationAction string

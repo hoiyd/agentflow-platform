@@ -146,8 +146,8 @@ func (s *FileStore) MarkToolEffectNeedsReconciliation(idempotencyKey string, err
 		if item.IdempotencyKey != idempotencyKey {
 			continue
 		}
-		if item.Status == domain.ToolEffectCommitted || item.Status == domain.ToolEffectCompensated {
-			return domain.ToolEffectRecord{}, errors.New("terminal tool effect cannot require reconciliation")
+		if item.Status != domain.ToolEffectExecuting && item.Status != domain.ToolEffectPrepared && item.Status != domain.ToolEffectNeedsReconciliation {
+			return domain.ToolEffectRecord{}, errors.New("tool effect cannot accept a late execution failure")
 		}
 		previous := cloneToolEffect(*item)
 		item.Status = domain.ToolEffectNeedsReconciliation
@@ -184,6 +184,9 @@ func (s *FileStore) CommitToolEffectReconciliation(mutation domain.ToolEffectRec
 		if existingEvent.ID == mutation.Event.ID {
 			for _, effect := range s.data.ToolEffects {
 				if effect.IdempotencyKey == mutation.IdempotencyKey {
+					if err := validateReconciliationDuplicate(existingEvent, mutation); err != nil {
+						return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+					}
 					return cloneToolEffect(effect), domain.RunEvent{}, false, nil
 				}
 			}
