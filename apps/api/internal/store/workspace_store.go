@@ -86,6 +86,20 @@ func (s workspaceStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 	return s.backend.GetRunReplay(runID)
 }
 
+func (s workspaceStore) ListToolEffects(runID string) ([]domain.ToolEffectRecord, error) {
+	if err := s.requireRun(runID); err != nil {
+		return nil, err
+	}
+	return s.backend.ListToolEffects(runID)
+}
+
+func (s workspaceStore) CommitToolEffectReconciliation(mutation domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error) {
+	if err := s.requireRun(mutation.Event.RunID); err != nil {
+		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+	}
+	return s.backend.CommitToolEffectReconciliation(mutation)
+}
+
 func (s workspaceStore) GetRunUsageLedger(runID string) (domain.RunUsageLedger, bool, error) {
 	if err := s.requireRun(runID); err != nil {
 		if IsNotFound(err) {

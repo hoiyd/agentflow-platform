@@ -40,6 +40,7 @@ func (s *FileStore) RepairInterruptedRun(request domain.InterruptedRunRepair) (d
 	originalRun := cloneRun(*run)
 	originalEventCount := len(s.data.RunEvents)
 	originalSteps := append([]domain.CollaborationStep(nil), s.data.CollaborationSteps...)
+	originalEffects := append([]domain.ToolEffectRecord(nil), s.data.ToolEffects...)
 	appended := make([]domain.RunEvent, 0, len(request.TerminalEvents))
 	for _, item := range request.TerminalEvents {
 		cursor++
@@ -59,11 +60,21 @@ func (s *FileStore) RepairInterruptedRun(request domain.InterruptedRunRepair) (d
 			step.UpdatedAt = now
 		}
 	}
+	for index := range s.data.ToolEffects {
+		effect := &s.data.ToolEffects[index]
+		if effect.RunID == request.RunID && effect.Status == domain.ToolEffectExecuting {
+			effect.Status = domain.ToolEffectNeedsReconciliation
+			effect.Version = max(effect.Version, 1) + 1
+			effect.Error = request.ErrorMessage
+			effect.UpdatedAt = now
+		}
+	}
 	applyRunStatus(run, domain.RunFailedRecoverable, request.ErrorMessage, now)
 	if err := s.saveLocked(); err != nil {
 		s.data.Runs[runIndex] = originalRun
 		s.data.RunEvents = s.data.RunEvents[:originalEventCount]
 		s.data.CollaborationSteps = originalSteps
+		s.data.ToolEffects = originalEffects
 		return domain.InterruptedRunRepairResult{}, err
 	}
 	return domain.InterruptedRunRepairResult{Run: cloneRun(*run), AppendedEvents: appended, Applied: true}, nil

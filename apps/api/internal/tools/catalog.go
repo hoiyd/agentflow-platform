@@ -72,6 +72,18 @@ func (c *Catalog) Register(binding Binding) error {
 	if binding.Descriptor.SideEffect.Mode == SideEffectExternal && binding.Descriptor.Security.SideEffect == toolpolicy.SideEffectNone {
 		return fmt.Errorf("tool %q external side effect requires an explicit security side-effect class", name)
 	}
+	if binding.Descriptor.SideEffect.Mode != SideEffectExternal && (binding.Descriptor.SideEffect.RetryWithSameKey || binding.Descriptor.SideEffect.Compensate || binding.Reconciliation.RetryWithSameKey != nil || binding.Reconciliation.Compensate != nil) {
+		return fmt.Errorf("tool %q reconciliation requires external side-effect mode", name)
+	}
+	if binding.Descriptor.SideEffect.RetryWithSameKey != (binding.Reconciliation.RetryWithSameKey != nil) {
+		return fmt.Errorf("tool %q retry capability and callback must match", name)
+	}
+	if binding.Descriptor.SideEffect.Compensate != (binding.Reconciliation.Compensate != nil) {
+		return fmt.Errorf("tool %q compensation capability and callback must match", name)
+	}
+	if binding.Descriptor.SideEffect.Compensate && binding.Descriptor.Security.Reversibility == toolpolicy.Irreversible {
+		return fmt.Errorf("tool %q irreversible side effect cannot declare compensation", name)
+	}
 	concurrency := binding.Descriptor.Concurrency
 	switch concurrency.Mode {
 	case "", ConcurrencySerial, ConcurrencyReadOnly:

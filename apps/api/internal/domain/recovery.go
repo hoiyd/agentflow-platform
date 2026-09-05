@@ -56,54 +56,82 @@ const (
 	ToolEffectPrepared            ToolEffectStatus = "prepared"
 	ToolEffectExecuting           ToolEffectStatus = "executing"
 	ToolEffectCommitted           ToolEffectStatus = "committed"
+	ToolEffectFailed              ToolEffectStatus = "failed"
 	ToolEffectCompensated         ToolEffectStatus = "compensated"
 	ToolEffectNeedsReconciliation ToolEffectStatus = "needs_reconciliation"
+)
+
+type ToolEffectReconciliationAction string
+
+const (
+	ToolEffectConfirmCommitted ToolEffectReconciliationAction = "confirm_committed"
+	ToolEffectConfirmFailed    ToolEffectReconciliationAction = "confirm_failed"
+	ToolEffectRetrySameKey     ToolEffectReconciliationAction = "retry_with_same_key"
+	ToolEffectCompensate       ToolEffectReconciliationAction = "compensate"
 )
 
 // ToolEffectRecord is an idempotency journal for tools that declare external
 // side effects. A committed result may be replayed without invoking the tool.
 type ToolEffectRecord struct {
-	IdempotencyKey string           `json:"idempotency_key"`
-	RunID          string           `json:"run_id"`
-	StageID        string           `json:"stage_id"`
-	TurnID         string           `json:"turn_id,omitempty"`
-	ToolCallID     string           `json:"tool_call_id"`
-	ToolName       string           `json:"tool_name"`
-	RequestHash    string           `json:"request_hash"`
-	Status         ToolEffectStatus `json:"status"`
-	Result         []byte           `json:"result,omitempty"`
-	Error          string           `json:"error,omitempty"`
-	CreatedAt      time.Time        `json:"created_at"`
-	UpdatedAt      time.Time        `json:"updated_at"`
+	IdempotencyKey     string           `json:"idempotency_key"`
+	Version            int64            `json:"version"`
+	RunID              string           `json:"run_id"`
+	StageID            string           `json:"stage_id"`
+	TurnID             string           `json:"turn_id,omitempty"`
+	ToolCallID         string           `json:"tool_call_id"`
+	ToolName           string           `json:"tool_name"`
+	DefinitionRevision string           `json:"definition_revision,omitempty"`
+	RequestHash        string           `json:"request_hash"`
+	Status             ToolEffectStatus `json:"status"`
+	Result             []byte           `json:"result,omitempty"`
+	Error              string           `json:"error,omitempty"`
+	CreatedAt          time.Time        `json:"created_at"`
+	UpdatedAt          time.Time        `json:"updated_at"`
 }
 
 // ToolEffectSummary exposes recovery state without duplicating a potentially
 // sensitive tool result in Replay. The result remains available to the
 // executor for idempotent replay and is already subject to Tool tracing policy.
 type ToolEffectSummary struct {
-	IdempotencyKey string           `json:"idempotency_key"`
-	RunID          string           `json:"run_id"`
-	StageID        string           `json:"stage_id"`
-	TurnID         string           `json:"turn_id,omitempty"`
-	ToolCallID     string           `json:"tool_call_id"`
-	ToolName       string           `json:"tool_name"`
-	RequestHash    string           `json:"request_hash"`
-	Status         ToolEffectStatus `json:"status"`
-	HasResult      bool             `json:"has_result"`
-	Error          string           `json:"error,omitempty"`
-	CreatedAt      time.Time        `json:"created_at"`
-	UpdatedAt      time.Time        `json:"updated_at"`
+	IdempotencyKey     string           `json:"idempotency_key"`
+	Version            int64            `json:"version"`
+	RunID              string           `json:"run_id"`
+	StageID            string           `json:"stage_id"`
+	TurnID             string           `json:"turn_id,omitempty"`
+	ToolCallID         string           `json:"tool_call_id"`
+	ToolName           string           `json:"tool_name"`
+	DefinitionRevision string           `json:"definition_revision,omitempty"`
+	RequestHash        string           `json:"request_hash"`
+	Status             ToolEffectStatus `json:"status"`
+	HasResult          bool             `json:"has_result"`
+	Error              string           `json:"error,omitempty"`
+	CreatedAt          time.Time        `json:"created_at"`
+	UpdatedAt          time.Time        `json:"updated_at"`
 }
 
 func SummarizeToolEffects(records []ToolEffectRecord) []ToolEffectSummary {
 	items := make([]ToolEffectSummary, 0, len(records))
 	for _, record := range records {
 		items = append(items, ToolEffectSummary{
-			IdempotencyKey: record.IdempotencyKey, RunID: record.RunID, StageID: record.StageID,
+			IdempotencyKey: record.IdempotencyKey, Version: max(record.Version, 1), RunID: record.RunID, StageID: record.StageID,
 			TurnID: record.TurnID, ToolCallID: record.ToolCallID, ToolName: record.ToolName,
-			RequestHash: record.RequestHash, Status: record.Status, HasResult: len(record.Result) > 0,
+			DefinitionRevision: record.DefinitionRevision,
+			RequestHash:        record.RequestHash, Status: record.Status, HasResult: len(record.Result) > 0,
 			Error: record.Error, CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt,
 		})
 	}
 	return items
+}
+
+// ToolEffectReconciliation is committed atomically with Event. Result contains
+// the Executor replay envelope, never an ungoverned raw provider response.
+type ToolEffectReconciliation struct {
+	CommandID       string
+	IdempotencyKey  string
+	ExpectedVersion int64
+	Action          ToolEffectReconciliationAction
+	NextStatus      ToolEffectStatus
+	Result          []byte
+	Error           string
+	Event           RunEvent
 }

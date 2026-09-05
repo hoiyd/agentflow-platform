@@ -163,6 +163,7 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventToolGuardWarned, domain.EventToolGuardBlocked}, DurableFact, optional, "event.ToolProgressPayload", none, "tool_progress_guard", "replay")
 	add([]domain.RunEventType{domain.EventTurnNoProgress}, DurableFact, turn, "event.ToolProgressPayload", transition("turn"), "tool_progress_guard", "replay")
 	add([]domain.RunEventType{domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired}, DurableFact, optional, "event.ToolArtifactPayload", none, "artifact_governance", "replay")
+	add([]domain.RunEventType{domain.EventToolEffectReconciled, domain.EventToolEffectReconciliationFailed}, DurableFact, stage, "event.ToolEffectReconciliationPayload", none, "tool_reconciliation", "replay")
 	add([]domain.RunEventType{domain.EventRetrievalStarted}, DurableFact, optional, "event.RetrievalPayload", start("retrieval"), "replay")
 	add([]domain.RunEventType{domain.EventRetrievalCompleted}, DurableFact, optional, "event.RetrievalPayload", terminal("retrieval", domain.EventRetrievalStarted), "replay")
 	add([]domain.RunEventType{domain.EventRetrievalFailed}, DurableFact, optional, "event.RetrievalPayload", terminal("retrieval", domain.EventRetrievalStarted), "run_projection", "replay")
@@ -210,7 +211,8 @@ func producerFor(eventType domain.RunEventType) string {
 		return "contextcompaction"
 	case domain.EventToolStarted, domain.EventToolCompleted, domain.EventToolFailed, domain.EventToolPolicyEvaluated,
 		domain.EventToolGuardWarned, domain.EventToolGuardBlocked, domain.EventTurnNoProgress,
-		domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired:
+		domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired,
+		domain.EventToolEffectReconciled, domain.EventToolEffectReconciliationFailed:
 		return "tools"
 	case domain.EventRetrievalStarted, domain.EventRetrievalCompleted, domain.EventRetrievalFailed,
 		domain.EventCitationResolved:

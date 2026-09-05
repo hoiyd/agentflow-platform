@@ -39,10 +39,17 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 		{Type: domain.EventStageStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1"},
 		{Type: domain.EventTurnStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1", TurnID: "turn-1"},
 		{Type: domain.EventModelStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1", TurnID: "turn-1"},
+		{Type: domain.EventToolStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1", TurnID: "turn-1", Payload: map[string]any{"tool_call_id": "call-1"}},
 	} {
 		if _, err := fileStore.CreateRunEvent(item); err != nil {
 			t.Fatalf("create run event: %v", err)
 		}
+	}
+	if _, execute, err := fileStore.BeginToolEffect(domain.ToolEffectRecord{
+		IdempotencyKey: "stale-effect", RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
+		ToolCallID: "call-1", ToolName: "external_writer", RequestHash: "request",
+	}); err != nil || !execute {
+		t.Fatalf("begin external effect: execute=%v err=%v", execute, err)
 	}
 	time.Sleep(time.Millisecond)
 
@@ -67,10 +74,10 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list repaired events: %v", err)
 	}
-	if len(events) != 6 {
-		t.Fatalf("expected three synthetic terminals, got %d events", len(events))
+	if len(events) != 8 {
+		t.Fatalf("expected four synthetic terminals, got %d events", len(events))
 	}
-	for _, item := range events[3:] {
+	for _, item := range events[4:] {
 		if item.Payload["synthetic"] != true {
 			t.Fatalf("expected synthetic terminal event, got %#v", item)
 		}
@@ -78,6 +85,10 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 	steps, err := fileStore.ListCollaborationSteps(run.ID)
 	if err != nil || len(steps) != 1 || steps[0].ID != step.ID || steps[0].Status != domain.CollaborationStepFailed {
 		t.Fatalf("expected interrupted stage record to fail: %#v err=%v", steps, err)
+	}
+	effects, err := fileStore.ListToolEffects(run.ID)
+	if err != nil || len(effects) != 1 || effects[0].Status != domain.ToolEffectNeedsReconciliation || effects[0].Version != 2 {
+		t.Fatalf("expected abandoned effect to require reconciliation: %#v err=%v", effects, err)
 	}
 
 	count, err = MarkStaleRunningRuns(fileStore, time.Nanosecond)

@@ -29,7 +29,9 @@ const (
 // SideEffectPolicy is explicit because external writes must use the durable
 // idempotency journal. The zero value is a replay-safe, read-only computation.
 type SideEffectPolicy struct {
-	Mode SideEffectMode `json:"mode,omitempty"`
+	Mode             SideEffectMode `json:"mode,omitempty"`
+	RetryWithSameKey bool           `json:"retry_with_same_key,omitempty"`
+	Compensate       bool           `json:"compensate,omitempty"`
 }
 
 type ConcurrencyMode string
@@ -56,12 +58,32 @@ type ExecutionPolicy struct {
 	MaxResultBytes int
 }
 
+type EffectReconciliationContext struct {
+	CommandID       string
+	IdempotencyKey  string
+	CompensationKey string
+	RunID           string
+	StageID         string
+	TurnID          string
+	ToolCallID      string
+	ToolName        string
+	RequestHash     string
+}
+
+// SideEffectReconciliation contains Tool-specific, idempotent recovery hooks.
+// Retry must reuse IdempotencyKey; Compensate must use CompensationKey.
+type SideEffectReconciliation struct {
+	RetryWithSameKey func(context.Context, EffectReconciliationContext) (any, error)
+	Compensate       func(context.Context, EffectReconciliationContext) error
+}
+
 type Binding struct {
-	Descriptor   Descriptor
-	Handler      Handler
-	Policy       ExecutionPolicy
-	ResolveScope ScopeResolver
-	contract     *argumentContract
+	Descriptor     Descriptor
+	Handler        Handler
+	Policy         ExecutionPolicy
+	ResolveScope   ScopeResolver
+	Reconciliation SideEffectReconciliation
+	contract       *argumentContract
 }
 
 type ToolInfo struct {
