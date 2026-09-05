@@ -66,6 +66,7 @@ func TestToolEffectReconciliationSettlementVariantsAndErrors(t *testing.T) {
 		{domain.ToolEffectCompensate, domain.ToolEffectCompensated, nil, domain.EventToolEffectReconciled},
 		{domain.ToolEffectRetrySameKey, domain.ToolEffectNeedsReconciliation, nil, domain.EventToolEffectReconciliationFailed},
 	} {
+		effect.Status = domain.ToolEffectReconciling
 		mutation := reconciliationMutation(effect, test.action, test.status, test.result)
 		mutation.Event.Type = test.typeID
 		if _, err := prepareToolEffectReconciliation(effect, mutation); err != nil {
@@ -93,6 +94,29 @@ func TestPayloadInt64AcceptsJSONAndNativeIntegers(t *testing.T) {
 		if _, ok := payloadInt64(value); ok {
 			t.Fatalf("payloadInt64 accepted %v", value)
 		}
+	}
+}
+
+func TestReconciliationRequiresAUniqueClaimBeforeCallbackSettlement(t *testing.T) {
+	effect := domain.ToolEffectRecord{IdempotencyKey: "effect", RunID: "run", StageID: "stage", Version: 2, Status: domain.ToolEffectNeedsReconciliation}
+	mutation := reconciliationMutation(effect, domain.ToolEffectRetrySameKey, domain.ToolEffectCommitted, []byte(`{}`))
+	if _, err := prepareToolEffectReconciliation(effect, mutation); !IsToolEffectConflict(err) {
+		t.Fatalf("callback settled without a claim: %v", err)
+	}
+	mutation.Event.Type = domain.EventToolEffectReconciliationStarted
+	mutation.Event.Payload["command_hash"] = "hash"
+	mutation.Event.Payload["outcome"] = "pending"
+	mutation.NextStatus, mutation.Result = domain.ToolEffectReconciling, nil
+	if _, err := prepareToolEffectReconciliation(effect, mutation); err != nil {
+		t.Fatal(err)
+	}
+	effect.Status = domain.ToolEffectReconciling
+	if _, err := prepareToolEffectReconciliation(effect, mutation); !IsToolEffectConflict(err) {
+		t.Fatalf("outstanding claim reclaimed: %v", err)
+	}
+	mutation.Event.Payload["command_hash"] = ""
+	if validToolEffectSettlement(mutation) {
+		t.Fatal("claim without command identity accepted")
 	}
 }
 

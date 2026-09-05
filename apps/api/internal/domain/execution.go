@@ -281,6 +281,8 @@ type ChatChunk struct {
 
 type RunEventType string
 
+const EventToolEffectReconciliationStarted RunEventType = "tool.effect.reconciliation_started"
+
 const (
 	EventRunCreated                     RunEventType = "run.created"
 	EventRunStarted                     RunEventType = "run.started"

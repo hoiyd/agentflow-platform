@@ -3,6 +3,7 @@ package store
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -154,8 +155,8 @@ func (s *PostgresStore) CompleteToolEffect(idempotencyKey string, result []byte)
 
 func (s *PostgresStore) MarkToolEffectNeedsReconciliation(idempotencyKey string, errorMessage string) (domain.ToolEffectRecord, error) {
 	return s.updateToolEffect(idempotencyKey, func(existing domain.ToolEffectRecord) (domain.ToolEffectStatus, []byte, string, error) {
-		if existing.Status == domain.ToolEffectCommitted || existing.Status == domain.ToolEffectCompensated {
-			return "", nil, "", errors.New("terminal tool effect cannot require reconciliation")
+		if existing.Status != domain.ToolEffectExecuting && existing.Status != domain.ToolEffectPrepared && existing.Status != domain.ToolEffectNeedsReconciliation {
+			return "", nil, "", errors.New("tool effect cannot accept a late execution failure")
 		}
 		return domain.ToolEffectNeedsReconciliation, existing.Result, strings.TrimSpace(errorMessage), nil
 	})
@@ -195,6 +196,17 @@ func (s *PostgresStore) CommitToolEffectReconciliation(mutation domain.ToolEffec
 		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
 	}
 	if duplicate {
+		var payload []byte
+		if err := tx.QueryRow(`SELECT payload FROM run_events WHERE id=$1`, mutation.Event.ID).Scan(&payload); err != nil {
+			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+		}
+		var previous domain.RunEvent
+		if err := json.Unmarshal(payload, &previous.Payload); err != nil {
+			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+		}
+		if err := validateReconciliationDuplicate(previous, mutation); err != nil {
+			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+		}
 		current, found, err := getToolEffect(tx, mutation.IdempotencyKey, false)
 		if err != nil {
 			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err

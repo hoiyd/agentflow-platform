@@ -94,6 +94,19 @@ test("replay preserves durable recovery metadata", async (t) => {
   assert.equal(replay.tool_effects[0].has_result, true);
 });
 
+test("replay preserves reconciliation claims and their typed audit events", async (t) => {
+  const claim = { id: "claim-1", run_id: "run-1", type: "tool.effect.reconciliation_started", sequence: 3,
+    payload: { command_id: "command-1", command_hash: "hash", outcome: "pending", status: "reconciling" } };
+  mockFetch(t, replayPayload({
+    run_events: [claim],
+    tool_effects: [{ tool_call_id: "call-1", status: "reconciling", version: 3, has_result: false }]
+  }));
+  const replay = await getRunReplay("run-1");
+  assert.equal(replay.tool_effects[0].status, "reconciling");
+  assert.equal(replay.run_events[0].type, claim.type);
+  assert.equal(replay.run_events[0].payload.outcome, "pending");
+});
+
 test("replay preserves tool artifact recovery metadata", async (t) => {
   mockFetch(t, replayPayload({
     tool_artifacts: [{ id: "tool_artifact_1", run_id: "run-1", tool_call_id: "call-1", tool_name: "search", stored_byte_size: 100000 }]
