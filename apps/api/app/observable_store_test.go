@@ -70,6 +70,36 @@ func TestObservableStorePublishesCommittedEventWithAssignedSequence(t *testing.T
 	case <-time.After(time.Second):
 		t.Fatal("workspace-scoped committed event was not published")
 	}
+
+	targets := []interface {
+		CommitToolEffectReconciliation(domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error)
+	}{observed, scoped}
+	for index, target := range targets {
+		effect, execute, err := observed.BeginToolEffect(domain.ToolEffectRecord{
+			IdempotencyKey: "effect-" + string(rune('a'+index)), RunID: run.ID, StageID: "stage-1",
+			ToolCallID: "call-1", ToolName: "writer", RequestHash: "request",
+		})
+		if err != nil || !execute {
+			t.Fatalf("begin effect: %#v execute=%t err=%v", effect, execute, err)
+		}
+		effect, err = observed.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "timeout")
+		if err != nil {
+			t.Fatal(err)
+		}
+		mutation := observableReconciliationMutation(run, effect, "command-"+effect.IdempotencyKey)
+		settled, committed, applied, err := target.CommitToolEffectReconciliation(mutation)
+		if err != nil || !applied || settled.Status != domain.ToolEffectFailed {
+			t.Fatalf("reconcile effect: %#v applied=%t err=%v", settled, applied, err)
+		}
+		select {
+		case delivered := <-subscription.Events:
+			if delivered.ID != committed.ID || delivered.Sequence != int64(3+index) {
+				t.Fatalf("reconciliation event not published: %#v", delivered)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("reconciliation event was not published")
+		}
+	}
 }
 
 func TestObservableStoreDoesNotPublishFailedCommit(t *testing.T) {
@@ -107,3 +137,18 @@ type closingStore struct {
 }
 
 func (s *closingStore) Close() error { return s.closeErr }
+
+func observableReconciliationMutation(run domain.Run, effect domain.ToolEffectRecord, commandID string) domain.ToolEffectReconciliation {
+	return domain.ToolEffectReconciliation{
+		CommandID: commandID, IdempotencyKey: effect.IdempotencyKey, ExpectedVersion: effect.Version,
+		Action: domain.ToolEffectConfirmFailed, NextStatus: domain.ToolEffectFailed, Error: "not committed",
+		Event: domain.RunEvent{
+			ID: "event-" + commandID, RunID: run.ID, ConversationID: run.ConversationID,
+			StageID: effect.StageID, Type: domain.EventToolEffectReconciled,
+			Payload: map[string]any{
+				"command_id": commandID, "idempotency_key": effect.IdempotencyKey,
+				"action": string(domain.ToolEffectConfirmFailed), "expected_version": effect.Version,
+			},
+		},
+	}
+}

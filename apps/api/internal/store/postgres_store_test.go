@@ -42,6 +42,8 @@ func TestPostgresMigrationsAddDurableRecoveryState(t *testing.T) {
 		"stage_checkpoints_run_cursor_idx",
 		"CREATE TABLE IF NOT EXISTS tool_effects",
 		"idempotency_key text PRIMARY KEY",
+		"ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 1",
+		"ADD COLUMN IF NOT EXISTS definition_revision text NOT NULL DEFAULT ''",
 		"tool_effects_run_stage_idx",
 	} {
 		if !strings.Contains(joined, expected) {
@@ -337,12 +339,32 @@ func TestPostgresDurableRecoveryRoundTrip(t *testing.T) {
 	if err != nil || uncertain.Status != domain.ToolEffectNeedsReconciliation {
 		t.Fatalf("mark uncertain effect: %#v err=%v", uncertain, err)
 	}
+	reconciliation := domain.ToolEffectReconciliation{
+		CommandID: "postgres-command", IdempotencyKey: uncertain.IdempotencyKey,
+		ExpectedVersion: uncertain.Version, Action: domain.ToolEffectConfirmFailed,
+		NextStatus: domain.ToolEffectFailed, Error: "provider confirmed no write",
+		Event: domain.RunEvent{
+			ID: "event-reconcile-" + run.ID, Type: domain.EventToolEffectReconciled,
+			RunID: run.ID, ConversationID: conversation.ID, StageID: uncertain.StageID,
+			Payload: map[string]any{
+				"command_id": "postgres-command", "idempotency_key": uncertain.IdempotencyKey,
+				"action": string(domain.ToolEffectConfirmFailed), "expected_version": uncertain.Version,
+			},
+		},
+	}
+	settled, audit, applied, err := postgresStore.CommitToolEffectReconciliation(reconciliation)
+	if err != nil || !applied || settled.Status != domain.ToolEffectFailed || settled.Version != uncertain.Version+1 || audit.Sequence == 0 {
+		t.Fatalf("reconcile effect: settled=%#v audit=%#v applied=%v err=%v", settled, audit, applied, err)
+	}
+	if duplicate, _, applied, err := postgresStore.CommitToolEffectReconciliation(reconciliation); err != nil || applied || duplicate.Version != settled.Version {
+		t.Fatalf("duplicate reconciliation: effect=%#v applied=%v err=%v", duplicate, applied, err)
+	}
 	checkpoints, err := postgresStore.ListStageCheckpoints(run.ID)
 	if err != nil || len(checkpoints) != 1 || checkpoints[0].Status != domain.CheckpointExecuting {
 		t.Fatalf("checkpoint round trip: %#v err=%v", checkpoints, err)
 	}
 	effects, err := postgresStore.ListToolEffects(run.ID)
-	if err != nil || len(effects) != 2 || effects[0].Status != domain.ToolEffectCommitted || effects[1].Status != domain.ToolEffectNeedsReconciliation {
+	if err != nil || len(effects) != 2 || effects[0].Status != domain.ToolEffectCommitted || effects[1].Status != domain.ToolEffectFailed {
 		t.Fatalf("effect round trip: %#v err=%v", effects, err)
 	}
 }
@@ -375,6 +397,13 @@ func TestPostgresInterruptedRunRepairIsAtomicAndIdempotent(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	staleEffect, execute, err := postgresStore.BeginToolEffect(domain.ToolEffectRecord{
+		IdempotencyKey: "stale-effect-" + run.ID, RunID: run.ID, StageID: step.ID, TurnID: "turn-1",
+		ToolCallID: "call-1", ToolName: "external_writer", RequestHash: "request",
+	})
+	if err != nil || !execute {
+		t.Fatalf("begin stale effect: effect=%#v execute=%v err=%v", staleEffect, execute, err)
 	}
 	for _, item := range []domain.RunEvent{
 		{Type: domain.EventStageStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: step.ID},
@@ -413,6 +442,10 @@ func TestPostgresInterruptedRunRepairIsAtomicAndIdempotent(t *testing.T) {
 	steps, err := postgresStore.ListCollaborationSteps(run.ID)
 	if err != nil || len(steps) != 1 || steps[0].Status != domain.CollaborationStepFailed {
 		t.Fatalf("repaired steps: %#v err=%v", steps, err)
+	}
+	effects, err := postgresStore.ListToolEffects(run.ID)
+	if err != nil || len(effects) != 1 || effects[0].Status != domain.ToolEffectNeedsReconciliation || effects[0].Version != staleEffect.Version+1 {
+		t.Fatalf("repaired effects: %#v err=%v", effects, err)
 	}
 	second, err := postgresStore.RepairInterruptedRun(request)
 	if err != nil || second.Applied {

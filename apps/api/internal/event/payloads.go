@@ -253,6 +253,27 @@ func (ToolProgressPayload) supports(eventType domain.RunEventType) bool {
 	}
 }
 
+// ToolEffectReconciliationPayload is the durable operator audit record. It
+// deliberately excludes provider results, Tool arguments, and credentials.
+type ToolEffectReconciliationPayload struct {
+	CommandID       string `json:"command_id"`
+	IdempotencyKey  string `json:"idempotency_key"`
+	ToolCallID      string `json:"tool_call_id"`
+	ToolName        string `json:"tool_name"`
+	Action          string `json:"action"`
+	Actor           string `json:"actor"`
+	Reason          string `json:"reason"`
+	ExpectedVersion int64  `json:"expected_version"`
+	ResultVersion   int64  `json:"result_version,omitempty"`
+	Outcome         string `json:"outcome"`
+	Status          string `json:"status"`
+	Error           string `json:"error,omitempty"`
+}
+
+func (ToolEffectReconciliationPayload) supports(eventType domain.RunEventType) bool {
+	return eventType == domain.EventToolEffectReconciled || eventType == domain.EventToolEffectReconciliationFailed
+}
+
 type ToolArtifactPayload struct {
 	ArtifactID    string `json:"artifact_id"`
 	ToolCallID    string `json:"tool_call_id,omitempty"`

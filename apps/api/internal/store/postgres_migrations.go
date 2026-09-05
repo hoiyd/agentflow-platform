@@ -177,11 +177,13 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS stage_checkpoints_run_cursor_idx ON stage_checkpoints(run_id, event_cursor)`,
 	`CREATE TABLE IF NOT EXISTS tool_effects (
 		idempotency_key text PRIMARY KEY,
+		version bigint NOT NULL DEFAULT 1,
 		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
 		stage_id text NOT NULL,
 		turn_id text NOT NULL DEFAULT '',
 		tool_call_id text NOT NULL,
 		tool_name text NOT NULL,
+		definition_revision text NOT NULL DEFAULT '',
 		request_hash text NOT NULL,
 		status text NOT NULL,
 		result bytea,
@@ -189,6 +191,8 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
+	`ALTER TABLE tool_effects ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 1`,
+	`ALTER TABLE tool_effects ADD COLUMN IF NOT EXISTS definition_revision text NOT NULL DEFAULT ''`,
 	`CREATE INDEX IF NOT EXISTS tool_effects_run_stage_idx ON tool_effects(run_id, stage_id, created_at)`,
 	`CREATE TABLE IF NOT EXISTS tool_artifacts (
 		id text PRIMARY KEY,

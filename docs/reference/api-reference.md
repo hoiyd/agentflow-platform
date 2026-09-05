@@ -60,6 +60,8 @@ GET    /api/runs/{id}/model_requests
 GET    /api/runs/{id}/artifacts
 GET    /api/runs/{id}/artifacts/{artifact_id}
 GET    /api/runs/{id}/artifacts/{artifact_id}/search
+GET    /api/runs/{id}/tool-effects
+POST   /api/runs/{id}/tool-effects/{idempotency_key}/reconcile
 GET    /api/runs/{id}/episode
 
 GET    /api/tools
@@ -189,6 +191,20 @@ admit the Tool. Agent allowlists cannot expand operator-granted Resource,
 Network, or Credential scope. See [Tool Security Policy and Scope](../tools/tool-security-policy.md),
 [Configurable Agent Profiles](../runtime/agent-profiles.md#two-tool-control-layers), and
 [Tool Execution Policy](../runtime/execution-controls.md#7-tool-execution-policy).
+
+`GET /api/runs/{id}/tool-effects` returns the Run's external-effect journal and
+supports exact `tool` and `status` filters. Result bodies remain hidden. Each
+item includes an optimistic `version` and only the reconciliation actions
+supported by its frozen definition and current Binding.
+
+`POST /api/runs/{id}/tool-effects/{idempotency_key}/reconcile` accepts
+`command_id`, `action`, `expected_version`, `actor`, `reason`, and, for
+`confirm_committed`, a bounded JSON `result`. Stale state or unavailable Binding
+capabilities return `409`. Repeating a committed `command_id` is idempotent and
+returns `applied=false`. Successful and failed decisions are visible in Replay
+through typed audit events. See
+[Tool side-effect reconciliation](../tools/tool-side-effect-reconciliation.md)
+for the state machine and operator security boundary.
 
 ## RAG Evaluation
 

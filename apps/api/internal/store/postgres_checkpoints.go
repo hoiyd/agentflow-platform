@@ -115,18 +115,19 @@ func (s *PostgresStore) BeginToolEffect(effect domain.ToolEffectRecord) (domain.
 	}
 	now := time.Now().UTC()
 	effect.Status = domain.ToolEffectExecuting
+	effect.Version = 1
 	effect.CreatedAt = now
 	effect.UpdatedAt = now
 	stored, err := scanToolEffect(tx.QueryRow(`
 		INSERT INTO tool_effects (
-			idempotency_key, run_id, stage_id, turn_id, tool_call_id, tool_name,
-			request_hash, status, result, error, created_at, updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULL,$9,$10,$11)
-		RETURNING idempotency_key, run_id, stage_id, turn_id, tool_call_id,
-			tool_name, request_hash, status, result, error, created_at, updated_at`,
-		effect.IdempotencyKey, effect.RunID, effect.StageID, effect.TurnID,
-		effect.ToolCallID, effect.ToolName, effect.RequestHash, string(effect.Status),
-		effect.Error, effect.CreatedAt, effect.UpdatedAt))
+			idempotency_key, version, run_id, stage_id, turn_id, tool_call_id, tool_name,
+			definition_revision, request_hash, status, result, error, created_at, updated_at
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULL,$11,$12,$13)
+		RETURNING idempotency_key, version, run_id, stage_id, turn_id, tool_call_id,
+			tool_name, definition_revision, request_hash, status, result, error, created_at, updated_at`,
+		effect.IdempotencyKey, effect.Version, effect.RunID, effect.StageID, effect.TurnID,
+		effect.ToolCallID, effect.ToolName, effect.DefinitionRevision, effect.RequestHash,
+		string(effect.Status), effect.Error, effect.CreatedAt, effect.UpdatedAt))
 	if err != nil {
 		return domain.ToolEffectRecord{}, false, err
 	}
@@ -162,8 +163,8 @@ func (s *PostgresStore) MarkToolEffectNeedsReconciliation(idempotencyKey string,
 
 func (s *PostgresStore) ListToolEffects(runID string) ([]domain.ToolEffectRecord, error) {
 	rows, err := s.db.Query(`
-		SELECT idempotency_key, run_id, stage_id, turn_id, tool_call_id, tool_name,
-			request_hash, status, result, error, created_at, updated_at
+		SELECT idempotency_key, version, run_id, stage_id, turn_id, tool_call_id, tool_name,
+			definition_revision, request_hash, status, result, error, created_at, updated_at
 		FROM tool_effects WHERE run_id=$1 ORDER BY created_at, idempotency_key`, runID)
 	if err != nil {
 		return nil, err
@@ -178,6 +179,75 @@ func (s *PostgresStore) ListToolEffects(runID string) ([]domain.ToolEffectRecord
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+func (s *PostgresStore) CommitToolEffectReconciliation(mutation domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtext($1))`, mutation.Event.RunID); err != nil {
+		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+	}
+	var duplicate bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM run_events WHERE id=$1)`, mutation.Event.ID).Scan(&duplicate); err != nil {
+		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+	}
+	if duplicate {
+		current, found, err := getToolEffect(tx, mutation.IdempotencyKey, false)
+		if err != nil {
+			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+		}
+		if !found {
+			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, ErrNotFound("tool effect")
+		}
+		if err := tx.Commit(); err != nil {
+			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+		}
+		return current, domain.RunEvent{}, false, nil
+	}
+	current, found, err := getToolEffect(tx, mutation.IdempotencyKey, true)
+	if err != nil {
+		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+	}
+	if !found {
+		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, ErrNotFound("tool effect")
+	}
+	prepared, err := prepareToolEffectReconciliation(current, mutation)
+	if err != nil {
+		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+	}
+	now := time.Now().UTC()
+	prepared.Event.Timestamp = now
+	createdEvent, payload, err := preparePostgresRunEvent(prepared.Event, now)
+	if err != nil {
+		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+	}
+	stored, err := scanToolEffect(tx.QueryRow(`
+		UPDATE tool_effects SET version=$1, status=$2, result=$3, error=$4, updated_at=$5
+		WHERE idempotency_key=$6 AND version=$7
+		RETURNING idempotency_key, version, run_id, stage_id, turn_id, tool_call_id,
+			tool_name, definition_revision, request_hash, status, result, error, created_at, updated_at`,
+		current.Version+1, string(prepared.NextStatus), prepared.Result, strings.TrimSpace(prepared.Error), now,
+		current.IdempotencyKey, current.Version))
+	if err != nil {
+		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+	}
+	err = tx.QueryRow(`
+		INSERT INTO run_events (id, run_id, conversation_id, stage_id, turn_id, parent_event_id, type, schema_version, sequence, payload, timestamp)
+		VALUES ($1,$2,NULLIF($3,''),NULLIF($4,''),NULLIF($5,''),NULLIF($6,''),$7,$8,
+			(SELECT COALESCE(MAX(sequence),0)+1 FROM run_events WHERE run_id=$2),$9,$10)
+		RETURNING sequence`, createdEvent.ID, createdEvent.RunID, createdEvent.ConversationID,
+		createdEvent.StageID, createdEvent.TurnID, createdEvent.ParentEventID, string(createdEvent.Type),
+		createdEvent.SchemaVersion, payload, createdEvent.Timestamp).Scan(&createdEvent.Sequence)
+	if err != nil {
+		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+	}
+	return stored, createdEvent, true, nil
 }
 
 type checkpointQuery interface {
@@ -218,11 +288,11 @@ func (s *PostgresStore) updateToolEffect(idempotencyKey string, mutate func(doma
 		return domain.ToolEffectRecord{}, err
 	}
 	stored, err := scanToolEffect(tx.QueryRow(`
-		UPDATE tool_effects SET status=$1, result=$2, error=$3, updated_at=$4
-		WHERE idempotency_key=$5
-		RETURNING idempotency_key, run_id, stage_id, turn_id, tool_call_id,
-			tool_name, request_hash, status, result, error, created_at, updated_at`,
-		string(status), result, message, time.Now().UTC(), idempotencyKey))
+		UPDATE tool_effects SET version=$1, status=$2, result=$3, error=$4, updated_at=$5
+		WHERE idempotency_key=$6
+		RETURNING idempotency_key, version, run_id, stage_id, turn_id, tool_call_id,
+			tool_name, definition_revision, request_hash, status, result, error, created_at, updated_at`,
+		existing.Version+1, string(status), result, message, time.Now().UTC(), idempotencyKey))
 	if err != nil {
 		return domain.ToolEffectRecord{}, err
 	}
@@ -238,8 +308,8 @@ func getToolEffect(query checkpointQuery, idempotencyKey string, lock bool) (dom
 		suffix = " FOR UPDATE"
 	}
 	item, err := scanToolEffect(query.QueryRow(`
-		SELECT idempotency_key, run_id, stage_id, turn_id, tool_call_id, tool_name,
-			request_hash, status, result, error, created_at, updated_at
+		SELECT idempotency_key, version, run_id, stage_id, turn_id, tool_call_id, tool_name,
+			definition_revision, request_hash, status, result, error, created_at, updated_at
 		FROM tool_effects WHERE idempotency_key=$1`+suffix, idempotencyKey))
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.ToolEffectRecord{}, false, nil
@@ -262,8 +332,8 @@ func scanToolEffect(row scanner) (domain.ToolEffectRecord, error) {
 	var item domain.ToolEffectRecord
 	var status string
 	var result []byte
-	err := row.Scan(&item.IdempotencyKey, &item.RunID, &item.StageID, &item.TurnID,
-		&item.ToolCallID, &item.ToolName, &item.RequestHash, &status, &result,
+	err := row.Scan(&item.IdempotencyKey, &item.Version, &item.RunID, &item.StageID, &item.TurnID,
+		&item.ToolCallID, &item.ToolName, &item.DefinitionRevision, &item.RequestHash, &status, &result,
 		&item.Error, &item.CreatedAt, &item.UpdatedAt)
 	item.Status = domain.ToolEffectStatus(status)
 	item.Result = append([]byte(nil), result...)

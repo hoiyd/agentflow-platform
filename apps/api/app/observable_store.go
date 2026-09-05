@@ -26,6 +26,14 @@ func (s *observableStore) CreateRunEvent(item domain.RunEvent) (domain.RunEvent,
 	return created, err
 }
 
+func (s *observableStore) CommitToolEffectReconciliation(mutation domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error) {
+	effect, committed, applied, err := s.Store.CommitToolEffectReconciliation(mutation)
+	if err == nil && applied {
+		s.hub.PublishCommitted(committed)
+	}
+	return effect, committed, applied, err
+}
+
 func (s *observableStore) ForWorkspace(scope domain.WorkspaceScope) store.WorkspaceStore {
 	return observableWorkspaceStore{WorkspaceStore: s.Store.ForWorkspace(scope), hub: s.hub}
 }
@@ -48,4 +56,12 @@ func (s observableWorkspaceStore) CreateRunEvent(item domain.RunEvent) (domain.R
 		s.hub.PublishCommitted(created)
 	}
 	return created, err
+}
+
+func (s observableWorkspaceStore) CommitToolEffectReconciliation(mutation domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error) {
+	effect, committed, applied, err := s.WorkspaceStore.CommitToolEffectReconciliation(mutation)
+	if err == nil && applied {
+		s.hub.PublishCommitted(committed)
+	}
+	return effect, committed, applied, err
 }

@@ -106,6 +106,7 @@ type CheckpointStore interface {
 	CompleteToolEffect(idempotencyKey string, result []byte) (domain.ToolEffectRecord, error)
 	MarkToolEffectNeedsReconciliation(idempotencyKey string, errorMessage string) (domain.ToolEffectRecord, error)
 	ListToolEffects(runID string) ([]domain.ToolEffectRecord, error)
+	CommitToolEffectReconciliation(domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error)
 }
 
 type SessionHistoryStore interface {
@@ -185,6 +186,8 @@ type WorkspaceStore interface {
 	ListRunEvents(runID string) ([]domain.RunEvent, error)
 	CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error)
 	GetRunReplay(runID string) (domain.RunReplay, bool, error)
+	ListToolEffects(runID string) ([]domain.ToolEffectRecord, error)
+	CommitToolEffectReconciliation(domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error)
 	GetRunUsageLedger(runID string) (domain.RunUsageLedger, bool, error)
 	GetTaskState(conversationID string) (domain.TaskState, bool, error)
 	GetTaskStateRevision(conversationID string, version int64) (domain.TaskStateRevision, bool, error)

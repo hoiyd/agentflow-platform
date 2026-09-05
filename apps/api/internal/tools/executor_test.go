@@ -249,6 +249,30 @@ func TestExecutorFailsClosedForUncertainSideEffect(t *testing.T) {
 	}
 }
 
+func TestExecutorDoesNotReexecuteTerminalReconciledEffects(t *testing.T) {
+	catalog, err := newExternalTestCatalog(Binding{
+		Descriptor: Descriptor{Name: "write_record", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal}},
+		Handler: func(context.Context, json.RawMessage) (any, error) {
+			t.Fatal("terminal reconciled effect must not execute again")
+			return nil, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := ExecutionRequest{CallID: "call-1", RunID: "run-1", StageID: "stage-1", Tool: "write_record", Arguments: json.RawMessage(`{}`)}
+	key := sideEffectKey(request)
+	for _, status := range []domain.ToolEffectStatus{domain.ToolEffectFailed, domain.ToolEffectCompensated} {
+		journal := &memoryEffectJournal{records: map[string]domain.ToolEffectRecord{
+			key: {IdempotencyKey: key, RunID: request.RunID, StageID: request.StageID, ToolCallID: request.CallID, ToolName: request.Tool, RequestHash: sideEffectRequestHash(request), Status: status},
+		}}
+		result := NewExecutor(catalog, ExecutorOptions{EffectJournal: journal}).Execute(context.Background(), request)
+		if result.Error == nil || result.Error.Code != ErrorExecutionFailed {
+			t.Fatalf("status %s returned %#v", status, result.Error)
+		}
+	}
+}
+
 func TestExecutorRequiresJournalAndExecutionIdentityForExternalSideEffects(t *testing.T) {
 	catalog, err := newExternalTestCatalog(Binding{
 		Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal}},

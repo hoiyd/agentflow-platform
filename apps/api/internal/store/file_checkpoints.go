@@ -94,6 +94,7 @@ func (s *FileStore) BeginToolEffect(effect domain.ToolEffectRecord) (domain.Tool
 	}
 	now := time.Now().UTC()
 	effect.Status = domain.ToolEffectExecuting
+	effect.Version = 1
 	effect.CreatedAt = now
 	effect.UpdatedAt = now
 	s.data.ToolEffects = append(s.data.ToolEffects, cloneToolEffect(effect))
@@ -123,6 +124,7 @@ func (s *FileStore) CompleteToolEffect(idempotencyKey string, result []byte) (do
 		}
 		previous := cloneToolEffect(*item)
 		item.Status = domain.ToolEffectCommitted
+		item.Version = max(item.Version, 1) + 1
 		item.Result = append([]byte(nil), result...)
 		item.Error = ""
 		item.UpdatedAt = time.Now().UTC()
@@ -149,6 +151,7 @@ func (s *FileStore) MarkToolEffectNeedsReconciliation(idempotencyKey string, err
 		}
 		previous := cloneToolEffect(*item)
 		item.Status = domain.ToolEffectNeedsReconciliation
+		item.Version = max(item.Version, 1) + 1
 		item.Error = strings.TrimSpace(errorMessage)
 		item.UpdatedAt = time.Now().UTC()
 		stored := cloneToolEffect(*item)
@@ -172,6 +175,56 @@ func (s *FileStore) ListToolEffects(runID string) ([]domain.ToolEffectRecord, er
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.Before(items[j].CreatedAt) })
 	return items, nil
+}
+
+func (s *FileStore) CommitToolEffectReconciliation(mutation domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, existingEvent := range s.data.RunEvents {
+		if existingEvent.ID == mutation.Event.ID {
+			for _, effect := range s.data.ToolEffects {
+				if effect.IdempotencyKey == mutation.IdempotencyKey {
+					return cloneToolEffect(effect), domain.RunEvent{}, false, nil
+				}
+			}
+			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, ErrNotFound("tool effect")
+		}
+	}
+	for index := range s.data.ToolEffects {
+		current := cloneToolEffect(s.data.ToolEffects[index])
+		if current.IdempotencyKey != mutation.IdempotencyKey {
+			continue
+		}
+		prepared, err := prepareToolEffectReconciliation(current, mutation)
+		if err != nil {
+			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+		}
+		var next int64 = 1
+		for _, event := range s.data.RunEvents {
+			if event.RunID == current.RunID && event.Sequence >= next {
+				next = event.Sequence + 1
+			}
+		}
+		createdEvent, err := prepareRunEvent(prepared.Event, next, time.Now().UTC())
+		if err != nil {
+			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+		}
+		updated := current
+		updated.Version++
+		updated.Status = prepared.NextStatus
+		updated.Result = append([]byte(nil), prepared.Result...)
+		updated.Error = strings.TrimSpace(prepared.Error)
+		updated.UpdatedAt = createdEvent.Timestamp
+		s.data.ToolEffects[index] = updated
+		s.data.RunEvents = append(s.data.RunEvents, createdEvent)
+		if err := s.saveLocked(); err != nil {
+			s.data.ToolEffects[index] = current
+			s.data.RunEvents = s.data.RunEvents[:len(s.data.RunEvents)-1]
+			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
+		}
+		return cloneToolEffect(updated), createdEvent, true, nil
+	}
+	return domain.ToolEffectRecord{}, domain.RunEvent{}, false, ErrNotFound("tool effect")
 }
 
 func validateStageCheckpoint(checkpoint domain.StageCheckpoint) error {
@@ -221,6 +274,7 @@ func validateToolEffect(effect domain.ToolEffectRecord) error {
 }
 
 func cloneToolEffect(effect domain.ToolEffectRecord) domain.ToolEffectRecord {
+	effect.Version = max(effect.Version, 1)
 	effect.Result = append([]byte(nil), effect.Result...)
 	return effect
 }

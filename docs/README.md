@@ -45,6 +45,7 @@ the project.
 | [Tool contract testing](tools/tool-contract-testing.md) | How are Binding contracts, runtime failure paths, durable effects, and Tool selection regressions tested without a network or model? |
 | [Tool result artifacts](tools/tool-result-artifacts.md) | How are oversized Tool results redacted, persisted, recovered, bounded in Context, and traced? |
 | [Tool Progress Guard](tools/tool-progress-guard.md) | How are repeated failures, unchanged read-only results, and oscillating Tool calls warned, blocked, and explained in Replay? |
+| [Tool side-effect reconciliation](tools/tool-side-effect-reconciliation.md) | How are uncertain external writes queried, reviewed, retried, compensated, and audited without unsafe automatic replay? |
 | [Failure handling](runtime/failure-handling.md) | How do subsystem errors retain specific types while exposing one structured trace and Episode contract? |
 | [Run Budget](runtime/run-budget.md) | How are logical calls, provider usage, tools, runtime, and cost accounted for? |
 | [Durable recovery](runtime/durable-recovery.md) | How are interrupted lifecycles repaired, Stage boundaries checkpointed, and external Tool effects replayed safely? |

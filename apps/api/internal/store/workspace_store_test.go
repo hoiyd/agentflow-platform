@@ -34,6 +34,12 @@ func TestWorkspaceStoreRejectsCrossScopeOwnedResources(t *testing.T) {
 	if _, err := workspaceA.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventRunStarted}); !IsNotFound(err) {
 		t.Fatalf("cross-scope event mutation must be rejected, got %v", err)
 	}
+	if _, err := workspaceA.ListToolEffects(run.ID); !IsNotFound(err) {
+		t.Fatalf("cross-scope Tool effects must be rejected, got %v", err)
+	}
+	if _, _, _, err := workspaceA.CommitToolEffectReconciliation(domain.ToolEffectReconciliation{Event: domain.RunEvent{RunID: run.ID}}); !IsNotFound(err) {
+		t.Fatalf("cross-scope Tool reconciliation must be rejected, got %v", err)
+	}
 	if _, err := workspaceA.AddMessageWithCitations(conversation.ID, "assistant", "private", nil); !IsNotFound(err) {
 		t.Fatalf("cross-scope message mutation must be rejected, got %v", err)
 	}

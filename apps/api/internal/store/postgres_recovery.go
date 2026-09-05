@@ -75,6 +75,14 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 		request.RunID, string(domain.CollaborationStepRunning)); err != nil {
 		return domain.InterruptedRunRepairResult{}, err
 	}
+	if _, err := tx.Exec(`
+		UPDATE tool_effects
+		SET status=$1, version=version+1, error=$2, updated_at=$3
+		WHERE run_id=$4 AND status=$5`,
+		string(domain.ToolEffectNeedsReconciliation), strings.TrimSpace(request.ErrorMessage), now,
+		request.RunID, string(domain.ToolEffectExecuting)); err != nil {
+		return domain.InterruptedRunRepairResult{}, err
+	}
 
 	run, err = scanRun(tx.QueryRow(`
 		UPDATE runs

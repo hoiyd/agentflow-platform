@@ -95,7 +95,7 @@ The journal uses these states:
 ```text
 prepared -> executing -> committed
                       -> needs_reconciliation
-needs_reconciliation -> compensated (future business-specific compensator)
+needs_reconciliation -> committed | failed | compensated
 ```
 
 - A new key enters `executing` before handler invocation.
@@ -107,10 +107,19 @@ needs_reconciliation -> compensated (future business-specific compensator)
 - Timeout, cancellation, panic, result-encoding failure, or loss of the journal
   commit marks the effect `needs_reconciliation` because an external write may
   already have occurred.
+- Stale-Run repair atomically moves abandoned `executing` effects to the same
+  state, making process-crash uncertainty visible to operators.
+- Operator reconciliation uses optimistic versions and idempotent command IDs.
+  Manual confirmation, Tool-specific retry, and Tool-specific compensation
+  atomically update the effect with a typed audit event. Retry and compensation
+  remain unavailable unless the frozen definition and current Binding both
+  declare the matching capability.
 
 Replay exposes Tool Effect status, request hash, and `has_result`, but not the
 stored result body. Tool result content remains governed by existing Tool trace
 and result-size policy.
+See [Tool side-effect reconciliation](../tools/tool-side-effect-reconciliation.md)
+for the operator API and complete transition rules.
 
 ## Shutdown Ordering
 
