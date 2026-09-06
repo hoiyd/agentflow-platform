@@ -70,10 +70,12 @@ bad candidates with stable finding codes. A future semantic judge may add
 advisory diagnostics, but it must not become a required CI gate unless its
 reproducibility and false-positive rate are measured.
 
-Policy denial is deliberately absent from the current outcome enum because the
-runtime has no Tool Security Policy yet. `TOOL-003` will add the production
-decision and its deterministic dataset case through this harness; the test
-suite does not invent behavior that production cannot emit.
+The selection dataset's outcome enum does not cover every runtime failure.
+Production Tool Security Policy and its owner tests cover policy denial;
+selection fixture conformance must not be presented as complete security or
+end-to-end task verification. [Task evaluations](tool-task-evaluations.md)
+exercise actual Artifact Bindings and verify returned source evidence through
+the production client/Executor path, separately from selection scoring.
 
 ## Adding a Tool
 

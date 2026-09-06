@@ -43,6 +43,7 @@ the project.
 | [Internal terms](architecture/terms.md) | What do the execution entities mean, and how do Run Events, Trace, Replay, and Episode Report differ? |
 | [Execution controls](runtime/execution-controls.md) | Which layer owns concurrency, rate limits, retries, budgets, context capacity, and stopping rules? |
 | [Tool contract testing](tools/tool-contract-testing.md) | How are Binding contracts, runtime failure paths, durable effects, and Tool selection regressions tested without a network or model? |
+| [Tool task evaluations](tools/tool-task-evaluations.md) | Can Artifact Tools complete evidence-backed tasks, and how are offline checks separated from budgeted live-model comparisons? |
 | [Tool result artifacts](tools/tool-result-artifacts.md) | How are oversized Tool results redacted, persisted, recovered, bounded in Context, and traced? |
 | [Tool Progress Guard](tools/tool-progress-guard.md) | How are repeated failures, unchanged read-only results, and oscillating Tool calls warned, blocked, and explained in Replay? |
 | [Tool side-effect reconciliation](tools/tool-side-effect-reconciliation.md) | How are uncertain external writes queried, reviewed, retried, compensated, and audited without unsafe automatic replay? |
