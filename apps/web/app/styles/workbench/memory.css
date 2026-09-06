@@ -63,6 +63,7 @@
 }
 
 .memory-field select,
+.memory-field input,
 .memory-field textarea,
 .memory-limit select,
 .memory-search input {
@@ -74,6 +75,7 @@
 }
 
 .memory-field select,
+.memory-field input,
 .memory-limit select,
 .memory-search input {
   min-height: 40px;
@@ -88,6 +90,7 @@
 }
 
 .memory-field select:focus,
+.memory-field input:focus,
 .memory-field textarea:focus,
 .memory-limit select:focus,
 .memory-search input:focus {
@@ -230,3 +233,51 @@
   font-family: var(--font-mono);
   font-size: 10px;
 }
+
+.memory-item-actions { display: flex; gap: 6px; }
+.memory-saved .memory-item-actions { display: flex; gap: 6px; }
+.memory-result-heading code { margin-left: auto; }
+.memory-item-actions button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel, #fff);
+  color: var(--ink);
+  cursor: pointer;
+}
+.memory-item-actions button:hover { border-color: var(--muted); }
+.memory-change-notice, .memory-dialog-heading, .memory-dialog-meta, .memory-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.memory-change-notice { margin-bottom: 16px; }
+.memory-dialog {
+  width: min(620px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  margin: 48px auto auto;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  overflow: auto;
+}
+.memory-dialog::backdrop { background: rgb(0 0 0 / 35%); }
+.memory-dialog h2 { font-size: 18px; margin: 0; }
+.memory-dialog h3 { font-size: 14px; margin-top: 24px; }
+.memory-dialog-meta { color: var(--muted); font-size: 12px; margin: 16px 0; flex-wrap: wrap; }
+.memory-dialog code { overflow-wrap: anywhere; }
+.memory-dialog p { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.memory-current-content { white-space: pre-wrap; }
+.memory-dialog .memory-field textarea { padding: 10px; resize: vertical; min-height: 76px; }
+.memory-dialog-actions { justify-content: flex-end; margin-top: 20px; }
+.memory-dialog-actions button { min-height: 40px; display: inline-flex; align-items: center; gap: 8px; }
+.memory-history { list-style: none; padding: 0; margin: 0; }
+.memory-history li { border-top: 1px solid var(--border); padding: 14px 0; display: grid; gap: 6px; overflow-wrap: anywhere; }
+.memory-history li > span, .memory-history code { font-size: 12px; color: var(--muted); }
+.memory-history p { margin: 0; }

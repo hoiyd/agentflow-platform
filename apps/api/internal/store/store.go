@@ -150,6 +150,13 @@ type MemoryStore interface {
 	SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error)
 }
 
+// MemoryMutationStore keeps user maintenance atomic without widening Runtime recall.
+type MemoryMutationStore interface {
+	GetMemoryDetail(workspaceID, id string) (domain.MemoryDetail, error)
+	FindMemoryChange(workspaceID, operationID string) (*domain.MemoryChange, error)
+	MutateMemory(workspaceID, id string, command domain.MemoryMutation, embedding domain.MemoryEmbedding) (domain.MemoryMutationResult, error)
+}
+
 type MemoryCandidateStore interface {
 	CreateMemoryCandidate(domain.MemoryCandidate) (domain.MemoryCandidate, bool, error)
 	ListMemoryCandidates(conversationID string) ([]domain.MemoryCandidate, error)
@@ -224,6 +231,7 @@ type Store interface {
 	ModelRequestStore
 	ToolArtifactStore
 	MemoryStore
+	MemoryMutationStore
 	MemoryCandidateStore
 	DocumentStore
 }

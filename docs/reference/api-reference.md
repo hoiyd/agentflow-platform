@@ -70,6 +70,8 @@ POST   /api/tools/{name}/disable
 
 POST   /api/memories
 POST   /api/memories/search
+GET    /api/memories/{id}
+POST   /api/memories/{id}/mutations
 
 GET    /api/documents
 POST   /api/documents

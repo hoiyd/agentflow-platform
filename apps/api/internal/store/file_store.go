@@ -40,6 +40,7 @@ type fileData struct {
 	ToolArtifacts         []domain.ToolArtifact           `json:"tool_artifacts"`
 	MemoryCandidates      []domain.MemoryCandidate        `json:"memory_candidates"`
 	Memories              []domain.Memory                 `json:"memories"`
+	MemoryChanges         []domain.MemoryChange           `json:"memory_changes"`
 	MemoryEmbeddings      []domain.MemoryEmbedding        `json:"memory_embeddings"`
 	Documents             []domain.Document               `json:"documents"`
 	DocumentContents      map[string]string               `json:"document_contents,omitempty"`
@@ -240,6 +241,16 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 				s.data.Memories[i].WorkspaceID = conversation.WorkspaceID
 			} else {
 				s.data.Memories[i].WorkspaceID = normalized
+			}
+			migrated = true
+		}
+	}
+	for i := range s.data.MemoryCandidates {
+		candidate := &s.data.MemoryCandidates[i]
+		if normalized := normalizeWorkspaceID(candidate.WorkspaceID); normalized != candidate.WorkspaceID {
+			candidate.WorkspaceID = normalized
+			if conversation, ok := s.getConversationLocked(candidate.ConversationID); ok {
+				candidate.WorkspaceID = conversation.WorkspaceID
 			}
 			migrated = true
 		}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   createMemory,
@@ -20,6 +20,16 @@ export function useMemoryWorkbench() {
   const [hasSearched, setHasSearched] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const searchGeneration = useRef(0);
+  const [lastChanged, setLastChanged] = useState<MemoryInfo | null>(null);
+
+  function applyMemoryChange(memory: MemoryInfo) {
+    // A search started before the mutation must not restore stale content.
+    searchGeneration.current++;
+    setResults((items) => items.filter((item) => item.memory.id !== memory.id));
+    setLastCreated((item) => item?.id === memory.id ? null : item);
+    setLastChanged(memory);
+  }
 
   async function saveMemory() {
     const normalizedContent = content.trim();
@@ -49,19 +59,25 @@ export function useMemoryWorkbench() {
       return;
     }
     setIsSearching(true);
+    const generation = ++searchGeneration.current;
     setHasSearched(true);
     setError("");
     try {
-      setResults(await searchMemories({ query: normalizedQuery, limit }));
+      const items = await searchMemories({ query: normalizedQuery, limit });
+      if (generation === searchGeneration.current) setResults(items);
     } catch (searchError) {
-      setResults([]);
-      setError(searchError instanceof Error ? searchError.message : "Failed to search memories");
+      if (generation === searchGeneration.current) {
+        setResults([]);
+        setError(searchError instanceof Error ? searchError.message : "Failed to search memories");
+      }
     } finally {
       setIsSearching(false);
     }
   }
 
   return {
+    applyMemoryChange,
+    lastChanged,
     content,
     error,
     hasSearched,

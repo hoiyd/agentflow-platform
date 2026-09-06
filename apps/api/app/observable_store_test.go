@@ -8,6 +8,8 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
+	memorypkg "agentflow-platform/apps/api/internal/memory"
+	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -134,6 +136,36 @@ func TestObservableStoreCloseDelegatesWhenSupported(t *testing.T) {
 type closingStore struct {
 	store.Store
 	closeErr error
+}
+
+func TestObservableStorePreservesMemoryAdministration(t *testing.T) {
+	base, err := store.NewFileStore(t.TempDir() + "/memory.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed := newObservableStore(base, event.NewHub(1))
+	p := memorypkg.NewBuiltinProvider(observed, &answerRelevanceEmbeddingClientStub{embedding: openai.Embedding{Vector: []float64{1}}}, memorypkg.ProviderOptions{})
+	ctx := context.Background()
+	if err := p.Initialize(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := p.Close(ctx); err != nil {
+			t.Error(err)
+		}
+	})
+	m, err := p.Commit(ctx, domain.Memory{Kind: "fact", Content: "old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := p.MutateMemory(ctx, "", m.ID, domain.MemoryMutation{OperationID: "correct", ExpectedVersion: 1, Action: "replace", Content: "new", Actor: "operator", Reason: "correction"})
+	if err != nil || !r.Applied {
+		t.Fatalf("observable provider mutation: %+v %v", r, err)
+	}
+	detail, err := p.GetMemory(ctx, "", m.ID)
+	if err != nil || detail.Memory.Content != "new" || len(detail.Changes) != 1 {
+		t.Fatalf("observable provider detail: %+v %v", detail, err)
+	}
 }
 
 func (s *closingStore) Close() error { return s.closeErr }

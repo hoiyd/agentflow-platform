@@ -37,6 +37,7 @@ func (s *FileStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEm
 		memory.CreatedAt = now
 	}
 	memory.UpdatedAt = now
+	memory.Version, memory.DeletedAt = 1, nil
 	embedding.MemoryID = memory.ID
 	if embedding.Provider == "" {
 		embedding.Provider = "local"
@@ -51,29 +52,29 @@ func (s *FileStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEm
 		embedding.CreatedAt = now
 	}
 
-	for index := range s.data.Memories {
-		if s.data.Memories[index].ID != memory.ID {
-			continue
+	for _, existing := range s.data.MemoryChanges {
+		if memory.SourceMessageID != "" && existing.SourceMessageID == memory.SourceMessageID && existing.WorkspaceID == memory.WorkspaceID {
+			return domain.Memory{}, ErrMemoryConflict
 		}
-		memory.CreatedAt = s.data.Memories[index].CreatedAt
-		s.data.Memories[index] = memory
-		replacedEmbedding := false
-		for embeddingIndex := range s.data.MemoryEmbeddings {
-			if s.data.MemoryEmbeddings[embeddingIndex].MemoryID == memory.ID {
-				s.data.MemoryEmbeddings[embeddingIndex] = embedding
-				replacedEmbedding = true
-				break
+	}
+	for _, existing := range s.data.Memories {
+		if existing.ID == memory.ID {
+			if !sameMemoryCreate(existing, memory) {
+				return domain.Memory{}, ErrMemoryConflict
 			}
+			existing.Version = max(1, existing.Version)
+			return existing, nil
 		}
-		if !replacedEmbedding {
-			s.data.MemoryEmbeddings = append(s.data.MemoryEmbeddings, embedding)
-		}
-		return memory, s.saveLocked()
 	}
 
+	previousMemories, previousEmbeddings := s.data.Memories, s.data.MemoryEmbeddings
 	s.data.Memories = append(s.data.Memories, memory)
 	s.data.MemoryEmbeddings = append(s.data.MemoryEmbeddings, embedding)
-	return memory, s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.data.Memories, s.data.MemoryEmbeddings = previousMemories, previousEmbeddings
+		return domain.Memory{}, err
+	}
+	return memory, nil
 }
 
 func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
@@ -95,6 +96,7 @@ func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.Retriev
 	items := []domain.RetrievedMemory{}
 	now := time.Now().UTC()
 	for _, memory := range s.data.Memories {
+		memory.Version = max(1, memory.Version)
 		if !memoryMatchesSearch(memory, search) {
 			continue
 		}
@@ -127,6 +129,9 @@ func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.Retriev
 }
 
 func memoryMatchesSearch(memory domain.Memory, search domain.MemorySearch) bool {
+	if memory.DeletedAt != nil {
+		return false
+	}
 	if normalizeWorkspaceID(memory.WorkspaceID) != normalizeWorkspaceID(search.WorkspaceID) {
 		return false
 	}

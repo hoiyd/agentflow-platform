@@ -87,7 +87,7 @@ func (p *BuiltinProvider) propose(ctx context.Context, request ProposalRequest, 
 	request.RunID = strings.TrimSpace(request.RunID)
 	request.IdempotencyKey = proposalKey(request)
 	candidate := domain.MemoryCandidate{
-		ID: candidateID(request.IdempotencyKey), ConversationID: request.Message.ConversationID,
+		ID: candidateID(request.IdempotencyKey), WorkspaceID: request.Message.WorkspaceID, ConversationID: request.Message.ConversationID,
 		RunID: request.RunID, SourceMessageID: request.Message.ID, SourceRole: strings.TrimSpace(request.Message.Role),
 	}
 
@@ -141,7 +141,7 @@ func (p *BuiltinProvider) propose(ctx context.Context, request ProposalRequest, 
 
 	candidate = stored
 	p.publish(request.RunID, request.Message, domain.EventMemoryCandidateProposed, candidatePayload(candidate, request.IdempotencyKey, "proposed", nil))
-	if !decision.Accepted {
+	if candidate.Status != domain.MemoryCandidateAccepted {
 		p.publish(request.RunID, request.Message, domain.EventMemoryCandidateRejected, candidatePayload(candidate, request.IdempotencyKey, "rejected", nil))
 		return ProposalResult{Candidate: candidate, Proposed: true}, nil
 	}

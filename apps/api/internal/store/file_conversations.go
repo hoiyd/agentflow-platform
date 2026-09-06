@@ -432,11 +432,24 @@ func (s *FileStore) CreateMemoryCandidate(candidate domain.MemoryCandidate) (dom
 	}
 	for _, existing := range s.data.MemoryCandidates {
 		if existing.ID == candidate.ID {
+			if existing.WorkspaceID != candidate.WorkspaceID {
+				return domain.MemoryCandidate{}, false, ErrMemoryConflict
+			}
 			return existing, false, nil
 		}
 	}
+	for _, memory := range s.data.MemoryChanges {
+		if memory.SourceMessageID == candidate.SourceMessageID && memory.WorkspaceID == candidate.WorkspaceID {
+			candidate = suppressMemoryCandidate(candidate)
+			break
+		}
+	}
 	s.data.MemoryCandidates = append(s.data.MemoryCandidates, candidate)
-	return candidate, true, s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.data.MemoryCandidates = s.data.MemoryCandidates[:len(s.data.MemoryCandidates)-1]
+		return domain.MemoryCandidate{}, false, err
+	}
+	return candidate, true, nil
 }
 
 func (s *FileStore) ListMemoryCandidates(conversationID string) ([]domain.MemoryCandidate, error) {

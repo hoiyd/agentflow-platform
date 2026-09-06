@@ -1,8 +1,10 @@
 "use client";
 
-import { Check, Search, Save } from "lucide-react";
+import { Check, Search, Save, Pencil, Trash2, History } from "lucide-react";
+import { useState } from "react";
 
-import type { RetrievedMemory } from "../../lib/memory-api";
+import type { MemoryInfo, RetrievedMemory } from "../../lib/memory-api";
+import { MemoryMutationDialog, type MemoryDialogMode } from "./MemoryMutationDialog";
 import type { MemoryWorkbenchModel } from "./useMemoryWorkbench";
 
 const MEMORY_KINDS = [
@@ -14,10 +16,19 @@ const MEMORY_KINDS = [
 ];
 
 export function MemoryPanel({ model }: { model: MemoryWorkbenchModel }) {
+  const [selection, setSelection] = useState<{ memory: Pick<MemoryInfo, "id" | "content">; mode: MemoryDialogMode } | null>(null);
+  const [lookupID, setLookupID] = useState("");
+  const open = (memory: MemoryInfo, mode: MemoryDialogMode) => setSelection({ memory, mode });
   return (
     <section className="memory-panel">
       <div className="memory-workbench">
         {model.error ? <div className="error">{model.error}</div> : null}
+        {model.lastChanged ? (
+          <div className="memory-change-notice" role="status">
+            <span>Memory {model.lastChanged.deleted_at ? "deleted" : "corrected"} · Version {model.lastChanged.version}</span>
+            <button className="secondary-action" onClick={() => open(model.lastChanged!, "history")} type="button"><History size={15} /> History</button>
+          </div>
+        ) : null}
         <div className="memory-operations">
           <section className="memory-operation memory-write">
             <header className="memory-operation-header">
@@ -47,7 +58,7 @@ export function MemoryPanel({ model }: { model: MemoryWorkbenchModel }) {
               <div className="memory-saved" role="status">
                 <Check size={15} />
                 <div><strong>Saved</strong><span>{model.lastCreated.content}</span></div>
-                <code>{model.lastCreated.kind}</code>
+                <MemoryActions memory={model.lastCreated} onOpen={open} />
               </div>
             ) : null}
           </section>
@@ -76,15 +87,20 @@ export function MemoryPanel({ model }: { model: MemoryWorkbenchModel }) {
                 <Search size={15} /> {model.isSearching ? "Searching..." : "Search"}
               </button>
             </form>
-            <MemoryResults hasSearched={model.hasSearched} items={model.results} />
+            <form className="memory-search" onSubmit={(event) => { event.preventDefault(); if (lookupID.trim()) setSelection({ memory: { id: lookupID.trim(), content: "" }, mode: "history" }); }}>
+              <input aria-label="Memory ID" placeholder="Memory ID" value={lookupID} onChange={(event) => setLookupID(event.target.value)} />
+              <button className="secondary-action" type="submit" disabled={!lookupID.trim()}><History size={15} /> History</button>
+            </form>
+            <MemoryResults hasSearched={model.hasSearched} items={model.results} onOpen={open} />
           </section>
         </div>
       </div>
+      {selection ? <MemoryMutationDialog key={`${selection.memory.id}:${selection.mode}`} memory={selection.memory} initialMode={selection.mode} onClose={() => setSelection(null)} onUpdated={model.applyMemoryChange} /> : null}
     </section>
   );
 }
 
-function MemoryResults({ hasSearched, items }: { hasSearched: boolean; items: RetrievedMemory[] }) {
+function MemoryResults({ hasSearched, items, onOpen }: { hasSearched: boolean; items: RetrievedMemory[]; onOpen: (memory: MemoryInfo, mode: MemoryDialogMode) => void }) {
   if (!hasSearched) {
     return <div className="memory-empty">No recall query yet.</div>;
   }
@@ -100,9 +116,11 @@ function MemoryResults({ hasSearched, items }: { hasSearched: boolean; items: Re
             <div className="memory-result-heading">
               <strong>{item.memory.kind.replaceAll("_", " ")}</strong>
               <code>{formatScore(item.score)}</code>
+              <MemoryActions memory={item.memory} onOpen={onOpen} />
             </div>
             <p>{item.memory.content}</p>
             <div className="memory-result-meta">
+              <span>Version {item.memory.version}</span>
               <span>Similarity {formatScore(item.similarity)}</span>
               <span>Recency +{formatScore(item.recency_boost)}</span>
               {item.memory.conversation_id ? <span>Conversation {shortID(item.memory.conversation_id)}</span> : null}
@@ -114,6 +132,14 @@ function MemoryResults({ hasSearched, items }: { hasSearched: boolean; items: Re
       ))}
     </div>
   );
+}
+
+function MemoryActions({ memory, onOpen }: { memory: MemoryInfo; onOpen: (memory: MemoryInfo, mode: MemoryDialogMode) => void }) {
+  return <div className="memory-item-actions">
+    <button type="button" title="Correct memory" aria-label="Correct memory" onClick={() => onOpen(memory, "replace")}><Pencil size={15} /></button>
+    <button type="button" title="Delete memory" aria-label="Delete memory" onClick={() => onOpen(memory, "delete")}><Trash2 size={15} /></button>
+    <button type="button" title="Memory history" aria-label="Memory history" onClick={() => onOpen(memory, "history")}><History size={15} /></button>
+  </div>;
 }
 
 function scoreWidth(score: number) {
