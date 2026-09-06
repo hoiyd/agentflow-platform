@@ -7,12 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/testsupport/tooltest"
+	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -159,4 +162,51 @@ func artifactFixture(t *testing.T, expires time.Time) (*store.FileStore, domain.
 		t.Fatal(err)
 	}
 	return fileStore, run, artifact
+}
+
+func TestCuratedArtifactBindingsRejectScopeAndPolicyAndBoundResults(t *testing.T) {
+	fs, run, artifact := artifactFixture(t, time.Now().Add(time.Hour))
+	service := NewService(fs, nil)
+	arguments := map[string]json.RawMessage{
+		ReadToolName:   json.RawMessage(`{"artifact_id":"` + artifact.ID + `"}`),
+		SearchToolName: json.RawMessage(`{"artifact_id":"` + artifact.ID + `","query":"needle"}`),
+	}
+	for _, binding := range service.ToolBindings() {
+		t.Run(binding.Descriptor.Name, func(t *testing.T) {
+			args, ok := arguments[binding.Descriptor.Name]
+			if !ok {
+				t.Fatal("new Artifact Binding requires a representative task fixture")
+			}
+			catalog, err := tools.NewCatalog(binding)
+			if err != nil {
+				t.Fatal(err)
+			}
+			executor := tools.NewExecutor(catalog, tools.ExecutorOptions{})
+			ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: "other-run"})
+			call := tools.ExecutionRequest{CallID: "scope", RunID: "other-run", Tool: binding.Descriptor.Name, Arguments: args}
+			tooltest.AssertTypedFailure(t, executor.Execute(ctx, call), tools.ErrorExecutionFailed)
+			denied, err := tools.NewCatalogWithPolicy(toolpolicy.Policy{Version: toolpolicy.CurrentVersion, DefaultAction: toolpolicy.ActionDeny}, binding)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx = eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID})
+			call.RunID = run.ID
+			tooltest.AssertTypedFailure(t, tools.NewExecutor(denied, tools.ExecutorOptions{}).Execute(ctx, call), tools.ErrorSecurityPolicyDenied)
+			binding.Policy.MaxResultBytes = 32
+			bounded, err := tools.NewCatalog(binding)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := tools.NewExecutor(bounded, tools.ExecutorOptions{}).Execute(ctx, call)
+			if result.Error != nil || !result.Truncated || result.OriginalResultBytes <= 32 {
+				t.Fatalf("unbounded result: %+v", result)
+			}
+		})
+	}
+	search := service.searchBinding()
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID})
+	result, err := search.Handler(ctx, json.RawMessage(strings.ReplaceAll(string(arguments[SearchToolName]), "needle", "absent")))
+	if err != nil || len(result.(domain.ToolArtifactSearchResult).Matches) != 0 {
+		t.Fatalf("no-match result: %+v %v", result, err)
+	}
 }

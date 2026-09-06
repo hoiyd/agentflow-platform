@@ -1,0 +1,14 @@
+{
+  "id": "curated-artifact-tasks",
+  "version": "1",
+  "records": [
+    {"id": "INV-7041", "value": "318.47", "quote": "INV-7041 | settled_amount_usd=318.47 | status=settled"},
+    {"id": "INV-9182", "value": "762.19", "quote": "INV-9182 | settled_amount_usd=762.19 | status=settled"},
+    {"id": "INV-3306", "value": "145.83", "quote": "INV-3306 | settled_amount_usd=145.83 | status=settled"}
+  ],
+  "cases": [
+    {"id": "single-fact", "ids": ["INV-7041"]},
+    {"id": "report-extraction", "ids": ["INV-9182", "INV-3306"]},
+    {"id": "missing-record", "ids": ["INV-0000"]}
+  ]
+}

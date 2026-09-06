@@ -53,7 +53,19 @@ jobs:
           cache-dependency-path: apps/api/go.sum
 
       - name: Run tests with coverage
-        run: go test ./... -count=1 -coverpkg=./... -covermode=atomic -coverprofile=coverage.out
+        env:
+          TOOL_TASK_REPORT_PATH: ${{ runner.temp }}/tool-task-protocol.json
+        # Fail stuck packages with goroutine stacks before the job-level timeout.
+        run: go test ./... -count=1 -timeout=3m -coverpkg=./... -covermode=atomic -coverprofile=coverage.out
+
+      - name: Retain offline Tool task report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tool-task-protocol
+          path: ${{ runner.temp }}/tool-task-protocol.json
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Upload backend coverage to Codecov
         if: env.CODECOV_TOKEN != ''
