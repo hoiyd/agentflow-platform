@@ -3,7 +3,9 @@ package tooleval
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,9 +22,18 @@ import (
 // snippets. It validates wiring, not real-model competence.
 func fixtureProvider(t *testing.T, mode string) *httptest.Server {
 	t.Helper()
+	lifetime, cancel := context.WithCancel(context.Background())
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if mode == "timeout" {
-			<-r.Context().Done()
+			// HTTP/1 only watches for disconnects after the request body reaches
+			// EOF. Waiting first can strand this Handler and Server.Close forever.
+			if _, err := io.Copy(io.Discard, r.Body); err != nil {
+				return
+			}
+			select {
+			case <-r.Context().Done():
+			case <-lifetime.Done():
+			}
 			return
 		}
 		if mode == "provider_error" {
@@ -108,8 +119,34 @@ func fixtureProvider(t *testing.T, mode string) *httptest.Server {
 			json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": string(answer)}}}, "usage": providerUsage})
 		}
 	}))
-	t.Cleanup(server.Close)
+	t.Cleanup(func() {
+		// Release deliberate stalls before waiting for active Handlers to exit.
+		cancel()
+		server.Close()
+	})
 	return server
+}
+
+func TestTimeoutFixtureClosesAfterCanceledPOST(t *testing.T) {
+	server := fixtureProvider(t, "timeout")
+	client := &http.Client{Timeout: 100 * time.Millisecond}
+	defer client.CloseIdleConnections()
+	response, err := client.Post(server.URL, "application/json", strings.NewReader(`{"messages":[]}`))
+	if response != nil {
+		response.Body.Close()
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected client timeout, got %v", err)
+	}
+	closed := make(chan struct{})
+	go func() { server.Close(); close(closed) }()
+	select {
+	case <-closed:
+	case <-time.After(time.Second):
+		// fixture cleanup cancels its own lifetime even if disconnect detection
+		// regresses, so this assertion itself does not leave a stuck Handler.
+		t.Fatal("timeout fixture did not close after the POST client disconnected")
+	}
 }
 
 func usage() map[string]int {
