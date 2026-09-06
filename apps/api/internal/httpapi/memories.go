@@ -2,12 +2,14 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
+	"agentflow-platform/apps/api/internal/store"
 )
 
 func (h *Handler) createMemory(w http.ResponseWriter, r *http.Request) {
@@ -24,6 +26,10 @@ func (h *Handler) createMemory(w http.ResponseWriter, r *http.Request) {
 	memory.WorkspaceID = workspaceID
 	created, err := h.memories.Commit(r.Context(), memory)
 	if err != nil {
+		if errors.Is(err, store.ErrMemoryConflict) {
+			writeMemoryMutationFailure(w, r, err)
+			return
+		}
 		status := http.StatusBadRequest
 		if memorypkg.IsEmbeddingError(err) {
 			status = http.StatusBadGateway

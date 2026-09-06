@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createMemory, searchMemories } from "./memory-api.ts";
+import { createMemory, searchMemories, getMemory, mutateMemory } from "./memory-api.ts";
+import { APIError } from "./api-client.ts";
 
 function mockFetch(t, body, onRequest = () => {}) {
   const originalFetch = globalThis.fetch;
@@ -67,4 +68,45 @@ test("memory search sends its recall boundary and preserves ranking evidence", a
 test("memory search normalizes a malformed collection", async (t) => {
   mockFetch(t, { results: [] });
   assert.deepEqual(await searchMemories({ query: "anything" }), []);
+});
+
+test("memory detail is scoped, uncached, and preserves tombstones and audit", async (t) => {
+  const detail = { memory: { id: "mem/1", version: 3, content: "", deleted_at: "2026-09-06T00:00:00Z" }, changes: [{ action: "delete", previous_version: 2, version: 3, actor: "user", reason: "withdraw" }] };
+  mockFetch(t, detail, (url, options) => {
+    assert.match(String(url), /\/api\/memories\/mem%2F1$/);
+    assert.equal(options.cache, "no-store");
+    assert.equal(new Headers(options.headers).get("X-Workspace-ID"), "default_workspace");
+  });
+  assert.deepEqual(await getMemory("mem/1"), detail);
+});
+
+test("memory mutations preserve expected version and operation identity without retries", async (t) => {
+  const command = { operation_id: "op", expected_version: 2, action: "delete", actor: "user", reason: "wrong" };
+  let calls = 0;
+  mockFetch(t, { memory: { id: "mem", version: 3 }, change: { operation_id: "op" }, applied: false }, (url, options) => {
+    calls++;
+    assert.match(String(url), /\/api\/memories\/mem\/mutations$/);
+    assert.equal(options.method, "POST");
+    assert.deepEqual(JSON.parse(options.body), command);
+  });
+  assert.equal((await mutateMemory("mem", command)).applied, false);
+  assert.equal(calls, 1);
+});
+
+test("memory version conflicts expose their status and code for explicit refresh", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async () => {
+    calls++;
+    return new Response(JSON.stringify({ error: "memory changed; refresh", code: "memory_version_conflict" }), { status: 409 });
+  };
+  await assert.rejects(mutateMemory("mem", { operation_id: "op", expected_version: 1, action: "replace", content: "new", actor: "user", reason: "correction" }), (error) => {
+    assert.ok(error instanceof APIError);
+    assert.equal(error.status, 409);
+    assert.equal(error.code, "memory_version_conflict");
+    assert.match(error.message, /refresh/);
+    return true;
+  });
+  assert.equal(calls, 1);
 });

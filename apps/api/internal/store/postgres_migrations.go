@@ -357,6 +357,8 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS model_request_records_run_created_idx ON model_request_records(run_id, created_at, id)`,
 	`CREATE TABLE IF NOT EXISTS memories (
 		id text PRIMARY KEY,
+		version bigint NOT NULL DEFAULT 1,
+		deleted_at timestamptz,
 		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		user_id text,
 		project_id text,
@@ -370,12 +372,31 @@ var postgresMigrations = []string{
 		updated_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE memories ADD COLUMN IF NOT EXISTS workspace_id text`,
+	`ALTER TABLE memories ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 1`,
+	`ALTER TABLE memories ADD COLUMN IF NOT EXISTS deleted_at timestamptz`,
+	`CREATE TABLE IF NOT EXISTS memory_changes (
+		workspace_id text NOT NULL,
+		memory_id text NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
+		operation_id text NOT NULL,
+		command_hash text NOT NULL,
+		action text NOT NULL,
+		previous_version bigint NOT NULL,
+		version bigint NOT NULL,
+		source_message_id text NOT NULL DEFAULT '',
+		actor text NOT NULL,
+		reason text NOT NULL,
+		created_at timestamptz NOT NULL,
+		PRIMARY KEY (workspace_id, operation_id)
+	)`,
+	`CREATE INDEX IF NOT EXISTS memory_changes_history_idx ON memory_changes(memory_id, version DESC)`,
+	`CREATE INDEX IF NOT EXISTS memory_changes_source_idx ON memory_changes(source_message_id)`,
 	`UPDATE memories m SET workspace_id = c.workspace_id FROM conversations c WHERE c.id = m.conversation_id AND (m.workspace_id IS NULL OR BTRIM(m.workspace_id) = '' OR m.workspace_id = 'default')`,
 	`UPDATE memories SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`,
 	`ALTER TABLE memories ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
 	`ALTER TABLE memories ALTER COLUMN workspace_id SET NOT NULL`,
 	`CREATE TABLE IF NOT EXISTS memory_candidates (
 		id text PRIMARY KEY,
+		workspace_id text NOT NULL DEFAULT 'default_workspace',
 		conversation_id text REFERENCES conversations(id) ON DELETE CASCADE,
 		run_id text REFERENCES runs(id) ON DELETE SET NULL,
 		source_message_id text NOT NULL,
@@ -389,6 +410,11 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE memory_candidates ADD COLUMN IF NOT EXISTS confidence double precision NOT NULL DEFAULT 1`,
+	`ALTER TABLE memory_candidates ADD COLUMN IF NOT EXISTS workspace_id text`,
+	`UPDATE memory_candidates m SET workspace_id=c.workspace_id FROM conversations c WHERE c.id=m.conversation_id AND (m.workspace_id IS NULL OR BTRIM(m.workspace_id)='' OR m.workspace_id='default')`,
+	`UPDATE memory_candidates SET workspace_id='default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id)='' OR workspace_id='default'`,
+	`ALTER TABLE memory_candidates ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
+	`ALTER TABLE memory_candidates ALTER COLUMN workspace_id SET NOT NULL`,
 	`CREATE TABLE IF NOT EXISTS memory_embeddings (
 		memory_id text PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
 		provider text NOT NULL,

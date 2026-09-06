@@ -33,6 +33,8 @@ func (h *Handler) registerConversationRoutes(mux *http.ServeMux) {
 func (h *Handler) registerMemoryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/memories", h.createMemory)
 	mux.HandleFunc("POST /api/memories/search", h.searchMemories)
+	mux.HandleFunc("GET /api/memories/{id}", h.getMemory)
+	mux.HandleFunc("POST /api/memories/{id}/mutations", h.mutateMemory)
 }
 
 func (h *Handler) registerDocumentRoutes(mux *http.ServeMux) {

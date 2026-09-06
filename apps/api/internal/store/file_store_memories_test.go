@@ -107,14 +107,17 @@ func TestFileStoreMemoryWriteIsIdempotentByID(t *testing.T) {
 	if _, err := store.CreateMemory(item, domain.MemoryEmbedding{Provider: "test", Model: "v1", Embedding: []float64{1, 0}}); err != nil {
 		t.Fatalf("first write: %v", err)
 	}
-	item.Content = "retry value"
 	if _, err := store.CreateMemory(item, domain.MemoryEmbedding{Provider: "test", Model: "v1", Embedding: []float64{0, 1}}); err != nil {
 		t.Fatalf("retry write: %v", err)
 	}
 	if len(store.data.Memories) != 1 || len(store.data.MemoryEmbeddings) != 1 {
 		t.Fatalf("retry created duplicate rows: memories=%d embeddings=%d", len(store.data.Memories), len(store.data.MemoryEmbeddings))
 	}
-	if store.data.Memories[0].Content != "retry value" || store.data.MemoryEmbeddings[0].Embedding[1] != 1 {
-		t.Fatalf("retry did not upsert state: memory=%#v embedding=%#v", store.data.Memories[0], store.data.MemoryEmbeddings[0])
+	if store.data.Memories[0].Content != "first value" || store.data.MemoryEmbeddings[0].Embedding[0] != 1 {
+		t.Fatalf("retry changed state: memory=%#v embedding=%#v", store.data.Memories[0], store.data.MemoryEmbeddings[0])
+	}
+	item.Content = "retry value"
+	if _, err := store.CreateMemory(item, domain.MemoryEmbedding{Embedding: []float64{0, 1}}); err != ErrMemoryConflict {
+		t.Fatalf("create must not overwrite: %v", err)
 	}
 }

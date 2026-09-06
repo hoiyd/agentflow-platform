@@ -17,15 +17,27 @@ func (s *PostgresStore) CreateMemoryCandidate(candidate domain.MemoryCandidate) 
 	if err != nil {
 		return domain.MemoryCandidate{}, false, err
 	}
-	result, err := s.db.Exec(`
+	tx, err := s.beginMemoryWrite()
+	if err != nil {
+		return domain.MemoryCandidate{}, false, err
+	}
+	defer tx.Rollback()
+	var withdrawn bool
+	if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM memory_changes WHERE source_message_id=$1 AND workspace_id=$2)`, candidate.SourceMessageID, candidate.WorkspaceID).Scan(&withdrawn); err != nil {
+		return domain.MemoryCandidate{}, false, err
+	}
+	if withdrawn {
+		candidate = suppressMemoryCandidate(candidate)
+	}
+	result, err := tx.Exec(`
 		INSERT INTO memory_candidates (
 			id, conversation_id, run_id, source_message_id, source_role, kind, content,
-			status, extraction_reason, policy_reason, confidence, created_at
-		) VALUES ($1,NULLIF($2,''),NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10,$11,$12)
+			status, extraction_reason, policy_reason, confidence, created_at, workspace_id
+		) VALUES ($1,NULLIF($2,''),NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 		ON CONFLICT (id) DO NOTHING`,
 		candidate.ID, candidate.ConversationID, candidate.RunID, candidate.SourceMessageID,
 		candidate.SourceRole, candidate.Kind, candidate.Content, string(candidate.Status),
-		candidate.ExtractionReason, candidate.PolicyReason, candidate.Confidence, candidate.CreatedAt)
+		candidate.ExtractionReason, candidate.PolicyReason, candidate.Confidence, candidate.CreatedAt, candidate.WorkspaceID)
 	if err != nil {
 		return domain.MemoryCandidate{}, false, err
 	}
@@ -34,18 +46,24 @@ func (s *PostgresStore) CreateMemoryCandidate(candidate domain.MemoryCandidate) 
 		return domain.MemoryCandidate{}, false, err
 	}
 	if rows == 1 {
-		return candidate, true, nil
+		return candidate, true, tx.Commit()
 	}
-	existing, err := scanMemoryCandidate(s.db.QueryRow(`
+	existing, err := scanMemoryCandidate(tx.QueryRow(`
 		SELECT id,conversation_id,run_id,source_message_id,source_role,kind,content,status,
-			extraction_reason,policy_reason,confidence,created_at
+			extraction_reason,policy_reason,confidence,created_at,workspace_id
 		FROM memory_candidates WHERE id=$1`, candidate.ID))
-	return existing, false, err
+	if err != nil {
+		return domain.MemoryCandidate{}, false, err
+	}
+	if existing.WorkspaceID != candidate.WorkspaceID {
+		return domain.MemoryCandidate{}, false, ErrMemoryConflict
+	}
+	return existing, false, tx.Commit()
 }
 
 func (s *PostgresStore) ListMemoryCandidates(conversationID string) ([]domain.MemoryCandidate, error) {
 	query := `SELECT id,conversation_id,run_id,source_message_id,source_role,kind,content,status,
-		extraction_reason,policy_reason,confidence,created_at FROM memory_candidates`
+		extraction_reason,policy_reason,confidence,created_at,workspace_id FROM memory_candidates`
 	args := []any{}
 	if strings.TrimSpace(conversationID) != "" {
 		query += " WHERE conversation_id=$1"
@@ -90,6 +108,7 @@ func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.Memo
 		memory.CreatedAt = now
 	}
 	memory.UpdatedAt = now
+	memory.Version, memory.DeletedAt = 1, nil
 	embedding.MemoryID = memory.ID
 	if embedding.Provider == "" {
 		embedding.Provider = "local"
@@ -111,39 +130,41 @@ func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.Memo
 		return domain.Memory{}, err
 	}
 
-	tx, err := s.db.Begin()
+	tx, err := s.beginMemoryWrite()
 	if err != nil {
 		return domain.Memory{}, err
 	}
 	defer tx.Rollback()
+	if memory.SourceMessageID != "" {
+		var withdrawn bool
+		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM memory_changes WHERE source_message_id=$1 AND workspace_id=$2)`, memory.SourceMessageID, memory.WorkspaceID).Scan(&withdrawn); err != nil {
+			return domain.Memory{}, err
+		}
+		if withdrawn {
+			return domain.Memory{}, ErrMemoryConflict
+		}
+	}
+	existing, err := scanMemory(tx.QueryRow(`SELECT `+memoryColumns+` FROM memories WHERE id=$1`, memory.ID))
+	if err == nil {
+		if !sameMemoryCreate(existing, memory) {
+			return domain.Memory{}, ErrMemoryConflict
+		}
+		return existing, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return domain.Memory{}, err
+	}
 
 	if _, err := tx.Exec(`
 		INSERT INTO memories (id, workspace_id, user_id, project_id, conversation_id, run_id, source_message_id, kind, content, metadata, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		ON CONFLICT (id) DO UPDATE SET
-			workspace_id = EXCLUDED.workspace_id,
-			user_id = EXCLUDED.user_id,
-			project_id = EXCLUDED.project_id,
-			conversation_id = EXCLUDED.conversation_id,
-			run_id = EXCLUDED.run_id,
-			source_message_id = EXCLUDED.source_message_id,
-			kind = EXCLUDED.kind,
-			content = EXCLUDED.content,
-			metadata = EXCLUDED.metadata,
-			updated_at = EXCLUDED.updated_at`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		memory.ID, nullString(memory.WorkspaceID), nullString(memory.UserID), nullString(memory.ProjectID), nullString(memory.ConversationID), nullString(memory.RunID), nullString(memory.SourceMessageID), memory.Kind, memory.Content, metadataJSON, memory.CreatedAt, memory.UpdatedAt); err != nil {
 		return domain.Memory{}, err
 	}
 
 	if _, err := tx.Exec(`
 		INSERT INTO memory_embeddings (memory_id, provider, model, dimensions, embedding, created_at)
-		VALUES ($1, $2, $3, $4, $5::vector, $6)
-		ON CONFLICT (memory_id) DO UPDATE SET
-			provider = EXCLUDED.provider,
-			model = EXCLUDED.model,
-			dimensions = EXCLUDED.dimensions,
-			embedding = EXCLUDED.embedding,
-			created_at = EXCLUDED.created_at`,
+		VALUES ($1, $2, $3, $4, $5::vector, $6)`,
 		embedding.MemoryID, embedding.Provider, embedding.Model, embedding.Dimensions, vectorLiteral(embedding.Embedding), embedding.CreatedAt); err != nil {
 		return domain.Memory{}, err
 	}
@@ -163,7 +184,7 @@ func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.Ret
 	}
 
 	args := []any{vectorLiteral(search.Embedding), limit}
-	conditions := []string{}
+	conditions := []string{"m.deleted_at IS NULL"}
 	args = append(args, search.WorkspaceID)
 	conditions = append(conditions, fmt.Sprintf("m.workspace_id = $%d", len(args)))
 	if strings.TrimSpace(search.UserID) != "" {
@@ -193,7 +214,7 @@ func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.Ret
 
 	query := `
 		SELECT
-			m.id, m.workspace_id, m.user_id, m.project_id, m.conversation_id, m.run_id, m.source_message_id, m.kind, m.content, m.metadata, m.created_at, m.updated_at,
+			m.id, m.workspace_id, m.user_id, m.project_id, m.conversation_id, m.run_id, m.source_message_id, m.kind, m.content, m.metadata, m.created_at, m.updated_at, m.version, m.deleted_at,
 			1 - (e.embedding <=> $1::vector) AS similarity,
 			0.05 / (1 + GREATEST(EXTRACT(EPOCH FROM (now() - m.created_at)) / 86400, 0) / 30) AS recency_boost,
 			(1 - (e.embedding <=> $1::vector)) + (0.05 / (1 + GREATEST(EXTRACT(EPOCH FROM (now() - m.created_at)) / 86400, 0) / 30)) AS score
@@ -241,6 +262,8 @@ func scanRetrievedMemory(row scanner) (domain.RetrievedMemory, error) {
 		&metadataJSON,
 		&item.Memory.CreatedAt,
 		&item.Memory.UpdatedAt,
+		&item.Memory.Version,
+		&item.Memory.DeletedAt,
 		&item.Similarity,
 		&item.RecencyBoost,
 		&item.Score,
@@ -284,6 +307,7 @@ func scanMemoryCandidate(row scanner) (domain.MemoryCandidate, error) {
 	if err := row.Scan(
 		&item.ID, &conversationID, &runID, &item.SourceMessageID, &item.SourceRole,
 		&item.Kind, &item.Content, &status, &item.ExtractionReason, &item.PolicyReason, &item.Confidence, &item.CreatedAt,
+		&item.WorkspaceID,
 	); err != nil {
 		return domain.MemoryCandidate{}, err
 	}
@@ -309,6 +333,7 @@ func scanMemory(row scanner) (domain.Memory, error) {
 	if err := row.Scan(
 		&item.ID, &workspaceID, &userID, &projectID, &conversationID, &runID,
 		&sourceMessageID, &item.Kind, &item.Content, &metadataJSON, &item.CreatedAt, &item.UpdatedAt,
+		&item.Version, &item.DeletedAt,
 	); err != nil {
 		return domain.Memory{}, err
 	}

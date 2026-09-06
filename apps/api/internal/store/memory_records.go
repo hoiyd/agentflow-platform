@@ -9,6 +9,7 @@ import (
 )
 
 func normalizeMemoryCandidate(candidate domain.MemoryCandidate) (domain.MemoryCandidate, error) {
+	candidate.WorkspaceID = normalizeWorkspaceID(candidate.WorkspaceID)
 	candidate.ID = strings.TrimSpace(candidate.ID)
 	candidate.SourceMessageID = strings.TrimSpace(candidate.SourceMessageID)
 	candidate.SourceRole = strings.TrimSpace(candidate.SourceRole)
