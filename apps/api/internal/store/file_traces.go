@@ -282,7 +282,7 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		}
 	}
 	sort.Slice(childDelegations, func(i, j int) bool { return childDelegations[i].CreatedAt.Before(childDelegations[j].CreatedAt) })
-	return domain.RunReplay{
+	replay := domain.RunReplay{
 		Run:                   cloneRun(run),
 		Projection:            readModel,
 		RuntimeSnapshot:       cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
@@ -300,7 +300,9 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		TaskStateRevisions:    taskStateRevisions,
 		ParentDelegation:      parentDelegation,
 		ChildDelegations:      childDelegations,
-	}, true, nil
+	}
+	replay.RecoverySummary = projection.BuildRecoverySummary(replay)
+	return replay, true, nil
 }
 
 func cloneRuntimeSnapshot(snapshot domain.RuntimeSnapshot) *domain.RuntimeSnapshot {

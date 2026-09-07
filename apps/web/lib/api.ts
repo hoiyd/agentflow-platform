@@ -430,6 +430,55 @@ export type ToolArtifactSearchResult = {
 	truncated: boolean;
 };
 
+export type ToolEffectReconciliationAction =
+	| "confirm_committed"
+	| "confirm_failed"
+	| "retry_with_same_key"
+	| "compensate";
+
+export type ToolEffect = {
+	idempotency_key: string;
+	version: number;
+	run_id: string;
+	stage_id: string;
+	turn_id?: string;
+	tool_call_id: string;
+	tool_name: string;
+	definition_revision?: string;
+	request_hash: string;
+	status: string;
+	has_result: boolean;
+	error?: string;
+	created_at: string;
+	updated_at: string;
+	available_actions?: ToolEffectReconciliationAction[];
+};
+
+export type RecoveryEvidence = {
+	kind: string;
+	id?: string;
+	status?: string;
+	summary: string;
+	artifact_refs?: string[];
+};
+
+export type RecoveryAction = {
+	kind: string;
+	label: string;
+	enabled: boolean;
+	target_id?: string;
+	unavailable_reason?: string;
+};
+
+export type RecoverySummary = {
+	reason: string;
+	title: string;
+	message: string;
+	evidence: RecoveryEvidence[];
+	artifact_refs: string[];
+	actions: RecoveryAction[];
+};
+
 export type RunReplay = {
   run: RunInfo;
   projection: RunProjectionSnapshot;
@@ -440,13 +489,14 @@ export type RunReplay = {
   usage_ledger: RunUsageLedger;
   run_events: RunEvent[];
   stage_checkpoints: Array<Record<string, unknown>>;
-	tool_effects: Array<Record<string, unknown>>;
+	tool_effects: ToolEffect[];
 	tool_artifacts: ToolArtifact[];
   verification_evidence: Array<Record<string, unknown>>;
   verification_artifacts: Array<Record<string, unknown>>;
   task_state_revisions: TaskStateRevision[];
   parent_delegation?: RunDelegation;
   child_delegations: RunDelegation[];
+	recovery_summary?: RecoverySummary;
 };
 
 export type EpisodeReport = {
@@ -515,13 +565,14 @@ function normalizeRunReplay(data: unknown): RunReplay {
     usage_ledger: normalizeRunUsageLedger(replay.usage_ledger, run?.id ?? ""),
     run_events: Array.isArray(replay.run_events) ? replay.run_events : [],
     stage_checkpoints: Array.isArray(replay.stage_checkpoints) ? replay.stage_checkpoints : [],
-		tool_effects: Array.isArray(replay.tool_effects) ? replay.tool_effects : [],
+		tool_effects: Array.isArray(replay.tool_effects) ? replay.tool_effects as ToolEffect[] : [],
 		tool_artifacts: Array.isArray(replay.tool_artifacts) ? replay.tool_artifacts as ToolArtifact[] : [],
     verification_evidence: Array.isArray(replay.verification_evidence) ? replay.verification_evidence : [],
     verification_artifacts: Array.isArray(replay.verification_artifacts) ? replay.verification_artifacts : [],
     task_state_revisions: Array.isArray(replay.task_state_revisions) ? replay.task_state_revisions : [],
     parent_delegation: isObject(replay.parent_delegation) ? replay.parent_delegation as RunDelegation : undefined,
-    child_delegations: Array.isArray(replay.child_delegations) ? replay.child_delegations as RunDelegation[] : []
+    child_delegations: Array.isArray(replay.child_delegations) ? replay.child_delegations as RunDelegation[] : [],
+		recovery_summary: isObject(replay.recovery_summary) ? replay.recovery_summary as RecoverySummary : undefined
   };
 }
 
@@ -750,7 +801,7 @@ export async function resumeRun(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_input: input.user_input })
     },
-    { errorMessage: "Resume request failed", requireBody: true }
+    { errorMessage: "Resume request failed", includeErrorBody: true, requireBody: true }
   );
 
   await readChatEventStream(response, onEvent);
@@ -917,6 +968,36 @@ export async function getRunReplay(runId: string): Promise<RunReplay> {
     { errorMessage: "Failed to load run replay" }
   );
   return normalizeRunReplay(data);
+}
+
+export async function listToolEffects(runId: string): Promise<ToolEffect[]> {
+	const response = await apiObject<{ effects?: ToolEffect[] }>(
+		`/api/runs/${encodeURIComponent(runId)}/tool-effects`,
+		{ cache: "no-store" },
+		{ errorMessage: "Failed to load tool effects", includeErrorBody: true },
+		"tool effect list"
+	);
+	return Array.isArray(response.effects) ? response.effects : [];
+}
+
+export async function reconcileToolEffect(
+	runId: string,
+	idempotencyKey: string,
+	command: {
+		command_id: string;
+		action: ToolEffectReconciliationAction;
+		expected_version: number;
+		actor: string;
+		reason: string;
+		result?: unknown;
+	}
+): Promise<{ applied: boolean; outcome: string; effect: ToolEffect }> {
+	return apiObject<{ applied: boolean; outcome: string; effect: ToolEffect }>(
+		`/api/runs/${encodeURIComponent(runId)}/tool-effects/${encodeURIComponent(idempotencyKey)}/reconcile`,
+		{ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(command) },
+		{ errorMessage: "Failed to reconcile tool effect", includeErrorBody: true },
+		"tool effect reconciliation"
+	);
 }
 
 export async function listToolArtifacts(runId: string): Promise<ToolArtifact[]> {

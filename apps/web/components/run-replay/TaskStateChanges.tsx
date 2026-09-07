@@ -6,7 +6,7 @@ export function TaskStateChanges({ revisions, runId }: { revisions: TaskStateRev
   const groups = partitionTaskStateRevisions(revisions, runId);
   const visibleRevisions = visibleTaskStateRevisions(revisions, runId);
   return (
-    <section className="task-state-changes">
+    <section className="task-state-changes" id="run-task-state">
       <header className="task-state-changes-header">
         <div><div className="panel-title inline">Task state changes</div><p>{groups.fromRun.length} from this run, {groups.conversationHistory.length} elsewhere in the conversation.</p></div>
         <code>{visibleRevisions.length === revisions.length ? `${revisions.length} revisions` : `${visibleRevisions.length} of ${revisions.length}`}</code>

@@ -339,6 +339,10 @@ func TestPostgresDurableRecoveryRoundTrip(t *testing.T) {
 	if err != nil || uncertain.Status != domain.ToolEffectNeedsReconciliation {
 		t.Fatalf("mark uncertain effect: %#v err=%v", uncertain, err)
 	}
+	replay, ok, err := postgresStore.GetRunReplay(run.ID)
+	if err != nil || !ok || replay.RecoverySummary == nil || replay.RecoverySummary.Reason != domain.RecoveryToolEffectUncertain {
+		t.Fatalf("postgres recovery summary: summary=%#v ok=%v err=%v", replay.RecoverySummary, ok, err)
+	}
 	reconciliation := domain.ToolEffectReconciliation{
 		CommandID: "postgres-command", IdempotencyKey: uncertain.IdempotencyKey,
 		ExpectedVersion: uncertain.Version, Action: domain.ToolEffectConfirmFailed,

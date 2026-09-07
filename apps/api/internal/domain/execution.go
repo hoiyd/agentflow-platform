@@ -504,6 +504,7 @@ type RunReplay struct {
 	TaskStateRevisions    []TaskStateRevision    `json:"task_state_revisions"`
 	ParentDelegation      *RunDelegation         `json:"parent_delegation,omitempty"`
 	ChildDelegations      []RunDelegation        `json:"child_delegations"`
+	RecoverySummary       *RecoverySummary       `json:"recovery_summary,omitempty"`
 }
 
 // EpisodeReport is a compact projection derived from RunReplay for review,
