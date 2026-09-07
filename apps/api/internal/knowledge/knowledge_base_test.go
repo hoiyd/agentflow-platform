@@ -81,7 +81,7 @@ func TestKnowledgeBaseIngestsSearchesAndEvaluatesKnowledge(t *testing.T) {
 	if evaluation.Reranker != response.Reranker {
 		t.Fatalf("expected evaluation reranker metadata %#v, got %#v", response.Reranker, evaluation.Reranker)
 	}
-	if evaluation.RelevanceGate != response.RelevanceGate || response.RelevanceGate.Version != "heuristic-relevance-gate-v1" {
+	if evaluation.RelevanceGate != response.RelevanceGate || response.RelevanceGate.Version != "heuristic-relevance-gate-v2" {
 		t.Fatalf("expected evaluation relevance gate metadata %#v, got %#v", response.RelevanceGate, evaluation.RelevanceGate)
 	}
 	if len(evaluation.Cases) != 1 || evaluation.Cases[0].Security.PolicyVersion != domain.RAGPromptGuardPolicyVersion {

@@ -102,12 +102,15 @@ func evidenceScore(query string, queryTerms []string, item domain.RetrievedDocum
 	return score
 }
 
-func relevanceConfidence(item domain.RetrievedDocumentChunk, reranker domain.RerankerInfo) (string, string) {
+func relevanceConfidence(item domain.RetrievedDocumentChunk, reranker domain.RerankerInfo, config HeuristicRelevanceGateConfig) (string, string) {
 	if item.LexicalRank > 0 && item.LexicalScore >= 0.95 {
 		return "high", "strong lexical recall match"
 	}
 	if item.EvidenceCoverage >= 0.6 || item.EvidenceScore >= 0.24 {
 		return "high", "strong evidence match"
+	}
+	if item.EvidenceCoverage < config.MinimumEvidenceCoverage {
+		return "low", "filtered: evidence coverage below calibrated minimum"
 	}
 	if item.Similarity >= 0.72 {
 		return "high", "strong vector similarity"

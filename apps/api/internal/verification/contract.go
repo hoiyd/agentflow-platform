@@ -126,6 +126,21 @@ func SubjectForQuestionAnswer(question, value string) Subject {
 	return Subject{Type: "run_output", Value: value, Question: question, Hash: hashBytes(encoded)}
 }
 
+func SubjectForGroundedQuestionAnswer(question, value string, sources []GroundingSource, groundingErr error) Subject {
+	subject := SubjectForQuestionAnswer(question, value)
+	subject.Grounding = append([]GroundingSource(nil), sources...)
+	if groundingErr != nil {
+		subject.GroundingError = groundingErr.Error()
+	}
+	encoded, _ := json.Marshal(struct {
+		Question  string            `json:"question"`
+		Answer    string            `json:"answer"`
+		Grounding []GroundingSource `json:"grounding"`
+	}{Question: strings.TrimSpace(question), Answer: value, Grounding: subject.Grounding})
+	subject.Hash = hashBytes(encoded)
+	return subject
+}
+
 func SnapshotHash(snapshot *domain.RuntimeSnapshot) (string, error) {
 	if snapshot == nil {
 		return hashBytes(nil), nil

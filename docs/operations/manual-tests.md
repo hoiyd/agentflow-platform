@@ -127,6 +127,12 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
 4. For an HTTP verifier with remaining attempt budget, restore the target service and call `POST /api/runs/{id}/verify`.
 5. Confirm fresh passing Evidence is appended and `run.completed` appears only after `verification.passed`.
 6. Change the candidate subject in a resumed Run and confirm a `verification.stale` marker references the superseded Evidence.
+7. Enable **Grounding**, ask a knowledge-backed question, and return one supported
+   `[S1]` claim. Confirm `grounded_answer` passes and Evidence contains
+   `algorithm=lexical_claim_support` without source text.
+8. Repeat with an invented `[S9]`, an unrelated selected source, and a changed
+   numeric or code identifier. Confirm each fails. Ask an unanswerable question
+   and confirm only an explicit insufficient-evidence response passes.
 
 ### Run Budget
 

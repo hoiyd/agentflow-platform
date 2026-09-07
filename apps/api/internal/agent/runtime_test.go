@@ -139,7 +139,7 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 			t.Fatalf("expected active reranker configuration in retrieval trace, got %#v", event.Payload["reranker"])
 		}
 		relevanceGate, ok := event.Payload["relevance_gate"].(domain.RelevanceGateInfo)
-		if !ok || relevanceGate.Policy != "heuristic" || relevanceGate.Version != "heuristic-relevance-gate-v1" || relevanceGate.ConfigVersion != "heuristic-relevance-default-v1" {
+		if !ok || relevanceGate.Policy != "heuristic" || relevanceGate.Version != "heuristic-relevance-gate-v2" || relevanceGate.ConfigVersion != "heuristic-relevance-calibrated-v1" {
 			t.Fatalf("expected active relevance gate configuration in retrieval trace, got %#v", event.Payload["relevance_gate"])
 		}
 		security, ok := event.Payload["knowledge_security"].(domain.KnowledgeSecurityInfo)

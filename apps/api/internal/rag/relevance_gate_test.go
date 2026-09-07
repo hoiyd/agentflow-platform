@@ -30,7 +30,7 @@ func TestHeuristicRelevanceGateOwnsConfidence(t *testing.T) {
 	if len(result.Items) != 0 {
 		t.Fatalf("expected Gate to overwrite and reject reranker confidence, got %#v", result.Items)
 	}
-	if result.Info.Version != "heuristic-relevance-gate-v1" || result.Info.ConfigVersion != "heuristic-relevance-default-v1" {
+	if result.Info.Version != "heuristic-relevance-gate-v2" || result.Info.ConfigVersion != "heuristic-relevance-calibrated-v1" || result.Info.MinimumEvidenceCoverage != 0.25 {
 		t.Fatalf("unexpected relevance gate metadata: %#v", result.Info)
 	}
 }
@@ -67,10 +67,40 @@ func TestHeuristicConfidenceIgnoresPostSelectionDiversityPenalty(t *testing.T) {
 	confidence, _ := relevanceConfidence(domain.RetrievedDocumentChunk{
 		RerankScore:      0.55,
 		DiversityPenalty: 0.04,
-		MatchedTerms:     []string{"runbook"},
-	}, domain.RerankerInfo{Algorithm: heuristicRerankerAlgorithm})
+		MatchedTerms:     []string{"runbook"}, EvidenceCoverage: 0.25,
+	}, domain.RerankerInfo{Algorithm: heuristicRerankerAlgorithm}, DefaultHeuristicRelevanceGateConfig())
 	if confidence != "medium" {
 		t.Fatalf("expected pre-diversity score 0.59 to preserve medium confidence, got %q", confidence)
+	}
+}
+
+func TestHeuristicRelevanceGateRejectsWeakTermOverlapDespiteVectorScore(t *testing.T) {
+	t.Parallel()
+
+	gate := NewHeuristicRelevanceGate(DefaultHeuristicRelevanceGateConfig())
+	result, err := gate.Evaluate(context.Background(), RelevanceGateRequest{
+		Query:    "lunar capacitor recovery procedure ZZ-0000",
+		Reranker: domain.RerankerInfo{Algorithm: heuristicRerankerAlgorithm},
+		Candidates: []domain.RetrievedDocumentChunk{{
+			Chunk:      domain.DocumentChunk{ID: "chunk-1", Content: "The approved procedure handles tenant keys."},
+			Similarity: 0.91, RerankScore: 0.91,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Items) != 0 {
+		t.Fatalf("weak lexical evidence bypassed calibrated gate: %#v", result.Items)
+	}
+}
+
+func TestQueryTermsRemoveEnglishStopWordsAndKeepCJKTerms(t *testing.T) {
+	t.Parallel()
+
+	terms := QueryTerms("What is the audit retention 审计保留?")
+	joined := strings.Join(terms, ",")
+	if strings.Contains(joined, "what") || strings.Contains(joined, "the") || !strings.Contains(joined, "audit") || !strings.Contains(joined, "审计") {
+		t.Fatalf("unexpected calibrated query terms: %v", terms)
 	}
 }
 

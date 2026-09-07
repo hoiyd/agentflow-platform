@@ -98,6 +98,7 @@ export type RelevanceGateInfo = {
   policy: string;
   version: string;
   config_version: string;
+  minimum_evidence_coverage: number;
 };
 
 export type KnowledgeSecurityDecision = {

@@ -43,6 +43,7 @@ const (
 	VerifierTextConstraints VerifierType = "text_constraints"
 	VerifierCitation        VerifierType = "citation"
 	VerifierAnswerRelevance VerifierType = "answer_relevance"
+	VerifierGroundedAnswer  VerifierType = "grounded_answer"
 )
 
 // CompletionContract opts one Run into evidence-gated completion. It must be

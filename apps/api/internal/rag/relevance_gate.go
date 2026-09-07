@@ -12,8 +12,9 @@ import (
 
 const (
 	heuristicRelevanceGatePolicy      = "heuristic"
-	heuristicRelevanceGateVersion     = "heuristic-relevance-gate-v1"
-	defaultRelevanceGateConfigVersion = "heuristic-relevance-default-v1"
+	heuristicRelevanceGateVersion     = "heuristic-relevance-gate-v2"
+	defaultRelevanceGateConfigVersion = "heuristic-relevance-calibrated-v1"
+	defaultMinimumEvidenceCoverage    = 0.25
 )
 
 type RelevanceGateRequest struct {
@@ -34,11 +35,14 @@ type RelevanceGate interface {
 }
 
 type HeuristicRelevanceGateConfig struct {
-	ConfigVersion string
+	ConfigVersion           string
+	MinimumEvidenceCoverage float64
 }
 
 func DefaultHeuristicRelevanceGateConfig() HeuristicRelevanceGateConfig {
-	return HeuristicRelevanceGateConfig{ConfigVersion: defaultRelevanceGateConfigVersion}
+	return HeuristicRelevanceGateConfig{
+		ConfigVersion: defaultRelevanceGateConfigVersion, MinimumEvidenceCoverage: defaultMinimumEvidenceCoverage,
+	}
 }
 
 type HeuristicRelevanceGate struct {
@@ -52,6 +56,9 @@ func NewHeuristicRelevanceGate(config HeuristicRelevanceGateConfig) *HeuristicRe
 	if config.ConfigVersion == "" {
 		config.ConfigVersion = defaultRelevanceGateConfigVersion
 	}
+	if config.MinimumEvidenceCoverage <= 0 || config.MinimumEvidenceCoverage > 1 {
+		config.MinimumEvidenceCoverage = defaultMinimumEvidenceCoverage
+	}
 	return &HeuristicRelevanceGate{config: config}
 }
 
@@ -60,10 +67,15 @@ func (g *HeuristicRelevanceGate) Info() domain.RelevanceGateInfo {
 	if g != nil && strings.TrimSpace(g.config.ConfigVersion) != "" {
 		configVersion = g.config.ConfigVersion
 	}
+	minimumCoverage := defaultMinimumEvidenceCoverage
+	if g != nil && g.config.MinimumEvidenceCoverage > 0 && g.config.MinimumEvidenceCoverage <= 1 {
+		minimumCoverage = g.config.MinimumEvidenceCoverage
+	}
 	return domain.RelevanceGateInfo{
-		Policy:        heuristicRelevanceGatePolicy,
-		Version:       heuristicRelevanceGateVersion,
-		ConfigVersion: configVersion,
+		Policy:                  heuristicRelevanceGatePolicy,
+		Version:                 heuristicRelevanceGateVersion,
+		ConfigVersion:           configVersion,
+		MinimumEvidenceCoverage: minimumCoverage,
 	}
 }
 
@@ -74,7 +86,7 @@ func (g *HeuristicRelevanceGate) Evaluate(_ context.Context, request RelevanceGa
 		item.MatchedTerms = matchedTerms(request.Query, queryTerms, item)
 		item.EvidenceCoverage = evidenceCoverage(queryTerms, item.MatchedTerms)
 		item.EvidenceScore = evidenceScore(request.Query, queryTerms, item)
-		item.Confidence, item.FilterReason = relevanceConfidence(item, request.Reranker)
+		item.Confidence, item.FilterReason = relevanceConfidence(item, request.Reranker, g.config)
 		if item.Confidence == "low" {
 			continue
 		}

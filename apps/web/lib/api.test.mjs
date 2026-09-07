@@ -368,7 +368,7 @@ test("RAG search preserves fusion, reranker, relevance gate, security, context s
     embedding: { provider: "local", model: "test", dimensions: 3, estimated: true },
     fusion: { algorithm: "rrf", version: "rrf-v1", rank_constant: 60, dense_weight: 1, lexical_weight: 1 },
     reranker: { algorithm: "heuristic", version: "heuristic-reranker-v1", config_version: "heuristic-default-v1" },
-    relevance_gate: { policy: "heuristic", version: "heuristic-relevance-gate-v1", config_version: "heuristic-relevance-default-v1" },
+    relevance_gate: { policy: "heuristic", version: "heuristic-relevance-gate-v2", config_version: "heuristic-relevance-calibrated-v1", minimum_evidence_coverage: 0.25 },
     security: { policy_version: "rag-prompt-guard-v1", untrusted_context: true, checked_candidates: 1, blocked_candidates: 1, decisions: [{ document_id: "doc-1", chunk_id: "chunk-1", action: "blocked", reasons: ["instruction_override"] }] },
     no_match: true,
     reason: "No confident match found."
@@ -382,7 +382,8 @@ test("RAG search preserves fusion, reranker, relevance gate, security, context s
   assert.equal(response.fusion?.rank_constant, 60);
   assert.equal(response.reranker?.algorithm, "heuristic");
   assert.equal(response.reranker?.config_version, "heuristic-default-v1");
-  assert.equal(response.relevance_gate?.version, "heuristic-relevance-gate-v1");
+  assert.equal(response.relevance_gate?.version, "heuristic-relevance-gate-v2");
+  assert.equal(response.relevance_gate?.minimum_evidence_coverage, 0.25);
   assert.equal(response.security?.policy_version, "rag-prompt-guard-v1");
   assert.deepEqual(response.security?.decisions?.[0].reasons, ["instruction_override"]);
   assert.equal(response.context_items?.[0].context_role, "matched_child");

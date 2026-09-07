@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/verification"
 )
 
 func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +41,7 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "run has no candidate output to verify")
 		return
 	}
-	decision, err := h.verification.Verify(r.Context(), run.ID, verification.SubjectForQuestionAnswer(latestUserInput(messages), output))
+	decision, err := h.verification.Verify(r.Context(), run.ID, h.verificationSubjectForRun(scoped, run, latestUserInput(messages), output))
 	if err != nil {
 		_, _ = scoped.UpdateRunVerificationStatus(run.ID, domain.VerificationBlocked)
 		writeFailure(w, r, http.StatusInternalServerError, err)

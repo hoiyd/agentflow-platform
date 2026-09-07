@@ -60,7 +60,7 @@ recall ranks, RRF score, final rank, relevance decision, and selected model
 context.
 
 For an AI-systems-focused review, open **Retrieval evaluation** and show the
-canonical `agentflow-rag-baseline@1.0.0` result. Point out Hit@1/3/5, per-case
+canonical `agentflow-rag-baseline@1.1.0` result. Point out Hit@1/3/5, per-case
 misses, prompt-injection blocks, gating versus diagnostic cases, and the
 Embedding/Fusion/Reranker/Relevance Gate versions used by the same production
 pipeline.

@@ -23,6 +23,22 @@ and context-selection path. Local hash embeddings make default runs deterministi
 and network-free. The report records actual component identity, Top-K, similarity
 threshold, each Case outcome/error, stable source hashes, MRR, binary-relevance
 NDCG, Hit@K, no-answer Precision/Recall, leak count, blocked candidates, and latency.
+Each sample belongs to an explicit `calibration` or `holdout` split, and the report
+publishes metrics for both. Ranked source diagnostics include confidence,
+similarity, evidence coverage, and the Gate reason without copying document text.
+
+The current `heuristic-relevance-calibrated-v1` profile removes common English
+query stop words and requires at least `0.25` query-term evidence coverage before
+weak vector/reranker paths may admit a result. The value was selected on the
+calibration split and must also pass the untouched holdout split. It is a baseline
+for this corpus and deterministic embedder, not a universal threshold. Compare a
+candidate as one explicit ablation:
+
+```bash
+go run ./cmd/eval rag --enforce > /tmp/rag-baseline.json
+go run ./cmd/eval rag --min-evidence-coverage 0.30 \
+  --baseline /tmp/rag-baseline.json --ablation --enforce
+```
 
 Cases tagged `non-blocking` remain diagnostic. Every other Case is gating;
 failed, canceled, missed, or not-evaluated gating Cases fail `--enforce` and

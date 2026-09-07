@@ -45,7 +45,7 @@ A Run enters the verification lifecycle only when its initial `POST /api/chat` r
 `VERIFICATION_WORKSPACE_ROOT`, command allowlists, HTTP host allowlists, and Artifact limits only configure which verifier implementations may run safely. Setting these environment variables does **not** enable verification for any Run by itself.
 
 The chat composer exposes this opt-in under **Verification** and
-supports all six built-in verifier types. The request behavior is identical
+supports all seven built-in verifier types. The request behavior is identical
 for `single`, `multi_agent`, and `autonomous` Runs.
 
 HTTP checks follow the backend host allowlist. Command checks also require
@@ -80,6 +80,8 @@ The current implementation supports:
 - `citation`: checks explicit Markdown citation count, HTTPS use, and allowed or blocked source hosts.
 - `answer_relevance`: embeds the user question and substantive final answer,
   then checks their cosine similarity against a frozen threshold.
+- `grounded_answer`: checks factual claims and native `[S#]` markers against the
+  knowledge sources selected for the Run.
 
 Each Evidence record binds the contract/version, verifier/version, Runtime Snapshot hash, exact candidate Subject Hash, attempt number, status, duration, exit code, summary, structured details, and Artifact IDs. For question-aware checks, the Subject Hash binds both the user question and candidate answer. One verifier may emit multiple bounded Artifacts, such as a score report and diagnostics. Evidence is append-only. When a later candidate has a different Subject Hash, AgentFlow appends a `stale` marker that references the superseded Evidence rather than rewriting history.
 
@@ -205,6 +207,41 @@ The verifier adds two embedding requests per attempt; those calls are not yet
 represented as generation-token usage in the Run Usage Ledger.
 
 `citation` counts unique external URLs from explicit Markdown links and CommonMark autolinks. Relative links, images, and bare URL-like text are not citations. Host rules match the configured host and its subdomains. This verifier does not fetch sources or judge whether a source supports a claim; source reachability and claim groundedness belong in separate verifiers.
+
+### Grounded Knowledge Answers
+
+Use `grounded_answer` for knowledge-backed Runs rather than the external-link
+`citation` verifier:
+
+```json
+{
+  "id": "grounded-answer",
+  "type": "grounded_answer",
+  "required": true,
+  "config": {
+    "minimum_claim_support": 0.5,
+    "no_answer_phrases": ["insufficient evidence", "证据不足"]
+  }
+}
+```
+
+Version `grounded-answer-lexical-v1` splits the answer into claims, resolves each
+`[S#]` only against the final Context Manifest, and measures claim-term coverage
+in the cited chunks. Numeric, code-like, and named anchors must occur exactly in
+the cited evidence. Evidence records scores, source IDs, unsupported claims, and
+missing anchors, but does not duplicate source text. Source contents participate
+in the Subject Hash, so a later evidence change cannot reuse an earlier result.
+
+When the calibrated Relevance Gate selected no source, an answer passes only if
+it uses one configured insufficient-evidence phrase and makes no factual claim.
+With selected sources, a pure refusal fails; partial answers may combine grounded
+cited claims with an explicit insufficient-evidence statement. Missing documents,
+version drift, and missing chunks produce `blocked` Evidence.
+
+The default `0.5` support threshold is a deterministic project baseline covered
+by acceptance fixtures. It detects absent, irrelevant, and conflicting anchors;
+it does not prove world truth, semantic entailment, or source quality. Recalibrate
+it on representative domain answers before making it a production gate.
 
 ## Extension Model
 

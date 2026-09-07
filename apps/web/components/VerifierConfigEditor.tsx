@@ -28,6 +28,26 @@ export function VerifierConfigEditor({ disabled, draft, onChange, type }: Verifi
     );
   }
 
+  if (type === "grounded_answer") {
+    const settings = draft.groundedAnswer;
+    const update = (next: Partial<typeof settings>) =>
+      onChange({ groundedAnswer: { ...settings, ...next } });
+    return (
+      <VerifierSection
+        checked={settings.enabled}
+        disabled={disabled}
+        label="Check claims against selected knowledge"
+        onToggle={(enabled) => update({ enabled })}
+      >
+        <div className="verifier-field-grid two-columns">
+          <NumberField disabled={disabled || !settings.enabled} label="Minimum claim support" min={0.1} max={1} step={0.05} value={settings.minimumClaimSupport} onChange={(minimumClaimSupport) => update({ minimumClaimSupport })} />
+          <TextAreaField disabled={disabled || !settings.enabled} label="Insufficient-evidence phrases" placeholder="One phrase per line" value={settings.noAnswerPhrases} onChange={(noAnswerPhrases) => update({ noAnswerPhrases })} />
+        </div>
+        <small className="verifier-requirement">Checks each factual statement against its selected [S#] source. With no selected evidence, only an explicit insufficient-evidence response passes.</small>
+      </VerifierSection>
+    );
+  }
+
   if (type === "text_constraints") {
     const settings = draft.textConstraints;
     const update = (next: Partial<typeof settings>) =>

@@ -135,6 +135,92 @@ func TestCompleteStreamingRunProvidesQuestionToAnswerRelevanceVerifier(t *testin
 	}
 }
 
+func TestCompleteStreamingRunGroundsClaimsInSelectedKnowledge(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, _ := fileStore.CreateConversation("grounded completion")
+	document := domain.Document{ID: "doc-1", Title: "Platform Facts", Version: "v1", SourceType: "markdown", Content: "The production control plane runs in AWS eu-central-1 in Frankfurt."}
+	chunk := domain.DocumentChunk{ID: "chunk-1", DocumentID: document.ID, Content: "The production control plane runs in AWS eu-central-1 in Frankfurt.", ChunkSource: domain.ChunkSource{DocumentVersion: "v1"}}
+	if _, err := fileStore.CreateDocument(document, []domain.DocumentChunk{chunk}, []domain.DocumentChunkEmbedding{{Embedding: []float64{1}}}); err != nil {
+		t.Fatalf("create grounding document: %v", err)
+	}
+	registry := verification.NewRegistry(verification.Options{})
+	contract, err := registry.FreezeContract(&domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
+		ID: "grounded-answer", Type: domain.VerifierGroundedAnswer, Required: true,
+		Config: map[string]any{"minimum_claim_support": 0.5},
+	}}, Policy: domain.VerificationPolicy{MaxAttempts: 1, OnExhausted: domain.VerificationFailRun}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), contract)
+	_, _ = fileStore.UpdateRunStatus(run.ID, domain.RunRunning, "")
+	source := domain.RAGCitation{SourceID: "S1", DocumentID: document.ID, DocumentTitle: document.Title, DocumentVersion: "v1", ChunkID: chunk.ID, SourceChunkIDs: []string{chunk.ID}}
+	_, _ = fileStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventRetrievalCompleted, Payload: map[string]any{"citation_sources": []domain.RAGCitation{source}}})
+	_, _ = fileStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventContextAssembled, Payload: map[string]any{
+		"manifest": domain.ContextManifest{Entries: []domain.ContextManifestEntry{{Source: "knowledge", CitationSourceID: "S1", Selected: true}}},
+	}})
+	runtime := agent.NewRuntime(agent.RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	handler := &Handler{store: fileStore, agentRuntime: runtime, verification: verification.NewEngine(fileStore, registry)}
+	response := httptest.NewRecorder()
+	if !handler.completeStreamingRun(response, response, nil, context.Background(), runCompletionRequest{
+		RunID: run.ID, ConversationID: conversation.ID, UserInput: "Where is the control plane?",
+		Assistant: "The production control plane runs in AWS `eu-central-1` [S1].",
+	}) {
+		t.Fatalf("complete grounded run: %s", response.Body.String())
+	}
+	completed, _, _ := fileStore.GetRun(run.ID)
+	if completed.Status != domain.RunCompleted || completed.VerificationStatus != domain.VerificationPassed {
+		t.Fatalf("grounding evidence did not open completion gate: %#v", completed)
+	}
+	evidence, err := fileStore.ListVerificationEvidence(run.ID)
+	if err != nil || len(evidence) != 1 || evidence[0].Details["algorithm"] != "lexical_claim_support" {
+		t.Fatalf("grounding evidence missing: %#v err=%v", evidence, err)
+	}
+}
+
+func TestGroundingSourcesForRunFailsClosedOnEvidenceDrift(t *testing.T) {
+	for _, testCase := range []struct {
+		name      string
+		document  *domain.Document
+		chunks    []domain.DocumentChunk
+		citation  domain.RAGCitation
+		wantError string
+	}{
+		{name: "missing document", citation: domain.RAGCitation{SourceID: "S1", DocumentID: "missing", ChunkID: "chunk-1"}, wantError: "document missing is unavailable"},
+		{name: "changed version", document: &domain.Document{ID: "doc-1", Title: "Facts", Version: "v2", SourceType: "markdown", Content: "fact"},
+			chunks:   []domain.DocumentChunk{{ID: "chunk-1", DocumentID: "doc-1", Content: "fact"}},
+			citation: domain.RAGCitation{SourceID: "S1", DocumentID: "doc-1", DocumentVersion: "v1", ChunkID: "chunk-1"}, wantError: "version changed"},
+		{name: "missing chunk", document: &domain.Document{ID: "doc-1", Title: "Facts", Version: "v1", SourceType: "markdown", Content: "fact"},
+			chunks:   []domain.DocumentChunk{{ID: "other", DocumentID: "doc-1", Content: "fact"}},
+			citation: domain.RAGCitation{SourceID: "S1", DocumentID: "doc-1", DocumentVersion: "v1", ChunkID: "chunk-1"}, wantError: "chunk chunk-1 is unavailable"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			conversation, _ := fileStore.CreateConversation("grounding drift")
+			run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+			if testCase.document != nil {
+				if _, err := fileStore.CreateDocument(*testCase.document, testCase.chunks, make([]domain.DocumentChunkEmbedding, len(testCase.chunks))); err != nil {
+					t.Fatal(err)
+				}
+			}
+			_, _ = fileStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventRetrievalCompleted, Payload: map[string]any{"citation_sources": []domain.RAGCitation{testCase.citation}}})
+			_, _ = fileStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventContextAssembled, Payload: map[string]any{
+				"manifest": domain.ContextManifest{Entries: []domain.ContextManifestEntry{{Source: "knowledge", CitationSourceID: "S1", Selected: true}}},
+			}})
+			handler := &Handler{store: fileStore}
+			_, err = handler.groundingSourcesForRun(fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)), run.ID)
+			if err == nil || !strings.Contains(err.Error(), testCase.wantError) {
+				t.Fatalf("got %v, want error containing %q", err, testCase.wantError)
+			}
+		})
+	}
+}
+
 func TestResolveRunCompletionReturnsQuestionLookupError(t *testing.T) {
 	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
 	if err != nil {

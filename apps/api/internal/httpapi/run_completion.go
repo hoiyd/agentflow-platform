@@ -8,7 +8,6 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
-	"agentflow-platform/apps/api/internal/verification"
 )
 
 type runCompletionRequest struct {
@@ -115,7 +114,7 @@ func (h *Handler) resolveRunCompletion(ctx context.Context, scoped store.Workspa
 		}
 		question = latestUserInput(messages)
 	}
-	decision, err := h.verification.Verify(ctx, runID, verification.SubjectForQuestionAnswer(question, output))
+	decision, err := h.verification.Verify(ctx, runID, h.verificationSubjectForRun(scoped, run, question, output))
 	if err != nil {
 		_, _ = scoped.UpdateRunVerificationStatus(runID, domain.VerificationBlocked)
 		return domain.Run{}, err

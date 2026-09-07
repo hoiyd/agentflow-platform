@@ -46,6 +46,7 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 	manifest := flags.String("corpus-manifest", "../../examples/knowledge/golden-v1/corpus-manifest.v1.json", "corpus manifest JSON path")
 	topK := flags.Int("top-k", 5, "retrieval result limit (1-20)")
 	minSimilarity := flags.Float64("min-similarity", 0.15, "minimum dense similarity (0-1)")
+	minimumEvidenceCoverage := flags.Float64("min-evidence-coverage", 0.25, "minimum query-term coverage required by the relevance gate (0.05-1)")
 	baselinePath := flags.String("baseline", "", "optional prior rag-eval-v1 JSON report")
 	ablation := flags.Bool("ablation", false, "allow exactly one declared pipeline/configuration difference")
 	enforce := flags.Bool("enforce", false, "exit 1 when the gate or comparable baseline check fails")
@@ -57,7 +58,7 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return 2
 	}
 	report, err := rageval.Run(ctx, rageval.Options{DatasetPath: *dataset, CorpusManifestPath: *manifest,
-		TopK: *topK, MinSimilarity: *minSimilarity, Revision: gitRevision(ctx)})
+		TopK: *topK, MinSimilarity: *minSimilarity, MinimumEvidenceCoverage: *minimumEvidenceCoverage, Revision: gitRevision(ctx)})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2

@@ -411,7 +411,10 @@ function relevanceGatePayload(value: unknown): RelevanceGateInfo | null {
 }
 
 function relevanceGateLabel(gate: RelevanceGateInfo) {
-  return `${gate.policy || "unknown"} / ${gate.version || "unversioned"} / config ${gate.config_version || "unversioned"}`;
+  const threshold = Number.isFinite(gate.minimum_evidence_coverage)
+    ? ` / evidence coverage ≥ ${gate.minimum_evidence_coverage.toFixed(2)}`
+    : "";
+  return `${gate.policy || "unknown"} / ${gate.version || "unversioned"} / config ${gate.config_version || "unversioned"}${threshold}`;
 }
 
 function retrievedMemories(payload: Record<string, unknown>): RetrievedMemoryPayload[] {
@@ -490,4 +493,3 @@ export function formatDuration(durationMS: number) {
   }
   return `${(durationMS / 1000).toFixed(2)} s`;
 }
-

@@ -184,7 +184,7 @@ structured failure metadata remain valid and expose only `source` and
 the original internal error remains in server diagnostics rather than the
 client payload. Streaming chat error chunks use the same fields.
 
-Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, `citation`, and `answer_relevance`. The last type binds the user question to the candidate output and records embedding cosine-similarity evidence; it is not a factuality or groundedness check. See [Verification](../runtime/verification.md) for exact config shapes, scope, extension points, and policy semantics.
+Verifier-specific settings use a common `verifiers[].config` object. Built-in types are `command`, `http`, `json_schema`, `text_constraints`, `citation`, `answer_relevance`, and `grounded_answer`. `answer_relevance` binds the user question to the candidate output and records embedding cosine similarity; `grounded_answer` checks claim-level `[S#]` support against knowledge selected for this Run. See [Verification](../runtime/verification.md) for exact config shapes, scope, extension points, and policy semantics.
 
 ## Tool Governance
 
@@ -329,8 +329,9 @@ knowledge for model context.
   },
   "relevance_gate": {
     "policy": "heuristic",
-    "version": "heuristic-relevance-gate-v1",
-    "config_version": "heuristic-relevance-default-v1"
+    "version": "heuristic-relevance-gate-v2",
+    "config_version": "heuristic-relevance-calibrated-v1",
+    "minimum_evidence_coverage": 0.25
   },
   "security": {
     "policy_version": "rag-prompt-guard-v1",
@@ -429,7 +430,9 @@ in the final Context Manifest. Unknown or budget-excluded markers are omitted
 from `citations`, exposed as `invalid_citation_ids` in the terminal event, and
 recorded as `invalid_source_ids` in the `citation.resolved` trace event. This
 native RAG protocol is separate from the optional completion verifier named
-`citation`, which checks external Markdown links.
+`citation`, which checks external Markdown links. The optional `grounded_answer`
+verifier instead consumes these native markers and selected source contents to
+produce claim-support Evidence.
 
 ### Security and No-Match Semantics
 

@@ -70,8 +70,11 @@ func TestCanonicalGoldenDatasetV1Asset(t *testing.T) {
 		if hasTag(evalCase.Tags, "multi-hop") && (evalCase.RequiredSourceCount < 2 || len(evalCase.ExpectedSources) < 2) {
 			t.Fatalf("multi-hop case %q must require at least two expected sources", evalCase.ID)
 		}
-		if (hasTag(evalCase.Tags, "acl") || hasTag(evalCase.Tags, "stale-data") || hasTag(evalCase.Tags, "no-answer")) && !hasTag(evalCase.Tags, "non-blocking") {
+		if (hasTag(evalCase.Tags, "acl") || hasTag(evalCase.Tags, "stale-data")) && !hasTag(evalCase.Tags, "non-blocking") {
 			t.Fatalf("case %q must remain non-blocking until its policy prerequisites are implemented", evalCase.ID)
+		}
+		if !hasTag(evalCase.Tags, "calibration") && !hasTag(evalCase.Tags, "holdout") {
+			t.Fatalf("case %q must belong to the calibration or holdout split", evalCase.ID)
 		}
 		if hasTag(evalCase.Tags, "prompt-injection") {
 			if len(evalCase.ForbiddenSources) == 0 {
