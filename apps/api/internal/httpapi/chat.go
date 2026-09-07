@@ -358,8 +358,19 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if run.Status != domain.RunWaitingForUser && run.Status != domain.RunFailedRecoverable {
-		writeError(w, http.StatusBadRequest, "run is not resumable")
+		writeError(w, http.StatusConflict, "run is not resumable in its current state")
 		return
+	}
+	toolEffects, err := scoped.ListToolEffects(id)
+	if err != nil {
+		writeFailure(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	for _, effect := range toolEffects {
+		if domain.ToolEffectRequiresReconciliation(effect.Status) {
+			writeError(w, http.StatusConflict, "run has unresolved tool effects; reconcile them before resuming")
+			return
+		}
 	}
 	reservation, admitted := h.reserveRunCapacity(w, r)
 	if !admitted {

@@ -112,6 +112,55 @@ type ToolEffectSummary struct {
 	UpdatedAt          time.Time        `json:"updated_at"`
 }
 
+// ToolEffectRequiresReconciliation reports whether an external side effect is
+// still unresolved. Resume and recovery read models share this predicate so a
+// UI action cannot bypass the durable reconciliation protocol.
+func ToolEffectRequiresReconciliation(status ToolEffectStatus) bool {
+	return status == ToolEffectNeedsReconciliation || status == ToolEffectReconciling
+}
+
+type RecoveryReason string
+
+const (
+	RecoveryRunFailed           RecoveryReason = "run_failed"
+	RecoveryRunCanceled         RecoveryReason = "run_canceled"
+	RecoveryRunRecoverable      RecoveryReason = "run_recoverable"
+	RecoveryInputRequired       RecoveryReason = "input_required"
+	RecoveryTaskBlocked         RecoveryReason = "task_blocked"
+	RecoveryVerificationFailed  RecoveryReason = "verification_failed"
+	RecoveryVerificationBlocked RecoveryReason = "verification_blocked"
+	RecoveryChildBlocked        RecoveryReason = "child_run_blocked"
+	RecoveryChildOwnedByParent  RecoveryReason = "child_run_owned_by_parent"
+	RecoveryToolEffectUncertain RecoveryReason = "tool_effect_reconciliation_required"
+)
+
+type RecoveryEvidence struct {
+	Kind         string   `json:"kind"`
+	ID           string   `json:"id,omitempty"`
+	Status       string   `json:"status,omitempty"`
+	Summary      string   `json:"summary"`
+	ArtifactRefs []string `json:"artifact_refs,omitempty"`
+}
+
+type RecoveryAction struct {
+	Kind              string `json:"kind"`
+	Label             string `json:"label"`
+	Enabled           bool   `json:"enabled"`
+	TargetID          string `json:"target_id,omitempty"`
+	UnavailableReason string `json:"unavailable_reason,omitempty"`
+}
+
+// RecoverySummary is a projection over existing durable records, not another
+// recovery state machine or source of truth.
+type RecoverySummary struct {
+	Reason       RecoveryReason     `json:"reason"`
+	Title        string             `json:"title"`
+	Message      string             `json:"message"`
+	Evidence     []RecoveryEvidence `json:"evidence"`
+	ArtifactRefs []string           `json:"artifact_refs"`
+	Actions      []RecoveryAction   `json:"actions"`
+}
+
 func SummarizeToolEffects(records []ToolEffectRecord) []ToolEffectSummary {
 	items := make([]ToolEffectSummary, 0, len(records))
 	for _, record := range records {

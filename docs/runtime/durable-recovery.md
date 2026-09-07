@@ -121,6 +121,32 @@ and result-size policy.
 See [Tool side-effect reconciliation](../tools/tool-side-effect-reconciliation.md)
 for the operator API and complete transition rules.
 
+## Recovery Summary and Actions
+
+Run Replay derives an optional `recovery_summary` from the existing Run,
+TaskState, Verification Evidence, parent/child delegation, and Tool Effect
+records. It is a read model, not a persisted recovery state or a replacement
+for those source records. Healthy queued, running, and completed Runs omit it.
+
+The summary contains one current reason, bounded supporting evidence, partial
+output references, and actions with explicit availability. It distinguishes a
+recoverable parent from a child whose delegation stage is owned by that parent;
+the child Replay links to the parent instead of offering an invalid Resume.
+Failed and canceled Runs do not expose Resume. Missing Verification Evidence is
+reported as the reason that its review action is unavailable.
+
+An unresolved `needs_reconciliation` or `reconciling` Tool Effect takes
+precedence over Resume. The Replay UI exposes the existing operator
+reconciliation commands, and `POST /api/runs/{id}/resume` independently rejects
+the request with `409` until every uncertain effect is settled. A repeated or
+stale Resume also returns `409`; Tool reconciliation retains its existing
+optimistic version and idempotent command contracts.
+
+The current API has Workspace scoping but no identity or authorization system.
+An operator-surface permission failure is therefore enforced by the deployment
+boundary and displayed by the UI as the API error; the `actor` field remains
+audit attribution, not proof of identity.
+
 ## Shutdown Ordering
 
 `RunController.CloseAndWait` rejects new reservations and waits for all accepted

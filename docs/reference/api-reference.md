@@ -149,6 +149,12 @@ related Run Events.
 
 `GET /api/runs/{id}/projection` returns the canonical Run, Usage, and Verification read models at one `as_of_sequence` watermark, plus stable runtime-invariant failures. Here, "projection" means a deterministic, non-persisted view derived from durable events and authoritative records; it is not a second source of truth or a resume checkpoint. Replay includes the same projection and retains its top-level `summary` and `usage_ledger` compatibility fields.
 
+When a Run is stopped, blocked, or needs operator action, Replay also returns a
+derived `recovery_summary` containing the current reason, supporting evidence,
+partial output references, and typed actions with availability reasons. Normal
+Runs omit this field. Resume returns `409` for stale/non-recoverable requests or
+while any Tool Effect remains `needs_reconciliation` or `reconciling`.
+
 `GET /api/runs/{id}/usage` returns the immutable budget, effective totals, open model reservations, and append-only usage entries. The same `usage_ledger` is included in Replay. A reservation and settlement share one `operation_id`; the settlement replaces its estimate when totals are calculated.
 
 `GET /api/runs/{id}/model_requests` returns physical Model Request Envelopes,

@@ -372,7 +372,7 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 		parentDelegationRef = &parentDelegation
 	}
 	readModel := projection.BuildSnapshot(run, runEvents, usageLedger, verificationEvidence)
-	return domain.RunReplay{
+	replay := domain.RunReplay{
 		Run:                   run,
 		Projection:            readModel,
 		RuntimeSnapshot:       cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
@@ -390,7 +390,9 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 		TaskStateRevisions:    taskStateRevisions,
 		ParentDelegation:      parentDelegationRef,
 		ChildDelegations:      childDelegations,
-	}, true, nil
+	}
+	replay.RecoverySummary = projection.BuildRecoverySummary(replay)
+	return replay, true, nil
 }
 
 func (s *PostgresStore) scanStepQuery(query string, args ...any) (domain.CollaborationStep, error) {

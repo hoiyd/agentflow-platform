@@ -23,6 +23,7 @@ Global styles load in two ordered layers from `app/layout.tsx`:
 - `collaboration.css`: multi-agent DAG, Loop Trace, and trace controls.
 - `replay-overlays.css`: run replay, event details, and shared overlays.
 - `runtime-diagnostics.css`: event-derived protocol diagnostics shown on Run Replay.
+- `recovery-summary.css`: stopped-run evidence, recovery actions, and Tool effect reconciliation.
 - `task-state-replay.css`: bounded Task State Revision projection on Run Replay.
 - `responsive.css`: breakpoint-specific overrides; keep this last.
 

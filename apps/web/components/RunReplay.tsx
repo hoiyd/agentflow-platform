@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { EpisodeReport, RunReplay as RunReplayData } from "../lib/api";
+import type { EpisodeReport, RecoveryAction, RunReplay as RunReplayData } from "../lib/api";
 import { getEpisodeReport, getRunReplay, resumeRun } from "../lib/api";
 import { RunUsagePanel } from "./RunUsagePanel";
 import {
@@ -19,6 +19,7 @@ import {
 import { TaskStateChanges } from "./run-replay/TaskStateChanges";
 import { RuntimeDiagnostics } from "./run-replay/RuntimeDiagnostics";
 import { DelegationTopology } from "./run-replay/DelegationTopology";
+import { RecoverySummaryPanel, ToolEffectReconciliationPanel } from "./run-replay/RecoveryActions";
 
 type Props = {
   runId: string;
@@ -62,8 +63,6 @@ export function RunReplay({ runId }: Props) {
     [replay, selectedEventId]
   );
   const retrievalSummary = useMemo(() => buildRetrievalSummary(replay?.run_events ?? []), [replay?.run_events]);
-  const canResumeRecoverable = replay?.run.status === "failed_recoverable" && !replay.parent_delegation;
-
   async function handleResumeRecoverable() {
     if (!replay || isResuming) {
       return;
@@ -125,6 +124,36 @@ export function RunReplay({ runId }: Props) {
     });
   }
 
+	async function refreshReplay() {
+		const [data, report] = await loadReplayAndReport(runId);
+		setReplay(data);
+		setEpisodeReport(report);
+	}
+
+	function handleRecoveryAction(action: RecoveryAction) {
+		if (!action.enabled) return;
+		switch (action.kind) {
+			case "resume_run":
+				void handleResumeRecoverable();
+				return;
+			case "continue_in_chat":
+				router.push(`/workspace?conversation=${encodeURIComponent(action.target_id ?? replay?.run.conversation_id ?? "")}`);
+				return;
+			case "inspect_parent_run":
+			case "inspect_child_run":
+				if (action.target_id) router.push(`/runs/${encodeURIComponent(action.target_id)}`);
+				return;
+			case "review_verification":
+				document.getElementById("run-verification-evidence")?.scrollIntoView({ behavior: "smooth", block: "start" });
+				return;
+			case "review_task_state":
+				document.getElementById("run-task-state")?.scrollIntoView({ behavior: "smooth", block: "start" });
+				return;
+			case "reconcile_tool_effect":
+				document.getElementById("tool-effect-recovery")?.scrollIntoView({ behavior: "smooth", block: "start" });
+		}
+	}
+
   if (error) {
     return (
       <main className="replay-page">
@@ -158,19 +187,14 @@ export function RunReplay({ runId }: Props) {
           <p>{replay.conversation.title}</p>
         </div>
         <div className="replay-header-actions">
-          {canResumeRecoverable ? (
-            <button className="run-link" disabled={isResuming} onClick={handleResumeRecoverable} type="button">
-              Resume run
-            </button>
-          ) : null}
           <span className={`replay-status ${replay.run.status}`}>{replay.run.status}</span>
         </div>
       </header>
-      {canResumeRecoverable ? (
-        <section className="recoverable-banner">
-          This run stopped unexpectedly and can be resumed from saved collaboration steps.
-        </section>
-      ) : null}
+
+		<RecoverySummaryPanel summary={replay.recovery_summary} onAction={handleRecoveryAction} />
+		{replay.recovery_summary?.actions.some((action) => action.kind === "reconcile_tool_effect") ? (
+			<ToolEffectReconciliationPanel onChanged={refreshReplay} runId={replay.run.id} />
+		) : null}
 
       <RuntimeDiagnostics
         asOfSequence={replay.projection.as_of_sequence}
@@ -279,7 +303,7 @@ function EpisodeReportPanel({ report }: { report: EpisodeReport }) {
         ? "failed"
         : "needs-review";
   return (
-    <section className="episode-report">
+    <section className="episode-report" id="run-verification-evidence">
       <div className="episode-report-header">
         <div>
           <div className="panel-title inline">Episode report</div>

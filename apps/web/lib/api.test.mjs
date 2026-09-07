@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { APIError } from "./api-client.ts";
-import { getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, patchTaskState } from "./api.ts";
+import { getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listToolEffects, patchTaskState, reconcileToolEffect } from "./api.ts";
 import {
   createDocument,
   deleteDocument,
@@ -92,6 +92,55 @@ test("replay preserves durable recovery metadata", async (t) => {
 
   assert.equal(replay.stage_checkpoints[0].status, "committed");
   assert.equal(replay.tool_effects[0].has_result, true);
+});
+
+test("replay preserves recovery actions and evidence summary", async (t) => {
+  mockFetch(t, replayPayload({
+    recovery_summary: {
+      reason: "run_recoverable",
+      title: "Run can be resumed",
+      message: "A durable recovery point exists.",
+      evidence: [{ kind: "run_error", status: "failed_recoverable", summary: "worker interrupted" }],
+      artifact_refs: ["run://child/stages/worker"],
+      actions: [{ kind: "resume_run", label: "Resume run", enabled: true, target_id: "run-1" }]
+    }
+  }));
+
+  const replay = await getRunReplay("run-1");
+
+  assert.equal(replay.recovery_summary.reason, "run_recoverable");
+  assert.equal(replay.recovery_summary.actions[0].enabled, true);
+  assert.equal(replay.recovery_summary.artifact_refs[0], "run://child/stages/worker");
+});
+
+test("tool effect clients preserve conflict versions and commands", async (t) => {
+  const requests = [];
+  const effect = {
+    idempotency_key: "effect-1", version: 3, run_id: "run-1", stage_id: "stage-1",
+    tool_call_id: "call-1", tool_name: "external_writer", request_hash: "hash",
+    status: "needs_reconciliation", has_result: false, created_at: "", updated_at: "",
+    available_actions: ["confirm_failed"]
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    requests.push([String(url), options]);
+    const body = requests.length === 1
+      ? { effects: [effect] }
+      : { applied: true, outcome: "completed", effect: { ...effect, status: "failed", version: 4 } };
+    return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const effects = await listToolEffects("run-1");
+  assert.equal(effects[0].version, 3);
+  assert.match(requests[0][0], /\/api\/runs\/run-1\/tool-effects$/);
+
+  const outcome = await reconcileToolEffect("run-1", "effect-1", {
+    command_id: "command-1", action: "confirm_failed", expected_version: 3, actor: "operator", reason: "checked"
+  });
+  assert.equal(outcome.effect.version, 4);
+  assert.deepEqual(JSON.parse(requests[1][1].body), {
+    command_id: "command-1", action: "confirm_failed", expected_version: 3, actor: "operator", reason: "checked"
+  });
 });
 
 test("replay preserves reconciliation claims and their typed audit events", async (t) => {

@@ -1,0 +1,203 @@
+/* Recovery diagnostics and explicit operator actions on Run Replay. */
+
+.recovery-summary,
+.tool-effect-recovery {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: #fff;
+  padding: 16px;
+}
+
+.recovery-summary > header,
+.tool-effect-recovery > header,
+.tool-effect-identity,
+.tool-effect-submit {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.recovery-summary h2,
+.tool-effect-recovery h2 {
+  margin: 2px 0 5px;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 680;
+}
+
+.recovery-summary p,
+.tool-effect-recovery p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.recovery-summary-kicker,
+.recovery-artifacts > strong {
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.recovery-summary > header > code,
+.tool-effect-recovery > header > span,
+.tool-effect-identity > span,
+.recovery-evidence-row > span {
+  flex: none;
+  color: var(--muted-strong);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.recovery-evidence {
+  border-top: 1px solid var(--border);
+}
+
+.recovery-evidence-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.45fr) minmax(280px, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+}
+
+.recovery-evidence-row > div {
+  display: flex;
+  min-width: 0;
+  gap: 9px;
+  align-items: baseline;
+}
+
+.recovery-evidence-row strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.recovery-evidence-row code,
+.recovery-artifacts code,
+.tool-effect-identity code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.recovery-evidence-empty {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.recovery-artifacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.recovery-actions > div {
+  display: grid;
+  gap: 5px;
+}
+
+.recovery-actions button,
+.tool-effect-submit button {
+  min-height: 34px;
+  border: 1px solid #202833;
+  border-radius: 4px;
+  background: #202833;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 7px 12px;
+}
+
+.recovery-actions button:disabled,
+.tool-effect-submit button:disabled {
+  border-color: var(--border-strong);
+  background: #eef1f4;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.recovery-actions span {
+  max-width: 260px;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.tool-effect-form {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.tool-effect-identity > div {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.tool-effect-error {
+  color: var(--danger) !important;
+}
+
+.tool-effect-fields {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(180px, 0.7fr) minmax(280px, 1.6fr);
+  gap: 10px;
+}
+
+.tool-effect-fields label,
+.tool-effect-result {
+  display: grid;
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.tool-effect-fields input,
+.tool-effect-fields select,
+.tool-effect-result textarea {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.tool-effect-result textarea {
+  min-height: 82px;
+  resize: vertical;
+  font-family: var(--font-mono);
+}
+
+.tool-effect-submit {
+  align-items: center;
+}
+
+.tool-effect-submit .error {
+  padding: 0;
+}

@@ -30,6 +30,7 @@ import "./styles/workbench/memory.css";
 import "./styles/workbench/collaboration.css";
 import "./styles/workbench/replay-overlays.css";
 import "./styles/workbench/runtime-diagnostics.css";
+import "./styles/workbench/recovery-summary.css";
 import "./styles/workbench/task-state-replay.css";
 import "./styles/workbench/responsive.css";
 

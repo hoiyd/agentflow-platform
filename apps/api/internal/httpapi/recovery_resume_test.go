@@ -262,6 +262,57 @@ func TestResumeFailurePolicyKeepsReplayOnlyRunRecoverable(t *testing.T) {
 	}
 }
 
+func TestResumeRunRejectsStaleAndUnreconciledActions(t *testing.T) {
+	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := fileStore.CreateConversation("Resume conflicts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.UpdateRunStatus(completed.ID, domain.RunCompleted, ""); err != nil {
+		t.Fatal(err)
+	}
+	handler := &Handler{store: fileStore}
+	response := httptest.NewRecorder()
+	handler.resumeRun(response, httptest.NewRequest(http.MethodPost, "/api/runs/"+completed.ID+"/resume", strings.NewReader(`{}`)))
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "current state") {
+		t.Fatalf("stale resume: status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	recoverable, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.UpdateRunStatus(recoverable.ID, domain.RunFailedRecoverable, "interrupted"); err != nil {
+		t.Fatal(err)
+	}
+	effect, _, err := fileStore.BeginToolEffect(domain.ToolEffectRecord{
+		IdempotencyKey: "effect-resume", RunID: recoverable.ID, StageID: "stage-1", ToolCallID: "call-1",
+		ToolName: "external_writer", RequestHash: "hash",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fileStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "timeout"); err != nil {
+		t.Fatal(err)
+	}
+	replay, ok, err := fileStore.GetRunReplay(recoverable.ID)
+	if err != nil || !ok || replay.RecoverySummary == nil || replay.RecoverySummary.Reason != domain.RecoveryToolEffectUncertain {
+		t.Fatalf("file recovery summary: summary=%#v ok=%v err=%v", replay.RecoverySummary, ok, err)
+	}
+	response = httptest.NewRecorder()
+	handler.resumeRun(response, httptest.NewRequest(http.MethodPost, "/api/runs/"+recoverable.ID+"/resume", strings.NewReader(`{}`)))
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "unresolved tool effects") {
+		t.Fatalf("unreconciled resume: status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 type sseChunk struct {
 	Event    string
 	Chunk    domain.ChatChunk

@@ -24,6 +24,11 @@ status, request hash, timestamps, `has_result`, and the actions currently
 available from the enabled Binding and current Tool security policy. Omitting filters returns every effect for
 the Run.
 
+Run Replay links uncertain effects into `recovery_summary` and provides the same
+manual commands in its operator panel. This UI is a consumer of the APIs above;
+it does not introduce a second reconciliation state or bypass optimistic
+versions. Resume remains unavailable until the effect is settled.
+
 A command has this shape:
 
 ```json

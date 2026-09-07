@@ -69,6 +69,12 @@ func TestAgentAndRunHandlersProjectStoreFailures(t *testing.T) {
 		assertHandlerFailure(t, test.invoke, test.request, http.StatusInternalServerError)
 	}
 	workspace.getRunErr = nil
+	if _, err := fileStore.UpdateRunStatus(run.ID, domain.RunFailedRecoverable, "interrupted"); err != nil {
+		t.Fatal(err)
+	}
+	workspace.listToolEffectsErr = want
+	assertHandlerFailure(t, handler.resumeRun, httptest.NewRequest(http.MethodPost, "/api/runs/"+run.ID+"/resume", bytes.NewBufferString(`{}`)), http.StatusInternalServerError)
+	workspace.listToolEffectsErr = nil
 
 	workspace.listCollaborationStepsErr = want
 	assertHandlerFailure(t, handler.listCollaborationSteps, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/collaboration_steps", nil), http.StatusInternalServerError)
@@ -357,6 +363,7 @@ type boundaryWorkspaceStore struct {
 	listRunEventsErr           error
 	getRunReplayErr            error
 	getRunUsageErr             error
+	listToolEffectsErr         error
 	listDocumentsErr           error
 	getDocumentErr             error
 }
@@ -444,6 +451,12 @@ func (s *boundaryWorkspaceStore) GetRunUsageLedger(id string) (domain.RunUsageLe
 		return domain.RunUsageLedger{}, false, s.getRunUsageErr
 	}
 	return s.WorkspaceStore.GetRunUsageLedger(id)
+}
+func (s *boundaryWorkspaceStore) ListToolEffects(id string) ([]domain.ToolEffectRecord, error) {
+	if s.listToolEffectsErr != nil {
+		return nil, s.listToolEffectsErr
+	}
+	return s.WorkspaceStore.ListToolEffects(id)
 }
 func (s *boundaryWorkspaceStore) ListDocuments() ([]domain.Document, error) {
 	if s.listDocumentsErr != nil {
