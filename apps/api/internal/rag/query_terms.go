@@ -2,6 +2,14 @@ package rag
 
 import "strings"
 
+var englishQueryStopWords = map[string]bool{
+	"a": true, "an": true, "and": true, "are": true, "as": true, "at": true,
+	"be": true, "by": true, "can": true, "does": true, "for": true, "from": true,
+	"how": true, "in": true, "is": true, "it": true, "of": true, "on": true,
+	"or": true, "should": true, "that": true, "the": true, "this": true, "to": true,
+	"what": true, "when": true, "where": true, "which": true, "who": true, "with": true,
+}
+
 func QueryTerms(query string) []string {
 	fields := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
 		return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9') && !(r >= '\u4e00' && r <= '\u9fff')
@@ -10,7 +18,7 @@ func QueryTerms(query string) []string {
 	seen := map[string]bool{}
 	for _, field := range fields {
 		field = strings.TrimSpace(field)
-		if len([]rune(field)) < 2 || seen[field] {
+		if len([]rune(field)) < 2 || seen[field] || englishQueryStopWords[field] {
 			continue
 		}
 		seen[field] = true

@@ -617,7 +617,10 @@ function RelevanceGateStatus({ gate, hasSearched }: { gate: RelevanceGateInfo | 
       <span>
         Relevance Gate: {gate.policy} / {gate.version}
       </span>
-      <span>Config {gate.config_version}</span>
+      <span>
+        Config {gate.config_version}
+        {Number.isFinite(gate.minimum_evidence_coverage) ? ` / evidence coverage ≥ ${gate.minimum_evidence_coverage.toFixed(2)}` : ""}
+      </span>
     </div>
   );
 }

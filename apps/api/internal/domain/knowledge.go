@@ -158,9 +158,10 @@ type RerankerInfo struct {
 }
 
 type RelevanceGateInfo struct {
-	Policy        string `json:"policy"`
-	Version       string `json:"version"`
-	ConfigVersion string `json:"config_version"`
+	Policy                  string  `json:"policy"`
+	Version                 string  `json:"version"`
+	ConfigVersion           string  `json:"config_version"`
+	MinimumEvidenceCoverage float64 `json:"minimum_evidence_coverage"`
 }
 
 type KnowledgeSecurityDecision struct {

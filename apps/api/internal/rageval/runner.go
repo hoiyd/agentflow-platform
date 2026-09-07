@@ -26,17 +26,19 @@ import (
 const SchemaVersion = "rag-eval-v1"
 
 type Options struct {
-	DatasetPath        string
-	CorpusManifestPath string
-	TopK               int
-	MinSimilarity      float64
-	Revision           string
+	DatasetPath             string
+	CorpusManifestPath      string
+	TopK                    int
+	MinSimilarity           float64
+	MinimumEvidenceCoverage float64
+	Revision                string
 }
 
 type Config struct {
-	TopK          int     `json:"top_k"`
-	MinSimilarity float64 `json:"min_similarity"`
-	Chunker       string  `json:"chunker"`
+	TopK                    int     `json:"top_k"`
+	MinSimilarity           float64 `json:"min_similarity"`
+	MinimumEvidenceCoverage float64 `json:"minimum_evidence_coverage"`
+	Chunker                 string  `json:"chunker"`
 }
 
 type CorpusIdentity struct {
@@ -55,14 +57,19 @@ type PipelineIdentity struct {
 }
 
 type RankedSource struct {
-	Rank            int    `json:"rank"`
-	SourceURI       string `json:"source_uri,omitempty"`
-	DocumentVersion string `json:"document_version,omitempty"`
-	ChunkHash       string `json:"chunk_hash,omitempty"`
+	Rank             int     `json:"rank"`
+	SourceURI        string  `json:"source_uri,omitempty"`
+	DocumentVersion  string  `json:"document_version,omitempty"`
+	ChunkHash        string  `json:"chunk_hash,omitempty"`
+	Confidence       string  `json:"confidence,omitempty"`
+	Similarity       float64 `json:"similarity"`
+	EvidenceCoverage float64 `json:"evidence_coverage"`
+	FilterReason     string  `json:"filter_reason,omitempty"`
 }
 
 type Sample struct {
 	CaseID            string         `json:"case_id"`
+	Split             string         `json:"split"`
 	Classification    string         `json:"classification"`
 	Status            string         `json:"status"`
 	Answerable        bool           `json:"answerable"`
@@ -115,15 +122,16 @@ type Comparison struct {
 
 type Report struct {
 	evalreport.Identity
-	SchemaVersion string           `json:"schema_version"`
-	Corpus        CorpusIdentity   `json:"corpus"`
-	Config        Config           `json:"config"`
-	Pipeline      PipelineIdentity `json:"pipeline"`
-	CostSource    string           `json:"cost_source"`
-	Samples       []Sample         `json:"samples"`
-	Summary       Summary          `json:"summary"`
-	Gate          evalreport.Gate  `json:"gate"`
-	Comparison    *Comparison      `json:"comparison,omitempty"`
+	SchemaVersion  string             `json:"schema_version"`
+	Corpus         CorpusIdentity     `json:"corpus"`
+	Config         Config             `json:"config"`
+	Pipeline       PipelineIdentity   `json:"pipeline"`
+	CostSource     string             `json:"cost_source"`
+	Samples        []Sample           `json:"samples"`
+	Summary        Summary            `json:"summary"`
+	SplitSummaries map[string]Summary `json:"split_summaries"`
+	Gate           evalreport.Gate    `json:"gate"`
+	Comparison     *Comparison        `json:"comparison,omitempty"`
 }
 
 type corpusManifest struct {
@@ -145,8 +153,11 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if opts.TopK == 0 {
 		opts.TopK = 5
 	}
-	if opts.TopK < 1 || opts.TopK > 20 || opts.MinSimilarity < 0 || opts.MinSimilarity > 1 {
-		return Report{}, errors.New("top-k must be 1-20 and min-similarity must be 0-1")
+	if opts.MinimumEvidenceCoverage == 0 {
+		opts.MinimumEvidenceCoverage = rag.DefaultHeuristicRelevanceGateConfig().MinimumEvidenceCoverage
+	}
+	if opts.TopK < 1 || opts.TopK > 20 || opts.MinSimilarity < 0 || opts.MinSimilarity > 1 || opts.MinimumEvidenceCoverage < 0.05 || opts.MinimumEvidenceCoverage > 1 {
+		return Report{}, errors.New("top-k must be 1-20 and similarity/evidence thresholds must be within their documented ranges")
 	}
 	startedAt := time.Now().UTC()
 	dataset, datasetHash, err := loadDataset(opts.DatasetPath)
@@ -167,7 +178,13 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		return Report{}, err
 	}
 	client := openai.NewClientWithTimeoutAndEmbeddingModel("", "", "https://offline.invalid/v1", "", "local_hash_embedding", 1536, time.Second)
-	base := knowledge.NewKnowledgeBase(fileStore, client)
+	gateConfig := rag.DefaultHeuristicRelevanceGateConfig()
+	gateConfig.MinimumEvidenceCoverage = opts.MinimumEvidenceCoverage
+	if gateConfig.MinimumEvidenceCoverage != rag.DefaultHeuristicRelevanceGateConfig().MinimumEvidenceCoverage {
+		gateConfig.ConfigVersion = fmt.Sprintf("eval-evidence-coverage-%.2f", gateConfig.MinimumEvidenceCoverage)
+	}
+	retriever := rag.NewRetrievalPipelineWithStages(fileStore, nil, rag.NewHeuristicRelevanceGate(gateConfig))
+	base := knowledge.NewKnowledgeBaseWithRetriever(fileStore, client, retriever)
 	for index, document := range documents {
 		if _, err := base.Ingest(ctx, domain.DocumentIngestRequest{Title: manifest.Documents[index].Title, Version: manifest.Version,
 			Content: document, SourceType: "markdown", SourceURI: manifest.Documents[index].File,
@@ -178,14 +195,16 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	report := Report{Identity: evalreport.Identity{ReportFormat: evalreport.Format, EvaluationKind: "offline_rag",
 		DatasetID: dataset.ID, DatasetVersion: dataset.Version, DatasetHash: datasetHash,
 		GitRevision: normalizedRevision(opts.Revision), StartedAt: startedAt}, SchemaVersion: SchemaVersion,
-		Corpus:     CorpusIdentity{DatasetID: manifest.DatasetID, Version: manifest.Version, Hash: corpusHash, Documents: len(documents)},
-		Config:     Config{TopK: opts.TopK, MinSimilarity: opts.MinSimilarity, Chunker: rag.DocumentChunkerVersion},
+		Corpus: CorpusIdentity{DatasetID: manifest.DatasetID, Version: manifest.Version, Hash: corpusHash, Documents: len(documents)},
+		Config: Config{TopK: opts.TopK, MinSimilarity: opts.MinSimilarity,
+			MinimumEvidenceCoverage: opts.MinimumEvidenceCoverage, Chunker: rag.DocumentChunkerVersion},
 		CostSource: "not_applicable: deterministic local embedding", Samples: make([]Sample, 0, len(dataset.Cases))}
 	for _, evaluationCase := range dataset.Cases {
 		sample := runSample(ctx, base, evaluationCase, opts.TopK, opts.MinSimilarity, &report.Pipeline)
 		report.Samples = append(report.Samples, sample)
 	}
 	report.Summary = summarize(report.Samples)
+	report.SplitSummaries = summarizeSplits(report.Samples)
 	report.Gate = gate(report.Samples)
 	report.CompletedAt = time.Now().UTC()
 	return report, nil
@@ -196,7 +215,7 @@ func runSample(ctx context.Context, base *knowledge.KnowledgeBase, evaluationCas
 	if contains(evaluationCase.Tags, "non-blocking") {
 		classification = "diagnostic"
 	}
-	sample := Sample{CaseID: evaluationCase.ID, Classification: classification, Status: "completed",
+	sample := Sample{CaseID: evaluationCase.ID, Split: evaluationSplit(evaluationCase.Tags), Classification: classification, Status: "completed",
 		Answerable: evaluationCase.Answerable != nil && *evaluationCase.Answerable, Sources: []RankedSource{}}
 	if err := ctx.Err(); err != nil {
 		sample.Status, sample.ErrorCode, sample.Error = "not_evaluated", "context_canceled", err.Error()
@@ -227,9 +246,32 @@ func runSample(ctx context.Context, base *knowledge.KnowledgeBase, evaluationCas
 	}
 	for index, item := range response.Items {
 		sample.Sources = append(sample.Sources, RankedSource{Rank: index + 1, SourceURI: item.Document.SourceURI,
-			DocumentVersion: item.Document.Version, ChunkHash: item.Chunk.ContentHash})
+			DocumentVersion: item.Document.Version, ChunkHash: item.Chunk.ContentHash, Confidence: item.Confidence,
+			Similarity: item.Similarity, EvidenceCoverage: item.EvidenceCoverage, FilterReason: item.FilterReason})
 	}
 	return sample
+}
+
+func summarizeSplits(samples []Sample) map[string]Summary {
+	grouped := map[string][]Sample{}
+	for _, sample := range samples {
+		grouped[sample.Split] = append(grouped[sample.Split], sample)
+	}
+	summaries := make(map[string]Summary, len(grouped))
+	for split, items := range grouped {
+		summaries[split] = summarize(items)
+	}
+	return summaries
+}
+
+func evaluationSplit(tags []string) string {
+	if contains(tags, "calibration") {
+		return "calibration"
+	}
+	if contains(tags, "holdout") {
+		return "holdout"
+	}
+	return "unspecified"
 }
 
 func summarize(samples []Sample) Summary {
@@ -391,6 +433,9 @@ func changedVariables(current, baseline Report) []string {
 	if current.Config.MinSimilarity != baseline.Config.MinSimilarity {
 		changes = append(changes, "min_similarity")
 	}
+	if current.Config.MinimumEvidenceCoverage != baseline.Config.MinimumEvidenceCoverage {
+		changes = append(changes, "minimum_evidence_coverage")
+	}
 	if current.Config.Chunker != baseline.Config.Chunker {
 		changes = append(changes, "chunker")
 	}
@@ -403,7 +448,12 @@ func changedVariables(current, baseline Report) []string {
 	if current.Pipeline.Reranker != baseline.Pipeline.Reranker {
 		changes = append(changes, "reranker")
 	}
-	if current.Pipeline.RelevanceGate != baseline.Pipeline.RelevanceGate {
+	currentGate, baselineGate := current.Pipeline.RelevanceGate, baseline.Pipeline.RelevanceGate
+	if current.Config.MinimumEvidenceCoverage != baseline.Config.MinimumEvidenceCoverage {
+		currentGate.ConfigVersion, baselineGate.ConfigVersion = "", ""
+		currentGate.MinimumEvidenceCoverage, baselineGate.MinimumEvidenceCoverage = 0, 0
+	}
+	if currentGate != baselineGate {
 		changes = append(changes, "relevance_gate")
 	}
 	if current.Pipeline.SecurityPolicy != baseline.Pipeline.SecurityPolicy {

@@ -1,10 +1,16 @@
 export type VerificationFailureAction = "fail" | "waiting_for_user";
-export type VerifierTypeInput = "command" | "http" | "json_schema" | "text_constraints" | "citation" | "answer_relevance";
+export type VerifierTypeInput = "command" | "http" | "json_schema" | "text_constraints" | "citation" | "answer_relevance" | "grounded_answer";
 
 export type AnswerRelevanceSettings = {
   enabled: boolean;
   minimumScore: number;
   minimumAnswerCharacters: number;
+};
+
+export type GroundedAnswerSettings = {
+  enabled: boolean;
+  minimumClaimSupport: number;
+  noAnswerPhrases: string;
 };
 
 export type TextConstraintsSettings = {
@@ -50,6 +56,7 @@ export type CommandVerifierSettings = {
 export type CompletionVerificationSettings = {
   enabled: boolean;
   answerRelevance: AnswerRelevanceSettings;
+  groundedAnswer: GroundedAnswerSettings;
   textConstraints: TextConstraintsSettings;
   citation: CitationSettings;
   jsonSchema: JSONSchemaSettings;
@@ -82,6 +89,11 @@ export const DEFAULT_COMPLETION_VERIFICATION: CompletionVerificationSettings = {
     enabled: false,
     minimumScore: 0.65,
     minimumAnswerCharacters: 20
+  },
+  groundedAnswer: {
+    enabled: false,
+    minimumClaimSupport: 0.5,
+    noAnswerPhrases: "insufficient evidence\nnot enough evidence\n证据不足\n无法从现有资料"
   },
   textConstraints: {
     enabled: true,
@@ -147,6 +159,17 @@ export function buildCompletionContract(
       config: {
         minimum_score: normalized.answerRelevance.minimumScore,
         minimum_answer_characters: normalized.answerRelevance.minimumAnswerCharacters
+      }
+    });
+  }
+  if (normalized.groundedAnswer.enabled) {
+    verifiers.push({
+      id: "grounded-answer",
+      type: "grounded_answer",
+      required: true,
+      config: {
+        minimum_claim_support: normalized.groundedAnswer.minimumClaimSupport,
+        no_answer_phrases: lines(normalized.groundedAnswer.noAnswerPhrases)
       }
     });
   }
@@ -234,6 +257,10 @@ export function normalizeCompletionVerification(
       minimumScore: clampNumber(settings.answerRelevance.minimumScore, 0.05, 1),
       minimumAnswerCharacters: clampInteger(settings.answerRelevance.minimumAnswerCharacters, 1, 100_000)
     },
+    groundedAnswer: {
+      ...settings.groundedAnswer,
+      minimumClaimSupport: clampNumber(settings.groundedAnswer.minimumClaimSupport, 0.1, 1)
+    },
     textConstraints: {
       ...settings.textConstraints,
       minimumCharacters: clampInteger(settings.textConstraints.minimumCharacters, 0, 100_000),
@@ -295,6 +322,10 @@ export function validateCompletionVerification(settings: CompletionVerificationS
     }
   }
 
+  if (settings.groundedAnswer.enabled && lines(settings.groundedAnswer.noAnswerPhrases).length === 0) {
+    errors.push("Grounded answer requires at least one insufficient-evidence phrase.");
+  }
+
   if (settings.citation.enabled) {
     const allowedHosts = normalizedHostInputs(settings.citation.allowedHosts, errors);
     const blockedHosts = normalizedHostInputs(settings.citation.blockedHosts, errors);
@@ -336,6 +367,7 @@ export function validateCompletionVerification(settings: CompletionVerificationS
 export function enabledVerifierCount(settings: CompletionVerificationSettings): number {
   return [
     settings.answerRelevance.enabled,
+    settings.groundedAnswer.enabled,
     settings.textConstraints.enabled,
     settings.citation.enabled,
     settings.jsonSchema.enabled,

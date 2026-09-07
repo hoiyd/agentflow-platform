@@ -138,8 +138,9 @@ The versioned `RelevanceGate` is the next independent stage. It ignores any
 incoming `confidence`, `filter_reason`, or derived evidence, recomputes evidence
 from the query and trusted candidate data, then owns filtering and final rank
 compaction. Gate output must remain an ordered subset of the reranked input. The
-default policy reports `heuristic-relevance-gate-v1` with configuration
-`heuristic-relevance-default-v1`. Model-backed rerankers must return normalized
+default policy reports `heuristic-relevance-gate-v2` with configuration
+`heuristic-relevance-calibrated-v1` and its `minimum_evidence_coverage`.
+Model-backed rerankers must return normalized
 scores in `[0,1]`; malformed metadata, unknown/duplicate candidates, invalid
 ranks, or non-finite scores fail the pipeline instead of bypassing the Gate.
 
@@ -232,6 +233,21 @@ Source aliases are stable within one search response and its Run context. They
 are intentionally not global document IDs and may be reassigned by a later
 search whose final context ordering differs.
 
+For Runs that opt into the `grounded_answer` Completion Contract, the server
+reconstructs the selected source chunks from trusted citation metadata. Each
+answer claim must cite an available `[S#]` and meet the frozen lexical-support
+threshold; identifiers, numbers, and named anchors must also occur in the cited
+content. Unknown sources, irrelevant existing sources, and contradictory factual
+anchors fail Verification. If the calibrated Relevance Gate selected no source,
+only an explicit insufficient-evidence response passes. A partial answer may mix
+supported cited claims with an explicit statement that the remaining evidence is
+insufficient.
+
+This is deterministic source-support evidence, not a universal truth oracle.
+Document deletion, version drift, or missing source chunks blocks Verification
+instead of treating unavailable evidence as a pass. See
+[Verification](../runtime/verification.md#grounded-knowledge-answers).
+
 ## Prompt-Injection Guard
 
 All retrieved knowledge is treated as untrusted external data. The guard uses
@@ -281,19 +297,20 @@ content boundary, filtering, and audit trail provide defense in depth.
   low-confidence `no_match` result.
 - `no_match` means recalled candidates did not pass the current relevance
   policy; it does not prove that the corpus contains no answer.
-- A no-match result supplies no RAG evidence, but the current Agent protocol
-  does not force the model to abstain from using prior knowledge.
-- RRF improves rank robustness but does not calibrate relevance thresholds.
+- A no-match result supplies no RAG evidence. Runs that opt into the
+  `grounded_answer` verifier must return an explicit insufficient-evidence
+  response instead of asserting an unsupported answer.
+- RRF improves rank robustness; relevance thresholds are calibrated separately
+  against explicit calibration and holdout Dataset splits.
 - Parent and adjacent expansion can improve context completeness while adding
   noise; the token limit and downstream transformation bound that trade-off.
 - Prompt-injection filtering is defense in depth, not a semantic proof that a
   document is safe.
-- The [`agentflow-rag-baseline@1.0.0`](rag-golden-dataset.md) asset pairs a
+- The [`agentflow-rag-baseline@1.1.0`](rag-golden-dataset.md) asset pairs a
   canonical corpus with fact, paraphrase, exact-ID, multi-source, no-answer,
-  ACL, stale-data, and prompt-injection cases. ACL, stale-data, and no-answer
-  cases remain diagnostic until their policy/calibration dependencies are
-  implemented. Persisting Dataset/Evaluation Run versions and calibrating
-  thresholds remain future work.
+  ACL, stale-data, and prompt-injection cases. No-answer cases are gating across
+  calibration and holdout splits; ACL and stale-data remain diagnostic until
+  their policy dependencies are implemented.
 
 The [Manual tests](../operations/manual-tests.md) exercise exact
 identifier recall, RRF reproduction, injection filtering, parent expansion,

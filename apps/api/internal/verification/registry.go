@@ -28,10 +28,19 @@ type Options struct {
 }
 
 type Subject struct {
-	Type     string
-	Value    string
-	Question string
-	Hash     string
+	Type           string
+	Value          string
+	Question       string
+	Hash           string
+	Grounding      []GroundingSource
+	GroundingError string
+}
+
+// GroundingSource is trusted, ephemeral evidence reconstructed by the server.
+// Source content participates in Subject.Hash but is not copied into Evidence.
+type GroundingSource struct {
+	SourceID string
+	Content  string
 }
 
 // Artifact is verifier output that can be persisted independently from the
@@ -80,6 +89,7 @@ func NewRegistry(options Options) *Registry {
 		textConstraintsVerifier{},
 		citationVerifier{},
 		answerRelevanceVerifier{embed: options.AnswerRelevanceEmbedder},
+		groundedAnswerVerifier{},
 	}
 	registry := &Registry{verifiers: make(map[domain.VerifierType]Verifier, len(items)), maxArtifactBytes: options.MaxArtifactBytes}
 	for _, item := range items {

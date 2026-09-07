@@ -26,6 +26,9 @@ func TestOfflineRAGEvaluationIsReproducibleAndBounded(t *testing.T) {
 		first.Summary.MRR != second.Summary.MRR || first.Summary.NDCG != second.Summary.NDCG {
 		t.Fatalf("unstable report: first=%#v second=%#v", first, second)
 	}
+	if first.Config.MinimumEvidenceCoverage != 0.25 || first.Pipeline.RelevanceGate.MinimumEvidenceCoverage != 0.25 || len(first.SplitSummaries) != 1 {
+		t.Fatalf("calibrated Gate configuration was not reported: %#v", first)
+	}
 	encoded, err := json.Marshal(first)
 	if err != nil {
 		t.Fatal(err)
@@ -100,6 +103,14 @@ func TestBaselineComparisonRejectsChangedInputsAndFindsRegressions(t *testing.T)
 	candidate.Pipeline.SecurityPolicy = "changed"
 	if comparison := Compare(candidate, baseline, true); comparison.Comparable {
 		t.Fatalf("multi-variable ablation accepted: %#v", comparison)
+	}
+	candidate = baseline
+	candidate.Config.MinimumEvidenceCoverage = 0.3
+	candidate.Pipeline.RelevanceGate.ConfigVersion = "eval-evidence-coverage-0.30"
+	candidate.Pipeline.RelevanceGate.MinimumEvidenceCoverage = 0.3
+	comparison = Compare(candidate, baseline, true)
+	if !comparison.Comparable || len(comparison.ChangedVariables) != 1 || comparison.ChangedVariables[0] != "minimum_evidence_coverage" {
+		t.Fatalf("Gate threshold was not treated as one ablation: %#v", comparison)
 	}
 }
 

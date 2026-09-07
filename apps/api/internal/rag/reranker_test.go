@@ -129,7 +129,7 @@ func TestRetrievalPipelineUsesInjectedReranker(t *testing.T) {
 	if response.Items[0].Confidence != "high" || response.Items[0].FilterReason == "" {
 		t.Fatalf("expected the relevance gate to classify score-only output, got %#v", response.Items[0])
 	}
-	if response.RelevanceGate.Version != "heuristic-relevance-gate-v1" || response.RelevanceGate.ConfigVersion != "heuristic-relevance-default-v1" {
+	if response.RelevanceGate.Version != "heuristic-relevance-gate-v2" || response.RelevanceGate.ConfigVersion != "heuristic-relevance-calibrated-v1" {
 		t.Fatalf("expected versioned relevance gate metadata, got %#v", response.RelevanceGate)
 	}
 }
@@ -140,17 +140,19 @@ func TestScoreOnlyCrossEncoderCannotBypassRelevanceGate(t *testing.T) {
 	for _, testCase := range []struct {
 		name       string
 		score      float64
+		content    string
 		wantItems  int
 		confidence string
 	}{
-		{name: "low score is filtered", score: 0.2, wantItems: 0},
-		{name: "high score is accepted", score: 0.9, wantItems: 1, confidence: "high"},
+		{name: "low score is filtered", score: 0.2, content: "unrelated content", wantItems: 0},
+		{name: "high score without evidence is filtered", score: 0.9, content: "generic content", wantItems: 0},
+		{name: "high score with evidence is accepted", score: 0.9, content: "target runbook", wantItems: 1, confidence: "high"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			store := &retrievalStoreStub{denseItems: []domain.RetrievedDocumentChunk{{
 				Document:   domain.Document{ID: "doc-1", Title: "Runbook"},
-				Chunk:      domain.DocumentChunk{ID: "chunk-1", Content: "generic content"},
+				Chunk:      domain.DocumentChunk{ID: "chunk-1", Content: testCase.content},
 				Similarity: 0.1,
 				Score:      0.1,
 			}}}
@@ -163,7 +165,7 @@ func TestScoreOnlyCrossEncoderCannotBypassRelevanceGate(t *testing.T) {
 			}
 			pipeline := NewRetrievalPipelineWithReranker(store, stub)
 
-			response, err := pipeline.Search(context.Background(), domain.DocumentSearch{Query: "unrelated", Limit: 1}, 1, Embedding{Vector: []float64{1}})
+			response, err := pipeline.Search(context.Background(), domain.DocumentSearch{Query: "target", Limit: 1}, 1, Embedding{Vector: []float64{1}})
 			if err != nil {
 				t.Fatalf("search score-only reranker: %v", err)
 			}

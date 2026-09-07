@@ -1,7 +1,7 @@
 # RAG Golden Dataset v1
 
 AgentFlow's canonical retrieval dataset is
-[`agentflow-rag-baseline@1.0.0`](../../examples/knowledge/golden-dataset.v1.json).
+[`agentflow-rag-baseline@1.1.0`](../../examples/knowledge/golden-dataset.v1.json).
 It is a small, versioned engineering baseline rather than a claim of
 domain-wide retrieval quality. The paired corpus lives under
 [`examples/knowledge/golden-v1`](../../examples/knowledge/golden-v1).
@@ -14,15 +14,16 @@ domain-wide retrieval quality. The paired corpus lives under
 | `paraphrase-audit-retention` | Query paraphrase | Audit retention fact | Gating |
 | `exact-id-px-2049` | Exact identifier / keyword recall | Incident code and operator action | Gating |
 | `multi-hop-atlas-oncall` | Multi-source retrieval | Service owner and team schedule | Gating |
-| `no-answer-zz-0000` | Unsupported query abstention | No accepted retrieval result | Diagnostic |
+| `no-answer-zz-0000` | Unsupported query abstention | No accepted retrieval result | Calibration gate |
+| `no-answer-qx-9999` | Unseen unsupported query abstention | No accepted retrieval result | Holdout gate |
 | `acl-external-key-reset` | Restricted-source leakage | Public procedure; restricted runbook forbidden | Diagnostic |
 | `stale-refund-window` | Superseded-source leakage | Current policy; retired policy forbidden | Diagnostic |
 | `injection-release-signing` | Prompt-injection filtering | Safe guide; hostile note forbidden | Gating |
 
-ACL, stale-data, and no-answer cases carry the `non-blocking` tag. They remain
-diagnostic until identity-derived ownership and ACL enforcement (RAG-004,
-RAG-016B), an explicit freshness policy, and Relevance Gate/no-answer
-calibration (RAG-015, RAG-020) are implemented. Workspace namespace filtering
+ACL and stale-data cases carry the `non-blocking` tag. They remain diagnostic
+until identity-derived ownership and ACL enforcement (RAG-004/RAG-016B) and an
+explicit freshness policy are implemented. No-answer is now gated by one
+calibration case and one untouched holdout case. Workspace namespace filtering
 (RAG-003) is complete, but it cannot decide whether a caller is authorized for
 that namespace. Diagnostic misses must be reported, but must not be represented
 as release-gate regressions yet.
@@ -60,6 +61,8 @@ Dataset object itself; the frontend wraps it in the API request.
 - Hit@K uses answerable Cases as its denominator. A multi-source Case is a hit
   at the rank where its configured number of expected sources has been found.
 - A no-answer Case passes only when the Relevance Gate returns no result.
+- Every canonical Case is tagged `calibration` or `holdout`; threshold selection
+  uses the former and release acceptance checks gating cases in both splits.
 - A forbidden source anywhere in returned Top-K fails the Case.
 - `blocked_candidates` is supporting evidence that the prompt-injection guard
   removed hostile material; the injection Case also forbids that source from
@@ -74,7 +77,8 @@ Dataset object itself; the frontend wraps it in the API request.
   remain `failed` or `not_evaluated` in the total and fail gating cases.
 - Reports include Dataset/corpus hashes, Git revision, actual chunker, Embedding,
   Fusion, Reranker, Relevance Gate and security-policy identity. Ranked evidence
-  is bounded to Top-K source metadata and stable chunk hashes; corpus text is not copied.
+  includes bounded scores, confidence and Gate reasons plus stable chunk hashes;
+  corpus text is not copied.
 
 ## Version discipline
 

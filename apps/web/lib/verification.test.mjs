@@ -12,7 +12,7 @@ test("ordinary chat omits the completion contract", () => {
   assert.equal(buildCompletionContract(DEFAULT_COMPLETION_VERIFICATION), undefined);
 });
 
-test("all six backend verifiers have a compatible frontend contract", () => {
+test("all seven backend verifiers have a compatible frontend contract", () => {
   const contract = buildCompletionContract({
     ...structuredClone(DEFAULT_COMPLETION_VERIFICATION),
     enabled: true,
@@ -20,6 +20,11 @@ test("all six backend verifiers have a compatible frontend contract", () => {
       enabled: true,
       minimumScore: 0.45,
       minimumAnswerCharacters: 40
+    },
+    groundedAnswer: {
+      enabled: true,
+      minimumClaimSupport: 0.6,
+      noAnswerPhrases: "insufficient evidence\n证据不足"
     },
     textConstraints: {
       ...DEFAULT_COMPLETION_VERIFICATION.textConstraints,
@@ -61,6 +66,15 @@ test("all six backend verifiers have a compatible frontend contract", () => {
         config: {
           minimum_score: 0.45,
           minimum_answer_characters: 40
+        }
+      },
+      {
+        id: "grounded-answer",
+        type: "grounded_answer",
+        required: true,
+        config: {
+          minimum_claim_support: 0.6,
+          no_answer_phrases: ["insufficient evidence", "证据不足"]
         }
       },
       {
@@ -118,8 +132,8 @@ test("all six backend verifiers have a compatible frontend contract", () => {
 });
 
 test("each verifier can be enabled independently", () => {
-  const verifierKeys = ["answerRelevance", "textConstraints", "citation", "jsonSchema", "http", "command"];
-  const verifierTypes = ["answer_relevance", "text_constraints", "citation", "json_schema", "http", "command"];
+  const verifierKeys = ["answerRelevance", "groundedAnswer", "textConstraints", "citation", "jsonSchema", "http", "command"];
+  const verifierTypes = ["answer_relevance", "grounded_answer", "text_constraints", "citation", "json_schema", "http", "command"];
 
   verifierKeys.forEach((enabledKey, index) => {
     const settings = structuredClone(DEFAULT_COMPLETION_VERIFICATION);
@@ -164,6 +178,7 @@ test("numeric settings are normalized to server limits", () => {
   settings.textConstraints.minimumCharacters = -1;
   settings.answerRelevance.minimumScore = 2;
   settings.answerRelevance.minimumAnswerCharacters = 0;
+  settings.groundedAnswer.minimumClaimSupport = 0;
   settings.citation.minimumCitations = 101;
   settings.citation.minimumUniqueSources = -1;
   settings.http.expectedStatus = 999;
@@ -172,6 +187,7 @@ test("numeric settings are normalized to server limits", () => {
   const normalized = normalizeCompletionVerification(settings);
   assert.equal(normalized.answerRelevance.minimumScore, 1);
   assert.equal(normalized.answerRelevance.minimumAnswerCharacters, 1);
+  assert.equal(normalized.groundedAnswer.minimumClaimSupport, 0.1);
   assert.equal(normalized.textConstraints.minimumCharacters, 0);
   assert.equal(normalized.citation.minimumCitations, 100);
   assert.equal(normalized.citation.minimumUniqueSources, 0);
