@@ -16,7 +16,8 @@ file is sample knowledge content, not the Demo instructions themselves. Keep one
 completed Multi-Agent Run available if the interview environment has unreliable
 network access.
 
-In a second terminal, seed and run the canonical retrieval baseline once:
+In a second terminal, run the canonical retrieval baseline in an isolated
+temporary store:
 
 ```bash
 make golden-eval

@@ -5,7 +5,7 @@ help:
 	  'make setup       Install locked frontend dependencies and download Go modules' \
 	  'make quickstart  Run setup, then start API and web workbench' \
 	  'make dev         Start API and web workbench without reinstalling dependencies' \
-	  'make golden-eval Seed and run the canonical RAG Golden Dataset v1' \
+	  'make golden-eval Run the isolated offline RAG regression gate' \
 	  'make test        Run backend tests, frontend lint/tests, and production build'
 
 setup:
@@ -18,7 +18,7 @@ dev:
 	@bash scripts/dev.sh
 
 golden-eval:
-	@node scripts/run-golden-dataset-v1.mjs
+	@bash -c 'source scripts/go-env.sh && activate_agentflow_go && cd apps/api && go run ./cmd/eval rag --enforce'
 
 test:
 	@bash scripts/test.sh

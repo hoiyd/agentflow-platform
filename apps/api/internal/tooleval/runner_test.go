@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -185,8 +186,11 @@ func TestTaskEvaluationProductionPathAndReport(t *testing.T) {
 		t.Fatal("credentials/endpoint leaked")
 	}
 	// CI can retain this deterministic wiring report separately from live evals.
-	if path := os.Getenv("TOOL_TASK_REPORT_PATH"); path != "" {
-		if err := os.WriteFile(path, encoded, 0600); err != nil {
+	if dir := os.Getenv("EVALUATION_REPORT_DIR"); dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "tool-task-protocol.json"), encoded, 0600); err != nil {
 			t.Fatal(err)
 		}
 	}

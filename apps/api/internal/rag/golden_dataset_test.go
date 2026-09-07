@@ -206,6 +206,9 @@ func TestEvaluateCaseAppliesAnswerableAndForbiddenSourceSemantics(t *testing.T) 
 	if leak.Hit || !strings.Contains(leak.FailureReason, "forbidden source matched at rank 2") {
 		t.Fatalf("expected forbidden source to fail case, got %#v", leak)
 	}
+	if count := CountForbiddenMatches(domain.RAGEvaluationCase{ForbiddenSources: []domain.RAGGoldenSource{{DocumentID: "doc-deprecated"}}}, []domain.RetrievedDocumentChunk{expected, forbidden, forbidden}); count != 2 {
+		t.Fatalf("expected every forbidden result to be counted, got %d", count)
+	}
 
 	noAnswer := EvaluateCase(domain.RAGEvaluationCase{
 		ID: "no-answer", Query: "unknown", Answerable: &unanswerable,

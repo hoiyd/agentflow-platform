@@ -54,16 +54,16 @@ jobs:
 
       - name: Run tests with coverage
         env:
-          TOOL_TASK_REPORT_PATH: ${{ runner.temp }}/tool-task-protocol.json
+          EVALUATION_REPORT_DIR: ${{ runner.temp }}/evaluation-reports
         # Fail stuck packages with goroutine stacks before the job-level timeout.
         run: go test ./... -count=1 -timeout=3m -coverpkg=./... -covermode=atomic -coverprofile=coverage.out
 
-      - name: Retain offline Tool task report
+      - name: Retain offline evaluation reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: tool-task-protocol
-          path: ${{ runner.temp }}/tool-task-protocol.json
+          name: offline-evaluation-reports
+          path: ${{ runner.temp }}/evaluation-reports
           retention-days: 14
           if-no-files-found: warn
 

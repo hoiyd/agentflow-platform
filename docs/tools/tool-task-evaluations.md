@@ -43,9 +43,9 @@ This is not an evaluation of multi-round search/read planning.
 From `apps/api`, using the repository Go version:
 
 ```bash
-go test ./internal/tooleval ./cmd/eval-tool-tasks ./internal/toolartifact ./internal/tools
-go test -race ./internal/tooleval ./cmd/eval-tool-tasks ./internal/toolartifact
-TOOL_TASK_REPORT_PATH=/tmp/tool-task-protocol.json go test ./internal/tooleval -count=1
+go test ./internal/tooleval ./cmd/eval ./internal/toolartifact ./internal/tools
+go test -race ./internal/tooleval ./cmd/eval ./internal/toolartifact
+EVALUATION_REPORT_DIR=/tmp/evaluation-reports go test ./internal/tooleval -count=1
 ```
 
 The local HTTP fixture selects Tools, reads the actual returned snippets and
@@ -61,7 +61,7 @@ Export `OPENAI_API_KEY` in the shell; the command does not load application `.en
 files or silently fall back to canned responses. Select a Tool-capable model:
 
 ```bash
-go run ./cmd/eval-tool-tasks --live \
+go run ./cmd/eval tool --live \
   --base-url https://api.openai.com/v1 --model YOUR_MODEL \
   --trials 3 --max-model-calls 30 --max-total-tokens 60000 \
   --timeout 60s --enforce > /tmp/tool-task-live.json
@@ -83,8 +83,8 @@ Do not commit credentials, temporary stores, or reports containing private data.
 
 ## Report Contract
 
-`task-eval-v1` is the initial Tool-task contribution to PROD-011, not a new report
-service or a claim that the RAG runner is already unified. JSON records dataset
+`task-eval-v1` is the Tool-specific payload inside the shared
+`agentflow-evaluation-report-v1` envelope. JSON records dataset
 ID/version/hash (including materialized source), git revision, model/provider,
 Context Assembly settings, Tool definition hash, suite limits, task/trial/arm,
 output, successful Tool evidence, failed Tool names/error codes, findings, usage
@@ -96,6 +96,8 @@ use evaluated samples only; always inspect `evaluated`, `samples`, estimated usa
 and open reservations before comparing costs. No price table means monetary cost
 is unavailable, not free. Repeated trials alternate arm order. Provider endpoints
 and API keys are omitted; result/error text uses the existing deterministic redactor.
+The same `eval` command and provenance/gate envelope are used by the offline RAG
+suite; domain metrics remain typed rather than forced into a lowest-common-denominator schema.
 
 Live-model acceptance remains manual until a budgeted report is collected. The
 three small cases do not establish statistical reliability or broad Tool quality.
