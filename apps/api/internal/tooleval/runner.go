@@ -13,6 +13,7 @@ import (
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/evalreport"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/openai"
@@ -63,11 +64,8 @@ type Summary struct {
 }
 
 type Report struct {
-	EvaluationKind   string                       `json:"evaluation_kind"`
+	evalreport.Identity
 	SchemaVersion    string                       `json:"schema_version"`
-	DatasetID        string                       `json:"dataset_id"`
-	DatasetVersion   string                       `json:"dataset_version"`
-	DatasetHash      string                       `json:"dataset_hash"`
 	Model            string                       `json:"model"`
 	Provider         string                       `json:"provider"`
 	Config           Options                      `json:"config"`
@@ -76,6 +74,7 @@ type Report struct {
 	CostSource       string                       `json:"cost_source"`
 	Samples          []Sample                     `json:"samples"`
 	Summary          map[string]Summary           `json:"summary"`
+	Gate             evalreport.Gate              `json:"gate"`
 }
 
 // One fixture owns the shared read-only corpus/catalog; each sample below gets
@@ -124,8 +123,10 @@ func Run(ctx context.Context, client *openai.Client, opts Options) (Report, erro
 	assembly.OutputReserveTokens = 512
 	assembly.CompactionMode = contextassembly.CompactionModeOff
 	identity := client.RuntimeIdentity()
-	report := Report{EvaluationKind: "live_model", SchemaVersion: "task-eval-v1", DatasetID: data.ID, DatasetVersion: data.Version,
-		DatasetHash: data.Hash, Model: identity.Model, Provider: identity.Provider, Config: opts,
+	startedAt := time.Now().UTC()
+	report := Report{Identity: evalreport.Identity{ReportFormat: evalreport.Format, EvaluationKind: "live_model", DatasetID: data.ID,
+		DatasetVersion: data.Version, DatasetHash: data.Hash, GitRevision: opts.Revision, StartedAt: startedAt},
+		SchemaVersion: "task-eval-v1", Model: identity.Model, Provider: identity.Provider, Config: opts,
 		ContextAssembly: assembly, ToolContractHash: digest(string(definitions)), CostSource: "unavailable: no price table; token usage only",
 		Samples: []Sample{}, Summary: map[string]Summary{}}
 	client.SetRetryPolicy(openai.RetryPolicy{MaxAttempts: 1})
@@ -167,6 +168,13 @@ func Run(ctx context.Context, client *openai.Client, opts Options) (Report, erro
 		}
 	}
 	report.Summary = summarize(report.Samples)
+	withTools := report.Summary["with_tools"]
+	report.Gate = evalreport.Gate{Passed: withTools.Samples > 0 && withTools.Verified == withTools.Samples,
+		BlockingSamples: withTools.Samples, BlockingFailures: withTools.Samples - withTools.Verified, Reasons: []string{}}
+	if !report.Gate.Passed {
+		report.Gate.Reasons = []string{"one or more Tool-arm samples were not verified"}
+	}
+	report.CompletedAt = time.Now().UTC()
 	return report, nil
 }
 
@@ -300,6 +308,5 @@ func summarize(samples []Sample) map[string]Summary {
 
 // Passed is an explicit deterministic gate, not a claim of model reliability.
 func (r Report) Passed() bool {
-	with := r.Summary["with_tools"]
-	return with.Samples > 0 && with.Verified == with.Samples
+	return r.Gate.Passed
 }

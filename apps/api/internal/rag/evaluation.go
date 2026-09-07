@@ -67,6 +67,18 @@ func EvaluateCase(evalCase domain.RAGEvaluationCase, items []domain.RetrievedDoc
 	return result
 }
 
+// CountForbiddenMatches reports every accepted result that violates a Golden
+// Dataset source constraint. Reports retain the count without copying content.
+func CountForbiddenMatches(evalCase domain.RAGEvaluationCase, items []domain.RetrievedDocumentChunk) int {
+	count := 0
+	for _, item := range items {
+		if goldenSourceMatchesAny(evalCase.ForbiddenSources, item) {
+			count++
+		}
+	}
+	return count
+}
+
 func expectedEvidenceRank(evalCase domain.RAGEvaluationCase, items []domain.RetrievedDocumentChunk) (int, int) {
 	if len(evalCase.ExpectedSources) == 0 {
 		for index, item := range items {

@@ -34,30 +34,21 @@ need separate answer-level evaluation.
 
 ## Run locally
 
-Start AgentFlow in one terminal:
-
-```bash
-make dev
-```
-
-Seed the corpus and run the Dataset from another terminal:
+Run the Dataset from the repository root. The command creates a temporary
+FileStore, indexes the canonical corpus, runs the production retrieval pipeline
+with deterministic local hash embeddings, emits JSON to stdout, and removes the
+store. It does not require a running API, database, network, or API key.
 
 ```bash
 make golden-eval
 ```
 
-For a non-default API port, set `AGENTFLOW_API_BASE_URL`, for example
-`AGENTFLOW_API_BASE_URL=http://127.0.0.1:18080 make golden-eval`.
-
-The runner is idempotent by `source_uri`: files already indexed with the same
-name are skipped. Use a clean local data store when validating a changed corpus,
-because immutable corpus version management belongs to RAG-008.
-
-The command reports every Case as `PASS` or `MISS`. Diagnostic cases are labeled
-separately. To return a non-zero exit code when a gating Case misses, run:
+To archive a report or compare it with the next candidate:
 
 ```bash
-node scripts/run-golden-dataset-v1.mjs --enforce
+cd apps/api
+go run ./cmd/eval rag --enforce > /tmp/rag-baseline.json
+go run ./cmd/eval rag --baseline /tmp/rag-baseline.json --enforce > /tmp/rag-candidate.json
 ```
 
 The same Dataset can be pasted into **Knowledge -> Retrieval evaluation** in the
@@ -76,10 +67,19 @@ Dataset object itself; the frontend wraps it in the API request.
 - Evaluation measures the retrieval pipeline against this corpus. Runtime
   Verification evaluates an Agent Run's configured completion contract; the two
   subsystems are intentionally independent.
+- MRR is the mean reciprocal `best_rank` for answerable cases. NDCG uses binary
+  relevance at that rank; no-answer cases are excluded from both denominators.
+- No-answer Precision/Recall are `null` when their denominator is empty rather
+  than being reported as a false zero. Retrieval failures and canceled cases
+  remain `failed` or `not_evaluated` in the total and fail gating cases.
+- Reports include Dataset/corpus hashes, Git revision, actual chunker, Embedding,
+  Fusion, Reranker, Relevance Gate and security-policy identity. Ranked evidence
+  is bounded to Top-K source metadata and stable chunk hashes; corpus text is not copied.
 
 ## Version discipline
 
 Do not silently edit a published baseline. Changes to Case meaning, expected
-sources, or corpus content require a new Dataset and corpus version. RAG-008
-will enforce immutable storage and maintain a changelog; until then, Git history
-is the version record.
+sources, or corpus content require a new Dataset and corpus version. The runner
+hashes both assets and refuses to describe reports as comparable when Dataset,
+corpus, Top-K, threshold, chunker, or pipeline identity differs. Git history and
+CI artifacts are the version record; no Evaluation Registry service is required.

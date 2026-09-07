@@ -254,14 +254,16 @@ failure reason, ranked items, and prompt-injection decisions. It also returns
 the exact Embedding, Fusion, Reranker, and Relevance Gate identity used by the
 run. `answerable_cases` and `unanswerable_cases` make the Hit@K denominator
 explicit: no-answer cases contribute to pass/miss status but not Hit@K.
-Dedicated no-answer Precision/Recall remains part of RAG-010.
+The offline report additionally computes MRR, binary-relevance NDCG,
+no-answer Precision/Recall, forbidden-source leak counts, latency, and a release
+gate. These report metrics do not change the online response contract.
 
 The workbench exposes this endpoint under **Knowledge -> Retrieval evaluation**
 and accepts either a Dataset object or a legacy case array. RAG-006 defines and
 validates the schema; the maintained v1 asset and coverage matrix are described
-in [RAG Golden Dataset v1](../knowledge/rag-golden-dataset.md). Immutable Dataset
-storage/changelog (RAG-008), persisted Evaluation Runs (RAG-009), and calibrated
-release thresholds remain future work.
+in [RAG Golden Dataset v1](../knowledge/rag-golden-dataset.md). Dataset and corpus
+hashes, Git history, and archived CI reports provide the current version discipline.
+The project deliberately does not add an online Evaluation Registry or database.
 
 ## RAG Search Response
 

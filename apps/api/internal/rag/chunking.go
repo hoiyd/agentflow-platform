@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	documentChunkSize    = 4000
-	documentChunkOverlap = 500
+	// DocumentChunkerVersion changes whenever chunk boundary semantics change.
+	DocumentChunkerVersion = "document-chunker-v1"
+	documentChunkSize      = 4000
+	documentChunkOverlap   = 500
 )
 
 var orderedMarkdownListPattern = regexp.MustCompile(`^\d+[.)]\s+`)
