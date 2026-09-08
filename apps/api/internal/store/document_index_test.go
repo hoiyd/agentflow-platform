@@ -35,6 +35,23 @@ func TestPrepareDocumentWriteRejectsInvalidEmbeddingIdentity(t *testing.T) {
 	}
 }
 
+func TestPrepareDocumentWriteNormalizesTimestampPrecision(t *testing.T) {
+	inputTime := time.Date(2026, 9, 8, 1, 2, 3, 456789123, time.FixedZone("fixture", 8*60*60))
+	document, chunks, embeddings, err := prepareDocumentWrite(
+		domain.Document{Title: "Policy", Content: "current policy", CreatedAt: inputTime},
+		[]domain.DocumentChunk{{Content: "current policy", CreatedAt: inputTime}},
+		[]domain.DocumentChunkEmbedding{{CreatedAt: inputTime}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := inputTime.UTC().Truncate(time.Microsecond)
+	if !document.CreatedAt.Equal(want) || !chunks[0].CreatedAt.Equal(want) || !embeddings[0].CreatedAt.Equal(want) ||
+		document.UpdatedAt.Nanosecond()%1000 != 0 {
+		t.Fatalf("timestamps were not normalized: document=%s updated=%s chunk=%s embedding=%s", document.CreatedAt, document.UpdatedAt, chunks[0].CreatedAt, embeddings[0].CreatedAt)
+	}
+}
+
 func TestNormalizeFileDocumentIndexesBackfillsAndRemovesStaleSources(t *testing.T) {
 	oldTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	newTime := oldTime.Add(time.Hour)

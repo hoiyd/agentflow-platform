@@ -25,7 +25,9 @@ func prepareDocumentWrite(document domain.Document, chunks []domain.DocumentChun
 	if len(chunks) != len(embeddings) {
 		return domain.Document{}, nil, nil, errors.New("document chunks and embeddings length mismatch")
 	}
-	now := time.Now().UTC()
+	// PostgreSQL timestamps have microsecond precision. Normalize before returning
+	// so the initial write and an idempotent read-back expose identical metadata.
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	document.WorkspaceID = normalizeWorkspaceID(document.WorkspaceID)
 	document.ID = strings.TrimSpace(document.ID)
 	if document.ID == "" {
@@ -56,6 +58,8 @@ func prepareDocumentWrite(document domain.Document, chunks []domain.DocumentChun
 	}
 	if document.CreatedAt.IsZero() {
 		document.CreatedAt = now
+	} else {
+		document.CreatedAt = document.CreatedAt.UTC().Truncate(time.Microsecond)
 	}
 	document.UpdatedAt = now
 
@@ -82,6 +86,8 @@ func prepareDocumentWrite(document domain.Document, chunks []domain.DocumentChun
 		}
 		if chunks[i].CreatedAt.IsZero() {
 			chunks[i].CreatedAt = now
+		} else {
+			chunks[i].CreatedAt = chunks[i].CreatedAt.UTC().Truncate(time.Microsecond)
 		}
 		embeddings[i].ChunkID = chunks[i].ID
 		if embeddings[i].Provider == "" {
@@ -101,6 +107,8 @@ func prepareDocumentWrite(document domain.Document, chunks []domain.DocumentChun
 		}
 		if embeddings[i].CreatedAt.IsZero() {
 			embeddings[i].CreatedAt = now
+		} else {
+			embeddings[i].CreatedAt = embeddings[i].CreatedAt.UTC().Truncate(time.Microsecond)
 		}
 	}
 
