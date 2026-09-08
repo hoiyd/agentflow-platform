@@ -2,8 +2,7 @@ package store
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
+
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
@@ -118,75 +117,6 @@ func TestReconciliationRequiresAUniqueClaimBeforeCallbackSettlement(t *testing.T
 	if validToolEffectSettlement(mutation) {
 		t.Fatal("claim without command identity accepted")
 	}
-}
-
-func TestFileStoreToolEffectReconciliationIsAtomicAndIdempotent(t *testing.T) {
-	fileStore, run := checkpointFileTestRun(t)
-	effect := beginUncertainEffect(t, fileStore, run, "effect-1")
-	mutation := reconciliationMutation(effect, domain.ToolEffectConfirmFailed, domain.ToolEffectFailed, nil)
-	conflict := mutation
-	conflict.ExpectedVersion++
-	conflict.Event.Payload["expected_version"] = conflict.ExpectedVersion
-	if _, _, _, err := fileStore.CommitToolEffectReconciliation(conflict); !IsToolEffectConflict(err) {
-		t.Fatalf("expected version conflict, got %v", err)
-	}
-	mutation.Event.Payload["expected_version"] = mutation.ExpectedVersion
-	invalidEvent := mutation
-	invalidEvent.Event.SchemaVersion = domain.CurrentRunEventSchemaVersion + 1
-	if _, _, _, err := fileStore.CommitToolEffectReconciliation(invalidEvent); err == nil {
-		t.Fatal("expected event schema failure")
-	}
-	settled, _, applied, err := fileStore.CommitToolEffectReconciliation(mutation)
-	if err != nil || !applied || settled.Status != domain.ToolEffectFailed {
-		t.Fatalf("commit: effect=%#v applied=%t err=%v", settled, applied, err)
-	}
-	if duplicate, _, applied, err := fileStore.CommitToolEffectReconciliation(mutation); err != nil || applied || duplicate.Version != settled.Version {
-		t.Fatalf("duplicate: effect=%#v applied=%t err=%v", duplicate, applied, err)
-	}
-
-	missing := mutation
-	missing.IdempotencyKey = "missing"
-	if _, _, _, err := fileStore.CommitToolEffectReconciliation(missing); !IsNotFound(err) {
-		t.Fatalf("duplicate event with missing effect: %v", err)
-	}
-	missing.Event.ID = "event-missing"
-	if _, _, _, err := fileStore.CommitToolEffectReconciliation(missing); !IsNotFound(err) {
-		t.Fatalf("missing effect: %v", err)
-	}
-}
-
-func TestFileStoreToolEffectReconciliationRollsBackFailedSave(t *testing.T) {
-	directory := t.TempDir()
-	fileStore, run := checkpointFileTestRunAtPath(t, filepath.Join(directory, "agentflow.json"))
-	effect := beginUncertainEffect(t, fileStore, run, "effect-rollback")
-	if err := os.RemoveAll(directory); err != nil {
-		t.Fatal(err)
-	}
-	mutation := reconciliationMutation(effect, domain.ToolEffectConfirmFailed, domain.ToolEffectFailed, nil)
-	if _, _, _, err := fileStore.CommitToolEffectReconciliation(mutation); err == nil {
-		t.Fatal("expected persistence failure")
-	}
-	records, _ := fileStore.ListToolEffects(run.ID)
-	events, _ := fileStore.ListRunEvents(run.ID)
-	if len(records) != 1 || records[0].Status != domain.ToolEffectNeedsReconciliation || len(events) != 0 {
-		t.Fatalf("failed save was not rolled back: effects=%#v events=%#v", records, events)
-	}
-}
-
-func beginUncertainEffect(t *testing.T, fileStore *FileStore, run domain.Run, key string) domain.ToolEffectRecord {
-	t.Helper()
-	effect, execute, err := fileStore.BeginToolEffect(domain.ToolEffectRecord{
-		IdempotencyKey: key, RunID: run.ID, StageID: "stage-1", ToolCallID: "call-1",
-		ToolName: "writer", RequestHash: "request",
-	})
-	if err != nil || !execute {
-		t.Fatalf("begin effect: %#v execute=%t err=%v", effect, execute, err)
-	}
-	effect, err = fileStore.MarkToolEffectNeedsReconciliation(key, "timeout")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return effect
 }
 
 func reconciliationMutation(effect domain.ToolEffectRecord, action domain.ToolEffectReconciliationAction, status domain.ToolEffectStatus, result []byte) domain.ToolEffectReconciliation {

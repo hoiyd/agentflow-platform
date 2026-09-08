@@ -12,10 +12,6 @@ func ScopeWorkspace(backend Store, scope domain.WorkspaceScope) WorkspaceStore {
 	return workspaceStore{backend: backend, workspaceID: scope.ID()}
 }
 
-func (s *FileStore) ForWorkspace(scope domain.WorkspaceScope) WorkspaceStore {
-	return workspaceStore{backend: s, workspaceID: scope.ID()}
-}
-
 func (s *PostgresStore) ForWorkspace(scope domain.WorkspaceScope) WorkspaceStore {
 	return workspaceStore{backend: s, workspaceID: scope.ID()}
 }

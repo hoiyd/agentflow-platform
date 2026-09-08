@@ -1,11 +1,12 @@
 package store
 
+import "agentflow-platform/apps/api/internal/testsupport/pgfixture"
+
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
+
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,7 +19,7 @@ import (
 	"agentflow-platform/apps/api/internal/tools"
 )
 
-func safetyFixture(t *testing.T, backend string, callbacks tools.SideEffectReconciliation) (Store, func() Store, domain.Run, *tools.Catalog, domain.ToolEffectRecord) {
+func safetyFixture(t *testing.T, callbacks tools.SideEffectReconciliation) (Store, func() Store, domain.Run, *tools.Catalog, domain.ToolEffectRecord) {
 	t.Helper()
 	binding := tools.Binding{
 		Descriptor: tools.Descriptor{Name: "write_record", Description: "writes a record", Parameters: tools.ObjectSchema(nil, nil),
@@ -34,26 +35,15 @@ func safetyFixture(t *testing.T, backend string, callbacks tools.SideEffectRecon
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(t.TempDir(), "effects.json")
+	url := pgfixture.DatabaseURL(t)
 	open := func() Store {
 		t.Helper()
-		if backend == "postgres" {
-			url := os.Getenv("TEST_DATABASE_URL")
-			if url == "" {
-				t.Skip("TEST_DATABASE_URL is not set")
-			}
-			pg, err := NewPostgresStore(url)
-			if err != nil {
-				t.Fatal(err)
-			}
-			t.Cleanup(func() { _ = pg.Close() })
-			return pg
-		}
-		file, err := NewFileStore(path)
+		pg, err := NewPostgresStore(url)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return file
+		t.Cleanup(func() { _ = pg.Close() })
+		return pg
 	}
 	target := open()
 	conversation, err := target.CreateConversation("reconciliation safety")
@@ -88,77 +78,75 @@ func retryCommand(effect domain.ToolEffectRecord) toolreconciliation.ToolEffectR
 }
 
 func TestCallbackClaimSerializesConcurrentCommands(t *testing.T) {
-	for _, backend := range []string{"file", "postgres"} {
-		t.Run(backend, func(t *testing.T) {
-			entered, release := make(chan struct{}), make(chan struct{})
-			var releaseOnce sync.Once
-			defer releaseOnce.Do(func() { close(release) })
-			var calls atomic.Int32
-			target, _, run, catalog, effect := safetyFixture(t, backend, tools.SideEffectReconciliation{
-				RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
-					if calls.Add(1) == 1 {
-						close(entered)
-					}
-					<-release
-					return map[string]any{"ok": true}, nil
-				},
-			})
-			command := retryCommand(effect)
-			done := make(chan error, 1)
-			go func() {
-				result, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command)
-				if err == nil && (result.Effect.Status != domain.ToolEffectCommitted || result.Effect.Version != effect.Version+2) {
-					err = errors.New("incorrect settlement")
-				}
-				done <- err
-			}()
-			select {
-			case <-entered:
-			case <-time.After(5 * time.Second):
-				t.Fatal("callback did not start")
+
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	var calls atomic.Int32
+	target, _, run, catalog, effect := safetyFixture(t, tools.SideEffectReconciliation{
+		RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
+			if calls.Add(1) == 1 {
+				close(entered)
 			}
-			var contenders sync.WaitGroup
-			for i := 0; i < 12; i++ {
-				contenders.Add(1)
-				go func(index int) {
-					defer contenders.Done()
-					other := command
-					if index%3 == 1 {
-						other.CommandID = "competing"
-					}
-					if index%3 == 2 {
-						other.Reason = "changed payload"
-					}
-					result, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, other)
-					if index%3 == 0 {
-						if err != nil || result.Applied || result.Outcome != "pending" || result.Effect.Status != domain.ToolEffectReconciling || len(result.Effect.AvailableActions) != 2 {
-							t.Errorf("duplicate: %#v %v", result, err)
-						}
-					} else if reconciliationCode(err) != toolreconciliation.ReconciliationConflict {
-						t.Errorf("expected conflict: %v", err)
-					}
-				}(i)
-			}
-			contenders.Wait()
-			if calls.Load() != 1 {
-				t.Fatalf("callbacks=%d", calls.Load())
-			}
-			if _, err := target.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "late failure"); err == nil {
-				t.Fatal("claim reopened")
-			}
-			if _, err := target.CompleteToolEffect(effect.IdempotencyKey, []byte(`{}`)); err == nil {
-				t.Fatal("late execution overwrote claim")
-			}
-			releaseOnce.Do(func() { close(release) })
-			if err := <-done; err != nil {
-				t.Fatal(err)
-			}
-			duplicate, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command)
-			if err != nil || duplicate.Applied || duplicate.Outcome != "completed" || calls.Load() != 1 {
-				t.Fatalf("settled duplicate: %#v %v", duplicate, err)
-			}
-		})
+			<-release
+			return map[string]any{"ok": true}, nil
+		},
+	})
+	command := retryCommand(effect)
+	done := make(chan error, 1)
+	go func() {
+		result, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command)
+		if err == nil && (result.Effect.Status != domain.ToolEffectCommitted || result.Effect.Version != effect.Version+2) {
+			err = errors.New("incorrect settlement")
+		}
+		done <- err
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("callback did not start")
 	}
+	var contenders sync.WaitGroup
+	for i := 0; i < 12; i++ {
+		contenders.Add(1)
+		go func(index int) {
+			defer contenders.Done()
+			other := command
+			if index%3 == 1 {
+				other.CommandID = "competing"
+			}
+			if index%3 == 2 {
+				other.Reason = "changed payload"
+			}
+			result, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, other)
+			if index%3 == 0 {
+				if err != nil || result.Applied || result.Outcome != "pending" || result.Effect.Status != domain.ToolEffectReconciling || len(result.Effect.AvailableActions) != 2 {
+					t.Errorf("duplicate: %#v %v", result, err)
+				}
+			} else if reconciliationCode(err) != toolreconciliation.ReconciliationConflict {
+				t.Errorf("expected conflict: %v", err)
+			}
+		}(i)
+	}
+	contenders.Wait()
+	if calls.Load() != 1 {
+		t.Fatalf("callbacks=%d", calls.Load())
+	}
+	if _, err := target.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "late failure"); err == nil {
+		t.Fatal("claim reopened")
+	}
+	if _, err := target.CompleteToolEffect(effect.IdempotencyKey, []byte(`{}`)); err == nil {
+		t.Fatal("late execution overwrote claim")
+	}
+	releaseOnce.Do(func() { close(release) })
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	duplicate, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command)
+	if err != nil || duplicate.Applied || duplicate.Outcome != "completed" || calls.Load() != 1 {
+		t.Fatalf("settled duplicate: %#v %v", duplicate, err)
+	}
+
 }
 
 type failingSettlementStore struct {
@@ -174,58 +162,58 @@ func (s failingSettlementStore) CommitToolEffectReconciliation(m domain.ToolEffe
 }
 
 func TestClaimAndSettlementFailureWindows(t *testing.T) {
-	for _, backend := range []string{"file", "postgres"} {
-		for _, failClaim := range []bool{true, false} {
-			name := backend + "/settlement"
-			if failClaim {
-				name = backend + "/claim"
-			}
-			t.Run(name, func(t *testing.T) {
-				var calls atomic.Int32
-				target, reopen, run, catalog, effect := safetyFixture(t, backend, tools.SideEffectReconciliation{
-					RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) { calls.Add(1); return true, nil },
-				})
-				command := retryCommand(effect)
-				_, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, failingSettlementStore{target, failClaim}, run, effect.IdempotencyKey, command)
-				if err == nil {
-					t.Fatal("expected persistence failure")
-				}
-				restarted := reopen()
-				effects, err := restarted.ListToolEffects(run.ID)
-				if err != nil || len(effects) != 1 {
-					t.Fatalf("read after restart: %v", err)
-				}
-				if failClaim {
-					if calls.Load() != 0 || effects[0].Version != effect.Version || effects[0].Status != domain.ToolEffectNeedsReconciliation {
-						t.Fatal("failed claim invoked callback or changed effect")
-					}
-					return
-				}
-				if calls.Load() != 1 || effects[0].Status != domain.ToolEffectReconciling {
-					t.Fatal("lost durable claim")
-				}
-				duplicate, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, restarted, run, effect.IdempotencyKey, command)
-				if err != nil || duplicate.Outcome != "pending" || calls.Load() != 1 {
-					t.Fatalf("replayed unknown callback: %#v %v", duplicate, err)
-				}
-				confirm := command
-				confirm.CommandID, confirm.Action, confirm.ExpectedVersion = "manual", domain.ToolEffectConfirmFailed, effects[0].Version
-				result, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, restarted, run, effect.IdempotencyKey, confirm)
-				if err != nil || result.Effect.Status != domain.ToolEffectFailed {
-					t.Fatalf("manual recovery: %#v %v", result, err)
-				}
-				if _, err := restarted.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "late failure"); err == nil {
-					t.Fatal("failed terminal reopened")
-				}
-			})
+
+	for _, failClaim := range []bool{true, false} {
+		name := "settlement"
+		if failClaim {
+			name = "claim"
 		}
+		t.Run(name, func(t *testing.T) {
+			var calls atomic.Int32
+			target, reopen, run, catalog, effect := safetyFixture(t, tools.SideEffectReconciliation{
+				RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) { calls.Add(1); return true, nil },
+			})
+			command := retryCommand(effect)
+			_, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, failingSettlementStore{target, failClaim}, run, effect.IdempotencyKey, command)
+			if err == nil {
+				t.Fatal("expected persistence failure")
+			}
+			restarted := reopen()
+			effects, err := restarted.ListToolEffects(run.ID)
+			if err != nil || len(effects) != 1 {
+				t.Fatalf("read after restart: %v", err)
+			}
+			if failClaim {
+				if calls.Load() != 0 || effects[0].Version != effect.Version || effects[0].Status != domain.ToolEffectNeedsReconciliation {
+					t.Fatal("failed claim invoked callback or changed effect")
+				}
+				return
+			}
+			if calls.Load() != 1 || effects[0].Status != domain.ToolEffectReconciling {
+				t.Fatal("lost durable claim")
+			}
+			duplicate, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, restarted, run, effect.IdempotencyKey, command)
+			if err != nil || duplicate.Outcome != "pending" || calls.Load() != 1 {
+				t.Fatalf("replayed unknown callback: %#v %v", duplicate, err)
+			}
+			confirm := command
+			confirm.CommandID, confirm.Action, confirm.ExpectedVersion = "manual", domain.ToolEffectConfirmFailed, effects[0].Version
+			result, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, restarted, run, effect.IdempotencyKey, confirm)
+			if err != nil || result.Effect.Status != domain.ToolEffectFailed {
+				t.Fatalf("manual recovery: %#v %v", result, err)
+			}
+			if _, err := restarted.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "late failure"); err == nil {
+				t.Fatal("failed terminal reopened")
+			}
+		})
 	}
+
 }
 
 func TestCanceledCallbackRemainsClaimedAndCannotOverwriteManualResolution(t *testing.T) {
 	entered, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	defer func() { close(release); <-finished }()
-	target, run, catalog, effect := fileReconciliationFixture(t, tools.SideEffectReconciliation{
+	target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{
 		RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
 			close(entered)
 			<-release
@@ -277,7 +265,7 @@ func TestCanceledCallbackRemainsClaimedAndCannotOverwriteManualResolution(t *tes
 func TestReconciliationRedactsAllPersistedSurfaces(t *testing.T) {
 	for _, action := range []domain.ToolEffectReconciliationAction{domain.ToolEffectConfirmCommitted, domain.ToolEffectConfirmFailed, domain.ToolEffectRetrySameKey} {
 		t.Run(string(action), func(t *testing.T) {
-			target, run, catalog, effect := fileReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
+			target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
 				return nil, errors.New("Bearer callback-secret")
 			}})
 			command := retryCommand(effect)
@@ -304,7 +292,7 @@ func TestReconciliationRedactsAllPersistedSurfaces(t *testing.T) {
 func TestReconciliationPolicyAndEnablementFailClosed(t *testing.T) {
 	for _, mode := range []string{"denied", "disabled", "credential", "approval"} {
 		t.Run(mode, func(t *testing.T) {
-			target, run, catalog, effect := fileReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
+			target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
 				t.Error("unauthorized callback")
 				return nil, nil
 			}})
@@ -348,9 +336,9 @@ func TestReconciliationPolicyAndEnablementFailClosed(t *testing.T) {
 	}
 }
 
-func fileReconciliationFixture(t *testing.T, callbacks tools.SideEffectReconciliation) (*FileStore, domain.Run, *tools.Catalog, domain.ToolEffectRecord) {
-	target, _, run, catalog, effect := safetyFixture(t, "file", callbacks)
-	return target.(*FileStore), run, catalog, effect
+func postgresReconciliationFixture(t *testing.T, callbacks tools.SideEffectReconciliation) (*PostgresStore, domain.Run, *tools.Catalog, domain.ToolEffectRecord) {
+	target, _, run, catalog, effect := safetyFixture(t, callbacks)
+	return target.(*PostgresStore), run, catalog, effect
 }
 
 type reconciliationRecordView struct {

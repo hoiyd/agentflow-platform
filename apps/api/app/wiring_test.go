@@ -5,14 +5,15 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
 type answerRelevanceEmbeddingClientStub struct {
@@ -31,6 +32,20 @@ func TestSplitOrigins(t *testing.T) {
 	want := []string{"http://localhost:3000", "https://agentflow.example.com"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("split origins: got %#v want %#v", got, want)
+	}
+}
+
+func TestNewStoreRequiresPostgresWithoutFallback(t *testing.T) {
+	t.Setenv("STORE_DRIVER", "file")
+	t.Setenv("DATA_PATH", t.TempDir()+"/state.json")
+	for _, databaseURL := range []string{"", "://invalid"} {
+		backend, err := newStore(config.Config{DatabaseURL: databaseURL})
+		if err == nil {
+			t.Fatalf("invalid PostgreSQL configuration must fail, backend=%T err=%v", backend, err)
+		}
+		if databaseURL == "" && !strings.Contains(err.Error(), "DATABASE_URL is required") {
+			t.Fatalf("missing configuration is not actionable: %v", err)
+		}
 	}
 }
 
@@ -118,8 +133,7 @@ func TestNewApplicationWiresHealthRoute(t *testing.T) {
 		ModelRetryMaxAttempts:      1,
 		ModelRetryBaseDelay:        time.Millisecond,
 		ModelRetryMaxDelay:         time.Millisecond,
-		StoreDriver:                "file",
-		DataPath:                   filepath.Join(t.TempDir(), "agentflow.json"),
+		DatabaseURL:                pgfixture.DatabaseURL(t),
 		AllowedOrigins:             "http://localhost:3000",
 	}
 

@@ -237,10 +237,7 @@ func contextAssemblyConfig(cfg config.Config) domain.ContextAssemblyConfig {
 }
 
 func newStore(cfg config.Config) (store.Store, error) {
-	if cfg.StoreDriver == "postgres" {
-		return store.NewPostgresStore(cfg.DatabaseURL)
-	}
-	return store.NewFileStore(cfg.DataPath)
+	return store.NewPostgresStore(cfg.DatabaseURL)
 }
 
 func closeStore(appStore store.Store) error {

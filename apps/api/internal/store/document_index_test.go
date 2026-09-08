@@ -52,38 +52,6 @@ func TestPrepareDocumentWriteNormalizesTimestampPrecision(t *testing.T) {
 	}
 }
 
-func TestNormalizeFileDocumentIndexesBackfillsAndRemovesStaleSources(t *testing.T) {
-	oldTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	newTime := oldTime.Add(time.Hour)
-	data := emptyFileData()
-	data.Documents = []domain.Document{
-		{ID: "old", WorkspaceID: "workspace-a", SourceURI: "refund-policy.md", Version: "2.4", UpdatedAt: oldTime},
-		{ID: "current", WorkspaceID: "workspace-a", SourceURI: "refund-policy.md", Version: "3.2", UpdatedAt: newTime},
-	}
-	data.DocumentContents = map[string]string{"old": "30 days", "current": "14 days"}
-	data.DocumentChunks = []domain.DocumentChunk{{ID: "old-chunk", DocumentID: "old"}, {ID: "current-chunk", DocumentID: "current"}}
-	data.ChunkEmbeddings = []domain.DocumentChunkEmbedding{
-		{ChunkID: "old-chunk", Provider: "test", Model: "embedding-v1", Dimensions: 2, Embedding: []float64{1, 0}},
-		{ChunkID: "current-chunk", Provider: "test", Model: "embedding-v1", Dimensions: 2, Embedding: []float64{1, 0}},
-	}
-
-	if !normalizeFileDocumentIndexes(&data) {
-		t.Fatal("legacy index was not migrated")
-	}
-	if len(data.Documents) != 1 || data.Documents[0].ID != "current" || data.Documents[0].SourceKey != "refund-policy.md" {
-		t.Fatalf("stale source survived migration: %#v", data.Documents)
-	}
-	if data.Documents[0].IndexIdentity != (domain.DocumentIndexIdentity{ChunkerVersion: domain.DocumentChunkerVersion, EmbeddingProvider: "test", EmbeddingModel: "embedding-v1", EmbeddingDimensions: 2}) {
-		t.Fatalf("index identity was not backfilled: %#v", data.Documents[0].IndexIdentity)
-	}
-	if len(data.DocumentChunks) != 1 || data.DocumentChunks[0].ID != "current-chunk" || len(data.ChunkEmbeddings) != 1 || data.ChunkEmbeddings[0].ChunkID != "current-chunk" || data.DocumentContents["old"] != "" {
-		t.Fatalf("stale child records survived migration: chunks=%#v embeddings=%#v contents=%#v", data.DocumentChunks, data.ChunkEmbeddings, data.DocumentContents)
-	}
-	if normalizeFileDocumentIndexes(&data) {
-		t.Fatal("normalized index should not migrate twice")
-	}
-}
-
 func TestDocumentVersionConflictHasStableFailureCode(t *testing.T) {
 	err := DocumentVersionConflict(domain.Document{ContentHash: "old"}, domain.Document{SourceKey: "policy", Version: "1", ContentHash: "new"})
 	if !IsDocumentVersionConflict(err) || failure.Describe(err).Code != "document_version_conflict" {

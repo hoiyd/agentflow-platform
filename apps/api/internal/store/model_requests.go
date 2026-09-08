@@ -12,47 +12,6 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-func (s *FileStore) CreateModelRequestRecord(record domain.ModelRequestRecord) (domain.ModelRequestRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.hasRunLocked(record.Envelope.RunID) {
-		return domain.ModelRequestRecord{}, ErrNotFound("run")
-	}
-	if err := ValidateModelRequestRecord(record); err != nil {
-		return domain.ModelRequestRecord{}, err
-	}
-	record.Envelope.Attempt = NextModelRequestAttempt(s.data.ModelRequestRecords, record.Envelope.RunID, record.Envelope.ModelCallID)
-	record = CloneModelRequestRecord(record)
-	s.data.ModelRequestRecords = append(s.data.ModelRequestRecords, record)
-	return CloneModelRequestRecord(record), s.saveLocked()
-}
-
-func (s *FileStore) ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.hasRunLocked(runID) {
-		return nil, ErrNotFound("run")
-	}
-	items := make([]domain.ModelRequestRecord, 0)
-	purged := false
-	for index, item := range s.data.ModelRequestRecords {
-		if item.Envelope.RunID == runID {
-			if ExpireModelRequestCapture(&item, time.Now().UTC()) {
-				s.data.ModelRequestRecords[index] = item
-				purged = true
-			}
-			items = append(items, CloneModelRequestRecord(item))
-		}
-	}
-	if purged {
-		if err := s.saveLocked(); err != nil {
-			return nil, err
-		}
-	}
-	SortModelRequestRecords(items)
-	return items, nil
-}
-
 func ValidateModelRequestRecord(record domain.ModelRequestRecord) error {
 	envelope := record.Envelope
 	if strings.TrimSpace(envelope.ID) == "" || strings.TrimSpace(envelope.RunID) == "" ||

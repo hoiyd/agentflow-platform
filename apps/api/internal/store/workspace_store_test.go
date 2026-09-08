@@ -1,5 +1,7 @@
 package store
 
+import "agentflow-platform/apps/api/internal/testsupport/pgfixture"
+
 import (
 	"errors"
 	"testing"
@@ -8,10 +10,11 @@ import (
 )
 
 func TestWorkspaceStoreRejectsCrossScopeOwnedResources(t *testing.T) {
-	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	fileStore, err := NewPostgresStore(pgfixture.DatabaseURL(t))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
+	t.Cleanup(func() { _ = fileStore.Close() })
 	conversation, err := fileStore.CreateConversationInWorkspace("workspace-b", "private conversation")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -61,10 +64,11 @@ func TestWorkspaceScopeAlwaysNormalizesToNonEmptyNamespace(t *testing.T) {
 }
 
 func TestWorkspaceStoreCoversRunOwnedMissingAndSuccessfulOperations(t *testing.T) {
-	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	fileStore, err := NewPostgresStore(pgfixture.DatabaseURL(t))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
+	t.Cleanup(func() { _ = fileStore.Close() })
 	scoped := fileStore.ForWorkspace(domain.NewWorkspaceScope("workspace-a"))
 
 	if _, err := scoped.ListCollaborationSteps("missing"); !IsNotFound(err) {
@@ -101,10 +105,11 @@ func TestWorkspaceStoreCoversRunOwnedMissingAndSuccessfulOperations(t *testing.T
 }
 
 func TestWorkspaceStorePropagatesRunLookupFailures(t *testing.T) {
-	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	fileStore, err := NewPostgresStore(pgfixture.DatabaseURL(t))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
+	t.Cleanup(func() { _ = fileStore.Close() })
 	want := errors.New("run lookup failed")
 	scoped := workspaceStore{
 		backend: &runLookupFailureStore{Store: fileStore, err: want}, workspaceID: "workspace-a",

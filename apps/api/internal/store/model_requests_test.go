@@ -2,7 +2,7 @@ package store
 
 import (
 	"encoding/json"
-	"os"
+
 	"strings"
 	"testing"
 	"time"
@@ -76,70 +76,6 @@ func TestValidateModelRequestRecordRejectsInvalidContracts(t *testing.T) {
 	cloned := CloneModelRequestRecord(domain.ModelRequestRecord{})
 	if cloned.Envelope.Parameters == nil {
 		t.Fatal("clone should normalize nil parameters")
-	}
-}
-
-func TestFileStoreModelRequestLifecycleAndOrdering(t *testing.T) {
-	path := t.TempDir() + "/agentflow.json"
-	fileStore, err := NewFileStore(path)
-	if err != nil {
-		t.Fatalf("new file store: %v", err)
-	}
-	conversation, err := fileStore.CreateConversation("model request lifecycle")
-	if err != nil {
-		t.Fatalf("create conversation: %v", err)
-	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
-	if err != nil {
-		t.Fatalf("create run: %v", err)
-	}
-	secondRun, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
-	if err != nil {
-		t.Fatalf("create second run: %v", err)
-	}
-
-	record := validModelRequestRecord(run.ID, conversation.ID)
-	created, err := fileStore.CreateModelRequestRecord(record)
-	if err != nil || created.Envelope.Attempt != 1 {
-		t.Fatalf("create first request: record=%#v err=%v", created, err)
-	}
-	record.Envelope.ID = "modelreq-retry"
-	retry, err := fileStore.CreateModelRequestRecord(record)
-	if err != nil || retry.Envelope.Attempt != 2 {
-		t.Fatalf("create retry request: record=%#v err=%v", retry, err)
-	}
-	other := validModelRequestRecord(secondRun.ID, conversation.ID)
-	other.Envelope.ID = "modelreq-other-run"
-	if _, err := fileStore.CreateModelRequestRecord(other); err != nil {
-		t.Fatalf("create other run request: %v", err)
-	}
-
-	items, err := fileStore.ListModelRequestRecords(run.ID)
-	if err != nil || len(items) != 2 || items[0].Envelope.Attempt != 1 || items[1].Envelope.Attempt != 2 {
-		t.Fatalf("unexpected request ordering: items=%#v err=%v", items, err)
-	}
-	if _, err := fileStore.ListModelRequestRecords("missing-run"); err == nil {
-		t.Fatal("expected missing run list error")
-	}
-	missingRun := validModelRequestRecord("missing-run", conversation.ID)
-	if _, err := fileStore.CreateModelRequestRecord(missingRun); err == nil {
-		t.Fatal("expected missing run create error")
-	}
-	invalid := validModelRequestRecord(run.ID, conversation.ID)
-	invalid.Envelope.ID = ""
-	if _, err := fileStore.CreateModelRequestRecord(invalid); err == nil {
-		t.Fatal("expected invalid record create error")
-	}
-
-	if err := fileStore.DeleteConversation(conversation.ID); err != nil {
-		t.Fatalf("delete conversation: %v", err)
-	}
-	persisted, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read file store: %v", err)
-	}
-	if strings.Contains(string(persisted), created.Envelope.ID) || strings.Contains(string(persisted), other.Envelope.ID) {
-		t.Fatal("conversation deletion left model request records behind")
 	}
 }
 
