@@ -359,6 +359,25 @@ range into the normalized source document (`start_offset` inclusive,
 server derives it from the normalized document content hash. The same chunk
 source details are included in Agent `retrieved_chunks` trace payloads.
 
+### Document Index Lifecycle
+
+`POST /api/documents` accepts an optional `source_key`, the stable logical
+identity of a source inside its Workspace. It is limited to 512 bytes and
+defaults to `source_uri`. The document response includes `source_key` and
+`index_identity` with the chunker version and embedding
+provider/model/dimensions.
+
+An exact retry is idempotent and returns the existing document. Reusing a
+source key and version for different content returns `409 Conflict`. A new
+version atomically replaces the active chunks and embeddings while retaining
+the document ID; failed replacement keeps the previous version active.
+`DELETE /api/documents/{id}` removes the complete active index.
+
+Search returns `409 Conflict` with code `knowledge_index_incompatible` when an
+active document was built with an unknown or incompatible chunker or embedding
+identity. The caller must reindex or delete that source before retrieval can
+continue; the server does not mix vector spaces.
+
 ### Recall, Fusion, and Reranking
 
 `vector_rank` and `lexical_rank` identify which independent recall paths found

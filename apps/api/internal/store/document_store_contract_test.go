@@ -76,6 +76,31 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore) {
 	if document.ID != documentID || document.ChunkCount != 1 || document.EmbeddingCount != 1 {
 		t.Fatalf("unexpected created document: %#v", document)
 	}
+	if document.SourceKey != "auth-errors.md" || document.IndexIdentity != (domain.DocumentIndexIdentity{
+		ChunkerVersion: domain.DocumentChunkerVersion, EmbeddingProvider: "contract", EmbeddingModel: "contract-1536", EmbeddingDimensions: 1536,
+	}) {
+		t.Fatalf("document index identity was not bound: %#v", document)
+	}
+
+	duplicate, err := documentStore.CreateDocument(domain.Document{
+		WorkspaceID: workspaceID, Title: document.Title, Version: document.Version, ContentHash: document.ContentHash,
+		SourceType: document.SourceType, SourceURI: document.SourceURI, MimeType: document.MimeType,
+		Content: "# Authentication\n\nAUTH-7F31 means the refresh token has expired.", Metadata: map[string]any{"project": "agentflow"},
+	}, []domain.DocumentChunk{{
+		ChunkSource: domain.ChunkSource{ParentID: "section_authentication", SectionPath: []string{"Authentication"}, StartOffset: 18, EndOffset: 66, DocumentVersion: "2026-07", ContentHash: "sha256:chunk-contract"},
+		Content:     "AUTH-7F31 means the refresh token has expired.", TokenCount: 10, Metadata: map[string]any{"project": "agentflow", "chunk_type": "paragraph"},
+	}}, []domain.DocumentChunkEmbedding{{Provider: "contract", Model: "contract-1536", Dimensions: 1536, Embedding: embedding}})
+	if err != nil || duplicate.ID != document.ID || !duplicate.UpdatedAt.Equal(document.UpdatedAt) {
+		t.Fatalf("identical ingest was not idempotent: document=%#v err=%v", duplicate, err)
+	}
+
+	_, err = documentStore.CreateDocument(domain.Document{
+		WorkspaceID: workspaceID, Title: document.Title, Version: document.Version, ContentHash: "sha256:different-content",
+		SourceType: document.SourceType, SourceURI: document.SourceURI, Content: "different content",
+	}, []domain.DocumentChunk{{Content: "different content"}}, []domain.DocumentChunkEmbedding{{Provider: "contract", Model: "contract-1536", Dimensions: 1536, Embedding: embedding}})
+	if !IsDocumentVersionConflict(err) {
+		t.Fatalf("same source/version accepted different content: %v", err)
+	}
 
 	documents, err := documentStore.ListDocuments()
 	if err != nil {
@@ -158,11 +183,42 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore) {
 		t.Fatalf("expected workspace scope to block context expansion, got %#v", crossWorkspaceResults)
 	}
 
+	updatedContent := "AUTH-8G42 means the session signing key has expired."
+	updated, err := documentStore.CreateDocument(domain.Document{
+		WorkspaceID: workspaceID, Title: "Authentication error catalog", Version: "2026-08", ContentHash: "sha256:document-contract-v2",
+		SourceType: "markdown", SourceURI: "auth-errors.md", MimeType: "text/markdown", Content: updatedContent,
+		Metadata: map[string]any{"project": "agentflow"},
+	}, []domain.DocumentChunk{{
+		ChunkSource: domain.ChunkSource{ParentID: "section_authentication_v2", SectionPath: []string{"Authentication"}, StartOffset: 0, EndOffset: len(updatedContent), DocumentVersion: "2026-08", ContentHash: "sha256:chunk-contract-v2"},
+		Content:     updatedContent, TokenCount: 11, Metadata: map[string]any{"project": "agentflow", "chunk_type": "paragraph"},
+	}}, []domain.DocumentChunkEmbedding{{Provider: "contract", Model: "contract-1536", Dimensions: 1536, Embedding: embedding}})
+	if err != nil || updated.ID != document.ID || updated.Version != "2026-08" || !updated.CreatedAt.Equal(document.CreatedAt) {
+		t.Fatalf("new source version was not atomically installed: document=%#v err=%v", updated, err)
+	}
+	loaded, chunks, found, err = documentStore.GetDocument(document.ID)
+	if err != nil || !found || loaded.Version != "2026-08" || len(chunks) != 1 || chunks[0].ID == chunkID || chunks[0].DocumentVersion != "2026-08" {
+		t.Fatalf("old version reference still resolves to stale index data: document=%#v chunks=%#v found=%v err=%v", loaded, chunks, found, err)
+	}
+	stale, err := documentStore.SearchDocumentChunksLexical(domain.DocumentSearch{
+		Query: "AUTH-7F31", LexicalTerms: []string{"7f31"}, WorkspaceID: workspaceID, Limit: 5,
+	})
+	if err != nil || len(stale) != 0 {
+		t.Fatalf("old source version remained in recall: results=%#v err=%v", stale, err)
+	}
+	documents, err = documentStore.ListDocumentsByWorkspace(workspaceID)
+	if err != nil || len(documents) != 1 || documents[0].ID != document.ID || documents[0].Version != "2026-08" {
+		t.Fatalf("source replacement created duplicate active documents: %#v err=%v", documents, err)
+	}
+
 	if err := documentStore.DeleteDocument(documentID); err != nil {
 		t.Fatalf("delete document: %v", err)
 	}
 	if _, _, found, err := documentStore.GetDocument(documentID); err != nil || found {
 		t.Fatalf("deleted document still available: found=%v err=%v", found, err)
+	}
+	identities, err := documentStore.ListDocumentIndexIdentities(workspaceID)
+	if err != nil || len(identities) != 0 {
+		t.Fatalf("deleted document left index identity state: %#v err=%v", identities, err)
 	}
 }
 

@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -84,6 +85,42 @@ func TestFileStoreDocumentSearchUsesMetadataSimilarityAndRecency(t *testing.T) {
 	}
 	if len(items) != 0 {
 		t.Fatalf("expected high threshold to filter mismatched chunks, got %d", len(items))
+	}
+}
+
+func TestFileStoreConcurrentIdenticalIngestKeepsOneActiveIndex(t *testing.T) {
+	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	embedding := []float64{1, 0}
+	var wait sync.WaitGroup
+	errors := make(chan error, 12)
+	for index := 0; index < 12; index++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, err := fileStore.CreateDocument(domain.Document{
+				WorkspaceID: "concurrent", SourceKey: "refund-policy", Title: "Refund policy", Version: "3.2",
+				ContentHash: "refund-v3-hash", SourceType: "markdown", SourceURI: "refund-policy-current.md", Content: "Refunds are automatic within 14 days.",
+			}, []domain.DocumentChunk{{Content: "Refunds are automatic within 14 days."}}, []domain.DocumentChunkEmbedding{{Provider: "test", Model: "embedding-v1", Dimensions: 2, Embedding: embedding}})
+			if err != nil {
+				errors <- err
+			}
+		}()
+	}
+	wait.Wait()
+	close(errors)
+	for err := range errors {
+		t.Errorf("concurrent ingest: %v", err)
+	}
+	documents, err := fileStore.ListDocumentsByWorkspace("concurrent")
+	if err != nil || len(documents) != 1 || documents[0].Version != "3.2" {
+		t.Fatalf("concurrent ingest produced duplicate or partial state: documents=%#v err=%v", documents, err)
+	}
+	_, chunks, found, err := fileStore.GetDocument(documents[0].ID)
+	if err != nil || !found || len(chunks) != 1 || chunks[0].Content != "Refunds are automatic within 14 days." {
+		t.Fatalf("concurrent ingest stored incomplete index: found=%v chunks=%#v err=%v", found, chunks, err)
 	}
 }
 

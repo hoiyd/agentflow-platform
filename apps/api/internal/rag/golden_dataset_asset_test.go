@@ -15,7 +15,9 @@ type goldenCorpusManifest struct {
 	DatasetID string `json:"dataset_id"`
 	Version   string `json:"version"`
 	Documents []struct {
-		File string `json:"file"`
+		File      string `json:"file"`
+		SourceKey string `json:"source_key,omitempty"`
+		Version   string `json:"version,omitempty"`
 	} `json:"documents"`
 }
 
@@ -39,6 +41,7 @@ func TestCanonicalGoldenDatasetV1Asset(t *testing.T) {
 	}
 
 	documentPaths := make(map[string]string, len(manifest.Documents))
+	refundVersions := []string{}
 	for _, document := range manifest.Documents {
 		if strings.TrimSpace(document.File) == "" {
 			t.Fatal("corpus manifest contains an empty file")
@@ -51,6 +54,12 @@ func TestCanonicalGoldenDatasetV1Asset(t *testing.T) {
 			t.Fatalf("corpus file %q is unavailable: %v", document.File, err)
 		}
 		documentPaths[document.File] = path
+		if document.SourceKey == "refund-policy" {
+			refundVersions = append(refundVersions, document.Version)
+		}
+	}
+	if strings.Join(refundVersions, ",") != "2.4,3.2" {
+		t.Fatalf("refund policy corpus must install old then current source version, got %v", refundVersions)
 	}
 
 	requiredCategories := map[string]bool{
@@ -70,8 +79,11 @@ func TestCanonicalGoldenDatasetV1Asset(t *testing.T) {
 		if hasTag(evalCase.Tags, "multi-hop") && (evalCase.RequiredSourceCount < 2 || len(evalCase.ExpectedSources) < 2) {
 			t.Fatalf("multi-hop case %q must require at least two expected sources", evalCase.ID)
 		}
-		if (hasTag(evalCase.Tags, "acl") || hasTag(evalCase.Tags, "stale-data")) && !hasTag(evalCase.Tags, "non-blocking") {
+		if hasTag(evalCase.Tags, "acl") && !hasTag(evalCase.Tags, "non-blocking") {
 			t.Fatalf("case %q must remain non-blocking until its policy prerequisites are implemented", evalCase.ID)
+		}
+		if hasTag(evalCase.Tags, "stale-data") && hasTag(evalCase.Tags, "non-blocking") {
+			t.Fatalf("implemented stale-source lifecycle case %q must gate releases", evalCase.ID)
 		}
 		if !hasTag(evalCase.Tags, "calibration") && !hasTag(evalCase.Tags, "holdout") {
 			t.Fatalf("case %q must belong to the calibration or holdout split", evalCase.ID)

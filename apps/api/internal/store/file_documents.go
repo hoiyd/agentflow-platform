@@ -10,86 +10,94 @@ import (
 )
 
 func (s *FileStore) CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error) {
+	document, chunks, embeddings, err := prepareDocumentWrite(document, chunks, embeddings)
+	if err != nil {
+		return domain.Document{}, err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if len(chunks) != len(embeddings) {
-		return domain.Document{}, errors.New("document chunks and embeddings length mismatch")
+	replacedDocumentIDs := map[string]bool{}
+	var existing *domain.Document
+	for index := range s.data.Documents {
+		candidate := &s.data.Documents[index]
+		if document.SourceKey == "" || candidate.WorkspaceID != document.WorkspaceID || candidate.SourceKey != document.SourceKey {
+			continue
+		}
+		replacedDocumentIDs[candidate.ID] = true
+		if existing == nil || candidate.UpdatedAt.After(existing.UpdatedAt) {
+			copy := *candidate
+			existing = &copy
+		}
 	}
-	now := time.Now().UTC()
-	document.WorkspaceID = normalizeWorkspaceID(document.WorkspaceID)
-	document.ID = strings.TrimSpace(document.ID)
-	if document.ID == "" {
-		document.ID = newID("doc")
-	}
-	document.Title = strings.TrimSpace(document.Title)
-	if document.Title == "" {
-		return domain.Document{}, errors.New("document title is required")
-	}
-	document.Content = strings.TrimSpace(document.Content)
-	if document.Content == "" {
-		return domain.Document{}, errors.New("document content is required")
-	}
-	document.SourceType = strings.TrimSpace(document.SourceType)
-	if document.SourceType == "" {
-		document.SourceType = "text"
-	}
-	if document.Metadata == nil {
-		document.Metadata = map[string]any{}
-	}
-	if document.CreatedAt.IsZero() {
-		document.CreatedAt = now
-	}
-	document.UpdatedAt = now
-
-	for i := range chunks {
-		chunks[i].ID = strings.TrimSpace(chunks[i].ID)
-		if chunks[i].ID == "" {
-			chunks[i].ID = newID("chunk")
+	if existing != nil {
+		if existing.Version == document.Version && existing.ContentHash != document.ContentHash {
+			return domain.Document{}, documentVersionConflict(*existing, document)
 		}
-		chunks[i].DocumentID = document.ID
-		chunks[i].ChunkIndex = i
-		chunks[i].Content = strings.TrimSpace(chunks[i].Content)
-		if chunks[i].Content == "" {
-			return domain.Document{}, errors.New("document chunk content is required")
+		if len(replacedDocumentIDs) == 1 && existing.Version == document.Version && existing.ContentHash == document.ContentHash && existing.IndexIdentity == document.IndexIdentity {
+			return *existing, nil
 		}
-		if chunks[i].Metadata == nil {
-			chunks[i].Metadata = map[string]any{}
-		}
-		if chunks[i].SectionPath == nil {
-			chunks[i].SectionPath = []string{}
-		}
-		if chunks[i].DocumentVersion == "" {
-			chunks[i].DocumentVersion = document.Version
-		}
-		if chunks[i].CreatedAt.IsZero() {
-			chunks[i].CreatedAt = now
-		}
-		embeddings[i].ChunkID = chunks[i].ID
-		if embeddings[i].Provider == "" {
-			embeddings[i].Provider = "local"
-		}
-		if embeddings[i].Model == "" {
-			embeddings[i].Model = "local_hash"
-		}
-		if embeddings[i].Dimensions == 0 {
-			embeddings[i].Dimensions = len(embeddings[i].Embedding)
-		}
-		if embeddings[i].CreatedAt.IsZero() {
-			embeddings[i].CreatedAt = now
-		}
+		document.CreatedAt = existing.CreatedAt
+		bindDocumentID(&document, chunks, embeddings, existing.ID)
 	}
 
-	document.ChunkCount = len(chunks)
-	document.EmbeddingCount = len(embeddings)
-	if s.data.DocumentContents == nil {
-		s.data.DocumentContents = map[string]string{}
+	next := s.data
+	next.Documents = make([]domain.Document, 0, len(s.data.Documents)+1)
+	for _, candidate := range s.data.Documents {
+		if !replacedDocumentIDs[candidate.ID] {
+			next.Documents = append(next.Documents, candidate)
+		}
 	}
-	s.data.DocumentContents[document.ID] = document.Content
-	s.data.Documents = append(s.data.Documents, document)
-	s.data.DocumentChunks = append(s.data.DocumentChunks, chunks...)
-	s.data.ChunkEmbeddings = append(s.data.ChunkEmbeddings, embeddings...)
-	return document, s.saveLocked()
+	next.Documents = append(next.Documents, document)
+	next.DocumentContents = make(map[string]string, len(s.data.DocumentContents)+1)
+	for id, content := range s.data.DocumentContents {
+		if !replacedDocumentIDs[id] {
+			next.DocumentContents[id] = content
+		}
+	}
+	next.DocumentContents[document.ID] = document.Content
+
+	deletedChunkIDs := map[string]bool{}
+	next.DocumentChunks = make([]domain.DocumentChunk, 0, len(s.data.DocumentChunks)+len(chunks))
+	for _, chunk := range s.data.DocumentChunks {
+		if replacedDocumentIDs[chunk.DocumentID] {
+			deletedChunkIDs[chunk.ID] = true
+			continue
+		}
+		next.DocumentChunks = append(next.DocumentChunks, chunk)
+	}
+	next.DocumentChunks = append(next.DocumentChunks, chunks...)
+	next.ChunkEmbeddings = make([]domain.DocumentChunkEmbedding, 0, len(s.data.ChunkEmbeddings)+len(embeddings))
+	for _, embedding := range s.data.ChunkEmbeddings {
+		if !deletedChunkIDs[embedding.ChunkID] {
+			next.ChunkEmbeddings = append(next.ChunkEmbeddings, embedding)
+		}
+	}
+	next.ChunkEmbeddings = append(next.ChunkEmbeddings, embeddings...)
+
+	previous := s.data
+	s.data = next
+	if err := s.saveLocked(); err != nil {
+		s.data = previous
+		return domain.Document{}, err
+	}
+	return document, nil
+}
+
+func (s *FileStore) ListDocumentIndexIdentities(workspaceID string) ([]domain.DocumentIndexIdentity, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	workspaceID = normalizeWorkspaceID(workspaceID)
+	seen := map[domain.DocumentIndexIdentity]bool{}
+	items := []domain.DocumentIndexIdentity{}
+	for _, document := range s.data.Documents {
+		if document.WorkspaceID == workspaceID && !seen[document.IndexIdentity] {
+			seen[document.IndexIdentity] = true
+			items = append(items, document.IndexIdentity)
+		}
+	}
+	return items, nil
 }
 
 func (s *FileStore) ListDocuments() ([]domain.Document, error) {

@@ -498,6 +498,15 @@ function DocumentDetailBlock({ detail, isLoading }: { detail: DocumentDetail | n
           <span>{documentFormat(detail.document)}</span>
           <span>{detail.document.chunk_count ?? detail.chunks.length} chunks</span>
           <span>{detail.document.embedding_count ?? 0} embeddings</span>
+          {detail.document.index_identity?.chunker_version ? (
+            <span>{detail.document.index_identity.chunker_version}</span>
+          ) : null}
+          {detail.document.index_identity?.embedding_model ? (
+            <span>
+              {detail.document.index_identity.embedding_provider}/{detail.document.index_identity.embedding_model} ·{" "}
+              {detail.document.index_identity.embedding_dimensions}d
+            </span>
+          ) : null}
         </div>
       </div>
       <div className="chunk-list">

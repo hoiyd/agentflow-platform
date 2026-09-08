@@ -12,6 +12,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/knowledge"
+	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -29,6 +30,16 @@ func (s *ragSearchResponseStub) Search(_ context.Context, _ domain.DocumentSearc
 
 func (s *ragSearchResponseStub) Evaluate(_ context.Context, _ domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error) {
 	return domain.RAGEvaluationRunResponse{}, nil
+}
+
+func TestKnowledgeIndexConflictsReturnHTTP409(t *testing.T) {
+	for _, err := range []error{store.ErrDocumentVersionConflict, rag.ErrIndexIncompatible} {
+		recorder := httptest.NewRecorder()
+		writeKnowledgeError(recorder, httptest.NewRequest(http.MethodPost, "/api/rag/search", nil), err)
+		if recorder.Code != http.StatusConflict {
+			t.Fatalf("expected conflict for %v, got %d body=%s", err, recorder.Code, recorder.Body.String())
+		}
+	}
 }
 
 func TestRAGSearchAPISerializesMergedContextTraceability(t *testing.T) {
@@ -93,6 +104,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	handler := &Handler{store: fileStore, knowledge: knowledge.NewKnowledgeBase(fileStore, client)}
 
 	createBody := []byte(`{
+		"source_key": "launch-notes",
 		"title": "Launch Notes",
 		"content": "The launch password is amber-9137. Keep it in the deployment notes.",
 		"metadata": {"project": "agentflow"}
@@ -107,7 +119,7 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 	if err := json.Unmarshal(createRecorder.Body.Bytes(), &document); err != nil {
 		t.Fatalf("decode document: %v", err)
 	}
-	if document.ChunkCount != 1 || document.EmbeddingCount != 1 {
+	if document.ChunkCount != 1 || document.EmbeddingCount != 1 || document.SourceKey != "launch-notes" || document.IndexIdentity.ChunkerVersion != domain.DocumentChunkerVersion || document.IndexIdentity.EmbeddingDimensions != 1536 {
 		t.Fatalf("expected one chunk and embedding, got %#v", document)
 	}
 

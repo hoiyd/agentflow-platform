@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
@@ -99,6 +100,35 @@ func TestKnowledgeBaseClassifiesEmbeddingFailure(t *testing.T) {
 	}
 	if info := failure.Describe(err); info.Source != "knowledge_embedding" {
 		t.Fatalf("expected unclassified embedding source, got %#v", info)
+	}
+}
+
+func TestKnowledgeBaseFailedUpdateKeepsPreviousIndex(t *testing.T) {
+	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	working := NewKnowledgeBase(fileStore, embeddingStub{embedding: openai.Embedding{
+		Vector: []float64{1, 0}, Provider: "test", Model: "embedding-v1", Dimensions: 2,
+	}})
+	previous, err := working.Ingest(context.Background(), domain.DocumentIngestRequest{
+		WorkspaceID: "workspace-a", SourceKey: "refund-policy", Title: "Refund policy", Version: "2.4",
+		SourceURI: "refund-policy-deprecated.md", Content: "Refunds were automatic within 30 days.",
+	})
+	if err != nil {
+		t.Fatalf("ingest previous version: %v", err)
+	}
+	want := errors.New("embedding provider unavailable")
+	failing := NewKnowledgeBase(fileStore, embeddingStub{err: want})
+	if _, err := failing.Ingest(context.Background(), domain.DocumentIngestRequest{
+		WorkspaceID: "workspace-a", SourceKey: "refund-policy", Title: "Refund policy", Version: "3.2",
+		SourceURI: "refund-policy-current.md", Content: "Refunds are automatic within 14 days.",
+	}); !IsEmbeddingError(err) || !errors.Is(err, want) {
+		t.Fatalf("expected update embedding failure, got %v", err)
+	}
+	loaded, chunks, found, err := fileStore.GetDocument(previous.ID)
+	if err != nil || !found || loaded.Version != "2.4" || loaded.SourceURI != "refund-policy-deprecated.md" || len(chunks) != 1 || !strings.Contains(chunks[0].Content, "30 days") {
+		t.Fatalf("failed update changed active index: document=%#v chunks=%#v found=%v err=%v", loaded, chunks, found, err)
 	}
 }
 

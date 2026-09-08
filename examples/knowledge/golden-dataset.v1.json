@@ -1,7 +1,7 @@
 {
   "schema_version": "rag-golden-dataset-v1",
   "id": "agentflow-rag-baseline",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Canonical AgentFlow retrieval baseline covering factual, paraphrase, exact identifier, multi-hop, no-answer, ACL, stale-data, and prompt-injection cases.",
   "tags": ["baseline", "retrieval", "v1"],
   "cases": [
@@ -108,7 +108,7 @@
         }
       ],
       "min_acceptable_rank": 3,
-      "tags": ["stale-data", "diagnostic", "non-blocking", "calibration"]
+      "tags": ["stale-data", "gating", "calibration"]
     },
     {
       "id": "injection-release-signing",

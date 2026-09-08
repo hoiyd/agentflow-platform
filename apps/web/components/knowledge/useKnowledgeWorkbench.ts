@@ -99,7 +99,7 @@ export function useKnowledgeWorkbench() {
         content,
         metadata: { source: "ui" }
       });
-      setDocuments((items) => [created, ...items]);
+      setDocuments((items) => [created, ...items.filter((item) => item.id !== created.id)]);
       setDocumentTitle("");
       setDocumentContent("");
     } catch (createError) {
@@ -124,7 +124,7 @@ export function useKnowledgeWorkbench() {
         file: uploadFile,
         title: uploadTitle
       });
-      setDocuments((items) => [created, ...items]);
+      setDocuments((items) => [created, ...items.filter((item) => item.id !== created.id)]);
       setUploadFile(null);
       setUploadTitle("");
     } catch (uploadError) {

@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -15,6 +16,12 @@ type retrievalStoreStub struct {
 	denseItems    []domain.RetrievedDocumentChunk
 	lexicalItems  []domain.RetrievedDocumentChunk
 	contextItems  []domain.RetrievedDocumentChunk
+	identities    []domain.DocumentIndexIdentity
+	identityErr   error
+}
+
+func (s *retrievalStoreStub) ListDocumentIndexIdentities(string) ([]domain.DocumentIndexIdentity, error) {
+	return append([]domain.DocumentIndexIdentity(nil), s.identities...), s.identityErr
 }
 
 func (s *retrievalStoreStub) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
@@ -51,7 +58,9 @@ func TestEmbedQueryNormalizesInput(t *testing.T) {
 }
 
 func TestRetrievalPipelineAppliesCandidateRecallRerankAndGate(t *testing.T) {
-	store := &retrievalStoreStub{denseItems: []domain.RetrievedDocumentChunk{
+	store := &retrievalStoreStub{identities: []domain.DocumentIndexIdentity{{
+		ChunkerVersion: DocumentChunkerVersion, EmbeddingProvider: "test", EmbeddingModel: "embedding-v1", EmbeddingDimensions: 3,
+	}}, denseItems: []domain.RetrievedDocumentChunk{
 		{
 			Document:   domain.Document{ID: "doc_unrelated", Title: "Dinner ideas"},
 			Chunk:      domain.DocumentChunk{ID: "chunk_unrelated", Content: "A collection of unrelated dinner recipes."},
@@ -180,5 +189,40 @@ func TestRetrievalPipelineAlwaysAppliesDefaultWorkspace(t *testing.T) {
 	}
 	if store.denseSearch.WorkspaceID != domain.DefaultWorkspaceID || store.lexicalSearch.WorkspaceID != domain.DefaultWorkspaceID {
 		t.Fatalf("expected default workspace on all recall paths, dense=%q lexical=%q", store.denseSearch.WorkspaceID, store.lexicalSearch.WorkspaceID)
+	}
+}
+
+func TestRetrievalPipelineRejectsIncompatibleIndexesBeforeRecall(t *testing.T) {
+	active := Embedding{Vector: []float64{1, 0, 0}, Provider: "test", Model: "embedding-v2", Dimensions: 3}
+	tests := []struct {
+		name     string
+		identity domain.DocumentIndexIdentity
+	}{
+		{name: "chunker", identity: domain.DocumentIndexIdentity{ChunkerVersion: "document-chunker-v0", EmbeddingProvider: "test", EmbeddingModel: "embedding-v2", EmbeddingDimensions: 3}},
+		{name: "provider", identity: domain.DocumentIndexIdentity{ChunkerVersion: DocumentChunkerVersion, EmbeddingProvider: "other", EmbeddingModel: "embedding-v2", EmbeddingDimensions: 3}},
+		{name: "model", identity: domain.DocumentIndexIdentity{ChunkerVersion: DocumentChunkerVersion, EmbeddingProvider: "test", EmbeddingModel: "embedding-v1", EmbeddingDimensions: 3}},
+		{name: "dimensions", identity: domain.DocumentIndexIdentity{ChunkerVersion: DocumentChunkerVersion, EmbeddingProvider: "test", EmbeddingModel: "embedding-v2", EmbeddingDimensions: 2}},
+		{name: "unknown", identity: domain.DocumentIndexIdentity{}},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			store := &retrievalStoreStub{identities: []domain.DocumentIndexIdentity{testCase.identity}}
+			_, err := NewRetrievalPipeline(store).Search(context.Background(), domain.DocumentSearch{Query: "refund window"}, 3, active)
+			if !IsIndexIncompatible(err) {
+				t.Fatalf("expected incompatible index error, got %v", err)
+			}
+			if store.denseSearch.Query != "" || store.lexicalSearch.Query != "" {
+				t.Fatalf("incompatible index reached recall: dense=%#v lexical=%#v", store.denseSearch, store.lexicalSearch)
+			}
+		})
+	}
+}
+
+func TestRetrievalPipelineReturnsIndexInspectionFailure(t *testing.T) {
+	want := errors.New("index unavailable")
+	store := &retrievalStoreStub{identityErr: want}
+	_, err := NewRetrievalPipeline(store).Search(context.Background(), domain.DocumentSearch{Query: "refund window"}, 3, Embedding{Vector: []float64{1}, Provider: "test", Model: "embedding-v1", Dimensions: 1})
+	if !errors.Is(err, want) || IsIndexIncompatible(err) {
+		t.Fatalf("expected storage error, got %v", err)
 	}
 }

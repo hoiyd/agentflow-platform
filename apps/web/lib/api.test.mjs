@@ -408,12 +408,23 @@ test("document list normalizes a non-array response", async (t) => {
 
 test("document creation sends the complete JSON contract", async (t) => {
   let request = {};
-  mockFetch(t, { id: "doc-1", title: "Runbook" }, (url, options) => {
+  mockFetch(t, {
+    id: "doc-1",
+    source_key: "incident-runbook",
+    title: "Runbook",
+    index_identity: {
+      chunker_version: "document-chunker-v1",
+      embedding_provider: "local",
+      embedding_model: "local_hash_embedding",
+      embedding_dimensions: 1536
+    }
+  }, (url, options) => {
     request = { url: String(url), options, body: JSON.parse(String(options?.body ?? "{}")) };
   });
 
   const document = await createDocument({
     title: "Runbook",
+    source_key: "incident-runbook",
     version: "v2",
     content: "Recovery steps",
     metadata: { project: "agentflow" }
@@ -425,11 +436,14 @@ test("document creation sends the complete JSON contract", async (t) => {
   assert.equal(new Headers(request.options.headers).get("X-Workspace-ID"), "default_workspace");
   assert.deepEqual(request.body, {
     title: "Runbook",
+    source_key: "incident-runbook",
     version: "v2",
     content: "Recovery steps",
     metadata: { project: "agentflow" }
   });
   assert.equal(document.id, "doc-1");
+  assert.equal(document.source_key, "incident-runbook");
+  assert.equal(document.index_identity?.embedding_dimensions, 1536);
 });
 
 test("document upload trims an optional title and sends multipart data", async (t) => {

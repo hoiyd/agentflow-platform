@@ -23,8 +23,8 @@ temporary store:
 make golden-eval
 ```
 
-The command labels no-answer, ACL, and stale-data cases as diagnostic because
-their calibration or policy prerequisites are intentionally unfinished.
+The command gates no-answer and stale-data behavior. ACL remains diagnostic
+because authenticated identity and document authorization are not implemented.
 
 ## Walkthrough
 
@@ -60,7 +60,7 @@ recall ranks, RRF score, final rank, relevance decision, and selected model
 context.
 
 For an AI-systems-focused review, open **Retrieval evaluation** and show the
-canonical `agentflow-rag-baseline@1.1.0` result. Point out Hit@1/3/5, per-case
+canonical `agentflow-rag-baseline@1.2.0` result. Point out Hit@1/3/5, per-case
 misses, prompt-injection blocks, gating versus diagnostic cases, and the
 Embedding/Fusion/Reranker/Relevance Gate versions used by the same production
 pipeline.
@@ -99,12 +99,11 @@ of the repository's unit or integration tests.
 
 ### 4:25-5:00 - Engineering Boundaries
 
-Close with two explicit limits: mandatory Workspace namespace filtering is
-implemented, but authentication, Membership, ACL, and complete Workspace
-lifecycle are not; the canonical Golden Dataset exists, but relevance and
-no-answer thresholds still need calibration and the ACL/stale-data cases are
-not release gates. This distinguishes implemented platform behavior from
-planned production hardening.
+Close with two explicit limits: mandatory Workspace namespace filtering and
+stale-source replacement are implemented, but authentication, Membership, ACL,
+and complete Workspace lifecycle are not; the ACL case therefore remains
+diagnostic rather than a release gate. This distinguishes implemented platform
+behavior from planned production hardening.
 
 ## Recorded README Assets
 
