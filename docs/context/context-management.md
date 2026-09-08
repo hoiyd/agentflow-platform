@@ -107,6 +107,19 @@ older snapshots keep this behavior disabled when resumed.
 
 Repeated compactions are incremental: each new summary combines the previous summary with only the newly compactable messages. The Context Manifest records the active compaction ID and generation. Summaries are injected as historical references; Structured Task State and the current user request win on conflict. Original messages remain available for replay and debugging.
 
+## Quality Regression
+
+`make context-eval` runs the deterministic H-30 regression suite through the
+production Assembler. It verifies required facts, stale-content exclusion,
+source token distribution, irrelevant-context ratio, total input tokens, prefix
+stability, overflow handling, and raw-history fallback. A `full_history` report
+can be compared with `compacted_history` as one explicit ablation. See
+[Offline evaluation reports](../operations/offline-evaluation.md#context-quality-gate).
+
+The suite uses fixed compaction summaries and never calls a model, so it tests
+the assembly contract rather than learned summarization quality. Real summary
+quality and task success require a separately budgeted model-backed evaluation.
+
 ### Exact v2 Selection Algorithm
 
 The current implementation is `context-compaction-v2`. It decides whether to

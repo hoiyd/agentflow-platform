@@ -1,0 +1,136 @@
+{
+  "schema_version": "context-quality-dataset-v1",
+  "id": "agentflow-context-quality",
+  "version": "1.0.0",
+  "model": "offline-context-fixture",
+  "config": {
+    "context_window_tokens": 1200,
+    "output_reserve_tokens": 120,
+    "safety_margin_tokens": 80,
+    "history_max_tokens": 320,
+    "memory_max_tokens": 100,
+    "knowledge_max_tokens": 100,
+    "compaction_tool_result_max_tokens": 100,
+    "history_retrieval_enabled": false,
+    "compaction_mode": "auto",
+    "compaction_soft_threshold": 0.7,
+    "compaction_hard_threshold": 0.85,
+    "compaction_recent_tokens": 80,
+    "compaction_summary_max_tokens": 120,
+    "compaction_timeout_ms": 1000
+  },
+  "cases": [
+    {
+      "id": "corrected-deployment-constraint",
+      "split": "calibration",
+      "classification": "gating",
+      "scenario": "correction_after_stale_fact",
+      "evidence_position": "early",
+      "system": "Follow the latest explicit deployment constraints and preserve exact identifiers.",
+      "current_input": "Prepare the deployment handoff without reviving superseded targets.",
+      "history": [
+        {"id": "deploy-1", "role": "user", "content": "The original target was DEPLOY_ENV=production."},
+        {"id": "deploy-2", "role": "assistant", "content": "A preliminary production checklist was drafted before the correction."},
+        {"id": "deploy-3", "role": "user", "content": "Correction: use DEPLOY_ENV=staging. The prior target is canceled."},
+        {"id": "deploy-4", "role": "assistant", "content": "Unfinished work: validate canary CANARY-204 before the 22:00 UTC change window."}
+      ],
+      "compaction": {
+        "summary": "Latest correction: use DEPLOY_ENV=staging; the earlier target is canceled.",
+        "source_message_ids": ["deploy-1", "deploy-2", "deploy-3"]
+      },
+      "required_facts": ["DEPLOY_ENV=staging", "CANARY-204", "22:00 UTC"],
+      "forbidden_facts": ["DEPLOY_ENV=production"],
+      "irrelevant_reference_ids": ["deploy-1", "deploy-2"]
+    },
+    {
+      "id": "identifier-under-distractor-pressure",
+      "split": "holdout",
+      "classification": "gating",
+      "scenario": "history_budget_pressure",
+      "evidence_position": "middle",
+      "system": "Preserve exact identifiers and unresolved work while ignoring unrelated historical discussion.",
+      "current_input": "State the active rotation target and next unresolved action.",
+      "history": [
+        {"id": "rotate-1", "role": "user", "content": "Unrelated notes about dashboard colors, spacing, typography, and old presentation drafts occupy historical context."},
+        {"id": "rotate-2", "role": "assistant", "content": "Unrelated retrospective details discuss meeting schedules, team aliases, archived milestones, and discarded mockups at length."},
+        {"id": "rotate-3", "role": "user", "content": "The active credential rotation identifier is AUTH-7F31 and the exact endpoint is /v1/keys/rotate."},
+        {"id": "rotate-4", "role": "assistant", "content": "More irrelevant material describes previous experiments, unused naming options, old screenshots, and already closed questions."},
+        {"id": "rotate-5", "role": "user", "content": "Additional unrelated context covers abandoned release themes, sample copy, historical estimates, and obsolete planning assumptions."},
+        {"id": "rotate-6", "role": "assistant", "content": "Unfinished work: verify the canary response before closing the rotation task."}
+      ],
+      "compaction": {
+        "summary": "Active target: AUTH-7F31 at /v1/keys/rotate. Preserve both values exactly.",
+        "source_message_ids": ["rotate-1", "rotate-2", "rotate-3", "rotate-4", "rotate-5"]
+      },
+      "required_facts": ["AUTH-7F31", "/v1/keys/rotate", "verify the canary response"],
+      "forbidden_facts": [],
+      "irrelevant_reference_ids": ["rotate-1", "rotate-2", "rotate-4", "rotate-5"]
+    },
+    {
+      "id": "unfinished-work-after-compaction",
+      "split": "holdout",
+      "classification": "gating",
+      "scenario": "recent_work_outside_compaction",
+      "evidence_position": "late",
+      "system": "Keep durable decisions and unfinished work visible in the final model input.",
+      "current_input": "Continue from the last verified state.",
+      "history": [
+        {"id": "work-1", "role": "user", "content": "Decision: database migration mode is online_only."},
+        {"id": "work-2", "role": "assistant", "content": "The decision was accepted and older alternatives were closed."},
+        {"id": "work-3", "role": "user", "content": "Unfinished work: run CHECKPOINT-88 before enabling writes."}
+      ],
+      "compaction": {
+        "summary": "Durable decision: database migration mode is online_only.",
+        "source_message_ids": ["work-1", "work-2"]
+      },
+      "required_facts": ["online_only", "CHECKPOINT-88", "before enabling writes"],
+      "forbidden_facts": [],
+      "irrelevant_reference_ids": []
+    },
+    {
+      "id": "failed-compaction-raw-history-fallback",
+      "split": "calibration",
+      "classification": "gating",
+      "scenario": "compaction_failure_fallback",
+      "evidence_position": "middle",
+      "system": "Retain source history when no completed compaction surface is available.",
+      "current_input": "Resume the task from durable history.",
+      "history": [
+        {"id": "fallback-1", "role": "user", "content": "Constraint: tenant scope remains TENANT-42."},
+        {"id": "fallback-2", "role": "assistant", "content": "Unfinished work: reconcile receipt RECEIPT-19."}
+      ],
+      "required_facts": ["TENANT-42", "RECEIPT-19"],
+      "forbidden_facts": [],
+      "irrelevant_reference_ids": []
+    },
+    {
+      "id": "required-input-over-budget",
+      "split": "calibration",
+      "classification": "gating",
+      "scenario": "insufficient_required_budget",
+      "system": "Required protocol text must fit before optional context can be selected.",
+      "system_repeat": 100,
+      "current_input": "Evaluate the required input budget.",
+      "history": [],
+      "required_facts": [],
+      "forbidden_facts": [],
+      "irrelevant_reference_ids": [],
+      "expected_error_code": "context_input_budget_exceeded"
+    },
+    {
+      "id": "missing-required-source",
+      "split": "holdout",
+      "classification": "diagnostic",
+      "scenario": "missing_source",
+      "evidence_position": "absent",
+      "system": "Do not invent facts that are absent from supplied context.",
+      "current_input": "Continue using the recorded incident identifier.",
+      "history": [
+        {"id": "missing-1", "role": "assistant", "content": "The incident identifier was never recorded in this conversation."}
+      ],
+      "required_facts": ["INCIDENT-4042"],
+      "forbidden_facts": [],
+      "irrelevant_reference_ids": []
+    }
+  ]
+}

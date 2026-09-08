@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentflow-platform/apps/api/internal/contexteval"
 	"agentflow-platform/apps/api/internal/rageval"
 	"agentflow-platform/apps/api/internal/tooleval"
 )
@@ -27,6 +28,36 @@ func TestCLIRejectsUnknownSuiteAndUnauthorizedToolEvaluation(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
 	if code := run(context.Background(), []string{"tool", "--live", "--model", "fixture", "--max-model-calls", "1", "--max-total-tokens", "1"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
 		t.Fatal("missing API key accepted")
+	}
+}
+
+func TestContextCLIProducesReportAndComparesStrategyAblation(t *testing.T) {
+	dataset := filepath.Join("..", "..", "..", "..", "examples", "context", "golden-dataset.v1.json")
+	var baseline bytes.Buffer
+	if code := run(context.Background(), []string{"context", "--dataset", dataset, "--strategy", contexteval.StrategyFullHistory}, &baseline, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("baseline exit code %d", code)
+	}
+	path := filepath.Join(t.TempDir(), "baseline.json")
+	if err := os.WriteFile(path, baseline.Bytes(), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"context", "--dataset", dataset, "--strategy", contexteval.StrategyCompacted, "--baseline", path, "--ablation", "--enforce"}
+	var out, stderr bytes.Buffer
+	if code := run(context.Background(), args, &out, &stderr); code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	var report contexteval.Report
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil || !report.Gate.Passed || report.Comparison == nil || !report.Comparison.Comparable {
+		t.Fatalf("invalid context report: %v %#v", err, report)
+	}
+	if !strings.Contains(stderr.String(), "retention=") || strings.Contains(out.String(), "DEPLOY_ENV=staging") {
+		t.Fatal("context summary missing or fixture content leaked")
+	}
+	if code := run(context.Background(), []string{"context", "--ablation"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
+		t.Fatal("context ablation without baseline accepted")
+	}
+	if code := run(context.Background(), []string{"context", "--dataset", "missing"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
+		t.Fatal("missing context dataset accepted")
 	}
 }
 

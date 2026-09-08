@@ -1,4 +1,4 @@
-.PHONY: help setup quickstart dev test golden-eval
+.PHONY: help setup quickstart dev test golden-eval context-eval
 
 help:
 	@printf '%s\n' \
@@ -6,6 +6,7 @@ help:
 	  'make quickstart  Run setup, then start API and web workbench' \
 	  'make dev         Start API and web workbench without reinstalling dependencies' \
 	  'make golden-eval Run the isolated offline RAG regression gate' \
+	  'make context-eval Run the deterministic Context quality regression gate' \
 	  'make test        Run backend tests, frontend lint/tests, and production build'
 
 setup:
@@ -19,6 +20,9 @@ dev:
 
 golden-eval:
 	@bash -c 'source scripts/go-env.sh && activate_agentflow_go && cd apps/api && go run ./cmd/eval rag --enforce'
+
+context-eval:
+	@bash -c 'source scripts/go-env.sh && activate_agentflow_go && cd apps/api && go run ./cmd/eval context --enforce'
 
 test:
 	@bash scripts/test.sh

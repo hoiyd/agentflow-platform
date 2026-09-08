@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/contexteval"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rageval"
 	"agentflow-platform/apps/api/internal/tooleval"
@@ -25,18 +26,62 @@ func main() {
 
 func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: eval <rag|tool> [options]")
+		fmt.Fprintln(stderr, "usage: eval <context|rag|tool> [options]")
 		return 2
 	}
 	switch args[0] {
+	case "context":
+		return runContext(ctx, args[1:], out, stderr)
 	case "rag":
 		return runRAG(ctx, args[1:], out, stderr)
 	case "tool":
 		return runTool(ctx, args[1:], out, stderr)
 	default:
-		fmt.Fprintf(stderr, "unknown evaluation suite %q; use rag or tool\n", args[0])
+		fmt.Fprintf(stderr, "unknown evaluation suite %q; use context, rag, or tool\n", args[0])
 		return 2
 	}
+}
+
+func runContext(ctx context.Context, args []string, out, stderr io.Writer) int {
+	flags := flag.NewFlagSet("eval context", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	dataset := flags.String("dataset", "../../examples/context/golden-dataset.v1.json", "Context quality dataset JSON path")
+	strategy := flags.String("strategy", contexteval.StrategyCompacted, "context strategy: compacted_history or full_history")
+	baselinePath := flags.String("baseline", "", "optional context-quality-eval-v1 JSON report")
+	ablation := flags.Bool("ablation", false, "allow one explicit strategy difference")
+	enforce := flags.Bool("enforce", false, "exit 1 when the gate or comparable baseline check fails")
+	if flags.Parse(args) != nil || flags.NArg() != 0 {
+		return 2
+	}
+	if *ablation && *baselinePath == "" {
+		fmt.Fprintln(stderr, "--ablation requires --baseline")
+		return 2
+	}
+	report, err := contexteval.Run(ctx, contexteval.Options{DatasetPath: *dataset, Strategy: *strategy, Revision: gitRevision(ctx)})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if *baselinePath != "" {
+		var baseline contexteval.Report
+		content, err := os.ReadFile(*baselinePath)
+		if err != nil || json.Unmarshal(content, &baseline) != nil {
+			fmt.Fprintln(stderr, "baseline must be a readable context-quality-eval-v1 JSON report")
+			return 2
+		}
+		contexteval.ApplyComparison(&report, baseline, *ablation)
+	}
+	if !writeJSON(out, stderr, report) {
+		return 2
+	}
+	fmt.Fprintf(stderr, "context: strategy=%s passed=%d/%d evaluated=%d gating_failures=%d retention=%.3f leaks=%d tokens=%.1f irrelevant=%.3f\n",
+		report.Config.Strategy, report.Summary.Passed, report.Summary.Samples, report.Summary.Evaluated,
+		report.Summary.GatingFailures, report.Summary.RequiredFactRetention, report.Summary.ForbiddenLeaks,
+		report.Summary.MeanInputTokens, report.Summary.MeanIrrelevantRatio)
+	if *enforce && !report.Gate.Passed {
+		return 1
+	}
+	return 0
 }
 
 func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
