@@ -56,6 +56,15 @@ Manual Tests and require a person to inspect the documented outcomes.
 6. Run an Agent retrieval and confirm Replay records the same `knowledge_security` summary.
 7. Inspect the assembled context in a test or trace and confirm knowledge is inside `<untrusted_knowledge_context>` while the user request appears afterward.
 
+### Index Lifecycle
+
+1. Upload a document and note its document ID, version, source key, and index identity.
+2. Upload the same source and content again. Confirm the ID and creation time do not change and only one document remains.
+3. Reuse the source key and version with different content. Confirm the API returns `409` with `document_version_conflict` and the old content remains searchable.
+4. Upload changed content with a new version. Confirm the document ID is preserved, old chunks no longer resolve or appear in search, and new chunks do.
+5. Delete the document and confirm neither dense nor lexical search returns its chunks.
+6. In a disposable store, alter an active document's chunker or embedding identity and confirm search fails with `knowledge_index_incompatible` rather than returning partial results.
+
 ### Parent-Child Context Selection
 
 1. Upload a Markdown document with at least two chunks under one heading and a neighboring chunk under another heading.

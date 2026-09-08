@@ -491,6 +491,11 @@ func TestPostgresRequiredSchemaCoversRuntimeColumns(t *testing.T) {
 		"memory_candidates.confidence",
 		"memory_embeddings.embedding",
 		"documents.workspace_id",
+		"documents.source_key",
+		"documents.chunker_version",
+		"documents.embedding_provider",
+		"documents.embedding_model",
+		"documents.embedding_dimensions",
 		"documents.lexical_vector",
 		"document_chunks.parent_id",
 		"document_chunk_embeddings.embedding",
@@ -546,6 +551,24 @@ func TestPostgresMigrationsAddDocumentSourceTraceability(t *testing.T) {
 	} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("missing document source migration step %q", expected)
+		}
+	}
+}
+
+func TestPostgresMigrationsAddDocumentIndexLifecycle(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"documents ADD COLUMN IF NOT EXISTS source_key",
+		"OCTET_LENGTH(BTRIM(source_uri)) BETWEEN 1 AND 512",
+		"documents ADD COLUMN IF NOT EXISTS chunker_version",
+		"documents ADD COLUMN IF NOT EXISTS embedding_provider",
+		"documents ADD COLUMN IF NOT EXISTS embedding_model",
+		"documents ADD COLUMN IF NOT EXISTS embedding_dimensions",
+		"PARTITION BY workspace_id, source_key",
+		"documents_workspace_source_key_idx",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing document lifecycle migration step %q", expected)
 		}
 	}
 }
@@ -1105,5 +1128,47 @@ func TestPostgresStoreLexicalRecall(t *testing.T) {
 	}
 	if items[0].Document.Version != "auth-v1" || items[0].Chunk.ParentID != "parent-auth" || items[0].Chunk.ContentHash != "chunk-hash" || strings.Join(items[0].Chunk.SectionPath, " > ") != "Errors" {
 		t.Fatalf("expected postgres source details round trip, got %#v", items[0])
+	}
+}
+
+func TestPostgresConcurrentIdenticalDocumentIngestKeepsOneActiveIndex(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is not set")
+	}
+	store, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatalf("new postgres store: %v", err)
+	}
+	defer store.Close()
+	workspaceID := "test-index-concurrency-" + time.Now().UTC().Format("20060102150405.000000000")
+	embedding := make([]float64, 1536)
+	embedding[0] = 1
+	var wait sync.WaitGroup
+	failures := make(chan error, 8)
+	for index := 0; index < 8; index++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, err := store.CreateDocument(domain.Document{
+				WorkspaceID: workspaceID, SourceKey: "refund-policy", Title: "Refund policy", Version: "3.2",
+				ContentHash: "refund-v3-hash", SourceType: "markdown", SourceURI: "refund-current.md", Content: "Refunds are automatic within 14 days.",
+			}, []domain.DocumentChunk{{Content: "Refunds are automatic within 14 days."}}, []domain.DocumentChunkEmbedding{{Provider: "test", Model: "embedding-v1", Dimensions: 1536, Embedding: embedding}})
+			if err != nil {
+				failures <- err
+			}
+		}()
+	}
+	wait.Wait()
+	close(failures)
+	for err := range failures {
+		t.Errorf("concurrent ingest: %v", err)
+	}
+	documents, err := store.ListDocumentsByWorkspace(workspaceID)
+	if err != nil || len(documents) != 1 || documents[0].Version != "3.2" || documents[0].ChunkCount != 1 || documents[0].EmbeddingCount != 1 {
+		t.Fatalf("concurrent ingest produced duplicate or partial index: documents=%#v err=%v", documents, err)
+	}
+	if len(documents) == 1 {
+		t.Cleanup(func() { _ = store.DeleteDocument(documents[0].ID) })
 	}
 }

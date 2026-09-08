@@ -3,6 +3,7 @@ import { apiArray, apiJSON, apiObject, apiVoid, expectObject } from "./api-clien
 export type DocumentInfo = {
   id: string;
   workspace_id?: string;
+  source_key?: string;
   title: string;
   version?: string;
   content_hash?: string;
@@ -12,6 +13,12 @@ export type DocumentInfo = {
   metadata: Record<string, unknown>;
   chunk_count?: number;
   embedding_count?: number;
+  index_identity?: {
+    chunker_version: string;
+    embedding_provider: string;
+    embedding_model: string;
+    embedding_dimensions: number;
+  };
   created_at: string;
   updated_at: string;
 };
@@ -254,6 +261,7 @@ export async function listDocuments(): Promise<DocumentInfo[]> {
 
 export async function createDocument(input: {
   title: string;
+  source_key?: string;
   version?: string;
   content: string;
   metadata?: Record<string, unknown>;

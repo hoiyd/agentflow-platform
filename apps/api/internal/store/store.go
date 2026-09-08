@@ -170,6 +170,7 @@ type DocumentStore interface {
 	GetDocumentInWorkspace(workspaceID string, id string) (domain.Document, []domain.DocumentChunk, bool, error)
 	DeleteDocument(id string) error
 	DeleteDocumentInWorkspace(workspaceID string, id string) error
+	ListDocumentIndexIdentities(workspaceID string) ([]domain.DocumentIndexIdentity, error)
 	SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 	SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 	ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error)

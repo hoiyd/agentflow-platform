@@ -7,12 +7,25 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 )
 
 type SearchStore interface {
+	ListDocumentIndexIdentities(string) ([]domain.DocumentIndexIdentity, error)
 	SearchDocumentChunks(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 	SearchDocumentChunksLexical(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
 	ListDocumentContextChunks(domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error)
+}
+
+var ErrIndexIncompatible = failure.New(failure.Definition{
+	Message: "knowledge index is incompatible with the active retrieval configuration",
+	Info: failure.Info{
+		Code: "knowledge_index_incompatible", Source: "knowledge_index", Category: failure.CategoryValidation,
+	},
+})
+
+func IsIndexIncompatible(err error) bool {
+	return errors.Is(err, ErrIndexIncompatible)
 }
 
 type Retriever interface {
@@ -86,6 +99,13 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 		return domain.DocumentSearchResponse{}, errors.New("retrieval store is required")
 	}
 	search.WorkspaceID = domain.NormalizeWorkspaceID(search.WorkspaceID)
+	identities, err := p.store.ListDocumentIndexIdentities(search.WorkspaceID)
+	if err != nil {
+		return domain.DocumentSearchResponse{}, fmt.Errorf("inspect knowledge index identity: %w", err)
+	}
+	if err := validateIndexCompatibility(identities, embedding); err != nil {
+		return domain.DocumentSearchResponse{}, err
+	}
 
 	requestedLimit = NormalizeSearchLimit(requestedLimit)
 	search.Limit = CandidateLimit(requestedLimit)
@@ -163,6 +183,26 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 		}
 	}
 	return response, nil
+}
+
+func validateIndexCompatibility(identities []domain.DocumentIndexIdentity, embedding Embedding) error {
+	dimensions := embedding.Dimensions
+	if dimensions <= 0 {
+		dimensions = len(embedding.Vector)
+	}
+	expected := domain.DocumentIndexIdentity{
+		ChunkerVersion: domain.DocumentChunkerVersion, EmbeddingProvider: strings.TrimSpace(embedding.Provider),
+		EmbeddingModel: strings.TrimSpace(embedding.Model), EmbeddingDimensions: dimensions,
+	}
+	for _, identity := range identities {
+		if identity != expected {
+			return fmt.Errorf("%w: indexed=%s/%s/%s/%d active=%s/%s/%s/%d",
+				ErrIndexIncompatible,
+				identity.ChunkerVersion, identity.EmbeddingProvider, identity.EmbeddingModel, identity.EmbeddingDimensions,
+				expected.ChunkerVersion, expected.EmbeddingProvider, expected.EmbeddingModel, expected.EmbeddingDimensions)
+		}
+	}
+	return nil
 }
 
 func mergeRecallCandidates(denseItems []domain.RetrievedDocumentChunk, lexicalItems []domain.RetrievedDocumentChunk, includeLexicalOnly bool) []domain.RetrievedDocumentChunk {

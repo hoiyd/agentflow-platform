@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -198,7 +199,9 @@ func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
 
 func writeKnowledgeError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusBadRequest
-	if knowledge.IsEmbeddingError(err) {
+	if errors.Is(err, store.ErrDocumentVersionConflict) || rag.IsIndexIncompatible(err) {
+		status = http.StatusConflict
+	} else if knowledge.IsEmbeddingError(err) {
 		status = http.StatusBadGateway
 	}
 	writeFailure(w, r, status, err)

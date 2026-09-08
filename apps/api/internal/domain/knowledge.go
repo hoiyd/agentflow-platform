@@ -2,21 +2,35 @@ package domain
 
 import "time"
 
+const DocumentChunkerVersion = "document-chunker-v1"
+
+// DocumentIndexIdentity describes the code and embedding space that produced a
+// document's active chunks. Retrieval compares this identity before mixing
+// documents in one search space.
+type DocumentIndexIdentity struct {
+	ChunkerVersion      string `json:"chunker_version"`
+	EmbeddingProvider   string `json:"embedding_provider"`
+	EmbeddingModel      string `json:"embedding_model"`
+	EmbeddingDimensions int    `json:"embedding_dimensions"`
+}
+
 type Document struct {
-	ID             string         `json:"id"`
-	WorkspaceID    string         `json:"workspace_id,omitempty"`
-	Title          string         `json:"title"`
-	Version        string         `json:"version,omitempty"`
-	ContentHash    string         `json:"content_hash,omitempty"`
-	SourceType     string         `json:"source_type"`
-	SourceURI      string         `json:"source_uri,omitempty"`
-	MimeType       string         `json:"mime_type,omitempty"`
-	Content        string         `json:"-"`
-	Metadata       map[string]any `json:"metadata"`
-	ChunkCount     int            `json:"chunk_count,omitempty"`
-	EmbeddingCount int            `json:"embedding_count,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
+	ID             string                `json:"id"`
+	WorkspaceID    string                `json:"workspace_id,omitempty"`
+	SourceKey      string                `json:"source_key,omitempty"`
+	Title          string                `json:"title"`
+	Version        string                `json:"version,omitempty"`
+	ContentHash    string                `json:"content_hash,omitempty"`
+	SourceType     string                `json:"source_type"`
+	SourceURI      string                `json:"source_uri,omitempty"`
+	MimeType       string                `json:"mime_type,omitempty"`
+	Content        string                `json:"-"`
+	Metadata       map[string]any        `json:"metadata"`
+	ChunkCount     int                   `json:"chunk_count,omitempty"`
+	EmbeddingCount int                   `json:"embedding_count,omitempty"`
+	IndexIdentity  DocumentIndexIdentity `json:"index_identity"`
+	CreatedAt      time.Time             `json:"created_at"`
+	UpdatedAt      time.Time             `json:"updated_at"`
 }
 
 type ChunkSource struct {
@@ -51,6 +65,7 @@ type DocumentChunkEmbedding struct {
 
 type DocumentIngestRequest struct {
 	WorkspaceID string         `json:"workspace_id,omitempty"`
+	SourceKey   string         `json:"source_key,omitempty"`
 	Title       string         `json:"title"`
 	Version     string         `json:"version,omitempty"`
 	Content     string         `json:"content"`

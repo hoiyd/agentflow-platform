@@ -1,7 +1,7 @@
 # RAG Golden Dataset v1
 
 AgentFlow's canonical retrieval dataset is
-[`agentflow-rag-baseline@1.1.0`](../../examples/knowledge/golden-dataset.v1.json).
+[`agentflow-rag-baseline@1.2.0`](../../examples/knowledge/golden-dataset.v1.json).
 It is a small, versioned engineering baseline rather than a claim of
 domain-wide retrieval quality. The paired corpus lives under
 [`examples/knowledge/golden-v1`](../../examples/knowledge/golden-v1).
@@ -17,12 +17,13 @@ domain-wide retrieval quality. The paired corpus lives under
 | `no-answer-zz-0000` | Unsupported query abstention | No accepted retrieval result | Calibration gate |
 | `no-answer-qx-9999` | Unseen unsupported query abstention | No accepted retrieval result | Holdout gate |
 | `acl-external-key-reset` | Restricted-source leakage | Public procedure; restricted runbook forbidden | Diagnostic |
-| `stale-refund-window` | Superseded-source leakage | Current policy; retired policy forbidden | Diagnostic |
+| `stale-refund-window` | Superseded-source leakage | Current policy; retired policy forbidden | Gating |
 | `injection-release-signing` | Prompt-injection filtering | Safe guide; hostile note forbidden | Gating |
 
-ACL and stale-data cases carry the `non-blocking` tag. They remain diagnostic
-until identity-derived ownership and ACL enforcement (RAG-004/RAG-016B) and an
-explicit freshness policy are implemented. No-answer is now gated by one
+The ACL case carries the `non-blocking` tag and remains diagnostic until
+identity-derived ownership and ACL enforcement (RAG-004/RAG-016B) are implemented.
+The stale-data case is gated because the corpus ingests policy 2.4 and then atomically
+replaces the same `source_key` with policy 3.2. No-answer is gated by one
 calibration case and one untouched holdout case. Workspace namespace filtering
 (RAG-003) is complete, but it cannot decide whether a caller is authorized for
 that namespace. Diagnostic misses must be reported, but must not be represented

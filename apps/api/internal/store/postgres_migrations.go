@@ -440,9 +440,14 @@ var postgresMigrations = []string{
 	`CREATE TABLE IF NOT EXISTS documents (
 		id text PRIMARY KEY,
 		workspace_id text NOT NULL DEFAULT 'default_workspace',
+		source_key text NOT NULL DEFAULT '',
 		title text NOT NULL,
 		version text NOT NULL DEFAULT '',
 		content_hash text NOT NULL DEFAULT '',
+		chunker_version text NOT NULL DEFAULT '',
+		embedding_provider text NOT NULL DEFAULT '',
+		embedding_model text NOT NULL DEFAULT '',
+		embedding_dimensions integer NOT NULL DEFAULT 0,
 		source_type text NOT NULL,
 		source_uri text,
 		mime_type text,
@@ -457,6 +462,12 @@ var postgresMigrations = []string{
 	`ALTER TABLE documents ALTER COLUMN workspace_id SET NOT NULL`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS version text NOT NULL DEFAULT ''`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_hash text NOT NULL DEFAULT ''`,
+	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_key text NOT NULL DEFAULT ''`,
+	`UPDATE documents SET source_key = BTRIM(source_uri) WHERE source_key = '' AND OCTET_LENGTH(BTRIM(source_uri)) BETWEEN 1 AND 512`,
+	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS chunker_version text NOT NULL DEFAULT ''`,
+	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS embedding_provider text NOT NULL DEFAULT ''`,
+	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS embedding_model text NOT NULL DEFAULT ''`,
+	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS embedding_dimensions integer NOT NULL DEFAULT 0`,
 	`CREATE TABLE IF NOT EXISTS document_chunks (
 		id text PRIMARY KEY,
 		document_id text NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -500,6 +511,32 @@ var postgresMigrations = []string{
 				USING embedding::vector(1536);
 		END IF;
 	END $$`,
+	`UPDATE documents d
+	SET chunker_version = 'document-chunker-v1',
+		embedding_provider = indexed.provider,
+		embedding_model = indexed.model,
+		embedding_dimensions = indexed.dimensions
+	FROM (
+		SELECT c.document_id, MIN(e.provider) AS provider, MIN(e.model) AS model, MIN(e.dimensions) AS dimensions
+		FROM document_chunks c
+		JOIN document_chunk_embeddings e ON e.chunk_id = c.id
+		GROUP BY c.document_id
+		HAVING COUNT(DISTINCT (e.provider, e.model, e.dimensions)) = 1
+	) indexed
+	WHERE d.id = indexed.document_id
+		AND (d.chunker_version = '' OR d.embedding_provider = '' OR d.embedding_model = '' OR d.embedding_dimensions = 0)`,
+	`WITH ranked_documents AS (
+		SELECT id, ROW_NUMBER() OVER (
+			PARTITION BY workspace_id, source_key
+			ORDER BY updated_at DESC, created_at DESC, id DESC
+		) AS source_rank
+		FROM documents
+		WHERE source_key <> ''
+	)
+	DELETE FROM documents d
+	USING ranked_documents ranked
+	WHERE d.id = ranked.id AND ranked.source_rank > 1`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS documents_workspace_source_key_idx ON documents(workspace_id, source_key) WHERE source_key <> ''`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_conversation_created ON runs(conversation_id, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_runs_status_created ON runs(status, created_at DESC)`,
 	`CREATE INDEX IF NOT EXISTS idx_run_delegations_parent_created ON run_delegations(parent_run_id, created_at ASC)`,

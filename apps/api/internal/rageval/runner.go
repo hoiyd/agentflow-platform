@@ -141,9 +141,11 @@ type corpusManifest struct {
 }
 
 type corpusDocument struct {
-	File     string         `json:"file"`
-	Title    string         `json:"title"`
-	Metadata map[string]any `json:"metadata"`
+	File      string         `json:"file"`
+	SourceKey string         `json:"source_key,omitempty"`
+	Version   string         `json:"version,omitempty"`
+	Title     string         `json:"title"`
+	Metadata  map[string]any `json:"metadata"`
 }
 
 func Run(ctx context.Context, opts Options) (Report, error) {
@@ -186,8 +188,13 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	retriever := rag.NewRetrievalPipelineWithStages(fileStore, nil, rag.NewHeuristicRelevanceGate(gateConfig))
 	base := knowledge.NewKnowledgeBaseWithRetriever(fileStore, client, retriever)
 	for index, document := range documents {
-		if _, err := base.Ingest(ctx, domain.DocumentIngestRequest{Title: manifest.Documents[index].Title, Version: manifest.Version,
-			Content: document, SourceType: "markdown", SourceURI: manifest.Documents[index].File,
+		descriptor := manifest.Documents[index]
+		version := strings.TrimSpace(descriptor.Version)
+		if version == "" {
+			version = manifest.Version
+		}
+		if _, err := base.Ingest(ctx, domain.DocumentIngestRequest{Title: descriptor.Title, SourceKey: descriptor.SourceKey, Version: version,
+			Content: document, SourceType: "markdown", SourceURI: descriptor.File,
 			MimeType: "text/markdown", Metadata: manifest.Documents[index].Metadata}); err != nil {
 			return Report{}, fmt.Errorf("ingest corpus document %q: %w", manifest.Documents[index].File, err)
 		}

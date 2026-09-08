@@ -15,7 +15,7 @@ import (
 
 const (
 	// DocumentChunkerVersion changes whenever chunk boundary semantics change.
-	DocumentChunkerVersion = "document-chunker-v1"
+	DocumentChunkerVersion = domain.DocumentChunkerVersion
 	documentChunkSize      = 4000
 	documentChunkOverlap   = 500
 )
@@ -44,6 +44,7 @@ func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.
 	now := time.Now().UTC()
 	document := domain.Document{
 		WorkspaceID: strings.TrimSpace(req.WorkspaceID),
+		SourceKey:   strings.TrimSpace(req.SourceKey),
 		Title:       title,
 		Version:     version,
 		ContentHash: contentHash,
@@ -54,6 +55,9 @@ func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.
 		Metadata:    metadata,
 		CreatedAt:   now,
 		UpdatedAt:   now,
+	}
+	if document.SourceKey == "" {
+		document.SourceKey = document.SourceURI
 	}
 	format := documentFormatFromRequest(req)
 	metadata["format"] = format

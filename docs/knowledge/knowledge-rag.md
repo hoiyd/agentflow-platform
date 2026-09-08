@@ -28,6 +28,30 @@ Markdown ingestion is structure-aware:
 - oversized blocks fall back to fixed-size chunk splitting
 - heading context is included in chunk content to improve retrieval
 
+## Index Lifecycle and Compatibility
+
+Each document has a `source_key` that identifies one logical source within a
+Workspace. It defaults to `source_uri`; callers may provide a stable key when a
+physical filename or URI can change. Reingestion follows one contract:
+
+- the same source key, version, content hash, and index identity is idempotent
+- the same source key and version with different content returns `409 Conflict`
+- a different version or index identity atomically replaces the active document,
+  chunks, and embeddings while preserving the document ID and creation time
+- a failed replacement leaves the previous active index intact
+- deletion removes the document and all of its chunks and embeddings
+
+The active document records the chunker version and embedding
+provider/model/dimensions that produced its index. Retrieval compares every
+active identity in the Workspace with the current query embedding and chunker.
+Unknown or mixed identities fail closed with `knowledge_index_incompatible`
+instead of searching incompatible vector spaces.
+
+FileStore normalizes legacy records on load. Postgres migrations backfill
+`source_key` and infer index identity where existing embeddings agree; duplicate
+logical sources keep the newest record. Identity that cannot be inferred remains
+unknown and therefore cannot silently participate in retrieval.
+
 ## Chunk Source Traceability
 
 Newly ingested documents and chunks carry structured source details:
@@ -48,11 +72,10 @@ Newly ingested documents and chunks carry structured source details:
   document root parent. This prepares grouping for Parent-Child Retrieval.
 
 The document detail API, RAG search results, Agent retrieval events, and model
-call traces expose the same source fields. Existing rows are preserved with
-empty/default source details; the migration does not invent unverifiable
-offsets or hashes for legacy chunks. FileStore persists normalized source
-content in its internal data file so offsets remain resolvable after restart;
-the full source content is still excluded from HTTP document responses.
+call traces expose the same source fields. Migration does not invent
+unverifiable offsets or hashes for legacy chunks. FileStore persists normalized
+source content in its internal data file so offsets remain resolvable after
+restart; the full source content is still excluded from HTTP document responses.
 
 ## Retrieval Pipeline
 
@@ -306,11 +329,11 @@ content boundary, filtering, and audit trail provide defense in depth.
   noise; the token limit and downstream transformation bound that trade-off.
 - Prompt-injection filtering is defense in depth, not a semantic proof that a
   document is safe.
-- The [`agentflow-rag-baseline@1.1.0`](rag-golden-dataset.md) asset pairs a
+- The [`agentflow-rag-baseline@1.2.0`](rag-golden-dataset.md) asset pairs a
   canonical corpus with fact, paraphrase, exact-ID, multi-source, no-answer,
   ACL, stale-data, and prompt-injection cases. No-answer cases are gating across
-  calibration and holdout splits; ACL and stale-data remain diagnostic until
-  their policy dependencies are implemented.
+  calibration and holdout splits. Index lifecycle makes stale-data gating; ACL
+  remains diagnostic until its authorization dependencies are implemented.
 
 The [Manual tests](../operations/manual-tests.md) exercise exact
 identifier recall, RRF reproduction, injection filtering, parent expansion,

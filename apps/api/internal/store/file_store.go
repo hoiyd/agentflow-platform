@@ -315,6 +315,9 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 	if s.data.ChunkEmbeddings == nil {
 		s.data.ChunkEmbeddings = []domain.DocumentChunkEmbedding{}
 	}
+	if normalizeFileDocumentIndexes(&s.data) {
+		migrated = true
+	}
 	return migrated
 }
 
