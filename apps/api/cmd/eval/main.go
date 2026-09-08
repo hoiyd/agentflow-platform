@@ -92,10 +92,26 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 	topK := flags.Int("top-k", 5, "retrieval result limit (1-20)")
 	minSimilarity := flags.Float64("min-similarity", 0.15, "minimum dense similarity (0-1)")
 	minimumEvidenceCoverage := flags.Float64("min-evidence-coverage", 0.25, "minimum query-term coverage required by the relevance gate (0.05-1)")
+	retrievalMode := flags.String("retrieval-mode", "hybrid", "retrieval mode: dense_only, lexical_only, or hybrid")
+	embeddingProfile := flags.String("embedding-profile", "hash", "embedding profile: hash, openai_compatible, or ollama")
+	liveEmbeddings := flags.Bool("live-embeddings", false, "explicitly authorize embedding model requests")
+	embeddingBaseURL := flags.String("embedding-base-url", "https://api.openai.com/v1", "OpenAI-compatible base URL or Ollama /api/embed URL")
+	embeddingModel := flags.String("embedding-model", "", "required model ID for a real embedding profile")
+	embeddingDimensions := flags.Int("embedding-dimensions", 0, "required vector dimensions for a real embedding profile")
+	maxEmbeddingCalls := flags.Int("max-embedding-calls", 0, "required physical request budget across indexing, queries, and retries")
+	maxEmbeddingInputTokens := flags.Int("max-embedding-input-tokens", 0, "required estimated input-token budget across indexing and queries")
+	embeddingRetryAttempts := flags.Int("embedding-retry-attempts", 2, "maximum attempts per embedding input (1-5)")
+	embeddingTimeout := flags.Duration("embedding-timeout", 2*time.Minute, "deadline for the complete embedding evaluation, at most 5m")
 	baselinePath := flags.String("baseline", "", "optional prior rag-eval-v1 JSON report")
 	ablation := flags.Bool("ablation", false, "allow exactly one declared pipeline/configuration difference")
 	enforce := flags.Bool("enforce", false, "exit 1 when the gate or comparable baseline check fails")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
+		return 2
+	}
+	provided := map[string]bool{}
+	flags.Visit(func(item *flag.Flag) { provided[item.Name] = true })
+	if !strings.EqualFold(strings.TrimSpace(*embeddingProfile), rageval.EmbeddingProfileHash) && (!provided["min-similarity"] || !provided["min-evidence-coverage"]) {
+		fmt.Fprintln(stderr, "real embedding profiles require explicit --min-similarity and --min-evidence-coverage values; calibrate them before interpreting quality")
 		return 2
 	}
 	if *ablation && *baselinePath == "" {
@@ -103,7 +119,11 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return 2
 	}
 	report, err := rageval.Run(ctx, rageval.Options{DatasetPath: *dataset, CorpusManifestPath: *manifest,
-		TopK: *topK, MinSimilarity: *minSimilarity, MinimumEvidenceCoverage: *minimumEvidenceCoverage, Revision: gitRevision(ctx)})
+		TopK: *topK, MinSimilarity: *minSimilarity, MinimumEvidenceCoverage: *minimumEvidenceCoverage, RetrievalMode: *retrievalMode,
+		EmbeddingProfile: rageval.EmbeddingProfileOptions{Name: *embeddingProfile, Live: *liveEmbeddings, APIKey: os.Getenv("OPENAI_API_KEY"),
+			BaseURL: *embeddingBaseURL, Model: *embeddingModel, Dimensions: *embeddingDimensions, MaxCalls: *maxEmbeddingCalls,
+			MaxInputTokens: *maxEmbeddingInputTokens, RetryMaxAttempts: *embeddingRetryAttempts, Timeout: *embeddingTimeout},
+		Revision: gitRevision(ctx)})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -120,9 +140,10 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if !writeJSON(out, stderr, report) {
 		return 2
 	}
-	fmt.Fprintf(stderr, "rag: passed=%d/%d evaluated=%d gating_failures=%d mrr=%.3f ndcg=%.3f leaks=%d latency_ms=%.1f\n",
+	fmt.Fprintf(stderr, "rag: profile=%s retrieval_mode=%s passed=%d/%d evaluated=%d gating_failures=%d mrr=%.3f ndcg=%.3f leaks=%d latency_ms=%.1f embedding_requests=%d\n",
+		report.EmbeddingProfile.Name, report.Config.RetrievalMode,
 		report.Summary.Passed, report.Summary.Samples, report.Summary.Evaluated, report.Summary.GatingFailures,
-		report.Summary.MRR, report.Summary.NDCG, report.Summary.LeakCount, report.Summary.MeanLatencyMS)
+		report.Summary.MRR, report.Summary.NDCG, report.Summary.LeakCount, report.Summary.MeanLatencyMS, report.EmbeddingProfile.Usage.PhysicalRequests)
 	if *enforce && !report.Gate.Passed {
 		return 1
 	}

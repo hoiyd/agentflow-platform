@@ -32,6 +32,7 @@ const (
 	ErrorContextLengthExceeded  ErrorKind = "context_length_exceeded"
 	ErrorContentPolicy          ErrorKind = "content_policy"
 	ErrorToolCallingUnsupported ErrorKind = "tool_calling_unsupported"
+	ErrorRequestCallCapacity    ErrorKind = "request_call_capacity_exceeded"
 	ErrorRequestTokenCapacity   ErrorKind = "request_token_capacity_exceeded"
 	ErrorInvalidResponse        ErrorKind = "invalid_response"
 )
@@ -117,7 +118,7 @@ func modelErrorCategory(kind ErrorKind) failure.Category {
 		return failure.CategoryQuota
 	case ErrorModelNotFound:
 		return failure.CategoryNotFound
-	case ErrorRequestTokenCapacity:
+	case ErrorRequestCallCapacity, ErrorRequestTokenCapacity:
 		return failure.CategoryCapacity
 	case ErrorInvalidRequest, ErrorContextLengthExceeded, ErrorContentPolicy:
 		return failure.CategoryValidation

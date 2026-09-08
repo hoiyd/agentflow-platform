@@ -3,12 +3,20 @@ package rageval
 import (
 	"context"
 	"encoding/json"
+	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/evalreport"
+	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/rag"
 )
 
 func TestOfflineRAGEvaluationIsReproducibleAndBounded(t *testing.T) {
@@ -79,7 +87,7 @@ func TestSummaryDefinesNoAnswerAndFailureSemantics(t *testing.T) {
 }
 
 func TestBaselineComparisonRejectsChangedInputsAndFindsRegressions(t *testing.T) {
-	baseline := Report{Identity: evalreport.Identity{ReportFormat: evalreport.Format, DatasetID: "d", DatasetVersion: "1", DatasetHash: "h"},
+	baseline := Report{Identity: evalreport.Identity{ReportFormat: evalreport.Format, EvaluationKind: "offline_rag", DatasetID: "d", DatasetVersion: "1", DatasetHash: "h"},
 		SchemaVersion: SchemaVersion, Corpus: CorpusIdentity{DatasetID: "d", Version: "1", Hash: "c"}, Config: Config{TopK: 5},
 		Summary: Summary{MRR: 1, NDCG: 1}, Gate: evalreport.Gate{Passed: true}}
 	candidate := baseline
@@ -99,6 +107,22 @@ func TestBaselineComparisonRejectsChangedInputsAndFindsRegressions(t *testing.T)
 	comparison := Compare(candidate, baseline, true)
 	if !comparison.Comparable || comparison.Mode != "single_variable_ablation" || len(comparison.ChangedVariables) != 1 {
 		t.Fatalf("single-variable ablation rejected: %#v", comparison)
+	}
+	candidate = baseline
+	candidate.Config.RetrievalMode = rag.RetrievalModeDenseOnly
+	comparison = Compare(candidate, baseline, true)
+	if !comparison.Comparable || len(comparison.ChangedVariables) != 1 || comparison.ChangedVariables[0] != "retrieval_mode" {
+		t.Fatalf("retrieval mode was not treated as one ablation: %#v", comparison)
+	}
+	candidate = baseline
+	candidate.EvaluationKind = "semantic_retrieval"
+	if comparison := Compare(candidate, baseline, false); comparison.Comparable {
+		t.Fatalf("different evaluation kinds compared: %#v", comparison)
+	}
+	candidate = baseline
+	candidate.EmbeddingProfile.ConfiguredModel = "configured-alias"
+	if comparison := Compare(candidate, baseline, true); !comparison.Comparable || len(comparison.ChangedVariables) != 1 || comparison.ChangedVariables[0] != "embedding" {
+		t.Fatalf("embedding profile configuration mismatch was hidden: %#v", comparison)
 	}
 	candidate.Pipeline.SecurityPolicy = "changed"
 	if comparison := Compare(candidate, baseline, true); comparison.Comparable {
@@ -163,7 +187,7 @@ func TestGateAndComparisonExplainAllBoundaries(t *testing.T) {
 		t.Fatalf("failed sample unexplained: %#v", failed)
 	}
 
-	baseline := Report{Identity: evalreport.Identity{ReportFormat: evalreport.Format, DatasetID: "d", DatasetVersion: "1", DatasetHash: "h"},
+	baseline := Report{Identity: evalreport.Identity{ReportFormat: evalreport.Format, EvaluationKind: "offline_rag", DatasetID: "d", DatasetVersion: "1", DatasetHash: "h"},
 		SchemaVersion: SchemaVersion, Corpus: CorpusIdentity{DatasetID: "d", Version: "1", Hash: "c"}}
 	candidate := baseline
 	candidate.Config = Config{TopK: 3, MinSimilarity: 0.2, Chunker: "changed"}
@@ -176,6 +200,125 @@ func TestGateAndComparisonExplainAllBoundaries(t *testing.T) {
 	if comparison.Comparable || len(comparison.ChangedVariables) != 8 {
 		t.Fatalf("configuration drift hidden: %#v", comparison)
 	}
+}
+
+func TestSemanticEmbeddingProfileRunsThroughIsolatedIndex(t *testing.T) {
+	dataset, manifest := writeFixture(t, "Frankfurt", false)
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"embedding":[1,0]}],"model":"semantic-v1"}`))
+	}))
+	defer server.Close()
+	report, err := Run(context.Background(), Options{DatasetPath: dataset, CorpusManifestPath: manifest, TopK: 1, MinSimilarity: 0.5,
+		RetrievalMode: rag.RetrievalModeDenseOnly, EmbeddingProfile: liveProfile(server.URL, 4, 1000, 1, time.Second)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Gate.Passed || report.EvaluationKind != "semantic_retrieval" || report.Pipeline.Embedding != (domain.EmbeddingInfo{Provider: "openai_compatible", Model: "semantic-v1", Dimensions: 2}) {
+		t.Fatalf("semantic profile was not used: %#v", report)
+	}
+	if requests != 2 || report.EmbeddingProfile.Usage.PhysicalRequests != 2 || report.EmbeddingProfile.Usage.Index.PhysicalRequests != 1 || report.EmbeddingProfile.Usage.Query.PhysicalRequests != 1 {
+		t.Fatalf("embedding usage was not separated by phase: requests=%d usage=%#v", requests, report.EmbeddingProfile.Usage)
+	}
+	if len(report.IndexBuild.IndexIdentity) != 1 || report.IndexBuild.IndexIdentity[0].EmbeddingDimensions != 2 || report.EmbeddingProfile.Usage.EstimatedCostUSD != nil {
+		t.Fatalf("index identity or unknown cost was misreported: %#v", report)
+	}
+}
+
+func TestSemanticEmbeddingRetriesConsumeCallBudget(t *testing.T) {
+	dataset, manifest := writeFixture(t, "Frankfurt", false)
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		if requests == 1 {
+			http.Error(w, `{"error":{"message":"retry","type":"server_error"}}`, http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"embedding":[1,0]}],"model":"semantic-v1"}`))
+	}))
+	defer server.Close()
+	report, err := Run(context.Background(), Options{DatasetPath: dataset, CorpusManifestPath: manifest, TopK: 1,
+		EmbeddingProfile: liveProfile(server.URL, 2, 1000, 2, time.Second)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 || report.EmbeddingProfile.Usage.PhysicalRequests != 2 || report.EmbeddingProfile.Usage.RejectedRequests != 1 || report.Samples[0].ErrorCode != string(openai.ErrorRequestCallCapacity) || report.Gate.Passed {
+		t.Fatalf("retry/call budget accounting changed: requests=%d report=%#v", requests, report)
+	}
+}
+
+func TestSemanticEmbeddingFailuresStayInReportDenominator(t *testing.T) {
+	dataset, manifest := writeFixture(t, "Frankfurt", false)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(50 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"embedding":[1,0]}],"model":"semantic-v1"}`))
+	}))
+	defer server.Close()
+
+	for _, testCase := range []struct {
+		name    string
+		profile EmbeddingProfileOptions
+		code    string
+	}{
+		{name: "input budget", profile: liveProfile(server.URL, 4, 1, 1, time.Second), code: "embedding_input_budget_exceeded"},
+		{name: "timeout", profile: liveProfile(server.URL, 4, 1000, 1, 10*time.Millisecond), code: string(openai.ErrorTimeout)},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			report, err := Run(context.Background(), Options{DatasetPath: dataset, CorpusManifestPath: manifest, TopK: 1, EmbeddingProfile: testCase.profile})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if report.IndexBuild.Status != "failed" || report.IndexBuild.ErrorCode != testCase.code || report.Summary.Samples != 1 || report.Summary.NotEvaluated != 1 || report.Gate.Passed {
+				t.Fatalf("index failure disappeared from denominator: %#v", report)
+			}
+		})
+	}
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	report, err := Run(canceled, Options{DatasetPath: dataset, CorpusManifestPath: manifest, TopK: 1,
+		EmbeddingProfile: liveProfile(server.URL, 4, 1000, 1, time.Second)})
+	if err != nil || report.IndexBuild.ErrorCode != string(openai.ErrorCanceled) || report.Summary.NotEvaluated != 1 {
+		t.Fatalf("cancellation was not retained in the report: err=%v report=%#v", err, report)
+	}
+}
+
+func TestEmbeddingProfileValidationAndVectorContract(t *testing.T) {
+	for _, profile := range []EmbeddingProfileOptions{
+		{Name: "unknown"},
+		{Name: EmbeddingProfileHash, Live: true},
+		{Name: EmbeddingProfileOpenAICompatible, Live: true, BaseURL: "https://example.com", Model: "m", Dimensions: 2, MaxCalls: 1, MaxInputTokens: 1, RetryMaxAttempts: 1, Timeout: time.Second},
+		{Name: EmbeddingProfileOllama, Live: true, BaseURL: "https://example.com", Model: "m", Dimensions: 2, MaxCalls: 1, MaxInputTokens: 1, RetryMaxAttempts: 1, Timeout: time.Second},
+	} {
+		if _, err := normalizeEmbeddingProfile(profile); err == nil {
+			t.Fatalf("invalid profile accepted: %#v", profile)
+		}
+	}
+	validOllama, err := normalizeEmbeddingProfile(EmbeddingProfileOptions{Name: EmbeddingProfileOllama, Live: true,
+		APIKey: "must-not-be-forwarded", BaseURL: "http://localhost:11434/api/embed", Model: "embeddinggemma", Dimensions: 1536,
+		MaxCalls: 10, MaxInputTokens: 1000, RetryMaxAttempts: 2, Timeout: time.Second})
+	if err != nil || validOllama.APIKey != "" {
+		t.Fatalf("valid Ollama profile was rejected or retained an unrelated API key: err=%v profile=%#v", err, validOllama)
+	}
+	embedder := &evaluationEmbedder{options: EmbeddingProfileOptions{Name: EmbeddingProfileOpenAICompatible, Model: "semantic-v1", Dimensions: 2}}
+	for _, embedding := range []modelprovider.Embedding{
+		{Vector: []float64{}, Provider: "openai_compatible", Model: "semantic-v1"},
+		{Vector: []float64{math.NaN(), 0}, Provider: "openai_compatible", Model: "semantic-v1", Dimensions: 2},
+		{Vector: []float64{1}, Provider: "openai_compatible", Model: "semantic-v1", Dimensions: 1},
+		{Vector: []float64{1, 0}, Provider: "openai_compatible", Model: "changed", Dimensions: 2},
+	} {
+		if err := embedder.validate(embedding); err == nil {
+			t.Fatalf("invalid vector accepted: %#v", embedding)
+		}
+	}
+}
+
+func liveProfile(baseURL string, maxCalls, maxTokens, attempts int, timeout time.Duration) EmbeddingProfileOptions {
+	return EmbeddingProfileOptions{Name: EmbeddingProfileOpenAICompatible, Live: true, APIKey: "fixture-key", BaseURL: baseURL,
+		Model: "semantic-v1", Dimensions: 2, MaxCalls: maxCalls, MaxInputTokens: maxTokens, RetryMaxAttempts: attempts, Timeout: timeout}
 }
 
 func TestCanonicalOfflineReportArtifact(t *testing.T) {

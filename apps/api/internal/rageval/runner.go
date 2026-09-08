@@ -17,7 +17,6 @@ import (
 	"agentflow-platform/apps/api/internal/evalreport"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/knowledge"
-	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
@@ -32,6 +31,8 @@ type Options struct {
 	MinSimilarity           float64
 	MinimumEvidenceCoverage float64
 	Revision                string
+	RetrievalMode           string
+	EmbeddingProfile        EmbeddingProfileOptions
 }
 
 type Config struct {
@@ -39,6 +40,15 @@ type Config struct {
 	MinSimilarity           float64 `json:"min_similarity"`
 	MinimumEvidenceCoverage float64 `json:"minimum_evidence_coverage"`
 	Chunker                 string  `json:"chunker"`
+	RetrievalMode           string  `json:"retrieval_mode"`
+}
+
+type IndexBuildResult struct {
+	Status        string                         `json:"status"`
+	DurationMS    int64                          `json:"duration_ms"`
+	ErrorCode     string                         `json:"error_code,omitempty"`
+	Error         string                         `json:"error,omitempty"`
+	IndexIdentity []domain.DocumentIndexIdentity `json:"index_identity"`
 }
 
 type CorpusIdentity struct {
@@ -122,16 +132,19 @@ type Comparison struct {
 
 type Report struct {
 	evalreport.Identity
-	SchemaVersion  string             `json:"schema_version"`
-	Corpus         CorpusIdentity     `json:"corpus"`
-	Config         Config             `json:"config"`
-	Pipeline       PipelineIdentity   `json:"pipeline"`
-	CostSource     string             `json:"cost_source"`
-	Samples        []Sample           `json:"samples"`
-	Summary        Summary            `json:"summary"`
-	SplitSummaries map[string]Summary `json:"split_summaries"`
-	Gate           evalreport.Gate    `json:"gate"`
-	Comparison     *Comparison        `json:"comparison,omitempty"`
+	SchemaVersion    string                 `json:"schema_version"`
+	Corpus           CorpusIdentity         `json:"corpus"`
+	Config           Config                 `json:"config"`
+	Pipeline         PipelineIdentity       `json:"pipeline"`
+	EmbeddingProfile EmbeddingProfileReport `json:"embedding_profile"`
+	IndexBuild       IndexBuildResult       `json:"index_build"`
+	QueryDurationMS  int64                  `json:"query_duration_ms"`
+	CostSource       string                 `json:"cost_source"`
+	Samples          []Sample               `json:"samples"`
+	Summary          Summary                `json:"summary"`
+	SplitSummaries   map[string]Summary     `json:"split_summaries"`
+	Gate             evalreport.Gate        `json:"gate"`
+	Comparison       *Comparison            `json:"comparison,omitempty"`
 }
 
 type corpusManifest struct {
@@ -158,8 +171,24 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if opts.MinimumEvidenceCoverage == 0 {
 		opts.MinimumEvidenceCoverage = rag.DefaultHeuristicRelevanceGateConfig().MinimumEvidenceCoverage
 	}
+	opts.RetrievalMode = strings.ToLower(strings.TrimSpace(opts.RetrievalMode))
+	if opts.RetrievalMode == "" {
+		opts.RetrievalMode = rag.RetrievalModeHybrid
+	}
 	if opts.TopK < 1 || opts.TopK > 20 || opts.MinSimilarity < 0 || opts.MinSimilarity > 1 || opts.MinimumEvidenceCoverage < 0.05 || opts.MinimumEvidenceCoverage > 1 {
 		return Report{}, errors.New("top-k must be 1-20 and similarity/evidence thresholds must be within their documented ranges")
+	}
+	if opts.RetrievalMode != rag.RetrievalModeHybrid && opts.RetrievalMode != rag.RetrievalModeDenseOnly && opts.RetrievalMode != rag.RetrievalModeLexicalOnly {
+		return Report{}, errors.New("retrieval mode must be hybrid, dense_only, or lexical_only")
+	}
+	embedder, err := newEvaluationEmbedder(opts.EmbeddingProfile)
+	if err != nil {
+		return Report{}, err
+	}
+	if embedder.options.Name != EmbeddingProfileHash {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, embedder.options.Timeout)
+		defer cancel()
 	}
 	startedAt := time.Now().UTC()
 	dataset, datasetHash, err := loadDataset(opts.DatasetPath)
@@ -179,42 +208,102 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	client := openai.NewClientWithTimeoutAndEmbeddingModel("", "", "https://offline.invalid/v1", "", "local_hash_embedding", 1536, time.Second)
 	gateConfig := rag.DefaultHeuristicRelevanceGateConfig()
 	gateConfig.MinimumEvidenceCoverage = opts.MinimumEvidenceCoverage
-	if gateConfig.MinimumEvidenceCoverage != rag.DefaultHeuristicRelevanceGateConfig().MinimumEvidenceCoverage {
+	if embedder.options.Name != EmbeddingProfileHash {
+		gateConfig.ConfigVersion = fmt.Sprintf("semantic-eval-evidence-coverage-%.2f", gateConfig.MinimumEvidenceCoverage)
+	} else if gateConfig.MinimumEvidenceCoverage != rag.DefaultHeuristicRelevanceGateConfig().MinimumEvidenceCoverage {
 		gateConfig.ConfigVersion = fmt.Sprintf("eval-evidence-coverage-%.2f", gateConfig.MinimumEvidenceCoverage)
 	}
-	retriever := rag.NewRetrievalPipelineWithStages(fileStore, nil, rag.NewHeuristicRelevanceGate(gateConfig))
-	base := knowledge.NewKnowledgeBaseWithRetriever(fileStore, client, retriever)
+	relevanceGate := rag.NewHeuristicRelevanceGate(gateConfig)
+	retriever := rag.NewRetrievalPipelineWithMode(fileStore, nil, relevanceGate, opts.RetrievalMode)
+	base := knowledge.NewKnowledgeBaseWithRetriever(fileStore, embedder, retriever)
+	costSource := "not_applicable: deterministic local embedding"
+	if embedder.options.Name != EmbeddingProfileHash {
+		costSource = "unavailable: embedding API usage and pricing were not reported"
+	}
+	evaluationKind := "offline_rag"
+	if embedder.options.Name != EmbeddingProfileHash {
+		evaluationKind = "semantic_retrieval"
+	}
+	report := Report{Identity: evalreport.Identity{ReportFormat: evalreport.Format, EvaluationKind: evaluationKind,
+		DatasetID: dataset.ID, DatasetVersion: dataset.Version, DatasetHash: datasetHash,
+		GitRevision: normalizedRevision(opts.Revision), StartedAt: startedAt}, SchemaVersion: SchemaVersion,
+		Corpus: CorpusIdentity{DatasetID: manifest.DatasetID, Version: manifest.Version, Hash: corpusHash, Documents: len(documents)},
+		Config: Config{TopK: opts.TopK, MinSimilarity: opts.MinSimilarity,
+			MinimumEvidenceCoverage: opts.MinimumEvidenceCoverage, Chunker: rag.DocumentChunkerVersion, RetrievalMode: opts.RetrievalMode},
+		Pipeline: PipelineIdentity{Fusion: rag.RRFInfo(), Reranker: rag.NewHeuristicReranker(rag.DefaultHeuristicRerankerConfig()).Info(),
+			RelevanceGate: relevanceGate.Info(), SecurityPolicy: rag.PromptInjectionPolicyVersion},
+		EmbeddingProfile: EmbeddingProfileReport{Name: embedder.options.Name, Live: embedder.options.Live,
+			ConfiguredModel: embedder.options.Model, ConfiguredDimensions: embedder.options.Dimensions,
+			MaxCalls: embedder.options.MaxCalls, MaxInputTokens: embedder.options.MaxInputTokens,
+			RetryMaxAttempts: embedder.options.RetryMaxAttempts, TimeoutMS: embedder.options.Timeout.Milliseconds(),
+			IndexInputTransform: "document-chunker-v1 chunk content", QueryInputTransform: "trim + 3000-character cap",
+			DistanceMetric: "cosine_similarity", LexicalImplementation: "file_token_overlap_heuristic"},
+		IndexBuild: IndexBuildResult{Status: "completed", IndexIdentity: []domain.DocumentIndexIdentity{}},
+		CostSource: costSource, Samples: make([]Sample, 0, len(dataset.Cases))}
+	indexStarted := time.Now()
 	for index, document := range documents {
 		descriptor := manifest.Documents[index]
 		version := strings.TrimSpace(descriptor.Version)
 		if version == "" {
 			version = manifest.Version
 		}
-		if _, err := base.Ingest(ctx, domain.DocumentIngestRequest{Title: descriptor.Title, SourceKey: descriptor.SourceKey, Version: version,
+		if _, err := base.Ingest(withEmbeddingPhase(ctx, phaseIndex), domain.DocumentIngestRequest{Title: descriptor.Title, SourceKey: descriptor.SourceKey, Version: version,
 			Content: document, SourceType: "markdown", SourceURI: descriptor.File,
 			MimeType: "text/markdown", Metadata: manifest.Documents[index].Metadata}); err != nil {
-			return Report{}, fmt.Errorf("ingest corpus document %q: %w", manifest.Documents[index].File, err)
+			report.IndexBuild.DurationMS = time.Since(indexStarted).Milliseconds()
+			finishIndexFailure(&report, dataset, fmt.Errorf("ingest corpus document %q: %w", manifest.Documents[index].File, err))
+			finishReport(&report, embedder)
+			return report, nil
 		}
 	}
-	report := Report{Identity: evalreport.Identity{ReportFormat: evalreport.Format, EvaluationKind: "offline_rag",
-		DatasetID: dataset.ID, DatasetVersion: dataset.Version, DatasetHash: datasetHash,
-		GitRevision: normalizedRevision(opts.Revision), StartedAt: startedAt}, SchemaVersion: SchemaVersion,
-		Corpus: CorpusIdentity{DatasetID: manifest.DatasetID, Version: manifest.Version, Hash: corpusHash, Documents: len(documents)},
-		Config: Config{TopK: opts.TopK, MinSimilarity: opts.MinSimilarity,
-			MinimumEvidenceCoverage: opts.MinimumEvidenceCoverage, Chunker: rag.DocumentChunkerVersion},
-		CostSource: "not_applicable: deterministic local embedding", Samples: make([]Sample, 0, len(dataset.Cases))}
+	report.IndexBuild.DurationMS = time.Since(indexStarted).Milliseconds()
+	report.IndexBuild.IndexIdentity, err = fileStore.ListDocumentIndexIdentities(domain.DefaultWorkspaceID)
+	if err != nil {
+		finishIndexFailure(&report, dataset, fmt.Errorf("inspect evaluation index: %w", err))
+		finishReport(&report, embedder)
+		return report, nil
+	}
+	report.Pipeline.Embedding, _ = embedder.report()
+	queryStarted := time.Now()
 	for _, evaluationCase := range dataset.Cases {
-		sample := runSample(ctx, base, evaluationCase, opts.TopK, opts.MinSimilarity, &report.Pipeline)
+		sample := runSample(withEmbeddingPhase(ctx, phaseQuery), base, evaluationCase, opts.TopK, opts.MinSimilarity, &report.Pipeline)
 		report.Samples = append(report.Samples, sample)
+	}
+	report.QueryDurationMS = time.Since(queryStarted).Milliseconds()
+	report.Summary = summarize(report.Samples)
+	report.SplitSummaries = summarizeSplits(report.Samples)
+	report.Gate = gate(report.Samples)
+	finishReport(&report, embedder)
+	return report, nil
+}
+
+func finishIndexFailure(report *Report, dataset domain.RAGGoldenDataset, err error) {
+	info := failure.Describe(err)
+	message, _ := redaction.Text(err.Error())
+	report.IndexBuild.Status, report.IndexBuild.ErrorCode, report.IndexBuild.Error = "failed", info.Code, message
+	for _, evaluationCase := range dataset.Cases {
+		classification := "gating"
+		if contains(evaluationCase.Tags, "non-blocking") {
+			classification = "diagnostic"
+		}
+		report.Samples = append(report.Samples, Sample{CaseID: evaluationCase.ID, Split: evaluationSplit(evaluationCase.Tags),
+			Classification: classification, Status: "not_evaluated", Answerable: evaluationCase.Answerable != nil && *evaluationCase.Answerable,
+			ErrorCode: info.Code, Error: message, Sources: []RankedSource{}})
 	}
 	report.Summary = summarize(report.Samples)
 	report.SplitSummaries = summarizeSplits(report.Samples)
 	report.Gate = gate(report.Samples)
+}
+
+func finishReport(report *Report, embedder *evaluationEmbedder) {
+	identity, usage := embedder.report()
+	if report.Pipeline.Embedding.Provider == "" {
+		report.Pipeline.Embedding = identity
+	}
+	report.EmbeddingProfile.Usage = usage
 	report.CompletedAt = time.Now().UTC()
-	return report, nil
 }
 
 func runSample(ctx context.Context, base *knowledge.KnowledgeBase, evaluationCase domain.RAGEvaluationCase, topK int, minSimilarity float64, pipeline *PipelineIdentity) Sample {
@@ -225,7 +314,7 @@ func runSample(ctx context.Context, base *knowledge.KnowledgeBase, evaluationCas
 	sample := Sample{CaseID: evaluationCase.ID, Split: evaluationSplit(evaluationCase.Tags), Classification: classification, Status: "completed",
 		Answerable: evaluationCase.Answerable != nil && *evaluationCase.Answerable, Sources: []RankedSource{}}
 	if err := ctx.Err(); err != nil {
-		sample.Status, sample.ErrorCode, sample.Error = "not_evaluated", "context_canceled", err.Error()
+		sample.Status, sample.ErrorCode, sample.Error = "not_evaluated", failure.Describe(err).Code, err.Error()
 		return sample
 	}
 	startedAt := time.Now()
@@ -384,6 +473,9 @@ func Compare(current, baseline Report, singleVariableAblation bool) Comparison {
 	if baseline.ReportFormat != evalreport.Format || baseline.SchemaVersion != SchemaVersion {
 		comparison.Reasons = append(comparison.Reasons, "report schema differs")
 	}
+	if current.EvaluationKind != baseline.EvaluationKind {
+		comparison.Reasons = append(comparison.Reasons, "evaluation kind differs")
+	}
 	if current.DatasetID != baseline.DatasetID || current.DatasetVersion != baseline.DatasetVersion || current.DatasetHash != baseline.DatasetHash {
 		comparison.Reasons = append(comparison.Reasons, "dataset identity differs")
 	}
@@ -446,7 +538,10 @@ func changedVariables(current, baseline Report) []string {
 	if current.Config.Chunker != baseline.Config.Chunker {
 		changes = append(changes, "chunker")
 	}
-	if current.Pipeline.Embedding != baseline.Pipeline.Embedding {
+	if normalizedRetrievalMode(current.Config.RetrievalMode) != normalizedRetrievalMode(baseline.Config.RetrievalMode) {
+		changes = append(changes, "retrieval_mode")
+	}
+	if current.Pipeline.Embedding != baseline.Pipeline.Embedding || embeddingProfileIdentity(current) != embeddingProfileIdentity(baseline) {
 		changes = append(changes, "embedding")
 	}
 	if current.Pipeline.Fusion != baseline.Pipeline.Fusion {
@@ -467,6 +562,29 @@ func changedVariables(current, baseline Report) []string {
 		changes = append(changes, "security_policy")
 	}
 	return changes
+}
+
+func normalizedRetrievalMode(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return rag.RetrievalModeHybrid
+	}
+	return strings.TrimSpace(value)
+}
+
+func embeddingProfileIdentity(report Report) string {
+	name := strings.TrimSpace(report.EmbeddingProfile.Name)
+	if name == "" && report.Pipeline.Embedding.Provider == "local" && report.Pipeline.Embedding.Model == "local_hash_embedding" {
+		name = EmbeddingProfileHash
+	}
+	model := strings.TrimSpace(report.EmbeddingProfile.ConfiguredModel)
+	if model == "" {
+		model = report.Pipeline.Embedding.Model
+	}
+	dimensions := report.EmbeddingProfile.ConfiguredDimensions
+	if dimensions == 0 {
+		dimensions = report.Pipeline.Embedding.Dimensions
+	}
+	return fmt.Sprintf("%s/%s/%d", name, model, dimensions)
 }
 
 func loadDataset(path string) (domain.RAGGoldenDataset, string, error) {
