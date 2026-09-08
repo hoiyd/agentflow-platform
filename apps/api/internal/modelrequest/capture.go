@@ -2,9 +2,9 @@ package modelrequest
 
 import "context"
 
-// Observation contains the exact canonical bytes passed to the model
-// transport. Recorder implementations must not receive request headers or
-// provider credentials.
+// Observation contains canonical model-request bytes from a physical transport
+// attempt or a deterministic offline reconstruction. Recorder implementations
+// must not receive request headers or provider credentials.
 type Observation struct {
 	ModelCallID          string
 	Operation            string

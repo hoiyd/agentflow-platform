@@ -188,8 +188,8 @@ persistence.
 3. Open **Knowledge** and upload [`examples/example.md`](examples/example.md).
 4. Search for that identifier and inspect Semantic rank, Keyword rank, RRF,
    final rerank, and the transformed model context.
-5. Run `make golden-eval` to build an isolated canonical corpus and execute the
-   deterministic RAG regression gate with complete provenance and quality metrics.
+5. Run `make golden-eval` and `make context-eval` to execute the deterministic
+   RAG and final-model-input regression gates with complete provenance and quality metrics.
 6. Run a Multi-Agent task against the runbook, then open **View trace** to
    connect orchestration stages, retrieval, model calls, usage, and final Run
    state. Export the Episode Report when a compact machine-readable review

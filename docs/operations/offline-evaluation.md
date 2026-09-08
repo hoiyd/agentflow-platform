@@ -1,10 +1,11 @@
 # Offline Evaluation Reports and Regression Gates
 
-AgentFlow uses one CLI and one provenance envelope for deterministic RAG checks
-and explicitly authorized live Tool-task checks:
+AgentFlow uses one CLI and one provenance envelope for deterministic Context and
+RAG checks plus explicitly authorized live Tool-task checks:
 
 ```bash
 cd apps/api
+go run ./cmd/eval context --enforce
 go run ./cmd/eval rag --enforce
 go run ./cmd/eval tool --live --model MODEL \
   --max-model-calls 30 --max-total-tokens 60000 --trials 3 --enforce
@@ -12,8 +13,49 @@ go run ./cmd/eval tool --live --model MODEL \
 
 Every report uses `agentflow-evaluation-report-v1` identity fields: evaluation
 kind, Dataset ID/version/hash, Git revision, start/end time, and an explicit
-gate. Domain payload schemas remain separate (`rag-eval-v1` and `task-eval-v1`)
-so retrieval ranks are not confused with model tokens or Tool calls.
+gate. Domain payload schemas remain separate (`context-quality-eval-v1`,
+`rag-eval-v1`, and `task-eval-v1`) so Context selection, retrieval ranks, model
+tokens, and Tool calls are not confused.
+
+## Context Quality Gate
+
+The Context runner calls the production Context Assembler against a versioned,
+network-free dataset. It checks the final model input for required fact
+retention, forbidden stale-content leakage, irrelevant selected-token ratio,
+per-source token share, total estimated input tokens, and stable prefix hashes.
+Cases place evidence early, in the middle, and late in history and cover
+corrections, exact identifiers, unfinished work, history-budget pressure,
+required-input overflow, missing sources, and raw-history fallback after a
+failed compaction.
+
+The default `compacted_history` strategy uses fixed, reviewed compaction
+summaries. This proves assembly, shadowing, budget, and constraint-retention
+behavior; it does not claim that a live model can generate summaries of the
+same quality or that the final answer is correct. No model request is sent.
+Each successful sample hashes a canonical final-input payload using the same
+provider-neutral `modelrequest.Observation` contract as production capture,
+but the offline report stores no prompt content.
+
+Generate a controlled one-variable comparison with:
+
+```bash
+go run ./cmd/eval context --strategy full_history > /tmp/context-baseline.json
+go run ./cmd/eval context --strategy compacted_history \
+  --baseline /tmp/context-baseline.json --ablation --enforce
+```
+
+Reports are comparable only when Dataset hash, model, Assembler version,
+Compaction algorithm, and Context Assembly configuration match. `--ablation`
+allows only the strategy to differ. Increased gating failures, lower required
+fact retention, higher forbidden-content or irrelevant-context ratios, and
+stable-prefix drift fail the comparison. Input-token change is reported as a
+cost signal rather than treated as quality by itself.
+
+The dataset separates `calibration` and `holdout` cases. Gating cases use exact
+invariants: all required facts retained and zero forbidden facts included.
+The intentionally missing-source case is diagnostic, remains in the denominator,
+and cannot block the canonical gate. No uncalibrated aggregate quality score is
+used as a release threshold.
 
 ## RAG Gate
 
@@ -62,6 +104,7 @@ failure evidence, latency and Usage Ledger totals. Missing usage stays estimated
 unsettled usage stops later samples.
 
 Default CI never calls public models. Fixture-backed Tool protocol checks and the
-canonical RAG run write JSON into `EVALUATION_REPORT_DIR`; the backend job uploads
-the directory as `offline-evaluation-reports`. Reports omit credentials/endpoints,
-redact model errors, and do not copy RAG document text.
+canonical Context/RAG runs write JSON into `EVALUATION_REPORT_DIR`; the backend
+job uploads the directory as `offline-evaluation-reports`. Reports omit
+credentials/endpoints, redact model errors, and do not copy Context or RAG source
+content.
