@@ -109,10 +109,10 @@ func TestBaselineComparisonRejectsChangedInputsAndFindsRegressions(t *testing.T)
 		t.Fatalf("single-variable ablation rejected: %#v", comparison)
 	}
 	candidate = baseline
-	candidate.Config.RecallArm = rag.RecallArmDenseOnly
+	candidate.Config.RetrievalMode = rag.RetrievalModeDenseOnly
 	comparison = Compare(candidate, baseline, true)
-	if !comparison.Comparable || len(comparison.ChangedVariables) != 1 || comparison.ChangedVariables[0] != "recall_arm" {
-		t.Fatalf("recall arm was not treated as one ablation: %#v", comparison)
+	if !comparison.Comparable || len(comparison.ChangedVariables) != 1 || comparison.ChangedVariables[0] != "retrieval_mode" {
+		t.Fatalf("retrieval mode was not treated as one ablation: %#v", comparison)
 	}
 	candidate = baseline
 	candidate.EvaluationKind = "semantic_retrieval"
@@ -212,7 +212,7 @@ func TestSemanticEmbeddingProfileRunsThroughIsolatedIndex(t *testing.T) {
 	}))
 	defer server.Close()
 	report, err := Run(context.Background(), Options{DatasetPath: dataset, CorpusManifestPath: manifest, TopK: 1, MinSimilarity: 0.5,
-		RecallArm: rag.RecallArmDenseOnly, EmbeddingProfile: liveProfile(server.URL, 4, 1000, 1, time.Second)})
+		RetrievalMode: rag.RetrievalModeDenseOnly, EmbeddingProfile: liveProfile(server.URL, 4, 1000, 1, time.Second)})
 	if err != nil {
 		t.Fatal(err)
 	}

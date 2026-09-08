@@ -43,16 +43,16 @@ type Embedding struct {
 }
 
 const (
-	RecallArmHybrid      = "hybrid"
-	RecallArmDenseOnly   = "dense_only"
-	RecallArmLexicalOnly = "lexical_only"
+	RetrievalModeHybrid      = "hybrid"
+	RetrievalModeDenseOnly   = "dense_only"
+	RetrievalModeLexicalOnly = "lexical_only"
 )
 
 type RetrievalPipeline struct {
 	store         SearchStore
 	reranker      Reranker
 	relevanceGate RelevanceGate
-	recallArm     string
+	retrievalMode string
 }
 
 func NewRetrievalPipeline(store SearchStore) *RetrievalPipeline {
@@ -67,11 +67,11 @@ func NewRetrievalPipelineWithStages(store SearchStore, reranker Reranker, releva
 	return newRetrievalPipeline(store, reranker, relevanceGate)
 }
 
-// NewRetrievalPipelineWithRecallArm is reserved for controlled retrieval
+// NewRetrievalPipelineWithMode is reserved for controlled retrieval
 // evaluations. Production constructors keep using the hybrid recall path.
-func NewRetrievalPipelineWithRecallArm(store SearchStore, reranker Reranker, relevanceGate RelevanceGate, recallArm string) *RetrievalPipeline {
+func NewRetrievalPipelineWithMode(store SearchStore, reranker Reranker, relevanceGate RelevanceGate, retrievalMode string) *RetrievalPipeline {
 	pipeline := newRetrievalPipeline(store, reranker, relevanceGate)
-	pipeline.recallArm = recallArm
+	pipeline.retrievalMode = retrievalMode
 	return pipeline
 }
 
@@ -82,7 +82,7 @@ func newRetrievalPipeline(store SearchStore, reranker Reranker, relevanceGate Re
 	if relevanceGate == nil {
 		relevanceGate = NewHeuristicRelevanceGate(DefaultHeuristicRelevanceGateConfig())
 	}
-	return &RetrievalPipeline{store: store, reranker: reranker, relevanceGate: relevanceGate, recallArm: RecallArmHybrid}
+	return &RetrievalPipeline{store: store, reranker: reranker, relevanceGate: relevanceGate, retrievalMode: RetrievalModeHybrid}
 }
 
 func EmbedQuery(ctx context.Context, query string, embed EmbedFunc) (Embedding, error) {
@@ -129,20 +129,20 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 	search.EmbeddingModel = embedding.Model
 	search.LexicalTerms = QueryTerms(search.Query)
 	denseItems := []domain.RetrievedDocumentChunk{}
-	if p.recallArm != RecallArmLexicalOnly {
+	if p.retrievalMode != RetrievalModeLexicalOnly {
 		denseItems, err = p.store.SearchDocumentChunks(search)
 		if err != nil {
 			return domain.DocumentSearchResponse{}, err
 		}
 	}
 	lexicalItems := []domain.RetrievedDocumentChunk{}
-	if p.recallArm != RecallArmDenseOnly {
+	if p.retrievalMode != RetrievalModeDenseOnly {
 		lexicalItems, err = p.store.SearchDocumentChunksLexical(search)
 		if err != nil {
 			return domain.DocumentSearchResponse{}, err
 		}
 	}
-	items := mergeRecallCandidates(denseItems, lexicalItems, p.recallArm == RecallArmLexicalOnly || search.MinSimilarity <= 0)
+	items := mergeRecallCandidates(denseItems, lexicalItems, p.retrievalMode == RetrievalModeLexicalOnly || search.MinSimilarity <= 0)
 	items, security := GuardPromptInjection(items)
 	items = ReciprocalRankFusion(items)
 	reranker := p.reranker

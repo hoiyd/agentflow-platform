@@ -62,7 +62,7 @@ It already separates calibration and holdout cases and covers paraphrase,
 exact-ID, hard-negative/no-answer, stale-source, restricted-source, and hostile
 source behavior. This avoids maintaining a second corpus whose only difference
 would be the embedder. See [Semantic retrieval profile](../operations/offline-evaluation.md#semantic-retrieval-profile)
-for the opt-in command and recall-arm comparison procedure.
+for the opt-in command and retrieval-mode comparison procedure.
 
 ## Interpretation
 

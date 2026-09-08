@@ -39,7 +39,7 @@ func (s *retrievalStoreStub) SearchDocumentChunksLexical(search domain.DocumentS
 	return append([]domain.RetrievedDocumentChunk(nil), s.lexicalItems...), nil
 }
 
-func TestRetrievalPipelineSupportsEvaluationRecallArms(t *testing.T) {
+func TestRetrievalPipelineSupportsEvaluationModes(t *testing.T) {
 	lexical := domain.RetrievedDocumentChunk{
 		Document: domain.Document{ID: "lexical"},
 		Chunk:    domain.DocumentChunk{ID: "lexical", Content: "AUTH-7F31 recovery procedure"},
@@ -51,24 +51,24 @@ func TestRetrievalPipelineSupportsEvaluationRecallArms(t *testing.T) {
 		Score:    0.9, Similarity: 0.9,
 	}
 	for _, testCase := range []struct {
-		arm                    string
+		mode                   string
 		wantDense, wantLexical int
 		wantID                 string
 	}{
-		{RecallArmDenseOnly, 1, 0, "dense"},
-		{RecallArmLexicalOnly, 0, 1, "lexical"},
-		{RecallArmHybrid, 1, 1, "dense"},
+		{RetrievalModeDenseOnly, 1, 0, "dense"},
+		{RetrievalModeLexicalOnly, 0, 1, "lexical"},
+		{RetrievalModeHybrid, 1, 1, "dense"},
 	} {
-		t.Run(testCase.arm, func(t *testing.T) {
+		t.Run(testCase.mode, func(t *testing.T) {
 			store := &retrievalStoreStub{denseItems: []domain.RetrievedDocumentChunk{dense}, lexicalItems: []domain.RetrievedDocumentChunk{lexical}}
-			pipeline := NewRetrievalPipelineWithRecallArm(store, nil, nil, testCase.arm)
+			pipeline := NewRetrievalPipelineWithMode(store, nil, nil, testCase.mode)
 			response, err := pipeline.Search(context.Background(), domain.DocumentSearch{Query: "recovery procedure", MinSimilarity: 0.5}, 3,
 				Embedding{Vector: []float64{1}, Provider: "test", Model: "test", Dimensions: 1})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if store.denseCalls != testCase.wantDense || store.lexicalCalls != testCase.wantLexical || len(response.Items) == 0 || response.Items[0].Document.ID != testCase.wantID {
-				t.Fatalf("arm %s used unexpected recall paths: dense=%d lexical=%d items=%#v", testCase.arm, store.denseCalls, store.lexicalCalls, response.Items)
+				t.Fatalf("mode %s used unexpected retrieval paths: dense=%d lexical=%d items=%#v", testCase.mode, store.denseCalls, store.lexicalCalls, response.Items)
 			}
 		})
 	}

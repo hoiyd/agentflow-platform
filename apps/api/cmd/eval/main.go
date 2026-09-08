@@ -92,7 +92,7 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 	topK := flags.Int("top-k", 5, "retrieval result limit (1-20)")
 	minSimilarity := flags.Float64("min-similarity", 0.15, "minimum dense similarity (0-1)")
 	minimumEvidenceCoverage := flags.Float64("min-evidence-coverage", 0.25, "minimum query-term coverage required by the relevance gate (0.05-1)")
-	recallArm := flags.String("recall-arm", "hybrid", "recall path: dense_only, lexical_only, or hybrid")
+	retrievalMode := flags.String("retrieval-mode", "hybrid", "retrieval mode: dense_only, lexical_only, or hybrid")
 	embeddingProfile := flags.String("embedding-profile", "hash", "embedding profile: hash, openai_compatible, or ollama")
 	liveEmbeddings := flags.Bool("live-embeddings", false, "explicitly authorize embedding model requests")
 	embeddingBaseURL := flags.String("embedding-base-url", "https://api.openai.com/v1", "OpenAI-compatible base URL or Ollama /api/embed URL")
@@ -119,7 +119,7 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return 2
 	}
 	report, err := rageval.Run(ctx, rageval.Options{DatasetPath: *dataset, CorpusManifestPath: *manifest,
-		TopK: *topK, MinSimilarity: *minSimilarity, MinimumEvidenceCoverage: *minimumEvidenceCoverage, RecallArm: *recallArm,
+		TopK: *topK, MinSimilarity: *minSimilarity, MinimumEvidenceCoverage: *minimumEvidenceCoverage, RetrievalMode: *retrievalMode,
 		EmbeddingProfile: rageval.EmbeddingProfileOptions{Name: *embeddingProfile, Live: *liveEmbeddings, APIKey: os.Getenv("OPENAI_API_KEY"),
 			BaseURL: *embeddingBaseURL, Model: *embeddingModel, Dimensions: *embeddingDimensions, MaxCalls: *maxEmbeddingCalls,
 			MaxInputTokens: *maxEmbeddingInputTokens, RetryMaxAttempts: *embeddingRetryAttempts, Timeout: *embeddingTimeout},
@@ -140,8 +140,8 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if !writeJSON(out, stderr, report) {
 		return 2
 	}
-	fmt.Fprintf(stderr, "rag: profile=%s arm=%s passed=%d/%d evaluated=%d gating_failures=%d mrr=%.3f ndcg=%.3f leaks=%d latency_ms=%.1f embedding_requests=%d\n",
-		report.EmbeddingProfile.Name, report.Config.RecallArm,
+	fmt.Fprintf(stderr, "rag: profile=%s retrieval_mode=%s passed=%d/%d evaluated=%d gating_failures=%d mrr=%.3f ndcg=%.3f leaks=%d latency_ms=%.1f embedding_requests=%d\n",
+		report.EmbeddingProfile.Name, report.Config.RetrievalMode,
 		report.Summary.Passed, report.Summary.Samples, report.Summary.Evaluated, report.Summary.GatingFailures,
 		report.Summary.MRR, report.Summary.NDCG, report.Summary.LeakCount, report.Summary.MeanLatencyMS, report.EmbeddingProfile.Usage.PhysicalRequests)
 	if *enforce && !report.Gate.Passed {

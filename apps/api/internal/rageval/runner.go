@@ -31,7 +31,7 @@ type Options struct {
 	MinSimilarity           float64
 	MinimumEvidenceCoverage float64
 	Revision                string
-	RecallArm               string
+	RetrievalMode           string
 	EmbeddingProfile        EmbeddingProfileOptions
 }
 
@@ -40,7 +40,7 @@ type Config struct {
 	MinSimilarity           float64 `json:"min_similarity"`
 	MinimumEvidenceCoverage float64 `json:"minimum_evidence_coverage"`
 	Chunker                 string  `json:"chunker"`
-	RecallArm               string  `json:"recall_arm"`
+	RetrievalMode           string  `json:"retrieval_mode"`
 }
 
 type IndexBuildResult struct {
@@ -171,15 +171,15 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if opts.MinimumEvidenceCoverage == 0 {
 		opts.MinimumEvidenceCoverage = rag.DefaultHeuristicRelevanceGateConfig().MinimumEvidenceCoverage
 	}
-	opts.RecallArm = strings.ToLower(strings.TrimSpace(opts.RecallArm))
-	if opts.RecallArm == "" {
-		opts.RecallArm = rag.RecallArmHybrid
+	opts.RetrievalMode = strings.ToLower(strings.TrimSpace(opts.RetrievalMode))
+	if opts.RetrievalMode == "" {
+		opts.RetrievalMode = rag.RetrievalModeHybrid
 	}
 	if opts.TopK < 1 || opts.TopK > 20 || opts.MinSimilarity < 0 || opts.MinSimilarity > 1 || opts.MinimumEvidenceCoverage < 0.05 || opts.MinimumEvidenceCoverage > 1 {
 		return Report{}, errors.New("top-k must be 1-20 and similarity/evidence thresholds must be within their documented ranges")
 	}
-	if opts.RecallArm != rag.RecallArmHybrid && opts.RecallArm != rag.RecallArmDenseOnly && opts.RecallArm != rag.RecallArmLexicalOnly {
-		return Report{}, errors.New("recall arm must be hybrid, dense_only, or lexical_only")
+	if opts.RetrievalMode != rag.RetrievalModeHybrid && opts.RetrievalMode != rag.RetrievalModeDenseOnly && opts.RetrievalMode != rag.RetrievalModeLexicalOnly {
+		return Report{}, errors.New("retrieval mode must be hybrid, dense_only, or lexical_only")
 	}
 	embedder, err := newEvaluationEmbedder(opts.EmbeddingProfile)
 	if err != nil {
@@ -216,7 +216,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		gateConfig.ConfigVersion = fmt.Sprintf("eval-evidence-coverage-%.2f", gateConfig.MinimumEvidenceCoverage)
 	}
 	relevanceGate := rag.NewHeuristicRelevanceGate(gateConfig)
-	retriever := rag.NewRetrievalPipelineWithRecallArm(fileStore, nil, relevanceGate, opts.RecallArm)
+	retriever := rag.NewRetrievalPipelineWithMode(fileStore, nil, relevanceGate, opts.RetrievalMode)
 	base := knowledge.NewKnowledgeBaseWithRetriever(fileStore, embedder, retriever)
 	costSource := "not_applicable: deterministic local embedding"
 	if embedder.options.Name != EmbeddingProfileHash {
@@ -231,7 +231,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		GitRevision: normalizedRevision(opts.Revision), StartedAt: startedAt}, SchemaVersion: SchemaVersion,
 		Corpus: CorpusIdentity{DatasetID: manifest.DatasetID, Version: manifest.Version, Hash: corpusHash, Documents: len(documents)},
 		Config: Config{TopK: opts.TopK, MinSimilarity: opts.MinSimilarity,
-			MinimumEvidenceCoverage: opts.MinimumEvidenceCoverage, Chunker: rag.DocumentChunkerVersion, RecallArm: opts.RecallArm},
+			MinimumEvidenceCoverage: opts.MinimumEvidenceCoverage, Chunker: rag.DocumentChunkerVersion, RetrievalMode: opts.RetrievalMode},
 		Pipeline: PipelineIdentity{Fusion: rag.RRFInfo(), Reranker: rag.NewHeuristicReranker(rag.DefaultHeuristicRerankerConfig()).Info(),
 			RelevanceGate: relevanceGate.Info(), SecurityPolicy: rag.PromptInjectionPolicyVersion},
 		EmbeddingProfile: EmbeddingProfileReport{Name: embedder.options.Name, Live: embedder.options.Live,
@@ -538,8 +538,8 @@ func changedVariables(current, baseline Report) []string {
 	if current.Config.Chunker != baseline.Config.Chunker {
 		changes = append(changes, "chunker")
 	}
-	if normalizedRecallArm(current.Config.RecallArm) != normalizedRecallArm(baseline.Config.RecallArm) {
-		changes = append(changes, "recall_arm")
+	if normalizedRetrievalMode(current.Config.RetrievalMode) != normalizedRetrievalMode(baseline.Config.RetrievalMode) {
+		changes = append(changes, "retrieval_mode")
 	}
 	if current.Pipeline.Embedding != baseline.Pipeline.Embedding || embeddingProfileIdentity(current) != embeddingProfileIdentity(baseline) {
 		changes = append(changes, "embedding")
@@ -564,9 +564,9 @@ func changedVariables(current, baseline Report) []string {
 	return changes
 }
 
-func normalizedRecallArm(value string) string {
+func normalizedRetrievalMode(value string) string {
 	if strings.TrimSpace(value) == "" {
-		return rag.RecallArmHybrid
+		return rag.RetrievalModeHybrid
 	}
 	return strings.TrimSpace(value)
 }

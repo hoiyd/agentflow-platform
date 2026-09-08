@@ -93,7 +93,7 @@ gate instead of being called an improvement. Increased gating failures or leaks,
 and decreased MRR/NDCG, are regressions.
 
 For an intentional single-variable experiment, add `--ablation`. The comparison
-is accepted only when exactly one of Top-K, threshold, chunker, recall arm,
+is accepted only when exactly one of Top-K, threshold, chunker, retrieval mode,
 Embedding, Fusion, Reranker, Relevance Gate, or security policy differs; the
 changed field is recorded.
 
@@ -115,14 +115,14 @@ OPENAI_API_KEY=... go run ./cmd/eval rag \
   --embedding-model text-embedding-3-small --embedding-dimensions 1536 \
   --max-embedding-calls 50 --max-embedding-input-tokens 50000 \
   --embedding-timeout 2m --min-similarity 0.15 \
-  --min-evidence-coverage 0.25 --recall-arm hybrid --enforce
+  --min-evidence-coverage 0.25 --retrieval-mode hybrid --enforce
 ```
 
 For Ollama, use `--embedding-profile ollama` and an
 `--embedding-base-url` ending in `/api/embed`; no API key is required. Run the
 same profile and corpus with `hybrid`, `dense_only`, and `lexical_only` to
-measure the recall contribution. A baseline comparison with `--ablation`
-accepts `recall_arm` as the sole changed variable. FileStore lexical recall is
+measure the retrieval contribution. A baseline comparison with `--ablation`
+accepts `retrieval_mode` as the sole changed variable. FileStore lexical recall is
 the existing token-overlap heuristic, not BM25. Real profiles require both
 threshold flags explicitly; the values above are only a runnable starting point,
 not a calibrated semantic profile.
