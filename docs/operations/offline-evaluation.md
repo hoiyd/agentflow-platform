@@ -93,8 +93,47 @@ gate instead of being called an improvement. Increased gating failures or leaks,
 and decreased MRR/NDCG, are regressions.
 
 For an intentional single-variable experiment, add `--ablation`. The comparison
-is accepted only when exactly one of Top-K, threshold, chunker, Embedding, Fusion,
-Reranker, Relevance Gate, or security policy differs; the changed field is recorded.
+is accepted only when exactly one of Top-K, threshold, chunker, recall arm,
+Embedding, Fusion, Reranker, Relevance Gate, or security policy differs; the
+changed field is recorded.
+
+### Semantic retrieval profile
+
+`eval rag` can explicitly replace the deterministic hash embedder with one real
+OpenAI-compatible or Ollama model. Live access is opt-in and requires a model,
+its expected dimensions, a physical request budget, an estimated input-token
+budget, and a deadline. Indexing, queries, and retries share those limits; every
+retry consumes another physical request. Missing credentials, invalid vectors,
+model or dimension drift, exhausted budgets, and timeouts fail closed and remain
+visible in the report denominator. They never fall back to hash.
+
+```bash
+cd apps/api
+OPENAI_API_KEY=... go run ./cmd/eval rag \
+  --embedding-profile openai_compatible --live-embeddings \
+  --embedding-base-url https://api.openai.com/v1 \
+  --embedding-model text-embedding-3-small --embedding-dimensions 1536 \
+  --max-embedding-calls 50 --max-embedding-input-tokens 50000 \
+  --embedding-timeout 2m --min-similarity 0.15 \
+  --min-evidence-coverage 0.25 --recall-arm hybrid --enforce
+```
+
+For Ollama, use `--embedding-profile ollama` and an
+`--embedding-base-url` ending in `/api/embed`; no API key is required. Run the
+same profile and corpus with `hybrid`, `dense_only`, and `lexical_only` to
+measure the recall contribution. A baseline comparison with `--ablation`
+accepts `recall_arm` as the sole changed variable. FileStore lexical recall is
+the existing token-overlap heuristic, not BM25. Real profiles require both
+threshold flags explicitly; the values above are only a runnable starting point,
+not a calibrated semantic profile.
+
+The report records requested and actual model identity, dimensions, input
+transformations, cosine distance, index identity, separate index/query timing,
+and phase-level logical-input and physical-request estimates. Embedding APIs do
+not currently return standardized token usage or price, so cost stays JSON
+`null` and is never reported as zero. Reports contain hashes and ranked source
+metadata, not raw document text or vectors. Real-model runs are manual and are
+not a default CI dependency.
 
 ## Tool Gate and CI
 

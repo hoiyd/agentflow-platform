@@ -18,6 +18,8 @@ type retrievalStoreStub struct {
 	contextItems  []domain.RetrievedDocumentChunk
 	identities    []domain.DocumentIndexIdentity
 	identityErr   error
+	denseCalls    int
+	lexicalCalls  int
 }
 
 func (s *retrievalStoreStub) ListDocumentIndexIdentities(string) ([]domain.DocumentIndexIdentity, error) {
@@ -25,14 +27,51 @@ func (s *retrievalStoreStub) ListDocumentIndexIdentities(string) ([]domain.Docum
 }
 
 func (s *retrievalStoreStub) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	s.denseCalls++
 	s.denseSearch = search
 	return append([]domain.RetrievedDocumentChunk(nil), s.denseItems...), nil
 
 }
 
 func (s *retrievalStoreStub) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	s.lexicalCalls++
 	s.lexicalSearch = search
 	return append([]domain.RetrievedDocumentChunk(nil), s.lexicalItems...), nil
+}
+
+func TestRetrievalPipelineSupportsEvaluationRecallArms(t *testing.T) {
+	lexical := domain.RetrievedDocumentChunk{
+		Document: domain.Document{ID: "lexical"},
+		Chunk:    domain.DocumentChunk{ID: "lexical", Content: "AUTH-7F31 recovery procedure"},
+		Score:    1, LexicalScore: 1,
+	}
+	dense := domain.RetrievedDocumentChunk{
+		Document: domain.Document{ID: "dense"},
+		Chunk:    domain.DocumentChunk{ID: "dense", Content: "semantic recovery procedure"},
+		Score:    0.9, Similarity: 0.9,
+	}
+	for _, testCase := range []struct {
+		arm                    string
+		wantDense, wantLexical int
+		wantID                 string
+	}{
+		{RecallArmDenseOnly, 1, 0, "dense"},
+		{RecallArmLexicalOnly, 0, 1, "lexical"},
+		{RecallArmHybrid, 1, 1, "dense"},
+	} {
+		t.Run(testCase.arm, func(t *testing.T) {
+			store := &retrievalStoreStub{denseItems: []domain.RetrievedDocumentChunk{dense}, lexicalItems: []domain.RetrievedDocumentChunk{lexical}}
+			pipeline := NewRetrievalPipelineWithRecallArm(store, nil, nil, testCase.arm)
+			response, err := pipeline.Search(context.Background(), domain.DocumentSearch{Query: "recovery procedure", MinSimilarity: 0.5}, 3,
+				Embedding{Vector: []float64{1}, Provider: "test", Model: "test", Dimensions: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if store.denseCalls != testCase.wantDense || store.lexicalCalls != testCase.wantLexical || len(response.Items) == 0 || response.Items[0].Document.ID != testCase.wantID {
+				t.Fatalf("arm %s used unexpected recall paths: dense=%d lexical=%d items=%#v", testCase.arm, store.denseCalls, store.lexicalCalls, response.Items)
+			}
+		})
+	}
 }
 
 func (s *retrievalStoreStub) ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error) {

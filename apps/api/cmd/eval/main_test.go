@@ -131,6 +131,37 @@ func TestRAGCLIComparesAValidBaseline(t *testing.T) {
 	}
 }
 
+func TestRAGCLIUsesExplicitSemanticProfile(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "fixture-key")
+	dataset, manifest := writeRAGFixture(t, "Frankfurt")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"embedding":[1,0]}],"model":"semantic-v1"}`))
+	}))
+	defer server.Close()
+	missingCalibration := []string{"rag", "--dataset", dataset, "--corpus-manifest", manifest,
+		"--embedding-profile", "openai_compatible", "--live-embeddings", "--embedding-base-url", server.URL,
+		"--embedding-model", "semantic-v1", "--embedding-dimensions", "2", "--max-embedding-calls", "3", "--max-embedding-input-tokens", "1000"}
+	if code := run(context.Background(), missingCalibration, &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
+		t.Fatal("semantic profile accepted implicit hash-calibrated thresholds")
+	}
+	args := []string{"rag", "--dataset", dataset, "--corpus-manifest", manifest, "--top-k", "1", "--min-similarity", "0.5",
+		"--min-evidence-coverage", "0.25", "--recall-arm", "dense_only", "--embedding-profile", "openai_compatible", "--live-embeddings",
+		"--embedding-base-url", server.URL, "--embedding-model", "semantic-v1", "--embedding-dimensions", "2",
+		"--max-embedding-calls", "3", "--max-embedding-input-tokens", "1000", "--embedding-retry-attempts", "1"}
+	var out, stderr bytes.Buffer
+	if code := run(context.Background(), args, &out, &stderr); code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	var report rageval.Report
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil || report.EmbeddingProfile.Name != rageval.EmbeddingProfileOpenAICompatible || report.Config.RecallArm != "dense_only" {
+		t.Fatalf("semantic CLI flags were not applied: err=%v report=%#v", err, report)
+	}
+	if strings.Contains(out.String(), "fixture-key") || !strings.Contains(stderr.String(), "embedding_requests=2") {
+		t.Fatalf("credential leaked or summary missing: out=%s stderr=%s", out.String(), stderr.String())
+	}
+}
+
 func writeRAGFixture(t *testing.T, expected string) (string, string) {
 	t.Helper()
 	dir := t.TempDir()

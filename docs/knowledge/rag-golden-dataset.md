@@ -57,6 +57,13 @@ The same Dataset can be pasted into **Knowledge -> Retrieval evaluation** in the
 workbench after the corpus files have been indexed. The text area expects the
 Dataset object itself; the frontend wraps it in the API request.
 
+The CLI can also run this fixed corpus through a real semantic embedding profile.
+It already separates calibration and holdout cases and covers paraphrase,
+exact-ID, hard-negative/no-answer, stale-source, restricted-source, and hostile
+source behavior. This avoids maintaining a second corpus whose only difference
+would be the embedder. See [Semantic retrieval profile](../operations/offline-evaluation.md#semantic-retrieval-profile)
+for the opt-in command and recall-arm comparison procedure.
+
 ## Interpretation
 
 - Hit@K uses answerable Cases as its denominator. A multi-source Case is a hit
@@ -80,6 +87,11 @@ Dataset object itself; the frontend wraps it in the API request.
   Fusion, Reranker, Relevance Gate and security-policy identity. Ranked evidence
   includes bounded scores, confidence and Gate reasons plus stable chunk hashes;
   corpus text is not copied.
+- The `0.15` dense threshold and `0.25` evidence-coverage setting are calibrated
+  for the deterministic baseline only. A real embedding profile must use the
+  calibration split to select its threshold, then report holdout results without
+  retuning on them; merely reusing the hash threshold is not a semantic-quality
+  claim.
 
 ## Version discipline
 

@@ -42,10 +42,17 @@ type Embedding struct {
 	Estimated  bool
 }
 
+const (
+	RecallArmHybrid      = "hybrid"
+	RecallArmDenseOnly   = "dense_only"
+	RecallArmLexicalOnly = "lexical_only"
+)
+
 type RetrievalPipeline struct {
 	store         SearchStore
 	reranker      Reranker
 	relevanceGate RelevanceGate
+	recallArm     string
 }
 
 func NewRetrievalPipeline(store SearchStore) *RetrievalPipeline {
@@ -60,6 +67,14 @@ func NewRetrievalPipelineWithStages(store SearchStore, reranker Reranker, releva
 	return newRetrievalPipeline(store, reranker, relevanceGate)
 }
 
+// NewRetrievalPipelineWithRecallArm is reserved for controlled retrieval
+// evaluations. Production constructors keep using the hybrid recall path.
+func NewRetrievalPipelineWithRecallArm(store SearchStore, reranker Reranker, relevanceGate RelevanceGate, recallArm string) *RetrievalPipeline {
+	pipeline := newRetrievalPipeline(store, reranker, relevanceGate)
+	pipeline.recallArm = recallArm
+	return pipeline
+}
+
 func newRetrievalPipeline(store SearchStore, reranker Reranker, relevanceGate RelevanceGate) *RetrievalPipeline {
 	if reranker == nil {
 		reranker = NewHeuristicReranker(DefaultHeuristicRerankerConfig())
@@ -67,7 +82,7 @@ func newRetrievalPipeline(store SearchStore, reranker Reranker, relevanceGate Re
 	if relevanceGate == nil {
 		relevanceGate = NewHeuristicRelevanceGate(DefaultHeuristicRelevanceGateConfig())
 	}
-	return &RetrievalPipeline{store: store, reranker: reranker, relevanceGate: relevanceGate}
+	return &RetrievalPipeline{store: store, reranker: reranker, relevanceGate: relevanceGate, recallArm: RecallArmHybrid}
 }
 
 func EmbedQuery(ctx context.Context, query string, embed EmbedFunc) (Embedding, error) {
@@ -113,15 +128,21 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 	search.EmbeddingProvider = embedding.Provider
 	search.EmbeddingModel = embedding.Model
 	search.LexicalTerms = QueryTerms(search.Query)
-	denseItems, err := p.store.SearchDocumentChunks(search)
-	if err != nil {
-		return domain.DocumentSearchResponse{}, err
+	denseItems := []domain.RetrievedDocumentChunk{}
+	if p.recallArm != RecallArmLexicalOnly {
+		denseItems, err = p.store.SearchDocumentChunks(search)
+		if err != nil {
+			return domain.DocumentSearchResponse{}, err
+		}
 	}
-	lexicalItems, err := p.store.SearchDocumentChunksLexical(search)
-	if err != nil {
-		return domain.DocumentSearchResponse{}, err
+	lexicalItems := []domain.RetrievedDocumentChunk{}
+	if p.recallArm != RecallArmDenseOnly {
+		lexicalItems, err = p.store.SearchDocumentChunksLexical(search)
+		if err != nil {
+			return domain.DocumentSearchResponse{}, err
+		}
 	}
-	items := mergeRecallCandidates(denseItems, lexicalItems, search.MinSimilarity <= 0)
+	items := mergeRecallCandidates(denseItems, lexicalItems, p.recallArm == RecallArmLexicalOnly || search.MinSimilarity <= 0)
 	items, security := GuardPromptInjection(items)
 	items = ReciprocalRankFusion(items)
 	reranker := p.reranker
