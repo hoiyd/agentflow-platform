@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"crypto/sha256"
 	"encoding/hex"
@@ -7,7 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
+
 	"strings"
 	"testing"
 	"time"
@@ -17,10 +19,8 @@ import (
 )
 
 func TestToolArtifactHandlersListReadSearchAndEnforceWorkspace(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversationInWorkspace("workspace-a", "artifacts")
 	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
@@ -103,10 +103,8 @@ func TestToolArtifactHandlersListReadSearchAndEnforceWorkspace(t *testing.T) {
 }
 
 func TestToolArtifactHandlersRejectInvalidQueries(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	handler := &Handler{store: fileStore}
 	tests := []struct {
 		name   string
@@ -138,10 +136,8 @@ func TestToolArtifactHandlersRejectInvalidQueries(t *testing.T) {
 }
 
 func TestToolArtifactHandlersMapStorageFailures(t *testing.T) {
-	base, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	base := fixturestore.New()
+
 	baseWorkspace := base.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID))
 
 	unavailable := &Handler{store: &toolArtifactHTTPStore{

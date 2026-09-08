@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"encoding/json"
 	"errors"
@@ -9,7 +11,6 @@ import (
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestCancelRunHandlerCancelsQueuedRun(t *testing.T) {
@@ -164,12 +165,10 @@ func TestGetRunProjectionHandlesInvalidMissingAndStoreFailures(t *testing.T) {
 	})
 }
 
-func createHTTPTestRun(t *testing.T) (*store.FileStore, domain.Run) {
+func createHTTPTestRun(t *testing.T) (*fixturestore.Store, domain.Run) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("handler coverage")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)

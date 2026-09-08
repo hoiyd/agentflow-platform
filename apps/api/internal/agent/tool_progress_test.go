@@ -1,19 +1,18 @@
 package agent
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
-	"path/filepath"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
+
 	"agentflow-platform/apps/api/internal/toolprogress"
 )
 
 func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("progress restore")
 	snapshot := testRuntimeSnapshot()
 	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
@@ -56,10 +55,8 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 }
 
 func TestProgressGuardForHistoricalSnapshotIsDisabled(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	snapshot := testRuntimeSnapshot()
 	snapshot.SchemaVersion = domain.ToolSecurityRuntimeSnapshotVersion
 	snapshot.ToolProgressGuard = toolprogress.Config{}

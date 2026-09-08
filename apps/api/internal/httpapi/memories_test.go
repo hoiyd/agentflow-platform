@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"bytes"
 	"context"
@@ -12,14 +14,11 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestMemoryCreateAndSearchAPI(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
 	provider := memorypkg.NewBuiltinProvider(fileStore, client, memorypkg.ProviderOptions{})
 	if err := provider.Initialize(context.Background()); err != nil {
@@ -69,10 +68,8 @@ func TestMemoryHandlersProjectDependencyFailures(t *testing.T) {
 }
 
 func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
 	provider := memorypkg.NewBuiltinProvider(fileStore, client, memorypkg.ProviderOptions{})
 	if err := provider.Initialize(context.Background()); err != nil {

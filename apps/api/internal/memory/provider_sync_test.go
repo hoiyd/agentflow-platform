@@ -1,5 +1,7 @@
 package memory
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -9,7 +11,6 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/openai"
-	storepkg "agentflow-platform/apps/api/internal/store"
 )
 
 type blockingEmbedder struct {
@@ -327,10 +328,8 @@ func TestProviderCloseReportsTimeoutAndCanFinishDrain(t *testing.T) {
 }
 
 func TestMemoryProviderSyncFailureDoesNotChangeCompletedRun(t *testing.T) {
-	fileStore, err := storepkg.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new file store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("memory failure")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)

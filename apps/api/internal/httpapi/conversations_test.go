@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"bytes"
 	"encoding/json"
@@ -9,14 +11,11 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestUpdateConversationTitleAPI(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Initial title")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -48,10 +47,8 @@ func TestUpdateConversationTitleAPI(t *testing.T) {
 }
 
 func TestConversationCollectionMessagesAndDeleteAPI(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	handler := &Handler{store: fileStore}
 
 	listRecorder := httptest.NewRecorder()
@@ -97,10 +94,8 @@ func TestConversationCollectionMessagesAndDeleteAPI(t *testing.T) {
 }
 
 func TestConversationHandlersRejectInvalidResourceIDs(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	handler := &Handler{store: fileStore}
 	tests := []struct {
 		name   string
@@ -124,10 +119,8 @@ func TestConversationHandlersRejectInvalidResourceIDs(t *testing.T) {
 }
 
 func TestUpdateConversationTitleAPIRejectsEmptyTitle(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Initial title")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -143,10 +136,8 @@ func TestUpdateConversationTitleAPIRejectsEmptyTitle(t *testing.T) {
 }
 
 func TestSummarizeConversationTitleBestEffortDoesNotOverwriteManualTitle(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Manual title")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -166,10 +157,8 @@ func TestSummarizeConversationTitleBestEffortDoesNotOverwriteManualTitle(t *test
 }
 
 func TestSummarizeConversationTitleBestEffortUpdatesTemporaryTitle(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("New conversation")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)

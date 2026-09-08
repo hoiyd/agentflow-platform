@@ -1,5 +1,7 @@
 package checkpoint
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -7,7 +9,6 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestInternalProviderCapturesAndRestoresCommittedStage(t *testing.T) {
@@ -248,12 +249,10 @@ func TestInternalProviderRejectsUnknownCheckpointStatus(t *testing.T) {
 	}
 }
 
-func checkpointTestRun(t *testing.T) (*store.FileStore, domain.Run) {
+func checkpointTestRun(t *testing.T) (*fixturestore.Store, domain.Run) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Checkpoint test")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)

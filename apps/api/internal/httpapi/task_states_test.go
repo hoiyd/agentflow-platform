@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"bytes"
 	"encoding/json"
@@ -9,14 +11,11 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestTaskStateAPIProvidesPatchTimelineAndHistoricalVersion(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversationInWorkspace("workspace-a", "task state api")
 	if err != nil {
 		t.Fatal(err)
@@ -78,10 +77,8 @@ func TestTaskStateAPIProvidesPatchTimelineAndHistoricalVersion(t *testing.T) {
 }
 
 func TestTaskStateAPIRejectsInvalidPatchAndVersion(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("invalid task state")
 	handler := (&Handler{store: fileStore}).Routes()
 	tests := []struct {

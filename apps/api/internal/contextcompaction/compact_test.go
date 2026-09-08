@@ -1,9 +1,11 @@
 package contextcompaction
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
-	"path/filepath"
+
 	"strings"
 	"testing"
 	"time"
@@ -12,7 +14,6 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
@@ -472,7 +473,7 @@ func fixedSummarizer(summary string) Summarizer {
 	})
 }
 
-func populatedCompactionTestStore(t *testing.T, count int) (*store.FileStore, domain.Conversation, domain.Run) {
+func populatedCompactionTestStore(t *testing.T, count int) (*fixturestore.Store, domain.Conversation, domain.Run) {
 	t.Helper()
 	fileStore, conversation, run := newCompactionTestStore(t)
 	for index := 0; index < count; index++ {
@@ -534,12 +535,10 @@ func (s *compactionFaultStore) ListConversationRunEvents(conversationID string) 
 	return s.Store.ListConversationRunEvents(conversationID)
 }
 
-func newCompactionTestStore(t *testing.T) (*store.FileStore, domain.Conversation, domain.Run) {
+func newCompactionTestStore(t *testing.T) (*fixturestore.Store, domain.Conversation, domain.Run) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("compaction test")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)

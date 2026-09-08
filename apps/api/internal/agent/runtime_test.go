@@ -1,5 +1,7 @@
 package agent
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -7,7 +9,6 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 type memoryRecallFunc func(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error)
@@ -18,10 +19,8 @@ func (fn memoryRecallFunc) Recall(ctx context.Context, search domain.MemorySearc
 
 func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 	ctx := context.Background()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
 	runtime := NewRuntime(RuntimeOptions{
 		Store: fileStore, ModelClient: client,
@@ -169,10 +168,8 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 }
 
 func TestRetrieveContextDegradesMemoryRecallFailureToEmptySet(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("memory recall failure")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -246,10 +243,8 @@ func TestRetrievedChunkTraceItemsIncludesMergedContextSources(t *testing.T) {
 
 func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 	ctx := context.Background()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
 	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: client})
 
@@ -304,10 +299,8 @@ func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 
 func TestRetrieveContextTruncatesEmbeddingQuery(t *testing.T) {
 	ctx := context.Background()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 
 	conversation, err := fileStore.CreateConversation("Long retrieval query")

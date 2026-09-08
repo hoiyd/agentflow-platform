@@ -1,5 +1,7 @@
 package agent
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"sync"
@@ -10,16 +12,14 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/modelprovider"
-	"agentflow-platform/apps/api/internal/store"
+
 	"agentflow-platform/apps/api/internal/tools"
 	"agentflow-platform/apps/api/internal/turn"
 )
 
 func TestRuntimeTurnModelRetriesTextOverflowOnlyAfterGenerationAdvances(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("overflow recovery")
 	config := overflowCompactionConfig()
 	snapshot := testRuntimeSnapshot()
@@ -53,10 +53,8 @@ func TestRuntimeTurnModelRetriesTextOverflowOnlyAfterGenerationAdvances(t *testi
 }
 
 func TestRuntimeTurnModelDoesNotRetryOverflowWhenCompactionFails(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("overflow failure")
 	config := overflowCompactionConfig()
 	snapshot := testRuntimeSnapshot()
@@ -70,7 +68,7 @@ func TestRuntimeTurnModelDoesNotRetryOverflowWhenCompactionFails(t *testing.T) {
 	history, _ := fileStore.ListMessages(conversation.ID)
 	client := &overflowRecoveryClient{summaryErr: context.DeadlineExceeded}
 	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: client, ContextAssembly: config})
-	_, err = (runtimeTurnModel{runtime: runtime}).Execute(context.Background(), turn.Request{
+	_, err := (runtimeTurnModel{runtime: runtime}).Execute(context.Background(), turn.Request{
 		RunID: run.ID, TurnID: "turn-overflow-failed", ConversationID: conversation.ID,
 		Agent: domain.Agent{ID: "agent_planner", SystemPrompt: "help", Executor: domain.DefaultAgentExecutor},
 		Role:  "primary", SystemPrompt: "help", History: history, Input: "continue",
@@ -82,12 +80,10 @@ func TestRuntimeTurnModelDoesNotRetryOverflowWhenCompactionFails(t *testing.T) {
 }
 
 func TestCompactContextBestEffortReturnsSuccessAndSuppressesFailure(t *testing.T) {
-	makeRuntime := func(t *testing.T, summaryErr error) (*Runtime, *store.FileStore, domain.Run) {
+	makeRuntime := func(t *testing.T, summaryErr error) (*Runtime, *fixturestore.Store, domain.Run) {
 		t.Helper()
-		fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-		if err != nil {
-			t.Fatal(err)
-		}
+		fileStore := fixturestore.New()
+
 		conversation, _ := fileStore.CreateConversation("best effort compaction")
 		config := overflowCompactionConfig()
 		config.ContextWindowTokens = 240

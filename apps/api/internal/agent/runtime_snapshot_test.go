@@ -1,5 +1,7 @@
 package agent
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"encoding/json"
@@ -13,7 +15,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/openai"
-	"agentflow-platform/apps/api/internal/store"
+
 	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/toolprogress"
@@ -22,10 +24,8 @@ import (
 
 func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T) {
 	ctx := context.Background()
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatalf("new file store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	toolPath := filepath.Join(t.TempDir(), "tools.json")
 	if err := tools.SaveConfig(toolPath, tools.DefaultConfig()); err != nil {
 		t.Fatalf("save tools config: %v", err)
@@ -371,10 +371,8 @@ func TestRestoreRuntimeRejectsReplayOnlySnapshotWithTypedError(t *testing.T) {
 }
 
 func TestClientForRunRejectsMissingSnapshot(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatalf("new file store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: openai.NewClient("", "", "test")})
 
 	if _, err := runtime.clientForRun("missing"); !errors.Is(err, ErrRuntimeSnapshotUnavailable) {

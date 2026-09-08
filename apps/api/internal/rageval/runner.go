@@ -19,7 +19,7 @@ import (
 	"agentflow-platform/apps/api/internal/knowledge"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/redaction"
-	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
 )
 
 const SchemaVersion = "rag-eval-v1"
@@ -199,15 +199,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	dir, err := os.MkdirTemp("", "agentflow-rag-eval-")
-	if err != nil {
-		return Report{}, err
-	}
-	defer os.RemoveAll(dir)
-	fileStore, err := store.NewFileStore(filepath.Join(dir, "eval.json"))
-	if err != nil {
-		return Report{}, err
-	}
+	fileStore := fixturestore.New()
 	gateConfig := rag.DefaultHeuristicRelevanceGateConfig()
 	gateConfig.MinimumEvidenceCoverage = opts.MinimumEvidenceCoverage
 	if embedder.options.Name != EmbeddingProfileHash {

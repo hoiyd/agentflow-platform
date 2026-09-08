@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"fmt"
@@ -37,10 +39,8 @@ func (s listMessagesErrorStore) ListMessages(string) ([]domain.Message, error) {
 }
 
 func TestCompleteStreamingRunRequiresFreshPassingEvidence(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("verified completion")
 	registry := verification.NewRegistry(verification.Options{})
 	contract, err := registry.FreezeContract(&domain.CompletionContract{
@@ -88,10 +88,8 @@ func TestCompleteStreamingRunRequiresFreshPassingEvidence(t *testing.T) {
 }
 
 func TestCompleteStreamingRunProvidesQuestionToAnswerRelevanceVerifier(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("answer relevance")
 	if _, err := fileStore.AddMessage(conversation.ID, "user", "What are your opening hours?"); err != nil {
 		t.Fatalf("add user message: %v", err)
@@ -136,10 +134,8 @@ func TestCompleteStreamingRunProvidesQuestionToAnswerRelevanceVerifier(t *testin
 }
 
 func TestCompleteStreamingRunGroundsClaimsInSelectedKnowledge(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("grounded completion")
 	document := domain.Document{ID: "doc-1", Title: "Platform Facts", Version: "v1", SourceType: "markdown", Content: "The production control plane runs in AWS eu-central-1 in Frankfurt."}
 	chunk := domain.DocumentChunk{ID: "chunk-1", DocumentID: document.ID, Content: "The production control plane runs in AWS eu-central-1 in Frankfurt.", ChunkSource: domain.ChunkSource{DocumentVersion: "v1"}}
@@ -197,10 +193,8 @@ func TestGroundingSourcesForRunFailsClosedOnEvidenceDrift(t *testing.T) {
 			citation: domain.RAGCitation{SourceID: "S1", DocumentID: "doc-1", DocumentVersion: "v1", ChunkID: "chunk-1"}, wantError: "chunk chunk-1 is unavailable"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-			if err != nil {
-				t.Fatal(err)
-			}
+			fileStore := fixturestore.New()
+
 			conversation, _ := fileStore.CreateConversation("grounding drift")
 			run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 			if testCase.document != nil {
@@ -213,7 +207,7 @@ func TestGroundingSourcesForRunFailsClosedOnEvidenceDrift(t *testing.T) {
 				"manifest": domain.ContextManifest{Entries: []domain.ContextManifestEntry{{Source: "knowledge", CitationSourceID: "S1", Selected: true}}},
 			}})
 			handler := &Handler{store: fileStore}
-			_, err = handler.groundingSourcesForRun(fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)), run.ID)
+			_, err := handler.groundingSourcesForRun(fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)), run.ID)
 			if err == nil || !strings.Contains(err.Error(), testCase.wantError) {
 				t.Fatalf("got %v, want error containing %q", err, testCase.wantError)
 			}
@@ -222,10 +216,8 @@ func TestGroundingSourcesForRunFailsClosedOnEvidenceDrift(t *testing.T) {
 }
 
 func TestResolveRunCompletionReturnsQuestionLookupError(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("question lookup failure")
 	registry := verification.NewRegistry(verification.Options{})
 	contract, err := registry.FreezeContract(&domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
@@ -265,10 +257,8 @@ func TestVerifyRunRetriesRecoverableEvidenceAndCompletes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("reverify")
 	registry := verification.NewRegistry(verification.Options{})
 	contract, err := registry.FreezeContract(&domain.CompletionContract{
@@ -324,10 +314,8 @@ func (q *recordingMemoryOperations) SyncTurn(job memorypkg.TurnSyncRequest) erro
 }
 
 func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("completion test")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -375,10 +363,8 @@ func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
 }
 
 func TestCompleteStreamingRunPersistsOnlyCitationsSelectedForModelContext(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("citation completion")
 	run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	_, _ = fileStore.UpdateRunStatus(run.ID, domain.RunRunning, "")

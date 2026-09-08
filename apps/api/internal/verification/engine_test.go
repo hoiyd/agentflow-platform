@@ -1,5 +1,7 @@
 package verification
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"strings"
@@ -7,7 +9,6 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestEngineBindsEvidenceToSubjectAndPassesFreshCandidate(t *testing.T) {
@@ -89,10 +90,8 @@ func TestEngineEnforcesPolicyAndAttemptBudget(t *testing.T) {
 }
 
 func TestEngineDoesNotRequireVerificationWithoutContract(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("no verification")
 	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, verificationSnapshot(), nil)
 	if err != nil {
@@ -124,10 +123,8 @@ func TestEngineFailsClosedWhenFrozenVerifierImplementationIsUnavailable(t *testi
 }
 
 func TestEnginePersistsStructuredEvidenceFromCustomVerifier(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	registry := NewRegistry(Options{})
 	if err := registry.Register(customVerifier{}); err != nil {
 		t.Fatalf("register custom verifier: %v", err)
@@ -173,12 +170,10 @@ func TestEvidencePayloadsAreBounded(t *testing.T) {
 	}
 }
 
-func newVerificationTestRun(t *testing.T, policy domain.VerificationPolicy, specs []domain.VerifierSpec) (*store.FileStore, domain.Run, *Engine) {
+func newVerificationTestRun(t *testing.T, policy domain.VerificationPolicy, specs []domain.VerifierSpec) (*fixturestore.Store, domain.Run, *Engine) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	registry := NewRegistry(Options{})
 	contract, err := registry.FreezeContract(&domain.CompletionContract{ID: "contract_test", Verifiers: specs, Policy: policy})
 	if err != nil {

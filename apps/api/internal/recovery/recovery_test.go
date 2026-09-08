@@ -1,19 +1,18 @@
 package recovery
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"errors"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestMarkStaleRunningRuns(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Recovery scan")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -98,10 +97,8 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 }
 
 func TestReconcileChildRunDelegationRebuildsCompletedResult(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("delegation recovery")
 	if err != nil {
 		t.Fatal(err)
@@ -260,12 +257,10 @@ func TestReconcileChildRunDelegationStoreFailures(t *testing.T) {
 	}
 }
 
-func createDelegationForRecovery(t *testing.T, completedChildStep bool) (*store.FileStore, domain.Run, domain.CollaborationStep, domain.Run, domain.RunDelegation) {
+func createDelegationForRecovery(t *testing.T, completedChildStep bool) (*fixturestore.Store, domain.Run, domain.CollaborationStep, domain.Run, domain.RunDelegation) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("delegation recovery state")
 	if err != nil {
 		t.Fatal(err)

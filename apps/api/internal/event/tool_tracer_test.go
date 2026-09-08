@@ -1,24 +1,24 @@
 package event
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
+
 	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
+
 	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/toolprogress"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
 func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatalf("new file store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("tool trace")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -73,10 +73,8 @@ func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
 }
 
 func TestToolPolicyTracePersistsDecisionWithoutSensitiveScopeNames(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("policy trace")
 	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
@@ -113,10 +111,8 @@ func TestToolPolicyTracePersistsDecisionWithoutSensitiveScopeNames(t *testing.T)
 }
 
 func TestToolProgressTracePersistsEscalationsAndTerminalRecoveryMetadata(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("progress trace")
 	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
@@ -168,10 +164,8 @@ func TestToolProgressTracePersistsEscalationsAndTerminalRecoveryMetadata(t *test
 }
 
 func TestToolExecutionTracerLinksPersistedArtifact(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("artifact trace")
 	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},

@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"bufio"
 	"bytes"
@@ -14,14 +16,11 @@ import (
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Recoverable API resume")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -119,10 +118,8 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 }
 
 func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Recoverable collaboration API resume")
 	if err != nil {
 		t.Fatal(err)
@@ -263,10 +260,8 @@ func TestResumeFailurePolicyKeepsReplayOnlyRunRecoverable(t *testing.T) {
 }
 
 func TestResumeRunRejectsStaleAndUnreconciledActions(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Resume conflicts")
 	if err != nil {
 		t.Fatal(err)

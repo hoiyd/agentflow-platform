@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -108,10 +110,8 @@ func TestCORSAllowlistAndKnowledgeErrorMapping(t *testing.T) {
 
 func completeHandlerDependencies(t *testing.T) Dependencies {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
 	toolPath := filepath.Join(t.TempDir(), "tools.json")
 	if err := toolpkg.SaveConfig(toolPath, toolpkg.DefaultConfig()); err != nil {

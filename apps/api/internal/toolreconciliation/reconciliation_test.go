@@ -1,5 +1,7 @@
 package toolreconciliation
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"encoding/json"
@@ -8,7 +10,7 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
+
 	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/tools"
 )
@@ -278,12 +280,10 @@ func (s *reconciliationStoreStub) CommitToolEffectReconciliation(mutation domain
 	return s.effects[0], mutation.Event, s.commitErr == nil, s.commitErr
 }
 
-func reconciliationFixture(t *testing.T, recovery tools.SideEffectReconciliation) (*store.FileStore, domain.Run, *tools.Catalog, domain.ToolEffectRecord) {
+func reconciliationFixture(t *testing.T, recovery tools.SideEffectReconciliation) (*fixturestore.Store, domain.Run, *tools.Catalog, domain.ToolEffectRecord) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("reconciliation")
 	if err != nil {
 		t.Fatal(err)

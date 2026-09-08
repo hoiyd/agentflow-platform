@@ -1,12 +1,14 @@
 package toolartifact
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"path/filepath"
+
 	"strings"
 	"testing"
 	"time"
@@ -137,12 +139,10 @@ func TestArtifactSearchRecordsExpiredAccess(t *testing.T) {
 	}
 }
 
-func artifactFixture(t *testing.T, expires time.Time) (*store.FileStore, domain.Run, domain.ToolArtifact) {
+func artifactFixture(t *testing.T, expires time.Time) (*fixturestore.Store, domain.Run, domain.ToolArtifact) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("artifact tools")
 	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},

@@ -1,5 +1,7 @@
 package agent
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -8,11 +10,10 @@ import (
 
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 type sessionHistoryErrorStore struct {
-	*store.FileStore
+	*fixturestore.Store
 	messageErr error
 }
 
@@ -21,10 +22,8 @@ func (s sessionHistoryErrorStore) ListMessages(string) ([]domain.Message, error)
 }
 
 func TestRetrieveSessionHistoryRestoresCompactedMessageAndExcludesActiveHistory(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("History retrieval")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -89,10 +88,8 @@ func TestRetrieveSessionHistoryRestoresCompactedMessageAndExcludesActiveHistory(
 }
 
 func TestRetrieveSessionHistorySkipsMissingRunAndEmptyQuery(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	if items := runtime.retrieveSessionHistory(context.Background(), "missing", "conv", "release-42"); items != nil {
 		t.Fatalf("missing run returned history: %#v", items)
@@ -115,10 +112,8 @@ func TestRetrieveSessionHistorySkipsMissingRunAndEmptyQuery(t *testing.T) {
 }
 
 func TestRetrieveSessionHistoryPublishesSearchFailure(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("Failed history search")
 	snapshot := testRuntimeSnapshot()
 	snapshot.ContextAssembly = contextassembly.DefaultConfig()
@@ -128,7 +123,7 @@ func TestRetrieveSessionHistoryPublishesSearchFailure(t *testing.T) {
 	}
 	want := errors.New("message history unavailable")
 	runtime := NewRuntime(RuntimeOptions{
-		Store:       sessionHistoryErrorStore{FileStore: fileStore, messageErr: want},
+		Store:       sessionHistoryErrorStore{Store: fileStore, messageErr: want},
 		ModelClient: newLocalFallbackOpenAIClientForTest(),
 	})
 	if items := runtime.retrieveSessionHistory(context.Background(), run.ID, conversation.ID, "recover release-42"); items != nil {

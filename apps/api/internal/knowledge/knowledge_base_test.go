@@ -1,9 +1,11 @@
 package knowledge
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
-	"path/filepath"
+
 	"strings"
 	"testing"
 
@@ -11,7 +13,6 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 type embeddingStub struct {
@@ -37,10 +38,8 @@ func (e embeddingStub) EmbedText(context.Context, string) (openai.Embedding, err
 }
 
 func TestKnowledgeBaseIngestsSearchesAndEvaluatesKnowledge(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	knowledgeBase := NewKnowledgeBase(fileStore, embeddingStub{embedding: openai.Embedding{
 		Vector: []float64{1, 0, 0}, Provider: "test", Model: "embedding-v1", Dimensions: 3,
 	}})
@@ -104,10 +103,8 @@ func TestKnowledgeBaseClassifiesEmbeddingFailure(t *testing.T) {
 }
 
 func TestKnowledgeBaseFailedUpdateKeepsPreviousIndex(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	working := NewKnowledgeBase(fileStore, embeddingStub{embedding: openai.Embedding{
 		Vector: []float64{1, 0}, Provider: "test", Model: "embedding-v1", Dimensions: 2,
 	}})

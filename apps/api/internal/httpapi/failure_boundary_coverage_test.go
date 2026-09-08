@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"bytes"
 	"context"
@@ -273,12 +275,10 @@ func assertHandlerFailure(t *testing.T, invoke func(http.ResponseWriter, *http.R
 	}
 }
 
-func newBoundaryHTTPStore(t *testing.T) (*boundaryHTTPStore, *boundaryWorkspaceStore, *store.FileStore) {
+func newBoundaryHTTPStore(t *testing.T) (*boundaryHTTPStore, *boundaryWorkspaceStore, *fixturestore.Store) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	workspace := &boundaryWorkspaceStore{
 		WorkspaceStore: fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
 	}

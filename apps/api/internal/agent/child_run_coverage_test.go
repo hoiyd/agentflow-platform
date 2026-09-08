@@ -1,5 +1,7 @@
 package agent
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -8,7 +10,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
+
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -30,7 +32,7 @@ func TestRunDelegatedWorkerPropagatesDurableBoundaryFailures(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			baseRuntime, fileStore, prepared := preparedCollaborationForChildTest(t)
 			fault := test.fault
-			fault.FileStore = fileStore
+			fault.Store = fileStore
 			runtime := NewRuntime(RuntimeOptions{
 				Store: &fault, ModelClient: baseRuntime.modelClient, RouterMode: RouterModeQuery,
 				ChildRuns: baseRuntime.childRunLimits,
@@ -59,7 +61,7 @@ func TestRunChildWorkerStepPropagatesStagePersistenceFailures(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			baseRuntime, fileStore, prepared := preparedCollaborationForChildTest(t)
 			fault := test.fault
-			fault.FileStore = fileStore
+			fault.Store = fileStore
 			runtime := NewRuntime(RuntimeOptions{Store: &fault, ModelClient: baseRuntime.modelClient})
 			if _, err := runtime.runChildWorkerStep(context.Background(), prepared.Run, prepared.WorkerAgent, tools.DefaultCatalog(), "delegated task"); err == nil {
 				t.Fatal("expected child stage persistence error")
@@ -87,12 +89,10 @@ func TestChildRuntimeSnapshotRejectsInvalidAndReplayOnlyParents(t *testing.T) {
 	}
 }
 
-func preparedCollaborationForChildTest(t *testing.T) (*Runtime, *store.FileStore, PreparedCollaborationRun) {
+func preparedCollaborationForChildTest(t *testing.T) (*Runtime, *fixturestore.Store, PreparedCollaborationRun) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("delegated child boundary")
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ type noopChildReservation struct{}
 func (noopChildReservation) Bind(string, context.CancelCauseFunc) {}
 
 type runtimeStoreFault struct {
-	*store.FileStore
+	*fixturestore.Store
 	failCreateStep       bool
 	failCreateChild      bool
 	failUpdateStepStatus domain.CollaborationStepStatus
@@ -133,49 +133,49 @@ func (s *runtimeStoreFault) CreateCollaborationStep(step domain.CollaborationSte
 	if s.failCreateStep {
 		return domain.CollaborationStep{}, errDelegationStoreTest
 	}
-	return s.FileStore.CreateCollaborationStep(step)
+	return s.Store.CreateCollaborationStep(step)
 }
 
 func (s *runtimeStoreFault) UpdateCollaborationStep(id string, status domain.CollaborationStepStatus, output, errorMessage string) (domain.CollaborationStep, error) {
 	if status == s.failUpdateStepStatus && status != "" {
 		return domain.CollaborationStep{}, errDelegationStoreTest
 	}
-	return s.FileStore.UpdateCollaborationStep(id, status, output, errorMessage)
+	return s.Store.UpdateCollaborationStep(id, status, output, errorMessage)
 }
 
 func (s *runtimeStoreFault) CreateChildRun(request domain.ChildRunRequest) (domain.Run, domain.RunDelegation, error) {
 	if s.failCreateChild {
 		return domain.Run{}, domain.RunDelegation{}, errDelegationStoreTest
 	}
-	return s.FileStore.CreateChildRun(request)
+	return s.Store.CreateChildRun(request)
 }
 
 func (s *runtimeStoreFault) UpdateRunStatus(id string, status domain.RunStatus, message string) (domain.Run, error) {
 	if status == s.failUpdateRunStatus && status != "" {
 		return domain.Run{}, errDelegationStoreTest
 	}
-	return s.FileStore.UpdateRunStatus(id, status, message)
+	return s.Store.UpdateRunStatus(id, status, message)
 }
 
 func (s *runtimeStoreFault) UpdateRunDelegation(id string, result domain.DelegationResult) (domain.RunDelegation, error) {
 	if result.Status == s.failDelegationStatus && result.Status != "" {
 		return domain.RunDelegation{}, errDelegationStoreTest
 	}
-	return s.FileStore.UpdateRunDelegation(id, result)
+	return s.Store.UpdateRunDelegation(id, result)
 }
 
 func (s *runtimeStoreFault) ListCollaborationSteps(runID string) ([]domain.CollaborationStep, error) {
 	if s.failListSteps {
 		return nil, errDelegationStoreTest
 	}
-	return s.FileStore.ListCollaborationSteps(runID)
+	return s.Store.ListCollaborationSteps(runID)
 }
 
 func (s *runtimeStoreFault) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error) {
 	if event.Type == s.failEventType && event.Type != "" {
 		return domain.RunEvent{}, errDelegationStoreTest
 	}
-	return s.FileStore.CreateRunEvent(event)
+	return s.Store.CreateRunEvent(event)
 }
 
 func (s *runtimeStoreFault) ListRunDelegations(parentRunID string) ([]domain.RunDelegation, error) {
@@ -185,12 +185,12 @@ func (s *runtimeStoreFault) ListRunDelegations(parentRunID string) ([]domain.Run
 	if s.runDelegations != nil {
 		return s.runDelegations, nil
 	}
-	return s.FileStore.ListRunDelegations(parentRunID)
+	return s.Store.ListRunDelegations(parentRunID)
 }
 
 func (s *runtimeStoreFault) GetRun(id string) (domain.Run, bool, error) {
 	if id == s.failGetRunID && id != "" {
 		return domain.Run{}, false, errDelegationStoreTest
 	}
-	return s.FileStore.GetRun(id)
+	return s.Store.GetRun(id)
 }

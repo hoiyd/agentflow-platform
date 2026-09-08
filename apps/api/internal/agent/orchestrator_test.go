@@ -1,5 +1,7 @@
 package agent
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -83,10 +85,8 @@ func TestParseLLMRouteDecisionRejectsUnknownAgent(t *testing.T) {
 }
 
 func TestPreparedRunsUseRequestedAgent(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	custom, err := fileStore.CreateAgent(domain.Agent{
 		Name:             "Resume Reviewer",
@@ -122,10 +122,8 @@ func TestPreparedRunsUseRequestedAgent(t *testing.T) {
 }
 
 func TestMultiAgentWorkerUsesBoundedIsolatedChildRun(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("delegated collaboration")
 	if err != nil {
 		t.Fatal(err)
@@ -203,10 +201,8 @@ func TestMultiAgentWorkerUsesBoundedIsolatedChildRun(t *testing.T) {
 }
 
 func TestCancelParentRunPropagatesToActiveChild(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("cancel delegated collaboration")
 	if err != nil {
 		t.Fatal(err)
@@ -263,10 +259,8 @@ func TestCancelParentRunPropagatesToActiveChild(t *testing.T) {
 }
 
 func TestResumeRecoverableCollaborationReusesInterruptedChild(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("resume delegated collaboration")
 	if err != nil {
 		t.Fatal(err)
@@ -358,10 +352,8 @@ func TestResumeRecoverableCollaborationReusesInterruptedChild(t *testing.T) {
 }
 
 func TestFailedChildDoesNotEnterParentReviewContext(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("failed delegated collaboration")
 	if err != nil {
 		t.Fatal(err)
@@ -409,10 +401,8 @@ func TestFailedChildDoesNotEnterParentReviewContext(t *testing.T) {
 }
 
 func TestChildBackpressureLeavesParentWaitingForRetry(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("delegation backpressure")
 	if err != nil {
 		t.Fatal(err)
@@ -454,18 +444,18 @@ func TestChildBackpressureLeavesParentWaitingForRetry(t *testing.T) {
 func TestResumeRecoverableCollaborationValidatesRecoveryBoundary(t *testing.T) {
 	tests := []struct {
 		name  string
-		setup func(*testing.T, *Runtime, *store.FileStore, domain.Run)
+		setup func(*testing.T, *Runtime, *fixturestore.Store, domain.Run)
 		want  string
 	}{
 		{name: "planner missing", want: "planner step not found"},
-		{name: "router missing", setup: func(t *testing.T, _ *Runtime, fileStore *store.FileStore, run domain.Run) {
+		{name: "router missing", setup: func(t *testing.T, _ *Runtime, fileStore *fixturestore.Store, run domain.Run) {
 			createRecoveryStep(t, fileStore, run, "planner", "agent_planner", "task", "plan")
 		}, want: "router step not found"},
-		{name: "frozen worker missing", setup: func(t *testing.T, _ *Runtime, fileStore *store.FileStore, run domain.Run) {
+		{name: "frozen worker missing", setup: func(t *testing.T, _ *Runtime, fileStore *fixturestore.Store, run domain.Run) {
 			createRecoveryStep(t, fileStore, run, "planner", "agent_planner", "task", "plan")
 			createRecoveryStep(t, fileStore, run, "router", "missing-agent", "route", "missing-agent")
 		}, want: "frozen routed worker not found"},
-		{name: "delegation missing", setup: func(t *testing.T, _ *Runtime, fileStore *store.FileStore, run domain.Run) {
+		{name: "delegation missing", setup: func(t *testing.T, _ *Runtime, fileStore *fixturestore.Store, run domain.Run) {
 			createRecoveryStep(t, fileStore, run, "planner", "agent_planner", "task", "plan")
 			createRecoveryStep(t, fileStore, run, "router", "agent_planner", "route", "agent_planner")
 		}, want: "exactly one delegation"},
@@ -602,7 +592,7 @@ func TestResumeRecoverableCollaborationRejectsNonResumableDelegation(t *testing.
 func TestResumeRecoverableCollaborationValidatesBlockedChildState(t *testing.T) {
 	t.Run("parent stage missing", func(t *testing.T) {
 		runtime, fileStore, run, _, relation := recoverableDelegationFixture(t)
-		fault := runtimeStoreFault{FileStore: fileStore, runDelegations: []domain.RunDelegation{relation}}
+		fault := runtimeStoreFault{Store: fileStore, runDelegations: []domain.RunDelegation{relation}}
 		fault.runDelegations[0].ParentStageID = "missing-stage"
 		runtime = NewRuntime(RuntimeOptions{Store: &fault, ModelClient: newLocalFallbackOpenAIClientForTest(), ChildRuns: runtime.childRunLimits})
 		if err := resumeCollaborationError(runtime, run.ID); err == nil || !strings.Contains(err.Error(), "parent worker delegation stage not found") {
@@ -612,7 +602,7 @@ func TestResumeRecoverableCollaborationValidatesBlockedChildState(t *testing.T) 
 
 	t.Run("unsupported block reason", func(t *testing.T) {
 		runtime, fileStore, run, _, relation := recoverableDelegationFixture(t)
-		fault := runtimeStoreFault{FileStore: fileStore, runDelegations: []domain.RunDelegation{relation}}
+		fault := runtimeStoreFault{Store: fileStore, runDelegations: []domain.RunDelegation{relation}}
 		fault.runDelegations[0].Status = domain.DelegationBlocked
 		fault.runDelegations[0].BlockReason = "manual_review"
 		runtime = NewRuntime(RuntimeOptions{Store: &fault, ModelClient: newLocalFallbackOpenAIClientForTest(), ChildRuns: runtime.childRunLimits})
@@ -691,7 +681,7 @@ func TestResumeRecoverableCollaborationPropagatesStoreFailures(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			fault := runtimeStoreFault{FileStore: fileStore}
+			fault := runtimeStoreFault{Store: fileStore}
 			test.fault(&fault, run, child, relation)
 			runtime := NewRuntime(RuntimeOptions{Store: &fault, ModelClient: newLocalFallbackOpenAIClientForTest(), ChildRuns: baseRuntime.childRunLimits})
 			if err := resumeCollaborationError(runtime, run.ID); err == nil || test.want != "" && !strings.Contains(err.Error(), test.want) {
@@ -701,7 +691,7 @@ func TestResumeRecoverableCollaborationPropagatesStoreFailures(t *testing.T) {
 	}
 }
 
-func recoverableDelegationFixture(t *testing.T) (*Runtime, *store.FileStore, domain.Run, domain.Run, domain.RunDelegation) {
+func recoverableDelegationFixture(t *testing.T) (*Runtime, *fixturestore.Store, domain.Run, domain.Run, domain.RunDelegation) {
 	t.Helper()
 	runtime, fileStore, run := newRecoverableCollaborationForTest(t)
 	createRecoveryStep(t, fileStore, run, "planner", "agent_planner", "task", "plan")
@@ -738,12 +728,10 @@ func completedDelegationForResume(relation domain.RunDelegation) domain.RunDeleg
 	return relation
 }
 
-func newRecoverableCollaborationForTest(t *testing.T) (*Runtime, *store.FileStore, domain.Run) {
+func newRecoverableCollaborationForTest(t *testing.T) (*Runtime, *fixturestore.Store, domain.Run) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("recoverable collaboration boundary")
 	if err != nil {
 		t.Fatal(err)
@@ -764,7 +752,7 @@ func newRecoverableCollaborationForTest(t *testing.T) (*Runtime, *store.FileStor
 	return runtime, fileStore, run
 }
 
-func createRecoveryStep(t *testing.T, fileStore *store.FileStore, run domain.Run, role, agentID, input, output string) domain.CollaborationStep {
+func createRecoveryStep(t *testing.T, fileStore *fixturestore.Store, run domain.Run, role, agentID, input, output string) domain.CollaborationStep {
 	t.Helper()
 	step, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
 		RunID: run.ID, ConversationID: run.ConversationID, Role: role, AgentID: agentID,
@@ -910,10 +898,8 @@ func TestParseAutonomousDecisionRejectsBadJSON(t *testing.T) {
 }
 
 func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Autonomous test")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -966,10 +952,8 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 }
 
 func TestAutonomousRunCanBeCanceledBeforeLoop(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Cancel test")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -1011,10 +995,8 @@ func TestAutonomousRunCanBeCanceledBeforeLoop(t *testing.T) {
 }
 
 func TestResumeAutonomousCompletesHumanInputCheckpoint(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("HITL test")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -1075,10 +1057,8 @@ func TestResumeAutonomousCompletesHumanInputCheckpoint(t *testing.T) {
 }
 
 func TestResumeRecoverableAutonomousContinuesFromSavedSteps(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Recovery resume test")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)

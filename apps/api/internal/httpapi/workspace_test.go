@@ -1,19 +1,18 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestWorkspaceDefaultsUnscopedAPIRequests(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	handler := &Handler{store: fileStore}
 
 	request := httptest.NewRequest(http.MethodGet, "/api/conversations", nil)

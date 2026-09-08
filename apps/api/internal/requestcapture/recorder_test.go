@@ -2,9 +2,9 @@ package requestcapture
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +13,7 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/modelrequest"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
 func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
@@ -43,10 +44,14 @@ func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
 		t.Fatalf("record retry: %v", err)
 	}
 
-	reopened, err := store.NewFileStore(path)
+	if err := fileStore.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := store.NewPostgresStore(path)
 	if err != nil {
 		t.Fatalf("reopen store: %v", err)
 	}
+	t.Cleanup(func() { _ = reopened.Close() })
 	records, err := reopened.ListModelRequestRecords(run.ID)
 	if err != nil || len(records) != 2 {
 		t.Fatalf("list records: records=%#v err=%v", records, err)
@@ -119,12 +124,19 @@ func TestExpiredCaptureContentIsPurgedButEnvelopeRemains(t *testing.T) {
 	if records[0].Envelope.PayloadHash == "" || records[0].Envelope.PayloadBytes != len(payload) {
 		t.Fatalf("expiration removed durable envelope metadata: %#v", records[0].Envelope)
 	}
-	persisted, err := os.ReadFile(path)
+	db, err := sql.Open("pgx", path)
 	if err != nil {
-		t.Fatalf("read file store: %v", err)
+		t.Fatal(err)
 	}
-	if strings.Contains(string(persisted), "short-lived") {
-		t.Fatal("expired capture content remains in the file store")
+	defer db.Close()
+	readCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var persisted string
+	if err := db.QueryRowContext(readCtx, "SELECT capture_content FROM model_request_records WHERE run_id=$1", run.ID).Scan(&persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted != "" {
+		t.Fatal("expired capture content remains in PostgreSQL")
 	}
 }
 
@@ -273,13 +285,14 @@ func (s *captureStoreStub) CreateRunEvent(event domain.RunEvent) (domain.RunEven
 	return event, s.eventErr
 }
 
-func newCaptureTestRun(t *testing.T) (*store.FileStore, domain.Run, string) {
+func newCaptureTestRun(t *testing.T) (*store.PostgresStore, domain.Run, string) {
 	t.Helper()
-	path := t.TempDir() + "/agentflow.json"
-	fileStore, err := store.NewFileStore(path)
+	path := pgfixture.DatabaseURL(t)
+	fileStore, err := store.NewPostgresStore(path)
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
+	t.Cleanup(func() { _ = fileStore.Close() })
 	conversation, err := fileStore.CreateConversation("capture test")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)

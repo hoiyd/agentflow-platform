@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"bytes"
 	"encoding/json"
@@ -9,14 +11,11 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestUpdateAgentConfigAPI(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	handler := &Handler{store: fileStore}
 
 	body := []byte(`{
@@ -61,10 +60,8 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 }
 
 func TestRunUsageAPIExposesLedger(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("usage api")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
@@ -96,10 +93,8 @@ func TestRunUsageAPIExposesLedger(t *testing.T) {
 }
 
 func TestCreateAgentConfigAPI(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	handler := &Handler{store: fileStore}
 
 	body := []byte(`{
@@ -129,10 +124,8 @@ func TestCreateAgentConfigAPI(t *testing.T) {
 }
 
 func TestCreateAgentRejectsUnavailableTool(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	handler := &Handler{store: fileStore}
 	body := []byte(`{
 		"name": "Invalid tool agent",
@@ -148,10 +141,8 @@ func TestCreateAgentRejectsUnavailableTool(t *testing.T) {
 }
 
 func TestArchiveAgentAPI(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	handler := &Handler{store: fileStore}
 
 	created, err := fileStore.CreateAgent(domain.Agent{
@@ -195,10 +186,8 @@ func TestArchiveAgentAPI(t *testing.T) {
 }
 
 func TestArchiveDefaultAgentAPIRejects(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	handler := &Handler{store: fileStore}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/agents/agent_planner", nil)
@@ -210,10 +199,8 @@ func TestArchiveDefaultAgentAPIRejects(t *testing.T) {
 }
 
 func TestRunAPIReturnsSnapshotOnlyFromReplay(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, err := fileStore.CreateConversation("Snapshot API boundary")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)

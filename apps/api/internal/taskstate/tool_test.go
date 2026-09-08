@@ -1,5 +1,7 @@
 package taskstate
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"encoding/json"
@@ -7,16 +9,14 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/store"
+
 	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
 func TestUpdateTaskStateToolAppliesPatchAndPublishesEvent(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	fileStore := fixturestore.New()
+
 	conversation, _ := fileStore.CreateConversation("tool test")
 	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, taskStateTestSnapshot(), nil)
 	if err != nil {
