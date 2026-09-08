@@ -140,7 +140,7 @@ func (s *FileStore) hasConversationLocked(id string) bool {
 	return false
 }
 
-func normalizeWorkspaceID(workspaceID string) string {
+func NormalizeWorkspaceID(workspaceID string) string {
 	return domain.NormalizeWorkspaceID(workspaceID)
 }
 
@@ -193,13 +193,13 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 		s.data.Conversations = []domain.Conversation{}
 	}
 	for i := range s.data.Conversations {
-		if normalized := normalizeWorkspaceID(s.data.Conversations[i].WorkspaceID); normalized != s.data.Conversations[i].WorkspaceID {
+		if normalized := NormalizeWorkspaceID(s.data.Conversations[i].WorkspaceID); normalized != s.data.Conversations[i].WorkspaceID {
 			s.data.Conversations[i].WorkspaceID = normalized
 			migrated = true
 		}
 	}
 	for i := range s.data.Messages {
-		if normalized := normalizeWorkspaceID(s.data.Messages[i].WorkspaceID); normalized != s.data.Messages[i].WorkspaceID {
+		if normalized := NormalizeWorkspaceID(s.data.Messages[i].WorkspaceID); normalized != s.data.Messages[i].WorkspaceID {
 			if conversation, ok := s.getConversationLocked(s.data.Messages[i].ConversationID); ok {
 				s.data.Messages[i].WorkspaceID = conversation.WorkspaceID
 			} else {
@@ -209,7 +209,7 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 		}
 	}
 	for i := range s.data.Runs {
-		if normalized := normalizeWorkspaceID(s.data.Runs[i].WorkspaceID); normalized != s.data.Runs[i].WorkspaceID {
+		if normalized := NormalizeWorkspaceID(s.data.Runs[i].WorkspaceID); normalized != s.data.Runs[i].WorkspaceID {
 			if conversation, ok := s.getConversationLocked(s.data.Runs[i].ConversationID); ok {
 				s.data.Runs[i].WorkspaceID = conversation.WorkspaceID
 			} else {
@@ -221,7 +221,7 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 	for i := range s.data.TaskStateRevisions {
 		revision := &s.data.TaskStateRevisions[i]
 		if conversation, ok := s.getConversationLocked(revision.ConversationID); ok {
-			workspaceID := normalizeWorkspaceID(conversation.WorkspaceID)
+			workspaceID := NormalizeWorkspaceID(conversation.WorkspaceID)
 			if revision.WorkspaceID != workspaceID || revision.State.WorkspaceID != workspaceID {
 				revision.WorkspaceID = workspaceID
 				revision.State.WorkspaceID = workspaceID
@@ -230,13 +230,13 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 		}
 	}
 	for i := range s.data.Documents {
-		if normalized := normalizeWorkspaceID(s.data.Documents[i].WorkspaceID); normalized != s.data.Documents[i].WorkspaceID {
+		if normalized := NormalizeWorkspaceID(s.data.Documents[i].WorkspaceID); normalized != s.data.Documents[i].WorkspaceID {
 			s.data.Documents[i].WorkspaceID = normalized
 			migrated = true
 		}
 	}
 	for i := range s.data.Memories {
-		if normalized := normalizeWorkspaceID(s.data.Memories[i].WorkspaceID); normalized != s.data.Memories[i].WorkspaceID {
+		if normalized := NormalizeWorkspaceID(s.data.Memories[i].WorkspaceID); normalized != s.data.Memories[i].WorkspaceID {
 			if conversation, ok := s.getConversationLocked(s.data.Memories[i].ConversationID); ok {
 				s.data.Memories[i].WorkspaceID = conversation.WorkspaceID
 			} else {
@@ -247,7 +247,7 @@ func (s *FileStore) normalizeLoadedDataLocked() bool {
 	}
 	for i := range s.data.MemoryCandidates {
 		candidate := &s.data.MemoryCandidates[i]
-		if normalized := normalizeWorkspaceID(candidate.WorkspaceID); normalized != candidate.WorkspaceID {
+		if normalized := NormalizeWorkspaceID(candidate.WorkspaceID); normalized != candidate.WorkspaceID {
 			candidate.WorkspaceID = normalized
 			if conversation, ok := s.getConversationLocked(candidate.ConversationID); ok {
 				candidate.WorkspaceID = conversation.WorkspaceID
@@ -352,7 +352,7 @@ func (s *FileStore) messagesForConversationLocked(conversationID string) []domai
 	return messages
 }
 
-func normalizeTitle(title string) string {
+func NormalizeTitle(title string) string {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		return "New conversation"
@@ -364,7 +364,7 @@ func normalizeTitle(title string) string {
 	return title
 }
 
-func newID(prefix string) string {
+func NewID(prefix string) string {
 	var bytes [8]byte
 	if _, err := rand.Read(bytes[:]); err != nil {
 		return prefix + "_" + time.Now().UTC().Format("20060102150405")

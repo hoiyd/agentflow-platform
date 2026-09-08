@@ -7,6 +7,11 @@ type workspaceStore struct {
 	workspaceID string
 }
 
+// ScopeWorkspace applies the same authorization boundary to persistence and fixtures.
+func ScopeWorkspace(backend Store, scope domain.WorkspaceScope) WorkspaceStore {
+	return workspaceStore{backend: backend, workspaceID: scope.ID()}
+}
+
 func (s *FileStore) ForWorkspace(scope domain.WorkspaceScope) WorkspaceStore {
 	return workspaceStore{backend: s, workspaceID: scope.ID()}
 }

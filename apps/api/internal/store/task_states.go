@@ -39,7 +39,7 @@ func IsTaskStateVersionConflict(err error) bool {
 	return errors.As(err, &conflict)
 }
 
-func classifyTaskStateValidation(err error) error {
+func ClassifyTaskStateValidation(err error) error {
 	var validation *taskStateValidationFailure
 	if err == nil || errors.As(err, &validation) {
 		return err
@@ -47,14 +47,14 @@ func classifyTaskStateValidation(err error) error {
 	return &taskStateValidationFailure{err: err}
 }
 
-func cloneTaskStateRevision(revision domain.TaskStateRevision) domain.TaskStateRevision {
+func CloneTaskStateRevision(revision domain.TaskStateRevision) domain.TaskStateRevision {
 	encoded, _ := json.Marshal(revision)
 	var cloned domain.TaskStateRevision
 	_ = json.Unmarshal(encoded, &cloned)
 	return cloned
 }
 
-func cloneTaskState(state domain.TaskState) domain.TaskState {
+func CloneTaskState(state domain.TaskState) domain.TaskState {
 	encoded, _ := json.Marshal(state)
 	var cloned domain.TaskState
 	_ = json.Unmarshal(encoded, &cloned)

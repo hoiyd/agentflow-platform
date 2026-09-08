@@ -15,7 +15,7 @@ func (s *PostgresStore) purgeExpiredToolArtifactContent(ctx context.Context) err
 }
 
 func (s *PostgresStore) CreateToolArtifact(artifact domain.ToolArtifact, content []byte) (domain.ToolArtifact, error) {
-	if err := validateToolArtifact(artifact, content); err != nil {
+	if err := ValidateToolArtifact(artifact, content); err != nil {
 		return domain.ToolArtifact{}, err
 	}
 	_, err := s.db.Exec(`
@@ -44,7 +44,7 @@ func (s *PostgresStore) CreateToolArtifact(artifact domain.ToolArtifact, content
 	if existing.ContentHash != artifact.ContentHash || existing.ToolCallID != artifact.ToolCallID || existing.StoredByteSize != artifact.StoredByteSize {
 		return domain.ToolArtifact{}, errors.New("tool artifact idempotency conflict")
 	}
-	if len(existingContent) != existing.StoredByteSize || toolArtifactContentHash(existingContent) != existing.ContentHash {
+	if len(existingContent) != existing.StoredByteSize || ToolArtifactContentHash(existingContent) != existing.ContentHash {
 		return domain.ToolArtifact{}, errors.New("existing tool artifact content is unavailable or corrupt")
 	}
 	return existing, nil
@@ -67,14 +67,14 @@ func (s *PostgresStore) ListToolArtifacts(runID string) ([]domain.ToolArtifact, 
 		if err != nil {
 			return nil, err
 		}
-		artifact.Expired = toolArtifactExpired(artifact, time.Now().UTC())
+		artifact.Expired = ToolArtifactExpired(artifact, time.Now().UTC())
 		result = append(result, artifact)
 	}
 	return result, rows.Err()
 }
 
 func (s *PostgresStore) ReadToolArtifact(runID string, artifactID string, offset int, limit int) (domain.ToolArtifactRead, error) {
-	offset, limit, err := normalizeArtifactRead(offset, limit)
+	offset, limit, err := NormalizeArtifactRead(offset, limit)
 	if err != nil {
 		return domain.ToolArtifactRead{}, err
 	}
@@ -85,7 +85,7 @@ func (s *PostgresStore) ReadToolArtifact(runID string, artifactID string, offset
 	if !ok {
 		return domain.ToolArtifactRead{}, ErrNotFound("tool artifact")
 	}
-	if toolArtifactExpired(artifact, time.Now().UTC()) {
+	if ToolArtifactExpired(artifact, time.Now().UTC()) {
 		return domain.ToolArtifactRead{}, ErrToolArtifactExpired
 	}
 	if offset > len(content) {
@@ -99,7 +99,7 @@ func (s *PostgresStore) ReadToolArtifact(runID string, artifactID string, offset
 }
 
 func (s *PostgresStore) SearchToolArtifact(runID string, artifactID string, query string, maxMatches int) (domain.ToolArtifactSearchResult, error) {
-	query, maxMatches, err := normalizeArtifactSearch(query, maxMatches)
+	query, maxMatches, err := NormalizeArtifactSearch(query, maxMatches)
 	if err != nil {
 		return domain.ToolArtifactSearchResult{}, err
 	}
@@ -110,10 +110,10 @@ func (s *PostgresStore) SearchToolArtifact(runID string, artifactID string, quer
 	if !ok {
 		return domain.ToolArtifactSearchResult{}, ErrNotFound("tool artifact")
 	}
-	if toolArtifactExpired(artifact, time.Now().UTC()) {
+	if ToolArtifactExpired(artifact, time.Now().UTC()) {
 		return domain.ToolArtifactSearchResult{}, ErrToolArtifactExpired
 	}
-	return searchToolArtifact(artifact, content, query, maxMatches), nil
+	return SearchToolArtifact(artifact, content, query, maxMatches), nil
 }
 
 const toolArtifactColumns = `id, schema_version, run_id, stage_id, turn_id,

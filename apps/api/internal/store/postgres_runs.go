@@ -36,13 +36,13 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 
 	now := time.Now().UTC()
 	run := domain.Run{
-		ID:                 newID("run"),
+		ID:                 NewID("run"),
 		WorkspaceID:        conversation.WorkspaceID,
 		AgentID:            agentID,
 		ConversationID:     conversationID,
 		Status:             domain.RunQueued,
-		RuntimeSnapshot:    cloneRuntimeSnapshot(snapshot),
-		CompletionContract: cloneCompletionContract(contract),
+		RuntimeSnapshot:    CloneRuntimeSnapshot(snapshot),
+		CompletionContract: CloneCompletionContract(contract),
 		VerificationStatus: domain.VerificationNotRequired,
 		CreatedAt:          now,
 		UpdatedAt:          now,
@@ -257,7 +257,7 @@ func (s *PostgresStore) GetRun(id string) (domain.Run, bool, error) {
 func (s *PostgresStore) GetRunInWorkspace(workspaceID string, id string) (domain.Run, bool, error) {
 	run, err := scanRun(s.db.QueryRow(`
 		SELECT id, COALESCE(workspace_id, 'default_workspace'), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
-		FROM runs WHERE id = $1 AND workspace_id = $2`, id, normalizeWorkspaceID(workspaceID)))
+		FROM runs WHERE id = $1 AND workspace_id = $2`, id, NormalizeWorkspaceID(workspaceID)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Run{}, false, nil
 	}
@@ -291,7 +291,7 @@ func (s *PostgresStore) ListRuns() ([]domain.Run, error) {
 func (s *PostgresStore) ListRunsByWorkspace(workspaceID string) ([]domain.Run, error) {
 	rows, err := s.db.Query(`
 		SELECT id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
-		FROM runs WHERE workspace_id = $1 ORDER BY created_at DESC`, normalizeWorkspaceID(workspaceID))
+		FROM runs WHERE workspace_id = $1 ORDER BY created_at DESC`, NormalizeWorkspaceID(workspaceID))
 	if err != nil {
 		return nil, err
 	}

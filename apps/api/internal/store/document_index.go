@@ -21,17 +21,17 @@ func IsDocumentVersionConflict(err error) bool {
 	return errors.Is(err, ErrDocumentVersionConflict)
 }
 
-func prepareDocumentWrite(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, []domain.DocumentChunk, []domain.DocumentChunkEmbedding, error) {
+func PrepareDocumentWrite(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, []domain.DocumentChunk, []domain.DocumentChunkEmbedding, error) {
 	if len(chunks) != len(embeddings) {
 		return domain.Document{}, nil, nil, errors.New("document chunks and embeddings length mismatch")
 	}
 	// PostgreSQL timestamps have microsecond precision. Normalize before returning
 	// so the initial write and an idempotent read-back expose identical metadata.
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	document.WorkspaceID = normalizeWorkspaceID(document.WorkspaceID)
+	document.WorkspaceID = NormalizeWorkspaceID(document.WorkspaceID)
 	document.ID = strings.TrimSpace(document.ID)
 	if document.ID == "" {
-		document.ID = newID("doc")
+		document.ID = NewID("doc")
 	}
 	document.SourceKey = strings.TrimSpace(document.SourceKey)
 	document.SourceURI = strings.TrimSpace(document.SourceURI)
@@ -67,7 +67,7 @@ func prepareDocumentWrite(document domain.Document, chunks []domain.DocumentChun
 	for i := range chunks {
 		chunks[i].ID = strings.TrimSpace(chunks[i].ID)
 		if chunks[i].ID == "" {
-			chunks[i].ID = newID("chunk")
+			chunks[i].ID = NewID("chunk")
 		}
 		chunks[i].DocumentID = document.ID
 		chunks[i].ChunkIndex = i
@@ -138,7 +138,7 @@ func prepareDocumentWrite(document domain.Document, chunks []domain.DocumentChun
 	return document, chunks, embeddings, nil
 }
 
-func bindDocumentID(document *domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding, id string) {
+func BindDocumentID(document *domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding, id string) {
 	document.ID = id
 	for index := range chunks {
 		chunks[index].DocumentID = id
@@ -150,7 +150,7 @@ func isZeroDocumentIndexIdentity(identity domain.DocumentIndexIdentity) bool {
 	return identity == (domain.DocumentIndexIdentity{})
 }
 
-func documentVersionConflict(existing, incoming domain.Document) error {
+func DocumentVersionConflict(existing, incoming domain.Document) error {
 	return fmt.Errorf("%w: source_key=%q version=%q", ErrDocumentVersionConflict, incoming.SourceKey, incoming.Version)
 }
 
@@ -196,7 +196,7 @@ func normalizeFileDocumentIndexes(data *fileData) bool {
 		if document.SourceKey == "" {
 			continue
 		}
-		key := normalizeWorkspaceID(document.WorkspaceID) + "\x00" + document.SourceKey
+		key := NormalizeWorkspaceID(document.WorkspaceID) + "\x00" + document.SourceKey
 		if previous, ok := latestBySource[key]; !ok || newerDocument(*document, data.Documents[previous]) {
 			latestBySource[key] = index
 		}
@@ -208,7 +208,7 @@ func normalizeFileDocumentIndexes(data *fileData) bool {
 			keep[document.ID] = true
 			continue
 		}
-		key := normalizeWorkspaceID(document.WorkspaceID) + "\x00" + document.SourceKey
+		key := NormalizeWorkspaceID(document.WorkspaceID) + "\x00" + document.SourceKey
 		if latestBySource[key] == index {
 			keep[document.ID] = true
 		} else {

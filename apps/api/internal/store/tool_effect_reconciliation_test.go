@@ -15,7 +15,7 @@ func TestPrepareToolEffectReconciliationValidatesCASAndSettlement(t *testing.T) 
 		Status: domain.ToolEffectNeedsReconciliation,
 	}
 	valid := reconciliationMutation(effect, domain.ToolEffectConfirmFailed, domain.ToolEffectFailed, nil)
-	prepared, err := prepareToolEffectReconciliation(effect, valid)
+	prepared, err := PrepareToolEffectReconciliation(effect, valid)
 	if err != nil || prepared.Event.Payload["result_version"] != int64(3) {
 		t.Fatalf("prepare valid mutation: %#v err=%v", prepared, err)
 	}
@@ -45,7 +45,7 @@ func TestPrepareToolEffectReconciliationValidatesCASAndSettlement(t *testing.T) 
 		t.Run(test.name, func(t *testing.T) {
 			current, mutation := effect, reconciliationMutation(effect, domain.ToolEffectConfirmFailed, domain.ToolEffectFailed, nil)
 			test.mutate(&current, &mutation)
-			_, err := prepareToolEffectReconciliation(current, mutation)
+			_, err := PrepareToolEffectReconciliation(current, mutation)
 			if err == nil || test.match != nil && !test.match(err) {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -69,7 +69,7 @@ func TestToolEffectReconciliationSettlementVariantsAndErrors(t *testing.T) {
 		effect.Status = domain.ToolEffectReconciling
 		mutation := reconciliationMutation(effect, test.action, test.status, test.result)
 		mutation.Event.Type = test.typeID
-		if _, err := prepareToolEffectReconciliation(effect, mutation); err != nil {
+		if _, err := PrepareToolEffectReconciliation(effect, mutation); err != nil {
 			t.Fatalf("action %s: %v", test.action, err)
 		}
 	}
@@ -100,18 +100,18 @@ func TestPayloadInt64AcceptsJSONAndNativeIntegers(t *testing.T) {
 func TestReconciliationRequiresAUniqueClaimBeforeCallbackSettlement(t *testing.T) {
 	effect := domain.ToolEffectRecord{IdempotencyKey: "effect", RunID: "run", StageID: "stage", Version: 2, Status: domain.ToolEffectNeedsReconciliation}
 	mutation := reconciliationMutation(effect, domain.ToolEffectRetrySameKey, domain.ToolEffectCommitted, []byte(`{}`))
-	if _, err := prepareToolEffectReconciliation(effect, mutation); !IsToolEffectConflict(err) {
+	if _, err := PrepareToolEffectReconciliation(effect, mutation); !IsToolEffectConflict(err) {
 		t.Fatalf("callback settled without a claim: %v", err)
 	}
 	mutation.Event.Type = domain.EventToolEffectReconciliationStarted
 	mutation.Event.Payload["command_hash"] = "hash"
 	mutation.Event.Payload["outcome"] = "pending"
 	mutation.NextStatus, mutation.Result = domain.ToolEffectReconciling, nil
-	if _, err := prepareToolEffectReconciliation(effect, mutation); err != nil {
+	if _, err := PrepareToolEffectReconciliation(effect, mutation); err != nil {
 		t.Fatal(err)
 	}
 	effect.Status = domain.ToolEffectReconciling
-	if _, err := prepareToolEffectReconciliation(effect, mutation); !IsToolEffectConflict(err) {
+	if _, err := PrepareToolEffectReconciliation(effect, mutation); !IsToolEffectConflict(err) {
 		t.Fatalf("outstanding claim reclaimed: %v", err)
 	}
 	mutation.Event.Payload["command_hash"] = ""

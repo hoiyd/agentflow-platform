@@ -28,7 +28,7 @@ func TestPrepareDocumentWriteRejectsInvalidEmbeddingIdentity(t *testing.T) {
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			if _, _, _, err := prepareDocumentWrite(testCase.document, testCase.chunks, testCase.embeddings); err == nil {
+			if _, _, _, err := PrepareDocumentWrite(testCase.document, testCase.chunks, testCase.embeddings); err == nil {
 				t.Fatal("invalid index identity was accepted")
 			}
 		})
@@ -37,7 +37,7 @@ func TestPrepareDocumentWriteRejectsInvalidEmbeddingIdentity(t *testing.T) {
 
 func TestPrepareDocumentWriteNormalizesTimestampPrecision(t *testing.T) {
 	inputTime := time.Date(2026, 9, 8, 1, 2, 3, 456789123, time.FixedZone("fixture", 8*60*60))
-	document, chunks, embeddings, err := prepareDocumentWrite(
+	document, chunks, embeddings, err := PrepareDocumentWrite(
 		domain.Document{Title: "Policy", Content: "current policy", CreatedAt: inputTime},
 		[]domain.DocumentChunk{{Content: "current policy", CreatedAt: inputTime}},
 		[]domain.DocumentChunkEmbedding{{CreatedAt: inputTime}},
@@ -85,7 +85,7 @@ func TestNormalizeFileDocumentIndexesBackfillsAndRemovesStaleSources(t *testing.
 }
 
 func TestDocumentVersionConflictHasStableFailureCode(t *testing.T) {
-	err := documentVersionConflict(domain.Document{ContentHash: "old"}, domain.Document{SourceKey: "policy", Version: "1", ContentHash: "new"})
+	err := DocumentVersionConflict(domain.Document{ContentHash: "old"}, domain.Document{SourceKey: "policy", Version: "1", ContentHash: "new"})
 	if !IsDocumentVersionConflict(err) || failure.Describe(err).Code != "document_version_conflict" {
 		t.Fatalf("unexpected conflict contract: %v", err)
 	}

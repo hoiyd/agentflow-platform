@@ -28,7 +28,7 @@ func TestFileToolArtifactRoundTripReadSearchReplayAndExpiry(t *testing.T) {
 	artifact := domain.ToolArtifact{
 		ID: "tool_artifact_roundtrip", SchemaVersion: domain.CurrentToolArtifactSchemaVersion,
 		RunID: run.ID, StageID: "stage-1", TurnID: "turn-1", ToolCallID: "call-1", ToolName: "future_tool",
-		MediaType: "application/json", ContentHash: toolArtifactContentHash(content),
+		MediaType: "application/json", ContentHash: ToolArtifactContentHash(content),
 		OriginalByteSize: len(content), StoredByteSize: len(content), CreatedAt: now, ExpiresAt: &expires,
 	}
 	if _, err := fileStore.CreateToolArtifact(artifact, content); err != nil {
@@ -125,7 +125,7 @@ func TestToolArtifactValidationAndBounds(t *testing.T) {
 	valid := domain.ToolArtifact{
 		ID: "tool_artifact_validation", SchemaVersion: domain.CurrentToolArtifactSchemaVersion,
 		RunID: "run-1", ToolCallID: "call-1", ToolName: "reader", MediaType: "application/json",
-		ContentHash: toolArtifactContentHash(content), OriginalByteSize: len(content), StoredByteSize: len(content), CreatedAt: now,
+		ContentHash: ToolArtifactContentHash(content), OriginalByteSize: len(content), StoredByteSize: len(content), CreatedAt: now,
 	}
 
 	invalidArtifacts := []domain.ToolArtifact{
@@ -137,7 +137,7 @@ func TestToolArtifactValidationAndBounds(t *testing.T) {
 		func() domain.ToolArtifact { item := valid; item.CreatedAt = time.Time{}; return item }(),
 	}
 	for index, artifact := range invalidArtifacts {
-		if err := validateToolArtifact(artifact, content); err == nil {
+		if err := ValidateToolArtifact(artifact, content); err == nil {
 			t.Fatalf("invalid artifact %d passed validation", index)
 		}
 	}
@@ -152,7 +152,7 @@ func TestToolArtifactValidationAndBounds(t *testing.T) {
 		{name: "oversized limit", limit: MaxToolArtifactReadBytes + 1, wantError: true},
 	} {
 		t.Run("read_"+test.name, func(t *testing.T) {
-			_, normalized, err := normalizeArtifactRead(test.offset, test.limit)
+			_, normalized, err := NormalizeArtifactRead(test.offset, test.limit)
 			if (err != nil) != test.wantError {
 				t.Fatalf("normalize read error = %v", err)
 			}
@@ -174,7 +174,7 @@ func TestToolArtifactValidationAndBounds(t *testing.T) {
 		{name: "too many matches", query: "needle", matches: MaxToolArtifactMatches + 1, wantError: true},
 	} {
 		t.Run("search_"+test.name, func(t *testing.T) {
-			query, matches, err := normalizeArtifactSearch(test.query, test.matches)
+			query, matches, err := NormalizeArtifactSearch(test.query, test.matches)
 			if (err != nil) != test.wantError {
 				t.Fatalf("normalize search error = %v", err)
 			}
@@ -184,7 +184,7 @@ func TestToolArtifactValidationAndBounds(t *testing.T) {
 		})
 	}
 
-	search := searchToolArtifact(valid, content, "needle", 1)
+	search := SearchToolArtifact(valid, content, "needle", 1)
 	if len(search.Matches) != 1 || !search.Truncated || search.Matches[0].Offset <= 0 {
 		t.Fatalf("bounded search did not report truncation: %#v", search)
 	}
@@ -192,7 +192,7 @@ func TestToolArtifactValidationAndBounds(t *testing.T) {
 	expired := valid
 	expired.ID = "tool_artifact_expired_metadata"
 	expired.ExpiresAt = &expiredAt
-	items := toolArtifactsForRun([]domain.ToolArtifact{expired, valid, {ID: "other", RunID: "other-run"}}, valid.RunID)
+	items := ToolArtifactsForRun([]domain.ToolArtifact{expired, valid, {ID: "other", RunID: "other-run"}}, valid.RunID)
 	if len(items) != 2 || !items[0].Expired || items[1].Expired {
 		t.Fatalf("run artifact metadata was not filtered and marked: %#v", items)
 	}
@@ -213,7 +213,7 @@ func TestFileToolArtifactFailurePathsAndConversationCleanup(t *testing.T) {
 	artifact := domain.ToolArtifact{
 		ID: "tool_artifact_failures", SchemaVersion: domain.CurrentToolArtifactSchemaVersion,
 		RunID: run.ID, ToolCallID: "call-1", ToolName: "reader", MediaType: "application/json",
-		ContentHash: toolArtifactContentHash(content), OriginalByteSize: len(content), StoredByteSize: len(content), CreatedAt: time.Now().UTC(),
+		ContentHash: ToolArtifactContentHash(content), OriginalByteSize: len(content), StoredByteSize: len(content), CreatedAt: time.Now().UTC(),
 	}
 
 	invalid := artifact
@@ -240,7 +240,7 @@ func TestFileToolArtifactFailurePathsAndConversationCleanup(t *testing.T) {
 	}
 	conflictingContent := []byte(`{"result":"different"}`)
 	conflict := artifact
-	conflict.ContentHash = toolArtifactContentHash(conflictingContent)
+	conflict.ContentHash = ToolArtifactContentHash(conflictingContent)
 	conflict.OriginalByteSize = len(conflictingContent)
 	conflict.StoredByteSize = len(conflictingContent)
 	if _, err := fileStore.CreateToolArtifact(conflict, conflictingContent); err == nil {

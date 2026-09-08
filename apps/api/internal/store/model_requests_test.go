@@ -61,9 +61,9 @@ func TestValidateModelRequestRecordRejectsInvalidContracts(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			record := cloneModelRequestRecord(base)
+			record := CloneModelRequestRecord(base)
 			test.mutate(&record)
-			err := validateModelRequestRecord(record)
+			err := ValidateModelRequestRecord(record)
 			if err == nil || !strings.Contains(err.Error(), test.message) {
 				t.Fatalf("expected error containing %q, got %v", test.message, err)
 			}
@@ -73,7 +73,7 @@ func TestValidateModelRequestRecordRejectsInvalidContracts(t *testing.T) {
 	if validSHA256("sha256:not-hex") || validSHA256(strings.Repeat("a", 64)) {
 		t.Fatal("invalid SHA-256 values were accepted")
 	}
-	cloned := cloneModelRequestRecord(domain.ModelRequestRecord{})
+	cloned := CloneModelRequestRecord(domain.ModelRequestRecord{})
 	if cloned.Envelope.Parameters == nil {
 		t.Fatal("clone should normalize nil parameters")
 	}
@@ -149,7 +149,7 @@ func TestSortModelRequestRecordsEqualTimestamps(t *testing.T) {
 		{Envelope: domain.ModelRequestEnvelope{ID: "second", ModelCallID: "call", Attempt: 2, CreatedAt: now}},
 		{Envelope: domain.ModelRequestEnvelope{ID: "first", ModelCallID: "call", Attempt: 1, CreatedAt: now}},
 	}
-	sortModelRequestRecords(sameCall)
+	SortModelRequestRecords(sameCall)
 	if sameCall[0].Envelope.Attempt != 1 {
 		t.Fatalf("attempt ordering failed: %#v", sameCall)
 	}
@@ -157,7 +157,7 @@ func TestSortModelRequestRecordsEqualTimestamps(t *testing.T) {
 		{Envelope: domain.ModelRequestEnvelope{ID: "z", ModelCallID: "call-z", CreatedAt: now}},
 		{Envelope: domain.ModelRequestEnvelope{ID: "a", ModelCallID: "call-a", CreatedAt: now}},
 	}
-	sortModelRequestRecords(differentCalls)
+	SortModelRequestRecords(differentCalls)
 	if differentCalls[0].Envelope.ID != "a" {
 		t.Fatalf("stable ID ordering failed: %#v", differentCalls)
 	}
@@ -183,7 +183,7 @@ func validModelRequestRecord(runID, conversationID string) domain.ModelRequestRe
 
 func TestValidModelRequestRecordFixture(t *testing.T) {
 	record := validModelRequestRecord("run", "conversation")
-	if err := validateModelRequestRecord(record); err != nil {
+	if err := ValidateModelRequestRecord(record); err != nil {
 		t.Fatalf("fixture is invalid: %v", err)
 	}
 	encoded, err := json.Marshal(record)

@@ -12,7 +12,7 @@ import (
 
 func (s *PostgresStore) CreateChildRun(request domain.ChildRunRequest) (domain.Run, domain.RunDelegation, error) {
 	d := request.Delegation
-	if err := validateChildRunRequest(request); err != nil {
+	if err := ValidateChildRunRequest(request); err != nil {
 		return domain.Run{}, domain.RunDelegation{}, err
 	}
 	parent, ok, err := s.GetRun(d.ParentRunID)
@@ -34,9 +34,9 @@ func (s *PostgresStore) CreateChildRun(request domain.ChildRunRequest) (domain.R
 	}
 	now := time.Now().UTC()
 	run := domain.Run{
-		ID: newID("run"), WorkspaceID: parent.WorkspaceID, AgentID: d.AgentID,
+		ID: NewID("run"), WorkspaceID: parent.WorkspaceID, AgentID: d.AgentID,
 		ConversationID: parent.ConversationID, Status: domain.RunQueued,
-		RuntimeSnapshot:    cloneRuntimeSnapshot(request.RuntimeSnapshot),
+		RuntimeSnapshot:    CloneRuntimeSnapshot(request.RuntimeSnapshot),
 		VerificationStatus: domain.VerificationNotRequired, CreatedAt: now, UpdatedAt: now,
 	}
 	d.WorkspaceID, d.ConversationID, d.ChildRunID = parent.WorkspaceID, parent.ConversationID, run.ID
@@ -67,7 +67,7 @@ func (s *PostgresStore) CreateChildRun(request domain.ChildRunRequest) (domain.R
 }
 
 func (s *PostgresStore) UpdateRunDelegation(id string, result domain.DelegationResult) (domain.RunDelegation, error) {
-	if err := validateDelegationResult(result); err != nil {
+	if err := ValidateDelegationResult(result); err != nil {
 		return domain.RunDelegation{}, err
 	}
 	return scanDelegation(s.db.QueryRow(`UPDATE run_delegations SET

@@ -36,7 +36,7 @@ func (s *FileStore) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 	now := time.Now().UTC()
 	agent.ID = strings.TrimSpace(agent.ID)
 	if agent.ID == "" {
-		agent.ID = newID("agent")
+		agent.ID = NewID("agent")
 	}
 	agent.Name = strings.TrimSpace(agent.Name)
 	if agent.Name == "" {
@@ -44,7 +44,7 @@ func (s *FileStore) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 	}
 	agent.Description = strings.TrimSpace(agent.Description)
 	agent.SystemPrompt = strings.TrimSpace(agent.SystemPrompt)
-	agent.Tools = normalizeTools(agent.Tools)
+	agent.Tools = NormalizeTools(agent.Tools)
 	agent = domain.NormalizeAgentConfig(agent)
 	agent.Archived = false
 	agent.CreatedAt = now
@@ -77,7 +77,7 @@ func (s *FileStore) UpdateAgent(agent domain.Agent) (domain.Agent, error) {
 			}
 			agent.Description = strings.TrimSpace(agent.Description)
 			agent.SystemPrompt = strings.TrimSpace(agent.SystemPrompt)
-			agent.Tools = normalizeTools(agent.Tools)
+			agent.Tools = NormalizeTools(agent.Tools)
 			agent = domain.NormalizeAgentConfig(agent)
 			agent.Archived = s.data.Agents[i].Archived
 			agent.CreatedAt = s.data.Agents[i].CreatedAt
@@ -125,10 +125,10 @@ func (s *FileStore) GetDefaultAgent() (domain.Agent, bool, error) {
 }
 
 func (s *FileStore) seedDefaultAgentsLocked() {
-	s.data.Agents = defaultAgents(time.Now().UTC())
+	s.data.Agents = DefaultAgents(time.Now().UTC())
 }
 
-func defaultAgents(now time.Time) []domain.Agent {
+func DefaultAgents(now time.Time) []domain.Agent {
 	agents := []domain.Agent{
 		{
 			ID:           "agent_research",
@@ -175,7 +175,7 @@ func defaultAgents(now time.Time) []domain.Agent {
 
 func (s *FileStore) migrateDefaultAgentsLocked() bool {
 	now := time.Now().UTC()
-	defaults := defaultAgents(now)
+	defaults := DefaultAgents(now)
 	defaultByID := make(map[string]domain.Agent, len(defaults))
 	for _, agent := range defaults {
 		defaultByID[agent.ID] = agent
@@ -244,7 +244,7 @@ func oldDefaultAgentText(id string) domain.Agent {
 	}
 }
 
-func normalizeTools(items []string) []string {
+func NormalizeTools(items []string) []string {
 	seen := map[string]bool{}
 	tools := make([]string, 0, len(items))
 	for _, item := range items {

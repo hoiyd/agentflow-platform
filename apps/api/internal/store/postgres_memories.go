@@ -13,7 +13,7 @@ import (
 
 func (s *PostgresStore) CreateMemoryCandidate(candidate domain.MemoryCandidate) (domain.MemoryCandidate, bool, error) {
 	var err error
-	candidate, err = normalizeMemoryCandidate(candidate)
+	candidate, err = NormalizeMemoryCandidate(candidate)
 	if err != nil {
 		return domain.MemoryCandidate{}, false, err
 	}
@@ -27,7 +27,7 @@ func (s *PostgresStore) CreateMemoryCandidate(candidate domain.MemoryCandidate) 
 		return domain.MemoryCandidate{}, false, err
 	}
 	if withdrawn {
-		candidate = suppressMemoryCandidate(candidate)
+		candidate = SuppressMemoryCandidate(candidate)
 	}
 	result, err := tx.Exec(`
 		INSERT INTO memory_candidates (
@@ -88,10 +88,10 @@ func (s *PostgresStore) ListMemoryCandidates(conversationID string) ([]domain.Me
 
 func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
 	now := time.Now().UTC()
-	memory.WorkspaceID = normalizeWorkspaceID(memory.WorkspaceID)
+	memory.WorkspaceID = NormalizeWorkspaceID(memory.WorkspaceID)
 	memory.ID = strings.TrimSpace(memory.ID)
 	if memory.ID == "" {
-		memory.ID = newID("mem")
+		memory.ID = NewID("mem")
 	}
 	memory.Kind = strings.TrimSpace(memory.Kind)
 	if memory.Kind == "" {
@@ -146,7 +146,7 @@ func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.Memo
 	}
 	existing, err := scanMemory(tx.QueryRow(`SELECT `+memoryColumns+` FROM memories WHERE id=$1`, memory.ID))
 	if err == nil {
-		if !sameMemoryCreate(existing, memory) {
+		if !SameMemoryCreate(existing, memory) {
 			return domain.Memory{}, ErrMemoryConflict
 		}
 		return existing, nil
@@ -172,7 +172,7 @@ func (s *PostgresStore) CreateMemory(memory domain.Memory, embedding domain.Memo
 }
 
 func (s *PostgresStore) SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
-	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
+	search.WorkspaceID = NormalizeWorkspaceID(search.WorkspaceID)
 	if len(search.Embedding) != 1536 {
 		return nil, fmt.Errorf("memory search embedding dimensions must be 1536, got %d", len(search.Embedding))
 	}

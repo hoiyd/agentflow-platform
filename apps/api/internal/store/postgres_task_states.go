@@ -104,9 +104,9 @@ func (s *PostgresStore) ApplyTaskStatePatch(conversationID string, patch domain.
 	now := time.Now().UTC()
 	next, err := domain.ApplyTaskStatePatch(current, patch, now)
 	if err != nil {
-		return domain.TaskStateRevision{}, classifyTaskStateValidation(err)
+		return domain.TaskStateRevision{}, ClassifyTaskStateValidation(err)
 	}
-	source = normalizeTaskStateSource(source)
+	source = NormalizeTaskStateSource(source)
 	patchJSON, err := json.Marshal(patch)
 	if err != nil {
 		return domain.TaskStateRevision{}, err
@@ -120,7 +120,7 @@ func (s *PostgresStore) ApplyTaskStatePatch(conversationID string, patch domain.
 		return domain.TaskStateRevision{}, err
 	}
 	revision := domain.TaskStateRevision{
-		ID: newID("tsr"), WorkspaceID: normalizeWorkspaceID(workspaceID), ConversationID: conversationID,
+		ID: NewID("tsr"), WorkspaceID: NormalizeWorkspaceID(workspaceID), ConversationID: conversationID,
 		Version: next.Version, PreviousVersion: current.Version, Patch: patch, State: next,
 		Source: source, CreatedAt: now,
 	}
@@ -170,7 +170,7 @@ func validatePostgresTaskStateSource(tx *sql.Tx, conversationID string, source d
 			return err
 		}
 		if !valid {
-			return classifyTaskStateValidation(errors.New("task state source run does not belong to conversation"))
+			return ClassifyTaskStateValidation(errors.New("task state source run does not belong to conversation"))
 		}
 	}
 	if messageID := strings.TrimSpace(source.SourceMessageID); messageID != "" {
@@ -179,7 +179,7 @@ func validatePostgresTaskStateSource(tx *sql.Tx, conversationID string, source d
 			return err
 		}
 		if !valid {
-			return classifyTaskStateValidation(errors.New("task state source message does not belong to conversation"))
+			return ClassifyTaskStateValidation(errors.New("task state source message does not belong to conversation"))
 		}
 	}
 	return nil

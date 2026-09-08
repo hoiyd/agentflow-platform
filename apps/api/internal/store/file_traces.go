@@ -26,7 +26,7 @@ func (s *FileStore) CreateCollaborationStep(step domain.CollaborationStep) (doma
 	now := time.Now().UTC()
 	step.ID = strings.TrimSpace(step.ID)
 	if step.ID == "" {
-		step.ID = newID("step")
+		step.ID = NewID("step")
 	}
 	step.Role = strings.TrimSpace(step.Role)
 	if step.Role == "" {
@@ -105,7 +105,7 @@ func (s *FileStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, erro
 			next = existing.Sequence + 1
 		}
 	}
-	event, err := prepareRunEvent(event, next, time.Now().UTC())
+	event, err := PrepareRunEvent(event, next, time.Now().UTC())
 	if err != nil {
 		return domain.RunEvent{}, err
 	}
@@ -113,10 +113,10 @@ func (s *FileStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, erro
 	return event, s.saveLocked()
 }
 
-func prepareRunEvent(event domain.RunEvent, sequence int64, now time.Time) (domain.RunEvent, error) {
+func PrepareRunEvent(event domain.RunEvent, sequence int64, now time.Time) (domain.RunEvent, error) {
 	event.ID = strings.TrimSpace(event.ID)
 	if event.ID == "" {
-		event.ID = newID("event")
+		event.ID = NewID("event")
 	}
 	if event.Type == "" {
 		return domain.RunEvent{}, errors.New("run event type is required")
@@ -185,7 +185,7 @@ func (s *FileStore) ApplyRunUsage(entry domain.RunUsageEntry) (domain.RunUsageLe
 	if !ok {
 		return domain.RunUsageLedger{}, false, ErrNotFound("run")
 	}
-	if err := validateUsageEntry(entry); err != nil {
+	if err := ValidateUsageEntry(entry); err != nil {
 		return domain.RunUsageLedger{}, false, err
 	}
 	entries := s.runUsageEntriesForRunLocked(entry.RunID)
@@ -193,20 +193,20 @@ func (s *FileStore) ApplyRunUsage(entry domain.RunUsageEntry) (domain.RunUsageLe
 		if existing.OperationID != entry.OperationID || existing.Kind != entry.Kind {
 			continue
 		}
-		ledger := budget.BuildLedger(entry.RunID, runBudget(run), entries)
-		if !sameUsageEntry(existing, entry) {
+		ledger := budget.BuildLedger(entry.RunID, RunBudget(run), entries)
+		if !SameUsageEntry(existing, entry) {
 			return ledger, false, errors.New("run usage operation already recorded with different values")
 		}
 		return ledger, false, nil
 	}
-	if entry.Kind == domain.UsageModelSettlement && !hasUsageReservation(entries, entry.OperationID) {
-		return budget.BuildLedger(entry.RunID, runBudget(run), entries), false, errors.New("model usage settlement has no reservation")
+	if entry.Kind == domain.UsageModelSettlement && !HasUsageReservation(entries, entry.OperationID) {
+		return budget.BuildLedger(entry.RunID, RunBudget(run), entries), false, errors.New("model usage settlement has no reservation")
 	}
 	proposed := append(append([]domain.RunUsageEntry(nil), entries...), entry)
-	ledger := budget.BuildLedger(entry.RunID, runBudget(run), proposed)
+	ledger := budget.BuildLedger(entry.RunID, RunBudget(run), proposed)
 	if entry.Kind != domain.UsageModelSettlement {
-		current := budget.BuildLedger(entry.RunID, runBudget(run), entries)
-		if err := budget.Check(runBudget(run), current.Totals, budget.EntryTotals(entry), entry.OperationID, entry.Purpose); err != nil {
+		current := budget.BuildLedger(entry.RunID, RunBudget(run), entries)
+		if err := budget.Check(RunBudget(run), current.Totals, budget.EntryTotals(entry), entry.OperationID, entry.Purpose); err != nil {
 			return current, false, err
 		}
 	}
@@ -216,7 +216,7 @@ func (s *FileStore) ApplyRunUsage(entry domain.RunUsageEntry) (domain.RunUsageLe
 		return domain.RunUsageLedger{}, false, err
 	}
 	if entry.Kind == domain.UsageModelSettlement {
-		if err := budget.CheckTotals(runBudget(run), ledger.Totals, entry.OperationID, entry.Purpose); err != nil {
+		if err := budget.CheckTotals(RunBudget(run), ledger.Totals, entry.OperationID, entry.Purpose); err != nil {
 			return ledger, true, err
 		}
 	}
@@ -230,7 +230,7 @@ func (s *FileStore) GetRunUsageLedger(runID string) (domain.RunUsageLedger, bool
 	if !ok {
 		return domain.RunUsageLedger{}, false, nil
 	}
-	return budget.BuildLedger(runID, runBudget(run), s.runUsageEntriesForRunLocked(runID)), true, nil
+	return budget.BuildLedger(runID, RunBudget(run), s.runUsageEntriesForRunLocked(runID)), true, nil
 }
 
 func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
@@ -248,8 +248,8 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	messages := s.messagesForConversationLocked(run.ConversationID)
 	steps := s.stepsForRunLocked(runID)
 	runEvents := s.runEventsForRunLocked(runID)
-	usageLedger := budget.BuildLedger(runID, runBudget(run), s.runUsageEntriesForRunLocked(runID))
-	verificationEvidence := verificationEvidenceForRun(s.data.VerificationEvidence, runID)
+	usageLedger := budget.BuildLedger(runID, RunBudget(run), s.runUsageEntriesForRunLocked(runID))
+	verificationEvidence := VerificationEvidenceForRun(s.data.VerificationEvidence, runID)
 	readModel := projection.BuildSnapshot(run, runEvents, usageLedger, verificationEvidence)
 	checkpoints := make([]domain.StageCheckpoint, 0)
 	for _, item := range s.data.StageCheckpoints {
@@ -260,13 +260,13 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	toolEffectRecords := make([]domain.ToolEffectRecord, 0)
 	for _, item := range s.data.ToolEffects {
 		if item.RunID == runID {
-			toolEffectRecords = append(toolEffectRecords, cloneToolEffect(item))
+			toolEffectRecords = append(toolEffectRecords, CloneToolEffect(item))
 		}
 	}
 	taskStateRevisions := make([]domain.TaskStateRevision, 0)
 	for _, item := range s.data.TaskStateRevisions {
 		if item.ConversationID == run.ConversationID {
-			taskStateRevisions = append(taskStateRevisions, cloneTaskStateRevision(item))
+			taskStateRevisions = append(taskStateRevisions, CloneTaskStateRevision(item))
 		}
 	}
 	sort.Slice(taskStateRevisions, func(i, j int) bool { return taskStateRevisions[i].Version < taskStateRevisions[j].Version })
@@ -283,9 +283,9 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	}
 	sort.Slice(childDelegations, func(i, j int) bool { return childDelegations[i].CreatedAt.Before(childDelegations[j].CreatedAt) })
 	replay := domain.RunReplay{
-		Run:                   cloneRun(run),
+		Run:                   CloneRun(run),
 		Projection:            readModel,
-		RuntimeSnapshot:       cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
+		RuntimeSnapshot:       CloneRuntimeSnapshotValue(run.RuntimeSnapshot),
 		Conversation:          conversation,
 		Messages:              messages,
 		Steps:                 steps,
@@ -294,9 +294,9 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		RunEvents:             runEvents,
 		StageCheckpoints:      checkpoints,
 		ToolEffects:           domain.SummarizeToolEffects(toolEffectRecords),
-		ToolArtifacts:         toolArtifactsForRun(s.data.ToolArtifacts, runID),
+		ToolArtifacts:         ToolArtifactsForRun(s.data.ToolArtifacts, runID),
 		VerificationEvidence:  verificationEvidence,
-		VerificationArtifacts: verificationArtifactsForRun(s.data.VerificationArtifacts, runID),
+		VerificationArtifacts: VerificationArtifactsForRun(s.data.VerificationArtifacts, runID),
 		TaskStateRevisions:    taskStateRevisions,
 		ParentDelegation:      parentDelegation,
 		ChildDelegations:      childDelegations,
@@ -305,23 +305,23 @@ func (s *FileStore) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 	return replay, true, nil
 }
 
-func cloneRuntimeSnapshot(snapshot domain.RuntimeSnapshot) *domain.RuntimeSnapshot {
+func CloneRuntimeSnapshot(snapshot domain.RuntimeSnapshot) *domain.RuntimeSnapshot {
 	bytes, _ := json.Marshal(snapshot)
 	var cloned domain.RuntimeSnapshot
 	_ = json.Unmarshal(bytes, &cloned)
 	return &cloned
 }
 
-func cloneRuntimeSnapshotValue(snapshot *domain.RuntimeSnapshot) *domain.RuntimeSnapshot {
+func CloneRuntimeSnapshotValue(snapshot *domain.RuntimeSnapshot) *domain.RuntimeSnapshot {
 	if snapshot == nil {
 		return nil
 	}
-	return cloneRuntimeSnapshot(*snapshot)
+	return CloneRuntimeSnapshot(*snapshot)
 }
 
-func cloneRun(run domain.Run) domain.Run {
-	run.RuntimeSnapshot = cloneRuntimeSnapshotValue(run.RuntimeSnapshot)
-	run.CompletionContract = cloneCompletionContract(run.CompletionContract)
+func CloneRun(run domain.Run) domain.Run {
+	run.RuntimeSnapshot = CloneRuntimeSnapshotValue(run.RuntimeSnapshot)
+	run.CompletionContract = CloneCompletionContract(run.CompletionContract)
 	return run
 }
 
@@ -341,14 +341,14 @@ func (s *FileStore) runUsageEntriesForRunLocked(runID string) []domain.RunUsageE
 	return entries
 }
 
-func runBudget(run domain.Run) domain.RuntimeRunBudget {
+func RunBudget(run domain.Run) domain.RuntimeRunBudget {
 	if run.RuntimeSnapshot == nil || run.RuntimeSnapshot.RunBudget == nil {
 		return domain.RuntimeRunBudget{}
 	}
 	return *run.RuntimeSnapshot.RunBudget
 }
 
-func validateUsageEntry(entry domain.RunUsageEntry) error {
+func ValidateUsageEntry(entry domain.RunUsageEntry) error {
 	if strings.TrimSpace(entry.ID) == "" || strings.TrimSpace(entry.RunID) == "" || strings.TrimSpace(entry.OperationID) == "" {
 		return errors.New("run usage requires id, run_id, and operation_id")
 	}
@@ -376,7 +376,7 @@ func validateUsageEntry(entry domain.RunUsageEntry) error {
 	return nil
 }
 
-func hasUsageReservation(entries []domain.RunUsageEntry, operationID string) bool {
+func HasUsageReservation(entries []domain.RunUsageEntry, operationID string) bool {
 	for _, entry := range entries {
 		if entry.OperationID == operationID && entry.Kind == domain.UsageModelReservation {
 			return true
@@ -385,13 +385,13 @@ func hasUsageReservation(entries []domain.RunUsageEntry, operationID string) boo
 	return false
 }
 
-func sameUsageEntry(left, right domain.RunUsageEntry) bool {
+func SameUsageEntry(left, right domain.RunUsageEntry) bool {
 	left.ID, right.ID = "", ""
 	left.Timestamp, right.Timestamp = time.Time{}, time.Time{}
 	return left == right
 }
 
-func cloneCompletionContract(contract *domain.CompletionContract) *domain.CompletionContract {
+func CloneCompletionContract(contract *domain.CompletionContract) *domain.CompletionContract {
 	if contract == nil {
 		return nil
 	}
@@ -401,17 +401,17 @@ func cloneCompletionContract(contract *domain.CompletionContract) *domain.Comple
 	return &cloned
 }
 
-func verificationEvidenceForRun(items []domain.VerificationEvidence, runID string) []domain.VerificationEvidence {
+func VerificationEvidenceForRun(items []domain.VerificationEvidence, runID string) []domain.VerificationEvidence {
 	result := []domain.VerificationEvidence{}
 	for _, item := range items {
 		if item.RunID == runID {
-			result = append(result, cloneVerificationEvidence(item))
+			result = append(result, CloneVerificationEvidence(item))
 		}
 	}
 	return result
 }
 
-func cloneVerificationEvidence(evidence domain.VerificationEvidence) domain.VerificationEvidence {
+func CloneVerificationEvidence(evidence domain.VerificationEvidence) domain.VerificationEvidence {
 	evidence.ArtifactIDs = append([]string(nil), evidence.ArtifactIDs...)
 	if evidence.Details == nil {
 		evidence.Details = map[string]any{}
@@ -423,7 +423,7 @@ func cloneVerificationEvidence(evidence domain.VerificationEvidence) domain.Veri
 	return evidence
 }
 
-func verificationArtifactsForRun(items []domain.VerificationArtifact, runID string) []domain.VerificationArtifact {
+func VerificationArtifactsForRun(items []domain.VerificationArtifact, runID string) []domain.VerificationArtifact {
 	result := []domain.VerificationArtifact{}
 	for _, item := range items {
 		if item.RunID == runID {

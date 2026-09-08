@@ -14,7 +14,7 @@ import (
 )
 
 func (s *FileStore) CreateToolArtifact(artifact domain.ToolArtifact, content []byte) (domain.ToolArtifact, error) {
-	if err := validateToolArtifact(artifact, content); err != nil {
+	if err := ValidateToolArtifact(artifact, content); err != nil {
 		return domain.ToolArtifact{}, err
 	}
 	s.mu.Lock()
@@ -84,7 +84,7 @@ func (s *FileStore) ListToolArtifacts(runID string) ([]domain.ToolArtifact, erro
 	now := time.Now().UTC()
 	for _, artifact := range s.data.ToolArtifacts {
 		if artifact.RunID == runID {
-			artifact.Expired = toolArtifactExpired(artifact, now)
+			artifact.Expired = ToolArtifactExpired(artifact, now)
 			artifacts = append(artifacts, artifact)
 		}
 	}
@@ -93,7 +93,7 @@ func (s *FileStore) ListToolArtifacts(runID string) ([]domain.ToolArtifact, erro
 }
 
 func (s *FileStore) ReadToolArtifact(runID string, artifactID string, offset int, limit int) (domain.ToolArtifactRead, error) {
-	offset, limit, err := normalizeArtifactRead(offset, limit)
+	offset, limit, err := NormalizeArtifactRead(offset, limit)
 	if err != nil {
 		return domain.ToolArtifactRead{}, err
 	}
@@ -103,7 +103,7 @@ func (s *FileStore) ReadToolArtifact(runID string, artifactID string, offset int
 	if !ok {
 		return domain.ToolArtifactRead{}, ErrNotFound("tool artifact")
 	}
-	if toolArtifactExpired(artifact, time.Now().UTC()) {
+	if ToolArtifactExpired(artifact, time.Now().UTC()) {
 		return domain.ToolArtifactRead{}, ErrToolArtifactExpired
 	}
 	if offset > artifact.StoredByteSize {
@@ -134,7 +134,7 @@ func (s *FileStore) ReadToolArtifact(runID string, artifactID string, offset int
 }
 
 func (s *FileStore) SearchToolArtifact(runID string, artifactID string, query string, maxMatches int) (domain.ToolArtifactSearchResult, error) {
-	query, maxMatches, err := normalizeArtifactSearch(query, maxMatches)
+	query, maxMatches, err := NormalizeArtifactSearch(query, maxMatches)
 	if err != nil {
 		return domain.ToolArtifactSearchResult{}, err
 	}
@@ -146,7 +146,7 @@ func (s *FileStore) SearchToolArtifact(runID string, artifactID string, query st
 	if err != nil {
 		return domain.ToolArtifactSearchResult{}, err
 	}
-	return searchToolArtifact(artifact, content, query, maxMatches), nil
+	return SearchToolArtifact(artifact, content, query, maxMatches), nil
 }
 
 func (s *FileStore) toolArtifactLocked(runID string, artifactID string) (domain.ToolArtifact, bool) {
@@ -165,7 +165,7 @@ func (s *FileStore) toolArtifactMetadata(runID string, artifactID string) (domai
 }
 
 func (s *FileStore) readCompleteToolArtifact(artifact domain.ToolArtifact) ([]byte, error) {
-	if toolArtifactExpired(artifact, time.Now().UTC()) {
+	if ToolArtifactExpired(artifact, time.Now().UTC()) {
 		return nil, ErrToolArtifactExpired
 	}
 	path, err := s.toolArtifactPath(artifact.ID)
@@ -176,7 +176,7 @@ func (s *FileStore) readCompleteToolArtifact(artifact domain.ToolArtifact) ([]by
 	if err != nil {
 		return nil, err
 	}
-	if len(content) != artifact.StoredByteSize || toolArtifactContentHash(content) != artifact.ContentHash {
+	if len(content) != artifact.StoredByteSize || ToolArtifactContentHash(content) != artifact.ContentHash {
 		return nil, errors.New("tool artifact content integrity check failed")
 	}
 	return content, nil
@@ -194,7 +194,7 @@ func (s *FileStore) purgeExpiredToolArtifactContent(now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, artifact := range s.data.ToolArtifacts {
-		if !toolArtifactExpired(artifact, now) {
+		if !ToolArtifactExpired(artifact, now) {
 			continue
 		}
 		path, err := s.toolArtifactPath(artifact.ID)

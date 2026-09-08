@@ -1,16 +1,16 @@
-package store
+package fixturestore
 
 import (
+	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
 	"errors"
 	"sort"
 	"strings"
 	"time"
-
-	"agentflow-platform/apps/api/internal/domain"
 )
 
-func (s *FileStore) CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error) {
-	document, chunks, embeddings, err := PrepareDocumentWrite(document, chunks, embeddings)
+func (s *Store) CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error) {
+	document, chunks, embeddings, err := store.PrepareDocumentWrite(document, chunks, embeddings)
 	if err != nil {
 		return domain.Document{}, err
 	}
@@ -33,13 +33,13 @@ func (s *FileStore) CreateDocument(document domain.Document, chunks []domain.Doc
 	}
 	if existing != nil {
 		if existing.Version == document.Version && existing.ContentHash != document.ContentHash {
-			return domain.Document{}, DocumentVersionConflict(*existing, document)
+			return domain.Document{}, store.DocumentVersionConflict(*existing, document)
 		}
 		if len(replacedDocumentIDs) == 1 && existing.Version == document.Version && existing.ContentHash == document.ContentHash && existing.IndexIdentity == document.IndexIdentity {
 			return *existing, nil
 		}
 		document.CreatedAt = existing.CreatedAt
-		BindDocumentID(&document, chunks, embeddings, existing.ID)
+		store.BindDocumentID(&document, chunks, embeddings, existing.ID)
 	}
 
 	next := s.data
@@ -76,19 +76,15 @@ func (s *FileStore) CreateDocument(document domain.Document, chunks []domain.Doc
 	}
 	next.ChunkEmbeddings = append(next.ChunkEmbeddings, embeddings...)
 
-	previous := s.data
 	s.data = next
-	if err := s.saveLocked(); err != nil {
-		s.data = previous
-		return domain.Document{}, err
-	}
+
 	return document, nil
 }
 
-func (s *FileStore) ListDocumentIndexIdentities(workspaceID string) ([]domain.DocumentIndexIdentity, error) {
+func (s *Store) ListDocumentIndexIdentities(workspaceID string) ([]domain.DocumentIndexIdentity, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	workspaceID = NormalizeWorkspaceID(workspaceID)
+	workspaceID = store.NormalizeWorkspaceID(workspaceID)
 	seen := map[domain.DocumentIndexIdentity]bool{}
 	items := []domain.DocumentIndexIdentity{}
 	for _, document := range s.data.Documents {
@@ -100,7 +96,7 @@ func (s *FileStore) ListDocumentIndexIdentities(workspaceID string) ([]domain.Do
 	return items, nil
 }
 
-func (s *FileStore) ListDocuments() ([]domain.Document, error) {
+func (s *Store) ListDocuments() ([]domain.Document, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -129,12 +125,12 @@ func (s *FileStore) ListDocuments() ([]domain.Document, error) {
 	return documents, nil
 }
 
-func (s *FileStore) ListDocumentsByWorkspace(workspaceID string) ([]domain.Document, error) {
+func (s *Store) ListDocumentsByWorkspace(workspaceID string) ([]domain.Document, error) {
 	documents, err := s.ListDocuments()
 	if err != nil {
 		return nil, err
 	}
-	workspaceID = NormalizeWorkspaceID(workspaceID)
+	workspaceID = store.NormalizeWorkspaceID(workspaceID)
 	items := make([]domain.Document, 0, len(documents))
 	for _, document := range documents {
 		if document.WorkspaceID == workspaceID {
@@ -144,7 +140,7 @@ func (s *FileStore) ListDocumentsByWorkspace(workspaceID string) ([]domain.Docum
 	return items, nil
 }
 
-func (s *FileStore) GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error) {
+func (s *Store) GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -183,21 +179,21 @@ func (s *FileStore) GetDocument(id string) (domain.Document, []domain.DocumentCh
 	return document, chunks, true, nil
 }
 
-func (s *FileStore) GetDocumentInWorkspace(workspaceID string, id string) (domain.Document, []domain.DocumentChunk, bool, error) {
+func (s *Store) GetDocumentInWorkspace(workspaceID string, id string) (domain.Document, []domain.DocumentChunk, bool, error) {
 	document, chunks, ok, err := s.GetDocument(id)
-	if err != nil || !ok || document.WorkspaceID != NormalizeWorkspaceID(workspaceID) {
+	if err != nil || !ok || document.WorkspaceID != store.NormalizeWorkspaceID(workspaceID) {
 		return domain.Document{}, nil, false, err
 	}
 	return document, chunks, true, nil
 }
 
-func (s *FileStore) DeleteDocument(id string) error {
+func (s *Store) DeleteDocument(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return ErrNotFound("document")
+		return store.ErrNotFound("document")
 	}
 	found := false
 	documents := s.data.Documents[:0]
@@ -209,7 +205,7 @@ func (s *FileStore) DeleteDocument(id string) error {
 		documents = append(documents, document)
 	}
 	if !found {
-		return ErrNotFound("document")
+		return store.ErrNotFound("document")
 	}
 
 	deletedChunkIDs := map[string]bool{}
@@ -233,22 +229,22 @@ func (s *FileStore) DeleteDocument(id string) error {
 	delete(s.data.DocumentContents, id)
 	s.data.DocumentChunks = chunks
 	s.data.ChunkEmbeddings = embeddings
-	return s.saveLocked()
+	return nil
 }
 
-func (s *FileStore) DeleteDocumentInWorkspace(workspaceID string, id string) error {
+func (s *Store) DeleteDocumentInWorkspace(workspaceID string, id string) error {
 	if _, _, ok, err := s.GetDocumentInWorkspace(workspaceID, id); err != nil {
 		return err
 	} else if !ok {
-		return ErrNotFound("document")
+		return store.ErrNotFound("document")
 	}
 	return s.DeleteDocument(id)
 }
 
-func (s *FileStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+func (s *Store) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	search.WorkspaceID = NormalizeWorkspaceID(search.WorkspaceID)
+	search.WorkspaceID = store.NormalizeWorkspaceID(search.WorkspaceID)
 
 	limit := search.Limit
 	if limit <= 0 {
@@ -270,7 +266,7 @@ func (s *FileStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain
 	now := time.Now().UTC()
 	for _, chunk := range s.data.DocumentChunks {
 		document, ok := documentByID[chunk.DocumentID]
-		if !ok || !DocumentChunkMatchesSearch(document, chunk, search) {
+		if !ok || !store.DocumentChunkMatchesSearch(document, chunk, search) {
 			continue
 		}
 		embedding, ok := embeddingByChunkID[chunk.ID]
@@ -283,11 +279,11 @@ func (s *FileStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain
 		if search.EmbeddingModel != "" && embedding.Model != search.EmbeddingModel {
 			continue
 		}
-		similarity := CosineSimilarity(search.Embedding, embedding.Embedding)
+		similarity := store.CosineSimilarity(search.Embedding, embedding.Embedding)
 		if search.MinSimilarity > 0 && similarity < search.MinSimilarity {
 			continue
 		}
-		recencyBoost := MemoryRecencyBoost(now, chunk.CreatedAt)
+		recencyBoost := store.MemoryRecencyBoost(now, chunk.CreatedAt)
 		items = append(items, domain.RetrievedDocumentChunk{
 			Document:     document,
 			Chunk:        chunk,
@@ -305,10 +301,10 @@ func (s *FileStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain
 	return items, nil
 }
 
-func (s *FileStore) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+func (s *Store) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	search.WorkspaceID = NormalizeWorkspaceID(search.WorkspaceID)
+	search.WorkspaceID = store.NormalizeWorkspaceID(search.WorkspaceID)
 
 	limit := search.Limit
 	if limit <= 0 {
@@ -326,14 +322,14 @@ func (s *FileStore) SearchDocumentChunksLexical(search domain.DocumentSearch) ([
 	now := time.Now().UTC()
 	for _, chunk := range s.data.DocumentChunks {
 		document, ok := documentByID[chunk.DocumentID]
-		if !ok || !DocumentChunkMatchesSearch(document, chunk, search) {
+		if !ok || !store.DocumentChunkMatchesSearch(document, chunk, search) {
 			continue
 		}
-		lexicalScore := DocumentChunkLexicalScore(search, document, chunk)
+		lexicalScore := store.DocumentChunkLexicalScore(search, document, chunk)
 		if lexicalScore <= 0 {
 			continue
 		}
-		recencyBoost := MemoryRecencyBoost(now, chunk.CreatedAt)
+		recencyBoost := store.MemoryRecencyBoost(now, chunk.CreatedAt)
 		items = append(items, domain.RetrievedDocumentChunk{
 			Document:     document,
 			Chunk:        chunk,
@@ -354,10 +350,10 @@ func (s *FileStore) SearchDocumentChunksLexical(search domain.DocumentSearch) ([
 	return items, nil
 }
 
-func (s *FileStore) ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error) {
+func (s *Store) ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	search.WorkspaceID = NormalizeWorkspaceID(search.WorkspaceID)
+	search.WorkspaceID = store.NormalizeWorkspaceID(search.WorkspaceID)
 
 	documentID := strings.TrimSpace(search.DocumentID)
 	if documentID == "" {
@@ -372,18 +368,18 @@ func (s *FileStore) ListDocumentContextChunks(search domain.DocumentContextSearc
 			break
 		}
 	}
-	if !found || NormalizeWorkspaceID(document.WorkspaceID) != search.WorkspaceID {
+	if !found || store.NormalizeWorkspaceID(document.WorkspaceID) != search.WorkspaceID {
 		return []domain.RetrievedDocumentChunk{}, nil
 	}
 
 	filter := domain.DocumentSearch{WorkspaceID: search.WorkspaceID, Metadata: search.Metadata}
 	items := make([]domain.RetrievedDocumentChunk, 0)
 	for _, chunk := range s.data.DocumentChunks {
-		if chunk.DocumentID != documentID || !DocumentChunkMatchesSearch(document, chunk, filter) {
+		if chunk.DocumentID != documentID || !store.DocumentChunkMatchesSearch(document, chunk, filter) {
 			continue
 		}
 		sameParent := strings.TrimSpace(search.ParentID) != "" && chunk.ParentID == strings.TrimSpace(search.ParentID)
-		adjacent := search.NeighborWindow > 0 && AbsInt(chunk.ChunkIndex-search.ChunkIndex) <= search.NeighborWindow
+		adjacent := search.NeighborWindow > 0 && store.AbsInt(chunk.ChunkIndex-search.ChunkIndex) <= search.NeighborWindow
 		if !sameParent && !adjacent {
 			continue
 		}
@@ -394,87 +390,4 @@ func (s *FileStore) ListDocumentContextChunks(search domain.DocumentContextSearc
 		return items[i].Chunk.ChunkIndex < items[j].Chunk.ChunkIndex
 	})
 	return items, nil
-}
-
-func DocumentChunkMatchesSearch(document domain.Document, chunk domain.DocumentChunk, search domain.DocumentSearch) bool {
-	if NormalizeWorkspaceID(document.WorkspaceID) != NormalizeWorkspaceID(search.WorkspaceID) {
-		return false
-	}
-	for key, expected := range search.Metadata {
-		value, ok := chunk.Metadata[key]
-		if !ok {
-			value, ok = document.Metadata[key]
-		}
-		if !ok || strings.TrimSpace(expected) != strings.TrimSpace(toString(value)) {
-			return false
-		}
-	}
-	return true
-}
-
-func DocumentChunkLexicalScore(search domain.DocumentSearch, document domain.Document, chunk domain.DocumentChunk) float64 {
-	query := strings.ToLower(strings.TrimSpace(search.Query))
-	if query == "" {
-		return 0
-	}
-	text := strings.ToLower(strings.Join([]string{
-		document.Title,
-		document.SourceURI,
-		chunk.Content,
-		toString(document.Metadata["filename"]),
-		toString(chunk.Metadata["title"]),
-		toString(chunk.Metadata["heading_path"]),
-	}, " "))
-	score := 0.0
-	if strings.Contains(text, query) {
-		score = 1
-	}
-	if lexicalIdentifierMatch(query, text) {
-		score = 1
-	}
-	if len(search.LexicalTerms) > 0 {
-		matches := 0
-		for _, term := range search.LexicalTerms {
-			if strings.Contains(text, strings.ToLower(strings.TrimSpace(term))) {
-				matches++
-			}
-		}
-		coverage := float64(matches) / float64(len(search.LexicalTerms))
-		if candidate := coverage * 0.60; candidate > score {
-			score = candidate
-		}
-	}
-	if score > 1 {
-		return 1
-	}
-	return score
-}
-
-func lexicalIdentifierMatch(query string, text string) bool {
-	for _, token := range strings.Fields(query) {
-		token = strings.Trim(token, ".,;:!?()[]{}<>\"'`，。；：！？（）【】")
-		if len([]rune(token)) < 3 || !containsASCIIDigit(token) {
-			continue
-		}
-		if strings.Contains(text, token) {
-			return true
-		}
-	}
-	return false
-}
-
-func containsASCIIDigit(value string) bool {
-	for _, r := range value {
-		if r >= '0' && r <= '9' {
-			return true
-		}
-	}
-	return false
-}
-
-func AbsInt(value int) int {
-	if value < 0 {
-		return -value
-	}
-	return value
 }

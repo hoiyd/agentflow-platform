@@ -38,12 +38,12 @@ func NormalizeMemoryMutation(command domain.MemoryMutation) (domain.MemoryMutati
 	return command, nil
 }
 
-func memoryCommandHash(memoryID string, command domain.MemoryMutation) string {
+func MemoryCommandHash(memoryID string, command domain.MemoryMutation) string {
 	encoded, _ := json.Marshal(command)
 	return fmt.Sprintf("sha256:%x", sha256.Sum256(append([]byte(memoryID+"\x00"), encoded...)))
 }
 
-func prepareMemoryMutation(current domain.Memory, command domain.MemoryMutation) (domain.MemoryMutationResult, error) {
+func PrepareMemoryMutation(current domain.Memory, command domain.MemoryMutation) (domain.MemoryMutationResult, error) {
 	current.Version = max(1, current.Version)
 	if current.Version != command.ExpectedVersion || current.DeletedAt != nil {
 		return domain.MemoryMutationResult{}, ErrMemoryConflict
@@ -52,7 +52,7 @@ func prepareMemoryMutation(current domain.Memory, command domain.MemoryMutation)
 	actor, _ := redaction.Text(command.Actor)
 	reason, _ := redaction.Text(command.Reason)
 	change := domain.MemoryChange{WorkspaceID: current.WorkspaceID, MemoryID: current.ID, OperationID: command.OperationID,
-		CommandHash: memoryCommandHash(current.ID, command), Action: command.Action, PreviousVersion: current.Version, Version: current.Version + 1,
+		CommandHash: MemoryCommandHash(current.ID, command), Action: command.Action, PreviousVersion: current.Version, Version: current.Version + 1,
 		SourceMessageID: current.SourceMessageID, Actor: actor, Reason: reason, CreatedAt: now}
 	current.Version++
 	current.UpdatedAt = now
@@ -64,13 +64,13 @@ func prepareMemoryMutation(current domain.Memory, command domain.MemoryMutation)
 	return domain.MemoryMutationResult{Memory: current, Change: change, Applied: true}, nil
 }
 
-func sameMemoryCreate(existing, incoming domain.Memory) bool {
+func SameMemoryCreate(existing, incoming domain.Memory) bool {
 	oldMetadata, oldErr := json.Marshal(existing.Metadata)
 	newMetadata, newErr := json.Marshal(incoming.Metadata)
-	return oldErr == nil && newErr == nil && string(oldMetadata) == string(newMetadata) && normalizeWorkspaceID(existing.WorkspaceID) == incoming.WorkspaceID && existing.DeletedAt == nil && max(1, existing.Version) == 1 && existing.Content == incoming.Content && existing.Kind == incoming.Kind && existing.SourceMessageID == incoming.SourceMessageID && existing.UserID == incoming.UserID && existing.ProjectID == incoming.ProjectID && existing.ConversationID == incoming.ConversationID && existing.RunID == incoming.RunID
+	return oldErr == nil && newErr == nil && string(oldMetadata) == string(newMetadata) && NormalizeWorkspaceID(existing.WorkspaceID) == incoming.WorkspaceID && existing.DeletedAt == nil && max(1, existing.Version) == 1 && existing.Content == incoming.Content && existing.Kind == incoming.Kind && existing.SourceMessageID == incoming.SourceMessageID && existing.UserID == incoming.UserID && existing.ProjectID == incoming.ProjectID && existing.ConversationID == incoming.ConversationID && existing.RunID == incoming.RunID
 }
 
-func suppressMemoryCandidate(candidate domain.MemoryCandidate) domain.MemoryCandidate {
+func SuppressMemoryCandidate(candidate domain.MemoryCandidate) domain.MemoryCandidate {
 	candidate.Content = "[withdrawn by memory mutation]"
 	candidate.Status = domain.MemoryCandidateRejected
 	candidate.PolicyReason = "source_memory_mutated"

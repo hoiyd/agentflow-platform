@@ -1,13 +1,13 @@
-package store
+package fixturestore
 
 import (
+	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
 	"errors"
 	"time"
-
-	"agentflow-platform/apps/api/internal/domain"
 )
 
-func (s *FileStore) RepairInterruptedRun(request domain.InterruptedRunRepair) (domain.InterruptedRunRepairResult, error) {
+func (s *Store) RepairInterruptedRun(request domain.InterruptedRunRepair) (domain.InterruptedRunRepairResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -19,11 +19,11 @@ func (s *FileStore) RepairInterruptedRun(request domain.InterruptedRunRepair) (d
 		}
 	}
 	if runIndex < 0 {
-		return domain.InterruptedRunRepairResult{}, ErrNotFound("run")
+		return domain.InterruptedRunRepairResult{}, store.ErrNotFound("run")
 	}
 	run := &s.data.Runs[runIndex]
 	if run.Status != domain.RunRunning || (run.HeartbeatAt != nil && !run.HeartbeatAt.Before(request.StaleBefore)) {
-		return domain.InterruptedRunRepairResult{Run: CloneRun(*run)}, nil
+		return domain.InterruptedRunRepairResult{Run: store.CloneRun(*run)}, nil
 	}
 
 	var cursor int64
@@ -37,21 +37,17 @@ func (s *FileStore) RepairInterruptedRun(request domain.InterruptedRunRepair) (d
 	}
 
 	now := time.Now().UTC()
-	originalRun := CloneRun(*run)
-	originalEventCount := len(s.data.RunEvents)
-	originalSteps := append([]domain.CollaborationStep(nil), s.data.CollaborationSteps...)
-	originalEffects := append([]domain.ToolEffectRecord(nil), s.data.ToolEffects...)
 	appended := make([]domain.RunEvent, 0, len(request.TerminalEvents))
 	for _, item := range request.TerminalEvents {
 		cursor++
 		item.RunID = request.RunID
-		prepared, err := PrepareRunEvent(item, cursor, now)
+		prepared, err := store.PrepareRunEvent(item, cursor, now)
 		if err != nil {
 			return domain.InterruptedRunRepairResult{}, err
 		}
-		s.data.RunEvents = append(s.data.RunEvents, prepared)
 		appended = append(appended, prepared)
 	}
+	s.data.RunEvents = append(s.data.RunEvents, appended...)
 	for index := range s.data.CollaborationSteps {
 		step := &s.data.CollaborationSteps[index]
 		if step.RunID == request.RunID && step.Status == domain.CollaborationStepRunning {
@@ -69,13 +65,7 @@ func (s *FileStore) RepairInterruptedRun(request domain.InterruptedRunRepair) (d
 			effect.UpdatedAt = now
 		}
 	}
-	ApplyRunStatus(run, domain.RunFailedRecoverable, request.ErrorMessage, now)
-	if err := s.saveLocked(); err != nil {
-		s.data.Runs[runIndex] = originalRun
-		s.data.RunEvents = s.data.RunEvents[:originalEventCount]
-		s.data.CollaborationSteps = originalSteps
-		s.data.ToolEffects = originalEffects
-		return domain.InterruptedRunRepairResult{}, err
-	}
-	return domain.InterruptedRunRepairResult{Run: CloneRun(*run), AppendedEvents: appended, Applied: true}, nil
+	store.ApplyRunStatus(run, domain.RunFailedRecoverable, request.ErrorMessage, now)
+
+	return domain.InterruptedRunRepairResult{Run: store.CloneRun(*run), AppendedEvents: appended, Applied: true}, nil
 }

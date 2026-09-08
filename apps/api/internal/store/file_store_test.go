@@ -241,7 +241,7 @@ func TestFileStoreContextCompactionFailureAndLegacyPaths(t *testing.T) {
 	if _, ok, err := fileStore.GetLatestContextCompaction("missing"); err != nil || ok {
 		t.Fatalf("missing latest compaction: ok=%v err=%v", ok, err)
 	}
-	legacy := cloneContextCompaction(domain.ContextCompaction{ID: "cmp-legacy", SourceMessageIDs: []string{"m1", "m2"}})
+	legacy := CloneContextCompaction(domain.ContextCompaction{ID: "cmp-legacy", SourceMessageIDs: []string{"m1", "m2"}})
 	if legacy.Status != domain.ContextCompactionCompleted || legacy.Generation != 1 || legacy.ReplacementSummaryID != "summary:cmp-legacy" || legacy.ShadowedMessageRange.MessageCount != 2 {
 		t.Fatalf("legacy compaction was not normalized: %#v", legacy)
 	}

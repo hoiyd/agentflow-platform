@@ -1,15 +1,15 @@
-package store
+package fixturestore
 
 import (
+	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
 	"errors"
 	"sort"
-	"strings"
-	"time"
 
-	"agentflow-platform/apps/api/internal/domain"
+	"time"
 )
 
-func (s *FileStore) CreateRunWithContract(agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
+func (s *Store) CreateRunWithContract(agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -26,13 +26,13 @@ func (s *FileStore) CreateRunWithContract(agentID string, conversationID string,
 
 	now := time.Now().UTC()
 	run := domain.Run{
-		ID:                 NewID("run"),
+		ID:                 store.NewID("run"),
 		WorkspaceID:        conversation.WorkspaceID,
 		AgentID:            agentID,
 		ConversationID:     conversationID,
 		Status:             domain.RunQueued,
-		RuntimeSnapshot:    CloneRuntimeSnapshot(snapshot),
-		CompletionContract: CloneCompletionContract(contract),
+		RuntimeSnapshot:    store.CloneRuntimeSnapshot(snapshot),
+		CompletionContract: store.CloneCompletionContract(contract),
 		VerificationStatus: domain.VerificationNotRequired,
 		CreatedAt:          now,
 		UpdatedAt:          now,
@@ -40,25 +40,25 @@ func (s *FileStore) CreateRunWithContract(agentID string, conversationID string,
 	if contract != nil {
 		run.VerificationStatus = domain.VerificationPending
 	}
-	stored := CloneRun(run)
+	stored := store.CloneRun(run)
 	s.data.Runs = append(s.data.Runs, stored)
-	return CloneRun(run), s.saveLocked()
+	return store.CloneRun(run), nil
 }
 
-func (s *FileStore) UpdateRunVerificationStatus(id string, status domain.VerificationStatus) (domain.Run, error) {
+func (s *Store) UpdateRunVerificationStatus(id string, status domain.VerificationStatus) (domain.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.data.Runs {
 		if s.data.Runs[i].ID == id {
 			s.data.Runs[i].VerificationStatus = status
 			s.data.Runs[i].UpdatedAt = time.Now().UTC()
-			return CloneRun(s.data.Runs[i]), s.saveLocked()
+			return store.CloneRun(s.data.Runs[i]), nil
 		}
 	}
 	return domain.Run{}, errors.New("run not found")
 }
 
-func (s *FileStore) AppendVerificationRecord(record domain.VerificationRecord) error {
+func (s *Store) AppendVerificationRecord(record domain.VerificationRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.getRunLocked(record.Evidence.RunID); !ok {
@@ -74,25 +74,25 @@ func (s *FileStore) AppendVerificationRecord(record domain.VerificationRecord) e
 			return errors.New("verification artifact does not match evidence")
 		}
 	}
-	s.data.VerificationEvidence = append(s.data.VerificationEvidence, CloneVerificationEvidence(record.Evidence))
+	s.data.VerificationEvidence = append(s.data.VerificationEvidence, store.CloneVerificationEvidence(record.Evidence))
 	s.data.VerificationArtifacts = append(s.data.VerificationArtifacts, record.Artifacts...)
-	return s.saveLocked()
+	return nil
 }
 
-func (s *FileStore) ListVerificationEvidence(runID string) ([]domain.VerificationEvidence, error) {
+func (s *Store) ListVerificationEvidence(runID string) ([]domain.VerificationEvidence, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	items := []domain.VerificationEvidence{}
 	for _, item := range s.data.VerificationEvidence {
 		if item.RunID == runID {
-			items = append(items, CloneVerificationEvidence(item))
+			items = append(items, store.CloneVerificationEvidence(item))
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].StartedAt.Before(items[j].StartedAt) })
 	return items, nil
 }
 
-func (s *FileStore) ListVerificationArtifacts(runID string) ([]domain.VerificationArtifact, error) {
+func (s *Store) ListVerificationArtifacts(runID string) ([]domain.VerificationArtifact, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	items := []domain.VerificationArtifact{}
@@ -105,7 +105,7 @@ func (s *FileStore) ListVerificationArtifacts(runID string) ([]domain.Verificati
 	return items, nil
 }
 
-func (s *FileStore) UpdateRunAgent(id string, agentID string) (domain.Run, error) {
+func (s *Store) UpdateRunAgent(id string, agentID string) (domain.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -116,54 +116,26 @@ func (s *FileStore) UpdateRunAgent(id string, agentID string) (domain.Run, error
 		if s.data.Runs[i].ID == id {
 			s.data.Runs[i].AgentID = agentID
 			s.data.Runs[i].UpdatedAt = time.Now().UTC()
-			return CloneRun(s.data.Runs[i]), s.saveLocked()
+			return store.CloneRun(s.data.Runs[i]), nil
 		}
 	}
 	return domain.Run{}, errors.New("run not found")
 }
 
-func (s *FileStore) UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error) {
+func (s *Store) UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for i := range s.data.Runs {
 		if s.data.Runs[i].ID == id {
-			ApplyRunStatus(&s.data.Runs[i], status, errorMessage, time.Now().UTC())
-			return CloneRun(s.data.Runs[i]), s.saveLocked()
+			store.ApplyRunStatus(&s.data.Runs[i], status, errorMessage, time.Now().UTC())
+			return store.CloneRun(s.data.Runs[i]), nil
 		}
 	}
 	return domain.Run{}, errors.New("run not found")
 }
 
-func ApplyRunStatus(run *domain.Run, status domain.RunStatus, errorMessage string, now time.Time) {
-	wasRunning := run.Status == domain.RunRunning
-	willRun := status == domain.RunRunning
-	if wasRunning && !willRun && run.ExecutionStartedAt != nil {
-		run.ActiveRuntimeMS += max(int64(0), now.Sub(*run.ExecutionStartedAt).Milliseconds())
-		run.ExecutionStartedAt = nil
-	}
-	if !wasRunning && willRun {
-		run.ExecutionStartedAt = &now
-	}
-	run.Status = status
-	run.Error = strings.TrimSpace(errorMessage)
-	run.UpdatedAt = now
-	if status == domain.RunRunning && run.StartedAt == nil {
-		run.StartedAt = &now
-	}
-	if status == domain.RunRunning {
-		run.HeartbeatAt = &now
-		run.CompletedAt = nil
-	}
-	if status == domain.RunWaitingForUser {
-		run.CompletedAt = nil
-	}
-	if status == domain.RunCompleted || status == domain.RunFailed || status == domain.RunFailedRecoverable || status == domain.RunCanceled {
-		run.CompletedAt = &now
-	}
-}
-
-func (s *FileStore) UpdateRunHeartbeat(id string) (domain.Run, error) {
+func (s *Store) UpdateRunHeartbeat(id string) (domain.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -172,13 +144,13 @@ func (s *FileStore) UpdateRunHeartbeat(id string) (domain.Run, error) {
 			now := time.Now().UTC()
 			s.data.Runs[i].HeartbeatAt = &now
 			s.data.Runs[i].UpdatedAt = now
-			return CloneRun(s.data.Runs[i]), s.saveLocked()
+			return store.CloneRun(s.data.Runs[i]), nil
 		}
 	}
 	return domain.Run{}, errors.New("run not found")
 }
 
-func (s *FileStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error) {
+func (s *Store) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -188,7 +160,7 @@ func (s *FileStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error)
 			continue
 		}
 		if run.HeartbeatAt == nil || run.HeartbeatAt.Before(cutoff) {
-			items = append(items, CloneRun(run))
+			items = append(items, store.CloneRun(run))
 		}
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -197,27 +169,27 @@ func (s *FileStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error)
 	return items, nil
 }
 
-func (s *FileStore) GetRun(id string) (domain.Run, bool, error) {
+func (s *Store) GetRun(id string) (domain.Run, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	for _, item := range s.data.Runs {
 		if item.ID == id {
-			return CloneRun(item), true, nil
+			return store.CloneRun(item), true, nil
 		}
 	}
 	return domain.Run{}, false, nil
 }
 
-func (s *FileStore) GetRunInWorkspace(workspaceID string, id string) (domain.Run, bool, error) {
+func (s *Store) GetRunInWorkspace(workspaceID string, id string) (domain.Run, bool, error) {
 	run, ok, err := s.GetRun(id)
-	if err != nil || !ok || run.WorkspaceID != NormalizeWorkspaceID(workspaceID) {
+	if err != nil || !ok || run.WorkspaceID != store.NormalizeWorkspaceID(workspaceID) {
 		return domain.Run{}, false, err
 	}
 	return run, true, nil
 }
 
-func (s *FileStore) ListRuns() ([]domain.Run, error) {
+func (s *Store) ListRuns() ([]domain.Run, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -226,7 +198,7 @@ func (s *FileStore) ListRuns() ([]domain.Run, error) {
 	}
 	items := make([]domain.Run, 0, len(s.data.Runs))
 	for _, run := range s.data.Runs {
-		items = append(items, CloneRun(run))
+		items = append(items, store.CloneRun(run))
 	}
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].CreatedAt.After(items[j].CreatedAt)
@@ -234,12 +206,12 @@ func (s *FileStore) ListRuns() ([]domain.Run, error) {
 	return items, nil
 }
 
-func (s *FileStore) ListRunsByWorkspace(workspaceID string) ([]domain.Run, error) {
+func (s *Store) ListRunsByWorkspace(workspaceID string) ([]domain.Run, error) {
 	runs, err := s.ListRuns()
 	if err != nil {
 		return nil, err
 	}
-	workspaceID = NormalizeWorkspaceID(workspaceID)
+	workspaceID = store.NormalizeWorkspaceID(workspaceID)
 	items := make([]domain.Run, 0, len(runs))
 	for _, run := range runs {
 		if run.WorkspaceID == workspaceID {

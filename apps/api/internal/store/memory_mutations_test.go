@@ -377,7 +377,7 @@ func TestMemoryCandidateWorkspaceUpgrade(t *testing.T) {
 	})
 	t.Run("postgres", func(t *testing.T) {
 		base := openPostgresTestStore(t)
-		schema := newID("h17_upgrade")
+		schema := NewID("h17_upgrade")
 		if _, err := base.db.Exec(`CREATE SCHEMA ` + schema); err != nil {
 			t.Fatal(err)
 		}
@@ -481,7 +481,7 @@ func TestPostgresMemoryMutationWriteFailuresAreAtomic(t *testing.T) {
 			if _, _, err := pg.CreateMemoryCandidate(candidate); err != nil {
 				t.Fatal(err)
 			}
-			name := newID("h17_fault")
+			name := NewID("h17_fault")
 			if _, err := pg.db.Exec(`CREATE FUNCTION ` + name + `() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected memory write failure'; END $$`); err != nil {
 				t.Fatal(err)
 			}

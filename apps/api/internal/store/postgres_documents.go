@@ -11,7 +11,7 @@ import (
 )
 
 func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error) {
-	document, chunks, embeddings, err := prepareDocumentWrite(document, chunks, embeddings)
+	document, chunks, embeddings, err := PrepareDocumentWrite(document, chunks, embeddings)
 	if err != nil {
 		return domain.Document{}, err
 	}
@@ -36,13 +36,13 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 		}
 		if found {
 			if existing.Version == document.Version && existing.ContentHash != document.ContentHash {
-				return domain.Document{}, documentVersionConflict(existing, document)
+				return domain.Document{}, DocumentVersionConflict(existing, document)
 			}
 			if existing.Version == document.Version && existing.ContentHash == document.ContentHash && existing.IndexIdentity == document.IndexIdentity {
 				return existing, nil
 			}
 			document.CreatedAt = existing.CreatedAt
-			bindDocumentID(&document, chunks, embeddings, existing.ID)
+			BindDocumentID(&document, chunks, embeddings, existing.ID)
 			if _, err := tx.Exec(`DELETE FROM documents WHERE id = $1`, existing.ID); err != nil {
 				return domain.Document{}, err
 			}
@@ -145,7 +145,7 @@ func (s *PostgresStore) ListDocumentsByWorkspace(workspaceID string) ([]domain.D
 		FROM documents d
 		LEFT JOIN document_chunks c ON c.document_id = d.id
 		LEFT JOIN document_chunk_embeddings e ON e.chunk_id = c.id
-		WHERE d.workspace_id = $1 GROUP BY d.id ORDER BY d.created_at DESC`, normalizeWorkspaceID(workspaceID))
+		WHERE d.workspace_id = $1 GROUP BY d.id ORDER BY d.created_at DESC`, NormalizeWorkspaceID(workspaceID))
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (s *PostgresStore) ListDocumentIndexIdentities(workspaceID string) ([]domai
 		SELECT DISTINCT chunker_version, embedding_provider, embedding_model, embedding_dimensions
 		FROM documents
 		WHERE workspace_id = $1`,
-		normalizeWorkspaceID(workspaceID))
+		NormalizeWorkspaceID(workspaceID))
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func (s *PostgresStore) GetDocumentInWorkspace(workspaceID string, id string) (d
 		LEFT JOIN document_chunks c ON c.document_id = d.id
 		LEFT JOIN document_chunk_embeddings e ON e.chunk_id = c.id
 		WHERE d.id = $1 AND d.workspace_id = $2
-		GROUP BY d.id`, strings.TrimSpace(id), normalizeWorkspaceID(workspaceID))
+		GROUP BY d.id`, strings.TrimSpace(id), NormalizeWorkspaceID(workspaceID))
 	document, err := scanDocument(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Document{}, nil, false, nil
@@ -282,7 +282,7 @@ func (s *PostgresStore) DeleteDocument(id string) error {
 }
 
 func (s *PostgresStore) DeleteDocumentInWorkspace(workspaceID string, id string) error {
-	result, err := s.db.Exec(`DELETE FROM documents WHERE id = $1 AND workspace_id = $2`, strings.TrimSpace(id), normalizeWorkspaceID(workspaceID))
+	result, err := s.db.Exec(`DELETE FROM documents WHERE id = $1 AND workspace_id = $2`, strings.TrimSpace(id), NormalizeWorkspaceID(workspaceID))
 	if err != nil {
 		return err
 	}
@@ -293,7 +293,7 @@ func (s *PostgresStore) DeleteDocumentInWorkspace(workspaceID string, id string)
 }
 
 func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
-	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
+	search.WorkspaceID = NormalizeWorkspaceID(search.WorkspaceID)
 	if len(search.Embedding) != 1536 {
 		return nil, fmt.Errorf("document search embedding dimensions must be 1536, got %d", len(search.Embedding))
 	}
@@ -363,7 +363,7 @@ func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]do
 }
 
 func (s *PostgresStore) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
-	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
+	search.WorkspaceID = NormalizeWorkspaceID(search.WorkspaceID)
 	queryText := strings.TrimSpace(search.Query)
 	if queryText == "" {
 		return nil, errors.New("document lexical search query is required")
@@ -433,7 +433,7 @@ func (s *PostgresStore) SearchDocumentChunksLexical(search domain.DocumentSearch
 }
 
 func (s *PostgresStore) ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error) {
-	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
+	search.WorkspaceID = NormalizeWorkspaceID(search.WorkspaceID)
 	documentID := strings.TrimSpace(search.DocumentID)
 	if documentID == "" {
 		return nil, errors.New("document context search document ID is required")
