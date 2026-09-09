@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"agentflow-platform/apps/api/internal/contexteval"
-	"agentflow-platform/apps/api/internal/rageval"
-	"agentflow-platform/apps/api/internal/tooleval"
+	"agentflow-platform/apps/api/internal/evaluation/contexteval"
+	"agentflow-platform/apps/api/internal/evaluation/rageval"
+	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 )
 
 func TestCLIRejectsUnknownSuiteAndUnauthorizedToolEvaluation(t *testing.T) {

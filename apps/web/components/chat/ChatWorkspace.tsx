@@ -2,7 +2,7 @@ import type { RefObject } from "react";
 import { GitBranch, PanelRightOpen } from "lucide-react";
 
 import type { AgentInfo, ChatMode, Message, TaskState } from "../../lib/api";
-import { CollaborationDag } from "../CollaborationDag";
+import { CollaborationDag } from "./CollaborationDag";
 import {
   AutonomousPanel,
   CollaborationPanel,

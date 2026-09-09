@@ -25,7 +25,8 @@ COMMAND 2>&1 | head -c 30000
 apps/api/                  Go backend
 apps/web/                  Next.js workbench
 docs/                      architecture and operations
-frontend_uex_design.md     product-level frontend constraints
+docs/architecture/frontend-experience.md
+                           product-level frontend constraints
 ```
 
 Start with:
@@ -91,7 +92,7 @@ npm run build
 
 Frontend rules:
 
-- Follow [Frontend experience principles](frontend_uex_design.md).
+- Follow [Frontend experience principles](docs/architecture/frontend-experience.md).
 - Add CSS to the narrowest owning module described in
   [Stylesheet organization](apps/web/app/styles/README.md).
 - Preserve one vertical scroll owner; avoid nested cards and nested scrolling.

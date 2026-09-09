@@ -1,4 +1,4 @@
-import type { RunEvent, RunUsageLedger } from "../lib/api";
+import type { RunEvent, RunUsageLedger } from "../../lib/api";
 
 type ResourceUsageRow = {
   key: string;

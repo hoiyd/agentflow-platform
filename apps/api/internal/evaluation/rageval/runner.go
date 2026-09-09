@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/evalreport"
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/knowledge"
 	"agentflow-platform/apps/api/internal/rag"

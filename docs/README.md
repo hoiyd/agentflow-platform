@@ -76,7 +76,7 @@ the project.
 | [Backend configuration](operations/backend-configuration.md) | Which environment variables configure providers, storage, limits, tools, Verification, and the mandatory Workspace namespace? |
 | [API reference](reference/api-reference.md) | Which HTTP endpoints and response contracts are available? |
 | [Manual tests](operations/manual-tests.md) | How can the major behaviors be tested manually? |
-| [Frontend design principles](../frontend_uex_design.md) | Which product and interaction constraints guide the workbench UI? |
+| [Frontend design principles](architecture/frontend-experience.md) | Which product and interaction constraints guide the workbench UI? |
 | [Stylesheet organization](../apps/web/app/styles/README.md) | Where should frontend style changes be made? |
 
 ## Reading the Evidence

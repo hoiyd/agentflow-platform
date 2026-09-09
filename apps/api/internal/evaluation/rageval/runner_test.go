@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/evalreport"
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
@@ -326,7 +326,7 @@ func TestCanonicalOfflineReportArtifact(t *testing.T) {
 	if dir == "" {
 		return
 	}
-	root := filepath.Join("..", "..", "..", "..")
+	root := filepath.Join("..", "..", "..", "..", "..")
 	report, err := Run(context.Background(), Options{DatasetPath: filepath.Join(root, "examples", "knowledge", "golden-dataset.v1.json"),
 		CorpusManifestPath: filepath.Join(root, "examples", "knowledge", "golden-v1", "corpus-manifest.v1.json"), TopK: 5, MinSimilarity: 0.15, Revision: "ci"})
 	if err != nil {

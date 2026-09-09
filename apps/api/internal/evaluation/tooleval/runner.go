@@ -11,7 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/evalreport"
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/openai"
