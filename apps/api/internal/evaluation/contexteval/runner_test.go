@@ -10,7 +10,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/evalreport"
+	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 )
 
 func TestCanonicalContextQualityGateAndAblation(t *testing.T) {
@@ -202,7 +202,7 @@ func TestCanonicalContextQualityReportArtifact(t *testing.T) {
 }
 
 func canonicalDatasetPath() string {
-	return filepath.Join("..", "..", "..", "..", "examples", "context", "golden-dataset.v1.json")
+	return filepath.Join("..", "..", "..", "..", "..", "examples", "context", "golden-dataset.v1.json")
 }
 
 func TestSourceTokenShareUsesManifestSelection(t *testing.T) {

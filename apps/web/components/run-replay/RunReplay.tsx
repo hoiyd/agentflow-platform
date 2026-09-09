@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { EpisodeReport, RecoveryAction, RunReplay as RunReplayData } from "../lib/api";
-import { getEpisodeReport, getRunReplay, resumeRun } from "../lib/api";
+import type { EpisodeReport, RecoveryAction, RunReplay as RunReplayData } from "../../lib/api";
+import { getEpisodeReport, getRunReplay, resumeRun } from "../../lib/api";
 import { RunUsagePanel } from "./RunUsagePanel";
 import {
   EventDetail,
@@ -15,11 +15,11 @@ import {
   formatDuration,
   formatTokenValue,
   stepDuration
-} from "./run-replay/RunEventDetails";
-import { TaskStateChanges } from "./run-replay/TaskStateChanges";
-import { RuntimeDiagnostics } from "./run-replay/RuntimeDiagnostics";
-import { DelegationTopology } from "./run-replay/DelegationTopology";
-import { RecoverySummaryPanel, ToolEffectReconciliationPanel } from "./run-replay/RecoveryActions";
+} from "./RunEventDetails";
+import { TaskStateChanges } from "./TaskStateChanges";
+import { RuntimeDiagnostics } from "./RuntimeDiagnostics";
+import { DelegationTopology } from "./DelegationTopology";
+import { RecoverySummaryPanel, ToolEffectReconciliationPanel } from "./RecoveryActions";
 
 type Props = {
   runId: string;

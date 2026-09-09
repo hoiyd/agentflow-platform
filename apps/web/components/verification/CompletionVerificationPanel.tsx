@@ -1,8 +1,8 @@
 import { BookCheck, Braces, Globe2, Quote, Target, Terminal, TextCursorInput, X } from "lucide-react";
 import { useState } from "react";
 
-import type { CompletionVerificationSettings, VerifierTypeInput } from "../lib/verification";
-import { enabledVerifierCount } from "../lib/verification";
+import type { CompletionVerificationSettings, VerifierTypeInput } from "../../lib/verification";
+import { enabledVerifierCount } from "../../lib/verification";
 import { VerifierConfigEditor } from "./VerifierConfigEditor";
 
 type CompletionVerificationPanelProps = {

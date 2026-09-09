@@ -1,6 +1,6 @@
 import type { AgentInfo, ChatMode, ToolInfo } from "../../lib/api";
 import type { CompletionVerificationSettings } from "../../lib/verification";
-import { CompletionVerificationPanel } from "../CompletionVerificationPanel";
+import { CompletionVerificationPanel } from "../verification/CompletionVerificationPanel";
 import { AgentConfigPanel, isDefaultAgent, type AgentConfigDraft } from "./AgentConfigPanel";
 
 export type AgentOperationNotice = {

@@ -1,4 +1,4 @@
-import type { CompletionVerificationSettings, VerifierTypeInput } from "../lib/verification";
+import type { CompletionVerificationSettings, VerifierTypeInput } from "../../lib/verification";
 
 type VerifierConfigEditorProps = {
   disabled: boolean;

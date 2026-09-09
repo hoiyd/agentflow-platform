@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import type { AgentInfo } from "../lib/api";
-import type { CollaborationRole, CollaborationStepView } from "./chat/CollaborationPanels";
+import type { AgentInfo } from "../../lib/api";
+import type { CollaborationRole, CollaborationStepView } from "./CollaborationPanels";
 
 type CollaborationDagProps = {
   activeRole: string;

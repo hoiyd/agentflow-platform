@@ -5,7 +5,7 @@ import type {
   RelevanceGateInfo,
   RerankerInfo
 } from "../../lib/knowledge-api";
-import { BudgetEventDetail } from "../RunUsagePanel";
+import { BudgetEventDetail } from "./RunUsagePanel";
 
 type RetrievedMemoryPayload = {
   id?: string;

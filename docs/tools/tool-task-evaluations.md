@@ -6,7 +6,7 @@ justify another Tool, MCP adapter, runtime service, or frontend page.
 
 ## Task Slice
 
-The versioned [dataset](../../apps/api/internal/tooleval/testdata/artifact_tasks.json)
+The versioned [dataset](../../apps/api/internal/evaluation/tooleval/testdata/artifact_tasks.json)
 models two practical tasks against a long settlement export:
 
 1. Verify the settled amount of one exact record.
@@ -43,9 +43,9 @@ This is not an evaluation of multi-round search/read planning.
 From `apps/api`, using the repository Go version:
 
 ```bash
-go test ./internal/tooleval ./cmd/eval ./internal/toolartifact ./internal/tools
-go test -race ./internal/tooleval ./cmd/eval ./internal/toolartifact
-EVALUATION_REPORT_DIR=/tmp/evaluation-reports go test ./internal/tooleval -count=1
+go test ./internal/evaluation/tooleval ./cmd/eval ./internal/toolartifact ./internal/tools
+go test -race ./internal/evaluation/tooleval ./cmd/eval ./internal/toolartifact
+EVALUATION_REPORT_DIR=/tmp/evaluation-reports go test ./internal/evaluation/tooleval -count=1
 ```
 
 The local HTTP fixture selects Tools, reads the actual returned snippets and

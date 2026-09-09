@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"agentflow-platform/apps/api/internal/contexteval"
+	"agentflow-platform/apps/api/internal/evaluation/contexteval"
+	"agentflow-platform/apps/api/internal/evaluation/rageval"
+	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 	"agentflow-platform/apps/api/internal/openai"
-	"agentflow-platform/apps/api/internal/rageval"
-	"agentflow-platform/apps/api/internal/tooleval"
 )
 
 func main() {
@@ -165,7 +165,7 @@ func runTool(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return 2
 	}
 	if !*live || strings.TrimSpace(*model) == "" || os.Getenv("OPENAI_API_KEY") == "" || flags.NArg() != 0 {
-		fmt.Fprintln(stderr, "Requires --live, --model, OPENAI_API_KEY and explicit positive budgets. Offline: go test ./internal/tooleval")
+		fmt.Fprintln(stderr, "Requires --live, --model, OPENAI_API_KEY and explicit positive budgets. Offline: go test ./internal/evaluation/tooleval")
 		return 2
 	}
 	client := openai.NewClientWithTimeout(os.Getenv("OPENAI_API_KEY"), *base, *model, *timeout)
