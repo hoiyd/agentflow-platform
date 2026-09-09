@@ -482,6 +482,7 @@ export type RecoverySummary = {
 export type RunReplay = {
   run: RunInfo;
   projection: RunProjectionSnapshot;
+  runtime_snapshot?: Record<string, unknown>;
   conversation: Conversation;
   messages: Message[];
   steps: CollaborationStepInfo[];
@@ -558,6 +559,7 @@ function normalizeRunReplay(data: unknown): RunReplay {
   return {
     run,
     projection: normalizeRunProjection(replay.projection, run, replay.summary, replay.usage_ledger),
+    runtime_snapshot: isObject(replay.runtime_snapshot) ? replay.runtime_snapshot : undefined,
     conversation: expectConversation(replay.conversation),
     summary: expectRunTraceSummary(replay.summary),
     messages: Array.isArray(replay.messages) ? replay.messages : [],

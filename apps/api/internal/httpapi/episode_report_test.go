@@ -6,10 +6,42 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
+
+func TestEvidenceComparisonReadsEnforceWorkspaceScope(t *testing.T) {
+	fixtureStore := fixturestore.New()
+	conversation, err := fixtureStore.CreateConversationInWorkspace("workspace-a", "private comparison")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := (&Handler{store: fixtureStore}).Routes()
+	tests := []struct {
+		path       string
+		wantStatus int
+	}{
+		{path: "/api/runs", wantStatus: http.StatusOK},
+		{path: "/api/runs/" + run.ID + "/replay", wantStatus: http.StatusNotFound},
+		{path: "/api/runs/" + run.ID + "/episode", wantStatus: http.StatusNotFound},
+		{path: "/api/runs/" + run.ID + "/model_requests", wantStatus: http.StatusNotFound},
+	}
+	for _, test := range tests {
+		request := httptest.NewRequest(http.MethodGet, test.path, nil)
+		request.Header.Set(WorkspaceHeader, "workspace-b")
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		if response.Code != test.wantStatus || strings.Contains(response.Body.String(), run.ID) {
+			t.Fatalf("cross-workspace read leaked run: path=%s status=%d body=%s", test.path, response.Code, response.Body.String())
+		}
+	}
+}
 
 func TestGetEpisodeReportAPI(t *testing.T) {
 	fixtureStore := fixturestore.New()
