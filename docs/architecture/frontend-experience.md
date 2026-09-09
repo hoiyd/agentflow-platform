@@ -6,7 +6,7 @@ a marketing template or a collection of AI-themed cards.
 
 This document records product-level design constraints. Stylesheet ownership is
 documented separately in
-[apps/web/app/styles/README.md](apps/web/app/styles/README.md).
+[apps/web/app/styles/README.md](../../apps/web/app/styles/README.md).
 
 ## Product Priorities
 

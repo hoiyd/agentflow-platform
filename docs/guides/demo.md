@@ -6,11 +6,14 @@ repeatable. No API key is required for the local workflow path.
 
 ## Before the Call
 
+Start PostgreSQL with pgvector and confirm `DATABASE_URL` in `apps/api/.env`
+points to it. The launcher starts AgentFlow, not the database.
+
 ```bash
 make quickstart
 ```
 
-Open `http://localhost:3000`. Upload
+Open `http://localhost:3000/workspace`. Upload
 [`examples/example.md`](../../examples/example.md) from the **Knowledge** view. This
 file is sample knowledge content, not the Demo instructions themselves. Keep one
 completed Multi-Agent Run available if the interview environment has unreliable
@@ -22,9 +25,9 @@ In a second terminal, build the fixed CASE-001 benchmark evidence pack:
 make benchmark-evidence
 ```
 
-The command writes five machine-readable artifacts under
-`.cache/benchmark-suite`: the 12-task manifest, deterministic RAG report, Tool
-protocol report, failure/recovery events, and a saved recoverable Replay. The
+The command writes six machine-readable files under `.cache/benchmark-suite`:
+the 12-task manifest, deterministic RAG report, Tool protocol report, Tool
+failure events, recovery events, and a saved recoverable Replay. The
 offline provider and hash embedder are explicit fixtures; do not present their
 results as live-model quality. ACL remains diagnostic because authenticated
 identity and document authorization are not implemented.
@@ -62,19 +65,16 @@ rotation` to exercise semantic recall. Inspect source details, independent
 recall ranks, RRF score, final rank, relevance decision, and selected model
 context.
 
-For an AI-systems-focused review, open **Retrieval evaluation** and show the
-canonical `agentflow-rag-baseline@1.2.0` result. Point out Hit@1/3/5, per-case
-misses, prompt-injection blocks, gating versus diagnostic cases, and the
-Embedding/Fusion/Reranker/Relevance Gate versions used by the same production
-pipeline.
-
-Tie this to the benchmark suite by opening
-`.cache/benchmark-suite/rag-offline.json` and finding `stale-refund-window`:
+For an AI-systems-focused review, open
+`.cache/benchmark-suite/rag-offline.json`. This is the canonical
+`agentflow-rag-baseline@1.2.0` result produced by the same production retrieval
+components against the isolated corpus. Point out Hit@1/3/5, per-case misses,
+prompt-injection blocks, gating versus diagnostic cases, and the active
+Embedding/Fusion/Reranker/Relevance Gate versions. Find `stale-refund-window`:
 the expected source is policy `3.2`, policy `2.4` is forbidden, and a weak or
 conflicting result remains visible instead of disappearing from the
-denominator. This artifact runs production retrieval components against an
-isolated fixture; the UI exercise above validates the interactive path, not
-the canonical dataset result.
+denominator. The UI searches above validate the interactive path; they are not
+the canonical Dataset run.
 
 ### 2:00-3:15 - Multi-Agent Run
 
@@ -112,6 +112,20 @@ persisted before the Completion Gate permits `run.completed`.
 
 Emphasize that this is **verification of one runtime outcome**, not execution
 of the repository's unit or integration tests.
+
+### Optional - Controlled Run Comparison
+
+Create a Single Agent with Memory and RAG disabled, then run the same prompt in
+two new Conversations without changing its model, Tools, or limits. Open
+**Evaluate > Run comparison**, select those Runs, and show that the
+Comparability Gate enables token, duration, call-count, and error deltas.
+
+Then select an unrelated Run. The outputs remain available side by side, but
+the page lists the changed identities and disables deltas. This demonstrates
+that the view is an evaluation surface for repeated or single-variable tests,
+not a performance claim over arbitrary production traffic. See
+[Evidence Comparison](../operations/evidence-comparison.md) for the complete
+gate.
 
 ### 4:25-5:00 - Engineering Boundaries
 

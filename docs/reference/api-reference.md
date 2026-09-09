@@ -86,7 +86,7 @@ POST   /api/rag/evaluations/run
 
 `PATCH /api/conversations/{id}` accepts `{"title":"..."}`. Deleting a
 Conversation removes its persisted Messages and associated execution state from
-the selected Store.
+PostgreSQL.
 
 ### Structured Task State
 
@@ -102,7 +102,8 @@ and current versions, source actor/Run metadata, and commit time. These
 Conversation-scoped endpoints enforce the same Workspace scope as Messages and
 Runs.
 
-New Runtime Snapshot v8 Runs receive Structured Task State context. Agent
+Runtime Snapshot v8 introduced Structured Task State context. Current v12 Runs
+retain that protocol, and Agent
 execution also receives the runtime-owned `update_task_state` Tool. The Tool
 applies the same patch contract and derives source identity from the active Run
 rather than model arguments. See

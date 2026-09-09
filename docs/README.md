@@ -77,7 +77,7 @@ the project.
 | [Production readiness roadmap](operations/production-readiness-roadmap.md) | Which implemented controls form the baseline, what blocks a controlled production beta, and what is deliberately deferred? |
 | [Backend configuration](operations/backend-configuration.md) | Which environment variables configure providers, storage, limits, tools, Verification, and the mandatory Workspace namespace? |
 | [Bounded load and soak testing](operations/load-soak-testing.md) | How can process-local concurrency and cleanup behavior be reproduced without public models or unsupported capacity claims? |
-| [Evidence comparison view](operations/evidence-comparison.md) | Which identity and single-variable rules allow Replay evidence deltas to be shown? |
+| [Evidence comparison view](operations/evidence-comparison.md) | Which identity and single-variable rules allow controlled Evaluation deltas to be shown? |
 | [API reference](reference/api-reference.md) | Which HTTP endpoints and response contracts are available? |
 | [Manual tests](operations/manual-tests.md) | How can the major behaviors be tested manually? |
 | [Frontend design principles](architecture/frontend-experience.md) | Which product and interaction constraints guide the workbench UI? |

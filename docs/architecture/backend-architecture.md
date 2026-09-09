@@ -129,7 +129,7 @@ Moving packages out of `internal` only to make the tree appear balanced would we
 
 `app.Application` owns:
 
-1. Store selection and stale-run recovery.
+1. PostgreSQL construction and stale-run recovery.
 2. Model client limits, retry policy, and frozen Run Budget policy.
 3. Tool Manager and Agent Runtime configuration.
 4. Memory Provider and Knowledge capabilities plus asynchronous Turn synchronization.

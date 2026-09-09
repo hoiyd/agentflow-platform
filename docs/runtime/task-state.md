@@ -42,17 +42,17 @@ time are runtime-owned. The state has field limits, at most 50 operations per
 patch, and a 16 KB serialized hard limit so it remains suitable for model
 context.
 
-The Store compares `expected_version` while holding the File lock or a
-Postgres `FOR UPDATE` lock on the owning Conversation. A stale writer receives
+The Store compares `expected_version` while holding a Postgres `FOR UPDATE`
+lock on the owning Conversation. A stale writer receives
 `task_state_version_conflict`; it must reload and intentionally rebase rather
 than silently overwriting another actor's change.
 
 ## Runtime Integration
 
-New Runs enable Structured Task State context through Runtime Snapshot v8.
-Runs created with v1-v7 snapshots keep Task State context and its Tool disabled
-when resumed, preserving their original protocol. Current snapshots freeze the
-runtime-owned `update_task_state` Tool. The Tool is not user-toggleable: it is a
+Runtime Snapshot v8 introduced Structured Task State context. The current
+resumable Snapshot window (v11-v12) retains it; older snapshots are Replay-only.
+Current snapshots freeze the runtime-owned `update_task_state` Tool. The Tool is
+not user-toggleable: it is a
 harness capability backed by the same versioned
 Store contract as the HTTP API. Tool calls derive Conversation, Run, Stage,
 Turn, and Agent provenance from trusted runtime scope instead of accepting
