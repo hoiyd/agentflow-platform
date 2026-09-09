@@ -210,10 +210,12 @@ AUTONOMOUS_MAX_TOOL_CALLS=20
   loop.
 - One iteration normally contains Observe, Plan, Act, Review, and Decide; it is
   not equivalent to one Model Call.
-- For new Snapshot v5 Runs, mode-specific runtime/tool values and general Run
-  Budget values are resolved to the stricter effective value at creation.
-  Run Budget then becomes the single enforcement owner for those resources.
-- Snapshot v4 and older Runs resume under their historical protocol.
+- Snapshot v5 introduced resolution of mode-specific runtime/tool values and
+  general Run Budget values to the stricter effective value at creation. Run
+  Budget then becomes the single enforcement owner for those resources.
+- Current v12 Runs and resumable v11 Runs retain that single-owner protocol.
+  Earlier Snapshot versions remain readable through Replay but are no longer
+  resumable.
 
 With defaults, the effective Autonomous runtime/tool caps are `5m/20`, not the
 general `15m/50`. Run Budget limits quantity; the Tool Progress Guard detects
@@ -256,8 +258,9 @@ Budget denial, tracing, and effect-journal boundaries. See
 [Tool Contract and Fault Testing](../tools/tool-contract-testing.md).
 
 Tool name, description, normalized parameter schema, schema version, definition
-revision, capability, and operator policy are frozen with new Snapshot v11
-Runs. Snapshot v10 remains resumable with the current fail-closed policy. The live Binding owns
+revision, capability, and operator policy have been frozen since Snapshot v11.
+The current v12/v11 Resume window preserves that policy; v11 resumes with Tool
+Progress Guard disabled because that protocol was introduced in v12. The live Binding owns
 handler, timeout, result-size, and concurrency policy. Execution is serial
 unless a Binding declares a safe `read_only` or keyed parallel group. Oversized
 results are redacted and persisted as immutable Tool Artifacts; model Context

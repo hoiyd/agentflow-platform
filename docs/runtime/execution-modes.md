@@ -137,8 +137,10 @@ Choose Loop when:
 - explicit stopping conditions can bound the task safely.
 
 Loop is not an unbounded background scheduler. The current implementation is a
-bounded in-process execution protocol; distributed scheduling and semantic
-progress/oscillation guards remain outside the implemented boundary.
+bounded in-process execution protocol. The Tool Progress Guard handles repeated
+typed failures, unchanged read results, and bounded Tool-call oscillation;
+distributed scheduling and semantic goal-progress assessment remain outside the
+implemented boundary.
 
 ## Shared Runtime Contract
 

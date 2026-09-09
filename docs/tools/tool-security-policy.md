@@ -94,10 +94,10 @@ configured policy uses one exact rule per Tool:
 }
 ```
 
-Policy and Tool capability are frozen in Runtime Snapshot v11. Resume therefore
-uses the same authority as the original Run even if the live operator file has
-changed. Version 10 remains resumable for one compatibility window and applies
-the current fail-closed policy because it did not capture one.
+Policy and Tool capability have been frozen since Runtime Snapshot v11. Resume
+therefore uses the same authority as the original Run even if the live operator
+file has changed. The current compatibility window is v12 and v11; v11 resumes
+with its frozen security policy and with the later Tool Progress Guard disabled.
 
 ## Decisions and Replay
 

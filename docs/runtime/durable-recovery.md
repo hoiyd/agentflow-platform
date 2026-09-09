@@ -35,9 +35,9 @@ Every synthetic payload includes:
 
 The store rechecks the stale heartbeat and expected event cursor before making
 changes. Appending terminal events, changing running Stage records to `failed`,
-and changing the Run to `failed_recoverable` are one File lock/save or one
-Postgres transaction. A second startup scan observes a non-running Run and does
-nothing, so repair is idempotent.
+and changing the Run to `failed_recoverable` occur in one Postgres transaction.
+A second startup scan observes a non-running Run and does nothing, so repair is
+idempotent.
 
 Recovery planning or persistence failure prevents API startup. It does not
 silently leave an inconsistent Run active.
@@ -78,7 +78,7 @@ external effect is marked `compensated`; an uncertain effect blocks Resume with
 a reconciliation error.
 
 Resume compatibility is intentionally bounded to the current Runtime Snapshot
-schema and its immediately preceding version (currently v9 and v8). Older Runs
+schema and its immediately preceding version (currently v12 and v11). Older Runs
 remain readable through Replay, but attempting to Resume them returns
 `runtime_snapshot_resume_unsupported`. This prevents old execution protocols
 from silently inheriting current model, Tool, context, or budget behavior.

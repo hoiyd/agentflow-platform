@@ -167,7 +167,7 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 | [Tool side-effect reconciliation](docs/tools/tool-side-effect-reconciliation.md) | Versioned operator commands resolve uncertain external writes with capability-gated retry/compensation and typed audit events | [coordinator](apps/api/internal/toolreconciliation/reconciliation.go), [tests](apps/api/internal/toolreconciliation/reconciliation_test.go) |
 | [**Verification**](docs/runtime/verification.md) | Frozen Completion Contracts run configured deterministic or model-backed verifiers, persist immutable Evidence/Artifacts, and gate `run.completed` | [engine](apps/api/internal/verification/engine.go), [tests](apps/api/internal/verification/engine_test.go) |
 | [**Tracing & replay**](docs/architecture/backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed Run/Stage/Turn/Model/Tool/Retrieval/Verification events, usage ledgers, Replay, and Episode reports explain what happened | [episode](apps/api/internal/httpapi/episode_report.go), [tests](apps/api/internal/httpapi/episode_report_test.go) |
-| [**Evidence comparison**](docs/operations/evidence-comparison.md) | Replay compares two Workspace-scoped Runs only when task, materials, and runtime identity permit meaningful deltas | [view](apps/web/components/run-replay/EvidenceComparison.tsx), [comparison rules](apps/web/lib/evidence-comparison.ts) |
+| [**Evidence comparison**](docs/operations/evidence-comparison.md) | The Evaluation workspace compares two controlled, Workspace-scoped Runs only when task, materials, and runtime identity permit meaningful deltas | [view](apps/web/components/evaluation/EvidenceComparison.tsx), [comparison rules](apps/web/lib/evidence-comparison.ts) |
 | [**Evidence-backed benchmark suite**](docs/guides/demo.md) | A fixed 12-task manifest connects retrieval, long-record access, failure accounting, and recoverable Replay without adding another runtime | [manifest](examples/benchmark-suite.v1.json), [evidence command](scripts/benchmark-evidence.sh) |
 
 Performance statements above describe implemented controls, not synthetic
@@ -185,7 +185,7 @@ persistence.
    make quickstart
    ```
 
-2. Open `http://localhost:3000`. In **Single**, create or edit an Agent and
+2. Open `http://localhost:3000/workspace`. In **Single**, create or edit an Agent and
    point out its system prompt, Tool allowlist, and Memory/RAG switches. The
    same effective profile is frozen when the Run starts.
 3. Open **Knowledge** and upload [`examples/example.md`](examples/example.md).
@@ -197,6 +197,9 @@ persistence.
    connect orchestration stages, retrieval, model calls, usage, and final Run
    state. Export the Episode Report when a compact machine-readable review
    artifact is useful.
+7. For a controlled experiment, repeat one Single task with the same Agent and
+   open **Evaluate > Run comparison**. Uncontrolled pairs remain review-only;
+   only identical or single-variable Runs receive metric deltas.
 
 With an OpenAI-compatible key in `apps/api/.env`, the same path exercises a real
 model. The key is optional so an interviewer can still inspect runtime behavior,
@@ -240,9 +243,9 @@ scope and its expansion path are documented in the
 - The HTTP API does not yet provide an authentication or authorization layer.
   Run it only in a trusted development environment or behind an external access
   boundary.
-- Customizable workflow is not yet supported. I tried the Temporal workflow engine, 
-  but it didn't bring much benefit considering the large complexity it brings. 
-  It'll be a long-term plan.
+- Arbitrary user-defined orchestration graphs are not supported. Temporal was
+  evaluated and removed because its operational cost did not justify the
+  current fixed Single, Multi, and Loop execution shapes.
 - Prompt-injection detection is a high-precision deterministic layer, not a
   semantic guarantee. Untrusted-context boundaries remain active even when no
   pattern is detected.
@@ -255,8 +258,9 @@ scope and its expansion path are documented in the
   retrieval-quality evaluation.
 - Verification proves configured invariants; it does not make every
   subjective answer factually correct.
-- Progress guards for repeated actions or oscillation, and asynchronous external
-  evidence ingestion, are planned rather than implemented.
+- Asynchronous external evidence ingestion remains planned rather than
+  implemented. Repeated Tool failures, unchanged read results, and bounded
+  oscillation are already handled by the Tool Progress Guard.
 
 ## Quick Start
 
@@ -279,8 +283,9 @@ make quickstart
 ```
 
 This installs locked frontend dependencies, downloads Go modules, and starts
-the API on `http://127.0.0.1:8080` plus the workbench on
-`http://localhost:3000`. Press `Ctrl+C` once to stop both processes.
+the API on `http://127.0.0.1:8080` plus the frontend on
+`http://localhost:3000`. The operational workbench is at
+`http://localhost:3000/workspace`. Press `Ctrl+C` once to stop both processes.
 
 For subsequent runs, skip dependency installation:
 
@@ -319,8 +324,8 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. Set `NEXT_PUBLIC_API_BASE_URL` only when the API
-is hosted elsewhere.
+Open `http://localhost:3000/workspace` for the operational workbench. Set
+`NEXT_PUBLIC_API_BASE_URL` only when the API is hosted elsewhere.
 
 ### Automated Tests
 

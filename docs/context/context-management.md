@@ -46,9 +46,9 @@ copying raw dynamic context into the event.
 Structured Task State is injected as bounded JSON and recorded in the Manifest
 with a versioned reference such as `conversation_id:v3`. Its raw facts remain in
 the immutable Revision snapshot rather than the Manifest. See
-[Structured Durable Task State](../runtime/task-state.md). New Runs enable this protocol
-through Runtime Snapshot v8; the current resumable Snapshot window (v9-v10)
-always uses this protocol.
+[Structured Durable Task State](../runtime/task-state.md). Runtime Snapshot v8
+introduced this protocol; the current resumable Snapshot window (v11-v12)
+always uses it.
 
 After assembly and application of effective request limits, the model adapter
 persists a Model Request Envelope for each physical attempt. The Manifest
@@ -83,8 +83,9 @@ Retrieval is best effort. Store or search failures emit
 `session_history.search_failed` and do not block the primary model call.
 Successful calls emit `session_history.search_started` and
 `session_history.search_completed` with references and counts, not raw source
-content. New Runs freeze the limits in Runtime Snapshot v6; Runs created with
-older snapshots keep this behavior disabled when resumed.
+content. Runtime Snapshot v6 introduced frozen retrieval limits; the current
+resumable Snapshot window (v11-v12) retains them. Older snapshots are
+Replay-only.
 
 ## When Compaction Runs
 

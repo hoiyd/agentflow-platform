@@ -48,6 +48,22 @@ explicitly `Unknown`; the two Run IDs and snapshot hashes remain visible. A
 single pair is diagnostic evidence and does not replace the multi-trial reports
 produced by the offline evaluation CLI.
 
+## Reproducible Local Pair
+
+For the shortest controlled demonstration:
+
+1. Create a Single Agent with Memory and RAG disabled.
+2. Start two new Conversations and send the exact same prompt with that Agent.
+3. Do not change the model, Tools, Context settings, Run Budget, or orchestration
+   limits between Runs.
+4. Open **Evaluate > Run comparison** and select the two completed Runs.
+
+The pair should pass as an identical-runtime comparison. To demonstrate a
+single-variable comparison, change exactly one declared dimension, create a
+third Run with the same prompt, and compare it with the original baseline.
+Ordinary Runs with different prompts or retrieved materials are expected to be
+review-only.
+
 ## Access Boundary
 
 No comparison endpoint bypasses existing access control. Candidate Runs and all

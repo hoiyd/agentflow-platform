@@ -151,6 +151,18 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
 4. Pause an Autonomous Run at `waiting_for_user`, wait longer than `RUN_MAX_RUNTIME`, and resume it. Confirm only active execution time is charged.
 5. With Postgres, run `TEST_DATABASE_URL=... go test ./internal/store -run 'TestPostgresRunUsage|TestPostgresActiveRuntime'` to verify atomic reservation and active-runtime round trips.
 
+### Controlled Run Comparison
+
+1. Create a Single Agent with Memory and RAG disabled.
+2. In two new Conversations, send the exact same prompt without changing the
+   Agent, model, Tools, Context settings, Run Budget, or orchestration limits.
+3. Open **Evaluate > Run comparison** and compare the two completed Runs.
+4. Confirm the Comparability Gate passes and token, duration, model-call,
+   Tool-call, and error deltas are calculated.
+5. Compare either Run with an unrelated Run. Confirm the page lists every
+   identity/configuration mismatch, keeps both outputs inspectable, and disables
+   deltas.
+
 ## Interview Demo
 
 For a timed reviewer walkthrough, use [Interview Demo](../guides/demo.md). This guide

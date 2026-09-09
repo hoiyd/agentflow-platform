@@ -107,9 +107,10 @@ model or workload requires them.
 These capabilities expand the risk or scale envelope and are not prerequisites
 for a controlled single-tenant pilot:
 
-- **External Tool sources:** curated MCP Tools require stable source identity,
+- **External Tool sources:** if MCP support is reintroduced, curated MCP Tools
+  require stable source identity,
   Secret references, lifecycle management, schema validation, frozen
-  definitions, Resume checks, and failure harnesses. MCP remains a Tool source;
+  definitions, Resume checks, and failure harnesses. MCP would remain a Tool source;
   it does not bypass the existing Catalog, policy, Budget, Executor, or Events.
 - **Sandbox and side effects:** code, Shell, filesystem, and external writes
   require isolation, idempotency keys, approval, Outbox/reconciliation, and

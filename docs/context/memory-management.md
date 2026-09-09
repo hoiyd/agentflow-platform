@@ -12,7 +12,7 @@ memories            accepted semantic knowledge used for recall
 memory_changes      metadata-only correction/deletion audit
 ```
 
-Completing a Run no longer copies every user and assistant message into `memories`. Assistant output and ordinary conversation remain available through Messages, Replay, and future session-history retrieval.
+Completing a Run no longer copies every user and assistant message into `memories`. Assistant output and ordinary conversation remain available through Messages and Replay; source-aware session-history retrieval can reintroduce relevant original Messages and Events into later model context without turning them into Memory.
 
 ## Provider Lifecycle and Curation Flow
 
