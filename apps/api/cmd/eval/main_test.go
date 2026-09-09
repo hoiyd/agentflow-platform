@@ -74,7 +74,7 @@ func TestToolCLIJSONSummaryAndGate(t *testing.T) {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 	var report tooleval.Report
-	if err := json.Unmarshal(out.Bytes(), &report); err != nil || len(report.Samples) != 6 || report.ReportFormat == "" {
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil || len(report.Samples) != 9 || report.ReportFormat == "" {
 		t.Fatalf("invalid report: %v %s", err, out.String())
 	}
 	if !strings.Contains(stderr.String(), "verified=") || strings.Contains(out.String(), "fixture-key") {

@@ -85,17 +85,22 @@ func fixtureProvider(t *testing.T, mode string) *httptest.Server {
 		for _, id := range ids {
 			found := false
 			for _, message := range request.Messages {
-				if message.Role != "tool" {
-					continue
+				texts := []string{}
+				if message.Role == "user" && strings.Contains(message.Content, "Full immutable export:") {
+					texts = append(texts, message.Content)
 				}
-				var envelope struct {
-					Result domain.ToolArtifactSearchResult `json:"result"`
+				if message.Role == "tool" {
+					var envelope struct {
+						Result domain.ToolArtifactSearchResult `json:"result"`
+					}
+					if json.Unmarshal([]byte(message.Content), &envelope) == nil {
+						for _, match := range envelope.Result.Matches {
+							texts = append(texts, match.Preview)
+						}
+					}
 				}
-				if json.Unmarshal([]byte(message.Content), &envelope) != nil {
-					continue
-				}
-				for _, match := range envelope.Result.Matches {
-					for _, line := range strings.Split(match.Preview, "\n") {
+				for _, text := range texts {
+					for _, line := range strings.Split(text, "\n") {
 						if strings.HasPrefix(line, id+" | ") {
 							parts := strings.Split(line, " | ")
 							facts = append(facts, Fact{id, strings.TrimPrefix(parts[1], "settled_amount_usd="), line})
@@ -163,10 +168,10 @@ func TestTaskEvaluationProductionPathAndReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !report.Passed() || len(report.Samples) != 12 {
+	if !report.Passed() || len(report.Samples) != 18 {
 		t.Fatalf("unexpected report: %+v", report)
 	}
-	if report.Summary["without_tools"].Verified != 2 || report.Summary["with_tools"].Verified != 6 {
+	if report.Summary["without_tools"].Verified != 2 || report.Summary["full_context"].Verified != 6 || report.Summary["with_tools"].Verified != 6 {
 		t.Fatalf("wrong ablation: %+v", report.Summary)
 	}
 	for _, sample := range report.Samples {
@@ -217,11 +222,11 @@ func TestTaskEvaluationFailuresStayInDenominator(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if report.Passed() || len(report.Samples) != 6 || report.Summary["with_tools"].Samples != 3 {
+			if report.Passed() || len(report.Samples) != 9 || report.Summary["with_tools"].Samples != 3 {
 				t.Fatalf("failure hidden: %+v", report)
 			}
-			if mode == "invalid_args" && (len(report.Samples[1].ToolFailures) != 1 || report.Samples[1].ToolFailures[0].Code != "invalid_arguments") {
-				t.Fatalf("Tool failure evidence missing: %+v", report.Samples[1])
+			if mode == "invalid_args" && (len(report.Samples[2].ToolFailures) != 1 || report.Samples[2].ToolFailures[0].Code != "invalid_arguments") {
+				t.Fatalf("Tool failure evidence missing: %+v", report.Samples[2])
 			}
 			if mode == "provider_error" || mode == "timeout" {
 				if report.Samples[0].Status != "failed" || report.Samples[1].Status != "not_evaluated" {

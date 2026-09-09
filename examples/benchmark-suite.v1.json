@@ -1,0 +1,48 @@
+{
+  "schema_version": "agentflow-benchmark-suite-v1",
+  "id": "evidence-backed-policy-and-record-benchmark",
+  "version": "1.0.0",
+  "description": "Fixed benchmark suite joining policy retrieval, long-record evidence access, failure accounting, and recoverable execution without adding another runtime.",
+  "task_sets": [
+    {
+      "id": "policy_retrieval",
+      "dataset": "examples/knowledge/golden-dataset.v1.json",
+      "runner": "eval rag",
+      "cases": [
+        {"id": "fact-control-plane-region", "split": "calibration", "coverage": ["normal"]},
+        {"id": "paraphrase-audit-retention", "split": "holdout", "coverage": ["normal", "paraphrase"]},
+        {"id": "exact-id-px-2049", "split": "calibration", "coverage": ["normal", "exact_id"]},
+        {"id": "multi-hop-atlas-oncall", "split": "holdout", "coverage": ["normal", "multiple_sources"]},
+        {"id": "no-answer-zz-0000", "split": "calibration", "coverage": ["no_answer"]},
+        {"id": "no-answer-qx-9999", "split": "holdout", "coverage": ["no_answer"]},
+        {"id": "acl-external-key-reset", "split": "calibration", "coverage": ["conflicting_sources", "diagnostic"]},
+        {"id": "stale-refund-window", "split": "calibration", "coverage": ["stale_version", "conflicting_sources"]},
+        {"id": "injection-release-signing", "split": "holdout", "coverage": ["hostile_source"]}
+      ]
+    },
+    {
+      "id": "long_record_evidence",
+      "dataset": "apps/api/internal/evaluation/tooleval/testdata/artifact_tasks.json",
+      "runner": "eval tool",
+      "cases": [
+        {"id": "single-fact", "split": "calibration", "coverage": ["normal", "long_context"]},
+        {"id": "report-extraction", "split": "holdout", "coverage": ["multiple_facts", "long_context"]},
+        {"id": "missing-record", "split": "holdout", "coverage": ["no_answer", "long_context"]}
+      ]
+    }
+  ],
+  "offline_evidence": [
+    {"file": "rag-offline.json", "kind": "deterministic_retrieval", "simulated": true},
+    {"file": "tool-task-protocol.json", "kind": "provider_protocol_fixture", "simulated": true},
+    {"file": "tool-failure-paths.jsonl", "kind": "failure_test_events", "simulated": true},
+    {"file": "benchmark-recovery-replay.json", "kind": "run_replay", "simulated": true},
+    {"file": "recovery-paths.jsonl", "kind": "recovery_test_events", "simulated": true}
+  ],
+  "failure_scenarios": [
+    {"id": "dependency_failure", "source_test": "TestTaskEvaluationFailuresStayInDenominator/provider_error"},
+    {"id": "budget_exhaustion", "source_test": "TestTaskEvaluationFailuresStayInDenominator/budget"},
+    {"id": "timeout_and_cancel", "source_test": "TestTaskEvaluationFailuresStayInDenominator/timeout"},
+    {"id": "recoverable_run", "source_test": "TestResumeRecoverableRunThroughAPIStreamsAndCompletes"},
+    {"id": "uncertain_side_effect", "source_test": "TestResumeRunRejectsStaleAndUnreconciledActions"}
+  ]
+}
