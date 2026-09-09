@@ -41,6 +41,37 @@ func TestFixtureIsolationAndArtifactLifecycle(t *testing.T) {
 	if _, err = New().ReadToolArtifact(run.ID, artifact.ID, 0, 4); !store.IsNotFound(err) {
 		t.Fatalf("new fixture must not reopen state: %v", err)
 	}
+	if _, err = s.CreateToolArtifact(artifact, []byte("evidence value")); err != nil || len(s.data.ToolArtifacts) != 1 {
+		t.Fatalf("idempotent create: %v", err)
+	}
+	conflict := artifact
+	conflict.ToolCallID = "other-call"
+	if _, err = s.CreateToolArtifact(conflict, []byte("evidence value")); err == nil {
+		t.Fatal("conflicting identity accepted")
+	}
+	if _, err = New().CreateToolArtifact(artifact, []byte("evidence value")); !store.IsNotFound(err) {
+		t.Fatalf("missing owner accepted: %v", err)
+	}
+	if _, err = s.ListToolArtifacts("missing"); !store.IsNotFound(err) {
+		t.Fatalf("missing artifact list owner: %v", err)
+	}
+	if _, err = s.ReadToolArtifact(run.ID, artifact.ID, -1, 4); err == nil {
+		t.Fatal("negative offset accepted")
+	}
+	if _, err = s.SearchToolArtifact(run.ID, artifact.ID, "", 1); err == nil {
+		t.Fatal("empty search accepted")
+	}
+	expired := time.Now().Add(-time.Hour)
+	s.data.ToolArtifacts[0].ExpiresAt = &expired
+	if _, err = s.CreateToolArtifact(artifact, []byte("evidence value")); err != store.ErrToolArtifactExpired {
+		t.Fatalf("expired idempotent create: %v", err)
+	}
+	if _, err = s.ReadToolArtifact(run.ID, artifact.ID, 0, 4); err != store.ErrToolArtifactExpired {
+		t.Fatalf("expired read: %v", err)
+	}
+	if _, err = s.SearchToolArtifact(run.ID, artifact.ID, "value", 1); err != store.ErrToolArtifactExpired {
+		t.Fatalf("expired search: %v", err)
+	}
 	if err = s.DeleteConversation(conversation.ID); err != nil {
 		t.Fatal(err)
 	}

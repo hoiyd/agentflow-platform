@@ -110,7 +110,7 @@ func TestCORSAllowlistAndKnowledgeErrorMapping(t *testing.T) {
 
 func completeHandlerDependencies(t *testing.T) Dependencies {
 	t.Helper()
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
 	client := newLocalFallbackOpenAIClientForTest()
 	toolPath := filepath.Join(t.TempDir(), "tools.json")
@@ -123,14 +123,14 @@ func completeHandlerDependencies(t *testing.T) Dependencies {
 	}
 	registry := verification.NewRegistry(verification.Options{})
 	return Dependencies{
-		Store: fileStore, ModelClient: client, Tools: manager,
-		AgentRuntime: agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fileStore, ModelClient: client}),
+		Store: fixtureStore, ModelClient: client, Tools: manager,
+		AgentRuntime: agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fixtureStore, ModelClient: client}),
 		Memory:       &memoryOperationsStub{},
 		Knowledge:    &knowledgeOperationsStub{},
 		RunController: concurrency.NewRunController(concurrency.RunOptions{
 			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
 		}),
-		Verification:   verification.NewEngine(fileStore, registry),
+		Verification:   verification.NewEngine(fixtureStore, registry),
 		AllowedOrigins: []string{"https://app.example.com"},
 	}
 }

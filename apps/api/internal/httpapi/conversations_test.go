@@ -14,13 +14,13 @@ import (
 )
 
 func TestUpdateConversationTitleAPI(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversation("Initial title")
+	conversation, err := fixtureStore.CreateConversation("Initial title")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/conversations/"+conversation.ID, bytes.NewReader([]byte(`{"title":"Edited title"}`)))
 	recorder := httptest.NewRecorder()
@@ -37,7 +37,7 @@ func TestUpdateConversationTitleAPI(t *testing.T) {
 		t.Fatalf("expected edited title, got %q", updated.Title)
 	}
 
-	persisted, ok, err := fileStore.GetConversation(conversation.ID)
+	persisted, ok, err := fixtureStore.GetConversation(conversation.ID)
 	if err != nil {
 		t.Fatalf("get conversation: %v", err)
 	}
@@ -47,9 +47,9 @@ func TestUpdateConversationTitleAPI(t *testing.T) {
 }
 
 func TestConversationCollectionMessagesAndDeleteAPI(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	listRecorder := httptest.NewRecorder()
 	handler.listConversations(listRecorder, httptest.NewRequest(http.MethodGet, "/api/conversations", nil))
@@ -66,7 +66,7 @@ func TestConversationCollectionMessagesAndDeleteAPI(t *testing.T) {
 	if err := json.Unmarshal(createRecorder.Body.Bytes(), &conversation); err != nil {
 		t.Fatalf("decode conversation: %v", err)
 	}
-	if _, err := fileStore.AddMessage(conversation.ID, "user", "hello"); err != nil {
+	if _, err := fixtureStore.AddMessage(conversation.ID, "user", "hello"); err != nil {
 		t.Fatalf("add message: %v", err)
 	}
 
@@ -94,9 +94,9 @@ func TestConversationCollectionMessagesAndDeleteAPI(t *testing.T) {
 }
 
 func TestConversationHandlersRejectInvalidResourceIDs(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 	tests := []struct {
 		name   string
 		invoke func(http.ResponseWriter, *http.Request)
@@ -119,13 +119,13 @@ func TestConversationHandlersRejectInvalidResourceIDs(t *testing.T) {
 }
 
 func TestUpdateConversationTitleAPIRejectsEmptyTitle(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversation("Initial title")
+	conversation, err := fixtureStore.CreateConversation("Initial title")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/conversations/"+conversation.ID, bytes.NewReader([]byte(`{"title":"   "}`)))
 	recorder := httptest.NewRecorder()
@@ -136,17 +136,17 @@ func TestUpdateConversationTitleAPIRejectsEmptyTitle(t *testing.T) {
 }
 
 func TestSummarizeConversationTitleBestEffortDoesNotOverwriteManualTitle(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversation("Manual title")
+	conversation, err := fixtureStore.CreateConversation("Manual title")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	title := handler.summarizeConversationTitleBestEffort(
 		httptest.NewRequest(http.MethodGet, "/", nil).Context(),
-		fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
+		fixtureStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
 		conversation.ID,
 		"Please explain vector search in RAG.",
 		"Vector search retrieves semantically similar chunks.",
@@ -157,17 +157,17 @@ func TestSummarizeConversationTitleBestEffortDoesNotOverwriteManualTitle(t *test
 }
 
 func TestSummarizeConversationTitleBestEffortUpdatesTemporaryTitle(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversation("New conversation")
+	conversation, err := fixtureStore.CreateConversation("New conversation")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	title := handler.summarizeConversationTitleBestEffort(
 		httptest.NewRequest(http.MethodGet, "/", nil).Context(),
-		fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
+		fixtureStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
 		conversation.ID,
 		"Explain vector search in RAG",
 		"Vector search retrieves semantically similar chunks.",
@@ -176,7 +176,7 @@ func TestSummarizeConversationTitleBestEffortUpdatesTemporaryTitle(t *testing.T)
 		t.Fatalf("expected heuristic title, got %q", title)
 	}
 
-	persisted, ok, err := fileStore.GetConversation(conversation.ID)
+	persisted, ok, err := fixtureStore.GetConversation(conversation.ID)
 	if err != nil {
 		t.Fatalf("get conversation: %v", err)
 	}

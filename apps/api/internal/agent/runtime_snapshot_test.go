@@ -24,7 +24,7 @@ import (
 
 func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T) {
 	ctx := context.Background()
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
 	toolPath := filepath.Join(t.TempDir(), "tools.json")
 	if err := tools.SaveConfig(toolPath, tools.DefaultConfig()); err != nil {
@@ -39,7 +39,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 		"test-model-v1", "embedding-v1", 1536, time.Second,
 	)
 	runtime := NewRuntime(RuntimeOptions{
-		Store: fileStore, ModelClient: client, Tools: manager,
+		Store: fixtureStore, ModelClient: client, Tools: manager,
 		RunBudget:         domain.RuntimeRunBudget{MaxModelCalls: 12, MaxRuntimeMS: 90_000, MaxToolCalls: 7},
 		ToolProgressGuard: toolprogress.DefaultConfig(),
 		ContextAssembly: domain.ContextAssemblyConfig{
@@ -47,14 +47,14 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 			SafetyMarginTokens: 1024, HistoryMaxTokens: 12000, MemoryMaxTokens: 2000, KnowledgeMaxTokens: 4000,
 		},
 	})
-	agent, err := fileStore.CreateAgent(domain.Agent{
+	agent, err := fixtureStore.CreateAgent(domain.Agent{
 		Name: "Frozen agent", SystemPrompt: "original prompt", Tools: []string{"calculator"},
 		MemoryEnabled: true, RetrievalEnabled: true, Executor: domain.DefaultAgentExecutor,
 	})
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
-	conversation, err := fileStore.CreateConversation("snapshot test")
+	conversation, err := fixtureStore.CreateConversation("snapshot test")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 
 	agent.SystemPrompt = "mutated prompt"
 	agent.Tools = nil
-	if _, err := fileStore.UpdateAgent(agent); err != nil {
+	if _, err := fixtureStore.UpdateAgent(agent); err != nil {
 		t.Fatalf("update agent: %v", err)
 	}
 	if _, err := manager.SetEnabled("calculator", false); err != nil {
@@ -371,9 +371,9 @@ func TestRestoreRuntimeRejectsReplayOnlySnapshotWithTypedError(t *testing.T) {
 }
 
 func TestClientForRunRejectsMissingSnapshot(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: openai.NewClient("", "", "test")})
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: openai.NewClient("", "", "test")})
 
 	if _, err := runtime.clientForRun("missing"); !errors.Is(err, ErrRuntimeSnapshotUnavailable) {
 		t.Fatalf("expected missing snapshot error, got %v", err)

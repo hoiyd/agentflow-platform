@@ -18,25 +18,25 @@ import (
 )
 
 func TestRuntimeTurnModelRetriesTextOverflowOnlyAfterGenerationAdvances(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, _ := fileStore.CreateConversation("overflow recovery")
+	conversation, _ := fixtureStore.CreateConversation("overflow recovery")
 	config := overflowCompactionConfig()
 	snapshot := testRuntimeSnapshot()
 	snapshot.ContextAssembly = config
 	snapshot.Model.Provider = "test"
 	snapshot.Model.Model = "test-model"
-	run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
+	run, _ := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	for index := 0; index < 8; index++ {
 		role := "user"
 		if index%2 == 1 {
 			role = "assistant"
 		}
-		_, _ = fileStore.AddMessage(conversation.ID, role, "compactable historical context")
+		_, _ = fixtureStore.AddMessage(conversation.ID, role, "compactable historical context")
 	}
-	history, _ := fileStore.ListMessages(conversation.ID)
+	history, _ := fixtureStore.ListMessages(conversation.ID)
 	client := &overflowRecoveryClient{}
-	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: client, ContextAssembly: config})
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client, ContextAssembly: config})
 	result, err := (runtimeTurnModel{runtime: runtime}).Execute(context.Background(), turn.Request{
 		RunID: run.ID, TurnID: "turn-overflow-1", ConversationID: conversation.ID,
 		Agent: domain.Agent{ID: "agent_planner", SystemPrompt: "help", Executor: domain.DefaultAgentExecutor},
@@ -46,28 +46,28 @@ func TestRuntimeTurnModelRetriesTextOverflowOnlyAfterGenerationAdvances(t *testi
 	if err != nil || result.Output != "recovered answer" || client.preparedCalls != 2 || client.summaryCalls != 1 {
 		t.Fatalf("overflow recovery failed: result=%#v prepared=%d summaries=%d err=%v", result, client.preparedCalls, client.summaryCalls, err)
 	}
-	latest, ok, err := fileStore.GetLatestContextCompaction(conversation.ID)
+	latest, ok, err := fixtureStore.GetLatestContextCompaction(conversation.ID)
 	if err != nil || !ok || latest.Generation != 1 || latest.Trigger != contextassembly.CompactionTriggerOverflow {
 		t.Fatalf("overflow did not advance compaction surface: ok=%v item=%#v err=%v", ok, latest, err)
 	}
 }
 
 func TestRuntimeTurnModelDoesNotRetryOverflowWhenCompactionFails(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, _ := fileStore.CreateConversation("overflow failure")
+	conversation, _ := fixtureStore.CreateConversation("overflow failure")
 	config := overflowCompactionConfig()
 	snapshot := testRuntimeSnapshot()
 	snapshot.ContextAssembly = config
 	snapshot.Model.Provider = "test"
 	snapshot.Model.Model = "test-model"
-	run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
+	run, _ := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	for index := 0; index < 6; index++ {
-		_, _ = fileStore.AddMessage(conversation.ID, "user", "compactable historical context")
+		_, _ = fixtureStore.AddMessage(conversation.ID, "user", "compactable historical context")
 	}
-	history, _ := fileStore.ListMessages(conversation.ID)
+	history, _ := fixtureStore.ListMessages(conversation.ID)
 	client := &overflowRecoveryClient{summaryErr: context.DeadlineExceeded}
-	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: client, ContextAssembly: config})
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client, ContextAssembly: config})
 	_, err := (runtimeTurnModel{runtime: runtime}).Execute(context.Background(), turn.Request{
 		RunID: run.ID, TurnID: "turn-overflow-failed", ConversationID: conversation.ID,
 		Agent: domain.Agent{ID: "agent_planner", SystemPrompt: "help", Executor: domain.DefaultAgentExecutor},
@@ -82,9 +82,9 @@ func TestRuntimeTurnModelDoesNotRetryOverflowWhenCompactionFails(t *testing.T) {
 func TestCompactContextBestEffortReturnsSuccessAndSuppressesFailure(t *testing.T) {
 	makeRuntime := func(t *testing.T, summaryErr error) (*Runtime, *fixturestore.Store, domain.Run) {
 		t.Helper()
-		fileStore := fixturestore.New()
+		fixtureStore := fixturestore.New()
 
-		conversation, _ := fileStore.CreateConversation("best effort compaction")
+		conversation, _ := fixtureStore.CreateConversation("best effort compaction")
 		config := overflowCompactionConfig()
 		config.ContextWindowTokens = 240
 		config.OutputReserveTokens = 20
@@ -96,14 +96,14 @@ func TestCompactContextBestEffortReturnsSuccessAndSuppressesFailure(t *testing.T
 		snapshot.Model.Provider = "test"
 		snapshot.Model.Model = "test-model"
 		snapshot.ContextAssembly = config
-		run, _ := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
+		run, _ := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 		for index := 0; index < 8; index++ {
-			_, _ = fileStore.AddMessage(conversation.ID, "user", "compactable context repeated several times")
+			_, _ = fixtureStore.AddMessage(conversation.ID, "user", "compactable context repeated several times")
 		}
 		runtime := NewRuntime(RuntimeOptions{
-			Store: fileStore, ModelClient: &overflowRecoveryClient{summaryErr: summaryErr}, ContextAssembly: config,
+			Store: fixtureStore, ModelClient: &overflowRecoveryClient{summaryErr: summaryErr}, ContextAssembly: config,
 		})
-		return runtime, fileStore, run
+		return runtime, fixtureStore, run
 	}
 
 	successRuntime, _, successRun := makeRuntime(t, nil)

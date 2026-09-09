@@ -1,13 +1,14 @@
-package store
+package fixturestore
 
 import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
 )
 
 func DocumentChunkMatchesSearch(document domain.Document, chunk domain.DocumentChunk, search domain.DocumentSearch) bool {
-	if NormalizeWorkspaceID(document.WorkspaceID) != NormalizeWorkspaceID(search.WorkspaceID) {
+	if store.NormalizeWorkspaceID(document.WorkspaceID) != store.NormalizeWorkspaceID(search.WorkspaceID) {
 		return false
 	}
 	for key, expected := range search.Metadata {

@@ -266,7 +266,7 @@ func (s *Store) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.Ret
 	now := time.Now().UTC()
 	for _, chunk := range s.data.DocumentChunks {
 		document, ok := documentByID[chunk.DocumentID]
-		if !ok || !store.DocumentChunkMatchesSearch(document, chunk, search) {
+		if !ok || !DocumentChunkMatchesSearch(document, chunk, search) {
 			continue
 		}
 		embedding, ok := embeddingByChunkID[chunk.ID]
@@ -279,11 +279,11 @@ func (s *Store) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.Ret
 		if search.EmbeddingModel != "" && embedding.Model != search.EmbeddingModel {
 			continue
 		}
-		similarity := store.CosineSimilarity(search.Embedding, embedding.Embedding)
+		similarity := CosineSimilarity(search.Embedding, embedding.Embedding)
 		if search.MinSimilarity > 0 && similarity < search.MinSimilarity {
 			continue
 		}
-		recencyBoost := store.MemoryRecencyBoost(now, chunk.CreatedAt)
+		recencyBoost := MemoryRecencyBoost(now, chunk.CreatedAt)
 		items = append(items, domain.RetrievedDocumentChunk{
 			Document:     document,
 			Chunk:        chunk,
@@ -322,14 +322,14 @@ func (s *Store) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]dom
 	now := time.Now().UTC()
 	for _, chunk := range s.data.DocumentChunks {
 		document, ok := documentByID[chunk.DocumentID]
-		if !ok || !store.DocumentChunkMatchesSearch(document, chunk, search) {
+		if !ok || !DocumentChunkMatchesSearch(document, chunk, search) {
 			continue
 		}
-		lexicalScore := store.DocumentChunkLexicalScore(search, document, chunk)
+		lexicalScore := DocumentChunkLexicalScore(search, document, chunk)
 		if lexicalScore <= 0 {
 			continue
 		}
-		recencyBoost := store.MemoryRecencyBoost(now, chunk.CreatedAt)
+		recencyBoost := MemoryRecencyBoost(now, chunk.CreatedAt)
 		items = append(items, domain.RetrievedDocumentChunk{
 			Document:     document,
 			Chunk:        chunk,
@@ -375,11 +375,11 @@ func (s *Store) ListDocumentContextChunks(search domain.DocumentContextSearch) (
 	filter := domain.DocumentSearch{WorkspaceID: search.WorkspaceID, Metadata: search.Metadata}
 	items := make([]domain.RetrievedDocumentChunk, 0)
 	for _, chunk := range s.data.DocumentChunks {
-		if chunk.DocumentID != documentID || !store.DocumentChunkMatchesSearch(document, chunk, filter) {
+		if chunk.DocumentID != documentID || !DocumentChunkMatchesSearch(document, chunk, filter) {
 			continue
 		}
 		sameParent := strings.TrimSpace(search.ParentID) != "" && chunk.ParentID == strings.TrimSpace(search.ParentID)
-		adjacent := search.NeighborWindow > 0 && store.AbsInt(chunk.ChunkIndex-search.ChunkIndex) <= search.NeighborWindow
+		adjacent := search.NeighborWindow > 0 && AbsInt(chunk.ChunkIndex-search.ChunkIndex) <= search.NeighborWindow
 		if !sameParent && !adjacent {
 			continue
 		}

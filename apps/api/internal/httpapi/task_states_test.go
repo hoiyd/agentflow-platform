@@ -14,13 +14,13 @@ import (
 )
 
 func TestTaskStateAPIProvidesPatchTimelineAndHistoricalVersion(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversationInWorkspace("workspace-a", "task state api")
+	conversation, err := fixtureStore.CreateConversationInWorkspace("workspace-a", "task state api")
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := (&Handler{store: fileStore}).Routes()
+	handler := (&Handler{store: fixtureStore}).Routes()
 	request := func(method, path, body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 		req.Header.Set(WorkspaceHeader, "workspace-a")
@@ -77,10 +77,10 @@ func TestTaskStateAPIProvidesPatchTimelineAndHistoricalVersion(t *testing.T) {
 }
 
 func TestTaskStateAPIRejectsInvalidPatchAndVersion(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, _ := fileStore.CreateConversation("invalid task state")
-	handler := (&Handler{store: fileStore}).Routes()
+	conversation, _ := fixtureStore.CreateConversation("invalid task state")
+	handler := (&Handler{store: fixtureStore}).Routes()
 	tests := []struct {
 		method string
 		path   string

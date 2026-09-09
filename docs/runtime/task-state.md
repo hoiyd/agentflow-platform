@@ -72,10 +72,9 @@ the exact transmitted content.
 
 ## Persistence and Replay
 
-File Store persists `task_state_revisions` in the existing atomic JSON save.
 Postgres stores one immutable row per `(conversation_id, version)` with JSONB
 patch, state, and source records. Conversation deletion removes the full
-revision chain in both adapters.
+revision chain.
 
 Run Replay includes the Conversation's ordered `task_state_revisions` timeline.
 Each revision records its source Run when a model applied it. Because Task State

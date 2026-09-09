@@ -11,9 +11,9 @@ import (
 )
 
 func TestWorkspaceDefaultsUnscopedAPIRequests(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	request := httptest.NewRequest(http.MethodGet, "/api/conversations", nil)
 	recorder := httptest.NewRecorder()

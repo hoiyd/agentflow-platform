@@ -11,11 +11,11 @@ import (
 )
 
 func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, _ := fileStore.CreateConversation("progress restore")
+	conversation, _ := fixtureStore.CreateConversation("progress restore")
 	snapshot := testRuntimeSnapshot()
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +23,7 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 	seed := toolprogress.New(snapshot.ToolProgressGuard)
 	for count := 1; count <= 3; count++ {
 		decision := seed.Observe(call, toolprogress.Outcome{ErrorCode: "execution_failed", ErrorCategory: "execution"})
-		_, err = fileStore.CreateRunEvent(domain.RunEvent{
+		_, err = fixtureStore.CreateRunEvent(domain.RunEvent{
 			Type: domain.EventToolFailed, SchemaVersion: domain.CurrentRunEventSchemaVersion,
 			RunID: run.ID, Payload: progressPayload(decision),
 		})
@@ -31,7 +31,7 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	guard, err := runtime.progressGuardForRun(run.ID, run.RuntimeSnapshot)
 	if err != nil {
 		t.Fatal(err)
@@ -55,12 +55,12 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 }
 
 func TestProgressGuardForHistoricalSnapshotIsDisabled(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
 	snapshot := testRuntimeSnapshot()
 	snapshot.SchemaVersion = domain.ToolSecurityRuntimeSnapshotVersion
 	snapshot.ToolProgressGuard = toolprogress.Config{}
-	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	guard, err := runtime.progressGuardForRun("historical-run", &snapshot)
 	if err != nil {
 		t.Fatal(err)

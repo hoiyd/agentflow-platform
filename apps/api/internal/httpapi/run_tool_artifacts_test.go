@@ -19,10 +19,10 @@ import (
 )
 
 func TestToolArtifactHandlersListReadSearchAndEnforceWorkspace(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, _ := fileStore.CreateConversationInWorkspace("workspace-a", "artifacts")
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	conversation, _ := fixtureStore.CreateConversationInWorkspace("workspace-a", "artifacts")
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
 	}, nil)
 	if err != nil {
@@ -37,10 +37,10 @@ func TestToolArtifactHandlersListReadSearchAndEnforceWorkspace(t *testing.T) {
 		ContentHash: "sha256:" + hex.EncodeToString(sum[:]), OriginalByteSize: len(content), StoredByteSize: len(content),
 		CreatedAt: time.Now().UTC(), ExpiresAt: &expires,
 	}
-	if _, err := fileStore.CreateToolArtifact(artifact, content); err != nil {
+	if _, err := fixtureStore.CreateToolArtifact(artifact, content); err != nil {
 		t.Fatal(err)
 	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	listRequest := httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/artifacts", nil)
 	listRequest.Header.Set(WorkspaceHeader, "workspace-a")
@@ -103,9 +103,9 @@ func TestToolArtifactHandlersListReadSearchAndEnforceWorkspace(t *testing.T) {
 }
 
 func TestToolArtifactHandlersRejectInvalidQueries(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 	tests := []struct {
 		name   string
 		target string

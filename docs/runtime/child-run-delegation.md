@@ -68,7 +68,7 @@ Delegation contract。
 
 ## Durability and recovery
 
-File Store 和 Postgres 都会原子创建 Child Run 与 `RunDelegation`。父 Run 的
+Postgres 会原子创建 Child Run 与 `RunDelegation`。父 Run 的
 Replay 返回 `child_delegations`，Child Replay 返回 `parent_delegation`。
 
 启动恢复先由 H-08 将 stale Child Run 修复为 `failed_recoverable`，再对仍处于

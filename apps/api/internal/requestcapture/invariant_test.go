@@ -114,18 +114,18 @@ func TestInvariantDecodersAndComparators(t *testing.T) {
 
 func reconstructabilityFixture(t *testing.T) (domain.Run, []domain.ModelRequestRecord, []domain.RunEvent) {
 	t.Helper()
-	fileStore, run, _ := newCaptureTestRun(t)
+	pgStore, run, _ := newCaptureTestRun(t)
 	manifest := domain.ContextManifest{
 		ID: "ctx-invariant", RunID: run.ID, ModelCallID: "call-invariant",
 		Entries: []domain.ContextManifestEntry{{Source: "system", Selected: true, EstimatedTokens: 3}},
 	}
-	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+	if _, err := pgStore.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventContextAssembled, RunID: run.ID, ConversationID: run.ConversationID,
 		Payload: map[string]any{"manifest": manifest},
 	}); err != nil {
 		t.Fatalf("create context event: %v", err)
 	}
-	recorder := NewRecorder(fileStore, Options{Mode: domain.ModelRequestCaptureFull})
+	recorder := NewRecorder(pgStore, Options{Mode: domain.ModelRequestCaptureFull})
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
 	if err := recorder.Record(ctx, modelrequest.Observation{
 		ModelCallID: "call-invariant", Operation: "chat.completion", Provider: "test", Model: "test-model",
@@ -134,8 +134,8 @@ func reconstructabilityFixture(t *testing.T) (domain.Run, []domain.ModelRequestR
 	}); err != nil {
 		t.Fatalf("record request: %v", err)
 	}
-	records, _ := fileStore.ListModelRequestRecords(run.ID)
-	events, _ := fileStore.ListRunEvents(run.ID)
+	records, _ := pgStore.ListModelRequestRecords(run.ID)
+	events, _ := pgStore.ListRunEvents(run.ID)
 	return run, records, events
 }
 

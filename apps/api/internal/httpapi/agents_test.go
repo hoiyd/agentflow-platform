@@ -14,9 +14,9 @@ import (
 )
 
 func TestUpdateAgentConfigAPI(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	body := []byte(`{
 		"name": "Configurable Agent",
@@ -47,7 +47,7 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 		t.Fatalf("expected updated tools, got %#v", agent.Tools)
 	}
 
-	persisted, ok, err := fileStore.GetAgent("agent_planner")
+	persisted, ok, err := fixtureStore.GetAgent("agent_planner")
 	if err != nil {
 		t.Fatalf("get agent: %v", err)
 	}
@@ -60,26 +60,26 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 }
 
 func TestRunUsageAPIExposesLedger(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversation("usage api")
+	conversation, err := fixtureStore.CreateConversation("usage api")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
 	snapshot := testRuntimeSnapshot()
 	snapshot.RunBudget = &domain.RuntimeRunBudget{MaxToolCalls: 3}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	if _, _, err = fileStore.ApplyRunUsage(domain.RunUsageEntry{
+	if _, _, err = fixtureStore.ApplyRunUsage(domain.RunUsageEntry{
 		ID: "usage-1", RunID: run.ID, OperationID: "tool-1", Kind: domain.UsageToolExecution,
 		Purpose: domain.UsagePurposePrimary, ToolName: "calculator", ToolCalls: 1, Timestamp: time.Now().UTC(),
 	}); err != nil {
 		t.Fatalf("record usage: %v", err)
 	}
 	recorder := httptest.NewRecorder()
-	(&Handler{store: fileStore}).getRunUsage(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/usage", nil))
+	(&Handler{store: fixtureStore}).getRunUsage(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/usage", nil))
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("usage endpoint status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -93,9 +93,9 @@ func TestRunUsageAPIExposesLedger(t *testing.T) {
 }
 
 func TestCreateAgentConfigAPI(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	body := []byte(`{
 		"name": "Resume Reviewer",
@@ -124,9 +124,9 @@ func TestCreateAgentConfigAPI(t *testing.T) {
 }
 
 func TestCreateAgentRejectsUnavailableTool(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 	body := []byte(`{
 		"name": "Invalid tool agent",
 		"system_prompt": "Use tools.",
@@ -141,11 +141,11 @@ func TestCreateAgentRejectsUnavailableTool(t *testing.T) {
 }
 
 func TestArchiveAgentAPI(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
-	created, err := fileStore.CreateAgent(domain.Agent{
+	created, err := fixtureStore.CreateAgent(domain.Agent{
 		Name:         "Temporary Agent",
 		Description:  "Can be archived.",
 		SystemPrompt: "Help briefly.",
@@ -186,9 +186,9 @@ func TestArchiveAgentAPI(t *testing.T) {
 }
 
 func TestArchiveDefaultAgentAPIRejects(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/agents/agent_planner", nil)
 	recorder := httptest.NewRecorder()
@@ -199,19 +199,19 @@ func TestArchiveDefaultAgentAPIRejects(t *testing.T) {
 }
 
 func TestRunAPIReturnsSnapshotOnlyFromReplay(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversation("Snapshot API boundary")
+	conversation, err := fixtureStore.CreateConversation("Snapshot API boundary")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
 	snapshot := testRuntimeSnapshot()
 	snapshot.Agent.SystemPrompt = "private frozen prompt"
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	for _, path := range []string{"/api/runs", "/api/runs/" + run.ID} {
 		recorder := httptest.NewRecorder()

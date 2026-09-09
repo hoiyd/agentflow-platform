@@ -16,25 +16,25 @@ import (
 )
 
 func TestConfirmCommittedIsAuditedAndIdempotent(t *testing.T) {
-	fileStore, run, catalog, effect := reconciliationFixture(t, tools.SideEffectReconciliation{})
+	fixtureStore, run, catalog, effect := reconciliationFixture(t, tools.SideEffectReconciliation{})
 	command := ToolEffectReconciliationCommand{
 		CommandID: "command-1", Action: domain.ToolEffectConfirmCommitted,
 		ExpectedVersion: effect.Version, Actor: "operator@example.com", Reason: "verified in provider audit log",
 		Result: json.RawMessage(`{"remote_id":"record-1"}`),
 	}
-	first, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command)
+	first, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
 	if err != nil || !first.Applied || first.Outcome != "completed" || first.Effect.Status != domain.ToolEffectCommitted || first.Effect.Version != effect.Version+1 {
 		t.Fatalf("first reconciliation: outcome=%#v err=%v", first, err)
 	}
-	second, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command)
+	second, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
 	if err != nil || second.Applied || second.Effect.Status != domain.ToolEffectCommitted {
 		t.Fatalf("duplicate reconciliation: outcome=%#v err=%v", second, err)
 	}
-	events, _ := fileStore.ListRunEvents(run.ID)
+	events, _ := fixtureStore.ListRunEvents(run.ID)
 	if len(events) != 1 || events[0].Type != domain.EventToolEffectReconciled || events[0].Payload["actor"] != command.Actor || events[0].Payload["result_version"] != effect.Version+1 {
 		t.Fatalf("unexpected audit events: %#v", events)
 	}
-	records, _ := fileStore.ListToolEffects(run.ID)
+	records, _ := fixtureStore.ListToolEffects(run.ID)
 	var replay tools.ExecutionResult
 	if err := json.Unmarshal(records[0].Result, &replay); err != nil || replay.Tool != effect.ToolName || replay.Result.(map[string]any)["remote_id"] != "record-1" {
 		t.Fatalf("invalid replay envelope: %#v err=%v", replay, err)
@@ -42,21 +42,21 @@ func TestConfirmCommittedIsAuditedAndIdempotent(t *testing.T) {
 }
 
 func TestRetryAndCompensationRequireExplicitBindingCapabilities(t *testing.T) {
-	fileStore, run, catalog, effect := reconciliationFixture(t, tools.SideEffectReconciliation{})
+	fixtureStore, run, catalog, effect := reconciliationFixture(t, tools.SideEffectReconciliation{})
 	command := ToolEffectReconciliationCommand{
 		CommandID: "retry-denied", Action: domain.ToolEffectRetrySameKey,
 		ExpectedVersion: effect.Version, Actor: "operator", Reason: "provider confirmed safe retry",
 	}
-	if _, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationUnavailable {
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationUnavailable {
 		t.Fatalf("expected unavailable retry, got %v", err)
 	}
-	records, _ := fileStore.ListToolEffects(run.ID)
+	records, _ := fixtureStore.ListToolEffects(run.ID)
 	if records[0].Version != effect.Version || records[0].Status != domain.ToolEffectNeedsReconciliation {
 		t.Fatalf("denied command changed effect: %#v", records[0])
 	}
 
 	retryCalls := 0
-	fileStore, run, catalog, effect = reconciliationFixture(t, tools.SideEffectReconciliation{
+	fixtureStore, run, catalog, effect = reconciliationFixture(t, tools.SideEffectReconciliation{
 		RetryWithSameKey: func(_ context.Context, recovery tools.EffectReconciliationContext) (any, error) {
 			retryCalls++
 			if recovery.IdempotencyKey != effect.IdempotencyKey {
@@ -66,16 +66,16 @@ func TestRetryAndCompensationRequireExplicitBindingCapabilities(t *testing.T) {
 		},
 	})
 	command.CommandID, command.ExpectedVersion = "retry-allowed", effect.Version
-	first, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command)
+	first, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
 	if err != nil || first.Effect.Status != domain.ToolEffectCommitted || retryCalls != 1 {
 		t.Fatalf("retry outcome=%#v calls=%d err=%v", first, retryCalls, err)
 	}
-	if _, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command); err != nil || retryCalls != 1 {
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command); err != nil || retryCalls != 1 {
 		t.Fatalf("duplicate retry called provider again: calls=%d err=%v", retryCalls, err)
 	}
 
 	compensated := false
-	fileStore, run, catalog, effect = reconciliationFixture(t, tools.SideEffectReconciliation{
+	fixtureStore, run, catalog, effect = reconciliationFixture(t, tools.SideEffectReconciliation{
 		Compensate: func(_ context.Context, recovery tools.EffectReconciliationContext) error {
 			compensated = recovery.CompensationKey != ""
 			return nil
@@ -85,7 +85,7 @@ func TestRetryAndCompensationRequireExplicitBindingCapabilities(t *testing.T) {
 		CommandID: "compensate-1", Action: domain.ToolEffectCompensate,
 		ExpectedVersion: effect.Version, Actor: "operator", Reason: "rollback approved",
 	}
-	outcome, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command)
+	outcome, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
 	if err != nil || !compensated || outcome.Effect.Status != domain.ToolEffectCompensated {
 		t.Fatalf("compensation outcome=%#v called=%v err=%v", outcome, compensated, err)
 	}
@@ -93,7 +93,7 @@ func TestRetryAndCompensationRequireExplicitBindingCapabilities(t *testing.T) {
 
 func TestFailedRetryRemainsQueryableAndDoesNotRepeatCommand(t *testing.T) {
 	calls := 0
-	fileStore, run, catalog, effect := reconciliationFixture(t, tools.SideEffectReconciliation{
+	fixtureStore, run, catalog, effect := reconciliationFixture(t, tools.SideEffectReconciliation{
 		RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
 			calls++
 			return nil, errors.New("provider still unavailable")
@@ -103,31 +103,31 @@ func TestFailedRetryRemainsQueryableAndDoesNotRepeatCommand(t *testing.T) {
 		CommandID: "retry-failed", Action: domain.ToolEffectRetrySameKey,
 		ExpectedVersion: effect.Version, Actor: "operator", Reason: "retry after outage",
 	}
-	first, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command)
+	first, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
 	if err != nil || first.Outcome != "failed" || first.Effect.Status != domain.ToolEffectNeedsReconciliation || first.Effect.Version != effect.Version+2 || calls != 1 {
 		t.Fatalf("failed retry: outcome=%#v calls=%d err=%v", first, calls, err)
 	}
-	second, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command)
+	second, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
 	if err != nil || second.Applied || calls != 1 {
 		t.Fatalf("duplicate failed retry: outcome=%#v calls=%d err=%v", second, calls, err)
 	}
-	events, _ := fileStore.ListRunEvents(run.ID)
+	events, _ := fixtureStore.ListRunEvents(run.ID)
 	if len(events) != 2 || events[0].Type != domain.EventToolEffectReconciliationStarted || events[1].Type != domain.EventToolEffectReconciliationFailed || events[1].Payload["error"] != "provider still unavailable" {
 		t.Fatalf("unexpected failure audit: %#v", events)
 	}
 }
 
 func TestReconciliationRejectsInvalidStateVersionAndDefinition(t *testing.T) {
-	fileStore, run, catalog, effect := reconciliationFixture(t, tools.SideEffectReconciliation{
+	fixtureStore, run, catalog, effect := reconciliationFixture(t, tools.SideEffectReconciliation{
 		RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) { return nil, nil },
 	})
 	base := ToolEffectReconciliationCommand{CommandID: "command", Action: domain.ToolEffectConfirmFailed, ExpectedVersion: effect.Version, Actor: "operator", Reason: "not applied"}
 	wrongVersion := base
 	wrongVersion.ExpectedVersion++
-	if _, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, wrongVersion); reconciliationCode(err) != ReconciliationConflict {
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, wrongVersion); reconciliationCode(err) != ReconciliationConflict {
 		t.Fatalf("expected version conflict, got %v", err)
 	}
-	if _, err := fileStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "still uncertain"); err != nil {
+	if _, err := fixtureStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "still uncertain"); err != nil {
 		t.Fatal(err)
 	}
 	command := base
@@ -139,12 +139,12 @@ func TestReconciliationRejectsInvalidStateVersionAndDefinition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReconcileToolEffect(context.Background(), drifted, fileStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationMismatch {
+	if _, err := ReconcileToolEffect(context.Background(), drifted, fixtureStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationMismatch {
 		t.Fatalf("expected definition mismatch, got %v", err)
 	}
 	base.CommandID = "invalid"
 	base.Action = "unknown"
-	if _, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, base); reconciliationCode(err) != ReconciliationInvalid {
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, base); reconciliationCode(err) != ReconciliationInvalid {
 		t.Fatalf("expected invalid action, got %v", err)
 	}
 }
@@ -209,20 +209,20 @@ func TestReconciliationValidationAndHelpers(t *testing.T) {
 }
 
 func TestReconciliationRejectsTerminalStateAndUnavailableCompensation(t *testing.T) {
-	fileStore, run, catalog, effect := reconciliationFixture(t, tools.SideEffectReconciliation{})
+	fixtureStore, run, catalog, effect := reconciliationFixture(t, tools.SideEffectReconciliation{})
 	command := ToolEffectReconciliationCommand{
 		CommandID: "compensate-denied", Action: domain.ToolEffectCompensate,
 		ExpectedVersion: effect.Version, Actor: "operator", Reason: "rollback requested",
 	}
-	if _, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationUnavailable {
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationUnavailable {
 		t.Fatalf("expected unavailable compensation, got %v", err)
 	}
 	command.CommandID, command.Action = "confirm-failed", domain.ToolEffectConfirmFailed
-	if _, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command); err != nil {
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command); err != nil {
 		t.Fatal(err)
 	}
 	command.CommandID, command.ExpectedVersion = "terminal-command", effect.Version+1
-	if _, err := ReconcileToolEffect(context.Background(), catalog, fileStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationConflict {
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationConflict {
 		t.Fatalf("expected terminal state conflict, got %v", err)
 	}
 
@@ -282,13 +282,13 @@ func (s *reconciliationStoreStub) CommitToolEffectReconciliation(mutation domain
 
 func reconciliationFixture(t *testing.T, recovery tools.SideEffectReconciliation) (*fixturestore.Store, domain.Run, *tools.Catalog, domain.ToolEffectRecord) {
 	t.Helper()
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversation("reconciliation")
+	conversation, err := fixtureStore.CreateConversation("reconciliation")
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
 	}, nil)
 	if err != nil {
@@ -303,7 +303,7 @@ func reconciliationFixture(t *testing.T, recovery tools.SideEffectReconciliation
 		t.Fatal(err)
 	}
 	binding, _ := catalog.Installed("write_record")
-	effect, execute, err := fileStore.BeginToolEffect(domain.ToolEffectRecord{
+	effect, execute, err := fixtureStore.BeginToolEffect(domain.ToolEffectRecord{
 		IdempotencyKey: "effect-1", RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
 		ToolCallID: "call-1", ToolName: binding.Descriptor.Name,
 		DefinitionRevision: binding.Descriptor.DefinitionRevision, RequestHash: "request-hash",
@@ -311,11 +311,11 @@ func reconciliationFixture(t *testing.T, recovery tools.SideEffectReconciliation
 	if err != nil || !execute {
 		t.Fatalf("begin effect: effect=%#v execute=%v err=%v", effect, execute, err)
 	}
-	effect, err = fileStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "timeout")
+	effect, err = fixtureStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "timeout")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return fileStore, run, catalog, effect
+	return fixtureStore, run, catalog, effect
 }
 
 func externalBinding(recovery tools.SideEffectReconciliation, description string) tools.Binding {

@@ -30,9 +30,9 @@ func TestRunDelegatedWorkerPropagatesDurableBoundaryFailures(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			baseRuntime, fileStore, prepared := preparedCollaborationForChildTest(t)
+			baseRuntime, fixtureStore, prepared := preparedCollaborationForChildTest(t)
 			fault := test.fault
-			fault.Store = fileStore
+			fault.Store = fixtureStore
 			runtime := NewRuntime(RuntimeOptions{
 				Store: &fault, ModelClient: baseRuntime.modelClient, RouterMode: RouterModeQuery,
 				ChildRuns: baseRuntime.childRunLimits,
@@ -59,9 +59,9 @@ func TestRunChildWorkerStepPropagatesStagePersistenceFailures(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			baseRuntime, fileStore, prepared := preparedCollaborationForChildTest(t)
+			baseRuntime, fixtureStore, prepared := preparedCollaborationForChildTest(t)
 			fault := test.fault
-			fault.Store = fileStore
+			fault.Store = fixtureStore
 			runtime := NewRuntime(RuntimeOptions{Store: &fault, ModelClient: baseRuntime.modelClient})
 			if _, err := runtime.runChildWorkerStep(context.Background(), prepared.Run, prepared.WorkerAgent, tools.DefaultCatalog(), "delegated task"); err == nil {
 				t.Fatal("expected child stage persistence error")
@@ -91,14 +91,14 @@ func TestChildRuntimeSnapshotRejectsInvalidAndReplayOnlyParents(t *testing.T) {
 
 func preparedCollaborationForChildTest(t *testing.T) (*Runtime, *fixturestore.Store, PreparedCollaborationRun) {
 	t.Helper()
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversation("delegated child boundary")
+	conversation, err := fixtureStore.CreateConversation("delegated child boundary")
 	if err != nil {
 		t.Fatal(err)
 	}
 	runtime := NewRuntime(RuntimeOptions{
-		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
 		ChildRuns: ChildRunLimits{
 			MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute, SummaryMaxChars: 100,
 			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000},
@@ -108,7 +108,7 @@ func preparedCollaborationForChildTest(t *testing.T) (*Runtime, *fixturestore.St
 	if err != nil {
 		t.Fatal(err)
 	}
-	return runtime, fileStore, prepared
+	return runtime, fixtureStore, prepared
 }
 
 type noopChildReservation struct{}

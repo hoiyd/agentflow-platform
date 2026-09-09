@@ -151,7 +151,7 @@ do not put sensitive original text in audit reasons.
 - **Atomicity:** replacement embedding runs before the write transaction. A failed
   embedding leaves content/version unchanged. Persistence atomically updates the
   Memory, vector, candidate suppression, and audit. Deletion needs no model or
-  embedding service. Failed writes roll back in File Store and Postgres alike.
+  embedding service. Failed writes roll back in Postgres.
 - **Deletion:** a tombstone retains identity/version, kind, timestamps and source
   references. Content, metadata and embedding are removed. Recall excludes it;
   `GET /api/memories/{id}` still returns its state and up to 100 newest changes.
@@ -176,13 +176,11 @@ retroactively rewritten or erased; their retention remains independently owned.
 New Recall sees only the current stored revision.
 
 Postgres startup adds `version`, `deleted_at`, and `memory_changes` idempotently.
-Existing rows default to version 1; File Store reads missing/zero versions as 1.
+Existing rows default to version 1.
 Candidates also persist Workspace scope. Existing candidates inherit their source
 Conversation's Workspace at migration, or `default_workspace` when no Conversation
 remains. Source-based suppression is always Workspace-scoped.
-File Store now persists Memory vectors for restart-safe Recall. Older files whose
-vectors were never serialized cannot reconstruct them automatically; correcting
-such a record generates a new vector. HTTP Memory responses do not contain vectors.
+Postgres persists Memory vectors for restart-safe Recall. HTTP Memory responses do not contain vectors.
 The built-in Postgres adapter currently serializes Memory writes with one
 transaction advisory lock to coordinate late proposals and mutations. Embedding
 and Recall do not hold this lock; source-scoped locking is a future throughput

@@ -17,13 +17,13 @@ import (
 )
 
 func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversation("tool trace")
+	conversation, err := fixtureStore.CreateConversation("tool trace")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
 	}, nil)
 
@@ -41,7 +41,7 @@ func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
 		t.Fatalf("new catalog: %v", err)
 	}
 	executor := tools.NewExecutor(catalog, tools.ExecutorOptions{
-		Tracer: NewToolExecutionTracer(NewRecorder(fileStore), run.ID, ""),
+		Tracer: NewToolExecutionTracer(NewRecorder(fixtureStore), run.ID, ""),
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -50,7 +50,7 @@ func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
 		t.Fatalf("expected cancellation error, got %#v", result.Error)
 	}
 
-	events, err := fileStore.ListRunEvents(run.ID)
+	events, err := fixtureStore.ListRunEvents(run.ID)
 	if err != nil {
 		t.Fatalf("list run events: %v", err)
 	}
@@ -73,16 +73,16 @@ func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
 }
 
 func TestToolPolicyTracePersistsDecisionWithoutSensitiveScopeNames(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, _ := fileStore.CreateConversation("policy trace")
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	conversation, _ := fixtureStore.CreateConversation("policy trace")
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tracer := NewToolExecutionTracer(NewRecorder(fileStore), run.ID, "stage-1")
+	tracer := NewToolExecutionTracer(NewRecorder(fixtureStore), run.ID, "stage-1")
 	capability := toolpolicy.NormalizeCapability(toolpolicy.Capability{Scope: toolpolicy.Scope{
 		Resources:   []toolpolicy.ResourceScope{{Kind: toolpolicy.ResourceWorkspace, Name: "private-customer-records", Access: toolpolicy.AccessRead}},
 		Network:     toolpolicy.NetworkScope{Mode: toolpolicy.NetworkExternal, Targets: []string{"secret.internal.example"}},
@@ -95,7 +95,7 @@ func TestToolPolicyTracePersistsDecisionWithoutSensitiveScopeNames(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, err := fileStore.ListRunEvents(run.ID)
+	events, err := fixtureStore.ListRunEvents(run.ID)
 	if err != nil || len(events) != 1 {
 		t.Fatalf("policy events: %#v err=%v", events, err)
 	}
@@ -111,16 +111,16 @@ func TestToolPolicyTracePersistsDecisionWithoutSensitiveScopeNames(t *testing.T)
 }
 
 func TestToolProgressTracePersistsEscalationsAndTerminalRecoveryMetadata(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, _ := fileStore.CreateConversation("progress trace")
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	conversation, _ := fixtureStore.CreateConversation("progress trace")
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tracer := NewToolExecutionTracer(NewRecorder(fileStore), run.ID, "stage-1")
+	tracer := NewToolExecutionTracer(NewRecorder(fixtureStore), run.ID, "stage-1")
 	ctx := WithScope(context.Background(), Scope{RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1", TurnID: "turn-1"})
 	request := tools.ExecutionRequest{CallID: "call-1", Tool: "reader", TurnID: "turn-1"}
 	base := toolprogress.Decision{
@@ -143,7 +143,7 @@ func TestToolProgressTracePersistsEscalationsAndTerminalRecoveryMetadata(t *test
 		ProgressDecision: &terminal,
 	})
 
-	events, err := fileStore.ListRunEvents(run.ID)
+	events, err := fixtureStore.ListRunEvents(run.ID)
 	if err != nil || len(events) != 5 {
 		t.Fatalf("progress events=%#v err=%v", events, err)
 	}
@@ -164,10 +164,10 @@ func TestToolProgressTracePersistsEscalationsAndTerminalRecoveryMetadata(t *test
 }
 
 func TestToolExecutionTracerLinksPersistedArtifact(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, _ := fileStore.CreateConversation("artifact trace")
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	conversation, _ := fixtureStore.CreateConversation("artifact trace")
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
 	}, nil)
 	if err != nil {
@@ -184,15 +184,15 @@ func TestToolExecutionTracerLinksPersistedArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := tools.NewExecutor(catalog, tools.ExecutorOptions{
-		ArtifactStore: fileStore,
-		Tracer:        NewToolExecutionTracer(NewRecorder(fileStore), run.ID, "stage-1"),
+		ArtifactStore: fixtureStore,
+		Tracer:        NewToolExecutionTracer(NewRecorder(fixtureStore), run.ID, "stage-1"),
 	}).Execute(context.Background(), tools.ExecutionRequest{
 		RunID: run.ID, StageID: "stage-1", CallID: "call-1", Tool: "future_tool",
 	})
 	if result.Artifact == nil {
 		t.Fatalf("artifact result missing: %#v", result)
 	}
-	events, err := fileStore.ListRunEvents(run.ID)
+	events, err := fixtureStore.ListRunEvents(run.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

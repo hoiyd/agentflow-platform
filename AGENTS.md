@@ -71,7 +71,7 @@ Any persisted-field change must update and verify the complete path:
 3. Idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration for existing
    databases.
 4. Every affected `SELECT`, `Scan`, `INSERT`, and `UPDATE` column list.
-5. File Store and Postgres behavior parity.
+5. PostgreSQL persistence behavior; update test/evaluation fixtures only where consumed.
 6. A migration regression test that asserts the required schema step exists.
 7. A Postgres round-trip test when `TEST_DATABASE_URL` is available.
 

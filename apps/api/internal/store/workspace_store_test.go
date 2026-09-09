@@ -10,24 +10,24 @@ import (
 )
 
 func TestWorkspaceStoreRejectsCrossScopeOwnedResources(t *testing.T) {
-	fileStore, err := NewPostgresStore(pgfixture.DatabaseURL(t))
+	pgStore, err := NewPostgresStore(pgfixture.DatabaseURL(t))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	t.Cleanup(func() { _ = fileStore.Close() })
-	conversation, err := fileStore.CreateConversationInWorkspace("workspace-b", "private conversation")
+	t.Cleanup(func() { _ = pgStore.Close() })
+	conversation, err := pgStore.CreateConversationInWorkspace("workspace-b", "private conversation")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := pgStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	if _, err := fileStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventRunCreated}); err != nil {
+	if _, err := pgStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventRunCreated}); err != nil {
 		t.Fatalf("create run event: %v", err)
 	}
 
-	workspaceA := fileStore.ForWorkspace(domain.NewWorkspaceScope("workspace-a"))
+	workspaceA := pgStore.ForWorkspace(domain.NewWorkspaceScope("workspace-a"))
 	if _, ok, err := workspaceA.GetRun(run.ID); err != nil || ok {
 		t.Fatalf("cross-scope run lookup must be hidden: ok=%v err=%v", ok, err)
 	}
@@ -47,7 +47,7 @@ func TestWorkspaceStoreRejectsCrossScopeOwnedResources(t *testing.T) {
 		t.Fatalf("cross-scope message mutation must be rejected, got %v", err)
 	}
 
-	workspaceB := fileStore.ForWorkspace(domain.NewWorkspaceScope("workspace-b"))
+	workspaceB := pgStore.ForWorkspace(domain.NewWorkspaceScope("workspace-b"))
 	events, err := workspaceB.ListRunEvents(run.ID)
 	if err != nil || len(events) != 1 {
 		t.Fatalf("owner Workspace should read run events: events=%d err=%v", len(events), err)
@@ -64,12 +64,12 @@ func TestWorkspaceScopeAlwaysNormalizesToNonEmptyNamespace(t *testing.T) {
 }
 
 func TestWorkspaceStoreCoversRunOwnedMissingAndSuccessfulOperations(t *testing.T) {
-	fileStore, err := NewPostgresStore(pgfixture.DatabaseURL(t))
+	pgStore, err := NewPostgresStore(pgfixture.DatabaseURL(t))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	t.Cleanup(func() { _ = fileStore.Close() })
-	scoped := fileStore.ForWorkspace(domain.NewWorkspaceScope("workspace-a"))
+	t.Cleanup(func() { _ = pgStore.Close() })
+	scoped := pgStore.ForWorkspace(domain.NewWorkspaceScope("workspace-a"))
 
 	if _, err := scoped.ListCollaborationSteps("missing"); !IsNotFound(err) {
 		t.Fatalf("missing collaboration run: %v", err)
@@ -94,7 +94,7 @@ func TestWorkspaceStoreCoversRunOwnedMissingAndSuccessfulOperations(t *testing.T
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := pgStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -105,14 +105,14 @@ func TestWorkspaceStoreCoversRunOwnedMissingAndSuccessfulOperations(t *testing.T
 }
 
 func TestWorkspaceStorePropagatesRunLookupFailures(t *testing.T) {
-	fileStore, err := NewPostgresStore(pgfixture.DatabaseURL(t))
+	pgStore, err := NewPostgresStore(pgfixture.DatabaseURL(t))
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	t.Cleanup(func() { _ = fileStore.Close() })
+	t.Cleanup(func() { _ = pgStore.Close() })
 	want := errors.New("run lookup failed")
 	scoped := workspaceStore{
-		backend: &runLookupFailureStore{Store: fileStore, err: want}, workspaceID: "workspace-a",
+		backend: &runLookupFailureStore{Store: pgStore, err: want}, workspaceID: "workspace-a",
 	}
 
 	if _, ok, err := scoped.GetRunReplay("run-1"); !errors.Is(err, want) || ok {

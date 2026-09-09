@@ -102,7 +102,7 @@ const (
 	providerClosed
 )
 
-// BuiltinProvider adapts the existing File/Postgres persistence and embedding
+// BuiltinProvider adapts PostgreSQL persistence and embedding
 // client to the provider lifecycle without exposing either to Runtime or HTTP.
 type BuiltinProvider struct {
 	store        ProviderStore

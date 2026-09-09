@@ -35,9 +35,9 @@ func (e embeddingStub) EmbedText(context.Context, string) (openai.Embedding, err
 }
 
 func TestBuiltinProviderCommitsAndRecallsMemory(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	provider := newTestProvider(t, fileStore, embeddingStub{embedding: openai.Embedding{
+	provider := newTestProvider(t, fixtureStore, embeddingStub{embedding: openai.Embedding{
 		Vector: []float64{1, 0, 0}, Provider: "test", Model: "embedding-v1", Dimensions: 3,
 	}}, ProviderOptions{})
 	defer closeProvider(t, provider)
@@ -61,9 +61,9 @@ func TestBuiltinProviderCommitsAndRecallsMemory(t *testing.T) {
 
 func TestBuiltinProviderClassifiesEmbeddingFailure(t *testing.T) {
 	want := errors.New("embedding provider unavailable")
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	provider := newTestProvider(t, fileStore, embeddingStub{err: want}, ProviderOptions{MaxAttempts: 1})
+	provider := newTestProvider(t, fixtureStore, embeddingStub{err: want}, ProviderOptions{MaxAttempts: 1})
 	defer closeProvider(t, provider)
 
 	_, err := provider.Recall(context.Background(), domain.MemorySearch{Query: "fact"})

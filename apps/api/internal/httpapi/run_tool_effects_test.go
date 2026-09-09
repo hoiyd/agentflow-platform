@@ -18,19 +18,19 @@ import (
 )
 
 func TestToolEffectReconciliationHTTPFlow(t *testing.T) {
-	fileStore, run := createHTTPTestRun(t)
-	effect, execute, err := fileStore.BeginToolEffect(domain.ToolEffectRecord{
+	fixtureStore, run := createHTTPTestRun(t)
+	effect, execute, err := fixtureStore.BeginToolEffect(domain.ToolEffectRecord{
 		IdempotencyKey: "effect-http", RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
 		ToolCallID: "call-1", ToolName: "external_writer", DefinitionRevision: "revision-1", RequestHash: "request",
 	})
 	if err != nil || !execute {
 		t.Fatalf("begin effect: effect=%#v execute=%v err=%v", effect, execute, err)
 	}
-	effect, err = fileStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "timeout")
+	effect, err = fixtureStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "timeout")
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := &Handler{store: fileStore, tools: toolManagerForEffectTest(t)}
+	handler := &Handler{store: fixtureStore, tools: toolManagerForEffectTest(t)}
 
 	listRequest := httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/tool-effects?status=needs_reconciliation&tool=external_writer", nil)
 	listRequest.SetPathValue("id", run.ID)
@@ -72,8 +72,8 @@ func TestToolEffectReconciliationHTTPFlow(t *testing.T) {
 }
 
 func TestToolEffectReconciliationHTTPRejectsInvalidRequests(t *testing.T) {
-	fileStore, run := createHTTPTestRun(t)
-	handler := &Handler{store: fileStore, tools: toolManagerForEffectTest(t)}
+	fixtureStore, run := createHTTPTestRun(t)
+	handler := &Handler{store: fixtureStore, tools: toolManagerForEffectTest(t)}
 
 	invalidFilter := httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/tool-effects?status=unknown", nil)
 	invalidFilter.SetPathValue("id", run.ID)
@@ -144,15 +144,15 @@ func TestToolEffectReconciliationHTTPRejectsInvalidRequests(t *testing.T) {
 }
 
 func TestToolEffectClaimHTTPAndReplayContract(t *testing.T) {
-	fileStore, run := createHTTPTestRun(t)
-	effect, _, err := fileStore.BeginToolEffect(domain.ToolEffectRecord{
+	fixtureStore, run := createHTTPTestRun(t)
+	effect, _, err := fixtureStore.BeginToolEffect(domain.ToolEffectRecord{
 		IdempotencyKey: "claimed-http", RunID: run.ID, StageID: "stage-1", ToolCallID: "call-1",
 		ToolName: "external_writer", DefinitionRevision: "revision-1", RequestHash: "request",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	effect, err = fileStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "uncertain")
+	effect, err = fixtureStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "uncertain")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,13 +166,13 @@ func TestToolEffectClaimHTTPAndReplayContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	claimEvent.ID = "claim-http-event"
-	if _, _, _, err := fileStore.CommitToolEffectReconciliation(domain.ToolEffectReconciliation{
+	if _, _, _, err := fixtureStore.CommitToolEffectReconciliation(domain.ToolEffectReconciliation{
 		CommandID: "claim", IdempotencyKey: effect.IdempotencyKey, ExpectedVersion: effect.Version,
 		Action: domain.ToolEffectRetrySameKey, NextStatus: domain.ToolEffectReconciling, Event: claimEvent,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	handler := &Handler{store: fileStore, tools: toolManagerForEffectTest(t)}
+	handler := &Handler{store: fixtureStore, tools: toolManagerForEffectTest(t)}
 	request := httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/tool-effects?status=reconciling", nil)
 	request.SetPathValue("id", run.ID)
 	response := httptest.NewRecorder()
@@ -183,7 +183,7 @@ func TestToolEffectClaimHTTPAndReplayContract(t *testing.T) {
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || len(body.Effects) != 1 || body.Effects[0].Status != domain.ToolEffectReconciling || len(body.Effects[0].AvailableActions) != 2 {
 		t.Fatalf("claim list contract: %d %s", response.Code, response.Body.String())
 	}
-	replay, ok, err := fileStore.GetRunReplay(run.ID)
+	replay, ok, err := fixtureStore.GetRunReplay(run.ID)
 	if err != nil || !ok || len(replay.ToolEffects) != 1 || replay.ToolEffects[0].Status != domain.ToolEffectReconciling {
 		t.Fatalf("replay claim: %#v %v", replay.ToolEffects, err)
 	}

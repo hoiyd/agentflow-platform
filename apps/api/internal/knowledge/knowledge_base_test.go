@@ -38,9 +38,9 @@ func (e embeddingStub) EmbedText(context.Context, string) (openai.Embedding, err
 }
 
 func TestKnowledgeBaseIngestsSearchesAndEvaluatesKnowledge(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	knowledgeBase := NewKnowledgeBase(fileStore, embeddingStub{embedding: openai.Embedding{
+	knowledgeBase := NewKnowledgeBase(fixtureStore, embeddingStub{embedding: openai.Embedding{
 		Vector: []float64{1, 0, 0}, Provider: "test", Model: "embedding-v1", Dimensions: 3,
 	}})
 
@@ -103,9 +103,9 @@ func TestKnowledgeBaseClassifiesEmbeddingFailure(t *testing.T) {
 }
 
 func TestKnowledgeBaseFailedUpdateKeepsPreviousIndex(t *testing.T) {
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	working := NewKnowledgeBase(fileStore, embeddingStub{embedding: openai.Embedding{
+	working := NewKnowledgeBase(fixtureStore, embeddingStub{embedding: openai.Embedding{
 		Vector: []float64{1, 0}, Provider: "test", Model: "embedding-v1", Dimensions: 2,
 	}})
 	previous, err := working.Ingest(context.Background(), domain.DocumentIngestRequest{
@@ -116,14 +116,14 @@ func TestKnowledgeBaseFailedUpdateKeepsPreviousIndex(t *testing.T) {
 		t.Fatalf("ingest previous version: %v", err)
 	}
 	want := errors.New("embedding provider unavailable")
-	failing := NewKnowledgeBase(fileStore, embeddingStub{err: want})
+	failing := NewKnowledgeBase(fixtureStore, embeddingStub{err: want})
 	if _, err := failing.Ingest(context.Background(), domain.DocumentIngestRequest{
 		WorkspaceID: "workspace-a", SourceKey: "refund-policy", Title: "Refund policy", Version: "3.2",
 		SourceURI: "refund-policy-current.md", Content: "Refunds are automatic within 14 days.",
 	}); !IsEmbeddingError(err) || !errors.Is(err, want) {
 		t.Fatalf("expected update embedding failure, got %v", err)
 	}
-	loaded, chunks, found, err := fileStore.GetDocument(previous.ID)
+	loaded, chunks, found, err := fixtureStore.GetDocument(previous.ID)
 	if err != nil || !found || loaded.Version != "2.4" || loaded.SourceURI != "refund-policy-deprecated.md" || len(chunks) != 1 || !strings.Contains(chunks[0].Content, "30 days") {
 		t.Fatalf("failed update changed active index: document=%#v chunks=%#v found=%v err=%v", loaded, chunks, found, err)
 	}

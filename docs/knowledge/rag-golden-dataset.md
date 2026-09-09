@@ -36,10 +36,10 @@ need separate answer-level evaluation.
 
 ## Run locally
 
-Run the Dataset from the repository root. The command creates a temporary
-FileStore, indexes the canonical corpus, runs the production retrieval pipeline
-with deterministic local hash embeddings, emits JSON to stdout, and removes the
-store. It does not require a running API, database, network, or API key.
+Run the Dataset from the repository root. The command creates an isolated
+in-memory fixture, indexes the canonical corpus, runs the production retrieval pipeline
+with deterministic local hash embeddings, and emits JSON to stdout.
+It does not require a running API, database, network, or API key.
 
 ```bash
 make golden-eval

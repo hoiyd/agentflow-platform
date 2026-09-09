@@ -1,4 +1,4 @@
-package store
+package fixturestore
 
 import (
 	"encoding/json"
@@ -10,13 +10,14 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
 )
 
 func MemoryMatchesSearch(memory domain.Memory, search domain.MemorySearch) bool {
 	if memory.DeletedAt != nil {
 		return false
 	}
-	if NormalizeWorkspaceID(memory.WorkspaceID) != NormalizeWorkspaceID(search.WorkspaceID) {
+	if store.NormalizeWorkspaceID(memory.WorkspaceID) != store.NormalizeWorkspaceID(search.WorkspaceID) {
 		return false
 	}
 	if search.UserID != "" && memory.UserID != search.UserID {

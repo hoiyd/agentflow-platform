@@ -212,7 +212,6 @@ func TestClaimAndSettlementFailureWindows(t *testing.T) {
 
 func TestCanceledCallbackRemainsClaimedAndCannotOverwriteManualResolution(t *testing.T) {
 	entered, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	defer func() { close(release); <-finished }()
 	target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{
 		RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
 			close(entered)
@@ -221,6 +220,15 @@ func TestCanceledCallbackRemainsClaimedAndCannotOverwriteManualResolution(t *tes
 			return true, nil
 		},
 	})
+	// Register only after database setup: a skipped fixture never starts a callback.
+	defer func() {
+		close(release)
+		select {
+		case <-finished:
+		case <-time.After(5 * time.Second):
+			t.Error("callback did not finish after release")
+		}
+	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	command := retryCommand(effect)
@@ -232,7 +240,11 @@ func TestCanceledCallbackRemainsClaimedAndCannotOverwriteManualResolution(t *tes
 		}
 		done <- result
 	}()
-	<-entered
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("callback did not start")
+	}
 	cancel()
 	var result toolreconciliation.ToolEffectReconciliationOutcome
 	select {

@@ -22,8 +22,8 @@ import (
 )
 
 func TestArtifactToolsReadSearchAndTraceWithinRun(t *testing.T) {
-	fileStore, run, artifact := artifactFixture(t, time.Now().UTC().Add(time.Hour))
-	service := NewService(fileStore, eventpkg.NewRecorder(fileStore))
+	fixtureStore, run, artifact := artifactFixture(t, time.Now().UTC().Add(time.Hour))
+	service := NewService(fixtureStore, eventpkg.NewRecorder(fixtureStore))
 	catalog, err := tools.NewCatalog(service.ToolBindings()...)
 	if err != nil {
 		t.Fatal(err)
@@ -46,7 +46,7 @@ func TestArtifactToolsReadSearchAndTraceWithinRun(t *testing.T) {
 	if search.Error != nil || len(search.Result.(domain.ToolArtifactSearchResult).Matches) != 1 {
 		t.Fatalf("artifact search failed: %#v", search)
 	}
-	events, err := fileStore.ListRunEvents(run.ID)
+	events, err := fixtureStore.ListRunEvents(run.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,8 +62,8 @@ func TestArtifactToolsReadSearchAndTraceWithinRun(t *testing.T) {
 }
 
 func TestArtifactToolRecordsExpiredAccess(t *testing.T) {
-	fileStore, run, artifact := artifactFixture(t, time.Now().UTC().Add(-time.Minute))
-	service := NewService(fileStore, eventpkg.NewRecorder(fileStore))
+	fixtureStore, run, artifact := artifactFixture(t, time.Now().UTC().Add(-time.Minute))
+	service := NewService(fixtureStore, eventpkg.NewRecorder(fixtureStore))
 	catalog, _ := tools.NewCatalog(service.ToolBindings()...)
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
 	result := tools.NewExecutor(catalog, tools.ExecutorOptions{}).Execute(ctx, tools.ExecutionRequest{
@@ -73,7 +73,7 @@ func TestArtifactToolRecordsExpiredAccess(t *testing.T) {
 	if result.Error == nil || !errors.Is(result.Error.Cause, store.ErrToolArtifactExpired) {
 		t.Fatalf("expired read result = %#v", result)
 	}
-	events, _ := fileStore.ListRunEvents(run.ID)
+	events, _ := fixtureStore.ListRunEvents(run.ID)
 	found := false
 	for _, item := range events {
 		found = found || item.Type == domain.EventArtifactExpired
@@ -92,8 +92,8 @@ func TestArtifactServiceOptionalAndFailurePaths(t *testing.T) {
 		t.Fatal("nil service exposed artifact tools")
 	}
 
-	fileStore, run, artifact := artifactFixture(t, time.Now().UTC().Add(time.Hour))
-	service := NewService(fileStore, nil)
+	fixtureStore, run, artifact := artifactFixture(t, time.Now().UTC().Add(time.Hour))
+	service := NewService(fixtureStore, nil)
 	if names := service.ToolNames(); len(names) != 2 || names[0] != ReadToolName || names[1] != SearchToolName {
 		t.Fatalf("artifact tool names = %#v", names)
 	}
@@ -123,14 +123,14 @@ func TestArtifactServiceOptionalAndFailurePaths(t *testing.T) {
 }
 
 func TestArtifactSearchRecordsExpiredAccess(t *testing.T) {
-	fileStore, run, artifact := artifactFixture(t, time.Now().UTC().Add(-time.Minute))
-	service := NewService(fileStore, eventpkg.NewRecorder(fileStore))
+	fixtureStore, run, artifact := artifactFixture(t, time.Now().UTC().Add(-time.Minute))
+	service := NewService(fixtureStore, eventpkg.NewRecorder(fixtureStore))
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
 	_, err := service.searchBinding().Handler(ctx, json.RawMessage(`{"artifact_id":"`+artifact.ID+`","query":"needle"}`))
 	if !errors.Is(err, store.ErrToolArtifactExpired) {
 		t.Fatalf("expired search error = %v", err)
 	}
-	events, err := fileStore.ListRunEvents(run.ID)
+	events, err := fixtureStore.ListRunEvents(run.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,10 +141,10 @@ func TestArtifactSearchRecordsExpiredAccess(t *testing.T) {
 
 func artifactFixture(t *testing.T, expires time.Time) (*fixturestore.Store, domain.Run, domain.ToolArtifact) {
 	t.Helper()
-	fileStore := fixturestore.New()
+	fixtureStore := fixturestore.New()
 
-	conversation, _ := fileStore.CreateConversation("artifact tools")
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	conversation, _ := fixtureStore.CreateConversation("artifact tools")
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
 	}, nil)
 	if err != nil {
@@ -158,10 +158,10 @@ func artifactFixture(t *testing.T, expires time.Time) (*fixturestore.Store, doma
 		ContentHash: "sha256:" + hex.EncodeToString(sum[:]), OriginalByteSize: len(content), StoredByteSize: len(content),
 		CreatedAt: time.Now().UTC(), ExpiresAt: &expires,
 	}
-	if _, err := fileStore.CreateToolArtifact(artifact, content); err != nil {
+	if _, err := fixtureStore.CreateToolArtifact(artifact, content); err != nil {
 		t.Fatal(err)
 	}
-	return fileStore, run, artifact
+	return fixtureStore, run, artifact
 }
 
 func TestCuratedArtifactBindingsRejectScopeAndPolicyAndBoundResults(t *testing.T) {

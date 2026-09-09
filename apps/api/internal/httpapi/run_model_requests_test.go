@@ -17,7 +17,7 @@ import (
 )
 
 func TestListModelRequestsHidesContentByDefaultAndReturnsManifest(t *testing.T) {
-	fileStore, run := createHTTPTestRun(t)
+	fixtureStore, run := createHTTPTestRun(t)
 	manifest := domain.ContextManifest{
 		ID: "ctx-http", RunID: run.ID, ModelCallID: "call-http", Model: "test",
 		Entries: []domain.ContextManifestEntry{
@@ -25,13 +25,13 @@ func TestListModelRequestsHidesContentByDefaultAndReturnsManifest(t *testing.T) 
 			{Source: "history", Selected: false, EstimatedTokens: 3},
 		},
 	}
-	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+	if _, err := fixtureStore.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventContextAssembled, RunID: run.ID, ConversationID: run.ConversationID,
 		Payload: map[string]any{"manifest": manifest},
 	}); err != nil {
 		t.Fatalf("create manifest: %v", err)
 	}
-	recorder := requestcapture.NewRecorder(fileStore, requestcapture.Options{Mode: domain.ModelRequestCaptureFull})
+	recorder := requestcapture.NewRecorder(fixtureStore, requestcapture.Options{Mode: domain.ModelRequestCaptureFull})
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
 	payload := []byte(`{"model":"test","messages":[{"role":"user","content":"debug me"}]}`)
 	if err := recorder.Record(ctx, modelrequest.Observation{
@@ -40,7 +40,7 @@ func TestListModelRequestsHidesContentByDefaultAndReturnsManifest(t *testing.T) 
 	}); err != nil {
 		t.Fatalf("record model request: %v", err)
 	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 
 	responseRecorder := httptest.NewRecorder()
 	handler.listModelRequests(responseRecorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/model_requests", nil))
@@ -68,8 +68,8 @@ func TestListModelRequestsHidesContentByDefaultAndReturnsManifest(t *testing.T) 
 }
 
 func TestListModelRequestsEnforcesWorkspaceScope(t *testing.T) {
-	fileStore, run := createHTTPTestRun(t)
-	handler := &Handler{store: fileStore}
+	fixtureStore, run := createHTTPTestRun(t)
+	handler := &Handler{store: fixtureStore}
 	request := httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/model_requests", nil)
 	request.Header.Set(WorkspaceHeader, "another-workspace")
 	recorder := httptest.NewRecorder()
@@ -82,7 +82,7 @@ func TestListModelRequestsEnforcesWorkspaceScope(t *testing.T) {
 }
 
 func TestListModelRequestsHandlesStoreFailuresAndInvalidProjection(t *testing.T) {
-	fileStore, run := createHTTPTestRun(t)
+	fixtureStore, run := createHTTPTestRun(t)
 	tests := []struct {
 		name       string
 		path       string
@@ -91,12 +91,12 @@ func TestListModelRequestsHandlesStoreFailuresAndInvalidProjection(t *testing.T)
 		wantBody   string
 		absentBody string
 	}{
-		{name: "missing id", path: "/api/runs//model_requests", store: &modelRequestHTTPStore{Store: fileStore}, wantStatus: http.StatusBadRequest, wantBody: "run id is required"},
-		{name: "run lookup", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, runErr: errors.New("run lookup failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "run lookup failed"},
-		{name: "record list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, recordsErr: errors.New("records failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "records failed"},
-		{name: "event list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fileStore, run: run, ok: true, eventsErr: errors.New("events failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "events failed"},
+		{name: "missing id", path: "/api/runs//model_requests", store: &modelRequestHTTPStore{Store: fixtureStore}, wantStatus: http.StatusBadRequest, wantBody: "run id is required"},
+		{name: "run lookup", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fixtureStore, runErr: errors.New("run lookup failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "run lookup failed"},
+		{name: "record list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fixtureStore, run: run, ok: true, recordsErr: errors.New("records failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "records failed"},
+		{name: "event list", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{Store: fixtureStore, run: run, ok: true, eventsErr: errors.New("events failed")}, wantStatus: http.StatusInternalServerError, wantBody: `"code":"internal_error"`, absentBody: "events failed"},
 		{name: "invalid projection", path: "/api/runs/" + run.ID + "/model_requests", store: &modelRequestHTTPStore{
-			Store: fileStore, run: run, ok: true, records: []domain.ModelRequestRecord{},
+			Store: fixtureStore, run: run, ok: true, records: []domain.ModelRequestRecord{},
 			events: []domain.RunEvent{{Type: domain.EventModelRequestPrepared, Payload: map[string]any{
 				"record_id": "orphan", "model_call_id": "call", "attempt": 1, "payload_hash": "sha256:orphan",
 			}}},

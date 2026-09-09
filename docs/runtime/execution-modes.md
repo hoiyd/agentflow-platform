@@ -153,7 +153,7 @@ The modes deliberately converge below orchestration:
 | Workspace namespace | A Run inherits its Conversation Workspace; retrieval, persistence, Replay, and Verification preserve that scope in every mode |
 | Tracing | Run/Stage/Turn/Model/Tool/Retrieval/Context/Usage/Verification Run Events use one schema |
 | Verification | The same optional frozen contract gates the candidate output from Single, Multi, or Loop |
-| Replay and Episode Report | File and Postgres stores expose the same persisted evidence and projections |
+| Replay and Episode Report | Postgres stores expose the same persisted evidence and projections |
 
 This boundary prevents a feature from working in one mode while silently
 bypassing policy in another. Adding a provider, Store, Reranker, Tool, or

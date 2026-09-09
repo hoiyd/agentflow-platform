@@ -15,8 +15,7 @@ Common environment variables:
 ```bash
 BIND_ADDRESS=127.0.0.1
 PORT=8080
-STORE_DRIVER=file
-DATA_PATH=.data/agentflow.json
+DATABASE_URL=postgres://agentflow:agentflow@localhost:5432/agentflow?sslmode=disable
 TOOL_CONFIG_PATH=.data/tools.json
 TOOL_RESULT_MAX_BATCH_BYTES=8000
 TOOL_ARTIFACT_MAX_BYTES=5242880
@@ -84,7 +83,7 @@ carry a non-empty workspace scope. Clients may send `X-Workspace-ID`; when it
 is omitted, both API and web client use the reserved `default_workspace`
 namespace. Workspace isolation has no feature flag and cannot be disabled.
 
-Existing File Store and Postgres records with an empty workspace or the legacy
+Existing Postgres records with an empty workspace or the legacy
 reserved value `default` are migrated to `default_workspace`. Explicit custom
 workspace IDs remain unchanged.
 
@@ -136,7 +135,7 @@ SHA-256 hash of the exact canonical JSON passed to the model transport.
 Oversized content is omitted and marked truncated; hashes, counts, effective
 parameters, Runtime Snapshot hash, and Context Manifest reference remain.
 `MODEL_REQUEST_CAPTURE_RETENTION` controls content lifetime. Expired content is
-purged lazily on File/Postgres reads; durable Envelope and redaction metadata
+purged lazily on Postgres reads; durable Envelope and redaction metadata
 remain available.
 Changing this process-level observability policy does not change model input or
 the semantic protocol frozen with a Run. See
@@ -239,10 +238,10 @@ Adaptive extraction uses the configured chat model and therefore consumes the sa
 
 ## Postgres + pgvector
 
-By default the backend uses the local file store. To use Postgres:
+PostgreSQL with pgvector is required, including local server development.
+Missing or invalid database configuration fails startup; there is no fallback:
 
 ```bash
-STORE_DRIVER=postgres
 DATABASE_URL=postgres://agentflow:agentflow@localhost:5432/agentflow?sslmode=disable
 ```
 
@@ -258,9 +257,12 @@ The Postgres store runs idempotent startup migrations for:
 
 Lexical search does not require an additional environment variable. The
 Postgres startup migration creates and maintains the generated full-text
-columns automatically. The file store performs the same logical recall path
-with in-process phrase, identifier, and term-coverage scoring instead of a
-persisted text index.
+columns automatically. Offline evaluation uses an in-memory fixture with phrase,
+identifier, and term-coverage scoring, not PostgreSQL full-text query semantics.
+
+`STORE_DRIVER` and `DATA_PATH` are retired and ignored. Existing JSON data is
+not read, imported, or deleted. `TOOL_CONFIG_PATH` remains an operator configuration
+file, not an application persistence backend. See [Storage Boundary](../architecture/storage-boundary.md).
 
 ## Tool Configuration
 

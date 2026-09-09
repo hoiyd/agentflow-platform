@@ -92,7 +92,7 @@ func (s *Store) SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMe
 	now := time.Now().UTC()
 	for _, memory := range s.data.Memories {
 		memory.Version = max(1, memory.Version)
-		if !store.MemoryMatchesSearch(memory, search) {
+		if !MemoryMatchesSearch(memory, search) {
 			continue
 		}
 		embedding, ok := embeddingByMemoryID[memory.ID]
@@ -105,8 +105,8 @@ func (s *Store) SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMe
 		if search.EmbeddingModel != "" && embedding.Model != search.EmbeddingModel {
 			continue
 		}
-		similarity := store.CosineSimilarity(search.Embedding, embedding.Embedding)
-		recencyBoost := store.MemoryRecencyBoost(now, memory.CreatedAt)
+		similarity := CosineSimilarity(search.Embedding, embedding.Embedding)
+		recencyBoost := MemoryRecencyBoost(now, memory.CreatedAt)
 		items = append(items, domain.RetrievedMemory{
 			Memory:       memory,
 			Similarity:   similarity,
