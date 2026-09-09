@@ -20,17 +20,19 @@ Artifact access retains the production Run scope and read-only security policy.
 
 ## Verification and Comparison
 
-Both arms receive identical task instructions, an artifact reference, and the
-same preview. `without_tools` has an empty Catalog; `with_tools` has only the two
-Artifact Bindings. This is a **preview-only ablation**, not a comparison with
-full-document prompting, RAG, or every alternative retrieval design.
+All three arms receive identical task instructions, an artifact reference, and
+the same preview. `without_tools` stops there, `full_context` also receives the
+complete immutable export, and `with_tools` has only the two Artifact Bindings.
+The full-context arm is the fair answer-quality baseline when the export fits
+the model window; the preview-only arm remains an access diagnostic. This is
+not a comparison with RAG or every alternative retrieval design.
 
 The answer must be strict JSON with `facts` and `missing`. A fact must match its
 expected ID, amount and exact complete source line. Tool-arm success additionally
 requires that quote in an actual successful read/search result. Missing-record
-success requires an exact-ID search with no matches and a complete scan. Duplicate,
-unexpected, omitted or fabricated facts fail. No LLM judge or exact call order
-is required. `completed` and `verified` are separate fields.
+Tool success requires an exact-ID search with no matches and a complete scan.
+Duplicate, unexpected, omitted or fabricated facts fail. No LLM judge or exact
+call order is required. `completed` and `verified` are separate fields.
 
 The runner calls the production OpenAI-compatible client, Context Assembler,
 Tool Executor, recorder and Usage Ledger. It does not run full Chat/Multi/Loop
@@ -63,11 +65,11 @@ files or silently fall back to canned responses. Select a Tool-capable model:
 ```bash
 go run ./cmd/eval tool --live \
   --base-url https://api.openai.com/v1 --model YOUR_MODEL \
-  --trials 3 --max-model-calls 30 --max-total-tokens 60000 \
+  --trials 3 --max-model-calls 45 --max-total-tokens 250000 \
   --timeout 60s --enforce > /tmp/tool-task-live.json
 ```
 
-The model-call/token limits cover the **whole suite**, both arms and every trial,
+The model-call/token limits cover the **whole suite**, all three arms and every trial,
 not each sample. Each sample has at most four Tool executions and the specified
 deadline (maximum five minutes); model output reserve is 512 tokens. Model retries
 are disabled to avoid hidden attempts. Existing Run Budget reservation/settlement
@@ -91,11 +93,12 @@ output, successful Tool evidence, failed Tool names/error codes, findings, usage
 source and latency. Latency covers model/Tool execution, excluding fixture setup.
 
 The stderr summary compares verified success, tokens, model calls, Tool calls
-and latency. Success-rate denominators include failed and unrun samples. Means
-use evaluated samples only; always inspect `evaluated`, `samples`, estimated usage
-and open reservations before comparing costs. No price table means monetary cost
-is unavailable, not free. Repeated trials alternate arm order. Provider endpoints
-and API keys are omitted; result/error text uses the existing deterministic redactor.
+and latency for preview-only, full-context, and Tool arms. Success-rate
+denominators include failed and unrun samples. Means use evaluated samples only;
+always inspect `evaluated`, `samples`, estimated usage and open reservations
+before comparing costs. No price table means monetary cost is unavailable, not
+free. Repeated trials rotate arm order. Provider endpoints and API keys are
+omitted; result/error text uses the existing deterministic redactor.
 The same `eval` command and provenance/gate envelope are used by the offline RAG
 suite; domain metrics remain typed rather than forced into a lowest-common-denominator schema.
 

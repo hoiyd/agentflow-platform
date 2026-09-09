@@ -85,8 +85,8 @@ type evaluationFixture struct {
 	assembly domain.ContextAssemblyConfig
 }
 
-// Run compares a preview-only ablation with artifact access. It uses the
-// production provider/Executor path, not full orchestration or a new Agent loop.
+// Run compares preview-only, full-context, and artifact-access inputs. It uses
+// the production provider/Executor path, not full orchestration or a new Agent loop.
 // The client must be dedicated to this evaluation (retries are disabled).
 func Run(ctx context.Context, client *openai.Client, opts Options) (Report, error) {
 	if client == nil || !client.HasAPIKey() {
@@ -125,10 +125,10 @@ func Run(ctx context.Context, client *openai.Client, opts Options) (Report, erro
 	stop := ""
 	for trial := 1; trial <= opts.Trials; trial++ {
 		for _, task := range data.Cases {
-			arms := []string{"without_tools", "with_tools"}
-			// Alternate order to reduce systematic latency/order bias across trials.
-			if trial%2 == 0 {
-				arms[0], arms[1] = arms[1], arms[0]
+			arms := []string{"without_tools", "full_context", "with_tools"}
+			// Rotate order to reduce systematic latency/order bias across trials.
+			if offset := (trial - 1) % len(arms); offset > 0 {
+				arms = append(arms[offset:], arms[:offset]...)
 			}
 			for _, arm := range arms {
 				sample := Sample{TaskID: task.ID, Trial: trial, Arm: arm, Findings: []string{}, Evidence: []Evidence{}, ToolFailures: []ToolFailure{}}
@@ -187,13 +187,16 @@ func (f evaluationFixture) runSample(ctx context.Context, client *openai.Client,
 		return err
 	}
 	active := f.catalog
-	if sample.Arm == "without_tools" {
+	if sample.Arm != "with_tools" {
 		active, err = tools.NewCatalog()
 		if err != nil {
 			return err
 		}
 	}
 	input := fmt.Sprintf("Requested IDs: %s\nArtifact: %s\nPreview (not the full export):\n%s", strings.Join(task.IDs, ", "), artifact.ID, content[:256])
+	if sample.Arm == "full_context" {
+		input += "\nFull immutable export:\n" + content
+	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	ctx = eventpkg.WithScope(ctx, eventpkg.Scope{RunID: run.ID, ConversationID: conversation.ID, StageID: "evaluation", TurnID: "turn_" + run.ID})

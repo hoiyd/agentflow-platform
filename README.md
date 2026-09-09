@@ -166,6 +166,7 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 | [Tool side-effect reconciliation](docs/tools/tool-side-effect-reconciliation.md) | Versioned operator commands resolve uncertain external writes with capability-gated retry/compensation and typed audit events | [coordinator](apps/api/internal/toolreconciliation/reconciliation.go), [tests](apps/api/internal/toolreconciliation/reconciliation_test.go) |
 | [**Verification**](docs/runtime/verification.md) | Frozen Completion Contracts run configured deterministic or model-backed verifiers, persist immutable Evidence/Artifacts, and gate `run.completed` | [engine](apps/api/internal/verification/engine.go), [tests](apps/api/internal/verification/engine_test.go) |
 | [**Tracing & replay**](docs/architecture/backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed Run/Stage/Turn/Model/Tool/Retrieval/Verification events, usage ledgers, Replay, and Episode reports explain what happened | [episode](apps/api/internal/httpapi/episode_report.go), [tests](apps/api/internal/httpapi/episode_report_test.go) |
+| [**Evidence-backed reference task**](docs/guides/demo.md) | A fixed 12-task manifest connects retrieval, long-record access, failure accounting, and recoverable Replay without adding another runtime | [manifest](examples/reference-task.v1.json), [evidence command](scripts/reference-task.sh) |
 
 Performance statements above describe implemented controls, not synthetic
 benchmark claims. Verification evaluates configured Run outcomes; Automated and
@@ -188,8 +189,8 @@ persistence.
 3. Open **Knowledge** and upload [`examples/example.md`](examples/example.md).
 4. Search for that identifier and inspect Semantic rank, Keyword rank, RRF,
    final rerank, and the transformed model context.
-5. Run `make golden-eval` and `make context-eval` to execute the deterministic
-   RAG and final-model-input regression gates with complete provenance and quality metrics.
+5. Run `make reference-eval` and `make context-eval` to produce the CASE-001
+   evidence pack and execute the final-model-input regression gate.
 6. Run a Multi-Agent task against the runbook, then open **View trace** to
    connect orchestration stages, retrieval, model calls, usage, and final Run
    state. Export the Episode Report when a compact machine-readable review

@@ -16,15 +16,18 @@ file is sample knowledge content, not the Demo instructions themselves. Keep one
 completed Multi-Agent Run available if the interview environment has unreliable
 network access.
 
-In a second terminal, run the canonical retrieval baseline in an isolated
-temporary store:
+In a second terminal, build the fixed CASE-001 evidence pack:
 
 ```bash
-make golden-eval
+make reference-eval
 ```
 
-The command gates no-answer and stale-data behavior. ACL remains diagnostic
-because authenticated identity and document authorization are not implemented.
+The command writes five machine-readable artifacts under
+`.cache/reference-task`: the 12-task manifest, deterministic RAG report, Tool
+protocol report, failure/recovery events, and a saved recoverable Replay. The
+offline provider and hash embedder are explicit fixtures; do not present their
+results as live-model quality. ACL remains diagnostic because authenticated
+identity and document authorization are not implemented.
 
 ## Walkthrough
 
@@ -65,6 +68,14 @@ misses, prompt-injection blocks, gating versus diagnostic cases, and the
 Embedding/Fusion/Reranker/Relevance Gate versions used by the same production
 pipeline.
 
+Tie this to the reference task by opening
+`.cache/reference-task/rag-offline.json` and finding `stale-refund-window`:
+the expected source is policy `3.2`, policy `2.4` is forbidden, and a weak or
+conflicting result remains visible instead of disappearing from the
+denominator. This artifact runs production retrieval components against an
+isolated fixture; the UI exercise above validates the interactive path, not
+the canonical dataset result.
+
 ### 2:00-3:15 - Multi-Agent Run
 
 Start a Multi-Agent task:
@@ -86,6 +97,11 @@ terminal state. Show that Replay reads stored evidence rather than reconstructin
 the Run from UI state. Point out the Episode Report's task, retrieval, LLM,
 Tool, error, and Verification summary, then export its JSON as a compact
 machine-readable artifact for offline evaluation or incident review.
+
+If the live provider is unavailable, open
+`.cache/reference-task/reference-recovery-replay.json` instead. It is a
+synthetic saved Replay produced through the same HTTP Resume and persistence
+contracts, not a screenshot or reconstructed UI object.
 
 ### Optional - Runtime Verification
 
@@ -128,9 +144,11 @@ rates so labels and trace payloads stay readable on GitHub.
 If live execution is unavailable, run:
 
 ```bash
+make reference-eval
 make test
 ```
 
-The command runs every Go package test, frontend lint, frontend contract tests,
-and the Next.js production build. These automated tests validate the codebase;
-a saved Replay demonstrates runtime behavior without a provider request.
+The first command produces the fixed reference evidence; the second runs every
+Go package test, frontend lint, frontend contract tests, and the Next.js
+production build. Automated tests validate the codebase; the saved Replay
+demonstrates runtime behavior without a provider request.

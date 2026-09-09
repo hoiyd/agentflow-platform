@@ -8,7 +8,7 @@ cd apps/api
 go run ./cmd/eval context --enforce
 go run ./cmd/eval rag --enforce
 go run ./cmd/eval tool --live --model MODEL \
-  --max-model-calls 30 --max-total-tokens 60000 --trials 3 --enforce
+  --max-model-calls 45 --max-total-tokens 250000 --trials 3 --enforce
 ```
 
 Every report uses `agentflow-evaluation-report-v1` identity fields: evaluation
@@ -147,3 +147,31 @@ canonical Context/RAG runs write JSON into `EVALUATION_REPORT_DIR`; the backend
 job uploads the directory as `offline-evaluation-reports`. Reports omit
 credentials/endpoints, redact model errors, and do not copy Context or RAG source
 content.
+
+## CASE-001 Reference Evidence Pack
+
+[`reference-task.v1.json`](../../examples/reference-task.v1.json) fixes 12 tasks:
+nine policy/operations retrieval cases and three long settlement-record cases.
+It records calibration/holdout membership and maps normal, no-answer, stale,
+conflicting-source, long-context, dependency, budget, cancellation, and recovery
+coverage to existing evaluators and tests.
+
+Generate the network-free evidence pack with:
+
+```bash
+make reference-eval
+```
+
+By default the command writes to `.cache/reference-task`; set
+`REFERENCE_REPORT_DIR` to choose another directory. The pack contains the
+manifest, `rag-offline.json`, `tool-task-protocol.json`, failure/recovery JSONL,
+and a saved recoverable Run Replay. Every offline item is explicitly marked or
+named as deterministic/simulated evidence. It proves protocol, accounting,
+retrieval, and recovery behavior, not real-model quality.
+
+For a budgeted model comparison, run the existing `eval tool --live` command.
+Its `full_context` and `with_tools` arms receive the same task and complete
+source access; `without_tools` remains a preview-only diagnostic. Semantic RAG
+runs continue to use the explicit profile described above. These are separate
+reports because embedding quality, answer quality, and recovery correctness have
+different denominators; CASE-001 does not flatten them into one score.

@@ -178,7 +178,7 @@ func runTool(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if !writeJSON(out, stderr, report) {
 		return 2
 	}
-	for _, arm := range []string{"without_tools", "with_tools"} {
+	for _, arm := range []string{"without_tools", "full_context", "with_tools"} {
 		summary := report.Summary[arm]
 		fmt.Fprintf(stderr, "%s: verified=%d/%d evaluated=%d tokens=%.1f model_calls=%.1f tool_calls=%.1f latency_ms=%.1f\n",
 			arm, summary.Verified, summary.Samples, summary.Evaluated, summary.MeanTokens, summary.MeanModelCalls,
