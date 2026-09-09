@@ -1,15 +1,19 @@
 # Evidence Comparison View
 
-The Run Replay page can compare its current Run with one baseline Run from the
+The dedicated **Evaluation > Run comparison** page compares two Runs from the
 same Workspace. The view is read-only and reuses the existing Replay, Episode
 Report, Model Request metadata, and Run-list endpoints. It does not persist a
 new report or create an online evaluation service.
 
 ## Use
 
-1. Open a Run Replay.
-2. Select **Compare run** in the page header.
-3. Choose a baseline Run and select **Compare evidence**.
+1. Open **Run comparison** from the Workspace sidebar.
+2. Choose the current and baseline Runs.
+3. Select **Compare evidence**.
+
+Run comparison is intentionally separated from normal Replay because its
+deltas are meaningful only for repeated or controlled single-variable tests.
+Replay remains the operational view for inspecting one Run.
 
 The comparison shows both Run IDs, task and material identity, execution mode,
 Agent, model, frozen snapshot hash, outcome, Verification status, stop reason,
@@ -35,8 +39,9 @@ following predeclared experiment variables:
 A pair is comparable when all runtime inputs match or exactly one of those
 variables differs. Multiple variable changes, unknown required identity,
 unrecognized runtime changes, or task/material/mode/delegation drift make the
-pair side-by-side only. In that state the UI does not calculate deltas. This
-prevents an unrelated Run from being presented as an improvement.
+pair review-only. In that state the UI lists every failed comparability check
+and does not calculate deltas. This prevents an unrelated Run from being
+presented as an improvement.
 
 The current runtime does not persist a separate experiment ID, so that field is
 explicitly `Unknown`; the two Run IDs and snapshot hashes remain visible. A

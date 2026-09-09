@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { GitCompareArrows, X } from "lucide-react";
-import type { EpisodeReport, RunInfo, RunReplay } from "../../lib/api";
+import { GitCompareArrows } from "lucide-react";
+import type { RunInfo } from "../../lib/api";
 import { getEpisodeReport, getRunModelRequests, getRunReplay, listRuns } from "../../lib/api";
 import {
   compareEvidence,
@@ -13,14 +13,9 @@ import {
   type EvidenceMetric
 } from "../../lib/evidence-comparison";
 
-type Props = {
-  currentReplay: RunReplay;
-  currentReport: EpisodeReport;
-  onClose: () => void;
-};
-
-export function EvidenceComparison({ currentReplay, currentReport, onClose }: Props) {
+export function EvidenceComparison({ initialCurrentRunId = "" }: { initialCurrentRunId?: string }) {
   const [runs, setRuns] = useState<RunInfo[]>([]);
+  const [currentRunId, setCurrentRunId] = useState(initialCurrentRunId);
   const [baselineRunId, setBaselineRunId] = useState("");
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [loadingRuns, setLoadingRuns] = useState(true);
@@ -31,9 +26,12 @@ export function EvidenceComparison({ currentReplay, currentReport, onClose }: Pr
     const controller = new AbortController();
     listRuns(controller.signal)
       .then((items) => {
-        const candidates = items.filter((run) => run.id !== currentReplay.run.id);
-        setRuns(candidates);
-        setBaselineRunId((current) => current || candidates[0]?.id || "");
+        setRuns(items);
+        const preferredCurrent = items.some((run) => run.id === initialCurrentRunId)
+          ? initialCurrentRunId
+          : items[0]?.id ?? "";
+        setCurrentRunId(preferredCurrent);
+        setBaselineRunId(items.find((run) => run.id !== preferredCurrent)?.id ?? "");
       })
       .catch((err) => {
         if (!controller.signal.aborted) setError(errorMessage(err, "Failed to load comparison runs"));
@@ -42,19 +40,27 @@ export function EvidenceComparison({ currentReplay, currentReport, onClose }: Pr
         if (!controller.signal.aborted) setLoadingRuns(false);
       });
     return () => controller.abort();
-  }, [currentReplay.run.id]);
+  }, [initialCurrentRunId]);
+
+  function selectCurrent(runId: string) {
+    setCurrentRunId(runId);
+    setBaselineRunId((current) => current === runId ? runs.find((run) => run.id !== runId)?.id ?? "" : current);
+    setComparison(null);
+  }
 
   async function runComparison() {
-    if (!baselineRunId || comparing) return;
+    if (!currentRunId || !baselineRunId || currentRunId === baselineRunId || comparing) return;
     setComparing(true);
     setComparison(null);
     setError("");
     try {
-      const [baselineReplay, baselineReport, baselineRequests, currentRequests] = await Promise.all([
+      const [currentReplay, currentReport, currentRequests, baselineReplay, baselineReport, baselineRequests] = await Promise.all([
+        getRunReplay(currentRunId),
+        getEpisodeReport(currentRunId),
+        getRunModelRequests(currentRunId),
         getRunReplay(baselineRunId),
         getEpisodeReport(baselineRunId),
-        getRunModelRequests(baselineRunId),
-        getRunModelRequests(currentReplay.run.id)
+        getRunModelRequests(baselineRunId)
       ]);
       setComparison(compareEvidence(
         { replay: currentReplay, report: currentReport, modelRequests: currentRequests },
@@ -69,34 +75,41 @@ export function EvidenceComparison({ currentReplay, currentReport, onClose }: Pr
 
   return (
     <section className="evidence-comparison" aria-labelledby="evidence-comparison-title">
-      <div className="evidence-comparison-header">
+      <div className="comparison-gate">
         <div>
-          <div className="panel-title inline" id="evidence-comparison-title">Evidence comparison</div>
-          <p>Compare this Run with one baseline from the current Workspace.</p>
+          <span>Comparability gate</span>
+          <strong id="evidence-comparison-title">Controlled runs only</strong>
         </div>
-        <button aria-label="Close comparison" className="evidence-comparison-close" onClick={onClose} title="Close comparison" type="button">
-          <X aria-hidden="true" size={16} />
-        </button>
+        <p>Same task</p>
+        <p>Same evidence</p>
+        <p>Zero or one runtime variable changed</p>
       </div>
 
       <div className="evidence-comparison-controls">
         <label>
+          <span>Current run</span>
+          <select disabled={loadingRuns || runs.length === 0} onChange={(event) => selectCurrent(event.target.value)} value={currentRunId}>
+            {runs.length === 0 ? <option value="">No runs available</option> : null}
+            {runs.map((run) => <option key={run.id} value={run.id}>{runOption(run)}</option>)}
+          </select>
+        </label>
+        <label>
           <span>Baseline run</span>
           <select
-            disabled={loadingRuns || runs.length === 0}
+            disabled={loadingRuns || runs.length < 2}
             onChange={(event) => {
               setBaselineRunId(event.target.value);
               setComparison(null);
             }}
             value={baselineRunId}
           >
-            {runs.length === 0 ? <option value="">No other runs available</option> : null}
-            {runs.map((run) => (
+            {runs.length < 2 ? <option value="">No other runs available</option> : null}
+            {runs.filter((run) => run.id !== currentRunId).map((run) => (
               <option key={run.id} value={run.id}>{runOption(run)}</option>
             ))}
           </select>
         </label>
-        <button className="run-link evidence-compare-action" disabled={!baselineRunId || comparing} onClick={runComparison} type="button">
+        <button className="run-link evidence-compare-action" disabled={!currentRunId || !baselineRunId || comparing} onClick={runComparison} type="button">
           <GitCompareArrows aria-hidden="true" size={15} />
           {comparing ? "Comparing..." : "Compare evidence"}
         </button>
@@ -111,14 +124,16 @@ export function EvidenceComparison({ currentReplay, currentReport, onClose }: Pr
 function ComparisonResult({ comparison }: { comparison: Comparison }) {
   const statusText = comparison.comparable
     ? comparison.mode === "single_variable"
-      ? `Comparable · single variable: ${comparison.changedVariable}`
-      : "Comparable · identical runtime configuration"
-    : "Side-by-side only · deltas are disabled";
+      ? `Comparable: ${comparison.changedVariable} is the only changed variable`
+      : "Comparable: runtime configuration is identical"
+    : "Not comparable: metric deltas are disabled";
   return (
     <div className="evidence-comparison-result">
       <div className={`evidence-comparison-status ${comparison.comparable ? "comparable" : "incomparable"}`}>
         <strong>{statusText}</strong>
-        {comparison.reasons.length > 0 ? <span>{comparison.reasons.join("; ")}</span> : null}
+        {comparison.reasons.length > 0 ? (
+          <ul>{comparison.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+        ) : <span>The pair passed the controlled-comparison gate.</span>}
       </div>
 
       <ComparisonTable comparison={comparison} />
