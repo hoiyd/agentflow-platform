@@ -2,8 +2,7 @@ package store
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
+
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
@@ -15,7 +14,7 @@ func TestPrepareToolEffectReconciliationValidatesCASAndSettlement(t *testing.T) 
 		Status: domain.ToolEffectNeedsReconciliation,
 	}
 	valid := reconciliationMutation(effect, domain.ToolEffectConfirmFailed, domain.ToolEffectFailed, nil)
-	prepared, err := prepareToolEffectReconciliation(effect, valid)
+	prepared, err := PrepareToolEffectReconciliation(effect, valid)
 	if err != nil || prepared.Event.Payload["result_version"] != int64(3) {
 		t.Fatalf("prepare valid mutation: %#v err=%v", prepared, err)
 	}
@@ -45,7 +44,7 @@ func TestPrepareToolEffectReconciliationValidatesCASAndSettlement(t *testing.T) 
 		t.Run(test.name, func(t *testing.T) {
 			current, mutation := effect, reconciliationMutation(effect, domain.ToolEffectConfirmFailed, domain.ToolEffectFailed, nil)
 			test.mutate(&current, &mutation)
-			_, err := prepareToolEffectReconciliation(current, mutation)
+			_, err := PrepareToolEffectReconciliation(current, mutation)
 			if err == nil || test.match != nil && !test.match(err) {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -69,7 +68,7 @@ func TestToolEffectReconciliationSettlementVariantsAndErrors(t *testing.T) {
 		effect.Status = domain.ToolEffectReconciling
 		mutation := reconciliationMutation(effect, test.action, test.status, test.result)
 		mutation.Event.Type = test.typeID
-		if _, err := prepareToolEffectReconciliation(effect, mutation); err != nil {
+		if _, err := PrepareToolEffectReconciliation(effect, mutation); err != nil {
 			t.Fatalf("action %s: %v", test.action, err)
 		}
 	}
@@ -100,93 +99,24 @@ func TestPayloadInt64AcceptsJSONAndNativeIntegers(t *testing.T) {
 func TestReconciliationRequiresAUniqueClaimBeforeCallbackSettlement(t *testing.T) {
 	effect := domain.ToolEffectRecord{IdempotencyKey: "effect", RunID: "run", StageID: "stage", Version: 2, Status: domain.ToolEffectNeedsReconciliation}
 	mutation := reconciliationMutation(effect, domain.ToolEffectRetrySameKey, domain.ToolEffectCommitted, []byte(`{}`))
-	if _, err := prepareToolEffectReconciliation(effect, mutation); !IsToolEffectConflict(err) {
+	if _, err := PrepareToolEffectReconciliation(effect, mutation); !IsToolEffectConflict(err) {
 		t.Fatalf("callback settled without a claim: %v", err)
 	}
 	mutation.Event.Type = domain.EventToolEffectReconciliationStarted
 	mutation.Event.Payload["command_hash"] = "hash"
 	mutation.Event.Payload["outcome"] = "pending"
 	mutation.NextStatus, mutation.Result = domain.ToolEffectReconciling, nil
-	if _, err := prepareToolEffectReconciliation(effect, mutation); err != nil {
+	if _, err := PrepareToolEffectReconciliation(effect, mutation); err != nil {
 		t.Fatal(err)
 	}
 	effect.Status = domain.ToolEffectReconciling
-	if _, err := prepareToolEffectReconciliation(effect, mutation); !IsToolEffectConflict(err) {
+	if _, err := PrepareToolEffectReconciliation(effect, mutation); !IsToolEffectConflict(err) {
 		t.Fatalf("outstanding claim reclaimed: %v", err)
 	}
 	mutation.Event.Payload["command_hash"] = ""
 	if validToolEffectSettlement(mutation) {
 		t.Fatal("claim without command identity accepted")
 	}
-}
-
-func TestFileStoreToolEffectReconciliationIsAtomicAndIdempotent(t *testing.T) {
-	fileStore, run := checkpointFileTestRun(t)
-	effect := beginUncertainEffect(t, fileStore, run, "effect-1")
-	mutation := reconciliationMutation(effect, domain.ToolEffectConfirmFailed, domain.ToolEffectFailed, nil)
-	conflict := mutation
-	conflict.ExpectedVersion++
-	conflict.Event.Payload["expected_version"] = conflict.ExpectedVersion
-	if _, _, _, err := fileStore.CommitToolEffectReconciliation(conflict); !IsToolEffectConflict(err) {
-		t.Fatalf("expected version conflict, got %v", err)
-	}
-	mutation.Event.Payload["expected_version"] = mutation.ExpectedVersion
-	invalidEvent := mutation
-	invalidEvent.Event.SchemaVersion = domain.CurrentRunEventSchemaVersion + 1
-	if _, _, _, err := fileStore.CommitToolEffectReconciliation(invalidEvent); err == nil {
-		t.Fatal("expected event schema failure")
-	}
-	settled, _, applied, err := fileStore.CommitToolEffectReconciliation(mutation)
-	if err != nil || !applied || settled.Status != domain.ToolEffectFailed {
-		t.Fatalf("commit: effect=%#v applied=%t err=%v", settled, applied, err)
-	}
-	if duplicate, _, applied, err := fileStore.CommitToolEffectReconciliation(mutation); err != nil || applied || duplicate.Version != settled.Version {
-		t.Fatalf("duplicate: effect=%#v applied=%t err=%v", duplicate, applied, err)
-	}
-
-	missing := mutation
-	missing.IdempotencyKey = "missing"
-	if _, _, _, err := fileStore.CommitToolEffectReconciliation(missing); !IsNotFound(err) {
-		t.Fatalf("duplicate event with missing effect: %v", err)
-	}
-	missing.Event.ID = "event-missing"
-	if _, _, _, err := fileStore.CommitToolEffectReconciliation(missing); !IsNotFound(err) {
-		t.Fatalf("missing effect: %v", err)
-	}
-}
-
-func TestFileStoreToolEffectReconciliationRollsBackFailedSave(t *testing.T) {
-	directory := t.TempDir()
-	fileStore, run := checkpointFileTestRunAtPath(t, filepath.Join(directory, "agentflow.json"))
-	effect := beginUncertainEffect(t, fileStore, run, "effect-rollback")
-	if err := os.RemoveAll(directory); err != nil {
-		t.Fatal(err)
-	}
-	mutation := reconciliationMutation(effect, domain.ToolEffectConfirmFailed, domain.ToolEffectFailed, nil)
-	if _, _, _, err := fileStore.CommitToolEffectReconciliation(mutation); err == nil {
-		t.Fatal("expected persistence failure")
-	}
-	records, _ := fileStore.ListToolEffects(run.ID)
-	events, _ := fileStore.ListRunEvents(run.ID)
-	if len(records) != 1 || records[0].Status != domain.ToolEffectNeedsReconciliation || len(events) != 0 {
-		t.Fatalf("failed save was not rolled back: effects=%#v events=%#v", records, events)
-	}
-}
-
-func beginUncertainEffect(t *testing.T, fileStore *FileStore, run domain.Run, key string) domain.ToolEffectRecord {
-	t.Helper()
-	effect, execute, err := fileStore.BeginToolEffect(domain.ToolEffectRecord{
-		IdempotencyKey: key, RunID: run.ID, StageID: "stage-1", ToolCallID: "call-1",
-		ToolName: "writer", RequestHash: "request",
-	})
-	if err != nil || !execute {
-		t.Fatalf("begin effect: %#v execute=%t err=%v", effect, execute, err)
-	}
-	effect, err = fileStore.MarkToolEffectNeedsReconciliation(key, "timeout")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return effect
 }
 
 func reconciliationMutation(effect domain.ToolEffectRecord, action domain.ToolEffectReconciliationAction, status domain.ToolEffectStatus, result []byte) domain.ToolEffectReconciliation {

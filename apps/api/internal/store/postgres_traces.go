@@ -17,7 +17,7 @@ func (s *PostgresStore) CreateCollaborationStep(step domain.CollaborationStep) (
 	now := time.Now().UTC()
 	step.ID = strings.TrimSpace(step.ID)
 	if step.ID == "" {
-		step.ID = newID("step")
+		step.ID = NewID("step")
 	}
 	step.Role = strings.TrimSpace(step.Role)
 	if step.Role == "" {
@@ -110,7 +110,7 @@ func (s *PostgresStore) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, 
 func preparePostgresRunEvent(event domain.RunEvent, now time.Time) (domain.RunEvent, []byte, error) {
 	event.ID = strings.TrimSpace(event.ID)
 	if event.ID == "" {
-		event.ID = newID("event")
+		event.ID = NewID("event")
 	}
 	if event.Type == "" {
 		return domain.RunEvent{}, nil, errors.New("run event type is required")
@@ -195,7 +195,7 @@ func scanRunEvents(rows runEventRows) ([]domain.RunEvent, error) {
 }
 
 func (s *PostgresStore) ApplyRunUsage(entry domain.RunUsageEntry) (domain.RunUsageLedger, bool, error) {
-	if err := validateUsageEntry(entry); err != nil {
+	if err := ValidateUsageEntry(entry); err != nil {
 		return domain.RunUsageLedger{}, false, err
 	}
 	run, ok, err := s.GetRun(entry.RunID)
@@ -221,18 +221,18 @@ func (s *PostgresStore) ApplyRunUsage(entry domain.RunUsageEntry) (domain.RunUsa
 		if existing.OperationID != entry.OperationID || existing.Kind != entry.Kind {
 			continue
 		}
-		ledger := budget.BuildLedger(entry.RunID, runBudget(run), entries)
-		if !sameUsageEntry(existing, entry) {
+		ledger := budget.BuildLedger(entry.RunID, RunBudget(run), entries)
+		if !SameUsageEntry(existing, entry) {
 			return ledger, false, errors.New("run usage operation already recorded with different values")
 		}
 		return ledger, false, nil
 	}
-	if entry.Kind == domain.UsageModelSettlement && !hasUsageReservation(entries, entry.OperationID) {
-		return budget.BuildLedger(entry.RunID, runBudget(run), entries), false, errors.New("model usage settlement has no reservation")
+	if entry.Kind == domain.UsageModelSettlement && !HasUsageReservation(entries, entry.OperationID) {
+		return budget.BuildLedger(entry.RunID, RunBudget(run), entries), false, errors.New("model usage settlement has no reservation")
 	}
 	if entry.Kind != domain.UsageModelSettlement {
-		current := budget.BuildLedger(entry.RunID, runBudget(run), entries)
-		if err := budget.Check(runBudget(run), current.Totals, budget.EntryTotals(entry), entry.OperationID, entry.Purpose); err != nil {
+		current := budget.BuildLedger(entry.RunID, RunBudget(run), entries)
+		if err := budget.Check(RunBudget(run), current.Totals, budget.EntryTotals(entry), entry.OperationID, entry.Purpose); err != nil {
 			return current, false, err
 		}
 	}
@@ -250,12 +250,12 @@ func (s *PostgresStore) ApplyRunUsage(entry domain.RunUsageEntry) (domain.RunUsa
 		return domain.RunUsageLedger{}, false, err
 	}
 	entries = append(entries, entry)
-	ledger := budget.BuildLedger(entry.RunID, runBudget(run), entries)
+	ledger := budget.BuildLedger(entry.RunID, RunBudget(run), entries)
 	if err := tx.Commit(); err != nil {
 		return domain.RunUsageLedger{}, false, err
 	}
 	if entry.Kind == domain.UsageModelSettlement {
-		if err := budget.CheckTotals(runBudget(run), ledger.Totals, entry.OperationID, entry.Purpose); err != nil {
+		if err := budget.CheckTotals(RunBudget(run), ledger.Totals, entry.OperationID, entry.Purpose); err != nil {
 			return ledger, true, err
 		}
 	}
@@ -271,7 +271,7 @@ func (s *PostgresStore) GetRunUsageLedger(runID string) (domain.RunUsageLedger, 
 	if err != nil {
 		return domain.RunUsageLedger{}, false, err
 	}
-	return budget.BuildLedger(runID, runBudget(run), entries), true, nil
+	return budget.BuildLedger(runID, RunBudget(run), entries), true, nil
 }
 
 type usageQueryer interface {
@@ -375,7 +375,7 @@ func (s *PostgresStore) GetRunReplay(runID string) (domain.RunReplay, bool, erro
 	replay := domain.RunReplay{
 		Run:                   run,
 		Projection:            readModel,
-		RuntimeSnapshot:       cloneRuntimeSnapshotValue(run.RuntimeSnapshot),
+		RuntimeSnapshot:       CloneRuntimeSnapshotValue(run.RuntimeSnapshot),
 		Conversation:          conversation,
 		Messages:              messages,
 		Steps:                 steps,

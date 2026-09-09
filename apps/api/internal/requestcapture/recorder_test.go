@@ -2,9 +2,9 @@ package requestcapture
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -13,12 +13,13 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/modelrequest"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
 func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
-	fileStore, run, path := newCaptureTestRun(t)
+	pgStore, run, path := newCaptureTestRun(t)
 	manifestID := "ctx-test"
-	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+	if _, err := pgStore.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventContextAssembled, RunID: run.ID, ConversationID: run.ConversationID,
 		Payload: map[string]any{"manifest": domain.ContextManifest{
 			ID: manifestID, RunID: run.ID, ModelCallID: "call-1",
@@ -27,7 +28,7 @@ func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create manifest event: %v", err)
 	}
-	recorder := NewRecorder(fileStore, Options{Mode: domain.ModelRequestCaptureFull, MaxBytes: 4096})
+	recorder := NewRecorder(pgStore, Options{Mode: domain.ModelRequestCaptureFull, MaxBytes: 4096})
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{
 		RunID: run.ID, ConversationID: run.ConversationID, StageID: "stage-1", TurnID: "turn-1",
 	})
@@ -43,10 +44,14 @@ func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
 		t.Fatalf("record retry: %v", err)
 	}
 
-	reopened, err := store.NewFileStore(path)
+	if err := pgStore.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := store.NewPostgresStore(path)
 	if err != nil {
 		t.Fatalf("reopen store: %v", err)
 	}
+	t.Cleanup(func() { _ = reopened.Close() })
 	records, err := reopened.ListModelRequestRecords(run.ID)
 	if err != nil || len(records) != 2 {
 		t.Fatalf("list records: records=%#v err=%v", records, err)
@@ -70,8 +75,8 @@ func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
 func TestRedactedAndMetadataCaptureNeverPersistSecrets(t *testing.T) {
 	for _, mode := range []domain.ModelRequestCaptureMode{domain.ModelRequestCaptureMetadata, domain.ModelRequestCaptureRedacted} {
 		t.Run(string(mode), func(t *testing.T) {
-			fileStore, run, _ := newCaptureTestRun(t)
-			recorder := NewRecorder(fileStore, Options{Mode: mode, MaxBytes: 4096})
+			pgStore, run, _ := newCaptureTestRun(t)
+			recorder := NewRecorder(pgStore, Options{Mode: mode, MaxBytes: 4096})
 			ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
 			secret := "sk-supersecret123456"
 			payload := []byte(`{"api_key":"` + secret + `","messages":[{"role":"user","content":"token=` + secret + `"}],"model":"test-model"}`)
@@ -80,7 +85,7 @@ func TestRedactedAndMetadataCaptureNeverPersistSecrets(t *testing.T) {
 			}); err != nil {
 				t.Fatalf("record request: %v", err)
 			}
-			records, _ := fileStore.ListModelRequestRecords(run.ID)
+			records, _ := pgStore.ListModelRequestRecords(run.ID)
 			encoded := records[0].Capture.Content
 			parameters := records[0].Envelope.Parameters
 			if strings.Contains(encoded, secret) || strings.Contains(string(mustJSON(parameters)), secret) || records[0].Capture.Reconstructable {
@@ -100,8 +105,8 @@ func TestRedactedAndMetadataCaptureNeverPersistSecrets(t *testing.T) {
 }
 
 func TestExpiredCaptureContentIsPurgedButEnvelopeRemains(t *testing.T) {
-	fileStore, run, path := newCaptureTestRun(t)
-	recorder := NewRecorder(fileStore, Options{Mode: domain.ModelRequestCaptureFull, MaxBytes: 4096, Retention: time.Nanosecond})
+	pgStore, run, path := newCaptureTestRun(t)
+	recorder := NewRecorder(pgStore, Options{Mode: domain.ModelRequestCaptureFull, MaxBytes: 4096, Retention: time.Nanosecond})
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
 	payload := []byte(`{"messages":[{"role":"user","content":"short-lived"}],"model":"test-model"}`)
 	if err := recorder.Record(ctx, modelrequest.Observation{
@@ -109,7 +114,7 @@ func TestExpiredCaptureContentIsPurgedButEnvelopeRemains(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("record request: %v", err)
 	}
-	records, err := fileStore.ListModelRequestRecords(run.ID)
+	records, err := pgStore.ListModelRequestRecords(run.ID)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("list records: records=%#v err=%v", records, err)
 	}
@@ -119,18 +124,25 @@ func TestExpiredCaptureContentIsPurgedButEnvelopeRemains(t *testing.T) {
 	if records[0].Envelope.PayloadHash == "" || records[0].Envelope.PayloadBytes != len(payload) {
 		t.Fatalf("expiration removed durable envelope metadata: %#v", records[0].Envelope)
 	}
-	persisted, err := os.ReadFile(path)
+	db, err := sql.Open("pgx", path)
 	if err != nil {
-		t.Fatalf("read file store: %v", err)
+		t.Fatal(err)
 	}
-	if strings.Contains(string(persisted), "short-lived") {
-		t.Fatal("expired capture content remains in the file store")
+	defer db.Close()
+	readCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var persisted string
+	if err := db.QueryRowContext(readCtx, "SELECT capture_content FROM model_request_records WHERE run_id=$1", run.ID).Scan(&persisted); err != nil {
+		t.Fatal(err)
+	}
+	if persisted != "" {
+		t.Fatal("expired capture content remains in PostgreSQL")
 	}
 }
 
 func TestCaptureSizeLimitKeepsEnvelopeWithoutPartialJSON(t *testing.T) {
-	fileStore, run, _ := newCaptureTestRun(t)
-	recorder := NewRecorder(fileStore, Options{Mode: domain.ModelRequestCaptureFull, MaxBytes: 32})
+	pgStore, run, _ := newCaptureTestRun(t)
+	recorder := NewRecorder(pgStore, Options{Mode: domain.ModelRequestCaptureFull, MaxBytes: 32})
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
 	payload := []byte(`{"messages":[{"role":"user","content":"this payload is deliberately larger than the capture limit"}],"model":"test-model"}`)
 	if err := recorder.Record(ctx, modelrequest.Observation{
@@ -138,7 +150,7 @@ func TestCaptureSizeLimitKeepsEnvelopeWithoutPartialJSON(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("record request: %v", err)
 	}
-	records, err := fileStore.ListModelRequestRecords(run.ID)
+	records, err := pgStore.ListModelRequestRecords(run.ID)
 	if err != nil || len(records) != 1 {
 		t.Fatalf("list records: records=%#v err=%v", records, err)
 	}
@@ -149,8 +161,8 @@ func TestCaptureSizeLimitKeepsEnvelopeWithoutPartialJSON(t *testing.T) {
 }
 
 func TestValidateReconstructabilityRejectsDuplicatePreparedEvent(t *testing.T) {
-	fileStore, run, _ := newCaptureTestRun(t)
-	recorder := NewRecorder(fileStore, Options{Mode: domain.ModelRequestCaptureFull, MaxBytes: 4096})
+	pgStore, run, _ := newCaptureTestRun(t)
+	recorder := NewRecorder(pgStore, Options{Mode: domain.ModelRequestCaptureFull, MaxBytes: 4096})
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
 	if err := recorder.Record(ctx, modelrequest.Observation{
 		ModelCallID: "call-duplicate", Operation: "chat.completion", Provider: "test", Model: "test-model",
@@ -158,8 +170,8 @@ func TestValidateReconstructabilityRejectsDuplicatePreparedEvent(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("record request: %v", err)
 	}
-	records, _ := fileStore.ListModelRequestRecords(run.ID)
-	events, _ := fileStore.ListRunEvents(run.ID)
+	records, _ := pgStore.ListModelRequestRecords(run.ID)
+	events, _ := pgStore.ListRunEvents(run.ID)
 	for _, item := range events {
 		if item.Type == domain.EventModelRequestPrepared {
 			duplicate := item
@@ -273,18 +285,19 @@ func (s *captureStoreStub) CreateRunEvent(event domain.RunEvent) (domain.RunEven
 	return event, s.eventErr
 }
 
-func newCaptureTestRun(t *testing.T) (*store.FileStore, domain.Run, string) {
+func newCaptureTestRun(t *testing.T) (*store.PostgresStore, domain.Run, string) {
 	t.Helper()
-	path := t.TempDir() + "/agentflow.json"
-	fileStore, err := store.NewFileStore(path)
+	path := pgfixture.DatabaseURL(t)
+	pgStore, err := store.NewPostgresStore(path)
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
-	conversation, err := fileStore.CreateConversation("capture test")
+	t.Cleanup(func() { _ = pgStore.Close() })
+	conversation, err := pgStore.CreateConversation("capture test")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := pgStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single",
 		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Model: domain.RuntimeModelSnapshot{Provider: "test", Model: "test-model"},
 		ContextAssembly: domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1"}, RunBudget: &domain.RuntimeRunBudget{},
@@ -293,7 +306,7 @@ func newCaptureTestRun(t *testing.T) (*store.FileStore, domain.Run, string) {
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	return fileStore, run, path
+	return pgStore, run, path
 }
 
 func mustJSON(value any) []byte {

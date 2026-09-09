@@ -286,7 +286,7 @@ verification.stale
 run.revision_requested
 ```
 
-File and Postgres stores use the same domain contract. Postgres creates the verification tables and Run columns through idempotent startup migration.
+Postgres stores use the same domain contract. Postgres creates the verification tables and Run columns through idempotent startup migration.
 
 ## Design Basis and Limits
 

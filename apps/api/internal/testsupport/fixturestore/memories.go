@@ -1,26 +1,25 @@
-package store
+package fixturestore
 
 import (
-	"encoding/json"
+	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
+
 	"errors"
-	"fmt"
-	"math"
+
 	"sort"
 	"strings"
 	"time"
-
-	"agentflow-platform/apps/api/internal/domain"
 )
 
-func (s *FileStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
+func (s *Store) CreateMemory(memory domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	now := time.Now().UTC()
-	memory.WorkspaceID = normalizeWorkspaceID(memory.WorkspaceID)
+	memory.WorkspaceID = store.NormalizeWorkspaceID(memory.WorkspaceID)
 	memory.ID = strings.TrimSpace(memory.ID)
 	if memory.ID == "" {
-		memory.ID = newID("mem")
+		memory.ID = store.NewID("mem")
 	}
 	memory.Kind = strings.TrimSpace(memory.Kind)
 	if memory.Kind == "" {
@@ -54,33 +53,29 @@ func (s *FileStore) CreateMemory(memory domain.Memory, embedding domain.MemoryEm
 
 	for _, existing := range s.data.MemoryChanges {
 		if memory.SourceMessageID != "" && existing.SourceMessageID == memory.SourceMessageID && existing.WorkspaceID == memory.WorkspaceID {
-			return domain.Memory{}, ErrMemoryConflict
+			return domain.Memory{}, store.ErrMemoryConflict
 		}
 	}
 	for _, existing := range s.data.Memories {
 		if existing.ID == memory.ID {
-			if !sameMemoryCreate(existing, memory) {
-				return domain.Memory{}, ErrMemoryConflict
+			if !store.SameMemoryCreate(existing, memory) {
+				return domain.Memory{}, store.ErrMemoryConflict
 			}
 			existing.Version = max(1, existing.Version)
 			return existing, nil
 		}
 	}
 
-	previousMemories, previousEmbeddings := s.data.Memories, s.data.MemoryEmbeddings
 	s.data.Memories = append(s.data.Memories, memory)
 	s.data.MemoryEmbeddings = append(s.data.MemoryEmbeddings, embedding)
-	if err := s.saveLocked(); err != nil {
-		s.data.Memories, s.data.MemoryEmbeddings = previousMemories, previousEmbeddings
-		return domain.Memory{}, err
-	}
+
 	return memory, nil
 }
 
-func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+func (s *Store) SearchMemories(search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	search.WorkspaceID = normalizeWorkspaceID(search.WorkspaceID)
+	search.WorkspaceID = store.NormalizeWorkspaceID(search.WorkspaceID)
 
 	limit := search.Limit
 	if limit <= 0 {
@@ -97,7 +92,7 @@ func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.Retriev
 	now := time.Now().UTC()
 	for _, memory := range s.data.Memories {
 		memory.Version = max(1, memory.Version)
-		if !memoryMatchesSearch(memory, search) {
+		if !MemoryMatchesSearch(memory, search) {
 			continue
 		}
 		embedding, ok := embeddingByMemoryID[memory.ID]
@@ -110,8 +105,8 @@ func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.Retriev
 		if search.EmbeddingModel != "" && embedding.Model != search.EmbeddingModel {
 			continue
 		}
-		similarity := cosineSimilarity(search.Embedding, embedding.Embedding)
-		recencyBoost := memoryRecencyBoost(now, memory.CreatedAt)
+		similarity := CosineSimilarity(search.Embedding, embedding.Embedding)
+		recencyBoost := MemoryRecencyBoost(now, memory.CreatedAt)
 		items = append(items, domain.RetrievedMemory{
 			Memory:       memory,
 			Similarity:   similarity,
@@ -126,69 +121,4 @@ func (s *FileStore) SearchMemories(search domain.MemorySearch) ([]domain.Retriev
 		items = items[:limit]
 	}
 	return items, nil
-}
-
-func memoryMatchesSearch(memory domain.Memory, search domain.MemorySearch) bool {
-	if memory.DeletedAt != nil {
-		return false
-	}
-	if normalizeWorkspaceID(memory.WorkspaceID) != normalizeWorkspaceID(search.WorkspaceID) {
-		return false
-	}
-	if search.UserID != "" && memory.UserID != search.UserID {
-		return false
-	}
-	if search.ProjectID != "" && memory.ProjectID != search.ProjectID {
-		return false
-	}
-	for key, expected := range search.Metadata {
-		value, ok := memory.Metadata[key]
-		if !ok || strings.TrimSpace(expected) != strings.TrimSpace(toString(value)) {
-			return false
-		}
-	}
-	return true
-}
-
-func cosineSimilarity(a []float64, b []float64) float64 {
-	limit := len(a)
-	if len(b) < limit {
-		limit = len(b)
-	}
-	if limit == 0 {
-		return 0
-	}
-	var dot, normA, normB float64
-	for i := 0; i < limit; i++ {
-		dot += a[i] * b[i]
-		normA += a[i] * a[i]
-		normB += b[i] * b[i]
-	}
-	if normA == 0 || normB == 0 {
-		return 0
-	}
-	return dot / (math.Sqrt(normA) * math.Sqrt(normB))
-}
-
-func memoryRecencyBoost(now time.Time, createdAt time.Time) float64 {
-	if createdAt.IsZero() {
-		return 0
-	}
-	ageDays := now.Sub(createdAt).Hours() / 24
-	if ageDays < 0 {
-		ageDays = 0
-	}
-	return 0.05 / (1 + ageDays/30)
-}
-
-func toString(value any) string {
-	switch v := value.(type) {
-	case string:
-		return v
-	case fmt.Stringer:
-		return v.String()
-	default:
-		bytes, _ := json.Marshal(v)
-		return string(bytes)
-	}
 }

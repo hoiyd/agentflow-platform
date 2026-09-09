@@ -9,7 +9,7 @@ import (
 )
 
 func (s *PostgresStore) CreateModelRequestRecord(record domain.ModelRequestRecord) (domain.ModelRequestRecord, error) {
-	if err := validateModelRequestRecord(record); err != nil {
+	if err := ValidateModelRequestRecord(record); err != nil {
 		return domain.ModelRequestRecord{}, err
 	}
 	parameters, err := json.Marshal(record.Envelope.Parameters)
@@ -58,7 +58,7 @@ func (s *PostgresStore) CreateModelRequestRecord(record domain.ModelRequestRecor
 	if err := tx.Commit(); err != nil {
 		return domain.ModelRequestRecord{}, err
 	}
-	return cloneModelRequestRecord(record), nil
+	return CloneModelRequestRecord(record), nil
 }
 
 func (s *PostgresStore) ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error) {

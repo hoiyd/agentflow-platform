@@ -9,14 +9,6 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-func TestFileStoreDocumentStoreContract(t *testing.T) {
-	fileStore, err := NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new file store: %v", err)
-	}
-	runDocumentStoreContract(t, fileStore)
-}
-
 func TestPostgresStoreDocumentStoreContract(t *testing.T) {
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {

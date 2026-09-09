@@ -36,7 +36,7 @@ MODEL_REQUEST_CAPTURE_RETENTION=168h
 
 When redacted or full content exceeds the limit, AgentFlow retains the envelope
 and marks the capture truncated without persisting a partial JSON fragment.
-Stored content receives an expiry. File and Postgres stores lazily purge expired
+Stored content receives an expiry. Postgres stores lazily purge expired
 content on read while retaining the Envelope, payload hash, expiry, and redaction
 metadata for long-term audit.
 API keys and Authorization headers never enter the recorder because transport
@@ -52,7 +52,7 @@ effective payload differs from the original request. Unsupported Tool Calling
 does not trigger a second text request.
 
 The recorder runs before the provider request. A run-scoped persistence failure
-fails closed rather than sending an unrecorded request. File and Postgres stores
+fails closed rather than sending an unrecorded request. Postgres stores
 assign attempt numbers atomically per `(run_id, model_call_id)`.
 
 ## Inspection API

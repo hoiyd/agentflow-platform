@@ -17,7 +17,7 @@ type PostgresStore struct {
 
 func NewPostgresStore(databaseURL string) (*PostgresStore, error) {
 	if strings.TrimSpace(databaseURL) == "" {
-		return nil, errors.New("DATABASE_URL is required when STORE_DRIVER=postgres")
+		return nil, errors.New("DATABASE_URL is required; PostgreSQL is the application persistence backend")
 	}
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {

@@ -86,7 +86,7 @@ type MemoryEmbedding struct {
 	Provider   string `json:"provider"`
 	Model      string `json:"model"`
 	Dimensions int    `json:"dimensions"`
-	// Persist vectors for File Store round-trips; API responses use Memory, not this record.
+	// Vectors belong to the internal embedding record; API responses use Memory.
 	Embedding []float64 `json:"embedding"`
 	CreatedAt time.Time `json:"created_at"`
 }

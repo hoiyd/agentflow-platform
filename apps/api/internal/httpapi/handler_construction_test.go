@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -108,10 +110,8 @@ func TestCORSAllowlistAndKnowledgeErrorMapping(t *testing.T) {
 
 func completeHandlerDependencies(t *testing.T) Dependencies {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
 	toolPath := filepath.Join(t.TempDir(), "tools.json")
 	if err := toolpkg.SaveConfig(toolPath, toolpkg.DefaultConfig()); err != nil {
@@ -123,14 +123,14 @@ func completeHandlerDependencies(t *testing.T) Dependencies {
 	}
 	registry := verification.NewRegistry(verification.Options{})
 	return Dependencies{
-		Store: fileStore, ModelClient: client, Tools: manager,
-		AgentRuntime: agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fileStore, ModelClient: client}),
+		Store: fixtureStore, ModelClient: client, Tools: manager,
+		AgentRuntime: agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fixtureStore, ModelClient: client}),
 		Memory:       &memoryOperationsStub{},
 		Knowledge:    &knowledgeOperationsStub{},
 		RunController: concurrency.NewRunController(concurrency.RunOptions{
 			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
 		}),
-		Verification:   verification.NewEngine(fileStore, registry),
+		Verification:   verification.NewEngine(fixtureStore, registry),
 		AllowedOrigins: []string{"https://app.example.com"},
 	}
 }

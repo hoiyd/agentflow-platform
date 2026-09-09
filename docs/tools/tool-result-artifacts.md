@@ -10,7 +10,7 @@ new Binding receives the same behavior without Tool-specific spill code.
 2. Executor serializes it once and applies the Binding's per-call
    `MaxResultBytes` plus the process-level batch budget.
 3. An oversized result is deterministically secret-redacted before storage.
-4. File Store or Postgres persists immutable content and metadata. The model
+4. Postgres persists immutable content and metadata. The model
    receives only a bounded preview, opaque Artifact ID, hash, size, media type,
    and retrieval hint.
 5. `artifact_read` can recover at most 16 KiB per model Tool Call;
@@ -43,10 +43,8 @@ TOOL_ARTIFACT_RETENTION=168h
 
 ## Persistence And Security
 
-File Store writes content with exclusive create into an owner-only directory
-and stores only Artifact metadata in the main JSON file. Postgres stores the
-same metadata and immutable `bytea` content in `tool_artifacts`; Run deletion
-cascades to both. Both adapters enforce Run ownership, content hash, byte size,
+Postgres stores metadata and immutable `bytea` content in `tool_artifacts`; Run deletion
+cascades to both. The adapter enforces Run ownership, content hash, byte size,
 bounded reads, bounded search, and expiry.
 
 Deterministic redaction covers credential-shaped keys and embedded Bearer,

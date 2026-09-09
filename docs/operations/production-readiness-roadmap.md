@@ -17,8 +17,8 @@ a controlled pilot.
 | --- | --- |
 | Execution | [Single, Multi, and Loop](../runtime/execution-modes.md) share one Turn Engine, frozen Runtime Snapshot, bounded lifecycle, and common completion path. |
 | Resource control | [Admission, backpressure, rate limits, retries, context limits, Run Budget, and timeouts](../runtime/execution-controls.md) have distinct scopes and enforcement owners. |
-| Persistence | File and Postgres stores persist Runs, Messages, durable Run Events, usage, retrieval data, and Verification records behind shared domain contracts. |
-| Workspace scope | Every request resolves a non-empty Workspace namespace. Conversation, Message, Run, Document, Memory, retrieval, Replay, and Verification paths preserve that scope in File and Postgres stores. |
+| Persistence | Postgres stores persist Runs, Messages, durable Run Events, usage, retrieval data, and Verification records behind shared domain contracts. |
+| Workspace scope | Every request resolves a non-empty Workspace namespace. Conversation, Message, Run, Document, Memory, retrieval, Replay, and Verification paths preserve that scope in Postgres stores. |
 | Tool execution | [Platform enablement and Agent allowlists](../runtime/agent-profiles.md#two-tool-control-layers) precede a bounded Executor with typed errors, timeout, result limits, tracing, and conservative concurrency. |
 | RAG | [Hybrid recall, RRF, reranking, relevance gating, scoped context expansion, injection filtering, and citations](../knowledge/knowledge-rag.md) use one observable pipeline. |
 | Evaluation | The [Golden Dataset v1](../knowledge/rag-golden-dataset.md) pairs a versioned schema and canonical corpus with the production retrieval path, reporting Hit@1/3/5, misses, security decisions, and active component versions. |
@@ -39,7 +39,7 @@ evaluation, internal use, or a controlled demonstration:
 | Tenancy | Namespace filtering is mandatory and supports isolated Workspace IDs, but the API trusts the caller-selected ID. Operate as a single tenant or with trusted clients until identity, Membership, and ACL enforcement are complete. |
 | Runtime | Run admission, bounded queueing, Conversation single-writer control, interrupted lifecycle repair, Stage checkpoints, and Tool effect idempotency operate within one process. |
 | Tools | Use built-in or operator-reviewed Tools. All calls pass through Agent allowlists, Budget, timeout, result limits, tracing, and conservative concurrency. |
-| Data | File Store supports local operation; Postgres provides durable storage. Automated backup, restore, and migration drills remain deployment responsibilities. |
+| Data | Postgres provides durable storage, including local operation. Automated backup, restore, and migration drills remain deployment responsibilities. |
 | Quality | Retrieval evaluation is repeatable against the canonical v1 corpus. Persisted Evaluation Runs, broader representative coverage, and calibrated release thresholds are the next quality steps. |
 
 This profile deliberately excludes untrusted public access, hard multi-tenant

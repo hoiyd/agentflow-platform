@@ -318,9 +318,11 @@ func TestMissingProviderUsageRemainsExplicitlyEstimated(t *testing.T) {
 	}
 }
 
-func TestUnavailableTemporaryStorageFailsBeforeModelCall(t *testing.T) {
+func TestEvaluationDoesNotRequireTemporaryStorage(t *testing.T) {
+	server := fixtureProvider(t, "estimated")
 	t.Setenv("TMPDIR", t.TempDir()+"/missing-parent")
-	if _, err := Run(context.Background(), openai.NewClient("fixture", "http://127.0.0.1:1", "fixture"), options()); err == nil {
-		t.Fatal("unavailable temporary storage accepted")
+	report, err := Run(context.Background(), openai.NewClient("fixture", server.URL, "fixture"), options())
+	if err != nil || !report.Passed() {
+		t.Fatalf("in-memory evaluation depended on temporary storage: %v", err)
 	}
 }

@@ -47,7 +47,7 @@ active identity in the Workspace with the current query embedding and chunker.
 Unknown or mixed identities fail closed with `knowledge_index_incompatible`
 instead of searching incompatible vector spaces.
 
-FileStore normalizes legacy records on load. Postgres migrations backfill
+Postgres migrations backfill
 `source_key` and infer index identity where existing embeddings agree; duplicate
 logical sources keep the newest record. Identity that cannot be inferred remains
 unknown and therefore cannot silently participate in retrieval.
@@ -73,8 +73,8 @@ Newly ingested documents and chunks carry structured source details:
 
 The document detail API, RAG search results, Agent retrieval events, and model
 call traces expose the same source fields. Migration does not invent
-unverifiable offsets or hashes for legacy chunks. FileStore persists normalized
-source content in its internal data file so offsets remain resolvable after
+unverifiable offsets or hashes for legacy chunks. Postgres persists normalized
+source content so offsets remain resolvable after
 restart; the full source content is still excluded from HTTP document responses.
 
 ## Retrieval Pipeline
@@ -110,7 +110,7 @@ silently diverge.
 Document ingestion stores the request workspace on the Document. HTTP search
 uses the request workspace, while Agent retrieval derives it from the persisted
 Run, which in turn inherits it from the Conversation. Memory and both Semantic
-and Keyword recall receive that same value. File and Postgres stores apply an
+and Keyword recall receive that same value. Postgres stores apply an
 exact workspace predicate before ranking candidates.
 
 The Retrieval Pipeline always normalizes an empty scope to the reserved
@@ -121,7 +121,7 @@ search.
 Dense recall uses cosine similarity against document chunk embeddings. Lexical
 recall can introduce a chunk that is absent from the dense candidate set, which
 improves retrieval of exact error codes, product IDs, API paths, and domain
-names. The local file store scores exact phrases, identifier-like terms, and
+names. The offline in-memory fixture scores exact phrases, identifier-like terms, and
 query-term coverage across content and selected metadata. Postgres uses exact
 substring matching plus `simple`-configuration full-text search over generated
 `tsvector` columns and GIN indexes.

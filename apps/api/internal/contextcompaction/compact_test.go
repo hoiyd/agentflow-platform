@@ -1,9 +1,11 @@
 package contextcompaction
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
-	"path/filepath"
+
 	"strings"
 	"testing"
 	"time"
@@ -12,22 +14,21 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
-	fileStore, conversation, run := newCompactionTestStore(t)
+	fixtureStore, conversation, run := newCompactionTestStore(t)
 	for index := 0; index < 8; index++ {
 		role := "user"
 		if index%2 == 1 {
 			role = "assistant"
 		}
-		if _, err := fileStore.AddMessage(conversation.ID, role, strings.Repeat("important context ", 8)); err != nil {
+		if _, err := fixtureStore.AddMessage(conversation.ID, role, strings.Repeat("important context ", 8)); err != nil {
 			t.Fatalf("add message: %v", err)
 		}
 	}
 
-	compactor := NewCompactor(fileStore)
+	compactor := NewCompactor(fixtureStore)
 	var prompts []string
 	summarizer := SummarizerFunc(func(_ context.Context, request SummaryRequest) (SummaryResult, error) {
 		prompts = append(prompts, request.Prompt)
@@ -50,7 +51,7 @@ func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
 	if first.TargetSummaryTokens <= 0 || first.TargetSummaryTokens > config.CompactionSummaryMaxTokens || first.ShadowedMessageRange.MessageCount != len(first.SourceMessageIDs) {
 		t.Fatalf("invalid target or shadowed range: %#v", first)
 	}
-	messages, _ := fileStore.ListMessages(conversation.ID)
+	messages, _ := fixtureStore.ListMessages(conversation.ID)
 	if len(messages) != 8 {
 		t.Fatalf("compaction modified raw messages: got %d", len(messages))
 	}
@@ -60,7 +61,7 @@ func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
 		if index%2 == 1 {
 			role = "assistant"
 		}
-		_, _ = fileStore.AddMessage(conversation.ID, role, strings.Repeat("new context ", 10))
+		_, _ = fixtureStore.AddMessage(conversation.ID, role, strings.Repeat("new context ", 10))
 	}
 	second, err := compactor.CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerHard,
@@ -81,18 +82,18 @@ func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
 	if !strings.Contains(prompts[1], "newer sources override") || !strings.Contains(compactionSystemPrompt, "## Superseded Instructions") || !strings.Contains(compactionSystemPrompt, "## Evidence Needed") {
 		t.Fatalf("anti-drift schema or precedence rule missing")
 	}
-	events, _ := fileStore.ListRunEvents(run.ID)
+	events, _ := fixtureStore.ListRunEvents(run.ID)
 	if !hasEvent(events, domain.EventCompactionStarted) || !hasEvent(events, domain.EventCompactionCompleted) {
 		t.Fatalf("missing compaction lifecycle events: %#v", events)
 	}
 }
 
 func TestCompactIfNeededFailureKeepsRawMessages(t *testing.T) {
-	fileStore, conversation, run := newCompactionTestStore(t)
+	fixtureStore, conversation, run := newCompactionTestStore(t)
 	for index := 0; index < 6; index++ {
-		_, _ = fileStore.AddMessage(conversation.ID, "user", strings.Repeat("context ", 20))
+		_, _ = fixtureStore.AddMessage(conversation.ID, "user", strings.Repeat("context ", 20))
 	}
-	compactor := NewCompactor(fileStore)
+	compactor := NewCompactor(fixtureStore)
 	calls := 0
 	compaction, err := compactor.CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerHard,
@@ -104,12 +105,12 @@ func TestCompactIfNeededFailureKeepsRawMessages(t *testing.T) {
 	if err == nil || compaction != nil {
 		t.Fatalf("expected non-destructive failure: item=%#v err=%v", compaction, err)
 	}
-	_, hasCompaction, _ := fileStore.GetLatestContextCompaction(conversation.ID)
-	messages, _ := fileStore.ListMessages(conversation.ID)
+	_, hasCompaction, _ := fixtureStore.GetLatestContextCompaction(conversation.ID)
+	messages, _ := fixtureStore.ListMessages(conversation.ID)
 	if hasCompaction || len(messages) != 6 {
 		t.Fatalf("failed compaction changed durable state: has_compaction=%v messages=%d", hasCompaction, len(messages))
 	}
-	events, _ := fileStore.ListRunEvents(run.ID)
+	events, _ := fixtureStore.ListRunEvents(run.ID)
 	if !hasEvent(events, domain.EventCompactionFailed) {
 		t.Fatalf("missing failed event: %#v", events)
 	}
@@ -126,13 +127,13 @@ func TestCompactIfNeededFailureKeepsRawMessages(t *testing.T) {
 }
 
 func TestCompactIfNeededPrefersObservedPromptTokensForSoftTrigger(t *testing.T) {
-	fileStore, conversation, run := newCompactionTestStore(t)
+	fixtureStore, conversation, run := newCompactionTestStore(t)
 	for index := 0; index < 6; index++ {
-		_, _ = fileStore.AddMessage(conversation.ID, "user", "short context")
+		_, _ = fixtureStore.AddMessage(conversation.ID, "user", "short context")
 	}
 	config := compactionTestConfig()
 	config.CompactionSoftThreshold = 0.9
-	compactor := NewCompactor(fileStore)
+	compactor := NewCompactor(fixtureStore)
 	compaction, err := compactor.CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerSoft,
 		ObservedPromptTokens: 200, Config: config,
@@ -143,7 +144,7 @@ func TestCompactIfNeededPrefersObservedPromptTokensForSoftTrigger(t *testing.T) 
 	if err != nil || compaction == nil {
 		t.Fatalf("observed prompt usage should trigger compaction: item=%#v err=%v", compaction, err)
 	}
-	events, _ := fileStore.ListRunEvents(run.ID)
+	events, _ := fixtureStore.ListRunEvents(run.ID)
 	foundObservedUsage := false
 	for _, runEvent := range events {
 		if runEvent.Type == domain.EventCompactionCompleted && runEvent.Payload["observed_prompt_tokens"] == float64(200) {
@@ -418,18 +419,18 @@ func TestCooldownHydratesFromPersistedEventPayload(t *testing.T) {
 }
 
 func TestLongSessionSemanticFidelityFixturePreservesCorrectionsAndCancellation(t *testing.T) {
-	fileStore, conversation, run := newCompactionTestStore(t)
-	oldUser, _ := fileStore.AddMessage(conversation.ID, "user", "Use model A and deploy the legacy task.")
-	oldAssistant, _ := fileStore.AddMessage(conversation.ID, "assistant", "Model A and deployment are active.")
+	fixtureStore, conversation, run := newCompactionTestStore(t)
+	oldUser, _ := fixtureStore.AddMessage(conversation.ID, "user", "Use model A and deploy the legacy task.")
+	oldAssistant, _ := fixtureStore.AddMessage(conversation.ID, "assistant", "Model A and deployment are active.")
 	fixtureID := "cmp-semantic-fidelity-fixture"
-	started, err := fileStore.CreateRunEvent(domain.RunEvent{
+	started, err := fixtureStore.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventCompactionStarted, RunID: run.ID, ConversationID: conversation.ID,
 		Payload: map[string]any{"compaction_id": fixtureID, "trigger": "fixture", "status": "running", "algorithm_version": AlgorithmVersion},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, err = fileStore.CommitContextCompaction(domain.ContextCompaction{
+	_, _, err = fixtureStore.CommitContextCompaction(domain.ContextCompaction{
 		ID: fixtureID, ConversationID: conversation.ID, RunID: run.ID, Trigger: "fixture",
 		Generation: 1, Summary: "## Key Decisions\nUse model A.\n## Pending Work\nDeploy the legacy task.",
 		SourceMessageIDs: []string{oldUser.ID, oldAssistant.ID}, SourceEventIDs: []string{started.ID}, SourceHash: "fixture-generation-1",
@@ -448,9 +449,9 @@ func TestLongSessionSemanticFidelityFixturePreservesCorrectionsAndCancellation(t
 		{"user", "What remains?"}, {"assistant", "Review the current state."},
 	}
 	for _, source := range newSources {
-		_, _ = fileStore.AddMessage(conversation.ID, source.role, source.content)
+		_, _ = fixtureStore.AddMessage(conversation.ID, source.role, source.content)
 	}
-	compaction, err := NewCompactor(fileStore).CompactIfNeeded(context.Background(), Request{
+	compaction, err := NewCompactor(fixtureStore).CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerHard,
 		ObservedPromptTokens: 1000, Config: compactionTestConfig(),
 		Summarizer: SummarizerFunc(func(_ context.Context, request SummaryRequest) (SummaryResult, error) {
@@ -472,17 +473,17 @@ func fixedSummarizer(summary string) Summarizer {
 	})
 }
 
-func populatedCompactionTestStore(t *testing.T, count int) (*store.FileStore, domain.Conversation, domain.Run) {
+func populatedCompactionTestStore(t *testing.T, count int) (*fixturestore.Store, domain.Conversation, domain.Run) {
 	t.Helper()
-	fileStore, conversation, run := newCompactionTestStore(t)
+	fixtureStore, conversation, run := newCompactionTestStore(t)
 	for index := 0; index < count; index++ {
 		role := "user"
 		if index%2 == 1 {
 			role = "assistant"
 		}
-		_, _ = fileStore.AddMessage(conversation.ID, role, strings.Repeat("context ", 20))
+		_, _ = fixtureStore.AddMessage(conversation.ID, role, strings.Repeat("context ", 20))
 	}
-	return fileStore, conversation, run
+	return fixtureStore, conversation, run
 }
 
 type compactionFaultStore struct {
@@ -534,17 +535,15 @@ func (s *compactionFaultStore) ListConversationRunEvents(conversationID string) 
 	return s.Store.ListConversationRunEvents(conversationID)
 }
 
-func newCompactionTestStore(t *testing.T) (*store.FileStore, domain.Conversation, domain.Run) {
+func newCompactionTestStore(t *testing.T) (*fixturestore.Store, domain.Conversation, domain.Run) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	conversation, err := fileStore.CreateConversation("compaction test")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("compaction test")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single", RunBudget: &domain.RuntimeRunBudget{},
 		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Model: domain.RuntimeModelSnapshot{Model: "test"},
 		ContextAssembly: compactionTestConfig(),
@@ -553,7 +552,7 @@ func newCompactionTestStore(t *testing.T) (*store.FileStore, domain.Conversation
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	return fileStore, conversation, run
+	return fixtureStore, conversation, run
 }
 
 func compactionTestConfig() domain.ContextAssemblyConfig {

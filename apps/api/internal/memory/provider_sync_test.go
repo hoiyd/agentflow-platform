@@ -1,5 +1,7 @@
 package memory
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -9,7 +11,6 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/openai"
-	storepkg "agentflow-platform/apps/api/internal/store"
 )
 
 type blockingEmbedder struct {
@@ -327,28 +328,26 @@ func TestProviderCloseReportsTimeoutAndCanFinishDrain(t *testing.T) {
 }
 
 func TestMemoryProviderSyncFailureDoesNotChangeCompletedRun(t *testing.T) {
-	fileStore, err := storepkg.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new file store: %v", err)
-	}
-	conversation, err := fileStore.CreateConversation("memory failure")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("memory failure")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
 	}, nil)
 
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	if _, err := fileStore.UpdateRunStatus(run.ID, domain.RunCompleted, ""); err != nil {
+	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunCompleted, ""); err != nil {
 		t.Fatalf("complete run: %v", err)
 	}
 	embedder := &blockingEmbedder{
 		started: make(chan struct{}), release: make(chan struct{}), err: errors.New("embedding unavailable"),
 	}
-	provider := newTestProvider(t, fileStore, embedder, ProviderOptions{QueueSize: 4, JobTimeout: time.Second})
+	provider := newTestProvider(t, fixtureStore, embedder, ProviderOptions{QueueSize: 4, JobTimeout: time.Second})
 	if err := provider.SyncTurn(TurnSyncRequest{RunID: run.ID, Message: domain.Message{
 		ID: "msg_failed", ConversationID: conversation.ID, Role: "user",
 		Content: "Remember that AgentFlow uses Postgres for durable state.",
@@ -359,14 +358,14 @@ func TestMemoryProviderSyncFailureDoesNotChangeCompletedRun(t *testing.T) {
 	close(embedder.release)
 	closeProvider(t, provider)
 
-	current, ok, err := fileStore.GetRun(run.ID)
+	current, ok, err := fixtureStore.GetRun(run.ID)
 	if err != nil || !ok {
 		t.Fatalf("get run: ok=%v err=%v", ok, err)
 	}
 	if current.Status != domain.RunCompleted || current.Error != "" {
 		t.Fatalf("memory failure changed primary run outcome: %#v", current)
 	}
-	replay, ok, err := fileStore.GetRunReplay(run.ID)
+	replay, ok, err := fixtureStore.GetRunReplay(run.ID)
 	if err != nil || !ok {
 		t.Fatalf("run replay: ok=%v err=%v", ok, err)
 	}

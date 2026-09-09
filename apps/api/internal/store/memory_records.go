@@ -8,8 +8,8 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-func normalizeMemoryCandidate(candidate domain.MemoryCandidate) (domain.MemoryCandidate, error) {
-	candidate.WorkspaceID = normalizeWorkspaceID(candidate.WorkspaceID)
+func NormalizeMemoryCandidate(candidate domain.MemoryCandidate) (domain.MemoryCandidate, error) {
+	candidate.WorkspaceID = NormalizeWorkspaceID(candidate.WorkspaceID)
 	candidate.ID = strings.TrimSpace(candidate.ID)
 	candidate.SourceMessageID = strings.TrimSpace(candidate.SourceMessageID)
 	candidate.SourceRole = strings.TrimSpace(candidate.SourceRole)

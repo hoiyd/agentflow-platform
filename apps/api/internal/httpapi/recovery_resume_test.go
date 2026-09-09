@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"bufio"
 	"bytes"
@@ -14,26 +16,23 @@ import (
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	conversation, err := fileStore.CreateConversation("Recoverable API resume")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("Recoverable API resume")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	if _, err := fileStore.AddMessage(conversation.ID, "user", "Write a concise recovery demo."); err != nil {
+	if _, err := fixtureStore.AddMessage(conversation.ID, "user", "Write a concise recovery demo."); err != nil {
 		t.Fatalf("add message: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	if _, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+	if _, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
 		RunID:          run.ID,
 		ConversationID: conversation.ID,
 		Role:           "observe",
@@ -45,13 +44,13 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create observe step: %v", err)
 	}
-	if _, err := fileStore.UpdateRunStatus(run.ID, domain.RunFailedRecoverable, "heartbeat expired"); err != nil {
+	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunFailedRecoverable, "heartbeat expired"); err != nil {
 		t.Fatalf("mark recoverable: %v", err)
 	}
 
 	client := newLocalFallbackOpenAIClientForTest()
 	runtime := agent.NewRuntime(agent.RuntimeOptions{
-		Store: fileStore, ModelClient: client, RouterMode: agent.RouterModeQuery,
+		Store: fixtureStore, ModelClient: client, RouterMode: agent.RouterModeQuery,
 		Autonomous: agent.AutonomousLimits{
 			MaxIterations:  2,
 			MaxRuntime:     time.Minute,
@@ -60,7 +59,7 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 		},
 	})
 	handler := &Handler{
-		store: fileStore, modelClient: client, agentRuntime: runtime,
+		store: fixtureStore, modelClient: client, agentRuntime: runtime,
 		runController: concurrency.NewRunController(concurrency.RunOptions{
 			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
 		}),
@@ -90,14 +89,14 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 		t.Fatalf("expected completed done event, got %s", recorder.Body.String())
 	}
 
-	updated, ok, err := fileStore.GetRun(run.ID)
+	updated, ok, err := fixtureStore.GetRun(run.ID)
 	if err != nil {
 		t.Fatalf("get run: %v", err)
 	}
 	if !ok || updated.Status != domain.RunCompleted {
 		t.Fatalf("expected completed run, got %#v ok=%v", updated, ok)
 	}
-	replay, ok, err := fileStore.GetRunReplay(run.ID)
+	replay, ok, err := fixtureStore.GetRunReplay(run.ID)
 	if err != nil {
 		t.Fatalf("get replay: %v", err)
 	}
@@ -119,17 +118,15 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 }
 
 func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	conversation, err := fileStore.CreateConversation("Recoverable collaboration API resume")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("Recoverable collaboration API resume")
 	if err != nil {
 		t.Fatal(err)
 	}
 	client := newLocalFallbackOpenAIClientForTest()
 	runtime := agent.NewRuntime(agent.RuntimeOptions{
-		Store: fileStore, ModelClient: client, RouterMode: agent.RouterModeQuery,
+		Store: fixtureStore, ModelClient: client, RouterMode: agent.RouterModeQuery,
 		ChildRuns: agent.ChildRunLimits{
 			MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute, SummaryMaxChars: 100,
 			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000},
@@ -139,7 +136,7 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	planner, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+	planner, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
 		RunID: prepared.Run.ID, ConversationID: conversation.ID, Role: "planner",
 		AgentID: "agent_planner", Status: domain.CollaborationStepCompleted,
 		Input: "Implement the API change", Output: "Inspect, implement, and test.",
@@ -147,14 +144,14 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+	if _, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
 		RunID: prepared.Run.ID, ConversationID: conversation.ID, Role: "router",
 		AgentID: "agent_planner", Status: domain.CollaborationStepCompleted,
 		Input: "route", Output: "agent_planner",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	worker, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+	worker, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
 		RunID: prepared.Run.ID, ConversationID: conversation.ID, Role: "worker",
 		AgentID: "agent_planner", Status: domain.CollaborationStepFailed,
 		Input: "delegated work", Error: "worker interrupted",
@@ -184,7 +181,7 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testi
 		},
 		CreatedAt: time.Now().UTC(),
 	}
-	child, relation, err := fileStore.CreateChildRun(domain.ChildRunRequest{
+	child, relation, err := fixtureStore.CreateChildRun(domain.ChildRunRequest{
 		Delegation: domain.RunDelegation{
 			ID: delegationID, ParentRunID: prepared.Run.ID, ParentTurnID: "turn-api-resume",
 			ParentStageID: worker.ID, AgentID: selected.ID, Depth: 1,
@@ -195,18 +192,18 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fileStore.UpdateRunDelegation(relation.ID, domain.DelegationResult{
+	if _, err := fixtureStore.UpdateRunDelegation(relation.ID, domain.DelegationResult{
 		Status: domain.DelegationCompleted, Summary: "durable worker result",
 		OutputRef: "run://" + child.ID + "/stages/worker", OutputHash: "hash", OutputBytes: 21,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fileStore.UpdateRunStatus(prepared.Run.ID, domain.RunFailedRecoverable, "worker interrupted"); err != nil {
+	if _, err := fixtureStore.UpdateRunStatus(prepared.Run.ID, domain.RunFailedRecoverable, "worker interrupted"); err != nil {
 		t.Fatal(err)
 	}
 
 	handler := &Handler{
-		store: fileStore, modelClient: client, agentRuntime: runtime,
+		store: fixtureStore, modelClient: client, agentRuntime: runtime,
 		runController: concurrency.NewRunController(concurrency.RunOptions{
 			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
 		}),
@@ -217,11 +214,11 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testi
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "event: done") {
 		t.Fatalf("resume response: status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
-	updated, ok, err := fileStore.GetRun(prepared.Run.ID)
+	updated, ok, err := fixtureStore.GetRun(prepared.Run.ID)
 	if err != nil || !ok || updated.Status != domain.RunCompleted {
 		t.Fatalf("resumed parent=%#v ok=%v err=%v", updated, ok, err)
 	}
-	steps, err := fileStore.ListCollaborationSteps(prepared.Run.ID)
+	steps, err := fixtureStore.ListCollaborationSteps(prepared.Run.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,46 +260,44 @@ func TestResumeFailurePolicyKeepsReplayOnlyRunRecoverable(t *testing.T) {
 }
 
 func TestResumeRunRejectsStaleAndUnreconciledActions(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("Resume conflicts")
 	if err != nil {
 		t.Fatal(err)
 	}
-	conversation, err := fileStore.CreateConversation("Resume conflicts")
+	completed, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	completed, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
-	if err != nil {
+	if _, err := fixtureStore.UpdateRunStatus(completed.ID, domain.RunCompleted, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fileStore.UpdateRunStatus(completed.ID, domain.RunCompleted, ""); err != nil {
-		t.Fatal(err)
-	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 	response := httptest.NewRecorder()
 	handler.resumeRun(response, httptest.NewRequest(http.MethodPost, "/api/runs/"+completed.ID+"/resume", strings.NewReader(`{}`)))
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "current state") {
 		t.Fatalf("stale resume: status=%d body=%s", response.Code, response.Body.String())
 	}
 
-	recoverable, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	recoverable, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fileStore.UpdateRunStatus(recoverable.ID, domain.RunFailedRecoverable, "interrupted"); err != nil {
+	if _, err := fixtureStore.UpdateRunStatus(recoverable.ID, domain.RunFailedRecoverable, "interrupted"); err != nil {
 		t.Fatal(err)
 	}
-	effect, _, err := fileStore.BeginToolEffect(domain.ToolEffectRecord{
+	effect, _, err := fixtureStore.BeginToolEffect(domain.ToolEffectRecord{
 		IdempotencyKey: "effect-resume", RunID: recoverable.ID, StageID: "stage-1", ToolCallID: "call-1",
 		ToolName: "external_writer", RequestHash: "hash",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fileStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "timeout"); err != nil {
+	if _, err := fixtureStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "timeout"); err != nil {
 		t.Fatal(err)
 	}
-	replay, ok, err := fileStore.GetRunReplay(recoverable.ID)
+	replay, ok, err := fixtureStore.GetRunReplay(recoverable.ID)
 	if err != nil || !ok || replay.RecoverySummary == nil || replay.RecoverySummary.Reason != domain.RecoveryToolEffectUncertain {
 		t.Fatalf("file recovery summary: summary=%#v ok=%v err=%v", replay.RecoverySummary, ok, err)
 	}

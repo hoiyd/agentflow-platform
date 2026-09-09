@@ -31,7 +31,7 @@ func (s *PostgresStore) ListConversations() ([]domain.Conversation, error) {
 }
 
 func (s *PostgresStore) ListConversationsByWorkspace(workspaceID string) ([]domain.Conversation, error) {
-	rows, err := s.db.Query(`SELECT id, workspace_id, title, created_at, updated_at FROM conversations WHERE workspace_id = $1 ORDER BY updated_at DESC`, normalizeWorkspaceID(workspaceID))
+	rows, err := s.db.Query(`SELECT id, workspace_id, title, created_at, updated_at FROM conversations WHERE workspace_id = $1 ORDER BY updated_at DESC`, NormalizeWorkspaceID(workspaceID))
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (s *PostgresStore) CreateConversation(title string) (domain.Conversation, e
 func (s *PostgresStore) CreateConversationInWorkspace(workspaceID string, title string) (domain.Conversation, error) {
 	now := time.Now().UTC()
 	conversation := domain.Conversation{
-		ID: newID("conv"), WorkspaceID: normalizeWorkspaceID(workspaceID), Title: normalizeTitle(title), CreatedAt: now, UpdatedAt: now,
+		ID: NewID("conv"), WorkspaceID: NormalizeWorkspaceID(workspaceID), Title: NormalizeTitle(title), CreatedAt: now, UpdatedAt: now,
 	}
 	_, err := s.db.Exec(`
 		INSERT INTO conversations (id, workspace_id, title, created_at, updated_at)
@@ -80,7 +80,7 @@ func (s *PostgresStore) GetConversation(id string) (domain.Conversation, bool, e
 
 func (s *PostgresStore) GetConversationInWorkspace(workspaceID string, id string) (domain.Conversation, bool, error) {
 	var item domain.Conversation
-	err := s.db.QueryRow(`SELECT id, workspace_id, title, created_at, updated_at FROM conversations WHERE id = $1 AND workspace_id = $2`, id, normalizeWorkspaceID(workspaceID)).Scan(&item.ID, &item.WorkspaceID, &item.Title, &item.CreatedAt, &item.UpdatedAt)
+	err := s.db.QueryRow(`SELECT id, workspace_id, title, created_at, updated_at FROM conversations WHERE id = $1 AND workspace_id = $2`, id, NormalizeWorkspaceID(workspaceID)).Scan(&item.ID, &item.WorkspaceID, &item.Title, &item.CreatedAt, &item.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Conversation{}, false, nil
 	}
@@ -103,7 +103,7 @@ func (s *PostgresStore) DeleteConversation(id string) error {
 }
 
 func (s *PostgresStore) DeleteConversationInWorkspace(workspaceID string, id string) error {
-	result, err := s.db.Exec(`DELETE FROM conversations WHERE id = $1 AND workspace_id = $2`, id, normalizeWorkspaceID(workspaceID))
+	result, err := s.db.Exec(`DELETE FROM conversations WHERE id = $1 AND workspace_id = $2`, id, NormalizeWorkspaceID(workspaceID))
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (s *PostgresStore) ListMessagesInWorkspace(workspaceID string, conversation
 		FROM messages m
 		JOIN conversations c ON c.id = m.conversation_id
 		WHERE m.conversation_id = $1 AND m.workspace_id = $2 AND c.workspace_id = $2
-		ORDER BY m.created_at ASC`, conversationID, normalizeWorkspaceID(workspaceID))
+		ORDER BY m.created_at ASC`, conversationID, NormalizeWorkspaceID(workspaceID))
 	if err != nil {
 		return nil, err
 	}
@@ -179,12 +179,12 @@ func (s *PostgresStore) AddMessageWithCitations(conversationID string, role stri
 	}
 	now := time.Now().UTC()
 	message := domain.Message{
-		ID:             newID("msg"),
+		ID:             NewID("msg"),
 		WorkspaceID:    conversation.WorkspaceID,
 		ConversationID: conversationID,
 		Role:           role,
 		Content:        content,
-		Citations:      cloneCitations(citations),
+		Citations:      CloneCitations(citations),
 		CreatedAt:      now,
 	}
 	citationsJSON := []byte("[]")
@@ -357,7 +357,7 @@ func (s *PostgresStore) getContextCompactionByHash(conversationID, sourceHash st
 
 func (s *PostgresStore) preparePostgresContextCompaction(compaction domain.ContextCompaction, status domain.ContextCompactionStatus) (domain.ContextCompaction, error) {
 	if compaction.ID == "" {
-		compaction.ID = newID("cmp")
+		compaction.ID = NewID("cmp")
 	}
 	if compaction.Generation <= 0 {
 		if err := s.db.QueryRow(`SELECT COALESCE(MAX(generation), 0) + 1 FROM context_compactions WHERE conversation_id = $1`, compaction.ConversationID).Scan(&compaction.Generation); err != nil {
@@ -382,7 +382,7 @@ func (s *PostgresStore) UpdateConversationTitle(id string, title string) error {
 	result, err := s.db.Exec(`
 		UPDATE conversations
 		SET title = $1, updated_at = $2
-		WHERE id = $3`, normalizeTitle(title), time.Now().UTC(), id)
+		WHERE id = $3`, NormalizeTitle(title), time.Now().UTC(), id)
 	if err != nil {
 		return err
 	}
@@ -394,7 +394,7 @@ func (s *PostgresStore) UpdateConversationTitle(id string, title string) error {
 }
 
 func (s *PostgresStore) UpdateConversationTitleInWorkspace(workspaceID string, id string, title string) error {
-	result, err := s.db.Exec(`UPDATE conversations SET title = $1, updated_at = $2 WHERE id = $3 AND workspace_id = $4`, normalizeTitle(title), time.Now().UTC(), id, normalizeWorkspaceID(workspaceID))
+	result, err := s.db.Exec(`UPDATE conversations SET title = $1, updated_at = $2 WHERE id = $3 AND workspace_id = $4`, NormalizeTitle(title), time.Now().UTC(), id, NormalizeWorkspaceID(workspaceID))
 	if err != nil {
 		return err
 	}

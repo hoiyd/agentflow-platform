@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"bytes"
 	"context"
@@ -15,7 +17,7 @@ import (
 )
 
 func TestAgentAndRunHandlersProjectStoreFailures(t *testing.T) {
-	httpStore, workspace, fileStore := newBoundaryHTTPStore(t)
+	httpStore, workspace, fixtureStore := newBoundaryHTTPStore(t)
 	handler := &Handler{store: httpStore}
 	want := errors.New("persistence unavailable")
 
@@ -43,11 +45,11 @@ func TestAgentAndRunHandlersProjectStoreFailures(t *testing.T) {
 	assertHandlerFailure(t, handler.updateAgent, httptest.NewRequest(http.MethodPatch, "/api/agents/agent_planner", bytes.NewBufferString(`{}`)), http.StatusBadRequest)
 	httpStore.updateAgentErr = nil
 
-	conversation, err := fileStore.CreateConversation("run failures")
+	conversation, err := fixtureStore.CreateConversation("run failures")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -69,7 +71,7 @@ func TestAgentAndRunHandlersProjectStoreFailures(t *testing.T) {
 		assertHandlerFailure(t, test.invoke, test.request, http.StatusInternalServerError)
 	}
 	workspace.getRunErr = nil
-	if _, err := fileStore.UpdateRunStatus(run.ID, domain.RunFailedRecoverable, "interrupted"); err != nil {
+	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunFailedRecoverable, "interrupted"); err != nil {
 		t.Fatal(err)
 	}
 	workspace.listToolEffectsErr = want
@@ -87,7 +89,7 @@ func TestAgentAndRunHandlersProjectStoreFailures(t *testing.T) {
 }
 
 func TestConversationAndDocumentHandlersProjectWorkspaceFailures(t *testing.T) {
-	httpStore, workspace, fileStore := newBoundaryHTTPStore(t)
+	httpStore, workspace, fixtureStore := newBoundaryHTTPStore(t)
 	handler := &Handler{store: httpStore}
 	want := errors.New("workspace store failed")
 
@@ -98,7 +100,7 @@ func TestConversationAndDocumentHandlersProjectWorkspaceFailures(t *testing.T) {
 	assertHandlerFailure(t, handler.createConversation, httptest.NewRequest(http.MethodPost, "/api/conversations", bytes.NewBufferString(`{"title":"coverage"}`)), http.StatusInternalServerError)
 	workspace.createConversationErr = nil
 
-	conversation, err := fileStore.CreateConversation("coverage")
+	conversation, err := fixtureStore.CreateConversation("coverage")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
@@ -123,7 +125,7 @@ func TestConversationAndDocumentHandlersProjectWorkspaceFailures(t *testing.T) {
 }
 
 func TestChatProjectsContractAndConversationPersistenceFailures(t *testing.T) {
-	httpStore, workspace, fileStore := newBoundaryHTTPStore(t)
+	httpStore, workspace, fixtureStore := newBoundaryHTTPStore(t)
 	dependencies := completeHandlerDependencies(t)
 	handler, err := NewHandler(dependencies)
 	if err != nil {
@@ -145,7 +147,7 @@ func TestChatProjectsContractAndConversationPersistenceFailures(t *testing.T) {
 	assertHandlerFailure(t, handler.chat, httptest.NewRequest(http.MethodPost, "/api/chat", bytes.NewBufferString(`{"conversation_id":"conv-1","message":"hello"}`)), http.StatusInternalServerError)
 	workspace.getConversationErr = nil
 
-	conversation, err := fileStore.CreateConversation("chat failures")
+	conversation, err := fixtureStore.CreateConversation("chat failures")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
@@ -170,12 +172,12 @@ func TestKnowledgeAndEpisodeHandlersProjectDependencyFailures(t *testing.T) {
 	upload.Header.Set("Content-Type", contentType)
 	assertHandlerFailure(t, handler.uploadDocument, upload, http.StatusBadRequest)
 
-	httpStore, workspace, fileStore := newBoundaryHTTPStore(t)
-	conversation, err := fileStore.CreateConversation("episode")
+	httpStore, workspace, fixtureStore := newBoundaryHTTPStore(t)
+	conversation, err := fixtureStore.CreateConversation("episode")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -273,33 +275,31 @@ func assertHandlerFailure(t *testing.T, invoke func(http.ResponseWriter, *http.R
 	}
 }
 
-func newBoundaryHTTPStore(t *testing.T) (*boundaryHTTPStore, *boundaryWorkspaceStore, *store.FileStore) {
+func newBoundaryHTTPStore(t *testing.T) (*boundaryHTTPStore, *boundaryWorkspaceStore, *fixturestore.Store) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	workspace := &boundaryWorkspaceStore{
-		WorkspaceStore: fileStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
+		WorkspaceStore: fixtureStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
 	}
-	return &boundaryHTTPStore{Store: fileStore, workspace: workspace}, workspace, fileStore
+	return &boundaryHTTPStore{Store: fixtureStore, workspace: workspace}, workspace, fixtureStore
 }
 
 func newBoundaryRunningRun(t *testing.T, contract *domain.CompletionContract) (*Handler, *boundaryWorkspaceStore, domain.Run, domain.Conversation) {
 	t.Helper()
-	httpStore, workspace, fileStore := newBoundaryHTTPStore(t)
-	conversation, err := fileStore.CreateConversation("boundary run")
+	httpStore, workspace, fixtureStore := newBoundaryHTTPStore(t)
+	conversation, err := fixtureStore.CreateConversation("boundary run")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), contract)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), contract)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	if _, err := fileStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
+	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
 		t.Fatalf("start run: %v", err)
 	}
-	runtime := agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	runtime := agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	return &Handler{store: httpStore, agentRuntime: runtime}, workspace, run, conversation
 }
 

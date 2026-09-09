@@ -117,7 +117,7 @@ flowchart LR
     Retrieval --> Transform["Parent/adjacent selection -> Dedup/Merge"]
     Scope --> Memory["Memory Provider"]
     Memory --> Candidates["Candidate policy"]
-    Scope --> Store["File Store / Postgres + pgvector"]
+    Scope --> Store["Postgres + pgvector"]
     Events --> Store
     Candidates --> Store
     Transform --> Store
@@ -142,7 +142,7 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 | [Configurable Agent profiles](docs/runtime/agent-profiles.md) | Persisted profiles combine a custom responsibility, system prompt, Tool allowlist, and Memory/RAG switches; Multi freezes active profiles as Router candidates | [API](apps/api/internal/httpapi/agents.go), [tests](apps/api/internal/httpapi/agents_test.go) |
 | [Reproducibility](docs/architecture/terms.md#runtime-snapshot) | Each Run freezes model, Agent, Tool schema, context policy, and budget in a Runtime Snapshot | [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
 | [Context control](docs/context/context-management.md) | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [assembler](apps/api/internal/contextassembly/assembler.go), [tests](apps/api/internal/contextassembly/assembler_test.go) |
-| [Structured durable task state](docs/runtime/task-state.md) | Conversation-scoped goals, tasks, decisions, constraints, blockers, and Artifact references evolve through optimistic typed patches rather than summaries | [domain](apps/api/internal/domain/task_state.go), [Store tests](apps/api/internal/store/file_task_states_test.go) |
+| [Structured durable task state](docs/runtime/task-state.md) | Conversation-scoped goals, tasks, decisions, constraints, blockers, and Artifact references evolve through optimistic typed patches rather than summaries | [domain](apps/api/internal/domain/task_state.go), [Store tests](apps/api/internal/store/postgres_store_test.go) |
 | [Durable memory](docs/context/memory-management.md) | Curated candidates plus user-visible, version-checked corrections/deletions; metadata-only audit and late-sync replay protection | [mutations](apps/api/internal/memory/mutations.go), [tests](apps/api/internal/store/memory_mutations_test.go) |
 | [Provider compatibility](docs/architecture/engineering-decisions.md#openai-compatible-does-not-mean-capability-identical) | The native Turn Engine requires structured Tool Calling and reports unsupported models explicitly; stream usage metadata has a bounded transport fallback | [provider adapter](apps/api/internal/openai), [tests](apps/api/internal/openai/context_integration_test.go) |
 
@@ -160,7 +160,7 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 | --- | --- | --- |
 | [**Performance & resource control**](docs/runtime/execution-controls.md) | SSE streaming, bounded context/output, asynchronous Memory curation, and per-Run usage/cost budgets keep work measurable and bounded | [budget](apps/api/internal/budget/budget.go), [tests](apps/api/internal/budget/budget_test.go) |
 | [**Concurrency & backpressure**](docs/runtime/execution-controls.md#1-run-admission-and-conversation-concurrency) | Global Run admission, per-Conversation single-writer execution, bounded queues, model-request permits, RPM/TPM limits, and retry-aware slot release | [controller](apps/api/internal/concurrency/run_controller.go), [tests](apps/api/internal/concurrency/run_controller_test.go) |
-| [Workspace namespace isolation](docs/operations/backend-configuration.md#workspace-scope) | Every API request resolves a non-empty Workspace; Conversations, Messages, Runs, Documents, Memory, retrieval, Replay, and Verification remain scoped in File and Postgres stores | [HTTP scope](apps/api/internal/httpapi/workspace.go), [Store contract](apps/api/internal/store/store.go), [tests](apps/api/internal/store/file_store_test.go) |
+| [Workspace namespace isolation](docs/operations/backend-configuration.md#workspace-scope) | Every API request resolves a non-empty Workspace; Conversations, Messages, Runs, Documents, Memory, retrieval, Replay, and Verification remain scoped in Postgres stores | [HTTP scope](apps/api/internal/httpapi/workspace.go), [Store contract](apps/api/internal/store/store.go), [tests](apps/api/internal/store/workspace_store_test.go) |
 | [Tool governance](docs/tools/tool-security-policy.md) | Platform enablement, Agent allowlists, frozen capability scope, operator policy, Budget, side-effect recovery, and concurrency remain explicit independent controls | [policy](apps/api/internal/toolpolicy/policy.go), [executor](apps/api/internal/tools/executor.go), [tests](apps/api/internal/tools/security_executor_test.go) |
 | [Tool Progress Guard](docs/tools/tool-progress-guard.md) | Run-scoped repeated failure/result detection escalates from warning to pre-Budget blocking and Turn halt with replayable evidence | [guard](apps/api/internal/toolprogress/guard.go), [tests](apps/api/internal/toolprogress/guard_test.go) |
 | [Tool side-effect reconciliation](docs/tools/tool-side-effect-reconciliation.md) | Versioned operator commands resolve uncertain external writes with capability-gated retry/compensation and typed audit events | [coordinator](apps/api/internal/toolreconciliation/reconciliation.go), [tests](apps/api/internal/toolreconciliation/reconciliation_test.go) |
@@ -170,7 +170,7 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 Performance statements above describe implemented controls, not synthetic
 benchmark claims. Verification evaluates configured Run outcomes; Automated and
 Manual Tests validate system behavior. The same Run, Event, Budget, and
-Verification contracts apply across execution modes and File/Postgres
+Verification contracts apply across execution modes and Postgres
 persistence.
 
 ## Three-to-Five-Minute Demo
@@ -261,10 +261,15 @@ scope and its expansion path are documented in the
 
 - Go `1.26.5` managed through `gvm`
 - Node.js `22+`
-- Optional: Postgres with `pgvector`
+- PostgreSQL with `pgvector` and a configured `DATABASE_URL` (required for the API)
 - Optional: an OpenAI-compatible API key and Ollama embedding endpoint
 
 ### One-Command Local Start
+
+Start PostgreSQL first and set `DATABASE_URL` in `apps/api/.env` (copy
+`.env.example` only if no local `.env` exists). The launcher starts API/web,
+not the database; missing database configuration or connection fails startup.
+There is no file-backed persistence fallback. See [Storage Boundary](docs/architecture/storage-boundary.md).
 
 ```bash
 make quickstart
@@ -292,7 +297,8 @@ Backend:
 
 ```bash
 cd apps/api
-cp .env.example .env
+test -f .env || cp .env.example .env
+# Set DATABASE_URL in .env to your running PostgreSQL + pgvector database.
 source ~/.gvm/scripts/gvm
 gvm use go1.26.5
 GOCACHE=/private/tmp/agentflow-go-build-cache go run ./cmd/server

@@ -12,48 +12,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-func (s *FileStore) CreateModelRequestRecord(record domain.ModelRequestRecord) (domain.ModelRequestRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.hasRunLocked(record.Envelope.RunID) {
-		return domain.ModelRequestRecord{}, ErrNotFound("run")
-	}
-	if err := validateModelRequestRecord(record); err != nil {
-		return domain.ModelRequestRecord{}, err
-	}
-	record.Envelope.Attempt = nextModelRequestAttempt(s.data.ModelRequestRecords, record.Envelope.RunID, record.Envelope.ModelCallID)
-	record = cloneModelRequestRecord(record)
-	s.data.ModelRequestRecords = append(s.data.ModelRequestRecords, record)
-	return cloneModelRequestRecord(record), s.saveLocked()
-}
-
-func (s *FileStore) ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if !s.hasRunLocked(runID) {
-		return nil, ErrNotFound("run")
-	}
-	items := make([]domain.ModelRequestRecord, 0)
-	purged := false
-	for index, item := range s.data.ModelRequestRecords {
-		if item.Envelope.RunID == runID {
-			if expireModelRequestCapture(&item, time.Now().UTC()) {
-				s.data.ModelRequestRecords[index] = item
-				purged = true
-			}
-			items = append(items, cloneModelRequestRecord(item))
-		}
-	}
-	if purged {
-		if err := s.saveLocked(); err != nil {
-			return nil, err
-		}
-	}
-	sortModelRequestRecords(items)
-	return items, nil
-}
-
-func validateModelRequestRecord(record domain.ModelRequestRecord) error {
+func ValidateModelRequestRecord(record domain.ModelRequestRecord) error {
 	envelope := record.Envelope
 	if strings.TrimSpace(envelope.ID) == "" || strings.TrimSpace(envelope.RunID) == "" ||
 		strings.TrimSpace(envelope.ConversationID) == "" || strings.TrimSpace(envelope.ModelCallID) == "" ||
@@ -117,7 +76,7 @@ func validateModelRequestRecord(record domain.ModelRequestRecord) error {
 	return nil
 }
 
-func expireModelRequestCapture(record *domain.ModelRequestRecord, now time.Time) bool {
+func ExpireModelRequestCapture(record *domain.ModelRequestRecord, now time.Time) bool {
 	capture := &record.Capture
 	if capture.Content == "" || capture.ExpiresAt == nil || now.Before(*capture.ExpiresAt) {
 		return false
@@ -130,7 +89,7 @@ func expireModelRequestCapture(record *domain.ModelRequestRecord, now time.Time)
 	return true
 }
 
-func nextModelRequestAttempt(items []domain.ModelRequestRecord, runID, modelCallID string) int {
+func NextModelRequestAttempt(items []domain.ModelRequestRecord, runID, modelCallID string) int {
 	next := 1
 	for _, item := range items {
 		if item.Envelope.RunID == runID && item.Envelope.ModelCallID == modelCallID && item.Envelope.Attempt >= next {
@@ -140,7 +99,7 @@ func nextModelRequestAttempt(items []domain.ModelRequestRecord, runID, modelCall
 	return next
 }
 
-func cloneModelRequestRecord(record domain.ModelRequestRecord) domain.ModelRequestRecord {
+func CloneModelRequestRecord(record domain.ModelRequestRecord) domain.ModelRequestRecord {
 	encoded, _ := json.Marshal(record)
 	var cloned domain.ModelRequestRecord
 	_ = json.Unmarshal(encoded, &cloned)
@@ -150,7 +109,7 @@ func cloneModelRequestRecord(record domain.ModelRequestRecord) domain.ModelReque
 	return cloned
 }
 
-func sortModelRequestRecords(items []domain.ModelRequestRecord) {
+func SortModelRequestRecords(items []domain.ModelRequestRecord) {
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].Envelope.CreatedAt.Equal(items[j].Envelope.CreatedAt) {
 			if items[i].Envelope.ModelCallID == items[j].Envelope.ModelCallID {

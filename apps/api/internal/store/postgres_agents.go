@@ -37,7 +37,7 @@ func (s *PostgresStore) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 	now := time.Now().UTC()
 	agent.ID = strings.TrimSpace(agent.ID)
 	if agent.ID == "" {
-		agent.ID = newID("agent")
+		agent.ID = NewID("agent")
 	}
 	agent.Name = strings.TrimSpace(agent.Name)
 	if agent.Name == "" {
@@ -45,7 +45,7 @@ func (s *PostgresStore) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 	}
 	agent.Description = strings.TrimSpace(agent.Description)
 	agent.SystemPrompt = strings.TrimSpace(agent.SystemPrompt)
-	agent.Tools = normalizeTools(agent.Tools)
+	agent.Tools = NormalizeTools(agent.Tools)
 	agent = domain.NormalizeAgentConfig(agent)
 	agent.CreatedAt = now
 	agent.UpdatedAt = now
@@ -91,7 +91,7 @@ func (s *PostgresStore) UpdateAgent(agent domain.Agent) (domain.Agent, error) {
 	}
 	agent.Description = strings.TrimSpace(agent.Description)
 	agent.SystemPrompt = strings.TrimSpace(agent.SystemPrompt)
-	agent.Tools = normalizeTools(agent.Tools)
+	agent.Tools = NormalizeTools(agent.Tools)
 	agent = domain.NormalizeAgentConfig(agent)
 	agent.Archived = existing.Archived
 	agent.CreatedAt = existing.CreatedAt
@@ -159,7 +159,7 @@ func (s *PostgresStore) seedDefaultAgents(ctx context.Context) error {
 	}
 	now := time.Now().UTC()
 	if count == 0 {
-		for _, agent := range defaultAgents(now) {
+		for _, agent := range DefaultAgents(now) {
 			toolsJSON, err := json.Marshal(agent.Tools)
 			if err != nil {
 				return err
@@ -208,7 +208,7 @@ func scanAgent(row scanner) (domain.Agent, error) {
 }
 
 func defaultAgentByID(id string) domain.Agent {
-	for _, agent := range defaultAgents(time.Now().UTC()) {
+	for _, agent := range DefaultAgents(time.Now().UTC()) {
 		if agent.ID == id {
 			return agent
 		}

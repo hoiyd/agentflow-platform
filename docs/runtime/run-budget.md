@@ -56,8 +56,7 @@ Each model call has a stable `operation_id`, normally the Context Manifest
    before settlement remains visible as an open conservative reservation.
 
 Duplicate reservation or settlement writes are idempotent. Reusing an operation
-ID with different values is rejected. File Store serializes the check and append
-under its mutex. Postgres uses a transaction, a Run-scoped advisory lock, and a
+ID with different values is rejected. Postgres uses a transaction, a Run-scoped advisory lock, and a
 unique `(run_id, operation_id, kind)` constraint.
 
 Tool budget is charged after catalog lookup and JSON-object validation but

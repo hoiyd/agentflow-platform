@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"encoding/json"
@@ -15,10 +17,8 @@ import (
 )
 
 func TestMemoryMutationAPI(t *testing.T) {
-	s, err := store.NewFileStore(t.TempDir() + "/memory.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := fixturestore.New()
+
 	p := memorypkg.NewBuiltinProvider(s, newLocalFallbackOpenAIClientForTest(), memorypkg.ProviderOptions{MaxAttempts: 1})
 	if err := p.Initialize(context.Background()); err != nil {
 		t.Fatal(err)

@@ -12,7 +12,7 @@ import (
 )
 
 func (s *PostgresStore) SaveStageCheckpoint(checkpoint domain.StageCheckpoint) (domain.StageCheckpoint, error) {
-	if err := validateStageCheckpoint(checkpoint); err != nil {
+	if err := ValidateStageCheckpoint(checkpoint); err != nil {
 		return domain.StageCheckpoint{}, err
 	}
 	tx, err := s.db.Begin()
@@ -29,14 +29,14 @@ func (s *PostgresStore) SaveStageCheckpoint(checkpoint domain.StageCheckpoint) (
 	}
 	now := time.Now().UTC()
 	if found {
-		if err := validateCheckpointUpdate(existing, checkpoint); err != nil {
+		if err := ValidateCheckpointUpdate(existing, checkpoint); err != nil {
 			return domain.StageCheckpoint{}, err
 		}
 		checkpoint.ID = existing.ID
 		checkpoint.CreatedAt = existing.CreatedAt
 	} else {
 		if checkpoint.ID == "" {
-			checkpoint.ID = newID("checkpoint")
+			checkpoint.ID = NewID("checkpoint")
 		}
 		checkpoint.CreatedAt = now
 	}
@@ -93,7 +93,7 @@ func (s *PostgresStore) ListStageCheckpoints(runID string) ([]domain.StageCheckp
 }
 
 func (s *PostgresStore) BeginToolEffect(effect domain.ToolEffectRecord) (domain.ToolEffectRecord, bool, error) {
-	if err := validateToolEffect(effect); err != nil {
+	if err := ValidateToolEffect(effect); err != nil {
 		return domain.ToolEffectRecord{}, false, err
 	}
 	tx, err := s.db.Begin()
@@ -204,7 +204,7 @@ func (s *PostgresStore) CommitToolEffectReconciliation(mutation domain.ToolEffec
 		if err := json.Unmarshal(payload, &previous.Payload); err != nil {
 			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
 		}
-		if err := validateReconciliationDuplicate(previous, mutation); err != nil {
+		if err := ValidateReconciliationDuplicate(previous, mutation); err != nil {
 			return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
 		}
 		current, found, err := getToolEffect(tx, mutation.IdempotencyKey, false)
@@ -226,7 +226,7 @@ func (s *PostgresStore) CommitToolEffectReconciliation(mutation domain.ToolEffec
 	if !found {
 		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, ErrNotFound("tool effect")
 	}
-	prepared, err := prepareToolEffectReconciliation(current, mutation)
+	prepared, err := PrepareToolEffectReconciliation(current, mutation)
 	if err != nil {
 		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
 	}

@@ -1,12 +1,14 @@
 package store
 
+import "agentflow-platform/apps/api/internal/testsupport/pgfixture"
+
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
+
 	"strings"
 	"sync"
 	"testing"
@@ -14,18 +16,16 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-func mutationFixture(t *testing.T, backend string) (Store, func() Store, domain.Memory, domain.MemoryEmbedding) {
+func mutationFixture(t *testing.T) (Store, func() Store, domain.Memory, domain.MemoryEmbedding) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "memory.json")
+	url := pgfixture.DatabaseURL(t)
 	open := func() Store {
 		t.Helper()
-		if backend == "postgres" {
-			return openPostgresTestStore(t)
-		}
-		s, err := NewFileStore(path)
+		s, err := NewPostgresStore(url)
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(func() { _ = s.Close() })
 		return s
 	}
 	s := open()
@@ -52,228 +52,199 @@ func mutationCommand(m domain.Memory) domain.MemoryMutation {
 }
 
 func TestMemoryMutationStoreContract(t *testing.T) {
-	for _, backend := range []string{"file", "postgres"} {
-		t.Run(backend, func(t *testing.T) {
-			s, reopen, m, embedding := mutationFixture(t, backend)
-			if duplicate, err := s.CreateMemory(m, embedding); err != nil || duplicate.Version != 1 {
-				t.Fatalf("duplicate create: %+v %v", duplicate, err)
-			}
-			altered := m
-			altered.Content = "changed create"
-			if _, err := s.CreateMemory(altered, embedding); !errors.Is(err, ErrMemoryConflict) {
-				t.Fatalf("create overwrite: %v", err)
-			}
-			if _, err := s.CreateMemory(domain.Memory{Kind: "fact", Content: "unrelated memory"}, embedding); err != nil {
-				t.Fatal(err)
-			}
-			candidate := domain.MemoryCandidate{ID: "candidate-" + m.ID, SourceMessageID: m.SourceMessageID, SourceRole: "user", Kind: m.Kind, Content: m.Content, Status: domain.MemoryCandidateAccepted}
-			if _, _, err := s.CreateMemoryCandidate(candidate); err != nil {
-				t.Fatal(err)
-			}
-			cmd := mutationCommand(m)
-			cmd.Actor, cmd.Reason = "token=actor-secret", "api_key=reason-secret"
-			r, err := s.MutateMemory(m.WorkspaceID, m.ID, cmd, embedding)
-			if err != nil || !r.Applied || r.Memory.Version != 2 || r.Change.PreviousVersion != 1 {
-				t.Fatalf("replace: %+v %v", r, err)
-			}
-			if strings.Contains(r.Change.Actor, "actor-secret") || strings.Contains(r.Change.Reason, "reason-secret") {
-				t.Fatal("audit leaked secret")
-			}
-			s = reopen()
-			detail, err := s.GetMemoryDetail(m.WorkspaceID, m.ID)
-			if err != nil || len(detail.Changes) != 1 || detail.Memory.Content != cmd.Content || detail.Changes[0].CommandHash == "" {
-				t.Fatalf("round trip: %+v %v", detail, err)
-			}
-			if change, err := s.FindMemoryChange(m.WorkspaceID, cmd.OperationID); err != nil || change == nil || change.Version != 2 {
-				t.Fatalf("find change: %+v %v", change, err)
-			}
-			items, err := s.SearchMemories(domain.MemorySearch{Embedding: embedding.Embedding, Metadata: map[string]string{"source": "test"}, Limit: 20})
-			if err != nil {
-				t.Fatal(err)
-			}
-			found := false
-			for _, item := range items {
-				if item.Memory.ID == m.ID {
-					found = true
-					if item.Memory.Content != cmd.Content || item.Memory.Version != 2 {
-						t.Fatal("stale recall")
-					}
-				}
-			}
-			if !found {
-				t.Fatal("reopened store lost embedding")
-			}
-			r, err = s.MutateMemory(m.WorkspaceID, m.ID, cmd, domain.MemoryEmbedding{})
-			if err != nil || r.Applied || r.Memory.Version != 2 {
-				t.Fatalf("duplicate: %+v %v", r, err)
-			}
-			changed := cmd
-			changed.Content = "different"
-			if _, err := s.MutateMemory(m.WorkspaceID, m.ID, changed, embedding); !errors.Is(err, ErrMemoryConflict) {
-				t.Fatalf("command ID reuse: %v", err)
-			}
-			changed = cmd
-			changed.OperationID += "-stale"
-			if _, err := s.MutateMemory(m.WorkspaceID, m.ID, changed, embedding); !errors.Is(err, ErrMemoryConflict) {
-				t.Fatalf("stale version: %v", err)
-			}
-			if _, err := s.GetMemoryDetail("another-workspace", m.ID); !errors.Is(err, ErrMemoryMissing) {
-				t.Fatalf("detail scope: %v", err)
-			}
-			if _, err := s.MutateMemory("another-workspace", m.ID, cmd, embedding); !errors.Is(err, ErrMemoryMissing) {
-				t.Fatalf("mutation scope: %v", err)
-			}
-			if change, err := s.FindMemoryChange("another-workspace", cmd.OperationID); err != nil || change != nil {
-				t.Fatal("audit leaked workspace")
-			}
-			deleted := domain.MemoryMutation{OperationID: "delete-" + m.ID, ExpectedVersion: 2, Action: "delete", Actor: "operator", Reason: "outdated"}
-			r, err = s.MutateMemory(m.WorkspaceID, m.ID, deleted, domain.MemoryEmbedding{})
-			if err != nil || r.Memory.DeletedAt == nil || r.Memory.Content != "" || len(r.Memory.Metadata) != 0 || r.Memory.Version != 3 {
-				t.Fatalf("delete: %+v %v", r, err)
-			}
-			s = reopen()
-			detail, err = s.GetMemoryDetail(m.WorkspaceID, m.ID)
-			if err != nil || detail.Memory.DeletedAt == nil || len(detail.Changes) != 2 || detail.Changes[0].Action != "delete" {
-				t.Fatalf("deleted roundtrip: %+v %v", detail, err)
-			}
-			encoded, _ := json.Marshal(detail)
-			if strings.Contains(string(encoded), m.Content) || strings.Contains(string(encoded), cmd.Content) {
-				t.Fatal("audit retains original content")
-			}
-			if r, err = s.MutateMemory(m.WorkspaceID, m.ID, deleted, domain.MemoryEmbedding{}); err != nil || r.Applied {
-				t.Fatalf("duplicate deletion: %v", err)
-			}
-			if r, err = s.MutateMemory(m.WorkspaceID, m.ID, cmd, domain.MemoryEmbedding{}); err != nil || r.Applied || r.Memory.DeletedAt == nil {
-				t.Fatalf("old duplicate resurrected: %v", err)
-			}
-			if _, err = s.CreateMemory(m, embedding); !errors.Is(err, ErrMemoryConflict) {
-				t.Fatalf("same ID resurrection: %v", err)
-			}
-			m.ID += "-late"
-			if _, err = s.CreateMemory(m, embedding); !errors.Is(err, ErrMemoryConflict) {
-				t.Fatalf("late source resurrection: %v", err)
-			}
-			candidate.ID += "-late"
-			late, created, err := s.CreateMemoryCandidate(candidate)
-			if err != nil || !created || late.Status != domain.MemoryCandidateRejected || late.Content == candidate.Content {
-				t.Fatalf("late candidate: %+v %v", late, err)
-			}
-			candidates, err := s.ListMemoryCandidates("")
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, c := range candidates {
-				if c.SourceMessageID == m.SourceMessageID && (c.Content == m.Content || c.Status != domain.MemoryCandidateRejected) {
-					t.Fatal("old candidate not withdrawn")
-				}
-			}
-			items, err = s.SearchMemories(domain.MemorySearch{Embedding: embedding.Embedding, Limit: 20})
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, item := range items {
-				if item.Memory.SourceMessageID == m.SourceMessageID {
-					t.Fatal("deleted memory recalled")
-				}
-			}
-			if err := s.DeleteConversation(m.ConversationID); err != nil {
-				t.Fatal(err)
-			}
-			candidate.ConversationID = ""
-			candidate.ID += "-after-source-delete"
-			late, _, err = s.CreateMemoryCandidate(candidate)
-			if err != nil || late.Status != domain.MemoryCandidateRejected {
-				t.Fatalf("source deletion lost fence: %+v %v", late, err)
-			}
-		})
+
+	s, reopen, m, embedding := mutationFixture(t)
+	if duplicate, err := s.CreateMemory(m, embedding); err != nil || duplicate.Version != 1 {
+		t.Fatalf("duplicate create: %+v %v", duplicate, err)
 	}
+	altered := m
+	altered.Content = "changed create"
+	if _, err := s.CreateMemory(altered, embedding); !errors.Is(err, ErrMemoryConflict) {
+		t.Fatalf("create overwrite: %v", err)
+	}
+	if _, err := s.CreateMemory(domain.Memory{Kind: "fact", Content: "unrelated memory"}, embedding); err != nil {
+		t.Fatal(err)
+	}
+	candidate := domain.MemoryCandidate{ID: "candidate-" + m.ID, SourceMessageID: m.SourceMessageID, SourceRole: "user", Kind: m.Kind, Content: m.Content, Status: domain.MemoryCandidateAccepted}
+	if _, _, err := s.CreateMemoryCandidate(candidate); err != nil {
+		t.Fatal(err)
+	}
+	cmd := mutationCommand(m)
+	cmd.Actor, cmd.Reason = "token=actor-secret", "api_key=reason-secret"
+	r, err := s.MutateMemory(m.WorkspaceID, m.ID, cmd, embedding)
+	if err != nil || !r.Applied || r.Memory.Version != 2 || r.Change.PreviousVersion != 1 {
+		t.Fatalf("replace: %+v %v", r, err)
+	}
+	if strings.Contains(r.Change.Actor, "actor-secret") || strings.Contains(r.Change.Reason, "reason-secret") {
+		t.Fatal("audit leaked secret")
+	}
+	s = reopen()
+	detail, err := s.GetMemoryDetail(m.WorkspaceID, m.ID)
+	if err != nil || len(detail.Changes) != 1 || detail.Memory.Content != cmd.Content || detail.Changes[0].CommandHash == "" {
+		t.Fatalf("round trip: %+v %v", detail, err)
+	}
+	if change, err := s.FindMemoryChange(m.WorkspaceID, cmd.OperationID); err != nil || change == nil || change.Version != 2 {
+		t.Fatalf("find change: %+v %v", change, err)
+	}
+	items, err := s.SearchMemories(domain.MemorySearch{Embedding: embedding.Embedding, Metadata: map[string]string{"source": "test"}, Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range items {
+		if item.Memory.ID == m.ID {
+			found = true
+			if item.Memory.Content != cmd.Content || item.Memory.Version != 2 {
+				t.Fatal("stale recall")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("reopened store lost embedding")
+	}
+	r, err = s.MutateMemory(m.WorkspaceID, m.ID, cmd, domain.MemoryEmbedding{})
+	if err != nil || r.Applied || r.Memory.Version != 2 {
+		t.Fatalf("duplicate: %+v %v", r, err)
+	}
+	changed := cmd
+	changed.Content = "different"
+	if _, err := s.MutateMemory(m.WorkspaceID, m.ID, changed, embedding); !errors.Is(err, ErrMemoryConflict) {
+		t.Fatalf("command ID reuse: %v", err)
+	}
+	changed = cmd
+	changed.OperationID += "-stale"
+	if _, err := s.MutateMemory(m.WorkspaceID, m.ID, changed, embedding); !errors.Is(err, ErrMemoryConflict) {
+		t.Fatalf("stale version: %v", err)
+	}
+	if _, err := s.GetMemoryDetail("another-workspace", m.ID); !errors.Is(err, ErrMemoryMissing) {
+		t.Fatalf("detail scope: %v", err)
+	}
+	if _, err := s.MutateMemory("another-workspace", m.ID, cmd, embedding); !errors.Is(err, ErrMemoryMissing) {
+		t.Fatalf("mutation scope: %v", err)
+	}
+	if change, err := s.FindMemoryChange("another-workspace", cmd.OperationID); err != nil || change != nil {
+		t.Fatal("audit leaked workspace")
+	}
+	deleted := domain.MemoryMutation{OperationID: "delete-" + m.ID, ExpectedVersion: 2, Action: "delete", Actor: "operator", Reason: "outdated"}
+	r, err = s.MutateMemory(m.WorkspaceID, m.ID, deleted, domain.MemoryEmbedding{})
+	if err != nil || r.Memory.DeletedAt == nil || r.Memory.Content != "" || len(r.Memory.Metadata) != 0 || r.Memory.Version != 3 {
+		t.Fatalf("delete: %+v %v", r, err)
+	}
+	s = reopen()
+	detail, err = s.GetMemoryDetail(m.WorkspaceID, m.ID)
+	if err != nil || detail.Memory.DeletedAt == nil || len(detail.Changes) != 2 || detail.Changes[0].Action != "delete" {
+		t.Fatalf("deleted roundtrip: %+v %v", detail, err)
+	}
+	encoded, _ := json.Marshal(detail)
+	if strings.Contains(string(encoded), m.Content) || strings.Contains(string(encoded), cmd.Content) {
+		t.Fatal("audit retains original content")
+	}
+	if r, err = s.MutateMemory(m.WorkspaceID, m.ID, deleted, domain.MemoryEmbedding{}); err != nil || r.Applied {
+		t.Fatalf("duplicate deletion: %v", err)
+	}
+	if r, err = s.MutateMemory(m.WorkspaceID, m.ID, cmd, domain.MemoryEmbedding{}); err != nil || r.Applied || r.Memory.DeletedAt == nil {
+		t.Fatalf("old duplicate resurrected: %v", err)
+	}
+	if _, err = s.CreateMemory(m, embedding); !errors.Is(err, ErrMemoryConflict) {
+		t.Fatalf("same ID resurrection: %v", err)
+	}
+	m.ID += "-late"
+	if _, err = s.CreateMemory(m, embedding); !errors.Is(err, ErrMemoryConflict) {
+		t.Fatalf("late source resurrection: %v", err)
+	}
+	candidate.ID += "-late"
+	late, created, err := s.CreateMemoryCandidate(candidate)
+	if err != nil || !created || late.Status != domain.MemoryCandidateRejected || late.Content == candidate.Content {
+		t.Fatalf("late candidate: %+v %v", late, err)
+	}
+	candidates, err := s.ListMemoryCandidates("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range candidates {
+		if c.SourceMessageID == m.SourceMessageID && (c.Content == m.Content || c.Status != domain.MemoryCandidateRejected) {
+			t.Fatal("old candidate not withdrawn")
+		}
+	}
+	items, err = s.SearchMemories(domain.MemorySearch{Embedding: embedding.Embedding, Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		if item.Memory.SourceMessageID == m.SourceMessageID {
+			t.Fatal("deleted memory recalled")
+		}
+	}
+	if err := s.DeleteConversation(m.ConversationID); err != nil {
+		t.Fatal(err)
+	}
+	candidate.ConversationID = ""
+	candidate.ID += "-after-source-delete"
+	late, _, err = s.CreateMemoryCandidate(candidate)
+	if err != nil || late.Status != domain.MemoryCandidateRejected {
+		t.Fatalf("source deletion lost fence: %+v %v", late, err)
+	}
+
 }
 
 func TestMemoryConcurrentCorrectionsAndDuplicates(t *testing.T) {
-	for _, backend := range []string{"file", "postgres"} {
-		t.Run(backend, func(t *testing.T) {
-			s, _, m, embedding := mutationFixture(t, backend)
-			out := make(chan error, 8)
-			var wg sync.WaitGroup
-			for i := 0; i < 8; i++ {
-				wg.Go(func() {
-					cmd := mutationCommand(m)
-					cmd.OperationID += fmt.Sprint(i)
-					_, err := s.MutateMemory(m.WorkspaceID, m.ID, cmd, embedding)
-					out <- err
-				})
-			}
-			wg.Wait()
-			close(out)
-			succeeded := 0
-			for err := range out {
-				if err == nil {
-					succeeded++
-				} else if !errors.Is(err, ErrMemoryConflict) {
-					t.Fatal(err)
-				}
-			}
-			if succeeded != 1 {
-				t.Fatalf("winners=%d", succeeded)
-			}
-			detail, err := s.GetMemoryDetail(m.WorkspaceID, m.ID)
-			if err != nil || len(detail.Changes) != 1 || detail.Memory.Version != 2 {
-				t.Fatalf("concurrent result: %+v %v", detail, err)
-			}
-			command := mutationCommand(detail.Memory)
-			command.OperationID = "duplicate-" + m.ID
-			applied := make(chan bool, 8)
-			for i := 0; i < 8; i++ {
-				wg.Go(func() {
-					result, err := s.MutateMemory(m.WorkspaceID, m.ID, command, embedding)
-					if err != nil {
-						t.Error(err)
-					}
-					applied <- result.Applied
-				})
-			}
-			wg.Wait()
-			close(applied)
-			writes := 0
-			for value := range applied {
-				if value {
-					writes++
-				}
-			}
-			if writes != 1 {
-				t.Fatalf("duplicate command wrote %d times", writes)
-			}
-			detail, err = s.GetMemoryDetail(m.WorkspaceID, m.ID)
-			if err != nil || detail.Memory.Version != 3 || len(detail.Changes) != 2 {
-				t.Fatalf("duplicate receipts: %+v %v", detail, err)
-			}
+
+	s, _, m, embedding := mutationFixture(t)
+	out := make(chan error, 8)
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Go(func() {
+			cmd := mutationCommand(m)
+			cmd.OperationID += fmt.Sprint(i)
+			_, err := s.MutateMemory(m.WorkspaceID, m.ID, cmd, embedding)
+			out <- err
 		})
 	}
-}
+	wg.Wait()
+	close(out)
+	succeeded := 0
+	for err := range out {
+		if err == nil {
+			succeeded++
+		} else if !errors.Is(err, ErrMemoryConflict) {
+			t.Fatal(err)
+		}
+	}
+	if succeeded != 1 {
+		t.Fatalf("winners=%d", succeeded)
+	}
+	detail, err := s.GetMemoryDetail(m.WorkspaceID, m.ID)
+	if err != nil || len(detail.Changes) != 1 || detail.Memory.Version != 2 {
+		t.Fatalf("concurrent result: %+v %v", detail, err)
+	}
+	command := mutationCommand(detail.Memory)
+	command.OperationID = "duplicate-" + m.ID
+	applied := make(chan bool, 8)
+	for i := 0; i < 8; i++ {
+		wg.Go(func() {
+			result, err := s.MutateMemory(m.WorkspaceID, m.ID, command, embedding)
+			if err != nil {
+				t.Error(err)
+			}
+			applied <- result.Applied
+		})
+	}
+	wg.Wait()
+	close(applied)
+	writes := 0
+	for value := range applied {
+		if value {
+			writes++
+		}
+	}
+	if writes != 1 {
+		t.Fatalf("duplicate command wrote %d times", writes)
+	}
+	detail, err = s.GetMemoryDetail(m.WorkspaceID, m.ID)
+	if err != nil || detail.Memory.Version != 3 || len(detail.Changes) != 2 {
+		t.Fatalf("duplicate receipts: %+v %v", detail, err)
+	}
 
-func TestFileMemoryMutationRollback(t *testing.T) {
-	s, _, m, embedding := mutationFixture(t, "file")
-	f := s.(*FileStore)
-	before, _ := json.Marshal(f.data)
-	original := f.path
-	f.path = filepath.Join(t.TempDir(), "missing", "memory.json")
-	if _, err := f.MutateMemory(m.WorkspaceID, m.ID, mutationCommand(m), embedding); err == nil {
-		t.Fatal("expected save failure")
-	}
-	after, _ := json.Marshal(f.data)
-	if string(before) != string(after) {
-		t.Fatal("failed mutation changed in-memory state")
-	}
-	if _, err := f.CreateMemory(domain.Memory{Kind: "fact", Content: "failed create"}, embedding); err == nil {
-		t.Fatal("create save error missing")
-	}
-	if _, _, err := f.CreateMemoryCandidate(domain.MemoryCandidate{ID: "failed-proposal", SourceMessageID: "new", SourceRole: "user", Kind: "fact", Content: "failed proposal", Status: domain.MemoryCandidateAccepted}); err == nil {
-		t.Fatal("candidate save error missing")
-	}
-	f.path = original
-	if _, err := f.MutateMemory(m.WorkspaceID, m.ID, mutationCommand(m), embedding); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func TestMemoryMutationValidation(t *testing.T) {
@@ -292,7 +263,7 @@ func TestMemoryMutationValidation(t *testing.T) {
 			t.Fatalf("accepted %+v", cmd)
 		}
 	}
-	s, _, m, embedding := mutationFixture(t, "file")
+	s, _, m, embedding := mutationFixture(t)
 	if _, err := s.MutateMemory(m.WorkspaceID, m.ID, domain.MemoryMutation{}, embedding); !errors.Is(err, ErrMemoryMutationInvalid) {
 		t.Fatal(err)
 	}
@@ -311,73 +282,51 @@ func TestMemoryMutationSchemaMigration(t *testing.T) {
 }
 
 func TestMemorySourceFenceIsWorkspaceScoped(t *testing.T) {
-	for _, backend := range []string{"file", "postgres"} {
-		t.Run(backend, func(t *testing.T) {
-			s, _, m, embedding := mutationFixture(t, backend)
-			otherWorkspace := "other-" + m.ID
-			candidate := domain.MemoryCandidate{ID: "foreign-" + m.ID, WorkspaceID: otherWorkspace, SourceMessageID: m.SourceMessageID, SourceRole: "user", Kind: "fact", Content: "foreign fact", Status: domain.MemoryCandidateAccepted}
-			if _, _, err := s.CreateMemoryCandidate(candidate); err != nil {
-				t.Fatal(err)
-			}
-			command := domain.MemoryMutation{OperationID: "delete-" + m.ID, Action: "delete", ExpectedVersion: 1, Actor: "user", Reason: "wrong"}
-			if _, err := s.MutateMemory(m.WorkspaceID, m.ID, command, domain.MemoryEmbedding{}); err != nil {
-				t.Fatal(err)
-			}
-			candidates, err := s.ListMemoryCandidates("")
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, c := range candidates {
-				if c.ID == candidate.ID && (c.Status != domain.MemoryCandidateAccepted || c.Content != candidate.Content) {
-					t.Fatal("cross-workspace candidate scrubbed")
-				}
-			}
-			candidate.ID += "-late"
-			late, _, err := s.CreateMemoryCandidate(candidate)
-			if err != nil || late.Status != domain.MemoryCandidateAccepted {
-				t.Fatalf("foreign candidate blocked: %+v %v", late, err)
-			}
-			candidate.WorkspaceID = m.WorkspaceID
-			if _, _, err := s.CreateMemoryCandidate(candidate); !errors.Is(err, ErrMemoryConflict) {
-				t.Fatalf("candidate identity crossed workspace: %v", err)
-			}
-			foreign, err := s.CreateMemory(domain.Memory{WorkspaceID: otherWorkspace, SourceMessageID: m.SourceMessageID, Content: "foreign fact", Kind: "fact"}, embedding)
-			if err != nil {
-				t.Fatalf("foreign materialization blocked: %v", err)
-			}
-			// The same command ID is independent in another Workspace.
-			if _, err := s.MutateMemory(otherWorkspace, foreign.ID, command, domain.MemoryEmbedding{}); err != nil {
-				t.Fatalf("operation ID scope: %v", err)
-			}
-		})
+
+	s, _, m, embedding := mutationFixture(t)
+	otherWorkspace := "other-" + m.ID
+	candidate := domain.MemoryCandidate{ID: "foreign-" + m.ID, WorkspaceID: otherWorkspace, SourceMessageID: m.SourceMessageID, SourceRole: "user", Kind: "fact", Content: "foreign fact", Status: domain.MemoryCandidateAccepted}
+	if _, _, err := s.CreateMemoryCandidate(candidate); err != nil {
+		t.Fatal(err)
 	}
+	command := domain.MemoryMutation{OperationID: "delete-" + m.ID, Action: "delete", ExpectedVersion: 1, Actor: "user", Reason: "wrong"}
+	if _, err := s.MutateMemory(m.WorkspaceID, m.ID, command, domain.MemoryEmbedding{}); err != nil {
+		t.Fatal(err)
+	}
+	candidates, err := s.ListMemoryCandidates("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range candidates {
+		if c.ID == candidate.ID && (c.Status != domain.MemoryCandidateAccepted || c.Content != candidate.Content) {
+			t.Fatal("cross-workspace candidate scrubbed")
+		}
+	}
+	candidate.ID += "-late"
+	late, _, err := s.CreateMemoryCandidate(candidate)
+	if err != nil || late.Status != domain.MemoryCandidateAccepted {
+		t.Fatalf("foreign candidate blocked: %+v %v", late, err)
+	}
+	candidate.WorkspaceID = m.WorkspaceID
+	if _, _, err := s.CreateMemoryCandidate(candidate); !errors.Is(err, ErrMemoryConflict) {
+		t.Fatalf("candidate identity crossed workspace: %v", err)
+	}
+	foreign, err := s.CreateMemory(domain.Memory{WorkspaceID: otherWorkspace, SourceMessageID: m.SourceMessageID, Content: "foreign fact", Kind: "fact"}, embedding)
+	if err != nil {
+		t.Fatalf("foreign materialization blocked: %v", err)
+	}
+	// The same command ID is independent in another Workspace.
+	if _, err := s.MutateMemory(otherWorkspace, foreign.ID, command, domain.MemoryEmbedding{}); err != nil {
+		t.Fatalf("operation ID scope: %v", err)
+	}
+
 }
 
 func TestMemoryCandidateWorkspaceUpgrade(t *testing.T) {
-	t.Run("file", func(t *testing.T) {
-		f, err := NewFileStore(t.TempDir() + "/memory.json")
-		if err != nil {
-			t.Fatal(err)
-		}
-		conv, err := f.CreateConversationInWorkspace("team", "legacy candidates")
-		if err != nil {
-			t.Fatal(err)
-		}
-		f.data.MemoryCandidates = []domain.MemoryCandidate{{ID: "legacy", ConversationID: conv.ID}, {ID: "orphan"}}
-		if err := f.saveLocked(); err != nil {
-			t.Fatal(err)
-		}
-		f, err = NewFileStore(f.path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if f.data.MemoryCandidates[0].WorkspaceID != "team" || f.data.MemoryCandidates[1].WorkspaceID != domain.DefaultWorkspaceID {
-			t.Fatalf("backfill: %+v", f.data.MemoryCandidates)
-		}
-	})
+
 	t.Run("postgres", func(t *testing.T) {
 		base := openPostgresTestStore(t)
-		schema := newID("h17_upgrade")
+		schema := NewID("h17_upgrade")
 		if _, err := base.db.Exec(`CREATE SCHEMA ` + schema); err != nil {
 			t.Fatal(err)
 		}
@@ -431,7 +380,7 @@ func TestMemoryCandidateWorkspaceUpgrade(t *testing.T) {
 }
 
 func TestPostgresMemoryMutationRollback(t *testing.T) {
-	s, _, m, embedding := mutationFixture(t, "postgres")
+	s, _, m, embedding := mutationFixture(t)
 	pg := s.(*PostgresStore)
 	if _, err := pg.MutateMemory(m.WorkspaceID, m.ID, domain.MemoryMutation{}, embedding); !errors.Is(err, ErrMemoryMutationInvalid) {
 		t.Fatal(err)
@@ -475,13 +424,13 @@ func TestPostgresMemoryMutationWriteFailuresAreAtomic(t *testing.T) {
 		{"memory_candidates", "UPDATE", "source_message_id"}, {"memory_changes", "INSERT", "memory_id"},
 	} {
 		t.Run(tc.table, func(t *testing.T) {
-			s, _, m, embedding := mutationFixture(t, "postgres")
+			s, _, m, embedding := mutationFixture(t)
 			pg := s.(*PostgresStore)
 			candidate := domain.MemoryCandidate{ID: "candidate-" + m.ID, SourceMessageID: m.SourceMessageID, SourceRole: "user", Kind: "fact", Content: "original proposal", Status: domain.MemoryCandidateAccepted}
 			if _, _, err := pg.CreateMemoryCandidate(candidate); err != nil {
 				t.Fatal(err)
 			}
-			name := newID("h17_fault")
+			name := NewID("h17_fault")
 			if _, err := pg.db.Exec(`CREATE FUNCTION ` + name + `() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected memory write failure'; END $$`); err != nil {
 				t.Fatal(err)
 			}
@@ -520,29 +469,5 @@ func TestPostgresMemoryMutationWriteFailuresAreAtomic(t *testing.T) {
 				t.Fatalf("scrubbed candidate on failure: %s %v", content, err)
 			}
 		})
-	}
-}
-
-func TestLegacyFileMemoryVersionDefaultsToOne(t *testing.T) {
-	s, _, m, _ := mutationFixture(t, "file")
-	f := s.(*FileStore)
-	f.data.Memories[0].Version = 0
-	if err := f.saveLocked(); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(f.path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(data), `"version": 0`) {
-		t.Fatal("fixture")
-	}
-	reloaded, err := NewFileStore(f.path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	detail, err := reloaded.GetMemoryDetail(m.WorkspaceID, m.ID)
-	if err != nil || detail.Memory.Version != 1 {
-		t.Fatalf("legacy version: %+v %v", detail, err)
 	}
 }

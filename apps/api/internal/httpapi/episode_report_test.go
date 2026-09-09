@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"encoding/json"
 	"net/http"
@@ -7,33 +9,30 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestGetEpisodeReportAPI(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	conversation, err := fileStore.CreateConversation("Episode report")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("Episode report")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	if _, err := fileStore.AddMessage(conversation.ID, "user", "Summarize my backend experience"); err != nil {
+	if _, err := fixtureStore.AddMessage(conversation.ID, "user", "Summarize my backend experience"); err != nil {
 		t.Fatalf("add user message: %v", err)
 	}
-	if _, err := fileStore.AddMessage(conversation.ID, "assistant", "You have Go and Postgres experience."); err != nil {
+	if _, err := fixtureStore.AddMessage(conversation.ID, "assistant", "You have Go and Postgres experience."); err != nil {
 		t.Fatalf("add assistant message: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	run, err = fileStore.UpdateRunStatus(run.ID, domain.RunRunning, "")
+	run, err = fixtureStore.UpdateRunStatus(run.ID, domain.RunRunning, "")
 	if err != nil {
 		t.Fatalf("mark running: %v", err)
 	}
-	step, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+	step, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
 		RunID:          run.ID,
 		ConversationID: conversation.ID,
 		Role:           "final",
@@ -45,7 +44,7 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create step: %v", err)
 	}
-	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+	if _, err := fixtureStore.CreateRunEvent(domain.RunEvent{
 		RunID:   run.ID,
 		StageID: step.ID,
 		Type:    domain.EventRetrievalCompleted,
@@ -60,7 +59,7 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create retrieval trace: %v", err)
 	}
-	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+	if _, err := fixtureStore.CreateRunEvent(domain.RunEvent{
 		RunID:   run.ID,
 		StageID: step.ID,
 		Type:    domain.EventModelCompleted,
@@ -77,7 +76,7 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create llm trace: %v", err)
 	}
-	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+	if _, err := fixtureStore.CreateRunEvent(domain.RunEvent{
 		RunID:   run.ID,
 		StageID: step.ID,
 		Type:    domain.EventToolCompleted,
@@ -85,11 +84,11 @@ func TestGetEpisodeReportAPI(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create tool trace: %v", err)
 	}
-	if _, err := fileStore.UpdateRunStatus(run.ID, domain.RunCompleted, ""); err != nil {
+	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunCompleted, ""); err != nil {
 		t.Fatalf("mark completed: %v", err)
 	}
 
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 	req := httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/episode", nil)
 	recorder := httptest.NewRecorder()
 	handler.getEpisodeReport(recorder, req)

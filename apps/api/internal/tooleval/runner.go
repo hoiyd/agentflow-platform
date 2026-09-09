@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,7 +16,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/redaction"
-	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
 	"agentflow-platform/apps/api/internal/toolartifact"
 	"agentflow-platform/apps/api/internal/tools"
 )
@@ -80,7 +78,7 @@ type Report struct {
 // One fixture owns the shared read-only corpus/catalog; each sample below gets
 // a fresh Run and remaining budget. No state from prior model outputs is reused.
 type evaluationFixture struct {
-	store    *store.FileStore
+	store    *fixturestore.Store
 	recorder *eventpkg.Recorder
 	catalog  *tools.Catalog
 	data     dataset
@@ -101,15 +99,7 @@ func Run(ctx context.Context, client *openai.Client, opts Options) (Report, erro
 	if err != nil {
 		return Report{}, err
 	}
-	dir, err := os.MkdirTemp("", "agentflow-tool-eval-")
-	if err != nil {
-		return Report{}, err
-	}
-	defer os.RemoveAll(dir)
-	fs, err := store.NewFileStore(filepath.Join(dir, "eval.json"))
-	if err != nil {
-		return Report{}, err
-	}
+	fs := fixturestore.New()
 	recorder := eventpkg.NewRecorder(fs)
 	catalog, err := tools.NewCatalog(toolartifact.NewService(fs, recorder).ToolBindings()...)
 	if err != nil {

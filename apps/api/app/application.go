@@ -121,7 +121,7 @@ func normalizeServerError(err error) error {
 func (a *Application) logStartup() {
 	cfg := a.config
 	log.Printf("AgentFlow API listening on http://%s", serverAddress(cfg))
-	log.Printf("AgentFlow store driver: %s", cfg.StoreDriver)
+	log.Printf("AgentFlow persistence: PostgreSQL")
 	log.Printf("AgentFlow router mode: %s", cfg.RouterMode)
 	log.Printf("AgentFlow autonomous profile: max_iterations=%d max_output_chars=%d run_budget_runtime_cap=%s run_budget_tool_cap=%d", cfg.AutonomousMaxIterations, cfg.AutonomousMaxOutputCharacters, cfg.AutonomousMaxRuntime, cfg.AutonomousMaxToolCalls)
 	log.Printf("AgentFlow native recovery: stale_run_timeout=%s", cfg.RecoveryStaleRunTimeout)

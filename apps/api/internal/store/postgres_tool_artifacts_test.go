@@ -34,7 +34,7 @@ func TestPostgresToolArtifactRoundTrip(t *testing.T) {
 	artifact := domain.ToolArtifact{
 		ID: "tool_artifact_postgres_" + run.ID, SchemaVersion: domain.CurrentToolArtifactSchemaVersion,
 		RunID: run.ID, ToolCallID: "call-1", ToolName: "future_tool", MediaType: "application/json",
-		ContentHash: toolArtifactContentHash(content), OriginalByteSize: len(content), StoredByteSize: len(content),
+		ContentHash: ToolArtifactContentHash(content), OriginalByteSize: len(content), StoredByteSize: len(content),
 		CreatedAt: time.Now().UTC(), ExpiresAt: &expires,
 	}
 	if _, err := postgresStore.CreateToolArtifact(artifact, content); err != nil {
@@ -45,7 +45,7 @@ func TestPostgresToolArtifactRoundTrip(t *testing.T) {
 	}
 	conflictingContent := []byte(`{"result":"different"}`)
 	conflict := artifact
-	conflict.ContentHash = toolArtifactContentHash(conflictingContent)
+	conflict.ContentHash = ToolArtifactContentHash(conflictingContent)
 	conflict.OriginalByteSize = len(conflictingContent)
 	conflict.StoredByteSize = len(conflictingContent)
 	if _, err := postgresStore.CreateToolArtifact(conflict, conflictingContent); err == nil {

@@ -1,19 +1,19 @@
-package store
+package fixturestore
 
 import (
+	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/store"
 	"errors"
 	"sort"
 	"strings"
 	"time"
-
-	"agentflow-platform/apps/api/internal/domain"
 )
 
-func (s *FileStore) GetTaskState(conversationID string) (domain.TaskState, bool, error) {
+func (s *Store) GetTaskState(conversationID string) (domain.TaskState, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if _, ok := s.getConversationLocked(conversationID); !ok {
-		return domain.TaskState{}, false, ErrNotFound("conversation")
+		return domain.TaskState{}, false, store.ErrNotFound("conversation")
 	}
 	var latest *domain.TaskStateRevision
 	for index := range s.data.TaskStateRevisions {
@@ -25,77 +25,74 @@ func (s *FileStore) GetTaskState(conversationID string) (domain.TaskState, bool,
 	if latest == nil {
 		return domain.TaskState{}, false, nil
 	}
-	return cloneTaskState(latest.State), true, nil
+	return store.CloneTaskState(latest.State), true, nil
 }
 
-func (s *FileStore) GetTaskStateRevision(conversationID string, version int64) (domain.TaskStateRevision, bool, error) {
+func (s *Store) GetTaskStateRevision(conversationID string, version int64) (domain.TaskStateRevision, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if _, ok := s.getConversationLocked(conversationID); !ok {
-		return domain.TaskStateRevision{}, false, ErrNotFound("conversation")
+		return domain.TaskStateRevision{}, false, store.ErrNotFound("conversation")
 	}
 	for _, item := range s.data.TaskStateRevisions {
 		if item.ConversationID == conversationID && item.Version == version {
-			return cloneTaskStateRevision(item), true, nil
+			return store.CloneTaskStateRevision(item), true, nil
 		}
 	}
 	return domain.TaskStateRevision{}, false, nil
 }
 
-func (s *FileStore) ListTaskStateRevisions(conversationID string) ([]domain.TaskStateRevision, error) {
+func (s *Store) ListTaskStateRevisions(conversationID string) ([]domain.TaskStateRevision, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if _, ok := s.getConversationLocked(conversationID); !ok {
-		return nil, ErrNotFound("conversation")
+		return nil, store.ErrNotFound("conversation")
 	}
 	items := make([]domain.TaskStateRevision, 0)
 	for _, item := range s.data.TaskStateRevisions {
 		if item.ConversationID == conversationID {
-			items = append(items, cloneTaskStateRevision(item))
+			items = append(items, store.CloneTaskStateRevision(item))
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Version < items[j].Version })
 	return items, nil
 }
 
-func (s *FileStore) ApplyTaskStatePatch(conversationID string, patch domain.TaskStatePatch, source domain.TaskStateSource) (domain.TaskStateRevision, error) {
+func (s *Store) ApplyTaskStatePatch(conversationID string, patch domain.TaskStatePatch, source domain.TaskStateSource) (domain.TaskStateRevision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	conversation, ok := s.getConversationLocked(conversationID)
 	if !ok {
-		return domain.TaskStateRevision{}, ErrNotFound("conversation")
+		return domain.TaskStateRevision{}, store.ErrNotFound("conversation")
 	}
 	if err := s.validateTaskStateSourceLocked(conversationID, source); err != nil {
-		return domain.TaskStateRevision{}, classifyTaskStateValidation(err)
+		return domain.TaskStateRevision{}, store.ClassifyTaskStateValidation(err)
 	}
 	current := domain.EmptyTaskState(conversation.WorkspaceID, conversationID)
 	for _, item := range s.data.TaskStateRevisions {
 		if item.ConversationID == conversationID && item.Version > current.Version {
-			current = cloneTaskState(item.State)
+			current = store.CloneTaskState(item.State)
 		}
 	}
 	if patch.ExpectedVersion != current.Version {
-		return domain.TaskStateRevision{}, &TaskStateVersionConflict{Expected: patch.ExpectedVersion, Actual: current.Version}
+		return domain.TaskStateRevision{}, &store.TaskStateVersionConflict{Expected: patch.ExpectedVersion, Actual: current.Version}
 	}
 	now := time.Now().UTC()
 	next, err := domain.ApplyTaskStatePatch(current, patch, now)
 	if err != nil {
-		return domain.TaskStateRevision{}, classifyTaskStateValidation(err)
+		return domain.TaskStateRevision{}, store.ClassifyTaskStateValidation(err)
 	}
 	revision := domain.TaskStateRevision{
-		ID: newID("tsr"), WorkspaceID: conversation.WorkspaceID, ConversationID: conversationID,
+		ID: store.NewID("tsr"), WorkspaceID: conversation.WorkspaceID, ConversationID: conversationID,
 		Version: next.Version, PreviousVersion: current.Version, Patch: patch, State: next,
-		Source: normalizeTaskStateSource(source), CreatedAt: now,
+		Source: store.NormalizeTaskStateSource(source), CreatedAt: now,
 	}
-	s.data.TaskStateRevisions = append(s.data.TaskStateRevisions, cloneTaskStateRevision(revision))
-	if err := s.saveLocked(); err != nil {
-		s.data.TaskStateRevisions = s.data.TaskStateRevisions[:len(s.data.TaskStateRevisions)-1]
-		return domain.TaskStateRevision{}, err
-	}
-	return cloneTaskStateRevision(revision), nil
+	s.data.TaskStateRevisions = append(s.data.TaskStateRevisions, store.CloneTaskStateRevision(revision))
+
+	return store.CloneTaskStateRevision(revision), nil
 }
 
-func (s *FileStore) validateTaskStateSourceLocked(conversationID string, source domain.TaskStateSource) error {
+func (s *Store) validateTaskStateSourceLocked(conversationID string, source domain.TaskStateSource) error {
 	if runID := strings.TrimSpace(source.RunID); runID != "" {
 		run, ok := s.getRunLocked(runID)
 		if !ok || run.ConversationID != conversationID {
@@ -111,17 +108,4 @@ func (s *FileStore) validateTaskStateSourceLocked(conversationID string, source 
 		return errors.New("task state source message does not belong to conversation")
 	}
 	return nil
-}
-
-func normalizeTaskStateSource(source domain.TaskStateSource) domain.TaskStateSource {
-	source.ActorType = strings.TrimSpace(source.ActorType)
-	if source.ActorType == "" {
-		source.ActorType = "system"
-	}
-	source.ActorID = strings.TrimSpace(source.ActorID)
-	source.RunID = strings.TrimSpace(source.RunID)
-	source.StageID = strings.TrimSpace(source.StageID)
-	source.TurnID = strings.TrimSpace(source.TurnID)
-	source.SourceMessageID = strings.TrimSpace(source.SourceMessageID)
-	return source
 }

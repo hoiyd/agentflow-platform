@@ -7,7 +7,7 @@ as a Run status update. The implementation has three cooperating parts:
 2. durable Stage checkpoints;
 3. an idempotency journal for tools with external side effects.
 
-These records use the same File/Postgres persistence boundary and are visible
+These records use the same Postgres persistence boundary and are visible
 through Run Replay. They contain hashes and execution metadata, never API keys.
 
 ## Cold-Start Lifecycle Repair
@@ -157,7 +157,7 @@ returns an error.
 
 ## Current Boundary
 
-- FileStore and Postgres implement the same repair, checkpoint, and Tool Effect
+- Postgres implements the repair, checkpoint, and Tool Effect
   contracts.
 - Automatic `failed_recoverable` execution Resume currently supports
   Autonomous Runs. Other modes remain replayable and repairable but do not

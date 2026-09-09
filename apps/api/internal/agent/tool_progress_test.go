@@ -1,22 +1,21 @@
 package agent
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
-	"path/filepath"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
+
 	"agentflow-platform/apps/api/internal/toolprogress"
 )
 
 func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	conversation, _ := fileStore.CreateConversation("progress restore")
+	fixtureStore := fixturestore.New()
+
+	conversation, _ := fixtureStore.CreateConversation("progress restore")
 	snapshot := testRuntimeSnapshot()
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +23,7 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 	seed := toolprogress.New(snapshot.ToolProgressGuard)
 	for count := 1; count <= 3; count++ {
 		decision := seed.Observe(call, toolprogress.Outcome{ErrorCode: "execution_failed", ErrorCategory: "execution"})
-		_, err = fileStore.CreateRunEvent(domain.RunEvent{
+		_, err = fixtureStore.CreateRunEvent(domain.RunEvent{
 			Type: domain.EventToolFailed, SchemaVersion: domain.CurrentRunEventSchemaVersion,
 			RunID: run.ID, Payload: progressPayload(decision),
 		})
@@ -32,7 +31,7 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	guard, err := runtime.progressGuardForRun(run.ID, run.RuntimeSnapshot)
 	if err != nil {
 		t.Fatal(err)
@@ -56,14 +55,12 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 }
 
 func TestProgressGuardForHistoricalSnapshotIsDisabled(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	fixtureStore := fixturestore.New()
+
 	snapshot := testRuntimeSnapshot()
 	snapshot.SchemaVersion = domain.ToolSecurityRuntimeSnapshotVersion
 	snapshot.ToolProgressGuard = toolprogress.Config{}
-	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	guard, err := runtime.progressGuardForRun("historical-run", &snapshot)
 	if err != nil {
 		t.Fatal(err)

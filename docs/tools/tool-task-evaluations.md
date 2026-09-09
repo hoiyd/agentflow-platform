@@ -14,8 +14,8 @@ models two practical tasks against a long settlement export:
 
 A third case checks a missing record. Values are synthetic, not customer data.
 Deterministic padding places facts beyond the initial 256-byte preview. Every
-sample uses an isolated temporary FileStore, Conversation, Run, and immutable
-artifact. Cleanup removes this data; normal application storage is not opened.
+sample uses an isolated in-memory fixture, Conversation, Run, and immutable
+artifact. No state is written to disk; normal application storage is not opened.
 Artifact access retains the production Run scope and read-only security policy.
 
 ## Verification and Comparison

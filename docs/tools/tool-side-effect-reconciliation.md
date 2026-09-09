@@ -53,7 +53,7 @@ returned by a later idempotent replay. Supported actions are:
 
 ## Consistency And Audit
 
-Every command carries an `expected_version`. FileStore and Postgres atomically
+Every command carries an `expected_version`. Postgres atomically
 compare that version, update the effect, and append a typed audit event.
 Manual confirmations use one commit. External callbacks first commit a
 `reconciling` claim and `tool.effect.reconciliation_started`, then execute outside
@@ -145,7 +145,6 @@ Committed, failed, and compensated effects cannot be reopened by a late normal
 execution failure. Cold-start stale-Run repair touches abandoned `executing`
 effects only, not reconciliation claims. Existing text status and JSON event
 columns store the added state/event without a schema migration or cleanup job.
-FileStore remains single-process; shared multi-process storage requires Postgres.
 Replay's generic event and effect records accept them without a new frontend
 enum; the list API also accepts `status=reconciling`.
 

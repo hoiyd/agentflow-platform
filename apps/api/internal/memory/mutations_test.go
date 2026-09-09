@@ -1,5 +1,7 @@
 package memory
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -18,10 +20,8 @@ func (f mutationEmbedderFunc) EmbedText(ctx context.Context, text string) (model
 }
 
 func TestMemoryAdministrationLifecycleAndFailures(t *testing.T) {
-	s, err := store.NewFileStore(t.TempDir() + "/memory.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := fixturestore.New()
+
 	ctx := context.Background()
 	p := NewBuiltinProvider(s, immediateEmbedder{}, ProviderOptions{MaxAttempts: 1})
 	if _, err := p.GetMemory(ctx, "", "missing"); !errors.Is(err, ErrProviderNotInitialized) {
@@ -100,10 +100,8 @@ func TestMemoryAdministrationLifecycleAndFailures(t *testing.T) {
 func TestMemoryMutationRechecksAfterEmbedding(t *testing.T) {
 	for _, mode := range []string{"cancel", "concurrent-delete"} {
 		t.Run(mode, func(t *testing.T) {
-			s, err := store.NewFileStore(t.TempDir() + "/memory.json")
-			if err != nil {
-				t.Fatal(err)
-			}
+			s := fixturestore.New()
+
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			p := newTestProvider(t, s, immediateEmbedder{}, ProviderOptions{MaxAttempts: 1})
@@ -136,7 +134,7 @@ func TestMemoryMutationRechecksAfterEmbedding(t *testing.T) {
 }
 
 type failingMutationStore struct {
-	*store.FileStore
+	*fixturestore.Store
 	fail string
 }
 
@@ -144,13 +142,13 @@ func (s failingMutationStore) FindMemoryChange(w, o string) (*domain.MemoryChang
 	if s.fail == "find" {
 		return nil, errors.New("find failed")
 	}
-	return s.FileStore.FindMemoryChange(w, o)
+	return s.Store.FindMemoryChange(w, o)
 }
 func (s failingMutationStore) GetMemoryDetail(w, id string) (domain.MemoryDetail, error) {
 	if s.fail == "get" {
 		return domain.MemoryDetail{}, errors.New("get failed")
 	}
-	return s.FileStore.GetMemoryDetail(w, id)
+	return s.Store.GetMemoryDetail(w, id)
 }
 func (s failingMutationStore) MutateMemory(w, id string, c domain.MemoryMutation, e domain.MemoryEmbedding) (domain.MemoryMutationResult, error) {
 	return domain.MemoryMutationResult{}, errors.New("persist failed")
@@ -159,11 +157,9 @@ func (s failingMutationStore) MutateMemory(w, id string, c domain.MemoryMutation
 func TestMemoryAdministrationStoreErrors(t *testing.T) {
 	for _, mode := range []string{"find", "get", "persist"} {
 		t.Run(mode, func(t *testing.T) {
-			s, err := store.NewFileStore(t.TempDir() + "/memory.json")
-			if err != nil {
-				t.Fatal(err)
-			}
-			p := newTestProvider(t, failingMutationStore{FileStore: s, fail: mode}, immediateEmbedder{}, ProviderOptions{MaxAttempts: 1})
+			s := fixturestore.New()
+
+			p := newTestProvider(t, failingMutationStore{Store: s, fail: mode}, immediateEmbedder{}, ProviderOptions{MaxAttempts: 1})
 			defer closeProvider(t, p)
 			m, err := p.Commit(context.Background(), domain.Memory{Kind: "fact", Content: "old"})
 			if err != nil {
@@ -181,10 +177,8 @@ func TestMemoryAdministrationStoreErrors(t *testing.T) {
 }
 
 func TestLateMemorySyncCannotRestoreWithdrawnSource(t *testing.T) {
-	s, err := store.NewFileStore(t.TempDir() + "/memory.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := fixturestore.New()
+
 	conv, err := s.CreateConversationInWorkspace("team", "late sync")
 	if err != nil {
 		t.Fatal(err)

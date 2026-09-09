@@ -32,7 +32,7 @@ func (s *PostgresStore) GetMemoryDetail(workspaceID, id string) (domain.MemoryDe
 		return domain.MemoryDetail{}, err
 	}
 	defer tx.Rollback()
-	item, err := scanMemory(tx.QueryRow(`SELECT `+memoryColumns+` FROM memories WHERE workspace_id=$1 AND id=$2`, normalizeWorkspaceID(workspaceID), id))
+	item, err := scanMemory(tx.QueryRow(`SELECT `+memoryColumns+` FROM memories WHERE workspace_id=$1 AND id=$2`, NormalizeWorkspaceID(workspaceID), id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.MemoryDetail{}, ErrMemoryMissing
 	}
@@ -59,7 +59,7 @@ func (s *PostgresStore) GetMemoryDetail(workspaceID, id string) (domain.MemoryDe
 }
 
 func (s *PostgresStore) FindMemoryChange(workspaceID, operationID string) (*domain.MemoryChange, error) {
-	change, err := scanMemoryChange(s.db.QueryRow(`SELECT `+memoryChangeColumns+` FROM memory_changes WHERE workspace_id=$1 AND operation_id=$2`, normalizeWorkspaceID(workspaceID), operationID))
+	change, err := scanMemoryChange(s.db.QueryRow(`SELECT `+memoryChangeColumns+` FROM memory_changes WHERE workspace_id=$1 AND operation_id=$2`, NormalizeWorkspaceID(workspaceID), operationID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -74,7 +74,7 @@ func (s *PostgresStore) MutateMemory(workspaceID, id string, command domain.Memo
 	if err != nil {
 		return domain.MemoryMutationResult{}, err
 	}
-	workspaceID = normalizeWorkspaceID(workspaceID)
+	workspaceID = NormalizeWorkspaceID(workspaceID)
 	tx, err := s.beginMemoryWrite()
 	if err != nil {
 		return domain.MemoryMutationResult{}, err
@@ -89,7 +89,7 @@ func (s *PostgresStore) MutateMemory(workspaceID, id string, command domain.Memo
 	}
 	previous, err := scanMemoryChange(tx.QueryRow(`SELECT `+memoryChangeColumns+` FROM memory_changes WHERE workspace_id=$1 AND operation_id=$2`, workspaceID, command.OperationID))
 	if err == nil {
-		if previous.MemoryID != id || previous.CommandHash != memoryCommandHash(id, command) {
+		if previous.MemoryID != id || previous.CommandHash != MemoryCommandHash(id, command) {
 			return domain.MemoryMutationResult{}, ErrMemoryConflict
 		}
 		return domain.MemoryMutationResult{Memory: current, Change: previous, Applied: false}, nil
@@ -97,7 +97,7 @@ func (s *PostgresStore) MutateMemory(workspaceID, id string, command domain.Memo
 	if !errors.Is(err, sql.ErrNoRows) {
 		return domain.MemoryMutationResult{}, err
 	}
-	result, err := prepareMemoryMutation(current, command)
+	result, err := PrepareMemoryMutation(current, command)
 	if err != nil {
 		return domain.MemoryMutationResult{}, err
 	}
@@ -120,7 +120,7 @@ func (s *PostgresStore) MutateMemory(workspaceID, id string, command domain.Memo
 		}
 	}
 	if current.SourceMessageID != "" {
-		withdrawn := suppressMemoryCandidate(domain.MemoryCandidate{})
+		withdrawn := SuppressMemoryCandidate(domain.MemoryCandidate{})
 		if _, err := tx.Exec(`UPDATE memory_candidates SET content=$2,status=$3,policy_reason=$4 WHERE source_message_id=$1 AND workspace_id=$5`, current.SourceMessageID, withdrawn.Content, withdrawn.Status, withdrawn.PolicyReason, workspaceID); err != nil {
 			return domain.MemoryMutationResult{}, err
 		}

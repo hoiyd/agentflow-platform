@@ -1,5 +1,7 @@
 package app
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -14,10 +16,8 @@ import (
 )
 
 func TestObservableStorePublishesCommittedEventWithAssignedSequence(t *testing.T) {
-	base, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	base := fixturestore.New()
+
 	hub := event.NewHub(4)
 	observed := newObservableStore(base, hub)
 	conversation, err := observed.CreateConversation("observable store")
@@ -105,23 +105,19 @@ func TestObservableStorePublishesCommittedEventWithAssignedSequence(t *testing.T
 }
 
 func TestObservableStoreDoesNotPublishFailedCommit(t *testing.T) {
-	base, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	base := fixturestore.New()
+
 	hub := event.NewHub(1)
 	observed := newObservableStore(base, hub)
-	_, err = observed.CreateRunEvent(domain.RunEvent{Type: domain.RunEventType("unknown.event"), RunID: "run-1"})
+	_, err := observed.CreateRunEvent(domain.RunEvent{Type: domain.RunEventType("unknown.event"), RunID: "run-1"})
 	if err == nil {
 		t.Fatal("invalid event commit should fail")
 	}
 }
 
 func TestObservableStoreCloseDelegatesWhenSupported(t *testing.T) {
-	base, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	base := fixturestore.New()
+
 	if err := newObservableStore(base, event.NewHub(1)).Close(); err != nil {
 		t.Fatalf("store without Close should be a no-op: %v", err)
 	}
@@ -139,10 +135,8 @@ type closingStore struct {
 }
 
 func TestObservableStorePreservesMemoryAdministration(t *testing.T) {
-	base, err := store.NewFileStore(t.TempDir() + "/memory.json")
-	if err != nil {
-		t.Fatal(err)
-	}
+	base := fixturestore.New()
+
 	observed := newObservableStore(base, event.NewHub(1))
 	p := memorypkg.NewBuiltinProvider(observed, &answerRelevanceEmbeddingClientStub{embedding: openai.Embedding{Vector: []float64{1}}}, memorypkg.ProviderOptions{})
 	ctx := context.Background()

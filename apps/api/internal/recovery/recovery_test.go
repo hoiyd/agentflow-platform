@@ -1,34 +1,33 @@
 package recovery
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"errors"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestMarkStaleRunningRuns(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	conversation, err := fileStore.CreateConversation("Recovery scan")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("Recovery scan")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
 	}, nil)
 
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	if _, err := fileStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
+	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
 		t.Fatalf("mark running: %v", err)
 	}
-	step, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+	step, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
 		RunID: run.ID, ConversationID: conversation.ID, Role: "worker",
 		Status: domain.CollaborationStepRunning, Input: "continue work",
 	})
@@ -41,11 +40,11 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 		{Type: domain.EventModelStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1", TurnID: "turn-1"},
 		{Type: domain.EventToolStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1", TurnID: "turn-1", Payload: map[string]any{"tool_call_id": "call-1"}},
 	} {
-		if _, err := fileStore.CreateRunEvent(item); err != nil {
+		if _, err := fixtureStore.CreateRunEvent(item); err != nil {
 			t.Fatalf("create run event: %v", err)
 		}
 	}
-	if _, execute, err := fileStore.BeginToolEffect(domain.ToolEffectRecord{
+	if _, execute, err := fixtureStore.BeginToolEffect(domain.ToolEffectRecord{
 		IdempotencyKey: "stale-effect", RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
 		ToolCallID: "call-1", ToolName: "external_writer", RequestHash: "request",
 	}); err != nil || !execute {
@@ -53,14 +52,14 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 	}
 	time.Sleep(time.Millisecond)
 
-	count, err := MarkStaleRunningRuns(fileStore, time.Nanosecond)
+	count, err := MarkStaleRunningRuns(fixtureStore, time.Nanosecond)
 	if err != nil {
 		t.Fatalf("mark stale running runs: %v", err)
 	}
 	if count != 1 {
 		t.Fatalf("expected one recovered run, got %d", count)
 	}
-	updated, ok, err := fileStore.GetRun(run.ID)
+	updated, ok, err := fixtureStore.GetRun(run.ID)
 	if err != nil {
 		t.Fatalf("get run: %v", err)
 	}
@@ -70,7 +69,7 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 	if updated.Error != staleRunMessage {
 		t.Fatalf("expected stale message, got %q", updated.Error)
 	}
-	events, err := fileStore.ListRunEvents(run.ID)
+	events, err := fixtureStore.ListRunEvents(run.ID)
 	if err != nil {
 		t.Fatalf("list repaired events: %v", err)
 	}
@@ -82,27 +81,25 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 			t.Fatalf("expected synthetic terminal event, got %#v", item)
 		}
 	}
-	steps, err := fileStore.ListCollaborationSteps(run.ID)
+	steps, err := fixtureStore.ListCollaborationSteps(run.ID)
 	if err != nil || len(steps) != 1 || steps[0].ID != step.ID || steps[0].Status != domain.CollaborationStepFailed {
 		t.Fatalf("expected interrupted stage record to fail: %#v err=%v", steps, err)
 	}
-	effects, err := fileStore.ListToolEffects(run.ID)
+	effects, err := fixtureStore.ListToolEffects(run.ID)
 	if err != nil || len(effects) != 1 || effects[0].Status != domain.ToolEffectNeedsReconciliation || effects[0].Version != 2 {
 		t.Fatalf("expected abandoned effect to require reconciliation: %#v err=%v", effects, err)
 	}
 
-	count, err = MarkStaleRunningRuns(fileStore, time.Nanosecond)
+	count, err = MarkStaleRunningRuns(fixtureStore, time.Nanosecond)
 	if err != nil || count != 0 {
 		t.Fatalf("expected idempotent second scan, count=%d err=%v", count, err)
 	}
 }
 
 func TestReconcileChildRunDelegationRebuildsCompletedResult(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	conversation, err := fileStore.CreateConversation("delegation recovery")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("delegation recovery")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,11 +109,11 @@ func TestReconcileChildRunDelegationRebuildsCompletedResult(t *testing.T) {
 		Model:     domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
 		RunBudget: &domain.RuntimeRunBudget{}, CreatedAt: time.Now().UTC(),
 	}
-	parent, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, base, nil)
+	parent, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, base, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	parentStep, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+	parentStep, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
 		ID: "parent-worker", RunID: parent.ID, ConversationID: conversation.ID,
 		Role: "worker", Status: domain.CollaborationStepRunning, Input: "work",
 	})
@@ -129,7 +126,7 @@ func TestReconcileChildRunDelegationRebuildsCompletedResult(t *testing.T) {
 		ParentStageID: parentStep.ID, Depth: 1, IsolatedContext: true,
 		TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 32,
 	}
-	child, relation, err := fileStore.CreateChildRun(domain.ChildRunRequest{
+	child, relation, err := fixtureStore.CreateChildRun(domain.ChildRunRequest{
 		Delegation: domain.RunDelegation{
 			ID: "delegation-1", ParentRunID: parent.ID, ParentTurnID: "turn-1",
 			ParentStageID: parentStep.ID, AgentID: "agent_planner", Depth: 1, Task: "work", TimeoutMS: time.Minute.Milliseconds(),
@@ -139,33 +136,33 @@ func TestReconcileChildRunDelegationRebuildsCompletedResult(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+	if _, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
 		ID: "child-worker", RunID: child.ID, ConversationID: conversation.ID,
 		Role: "worker", Status: domain.CollaborationStepCompleted,
 		Input: "work", Output: "This is a completed child result that exceeds the parent summary limit.",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fileStore.UpdateRunStatus(child.ID, domain.RunCompleted, ""); err != nil {
+	if _, err := fixtureStore.UpdateRunStatus(child.ID, domain.RunCompleted, ""); err != nil {
 		t.Fatal(err)
 	}
 
-	count, err := ReconcileChildRunDelegations(fileStore)
+	count, err := ReconcileChildRunDelegations(fixtureStore)
 	if err != nil || count != 1 {
 		t.Fatalf("reconcile count=%d err=%v", count, err)
 	}
-	updated, ok, err := fileStore.GetRunDelegation(relation.ID)
+	updated, ok, err := fixtureStore.GetRunDelegation(relation.ID)
 	if err != nil || !ok {
 		t.Fatalf("relation ok=%v err=%v", ok, err)
 	}
 	if updated.Status != domain.DelegationCompleted || !updated.SummaryTruncated || updated.OutputRef == "" {
 		t.Fatalf("reconciled relation = %#v", updated)
 	}
-	step, err := fileStore.ListCollaborationSteps(parent.ID)
+	step, err := fixtureStore.ListCollaborationSteps(parent.ID)
 	if err != nil || len(step) != 1 || step[0].Status != domain.CollaborationStepCompleted {
 		t.Fatalf("parent step=%#v err=%v", step, err)
 	}
-	if count, err := ReconcileChildRunDelegations(fileStore); err != nil || count != 0 {
+	if count, err := ReconcileChildRunDelegations(fixtureStore); err != nil || count != 0 {
 		t.Fatalf("idempotent reconcile count=%d err=%v", count, err)
 	}
 }
@@ -186,23 +183,23 @@ func TestReconcileChildRunDelegationsMapsTerminalChildStates(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			fileStore, parent, parentStep, child, relation := createDelegationForRecovery(t, false)
-			if _, err := fileStore.UpdateRunStatus(child.ID, test.childStatus, test.childError); err != nil {
+			fixtureStore, parent, parentStep, child, relation := createDelegationForRecovery(t, false)
+			if _, err := fixtureStore.UpdateRunStatus(child.ID, test.childStatus, test.childError); err != nil {
 				t.Fatal(err)
 			}
-			count, err := ReconcileChildRunDelegations(fileStore)
+			count, err := ReconcileChildRunDelegations(fixtureStore)
 			if err != nil || count != 1 {
 				t.Fatalf("reconcile count=%d err=%v", count, err)
 			}
-			updated, ok, err := fileStore.GetRunDelegation(relation.ID)
+			updated, ok, err := fixtureStore.GetRunDelegation(relation.ID)
 			if err != nil || !ok || updated.Status != test.wantStatus || updated.BlockReason != test.wantBlock {
 				t.Fatalf("updated relation=%#v ok=%v err=%v", updated, ok, err)
 			}
-			steps, err := fileStore.ListCollaborationSteps(parent.ID)
+			steps, err := fixtureStore.ListCollaborationSteps(parent.ID)
 			if err != nil || len(steps) != 1 || steps[0].ID != parentStep.ID || steps[0].Status != test.wantParentStep {
 				t.Fatalf("parent steps=%#v err=%v", steps, err)
 			}
-			events, err := fileStore.ListRunEvents(parent.ID)
+			events, err := fixtureStore.ListRunEvents(parent.ID)
 			if err != nil || len(events) != 1 || events[0].Type != test.wantEvent || events[0].Payload["synthetic"] != true {
 				t.Fatalf("synthetic events=%#v err=%v", events, err)
 			}
@@ -211,26 +208,26 @@ func TestReconcileChildRunDelegationsMapsTerminalChildStates(t *testing.T) {
 }
 
 func TestReconcileChildRunDelegationsLeavesLiveChildActive(t *testing.T) {
-	fileStore, _, _, child, relation := createDelegationForRecovery(t, false)
-	if _, err := fileStore.UpdateRunStatus(child.ID, domain.RunRunning, ""); err != nil {
+	fixtureStore, _, _, child, relation := createDelegationForRecovery(t, false)
+	if _, err := fixtureStore.UpdateRunStatus(child.ID, domain.RunRunning, ""); err != nil {
 		t.Fatal(err)
 	}
-	count, err := ReconcileChildRunDelegations(fileStore)
+	count, err := ReconcileChildRunDelegations(fixtureStore)
 	if err != nil || count != 0 {
 		t.Fatalf("live child reconcile count=%d err=%v", count, err)
 	}
-	updated, ok, err := fileStore.GetRunDelegation(relation.ID)
+	updated, ok, err := fixtureStore.GetRunDelegation(relation.ID)
 	if err != nil || !ok || updated.Status != domain.DelegationCreated {
 		t.Fatalf("live relation changed: %#v ok=%v err=%v", updated, ok, err)
 	}
 }
 
 func TestReconcileChildRunDelegationsRejectsCompletedChildWithoutOutput(t *testing.T) {
-	fileStore, _, _, child, _ := createDelegationForRecovery(t, false)
-	if _, err := fileStore.UpdateRunStatus(child.ID, domain.RunCompleted, ""); err != nil {
+	fixtureStore, _, _, child, _ := createDelegationForRecovery(t, false)
+	if _, err := fixtureStore.UpdateRunStatus(child.ID, domain.RunCompleted, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ReconcileChildRunDelegations(fileStore); err == nil {
+	if _, err := ReconcileChildRunDelegations(fixtureStore); err == nil {
 		t.Fatal("expected completed child without a durable completed stage to fail reconciliation")
 	}
 }
@@ -260,13 +257,11 @@ func TestReconcileChildRunDelegationStoreFailures(t *testing.T) {
 	}
 }
 
-func createDelegationForRecovery(t *testing.T, completedChildStep bool) (*store.FileStore, domain.Run, domain.CollaborationStep, domain.Run, domain.RunDelegation) {
+func createDelegationForRecovery(t *testing.T, completedChildStep bool) (*fixturestore.Store, domain.Run, domain.CollaborationStep, domain.Run, domain.RunDelegation) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	conversation, err := fileStore.CreateConversation("delegation recovery state")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("delegation recovery state")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,11 +271,11 @@ func createDelegationForRecovery(t *testing.T, completedChildStep bool) (*store.
 		Model:     domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
 		RunBudget: &domain.RuntimeRunBudget{}, CreatedAt: time.Now().UTC(),
 	}
-	parent, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, base, nil)
+	parent, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, base, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	parentStep, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+	parentStep, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
 		ID: "parent-worker", RunID: parent.ID, ConversationID: conversation.ID,
 		Role: "worker", Status: domain.CollaborationStepRunning, Input: "work",
 	})
@@ -294,7 +289,7 @@ func createDelegationForRecovery(t *testing.T, completedChildStep bool) (*store.
 		ParentStageID: parentStep.ID, Depth: 1, IsolatedContext: true,
 		TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 0,
 	}
-	child, relation, err := fileStore.CreateChildRun(domain.ChildRunRequest{
+	child, relation, err := fixtureStore.CreateChildRun(domain.ChildRunRequest{
 		Delegation: domain.RunDelegation{
 			ID: delegationID, ParentRunID: parent.ID, ParentTurnID: "turn-1",
 			ParentStageID: parentStep.ID, AgentID: "agent_planner", Depth: 1,
@@ -306,14 +301,14 @@ func createDelegationForRecovery(t *testing.T, completedChildStep bool) (*store.
 		t.Fatal(err)
 	}
 	if completedChildStep {
-		if _, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+		if _, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
 			RunID: child.ID, ConversationID: conversation.ID, Role: "worker",
 			Status: domain.CollaborationStepCompleted, Input: "work", Output: "done",
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return fileStore, parent, parentStep, child, relation
+	return fixtureStore, parent, parentStep, child, relation
 }
 
 type delegationRecoveryTestStore struct {

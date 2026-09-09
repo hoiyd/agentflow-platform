@@ -21,17 +21,17 @@ func IsDocumentVersionConflict(err error) bool {
 	return errors.Is(err, ErrDocumentVersionConflict)
 }
 
-func prepareDocumentWrite(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, []domain.DocumentChunk, []domain.DocumentChunkEmbedding, error) {
+func PrepareDocumentWrite(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, []domain.DocumentChunk, []domain.DocumentChunkEmbedding, error) {
 	if len(chunks) != len(embeddings) {
 		return domain.Document{}, nil, nil, errors.New("document chunks and embeddings length mismatch")
 	}
 	// PostgreSQL timestamps have microsecond precision. Normalize before returning
 	// so the initial write and an idempotent read-back expose identical metadata.
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	document.WorkspaceID = normalizeWorkspaceID(document.WorkspaceID)
+	document.WorkspaceID = NormalizeWorkspaceID(document.WorkspaceID)
 	document.ID = strings.TrimSpace(document.ID)
 	if document.ID == "" {
-		document.ID = newID("doc")
+		document.ID = NewID("doc")
 	}
 	document.SourceKey = strings.TrimSpace(document.SourceKey)
 	document.SourceURI = strings.TrimSpace(document.SourceURI)
@@ -67,7 +67,7 @@ func prepareDocumentWrite(document domain.Document, chunks []domain.DocumentChun
 	for i := range chunks {
 		chunks[i].ID = strings.TrimSpace(chunks[i].ID)
 		if chunks[i].ID == "" {
-			chunks[i].ID = newID("chunk")
+			chunks[i].ID = NewID("chunk")
 		}
 		chunks[i].DocumentID = document.ID
 		chunks[i].ChunkIndex = i
@@ -138,7 +138,7 @@ func prepareDocumentWrite(document domain.Document, chunks []domain.DocumentChun
 	return document, chunks, embeddings, nil
 }
 
-func bindDocumentID(document *domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding, id string) {
+func BindDocumentID(document *domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding, id string) {
 	document.ID = id
 	for index := range chunks {
 		chunks[index].DocumentID = id
@@ -150,99 +150,8 @@ func isZeroDocumentIndexIdentity(identity domain.DocumentIndexIdentity) bool {
 	return identity == (domain.DocumentIndexIdentity{})
 }
 
-func documentVersionConflict(existing, incoming domain.Document) error {
+func DocumentVersionConflict(existing, incoming domain.Document) error {
 	return fmt.Errorf("%w: source_key=%q version=%q", ErrDocumentVersionConflict, incoming.SourceKey, incoming.Version)
-}
-
-func normalizeFileDocumentIndexes(data *fileData) bool {
-	migrated := false
-	chunkDocuments := make(map[string]string, len(data.DocumentChunks))
-	for _, chunk := range data.DocumentChunks {
-		chunkDocuments[chunk.ID] = chunk.DocumentID
-	}
-	identities := map[string]domain.DocumentIndexIdentity{}
-	incompatible := map[string]bool{}
-	for _, embedding := range data.ChunkEmbeddings {
-		documentID := chunkDocuments[embedding.ChunkID]
-		if documentID == "" || len(embedding.Embedding) == 0 {
-			continue
-		}
-		dimensions := embedding.Dimensions
-		if dimensions == 0 {
-			dimensions = len(embedding.Embedding)
-		}
-		identity := domain.DocumentIndexIdentity{
-			ChunkerVersion: domain.DocumentChunkerVersion, EmbeddingProvider: embedding.Provider,
-			EmbeddingModel: embedding.Model, EmbeddingDimensions: dimensions,
-		}
-		if existing, ok := identities[documentID]; ok && existing != identity {
-			incompatible[documentID] = true
-		} else {
-			identities[documentID] = identity
-		}
-	}
-
-	latestBySource := map[string]int{}
-	for index := range data.Documents {
-		document := &data.Documents[index]
-		if document.SourceKey == "" && strings.TrimSpace(document.SourceURI) != "" {
-			document.SourceKey = strings.TrimSpace(document.SourceURI)
-			migrated = true
-		}
-		if isZeroDocumentIndexIdentity(document.IndexIdentity) && !incompatible[document.ID] && !isZeroDocumentIndexIdentity(identities[document.ID]) {
-			document.IndexIdentity = identities[document.ID]
-			migrated = true
-		}
-		if document.SourceKey == "" {
-			continue
-		}
-		key := normalizeWorkspaceID(document.WorkspaceID) + "\x00" + document.SourceKey
-		if previous, ok := latestBySource[key]; !ok || newerDocument(*document, data.Documents[previous]) {
-			latestBySource[key] = index
-		}
-	}
-
-	keep := make(map[string]bool, len(data.Documents))
-	for index, document := range data.Documents {
-		if document.SourceKey == "" {
-			keep[document.ID] = true
-			continue
-		}
-		key := normalizeWorkspaceID(document.WorkspaceID) + "\x00" + document.SourceKey
-		if latestBySource[key] == index {
-			keep[document.ID] = true
-		} else {
-			migrated = true
-		}
-	}
-	if len(keep) == len(data.Documents) {
-		return migrated
-	}
-
-	documents := make([]domain.Document, 0, len(keep))
-	for _, document := range data.Documents {
-		if keep[document.ID] {
-			documents = append(documents, document)
-		} else {
-			delete(data.DocumentContents, document.ID)
-		}
-	}
-	chunks := make([]domain.DocumentChunk, 0, len(data.DocumentChunks))
-	keptChunks := map[string]bool{}
-	for _, chunk := range data.DocumentChunks {
-		if keep[chunk.DocumentID] {
-			chunks = append(chunks, chunk)
-			keptChunks[chunk.ID] = true
-		}
-	}
-	embeddings := make([]domain.DocumentChunkEmbedding, 0, len(data.ChunkEmbeddings))
-	for _, embedding := range data.ChunkEmbeddings {
-		if keptChunks[embedding.ChunkID] {
-			embeddings = append(embeddings, embedding)
-		}
-	}
-	data.Documents, data.DocumentChunks, data.ChunkEmbeddings = documents, chunks, embeddings
-	return migrated
 }
 
 func newerDocument(left, right domain.Document) bool {

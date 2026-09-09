@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"bytes"
 	"encoding/json"
@@ -9,19 +11,16 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestTaskStateAPIProvidesPatchTimelineAndHistoricalVersion(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversationInWorkspace("workspace-a", "task state api")
 	if err != nil {
 		t.Fatal(err)
 	}
-	conversation, err := fileStore.CreateConversationInWorkspace("workspace-a", "task state api")
-	if err != nil {
-		t.Fatal(err)
-	}
-	handler := (&Handler{store: fileStore}).Routes()
+	handler := (&Handler{store: fixtureStore}).Routes()
 	request := func(method, path, body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 		req.Header.Set(WorkspaceHeader, "workspace-a")
@@ -78,12 +77,10 @@ func TestTaskStateAPIProvidesPatchTimelineAndHistoricalVersion(t *testing.T) {
 }
 
 func TestTaskStateAPIRejectsInvalidPatchAndVersion(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	conversation, _ := fileStore.CreateConversation("invalid task state")
-	handler := (&Handler{store: fileStore}).Routes()
+	fixtureStore := fixturestore.New()
+
+	conversation, _ := fixtureStore.CreateConversation("invalid task state")
+	handler := (&Handler{store: fixtureStore}).Routes()
 	tests := []struct {
 		method string
 		path   string

@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"bytes"
 	"context"
@@ -96,12 +98,10 @@ func TestRAGSearchAPISerializesMergedContextTraceability(t *testing.T) {
 }
 
 func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
-	handler := &Handler{store: fileStore, knowledge: knowledge.NewKnowledgeBase(fileStore, client)}
+	handler := &Handler{store: fixtureStore, knowledge: knowledge.NewKnowledgeBase(fixtureStore, client)}
 
 	createBody := []byte(`{
 		"source_key": "launch-notes",
@@ -400,12 +400,10 @@ func TestDocumentIngestAndRAGSearchAPI(t *testing.T) {
 }
 
 func TestRAGSearchBlocksPromptInjectionAndReturnsDecision(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
-	handler := &Handler{store: fileStore, knowledge: knowledge.NewKnowledgeBase(fileStore, client)}
+	handler := &Handler{store: fixtureStore, knowledge: knowledge.NewKnowledgeBase(fixtureStore, client)}
 
 	createBody := []byte(`{
 		"title": "Emergency access procedure",
@@ -452,11 +450,9 @@ func containsString(items []string, expected string) bool {
 }
 
 func TestDeleteDocumentReturnsNotFoundForMissingDocument(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	handler := &Handler{store: fileStore}
+	fixtureStore := fixturestore.New()
+
+	handler := &Handler{store: fixtureStore}
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodDelete, "/api/documents/missing", nil)
 
@@ -468,12 +464,10 @@ func TestDeleteDocumentReturnsNotFoundForMissingDocument(t *testing.T) {
 }
 
 func TestUploadDocumentAPIAcceptsTxtAndMarkdown(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
-	handler := &Handler{store: fileStore, knowledge: knowledge.NewKnowledgeBase(fileStore, client)}
+	handler := &Handler{store: fixtureStore, knowledge: knowledge.NewKnowledgeBase(fixtureStore, client)}
 
 	for _, tc := range []struct {
 		name       string
@@ -522,12 +516,10 @@ func TestUploadDocumentAPIAcceptsTxtAndMarkdown(t *testing.T) {
 }
 
 func TestUploadDocumentAPIRejectsUnsupportedAndEmptyFiles(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
-	handler := &Handler{store: fileStore, knowledge: knowledge.NewKnowledgeBase(fileStore, client)}
+	handler := &Handler{store: fixtureStore, knowledge: knowledge.NewKnowledgeBase(fixtureStore, client)}
 
 	for _, tc := range []struct {
 		name     string

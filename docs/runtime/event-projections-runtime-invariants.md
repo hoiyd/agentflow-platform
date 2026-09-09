@@ -33,7 +33,7 @@ Every Run Event is registered in the executable
 - lifecycle role and terminal pairing;
 - known read-side consumers.
 
-`model.delta` and `run.progress` are live-only. File Store and Postgres reject
+`model.delta` and `run.progress` are live-only. Postgres rejects
 them at the persistence boundary, so Replay contains facts rather than UI
 progress. Unknown event types and unsupported schemas are rejected before a
 durable write. The generated [Run Event Catalog](event-catalog.md) is checked
@@ -51,8 +51,7 @@ one durable event watermark:
 | Usage | Usage Ledger | model/tool calls, tokens, estimated cost, reservations |
 | Verification | Run + immutable Evidence | current status, subject, attempt, fresh evidence count |
 
-Each projection and the combined snapshot expose `as_of_sequence`. File Store,
-Postgres, Replay, and `GET /api/runs/{id}/projection` call the same reducers.
+Each projection and the combined snapshot expose `as_of_sequence`. Postgres, Replay, and `GET /api/runs/{id}/projection` call the same reducers.
 There is no persisted projection cache; rebuild cost and real profiling data
 must justify one later.
 

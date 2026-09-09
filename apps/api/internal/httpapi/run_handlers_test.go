@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"encoding/json"
 	"errors"
@@ -9,13 +11,12 @@ import (
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestCancelRunHandlerCancelsQueuedRun(t *testing.T) {
-	fileStore, run := createHTTPTestRun(t)
-	runtime := agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
-	handler := &Handler{store: fileStore, agentRuntime: runtime}
+	fixtureStore, run := createHTTPTestRun(t)
+	runtime := agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	handler := &Handler{store: fixtureStore, agentRuntime: runtime}
 	recorder := httptest.NewRecorder()
 
 	handler.cancelRun(recorder, httptest.NewRequest(http.MethodPost, "/api/runs/"+run.ID+"/cancel", nil))
@@ -33,18 +34,18 @@ func TestCancelRunHandlerCancelsQueuedRun(t *testing.T) {
 }
 
 func TestListCollaborationStepsHandler(t *testing.T) {
-	fileStore, run := createHTTPTestRun(t)
-	conversation, ok, err := fileStore.GetConversation(run.ConversationID)
+	fixtureStore, run := createHTTPTestRun(t)
+	conversation, ok, err := fixtureStore.GetConversation(run.ConversationID)
 	if err != nil || !ok {
 		t.Fatalf("get conversation: ok=%t err=%v", ok, err)
 	}
-	step, err := fileStore.CreateCollaborationStep(domain.CollaborationStep{
+	step, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
 		RunID: run.ID, ConversationID: conversation.ID, AgentID: run.AgentID, Role: "plan", Input: "task",
 	})
 	if err != nil {
 		t.Fatalf("create collaboration step: %v", err)
 	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 	recorder := httptest.NewRecorder()
 
 	handler.listCollaborationSteps(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/collaboration_steps", nil))
@@ -65,11 +66,11 @@ func TestListCollaborationStepsHandler(t *testing.T) {
 }
 
 func TestGetRunProjectionReturnsCanonicalWatermarkAndDiagnostics(t *testing.T) {
-	fileStore, run := createHTTPTestRun(t)
-	if _, err := fileStore.CreateRunEvent(domain.RunEvent{Type: domain.EventRunCreated, RunID: run.ID, ConversationID: run.ConversationID}); err != nil {
+	fixtureStore, run := createHTTPTestRun(t)
+	if _, err := fixtureStore.CreateRunEvent(domain.RunEvent{Type: domain.EventRunCreated, RunID: run.ID, ConversationID: run.ConversationID}); err != nil {
 		t.Fatal(err)
 	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 	recorder := httptest.NewRecorder()
 
 	handler.getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/projection", nil))
@@ -87,13 +88,13 @@ func TestGetRunProjectionReturnsCanonicalWatermarkAndDiagnostics(t *testing.T) {
 }
 
 func TestRunProjectionAlwaysReturnsInvariantDiagnostics(t *testing.T) {
-	fileStore, run := createHTTPTestRun(t)
-	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+	fixtureStore, run := createHTTPTestRun(t)
+	if _, err := fixtureStore.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventToolFailed, RunID: run.ID, Payload: map[string]any{"tool_call_id": "orphan-call"},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 	recorder := httptest.NewRecorder()
 	handler.getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/projection", nil))
 	if recorder.Code != http.StatusOK {
@@ -106,13 +107,13 @@ func TestRunProjectionAlwaysReturnsInvariantDiagnostics(t *testing.T) {
 }
 
 func TestRunReplayAlwaysReturnsInvariantDiagnostics(t *testing.T) {
-	fileStore, run := createHTTPTestRun(t)
-	if _, err := fileStore.CreateRunEvent(domain.RunEvent{
+	fixtureStore, run := createHTTPTestRun(t)
+	if _, err := fixtureStore.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventToolFailed, RunID: run.ID, Payload: map[string]any{"tool_call_id": "orphan-call"},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	handler := &Handler{store: fileStore}
+	handler := &Handler{store: fixtureStore}
 	recorder := httptest.NewRecorder()
 	handler.getRunReplay(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/replay", nil))
 	if recorder.Code != http.StatusOK {
@@ -126,18 +127,18 @@ func TestRunReplayAlwaysReturnsInvariantDiagnostics(t *testing.T) {
 
 func TestGetRunProjectionHandlesInvalidMissingAndStoreFailures(t *testing.T) {
 	t.Run("missing id", func(t *testing.T) {
-		fileStore, _ := createHTTPTestRun(t)
+		fixtureStore, _ := createHTTPTestRun(t)
 		recorder := httptest.NewRecorder()
-		(&Handler{store: fileStore}).getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs//projection", nil))
+		(&Handler{store: fixtureStore}).getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs//projection", nil))
 		if recorder.Code != http.StatusBadRequest {
 			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 		}
 	})
 
 	t.Run("unknown run", func(t *testing.T) {
-		fileStore, _ := createHTTPTestRun(t)
+		fixtureStore, _ := createHTTPTestRun(t)
 		recorder := httptest.NewRecorder()
-		(&Handler{store: fileStore}).getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/missing/projection", nil))
+		(&Handler{store: fixtureStore}).getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/missing/projection", nil))
 		if recorder.Code != http.StatusNotFound {
 			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 		}
@@ -154,8 +155,8 @@ func TestGetRunProjectionHandlesInvalidMissingAndStoreFailures(t *testing.T) {
 	})
 
 	t.Run("invariant dependency failure", func(t *testing.T) {
-		fileStore, run := createHTTPTestRun(t)
-		wrapped := &modelRequestHTTPStore{Store: fileStore, recordsErr: errors.New("model requests unavailable")}
+		fixtureStore, run := createHTTPTestRun(t)
+		wrapped := &modelRequestHTTPStore{Store: fixtureStore, recordsErr: errors.New("model requests unavailable")}
 		recorder := httptest.NewRecorder()
 		(&Handler{store: wrapped}).getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/projection", nil))
 		if recorder.Code != http.StatusInternalServerError {
@@ -164,19 +165,17 @@ func TestGetRunProjectionHandlesInvalidMissingAndStoreFailures(t *testing.T) {
 	})
 }
 
-func createHTTPTestRun(t *testing.T) (*store.FileStore, domain.Run) {
+func createHTTPTestRun(t *testing.T) (*fixturestore.Store, domain.Run) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	conversation, err := fileStore.CreateConversation("handler coverage")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("handler coverage")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	return fileStore, run
+	return fixtureStore, run
 }

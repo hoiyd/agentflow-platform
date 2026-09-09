@@ -77,6 +77,14 @@ jobs:
           fail_ci_if_error: true
           token: ${{ env.CODECOV_TOKEN }}
 
+      - name: Reject test fixtures in server dependencies
+        run: |
+          dependencies="$(go list -deps ./cmd/server)"
+          if printf '%s\n' "$dependencies" | grep -q '/internal/testsupport/'; then
+            echo "Server must not depend on test/evaluation fixtures"
+            exit 1
+          fi
+
       - name: Run go vet
         run: go vet ./...
 

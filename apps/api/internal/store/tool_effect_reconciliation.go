@@ -41,7 +41,7 @@ func IsToolEffectConflict(err error) bool {
 	return errors.As(err, &version) || errors.As(err, &state)
 }
 
-func validateReconciliationDuplicate(previous domain.RunEvent, mutation domain.ToolEffectReconciliation) error {
+func ValidateReconciliationDuplicate(previous domain.RunEvent, mutation domain.ToolEffectReconciliation) error {
 	for _, key := range []string{"command_id", "idempotency_key", "action", "command_hash"} {
 		if previous.Payload[key] != mutation.Event.Payload[key] {
 			return &ToolEffectStateConflict{Status: "command_identity_conflict"}
@@ -50,7 +50,7 @@ func validateReconciliationDuplicate(previous domain.RunEvent, mutation domain.T
 	return nil
 }
 
-func prepareToolEffectReconciliation(existing domain.ToolEffectRecord, mutation domain.ToolEffectReconciliation) (domain.ToolEffectReconciliation, error) {
+func PrepareToolEffectReconciliation(existing domain.ToolEffectRecord, mutation domain.ToolEffectReconciliation) (domain.ToolEffectReconciliation, error) {
 	existing.Version = max(existing.Version, 1)
 	if strings.TrimSpace(mutation.CommandID) == "" || strings.TrimSpace(mutation.IdempotencyKey) == "" || mutation.ExpectedVersion <= 0 {
 		return mutation, errors.New("tool effect reconciliation requires command, effect, and expected version")

@@ -30,72 +30,70 @@ func (s commitBarrier) CommitToolEffectReconciliation(m domain.ToolEffectReconci
 }
 
 func TestReconciliationCASAfterCompetingPreflightReads(t *testing.T) {
-	for _, backend := range []string{"file", "postgres"} {
-		for _, variant := range []string{"same-command", "different-command", "changed-payload", "manual-changed-payload"} {
-			t.Run(backend+"/"+variant, func(t *testing.T) {
-				var calls atomic.Int32
-				target, _, run, catalog, effect := safetyFixture(t, backend, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) { calls.Add(1); return true, nil }})
-				first := retryCommand(effect)
-				phase := domain.EventToolEffectReconciliationStarted
-				if variant == "manual-changed-payload" {
-					first.Action = domain.ToolEffectConfirmFailed
-					phase = domain.EventToolEffectReconciled
+	for _, variant := range []string{"same-command", "different-command", "changed-payload", "manual-changed-payload"} {
+		t.Run(variant, func(t *testing.T) {
+			var calls atomic.Int32
+			target, _, run, catalog, effect := safetyFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) { calls.Add(1); return true, nil }})
+			first := retryCommand(effect)
+			phase := domain.EventToolEffectReconciliationStarted
+			if variant == "manual-changed-payload" {
+				first.Action = domain.ToolEffectConfirmFailed
+				phase = domain.EventToolEffectReconciled
+			}
+			second := first
+			if variant == "different-command" {
+				second.CommandID = "other"
+			}
+			if strings.Contains(variant, "changed-payload") {
+				second.Reason = "different intent"
+			}
+			barrier := commitBarrier{target, make(chan struct{}, 2), make(chan struct{}), phase}
+			done := make(chan error, 2)
+			for _, cmd := range []toolreconciliation.ToolEffectReconciliationCommand{first, second} {
+				go func(command toolreconciliation.ToolEffectReconciliationCommand) {
+					_, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, barrier, run, effect.IdempotencyKey, command)
+					done <- err
+				}(cmd)
+			}
+			for range 2 {
+				select {
+				case <-barrier.arrived:
+				case <-time.After(5 * time.Second):
+					close(barrier.release)
+					t.Fatal("preflight barrier not reached")
 				}
-				second := first
-				if variant == "different-command" {
-					second.CommandID = "other"
-				}
-				if strings.Contains(variant, "changed-payload") {
-					second.Reason = "different intent"
-				}
-				barrier := commitBarrier{target, make(chan struct{}, 2), make(chan struct{}), phase}
-				done := make(chan error, 2)
-				for _, cmd := range []toolreconciliation.ToolEffectReconciliationCommand{first, second} {
-					go func(command toolreconciliation.ToolEffectReconciliationCommand) {
-						_, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, barrier, run, effect.IdempotencyKey, command)
-						done <- err
-					}(cmd)
-				}
-				for range 2 {
-					select {
-					case <-barrier.arrived:
-					case <-time.After(5 * time.Second):
-						close(barrier.release)
-						t.Fatal("preflight barrier not reached")
+			}
+			close(barrier.release)
+			failures := 0
+			for range 2 {
+				if err := <-done; err != nil {
+					failures++
+					if !IsToolEffectConflict(err) && reconciliationCode(err) != toolreconciliation.ReconciliationConflict {
+						t.Fatal(err)
 					}
 				}
-				close(barrier.release)
-				failures := 0
-				for range 2 {
-					if err := <-done; err != nil {
-						failures++
-						if !IsToolEffectConflict(err) && reconciliationCode(err) != toolreconciliation.ReconciliationConflict {
-							t.Fatal(err)
-						}
-					}
-				}
-				wantFailures := 1
-				if variant == "same-command" {
-					wantFailures = 0
-				}
-				if failures != wantFailures {
-					t.Fatalf("conflicts=%d want=%d", failures, wantFailures)
-				}
-				wantCalls := int32(1)
-				if variant == "manual-changed-payload" {
-					wantCalls = 0
-				}
-				if calls.Load() != wantCalls {
-					t.Fatalf("calls=%d want=%d", calls.Load(), wantCalls)
-				}
-			})
-		}
+			}
+			wantFailures := 1
+			if variant == "same-command" {
+				wantFailures = 0
+			}
+			if failures != wantFailures {
+				t.Fatalf("conflicts=%d want=%d", failures, wantFailures)
+			}
+			wantCalls := int32(1)
+			if variant == "manual-changed-payload" {
+				wantCalls = 0
+			}
+			if calls.Load() != wantCalls {
+				t.Fatalf("calls=%d want=%d", calls.Load(), wantCalls)
+			}
+		})
 	}
 }
 
 func TestCallbackDeadlineAndCompensationIdentity(t *testing.T) {
 	t.Run("deadline", func(t *testing.T) {
-		target, run, catalog, effect := fileReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(ctx context.Context, _ tools.EffectReconciliationContext) (any, error) {
+		target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(ctx context.Context, _ tools.EffectReconciliationContext) (any, error) {
 			<-ctx.Done()
 			return true, nil
 		}})
@@ -112,7 +110,7 @@ func TestCallbackDeadlineAndCompensationIdentity(t *testing.T) {
 	})
 	t.Run("stable compensation key", func(t *testing.T) {
 		keys := make(chan string, 2)
-		target, run, catalog, effect := fileReconciliationFixture(t, tools.SideEffectReconciliation{Compensate: func(_ context.Context, recovery tools.EffectReconciliationContext) error {
+		target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{Compensate: func(_ context.Context, recovery tools.EffectReconciliationContext) error {
 			keys <- recovery.CompensationKey
 			return errors.New("temporary failure")
 		}})
@@ -135,7 +133,7 @@ func TestCallbackDeadlineAndCompensationIdentity(t *testing.T) {
 func TestCanceledRequestDoesNotClaimAndCallbackResultIsGoverned(t *testing.T) {
 	for _, variant := range []string{"canceled", "panic", "large", "redacted"} {
 		t.Run(variant, func(t *testing.T) {
-			target, run, catalog, effect := fileReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
+			target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
 				switch variant {
 				case "canceled":
 					t.Error("canceled request invoked callback")

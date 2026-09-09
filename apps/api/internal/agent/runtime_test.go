@@ -1,5 +1,7 @@
 package agent
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
@@ -7,7 +9,6 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 type memoryRecallFunc func(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error)
@@ -18,23 +19,21 @@ func (fn memoryRecallFunc) Recall(ctx context.Context, search domain.MemorySearc
 
 func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 	ctx := context.Background()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
 	runtime := NewRuntime(RuntimeOptions{
-		Store: fileStore, ModelClient: client,
+		Store: fixtureStore, ModelClient: client,
 		MemoryRecall: memoryRecallFunc(func(_ context.Context, search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
-			return fileStore.SearchMemories(search)
+			return fixtureStore.SearchMemories(search)
 		}),
 	})
 
-	conversation, err := fileStore.CreateConversation("Demo retrieval")
+	conversation, err := fixtureStore.CreateConversation("Demo retrieval")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -44,7 +43,7 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embed memory: %v", err)
 	}
-	if _, err := fileStore.CreateMemory(domain.Memory{
+	if _, err := fixtureStore.CreateMemory(domain.Memory{
 		WorkspaceID: conversation.WorkspaceID,
 		Kind:        "note",
 		Content:     memoryText,
@@ -62,7 +61,7 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embed chunk: %v", err)
 	}
-	if _, err := fileStore.CreateDocument(domain.Document{
+	if _, err := fixtureStore.CreateDocument(domain.Document{
 		WorkspaceID: conversation.WorkspaceID,
 		Title:       "Demo Knowledge",
 		Version:     "demo-v1",
@@ -97,7 +96,7 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		t.Fatalf("expected runtime retrieval to use the shared rerank and gate pipeline, got %#v", chunks[0])
 	}
 
-	replay, ok, err := fileStore.GetRunReplay(run.ID)
+	replay, ok, err := fixtureStore.GetRunReplay(run.ID)
 	if err != nil {
 		t.Fatalf("get replay: %v", err)
 	}
@@ -169,21 +168,19 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 }
 
 func TestRetrieveContextDegradesMemoryRecallFailureToEmptySet(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	conversation, err := fileStore.CreateConversation("memory recall failure")
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("memory recall failure")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
 	want := errors.New("memory provider unavailable")
 	runtime := NewRuntime(RuntimeOptions{
-		Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest(),
+		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(),
 		MemoryRecall: memoryRecallFunc(func(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
 			return nil, want
 		}),
@@ -193,7 +190,7 @@ func TestRetrieveContextDegradesMemoryRecallFailureToEmptySet(t *testing.T) {
 	if len(memories) != 0 || len(chunks) != 0 {
 		t.Fatalf("recall failure should degrade to empty context: memories=%#v chunks=%#v", memories, chunks)
 	}
-	events, err := fileStore.ListRunEvents(run.ID)
+	events, err := fixtureStore.ListRunEvents(run.ID)
 	if err != nil {
 		t.Fatalf("list events: %v", err)
 	}
@@ -246,18 +243,16 @@ func TestRetrievedChunkTraceItemsIncludesMergedContextSources(t *testing.T) {
 
 func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 	ctx := context.Background()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	client := newLocalFallbackOpenAIClientForTest()
-	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: client})
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversation("Disabled retrieval")
+	client := newLocalFallbackOpenAIClientForTest()
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client})
+
+	conversation, err := fixtureStore.CreateConversation("Disabled retrieval")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -274,7 +269,7 @@ func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 		t.Fatalf("expected no retrieved context when disabled, got memories=%d chunks=%d", len(memories), len(chunks))
 	}
 
-	replay, ok, err := fileStore.GetRunReplay(run.ID)
+	replay, ok, err := fixtureStore.GetRunReplay(run.ID)
 	if err != nil {
 		t.Fatalf("get replay: %v", err)
 	}
@@ -304,17 +299,15 @@ func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 
 func TestRetrieveContextTruncatesEmbeddingQuery(t *testing.T) {
 	ctx := context.Background()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	fixtureStore := fixturestore.New()
 
-	conversation, err := fileStore.CreateConversation("Long retrieval query")
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+
+	conversation, err := fixtureStore.CreateConversation("Long retrieval query")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -324,7 +317,7 @@ func TestRetrieveContextTruncatesEmbeddingQuery(t *testing.T) {
 		"executor": domain.DefaultAgentExecutor,
 	})
 
-	replay, ok, err := fileStore.GetRunReplay(run.ID)
+	replay, ok, err := fixtureStore.GetRunReplay(run.ID)
 	if err != nil {
 		t.Fatalf("get replay: %v", err)
 	}

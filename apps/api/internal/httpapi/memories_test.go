@@ -1,5 +1,7 @@
 package httpapi
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"bytes"
 	"context"
@@ -12,16 +14,13 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestMemoryCreateAndSearchAPI(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
-	provider := memorypkg.NewBuiltinProvider(fileStore, client, memorypkg.ProviderOptions{})
+	provider := memorypkg.NewBuiltinProvider(fixtureStore, client, memorypkg.ProviderOptions{})
 	if err := provider.Initialize(context.Background()); err != nil {
 		t.Fatalf("initialize memory provider: %v", err)
 	}
@@ -69,21 +68,19 @@ func TestMemoryHandlersProjectDependencyFailures(t *testing.T) {
 }
 
 func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	client := newLocalFallbackOpenAIClientForTest()
-	provider := memorypkg.NewBuiltinProvider(fileStore, client, memorypkg.ProviderOptions{})
+	provider := memorypkg.NewBuiltinProvider(fixtureStore, client, memorypkg.ProviderOptions{})
 	if err := provider.Initialize(context.Background()); err != nil {
 		t.Fatalf("initialize memory provider: %v", err)
 	}
-	handler := &Handler{store: fileStore, modelClient: client, memories: provider}
-	conversation, err := fileStore.CreateConversation("memory sync")
+	handler := &Handler{store: fixtureStore, modelClient: client, memories: provider}
+	conversation, err := fixtureStore.CreateConversation("memory sync")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
@@ -105,7 +102,7 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embed query: %v", err)
 	}
-	items, err := fileStore.SearchMemories(domain.MemorySearch{
+	items, err := fixtureStore.SearchMemories(domain.MemorySearch{
 		Embedding: queryEmbedding.Vector,
 		Metadata:  map[string]string{"source_role": "user"},
 		Limit:     1,
@@ -122,7 +119,7 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 	if items[0].Memory.RunID != run.ID {
 		t.Fatalf("expected run id to be stored, got %q", items[0].Memory.RunID)
 	}
-	events, err := fileStore.ListRunEvents(run.ID)
+	events, err := fixtureStore.ListRunEvents(run.ID)
 	if err != nil {
 		t.Fatalf("list run events: %v", err)
 	}
@@ -138,7 +135,7 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 			t.Fatalf("event[%d]=%s want=%s", index, events[index].Type, want)
 		}
 	}
-	candidates, err := fileStore.ListMemoryCandidates(conversation.ID)
+	candidates, err := fixtureStore.ListMemoryCandidates(conversation.ID)
 	if err != nil || len(candidates) != 1 || candidates[0].Status != domain.MemoryCandidateAccepted {
 		t.Fatalf("accepted candidate was not persisted: candidates=%#v err=%v", candidates, err)
 	}

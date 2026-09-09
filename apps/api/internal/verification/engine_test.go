@@ -1,5 +1,7 @@
 package verification
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"strings"
@@ -7,11 +9,10 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 func TestEngineBindsEvidenceToSubjectAndPassesFreshCandidate(t *testing.T) {
-	fileStore, run, engine := newVerificationTestRun(t, domain.VerificationPolicy{
+	fixtureStore, run, engine := newVerificationTestRun(t, domain.VerificationPolicy{
 		Mode: domain.VerificationAllMustPass, MaxAttempts: 2, OnExhausted: domain.VerificationFailRun,
 	}, []domain.VerifierSpec{schemaSpec("schema", true, "ok")})
 
@@ -32,22 +33,22 @@ func TestEngineBindsEvidenceToSubjectAndPassesFreshCandidate(t *testing.T) {
 	if !decision.AllowCompletion || decision.Status != domain.VerificationPassed || decision.Attempt != 2 || decision.SubjectHash != second.Hash {
 		t.Fatalf("unexpected second decision: %#v", decision)
 	}
-	evidence, err := fileStore.ListVerificationEvidence(run.ID)
+	evidence, err := fixtureStore.ListVerificationEvidence(run.ID)
 	if err != nil {
 		t.Fatalf("list evidence: %v", err)
 	}
 	if len(evidence) != 3 || evidence[0].Status != domain.VerificationFailed || evidence[1].Status != domain.VerificationStale || evidence[1].SupersedesEvidenceID != evidence[0].ID || evidence[2].Status != domain.VerificationPassed {
 		t.Fatalf("unexpected evidence history: %#v", evidence)
 	}
-	artifacts, err := fileStore.ListVerificationArtifacts(run.ID)
+	artifacts, err := fixtureStore.ListVerificationArtifacts(run.ID)
 	if err != nil || len(artifacts) != 2 || artifacts[1].Content != second.Value || artifacts[1].ContentHash == "" {
 		t.Fatalf("unexpected artifacts: %#v err=%v", artifacts, err)
 	}
-	stored, ok, err := fileStore.GetRun(run.ID)
+	stored, ok, err := fixtureStore.GetRun(run.ID)
 	if err != nil || !ok || stored.VerificationStatus != domain.VerificationPassed {
 		t.Fatalf("unexpected stored verification status: %#v ok=%v err=%v", stored, ok, err)
 	}
-	events, err := fileStore.ListRunEvents(run.ID)
+	events, err := fixtureStore.ListRunEvents(run.ID)
 	if err != nil {
 		t.Fatalf("list run events: %v", err)
 	}
@@ -89,16 +90,14 @@ func TestEngineEnforcesPolicyAndAttemptBudget(t *testing.T) {
 }
 
 func TestEngineDoesNotRequireVerificationWithoutContract(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	conversation, _ := fileStore.CreateConversation("no verification")
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, verificationSnapshot(), nil)
+	fixtureStore := fixturestore.New()
+
+	conversation, _ := fixtureStore.CreateConversation("no verification")
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, verificationSnapshot(), nil)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	engine := NewEngine(fileStore, NewRegistry(Options{}))
+	engine := NewEngine(fixtureStore, NewRegistry(Options{}))
 	decision, err := engine.Verify(context.Background(), run.ID, SubjectForRunOutput("plain response"))
 	if err != nil || !decision.AllowCompletion || decision.Status != domain.VerificationNotRequired {
 		t.Fatalf("unexpected no-contract decision: %#v err=%v", decision, err)
@@ -106,7 +105,7 @@ func TestEngineDoesNotRequireVerificationWithoutContract(t *testing.T) {
 }
 
 func TestEngineFailsClosedWhenFrozenVerifierImplementationIsUnavailable(t *testing.T) {
-	fileStore, run, engine := newVerificationTestRun(t, domain.VerificationPolicy{
+	fixtureStore, run, engine := newVerificationTestRun(t, domain.VerificationPolicy{
 		Mode: domain.VerificationAllMustPass, MaxAttempts: 1, OnExhausted: domain.VerificationFailRun,
 	}, []domain.VerifierSpec{schemaSpec("schema", true, "ok")})
 	delete(engine.registry.verifiers, domain.VerifierJSONSchema)
@@ -114,7 +113,7 @@ func TestEngineFailsClosedWhenFrozenVerifierImplementationIsUnavailable(t *testi
 	if err != nil || decision.AllowCompletion || decision.Status != domain.VerificationBlocked {
 		t.Fatalf("unavailable verifier did not fail closed: decision=%#v err=%v", decision, err)
 	}
-	evidence, err := fileStore.ListVerificationEvidence(run.ID)
+	evidence, err := fixtureStore.ListVerificationEvidence(run.ID)
 	if err != nil || len(evidence) != 1 || evidence[0].Status != domain.VerificationBlocked {
 		t.Fatalf("blocked evidence was not persisted: %#v err=%v", evidence, err)
 	}
@@ -124,10 +123,8 @@ func TestEngineFailsClosedWhenFrozenVerifierImplementationIsUnavailable(t *testi
 }
 
 func TestEnginePersistsStructuredEvidenceFromCustomVerifier(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	registry := NewRegistry(Options{})
 	if err := registry.Register(customVerifier{}); err != nil {
 		t.Fatalf("register custom verifier: %v", err)
@@ -138,17 +135,17 @@ func TestEnginePersistsStructuredEvidenceFromCustomVerifier(t *testing.T) {
 	if err != nil {
 		t.Fatalf("freeze contract: %v", err)
 	}
-	conversation, _ := fileStore.CreateConversation("custom verification")
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, verificationSnapshot(), contract)
+	conversation, _ := fixtureStore.CreateConversation("custom verification")
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, verificationSnapshot(), contract)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	decision, err := NewEngine(fileStore, registry).Verify(context.Background(), run.ID, SubjectForRunOutput("candidate"))
+	decision, err := NewEngine(fixtureStore, registry).Verify(context.Background(), run.ID, SubjectForRunOutput("candidate"))
 	if err != nil || !decision.AllowCompletion {
 		t.Fatalf("custom verifier did not pass gate: decision=%#v err=%v", decision, err)
 	}
-	evidence, _ := fileStore.ListVerificationEvidence(run.ID)
-	artifacts, _ := fileStore.ListVerificationArtifacts(run.ID)
+	evidence, _ := fixtureStore.ListVerificationEvidence(run.ID)
+	artifacts, _ := fixtureStore.ListVerificationArtifacts(run.ID)
 	if len(evidence) != 1 || evidence[0].Details["score"] != 1.0 || len(evidence[0].ArtifactIDs) != 2 || len(artifacts) != 2 {
 		t.Fatalf("custom evidence did not persist: evidence=%#v artifacts=%#v", evidence, artifacts)
 	}
@@ -173,26 +170,24 @@ func TestEvidencePayloadsAreBounded(t *testing.T) {
 	}
 }
 
-func newVerificationTestRun(t *testing.T, policy domain.VerificationPolicy, specs []domain.VerifierSpec) (*store.FileStore, domain.Run, *Engine) {
+func newVerificationTestRun(t *testing.T, policy domain.VerificationPolicy, specs []domain.VerifierSpec) (*fixturestore.Store, domain.Run, *Engine) {
 	t.Helper()
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	registry := NewRegistry(Options{})
 	contract, err := registry.FreezeContract(&domain.CompletionContract{ID: "contract_test", Verifiers: specs, Policy: policy})
 	if err != nil {
 		t.Fatalf("freeze contract: %v", err)
 	}
-	conversation, err := fileStore.CreateConversation("verification")
+	conversation, err := fixtureStore.CreateConversation("verification")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	run, err := fileStore.CreateRunWithContract("agent_planner", conversation.ID, verificationSnapshot(), contract)
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, verificationSnapshot(), contract)
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	return fileStore, run, NewEngine(fileStore, registry)
+	return fixtureStore, run, NewEngine(fixtureStore, registry)
 }
 
 func schemaSpec(id string, required bool, expected string) domain.VerifierSpec {

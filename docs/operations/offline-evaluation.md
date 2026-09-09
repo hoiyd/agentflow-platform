@@ -59,7 +59,7 @@ used as a release threshold.
 
 ## RAG Gate
 
-The RAG runner builds a clean temporary FileStore from the versioned corpus and
+The RAG runner builds an isolated in-memory fixture from the versioned corpus and
 uses the production chunking, hybrid recall, RRF, reranking, relevance, security,
 and context-selection path. Local hash embeddings make default runs deterministic
 and network-free. The report records actual component identity, Top-K, similarity
@@ -122,7 +122,7 @@ For Ollama, use `--embedding-profile ollama` and an
 `--embedding-base-url` ending in `/api/embed`; no API key is required. Run the
 same profile and corpus with `hybrid`, `dense_only`, and `lexical_only` to
 measure the retrieval contribution. A baseline comparison with `--ablation`
-accepts `retrieval_mode` as the sole changed variable. FileStore lexical recall is
+accepts `retrieval_mode` as the sole changed variable. Fixture lexical recall is
 the existing token-overlap heuristic, not BM25. Real profiles require both
 threshold flags explicitly; the values above are only a runnable starting point,
 not a calibrated semantic profile.

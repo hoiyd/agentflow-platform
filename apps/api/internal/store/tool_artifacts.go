@@ -23,12 +23,12 @@ var (
 	ErrToolArtifactRange   = errors.New("tool artifact range is invalid")
 )
 
-func toolArtifactContentHash(content []byte) string {
+func ToolArtifactContentHash(content []byte) string {
 	sum := sha256.Sum256(content)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func normalizeArtifactRead(offset int, limit int) (int, int, error) {
+func NormalizeArtifactRead(offset int, limit int) (int, int, error) {
 	if offset < 0 {
 		return 0, 0, errors.New("artifact offset cannot be negative")
 	}
@@ -41,7 +41,7 @@ func normalizeArtifactRead(offset int, limit int) (int, int, error) {
 	return offset, limit, nil
 }
 
-func normalizeArtifactSearch(query string, maxMatches int) (string, int, error) {
+func NormalizeArtifactSearch(query string, maxMatches int) (string, int, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return "", 0, errors.New("artifact search query is required")
@@ -58,7 +58,7 @@ func normalizeArtifactSearch(query string, maxMatches int) (string, int, error) 
 	return query, maxMatches, nil
 }
 
-func validateToolArtifact(artifact domain.ToolArtifact, content []byte) error {
+func ValidateToolArtifact(artifact domain.ToolArtifact, content []byte) error {
 	if strings.TrimSpace(artifact.ID) == "" || strings.TrimSpace(artifact.RunID) == "" ||
 		strings.TrimSpace(artifact.ToolCallID) == "" || strings.TrimSpace(artifact.ToolName) == "" {
 		return errors.New("tool artifact requires id, run, tool call, and tool name")
@@ -72,7 +72,7 @@ func validateToolArtifact(artifact domain.ToolArtifact, content []byte) error {
 	if artifact.StoredByteSize != len(content) || artifact.StoredByteSize < 0 || artifact.OriginalByteSize < 0 {
 		return errors.New("tool artifact byte sizes do not match content")
 	}
-	if artifact.ContentHash != toolArtifactContentHash(content) {
+	if artifact.ContentHash != ToolArtifactContentHash(content) {
 		return errors.New("tool artifact content hash mismatch")
 	}
 	if artifact.CreatedAt.IsZero() {
@@ -81,11 +81,11 @@ func validateToolArtifact(artifact domain.ToolArtifact, content []byte) error {
 	return nil
 }
 
-func toolArtifactExpired(artifact domain.ToolArtifact, now time.Time) bool {
+func ToolArtifactExpired(artifact domain.ToolArtifact, now time.Time) bool {
 	return artifact.ExpiresAt != nil && !now.Before(*artifact.ExpiresAt)
 }
 
-func searchToolArtifact(artifact domain.ToolArtifact, content []byte, query string, maxMatches int) domain.ToolArtifactSearchResult {
+func SearchToolArtifact(artifact domain.ToolArtifact, content []byte, query string, maxMatches int) domain.ToolArtifactSearchResult {
 	text := string(content)
 	matches := make([]domain.ToolArtifactSearchMatch, 0, maxMatches)
 	truncated := false
@@ -110,12 +110,12 @@ func searchToolArtifact(artifact domain.ToolArtifact, content []byte, query stri
 	}
 }
 
-func toolArtifactsForRun(items []domain.ToolArtifact, runID string) []domain.ToolArtifact {
+func ToolArtifactsForRun(items []domain.ToolArtifact, runID string) []domain.ToolArtifact {
 	result := make([]domain.ToolArtifact, 0)
 	now := time.Now().UTC()
 	for _, artifact := range items {
 		if artifact.RunID == runID {
-			artifact.Expired = toolArtifactExpired(artifact, now)
+			artifact.Expired = ToolArtifactExpired(artifact, now)
 			result = append(result, artifact)
 		}
 	}

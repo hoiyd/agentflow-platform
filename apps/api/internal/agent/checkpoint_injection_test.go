@@ -1,5 +1,7 @@
 package agent
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"testing"
@@ -7,7 +9,6 @@ import (
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/openai"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 type checkpointProviderStub struct {
@@ -24,13 +25,11 @@ func (*checkpointProviderStub) RestoreRun(context.Context, domain.Run) (checkpoi
 }
 
 func TestRuntimeUsesInjectedCheckpointProvider(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
+	fixtureStore := fixturestore.New()
+
 	provider := &checkpointProviderStub{}
 	runtime := NewRuntime(RuntimeOptions{
-		Store: fileStore, ModelClient: openai.NewClient("", "", "test"), CheckpointProvider: provider,
+		Store: fixtureStore, ModelClient: openai.NewClient("", "", "test"), CheckpointProvider: provider,
 	})
 	step := domain.CollaborationStep{ID: "stage-1", RunID: "run-1"}
 	if err := runtime.publishStage(context.Background(), step, domain.EventStageStarted); err != nil {
@@ -42,11 +41,9 @@ func TestRuntimeUsesInjectedCheckpointProvider(t *testing.T) {
 }
 
 func TestRuntimeDefaultsToInternalCheckpointProvider(t *testing.T) {
-	fileStore, err := store.NewFileStore(t.TempDir() + "/agentflow.json")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	runtime := NewRuntime(RuntimeOptions{Store: fileStore, ModelClient: openai.NewClient("", "", "test")})
+	fixtureStore := fixturestore.New()
+
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: openai.NewClient("", "", "test")})
 	if _, ok := runtime.checkpoints.(*checkpoint.InternalProvider); !ok {
 		t.Fatalf("expected internal checkpoint provider, got %T", runtime.checkpoints)
 	}

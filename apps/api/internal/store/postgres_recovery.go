@@ -47,7 +47,7 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 	for _, item := range request.TerminalEvents {
 		cursor++
 		item.RunID = request.RunID
-		prepared, err := prepareRunEvent(item, cursor, now)
+		prepared, err := PrepareRunEvent(item, cursor, now)
 		if err != nil {
 			return domain.InterruptedRunRepairResult{}, err
 		}

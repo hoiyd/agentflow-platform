@@ -1,15 +1,16 @@
 package memory
 
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
 import (
 	"context"
 	"errors"
-	"path/filepath"
+
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/openai"
-	"agentflow-platform/apps/api/internal/store"
 )
 
 type embeddingStub struct {
@@ -34,11 +35,9 @@ func (e embeddingStub) EmbedText(context.Context, string) (openai.Embedding, err
 }
 
 func TestBuiltinProviderCommitsAndRecallsMemory(t *testing.T) {
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	provider := newTestProvider(t, fileStore, embeddingStub{embedding: openai.Embedding{
+	fixtureStore := fixturestore.New()
+
+	provider := newTestProvider(t, fixtureStore, embeddingStub{embedding: openai.Embedding{
 		Vector: []float64{1, 0, 0}, Provider: "test", Model: "embedding-v1", Dimensions: 3,
 	}}, ProviderOptions{})
 	defer closeProvider(t, provider)
@@ -62,14 +61,12 @@ func TestBuiltinProviderCommitsAndRecallsMemory(t *testing.T) {
 
 func TestBuiltinProviderClassifiesEmbeddingFailure(t *testing.T) {
 	want := errors.New("embedding provider unavailable")
-	fileStore, err := store.NewFileStore(filepath.Join(t.TempDir(), "agentflow.json"))
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	provider := newTestProvider(t, fileStore, embeddingStub{err: want}, ProviderOptions{MaxAttempts: 1})
+	fixtureStore := fixturestore.New()
+
+	provider := newTestProvider(t, fixtureStore, embeddingStub{err: want}, ProviderOptions{MaxAttempts: 1})
 	defer closeProvider(t, provider)
 
-	_, err = provider.Recall(context.Background(), domain.MemorySearch{Query: "fact"})
+	_, err := provider.Recall(context.Background(), domain.MemorySearch{Query: "fact"})
 	if !IsEmbeddingError(err) || !errors.Is(err, want) {
 		t.Fatalf("expected typed embedding error, got %v", err)
 	}

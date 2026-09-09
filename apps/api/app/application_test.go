@@ -22,7 +22,7 @@ func TestNormalizeServerErrorAndStartupLogging(t *testing.T) {
 	}
 
 	application := &Application{config: config.Config{
-		Port: "8080", StoreDriver: "file", RouterMode: "auto",
+		Port: "8080", RouterMode: "auto",
 		AutonomousMaxIterations: 5, AutonomousMaxOutputCharacters: 60000,
 		AutonomousMaxRuntime: 5 * time.Minute, AutonomousMaxToolCalls: 20,
 		RecoveryStaleRunTimeout: time.Minute, MaxConcurrentRuns: 4,

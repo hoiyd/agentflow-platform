@@ -30,7 +30,7 @@ For a focused backend or AI-systems review, use this path:
 | **Verification** | [Verification](runtime/verification.md) | Runtime outcome contracts, versioned verifiers, immutable Evidence/Artifacts, and the Completion Gate. This is separate from Automated and Manual Tests. |
 
 The same runtime contracts apply to Single, Multi, and Loop execution. The API
-names the Loop path `autonomous`. File/Postgres stores and provider/framework
+names the Loop path `autonomous`. Postgres stores and provider/framework
 adapters preserve those contracts, which is the main portability boundary of
 the project.
 

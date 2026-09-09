@@ -129,9 +129,7 @@ type Config struct {
 	// AutonomousMaxToolCalls is folded into the frozen Run Budget for new Autonomous Runs.
 	AutonomousMaxToolCalls  int
 	RecoveryStaleRunTimeout time.Duration
-	StoreDriver             string
 	DatabaseURL             string
-	DataPath                string
 	ToolConfigPath          string
 	// ToolResultMaxBatchBytes caps aggregate raw Tool results returned by one model Tool-call batch.
 	ToolResultMaxBatchBytes int
@@ -230,9 +228,7 @@ func Load() Config {
 		AutonomousMaxOutputCharacters:     getIntEnv("AUTONOMOUS_MAX_OUTPUT_CHARS", 60000),
 		AutonomousMaxToolCalls:            getIntEnv("AUTONOMOUS_MAX_TOOL_CALLS", 20),
 		RecoveryStaleRunTimeout:           getDurationEnv("RECOVERY_STALE_RUN_TIMEOUT", 60*time.Second),
-		StoreDriver:                       normalizeStoreDriver(getEnv("STORE_DRIVER", "file")),
 		DatabaseURL:                       getEnv("DATABASE_URL", ""),
-		DataPath:                          getEnv("DATA_PATH", ".data/agentflow.json"),
 		ToolConfigPath:                    getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
 		ToolResultMaxBatchBytes:           getIntEnv("TOOL_RESULT_MAX_BATCH_BYTES", 8000),
 		ToolArtifactMaxBytes:              getIntEnv("TOOL_ARTIFACT_MAX_BYTES", 5*1024*1024),
@@ -247,15 +243,6 @@ func Load() Config {
 		VerificationAllowedHTTPHosts:      getEnv("VERIFICATION_ALLOWED_HTTP_HOSTS", ""),
 		VerificationMaxArtifactBytes:      getIntEnv("VERIFICATION_MAX_ARTIFACT_BYTES", 65536),
 		AllowedOrigins:                    getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
-	}
-}
-
-func normalizeStoreDriver(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "postgres", "postgresql":
-		return "postgres"
-	default:
-		return "file"
 	}
 }
 
