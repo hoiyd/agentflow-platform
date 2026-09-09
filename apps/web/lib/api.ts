@@ -574,7 +574,38 @@ function normalizeRunReplay(data: unknown): RunReplay {
     task_state_revisions: Array.isArray(replay.task_state_revisions) ? replay.task_state_revisions : [],
     parent_delegation: isObject(replay.parent_delegation) ? replay.parent_delegation as RunDelegation : undefined,
     child_delegations: Array.isArray(replay.child_delegations) ? replay.child_delegations as RunDelegation[] : [],
-		recovery_summary: isObject(replay.recovery_summary) ? replay.recovery_summary as RecoverySummary : undefined
+    recovery_summary: normalizeRecoverySummary(replay.recovery_summary)
+  };
+}
+
+function normalizeRecoverySummary(value: unknown): RecoverySummary | undefined {
+  if (!isObject(value)) return undefined;
+  const strings = (input: unknown) => Array.isArray(input)
+    ? input.filter((item): item is string => typeof item === "string")
+    : [];
+  return {
+    reason: stringValue(value.reason) ?? "",
+    title: stringValue(value.title) ?? "",
+    message: stringValue(value.message) ?? "",
+    evidence: Array.isArray(value.evidence)
+      ? value.evidence.filter(isObject).map((item) => ({
+          kind: stringValue(item.kind) ?? "unknown",
+          summary: stringValue(item.summary) ?? "",
+          id: stringValue(item.id),
+          status: stringValue(item.status),
+          artifact_refs: strings(item.artifact_refs)
+        }))
+      : [],
+    artifact_refs: strings(value.artifact_refs),
+    actions: Array.isArray(value.actions)
+      ? value.actions.filter(isObject).map((item) => ({
+          kind: stringValue(item.kind) ?? "unknown",
+          label: stringValue(item.label) ?? "Unknown action",
+          enabled: item.enabled === true,
+          target_id: stringValue(item.target_id),
+          unavailable_reason: stringValue(item.unavailable_reason)
+        }))
+      : []
   };
 }
 
