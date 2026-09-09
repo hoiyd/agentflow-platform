@@ -1,4 +1,4 @@
-.PHONY: help setup quickstart dev test golden-eval context-eval benchmark-evidence
+.PHONY: help setup quickstart dev test golden-eval context-eval benchmark-evidence load-evidence
 
 help:
 	@printf '%s\n' \
@@ -8,6 +8,7 @@ help:
 	  'make golden-eval Run the isolated offline RAG regression gate' \
 	  'make context-eval Run the deterministic Context quality regression gate' \
 	  'make benchmark-evidence Build the offline CASE-001 benchmark evidence pack' \
+	  'make load-evidence Run bounded load and soak evidence tests' \
 	  'make test        Run backend tests, frontend lint/tests, and production build'
 
 setup:
@@ -27,6 +28,9 @@ context-eval:
 
 benchmark-evidence:
 	@bash scripts/benchmark-evidence.sh
+
+load-evidence:
+	@bash scripts/load-evidence.sh
 
 test:
 	@bash scripts/test.sh

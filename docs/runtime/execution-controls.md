@@ -342,6 +342,12 @@ process and provider without rewriting historical execution protocol.
 Change one layer at a time and inspect Usage, Replay, and Run Events before
 adjusting another.
 
+Run `make load-evidence` after changing these controls. The bounded profile
+records underload, saturation, overload, recovery, and soak behavior while
+keeping Run admission, model concurrency, RPM/TPM, Run Budget, Tool timeout,
+and Memory queue outcomes distinct. See
+[Bounded Load and Soak Testing](../operations/load-soak-testing.md).
+
 ## Checklist for a New Control
 
 Before adding a limit, timeout, quota, or guard, answer:
