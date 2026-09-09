@@ -117,10 +117,10 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	if !foundRecovery {
 		t.Fatalf("expected recovery step in replay, got %#v", replay.Steps)
 	}
-	writeReferenceReplayArtifact(t, replay)
+	writeBenchmarkReplayArtifact(t, replay)
 }
 
-func writeReferenceReplayArtifact(t *testing.T, replay domain.RunReplay) {
+func writeBenchmarkReplayArtifact(t *testing.T, replay domain.RunReplay) {
 	t.Helper()
 	dir := os.Getenv("EVALUATION_REPORT_DIR")
 	if dir == "" {
@@ -133,7 +133,7 @@ func writeReferenceReplayArtifact(t *testing.T, replay domain.RunReplay) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "reference-recovery-replay.json"), content, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "benchmark-recovery-replay.json"), content, 0600); err != nil {
 		t.Fatal(err)
 	}
 }

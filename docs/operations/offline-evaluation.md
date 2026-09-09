@@ -148,9 +148,9 @@ job uploads the directory as `offline-evaluation-reports`. Reports omit
 credentials/endpoints, redact model errors, and do not copy Context or RAG source
 content.
 
-## CASE-001 Reference Evidence Pack
+## CASE-001 Evidence-backed Benchmark Suite
 
-[`reference-task.v1.json`](../../examples/reference-task.v1.json) fixes 12 tasks:
+[`benchmark-suite.v1.json`](../../examples/benchmark-suite.v1.json) fixes 12 tasks:
 nine policy/operations retrieval cases and three long settlement-record cases.
 It records calibration/holdout membership and maps normal, no-answer, stale,
 conflicting-source, long-context, dependency, budget, cancellation, and recovery
@@ -159,13 +159,13 @@ coverage to existing evaluators and tests.
 Generate the network-free evidence pack with:
 
 ```bash
-make reference-eval
+make benchmark-evidence
 ```
 
-By default the command writes to `.cache/reference-task`; set
-`REFERENCE_REPORT_DIR` to choose another directory. The pack contains the
+By default the command writes to `.cache/benchmark-suite`; set
+`BENCHMARK_REPORT_DIR` to choose another directory. The pack contains the
 manifest, `rag-offline.json`, `tool-task-protocol.json`, failure/recovery JSONL,
-and a saved recoverable Run Replay. Every offline item is explicitly marked or
+and `benchmark-recovery-replay.json`. Every offline item is explicitly marked or
 named as deterministic/simulated evidence. It proves protocol, accounting,
 retrieval, and recovery behavior, not real-model quality.
 
@@ -174,4 +174,6 @@ Its `full_context` and `with_tools` arms receive the same task and complete
 source access; `without_tools` remains a preview-only diagnostic. Semantic RAG
 runs continue to use the explicit profile described above. These are separate
 reports because embedding quality, answer quality, and recovery correctness have
-different denominators; CASE-001 does not flatten them into one score.
+different denominators; CASE-001 does not flatten them into one score. The suite
+defines the stable tasks; a Baseline Report is a versioned result produced by
+running those tasks and remains a separate concept.

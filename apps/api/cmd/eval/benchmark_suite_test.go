@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-type referenceTaskManifest struct {
+type benchmarkSuiteManifest struct {
 	SchemaVersion string `json:"schema_version"`
 	TaskSets      []struct {
 		Dataset string `json:"dataset"`
@@ -26,17 +26,17 @@ type referenceTaskManifest struct {
 	} `json:"failure_scenarios"`
 }
 
-func TestReferenceTaskManifestMatchesSourceDatasets(t *testing.T) {
+func TestBenchmarkSuiteManifestMatchesSourceDatasets(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..")
-	content, err := os.ReadFile(filepath.Join(root, "examples", "reference-task.v1.json"))
+	content, err := os.ReadFile(filepath.Join(root, "examples", "benchmark-suite.v1.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var manifest referenceTaskManifest
+	var manifest benchmarkSuiteManifest
 	if err := json.Unmarshal(content, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if manifest.SchemaVersion != "agentflow-reference-task-v1" {
+	if manifest.SchemaVersion != "agentflow-benchmark-suite-v1" {
 		t.Fatalf("unexpected schema version %q", manifest.SchemaVersion)
 	}
 
@@ -45,7 +45,7 @@ func TestReferenceTaskManifestMatchesSourceDatasets(t *testing.T) {
 		source := sourceCaseIDs(t, filepath.Join(root, filepath.FromSlash(taskSet.Dataset)))
 		for _, task := range taskSet.Cases {
 			if !source[task.ID] || taskIDs[task.ID] {
-				t.Fatalf("missing or duplicate reference task %q", task.ID)
+				t.Fatalf("missing or duplicate benchmark task %q", task.ID)
 			}
 			taskIDs[task.ID], splits[task.Split] = true, true
 			for _, item := range task.Coverage {
@@ -54,11 +54,11 @@ func TestReferenceTaskManifestMatchesSourceDatasets(t *testing.T) {
 		}
 	}
 	if len(taskIDs) != 12 || !splits["calibration"] || !splits["holdout"] {
-		t.Fatalf("reference suite must contain 12 split tasks: tasks=%d splits=%v", len(taskIDs), splits)
+		t.Fatalf("benchmark suite must contain 12 split tasks: tasks=%d splits=%v", len(taskIDs), splits)
 	}
 	for _, required := range []string{"normal", "no_answer", "stale_version", "conflicting_sources", "long_context"} {
 		if !coverage[required] {
-			t.Fatalf("reference suite does not cover %q", required)
+			t.Fatalf("benchmark suite does not cover %q", required)
 		}
 	}
 
@@ -69,9 +69,9 @@ func TestReferenceTaskManifestMatchesSourceDatasets(t *testing.T) {
 		}
 		evidenceFiles[evidence.File] = true
 	}
-	for _, required := range []string{"rag-offline.json", "tool-task-protocol.json", "reference-recovery-replay.json"} {
+	for _, required := range []string{"rag-offline.json", "tool-task-protocol.json", "benchmark-recovery-replay.json"} {
 		if !evidenceFiles[required] {
-			t.Fatalf("reference evidence does not declare %q", required)
+			t.Fatalf("benchmark evidence does not declare %q", required)
 		}
 	}
 	failures := map[string]bool{}
@@ -80,7 +80,7 @@ func TestReferenceTaskManifestMatchesSourceDatasets(t *testing.T) {
 	}
 	for _, required := range []string{"dependency_failure", "budget_exhaustion", "recoverable_run", "uncertain_side_effect"} {
 		if !failures[required] {
-			t.Fatalf("reference suite does not declare %q", required)
+			t.Fatalf("benchmark suite does not declare %q", required)
 		}
 	}
 }

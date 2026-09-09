@@ -1,8 +1,8 @@
 {
-  "schema_version": "agentflow-reference-task-v1",
-  "id": "evidence-backed-policy-and-record-review",
+  "schema_version": "agentflow-benchmark-suite-v1",
+  "id": "evidence-backed-policy-and-record-benchmark",
   "version": "1.0.0",
-  "description": "Fixed reference suite joining policy retrieval, long-record evidence access, failure accounting, and recoverable execution without adding another runtime.",
+  "description": "Fixed benchmark suite joining policy retrieval, long-record evidence access, failure accounting, and recoverable execution without adding another runtime.",
   "task_sets": [
     {
       "id": "policy_retrieval",
@@ -35,7 +35,7 @@
     {"file": "rag-offline.json", "kind": "deterministic_retrieval", "simulated": true},
     {"file": "tool-task-protocol.json", "kind": "provider_protocol_fixture", "simulated": true},
     {"file": "tool-failure-paths.jsonl", "kind": "failure_test_events", "simulated": true},
-    {"file": "reference-recovery-replay.json", "kind": "run_replay", "simulated": true},
+    {"file": "benchmark-recovery-replay.json", "kind": "run_replay", "simulated": true},
     {"file": "recovery-paths.jsonl", "kind": "recovery_test_events", "simulated": true}
   ],
   "failure_scenarios": [
