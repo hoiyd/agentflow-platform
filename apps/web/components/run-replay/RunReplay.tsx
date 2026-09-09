@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { GitCompareArrows } from "lucide-react";
 import type { EpisodeReport, RecoveryAction, RunReplay as RunReplayData } from "../../lib/api";
 import { getEpisodeReport, getRunReplay, resumeRun } from "../../lib/api";
 import { RunUsagePanel } from "./RunUsagePanel";
@@ -20,6 +21,7 @@ import { TaskStateChanges } from "./TaskStateChanges";
 import { RuntimeDiagnostics } from "./RuntimeDiagnostics";
 import { DelegationTopology } from "./DelegationTopology";
 import { RecoverySummaryPanel, ToolEffectReconciliationPanel } from "./RecoveryActions";
+import { EvidenceComparison } from "./EvidenceComparison";
 
 type Props = {
   runId: string;
@@ -32,6 +34,7 @@ export function RunReplay({ runId }: Props) {
   const [selectedEventId, setSelectedEventId] = useState("");
   const [error, setError] = useState("");
   const [isResuming, setIsResuming] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
   const hasNavigatedAfterResume = useRef(false);
 
   useEffect(() => {
@@ -187,6 +190,14 @@ export function RunReplay({ runId }: Props) {
           <p>{replay.conversation.title}</p>
         </div>
         <div className="replay-header-actions">
+          <button
+            className={`run-link evidence-comparison-trigger ${showComparison ? "active" : ""}`}
+            onClick={() => setShowComparison((visible) => !visible)}
+            type="button"
+          >
+            <GitCompareArrows aria-hidden="true" size={15} />
+            {showComparison ? "Close comparison" : "Compare run"}
+          </button>
           <span className={`replay-status ${replay.run.status}`}>{replay.run.status}</span>
         </div>
       </header>
@@ -214,6 +225,10 @@ export function RunReplay({ runId }: Props) {
         <Metric label="Tool calls" value={String(replay.summary.tool_calls)} />
         <Metric label="Errors" value={String(replay.summary.error_count)} tone={replay.summary.error_count > 0 ? "danger" : ""} />
       </section>
+
+      {showComparison && episodeReport ? (
+        <EvidenceComparison currentReplay={replay} currentReport={episodeReport} onClose={() => setShowComparison(false)} />
+      ) : null}
 
       <RunUsagePanel
         activeRuntimeMS={replay.run.active_runtime_ms ?? 0}

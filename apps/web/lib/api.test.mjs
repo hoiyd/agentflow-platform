@@ -82,6 +82,22 @@ test("replay preserves frozen budget and settled usage", async (t) => {
   assert.equal(replay.usage_ledger.entries.length, 1);
 });
 
+test("replay preserves the frozen runtime snapshot for evidence comparison", async (t) => {
+  mockFetch(t, replayPayload({
+    runtime_snapshot: {
+      schema_version: 12,
+      mode: "single",
+      model: { provider: "openai", model: "gpt-test" },
+      context_assembly: { history_max_tokens: 2000 }
+    }
+  }));
+
+  const replay = await getRunReplay("run-1");
+
+  assert.equal(replay.runtime_snapshot.mode, "single");
+  assert.equal(replay.runtime_snapshot.model.model, "gpt-test");
+});
+
 test("replay preserves durable recovery metadata", async (t) => {
   mockFetch(t, replayPayload({
     stage_checkpoints: [{ stage_id: "stage-1", status: "committed", event_cursor: 9 }],

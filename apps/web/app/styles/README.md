@@ -22,6 +22,7 @@ Global styles load in two ordered layers from `app/layout.tsx`:
 - `memory.css`: manual semantic-memory write and recall workspace.
 - `collaboration.css`: multi-agent DAG, Loop Trace, and trace controls.
 - `replay-overlays.css`: run replay, event details, and shared overlays.
+- `evidence-comparison.css`: read-only baseline comparison within Run Replay.
 - `runtime-diagnostics.css`: event-derived protocol diagnostics shown on Run Replay.
 - `recovery-summary.css`: stopped-run evidence, recovery actions, and Tool effect reconciliation.
 - `task-state-replay.css`: bounded Task State Revision projection on Run Replay.
