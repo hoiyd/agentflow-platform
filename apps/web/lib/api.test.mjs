@@ -129,6 +129,25 @@ test("replay preserves recovery actions and evidence summary", async (t) => {
   assert.equal(replay.recovery_summary.artifact_refs[0], "run://child/stages/worker");
 });
 
+test("replay normalizes nullable recovery collections", async (t) => {
+  mockFetch(t, replayPayload({
+    recovery_summary: {
+      reason: "run_failed",
+      title: "Run failed",
+      message: "The run stopped.",
+      evidence: null,
+      artifact_refs: null,
+      actions: null
+    }
+  }));
+
+  const replay = await getRunReplay("run-1");
+
+  assert.deepEqual(replay.recovery_summary.evidence, []);
+  assert.deepEqual(replay.recovery_summary.artifact_refs, []);
+  assert.deepEqual(replay.recovery_summary.actions, []);
+});
+
 test("tool effect clients preserve conflict versions and commands", async (t) => {
   const requests = [];
   const effect = {
