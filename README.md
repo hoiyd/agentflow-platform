@@ -341,6 +341,7 @@ require a disposable database through `TEST_DATABASE_URL`.
 
 ```text
 agentflow-platform/
+  api/                     shared OpenAPI contract
   apps/
     api/
       app/                 application composition root
@@ -348,7 +349,6 @@ agentflow-platform/
       internal/            domain capabilities and adapters
     web/                   Next.js workbench
   docs/                    architecture and operational documentation
-  packages/shared/         reserved shared-contract boundary
 ```
 
 ## Suggested Review Path

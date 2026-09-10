@@ -1,13 +1,11 @@
-/* Tools and knowledge */
+/* Tools */
 
 .tools-panel,
-.knowledge-panel,
 .replay-page {
   background: var(--bg);
 }
 
-.tools-panel,
-.knowledge-panel {
+.tools-panel {
   padding: 24px;
 }
 
@@ -37,31 +35,3 @@
   border-radius: 4px;
   background: #ffffff;
 }
-
-.knowledge-grid,
-.knowledge-search,
-.rag-evaluation,
-.knowledge-column,
-.document-card,
-.rag-result-card,
-.evaluation-case,
-.document-detail-inline,
-.chunk-card,
-.embedding-status {
-  border-radius: 5px;
-}
-
-.knowledge-column,
-.knowledge-search,
-.rag-evaluation {
-  background: #ffffff;
-  box-shadow: none;
-}
-
-.document-card,
-.rag-result-card,
-.evaluation-case,
-.chunk-card {
-  background: #f9fafb;
-}
-

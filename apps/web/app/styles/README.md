@@ -1,14 +1,16 @@
 # Stylesheet Organization
 
-The frontend currently uses a transitional two-layer stylesheet structure. The
-first layer preserves original component geometry; the Precision Workbench
-layer owns the current visual system and focused UX corrections. This is an
-explicit migration state, not a recommendation to keep adding global overrides.
+The frontend currently uses transitional ordered stylesheet layers. Legacy
+feature files preserve component geometry; the Precision Workbench layer owns
+the current visual system and focused UX corrections. Features that have
+finished the migration, such as Knowledge, use a single authoritative module
+set instead of adding another global override.
 
-Global styles load in two ordered layers from `app/layout.tsx`:
+Global styles load in ordered feature layers from `app/layout.tsx`:
 
-1. The top-level files (`base.css`, `shell.css`, `chat.css`, and related files) contain the original component and page structure. Collaboration components are grouped under `collaboration/`.
+1. The top-level files (`shell.css`, `chat.css`, and related files) contain original component geometry that has not yet moved. Collaboration components are grouped under `collaboration/`.
 2. `workbench/` contains the Precision Workbench theme and UX refinements. Its files must remain in the import order declared in `layout.tsx` because later modules include responsive overrides.
+3. `knowledge/` is authoritative for the Knowledge workspace and is split by task boundary instead of using a legacy-plus-override pair.
 
 ## Workbench Modules
 
@@ -18,7 +20,7 @@ Global styles load in two ordered layers from `app/layout.tsx`:
 - `chat.css`: mode chooser, messages, markdown, and empty state.
 - `task-state.css`: Conversation Task State trigger, inspector layout, and fact rows.
 - `composer.css`: composer, agent selector, and agent dialogs.
-- `tools-knowledge.css`: tools and knowledge workspace refinements.
+- `tools.css`: tools workspace refinements.
 - `memory.css`: manual semantic-memory write and recall workspace.
 - `collaboration.css`: multi-agent DAG, Loop Trace, and trace controls.
 - `replay-overlays.css`: run replay, event details, and shared overlays.
@@ -29,6 +31,13 @@ Global styles load in two ordered layers from `app/layout.tsx`:
 - `responsive.css`: breakpoint-specific overrides; keep this last.
 
 Add new rules to the narrowest matching module. Shared tokens belong in `foundation.css`; avoid creating another cross-feature override file.
+
+## Knowledge Modules
+
+- `layout.css`: page shell, section navigation, shared headings, fields, errors, and empty states.
+- `documents.css`: ingestion, document library, document detail, and chunks.
+- `retrieval.css`: search controls, retrieval diagnostics, evidence, and model context.
+- `evaluation.css`: golden-dataset input, evaluation metrics, and case results.
 
 ## Collaboration Modules
 

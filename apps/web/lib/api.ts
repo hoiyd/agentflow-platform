@@ -1,228 +1,29 @@
+import type { components } from "./api-contract.gen";
 import type { CompletionContractInput } from "./verification";
 import { apiArray, apiJSON, apiObject, apiRequest, apiVoid, expectObject, isObject } from "./api-client.ts";
 
-export type Conversation = {
-  id: string;
-  workspace_id?: string;
-  title: string;
-  created_at: string;
-  updated_at: string;
-  started_at?: string;
-  heartbeat_at?: string;
-  completed_at?: string;
-};
+type ContractSchemas = components["schemas"];
 
-export type Message = {
-  id: string;
-  workspace_id?: string;
-  conversation_id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  citations?: RAGCitation[];
-  created_at: string;
-};
-
-export type RAGCitation = {
-  source_id: string;
-  document_id: string;
-  document_title: string;
-  document_version?: string;
-  chunk_id: string;
-  source_chunk_ids?: string[];
-  section_path?: string[];
-  start_offset?: number;
-  end_offset?: number;
-};
-
-export type RunEvent = {
-  id: string;
-  type: string;
-  schema_version: number;
-  sequence: number;
-  conversation_id?: string;
-  run_id: string;
-  stage_id?: string;
-  turn_id?: string;
-  parent_event_id?: string;
-  payload: Record<string, unknown>;
-  timestamp: string;
-};
-
-export type ChatEvent =
-  | { type: "conversation"; conversation_id: string }
-  | { type: "run_state"; conversation_id: string; run_id: string; agent_id: string; status: string }
-  | { type: "run_progress"; conversation_id: string; run_id: string; agent_id?: string; iteration?: number; max_iterations?: number; elapsed_seconds?: number; max_runtime_seconds?: number; output_chars?: number; max_output_chars?: number; tool_calls?: number; max_tool_calls?: number; stop_reason?: string }
-  | { type: "model_delta"; delta: string }
-  | { type: "stage_state"; conversation_id: string; run_id: string; agent_id?: string; role: string; status: string; iteration?: number; input?: string; output?: string; error?: string }
-  | {
-      type: "done";
-      conversation_id: string;
-      title?: string;
-      message_id?: string;
-      run_id?: string;
-      agent_id?: string;
-      status?:
-        | "idle"
-        | "queued"
-        | "running"
-        | "waiting_for_user"
-        | "completed"
-        | "failed"
-        | "failed_recoverable"
-        | "canceling"
-        | "canceled"
-        | string;
-      verification_status?:
-        | "not_required"
-        | "pending"
-        | "running"
-        | "passed"
-        | "failed"
-        | "blocked"
-        | "stale"
-        | string;
-      citations?: RAGCitation[];
-      invalid_citation_ids?: string[];
-    }
-  | { type: "error"; error: string; code?: string; source?: string; category?: string; retryable?: boolean; request_id?: string };
-
-export type AgentInfo = {
-  id: string;
-  name: string;
-  description: string;
-  system_prompt: string;
-  tools: string[];
-  memory_enabled: boolean;
-  retrieval_enabled: boolean;
-  archived?: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-export type ToolInfo = {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  enabled: boolean;
-};
-
-export type ChatMode = "single" | "multi_agent" | "autonomous";
-
-export type RunInfo = {
-  workspace_id?: string;
-  id: string;
-  agent_id: string;
-  conversation_id: string;
-  status:
-    | "idle"
-    | "queued"
-    | "running"
-    | "waiting_for_user"
-    | "completed"
-    | "failed"
-    | "failed_recoverable"
-    | "canceling"
-    | "canceled"
-    | string;
-  verification_status?: "not_required" | "pending" | "running" | "passed" | "failed" | "blocked" | "stale" | string;
-  completion_contract?: CompletionContractInput | Record<string, unknown>;
-  error?: string;
-  started_at?: string;
-  execution_started_at?: string;
-  active_runtime_ms?: number;
-  heartbeat_at?: string;
-  completed_at?: string;
-  created_at: string;
-  updated_at: string;
-};
-
-export type CollaborationStepInfo = {
-  id: string;
-  run_id: string;
-  conversation_id: string;
-  role: string;
-  agent_id?: string;
-  status:
-    | "idle"
-    | "queued"
-    | "running"
-    | "waiting_for_user"
-    | "completed"
-    | "failed"
-    | "failed_recoverable"
-    | "canceling"
-    | "canceled"
-    | string;
-  iteration?: number;
-  input: string;
-  output: string;
-  error?: string;
-  created_at: string;
-  updated_at: string;
-};
-
-export type RunTraceSummary = {
-  run_id: string;
-  status: string;
-  total_duration_ms: number;
-  total_tokens: number;
-  prompt_tokens: number;
-  completion_tokens: number;
-  token_usage_estimated: boolean;
-  llm_calls: number;
-  tool_calls: number;
-  error_count: number;
-};
-
-export type RuntimeRunBudget = {
-  max_model_calls?: number;
-  max_prompt_tokens?: number;
-  max_completion_tokens?: number;
-  max_total_tokens?: number;
-  max_tool_calls?: number;
-  max_runtime_ms?: number;
-  max_estimated_cost_micros?: number;
-  input_cost_per_million_tokens_micros?: number;
-  output_cost_per_million_tokens_micros?: number;
-};
-
-export type RunUsageTotals = {
-  model_calls: number;
-  tool_calls: number;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  estimated_cost_micros: number;
-  open_reservations: number;
-};
-
-export type RunUsageEntry = {
-  id: string;
-  run_id: string;
-  operation_id: string;
-  stage_id?: string;
-  turn_id?: string;
-  kind: "model.reservation" | "model.settlement" | "tool.execution" | string;
-  purpose: "primary" | "router" | "compaction" | string;
-  model?: string;
-  tool_name?: string;
-  model_calls?: number;
-  tool_calls?: number;
-  prompt_tokens?: number;
-  completion_tokens?: number;
-  total_tokens?: number;
-  estimated_cost_micros?: number;
-  estimated?: boolean;
-  timestamp: string;
-};
-
-export type RunUsageLedger = {
-  run_id: string;
-  budget: RuntimeRunBudget;
-  totals: RunUsageTotals;
-  entries: RunUsageEntry[];
-  updated_at?: string;
-};
+export type APIErrorResponse = ContractSchemas["ErrorResponse"];
+export type APIHealth = ContractSchemas["HealthResponse"];
+export type ChatRequest = ContractSchemas["ChatRequest"];
+export type AgentConfigInput = ContractSchemas["AgentConfigRequest"];
+export type Conversation = ContractSchemas["Conversation"];
+export type RAGCitation = ContractSchemas["RAGCitation"];
+type APIMessage = ContractSchemas["Message"];
+export type Message = Omit<APIMessage, "workspace_id"> & { workspace_id?: string };
+export type RunEvent = ContractSchemas["RunEvent"];
+export type ChatEvent = Exclude<ContractSchemas["ChatStreamEvent"], RunEvent>;
+export type AgentInfo = ContractSchemas["Agent"];
+export type ToolInfo = ContractSchemas["ToolInfo"];
+export type ChatMode = ContractSchemas["ChatMode"];
+export type RunInfo = ContractSchemas["Run"];
+export type CollaborationStepInfo = ContractSchemas["CollaborationStep"];
+export type RunTraceSummary = ContractSchemas["RunTraceSummary"];
+export type RuntimeRunBudget = ContractSchemas["RuntimeRunBudget"];
+export type RunUsageTotals = ContractSchemas["RunUsageTotals"];
+export type RunUsageEntry = ContractSchemas["RunUsageEntry"];
+export type RunUsageLedger = ContractSchemas["RunUsageLedger"];
 
 export type RuntimeInvariantFailure = {
   code: string;
@@ -706,13 +507,27 @@ export async function listConversations(signal?: AbortSignal): Promise<Conversat
   );
 }
 
+export async function getAPIHealth(signal?: AbortSignal): Promise<APIHealth> {
+  const health = await apiObject<APIHealth>(
+    "/health",
+    { cache: "no-store", signal },
+    { errorMessage: "Failed to reach API" },
+    "API health"
+  );
+  if (health.status !== "ok") {
+    throw new Error(`API health check returned ${health.status || "an unknown status"}`);
+  }
+  return health;
+}
+
 export async function createConversation(title: string): Promise<Conversation> {
+  const input: ContractSchemas["CreateConversationRequest"] = { title };
   return apiObject<Conversation>(
     "/api/conversations",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title })
+      body: JSON.stringify(input)
     },
     { errorMessage: "Failed to create conversation" },
     "conversation"
@@ -720,12 +535,13 @@ export async function createConversation(title: string): Promise<Conversation> {
 }
 
 export async function updateConversationTitle(conversationId: string, title: string): Promise<Conversation> {
+  const input: ContractSchemas["UpdateConversationRequest"] = { title };
   return apiObject<Conversation>(
     `/api/conversations/${conversationId}`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title })
+      body: JSON.stringify(input)
     },
     { errorMessage: "Failed to update conversation" },
     "conversation"
@@ -784,13 +600,7 @@ export async function getTaskStateRevision(conversationId: string, version: numb
 }
 
 export async function streamChat(
-  input: {
-    conversation_id?: string;
-    agent_id?: string;
-    message: string;
-    mode?: ChatMode;
-    completion_contract?: CompletionContractInput;
-  },
+  input: Omit<ChatRequest, "completion_contract"> & { completion_contract?: CompletionContractInput },
   onEvent: (event: ChatEvent) => void
 ) {
   const response = await apiRequest(
@@ -810,12 +620,13 @@ export async function continueRun(
   input: { run_id: string; plan: string },
   onEvent: (event: ChatEvent) => void
 ) {
+  const body: ContractSchemas["ContinueRunRequest"] = { plan: input.plan };
   const response = await apiRequest(
     `/api/runs/${input.run_id}/continue`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan: input.plan })
+      body: JSON.stringify(body)
     },
     { errorMessage: "Continue request failed", requireBody: true }
   );
@@ -827,12 +638,13 @@ export async function resumeRun(
   input: { run_id: string; user_input: string },
   onEvent: (event: ChatEvent) => void
 ) {
+  const body: ContractSchemas["ResumeRunRequest"] = { user_input: input.user_input };
   const response = await apiRequest(
     `/api/runs/${input.run_id}/resume`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_input: input.user_input })
+      body: JSON.stringify(body)
     },
     { errorMessage: "Resume request failed", includeErrorBody: true, requireBody: true }
   );
@@ -849,8 +661,8 @@ export async function cancelRun(runId: string): Promise<RunInfo> {
   );
 }
 
-export async function verifyRun(runId: string): Promise<{ run: RunInfo; decision: Record<string, unknown> }> {
-  return apiObject<{ run: RunInfo; decision: Record<string, unknown> }>(
+export async function verifyRun(runId: string): Promise<ContractSchemas["VerifyRunResponse"]> {
+  return apiObject<ContractSchemas["VerifyRunResponse"]>(
     `/api/runs/${runId}/verify`,
     { method: "POST" },
     { errorMessage: "Verify request failed" },
@@ -907,13 +719,29 @@ function projectRunEvent(event: ChatEvent | RunEvent): ChatEvent {
   };
   if (event.type.startsWith("run.")) return {
     type: "run_state", conversation_id: event.conversation_id ?? "", run_id: event.run_id,
-    agent_id: stringValue(payload.agent_id) ?? "", status: stringValue(payload.status) ?? event.type.slice("run.".length)
+    agent_id: stringValue(payload.agent_id) ?? "", status: runStatusValue(payload.status) ?? fallbackRunStatus(event.type)
   };
   return { type: "model_delta", delta: "" };
 }
 
 function stringValue(value: unknown): string | undefined { return typeof value === "string" ? value : undefined; }
 function numberValue(value: unknown): number | undefined { return typeof value === "number" ? value : undefined; }
+function runStatusValue(value: unknown): ContractSchemas["RunStatus"] | undefined {
+  if (typeof value !== "string") return undefined;
+  const statuses: ContractSchemas["RunStatus"][] = [
+    "queued", "running", "waiting_for_user", "completed", "failed", "failed_recoverable", "canceling", "canceled"
+  ];
+  return statuses.find((status) => status === value);
+}
+function fallbackRunStatus(eventType: string): ContractSchemas["RunStatus"] {
+  if (eventType === "run.created") return "queued";
+  if (eventType === "run.waiting_for_user") return "waiting_for_user";
+  if (eventType === "run.completed") return "completed";
+  if (eventType === "run.failed") return "failed";
+  if (eventType === "run.cancel_requested") return "canceling";
+  if (eventType === "run.canceled") return "canceled";
+  return "running";
+}
 
 export async function listAgents(): Promise<AgentInfo[]> {
   const agents = await apiArray<AgentInfo>(
@@ -925,7 +753,7 @@ export async function listAgents(): Promise<AgentInfo[]> {
 }
 
 export async function createAgent(
-  input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled">>
+  input: AgentConfigInput
 ): Promise<AgentInfo> {
   const agent = await apiObject<AgentInfo>(
     "/api/agents",
@@ -942,7 +770,7 @@ export async function createAgent(
 
 export async function updateAgent(
   agentId: string,
-  input: Partial<Pick<AgentInfo, "name" | "description" | "system_prompt" | "tools" | "memory_enabled" | "retrieval_enabled">>
+  input: AgentConfigInput
 ): Promise<AgentInfo> {
   const agent = await apiObject<AgentInfo>(
     `/api/agents/${agentId}`,
@@ -1073,10 +901,12 @@ export async function getRunProjection(runId: string): Promise<RunProjectionSnap
   const runProjection = expectObject<Record<string, unknown>>(projection.run, "run projection state");
   const run = {
     id: stringValue(runProjection.run_id) ?? runId,
+    workspace_id: "",
     agent_id: "",
     conversation_id: stringValue(runProjection.conversation_id) ?? "",
-    status: stringValue(runProjection.status) ?? "",
-    verification_status: stringValue(runProjection.verification_status),
+    status: runStatusValue(runProjection.status) ?? "running",
+    verification_status: "not_required",
+    active_runtime_ms: 0,
     created_at: "",
     updated_at: ""
   } satisfies RunInfo;

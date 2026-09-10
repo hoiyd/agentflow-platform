@@ -9,17 +9,19 @@ import (
 	"strings"
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/store"
 )
 
 func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
-	var req domain.ChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var input apicontract.ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	req := chatRequestFromContract(input)
 	workspaceID, matches := resolvePayloadWorkspace(r, req.WorkspaceID)
 	if !matches {
 		writeError(w, http.StatusBadRequest, "workspace_id does not match request scope")
@@ -263,7 +265,7 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req domain.ContinueRunRequest
+	var req apicontract.ContinueRunRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
@@ -342,7 +344,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req domain.ResumeRunRequest
+	var req apicontract.ResumeRunRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return

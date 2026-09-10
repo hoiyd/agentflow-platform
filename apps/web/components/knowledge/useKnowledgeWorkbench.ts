@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChangeEvent } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   type ContextSelectionInfo,
   type DocumentDetail,
@@ -23,6 +23,7 @@ import {
   searchRAG,
   uploadDocument
 } from "../../lib/knowledge-api";
+import { createLatestRequestController } from "../../lib/latest-request";
 
 const DEFAULT_RAG_EVAL_CASES = `{
   "schema_version": "rag-golden-dataset-v1",
@@ -73,8 +74,13 @@ export function useKnowledgeWorkbench() {
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
   const [isLoadingDocumentDetail, setIsLoadingDocumentDetail] = useState(false);
   const [deletingDocumentId, setDeletingDocumentId] = useState("");
+  const [documentRequests] = useState(createLatestRequestController);
+
+  useEffect(() => () => documentRequests.cancel(), [documentRequests]);
 
   async function refreshDocuments() {
+    documentRequests.cancel();
+    setIsLoadingDocumentDetail(false);
     try {
       setError("");
       setDocuments(await listDocuments());
@@ -199,15 +205,23 @@ export function useKnowledgeWorkbench() {
   }
 
   async function selectDocument(documentId: string) {
+    const request = documentRequests.begin();
     setSelectedDocumentId(documentId);
     setIsLoadingDocumentDetail(true);
     setError("");
     try {
-      setSelectedDocument(await getDocument(documentId));
+      const detail = await getDocument(documentId, request.signal);
+      if (request.isCurrent()) {
+        setSelectedDocument(detail);
+      }
     } catch (selectionError) {
-      setError(selectionError instanceof Error ? selectionError.message : "Failed to load document");
+      if (request.isCurrent()) {
+        setError(selectionError instanceof Error ? selectionError.message : "Failed to load document");
+      }
     } finally {
-      setIsLoadingDocumentDetail(false);
+      if (request.isCurrent()) {
+        setIsLoadingDocumentDetail(false);
+      }
     }
   }
 
@@ -226,6 +240,8 @@ export function useKnowledgeWorkbench() {
       setDocuments((items) => items.filter((item) => item.id !== document.id));
       setResults((items) => items.filter((item) => item.document.id !== document.id));
       if (selectedDocumentId === document.id) {
+        documentRequests.cancel();
+        setIsLoadingDocumentDetail(false);
         setSelectedDocumentId("");
         setSelectedDocument(null);
       }

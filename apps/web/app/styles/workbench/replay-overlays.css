@@ -4,6 +4,15 @@
   padding: 24px 28px 48px;
 }
 
+.replay-secondary-error {
+  margin-bottom: 20px;
+  border: 1px solid color-mix(in srgb, var(--warning) 34%, var(--border));
+  border-radius: 5px;
+  background: #fffaf2;
+  color: var(--muted-strong);
+  padding: 12px 14px;
+}
+
 .replay-header h1 {
   font-family: var(--font-display);
   font-size: 28px;
@@ -15,6 +24,69 @@
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0;
+}
+
+.replay-evaluation-menu {
+  position: relative;
+}
+
+.replay-evaluation-menu summary {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--muted-strong);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  list-style: none;
+  padding: 0 9px;
+}
+
+.replay-evaluation-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.replay-evaluation-menu summary:hover,
+.replay-evaluation-menu[open] summary {
+  border-color: var(--border-strong);
+  color: var(--ink);
+}
+
+.replay-evaluation-menu[open] summary svg {
+  transform: rotate(180deg);
+}
+
+.replay-evaluation-menu-content {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px -14px rgba(15, 22, 31, 0.35);
+  padding: 4px;
+}
+
+.replay-evaluation-menu-content a {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 3px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 560;
+  padding: 0 9px;
+}
+
+.replay-evaluation-menu-content a:hover {
+  background: #edf1f5;
 }
 
 .recoverable-banner,

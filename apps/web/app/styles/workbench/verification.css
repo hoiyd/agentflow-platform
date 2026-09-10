@@ -21,6 +21,10 @@
   padding: 0 9px;
 }
 
+.agent-actions .verification-config-toggle {
+  min-height: 36px;
+}
+
 .verification-config-toggle strong {
   min-width: 24px;
   color: var(--muted);
@@ -41,7 +45,7 @@
 }
 
 .verification-config-dialog {
-  width: min(860px, 100%);
+  width: min(960px, 100%);
 }
 
 .verification-config-panel {
@@ -130,12 +134,14 @@
   height: 40px;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  overflow: hidden;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .verifier-tabs button {
+  flex: 1 0 max-content;
   min-width: 0;
   border: 0;
   border-right: 1px solid var(--border);

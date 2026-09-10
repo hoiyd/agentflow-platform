@@ -28,6 +28,7 @@ type RunEventProjectionOptions = {
   fallbackRunId: string;
   onConversation?: (event: Extract<ChatEvent, { type: "conversation" }>) => void;
   onDone?: (event: Extract<ChatEvent, { type: "done" }>) => void;
+  onEvent?: () => void;
   onRunState?: (event: Extract<ChatEvent, { type: "run_state" }>) => void;
   setAutonomousProgress: Dispatch<SetStateAction<AutonomousProgress | null>>;
   setCollaborationSteps: Dispatch<SetStateAction<CollaborationStepView[]>>;
@@ -40,6 +41,7 @@ type RunEventProjectionOptions = {
 
 export function createRunEventHandler(options: RunEventProjectionOptions) {
   return (event: ChatEvent) => {
+    options.onEvent?.();
     if (event.type === "conversation") {
       options.onConversation?.(event);
     }

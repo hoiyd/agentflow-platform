@@ -20,7 +20,7 @@
 }
 
 .agent-bar.single {
-  grid-template-columns: minmax(260px, 25%) minmax(0, 1fr) 230px;
+  grid-template-columns: minmax(260px, 25%) minmax(0, 1fr) auto;
 }
 
 .agent-select {
@@ -63,13 +63,16 @@
 }
 
 .agent-actions {
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 6px;
 }
 
 .agent-config-toggle,
 .agent-create-button {
   min-height: 36px;
+  min-width: 104px;
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -81,16 +84,17 @@
 }
 
 .agent-config-toggle {
-  border-color: var(--ink);
-  background: var(--ink);
+  border-color: var(--border);
+  background: #ffffff;
   box-shadow: none;
-  color: #ffffff;
+  color: var(--ink);
 }
 
 .agent-config-toggle:hover,
 .agent-config-toggle.active {
-  border-color: #292e35;
-  background: #292e35;
+  border-color: var(--border-strong);
+  background: var(--surface-soft);
+  color: var(--ink);
 }
 
 .agent-create-button {

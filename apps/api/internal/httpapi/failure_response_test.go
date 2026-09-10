@@ -150,6 +150,16 @@ func TestFormatHTTPFailureLogKeepsRawErrorAndCorrelationFields(t *testing.T) {
 	}
 }
 
+type apiErrorResponse struct {
+	Error     string `json:"error"`
+	Code      string `json:"code"`
+	Source    string `json:"source"`
+	Category  string `json:"category"`
+	Retryable bool   `json:"retryable"`
+	Operation string `json:"operation,omitempty"`
+	RequestID string `json:"request_id"`
+}
+
 func decodeAPIErrorResponse(t *testing.T, recorder *httptest.ResponseRecorder) apiErrorResponse {
 	t.Helper()
 	var response apiErrorResponse

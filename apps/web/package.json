@@ -7,8 +7,12 @@
     "dev:turbo": "next dev --turbo",
     "build": "next build",
     "start": "next start",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test lib/*.test.mjs",
+    "test": "npm run test:lib && npm run test:components",
+    "test:lib": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test lib/*.test.mjs",
+    "test:components": "vitest run",
     "test:coverage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --experimental-test-coverage --test-coverage-include='lib/**/*.ts' --test lib/*.test.mjs",
+    "contract:generate": "openapi-typescript ../../api/openapi.yaml -o lib/api-contract.gen.ts",
+    "contract:check": "npm run contract:generate && git diff --exit-code -- lib/api-contract.gen.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
@@ -23,12 +27,16 @@
     "react-dom": "19.0.0"
   },
   "devDependencies": {
+    "@testing-library/react": "16.3.0",
     "@types/node": "22.10.2",
     "@types/react": "19.0.1",
     "@types/react-dom": "19.0.2",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.6",
-    "typescript": "5.7.2"
+    "jsdom": "26.1.0",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.7.2",
+    "vitest": "3.2.4"
   },
   "overrides": {
     "postcss": "8.5.10"

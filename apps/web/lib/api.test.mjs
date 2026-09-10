@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { APIError } from "./api-client.ts";
-import { getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listToolEffects, patchTaskState, reconcileToolEffect } from "./api.ts";
+import { APIError, apiRequest } from "./api-client.ts";
+import { getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listToolEffects, patchTaskState, reconcileToolEffect } from "./api.ts";
 import {
   createDocument,
   deleteDocument,
@@ -328,6 +328,37 @@ test("shared transport rejects invalid JSON at the API boundary", async (t) => {
   await assert.rejects(() => getRunUsage("run-invalid-json"), /Failed to load run usage: invalid JSON response/);
 });
 
+test("shared transport shows structured errors but keeps raw bodies private by default", async (t) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("upstream token=secret", { status: 502 });
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  await assert.rejects(
+    () => apiRequest("/failure", {}, { errorMessage: "Request failed" }),
+    (error) => {
+      assert.equal(error instanceof APIError, true);
+      assert.equal(error.message, "Request failed: 502");
+      return true;
+    }
+  );
+});
+
+test("health client validates the live API status", async (t) => {
+  mockFetch(t, { status: "ok" }, (url, options) => {
+    assert.match(String(url), /\/health$/);
+    assert.equal(options.cache, "no-store");
+  });
+
+  assert.deepEqual(await getAPIHealth(), { status: "ok" });
+});
+
+test("health client rejects a non-ready API status", async (t) => {
+  mockFetch(t, { status: "starting" });
+  await assert.rejects(() => getAPIHealth(), /health check returned starting/);
+});
+
 test("run usage client calls the dedicated endpoint", async (t) => {
   let requestedURL = "";
   let workspaceID = "";
@@ -497,9 +528,12 @@ test("document upload trims an optional title and sends multipart data", async (
 });
 
 test("document detail normalizes missing chunks", async (t) => {
-  mockFetch(t, { document: { id: "doc-1", title: "Runbook" }, chunks: null });
+  const controller = new AbortController();
+  mockFetch(t, { document: { id: "doc-1", title: "Runbook" }, chunks: null }, (_url, options) => {
+    assert.equal(options.signal, controller.signal);
+  });
 
-  const detail = await getDocument("doc-1");
+  const detail = await getDocument("doc-1", controller.signal);
 
   assert.equal(detail.document.id, "doc-1");
   assert.deepEqual(detail.chunks, []);
@@ -555,7 +589,7 @@ test("RAG search exposes an unsuccessful HTTP status", async (t) => {
     () => searchRAG({ query: "failure" }),
     (error) => {
       assert.equal(error instanceof APIError, true);
-      assert.match(error.message, /Failed to search knowledge: 503/);
+      assert.match(error.message, /Failed to search knowledge: 503 Service Unavailable/);
       assert.equal(error.code, "embedding_unavailable");
       assert.equal(error.source, "model_provider");
       assert.equal(error.category, "availability");

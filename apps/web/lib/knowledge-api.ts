@@ -292,10 +292,10 @@ export async function uploadDocument(input: { file: File; title?: string }): Pro
   );
 }
 
-export async function getDocument(documentId: string): Promise<DocumentDetail> {
+export async function getDocument(documentId: string, signal?: AbortSignal): Promise<DocumentDetail> {
   const data = await apiObject<Record<string, unknown>>(
     `/api/documents/${documentId}`,
-    { cache: "no-store" },
+    { cache: "no-store", signal },
     { errorMessage: "Failed to load document" },
     "document detail"
   );
