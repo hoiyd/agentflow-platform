@@ -1,4 +1,4 @@
-.PHONY: help setup quickstart dev test golden-eval context-eval benchmark-evidence load-evidence
+.PHONY: help setup quickstart dev test golden-eval context-eval benchmark-evidence load-evidence contract-generate contract-check
 
 help:
 	@printf '%s\n' \
@@ -9,7 +9,8 @@ help:
 	  'make context-eval Run the deterministic Context quality regression gate' \
 	  'make benchmark-evidence Build the offline CASE-001 benchmark evidence pack' \
 	  'make load-evidence Run bounded load and soak evidence tests' \
-	  'make test        Run backend tests, frontend lint/tests, and production build'
+	  'make test        Run backend tests, frontend lint/tests, and production build' \
+	  'make contract-check Regenerate shared API DTOs and reject drift'
 
 setup:
 	@bash scripts/setup.sh
@@ -34,3 +35,10 @@ load-evidence:
 
 test:
 	@bash scripts/test.sh
+
+contract-generate:
+	cd apps/api && go generate ./internal/apicontract
+	cd apps/web && npm run contract:generate
+
+contract-check: contract-generate
+	git diff --exit-code -- apps/api/internal/apicontract/types.gen.go apps/web/lib/api-contract.gen.ts

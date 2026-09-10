@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
@@ -199,16 +200,6 @@ func rejectCredentialContent(w http.ResponseWriter, r *http.Request, value any) 
 	return false
 }
 
-type apiErrorResponse struct {
-	Error     string `json:"error"`
-	Code      string `json:"code"`
-	Source    string `json:"source"`
-	Category  string `json:"category"`
-	Retryable bool   `json:"retryable"`
-	Operation string `json:"operation,omitempty"`
-	RequestID string `json:"request_id"`
-}
-
 func writeFailure(w http.ResponseWriter, r *http.Request, status int, err error) {
 	info := describeHTTPFailure(status, err)
 	requestID := ensureRequestID(w)
@@ -250,10 +241,15 @@ func failureChatChunk(w http.ResponseWriter, r *http.Request, status int, err er
 func writeAPIError(w http.ResponseWriter, status int, message string, info failure.Info) {
 	message, _ = redaction.Text(message)
 	requestID := ensureRequestID(w)
-	writeJSON(w, status, apiErrorResponse{
-		Error: message, Code: info.Code, Source: info.Source,
-		Category: string(info.Category), Retryable: info.Retryable, Operation: info.Operation, RequestID: requestID,
-	})
+	category := string(info.Category)
+	response := apicontract.ErrorResponse{
+		Error: message, Code: &info.Code, Source: &info.Source,
+		Category: &category, Retryable: &info.Retryable, RequestId: &requestID,
+	}
+	if info.Operation != "" {
+		response.Operation = &info.Operation
+	}
+	writeJSON(w, status, response)
 }
 
 func ensureRequestID(w http.ResponseWriter) string {

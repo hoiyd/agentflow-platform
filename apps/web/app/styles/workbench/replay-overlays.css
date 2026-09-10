@@ -4,6 +4,15 @@
   padding: 24px 28px 48px;
 }
 
+.replay-secondary-error {
+  margin-bottom: 20px;
+  border: 1px solid color-mix(in srgb, var(--warning) 34%, var(--border));
+  border-radius: 5px;
+  background: #fffaf2;
+  color: var(--muted-strong);
+  padding: 12px 14px;
+}
+
 .replay-header h1 {
   font-family: var(--font-display);
   font-size: 28px;

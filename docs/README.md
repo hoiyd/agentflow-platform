@@ -80,6 +80,7 @@ the project.
 | [Bounded load and soak testing](operations/load-soak-testing.md) | How can process-local concurrency and cleanup behavior be reproduced without public models or unsupported capacity claims? |
 | [Evidence comparison view](operations/evidence-comparison.md) | Which identity and single-variable rules allow controlled Evaluation deltas to be shown? |
 | [API reference](reference/api-reference.md) | Which HTTP endpoints and response contracts are available? |
+| [API contract](architecture/api-contract.md) | How do OpenAPI-generated Go DTOs and TypeScript types prevent backend/frontend drift? |
 | [Manual tests](operations/manual-tests.md) | How can the major behaviors be tested manually? |
 | [Frontend design principles](architecture/frontend-experience.md) | Which product and interaction constraints guide the workbench UI? |
 | [Stylesheet organization](../apps/web/app/styles/README.md) | Where should frontend style changes be made? |

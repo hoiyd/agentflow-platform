@@ -13,6 +13,7 @@ import {
   createConversation,
   createAgent,
   deleteConversation as deleteConversationApi,
+  getAPIHealth,
   listCollaborationSteps,
   listAgents,
   listConversations,
@@ -34,7 +35,8 @@ import {
 } from "../lib/verification";
 import type { CompletionVerificationSettings } from "../lib/verification";
 import { createLatestRequestController, type LatestRequestLease } from "../lib/latest-request";
-import { Sidebar, ToolsPanel, Topbar, type ChatView } from "./chat/ChatChrome";
+import { removePendingMessages } from "../lib/pending-messages";
+import { Sidebar, ToolsPanel, Topbar, type APIConnectionStatus, type ChatView } from "./chat/ChatChrome";
 import { ChatComposer } from "./chat/ChatComposer";
 import { ChatDialogs, type AgentOperationNotice } from "./chat/ChatDialogs";
 import { ChatWorkspace } from "./chat/ChatWorkspace";
@@ -102,6 +104,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const [isSavingConversationTitle, setIsSavingConversationTitle] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [apiConnectionStatus, setAPIConnectionStatus] = useState<APIConnectionStatus>("checking");
   const messagesRef = useRef<HTMLElement | null>(null);
   const conversationRequestsRef = useRef<ReturnType<typeof createLatestRequestController> | null>(null);
   if (!conversationRequestsRef.current) {
@@ -162,6 +165,16 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     void refreshTools();
     void knowledge.refreshDocuments();
   }, [initialConversationId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void getAPIHealth(controller.signal)
+      .then(() => setAPIConnectionStatus("connected"))
+      .catch(() => {
+        if (!controller.signal.aborted) setAPIConnectionStatus("unavailable");
+      });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const container = messagesRef.current;
@@ -311,9 +324,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       setPlanDraft(planner?.output ?? "");
       const humanInput = steps.find((step) => step.role === "human_input" && step.status === "running");
       setHumanInputDraft((current) => (humanInput ? current : ""));
-    } catch {
+    } catch (err) {
       if (request.isCurrent()) {
         resetConversationRuntimeState();
+        setError(err instanceof Error ? `Failed to load run trace: ${err.message}` : "Failed to load run trace");
       }
     }
   }
@@ -734,6 +748,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     setMessages((items) => [...items, optimisticUser, assistantDraft]);
 
     let conversationId = activeId;
+    let receivedStreamEvent = false;
 
     try {
       await streamChat(
@@ -755,6 +770,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
             setActiveId(event.conversation_id);
           },
           onDone: (event) => applyConversationTitle(event.conversation_id, event.title),
+          onEvent: () => { receivedStreamEvent = true; },
           setAutonomousProgress,
           setCollaborationSteps,
           setError,
@@ -767,6 +783,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
 
       await refreshConversations(conversationId);
     } catch (err) {
+      if (!receivedStreamEvent) {
+        setMessages((items) => removePendingMessages(items, [optimisticUser.id, assistantDraft.id]));
+        setInput(content);
+      }
       setError(err instanceof Error ? err.message : "Unexpected chat error");
     } finally {
       setIsStreaming(false);
@@ -793,6 +813,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       created_at: new Date().toISOString()
     };
     setMessages((items) => [...items, assistantDraft]);
+    let receivedStreamEvent = false;
 
     try {
       await continueRun(
@@ -802,6 +823,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           defaultVerificationStatus: "not_required",
           fallbackAgentId: activeAgentId,
           fallbackRunId: runID,
+          onEvent: () => { receivedStreamEvent = true; },
           setAutonomousProgress,
           setCollaborationSteps,
           setError,
@@ -816,6 +838,9 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         await loadConversation(activeId);
       }
     } catch (err) {
+      if (!receivedStreamEvent) {
+        setMessages((items) => removePendingMessages(items, [assistantDraft.id]));
+      }
       setError(err instanceof Error ? err.message : "Unexpected continue error");
     } finally {
       setIsContinuingRun(false);
@@ -834,6 +859,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     setHumanInputDraft(userInput);
     setIsResumingRun(true);
     setIsStreaming(true);
+    const previousRunState = runState;
     setRunState((current) =>
       current
         ? {
@@ -851,6 +877,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       created_at: new Date().toISOString()
     };
     setMessages((items) => [...items, assistantDraft]);
+    let receivedStreamEvent = false;
 
     try {
       await resumeRun(
@@ -860,6 +887,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           defaultVerificationStatus: "not_required",
           fallbackAgentId: activeAgentId,
           fallbackRunId: runID,
+          onEvent: () => { receivedStreamEvent = true; },
           onRunState: (event) => {
             if (event.status !== "waiting_for_user") {
               setHumanInputDraft("");
@@ -879,6 +907,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         await loadConversation(activeId);
       }
     } catch (err) {
+      if (!receivedStreamEvent) {
+        setMessages((items) => removePendingMessages(items, [assistantDraft.id]));
+        setRunState(previousRunState);
+      }
       setError(err instanceof Error ? err.message : "Unexpected resume error");
     } finally {
       setIsResumingRun(false);
@@ -919,6 +951,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     <div className={`shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <Sidebar
         activeId={activeId}
+        apiConnectionStatus={apiConnectionStatus}
         conversations={conversations}
         isBusy={isStreaming || isContinuingRun}
         isCollapsed={isSidebarCollapsed}

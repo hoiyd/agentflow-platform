@@ -1,3 +1,5 @@
+import type { components } from "./api-contract.gen";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 const configuredWorkspaceId = process.env.NEXT_PUBLIC_WORKSPACE_ID?.trim();
 const workspaceId = !configuredWorkspaceId || configuredWorkspaceId === "default"
@@ -20,15 +22,7 @@ type APIErrorOptions = {
   requestId?: string;
 };
 
-type APIErrorEnvelope = {
-  error?: string;
-  code?: string;
-  source?: string;
-  category?: string;
-  retryable?: boolean;
-  operation?: string;
-  request_id?: string;
-};
+type APIErrorEnvelope = Partial<components["schemas"]["ErrorResponse"]>;
 
 export class APIError extends Error {
   readonly status: number;
@@ -66,7 +60,9 @@ export async function apiRequest(
 
   const body = await response.text();
   const envelope = parseErrorEnvelope(body);
-  const detail = policy.includeErrorBody ? envelope.error ?? body.trim() : "";
+  // Structured API errors are already redacted at the server boundary. Raw
+  // response bodies remain opt-in because they may come from an upstream.
+  const detail = envelope.error ?? (policy.includeErrorBody ? body.trim() : "");
   throw new APIError(
     `${policy.errorMessage}: ${response.status}${detail ? ` ${detail}` : ""}`,
     {

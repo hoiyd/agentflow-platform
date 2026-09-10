@@ -88,6 +88,11 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
+      - name: Check generated Go API contract
+        run: |
+          go generate ./internal/apicontract
+          git diff --exit-code -- internal/apicontract/types.gen.go
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
@@ -112,6 +117,9 @@ jobs:
 
       - name: Run lint
         run: npm run lint
+
+      - name: Check generated TypeScript API contract
+        run: npm run contract:check
 
       - name: Run tests
         run: npm test

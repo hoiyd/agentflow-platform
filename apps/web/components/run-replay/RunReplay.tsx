@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { EpisodeReport, RecoveryAction, RunReplay as RunReplayData } from "../../lib/api";
-import { getEpisodeReport, getRunReplay, resumeRun } from "../../lib/api";
+import { resumeRun } from "../../lib/api";
+import { getReplayPageData } from "../../lib/replay-page-data";
 import { RunUsagePanel } from "./RunUsagePanel";
 import {
   EventDetail,
@@ -29,6 +30,7 @@ export function RunReplay({ runId }: Props) {
   const router = useRouter();
   const [replay, setReplay] = useState<RunReplayData | null>(null);
   const [episodeReport, setEpisodeReport] = useState<EpisodeReport | null>(null);
+  const [episodeReportError, setEpisodeReportError] = useState("");
   const [selectedEventId, setSelectedEventId] = useState("");
   const [error, setError] = useState("");
   const [isResuming, setIsResuming] = useState(false);
@@ -39,12 +41,13 @@ export function RunReplay({ runId }: Props) {
     async function load() {
       try {
         setError("");
-        const [data, report] = await loadReplayAndReport(runId);
+        const { data, report, reportError } = await getReplayPageData(runId);
         if (canceled) {
           return;
         }
         setReplay(data);
         setEpisodeReport(report);
+        setEpisodeReportError(reportError);
         setSelectedEventId(data.run_events[0]?.id ?? "");
       } catch (err) {
         if (!canceled) {
@@ -103,9 +106,10 @@ export function RunReplay({ runId }: Props) {
           );
         }
       });
-      const [data, report] = await loadReplayAndReport(replay.run.id);
+      const { data, report, reportError } = await getReplayPageData(replay.run.id);
       setReplay(data);
       setEpisodeReport(report);
+      setEpisodeReportError(reportError);
       setSelectedEventId(data.run_events[0]?.id ?? "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to resume run");
@@ -125,9 +129,10 @@ export function RunReplay({ runId }: Props) {
   }
 
 	async function refreshReplay() {
-		const [data, report] = await loadReplayAndReport(runId);
+		const { data, report, reportError } = await getReplayPageData(runId);
 		setReplay(data);
 		setEpisodeReport(report);
+		setEpisodeReportError(reportError);
 	}
 
 	function handleRecoveryAction(action: RecoveryAction) {
@@ -222,6 +227,11 @@ export function RunReplay({ runId }: Props) {
       />
 
       {episodeReport ? <EpisodeReportPanel report={episodeReport} /> : null}
+      {episodeReportError ? (
+        <div className="replay-secondary-error" role="status">
+          Episode report unavailable: {episodeReportError}
+        </div>
+      ) : null}
 
       <TaskStateChanges revisions={replay.task_state_revisions} runId={replay.run.id} />
 
@@ -289,10 +299,6 @@ export function RunReplay({ runId }: Props) {
       </section>
     </main>
   );
-}
-
-function loadReplayAndReport(runId: string) {
-  return Promise.all([getRunReplay(runId), getEpisodeReport(runId)]);
 }
 
 function EpisodeReportPanel({ report }: { report: EpisodeReport }) {

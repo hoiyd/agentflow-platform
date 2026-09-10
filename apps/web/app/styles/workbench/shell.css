@@ -230,6 +230,9 @@
   background: var(--teal);
 }
 
+.sidebar-runtime.checking i { background: var(--warning); }
+.sidebar-runtime.unavailable i { background: var(--danger); }
+
 .sidebar-runtime code { color: #9aa3ad; }
 
 .sidebar.collapsed .brand {

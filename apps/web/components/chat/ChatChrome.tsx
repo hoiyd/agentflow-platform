@@ -22,6 +22,7 @@ import {
 import type { Conversation, ToolInfo } from "../../lib/api";
 
 export type ChatView = "chat" | "tools" | "knowledge" | "memory";
+export type APIConnectionStatus = "checking" | "connected" | "unavailable";
 
 export type VisibleRunState = {
   id: string;
@@ -31,6 +32,7 @@ export type VisibleRunState = {
 
 type SidebarProps = {
   activeId: string;
+  apiConnectionStatus: APIConnectionStatus;
   conversations: Conversation[];
   isBusy: boolean;
   isCollapsed: boolean;
@@ -47,6 +49,7 @@ type SidebarProps = {
 
 export function Sidebar({
   activeId,
+  apiConnectionStatus,
   conversations,
   isBusy,
   isCollapsed,
@@ -146,9 +149,9 @@ export function Sidebar({
             </div>
           ))}
         </div>
-        <div className="sidebar-runtime">
-          <span><i /> <span className="sidebar-runtime-label">API connected</span></span>
-          <code>v0.7</code>
+        <div className={`sidebar-runtime ${apiConnectionStatus}`}>
+          <span><i /> <span className="sidebar-runtime-label">API {apiStatusLabel(apiConnectionStatus)}</span></span>
+          <code>{apiConnectionStatus === "connected" ? "online" : apiConnectionStatus === "checking" ? "checking" : "offline"}</code>
         </div>
       </aside>
       <button
@@ -159,6 +162,12 @@ export function Sidebar({
       />
     </>
   );
+}
+
+function apiStatusLabel(status: APIConnectionStatus) {
+  if (status === "connected") return "connected";
+  if (status === "checking") return "checking";
+  return "unavailable";
 }
 
 function NavButton({ active, icon, label, onClick }: { active: boolean; icon: ReactNode; label: string; onClick: () => void }) {
