@@ -140,7 +140,6 @@ export function useKnowledgeWorkbench() {
       return;
     }
     setIsSearching(true);
-    setHasSearched(true);
     setError("");
     try {
       const parsedMinSimilarity = Number(minSimilarity);
@@ -163,6 +162,7 @@ export function useKnowledgeWorkbench() {
       setSearchRelevanceGate(response.relevance_gate ?? null);
       setSearchSecurity(response.security ?? null);
       setNoMatchReason(response.no_match ? response.reason ?? "No confident match found." : "");
+      setHasSearched(true);
     } catch (searchError) {
       setError(searchError instanceof Error ? searchError.message : "Failed to search knowledge");
     } finally {
