@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 const (
@@ -74,6 +75,9 @@ func ValidateToolArtifact(artifact domain.ToolArtifact, content []byte) error {
 	}
 	if artifact.ContentHash != ToolArtifactContentHash(content) {
 		return errors.New("tool artifact content hash mismatch")
+	}
+	if _, count := redaction.Text(string(content)); count > 0 {
+		return errors.New("tool artifact contains credential-like content")
 	}
 	if artifact.CreatedAt.IsZero() {
 		return errors.New("tool artifact created_at is required")

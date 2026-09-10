@@ -43,6 +43,9 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		Executor:         domain.DefaultAgentExecutor,
 	}
 	applyAgentConfigRequest(&agent, req)
+	if rejectCredentialContent(w, r, req) {
+		return
+	}
 	if err := h.validateAgentTools(agent.Tools); err != nil {
 		writeFailure(w, r, http.StatusBadRequest, err)
 		return
@@ -126,6 +129,9 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	agent := domain.NormalizeAgentConfig(existing)
 	applyAgentConfigRequest(&agent, req)
+	if rejectCredentialContent(w, r, req) {
+		return
+	}
 	if err := h.validateAgentTools(agent.Tools); err != nil {
 		writeFailure(w, r, http.StatusBadRequest, err)
 		return

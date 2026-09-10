@@ -5,6 +5,7 @@ import (
 	"unicode"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 const PromptInjectionPolicyVersion = domain.RAGPromptGuardPolicyVersion
@@ -16,6 +17,7 @@ const (
 	reasonSystemPromptExfiltration = "system_prompt_exfiltration"
 	reasonToolOrCommandExecution   = "tool_or_command_execution"
 	reasonTrustBoundarySpoofing    = "trust_boundary_spoofing"
+	reasonCredentialContent        = "credential_content"
 )
 
 var promptInjectionDetectors = []struct {
@@ -50,7 +52,11 @@ func GuardPromptInjection(items []domain.RetrievedDocumentChunk) ([]domain.Retri
 	}
 	allowed := make([]domain.RetrievedDocumentChunk, 0, len(items))
 	for _, item := range items {
-		reasons := DetectPromptInjection(strings.Join([]string{item.Document.Title, item.Chunk.Content}, "\n"))
+		content := strings.Join([]string{item.Document.Title, item.Chunk.Content}, "\n")
+		reasons := DetectPromptInjection(content)
+		if _, count := redaction.Text(content); count > 0 {
+			reasons = append(reasons, reasonCredentialContent)
+		}
 		if len(reasons) == 0 {
 			allowed = append(allowed, item)
 			continue

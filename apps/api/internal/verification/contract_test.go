@@ -2,9 +2,11 @@ package verification
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 func TestFreezeContractNormalizesAndHashesEffectiveDefinition(t *testing.T) {
@@ -50,6 +52,17 @@ func TestFreezeContractNormalizesAndHashesEffectiveDefinition(t *testing.T) {
 	}
 	if frozen.Hash != again.Hash {
 		t.Fatalf("canonical contract hash changed: %s != %s", frozen.Hash, again.Hash)
+	}
+}
+
+func TestFreezeContractRejectsCredentialContent(t *testing.T) {
+	registry := NewRegistry(Options{})
+	_, err := registry.FreezeContract(&domain.CompletionContract{Verifiers: []domain.VerifierSpec{{
+		ID: "command", Type: domain.VerifierCommand, Required: true,
+		Config: map[string]any{"args": []any{"echo", "api_key=sk-abcdefgh"}},
+	}}})
+	if !errors.Is(err, redaction.ErrCredentialContent) {
+		t.Fatalf("credential verifier contract error=%v", err)
 	}
 }
 

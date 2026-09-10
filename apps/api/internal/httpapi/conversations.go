@@ -22,6 +22,9 @@ func (h *Handler) createConversation(w http.ResponseWriter, r *http.Request) {
 		Title string `json:"title"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	if rejectCredentialContent(w, r, body) {
+		return
+	}
 
 	conversation, err := h.scopedStore(r).CreateConversation(body.Title)
 	if err != nil {
@@ -47,6 +50,9 @@ func (h *Handler) updateConversation(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(body.Title) == "" {
 		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+	if rejectCredentialContent(w, r, body) {
 		return
 	}
 

@@ -19,11 +19,12 @@ import (
 
 // Application owns the API process lifecycle and its composed dependencies.
 type Application struct {
-	config         config.Config
-	store          store.Store
-	memoryProvider memorypkg.Provider
-	runController  *concurrency.RunController
-	server         *http.Server
+	config          config.Config
+	store           store.Store
+	memoryProvider  memorypkg.Provider
+	runController   *concurrency.RunController
+	modelConfigured bool
+	server          *http.Server
 
 	closeOnce sync.Once
 	closeErr  error
@@ -36,10 +37,11 @@ func New(cfg config.Config) (*Application, error) {
 	}
 
 	return &Application{
-		config:         cfg,
-		store:          dependencies.store,
-		memoryProvider: dependencies.memoryProvider,
-		runController:  dependencies.runController,
+		config:          cfg,
+		store:           dependencies.store,
+		memoryProvider:  dependencies.memoryProvider,
+		runController:   dependencies.runController,
+		modelConfigured: dependencies.modelConfigured,
 		server: &http.Server{
 			Addr:              serverAddress(cfg),
 			Handler:           dependencies.handler.Routes(),
@@ -131,7 +133,7 @@ func (a *Application) logStartup() {
 	log.Printf("AgentFlow model request capture: mode=%s max_bytes=%d retention=%s", cfg.ModelRequestCaptureMode, cfg.ModelRequestCaptureMaxBytes, cfg.ModelRequestCaptureRetention)
 	log.Printf("AgentFlow memory provider: sync_queue=%d job_timeout=%s max_attempts=%d retry_base_delay=%s", cfg.MemorySyncQueueSize, cfg.MemorySyncJobTimeout, cfg.MemoryProviderMaxAttempts, cfg.MemoryProviderRetryBaseDelay)
 	log.Printf("AgentFlow context policy: window=%d output_reserve=%d safety_margin=%d history_max=%d memory_max=%d knowledge_max=%d tool_result_max=%d history_retrieval_results=%d history_retrieval_chars=%d history_retrieval_tokens=%d history_retrieval_window=%d compaction=%s soft=%.2f hard=%.2f recent=%d summary_max=%d", cfg.ModelContextWindowTokens, cfg.ModelOutputReserveTokens, cfg.ContextSafetyMarginTokens, cfg.ContextHistoryMaxTokens, cfg.ContextMemoryMaxTokens, cfg.ContextKnowledgeMaxTokens, cfg.ContextToolResultMaxTokens, cfg.ContextHistoryRetrievalMaxResults, cfg.ContextHistoryRetrievalMaxChars, cfg.ContextHistoryRetrievalMaxTokens, cfg.ContextHistoryRetrievalWindow, cfg.ContextCompactionMode, cfg.ContextCompactionSoftThreshold, cfg.ContextCompactionHardThreshold, cfg.ContextCompactionRecentTokens, cfg.ContextCompactionSummaryMaxTokens)
-	if cfg.OpenAIAPIKey == "" {
+	if !a.modelConfigured {
 		log.Println("OPENAI_API_KEY is empty; using local streaming fallback for verification")
 	}
 }

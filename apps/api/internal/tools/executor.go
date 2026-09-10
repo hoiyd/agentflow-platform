@@ -14,6 +14,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/toolprogress"
 )
@@ -378,6 +379,12 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 				e.markSideEffectUncertain(effectKey, result.ErrorMessage())
 				return result
 			}
+			persisted, _, err = redaction.JSON(persisted)
+			if err != nil {
+				result.Error = executionError(ErrorEffectJournal, "redact side-effect result", err)
+				e.markSideEffectUncertain(effectKey, result.ErrorMessage())
+				return result
+			}
 			if _, err := e.effectJournal.CompleteToolEffect(effectKey, persisted); err != nil {
 				result.Error = executionError(ErrorEffectJournal, "commit side-effect journal: "+err.Error(), err)
 				e.markSideEffectUncertain(effectKey, result.ErrorMessage())
@@ -514,6 +521,7 @@ func hashExecutionIdentity(parts ...string) string {
 }
 
 func executionError(code ErrorCode, message string, cause error) *ExecutionError {
+	message, _ = redaction.Text(message)
 	return &ExecutionError{Code: code, Message: message, Cause: cause}
 }
 

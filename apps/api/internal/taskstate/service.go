@@ -7,6 +7,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 type Store interface {
@@ -40,6 +41,9 @@ func (s *Service) ListRevisions(conversationID string) ([]domain.TaskStateRevisi
 
 func (s *Service) Apply(ctx context.Context, conversationID string, patch domain.TaskStatePatch, source domain.TaskStateSource) (domain.TaskStateRevision, error) {
 	conversationID = strings.TrimSpace(conversationID)
+	if err := redaction.ValidateValue(patch); err != nil {
+		return domain.TaskStateRevision{}, err
+	}
 	if source.RunID != "" && source.ActorID == "" {
 		if run, ok, err := s.store.GetRun(source.RunID); err == nil && ok {
 			source.ActorID = run.AgentID

@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 const (
@@ -127,7 +128,7 @@ func (p ConservativeCandidatePolicy) Evaluate(message domain.Message, draft Cand
 		return PolicyDecision{Reason: PolicyRejectTooLong}
 	}
 	lower := strings.ToLower(draft.Content)
-	if containsAny(lower, secretMarkers) {
+	if _, credentialCount := redaction.Text(draft.Content); credentialCount > 0 || containsAny(lower, secretMarkers) {
 		return PolicyDecision{Reason: PolicyRejectSecret}
 	}
 	if containsAny(lower, temporaryMarkers) {

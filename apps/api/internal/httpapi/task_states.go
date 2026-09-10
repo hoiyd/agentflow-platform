@@ -60,6 +60,9 @@ func (h *Handler) patchTaskState(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid task state patch")
 		return
 	}
+	if rejectCredentialContent(w, r, patch) {
+		return
+	}
 	revision, err := h.scopedStore(r).ApplyTaskStatePatch(conversationID, patch, domain.TaskStateSource{ActorType: "user"})
 	if err != nil {
 		writeTaskStateError(w, r, err)

@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 type CandidateCompletionModel interface {
@@ -92,7 +93,8 @@ func eligibleForAdaptiveExtraction(message domain.Message) bool {
 		return false
 	}
 	lower := strings.ToLower(content)
-	return !containsAny(lower, secretMarkers) && !containsAny(lower, temporaryMarkers) && !containsAny(lower, taskOutcomeMarkers)
+	_, credentialCount := redaction.Text(content)
+	return credentialCount == 0 && !containsAny(lower, secretMarkers) && !containsAny(lower, temporaryMarkers) && !containsAny(lower, taskOutcomeMarkers)
 }
 
 func parseAdaptiveCandidateDecision(raw string) (adaptiveCandidateDecision, error) {

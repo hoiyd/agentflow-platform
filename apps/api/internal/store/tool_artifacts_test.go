@@ -48,6 +48,14 @@ func TestToolArtifactValidationAndBounds(t *testing.T) {
 			t.Fatalf("invalid artifact %d passed validation", index)
 		}
 	}
+	credentialContent := []byte(`{"api_key":"sk-private123"}`)
+	credentialArtifact := valid
+	credentialArtifact.StoredByteSize = len(credentialContent)
+	credentialArtifact.OriginalByteSize = len(credentialContent)
+	credentialArtifact.ContentHash = ToolArtifactContentHash(credentialContent)
+	if err := ValidateToolArtifact(credentialArtifact, credentialContent); err == nil {
+		t.Fatal("credential-bearing artifact passed validation")
+	}
 
 	for _, test := range []struct {
 		name          string

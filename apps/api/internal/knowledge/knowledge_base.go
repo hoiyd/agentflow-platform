@@ -9,6 +9,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 type Store interface {
@@ -62,6 +63,12 @@ func IsEmbeddingError(err error) bool {
 }
 
 func (s *KnowledgeBase) Ingest(ctx context.Context, request domain.DocumentIngestRequest) (domain.Document, error) {
+	if err := redaction.ValidateText(request.Title, request.SourceURI, request.Content); err != nil {
+		return domain.Document{}, err
+	}
+	if err := redaction.ValidateValue(request.Metadata); err != nil {
+		return domain.Document{}, err
+	}
 	document, chunks, err := rag.BuildDocument(request)
 	if err != nil {
 		return domain.Document{}, err
@@ -90,6 +97,12 @@ func (s *KnowledgeBase) Search(ctx context.Context, search domain.DocumentSearch
 	search.Query = strings.TrimSpace(search.Query)
 	if search.Query == "" {
 		return domain.DocumentSearchResponse{}, errors.New("query is required")
+	}
+	if err := redaction.ValidateText(search.Query); err != nil {
+		return domain.DocumentSearchResponse{}, err
+	}
+	if err := redaction.ValidateValue(search.Metadata); err != nil {
+		return domain.DocumentSearchResponse{}, err
 	}
 
 	embedding, err := rag.EmbedQuery(ctx, search.Query, func(ctx context.Context, query string) (rag.Embedding, error) {

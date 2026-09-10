@@ -97,7 +97,10 @@ grant access to that namespace.
 
 Do not commit `.env` files. Runtime Snapshots freeze provider endpoints and
 model identity for reproducibility, but credentials remain live process
-configuration and are never persisted with a Run.
+configuration and are never persisted with a Run. `OPENAI_API_KEY` is resolved
+at application composition and passed directly to the provider client; it is
+not stored in the general `Config` value. See
+[Credential boundary and redaction](credential-boundary.md).
 
 ## Concurrency, Rate Limits, and Retry
 
@@ -129,7 +132,8 @@ SHA-256 hash of the exact canonical JSON passed to the model transport.
 
 - `metadata_only`: no prompt content; production-safe default.
 - `redacted`: bounded canonical JSON after deterministic secret redaction.
-- `full`: exact bounded JSON for trusted local debugging only.
+- `full`: exact bounded JSON for trusted local debugging only. A detected
+  credential automatically downgrades the individual capture to `redacted`.
 
 `MODEL_REQUEST_CAPTURE_MAX_BYTES` applies only to stored redacted/full content.
 Oversized content is omitted and marked truncated; hashes, counts, effective

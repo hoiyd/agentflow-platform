@@ -8,6 +8,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
+	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -58,6 +59,8 @@ func writeMemoryMutationFailure(w http.ResponseWriter, r *http.Request, err erro
 	case errors.Is(err, store.ErrMemoryConflict):
 		status = http.StatusConflict
 	case errors.Is(err, store.ErrMemoryMutationInvalid):
+		status = http.StatusBadRequest
+	case errors.Is(err, redaction.ErrCredentialContent):
 		status = http.StatusBadRequest
 	case memorypkg.IsEmbeddingError(err):
 		status = http.StatusBadGateway

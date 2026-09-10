@@ -54,6 +54,14 @@ func TestValidateModelRequestRecordRejectsInvalidContracts(t *testing.T) {
 		{name: "content hash", mutate: func(record *domain.ModelRequestRecord) {
 			record.Capture.ContentHash = hashModelRequestBytes([]byte(`{"other":true}`))
 		}, message: "content or hash"},
+		{name: "credential content", mutate: func(record *domain.ModelRequestRecord) {
+			record.Capture.Content = `{"api_key":"sk-private123"}`
+			record.Capture.StoredBytes = len(record.Capture.Content)
+			record.Capture.OriginalBytes = record.Capture.StoredBytes
+			record.Capture.ContentHash = hashModelRequestBytes([]byte(record.Capture.Content))
+			record.Envelope.PayloadBytes = record.Capture.StoredBytes
+			record.Envelope.PayloadHash = record.Capture.ContentHash
+		}, message: "credential-like content"},
 		{name: "reconstructability", mutate: func(record *domain.ModelRequestRecord) {
 			record.Envelope.PayloadHash = hashModelRequestBytes([]byte(`{"other":true}`))
 		}, message: "reconstructability claim"},

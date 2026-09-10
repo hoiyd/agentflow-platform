@@ -46,6 +46,18 @@ func TestUpdateConversationTitleAPI(t *testing.T) {
 	}
 }
 
+func TestConversationAPIRejectsCredentialTitle(t *testing.T) {
+	handler := &Handler{store: fixturestore.New()}
+	recorder := httptest.NewRecorder()
+	handler.createConversation(recorder, httptest.NewRequest(
+		http.MethodPost, "/api/conversations", bytes.NewReader([]byte(`{"title":"api_key=sk-abcdefgh"}`)),
+	))
+	response := decodeAPIErrorResponse(t, recorder)
+	if recorder.Code != http.StatusBadRequest || response.Code != "credential_content_rejected" || strings.Contains(recorder.Body.String(), "abcdefgh") {
+		t.Fatalf("credential title response: status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestConversationCollectionMessagesAndDeleteAPI(t *testing.T) {
 	fixtureStore := fixturestore.New()
 

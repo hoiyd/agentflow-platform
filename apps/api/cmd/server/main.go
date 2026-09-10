@@ -10,10 +10,11 @@ import (
 
 	"agentflow-platform/apps/api/app"
 	"agentflow-platform/apps/api/internal/config"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 func main() {
-	log.SetOutput(os.Stdout)
+	log.SetOutput(redaction.Writer{Writer: os.Stdout})
 
 	application, err := app.New(config.Load())
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 func ValidateModelRequestRecord(record domain.ModelRequestRecord) error {
@@ -69,6 +70,9 @@ func ValidateModelRequestRecord(record domain.ModelRequestRecord) error {
 	}
 	if !json.Valid([]byte(capture.Content)) || capture.ContentHash != hashModelRequestBytes([]byte(capture.Content)) {
 		return errors.New("model request capture content or hash is invalid")
+	}
+	if _, count := redaction.Text(capture.Content); count > 0 {
+		return errors.New("model request capture contains credential-like content")
 	}
 	if capture.Reconstructable && (capture.Mode != domain.ModelRequestCaptureFull || capture.Redacted || capture.Truncated || capture.ContentHash != envelope.PayloadHash) {
 		return errors.New("model request capture reconstructability claim is invalid")

@@ -15,6 +15,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
 	"agentflow-platform/apps/api/internal/verification"
@@ -190,6 +191,14 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeAPIError(w, status, message, failureInfoForHTTPStatus(status))
 }
 
+func rejectCredentialContent(w http.ResponseWriter, r *http.Request, value any) bool {
+	if err := redaction.ValidateValue(value); err != nil {
+		writeFailure(w, r, http.StatusBadRequest, err)
+		return true
+	}
+	return false
+}
+
 type apiErrorResponse struct {
 	Error     string `json:"error"`
 	Code      string `json:"code"`
@@ -223,6 +232,7 @@ func publicFailureMessage(status int, err error) string {
 	if status < http.StatusInternalServerError && err != nil {
 		message = err.Error()
 	}
+	message, _ = redaction.Text(message)
 	return message
 }
 
@@ -238,6 +248,7 @@ func failureChatChunk(w http.ResponseWriter, r *http.Request, status int, err er
 }
 
 func writeAPIError(w http.ResponseWriter, status int, message string, info failure.Info) {
+	message, _ = redaction.Text(message)
 	requestID := ensureRequestID(w)
 	writeJSON(w, status, apiErrorResponse{
 		Error: message, Code: info.Code, Source: info.Source,
@@ -266,7 +277,7 @@ func formatHTTPFailureLog(r *http.Request, requestID string, transport string, s
 	}
 	errorMessage := ""
 	if err != nil {
-		errorMessage = err.Error()
+		errorMessage, _ = redaction.Text(err.Error())
 	}
 	return fmt.Sprintf(
 		"http_failure request_id=%q transport=%q method=%q path=%q status=%d code=%q source=%q category=%q retryable=%t operation=%q error=%q",

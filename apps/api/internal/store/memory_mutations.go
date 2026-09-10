@@ -29,6 +29,9 @@ func NormalizeMemoryMutation(command domain.MemoryMutation) (domain.MemoryMutati
 	if _, count := redaction.Text(command.OperationID); count > 0 {
 		return command, ErrMemoryMutationInvalid
 	}
+	if err := redaction.ValidateText(command.Content); err != nil {
+		return command, err
+	}
 	if command.Action != "replace" && command.Action != "delete" {
 		return command, ErrMemoryMutationInvalid
 	}

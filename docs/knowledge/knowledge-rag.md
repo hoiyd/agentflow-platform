@@ -274,7 +274,7 @@ instead of treating unavailable evidence as a pass. See
 ## Prompt-Injection Guard
 
 All retrieved knowledge is treated as untrusted external data. The guard uses
-policy version `rag-prompt-guard-v1` and blocks high-confidence patterns before
+policy version `rag-prompt-guard-v2` and blocks high-confidence patterns before
 RRF, including:
 
 - requests to ignore, override, or bypass prior/system instructions
@@ -282,6 +282,8 @@ RRF, including:
 - requests to reveal system/developer instructions
 - explicit requests to invoke tools or execute shell commands
 - attempts to spoof AgentFlow's untrusted-knowledge boundary markers
+- credential-shaped content such as Authorization values, private keys, and
+  provider tokens
 
 Blocked chunks do not participate in fusion, reranking, context selection, or
 model calls. Responses and retrieval traces retain only document/chunk IDs, the

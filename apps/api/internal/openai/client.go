@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"net"
@@ -56,7 +57,7 @@ func (t *streamToolExecutionTracer) ToolStarted(ctx context.Context, request too
 	if t.delegate != nil {
 		t.delegate.ToolStarted(ctx, request)
 	}
-	log.Printf("tool_call_start id=%s tool=%s arguments=%q", request.CallID, request.Tool, string(request.Arguments))
+	log.Printf("tool_call_start id=%s tool=%s arguments_bytes=%d arguments_hash=%s", request.CallID, request.Tool, len(request.Arguments), request.ArgumentsHash)
 	select {
 	case <-ctx.Done():
 	case t.events <- StreamEvent{Type: "tool_start", ToolName: request.Tool, ToolCallID: request.CallID}:
@@ -75,14 +76,15 @@ func (t *streamToolExecutionTracer) ToolFinished(ctx context.Context, result too
 	if result.Error != nil {
 		status = "tool_error"
 	}
+	encodedResult, _ := json.Marshal(result.Result)
 	log.Printf(
-		"tool_call_end id=%s tool=%s status=%s duration_ms=%d arguments=%q result=%q error=%q",
+		"tool_call_end id=%s tool=%s status=%s duration_ms=%d arguments_hash=%s result_bytes=%d error=%q",
 		result.CallID,
 		result.Tool,
 		status,
 		result.DurationMS,
-		string(result.Arguments),
-		marshalResult(result),
+		result.ArgumentsHash,
+		len(encodedResult),
 		result.ErrorMessage(),
 	)
 }

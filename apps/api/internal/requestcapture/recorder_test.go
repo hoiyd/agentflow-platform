@@ -12,6 +12,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/modelrequest"
+	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
@@ -72,8 +73,10 @@ func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
 	}
 }
 
-func TestRedactedAndMetadataCaptureNeverPersistSecrets(t *testing.T) {
-	for _, mode := range []domain.ModelRequestCaptureMode{domain.ModelRequestCaptureMetadata, domain.ModelRequestCaptureRedacted} {
+func TestCaptureModesNeverPersistDetectedCredentials(t *testing.T) {
+	for _, mode := range []domain.ModelRequestCaptureMode{
+		domain.ModelRequestCaptureMetadata, domain.ModelRequestCaptureRedacted, domain.ModelRequestCaptureFull,
+	} {
 		t.Run(string(mode), func(t *testing.T) {
 			pgStore, run, _ := newCaptureTestRun(t)
 			recorder := NewRecorder(pgStore, Options{Mode: mode, MaxBytes: 4096})
@@ -94,13 +97,22 @@ func TestRedactedAndMetadataCaptureNeverPersistSecrets(t *testing.T) {
 			if mode == domain.ModelRequestCaptureMetadata && encoded != "" {
 				t.Fatalf("metadata capture stored content: %q", encoded)
 			}
-			if mode == domain.ModelRequestCaptureRedacted && (!records[0].Capture.Redacted || !strings.Contains(encoded, "[REDACTED]")) {
+			if mode != domain.ModelRequestCaptureMetadata && (!records[0].Capture.Redacted || !strings.Contains(encoded, "[REDACTED]")) {
 				t.Fatalf("redacted capture missing markers: %#v", records[0].Capture)
 			}
-			if mode == domain.ModelRequestCaptureRedacted && (records[0].Capture.RedactionStrategy != "deterministic-v1" || records[0].Capture.RedactionCount == 0) {
+			if mode != domain.ModelRequestCaptureMetadata && (records[0].Capture.Mode != domain.ModelRequestCaptureRedacted || records[0].Capture.RedactionStrategy != redaction.DeterministicStrategy || records[0].Capture.RedactionCount == 0) {
 				t.Fatalf("redacted capture missing metadata: %#v", records[0].Capture)
 			}
 		})
+	}
+}
+
+func TestFullCaptureDowngradesWhenPayloadContainsCredential(t *testing.T) {
+	payload := []byte(`{"messages":[{"role":"user","content":"api_key=sk-private123"}]}`)
+	capture := capturePayload(payload, domain.ModelRequestCaptureFull, 4096, time.Hour, time.Now().UTC())
+	if capture.Mode != domain.ModelRequestCaptureRedacted || !capture.Redacted || capture.Reconstructable ||
+		capture.RedactionCount == 0 || strings.Contains(capture.Content, "sk-private123") {
+		t.Fatalf("credential-bearing full capture was not downgraded: %#v", capture)
 	}
 }
 

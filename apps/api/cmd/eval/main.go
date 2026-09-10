@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/credential"
 	"agentflow-platform/apps/api/internal/evaluation/contexteval"
 	"agentflow-platform/apps/api/internal/evaluation/rageval"
 	"agentflow-platform/apps/api/internal/evaluation/tooleval"
@@ -120,7 +121,7 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 	}
 	report, err := rageval.Run(ctx, rageval.Options{DatasetPath: *dataset, CorpusManifestPath: *manifest,
 		TopK: *topK, MinSimilarity: *minSimilarity, MinimumEvidenceCoverage: *minimumEvidenceCoverage, RetrievalMode: *retrievalMode,
-		EmbeddingProfile: rageval.EmbeddingProfileOptions{Name: *embeddingProfile, Live: *liveEmbeddings, APIKey: os.Getenv("OPENAI_API_KEY"),
+		EmbeddingProfile: rageval.EmbeddingProfileOptions{Name: *embeddingProfile, Live: *liveEmbeddings, APIKey: credential.FromEnvironment("OPENAI_API_KEY").Reveal(),
 			BaseURL: *embeddingBaseURL, Model: *embeddingModel, Dimensions: *embeddingDimensions, MaxCalls: *maxEmbeddingCalls,
 			MaxInputTokens: *maxEmbeddingInputTokens, RetryMaxAttempts: *embeddingRetryAttempts, Timeout: *embeddingTimeout},
 		Revision: gitRevision(ctx)})
@@ -164,11 +165,12 @@ func runTool(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if flags.Parse(args) != nil {
 		return 2
 	}
-	if !*live || strings.TrimSpace(*model) == "" || os.Getenv("OPENAI_API_KEY") == "" || flags.NArg() != 0 {
+	providerCredential := credential.FromEnvironment("OPENAI_API_KEY")
+	if !*live || strings.TrimSpace(*model) == "" || !providerCredential.Available() || flags.NArg() != 0 {
 		fmt.Fprintln(stderr, "Requires --live, --model, OPENAI_API_KEY and explicit positive budgets. Offline: go test ./internal/evaluation/tooleval")
 		return 2
 	}
-	client := openai.NewClientWithTimeout(os.Getenv("OPENAI_API_KEY"), *base, *model, *timeout)
+	client := openai.NewClientWithTimeout(providerCredential.Reveal(), *base, *model, *timeout)
 	report, err := tooleval.Run(ctx, client, tooleval.Options{Trials: *trials, MaxModelCalls: *calls,
 		MaxTotalTokens: *tokens, Timeout: *timeout, Revision: gitRevision(ctx)})
 	if err != nil {

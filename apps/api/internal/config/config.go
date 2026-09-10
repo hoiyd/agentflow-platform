@@ -12,7 +12,6 @@ import (
 type Config struct {
 	BindAddress         string
 	Port                string
-	OpenAIAPIKey        string
 	OpenAIBaseURL       string
 	OpenAIModel         string
 	EmbeddingBaseURL    string
@@ -164,7 +163,6 @@ func Load() Config {
 	return Config{
 		BindAddress:                       getEnv("BIND_ADDRESS", "127.0.0.1"),
 		Port:                              getEnv("PORT", "8080"),
-		OpenAIAPIKey:                      getEnv("OPENAI_API_KEY", ""),
 		OpenAIBaseURL:                     getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		OpenAIModel:                       getEnv("OPENAI_MODEL", "gpt-4o-mini"),
 		EmbeddingBaseURL:                  getEnv("EMBEDDING_BASE_URL", "http://localhost:11434/api/embed"),
