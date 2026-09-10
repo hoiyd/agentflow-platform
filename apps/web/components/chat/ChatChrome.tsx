@@ -5,7 +5,6 @@ import {
   BrainCircuit,
   ClipboardList,
   Database,
-  FlaskConical,
   Menu,
   MessageSquare,
   PanelLeftClose,
@@ -102,12 +101,6 @@ export function Sidebar({
           <NavButton active={view === "tools"} icon={<Wrench size={16} />} label="Tools" onClick={() => selectView("tools")} />
           <NavButton active={view === "memory"} icon={<BrainCircuit size={16} />} label="Memory" onClick={() => selectView("memory")} />
           <NavButton active={view === "knowledge"} icon={<Database size={16} />} label="Knowledge" onClick={() => selectView("knowledge")} />
-        </div>
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">Evaluate</div>
-          <Link className="nav-button" href="/evaluations/compare" title="Run comparison">
-            <FlaskConical size={16} /> <span>Run comparison</span>
-          </Link>
         </div>
         <div className="sidebar-section-title conversation-section-title">Recent runs</div>
         <div className="conversation-list">

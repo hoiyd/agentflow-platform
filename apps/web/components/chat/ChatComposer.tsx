@@ -54,6 +54,19 @@ export function ChatComposer(props: ChatComposerProps) {
     showAgentActions
   } = props;
 
+  const verificationButton = (
+    <button
+      aria-pressed={completionVerificationEnabled}
+      className={`verification-config-toggle ${completionVerificationEnabled ? "active" : ""}`}
+      disabled={isStreaming}
+      onClick={onOpenVerification}
+      type="button"
+    >
+      <ShieldCheck size={15} /><span>Verification</span>
+      <strong>{completionVerificationEnabled ? "On" : "Off"}</strong>
+    </button>
+  );
+
   return (
     <section className="composer">
       {chatMode === "single" ? (
@@ -86,35 +99,27 @@ export function ChatComposer(props: ChatComposerProps) {
               ) : null}
             </div>
           </div>
-          {showAgentActions ? (
-            <div className="agent-actions">
-              <button
-                className={`agent-create-button ${isNewAgentFormOpen ? "active" : ""}`}
-                disabled={isCreatingAgent || isStreaming}
-                onClick={onNewAgent}
-                type="button"
-              >
-                <UserRoundPlus size={15} /> New agent
-              </button>
-              <button className="agent-config-toggle" onClick={onConfigureAgent} type="button">
-                <Settings2 size={15} /> Configure
-              </button>
-            </div>
-          ) : null}
+          <div className="agent-actions">
+            {showAgentActions ? (
+              <>
+                <button
+                  className={`agent-create-button ${isNewAgentFormOpen ? "active" : ""}`}
+                  disabled={isCreatingAgent || isStreaming}
+                  onClick={onNewAgent}
+                  type="button"
+                >
+                  <UserRoundPlus size={15} /> New agent
+                </button>
+                <button className="agent-config-toggle" onClick={onConfigureAgent} type="button">
+                  <Settings2 size={15} /> Configure
+                </button>
+              </>
+            ) : null}
+            {verificationButton}
+          </div>
         </div>
       ) : null}
-      <div className="composer-run-options">
-        <button
-          aria-pressed={completionVerificationEnabled}
-          className={`verification-config-toggle ${completionVerificationEnabled ? "active" : ""}`}
-          disabled={isStreaming}
-          onClick={onOpenVerification}
-          type="button"
-        >
-          <ShieldCheck size={15} /><span>Verification</span>
-          <strong>{completionVerificationEnabled ? "On" : "Off"}</strong>
-        </button>
-      </div>
+      {chatMode !== "single" ? <div className="composer-run-options">{verificationButton}</div> : null}
       {chatMode === "single" && agentsError ? <div className="error">{agentsError}</div> : null}
       {error ? <div className="error">{error}</div> : null}
       <form className="composer-inner" onSubmit={onSubmit}>

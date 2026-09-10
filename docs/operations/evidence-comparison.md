@@ -7,9 +7,10 @@ new report or create an online evaluation service.
 
 ## Use
 
-1. Open **Run comparison** from the Workspace sidebar.
-2. Choose the current and baseline Runs.
-3. Select **Compare evidence**.
+1. Open a Run's Replay page.
+2. Open **Evaluation** and select **Compare with another run**.
+3. Choose the baseline Run; the current Run is preselected.
+4. Select **Compare evidence**.
 
 Run comparison is intentionally separated from normal Replay because its
 deltas are meaningful only for repeated or controlled single-variable tests.
@@ -56,7 +57,7 @@ For the shortest controlled demonstration:
 2. Start two new Conversations and send the exact same prompt with that Agent.
 3. Do not change the model, Tools, Context settings, Run Budget, or orchestration
    limits between Runs.
-4. Open **Evaluate > Run comparison** and select the two completed Runs.
+4. Open one completed Run's Replay page, then select **Evaluation > Compare with another run** and choose the other Run.
 
 The pair should pass as an identical-runtime comparison. To demonstrate a
 single-variable comparison, change exactly one declared dimension, create a

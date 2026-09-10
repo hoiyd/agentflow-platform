@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChevronDown, GitCompareArrows } from "lucide-react";
 import type { EpisodeReport, RecoveryAction, RunReplay as RunReplayData } from "../../lib/api";
 import { resumeRun } from "../../lib/api";
 import { getReplayPageData } from "../../lib/replay-page-data";
@@ -193,6 +194,18 @@ export function RunReplay({ runId }: Props) {
         </div>
         <div className="replay-header-actions">
           <span className={`replay-status ${replay.run.status}`}>{replay.run.status}</span>
+          <details className="replay-evaluation-menu">
+            <summary>
+              Evaluation
+              <ChevronDown aria-hidden="true" size={13} />
+            </summary>
+            <div className="replay-evaluation-menu-content">
+              <Link href={`/evaluations/compare?run=${encodeURIComponent(replay.run.id)}`}>
+                <GitCompareArrows aria-hidden="true" size={15} />
+                Compare with another run
+              </Link>
+            </div>
+          </details>
         </div>
       </header>
 

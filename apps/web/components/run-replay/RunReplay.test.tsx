@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import type { RunReplay as RunReplayData } from "../../lib/api";
@@ -25,6 +25,25 @@ it("keeps replay available when the episode report fails", async () => {
 
   expect(await screen.findByRole("heading", { name: "Run replay" })).toBeTruthy();
   expect(screen.getByRole("status").textContent).toContain("Episode report unavailable: report unavailable");
+});
+
+it("keeps run comparison behind the replay evaluation menu", async () => {
+  getReplayPageData.mockResolvedValue({
+    data: replayFixture(),
+    report: null,
+    reportError: ""
+  });
+
+  render(<RunReplay runId="run-1" />);
+
+  const menuLabel = await screen.findByText("Evaluation");
+  const menu = menuLabel.closest("details");
+  expect(menu?.hasAttribute("open")).toBe(false);
+
+  fireEvent.click(menuLabel);
+  expect(screen.getByRole("link", { name: "Compare with another run" }).getAttribute("href")).toBe(
+    "/evaluations/compare?run=run-1"
+  );
 });
 
 function replayFixture(): RunReplayData {
