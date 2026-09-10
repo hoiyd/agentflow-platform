@@ -116,8 +116,8 @@
 }
 
 .agent-config-modal-backdrop {
-  align-items: center;
-  padding: 24px;
+  align-items: start;
+  padding-top: clamp(40px, 7vh, 64px);
 }
 
 .create-agent-modal-backdrop {
