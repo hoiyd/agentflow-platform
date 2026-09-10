@@ -66,8 +66,9 @@ model or workload requires them.
   boundary; do not trust a client-selected `workspace_id`.
 - Extend Workspace scope to Agent, Artifact, Evaluation, cleanup, and background
   operations, and bind it to authenticated Membership without a global fallback.
-- Resolve Provider and Tool secrets through scoped references, and apply one
-  redaction policy before Events, Artifacts, logs, or telemetry are persisted.
+- Keep the implemented process-level Provider credential boundary and shared
+  redaction sink policy; add scoped Provider and Tool credential references
+  when authenticated identities and multiple credential owners exist.
 - Add Resource, Credential, Network, Side-effect, and Approval policy ahead of
   Tool execution. Agent allowlists may narrow platform policy, never widen it.
 - Define retention, deletion, and append-only security audit behavior without

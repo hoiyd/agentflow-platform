@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 // ErrorKind identifies the recovery action for a failed model request.
@@ -347,6 +348,7 @@ func containsAny(value string, candidates ...string) bool {
 
 func cleanErrorMessage(value string) string {
 	value = strings.Join(strings.Fields(strings.TrimSpace(value)), " ")
+	value, _ = redaction.Text(value)
 	const maxMessageBytes = 1000
 	if len(value) > maxMessageBytes {
 		value = value[:maxMessageBytes]

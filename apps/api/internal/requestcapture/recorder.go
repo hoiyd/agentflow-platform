@@ -132,13 +132,14 @@ func capturePayload(payload []byte, mode domain.ModelRequestCaptureMode, maxByte
 		return capture
 	}
 	content := append([]byte(nil), payload...)
-	if mode == domain.ModelRequestCaptureRedacted {
-		redacted, redactionCount, err := redaction.JSON(content)
-		if err != nil {
-			capture.Truncated = true
-			return capture
-		}
+	redacted, redactionCount, err := redaction.JSON(content)
+	if err != nil {
+		capture.Truncated = true
+		return capture
+	}
+	if mode == domain.ModelRequestCaptureRedacted || redactionCount > 0 {
 		content = redacted
+		capture.Mode = domain.ModelRequestCaptureRedacted
 		capture.Redacted = true
 		capture.RedactionStrategy = redaction.DeterministicStrategy
 		capture.RedactionCount = redactionCount
@@ -150,7 +151,7 @@ func capturePayload(payload []byte, mode domain.ModelRequestCaptureMode, maxByte
 	capture.Content = string(content)
 	capture.ContentHash = hashBytes(content)
 	capture.StoredBytes = len(content)
-	capture.Reconstructable = mode == domain.ModelRequestCaptureFull && capture.ContentHash == hashBytes(payload)
+	capture.Reconstructable = capture.Mode == domain.ModelRequestCaptureFull && capture.ContentHash == hashBytes(payload)
 	expiresAt := now.Add(retention)
 	capture.ExpiresAt = &expiresAt
 	return capture

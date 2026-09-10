@@ -168,6 +168,14 @@ func TestEvidencePayloadsAreBounded(t *testing.T) {
 	if details["truncated"] != true || details["byte_size"] == nil {
 		t.Fatalf("details were not bounded: %#v", details)
 	}
+	secretArtifact := buildArtifacts("run", "evidence", []Artifact{{Content: "Bearer private-token"}}, time.Now().UTC(), 64)
+	if strings.Contains(secretArtifact[0].Content, "private-token") || !secretArtifact[0].Truncated {
+		t.Fatalf("artifact credential leaked: %#v", secretArtifact[0])
+	}
+	secretDetails := cloneDetails(map[string]any{"authorization": "Bearer private-token"}, 128)
+	if secretDetails["authorization"] != "[REDACTED]" || strings.Contains(redactText("api_key=sk-abcdefgh"), "abcdefgh") {
+		t.Fatalf("evidence credential leaked: details=%#v", secretDetails)
+	}
 }
 
 func newVerificationTestRun(t *testing.T, policy domain.VerificationPolicy, specs []domain.VerifierSpec) (*fixturestore.Store, domain.Run, *Engine) {

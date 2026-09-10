@@ -335,7 +335,7 @@ knowledge for model context.
     "minimum_evidence_coverage": 0.25
   },
   "security": {
-    "policy_version": "rag-prompt-guard-v1",
+    "policy_version": "rag-prompt-guard-v2",
     "untrusted_context": true,
     "checked_candidates": 4,
     "blocked_candidates": 1,

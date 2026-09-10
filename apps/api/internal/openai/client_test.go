@@ -138,6 +138,10 @@ func TestClientHelperContracts(t *testing.T) {
 	if summarizeToolResults(nil) != "Tool execution completed." || summarizeToolResults([]tools.ExecutionResult{{Tool: "calculator"}}) != "Tool execution completed." {
 		t.Fatal("unexpected tool result summary")
 	}
+	toolPayload := marshalResult(tools.ExecutionResult{Tool: "test", Result: map[string]any{"api_key": "sk-abcdefgh"}})
+	if strings.Contains(toolPayload, "abcdefgh") || !strings.Contains(toolPayload, "[REDACTED]") {
+		t.Fatalf("tool result credential leaked to model payload: %s", toolPayload)
+	}
 
 	events := make(chan StreamEvent, 8)
 	if err := emitText(context.Background(), "one two", events); err != nil {

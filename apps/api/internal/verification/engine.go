@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 const maxArtifactsPerEvidence = 8
@@ -190,7 +191,7 @@ func (e *Engine) runVerifier(ctx context.Context, run domain.Run, spec domain.Ve
 		VerifierType: spec.Type, VerifierVersion: spec.Version, Attempt: attempt,
 		SubjectHash: subject.Hash, SnapshotHash: snapshotHash, Status: result.Status,
 		StartedAt: started, CompletedAt: completed, DurationMS: completed.Sub(started).Milliseconds(),
-		ExitCode: result.ExitCode, Summary: strings.TrimSpace(result.Summary), Details: details, ArtifactIDs: artifactIDs,
+		ExitCode: result.ExitCode, Summary: redactText(strings.TrimSpace(result.Summary)), Details: details, ArtifactIDs: artifactIDs,
 	}
 	if err := e.store.AppendVerificationRecord(domain.VerificationRecord{Evidence: evidence, Artifacts: artifacts}); err != nil {
 		return domain.VerificationBlocked, err
@@ -213,8 +214,9 @@ func buildArtifacts(runID, evidenceID string, outputs []Artifact, createdAt time
 	artifacts := make([]domain.VerificationArtifact, 0, len(outputs))
 	for _, output := range outputs {
 		originalContent := output.Content
-		content, contentChanged := boundedArtifactContent(output.Content, limit)
-		truncated := output.Truncated || contentChanged
+		redactedContent, redactionCount := redaction.Text(originalContent)
+		content, contentChanged := boundedArtifactContent(redactedContent, limit)
+		truncated := output.Truncated || contentChanged || redactionCount > 0
 		byteSize := output.ByteSize
 		if byteSize == 0 {
 			byteSize = len(originalContent)
@@ -342,7 +344,13 @@ func cloneDetails(details map[string]any, limit int) map[string]any {
 	if err := json.Unmarshal(encoded, &cloned); err != nil {
 		return map[string]any{"serialization_error": err.Error()}
 	}
-	return cloned
+	redacted, _ := redaction.Map(cloned)
+	return redacted
+}
+
+func redactText(value string) string {
+	redacted, _ := redaction.Text(value)
+	return redacted
 }
 
 func (e *Engine) recordEvent(run domain.Run, eventType domain.RunEventType, payload map[string]any) {

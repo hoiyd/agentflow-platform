@@ -11,11 +11,52 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 type embeddingStub struct {
 	embedding openai.Embedding
 	err       error
+}
+
+func TestBuiltinProviderRejectsCredentialContent(t *testing.T) {
+	provider := newTestProvider(t, &recordingStore{}, immediateEmbedder{}, ProviderOptions{})
+	defer closeProvider(t, provider)
+	if _, err := provider.Commit(context.Background(), domain.Memory{
+		Kind: "fact", Content: "Authorization: Bearer private-token",
+	}); !errors.Is(err, redaction.ErrCredentialContent) {
+		t.Fatalf("credential memory error=%v", err)
+	}
+	if _, err := provider.Recall(context.Background(), domain.MemorySearch{
+		Query: "api_key=sk-abcdefgh",
+	}); !errors.Is(err, redaction.ErrCredentialContent) {
+		t.Fatalf("credential recall error=%v", err)
+	}
+}
+
+func TestBuiltinProviderDropsLegacyCredentialMemoryFromRecall(t *testing.T) {
+	store := &legacyRecallStore{
+		recordingStore: &recordingStore{},
+		items: []domain.RetrievedMemory{
+			{Memory: domain.Memory{ID: "safe", Content: "release day is Tuesday"}},
+			{Memory: domain.Memory{ID: "secret", Content: "Authorization: Bearer private-token"}},
+		},
+	}
+	provider := newTestProvider(t, store, immediateEmbedder{}, ProviderOptions{})
+	defer closeProvider(t, provider)
+	items, err := provider.Recall(context.Background(), domain.MemorySearch{Query: "release day"})
+	if err != nil || len(items) != 1 || items[0].Memory.ID != "safe" {
+		t.Fatalf("legacy credential memory was recalled: items=%#v err=%v", items, err)
+	}
+}
+
+type legacyRecallStore struct {
+	*recordingStore
+	items []domain.RetrievedMemory
+}
+
+func (s *legacyRecallStore) SearchMemories(domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+	return s.items, nil
 }
 
 type retryEmbeddingStub struct {

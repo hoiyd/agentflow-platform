@@ -199,7 +199,7 @@ func TestExecutorReplaysCommittedSideEffectWithoutInvokingHandler(t *testing.T) 
 		},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
 			calls.Add(1)
-			return map[string]any{"record_id": "record-1"}, nil
+			return map[string]any{"record_id": "record-1", "api_key": "sk-private123"}, nil
 		},
 	})
 	if err != nil {
@@ -224,6 +224,9 @@ func TestExecutorReplaysCommittedSideEffectWithoutInvokingHandler(t *testing.T) 
 	}
 	if second.Result.(map[string]any)["record_id"] != "record-1" {
 		t.Fatalf("unexpected replayed result: %#v", second.Result)
+	}
+	if second.Result.(map[string]any)["api_key"] != "[REDACTED]" || strings.Contains(string(journal.records[sideEffectKey(request)].Result), "private123") {
+		t.Fatalf("credential leaked in side-effect journal: %#v", journal.records[sideEffectKey(request)])
 	}
 }
 
@@ -423,6 +426,13 @@ func TestExecutionErrorUnwrapsCause(t *testing.T) {
 	err := executionError(ErrorExecutionFailed, "failed", cause)
 	if !errors.Is(err, cause) {
 		t.Fatal("expected execution error to unwrap its cause")
+	}
+}
+
+func TestExecutionErrorRedactsCredentialMessage(t *testing.T) {
+	err := executionError(ErrorExecutionFailed, "Authorization: Bearer private-token", nil)
+	if strings.Contains(err.Message, "private-token") || !strings.Contains(err.Message, "[REDACTED]") {
+		t.Fatalf("credential leaked in tool error: %#v", err)
 	}
 }
 

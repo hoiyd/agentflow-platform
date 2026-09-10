@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const RAGPromptGuardPolicyVersion = "rag-prompt-guard-v1"
+const RAGPromptGuardPolicyVersion = "rag-prompt-guard-v2"
 const RAGCitationProtocolVersion = "rag-citation-v1"
 const DefaultWorkspaceID = "default_workspace"
 

@@ -61,6 +61,14 @@ func TestWriteErrorReturnsStructuredValidationEnvelope(t *testing.T) {
 	}
 }
 
+func TestWriteErrorRedactsCredentialMessage(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeError(recorder, http.StatusBadRequest, "api_key=sk-abcdefgh")
+	if strings.Contains(recorder.Body.String(), "abcdefgh") || !strings.Contains(recorder.Body.String(), "[REDACTED]") {
+		t.Fatalf("credential leaked in API error: %s", recorder.Body.String())
+	}
+}
+
 func TestFailureInfoForHTTPStatusCoversStableClientClassifications(t *testing.T) {
 	tests := []struct {
 		name      string

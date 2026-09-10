@@ -9,6 +9,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/tools"
 )
 
@@ -139,9 +140,14 @@ func normalizeToolCalls(toolCalls []ToolCall) []ToolCall {
 func marshalResult(result tools.ExecutionResult) string {
 	bytes, err := json.Marshal(result)
 	if err != nil {
-		return fmt.Sprintf(`{"tool":%q,"error":%q}`, result.Tool, err.Error())
+		message, _ := redaction.Text(err.Error())
+		return fmt.Sprintf(`{"tool":%q,"error":%q}`, result.Tool, message)
 	}
-	return string(bytes)
+	redacted, _, err := redaction.JSON(bytes)
+	if err != nil {
+		return fmt.Sprintf(`{"tool":%q,"error":"tool result redaction failed"}`, result.Tool)
+	}
+	return string(redacted)
 }
 
 func summarizeToolResults(results []tools.ExecutionResult) string {

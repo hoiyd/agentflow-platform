@@ -11,6 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/eventcatalog"
 	"agentflow-platform/apps/api/internal/projection"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 func (s *PostgresStore) CreateCollaborationStep(step domain.CollaborationStep) (domain.CollaborationStep, error) {
@@ -29,6 +30,9 @@ func (s *PostgresStore) CreateCollaborationStep(step domain.CollaborationStep) (
 	step.Input = strings.TrimSpace(step.Input)
 	step.Output = strings.TrimSpace(step.Output)
 	step.Error = strings.TrimSpace(step.Error)
+	step.Input, _ = redaction.Text(step.Input)
+	step.Output, _ = redaction.Text(step.Output)
+	step.Error, _ = redaction.Text(step.Error)
 	if step.Iteration < 0 {
 		step.Iteration = 0
 	}
@@ -43,21 +47,24 @@ func (s *PostgresStore) CreateCollaborationStep(step domain.CollaborationStep) (
 }
 
 func (s *PostgresStore) UpdateCollaborationStep(id string, status domain.CollaborationStepStatus, output string, errorMessage string) (domain.CollaborationStep, error) {
+	output, _ = redaction.Text(strings.TrimSpace(output))
+	errorMessage, _ = redaction.Text(strings.TrimSpace(errorMessage))
 	return s.scanStepQuery(`
 		UPDATE collaboration_steps
 		SET status = $1, output = $2, error = $3, updated_at = $4
 		WHERE id = $5
 		RETURNING id, run_id, conversation_id, role, agent_id, status, iteration, input, output, error, created_at, updated_at`,
-		string(status), strings.TrimSpace(output), strings.TrimSpace(errorMessage), time.Now().UTC(), id)
+		string(status), output, errorMessage, time.Now().UTC(), id)
 }
 
 func (s *PostgresStore) UpdateCollaborationStepOutput(id string, output string) (domain.CollaborationStep, error) {
+	output, _ = redaction.Text(strings.TrimSpace(output))
 	return s.scanStepQuery(`
 		UPDATE collaboration_steps
 		SET output = $1, updated_at = $2
 		WHERE id = $3
 		RETURNING id, run_id, conversation_id, role, agent_id, status, iteration, input, output, error, created_at, updated_at`,
-		strings.TrimSpace(output), time.Now().UTC(), id)
+		output, time.Now().UTC(), id)
 }
 
 func (s *PostgresStore) ListCollaborationSteps(runID string) ([]domain.CollaborationStep, error) {
@@ -121,6 +128,7 @@ func preparePostgresRunEvent(event domain.RunEvent, now time.Time) (domain.RunEv
 	if event.Payload == nil {
 		event.Payload = map[string]any{}
 	}
+	event.Payload, _ = redaction.Map(event.Payload)
 	if event.Timestamp.IsZero() {
 		event.Timestamp = now
 	}

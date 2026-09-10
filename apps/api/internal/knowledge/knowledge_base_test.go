@@ -13,11 +13,26 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 type embeddingStub struct {
 	embedding openai.Embedding
 	err       error
+}
+
+func TestKnowledgeBaseRejectsCredentialContentBeforeEmbedding(t *testing.T) {
+	knowledgeBase := NewKnowledgeBase(nil, embeddingStub{})
+	if _, err := knowledgeBase.Ingest(context.Background(), domain.DocumentIngestRequest{
+		Title: "unsafe", Content: "Authorization: Bearer private-token",
+	}); !errors.Is(err, redaction.ErrCredentialContent) {
+		t.Fatalf("credential document error=%v", err)
+	}
+	if _, err := knowledgeBase.Search(context.Background(), domain.DocumentSearch{
+		Query: "api_key=sk-abcdefgh",
+	}, 1); !errors.Is(err, redaction.ErrCredentialContent) {
+		t.Fatalf("credential query error=%v", err)
+	}
 }
 
 type knowledgeRetrieverStub struct {

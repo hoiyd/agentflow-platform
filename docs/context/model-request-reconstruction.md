@@ -31,8 +31,10 @@ MODEL_REQUEST_CAPTURE_RETENTION=168h
   count are recorded. Redacted captures are useful for debugging but are not
   exact reconstructions.
 - `full` stores the exact canonical JSON sent to the transport when it fits the
-  configured limit. It is the only mode that may set `reconstructable=true` and
-  should be enabled only in a trusted local environment.
+  configured limit and contains no detected credential. A credential match
+  automatically downgrades that capture to `redacted`; only unchanged full
+  captures may set `reconstructable=true`. Use this mode only in a trusted
+  local environment.
 
 When redacted or full content exceeds the limit, AgentFlow retains the envelope
 and marks the capture truncated without persisting a partial JSON fragment.
@@ -41,6 +43,8 @@ content on read while retaining the Envelope, payload hash, expiry, and redactio
 metadata for long-term audit.
 API keys and Authorization headers never enter the recorder because transport
 headers are applied after the payload observation boundary.
+See [Credential boundary and redaction](../operations/credential-boundary.md)
+for the complete source-to-sink policy and known limits.
 
 ## Logical Calls and Physical Attempts
 

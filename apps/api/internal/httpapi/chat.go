@@ -26,6 +26,9 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.WorkspaceID = workspaceID
+	if rejectCredentialContent(w, r, req) {
+		return
+	}
 	scoped := h.scopedStoreForID(workspaceID)
 	req.Message = strings.TrimSpace(req.Message)
 	if req.Message == "" {
@@ -265,6 +268,9 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	if rejectCredentialContent(w, r, req) {
+		return
+	}
 
 	scoped := h.scopedStore(r)
 	run, ok, err := scoped.GetRun(id)
@@ -342,6 +348,9 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.UserInput = strings.TrimSpace(req.UserInput)
+	if rejectCredentialContent(w, r, req) {
+		return
+	}
 
 	scoped := h.scopedStore(r)
 	run, ok, err := scoped.GetRun(id)

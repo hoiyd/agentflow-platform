@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair) (domain.InterruptedRunRepairResult, error) {
@@ -43,6 +44,7 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 	}
 
 	now := time.Now().UTC()
+	errorMessage, _ := redaction.Text(strings.TrimSpace(request.ErrorMessage))
 	appended := make([]domain.RunEvent, 0, len(request.TerminalEvents))
 	for _, item := range request.TerminalEvents {
 		cursor++
@@ -51,6 +53,7 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 		if err != nil {
 			return domain.InterruptedRunRepairResult{}, err
 		}
+		prepared.Payload, _ = redaction.Map(prepared.Payload)
 		payload, err := json.Marshal(prepared.Payload)
 		if err != nil {
 			return domain.InterruptedRunRepairResult{}, err
@@ -71,7 +74,7 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 		UPDATE collaboration_steps
 		SET status=$1, error=$2, updated_at=$3
 		WHERE run_id=$4 AND status=$5`,
-		string(domain.CollaborationStepFailed), strings.TrimSpace(request.ErrorMessage), now,
+		string(domain.CollaborationStepFailed), errorMessage, now,
 		request.RunID, string(domain.CollaborationStepRunning)); err != nil {
 		return domain.InterruptedRunRepairResult{}, err
 	}
@@ -79,7 +82,7 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 		UPDATE tool_effects
 		SET status=$1, version=version+1, error=$2, updated_at=$3
 		WHERE run_id=$4 AND status=$5`,
-		string(domain.ToolEffectNeedsReconciliation), strings.TrimSpace(request.ErrorMessage), now,
+		string(domain.ToolEffectNeedsReconciliation), errorMessage, now,
 		request.RunID, string(domain.ToolEffectExecuting)); err != nil {
 		return domain.InterruptedRunRepairResult{}, err
 	}
@@ -100,7 +103,7 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 		RETURNING id, workspace_id, agent_id, conversation_id, status, error,
 			runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at,
 			active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
-		string(domain.RunFailedRecoverable), strings.TrimSpace(request.ErrorMessage), now, request.RunID))
+		string(domain.RunFailedRecoverable), errorMessage, now, request.RunID))
 	if err != nil {
 		return domain.InterruptedRunRepairResult{}, err
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
@@ -24,6 +25,12 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 	}
 	if snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion || snapshot.RunBudget == nil {
 		return domain.Run{}, errors.New("runtime snapshot is required")
+	}
+	if err := redaction.ValidateText(
+		snapshot.Agent.Name, snapshot.Agent.Description, snapshot.Agent.SystemPrompt,
+		snapshot.Model.BaseURL, snapshot.Model.EmbeddingBaseURL,
+	); err != nil {
+		return domain.Run{}, err
 	}
 	snapshotJSON, err := json.Marshal(snapshot)
 	if err != nil {
@@ -73,6 +80,7 @@ func (s *PostgresStore) UpdateRunAgent(id string, agentID string) (domain.Run, e
 
 func (s *PostgresStore) UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error) {
 	now := time.Now().UTC()
+	errorMessage, _ = redaction.Text(strings.TrimSpace(errorMessage))
 	return s.scanRunQuery(`
 		UPDATE runs
 		SET status = $1,
@@ -98,7 +106,7 @@ func (s *PostgresStore) UpdateRunStatus(id string, status domain.RunStatus, erro
 			updated_at = $3
 		WHERE id = $4
 		RETURNING id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
-		string(status), strings.TrimSpace(errorMessage), now, id)
+		string(status), errorMessage, now, id)
 }
 
 func (s *PostgresStore) UpdateRunVerificationStatus(id string, status domain.VerificationStatus) (domain.Run, error) {
@@ -111,6 +119,13 @@ func (s *PostgresStore) UpdateRunVerificationStatus(id string, status domain.Ver
 }
 
 func (s *PostgresStore) AppendVerificationRecord(record domain.VerificationRecord) error {
+	record.Evidence.Summary, _ = redaction.Text(record.Evidence.Summary)
+	record.Evidence.Details, _ = redaction.Map(record.Evidence.Details)
+	for index := range record.Artifacts {
+		content, count := redaction.Text(record.Artifacts[index].Content)
+		record.Artifacts[index].Content = content
+		record.Artifacts[index].Truncated = record.Artifacts[index].Truncated || count > 0
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err

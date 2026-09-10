@@ -12,6 +12,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 const (
@@ -187,6 +188,12 @@ func (p *BuiltinProvider) Recall(ctx context.Context, search domain.MemorySearch
 	if search.Query == "" {
 		return nil, newOperationError("recall", 1, errors.New("query is required"))
 	}
+	if err := redaction.ValidateText(search.Query); err != nil {
+		return nil, err
+	}
+	if err := redaction.ValidateValue(search.Metadata); err != nil {
+		return nil, err
+	}
 	if len(search.Embedding) == 0 {
 		var embedding modelprovider.Embedding
 		if err := p.retry(ctx, "recall.embed", func() error {
@@ -208,7 +215,14 @@ func (p *BuiltinProvider) Recall(ctx context.Context, search domain.MemorySearch
 	}); err != nil {
 		return nil, err
 	}
-	return items, nil
+	filtered := items[:0]
+	for _, item := range items {
+		if redaction.ValidateText(item.Memory.Content) != nil || redaction.ValidateValue(item.Memory.Metadata) != nil {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered, nil
 }
 
 func (p *BuiltinProvider) Commit(ctx context.Context, item domain.Memory) (domain.Memory, error) {
@@ -226,6 +240,12 @@ func (p *BuiltinProvider) commit(ctx context.Context, item domain.Memory, allowC
 	}
 	if item.Content == "" {
 		return domain.Memory{}, newOperationError("commit", 1, errors.New("memory content is required"))
+	}
+	if err := redaction.ValidateText(item.Content); err != nil {
+		return domain.Memory{}, err
+	}
+	if err := redaction.ValidateValue(item.Metadata); err != nil {
+		return domain.Memory{}, err
 	}
 	if strings.TrimSpace(item.ID) == "" {
 		id, err := newMemoryID()

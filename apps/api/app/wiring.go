@@ -10,6 +10,7 @@ import (
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/config"
+	"agentflow-platform/apps/api/internal/credential"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/httpapi"
@@ -26,10 +27,11 @@ import (
 )
 
 type applicationDependencies struct {
-	store          store.Store
-	handler        *httpapi.Handler
-	memoryProvider memorypkg.Provider
-	runController  *concurrency.RunController
+	store           store.Store
+	handler         *httpapi.Handler
+	memoryProvider  memorypkg.Provider
+	runController   *concurrency.RunController
+	modelConfigured bool
 }
 
 func buildDependencies(cfg config.Config) (applicationDependencies, error) {
@@ -58,7 +60,8 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		log.Printf("native recovery reconciled %d child run delegation(s)", reconciled)
 	}
 
-	modelClient := newModelClient(cfg)
+	providerCredential := credential.FromEnvironment("OPENAI_API_KEY")
+	modelClient := newModelClient(cfg, providerCredential)
 	modelClient.SetToolEffectJournal(appStore)
 	modelClient.SetToolArtifactStore(appStore)
 	modelClient.SetToolArtifactPolicy(openai.ToolArtifactPolicy{
@@ -85,7 +88,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	verificationEngine := verification.NewEngine(appStore, verifierRegistry)
 	retrievalPipeline := rag.NewRetrievalPipeline(appStore)
 	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, modelClient, retrievalPipeline)
-	memoryProvider := newMemoryProvider(cfg, appStore, modelClient)
+	memoryProvider := newMemoryProvider(cfg, appStore, modelClient, providerCredential.Available())
 	if err := memoryProvider.Initialize(context.Background()); err != nil {
 		return applicationDependencies{}, fmt.Errorf("initialize memory provider: %w", err)
 	}
@@ -153,7 +156,10 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	}
 
 	cleanupStore = false
-	return applicationDependencies{store: appStore, handler: handler, memoryProvider: memoryProvider, runController: runController}, nil
+	return applicationDependencies{
+		store: appStore, handler: handler, memoryProvider: memoryProvider,
+		runController: runController, modelConfigured: providerCredential.Available(),
+	}, nil
 }
 
 type answerRelevanceEmbeddingClient interface {
@@ -173,10 +179,10 @@ func newAnswerRelevanceEmbedder(client answerRelevanceEmbeddingClient) verificat
 	}
 }
 
-func newMemoryProvider(cfg config.Config, appStore store.Store, modelClient *openai.Client) *memorypkg.BuiltinProvider {
+func newMemoryProvider(cfg config.Config, appStore store.Store, modelClient *openai.Client, modelConfigured bool) *memorypkg.BuiltinProvider {
 	var fallback memorypkg.CandidateExtractor
 	adaptiveEnabled := cfg.MemoryAdaptiveExtractionMode == memorypkg.AdaptiveModeShadow || cfg.MemoryAdaptiveExtractionMode == memorypkg.AdaptiveModeAuto
-	if strings.TrimSpace(cfg.OpenAIAPIKey) != "" && adaptiveEnabled {
+	if modelConfigured && adaptiveEnabled {
 		fallback = memorypkg.AdaptiveCandidateExtractor{Model: modelClient}
 	}
 	return memorypkg.NewBuiltinProvider(appStore, modelClient, memorypkg.ProviderOptions{
@@ -190,9 +196,9 @@ func newMemoryProvider(cfg config.Config, appStore store.Store, modelClient *ope
 	})
 }
 
-func newModelClient(cfg config.Config) *openai.Client {
+func newModelClient(cfg config.Config, providerCredential credential.Value) *openai.Client {
 	client := openai.NewClientWithTimeoutAndEmbeddingModel(
-		cfg.OpenAIAPIKey,
+		providerCredential.Reveal(),
 		cfg.OpenAIBaseURL,
 		cfg.EmbeddingBaseURL,
 		cfg.OpenAIModel,

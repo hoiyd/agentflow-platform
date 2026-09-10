@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/redaction"
 )
 
 const (
@@ -19,6 +20,9 @@ const (
 func (r *Registry) FreezeContract(input *domain.CompletionContract) (*domain.CompletionContract, error) {
 	if input == nil {
 		return nil, nil
+	}
+	if err := redaction.ValidateValue(input); err != nil {
+		return nil, &VerificationError{Kind: ErrorInvalidContract, Message: "completion contract contains credential-like content", Cause: err}
 	}
 	bytes, err := json.Marshal(input)
 	if err != nil {
