@@ -21,18 +21,19 @@ func TestJSONRemovesStructuredAndEmbeddedSecrets(t *testing.T) {
 func TestTextCoversProviderDatabaseAndHeaderCredentials(t *testing.T) {
 	input := strings.Join([]string{
 		"Bearer private-token", "Basic dXNlcjpwYXNz", "OPENAI_API_KEY=sk-abcdefgh",
+		"token=actor-secret",
 		"postgres://agent:database-password@localhost/agentflow",
 		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature",
 		"gsk_abcdefgh12345678",
 	}, " ")
 	redacted, count := Text(input)
-	for _, secret := range []string{"private-token", "dXNlcjpwYXNz", "sk-abcdefgh", "database-password", "eyJhbGci", "gsk_abcdefgh"} {
+	for _, secret := range []string{"private-token", "dXNlcjpwYXNz", "sk-abcdefgh", "actor-secret", "database-password", "eyJhbGci", "gsk_abcdefgh"} {
 		if strings.Contains(redacted, secret) {
 			t.Fatalf("redacted text contains %q: %s", secret, redacted)
 		}
 	}
-	if count != 6 {
-		t.Fatalf("expected six redactions, got %d: %s", count, redacted)
+	if count != 7 {
+		t.Fatalf("expected seven redactions, got %d: %s", count, redacted)
 	}
 }
 
