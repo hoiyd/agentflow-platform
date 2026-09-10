@@ -1,0 +1,98 @@
+.evaluation-controls {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.evaluation-input {
+  display: grid;
+  gap: 6px;
+}
+
+.evaluation-cases-input {
+  min-height: 220px;
+  resize: vertical;
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.compact-send {
+  min-height: 42px;
+  min-width: 128px;
+  padding: 0 14px;
+}
+
+.evaluation-result,
+.evaluation-cases {
+  display: grid;
+  gap: 14px;
+}
+
+.evaluation-dataset,
+.evaluation-expected,
+.evaluation-failure {
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.evaluation-summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(90px, 1fr));
+  border: 1px solid var(--border);
+}
+
+.evaluation-metric {
+  min-height: 66px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 10px 12px;
+}
+
+.evaluation-metric + .evaluation-metric {
+  border-left: 1px solid var(--border);
+}
+
+.evaluation-metric span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.evaluation-metric strong {
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-variation-settings: "wght" 650;
+}
+
+.evaluation-metric.danger strong,
+.evaluation-failure {
+  color: var(--danger);
+}
+
+.evaluation-case {
+  border-top: 1px solid var(--border-strong);
+  padding-top: 14px;
+}
+
+.evaluation-case h3 {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.evaluation-case.hit {
+  border-top-color: color-mix(in srgb, var(--teal) 35%, var(--border));
+}
+
+.evaluation-case.miss {
+  border-top-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+}
+
+.evaluation-failure {
+  margin-top: 6px;
+}
