@@ -588,7 +588,13 @@ func exerciseFailureBoundaries(t *testing.T, harness *harness) controlReport {
 	if err == nil {
 		t.Fatal("ignored-cancel provider completed before caller timeout")
 	}
-	time.Sleep(harness.config.ProviderDelay*4 + 10*time.Millisecond)
+	providerIdleDeadline := time.Now().Add(harness.config.RequestTimeout)
+	for harness.provider.active.Load() != 0 && time.Now().Before(providerIdleDeadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if harness.provider.active.Load() != 0 {
+		t.Fatal("ignored-cancel provider request did not finish")
+	}
 	recoveryCtx, recoveryCancel := context.WithTimeout(context.Background(), harness.config.RequestTimeout)
 	result.IgnoredCancelRecovered = harness.probe(recoveryCtx, "post-cancel-recovery", 512) == nil
 	recoveryCancel()
