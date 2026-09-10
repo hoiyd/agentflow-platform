@@ -553,6 +553,9 @@ func exerciseFailureBoundaries(t *testing.T, harness *harness) controlReport {
 	if err == nil {
 		t.Fatal("slow provider completed before caller timeout")
 	}
+	if !waitForProviderIdle(harness.provider, harness.config.RequestTimeout) {
+		t.Fatal("timed-out provider request did not finish")
+	}
 	timeoutRecoveryCtx, timeoutRecoveryCancel := context.WithTimeout(context.Background(), harness.config.RequestTimeout)
 	result.TimeoutReleasedPermit = harness.probe(timeoutRecoveryCtx, "post-timeout-recovery", 512) == nil
 	timeoutRecoveryCancel()
@@ -578,6 +581,9 @@ func exerciseFailureBoundaries(t *testing.T, harness *harness) controlReport {
 	case <-time.After(harness.config.RequestTimeout):
 		t.Fatal("canceled provider request did not return")
 	}
+	if !waitForProviderIdle(harness.provider, harness.config.RequestTimeout) {
+		t.Fatal("canceled provider request did not finish")
+	}
 	cancelRecoveryCtx, cancelRecovery := context.WithTimeout(context.Background(), harness.config.RequestTimeout)
 	result.CanceledRequestRecovers = harness.probe(cancelRecoveryCtx, "post-explicit-cancel", 512) == nil
 	cancelRecovery()
@@ -588,11 +594,7 @@ func exerciseFailureBoundaries(t *testing.T, harness *harness) controlReport {
 	if err == nil {
 		t.Fatal("ignored-cancel provider completed before caller timeout")
 	}
-	providerIdleDeadline := time.Now().Add(harness.config.RequestTimeout)
-	for harness.provider.active.Load() != 0 && time.Now().Before(providerIdleDeadline) {
-		time.Sleep(time.Millisecond)
-	}
-	if harness.provider.active.Load() != 0 {
+	if !waitForProviderIdle(harness.provider, harness.config.RequestTimeout) {
 		t.Fatal("ignored-cancel provider request did not finish")
 	}
 	recoveryCtx, recoveryCancel := context.WithTimeout(context.Background(), harness.config.RequestTimeout)
@@ -701,6 +703,14 @@ func waitForGoroutines(limit int) int {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+func waitForProviderIdle(provider *providerFixture, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for provider.active.Load() != 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	return provider.active.Load() == 0
 }
 
 func hashConfig(config suiteConfig) string {
