@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/failure"
 )
 
@@ -121,6 +122,9 @@ func TestContinuationFailurePolicyPreservesRetryableRunState(t *testing.T) {
 	}
 	if status, failRun := continuationFailurePolicy(errors.New("worker failed")); status != http.StatusInternalServerError || !failRun {
 		t.Fatalf("terminal failure policy: status=%d fail_run=%t", status, failRun)
+	}
+	if status, failRun := continuationFailurePolicy(agentpkg.ErrNoEligibleAgent); status != http.StatusUnprocessableEntity || !failRun {
+		t.Fatalf("no-route policy: status=%d fail_run=%t", status, failRun)
 	}
 }
 

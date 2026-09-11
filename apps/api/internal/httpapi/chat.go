@@ -329,6 +329,9 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func continuationFailurePolicy(err error) (status int, failRun bool) {
+	if errors.Is(err, agentpkg.ErrNoEligibleAgent) {
+		return http.StatusUnprocessableEntity, true
+	}
 	info := failure.Describe(err)
 	if info.Source == "delegation" && info.Category == failure.CategoryCapacity {
 		return http.StatusServiceUnavailable, false

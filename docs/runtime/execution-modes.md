@@ -66,9 +66,11 @@ Planner -> waiting_for_user -> Router -> Worker -> Reviewer -> Finalizer
 
 1. **Planner** creates an explicit plan and success criteria.
 2. The Run enters `waiting_for_user`; the user may approve or edit the plan.
-3. **Router** scores the frozen candidate Agents and selects one Worker. Auto
-   routing uses the model when available and falls back to deterministic
-   query/profile matching.
+3. **Router** first excludes frozen candidates with invalid identity or
+   unavailable Tools, then scores only eligible Agents. Auto routing uses the
+   model when available and falls back to deterministic query/profile matching
+   only for transient provider or invalid-response failures. Terminal Auth,
+   Budget, cancellation, and configuration failures are not hidden.
 4. **Worker** executes the approved plan in an isolated, bounded Child Run using
    the selected Agent profile.
 5. **Reviewer** evaluates the Worker result against the task and plan.
@@ -94,6 +96,9 @@ summary and Child Trace reference. See
 The current topology is intentionally fixed rather than a generic arbitrary
 DAG. This keeps lifecycle, continue semantics, and Replay predictable while
 still exposing a bounded Router extension point.
+
+See [Capability-aware Agent Selection](agent-selection.md) for the eligibility,
+structured response, fallback, Snapshot, and decision-event contracts.
 
 ## Loop Mode
 

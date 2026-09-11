@@ -198,6 +198,26 @@ func TestRuntimeSnapshotResumeSupportsOnlyCurrentAndPreviousVersions(t *testing.
 	}
 }
 
+func TestPreviousMultiAgentSnapshotUsesLegacySelectionPolicy(t *testing.T) {
+	snapshot := testRuntimeSnapshot()
+	snapshot.SchemaVersion = domain.PreviousRuntimeSnapshotVersion
+	snapshot.Mode = ChatModeMultiAgent
+	snapshot.AutonomousLimits = nil
+	snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{{ID: "worker", Executor: domain.DefaultAgentExecutor}}
+	snapshot.ChildRunPolicy = &domain.RuntimeChildRunPolicy{
+		MaxDepth: 1, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+		AgentDefinitionSource: "runtime_snapshot.candidate_agents",
+	}
+	runtime := NewRuntime(RuntimeOptions{Store: fixturestore.New(), ModelClient: newLocalFallbackOpenAIClientForTest()})
+	restored, err := runtime.restoreRuntime(domain.Run{ID: "run_previous", RuntimeSnapshot: &snapshot})
+	if err != nil {
+		t.Fatalf("restore previous snapshot: %v", err)
+	}
+	if restored.agentSelectionPolicyVersion != LegacyAgentSelectionPolicyVersion {
+		t.Fatalf("previous snapshot policy = %q", restored.agentSelectionPolicyVersion)
+	}
+}
+
 func TestCurrentRuntimeSnapshotRequiresFrozenToolSecurityPolicy(t *testing.T) {
 	snapshot := testRuntimeSnapshot()
 	snapshot.ToolSecurityPolicy = toolpolicy.Policy{}
@@ -404,6 +424,7 @@ func TestValidateRuntimeSnapshotRejectsRetiredExecutorProtocol(t *testing.T) {
 func TestValidateRuntimeSnapshotRequiresFrozenChildRunPolicy(t *testing.T) {
 	base := testRuntimeSnapshot()
 	base.Mode = ChatModeMultiAgent
+	base.AgentSelectionPolicyVersion = CurrentAgentSelectionPolicyVersion
 	base.AutonomousLimits = nil
 	base.CandidateAgents = []domain.RuntimeAgentSnapshot{{ID: "agent_planner", Executor: domain.DefaultAgentExecutor}}
 	validPolicy := domain.RuntimeChildRunPolicy{
@@ -437,6 +458,20 @@ func TestValidateRuntimeSnapshotRequiresFrozenChildRunPolicy(t *testing.T) {
 	}
 }
 
+func TestCurrentMultiAgentSnapshotRequiresSelectionPolicy(t *testing.T) {
+	snapshot := testRuntimeSnapshot()
+	snapshot.Mode = ChatModeMultiAgent
+	snapshot.AutonomousLimits = nil
+	snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{{ID: "worker", Executor: domain.DefaultAgentExecutor}}
+	snapshot.ChildRunPolicy = &domain.RuntimeChildRunPolicy{
+		MaxDepth: 1, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+		AgentDefinitionSource: "runtime_snapshot.candidate_agents",
+	}
+	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "selection policy") {
+		t.Fatalf("current multi-agent snapshot without selection policy must fail: %v", err)
+	}
+}
+
 func TestValidateRuntimeSnapshotEnforcesDelegationIsolationBoundary(t *testing.T) {
 	base := testRuntimeSnapshot()
 	base.Mode = ChatModeSingle
@@ -456,6 +491,7 @@ func TestValidateRuntimeSnapshotEnforcesDelegationIsolationBoundary(t *testing.T
 	}{
 		{name: "multi-agent mode", mutate: func(snapshot *domain.RuntimeSnapshot) {
 			snapshot.Mode = ChatModeMultiAgent
+			snapshot.AgentSelectionPolicyVersion = CurrentAgentSelectionPolicyVersion
 			snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{snapshot.Agent}
 			snapshot.ChildRunPolicy = &domain.RuntimeChildRunPolicy{
 				MaxDepth: 1, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
