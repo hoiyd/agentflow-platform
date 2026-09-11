@@ -38,7 +38,7 @@ const executionModes = [
     icon: Users,
     label: "Coordinate",
     title: "Multi-agent",
-    body: "Planner, researcher, worker, and reviewer collaborate through persisted steps and visible handoffs."
+    body: "Planner, researcher, worker, and reviewer collaborate through persisted stages and bounded child runs."
   },
   {
     icon: Repeat2,
@@ -53,50 +53,50 @@ const platformCapabilities = [
     icon: Layers3,
     phase: "Configure",
     title: "Agents and execution policy",
-    body: "Create reusable agents, attach tools, and freeze completion and budget policy per run.",
-    details: ["Agent profiles", "Tool catalog", "Frozen run snapshot"]
+    body: "Create reusable agents, scope tools, and freeze the effective model, context, budget, and completion policy per run.",
+    details: ["Agent profiles", "Tool security scope", "Frozen runtime snapshot"]
   },
   {
     icon: Database,
     phase: "Ground",
     title: "Memory and hybrid RAG",
-    body: "Combine curated semantic memory with Markdown-aware knowledge ingestion, semantic and keyword recall, RRF fusion, reranking, and relevance gating.",
-    details: ["Source details", "Prompt-injection guard", "RAG evaluation"]
+    body: "Combine curated memory with versioned knowledge indexes, semantic and keyword recall, RRF fusion, reranking, and relevance gating.",
+    details: ["Index compatibility", "Prompt-injection guard", "Calibrated retrieval evaluation"]
   },
   {
     icon: Wrench,
     phase: "Execute",
     title: "Tool-aware orchestration",
-    body: "Stream every mode through the same Go runtime, with guarded tool execution, resumable run state, context assembly, and compaction.",
-    details: ["SSE events", "Cancel and resume", "Context manifest"]
+    body: "Stream every mode through the same Go runtime with guarded tools, durable stage checkpoints, resumable child runs, and compacted context.",
+    details: ["Tool artifact spillover", "Checkpoint recovery", "Context manifest"]
   },
   {
     icon: Gauge,
     phase: "Control",
-    title: "Budgets and runtime limits",
-    body: "Enforce model, token, tool, active-runtime, and estimated-cost limits with an append-only usage ledger and explicit failure states.",
-    details: ["Usage ledger", "Rate limits", "Progress guards"]
+    title: "Boundaries and runtime limits",
+    body: "Bound concurrent runs and model traffic, enforce run budgets, and keep credentials out of snapshots, traces, artifacts, and replay.",
+    details: ["Usage ledger", "Backpressure", "Credential redaction"]
   },
   {
     icon: FileCheck2,
     phase: "Verify",
     title: "Evidence-gated completion",
-    body: "Treat output as a candidate until frozen completion contracts pass deterministic text, schema, citation, HTTP, or command checks.",
-    details: ["Subject hash", "Retryable evidence", "Verification artifacts"]
+    body: "Treat output as a candidate until its frozen completion contract passes configured deterministic or model-backed checks.",
+    details: ["Seven verifier types", "Immutable evidence", "Completion gate"]
   },
   {
     icon: Activity,
     phase: "Inspect",
     title: "Trace, usage, and replay",
-    body: "Inspect collaboration steps, retrieval decisions, tool calls, model usage, errors, and verification evidence during and after every run.",
-    details: ["Live status", "Run trace", "Episode report"]
+    body: "Inspect typed events, retrieval decisions, model inputs, tool calls, usage, recovery actions, and verification evidence for every run.",
+    details: ["Run replay", "Model request capture", "Controlled comparison"]
   }
 ];
 
 const architectureRows = [
   { label: "Runtime", value: "Go orchestration", detail: "Native Turn Engine" },
   { label: "Models", value: "OpenAI-compatible", detail: "Chat and embedding providers" },
-  { label: "State", value: "File or PostgreSQL", detail: "pgvector semantic retrieval" },
+  { label: "State", value: "PostgreSQL", detail: "pgvector semantic retrieval" },
   { label: "Transport", value: "HTTP + SSE", detail: "Persisted events and replay projections" }
 ];
 
@@ -211,10 +211,11 @@ export default function Page() {
             <p>AgentFlow keeps the parts that usually disappear inside a framework visible, persisted, and testable.</p>
           </div>
           <div className="capability-list">
-            {platformCapabilities.map((capability) => (
+            {platformCapabilities.map((capability, index) => (
               <article className="capability-row" key={capability.phase}>
                 <div className="capability-phase">
-                  <capability.icon size={19} strokeWidth={1.7} />
+                  <code>0{index + 1}</code>
+                  <capability.icon size={17} strokeWidth={1.7} />
                   <span>{capability.phase}</span>
                 </div>
                 <div className="capability-copy">
@@ -237,7 +238,7 @@ export default function Page() {
             <h2>Native orchestration.<br />Explicit boundaries.</h2>
             <p>A compact stack built to expose execution state instead of hiding it behind a chat abstraction.</p>
             <div className="architecture-signals" aria-label="Architecture capabilities">
-              <span><GitBranch size={14} /> Workflow state</span>
+              <span><GitBranch size={14} /> Durable run state</span>
               <span><Search size={14} /> Hybrid retrieval</span>
               <span><ShieldCheck size={14} /> Policy checks</span>
               <span><Braces size={14} /> Typed events</span>
