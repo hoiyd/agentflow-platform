@@ -211,10 +211,11 @@ export default function Page() {
             <p>AgentFlow keeps the parts that usually disappear inside a framework visible, persisted, and testable.</p>
           </div>
           <div className="capability-list">
-            {platformCapabilities.map((capability) => (
+            {platformCapabilities.map((capability, index) => (
               <article className="capability-row" key={capability.phase}>
                 <div className="capability-phase">
-                  <capability.icon size={19} strokeWidth={1.7} />
+                  <code>0{index + 1}</code>
+                  <capability.icon size={17} strokeWidth={1.7} />
                   <span>{capability.phase}</span>
                 </div>
                 <div className="capability-copy">
