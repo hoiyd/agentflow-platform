@@ -60,7 +60,9 @@ func TestParseLLMRouteDecision(t *testing.T) {
 		"confidence": 0.82,
 		"scores": [
 			{"agent_id": "agent_research", "score": 91, "reason": "Best fit for source comparison."},
-			{"agent_id": "agent_coding", "score": 22, "reason": "Some implementation detail, but not primary."}
+			{"agent_id": "agent_coding", "score": 22, "reason": "Some implementation detail, but not primary."},
+			{"agent_id": "agent_data", "score": 18, "reason": "No quantitative analysis is required."},
+			{"agent_id": "agent_planner", "score": 30, "reason": "Planning is secondary to research."}
 		]
 	}`, agents)
 	if err != nil {
@@ -73,7 +75,7 @@ func TestParseLLMRouteDecision(t *testing.T) {
 		t.Fatalf("expected llm mode and confidence, got %#v", decision)
 	}
 	if len(decision.Scores) != len(agents) {
-		t.Fatalf("expected one score per agent after fill, got %d", len(decision.Scores))
+		t.Fatalf("expected one score per agent, got %d", len(decision.Scores))
 	}
 }
 
@@ -81,6 +83,77 @@ func TestParseLLMRouteDecisionRejectsUnknownAgent(t *testing.T) {
 	_, err := parseLLMRouteDecision(`{"agent_id":"agent_missing","reason":"bad","scores":[]}`, testAgents())
 	if err == nil {
 		t.Fatal("expected unknown agent error")
+	}
+}
+
+func TestParseLLMRouteDecisionRejectsIncompleteOrInconsistentScores(t *testing.T) {
+	agents := testAgents()[:2]
+	tests := []string{
+		`{"agent_id":"agent_research","reason":"fit","confidence":0.8,"scores":[{"agent_id":"agent_research","score":90,"reason":"fit"}]}`,
+		`{"agent_id":"agent_research","reason":"fit","confidence":0.8,"scores":[{"agent_id":"agent_research","score":90,"reason":"fit"},{"agent_id":"agent_research","score":80,"reason":"duplicate"}]}`,
+		`{"agent_id":"agent_research","reason":"fit","confidence":1.2,"scores":[{"agent_id":"agent_research","score":90,"reason":"fit"},{"agent_id":"agent_coding","score":20,"reason":"weak"}]}`,
+		`{"agent_id":"agent_coding","reason":"fit","confidence":0.8,"scores":[{"agent_id":"agent_research","score":90,"reason":"fit"},{"agent_id":"agent_coding","score":20,"reason":"weak"}]}`,
+		`{"agent_id":"agent_research","reason":"fit","confidence":0.8,"scores":[{"agent_id":"agent_research","score":101,"reason":"fit"},{"agent_id":"agent_coding","score":20,"reason":"weak"}]}`,
+		`{"agent_id":"agent_research","reason":"fit","confidence":0.8,"scores":[{"agent_id":"agent_research","score":90,"reason":""},{"agent_id":"agent_coding","score":20,"reason":"weak"}]}`,
+	}
+	for _, response := range tests {
+		if _, err := parseLLMRouteDecision(response, agents); err == nil {
+			t.Fatalf("expected invalid router response to fail: %s", response)
+		}
+	}
+}
+
+func TestLegacyAgentSelectionPolicyPreservesPreEligibilityBehavior(t *testing.T) {
+	runtime := &Runtime{}
+	agents := []domain.Agent{{ID: "legacy", Name: "Legacy worker", Tools: []string{"not_frozen"}}}
+	decision, err := runtime.routeWorkerAgent(context.Background(), "run_legacy", restoredRuntime{
+		routerMode: RouterModeQuery, agentSelectionPolicyVersion: LegacyAgentSelectionPolicyVersion,
+	}, agents, "task", "plan")
+	if err != nil || decision.Agent.ID != "legacy" || decision.PolicyRevision != LegacyAgentSelectionPolicyVersion {
+		t.Fatalf("legacy route changed: decision=%#v err=%v", decision, err)
+	}
+}
+
+func TestEligibleWorkerAgentsRequiresStableIdentityAndFrozenTools(t *testing.T) {
+	agents := []domain.Agent{
+		{ID: "eligible", Tools: []string{"calculator"}},
+		{ID: "missing-tool", Tools: []string{"not_frozen"}},
+		{ID: "duplicate"},
+		{ID: "duplicate"},
+		{ID: " "},
+	}
+	eligible, evidence := eligibleWorkerAgents(agents, tools.DefaultCatalog())
+	if len(eligible) != 1 || eligible[0].ID != "eligible" {
+		t.Fatalf("eligible agents = %#v", eligible)
+	}
+	joined := ""
+	for _, item := range evidence {
+		joined += strings.Join(item.ExclusionReasons, ",")
+	}
+	for _, reason := range []string{"tool_unavailable:not_frozen", "agent_id_duplicate", "agent_id_missing"} {
+		if !strings.Contains(joined, reason) {
+			t.Fatalf("missing exclusion reason %q in %#v", reason, evidence)
+		}
+	}
+}
+
+func TestAgentSelectionFallbackOnlyHandlesTransientOrInvalidModelResults(t *testing.T) {
+	transient := failure.New(failure.Definition{Message: "temporarily unavailable", Info: failure.Info{
+		Code: "provider_unavailable", Source: "model_provider", Category: failure.CategoryAvailability, Retryable: true,
+	}})
+	auth := failure.New(failure.Definition{Message: "invalid credential", Info: failure.Info{
+		Code: "authentication", Source: "model_provider", Category: failure.CategoryAuthentication,
+	}})
+	budget := failure.New(failure.Definition{Message: "budget exhausted", Info: failure.Info{
+		Code: "budget_exceeded", Source: "run_budget", Category: failure.CategoryCapacity,
+	}})
+	if !shouldFallbackAgentSelection(transient) || !shouldFallbackAgentSelection(ErrAgentRouteResponseInvalid) {
+		t.Fatal("transient and invalid router responses must use the deterministic baseline")
+	}
+	for _, err := range []error{auth, budget, context.Canceled} {
+		if shouldFallbackAgentSelection(err) {
+			t.Fatalf("terminal failure must not be hidden by fallback: %v", err)
+		}
 	}
 }
 
@@ -110,6 +183,9 @@ func TestPreparedRunsUseRequestedAgent(t *testing.T) {
 	}
 	if collaboration.WorkerAgent.ID != custom.ID || collaboration.Run.AgentID != custom.ID {
 		t.Fatalf("expected collaboration to use requested agent, got agent=%s run_agent=%s", collaboration.WorkerAgent.ID, collaboration.Run.AgentID)
+	}
+	if collaboration.Run.RuntimeSnapshot.AgentSelectionPolicyVersion != CurrentAgentSelectionPolicyVersion {
+		t.Fatalf("agent selection policy was not frozen: %#v", collaboration.Run.RuntimeSnapshot)
 	}
 
 	autonomous, err := runtime.PrepareAutonomousRunWithContract(context.Background(), custom.ID, conversation.ID, nil)
@@ -193,10 +269,69 @@ func TestMultiAgentWorkerUsesBoundedIsolatedChildRun(t *testing.T) {
 	for _, item := range parentEvents {
 		seen[item.Type] = true
 	}
-	for _, eventType := range []domain.RunEventType{domain.EventDelegationCreated, domain.EventDelegationStarted, domain.EventDelegationCompleted} {
+	for _, eventType := range []domain.RunEventType{domain.EventAgentSelectionDecided, domain.EventDelegationCreated, domain.EventDelegationStarted, domain.EventDelegationCompleted} {
 		if !seen[eventType] {
 			t.Fatalf("missing parent event %s", eventType)
 		}
+	}
+}
+
+func TestContinueCollaborationRefusesIneligibleCandidatesWithoutChildRun(t *testing.T) {
+	fixtureStore := fixturestore.New()
+	conversation, err := fixtureStore.CreateConversation("no eligible worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+	})
+	snapshot := testRuntimeSnapshot()
+	snapshot.Mode = ChatModeMultiAgent
+	snapshot.AutonomousLimits = nil
+	snapshot.RouterMode = RouterModeQuery
+	snapshot.AgentSelectionPolicyVersion = CurrentAgentSelectionPolicyVersion
+	snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{{
+		ID: "agent_unavailable", Name: "Unavailable worker", Tools: []string{"not_frozen"}, Executor: domain.DefaultAgentExecutor,
+	}}
+	snapshot.ChildRunPolicy = &domain.RuntimeChildRunPolicy{
+		MaxDepth: 1, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+		AgentDefinitionSource: "runtime_snapshot.candidate_agents", RunBudget: domain.RuntimeRunBudget{},
+	}
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
+		RunID: run.ID, ConversationID: conversation.ID, Role: "planner",
+		Status: domain.CollaborationStepCompleted, Input: "Use an unavailable capability", Output: "Execute the plan.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunWaitingForUser, ""); err != nil {
+		t.Fatal(err)
+	}
+	events, errs := runtime.ContinueCollaboration(context.Background(), run.ID, "Execute the plan.")
+	for range events {
+	}
+	if err := <-errs; !errors.Is(err, ErrNoEligibleAgent) {
+		t.Fatalf("expected typed no-route failure, got %v", err)
+	}
+	delegations, err := fixtureStore.ListRunDelegations(run.ID)
+	if err != nil || len(delegations) != 0 {
+		t.Fatalf("ineligible route created child delegation: %#v err=%v", delegations, err)
+	}
+	runEvents, err := fixtureStore.ListRunEvents(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range runEvents {
+		if item.Type == domain.EventAgentSelectionDecided {
+			found = item.Payload["outcome"] == AgentSelectionOutcomeNoEligible && item.Payload["policy_revision"] == CurrentAgentSelectionPolicyVersion
+		}
+	}
+	if !found {
+		t.Fatalf("missing no-route decision evidence: %#v", runEvents)
 	}
 }
 

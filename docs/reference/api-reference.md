@@ -130,6 +130,12 @@ archived with `DELETE /api/agents/{id}`; built-in Agents cannot be archived.
 Creating a Run freezes the effective profile and, for Multi mode, its candidate
 profiles, so later edits do not change Resume or Replay semantics.
 
+`POST /api/runs/{id}/continue` applies the approved Multi plan. The Router only
+selects from eligible frozen profiles; a 422-class SSE error with
+`agent_route_no_eligible_candidate` means every candidate failed identity or
+frozen Tool availability checks and no Child Run was created. Replay records
+the decision as `agent.selection.decided`.
+
 See [Configurable Agent Profiles](../runtime/agent-profiles.md) for mode behavior, Router
 participation, Snapshot ownership, and current boundaries.
 

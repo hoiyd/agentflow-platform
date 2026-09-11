@@ -102,6 +102,31 @@ type StagePayload struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// AgentSelectionPayload records why a frozen Multi-Agent candidate was chosen
+// or why delegation was refused. It is evidence, not a second orchestration state.
+type AgentSelectionPayload struct {
+	PolicyRevision     string                           `json:"policy_revision"`
+	Outcome            string                           `json:"outcome"`
+	Mode               string                           `json:"mode"`
+	SelectedAgentID    string                           `json:"selected_agent_id,omitempty"`
+	Reason             string                           `json:"reason"`
+	FallbackReasonCode string                           `json:"fallback_reason_code,omitempty"`
+	FailureCode        string                           `json:"failure_code,omitempty"`
+	Candidates         []AgentSelectionCandidatePayload `json:"candidates"`
+}
+
+type AgentSelectionCandidatePayload struct {
+	AgentID              string   `json:"agent_id"`
+	Eligible             bool     `json:"eligible"`
+	Score                int      `json:"score,omitempty"`
+	Reason               string   `json:"reason,omitempty"`
+	ExclusionReasonCodes []string `json:"exclusion_reason_codes,omitempty"`
+}
+
+func (AgentSelectionPayload) supports(eventType domain.RunEventType) bool {
+	return eventType == domain.EventAgentSelectionDecided
+}
+
 func (StagePayload) supports(eventType domain.RunEventType) bool {
 	switch eventType {
 	case domain.EventStageStarted, domain.EventStageCompleted, domain.EventStageFailed, domain.EventStageCanceled:

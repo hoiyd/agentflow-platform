@@ -24,7 +24,8 @@ built-in profiles remain available as stable defaults and cannot be archived.
 - **Single:** the selected Agent executes one direct Turn with its prompt,
   tools, and retrieval policies.
 - **Multi:** all active profiles are frozen as Router candidates. After plan
-  approval, the Router selects a Worker from those candidates using the task,
+  approval, the Router first excludes candidates with invalid identity or
+  unavailable frozen Tools, then ranks only eligible Workers using the task,
   approved plan, Agent description, and routing policy. An explicitly requested
   Agent remains the initial profile for the Run.
 - **Loop:** the selected Agent supplies the persona and capabilities for bounded
@@ -41,7 +42,7 @@ Creating a Run captures the effective Agent profile in its Runtime Snapshot.
 Multi mode also captures every candidate profile. The Snapshot includes Agent
 identity, description, system prompt, tool names, and Memory/RAG switches,
 together with the native execution protocol, model identity, tool schemas,
-context policy, and Run Budget.
+context policy, Agent selection policy revision, and Run Budget.
 
 Editing or archiving a profile later does not rewrite an existing Run. Resume
 restores the frozen Agent configuration and verifies that every required tool is
@@ -117,9 +118,11 @@ deployment limits stay live.
   create a per-Workspace Agent registry.
 - Profiles select from installed in-process tools; remote tool discovery and
   tenant-specific tool registries are not implemented.
-- The Router can use deterministic profile matching or an LLM-backed policy,
-  but routing quality is not yet calibrated against a versioned routing dataset.
+- The Router can use deterministic profile matching or an LLM-backed policy.
+  Both produce typed eligibility and decision evidence, but routing quality is
+  not yet calibrated against a versioned routing dataset.
 
 See [Execution modes](execution-modes.md) for orchestration behavior,
+[Capability-aware Agent Selection](agent-selection.md) for routing rules,
 [Tool Execution Policy](execution-controls.md#7-tool-execution-policy), and
 [Internal terms](../architecture/terms.md#runtime-snapshot) for Snapshot ownership.

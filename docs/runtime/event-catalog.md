@@ -4,6 +4,7 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 
 | Event | Durability | Schema | Scope | Producer | Payload schema | Lifecycle | Terminal for | Consumers |
 | --- | --- | ---: | --- | --- | --- | --- | --- | --- |
+| `agent.selection.decided` | durable | 1 | run+stage | agent/router | `event.AgentSelectionPayload` | none | `` | replay |
 | `artifact.expired` | durable | 1 | run | tools | `event.ToolArtifactPayload` | none | `` | artifact_governance, replay |
 | `artifact.read` | durable | 1 | run | tools | `event.ToolArtifactPayload` | none | `` | artifact_governance, replay |
 | `budget.exceeded` | durable | 1 | run | budget | `event.BudgetExceededPayload` | none | `` | run_projection, usage_ledger, replay |

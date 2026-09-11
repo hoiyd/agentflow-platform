@@ -44,12 +44,13 @@ var ErrRuntimeExecutorUnsupported = failure.New(failure.Definition{
 })
 
 type restoredRuntime struct {
-	mode            string
-	agent           domain.Agent
-	candidateAgents []domain.Agent
-	catalog         *tools.Catalog
-	client          modelprovider.Client
-	routerMode      string
+	mode                        string
+	agent                       domain.Agent
+	candidateAgents             []domain.Agent
+	catalog                     *tools.Catalog
+	client                      modelprovider.Client
+	routerMode                  string
+	agentSelectionPolicyVersion string
 }
 
 func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candidates []domain.Agent) (domain.RuntimeSnapshot, error) {
@@ -99,6 +100,7 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 	}
 	if mode == ChatModeMultiAgent {
 		limits := normalizeChildRunLimits(r.childRunLimits)
+		snapshot.AgentSelectionPolicyVersion = CurrentAgentSelectionPolicyVersion
 		snapshot.ChildRunPolicy = &domain.RuntimeChildRunPolicy{
 			MaxDepth: 1, TimeoutMS: limits.Timeout.Milliseconds(),
 			SummaryMaxChars:       limits.SummaryMaxChars,
@@ -241,9 +243,14 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 	if err != nil {
 		return restoredRuntime{}, err
 	}
+	selectionPolicyVersion := LegacyAgentSelectionPolicyVersion
+	if snapshot.SchemaVersion >= domain.AgentSelectionRuntimeSnapshotVersion {
+		selectionPolicyVersion = snapshot.AgentSelectionPolicyVersion
+	}
 	return restoredRuntime{
 		mode: snapshot.Mode, agent: restoreAgent(snapshot.Agent), candidateAgents: candidates,
 		catalog: catalog, client: client, routerMode: NormalizeRouterMode(snapshot.RouterMode),
+		agentSelectionPolicyVersion: selectionPolicyVersion,
 	}, nil
 }
 
@@ -265,6 +272,9 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 		}
 		if snapshot.SchemaVersion >= domain.DelegationRuntimeSnapshotVersion && (snapshot.ChildRunPolicy == nil || snapshot.ChildRunPolicy.MaxDepth != 1 || snapshot.ChildRunPolicy.TimeoutMS <= 0 || snapshot.ChildRunPolicy.SummaryMaxChars <= 0 || strings.TrimSpace(snapshot.ChildRunPolicy.AgentDefinitionSource) == "") {
 			return errors.New("multi-agent runtime snapshot has no valid child run policy")
+		}
+		if snapshot.SchemaVersion >= domain.AgentSelectionRuntimeSnapshotVersion && snapshot.AgentSelectionPolicyVersion != CurrentAgentSelectionPolicyVersion {
+			return fmt.Errorf("multi-agent runtime snapshot has unsupported agent selection policy %q", snapshot.AgentSelectionPolicyVersion)
 		}
 	case ChatModeAutonomous:
 		if snapshot.AutonomousLimits == nil {

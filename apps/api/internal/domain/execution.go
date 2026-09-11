@@ -40,38 +40,40 @@ type Run struct {
 }
 
 const (
-	LegacyRuntimeSnapshotVersion       = 1
-	ContextRuntimeSnapshotVersion      = 2
-	CompactionRuntimeSnapshotVersion   = 3
-	RunBudgetRuntimeSnapshotVersion    = 4
-	UnifiedExecutionSnapshotVersion    = 5
-	SessionHistorySnapshotVersion      = 6
-	RecoveryRuntimeSnapshotVersion     = 7
-	TaskStateRuntimeSnapshotVersion    = 8
-	DelegationRuntimeSnapshotVersion   = 9
-	ToolContractRuntimeSnapshotVersion = 10
-	ToolSecurityRuntimeSnapshotVersion = 11
-	ToolProgressRuntimeSnapshotVersion = 12
-	PreviousRuntimeSnapshotVersion     = ToolSecurityRuntimeSnapshotVersion
-	CurrentRuntimeSnapshotVersion      = ToolProgressRuntimeSnapshotVersion
+	LegacyRuntimeSnapshotVersion         = 1
+	ContextRuntimeSnapshotVersion        = 2
+	CompactionRuntimeSnapshotVersion     = 3
+	RunBudgetRuntimeSnapshotVersion      = 4
+	UnifiedExecutionSnapshotVersion      = 5
+	SessionHistorySnapshotVersion        = 6
+	RecoveryRuntimeSnapshotVersion       = 7
+	TaskStateRuntimeSnapshotVersion      = 8
+	DelegationRuntimeSnapshotVersion     = 9
+	ToolContractRuntimeSnapshotVersion   = 10
+	ToolSecurityRuntimeSnapshotVersion   = 11
+	ToolProgressRuntimeSnapshotVersion   = 12
+	AgentSelectionRuntimeSnapshotVersion = 13
+	PreviousRuntimeSnapshotVersion       = ToolProgressRuntimeSnapshotVersion
+	CurrentRuntimeSnapshotVersion        = AgentSelectionRuntimeSnapshotVersion
 )
 
 type RuntimeSnapshot struct {
-	SchemaVersion      int                    `json:"schema_version"`
-	Mode               string                 `json:"mode"`
-	Agent              RuntimeAgentSnapshot   `json:"agent"`
-	CandidateAgents    []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
-	Model              RuntimeModelSnapshot   `json:"model"`
-	Tools              []RuntimeToolSnapshot  `json:"tools"`
-	ToolSecurityPolicy toolpolicy.Policy      `json:"tool_security_policy"`
-	ToolProgressGuard  toolprogress.Config    `json:"tool_progress_guard"`
-	ContextAssembly    ContextAssemblyConfig  `json:"context_assembly"`
-	RouterMode         string                 `json:"router_mode,omitempty"`
-	AutonomousLimits   *RuntimeLimitsSnapshot `json:"autonomous_limits,omitempty"`
-	RunBudget          *RuntimeRunBudget      `json:"run_budget,omitempty"`
-	ChildRunPolicy     *RuntimeChildRunPolicy `json:"child_run_policy,omitempty"`
-	Delegation         *RuntimeDelegation     `json:"delegation,omitempty"`
-	CreatedAt          time.Time              `json:"created_at"`
+	SchemaVersion               int                    `json:"schema_version"`
+	Mode                        string                 `json:"mode"`
+	Agent                       RuntimeAgentSnapshot   `json:"agent"`
+	CandidateAgents             []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
+	Model                       RuntimeModelSnapshot   `json:"model"`
+	Tools                       []RuntimeToolSnapshot  `json:"tools"`
+	ToolSecurityPolicy          toolpolicy.Policy      `json:"tool_security_policy"`
+	ToolProgressGuard           toolprogress.Config    `json:"tool_progress_guard"`
+	ContextAssembly             ContextAssemblyConfig  `json:"context_assembly"`
+	RouterMode                  string                 `json:"router_mode,omitempty"`
+	AgentSelectionPolicyVersion string                 `json:"agent_selection_policy_version,omitempty"`
+	AutonomousLimits            *RuntimeLimitsSnapshot `json:"autonomous_limits,omitempty"`
+	RunBudget                   *RuntimeRunBudget      `json:"run_budget,omitempty"`
+	ChildRunPolicy              *RuntimeChildRunPolicy `json:"child_run_policy,omitempty"`
+	Delegation                  *RuntimeDelegation     `json:"delegation,omitempty"`
+	CreatedAt                   time.Time              `json:"created_at"`
 }
 
 // RuntimeChildRunPolicy is frozen with a parent Multi-Agent Run. Process-level
@@ -360,6 +362,7 @@ const (
 	EventDelegationCompleted            RunEventType = "delegation.completed"
 	EventDelegationFailed               RunEventType = "delegation.failed"
 	EventDelegationCanceled             RunEventType = "delegation.canceled"
+	EventAgentSelectionDecided          RunEventType = "agent.selection.decided"
 )
 
 type ContextManifestEntry struct {

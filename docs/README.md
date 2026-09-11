@@ -39,6 +39,7 @@ the project.
 | Document | Question answered |
 | --- | --- |
 | [Agent profiles](runtime/agent-profiles.md) | How are reusable Agent personas, prompts, Tool permissions, retrieval policy, and Router candidates configured and frozen? |
+| [Capability-aware Agent selection](runtime/agent-selection.md) | How does Multi mode filter frozen candidates, validate model ranking, refuse unsafe delegation, and preserve routing evidence? |
 | [Execution modes](runtime/execution-modes.md) | How do Single, Multi, and Loop execution differ in lifecycle, checkpoints, trace shape, cost, and use case? |
 | [Internal terms](architecture/terms.md) | What do the execution entities mean, and how do Run Events, Trace, Replay, and Episode Report differ? |
 | [Execution controls](runtime/execution-controls.md) | Which layer owns concurrency, rate limits, retries, budgets, context capacity, and stopping rules? |
