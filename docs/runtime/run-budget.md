@@ -29,10 +29,10 @@ model call. The reservation surrounds the entire Retry Policy operation.
 ## Frozen Budget
 
 Run Budget was introduced in Runtime Snapshot v4 and its current single-owner
-protocol in v5. Current v12 Runs and resumable v11 Runs use the frozen value even
-when environment configuration changes. Snapshot v1-v10 Runs remain readable
-through Replay but are no longer resumable; they never inherit current limits
-implicitly.
+protocol in v5. Current and immediately previous Snapshot versions use the
+frozen value even when environment configuration changes. Older Runs remain
+readable through Replay but are no longer resumable; they never inherit current
+limits implicitly.
 
 Configured dimensions are:
 
@@ -102,8 +102,8 @@ mode-owned loop guards. Runtime and Tool configuration is resolved against the
 general Run Budget once at Run creation, and the stricter values are stored only
 in `RuntimeRunBudget`. The ledger/controller is therefore the sole runtime and
 Tool enforcement owner; the Autonomous progress projection reads those frozen
-values but does not run a second counter. Current v12 Runs and resumable v11
-Runs both use this model; earlier versions remain Replay-only.
+values but does not run a second counter. Current and immediately previous
+Snapshot versions both use this model; earlier versions remain Replay-only.
 
 ## Events and API
 

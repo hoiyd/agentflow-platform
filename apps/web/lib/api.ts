@@ -796,6 +796,11 @@ export async function archiveAgent(agentId: string): Promise<void> {
 function normalizeAgentInfo(agent: AgentInfo): AgentInfo {
   return {
     ...agent,
+    routing_hints: {
+      capabilities: agent.routing_hints?.capabilities ?? [],
+      task_examples: agent.routing_hints?.task_examples ?? [],
+      exclusions: agent.routing_hints?.exclusions ?? []
+    },
     tools: Array.isArray(agent.tools) ? agent.tools : [],
     memory_enabled: agent.memory_enabled ?? true,
     retrieval_enabled: agent.retrieval_enabled ?? true

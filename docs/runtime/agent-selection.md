@@ -20,12 +20,24 @@ If every candidate is excluded, the Router returns
 
 ## Ranking And Fallback
 
-`query_match` is the deterministic baseline. `auto` asks the configured model
-to rank only eligible candidates using the task, approved plan, and frozen
-profile descriptions. The response must score every candidate exactly once,
-select a highest-scored candidate, use scores from 0 to 100, and use confidence
-from 0 to 1. Unknown IDs, duplicates, omissions, and inconsistent scores are
-rejected locally before delegation.
+`query_match` is the deterministic baseline. Its v2 policy reads declarative
+signals owned by each frozen Agent profile: `capabilities`, `task_examples`,
+`exclusions`, Tool names, and low-weight name/description terms. Capability and
+Tool matches add strong evidence, example overlap adds supporting evidence, and
+exclusions subtract evidence. Stable score and Agent-name ordering makes the
+same frozen inputs produce the same decision. The policy does not inspect the
+System Prompt and has no central task-to-Agent keyword table.
+
+If every eligible candidate has a zero score, v2 returns
+`agent_route_no_suitable_candidate` instead of selecting an arbitrary Worker.
+This is separate from `agent_route_no_eligible_candidate`: an eligible Agent is
+executable, while a suitable Agent has positive evidence for this task.
+
+`auto` asks the configured model to rank only eligible candidates using the
+task, approved plan, and frozen profile descriptions. The response must score
+every candidate exactly once, select a highest-scored candidate, use scores
+from 0 to 100, and use confidence from 0 to 1. Unknown IDs, duplicates,
+omissions, and inconsistent scores are rejected locally before delegation.
 
 Fallback is intentionally narrow:
 
@@ -34,6 +46,7 @@ Fallback is intentionally narrow:
 | Router model intentionally not configured for the deployment, timeout, rate limit, temporary provider failure, or invalid structured response | Use `query_match` and record `fallback_reason_code` |
 | Cancellation, Run Budget exhaustion, provider authentication, quota, route identity/configuration, or content-policy failure | Return the original typed error; do not delegate |
 | No eligible candidate | Return a typed 422-class error in the continuation stream; fail the Run without a Child Run |
+| No candidate with positive routing evidence | Return `agent_route_no_suitable_candidate`; fail the Run without a Child Run |
 
 The Router model call remains a normal Turn Engine request with
 `UsagePurposeRouter`, so existing request limits, Run Budget, Usage Ledger,
@@ -42,9 +55,12 @@ concerns.
 
 ## Frozen And Observable Decisions
 
-New Multi Runs freeze `agent-selection-v1` in the Runtime Snapshot. Version 12
-Snapshots without this field resume under the legacy policy; configuration or
-newly-created Agent profiles cannot enter their candidate set.
+New Multi Runs freeze `agent-selection-v2` and all candidate routing hints in
+Runtime Snapshot v14. Snapshot v13 resumes with the isolated
+`agent-selection-v1` central-keyword fallback, preserving its historical
+behavior without letting v1 rules leak into new Runs. Configuration changes or
+newly-created Agent profiles cannot enter either frozen candidate set. Once v13
+Resume support expires, v1 can be removed as one self-contained implementation.
 
 The Router Collaboration Step remains the human-readable trace. The durable
 `agent.selection.decided` event adds policy revision, outcome, mode, selected
@@ -67,4 +83,6 @@ bound delegated work.
 
 This implementation deliberately does not add dynamic Agent discovery,
 recursive delegation, load-aware scheduling, or a general-purpose Agent
-Gateway. Those require measured demand and separate evaluation evidence.
+Gateway. The v2 weights are deterministic policy constants, not calibrated
+quality claims; score thresholds, confidence margins, and semantic retrieval
+belong to the routing evaluation and calibration backlog.

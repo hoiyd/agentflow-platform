@@ -569,6 +569,11 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
       name: base ? `Copy of ${base.name}` : "New Agent",
       description: base?.description ?? "",
       system_prompt: base?.system_prompt ?? "You are a helpful AgentFlow agent.",
+      routing_hints: {
+        capabilities: base?.routing_hints?.capabilities ?? [],
+        task_examples: base?.routing_hints?.task_examples ?? [],
+        exclusions: base?.routing_hints?.exclusions ?? []
+      },
       tools: base?.tools ?? [],
       memory_enabled: base?.memory_enabled ?? true,
       retrieval_enabled: base?.retrieval_enabled ?? true
@@ -1126,6 +1131,11 @@ function agentToConfigDraft(agent: AgentInfo): AgentConfigDraft {
     name: agent.name,
     description: agent.description,
     system_prompt: agent.system_prompt,
+    routing_hints: {
+      capabilities: agent.routing_hints?.capabilities ?? [],
+      task_examples: agent.routing_hints?.task_examples ?? [],
+      exclusions: agent.routing_hints?.exclusions ?? []
+    },
     tools: agent.tools ?? [],
     memory_enabled: agent.memory_enabled ?? true,
     retrieval_enabled: agent.retrieval_enabled ?? true

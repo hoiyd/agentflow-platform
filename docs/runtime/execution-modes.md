@@ -68,7 +68,7 @@ Planner -> waiting_for_user -> Router -> Worker -> Reviewer -> Finalizer
 2. The Run enters `waiting_for_user`; the user may approve or edit the plan.
 3. **Router** first excludes frozen candidates with invalid identity or
    unavailable Tools, then scores only eligible Agents. Auto routing uses the
-   model when available and falls back to deterministic query/profile matching
+   model when available and falls back to deterministic declarative profile matching
    only for transient provider or invalid-response failures. Terminal Auth,
    Budget, cancellation, and configuration failures are not hidden.
 4. **Worker** executes the approved plan in an isolated, bounded Child Run using

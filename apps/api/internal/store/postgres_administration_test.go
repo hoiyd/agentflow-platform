@@ -46,9 +46,14 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 	agent, err := postgresStore.CreateAgent(domain.Agent{
 		ID: "agent_coverage_" + fmt.Sprint(suffix), Name: " Coverage Agent ",
 		Description: "Initial", SystemPrompt: "Be precise.",
+		RoutingHints: domain.AgentRoutingHints{
+			Capabilities: []string{"coverage", " coverage "},
+			TaskExamples: []string{"Exercise Postgres Agent persistence."},
+			Exclusions:   []string{"unrelated work"},
+		},
 		Tools: []string{"calculator", " calculator ", "get_current_time"},
 	})
-	if err != nil || len(agent.Tools) != 2 || !agent.MemoryEnabled || !agent.RetrievalEnabled {
+	if err != nil || len(agent.Tools) != 2 || len(agent.RoutingHints.Capabilities) != 1 || !agent.MemoryEnabled || !agent.RetrievalEnabled {
 		t.Fatalf("create agent: agent=%#v err=%v", agent, err)
 	}
 	agent.Description = "Updated"
@@ -58,7 +63,7 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 		t.Fatalf("update agent: agent=%#v err=%v", updated, err)
 	}
 	loadedAgent, found, err := postgresStore.GetAgent(agent.ID)
-	if err != nil || !found || loadedAgent.SystemPrompt != "Updated prompt" {
+	if err != nil || !found || loadedAgent.SystemPrompt != "Updated prompt" || len(loadedAgent.RoutingHints.TaskExamples) != 1 {
 		t.Fatalf("get agent: found=%v agent=%#v err=%v", found, loadedAgent, err)
 	}
 	agents, err := postgresStore.ListAgents()

@@ -35,6 +35,7 @@ var postgresMigrations = []string{
 		name text NOT NULL,
 		description text NOT NULL DEFAULT '',
 		system_prompt text NOT NULL DEFAULT '',
+		routing_hints jsonb NOT NULL DEFAULT '{}'::jsonb,
 		tools jsonb NOT NULL DEFAULT '[]'::jsonb,
 		memory_enabled boolean NOT NULL DEFAULT true,
 		retrieval_enabled boolean NOT NULL DEFAULT true,
@@ -44,6 +45,7 @@ var postgresMigrations = []string{
 		updated_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS memory_enabled boolean NOT NULL DEFAULT true`,
+	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS routing_hints jsonb NOT NULL DEFAULT '{}'::jsonb`,
 	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS retrieval_enabled boolean NOT NULL DEFAULT true`,
 	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS executor text NOT NULL DEFAULT 'native'`,
 	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS deleted_at timestamptz`,

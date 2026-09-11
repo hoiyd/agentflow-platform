@@ -6,6 +6,11 @@ export type AgentConfigDraft = {
   name: string;
   description: string;
   system_prompt: string;
+  routing_hints: {
+    capabilities: string[];
+    task_examples: string[];
+    exclusions: string[];
+  };
   tools: string[];
   memory_enabled: boolean;
   retrieval_enabled: boolean;
@@ -77,6 +82,41 @@ export function AgentConfigPanel({
           onChange={(event) => onChange({ system_prompt: event.target.value })}
         />
       </label>
+      <details className="agent-routing-hints">
+        <summary>Routing signals</summary>
+        <div className="agent-routing-hints-grid">
+          <label>
+            <span>Capabilities</span>
+            <textarea
+              disabled={disabled}
+              value={draft.routing_hints.capabilities.join("\n")}
+              onChange={(event) => onChange({
+                routing_hints: { ...draft.routing_hints, capabilities: splitRoutingHints(event.target.value) }
+              })}
+            />
+          </label>
+          <label>
+            <span>Example tasks</span>
+            <textarea
+              disabled={disabled}
+              value={draft.routing_hints.task_examples.join("\n")}
+              onChange={(event) => onChange({
+                routing_hints: { ...draft.routing_hints, task_examples: splitRoutingHints(event.target.value) }
+              })}
+            />
+          </label>
+          <label>
+            <span>Excluded tasks</span>
+            <textarea
+              disabled={disabled}
+              value={draft.routing_hints.exclusions.join("\n")}
+              onChange={(event) => onChange({
+                routing_hints: { ...draft.routing_hints, exclusions: splitRoutingHints(event.target.value) }
+              })}
+            />
+          </label>
+        </div>
+      </details>
       <div className="agent-config-switches">
         <label>
           <input
@@ -157,4 +197,8 @@ export function AgentConfigPanel({
       </div>
     </section>
   );
+}
+
+function splitRoutingHints(value: string): string[] {
+  return value.split("\n").map((item) => item.trim()).filter(Boolean);
 }

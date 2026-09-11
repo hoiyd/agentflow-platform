@@ -102,7 +102,7 @@ and current versions, source actor/Run metadata, and commit time. These
 Conversation-scoped endpoints enforce the same Workspace scope as Messages and
 Runs.
 
-Runtime Snapshot v8 introduced Structured Task State context. Current v12 Runs
+Runtime Snapshot v8 introduced Structured Task State context. Current Runs
 retain that protocol, and Agent
 execution also receives the runtime-owned `update_task_state` Tool. The Tool
 applies the same patch contract and derives source identity from the active Run
@@ -118,6 +118,11 @@ Context/Replay semantics.
   "name": "Incident Responder",
   "description": "Diagnoses production incidents from runbooks and runtime evidence.",
   "system_prompt": "Separate evidence from assumptions and return ordered recovery steps.",
+  "routing_hints": {
+    "capabilities": ["incident diagnosis", "runbook execution"],
+    "task_examples": ["Diagnose a production API outage"],
+    "exclusions": ["marketing copy"]
+  },
   "tools": ["calculator", "get_current_time"],
   "memory_enabled": true,
   "retrieval_enabled": true
@@ -131,10 +136,12 @@ Creating a Run freezes the effective profile and, for Multi mode, its candidate
 profiles, so later edits do not change Resume or Replay semantics.
 
 `POST /api/runs/{id}/continue` applies the approved Multi plan. The Router only
-selects from eligible frozen profiles; a 422-class SSE error with
+selects from eligible frozen profiles. A 422-class SSE error with
 `agent_route_no_eligible_candidate` means every candidate failed identity or
-frozen Tool availability checks and no Child Run was created. Replay records
-the decision as `agent.selection.decided`.
+frozen Tool availability checks. `agent_route_no_suitable_candidate` means the
+eligible candidates had no positive declarative evidence for the task. Neither
+case creates a Child Run. Replay records the decision as
+`agent.selection.decided`.
 
 See [Configurable Agent Profiles](../runtime/agent-profiles.md) for mode behavior, Router
 participation, Snapshot ownership, and current boundaries.

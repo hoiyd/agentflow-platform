@@ -25,10 +25,11 @@ const (
 	RouterModeAuto     = "auto"
 	RouterModeQuery    = "query_match"
 
-	LegacyAgentSelectionPolicyVersion  = "agent-selection-v0"
-	CurrentAgentSelectionPolicyVersion = "agent-selection-v1"
+	AgentSelectionPolicyVersionV1      = "agent-selection-v1"
+	CurrentAgentSelectionPolicyVersion = "agent-selection-v2"
 	AgentSelectionOutcomeSelected      = "selected"
 	AgentSelectionOutcomeNoEligible    = "no_eligible_agent"
+	AgentSelectionOutcomeNoSuitable    = "no_suitable_agent"
 	AgentSelectionOutcomeRouterFailed  = "router_failed"
 )
 
@@ -36,6 +37,14 @@ var ErrNoEligibleAgent = failure.New(failure.Definition{
 	Message: "no eligible worker agent is available",
 	Info: failure.Info{
 		Code: "agent_route_no_eligible_candidate", Source: "agent_router",
+		Category: failure.CategoryValidation, Retryable: false,
+	},
+})
+
+var ErrNoSuitableAgent = failure.New(failure.Definition{
+	Message: "no suitable worker agent matched the task",
+	Info: failure.Info{
+		Code: "agent_route_no_suitable_candidate", Source: "agent_router",
 		Category: failure.CategoryValidation, Retryable: false,
 	},
 })
@@ -501,21 +510,11 @@ type agentEligibility struct {
 }
 
 func (r *Runtime) routeWorkerAgent(ctx context.Context, runID string, restored restoredRuntime, agents []domain.Agent, task string, plan string) (routeDecision, error) {
-	if restored.agentSelectionPolicyVersion == LegacyAgentSelectionPolicyVersion {
-		decision := r.routeWorkerAgentLegacy(ctx, runID, restored, agents, task, plan)
-		decision.PolicyRevision = LegacyAgentSelectionPolicyVersion
-		decision.Outcome = AgentSelectionOutcomeSelected
-		for _, agent := range agents {
-			decision.Eligibility = append(decision.Eligibility, agentEligibility{Agent: agent, Eligible: true})
-		}
-		return decision, nil
-	}
-
 	eligible, eligibility := eligibleWorkerAgents(agents, restored.catalog)
 	if len(eligible) == 0 {
 		return routeDecision{
 			Outcome: AgentSelectionOutcomeNoEligible, Mode: restored.routerMode,
-			PolicyRevision: CurrentAgentSelectionPolicyVersion,
+			PolicyRevision: restored.agentSelectionPolicyVersion,
 			Reason:         "Every frozen candidate failed a hard capability check.",
 			FailureCode:    failure.Describe(ErrNoEligibleAgent).Code,
 			Eligibility:    eligibility,
@@ -523,9 +522,14 @@ func (r *Runtime) routeWorkerAgent(ctx context.Context, runID string, restored r
 	}
 
 	decision, err := r.routeEligibleWorkerAgent(ctx, runID, restored, eligible, task, plan)
-	decision.PolicyRevision = CurrentAgentSelectionPolicyVersion
+	decision.PolicyRevision = restored.agentSelectionPolicyVersion
 	decision.Eligibility = eligibility
 	if err != nil {
+		if errors.Is(err, ErrNoSuitableAgent) {
+			decision.Outcome = AgentSelectionOutcomeNoSuitable
+			decision.FailureCode = failure.Describe(err).Code
+			return decision, err
+		}
 		decision.Outcome = AgentSelectionOutcomeRouterFailed
 		decision.FailureCode = failure.Describe(err).Code
 		return decision, err
@@ -534,40 +538,18 @@ func (r *Runtime) routeWorkerAgent(ctx context.Context, runID string, restored r
 	return decision, nil
 }
 
-func (r *Runtime) routeWorkerAgentLegacy(ctx context.Context, runID string, restored restoredRuntime, agents []domain.Agent, task string, plan string) routeDecision {
-	client := restored.client
-	switch restored.routerMode {
-	case RouterModeQuery:
-		log.Printf("router_start run_id=%s router_mode=query_match candidate_count=%d", runID, len(agents))
-		return selectWorkerAgentWithLog(runID, agents, task, plan)
-	default:
-		log.Printf("router_start run_id=%s router_mode=auto candidate_count=%d llm_available=%t", runID, len(agents), client.HasAPIKey())
-		if !client.HasAPIKey() {
-			log.Printf("router_auto_fallback run_id=%s reason=no_openai_api_key fallback_mode=query_match", runID)
-			return selectWorkerAgentWithLog(runID, agents, task, plan)
-		}
-		decision, err := r.routeWorkerAgentWithLLM(ctx, runID, agents, task, plan, false)
-		if err != nil {
-			log.Printf("router_auto_fallback run_id=%s reason=%q fallback_mode=query_match", runID, err.Error())
-			return selectWorkerAgentWithLog(runID, agents, task, plan)
-		}
-		logRouteScores(runID, decision)
-		return decision
-	}
-}
-
 func (r *Runtime) routeEligibleWorkerAgent(ctx context.Context, runID string, restored restoredRuntime, agents []domain.Agent, task string, plan string) (routeDecision, error) {
 	if restored.routerMode == RouterModeQuery {
 		log.Printf("router_start run_id=%s router_mode=query_match candidate_count=%d", runID, len(agents))
-		return selectWorkerAgentWithLog(runID, agents, task, plan), nil
+		return selectDeterministicWorkerAgent(restored.agentSelectionPolicyVersion, runID, agents, task, plan)
 	}
 	client := restored.client
 	log.Printf("router_start run_id=%s router_mode=auto candidate_count=%d llm_available=%t", runID, len(agents), client.HasAPIKey())
 	if !client.HasAPIKey() {
-		decision := selectWorkerAgentWithLog(runID, agents, task, plan)
+		decision, err := selectDeterministicWorkerAgent(restored.agentSelectionPolicyVersion, runID, agents, task, plan)
 		decision.FallbackReasonCode = "router_model_unconfigured"
 		log.Printf("router_auto_fallback run_id=%s reason_code=%s fallback_mode=query_match", runID, decision.FallbackReasonCode)
-		return decision, nil
+		return decision, err
 	}
 	decision, err := r.routeWorkerAgentWithLLM(ctx, runID, agents, task, plan, true)
 	if err == nil {
@@ -577,10 +559,21 @@ func (r *Runtime) routeEligibleWorkerAgent(ctx context.Context, runID string, re
 	if !shouldFallbackAgentSelection(err) {
 		return routeDecision{Mode: RouterModeAuto, Reason: "Router model failed without a safe fallback."}, err
 	}
-	fallback := selectWorkerAgentWithLog(runID, agents, task, plan)
+	fallback, fallbackErr := selectDeterministicWorkerAgent(restored.agentSelectionPolicyVersion, runID, agents, task, plan)
 	fallback.FallbackReasonCode = failure.Describe(err).Code
 	log.Printf("router_auto_fallback run_id=%s reason_code=%s fallback_mode=query_match", runID, fallback.FallbackReasonCode)
-	return fallback, nil
+	return fallback, fallbackErr
+}
+
+func selectDeterministicWorkerAgent(policyVersion string, runID string, agents []domain.Agent, task string, plan string) (routeDecision, error) {
+	switch policyVersion {
+	case AgentSelectionPolicyVersionV1:
+		return selectWorkerAgentV1(runID, agents, task, plan), nil
+	case CurrentAgentSelectionPolicyVersion:
+		return selectWorkerAgentV2(runID, agents, task, plan)
+	default:
+		return routeDecision{}, fmt.Errorf("unsupported agent selection policy %q", policyVersion)
+	}
 }
 
 func shouldFallbackAgentSelection(err error) bool {
@@ -654,131 +647,13 @@ func (r *Runtime) routeWorkerAgentWithLLM(ctx context.Context, runID string, age
 	return decision, nil
 }
 
-func selectWorkerAgent(agents []domain.Agent, task string, plan string) routeDecision {
-	return selectWorkerAgentWithLog("", agents, task, plan)
-}
-
-func selectWorkerAgentWithLog(runID string, agents []domain.Agent, task string, plan string) routeDecision {
-	query := strings.ToLower(task + "\n" + plan)
-	scores := make([]agentScore, 0, len(agents))
-	for _, agent := range agents {
-		score, reason := scoreAgentForTask(agent, query)
-		scores = append(scores, agentScore{Agent: agent, Score: score, Reason: reason})
-	}
-	sort.SliceStable(scores, func(i, j int) bool {
-		if scores[i].Score == scores[j].Score {
-			return scores[i].Agent.Name < scores[j].Agent.Name
-		}
-		return scores[i].Score > scores[j].Score
-	})
-	if len(scores) == 0 {
-		return routeDecision{}
-	}
-	selected := scores[0]
-	decision := routeDecision{
-		Agent:      selected.Agent,
-		Mode:       RouterModeQuery,
-		Reason:     selected.Reason,
-		Score:      selected.Score,
-		Confidence: 0,
-		Scores:     scores,
-	}
-	logRouteScores(runID, decision)
-	return decision
-}
-
-func scoreAgentForTask(agent domain.Agent, query string) (int, string) {
-	profile := strings.ToLower(agent.ID + " " + agent.Name + " " + agent.Description + " " + agent.SystemPrompt + " " + strings.Join(agent.Tools, " "))
-	score := 0
-	reasons := []string{}
-	profileMatches := []string{}
-
-	for _, token := range strings.FieldsFunc(query, func(r rune) bool {
-		return r < '0' || (r > '9' && r < 'A') || (r > 'Z' && r < 'a') || r > 'z'
-	}) {
-		if len(token) < 4 {
-			continue
-		}
-		if strings.Contains(profile, token) {
-			score += 1
-			profileMatches = append(profileMatches, token)
-		}
-	}
-	if len(profileMatches) > 0 {
-		reasons = append(reasons, fmt.Sprintf("profile term overlap +%d: %s", len(profileMatches), strings.Join(profileMatches, ", ")))
-	}
-
-	for _, rule := range routingRules() {
-		if !strings.Contains(profile, rule.ProfileHint) {
-			continue
-		}
-		matches := matchedKeywords(query, rule.Keywords)
-		if len(matches) == 0 {
-			continue
-		}
-		score += rule.Weight * len(matches)
-		reasons = append(reasons, fmt.Sprintf("%s matched %s", rule.Label, strings.Join(matches, ", ")))
-	}
-
-	if score == 0 {
-		score = 1
-		reasons = append(reasons, "fallback score from available agent profile")
-	}
-	if len(reasons) == 0 {
-		reasons = append(reasons, "agent profile overlaps with task and plan terms")
-	}
-	return score, strings.Join(reasons, "; ")
-}
-
-type routingRule struct {
-	Label       string
-	ProfileHint string
-	Keywords    []string
-	Weight      int
-}
-
-func routingRules() []routingRule {
-	return []routingRule{
-		{
-			Label:       "software implementation/debugging",
-			ProfileHint: "software",
-			Keywords:    []string{"code", "coding", "implement", "implementation", "bug", "debug", "frontend", "backend", "api", "test", "typescript", "go", "react", "css", "代码", "实现", "修复", "前端", "后端", "测试", "接口"},
-			Weight:      5,
-		},
-		{
-			Label:       "research and external context",
-			ProfileHint: "research",
-			Keywords:    []string{"research", "market", "compare", "source", "sources", "verify", "news", "place", "product", "pricing", "competitor", "调研", "市场", "比较", "来源", "验证", "新闻", "产品", "价格", "竞品"},
-			Weight:      5,
-		},
-		{
-			Label:       "operations and quantitative analysis",
-			ProfileHint: "operational",
-			Keywords:    []string{"budget", "cost", "capacity", "schedule", "calculate", "calculation", "metric", "forecast", "tradeoff", "operations", "data", "预算", "成本", "容量", "排期", "计算", "指标", "预测", "取舍", "数据"},
-			Weight:      5,
-		},
-		{
-			Label:       "strategy, narrative, and planning",
-			ProfileHint: "storyline",
-			Keywords:    []string{"plan", "brief", "story", "storyline", "launch", "audience", "message", "strategy", "roadmap", "proposal", "decision", "计划", "简报", "故事", "发布", "受众", "策略", "路线图", "方案", "决策"},
-			Weight:      5,
-		},
-	}
-}
-
-func matchedKeywords(query string, keywords []string) []string {
-	matches := []string{}
-	for _, keyword := range keywords {
-		if strings.Contains(query, keyword) {
-			matches = append(matches, keyword)
-		}
-	}
-	return matches
-}
-
 func logRouteScores(runID string, decision routeDecision) {
 	for _, score := range decision.Scores {
 		log.Printf("router_candidate_score run_id=%s router_mode=%s agent_id=%s agent_name=%q score=%d reason=%q", runID, decision.Mode, score.Agent.ID, score.Agent.Name, score.Score, score.Reason)
+	}
+	if decision.Agent.ID == "" {
+		log.Printf("router_no_selection run_id=%s router_mode=%s reason=%q", runID, decision.Mode, decision.Reason)
+		return
 	}
 	log.Printf("router_selected run_id=%s router_mode=%s agent_id=%s agent_name=%q score=%d confidence=%.2f reason=%q", runID, decision.Mode, decision.Agent.ID, decision.Agent.Name, decision.Score, decision.Confidence, decision.Reason)
 }
@@ -793,18 +668,27 @@ func (d routeDecision) Output() string {
 			fmt.Sprintf("Reason: %s", d.Reason),
 		}, "\n")
 	}
-	if d.Outcome == AgentSelectionOutcomeNoEligible {
+	if d.Outcome == AgentSelectionOutcomeNoEligible || d.Outcome == AgentSelectionOutcomeNoSuitable {
+		label := "no eligible worker"
+		if d.Outcome == AgentSelectionOutcomeNoSuitable {
+			label = "no suitable worker"
+		}
 		lines := []string{
-			"Router outcome: no eligible worker",
+			"Router outcome: " + label,
 			fmt.Sprintf("Policy revision: %s", d.PolicyRevision),
 			fmt.Sprintf("Failure code: %s", d.FailureCode),
 			fmt.Sprintf("Reason: %s", d.Reason),
 			"",
-			"Excluded candidates:",
+			"Candidates:",
 		}
 		for _, candidate := range d.Eligibility {
 			if !candidate.Eligible {
 				lines = append(lines, fmt.Sprintf("- %s (`%s`): %s", candidate.Agent.Name, candidate.Agent.ID, strings.Join(candidate.ExclusionReasons, ", ")))
+			}
+		}
+		if d.Outcome == AgentSelectionOutcomeNoSuitable {
+			for _, score := range d.Scores {
+				lines = append(lines, fmt.Sprintf("- %s (`%s`): %d - %s", score.Agent.Name, score.Agent.ID, score.Score, score.Reason))
 			}
 		}
 		return strings.Join(lines, "\n")

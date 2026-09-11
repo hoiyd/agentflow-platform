@@ -53,8 +53,9 @@ const (
 	ToolSecurityRuntimeSnapshotVersion   = 11
 	ToolProgressRuntimeSnapshotVersion   = 12
 	AgentSelectionRuntimeSnapshotVersion = 13
-	PreviousRuntimeSnapshotVersion       = ToolProgressRuntimeSnapshotVersion
-	CurrentRuntimeSnapshotVersion        = AgentSelectionRuntimeSnapshotVersion
+	RoutingHintsRuntimeSnapshotVersion   = 14
+	PreviousRuntimeSnapshotVersion       = AgentSelectionRuntimeSnapshotVersion
+	CurrentRuntimeSnapshotVersion        = RoutingHintsRuntimeSnapshotVersion
 )
 
 type RuntimeSnapshot struct {
@@ -165,14 +166,15 @@ type ContextShadowedRange struct {
 }
 
 type RuntimeAgentSnapshot struct {
-	ID               string   `json:"id"`
-	Name             string   `json:"name"`
-	Description      string   `json:"description"`
-	SystemPrompt     string   `json:"system_prompt"`
-	Tools            []string `json:"tools"`
-	MemoryEnabled    bool     `json:"memory_enabled"`
-	RetrievalEnabled bool     `json:"retrieval_enabled"`
-	Executor         string   `json:"executor"`
+	ID               string            `json:"id"`
+	Name             string            `json:"name"`
+	Description      string            `json:"description"`
+	SystemPrompt     string            `json:"system_prompt"`
+	RoutingHints     AgentRoutingHints `json:"routing_hints,omitempty"`
+	Tools            []string          `json:"tools"`
+	MemoryEnabled    bool              `json:"memory_enabled"`
+	RetrievalEnabled bool              `json:"retrieval_enabled"`
+	Executor         string            `json:"executor"`
 }
 
 type RuntimeModelSnapshot struct {

@@ -213,7 +213,7 @@ AUTONOMOUS_MAX_TOOL_CALLS=20
 - Snapshot v5 introduced resolution of mode-specific runtime/tool values and
   general Run Budget values to the stricter effective value at creation. Run
   Budget then becomes the single enforcement owner for those resources.
-- Current v12 Runs and resumable v11 Runs retain that single-owner protocol.
+- Current and immediately previous Snapshot versions retain that single-owner protocol.
   Earlier Snapshot versions remain readable through Replay but are no longer
   resumable.
 

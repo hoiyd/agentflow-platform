@@ -49,6 +49,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	})
 	agent, err := fixtureStore.CreateAgent(domain.Agent{
 		Name: "Frozen agent", SystemPrompt: "original prompt", Tools: []string{"calculator"},
+		RoutingHints:  domain.AgentRoutingHints{Capabilities: []string{"original capability"}},
 		MemoryEnabled: true, RetrievalEnabled: true, Executor: domain.DefaultAgentExecutor,
 	})
 	if err != nil {
@@ -107,6 +108,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	}
 
 	agent.SystemPrompt = "mutated prompt"
+	agent.RoutingHints.Capabilities[0] = "mutated capability"
 	agent.Tools = nil
 	if _, err := fixtureStore.UpdateAgent(agent); err != nil {
 		t.Fatalf("update agent: %v", err)
@@ -133,6 +135,9 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	}
 	if restored.agent.SystemPrompt != "original prompt" {
 		t.Fatalf("expected frozen prompt, got %q", restored.agent.SystemPrompt)
+	}
+	if len(restored.agent.RoutingHints.Capabilities) != 1 || restored.agent.RoutingHints.Capabilities[0] != "original capability" {
+		t.Fatalf("expected frozen routing hints, got %#v", restored.agent.RoutingHints)
 	}
 	if _, ok := restored.catalog.Resolve("calculator"); !ok {
 		t.Fatal("expected frozen tool to remain available after current config disabled it")
@@ -198,12 +203,13 @@ func TestRuntimeSnapshotResumeSupportsOnlyCurrentAndPreviousVersions(t *testing.
 	}
 }
 
-func TestPreviousMultiAgentSnapshotUsesLegacySelectionPolicy(t *testing.T) {
+func TestPreviousMultiAgentSnapshotUsesV1SelectionPolicy(t *testing.T) {
 	snapshot := testRuntimeSnapshot()
 	snapshot.SchemaVersion = domain.PreviousRuntimeSnapshotVersion
 	snapshot.Mode = ChatModeMultiAgent
 	snapshot.AutonomousLimits = nil
 	snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{{ID: "worker", Executor: domain.DefaultAgentExecutor}}
+	snapshot.AgentSelectionPolicyVersion = AgentSelectionPolicyVersionV1
 	snapshot.ChildRunPolicy = &domain.RuntimeChildRunPolicy{
 		MaxDepth: 1, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
 		AgentDefinitionSource: "runtime_snapshot.candidate_agents",
@@ -213,7 +219,7 @@ func TestPreviousMultiAgentSnapshotUsesLegacySelectionPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restore previous snapshot: %v", err)
 	}
-	if restored.agentSelectionPolicyVersion != LegacyAgentSelectionPolicyVersion {
+	if restored.agentSelectionPolicyVersion != AgentSelectionPolicyVersionV1 {
 		t.Fatalf("previous snapshot policy = %q", restored.agentSelectionPolicyVersion)
 	}
 }

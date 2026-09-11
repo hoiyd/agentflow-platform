@@ -21,10 +21,10 @@ import (
 func TestSelectWorkerAgentChoosesCodingForImplementationTask(t *testing.T) {
 	agents := testAgents()
 
-	decision := selectWorkerAgent(agents, "修复前端 React 组件里的 bug，并补充 Go API 测试", "1. Inspect frontend state\n2. Patch backend API\n3. Run tests")
+	decision, err := selectWorkerAgentV2("", agents, "修复前端 React 组件里的 bug，并补充 Go API 测试", "1. Inspect frontend state\n2. Patch backend API\n3. Run tests")
 
-	if decision.Agent.ID != "agent_coding" {
-		t.Fatalf("expected coding agent, got %s with output:\n%s", decision.Agent.ID, decision.Output())
+	if err != nil || decision.Agent.ID != "agent_coding" {
+		t.Fatalf("expected coding agent, got %s with output:\n%s err=%v", decision.Agent.ID, decision.Output(), err)
 	}
 	if !strings.Contains(decision.Output(), "Candidate scores") {
 		t.Fatalf("expected transparent candidate scores, got:\n%s", decision.Output())
@@ -34,20 +34,50 @@ func TestSelectWorkerAgentChoosesCodingForImplementationTask(t *testing.T) {
 func TestSelectWorkerAgentChoosesResearchForMarketTask(t *testing.T) {
 	agents := testAgents()
 
-	decision := selectWorkerAgent(agents, "Compare competitors and verify recent pricing sources for this product launch", "1. Gather sources\n2. Compare market positioning")
+	decision, err := selectWorkerAgentV2("", agents, "Compare competitors and verify recent pricing sources for this product launch", "1. Gather sources\n2. Compare market positioning")
 
-	if decision.Agent.ID != "agent_research" {
-		t.Fatalf("expected research agent, got %s with output:\n%s", decision.Agent.ID, decision.Output())
+	if err != nil || decision.Agent.ID != "agent_research" {
+		t.Fatalf("expected research agent, got %s with output:\n%s err=%v", decision.Agent.ID, decision.Output(), err)
 	}
 }
 
 func TestSelectWorkerAgentChoosesDataForBudgetTask(t *testing.T) {
 	agents := testAgents()
 
-	decision := selectWorkerAgent(agents, "计算下个季度预算、成本和 capacity tradeoff", "1. Estimate cost\n2. Compare budget scenarios")
+	decision, err := selectWorkerAgentV2("", agents, "计算下个季度预算、成本和 capacity tradeoff", "1. Estimate cost\n2. Compare budget scenarios")
 
-	if decision.Agent.ID != "agent_data" {
-		t.Fatalf("expected data agent, got %s with output:\n%s", decision.Agent.ID, decision.Output())
+	if err != nil || decision.Agent.ID != "agent_data" {
+		t.Fatalf("expected data agent, got %s with output:\n%s err=%v", decision.Agent.ID, decision.Output(), err)
+	}
+}
+
+func TestSelectWorkerAgentV2RefusesZeroEvidence(t *testing.T) {
+	agents := []domain.Agent{{ID: "agent_invoices", Name: "Invoice Clerk", Description: "Reconciles invoices."}}
+	decision, err := selectWorkerAgentV2("", agents, "Write a sonnet about winter", "Use vivid imagery")
+	if !errors.Is(err, ErrNoSuitableAgent) || decision.Agent.ID != "" || decision.Scores[0].Score != 0 {
+		t.Fatalf("expected typed no-suitable decision, got decision=%#v err=%v", decision, err)
+	}
+}
+
+func TestSelectWorkerAgentV2AppliesDeclarativeExclusions(t *testing.T) {
+	agents := []domain.Agent{
+		{ID: "medical", Name: "Market Researcher", RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"market"}, Exclusions: []string{"medical diagnosis"}}},
+		{ID: "analyst", Name: "General Analyst", RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"analysis"}}},
+	}
+	decision, err := selectWorkerAgentV2("", agents, "Analyze the market for medical diagnosis tools", "Provide analysis")
+	if err != nil || decision.Agent.ID != "analyst" {
+		t.Fatalf("expected exclusion to demote medical agent, got decision=%#v err=%v", decision, err)
+	}
+}
+
+func TestSelectWorkerAgentV2DoesNotSubstringMatchShortEnglishHints(t *testing.T) {
+	agents := []domain.Agent{{
+		ID: "coding", Name: "Coding Agent",
+		RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"go"}},
+	}}
+	decision, err := selectWorkerAgentV2("", agents, "Set quarterly goals", "Draft objectives")
+	if !errors.Is(err, ErrNoSuitableAgent) || decision.Scores[0].Score != 0 {
+		t.Fatalf("short hint must match a complete token: decision=%#v err=%v", decision, err)
 	}
 }
 
@@ -103,14 +133,24 @@ func TestParseLLMRouteDecisionRejectsIncompleteOrInconsistentScores(t *testing.T
 	}
 }
 
-func TestLegacyAgentSelectionPolicyPreservesPreEligibilityBehavior(t *testing.T) {
+func TestV1AgentSelectionPolicyPreservesCentralKeywordFallback(t *testing.T) {
 	runtime := &Runtime{}
-	agents := []domain.Agent{{ID: "legacy", Name: "Legacy worker", Tools: []string{"not_frozen"}}}
+	agents := []domain.Agent{{ID: "research", Name: "Research worker", Description: "research"}, {ID: "coding", Name: "Coding worker", Description: "software"}}
 	decision, err := runtime.routeWorkerAgent(context.Background(), "run_legacy", restoredRuntime{
-		routerMode: RouterModeQuery, agentSelectionPolicyVersion: LegacyAgentSelectionPolicyVersion,
-	}, agents, "task", "plan")
-	if err != nil || decision.Agent.ID != "legacy" || decision.PolicyRevision != LegacyAgentSelectionPolicyVersion {
-		t.Fatalf("legacy route changed: decision=%#v err=%v", decision, err)
+		routerMode: RouterModeQuery, agentSelectionPolicyVersion: AgentSelectionPolicyVersionV1, catalog: tools.DefaultCatalog(),
+	}, agents, "implement and test an API", "debug the code")
+	if err != nil || decision.Agent.ID != "coding" || decision.PolicyRevision != AgentSelectionPolicyVersionV1 {
+		t.Fatalf("v1 route changed: decision=%#v err=%v", decision, err)
+	}
+}
+
+func TestCurrentAgentSelectionPolicyReturnsTypedNoSuitableOutcome(t *testing.T) {
+	runtime := &Runtime{}
+	decision, err := runtime.routeWorkerAgent(context.Background(), "run_v2", restoredRuntime{
+		routerMode: RouterModeQuery, agentSelectionPolicyVersion: CurrentAgentSelectionPolicyVersion, catalog: tools.DefaultCatalog(),
+	}, []domain.Agent{{ID: "invoices", Name: "Invoice Clerk", Description: "Reconciles invoices."}}, "write a sonnet", "use imagery")
+	if !errors.Is(err, ErrNoSuitableAgent) || decision.Outcome != AgentSelectionOutcomeNoSuitable || decision.FailureCode != "agent_route_no_suitable_candidate" {
+		t.Fatalf("unexpected no-suitable route: decision=%#v err=%v", decision, err)
 	}
 }
 
@@ -1279,39 +1319,5 @@ func TestRecoverableStateIgnoresRecoveryStepForNextIteration(t *testing.T) {
 }
 
 func testAgents() []domain.Agent {
-	now := time.Now().UTC()
-	return []domain.Agent{
-		{
-			ID:           "agent_research",
-			Name:         "Field Researcher",
-			Description:  "Investigates people, places, products, and market context, then separates verified facts from open questions.",
-			SystemPrompt: "Gather research context with search and compare sources carefully.",
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "agent_coding",
-			Name:         "Systems Builder",
-			Description:  "Turns implementation requests into concrete technical steps, debugging hypotheses, and maintainable code changes.",
-			SystemPrompt: "Focus on software behavior, interfaces, edge cases, and implementation tradeoffs.",
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "agent_data",
-			Name:         "Operations Analyst",
-			Description:  "Evaluates budgets, schedules, capacity, and tradeoffs with explicit assumptions and calculation-backed reasoning.",
-			SystemPrompt: "Treat questions as operational decisions involving cost, time, capacity, or prioritization.",
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-		{
-			ID:           "agent_planner",
-			Name:         "Narrative Strategist",
-			Description:  "Shapes messy goals into audience-aware briefs, storylines, launch plans, and decision-ready next actions.",
-			SystemPrompt: "Clarify the audience, intent, and constraints behind a request.",
-			CreatedAt:    now,
-			UpdatedAt:    now,
-		},
-	}
+	return store.DefaultAgents(time.Now().UTC())
 }

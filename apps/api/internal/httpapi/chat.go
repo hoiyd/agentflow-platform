@@ -329,7 +329,7 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func continuationFailurePolicy(err error) (status int, failRun bool) {
-	if errors.Is(err, agentpkg.ErrNoEligibleAgent) {
+	if errors.Is(err, agentpkg.ErrNoEligibleAgent) || errors.Is(err, agentpkg.ErrNoSuitableAgent) {
 		return http.StatusUnprocessableEntity, true
 	}
 	info := failure.Describe(err)

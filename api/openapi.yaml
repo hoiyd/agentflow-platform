@@ -769,6 +769,8 @@ components:
           type: string
         system_prompt:
           type: string
+        routing_hints:
+          $ref: '#/components/schemas/AgentRoutingHints'
         tools:
           type: array
           items:
@@ -789,6 +791,8 @@ components:
           type: string
         system_prompt:
           type: string
+        routing_hints:
+          $ref: '#/components/schemas/AgentRoutingHints'
         tools:
           type: array
           items:
@@ -807,6 +811,23 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    AgentRoutingHints:
+      type: object
+      required: [capabilities, task_examples, exclusions]
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: string
+        task_examples:
+          type: array
+          items:
+            type: string
+        exclusions:
+          type: array
+          items:
+            type: string
 
     ToolInfo:
       type: object

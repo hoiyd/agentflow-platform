@@ -120,7 +120,7 @@ credentials when it reconnects to the frozen provider endpoint.
 Replay and Resume have different compatibility promises. Replay preserves the
 persisted Snapshot, events, usage, evidence, and other read-model inputs for all
 historical schema versions. Resume executes only the current Runtime Snapshot
-schema and its immediately preceding version (currently v12 and v11). Older Runs
+schema and its immediately preceding version. Older Runs
 and Runs without a Snapshot are Replay-only. An unsupported Resume returns the
 stable `runtime_snapshot_resume_unsupported` error; AgentFlow never substitutes
 current configuration for an older frozen protocol.

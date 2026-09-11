@@ -278,28 +278,37 @@ func (e VerifierType) Valid() bool {
 
 // Agent defines model for Agent.
 type Agent struct {
-	Archived         *bool     `json:"archived,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
-	Description      string    `json:"description"`
-	Executor         *string   `json:"executor,omitempty"`
-	Id               string    `json:"id"`
-	MemoryEnabled    bool      `json:"memory_enabled"`
-	Name             string    `json:"name"`
-	RetrievalEnabled bool      `json:"retrieval_enabled"`
-	SystemPrompt     string    `json:"system_prompt"`
-	Tools            []string  `json:"tools"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	Archived         *bool              `json:"archived,omitempty"`
+	CreatedAt        time.Time          `json:"created_at"`
+	Description      string             `json:"description"`
+	Executor         *string            `json:"executor,omitempty"`
+	Id               string             `json:"id"`
+	MemoryEnabled    bool               `json:"memory_enabled"`
+	Name             string             `json:"name"`
+	RetrievalEnabled bool               `json:"retrieval_enabled"`
+	RoutingHints     *AgentRoutingHints `json:"routing_hints,omitempty"`
+	SystemPrompt     string             `json:"system_prompt"`
+	Tools            []string           `json:"tools"`
+	UpdatedAt        time.Time          `json:"updated_at"`
 }
 
 // AgentConfigRequest defines model for AgentConfigRequest.
 type AgentConfigRequest struct {
-	Description      *string   `json:"description,omitempty"`
-	Id               *string   `json:"id,omitempty"`
-	MemoryEnabled    *bool     `json:"memory_enabled,omitempty"`
-	Name             *string   `json:"name,omitempty"`
-	RetrievalEnabled *bool     `json:"retrieval_enabled,omitempty"`
-	SystemPrompt     *string   `json:"system_prompt,omitempty"`
-	Tools            *[]string `json:"tools,omitempty"`
+	Description      *string            `json:"description,omitempty"`
+	Id               *string            `json:"id,omitempty"`
+	MemoryEnabled    *bool              `json:"memory_enabled,omitempty"`
+	Name             *string            `json:"name,omitempty"`
+	RetrievalEnabled *bool              `json:"retrieval_enabled,omitempty"`
+	RoutingHints     *AgentRoutingHints `json:"routing_hints,omitempty"`
+	SystemPrompt     *string            `json:"system_prompt,omitempty"`
+	Tools            *[]string          `json:"tools,omitempty"`
+}
+
+// AgentRoutingHints defines model for AgentRoutingHints.
+type AgentRoutingHints struct {
+	Capabilities []string `json:"capabilities"`
+	Exclusions   []string `json:"exclusions"`
+	TaskExamples []string `json:"task_examples"`
 }
 
 // ChatMode defines model for ChatMode.

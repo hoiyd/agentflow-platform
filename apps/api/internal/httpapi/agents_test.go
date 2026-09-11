@@ -22,6 +22,11 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 		"name": "Configurable Agent",
 		"description": "Updated description.",
 		"system_prompt": "Use a concise style.",
+		"routing_hints": {
+			"capabilities": ["resume review", " resume review "],
+			"task_examples": ["Compare a resume with a job description."],
+			"exclusions": ["write application code"]
+		},
 		"tools": ["calculator"],
 		"memory_enabled": false,
 		"retrieval_enabled": true,
@@ -46,6 +51,9 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 	if len(agent.Tools) != 1 || agent.Tools[0] != "calculator" {
 		t.Fatalf("expected updated tools, got %#v", agent.Tools)
 	}
+	if len(agent.RoutingHints.Capabilities) != 1 || agent.RoutingHints.Capabilities[0] != "resume review" || len(agent.RoutingHints.Exclusions) != 1 {
+		t.Fatalf("expected normalized routing hints, got %#v", agent.RoutingHints)
+	}
 
 	persisted, ok, err := fixtureStore.GetAgent("agent_planner")
 	if err != nil {
@@ -54,7 +62,7 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 	if !ok {
 		t.Fatal("expected updated agent")
 	}
-	if persisted.MemoryEnabled || !persisted.RetrievalEnabled || persisted.Executor != domain.DefaultAgentExecutor {
+	if persisted.MemoryEnabled || !persisted.RetrievalEnabled || persisted.Executor != domain.DefaultAgentExecutor || len(persisted.RoutingHints.TaskExamples) != 1 {
 		t.Fatalf("expected persisted config, got %#v", persisted)
 	}
 }

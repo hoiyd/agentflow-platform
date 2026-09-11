@@ -447,6 +447,7 @@ export interface components {
             name?: string;
             description?: string;
             system_prompt?: string;
+            routing_hints?: components["schemas"]["AgentRoutingHints"];
             tools?: string[];
             memory_enabled?: boolean;
             retrieval_enabled?: boolean;
@@ -456,6 +457,7 @@ export interface components {
             name: string;
             description: string;
             system_prompt: string;
+            routing_hints?: components["schemas"]["AgentRoutingHints"];
             tools: string[];
             memory_enabled: boolean;
             retrieval_enabled: boolean;
@@ -465,6 +467,11 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        AgentRoutingHints: {
+            capabilities: string[];
+            task_examples: string[];
+            exclusions: string[];
         };
         ToolInfo: {
             name: string;
