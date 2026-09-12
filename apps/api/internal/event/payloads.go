@@ -105,7 +105,6 @@ type StagePayload struct {
 // AgentSelectionPayload records why a frozen Multi-Agent candidate was chosen
 // or why delegation was refused. It is evidence, not a second orchestration state.
 type AgentSelectionPayload struct {
-	PolicyRevision        string                           `json:"policy_revision"`
 	Outcome               string                           `json:"outcome"`
 	Mode                  string                           `json:"mode"`
 	SelectedAgentID       string                           `json:"selected_agent_id,omitempty"`

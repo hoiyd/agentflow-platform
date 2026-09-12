@@ -15,7 +15,7 @@ import (
 )
 
 func TestDeterministicBenchmarkPassesHoldoutAndProducesCalibration(t *testing.T) {
-	report, err := Run(context.Background(), nil, Options{DatasetPath: datasetPath(), PolicyRevision: agent.CurrentAgentSelectionPolicyVersion, Revision: "test"})
+	report, err := Run(context.Background(), nil, Options{DatasetPath: datasetPath(), Revision: "test"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,11 +32,48 @@ func TestDeterministicBenchmarkPassesHoldoutAndProducesCalibration(t *testing.T)
 	if report.Calibration.Recommendation != (Thresholds{MinimumScore: 4, MinimumScoreMargin: 1}) {
 		t.Fatalf("unexpected calibration recommendation: %+v", report.Calibration.Recommendation)
 	}
+	content, err := os.ReadFile(legacyBaselinePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var archive struct {
+		Dataset struct {
+			Hash string `json:"hash"`
+		} `json:"dataset"`
+		Baselines []struct {
+			Accepted                bool   `json:"accepted"`
+			ThresholdSource         string `json:"threshold_source"`
+			MinimumScore            int    `json:"minimum_score"`
+			MinimumScoreMargin      int    `json:"minimum_score_margin"`
+			Top1AcceptableSelection Metric `json:"top_1_acceptable_selection"`
+			UnsafeFalseRoute        Metric `json:"unsafe_false_route"`
+			NoRouteRecall           Metric `json:"no_route_recall"`
+			GatePassed              bool   `json:"gate_passed"`
+		} `json:"baselines"`
+	}
+	if err := json.Unmarshal(content, &archive); err != nil {
+		t.Fatal(err)
+	}
+	for _, baseline := range archive.Baselines {
+		if !baseline.Accepted {
+			continue
+		}
+		overall := report.Summary["overall"]
+		if report.DatasetHash != archive.Dataset.Hash || report.Config.Policy.ThresholdSource != baseline.ThresholdSource ||
+			report.Config.Policy.MinimumScore != baseline.MinimumScore || report.Config.Policy.MinimumScoreMargin != baseline.MinimumScoreMargin ||
+			overall.Top1AcceptableSelection.Numerator != baseline.Top1AcceptableSelection.Numerator || overall.Top1AcceptableSelection.Denominator != baseline.Top1AcceptableSelection.Denominator ||
+			overall.UnsafeFalseRoute.Numerator != baseline.UnsafeFalseRoute.Numerator || overall.UnsafeFalseRoute.Denominator != baseline.UnsafeFalseRoute.Denominator ||
+			overall.NoRouteRecall.Numerator != baseline.NoRouteRecall.Numerator || overall.NoRouteRecall.Denominator != baseline.NoRouteRecall.Denominator || report.Gate.Passed != baseline.GatePassed {
+			t.Fatalf("current routing result drifted from the accepted archived baseline: report=%+v baseline=%+v", overall, baseline)
+		}
+		return
+	}
+	t.Fatal("archive has no accepted routing baseline")
 }
 
 func TestLiveInvalidResponsesFallBackAndRemainInDenominator(t *testing.T) {
 	client := fakeCompleter{completion: modelprovider.TextCompletion{Text: "not json", Model: "fixture-actual", Usage: modelprovider.Usage{PromptTokens: 10, CompletionTokens: 2, TotalTokens: 12}}}
-	report, err := Run(context.Background(), client, Options{DatasetPath: datasetPath(), PolicyRevision: agent.CurrentAgentSelectionPolicyVersion,
+	report, err := Run(context.Background(), client, Options{DatasetPath: datasetPath(),
 		RouterMode: agent.RouterModeAuto, Trials: 1, MaxModelCalls: 20, MaxTotalTokens: 10000, Timeout: time.Second, Revision: "test", Model: "fixture", Provider: "fixture"})
 	if err != nil {
 		t.Fatal(err)
@@ -52,7 +89,7 @@ func TestLiveInvalidResponsesFallBackAndRemainInDenominator(t *testing.T) {
 
 func TestLiveFailuresAndBudgetStopsRemainVisible(t *testing.T) {
 	failing := fakeCompleter{err: errors.New("provider failed")}
-	report, err := Run(context.Background(), failing, Options{DatasetPath: datasetPath(), PolicyRevision: agent.CurrentAgentSelectionPolicyVersion,
+	report, err := Run(context.Background(), failing, Options{DatasetPath: datasetPath(),
 		RouterMode: agent.RouterModeAuto, Trials: 1, MaxModelCalls: 1, MaxTotalTokens: 10000, Timeout: time.Second})
 	if err != nil {
 		t.Fatal(err)
@@ -88,25 +125,10 @@ func TestRejectsInvalidConfigurationAndDataset(t *testing.T) {
 	if _, err := Run(context.Background(), nil, Options{DatasetPath: datasetPath(), RouterMode: agent.RouterModeAuto}); err == nil {
 		t.Fatal("live mode accepted without explicit client and budgets")
 	}
-	if _, err := Run(context.Background(), nil, Options{DatasetPath: datasetPath(), PolicyRevision: "unknown"}); err == nil {
-		t.Fatal("unknown policy accepted")
-	}
 	data := Dataset{SchemaVersion: DatasetSchemaVersion, ID: "fixture", Version: "1", Agents: []domain.Agent{{ID: "a"}, {ID: "b"}},
 		Cases: []EvaluationCase{{ID: "case", Split: SplitCalibration, Task: "task", ExpectedOutcome: agent.AgentSelectionOutcomeNoSuitable}}}
 	if err := validateDataset(&data); err == nil {
 		t.Fatal("dataset without coverage and holdout accepted")
-	}
-}
-
-func TestLegacyPoliciesRemainAvailableAsDiagnosticBaselines(t *testing.T) {
-	for _, policy := range []string{agent.AgentSelectionPolicyVersionV1, agent.AgentSelectionPolicyVersionV2} {
-		report, err := Run(context.Background(), nil, Options{DatasetPath: datasetPath(), PolicyRevision: policy})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(report.Samples) != 16 || report.Config.Policy.Revision != policy || report.Gate.Passed || report.Calibration != nil {
-			t.Fatalf("unexpected %s baseline: samples=%d gate=%+v", policy, len(report.Samples), report.Gate)
-		}
 	}
 }
 
@@ -118,23 +140,25 @@ func TestCanonicalRoutingReportArtifacts(t *testing.T) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	for _, policy := range []string{agent.AgentSelectionPolicyVersionV1, agent.AgentSelectionPolicyVersionV2, agent.CurrentAgentSelectionPolicyVersion} {
-		report, err := Run(context.Background(), nil, Options{DatasetPath: datasetPath(), PolicyRevision: policy, Revision: "ci"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		content, err := json.MarshalIndent(report, "", "  ")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "agent-routing-"+policy+".json"), content, 0600); err != nil {
-			t.Fatal(err)
-		}
+	report, err := Run(context.Background(), nil, Options{DatasetPath: datasetPath(), Revision: "ci"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "agent-routing.json"), content, 0600); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func datasetPath() string {
 	return filepath.Join("..", "..", "..", "..", "..", "examples", "routing", "golden-dataset.v1.json")
+}
+
+func legacyBaselinePath() string {
+	return filepath.Join("..", "..", "..", "..", "..", "examples", "routing", "legacy-algorithm-baselines.json")
 }
 
 type fakeCompleter struct {

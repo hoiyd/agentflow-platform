@@ -23,14 +23,19 @@ In a second terminal, build the fixed CASE-001 benchmark evidence pack:
 
 ```bash
 make benchmark-evidence
+make routing-eval
 ```
 
-The command writes six machine-readable files under `.cache/benchmark-suite`:
+`make benchmark-evidence` writes six machine-readable files under `.cache/benchmark-suite`:
 the 12-task manifest, deterministic RAG report, Tool protocol report, Tool
 failure events, recovery events, and a saved recoverable Replay. The
 offline provider and hash embedder are explicit fixtures; do not present their
 results as live-model quality. ACL remains diagnostic because authenticated
 identity and document authorization are not implemented.
+
+The routing command runs a separate 16-case calibration/holdout gate against
+the production eligibility, ranking, fallback, and abstention code. Keep its
+terminal output available for the routing discussion below.
 
 ## Walkthrough
 
@@ -45,7 +50,7 @@ per-Conversation single-writer execution, model-request limits, and Run Budget
 remain shared performance and concurrency controls rather than mode-specific
 implementations.
 
-### 0:35-1:05 - Configurable Agent Profile
+### 0:35-1:15 - Configurable Agent Profile and Routing Evidence
 
 In **Single**, open **New agent** or **Configure**. Show that one persisted
 profile owns its responsibility, system prompt, Tool allowlist, and Memory/RAG
@@ -57,7 +62,16 @@ Briefly distinguish platform Tool enablement from the per-Agent allowlist. The
 Tool Executor still applies timeout, result-size, panic-recovery, tracing, and
 concurrency policy after both layers admit a call.
 
-### 1:05-2:00 - Hybrid Retrieval
+Use the `make routing-eval` output to show that the single Router algorithm
+records 10/10 acceptable selections, zero unsafe false routes, and 6/6 no-route
+recall on the fixed Dataset v1. The tracked retirement Artifact preserves how
+the deleted v1/v2 implementations produced unsafe or missed no-route decisions.
+The Dataset recommends score/margin
+`4/1`, but production remains at conservative `6/1`; this is the deliberate
+decision not to auto-publish a policy from a small offline fixture. No live LLM
+quality claim is made.
+
+### 1:15-2:05 - Hybrid Retrieval
 
 Search for `AUTH-7F31`. Point out that keyword recall preserves identifiers that
 semantic similarity may miss. Then search for `login failures after a key
@@ -76,7 +90,7 @@ conflicting result remains visible instead of disappearing from the
 denominator. The UI searches above validate the interactive path; they are not
 the canonical Dataset run.
 
-### 2:00-3:15 - Multi-Agent Run
+### 2:05-3:15 - Multi-Agent Run
 
 Start a Multi-Agent task:
 
@@ -129,11 +143,13 @@ gate.
 
 ### 4:25-5:00 - Engineering Boundaries
 
-Close with two explicit limits: mandatory Workspace namespace filtering and
+Close with explicit limits: mandatory Workspace namespace filtering and
 stale-source replacement are implemented, but authentication, Membership, ACL,
 and complete Workspace lifecycle are not; the ACL case therefore remains
-diagnostic rather than a release gate. This distinguishes implemented platform
-behavior from planned production hardening.
+diagnostic rather than a release gate. Routing is protected by a deterministic
+offline regression gate, but live LLM routing and production threshold promotion
+still need budgeted multi-trial evidence. This distinguishes implemented
+platform behavior from planned production hardening.
 
 ## Recorded README Assets
 
@@ -159,6 +175,7 @@ If live execution is unavailable, run:
 
 ```bash
 make benchmark-evidence
+make routing-eval
 make test
 ```
 

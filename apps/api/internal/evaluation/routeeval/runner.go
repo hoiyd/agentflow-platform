@@ -33,7 +33,6 @@ const (
 
 type Options struct {
 	DatasetPath    string        `json:"dataset_path"`
-	PolicyRevision string        `json:"policy_revision"`
 	RouterMode     string        `json:"router_mode"`
 	Trials         int           `json:"trials"`
 	MaxModelCalls  int           `json:"max_model_calls,omitempty"`
@@ -164,13 +163,7 @@ func Run(ctx context.Context, completer modelprovider.TextCompleter, opts Option
 	if err != nil {
 		return Report{}, err
 	}
-	if opts.PolicyRevision == "" {
-		opts.PolicyRevision = agent.CurrentAgentSelectionPolicyVersion
-	}
-	policy, ok := agent.AgentSelectionPolicyEvidence(opts.PolicyRevision)
-	if !ok {
-		return Report{}, fmt.Errorf("unsupported agent selection policy %q", opts.PolicyRevision)
-	}
+	policy := agent.AgentSelectionPolicyEvidence()
 	if opts.RouterMode == "" {
 		opts.RouterMode = agent.RouterModeQuery
 	}
@@ -224,9 +217,7 @@ func Run(ctx context.Context, completer modelprovider.TextCompleter, opts Option
 		}
 	}
 	report.Summary = summarizeBySplit(report.Samples)
-	if opts.PolicyRevision == agent.CurrentAgentSelectionPolicyVersion {
-		report.Calibration = calibrate(report.Samples)
-	}
+	report.Calibration = calibrate(report.Samples)
 	report.Gate = gate(report.Samples)
 	report.CompletedAt = time.Now().UTC()
 	return report, nil
@@ -234,7 +225,7 @@ func Run(ctx context.Context, completer modelprovider.TextCompleter, opts Option
 
 func evaluateSample(ctx context.Context, completer modelprovider.TextCompleter, catalog *tools.Catalog, agents []domain.Agent, item EvaluationCase, opts Options, remainingTokens int) (agent.RoutingEvaluationResult, modelprovider.Usage, int64, string) {
 	input := agent.RoutingEvaluationInput{Agents: agents, Catalog: catalog, Task: item.Task, Plan: item.Plan,
-		Requirements: item.Requirements, PolicyRevision: opts.PolicyRevision, RouterMode: opts.RouterMode}
+		Requirements: item.Requirements, RouterMode: opts.RouterMode}
 	started := time.Now()
 	if opts.RouterMode == agent.RouterModeAuto {
 		eligible := eligibleAgents(agents, catalog, item.Requirements)
@@ -528,7 +519,7 @@ func validateDataset(data *Dataset) error {
 func eligibleAgents(agents []domain.Agent, catalog *tools.Catalog, requirements domain.AgentRoutingRequirements) []domain.Agent {
 	result := make([]domain.Agent, 0, len(agents))
 	for _, item := range agent.EvaluateAgentRouting(agent.RoutingEvaluationInput{Agents: agents, Catalog: catalog, Task: "", Plan: "",
-		Requirements: requirements, PolicyRevision: agent.CurrentAgentSelectionPolicyVersion, RouterMode: agent.RouterModeQuery}).Candidates {
+		Requirements: requirements, RouterMode: agent.RouterModeQuery}).Candidates {
 		if item.Eligible {
 			for _, candidate := range agents {
 				if candidate.ID == item.AgentID {

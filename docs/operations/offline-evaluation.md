@@ -69,41 +69,41 @@ outcome. Dataset cases cover clear and multiple specialists, hard capability
 failure, no match, ambiguous requests, and description conflict. Fixture tests
 cover Router failure, invalid response, fallback, and exhausted-budget paths.
 
-The report records Dataset, Agent catalog, policy, prompt, model, and Git
-revisions. It reports eligible recall, top-1 acceptable selection, unsafe false
+The report records Dataset, Agent catalog, threshold configuration, prompt,
+model, and Git revisions. It reports eligible recall, top-1 acceptable selection, unsafe false
 routes, no-route Precision/Recall, invalid responses, fallback recovery, Router
 tokens, and latency separately. Failed, timed-out, invalid, fallback, and
 budget-skipped trials stay in their metric denominators; undefined ratios are
 JSON `null`. The holdout gate requires every expected outcome to match and no
 unsafe false route. It intentionally does not produce one aggregate score.
 
-The current-policy run searches observed calibration scores and margins and
+The evaluator searches observed calibration scores and margins and
 reports a holdout-tested threshold recommendation; live LLM runs additionally
 calibrate confidence from valid LLM decisions. Fallback decisions remain on the
 deterministic threshold path. Recommendations are advisory evidence, not an
 automatic production policy update. Review the dataset and report before
-publishing a new frozen policy revision.
+changing routing behavior; a protocol change must use a new Runtime Snapshot
+schema rather than an Agent selection algorithm switch.
 
-Dataset v1 establishes this deterministic baseline:
+Dataset v1 produced the following retirement baseline at Git revision `426bae7`:
 
-| Policy | Top-1 acceptable | Unsafe false routes | No-route recall | Result |
+| Historical implementation | Top-1 acceptable | Unsafe false routes | No-route recall | Result |
 | --- | ---: | ---: | ---: | --- |
 | `agent-selection-v1` | 9/10 | 2/16 | 0/6 | diagnostic failure |
 | `agent-selection-v2` | 9/10 | 1/16 | 1/6 | diagnostic failure |
 | `agent-selection-v3` | 10/10 | 0/16 | 6/6 | holdout gate passed |
 
-The v1/v2 failure counts also retain typed-requirement cases those historical
-policies cannot represent. Dataset v1 recommends score/margin `4/1`; production
-v3 intentionally remains at conservative `6/1` until a reviewed live-model
-baseline justifies a new frozen policy revision. No live LLM result is claimed
-without an explicitly authorized, budgeted multi-trial run.
+The old labels describe archived results, not selectable or executable policies.
+The v1/v2 failure counts include typed-requirement cases those implementations
+could not represent. The current algorithm is the accepted v3 behavior and keeps
+the conservative `6/1` threshold despite Dataset v1 recommending `4/1`. The
+complete immutable summary records dataset/configuration hashes and metrics in
+[`legacy-algorithm-baselines.json`](../../examples/routing/legacy-algorithm-baselines.json).
+No live LLM result is claimed without an explicitly authorized, budgeted
+multi-trial run.
 
 ```bash
 make routing-eval
-
-# Preserve migration baselines; old policies reject typed-requirement cases.
-go run ./cmd/eval route --policy agent-selection-v1 > /tmp/route-v1.json
-go run ./cmd/eval route --policy agent-selection-v2 > /tmp/route-v2.json
 ```
 
 Real LLM ranking is opt-in, disables provider retries, and requires explicit
@@ -205,9 +205,10 @@ failure evidence, latency and Usage Ledger totals. Missing usage stays estimated
 unsettled usage stops later samples.
 
 Default CI never calls public models. Fixture-backed Tool protocol checks and the
-canonical Context/RAG plus v1/v2/v3 deterministic routing runs write JSON into
+canonical Context/RAG plus current deterministic routing run write JSON into
 `EVALUATION_REPORT_DIR`; the backend job uploads the directory as
-`offline-evaluation-reports`. Reports omit
+`offline-evaluation-reports`. Retired routing comparisons stay in the tracked
+read-only Artifact and are not executed by CI. Reports omit
 credentials/endpoints, redact model errors, and do not copy Context or RAG source
 content.
 
