@@ -76,11 +76,11 @@ concerns.
 ## Frozen And Observable Decisions
 
 New Multi Runs freeze `agent-selection-v3` and all candidate routing hints in
-Runtime Snapshot v15. Snapshot v14 resumes with `agent-selection-v2`, preserving
-its zero-evidence behavior without applying newer thresholds. A v14 Run rejects
-non-empty routing requirements instead of silently applying only part of the
-new protocol. Older snapshots
-remain available for Replay but are not resumable. Configuration changes or
+Runtime Snapshot v15. It is the only resumable Agent selection protocol. Snapshot
+v14 and earlier remain available for Replay but are not resumable; AgentFlow does
+not rewrite their frozen policy or silently apply v3 thresholds. The v1/v2 policy
+identifiers and selectors remain executable only inside the offline migration
+benchmark. Configuration changes or
 newly-created Agent profiles cannot enter a frozen candidate set. The approved
 requirements belong to that continuation decision and are persisted in its
 `agent.selection.decided` event; recovery after selection reuses the persisted
@@ -95,7 +95,7 @@ for Replay and evaluation.
 The offline routing gate reuses the production eligibility, ranking, response
 validation, fallback, and abstention code. On Dataset v1, v3 records 10/10
 acceptable selections, zero unsafe false routes, and 6/6 no-route recall;
-v1/v2 remain diagnostic migration baselines. These numbers do not claim live
+v1/v2 remain evaluation-only diagnostic migration baselines. These numbers do not claim live
 LLM quality. See [Offline evaluation](../operations/offline-evaluation.md#agent-routing-gate)
 for the dataset boundary, commands, and full metrics.
 

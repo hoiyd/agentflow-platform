@@ -55,7 +55,6 @@ const (
 	AgentSelectionRuntimeSnapshotVersion = 13
 	RoutingHintsRuntimeSnapshotVersion   = 14
 	RoutingRequirementsSnapshotVersion   = 15
-	PreviousRuntimeSnapshotVersion       = RoutingHintsRuntimeSnapshotVersion
 	CurrentRuntimeSnapshotVersion        = RoutingRequirementsSnapshotVersion
 )
 

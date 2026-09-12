@@ -110,7 +110,7 @@ func EvaluateAgentRouting(input RoutingEvaluationInput) RoutingEvaluationResult 
 	var decision routeDecision
 	var err error
 	if result.Mode == RouterModeQuery {
-		decision, err = selectDeterministicWorkerAgent(input.PolicyRevision, eligible, input.Task, input.Plan, input.Requirements)
+		decision, err = selectDeterministicPolicyForEvaluation(input.PolicyRevision, eligible, input.Task, input.Plan, input.Requirements)
 	} else if input.ModelError != nil {
 		err = input.ModelError
 	} else {
@@ -121,7 +121,7 @@ func EvaluateAgentRouting(input RoutingEvaluationInput) RoutingEvaluationResult 
 		}
 	}
 	if err != nil && result.Mode == RouterModeAuto && shouldFallbackAgentSelection(err) {
-		decision, err = selectDeterministicWorkerAgent(input.PolicyRevision, eligible, input.Task, input.Plan, input.Requirements)
+		decision, err = selectDeterministicPolicyForEvaluation(input.PolicyRevision, eligible, input.Task, input.Plan, input.Requirements)
 		decision.FallbackReasonCode = failure.Describe(input.ModelError).Code
 		if result.InvalidResponse {
 			decision.FallbackReasonCode = failure.Describe(ErrAgentRouteResponseInvalid).Code
@@ -144,6 +144,19 @@ func EvaluateAgentRouting(input RoutingEvaluationInput) RoutingEvaluationResult 
 	}
 	result.InvalidResponse = result.InvalidResponse || errors.Is(input.ModelError, ErrAgentRouteResponseInvalid)
 	return evaluationResult(result, decision, eligibility)
+}
+
+func selectDeterministicPolicyForEvaluation(policyVersion string, agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) (routeDecision, error) {
+	switch policyVersion {
+	case AgentSelectionPolicyVersionV1:
+		return selectWorkerAgentV1(agents, task, plan), nil
+	case AgentSelectionPolicyVersionV2:
+		return selectWorkerAgentV2Baseline(agents, task, plan, requirements)
+	case CurrentAgentSelectionPolicyVersion:
+		return rankWorkerAgentsDeclarative(agents, task, plan, requirements), nil
+	default:
+		return routeDecision{}, fmt.Errorf("unsupported agent selection policy %q", policyVersion)
+	}
 }
 
 func failedEvaluation(result RoutingEvaluationResult, outcome string, err error, reason string) RoutingEvaluationResult {

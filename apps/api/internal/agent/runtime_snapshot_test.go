@@ -177,24 +177,17 @@ func containsFrozenTool(items []domain.RuntimeToolSnapshot, want string) bool {
 	return false
 }
 
-func TestRuntimeSnapshotResumeSupportsOnlyCurrentAndPreviousVersions(t *testing.T) {
-	for _, version := range []int{domain.PreviousRuntimeSnapshotVersion, domain.CurrentRuntimeSnapshotVersion} {
-		snapshot := &domain.RuntimeSnapshot{
-			SchemaVersion: version, Mode: ChatModeSingle,
-			Agent: domain.RuntimeAgentSnapshot{ID: "agent"}, Model: domain.RuntimeModelSnapshot{Model: "model"},
-			RunBudget: &domain.RuntimeRunBudget{},
-		}
-		if version >= domain.ToolSecurityRuntimeSnapshotVersion {
-			snapshot.ToolSecurityPolicy = toolpolicy.DefaultPolicy()
-		}
-		if version >= domain.ToolProgressRuntimeSnapshotVersion {
-			snapshot.ToolProgressGuard = toolprogress.DefaultConfig()
-		}
-		if err := validateRuntimeSnapshot(snapshot); err != nil {
-			t.Fatalf("snapshot v%d should be resumable: %v", version, err)
-		}
+func TestRuntimeSnapshotResumeSupportsOnlyCurrentVersion(t *testing.T) {
+	snapshot := &domain.RuntimeSnapshot{
+		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: ChatModeSingle,
+		Agent: domain.RuntimeAgentSnapshot{ID: "agent"}, Model: domain.RuntimeModelSnapshot{Model: "model"},
+		RunBudget: &domain.RuntimeRunBudget{}, ToolSecurityPolicy: toolpolicy.DefaultPolicy(),
+		ToolProgressGuard: toolprogress.DefaultConfig(),
 	}
-	for version := domain.LegacyRuntimeSnapshotVersion; version < domain.PreviousRuntimeSnapshotVersion; version++ {
+	if err := validateRuntimeSnapshot(snapshot); err != nil {
+		t.Fatalf("current snapshot should be resumable: %v", err)
+	}
+	for version := domain.LegacyRuntimeSnapshotVersion; version < domain.CurrentRuntimeSnapshotVersion; version++ {
 		snapshot := &domain.RuntimeSnapshot{SchemaVersion: version}
 		err := validateRuntimeSnapshot(snapshot)
 		if !errors.Is(err, ErrRuntimeSnapshotResumeUnsupported) || failure.Describe(err).Code != "runtime_snapshot_resume_unsupported" {
@@ -203,9 +196,9 @@ func TestRuntimeSnapshotResumeSupportsOnlyCurrentAndPreviousVersions(t *testing.
 	}
 }
 
-func TestPreviousMultiAgentSnapshotUsesV2SelectionPolicy(t *testing.T) {
+func TestV14MultiAgentSnapshotIsReplayOnly(t *testing.T) {
 	snapshot := testRuntimeSnapshot()
-	snapshot.SchemaVersion = domain.PreviousRuntimeSnapshotVersion
+	snapshot.SchemaVersion = domain.RoutingHintsRuntimeSnapshotVersion
 	snapshot.Mode = ChatModeMultiAgent
 	snapshot.AutonomousLimits = nil
 	snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{{ID: "worker", Executor: domain.DefaultAgentExecutor}}
@@ -215,12 +208,9 @@ func TestPreviousMultiAgentSnapshotUsesV2SelectionPolicy(t *testing.T) {
 		AgentDefinitionSource: "runtime_snapshot.candidate_agents",
 	}
 	runtime := NewRuntime(RuntimeOptions{Store: fixturestore.New(), ModelClient: newLocalFallbackOpenAIClientForTest()})
-	restored, err := runtime.restoreRuntime(domain.Run{ID: "run_previous", RuntimeSnapshot: &snapshot})
-	if err != nil {
-		t.Fatalf("restore previous snapshot: %v", err)
-	}
-	if restored.agentSelectionPolicyVersion != AgentSelectionPolicyVersionV2 {
-		t.Fatalf("previous snapshot policy = %q", restored.agentSelectionPolicyVersion)
+	_, err := runtime.restoreRuntime(domain.Run{ID: "run_v14", RuntimeSnapshot: &snapshot})
+	if !errors.Is(err, ErrRuntimeSnapshotResumeUnsupported) {
+		t.Fatalf("v14 snapshot should be replay-only, got %v", err)
 	}
 }
 
@@ -314,10 +304,6 @@ func TestCurrentRuntimeSnapshotRequiresToolSchemaContract(t *testing.T) {
 	snapshot.Tools = []domain.RuntimeToolSnapshot{{Name: "reader", Parameters: tools.ObjectSchema(nil, nil)}}
 	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "schema contract") {
 		t.Fatalf("expected missing tool contract error, got %v", err)
-	}
-	snapshot.SchemaVersion = domain.PreviousRuntimeSnapshotVersion
-	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "schema contract") {
-		t.Fatalf("version 10 snapshot must retain its Tool schema contract: %v", err)
 	}
 }
 

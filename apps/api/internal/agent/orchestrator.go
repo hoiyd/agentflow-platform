@@ -521,16 +521,15 @@ type agentEligibility struct {
 }
 
 func (r *Runtime) routeWorkerAgent(ctx context.Context, runID string, restored restoredRuntime, agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) (routeDecision, error) {
-	requirements = domain.NormalizeAgentRoutingRequirements(requirements)
-	if !requirements.IsEmpty() && restored.agentSelectionPolicyVersion != CurrentAgentSelectionPolicyVersion {
+	if restored.agentSelectionPolicyVersion != CurrentAgentSelectionPolicyVersion {
 		return routeDecision{
 			Outcome: AgentSelectionOutcomeRouterFailed, Mode: restored.routerMode,
 			PolicyRevision: restored.agentSelectionPolicyVersion,
-			Reason:         "Routing requirements are not supported by this Run's frozen Agent selection policy.",
-			FailureCode:    failure.Describe(ErrInvalidRoutingRequirements).Code,
-			Requirements:   requirements,
-		}, fmt.Errorf("%w: frozen policy %q does not support routing requirements", ErrInvalidRoutingRequirements, restored.agentSelectionPolicyVersion)
+			Reason:         "The Run's frozen Agent selection policy is replay-only.",
+			FailureCode:    failure.Describe(ErrRuntimeSnapshotResumeUnsupported).Code,
+		}, fmt.Errorf("%w: agent selection policy %q", ErrRuntimeSnapshotResumeUnsupported, restored.agentSelectionPolicyVersion)
 	}
+	requirements = domain.NormalizeAgentRoutingRequirements(requirements)
 	if conflicts := requirements.ConflictingTools(); len(conflicts) > 0 {
 		return routeDecision{
 			Outcome: AgentSelectionOutcomeRouterFailed, Mode: restored.routerMode,
@@ -582,15 +581,15 @@ func (r *Runtime) routeWorkerAgent(ctx context.Context, runID string, restored r
 func (r *Runtime) routeEligibleWorkerAgent(ctx context.Context, runID string, restored restoredRuntime, agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) (routeDecision, error) {
 	if restored.routerMode == RouterModeQuery {
 		log.Printf("router_start run_id=%s router_mode=query_match candidate_count=%d", runID, len(agents))
-		return selectDeterministicWorkerAgent(restored.agentSelectionPolicyVersion, agents, task, plan, requirements)
+		return rankWorkerAgentsDeclarative(agents, task, plan, requirements), nil
 	}
 	client := restored.client
 	log.Printf("router_start run_id=%s router_mode=auto candidate_count=%d llm_available=%t", runID, len(agents), client.HasAPIKey())
 	if !client.HasAPIKey() {
-		decision, err := selectDeterministicWorkerAgent(restored.agentSelectionPolicyVersion, agents, task, plan, requirements)
+		decision := rankWorkerAgentsDeclarative(agents, task, plan, requirements)
 		decision.FallbackReasonCode = "router_model_unconfigured"
 		log.Printf("router_auto_fallback run_id=%s reason_code=%s fallback_mode=query_match", runID, decision.FallbackReasonCode)
-		return decision, err
+		return decision, nil
 	}
 	decision, err := r.routeWorkerAgentWithLLM(ctx, runID, agents, task, plan, requirements, true)
 	if err == nil {
@@ -599,23 +598,10 @@ func (r *Runtime) routeEligibleWorkerAgent(ctx context.Context, runID string, re
 	if !shouldFallbackAgentSelection(err) {
 		return routeDecision{Mode: RouterModeAuto, Reason: "Router model failed without a safe fallback."}, err
 	}
-	fallback, fallbackErr := selectDeterministicWorkerAgent(restored.agentSelectionPolicyVersion, agents, task, plan, requirements)
+	fallback := rankWorkerAgentsDeclarative(agents, task, plan, requirements)
 	fallback.FallbackReasonCode = failure.Describe(err).Code
 	log.Printf("router_auto_fallback run_id=%s reason_code=%s fallback_mode=query_match", runID, fallback.FallbackReasonCode)
-	return fallback, fallbackErr
-}
-
-func selectDeterministicWorkerAgent(policyVersion string, agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) (routeDecision, error) {
-	switch policyVersion {
-	case AgentSelectionPolicyVersionV1:
-		return selectWorkerAgentV1(agents, task, plan), nil
-	case AgentSelectionPolicyVersionV2:
-		return selectWorkerAgentV2(agents, task, plan, requirements)
-	case CurrentAgentSelectionPolicyVersion:
-		return rankWorkerAgentsV2(agents, task, plan, requirements), nil
-	default:
-		return routeDecision{}, fmt.Errorf("unsupported agent selection policy %q", policyVersion)
-	}
+	return fallback, nil
 }
 
 func shouldFallbackAgentSelection(err error) bool {

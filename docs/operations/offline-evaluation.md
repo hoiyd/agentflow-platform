@@ -93,7 +93,8 @@ Dataset v1 establishes this deterministic baseline:
 | `agent-selection-v3` | 10/10 | 0/16 | 6/6 | holdout gate passed |
 
 The v1/v2 failure counts also retain typed-requirement cases those historical
-policies cannot represent. Dataset v1 recommends score/margin `4/1`; production
+policies cannot represent. Both policies are evaluation-only migration baselines:
+production Runs and Resume execute only v3. Dataset v1 recommends score/margin `4/1`; production
 v3 intentionally remains at conservative `6/1` until a reviewed live-model
 baseline justifies a new frozen policy revision. No live LLM result is claimed
 without an explicitly authorized, budgeted multi-trial run.

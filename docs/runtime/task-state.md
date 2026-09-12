@@ -50,7 +50,7 @@ than silently overwriting another actor's change.
 ## Runtime Integration
 
 Runtime Snapshot v8 introduced Structured Task State context. The current
-resumable Snapshot window (v11-v12) retains it; older snapshots are Replay-only.
+v15 Snapshot retains it; v14 and earlier snapshots are Replay-only.
 Current snapshots freeze the runtime-owned `update_task_state` Tool. The Tool is
 not user-toggleable: it is a
 harness capability backed by the same versioned

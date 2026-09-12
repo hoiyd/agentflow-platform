@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	// These weights are part of agent-selection-v2. Changing them requires a new
-	// policy revision so resumable Runs keep deterministic routing semantics.
+	// These weights define the declarative ranker used by the current v3 policy
+	// and the evaluation-only v2 migration baseline.
 	capabilityHintWeight = 6
 	taskExampleWeight    = 3
 	toolHintWeight       = 4
@@ -21,8 +21,8 @@ const (
 	exclusionHintWeight  = 8
 )
 
-func selectWorkerAgentV2(agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) (routeDecision, error) {
-	decision := rankWorkerAgentsV2(agents, task, plan, requirements)
+func selectWorkerAgentV2Baseline(agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) (routeDecision, error) {
+	decision := rankWorkerAgentsDeclarative(agents, task, plan, requirements)
 	if decision.Agent.ID == "" || decision.Score <= 0 {
 		decision.Agent = domain.Agent{}
 		decision.Reason = "No candidate had positive declarative routing evidence."
@@ -31,12 +31,12 @@ func selectWorkerAgentV2(agents []domain.Agent, task string, plan string, requir
 	return decision, nil
 }
 
-func rankWorkerAgentsV2(agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) routeDecision {
+func rankWorkerAgentsDeclarative(agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) routeDecision {
 	query := normalizeRoutingText(task + "\n" + plan)
 	queryTokens := routingTokens(query, 2)
 	scores := make([]agentScore, 0, len(agents))
 	for _, agent := range agents {
-		score, reason := scoreAgentForTaskV2(agent, query, queryTokens, requirements.PreferredCapabilities)
+		score, reason := scoreAgentForTaskDeclarative(agent, query, queryTokens, requirements.PreferredCapabilities)
 		scores = append(scores, agentScore{Agent: agent, Score: score, Reason: reason})
 	}
 	sort.SliceStable(scores, func(i, j int) bool {
@@ -67,7 +67,7 @@ func rankWorkerAgentsV2(agents []domain.Agent, task string, plan string, require
 	return decision
 }
 
-func scoreAgentForTaskV2(agent domain.Agent, query string, queryTokens map[string]bool, preferredCapabilities []string) (int, string) {
+func scoreAgentForTaskDeclarative(agent domain.Agent, query string, queryTokens map[string]bool, preferredCapabilities []string) (int, string) {
 	score := 0
 	reasons := make([]string, 0, 5)
 

@@ -230,7 +230,7 @@ the current design as a one-shot architecture:
    evidence-gated Completion Contract with replayable artifacts.
 7. Multi-Agent routing moved from a central keyword fallback to frozen profile
    hints, typed requirements, calibrated abstention, and a versioned holdout
-   gate. The repository keeps old policies only as reproducible migration
+   gate. The repository keeps old policies only as evaluation-only migration
    baselines and does not auto-publish thresholds from a small offline fixture.
 
 Each step introduced a narrower contract and regression tests before the next

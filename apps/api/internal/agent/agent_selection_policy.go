@@ -8,8 +8,10 @@ import (
 )
 
 const (
-	AgentSelectionPolicyVersionV1      = "agent-selection-v1"
-	AgentSelectionPolicyVersionV2      = "agent-selection-v2"
+	// V1 and V2 remain executable only for offline migration baselines.
+	AgentSelectionPolicyVersionV1 = "agent-selection-v1"
+	AgentSelectionPolicyVersionV2 = "agent-selection-v2"
+
 	CurrentAgentSelectionPolicyVersion = "agent-selection-v3"
 )
 
@@ -27,8 +29,8 @@ func selectionPolicy(revision string) (agentSelectionPolicy, bool) {
 	case AgentSelectionPolicyVersionV1, AgentSelectionPolicyVersionV2:
 		return agentSelectionPolicy{Revision: revision}, true
 	case CurrentAgentSelectionPolicyVersion:
-		// These are conservative protocol defaults, not empirical calibration.
-		// H-33 owns replacing them with a versioned calibration result.
+		// Dataset v1 recommends 4/1, but the production policy intentionally
+		// retains these conservative defaults until live evidence is reviewed.
 		return agentSelectionPolicy{
 			Revision:                   revision,
 			ThresholdSource:            "conservative-safety-baseline-v1",
