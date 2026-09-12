@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	// These weights define the declarative ranker used by the current v3 policy
-	// and the evaluation-only v2 migration baseline.
+	// These weights are part of the single Agent selection algorithm.
 	capabilityHintWeight = 6
 	taskExampleWeight    = 3
 	toolHintWeight       = 4
@@ -20,16 +19,6 @@ const (
 	profileTermWeight    = 1
 	exclusionHintWeight  = 8
 )
-
-func selectWorkerAgentV2Baseline(agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) (routeDecision, error) {
-	decision := rankWorkerAgentsDeclarative(agents, task, plan, requirements)
-	if decision.Agent.ID == "" || decision.Score <= 0 {
-		decision.Agent = domain.Agent{}
-		decision.Reason = "No candidate had positive declarative routing evidence."
-		return decision, ErrNoSuitableAgent
-	}
-	return decision, nil
-}
 
 func rankWorkerAgentsDeclarative(agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) routeDecision {
 	query := normalizeRoutingText(task + "\n" + plan)

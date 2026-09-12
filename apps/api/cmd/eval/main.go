@@ -51,7 +51,6 @@ func runRoute(ctx context.Context, args []string, out, stderr io.Writer) int {
 	flags := flag.NewFlagSet("eval route", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	dataset := flags.String("dataset", "../../examples/routing/golden-dataset.v1.json", "Agent routing dataset JSON path")
-	policy := flags.String("policy", agent.CurrentAgentSelectionPolicyVersion, "Agent selection policy revision")
 	live := flags.Bool("live", false, "explicitly authorize Router model requests")
 	model := flags.String("model", "", "required model ID for live routing")
 	base := flags.String("base-url", "https://api.openai.com/v1", "OpenAI-compatible base URL")
@@ -63,7 +62,7 @@ func runRoute(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return 2
 	}
-	opts := routeeval.Options{DatasetPath: *dataset, PolicyRevision: *policy, RouterMode: agent.RouterModeQuery,
+	opts := routeeval.Options{DatasetPath: *dataset, RouterMode: agent.RouterModeQuery,
 		Trials: 1, Revision: gitRevision(ctx)}
 	var client *openai.Client
 	if *live {
@@ -87,8 +86,8 @@ func runRoute(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return 2
 	}
 	summary := report.Summary["overall"]
-	fmt.Fprintf(stderr, "route: mode=%s policy=%s evaluated=%d/%d failed=%d skipped=%d top1=%s unsafe=%s no_route_recall=%s invalid=%s fallback=%s tokens=%.1f latency_ms=%.1f\n",
-		report.Config.RouterMode, report.Config.Policy.Revision, summary.Evaluated, summary.Samples, summary.Failed, summary.NotEvaluated,
+	fmt.Fprintf(stderr, "route: mode=%s evaluated=%d/%d failed=%d skipped=%d top1=%s unsafe=%s no_route_recall=%s invalid=%s fallback=%s tokens=%.1f latency_ms=%.1f\n",
+		report.Config.RouterMode, summary.Evaluated, summary.Samples, summary.Failed, summary.NotEvaluated,
 		formatMetric(summary.Top1AcceptableSelection), formatMetric(summary.UnsafeFalseRoute), formatMetric(summary.NoRouteRecall),
 		formatMetric(summary.InvalidResponse), formatMetric(summary.FallbackRecovery), summary.MeanRouterTokens, summary.MeanLatencyMS)
 	if *enforce && !report.Gate.Passed {

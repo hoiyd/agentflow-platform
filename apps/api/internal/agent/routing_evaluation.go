@@ -14,21 +14,19 @@ import (
 // production Agent selection policy. ModelResponse and ModelError are mutually
 // exclusive and are only used when RouterMode is auto.
 type RoutingEvaluationInput struct {
-	Agents         []domain.Agent
-	Catalog        *tools.Catalog
-	Task           string
-	Plan           string
-	Requirements   domain.AgentRoutingRequirements
-	PolicyRevision string
-	RouterMode     string
-	ModelResponse  string
-	ModelError     error
+	Agents        []domain.Agent
+	Catalog       *tools.Catalog
+	Task          string
+	Plan          string
+	Requirements  domain.AgentRoutingRequirements
+	RouterMode    string
+	ModelResponse string
+	ModelError    error
 }
 
 const AgentRoutingPromptRevision = "agent-router-json-v1"
 
 type RoutingEvaluationPolicy struct {
-	Revision                   string  `json:"revision"`
 	ThresholdSource            string  `json:"threshold_source,omitempty"`
 	MinimumScore               int     `json:"minimum_score"`
 	MinimumScoreMargin         int     `json:"minimum_score_margin"`
@@ -36,16 +34,13 @@ type RoutingEvaluationPolicy struct {
 	MinimumRequirementCoverage float64 `json:"minimum_requirement_coverage"`
 }
 
-func AgentSelectionPolicyEvidence(revision string) (RoutingEvaluationPolicy, bool) {
-	policy, ok := selectionPolicy(revision)
-	if !ok {
-		return RoutingEvaluationPolicy{}, false
-	}
+func AgentSelectionPolicyEvidence() RoutingEvaluationPolicy {
+	policy := selectionPolicy()
 	return RoutingEvaluationPolicy{
-		Revision: policy.Revision, ThresholdSource: policy.ThresholdSource,
-		MinimumScore: policy.MinimumScore, MinimumScoreMargin: policy.MinimumScoreMargin,
+		ThresholdSource: policy.ThresholdSource,
+		MinimumScore:    policy.MinimumScore, MinimumScoreMargin: policy.MinimumScoreMargin,
 		MinimumLLMConfidence: policy.MinimumLLMConfidence, MinimumRequirementCoverage: policy.MinimumRequirementCoverage,
-	}, true
+	}
 }
 
 type RoutingEvaluationCandidate struct {
@@ -60,7 +55,6 @@ type RoutingEvaluationResult struct {
 	Outcome             string                       `json:"outcome"`
 	SelectedAgentID     string                       `json:"selected_agent_id,omitempty"`
 	ProposedAgentID     string                       `json:"proposed_agent_id,omitempty"`
-	PolicyRevision      string                       `json:"policy_revision"`
 	Mode                string                       `json:"mode"`
 	Reason              string                       `json:"reason"`
 	FailureCode         string                       `json:"failure_code,omitempty"`
@@ -84,16 +78,8 @@ func AgentRoutingPrompts(task, plan string, requirements domain.AgentRoutingRequ
 // EvaluateAgentRouting runs the same policy primitives as production without
 // creating Runs, stages, events, or child Runs.
 func EvaluateAgentRouting(input RoutingEvaluationInput) RoutingEvaluationResult {
-	input.PolicyRevision = strings.TrimSpace(input.PolicyRevision)
-	if input.PolicyRevision == "" {
-		input.PolicyRevision = CurrentAgentSelectionPolicyVersion
-	}
 	input.Requirements = domain.NormalizeAgentRoutingRequirements(input.Requirements)
-	result := RoutingEvaluationResult{PolicyRevision: input.PolicyRevision, Mode: NormalizeRouterMode(input.RouterMode), Candidates: []RoutingEvaluationCandidate{}}
-	if !input.Requirements.IsEmpty() && input.PolicyRevision != CurrentAgentSelectionPolicyVersion {
-		return failedEvaluation(result, AgentSelectionOutcomeRouterFailed, ErrInvalidRoutingRequirements,
-			fmt.Sprintf("frozen policy %q does not support routing requirements", input.PolicyRevision))
-	}
+	result := RoutingEvaluationResult{Mode: NormalizeRouterMode(input.RouterMode), Candidates: []RoutingEvaluationCandidate{}}
 	if conflicts := input.Requirements.ConflictingTools(); len(conflicts) > 0 {
 		return failedEvaluation(result, AgentSelectionOutcomeRouterFailed, ErrInvalidRoutingRequirements,
 			"conflicting tools: "+strings.Join(conflicts, ", "))
@@ -110,7 +96,7 @@ func EvaluateAgentRouting(input RoutingEvaluationInput) RoutingEvaluationResult 
 	var decision routeDecision
 	var err error
 	if result.Mode == RouterModeQuery {
-		decision, err = selectDeterministicPolicyForEvaluation(input.PolicyRevision, eligible, input.Task, input.Plan, input.Requirements)
+		decision = rankWorkerAgentsDeclarative(eligible, input.Task, input.Plan, input.Requirements)
 	} else if input.ModelError != nil {
 		err = input.ModelError
 	} else {
@@ -121,7 +107,8 @@ func EvaluateAgentRouting(input RoutingEvaluationInput) RoutingEvaluationResult 
 		}
 	}
 	if err != nil && result.Mode == RouterModeAuto && shouldFallbackAgentSelection(err) {
-		decision, err = selectDeterministicPolicyForEvaluation(input.PolicyRevision, eligible, input.Task, input.Plan, input.Requirements)
+		decision = rankWorkerAgentsDeclarative(eligible, input.Task, input.Plan, input.Requirements)
+		err = nil
 		decision.FallbackReasonCode = failure.Describe(input.ModelError).Code
 		if result.InvalidResponse {
 			decision.FallbackReasonCode = failure.Describe(ErrAgentRouteResponseInvalid).Code
@@ -136,7 +123,7 @@ func EvaluateAgentRouting(input RoutingEvaluationInput) RoutingEvaluationResult 
 		result.FailureCode = failure.Describe(err).Code
 		return evaluationResult(result, decision, eligibility)
 	}
-	if err = applySelectionGate(&decision, input.PolicyRevision, eligibility); err != nil {
+	if err = applySelectionGate(&decision, eligibility); err != nil {
 		result.Outcome = AgentSelectionOutcomeNoSuitable
 		result.FailureCode = failure.Describe(err).Code
 	} else {
@@ -144,19 +131,6 @@ func EvaluateAgentRouting(input RoutingEvaluationInput) RoutingEvaluationResult 
 	}
 	result.InvalidResponse = result.InvalidResponse || errors.Is(input.ModelError, ErrAgentRouteResponseInvalid)
 	return evaluationResult(result, decision, eligibility)
-}
-
-func selectDeterministicPolicyForEvaluation(policyVersion string, agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) (routeDecision, error) {
-	switch policyVersion {
-	case AgentSelectionPolicyVersionV1:
-		return selectWorkerAgentV1(agents, task, plan), nil
-	case AgentSelectionPolicyVersionV2:
-		return selectWorkerAgentV2Baseline(agents, task, plan, requirements)
-	case CurrentAgentSelectionPolicyVersion:
-		return rankWorkerAgentsDeclarative(agents, task, plan, requirements), nil
-	default:
-		return routeDecision{}, fmt.Errorf("unsupported agent selection policy %q", policyVersion)
-	}
 }
 
 func failedEvaluation(result RoutingEvaluationResult, outcome string, err error, reason string) RoutingEvaluationResult {

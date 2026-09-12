@@ -27,7 +27,7 @@ If every candidate is excluded, the Router returns
 
 ## Ranking And Fallback
 
-`query_match` is the deterministic baseline. Its v3 policy reads declarative
+`query_match` is the deterministic baseline. The Agent selection algorithm reads declarative
 signals owned by each frozen Agent profile: `capabilities`, `task_examples`,
 `exclusions`, Tool names, and low-weight name/description terms. Capability and
 Tool matches add strong evidence, example overlap adds supporting evidence, and
@@ -36,7 +36,7 @@ evidence. Stable score and Agent-name ordering makes the
 same frozen inputs produce the same decision. The policy does not inspect the
 System Prompt and has no central task-to-Agent keyword table.
 
-After ranking, v3 applies an explicit abstention gate. It rejects a proposed
+After ranking, the algorithm applies an explicit abstention gate. It rejects a proposed
 candidate when its score, first-to-second margin, LLM confidence, or verified
 hard-requirement coverage is below the policy threshold. The decision retains
 the proposed Agent, observed values, thresholds, threshold source, and stable
@@ -48,7 +48,7 @@ after calibration and holdout. Production intentionally remains on the stricter
 is regression evidence, not enough evidence to publish a broader production
 policy. Decision evidence reports the active threshold source verbatim.
 
-If every eligible candidate has a zero score, the compatibility v2 policy returns
+If every eligible candidate has a zero score, the abstention gate returns
 `agent_route_no_suitable_candidate` instead of selecting an arbitrary Worker.
 This is separate from `agent_route_no_eligible_candidate`: an eligible Agent is
 executable, while a suitable Agent has positive evidence for this task.
@@ -75,27 +75,27 @@ concerns.
 
 ## Frozen And Observable Decisions
 
-New Multi Runs freeze `agent-selection-v3` and all candidate routing hints in
-Runtime Snapshot v15. It is the only resumable Agent selection protocol. Snapshot
-v14 and earlier remain available for Replay but are not resumable; AgentFlow does
-not rewrite their frozen policy or silently apply v3 thresholds. The v1/v2 policy
-identifiers and selectors remain executable only inside the offline migration
-benchmark. Configuration changes or
+New Multi Runs freeze all candidate routing hints and Router mode in Runtime
+Snapshot v15. The Snapshot schema defines the only resumable Agent selection
+protocol; there is no separate algorithm-version field or runtime selector.
+Snapshot v14 and earlier remain available for Replay but are not resumable.
+Configuration changes or
 newly-created Agent profiles cannot enter a frozen candidate set. The approved
 requirements belong to that continuation decision and are persisted in its
 `agent.selection.decided` event; recovery after selection reuses the persisted
 Router Step instead of selecting again.
 
 The Router Collaboration Step remains the human-readable trace. The durable
-`agent.selection.decided` adds policy revision, outcome, mode, requirements,
+`agent.selection.decided` adds outcome, mode, requirements,
 selected and proposed Agent IDs, fallback code, candidate scores, requirement
 coverage, exclusion reasons, threshold observations, and abstention reason codes
 for Replay and evaluation.
 
 The offline routing gate reuses the production eligibility, ranking, response
-validation, fallback, and abstention code. On Dataset v1, v3 records 10/10
-acceptable selections, zero unsafe false routes, and 6/6 no-route recall;
-v1/v2 remain evaluation-only diagnostic migration baselines. These numbers do not claim live
+validation, fallback, and abstention code. On Dataset v1, the current algorithm
+records 10/10 acceptable selections, zero unsafe false routes, and 6/6 no-route
+recall. The retired implementation results remain in a read-only Artifact, not
+in executable selectors. These numbers do not claim live
 LLM quality. See [Offline evaluation](../operations/offline-evaluation.md#agent-routing-gate)
 for the dataset boundary, commands, and full metrics.
 

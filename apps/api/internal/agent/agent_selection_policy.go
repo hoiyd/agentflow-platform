@@ -1,22 +1,12 @@
 package agent
 
 import (
-	"fmt"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
 
-const (
-	// V1 and V2 remain executable only for offline migration baselines.
-	AgentSelectionPolicyVersionV1 = "agent-selection-v1"
-	AgentSelectionPolicyVersionV2 = "agent-selection-v2"
-
-	CurrentAgentSelectionPolicyVersion = "agent-selection-v3"
-)
-
 type agentSelectionPolicy struct {
-	Revision                   string
 	ThresholdSource            string
 	MinimumScore               int
 	MinimumScoreMargin         int
@@ -24,23 +14,15 @@ type agentSelectionPolicy struct {
 	MinimumRequirementCoverage float64
 }
 
-func selectionPolicy(revision string) (agentSelectionPolicy, bool) {
-	switch revision {
-	case AgentSelectionPolicyVersionV1, AgentSelectionPolicyVersionV2:
-		return agentSelectionPolicy{Revision: revision}, true
-	case CurrentAgentSelectionPolicyVersion:
-		// Dataset v1 recommends 4/1, but the production policy intentionally
-		// retains these conservative defaults until live evidence is reviewed.
-		return agentSelectionPolicy{
-			Revision:                   revision,
-			ThresholdSource:            "conservative-safety-baseline-v1",
-			MinimumScore:               capabilityHintWeight,
-			MinimumScoreMargin:         1,
-			MinimumLLMConfidence:       0.5,
-			MinimumRequirementCoverage: 1,
-		}, true
-	default:
-		return agentSelectionPolicy{}, false
+func selectionPolicy() agentSelectionPolicy {
+	// Dataset v1 recommends 4/1, but the production policy intentionally
+	// retains these conservative defaults until live evidence is reviewed.
+	return agentSelectionPolicy{
+		ThresholdSource:            "conservative-safety-baseline-v1",
+		MinimumScore:               capabilityHintWeight,
+		MinimumScoreMargin:         1,
+		MinimumLLMConfidence:       0.5,
+		MinimumRequirementCoverage: 1,
 	}
 }
 
@@ -59,14 +41,8 @@ type routeGateEvidence struct {
 	ReasonCodes          []string
 }
 
-func applySelectionGate(decision *routeDecision, policyRevision string, eligibility []agentEligibility) error {
-	policy, ok := selectionPolicy(policyRevision)
-	if !ok {
-		return fmt.Errorf("unsupported agent selection policy %q", policyRevision)
-	}
-	if policy.ThresholdSource == "" {
-		return nil
-	}
+func applySelectionGate(decision *routeDecision, eligibility []agentEligibility) error {
+	policy := selectionPolicy()
 	evidence := routeGateEvidence{
 		ProposedAgentID: decision.Agent.ID, ThresholdSource: policy.ThresholdSource, MinimumScore: policy.MinimumScore,
 		MinimumScoreMargin: policy.MinimumScoreMargin, MinimumLLMConfidence: policy.MinimumLLMConfidence,

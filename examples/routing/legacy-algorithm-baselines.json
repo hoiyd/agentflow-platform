@@ -1,0 +1,51 @@
+{
+  "schema_version": "agent-routing-legacy-baselines-v1",
+  "captured_from_git_revision": "426bae7a6d035adb5d4e21de9060c2704f1f7b0d",
+  "dataset": {
+    "id": "agentflow-agent-routing",
+    "version": "1.0.0",
+    "hash": "120eaf81a316580970c9264bbbce3603b755a5284eb9921838907929e86c311f"
+  },
+  "configuration": {
+    "router_mode": "query_match",
+    "prompt_revision": "agent-router-json-v1",
+    "prompt_hash": "386f2309d9c73cf157de1eaecd194848da702cd6798e0db82f59eb81ef8ca748",
+    "agent_catalog_hash": "7aaf1fc63ac0a11fabcb565e21e52d77463c85d5535725eb391db4a3f76dba01",
+    "trials": 1
+  },
+  "baselines": [
+    {
+      "historical_label": "agent-selection-v1",
+      "accepted": false,
+      "minimum_score": 0,
+      "minimum_score_margin": 0,
+      "top_1_acceptable_selection": { "numerator": 9, "denominator": 10 },
+      "unsafe_false_route": { "numerator": 2, "denominator": 16 },
+      "no_route_recall": { "numerator": 0, "denominator": 6 },
+      "gate_passed": false
+    },
+    {
+      "historical_label": "agent-selection-v2",
+      "accepted": false,
+      "minimum_score": 0,
+      "minimum_score_margin": 0,
+      "top_1_acceptable_selection": { "numerator": 9, "denominator": 10 },
+      "unsafe_false_route": { "numerator": 1, "denominator": 16 },
+      "no_route_recall": { "numerator": 1, "denominator": 6 },
+      "gate_passed": false
+    },
+    {
+      "historical_label": "agent-selection-v3",
+      "accepted": true,
+      "threshold_source": "conservative-safety-baseline-v1",
+      "minimum_score": 6,
+      "minimum_score_margin": 1,
+      "minimum_llm_confidence": 0.5,
+      "minimum_requirement_coverage": 1,
+      "top_1_acceptable_selection": { "numerator": 10, "denominator": 10 },
+      "unsafe_false_route": { "numerator": 0, "denominator": 16 },
+      "no_route_recall": { "numerator": 6, "denominator": 6 },
+      "gate_passed": true
+    }
+  ]
+}

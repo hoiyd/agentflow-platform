@@ -46,7 +46,8 @@ Creating a Run captures the effective Agent profile in its Runtime Snapshot.
 Multi mode also captures every candidate profile. The Snapshot includes Agent
 identity, description, system prompt, routing hints, tool names, and Memory/RAG switches,
 together with the native execution protocol, model identity, tool schemas,
-context policy, Agent selection policy revision, and Run Budget.
+context policy, Router mode, and Run Budget. Agent selection semantics belong to
+the Runtime Snapshot schema rather than a separate algorithm version.
 
 Editing or archiving a profile later does not rewrite an existing Run. Resume
 restores the frozen Agent configuration and verifies that every required tool is

@@ -141,8 +141,8 @@ grounding, and cross-cutting platform controls can be reviewed independently.
 | [Bounded Child Run delegation](docs/runtime/child-run-delegation.md) | Multi-Agent Workers execute in isolated Child Runs with frozen Tool authority, independent budgets, no-wait backpressure, bounded result handoff, cancellation, and replayable parent-child topology | [runtime](apps/api/internal/agent/child_run.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
 | [Configurable Agent profiles](docs/runtime/agent-profiles.md) | Persisted profiles combine responsibility, system prompt, declarative routing hints, Tool allowlist, and Memory/RAG switches; Multi freezes active profiles as Router candidates | [API](apps/api/internal/httpapi/agents.go), [tests](apps/api/internal/httpapi/agents_test.go) |
 | [Capability-aware Agent selection](docs/runtime/agent-selection.md) | Multi filters frozen candidates by executable capabilities before deterministic or validated model ranking, with typed refusal and durable decision evidence | [router](apps/api/internal/agent/orchestrator.go), [tests](apps/api/internal/agent/orchestrator_test.go) |
-| [Agent routing evaluation](docs/operations/offline-evaluation.md#agent-routing-gate) | A versioned calibration/holdout gate compares v1/v2/v3 policies, preserves failures in metric denominators, and reports selection, unsafe-route, no-route, fallback, token, and latency evidence separately | [runner](apps/api/internal/evaluation/routeeval/runner.go), [dataset](examples/routing/golden-dataset.v1.json) |
-| [Reproducibility](docs/architecture/terms.md#runtime-snapshot) | Each Run freezes model, Agent, Tool schema, context policy, Agent selection policy, and budget in a Runtime Snapshot | [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
+| [Agent routing evaluation](docs/operations/offline-evaluation.md#agent-routing-gate) | A versioned calibration/holdout dataset gates the single Agent selection algorithm; an immutable Artifact preserves the retired algorithm comparison without keeping old code executable | [runner](apps/api/internal/evaluation/routeeval/runner.go), [dataset](examples/routing/golden-dataset.v1.json), [retirement evidence](examples/routing/legacy-algorithm-baselines.json) |
+| [Reproducibility](docs/architecture/terms.md#runtime-snapshot) | Each Run freezes model, Agent profiles and routing inputs, Tool schema, context policy, and budget in a Runtime Snapshot | [snapshot](apps/api/internal/agent/runtime_snapshot.go), [tests](apps/api/internal/agent/runtime_snapshot_test.go) |
 | [Context control](docs/context/context-management.md) | Per-source budgets, Context Manifests, non-destructive compaction, and a protected recent message tail | [assembler](apps/api/internal/contextassembly/assembler.go), [tests](apps/api/internal/contextassembly/assembler_test.go) |
 | [Structured durable task state](docs/runtime/task-state.md) | Conversation-scoped goals, tasks, decisions, constraints, blockers, and Artifact references evolve through optimistic typed patches rather than summaries | [domain](apps/api/internal/domain/task_state.go), [Store tests](apps/api/internal/store/postgres_store_test.go) |
 | [Durable memory](docs/context/memory-management.md) | Curated candidates plus user-visible, version-checked corrections/deletions; metadata-only audit and late-sync replay protection | [mutations](apps/api/internal/memory/mutations.go), [tests](apps/api/internal/store/memory_mutations_test.go) |
@@ -230,8 +230,8 @@ the current design as a one-shot architecture:
    evidence-gated Completion Contract with replayable artifacts.
 7. Multi-Agent routing moved from a central keyword fallback to frozen profile
    hints, typed requirements, calibrated abstention, and a versioned holdout
-   gate. The repository keeps old policies only as evaluation-only migration
-   baselines and does not auto-publish thresholds from a small offline fixture.
+   gate. The retired implementations survive only as an immutable evaluation
+   Artifact; the runtime and evaluator execute one selection algorithm.
 
 Each step introduced a narrower contract and regression tests before the next
 capability depended on it. The rationale and rejected shortcuts are recorded in

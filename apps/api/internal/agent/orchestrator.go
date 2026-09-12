@@ -494,7 +494,6 @@ type routeDecision struct {
 	Agent              domain.Agent
 	Outcome            string
 	Mode               string
-	PolicyRevision     string
 	Reason             string
 	FallbackReasonCode string
 	FailureCode        string
@@ -521,38 +520,27 @@ type agentEligibility struct {
 }
 
 func (r *Runtime) routeWorkerAgent(ctx context.Context, runID string, restored restoredRuntime, agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) (routeDecision, error) {
-	if restored.agentSelectionPolicyVersion != CurrentAgentSelectionPolicyVersion {
-		return routeDecision{
-			Outcome: AgentSelectionOutcomeRouterFailed, Mode: restored.routerMode,
-			PolicyRevision: restored.agentSelectionPolicyVersion,
-			Reason:         "The Run's frozen Agent selection policy is replay-only.",
-			FailureCode:    failure.Describe(ErrRuntimeSnapshotResumeUnsupported).Code,
-		}, fmt.Errorf("%w: agent selection policy %q", ErrRuntimeSnapshotResumeUnsupported, restored.agentSelectionPolicyVersion)
-	}
 	requirements = domain.NormalizeAgentRoutingRequirements(requirements)
 	if conflicts := requirements.ConflictingTools(); len(conflicts) > 0 {
 		return routeDecision{
 			Outcome: AgentSelectionOutcomeRouterFailed, Mode: restored.routerMode,
-			PolicyRevision: restored.agentSelectionPolicyVersion,
-			Reason:         fmt.Sprintf("Routing requirements both require and prohibit: %s.", strings.Join(conflicts, ", ")),
-			FailureCode:    failure.Describe(ErrInvalidRoutingRequirements).Code,
-			Requirements:   requirements,
+			Reason:       fmt.Sprintf("Routing requirements both require and prohibit: %s.", strings.Join(conflicts, ", ")),
+			FailureCode:  failure.Describe(ErrInvalidRoutingRequirements).Code,
+			Requirements: requirements,
 		}, fmt.Errorf("%w: conflicting tools: %s", ErrInvalidRoutingRequirements, strings.Join(conflicts, ", "))
 	}
 	eligible, eligibility := eligibleWorkerAgents(agents, restored.catalog, requirements)
 	if len(eligible) == 0 {
 		return routeDecision{
 			Outcome: AgentSelectionOutcomeNoEligible, Mode: restored.routerMode,
-			PolicyRevision: restored.agentSelectionPolicyVersion,
-			Reason:         "Every frozen candidate failed a hard capability check.",
-			FailureCode:    failure.Describe(ErrNoEligibleAgent).Code,
-			Eligibility:    eligibility,
-			Requirements:   requirements,
+			Reason:       "Every frozen candidate failed a hard capability check.",
+			FailureCode:  failure.Describe(ErrNoEligibleAgent).Code,
+			Eligibility:  eligibility,
+			Requirements: requirements,
 		}, ErrNoEligibleAgent
 	}
 
 	decision, err := r.routeEligibleWorkerAgent(ctx, runID, restored, eligible, task, plan, requirements)
-	decision.PolicyRevision = restored.agentSelectionPolicyVersion
 	decision.Eligibility = eligibility
 	decision.Requirements = requirements
 	if err != nil {
@@ -567,7 +555,7 @@ func (r *Runtime) routeWorkerAgent(ctx context.Context, runID string, restored r
 		logRouteScores(runID, decision)
 		return decision, err
 	}
-	if err := applySelectionGate(&decision, restored.agentSelectionPolicyVersion, eligibility); err != nil {
+	if err := applySelectionGate(&decision, eligibility); err != nil {
 		decision.Outcome = AgentSelectionOutcomeNoSuitable
 		decision.FailureCode = failure.Describe(err).Code
 		logRouteScores(runID, decision)
@@ -755,7 +743,6 @@ func (d routeDecision) Output() string {
 	if d.Outcome == AgentSelectionOutcomeRouterFailed {
 		return strings.Join([]string{
 			"Router outcome: failed",
-			fmt.Sprintf("Policy revision: %s", d.PolicyRevision),
 			fmt.Sprintf("Router mode: %s", d.Mode),
 			fmt.Sprintf("Failure code: %s", d.FailureCode),
 			fmt.Sprintf("Reason: %s", d.Reason),
@@ -768,7 +755,6 @@ func (d routeDecision) Output() string {
 		}
 		lines := []string{
 			"Router outcome: " + label,
-			fmt.Sprintf("Policy revision: %s", d.PolicyRevision),
 			fmt.Sprintf("Failure code: %s", d.FailureCode),
 			fmt.Sprintf("Reason: %s", d.Reason),
 			"",
@@ -795,9 +781,6 @@ func (d routeDecision) Output() string {
 	lines := []string{
 		fmt.Sprintf("Selected worker: %s (`%s`)", d.Agent.Name, d.Agent.ID),
 		fmt.Sprintf("Router mode: %s", d.Mode),
-	}
-	if d.PolicyRevision != "" {
-		lines = append(lines, fmt.Sprintf("Policy revision: %s", d.PolicyRevision))
 	}
 	if d.FallbackReasonCode != "" {
 		lines = append(lines, fmt.Sprintf("Fallback reason: %s", d.FallbackReasonCode))
@@ -831,7 +814,7 @@ func (r *Runtime) publishAgentSelection(ctx context.Context, run domain.Run, sta
 	item, err := eventpkg.NewRunEvent(domain.EventAgentSelectionDecided, eventpkg.EventMetadata{
 		RunID: run.ID, ConversationID: run.ConversationID, StageID: stageID,
 	}, eventpkg.AgentSelectionPayload{
-		PolicyRevision: decision.PolicyRevision, Outcome: decision.Outcome, Mode: decision.Mode,
+		Outcome: decision.Outcome, Mode: decision.Mode,
 		SelectedAgentID: decision.Agent.ID, Reason: decision.Reason,
 		FallbackReasonCode: decision.FallbackReasonCode, FailureCode: decision.FailureCode,
 		Requirements: decision.Requirements, AbstentionReasonCodes: append([]string(nil), decision.Gate.ReasonCodes...),

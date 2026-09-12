@@ -62,10 +62,11 @@ Briefly distinguish platform Tool enablement from the per-Agent allowlist. The
 Tool Executor still applies timeout, result-size, panic-recovery, tracing, and
 concurrency policy after both layers admit a call.
 
-Use the `make routing-eval` output to explain the Router's evolution: the old
-v1/v2 migration baselines produce unsafe or missed no-route decisions, while
-v3 records 10/10 acceptable selections, zero unsafe false routes, and 6/6
-no-route recall on the fixed Dataset v1. The Dataset recommends score/margin
+Use the `make routing-eval` output to show that the single Router algorithm
+records 10/10 acceptable selections, zero unsafe false routes, and 6/6 no-route
+recall on the fixed Dataset v1. The tracked retirement Artifact preserves how
+the deleted v1/v2 implementations produced unsafe or missed no-route decisions.
+The Dataset recommends score/margin
 `4/1`, but production remains at conservative `6/1`; this is the deliberate
 decision not to auto-publish a policy from a small offline fixture. No live LLM
 quality claim is made.
