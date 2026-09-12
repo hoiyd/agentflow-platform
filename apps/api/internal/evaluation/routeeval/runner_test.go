@@ -85,6 +85,9 @@ func TestLiveInvalidResponsesFallBackAndRemainInDenominator(t *testing.T) {
 	if report.Samples[0].ActualModel != "fixture-actual" {
 		t.Fatal("actual model identity was not recorded")
 	}
+	if report.Samples[0].InputTokens != 10 || report.Samples[0].OutputTokens != 2 || overall.MeanInputTokens == 0 || overall.MeanOutputTokens == 0 {
+		t.Fatalf("input/output token evidence missing: sample=%+v summary=%+v", report.Samples[0], overall)
+	}
 }
 
 func TestLiveFailuresAndBudgetStopsRemainVisible(t *testing.T) {

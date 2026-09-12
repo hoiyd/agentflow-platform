@@ -104,6 +104,8 @@ type Sample struct {
 	RequirementCoverage float64                            `json:"requirement_coverage"`
 	Candidates          []agent.RoutingEvaluationCandidate `json:"candidates"`
 	ModelCalls          int                                `json:"model_calls"`
+	InputTokens         int                                `json:"input_tokens"`
+	OutputTokens        int                                `json:"output_tokens"`
 	RouterTokens        int                                `json:"router_tokens"`
 	UsageEstimated      bool                               `json:"usage_estimated"`
 	LatencyMS           int64                              `json:"latency_ms"`
@@ -128,6 +130,8 @@ type Summary struct {
 	NoRouteRecall           Metric  `json:"no_route_recall"`
 	InvalidResponse         Metric  `json:"invalid_response"`
 	FallbackRecovery        Metric  `json:"fallback_recovery"`
+	MeanInputTokens         float64 `json:"mean_input_tokens"`
+	MeanOutputTokens        float64 `json:"mean_output_tokens"`
 	MeanRouterTokens        float64 `json:"mean_router_tokens"`
 	MeanLatencyMS           float64 `json:"mean_latency_ms"`
 }
@@ -266,7 +270,8 @@ func applyResult(sample *Sample, result agent.RoutingEvaluationResult, usage mod
 	sample.EligibleRecall = intersects(sample.EligibleAgentIDs, sample.AcceptableAgentIDs)
 	sample.AcceptableSelection = contains(sample.AcceptableAgentIDs, sample.SelectedAgentID)
 	sample.UnsafeFalseRoute = result.Outcome == agent.AgentSelectionOutcomeSelected && !sample.AcceptableSelection
-	sample.ModelCalls, sample.RouterTokens, sample.UsageEstimated, sample.LatencyMS = 0, usage.TotalTokens, usage.Estimated, latency
+	sample.ModelCalls, sample.InputTokens, sample.OutputTokens = 0, usage.PromptTokens, usage.CompletionTokens
+	sample.RouterTokens, sample.UsageEstimated, sample.LatencyMS = usage.TotalTokens, usage.Estimated, latency
 	sample.ActualModel = actualModel
 	if usage.Valid() {
 		sample.ModelCalls = 1
@@ -294,7 +299,7 @@ func summarize(samples []Sample, split string) Summary {
 	var result Summary
 	var eligibleOK, eligibleTotal, selectedOK, selectedTotal int
 	var unsafe, predictedNoRoute, expectedNoRoute, correctNoRoute, invalid, modelCalls, fallbackAttempts, fallbackRecovered int
-	var tokenTotal, latencyTotal int64
+	var inputTokenTotal, outputTokenTotal, tokenTotal, latencyTotal int64
 	for _, sample := range samples {
 		if split != "" && sample.Split != split {
 			continue
@@ -344,6 +349,8 @@ func summarize(samples []Sample, split string) Summary {
 			fallbackRecovered++
 		}
 		tokenTotal += int64(sample.RouterTokens)
+		inputTokenTotal += int64(sample.InputTokens)
+		outputTokenTotal += int64(sample.OutputTokens)
 		latencyTotal += sample.LatencyMS
 	}
 	result.EligibleRecall = metric(eligibleOK, eligibleTotal)
@@ -354,6 +361,8 @@ func summarize(samples []Sample, split string) Summary {
 	result.InvalidResponse = metric(invalid, modelCalls)
 	result.FallbackRecovery = metric(fallbackRecovered, fallbackAttempts)
 	if result.Evaluated > 0 {
+		result.MeanInputTokens = float64(inputTokenTotal) / float64(result.Evaluated)
+		result.MeanOutputTokens = float64(outputTokenTotal) / float64(result.Evaluated)
 		result.MeanRouterTokens = float64(tokenTotal) / float64(result.Evaluated)
 		result.MeanLatencyMS = float64(latencyTotal) / float64(result.Evaluated)
 	}

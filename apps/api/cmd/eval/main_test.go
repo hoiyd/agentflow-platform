@@ -86,6 +86,58 @@ func TestToolCLIJSONSummaryAndGate(t *testing.T) {
 	}
 }
 
+func TestLiveBenchmarkProducesTraceableEvidencePack(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "fixture-key")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/embeddings") {
+			_, _ = w.Write([]byte(`{"data":[{"embedding":[1,0]}],"model":"fixture-embedding"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"{}"}}],"usage":{"prompt_tokens":10,"completion_tokens":2,"total_tokens":12},"model":"fixture-chat"}`))
+	}))
+	defer server.Close()
+
+	root := filepath.Join("..", "..", "..", "..")
+	outputDir := filepath.Join(t.TempDir(), "live-benchmark")
+	args := []string{"benchmark", "--live", "--model", "fixture-chat", "--base-url", server.URL,
+		"--embedding-model", "fixture-embedding", "--embedding-base-url", server.URL, "--embedding-dimensions", "2",
+		"--trials", "3", "--tool-max-model-calls", "30", "--tool-max-total-tokens", "100000",
+		"--route-max-model-calls", "1", "--route-max-total-tokens", "100000",
+		"--max-embedding-calls", "100", "--max-embedding-input-tokens", "1000000",
+		"--suite", filepath.Join(root, "examples", "benchmark-suite.v1.json"),
+		"--rag-dataset", filepath.Join(root, "examples", "knowledge", "golden-dataset.v1.json"),
+		"--corpus-manifest", filepath.Join(root, "examples", "knowledge", "golden-v1", "corpus-manifest.v1.json"),
+		"--route-dataset", filepath.Join(root, "examples", "routing", "golden-dataset.v1.json"),
+		"--output-dir", outputDir, "--enforce"}
+	var out, stderr bytes.Buffer
+	if code := run(context.Background(), args, &out, &stderr); code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	var manifest liveBenchmarkManifest
+	if err := json.Unmarshal(out.Bytes(), &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.SchemaVersion != liveBenchmarkSchemaVersion || manifest.Evidence.BenchmarkTasks != 12 || len(manifest.Artifacts) != 4 || !manifest.Gate.Passed {
+		t.Fatalf("incomplete evidence manifest: %#v", manifest)
+	}
+	if manifest.Evidence.ToolContextComparison.Pairs != 9 || !manifest.Evidence.NoGainOrRegressionObserved || manifest.Evidence.ObservedFailedOrSkipped == 0 {
+		t.Fatalf("failure/no-gain evidence was lost: %#v", manifest.Evidence)
+	}
+	for _, name := range []string{"benchmark-suite.v1.json", "rag-semantic.json", "tool-context-vs-tools.json", "route-query-match.json", "route-llm-ranking.json", "manifest.json"} {
+		content, err := os.ReadFile(filepath.Join(outputDir, name))
+		if err != nil {
+			t.Fatalf("missing %s: %v", name, err)
+		}
+		if strings.Contains(string(content), "fixture-key") {
+			t.Fatalf("credential leaked into %s", name)
+		}
+	}
+	if strings.Contains(out.String(), "fixture-key") {
+		t.Fatal("credential leaked into benchmark manifest")
+	}
+}
+
 func TestRouteCLIProducesOfflineReportAndRejectsUnauthorizedLiveRun(t *testing.T) {
 	dataset := filepath.Join("..", "..", "..", "..", "examples", "routing", "golden-dataset.v1.json")
 	var out, stderr bytes.Buffer

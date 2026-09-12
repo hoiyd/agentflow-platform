@@ -174,6 +174,9 @@ func TestTaskEvaluationProductionPathAndReport(t *testing.T) {
 	if report.Summary["without_tools"].Verified != 2 || report.Summary["full_context"].Verified != 6 || report.Summary["with_tools"].Verified != 6 {
 		t.Fatalf("wrong ablation: %+v", report.Summary)
 	}
+	if report.PromptRevision != PromptRevision || report.PromptHash == "" || report.Summary["with_tools"].MeanInputTokens == 0 || report.Summary["with_tools"].MeanOutputTokens == 0 {
+		t.Fatalf("prompt or token provenance missing: %+v", report)
+	}
 	for _, sample := range report.Samples {
 		if sample.Usage.TotalTokens == 0 || sample.UsageEstimated || sample.Usage.OpenReservations != 0 {
 			t.Fatalf("usage lost: %+v", sample)

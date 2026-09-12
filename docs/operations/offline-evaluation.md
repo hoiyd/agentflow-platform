@@ -200,9 +200,9 @@ not a default CI dependency.
 ## Tool Gate and CI
 
 Tool evaluation remains opt-in because it spends model quota. It records trials,
-provider/model, frozen Context configuration, Tool contract hash, verified output,
-failure evidence, latency and Usage Ledger totals. Missing usage stays estimated;
-unsettled usage stops later samples.
+provider/model, frozen Context configuration, prompt revision/hash, Tool contract
+hash, verified output, failure evidence, input/output tokens, latency and Usage
+Ledger totals. Missing usage stays estimated; unsettled usage stops later samples.
 
 Default CI never calls public models. Fixture-backed Tool protocol checks and the
 canonical Context/RAG plus current deterministic routing run write JSON into
@@ -233,11 +233,51 @@ and `benchmark-recovery-replay.json`. Every offline item is explicitly marked or
 named as deterministic/simulated evidence. It proves protocol, accounting,
 retrieval, and recovery behavior, not real-model quality.
 
-For a budgeted model comparison, run the existing `eval tool --live` command.
-Its `full_context` and `with_tools` arms receive the same task and complete
-source access; `without_tools` remains a preview-only diagnostic. Semantic RAG
-runs continue to use the explicit profile described above. These are separate
-reports because embedding quality, answer quality, and recovery correctness have
-different denominators; CASE-001 does not flatten them into one score. The suite
-defines the stable tasks; a Baseline Report is a versioned result produced by
-running those tasks and remains a separate concept.
+## CASE-001A Live Model Benchmark Evidence
+
+`eval benchmark` is a thin orchestration command over the existing RAG, Tool,
+and Router runners. It runs all 12 frozen CASE-001 tasks: nine use a real
+embedding profile and three compare the same chat model across `full_context`
+and `with_tools`. It also compares the deterministic `query_match` Router with
+explicit LLM ranking on the frozen routing dataset. Domain reports remain
+separate; no aggregate intelligence score is calculated.
+
+The command is deliberately opt-in and requires explicit independent budgets.
+The example below permits up to 45 Tool experiment model calls, 50 Router calls,
+and 50 embedding requests. These are suite-wide ceilings, not per-task limits:
+
+```bash
+cd apps/api
+OPENAI_API_KEY=... go run ./cmd/eval benchmark --live \
+  --model CHAT_MODEL --base-url https://api.openai.com/v1 \
+  --embedding-profile openai_compatible \
+  --embedding-model EMBEDDING_MODEL --embedding-dimensions 1536 \
+  --embedding-base-url https://api.openai.com/v1 \
+  --trials 3 \
+  --tool-max-model-calls 45 --tool-max-total-tokens 250000 \
+  --route-max-model-calls 50 --route-max-total-tokens 100000 \
+  --max-embedding-calls 50 --max-embedding-input-tokens 50000 \
+  --timeout 60s --embedding-timeout 2m \
+  --output-dir ../../.cache/live-benchmark/MODEL-REVISION --enforce
+```
+
+The output directory contains the frozen suite plus `rag-semantic.json`,
+`tool-context-vs-tools.json`, `route-query-match.json`,
+`route-llm-ranking.json`, and `manifest.json`. The manifest records model IDs,
+budgets, trials, Dataset hash, Git revision, report hashes, observed skipped or
+failed samples, and binary improved/unchanged/regressed comparisons. Individual
+reports retain task/trial rows, verification or no-answer outcomes, false routes,
+fallbacks, model/Tool calls, latency, and available usage.
+
+Failures, timeouts, budget-skipped samples and invalid model responses stay in
+their original report denominators. The evidence completeness gate also requires
+a traceable declared failure path and at least one evaluated no-gain or regression
+pair; it does not require every model-quality gate to pass. Unknown pricing stays
+unknown, estimated usage remains marked, credentials and provider endpoints are
+not written, and no public model is called by default tests or CI.
+
+The same prompt, task and chat model are used within the Tool arm comparison;
+the Router comparison changes only selection mode. The suite defines stable
+tasks, while each generated report is a versioned result. Do not quote offline
+fixture percentages as live-model quality or omit failed and unrun trials from
+resume claims.
