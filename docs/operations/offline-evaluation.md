@@ -1,12 +1,13 @@
 # Offline Evaluation Reports and Regression Gates
 
-AgentFlow uses one CLI and one provenance envelope for deterministic Context and
-RAG checks plus explicitly authorized live Tool-task checks:
+AgentFlow uses one CLI and one provenance envelope for deterministic Context,
+RAG, and Agent routing checks plus explicitly authorized live checks:
 
 ```bash
 cd apps/api
 go run ./cmd/eval context --enforce
 go run ./cmd/eval rag --enforce
+go run ./cmd/eval route --enforce
 go run ./cmd/eval tool --live --model MODEL \
   --max-model-calls 45 --max-total-tokens 250000 --trials 3 --enforce
 ```
@@ -14,8 +15,8 @@ go run ./cmd/eval tool --live --model MODEL \
 Every report uses `agentflow-evaluation-report-v1` identity fields: evaluation
 kind, Dataset ID/version/hash, Git revision, start/end time, and an explicit
 gate. Domain payload schemas remain separate (`context-quality-eval-v1`,
-`rag-eval-v1`, and `task-eval-v1`) so Context selection, retrieval ranks, model
-tokens, and Tool calls are not confused.
+`rag-eval-v1`, `agent-routing-eval-v1`, and `task-eval-v1`) so Context selection,
+retrieval ranks, routing outcomes, model tokens, and Tool calls are not confused.
 
 ## Context Quality Gate
 
@@ -56,6 +57,67 @@ invariants: all required facts retained and zero forbidden facts included.
 The intentionally missing-source case is diagnostic, remains in the denominator,
 and cannot block the canonical gate. No uncalibrated aggregate quality score is
 used as a release threshold.
+
+## Agent Routing Gate
+
+`eval route` calls the production hard-eligibility, deterministic ranking, LLM
+response parser, fallback, and abstention gate through a narrow offline adapter.
+It does not create a Run, stage, event, or child Run. The versioned dataset freezes
+the Agent catalog and calibration/holdout split and allows either a set of
+acceptable Agents or an explicit `no_eligible_agent` / `no_suitable_agent`
+outcome. Dataset cases cover clear and multiple specialists, hard capability
+failure, no match, ambiguous requests, and description conflict. Fixture tests
+cover Router failure, invalid response, fallback, and exhausted-budget paths.
+
+The report records Dataset, Agent catalog, policy, prompt, model, and Git
+revisions. It reports eligible recall, top-1 acceptable selection, unsafe false
+routes, no-route Precision/Recall, invalid responses, fallback recovery, Router
+tokens, and latency separately. Failed, timed-out, invalid, fallback, and
+budget-skipped trials stay in their metric denominators; undefined ratios are
+JSON `null`. The holdout gate requires every expected outcome to match and no
+unsafe false route. It intentionally does not produce one aggregate score.
+
+The current-policy run searches observed calibration scores and margins and
+reports a holdout-tested threshold recommendation; live LLM runs additionally
+calibrate confidence from valid LLM decisions. Fallback decisions remain on the
+deterministic threshold path. Recommendations are advisory evidence, not an
+automatic production policy update. Review the dataset and report before
+publishing a new frozen policy revision.
+
+Dataset v1 establishes this deterministic baseline:
+
+| Policy | Top-1 acceptable | Unsafe false routes | No-route recall | Result |
+| --- | ---: | ---: | ---: | --- |
+| `agent-selection-v1` | 9/10 | 2/16 | 0/6 | diagnostic failure |
+| `agent-selection-v2` | 9/10 | 1/16 | 1/6 | diagnostic failure |
+| `agent-selection-v3` | 10/10 | 0/16 | 6/6 | holdout gate passed |
+
+The v1/v2 failure counts also retain typed-requirement cases those historical
+policies cannot represent. Dataset v1 recommends score/margin `4/1`; production
+v3 intentionally remains at conservative `6/1` until a reviewed live-model
+baseline justifies a new frozen policy revision. No live LLM result is claimed
+without an explicitly authorized, budgeted multi-trial run.
+
+```bash
+make routing-eval
+
+# Preserve migration baselines; old policies reject typed-requirement cases.
+go run ./cmd/eval route --policy agent-selection-v1 > /tmp/route-v1.json
+go run ./cmd/eval route --policy agent-selection-v2 > /tmp/route-v2.json
+```
+
+Real LLM ranking is opt-in, disables provider retries, and requires explicit
+suite call/token budgets plus a per-sample deadline. Use multiple trials because
+one model response is not a reliability measurement:
+
+```bash
+OPENAI_API_KEY=... go run ./cmd/eval route --live --model MODEL \
+  --trials 3 --max-model-calls 50 --max-total-tokens 100000 \
+  --timeout 60s
+```
+
+The default command and CI tests never call a public model. No embedding,
+classifier, Router database, or dashboard is introduced by this evaluator.
 
 ## RAG Gate
 
@@ -143,8 +205,9 @@ failure evidence, latency and Usage Ledger totals. Missing usage stays estimated
 unsettled usage stops later samples.
 
 Default CI never calls public models. Fixture-backed Tool protocol checks and the
-canonical Context/RAG runs write JSON into `EVALUATION_REPORT_DIR`; the backend
-job uploads the directory as `offline-evaluation-reports`. Reports omit
+canonical Context/RAG plus v1/v2/v3 deterministic routing runs write JSON into
+`EVALUATION_REPORT_DIR`; the backend job uploads the directory as
+`offline-evaluation-reports`. Reports omit
 credentials/endpoints, redact model errors, and do not copy Context or RAG source
 content.
 

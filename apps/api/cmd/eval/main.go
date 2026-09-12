@@ -12,9 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/credential"
 	"agentflow-platform/apps/api/internal/evaluation/contexteval"
 	"agentflow-platform/apps/api/internal/evaluation/rageval"
+	"agentflow-platform/apps/api/internal/evaluation/routeeval"
 	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 	"agentflow-platform/apps/api/internal/openai"
 )
@@ -27,7 +29,7 @@ func main() {
 
 func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: eval <context|rag|tool> [options]")
+		fmt.Fprintln(stderr, "usage: eval <context|rag|route|tool> [options]")
 		return 2
 	}
 	switch args[0] {
@@ -35,12 +37,71 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return runContext(ctx, args[1:], out, stderr)
 	case "rag":
 		return runRAG(ctx, args[1:], out, stderr)
+	case "route":
+		return runRoute(ctx, args[1:], out, stderr)
 	case "tool":
 		return runTool(ctx, args[1:], out, stderr)
 	default:
-		fmt.Fprintf(stderr, "unknown evaluation suite %q; use context, rag, or tool\n", args[0])
+		fmt.Fprintf(stderr, "unknown evaluation suite %q; use context, rag, route, or tool\n", args[0])
 		return 2
 	}
+}
+
+func runRoute(ctx context.Context, args []string, out, stderr io.Writer) int {
+	flags := flag.NewFlagSet("eval route", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	dataset := flags.String("dataset", "../../examples/routing/golden-dataset.v1.json", "Agent routing dataset JSON path")
+	policy := flags.String("policy", agent.CurrentAgentSelectionPolicyVersion, "Agent selection policy revision")
+	live := flags.Bool("live", false, "explicitly authorize Router model requests")
+	model := flags.String("model", "", "required model ID for live routing")
+	base := flags.String("base-url", "https://api.openai.com/v1", "OpenAI-compatible base URL")
+	trials := flags.Int("trials", 3, "live repetitions per routing case (1-20)")
+	calls := flags.Int("max-model-calls", 0, "required total live Router call budget")
+	tokens := flags.Int("max-total-tokens", 0, "required total live Router token budget")
+	timeout := flags.Duration("timeout", 60*time.Second, "deadline per live routing sample, at most 5m")
+	enforce := flags.Bool("enforce", false, "exit 1 when a holdout route is incorrect, failed, or skipped")
+	if flags.Parse(args) != nil || flags.NArg() != 0 {
+		return 2
+	}
+	opts := routeeval.Options{DatasetPath: *dataset, PolicyRevision: *policy, RouterMode: agent.RouterModeQuery,
+		Trials: 1, Revision: gitRevision(ctx)}
+	var client *openai.Client
+	if *live {
+		providerCredential := credential.FromEnvironment("OPENAI_API_KEY")
+		if strings.TrimSpace(*model) == "" || !providerCredential.Available() || *calls < 1 || *tokens < 1 {
+			fmt.Fprintln(stderr, "Live routing requires --model, OPENAI_API_KEY and explicit positive --max-model-calls/--max-total-tokens budgets")
+			return 2
+		}
+		client = openai.NewClientWithTimeout(providerCredential.Reveal(), *base, *model, *timeout)
+		client.SetRetryPolicy(openai.RetryPolicy{MaxAttempts: 1})
+		identity := client.RuntimeIdentity()
+		opts.RouterMode, opts.Trials, opts.MaxModelCalls, opts.MaxTotalTokens, opts.Timeout = agent.RouterModeAuto, *trials, *calls, *tokens, *timeout
+		opts.Model, opts.Provider = identity.Model, identity.Provider
+	}
+	report, err := routeeval.Run(ctx, client, opts)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if !writeJSON(out, stderr, report) {
+		return 2
+	}
+	summary := report.Summary["overall"]
+	fmt.Fprintf(stderr, "route: mode=%s policy=%s evaluated=%d/%d failed=%d skipped=%d top1=%s unsafe=%s no_route_recall=%s invalid=%s fallback=%s tokens=%.1f latency_ms=%.1f\n",
+		report.Config.RouterMode, report.Config.Policy.Revision, summary.Evaluated, summary.Samples, summary.Failed, summary.NotEvaluated,
+		formatMetric(summary.Top1AcceptableSelection), formatMetric(summary.UnsafeFalseRoute), formatMetric(summary.NoRouteRecall),
+		formatMetric(summary.InvalidResponse), formatMetric(summary.FallbackRecovery), summary.MeanRouterTokens, summary.MeanLatencyMS)
+	if *enforce && !report.Gate.Passed {
+		return 1
+	}
+	return 0
+}
+
+func formatMetric(metric routeeval.Metric) string {
+	if metric.Value == nil {
+		return "n/a"
+	}
+	return fmt.Sprintf("%.3f", *metric.Value)
 }
 
 func runContext(ctx context.Context, args []string, out, stderr io.Writer) int {

@@ -1,0 +1,212 @@
+{
+  "schema_version": "agent-routing-dataset-v1",
+  "id": "agentflow-agent-routing",
+  "version": "1.0.0",
+  "agents": [
+    {
+      "id": "agent_research",
+      "name": "Field Researcher",
+      "description": "Analyzes supplied research material, separates supported facts from open questions, and identifies evidence gaps.",
+      "system_prompt": "You are AgentFlow's Field Researcher. Analyze the supplied context, distinguish supported facts from assumptions, compare evidence carefully, and call out uncertainty instead of filling gaps with guesses.",
+      "routing_hints": {
+        "capabilities": ["research", "sources", "verification", "market", "pricing", "competitors", "调研", "来源", "验证", "市场", "价格", "竞品"],
+        "task_examples": ["Compare competitors and verify recent pricing sources.", "Research a product or market and identify evidence gaps."],
+        "exclusions": ["implement or debug software", "calculate a budget or capacity forecast"]
+      },
+      "tools": [],
+      "memory_enabled": true,
+      "retrieval_enabled": true,
+      "executor": "native"
+    },
+    {
+      "id": "agent_coding",
+      "name": "Systems Builder",
+      "description": "Turns implementation requests into concrete technical steps, debugging hypotheses, and maintainable code changes.",
+      "system_prompt": "You are AgentFlow's Systems Builder. Focus on software behavior, interfaces, edge cases, and implementation tradeoffs. Give direct engineering guidance, identify risks, and prefer concrete next steps over broad advice.",
+      "routing_hints": {
+        "capabilities": ["software", "code", "implementation", "debugging", "frontend", "backend", "api", "testing", "go", "typescript", "react", "css", "代码", "实现", "修复", "前端", "后端", "接口", "测试"],
+        "task_examples": ["Implement and test a Go API change.", "Debug a frontend component and fix the underlying code."],
+        "exclusions": ["market research and source comparison", "budget forecasting"]
+      },
+      "tools": ["calculator", "get_current_time"],
+      "memory_enabled": true,
+      "retrieval_enabled": true,
+      "executor": "native"
+    },
+    {
+      "id": "agent_data",
+      "name": "Operations Analyst",
+      "description": "Evaluates budgets, schedules, capacity, and tradeoffs with explicit assumptions and calculation-backed reasoning.",
+      "system_prompt": "You are AgentFlow's Operations Analyst. Treat questions as operational decisions involving cost, time, capacity, or prioritization. Show assumptions, calculate carefully, compare scenarios, and make the practical tradeoff visible.",
+      "routing_hints": {
+        "capabilities": ["budget", "cost", "capacity", "schedule", "calculation", "metrics", "forecast", "tradeoff", "operations", "data", "预算", "成本", "容量", "排期", "计算", "指标", "预测", "取舍", "数据"],
+        "task_examples": ["Calculate a quarterly budget and compare cost scenarios.", "Forecast capacity and explain operational tradeoffs."],
+        "exclusions": ["write software", "research external sources"]
+      },
+      "tools": ["calculator"],
+      "memory_enabled": true,
+      "retrieval_enabled": true,
+      "executor": "native"
+    },
+    {
+      "id": "agent_planner",
+      "name": "Narrative Strategist",
+      "description": "Shapes messy goals into audience-aware briefs, storylines, launch plans, and decision-ready next actions.",
+      "system_prompt": "You are AgentFlow's Narrative Strategist. Clarify the audience, intent, and constraints behind a request. Convert goals into concise briefs, storylines, communication plans, or ordered next actions with dependencies and risks.",
+      "routing_hints": {
+        "capabilities": ["plan", "brief", "story", "storyline", "launch", "audience", "message", "strategy", "roadmap", "proposal", "decision", "计划", "简报", "故事", "发布", "受众", "策略", "路线图", "方案", "决策"],
+        "task_examples": ["Turn an ambiguous goal into an ordered roadmap.", "Create an audience-aware launch brief and communication plan."],
+        "exclusions": ["debug software", "calculate detailed financial metrics"]
+      },
+      "tools": ["get_current_time"],
+      "memory_enabled": true,
+      "retrieval_enabled": true,
+      "executor": "native"
+    }
+  ],
+  "cases": [
+    {
+      "id": "cal-clear-coding",
+      "split": "calibration",
+      "coverage": ["clear_single_specialist"],
+      "task": "Implement and test a Go API change that fixes a backend bug.",
+      "plan": "Update the handler, add regression tests, and run the backend suite.",
+      "expected_outcome": "selected",
+      "acceptable_agent_ids": ["agent_coding"]
+    },
+    {
+      "id": "cal-multiple-acceptable",
+      "split": "calibration",
+      "coverage": ["multiple_acceptable_specialists"],
+      "task": "Create a launch roadmap with a capacity budget and explicit tradeoffs.",
+      "plan": "Produce a decision-ready sequence with budget assumptions.",
+      "expected_outcome": "selected",
+      "acceptable_agent_ids": ["agent_data", "agent_planner"]
+    },
+    {
+      "id": "cal-insufficient-capability",
+      "split": "calibration",
+      "coverage": ["insufficient_capability"],
+      "task": "Publish the production deployment.",
+      "plan": "Use the deployment control tool.",
+      "requirements": {"required_tools": ["deployment_control"]},
+      "expected_outcome": "no_eligible_agent"
+    },
+    {
+      "id": "cal-no-match",
+      "split": "calibration",
+      "coverage": ["no_match"],
+      "task": "Design a floral arrangement for a wedding table.",
+      "plan": "Choose flowers and a vase shape.",
+      "expected_outcome": "no_suitable_agent"
+    },
+    {
+      "id": "cal-ambiguous-tie",
+      "split": "calibration",
+      "coverage": ["ambiguous_task"],
+      "task": "Plan and calculate the launch capacity.",
+      "plan": "Decide what to do next.",
+      "expected_outcome": "selected",
+      "acceptable_agent_ids": ["agent_data", "agent_planner"]
+    },
+    {
+      "id": "cal-description-conflict",
+      "split": "calibration",
+      "coverage": ["candidate_description_conflict"],
+      "task": "Analyze supplied material and separate facts, then implement and debug the Go API.",
+      "plan": "The deliverable is tested backend code, not a research report.",
+      "expected_outcome": "selected",
+      "acceptable_agent_ids": ["agent_coding"]
+    },
+    {
+      "id": "cal-single-eligible-no-evidence",
+      "split": "calibration",
+      "coverage": ["no_match", "typed_requirements"],
+      "task": "Design a floral arrangement for a wedding table.",
+      "plan": "Choose flowers and a vase shape.",
+      "requirements": {"required_tools": ["get_current_time"], "prohibited_tools": ["calculator"]},
+      "expected_outcome": "no_suitable_agent"
+    },
+    {
+      "id": "holdout-clear-research",
+      "split": "holdout",
+      "coverage": ["clear_single_specialist"],
+      "task": "Research competitors and verify recent pricing sources.",
+      "plan": "Compare evidence and identify unsupported claims.",
+      "expected_outcome": "selected",
+      "acceptable_agent_ids": ["agent_research"]
+    },
+    {
+      "id": "holdout-clear-data",
+      "split": "holdout",
+      "coverage": ["clear_single_specialist"],
+      "task": "Forecast quarterly capacity and calculate the operating cost.",
+      "plan": "Show assumptions and compare two budget scenarios.",
+      "expected_outcome": "selected",
+      "acceptable_agent_ids": ["agent_data"]
+    },
+    {
+      "id": "holdout-clear-planner",
+      "split": "holdout",
+      "coverage": ["clear_single_specialist"],
+      "task": "Turn this ambiguous launch goal into an audience-aware roadmap.",
+      "plan": "Create an ordered communication plan with dependencies.",
+      "expected_outcome": "selected",
+      "acceptable_agent_ids": ["agent_planner"]
+    },
+    {
+      "id": "holdout-required-tool",
+      "split": "holdout",
+      "coverage": ["multiple_acceptable_specialists", "typed_requirements"],
+      "task": "Calculate capacity for the next release.",
+      "plan": "Use explicit arithmetic and explain the tradeoff.",
+      "requirements": {"required_tools": ["calculator"], "preferred_capabilities": ["capacity"]},
+      "expected_outcome": "selected",
+      "acceptable_agent_ids": ["agent_data"]
+    },
+    {
+      "id": "holdout-no-match",
+      "split": "holdout",
+      "coverage": ["no_match"],
+      "task": "Compose a short melody for solo violin.",
+      "plan": "Return musical notation.",
+      "expected_outcome": "no_suitable_agent"
+    },
+    {
+      "id": "holdout-ambiguous-tie",
+      "split": "holdout",
+      "coverage": ["ambiguous_task"],
+      "task": "Create a plan for budget capacity.",
+      "plan": "Select the best specialist only if one clearly dominates.",
+      "expected_outcome": "selected",
+      "acceptable_agent_ids": ["agent_data", "agent_planner"]
+    },
+    {
+      "id": "holdout-multiple-acceptable",
+      "split": "holdout",
+      "coverage": ["multiple_acceptable_specialists"],
+      "task": "Research the market and create a launch strategy roadmap.",
+      "plan": "Deliver sourced findings and decision-ready next actions.",
+      "expected_outcome": "selected",
+      "acceptable_agent_ids": ["agent_research", "agent_planner"]
+    },
+    {
+      "id": "holdout-insufficient-capability",
+      "split": "holdout",
+      "coverage": ["insufficient_capability"],
+      "task": "Modify an external payment account.",
+      "plan": "Use the account administration tool.",
+      "requirements": {"required_tools": ["account_admin"]},
+      "expected_outcome": "no_eligible_agent"
+    },
+    {
+      "id": "holdout-single-eligible-no-evidence",
+      "split": "holdout",
+      "coverage": ["no_match", "typed_requirements"],
+      "task": "Compose a short melody for solo violin.",
+      "plan": "Return musical notation.",
+      "requirements": {"required_tools": ["get_current_time"], "prohibited_tools": ["calculator"]},
+      "expected_outcome": "no_suitable_agent"
+    }
+  ]
+}
