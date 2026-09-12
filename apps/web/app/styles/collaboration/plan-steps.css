@@ -74,6 +74,87 @@
   opacity: 0.72;
 }
 
+.plan-routing-requirements {
+  border-top: 1px solid rgba(86, 76, 66, 0.16);
+  padding-top: 10px;
+}
+
+.plan-routing-requirements summary {
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.plan-routing-requirements[open] summary {
+  margin-bottom: 10px;
+}
+
+.routing-requirement-flags {
+  display: flex;
+  gap: 18px;
+}
+
+.routing-requirement-flags label,
+.routing-preferences {
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
+.routing-requirement-flags label {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+}
+
+.routing-tool-matrix {
+  align-items: center;
+  display: grid;
+  gap: 7px 14px;
+  grid-template-columns: minmax(140px, 1fr) 64px 72px;
+  margin-top: 12px;
+}
+
+.routing-tool-matrix > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.routing-tool-matrix > strong {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.routing-tool-matrix > input {
+  justify-self: center;
+}
+
+.routing-preferences {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.routing-preferences textarea {
+  background: #fff;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: inherit;
+  min-height: 64px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.routing-preferences textarea:focus {
+  border-color: var(--accent);
+  outline: 2px solid rgba(180, 95, 60, 0.12);
+}
+
 .plan-review p {
   color: var(--muted-strong);
   font-size: 12px;

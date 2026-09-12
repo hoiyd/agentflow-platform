@@ -105,14 +105,31 @@ type StagePayload struct {
 // AgentSelectionPayload records why a frozen Multi-Agent candidate was chosen
 // or why delegation was refused. It is evidence, not a second orchestration state.
 type AgentSelectionPayload struct {
-	PolicyRevision     string                           `json:"policy_revision"`
-	Outcome            string                           `json:"outcome"`
-	Mode               string                           `json:"mode"`
-	SelectedAgentID    string                           `json:"selected_agent_id,omitempty"`
-	Reason             string                           `json:"reason"`
-	FallbackReasonCode string                           `json:"fallback_reason_code,omitempty"`
-	FailureCode        string                           `json:"failure_code,omitempty"`
-	Candidates         []AgentSelectionCandidatePayload `json:"candidates"`
+	PolicyRevision        string                           `json:"policy_revision"`
+	Outcome               string                           `json:"outcome"`
+	Mode                  string                           `json:"mode"`
+	SelectedAgentID       string                           `json:"selected_agent_id,omitempty"`
+	Reason                string                           `json:"reason"`
+	FallbackReasonCode    string                           `json:"fallback_reason_code,omitempty"`
+	FailureCode           string                           `json:"failure_code,omitempty"`
+	Requirements          domain.AgentRoutingRequirements  `json:"requirements,omitempty"`
+	Gate                  AgentSelectionGatePayload        `json:"gate,omitempty"`
+	AbstentionReasonCodes []string                         `json:"abstention_reason_codes,omitempty"`
+	Candidates            []AgentSelectionCandidatePayload `json:"candidates"`
+}
+
+type AgentSelectionGatePayload struct {
+	ProposedAgentID      string  `json:"proposed_agent_id,omitempty"`
+	ThresholdSource      string  `json:"threshold_source,omitempty"`
+	MinimumScore         int     `json:"minimum_score,omitempty"`
+	MinimumScoreMargin   int     `json:"minimum_score_margin,omitempty"`
+	MinimumLLMConfidence float64 `json:"minimum_llm_confidence,omitempty"`
+	MinimumCoverage      float64 `json:"minimum_requirement_coverage,omitempty"`
+	TopScore             int     `json:"top_score,omitempty"`
+	RunnerUpScore        int     `json:"runner_up_score,omitempty"`
+	ScoreMargin          int     `json:"score_margin,omitempty"`
+	Confidence           float64 `json:"confidence,omitempty"`
+	RequirementCoverage  float64 `json:"requirement_coverage,omitempty"`
 }
 
 type AgentSelectionCandidatePayload struct {
@@ -121,6 +138,8 @@ type AgentSelectionCandidatePayload struct {
 	Score                int      `json:"score,omitempty"`
 	Reason               string   `json:"reason,omitempty"`
 	ExclusionReasonCodes []string `json:"exclusion_reason_codes,omitempty"`
+	MatchedRequirements  []string `json:"matched_requirements,omitempty"`
+	RequirementCoverage  float64  `json:"requirement_coverage,omitempty"`
 }
 
 func (AgentSelectionPayload) supports(eventType domain.RunEventType) bool {

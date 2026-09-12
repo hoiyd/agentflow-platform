@@ -307,7 +307,7 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 
 	writeRunStateSSE(w, flusher, run.ConversationID, run.ID, run.AgentID, run.Status)
 
-	events, errs := h.agentRuntime.ContinueCollaboration(r.Context(), id, req.Plan)
+	events, errs := h.agentRuntime.ContinueCollaboration(r.Context(), id, req.Plan, routingRequirementsFromInput(req.RoutingRequirements))
 	var assistant strings.Builder
 	for event := range events {
 		writeUnifiedRunEvent(w, flusher, event, &assistant)
@@ -329,7 +329,7 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func continuationFailurePolicy(err error) (status int, failRun bool) {
-	if errors.Is(err, agentpkg.ErrNoEligibleAgent) || errors.Is(err, agentpkg.ErrNoSuitableAgent) {
+	if errors.Is(err, agentpkg.ErrNoEligibleAgent) || errors.Is(err, agentpkg.ErrNoSuitableAgent) || errors.Is(err, agentpkg.ErrInvalidRoutingRequirements) {
 		return http.StatusUnprocessableEntity, true
 	}
 	info := failure.Describe(err)

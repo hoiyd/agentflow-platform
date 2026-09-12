@@ -286,7 +286,10 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 		if snapshot.SchemaVersion == domain.AgentSelectionRuntimeSnapshotVersion && snapshot.AgentSelectionPolicyVersion != AgentSelectionPolicyVersionV1 {
 			return fmt.Errorf("multi-agent runtime snapshot has unsupported agent selection policy %q", snapshot.AgentSelectionPolicyVersion)
 		}
-		if snapshot.SchemaVersion >= domain.RoutingHintsRuntimeSnapshotVersion && snapshot.AgentSelectionPolicyVersion != CurrentAgentSelectionPolicyVersion {
+		if snapshot.SchemaVersion == domain.RoutingHintsRuntimeSnapshotVersion && snapshot.AgentSelectionPolicyVersion != AgentSelectionPolicyVersionV2 {
+			return fmt.Errorf("multi-agent runtime snapshot has unsupported agent selection policy %q", snapshot.AgentSelectionPolicyVersion)
+		}
+		if snapshot.SchemaVersion >= domain.RoutingRequirementsSnapshotVersion && snapshot.AgentSelectionPolicyVersion != CurrentAgentSelectionPolicyVersion {
 			return fmt.Errorf("multi-agent runtime snapshot has unsupported agent selection policy %q", snapshot.AgentSelectionPolicyVersion)
 		}
 	case ChatModeAutonomous:

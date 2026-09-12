@@ -9,8 +9,8 @@ import (
 )
 
 // selectWorkerAgentV1 preserves the original central-keyword fallback for
-// resumable v13 snapshots and short-lived benchmark comparison only.
-func selectWorkerAgentV1(runID string, agents []domain.Agent, task string, plan string) routeDecision {
+// replay comparison only; v13 snapshots are no longer resumable.
+func selectWorkerAgentV1(agents []domain.Agent, task string, plan string) routeDecision {
 	query := strings.ToLower(task + "\n" + plan)
 	scores := make([]agentScore, 0, len(agents))
 	for _, agent := range agents {
@@ -31,7 +31,6 @@ func selectWorkerAgentV1(runID string, agents []domain.Agent, task string, plan 
 		Agent: selected.Agent, Mode: RouterModeQuery, Reason: selected.Reason,
 		Score: selected.Score, Scores: scores,
 	}
-	logRouteScores(runID, decision)
 	return decision
 }
 

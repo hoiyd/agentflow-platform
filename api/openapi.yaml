@@ -675,6 +675,27 @@ components:
       properties:
         plan:
           type: string
+        routing_requirements:
+          $ref: '#/components/schemas/AgentRoutingRequirements'
+    AgentRoutingRequirements:
+      type: object
+      properties:
+        required_tools:
+          type: array
+          items:
+            type: string
+        prohibited_tools:
+          type: array
+          items:
+            type: string
+        require_memory:
+          type: boolean
+        require_retrieval:
+          type: boolean
+        preferred_capabilities:
+          type: array
+          items:
+            type: string
     ResumeRunRequest:
       type: object
       required: [user_input]

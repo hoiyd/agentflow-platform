@@ -203,13 +203,13 @@ func TestRuntimeSnapshotResumeSupportsOnlyCurrentAndPreviousVersions(t *testing.
 	}
 }
 
-func TestPreviousMultiAgentSnapshotUsesV1SelectionPolicy(t *testing.T) {
+func TestPreviousMultiAgentSnapshotUsesV2SelectionPolicy(t *testing.T) {
 	snapshot := testRuntimeSnapshot()
 	snapshot.SchemaVersion = domain.PreviousRuntimeSnapshotVersion
 	snapshot.Mode = ChatModeMultiAgent
 	snapshot.AutonomousLimits = nil
 	snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{{ID: "worker", Executor: domain.DefaultAgentExecutor}}
-	snapshot.AgentSelectionPolicyVersion = AgentSelectionPolicyVersionV1
+	snapshot.AgentSelectionPolicyVersion = AgentSelectionPolicyVersionV2
 	snapshot.ChildRunPolicy = &domain.RuntimeChildRunPolicy{
 		MaxDepth: 1, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
 		AgentDefinitionSource: "runtime_snapshot.candidate_agents",
@@ -219,7 +219,7 @@ func TestPreviousMultiAgentSnapshotUsesV1SelectionPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restore previous snapshot: %v", err)
 	}
-	if restored.agentSelectionPolicyVersion != AgentSelectionPolicyVersionV1 {
+	if restored.agentSelectionPolicyVersion != AgentSelectionPolicyVersionV2 {
 		t.Fatalf("previous snapshot policy = %q", restored.agentSelectionPolicyVersion)
 	}
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { APIError, apiRequest } from "./api-client.ts";
-import { getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listToolEffects, patchTaskState, reconcileToolEffect } from "./api.ts";
+import { continueRun, getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listToolEffects, patchTaskState, reconcileToolEffect } from "./api.ts";
 import {
   createDocument,
   deleteDocument,
@@ -357,6 +357,43 @@ test("health client validates the live API status", async (t) => {
 test("health client rejects a non-ready API status", async (t) => {
   mockFetch(t, { status: "starting" });
   await assert.rejects(() => getAPIHealth(), /health check returned starting/);
+});
+
+test("continue client sends typed routing requirements", async (t) => {
+  let request = {};
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    request = { url: String(url), body: JSON.parse(String(options?.body ?? "{}")) };
+    return new Response("data: {\"type\":\"done\",\"run_id\":\"run-1\",\"conversation_id\":\"conversation-1\",\"status\":\"completed\",\"verification_status\":\"not_required\"}\n\n", {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" }
+    });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  await continueRun({
+    run_id: "run-1",
+    plan: "Calculate the forecast.",
+    routing_requirements: {
+      required_tools: ["calculator"],
+      prohibited_tools: ["get_current_time"],
+      require_memory: true,
+      require_retrieval: false,
+      preferred_capabilities: ["forecasting"]
+    }
+  }, () => {});
+
+  assert.match(request.url, /\/api\/runs\/run-1\/continue$/);
+  assert.deepEqual(request.body, {
+    plan: "Calculate the forecast.",
+    routing_requirements: {
+      required_tools: ["calculator"],
+      prohibited_tools: ["get_current_time"],
+      require_memory: true,
+      require_retrieval: false,
+      preferred_capabilities: ["forecasting"]
+    }
+  });
 });
 
 test("run usage client calls the dedicated endpoint", async (t) => {

@@ -21,7 +21,7 @@ import (
 func TestSelectWorkerAgentChoosesCodingForImplementationTask(t *testing.T) {
 	agents := testAgents()
 
-	decision, err := selectWorkerAgentV2("", agents, "修复前端 React 组件里的 bug，并补充 Go API 测试", "1. Inspect frontend state\n2. Patch backend API\n3. Run tests")
+	decision, err := selectWorkerAgentV2(agents, "修复前端 React 组件里的 bug，并补充 Go API 测试", "1. Inspect frontend state\n2. Patch backend API\n3. Run tests", domain.AgentRoutingRequirements{})
 
 	if err != nil || decision.Agent.ID != "agent_coding" {
 		t.Fatalf("expected coding agent, got %s with output:\n%s err=%v", decision.Agent.ID, decision.Output(), err)
@@ -34,7 +34,7 @@ func TestSelectWorkerAgentChoosesCodingForImplementationTask(t *testing.T) {
 func TestSelectWorkerAgentChoosesResearchForMarketTask(t *testing.T) {
 	agents := testAgents()
 
-	decision, err := selectWorkerAgentV2("", agents, "Compare competitors and verify recent pricing sources for this product launch", "1. Gather sources\n2. Compare market positioning")
+	decision, err := selectWorkerAgentV2(agents, "Compare competitors and verify recent pricing sources for this product launch", "1. Gather sources\n2. Compare market positioning", domain.AgentRoutingRequirements{})
 
 	if err != nil || decision.Agent.ID != "agent_research" {
 		t.Fatalf("expected research agent, got %s with output:\n%s err=%v", decision.Agent.ID, decision.Output(), err)
@@ -44,7 +44,7 @@ func TestSelectWorkerAgentChoosesResearchForMarketTask(t *testing.T) {
 func TestSelectWorkerAgentChoosesDataForBudgetTask(t *testing.T) {
 	agents := testAgents()
 
-	decision, err := selectWorkerAgentV2("", agents, "计算下个季度预算、成本和 capacity tradeoff", "1. Estimate cost\n2. Compare budget scenarios")
+	decision, err := selectWorkerAgentV2(agents, "计算下个季度预算、成本和 capacity tradeoff", "1. Estimate cost\n2. Compare budget scenarios", domain.AgentRoutingRequirements{})
 
 	if err != nil || decision.Agent.ID != "agent_data" {
 		t.Fatalf("expected data agent, got %s with output:\n%s err=%v", decision.Agent.ID, decision.Output(), err)
@@ -53,7 +53,7 @@ func TestSelectWorkerAgentChoosesDataForBudgetTask(t *testing.T) {
 
 func TestSelectWorkerAgentV2RefusesZeroEvidence(t *testing.T) {
 	agents := []domain.Agent{{ID: "agent_invoices", Name: "Invoice Clerk", Description: "Reconciles invoices."}}
-	decision, err := selectWorkerAgentV2("", agents, "Write a sonnet about winter", "Use vivid imagery")
+	decision, err := selectWorkerAgentV2(agents, "Write a sonnet about winter", "Use vivid imagery", domain.AgentRoutingRequirements{})
 	if !errors.Is(err, ErrNoSuitableAgent) || decision.Agent.ID != "" || decision.Scores[0].Score != 0 {
 		t.Fatalf("expected typed no-suitable decision, got decision=%#v err=%v", decision, err)
 	}
@@ -64,7 +64,7 @@ func TestSelectWorkerAgentV2AppliesDeclarativeExclusions(t *testing.T) {
 		{ID: "medical", Name: "Market Researcher", RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"market"}, Exclusions: []string{"medical diagnosis"}}},
 		{ID: "analyst", Name: "General Analyst", RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"analysis"}}},
 	}
-	decision, err := selectWorkerAgentV2("", agents, "Analyze the market for medical diagnosis tools", "Provide analysis")
+	decision, err := selectWorkerAgentV2(agents, "Analyze the market for medical diagnosis tools", "Provide analysis", domain.AgentRoutingRequirements{})
 	if err != nil || decision.Agent.ID != "analyst" {
 		t.Fatalf("expected exclusion to demote medical agent, got decision=%#v err=%v", decision, err)
 	}
@@ -75,9 +75,113 @@ func TestSelectWorkerAgentV2DoesNotSubstringMatchShortEnglishHints(t *testing.T)
 		ID: "coding", Name: "Coding Agent",
 		RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"go"}},
 	}}
-	decision, err := selectWorkerAgentV2("", agents, "Set quarterly goals", "Draft objectives")
+	decision, err := selectWorkerAgentV2(agents, "Set quarterly goals", "Draft objectives", domain.AgentRoutingRequirements{})
 	if !errors.Is(err, ErrNoSuitableAgent) || decision.Scores[0].Score != 0 {
 		t.Fatalf("short hint must match a complete token: decision=%#v err=%v", decision, err)
+	}
+}
+
+func TestSelectWorkerAgentV2UsesSoftPreferencesOnlyForRanking(t *testing.T) {
+	agents := []domain.Agent{
+		{ID: "coding", Name: "Coding", RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"analysis", "coding"}}},
+		{ID: "research", Name: "Research", RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"analysis", "research"}}},
+	}
+	decision, err := selectWorkerAgentV2(agents, "Analyze the options", "Compare evidence", domain.AgentRoutingRequirements{
+		PreferredCapabilities: []string{"research"},
+	})
+	if err != nil || decision.Agent.ID != "research" || !strings.Contains(decision.Reason, "preferred capabilities") {
+		t.Fatalf("soft preference did not influence ranking: decision=%#v err=%v", decision, err)
+	}
+}
+
+func TestEligibleWorkerAgentsAppliesTypedHardRequirements(t *testing.T) {
+	agents := []domain.Agent{
+		{ID: "qualified", Tools: []string{"calculator"}, MemoryEnabled: true, RetrievalEnabled: true},
+		{ID: "missing", Tools: []string{"get_current_time"}},
+	}
+	requirements := domain.AgentRoutingRequirements{
+		RequiredTools: []string{"calculator"}, ProhibitedTools: []string{"get_current_time"},
+		RequireMemory: true, RequireRetrieval: true,
+	}
+	eligible, evidence := eligibleWorkerAgents(agents, tools.DefaultCatalog(), requirements)
+	if len(eligible) != 1 || eligible[0].ID != "qualified" {
+		t.Fatalf("eligible agents = %#v", eligible)
+	}
+	if evidence[0].RequirementCoverage != 1 || len(evidence[0].MatchedRequirements) != 4 {
+		t.Fatalf("qualified evidence = %#v", evidence[0])
+	}
+	if evidence[1].RequirementCoverage != 0 || len(evidence[1].ExclusionReasons) != 4 {
+		t.Fatalf("missing requirement evidence = %#v", evidence[1])
+	}
+}
+
+func TestSelectionGateAbstainsOnAmbiguityAndLowConfidence(t *testing.T) {
+	agents := []domain.Agent{{ID: "first"}, {ID: "second"}}
+	tests := []struct {
+		name     string
+		decision routeDecision
+		code     string
+	}{
+		{name: "low score", decision: routeDecision{Agent: agents[0], Score: 5, Scores: []agentScore{{Agent: agents[0], Score: 5}}}, code: "minimum_score_not_met"},
+		{name: "tie", decision: routeDecision{Agent: agents[0], Score: 10, Scores: []agentScore{{Agent: agents[0], Score: 10}, {Agent: agents[1], Score: 10}}}, code: "minimum_score_margin_not_met"},
+		{name: "low llm confidence", decision: routeDecision{Agent: agents[0], Mode: "llm", Score: 80, Confidence: 0.49, Scores: []agentScore{{Agent: agents[0], Score: 80}, {Agent: agents[1], Score: 40}}}, code: "minimum_llm_confidence_not_met"},
+		{name: "missing requirement evidence", decision: routeDecision{Agent: agents[0], Score: 80, Scores: []agentScore{{Agent: agents[0], Score: 80}}}, code: "minimum_requirement_coverage_not_met"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			decision := test.decision
+			eligibility := []agentEligibility{{Agent: agents[1], Eligible: true, RequirementCoverage: 1}}
+			if test.name != "missing requirement evidence" {
+				eligibility = append(eligibility, agentEligibility{Agent: agents[0], Eligible: true, RequirementCoverage: 1})
+			}
+			if err := applySelectionGate(&decision, CurrentAgentSelectionPolicyVersion, eligibility); !errors.Is(err, ErrNoSuitableAgent) || !containsString(decision.Gate.ReasonCodes, test.code) {
+				t.Fatalf("gate decision=%#v err=%v", decision, err)
+			}
+			if decision.Agent.ID != "" || decision.Gate.ProposedAgentID != "first" {
+				t.Fatalf("abstention confused proposed and selected agents: %#v", decision)
+			}
+		})
+	}
+}
+
+func TestSelectionGateRejectsUnknownPolicyRevision(t *testing.T) {
+	decision := routeDecision{Agent: domain.Agent{ID: "candidate"}}
+	if err := applySelectionGate(&decision, "unknown-policy", nil); err == nil {
+		t.Fatal("unknown policy revision was accepted")
+	}
+}
+
+func TestSelectionGateAcceptsQualifiedClearWinner(t *testing.T) {
+	agent := domain.Agent{ID: "qualified"}
+	decision := routeDecision{Agent: agent, Score: 8, Scores: []agentScore{{Agent: agent, Score: 8}}}
+	eligibility := []agentEligibility{{Agent: agent, Eligible: true, RequirementCoverage: 1}}
+	if err := applySelectionGate(&decision, CurrentAgentSelectionPolicyVersion, eligibility); err != nil {
+		t.Fatalf("qualified route was rejected: decision=%#v err=%v", decision, err)
+	}
+	if decision.Gate.ThresholdSource != "conservative-safety-baseline-v1" {
+		t.Fatalf("threshold evidence missing: %#v", decision.Gate)
+	}
+}
+
+func TestRouteWorkerAgentRejectsConflictingRequirements(t *testing.T) {
+	runtime := &Runtime{}
+	decision, err := runtime.routeWorkerAgent(context.Background(), "run_conflict", restoredRuntime{
+		routerMode: RouterModeQuery, agentSelectionPolicyVersion: CurrentAgentSelectionPolicyVersion, catalog: tools.DefaultCatalog(),
+	}, testAgents(), "calculate", "use calculator", domain.AgentRoutingRequirements{
+		RequiredTools: []string{"calculator"}, ProhibitedTools: []string{"calculator"},
+	})
+	if !errors.Is(err, ErrInvalidRoutingRequirements) || decision.Outcome != AgentSelectionOutcomeRouterFailed || decision.FailureCode != "agent_route_requirements_invalid" {
+		t.Fatalf("conflicting requirements decision=%#v err=%v", decision, err)
+	}
+}
+
+func TestPreviousSelectionPolicyRejectsNewRoutingRequirements(t *testing.T) {
+	runtime := &Runtime{}
+	decision, err := runtime.routeWorkerAgent(context.Background(), "run_v14", restoredRuntime{
+		routerMode: RouterModeQuery, agentSelectionPolicyVersion: AgentSelectionPolicyVersionV2, catalog: tools.DefaultCatalog(),
+	}, testAgents(), "calculate", "use calculator", domain.AgentRoutingRequirements{RequiredTools: []string{"calculator"}})
+	if !errors.Is(err, ErrInvalidRoutingRequirements) || decision.PolicyRevision != AgentSelectionPolicyVersionV2 {
+		t.Fatalf("v14 policy accepted v15 routing requirements: decision=%#v err=%v", decision, err)
 	}
 }
 
@@ -138,7 +242,7 @@ func TestV1AgentSelectionPolicyPreservesCentralKeywordFallback(t *testing.T) {
 	agents := []domain.Agent{{ID: "research", Name: "Research worker", Description: "research"}, {ID: "coding", Name: "Coding worker", Description: "software"}}
 	decision, err := runtime.routeWorkerAgent(context.Background(), "run_legacy", restoredRuntime{
 		routerMode: RouterModeQuery, agentSelectionPolicyVersion: AgentSelectionPolicyVersionV1, catalog: tools.DefaultCatalog(),
-	}, agents, "implement and test an API", "debug the code")
+	}, agents, "implement and test an API", "debug the code", domain.AgentRoutingRequirements{})
 	if err != nil || decision.Agent.ID != "coding" || decision.PolicyRevision != AgentSelectionPolicyVersionV1 {
 		t.Fatalf("v1 route changed: decision=%#v err=%v", decision, err)
 	}
@@ -148,7 +252,7 @@ func TestCurrentAgentSelectionPolicyReturnsTypedNoSuitableOutcome(t *testing.T) 
 	runtime := &Runtime{}
 	decision, err := runtime.routeWorkerAgent(context.Background(), "run_v2", restoredRuntime{
 		routerMode: RouterModeQuery, agentSelectionPolicyVersion: CurrentAgentSelectionPolicyVersion, catalog: tools.DefaultCatalog(),
-	}, []domain.Agent{{ID: "invoices", Name: "Invoice Clerk", Description: "Reconciles invoices."}}, "write a sonnet", "use imagery")
+	}, []domain.Agent{{ID: "invoices", Name: "Invoice Clerk", Description: "Reconciles invoices."}}, "write a sonnet", "use imagery", domain.AgentRoutingRequirements{})
 	if !errors.Is(err, ErrNoSuitableAgent) || decision.Outcome != AgentSelectionOutcomeNoSuitable || decision.FailureCode != "agent_route_no_suitable_candidate" {
 		t.Fatalf("unexpected no-suitable route: decision=%#v err=%v", decision, err)
 	}
@@ -162,7 +266,7 @@ func TestEligibleWorkerAgentsRequiresStableIdentityAndFrozenTools(t *testing.T) 
 		{ID: "duplicate"},
 		{ID: " "},
 	}
-	eligible, evidence := eligibleWorkerAgents(agents, tools.DefaultCatalog())
+	eligible, evidence := eligibleWorkerAgents(agents, tools.DefaultCatalog(), domain.AgentRoutingRequirements{})
 	if len(eligible) != 1 || eligible[0].ID != "eligible" {
 		t.Fatalf("eligible agents = %#v", eligible)
 	}
@@ -265,7 +369,7 @@ func TestMultiAgentWorkerUsesBoundedIsolatedChildRun(t *testing.T) {
 	if err := <-errs; err != nil {
 		t.Fatal(err)
 	}
-	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Inspect, implement, and test the change.")
+	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Inspect, implement, and test the change.", domain.AgentRoutingRequirements{})
 	for range events {
 	}
 	if err := <-errs; err != nil {
@@ -350,7 +454,7 @@ func TestContinueCollaborationRefusesIneligibleCandidatesWithoutChildRun(t *test
 	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunWaitingForUser, ""); err != nil {
 		t.Fatal(err)
 	}
-	events, errs := runtime.ContinueCollaboration(context.Background(), run.ID, "Execute the plan.")
+	events, errs := runtime.ContinueCollaboration(context.Background(), run.ID, "Execute the plan.", domain.AgentRoutingRequirements{})
 	for range events {
 	}
 	if err := <-errs; !errors.Is(err, ErrNoEligibleAgent) {
@@ -373,6 +477,71 @@ func TestContinueCollaborationRefusesIneligibleCandidatesWithoutChildRun(t *test
 	if !found {
 		t.Fatalf("missing no-route decision evidence: %#v", runEvents)
 	}
+}
+
+func TestContinueCollaborationPersistsRequirementFailureWithoutChildRun(t *testing.T) {
+	fixtureStore := fixturestore.New()
+	conversation, err := fixtureStore.CreateConversation("required tool unavailable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+	})
+	snapshot := testRuntimeSnapshot()
+	snapshot.Mode = ChatModeMultiAgent
+	snapshot.AutonomousLimits = nil
+	snapshot.RouterMode = RouterModeQuery
+	snapshot.AgentSelectionPolicyVersion = CurrentAgentSelectionPolicyVersion
+	snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{{
+		ID: "agent_writer", Name: "Writer", RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"writing"}},
+		MemoryEnabled: true, RetrievalEnabled: true, Executor: domain.DefaultAgentExecutor,
+	}}
+	snapshot.ChildRunPolicy = &domain.RuntimeChildRunPolicy{
+		MaxDepth: 1, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+		AgentDefinitionSource: "runtime_snapshot.candidate_agents", RunBudget: domain.RuntimeRunBudget{},
+	}
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, snapshot, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
+		RunID: run.ID, ConversationID: conversation.ID, Role: "planner",
+		Status: domain.CollaborationStepCompleted, Input: "Calculate a forecast", Output: "Use the calculator.",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunWaitingForUser, ""); err != nil {
+		t.Fatal(err)
+	}
+	events, errs := runtime.ContinueCollaboration(context.Background(), run.ID, "Use the calculator.", domain.AgentRoutingRequirements{
+		RequiredTools: []string{"calculator"},
+	})
+	for range events {
+	}
+	if err := <-errs; !errors.Is(err, ErrNoEligibleAgent) {
+		t.Fatalf("expected typed requirement failure, got %v", err)
+	}
+	delegations, err := fixtureStore.ListRunDelegations(run.ID)
+	if err != nil || len(delegations) != 0 {
+		t.Fatalf("requirement failure created child delegation: %#v err=%v", delegations, err)
+	}
+	runEvents, err := fixtureStore.ListRunEvents(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range runEvents {
+		if item.Type != domain.EventAgentSelectionDecided {
+			continue
+		}
+		requirements, ok := item.Payload["requirements"].(map[string]any)
+		requiredTools, toolsOK := requirements["required_tools"].([]any)
+		if !ok || !toolsOK || len(requiredTools) != 1 || item.Payload["selected_agent_id"] != nil {
+			t.Fatalf("requirement evidence = %#v", item.Payload)
+		}
+		return
+	}
+	t.Fatal("missing agent selection evidence")
 }
 
 func TestCancelParentRunPropagatesToActiveChild(t *testing.T) {
@@ -400,7 +569,7 @@ func TestCancelParentRunPropagatesToActiveChild(t *testing.T) {
 	if err := <-errs; err != nil {
 		t.Fatal(err)
 	}
-	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Implement and test.")
+	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Implement and test.", domain.AgentRoutingRequirements{})
 	drained := make(chan struct{})
 	go func() {
 		for range events {
@@ -549,7 +718,7 @@ func TestFailedChildDoesNotEnterParentReviewContext(t *testing.T) {
 	if err := <-errs; err != nil {
 		t.Fatal(err)
 	}
-	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Execute once.")
+	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Execute once.", domain.AgentRoutingRequirements{})
 	for range events {
 	}
 	if err := <-errs; err == nil || !strings.Contains(err.Error(), "forced child failure") {
@@ -602,7 +771,7 @@ func TestChildBackpressureLeavesParentWaitingForRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer blocker.Release()
-	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Approved plan")
+	events, errs = runtime.ContinueCollaboration(context.Background(), prepared.Run.ID, "Approved plan", domain.AgentRoutingRequirements{})
 	for range events {
 	}
 	runErr := <-errs

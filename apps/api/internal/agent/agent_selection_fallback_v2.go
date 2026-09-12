@@ -16,16 +16,27 @@ const (
 	capabilityHintWeight = 6
 	taskExampleWeight    = 3
 	toolHintWeight       = 4
+	preferenceHintWeight = 2
 	profileTermWeight    = 1
 	exclusionHintWeight  = 8
 )
 
-func selectWorkerAgentV2(runID string, agents []domain.Agent, task string, plan string) (routeDecision, error) {
+func selectWorkerAgentV2(agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) (routeDecision, error) {
+	decision := rankWorkerAgentsV2(agents, task, plan, requirements)
+	if decision.Agent.ID == "" || decision.Score <= 0 {
+		decision.Agent = domain.Agent{}
+		decision.Reason = "No candidate had positive declarative routing evidence."
+		return decision, ErrNoSuitableAgent
+	}
+	return decision, nil
+}
+
+func rankWorkerAgentsV2(agents []domain.Agent, task string, plan string, requirements domain.AgentRoutingRequirements) routeDecision {
 	query := normalizeRoutingText(task + "\n" + plan)
 	queryTokens := routingTokens(query, 2)
 	scores := make([]agentScore, 0, len(agents))
 	for _, agent := range agents {
-		score, reason := scoreAgentForTaskV2(agent, query, queryTokens)
+		score, reason := scoreAgentForTaskV2(agent, query, queryTokens, requirements.PreferredCapabilities)
 		scores = append(scores, agentScore{Agent: agent, Score: score, Reason: reason})
 	}
 	sort.SliceStable(scores, func(i, j int) bool {
@@ -42,19 +53,21 @@ func selectWorkerAgentV2(runID string, agents []domain.Agent, task string, plan 
 			Mode: RouterModeQuery, Reason: "No candidate had positive declarative routing evidence.",
 			Scores: scores,
 		}
-		logRouteScores(runID, decision)
-		return decision, ErrNoSuitableAgent
+		if len(scores) > 0 {
+			decision.Agent = scores[0].Agent
+			decision.Score = scores[0].Score
+		}
+		return decision
 	}
 	selected := scores[0]
 	decision := routeDecision{
 		Agent: selected.Agent, Mode: RouterModeQuery, Reason: selected.Reason,
 		Score: selected.Score, Scores: scores,
 	}
-	logRouteScores(runID, decision)
-	return decision, nil
+	return decision
 }
 
-func scoreAgentForTaskV2(agent domain.Agent, query string, queryTokens map[string]bool) (int, string) {
+func scoreAgentForTaskV2(agent domain.Agent, query string, queryTokens map[string]bool, preferredCapabilities []string) (int, string) {
 	score := 0
 	reasons := make([]string, 0, 5)
 
@@ -63,6 +76,13 @@ func scoreAgentForTaskV2(agent domain.Agent, query string, queryTokens map[strin
 		delta := capabilityHintWeight * len(capabilities)
 		score += delta
 		reasons = append(reasons, fmt.Sprintf("capability hints +%d: %s", delta, summarizeHints(capabilities)))
+	}
+	preferredQuery := normalizeRoutingText(strings.Join(preferredCapabilities, " "))
+	preferenceMatches := matchedRoutingHints(preferredQuery, routingTokens(preferredQuery, 2), agent.RoutingHints.Capabilities, 1)
+	if len(preferenceMatches) > 0 {
+		delta := preferenceHintWeight * len(preferenceMatches)
+		score += delta
+		reasons = append(reasons, fmt.Sprintf("preferred capabilities +%d: %s", delta, summarizeHints(preferenceMatches)))
 	}
 
 	exampleMatches := 0

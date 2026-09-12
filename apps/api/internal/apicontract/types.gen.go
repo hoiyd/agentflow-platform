@@ -311,6 +311,15 @@ type AgentRoutingHints struct {
 	TaskExamples []string `json:"task_examples"`
 }
 
+// AgentRoutingRequirements defines model for AgentRoutingRequirements.
+type AgentRoutingRequirements struct {
+	PreferredCapabilities *[]string `json:"preferred_capabilities,omitempty"`
+	ProhibitedTools       *[]string `json:"prohibited_tools,omitempty"`
+	RequireMemory         *bool     `json:"require_memory,omitempty"`
+	RequireRetrieval      *bool     `json:"require_retrieval,omitempty"`
+	RequiredTools         *[]string `json:"required_tools,omitempty"`
+}
+
 // ChatMode defines model for ChatMode.
 type ChatMode string
 
@@ -365,7 +374,8 @@ type CompletionContractInputSubjectType string
 
 // ContinueRunRequest defines model for ContinueRunRequest.
 type ContinueRunRequest struct {
-	Plan string `json:"plan"`
+	Plan                string                    `json:"plan"`
+	RoutingRequirements *AgentRoutingRequirements `json:"routing_requirements,omitempty"`
 }
 
 // Conversation defines model for Conversation.

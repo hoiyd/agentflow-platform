@@ -51,7 +51,7 @@ type AgentRuntimeOperations interface {
 	PrepareAutonomousRunWithContract(context.Context, string, string, *domain.CompletionContract) (agent.PreparedCollaborationRun, error)
 	StreamChat(context.Context, agent.PreparedRun, []domain.Message, string) (<-chan domain.RunEvent, <-chan error)
 	RunCollaboration(context.Context, agent.PreparedCollaborationRun, string) (<-chan domain.RunEvent, <-chan error)
-	ContinueCollaboration(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)
+	ContinueCollaboration(context.Context, string, string, domain.AgentRoutingRequirements) (<-chan domain.RunEvent, <-chan error)
 	RunAutonomous(context.Context, agent.PreparedCollaborationRun, string) (<-chan domain.RunEvent, <-chan error)
 	ResumeAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)
 	ResumeRecoverableAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)

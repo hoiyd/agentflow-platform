@@ -398,6 +398,14 @@ export interface components {
         };
         ContinueRunRequest: {
             plan: string;
+            routing_requirements?: components["schemas"]["AgentRoutingRequirements"];
+        };
+        AgentRoutingRequirements: {
+            required_tools?: string[];
+            prohibited_tools?: string[];
+            require_memory?: boolean;
+            require_retrieval?: boolean;
+            preferred_capabilities?: string[];
         };
         ResumeRunRequest: {
             user_input: string;

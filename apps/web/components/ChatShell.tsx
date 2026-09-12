@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   AgentInfo,
+  AgentRoutingRequirements,
   ChatMode,
   Conversation,
   ToolInfo,
@@ -74,6 +75,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const [isTaskStateLoading, setIsTaskStateLoading] = useState(false);
   const [selectedCollaborationRole, setSelectedCollaborationRole] = useState("planner");
   const [planDraft, setPlanDraft] = useState("");
+  const [routingRequirements, setRoutingRequirements] = useState<AgentRoutingRequirements>(emptyRoutingRequirements);
   const [isContinuingRun, setIsContinuingRun] = useState(false);
   const [isResumingRun, setIsResumingRun] = useState(false);
   const [isCancelingRun, setIsCancelingRun] = useState(false);
@@ -337,6 +339,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     setCollaborationSteps([]);
     setAutonomousProgress(null);
     setPlanDraft("");
+    setRoutingRequirements(emptyRoutingRequirements());
     setHumanInputDraft("");
     setIsCancelingRun(false);
   }
@@ -732,6 +735,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     setAutonomousProgress(null);
     setHumanInputDraft("");
     setPlanDraft("");
+    setRoutingRequirements(emptyRoutingRequirements());
     setIsCancelingRun(false);
     setSidePanel(chatMode === "multi_agent" || chatMode === "autonomous" ? "trace" : "closed");
     setIsStreaming(true);
@@ -798,7 +802,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     }
   }
 
-  async function handleContinuePlan(planOverride?: string) {
+  async function handleContinuePlan(planOverride?: string, requirementsOverride?: AgentRoutingRequirements) {
     const runID = runState?.id;
     const plan = (planOverride ?? planDraft).trim();
     if (!runID || !plan || isContinuingRun || isStreaming) {
@@ -822,7 +826,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
 
     try {
       await continueRun(
-        { run_id: runID, plan },
+        { run_id: runID, plan, routing_requirements: requirementsOverride ?? routingRequirements },
         createRunEventHandler({
           assistantDraftId: assistantDraft.id,
           defaultVerificationStatus: "not_required",
@@ -1029,9 +1033,11 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
             onPromptSelect={setInput}
             onResume={handleResumeAutonomous}
             onRoleSelect={setSelectedCollaborationRole}
+            onRoutingRequirementsChange={setRoutingRequirements}
             onTaskStateClose={() => setSidePanel("closed")}
             onTaskStateRefresh={() => void refreshTaskState()}
             planDraft={planDraft}
+            routingRequirements={routingRequirements}
             runStatus={runState?.status ?? ""}
             selectedRole={visibleCollaborationRole}
             showAutonomousTrace={showAutonomousTrace}
@@ -1125,7 +1131,6 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   );
 }
 
-
 function agentToConfigDraft(agent: AgentInfo): AgentConfigDraft {
   return {
     name: agent.name,
@@ -1139,5 +1144,15 @@ function agentToConfigDraft(agent: AgentInfo): AgentConfigDraft {
     tools: agent.tools ?? [],
     memory_enabled: agent.memory_enabled ?? true,
     retrieval_enabled: agent.retrieval_enabled ?? true
+  };
+}
+
+function emptyRoutingRequirements(): AgentRoutingRequirements {
+  return {
+    required_tools: [],
+    prohibited_tools: [],
+    require_memory: false,
+    require_retrieval: false,
+    preferred_capabilities: []
   };
 }

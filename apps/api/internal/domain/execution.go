@@ -54,8 +54,9 @@ const (
 	ToolProgressRuntimeSnapshotVersion   = 12
 	AgentSelectionRuntimeSnapshotVersion = 13
 	RoutingHintsRuntimeSnapshotVersion   = 14
-	PreviousRuntimeSnapshotVersion       = AgentSelectionRuntimeSnapshotVersion
-	CurrentRuntimeSnapshotVersion        = RoutingHintsRuntimeSnapshotVersion
+	RoutingRequirementsSnapshotVersion   = 15
+	PreviousRuntimeSnapshotVersion       = RoutingHintsRuntimeSnapshotVersion
+	CurrentRuntimeSnapshotVersion        = RoutingRequirementsSnapshotVersion
 )
 
 type RuntimeSnapshot struct {

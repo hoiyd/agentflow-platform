@@ -43,3 +43,21 @@ func TestChatRequestFromContractPreservesExecutionInputs(t *testing.T) {
 		t.Fatalf("completion contract changed at boundary: %#v", request.CompletionContract)
 	}
 }
+
+func TestRoutingRequirementsFromInputPreservesTypedConstraints(t *testing.T) {
+	required := []string{" calculator ", "calculator"}
+	prohibited := []string{"get_current_time"}
+	preferred := []string{"forecasting"}
+	requireMemory := true
+	requireRetrieval := true
+	requirements := routingRequirementsFromInput(&apicontract.AgentRoutingRequirements{
+		RequiredTools: &required, ProhibitedTools: &prohibited,
+		PreferredCapabilities: &preferred, RequireMemory: &requireMemory, RequireRetrieval: &requireRetrieval,
+	})
+	if len(requirements.RequiredTools) != 1 || requirements.RequiredTools[0] != "calculator" ||
+		len(requirements.ProhibitedTools) != 1 || requirements.ProhibitedTools[0] != "get_current_time" ||
+		len(requirements.PreferredCapabilities) != 1 || requirements.PreferredCapabilities[0] != "forecasting" ||
+		!requirements.RequireMemory || !requirements.RequireRetrieval {
+		t.Fatalf("routing requirements changed at contract boundary: %#v", requirements)
+	}
+}

@@ -50,3 +50,28 @@ func completionContractFromInput(input *apicontract.CompletionContractInput) *do
 	}
 	return contract
 }
+
+func routingRequirementsFromInput(input *apicontract.AgentRoutingRequirements) domain.AgentRoutingRequirements {
+	if input == nil {
+		return domain.AgentRoutingRequirements{}
+	}
+	requirements := domain.AgentRoutingRequirements{
+		RequiredTools:         copyStringList(input.RequiredTools),
+		ProhibitedTools:       copyStringList(input.ProhibitedTools),
+		PreferredCapabilities: copyStringList(input.PreferredCapabilities),
+	}
+	if input.RequireMemory != nil {
+		requirements.RequireMemory = *input.RequireMemory
+	}
+	if input.RequireRetrieval != nil {
+		requirements.RequireRetrieval = *input.RequireRetrieval
+	}
+	return domain.NormalizeAgentRoutingRequirements(requirements)
+}
+
+func copyStringList(items *[]string) []string {
+	if items == nil {
+		return nil
+	}
+	return append([]string(nil), (*items)...)
+}
