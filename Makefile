@@ -1,4 +1,4 @@
-.PHONY: help setup quickstart dev test golden-eval context-eval routing-eval benchmark-evidence load-evidence contract-generate contract-check
+.PHONY: help setup quickstart dev test golden-eval context-eval routing-eval benchmark-evidence demo-check load-evidence contract-generate contract-check
 
 help:
 	@printf '%s\n' \
@@ -9,6 +9,7 @@ help:
 	  'make context-eval Run the deterministic Context quality regression gate' \
 	  'make routing-eval Run the deterministic Agent routing calibration/holdout gate' \
 	  'make benchmark-evidence Build the offline CASE-001 benchmark evidence pack' \
+	  'make demo-check     Check the demo services and evidence pack' \
 	  'make load-evidence Run bounded load and soak evidence tests' \
 	  'make test        Run backend tests, frontend lint/tests, and production build' \
 	  'make contract-check Regenerate shared API DTOs and reject drift'
@@ -33,6 +34,9 @@ routing-eval:
 
 benchmark-evidence:
 	@bash scripts/benchmark-evidence.sh
+
+demo-check:
+	@bash scripts/demo-preflight.sh
 
 load-evidence:
 	@bash scripts/load-evidence.sh
