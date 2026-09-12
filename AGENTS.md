@@ -132,7 +132,7 @@ are complete. Mandatory namespace filtering alone is not authorization.
   ownership aligned with `docs/runtime/execution-controls.md`.
 - State limitations explicitly; never imply a stronger security, evaluation, or
   tenant-isolation guarantee than the code provides.
-- `docs/TODO/` is local planning material. Do not stage or commit it unless the
+- `docs/private/` is local planning and interview prep material. Do not stage or commit it unless the
   user explicitly asks for it.
 
 ## Git and Scope
@@ -149,7 +149,7 @@ are complete. Mandatory namespace filtering alone is not authorization.
   `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}` returns the same
   branch name on `origin` before reporting the push as complete.
 - Stage explicit files only; never use `git add -A` in a dirty worktree.
-- Do not stage local files such as `docs/TODO/` unless the
+- Do not stage local files such as `docs/private/` unless the
   user explicitly requests them.
 - Do not create a commit, push, or PR unless requested.
 - If blocked, ask for the missing input or propose a focused next step instead

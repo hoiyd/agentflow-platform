@@ -158,7 +158,7 @@ All verifier-specific settings live under `config`. Each registered verifier str
         "min_words": 300,
         "max_words": 1200,
         "required_headings": ["Findings", "Sources"],
-        "forbidden_phrases": ["TODO"]
+        "forbidden_phrases": ["private"]
       }
     },
     {

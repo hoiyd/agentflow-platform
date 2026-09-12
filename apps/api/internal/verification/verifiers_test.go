@@ -107,7 +107,7 @@ func TestTextConstraintsVerifierChecksStructureAndContent(t *testing.T) {
 	spec := domain.VerifierSpec{ID: "report-text", Config: map[string]any{
 		"min_words": 4, "max_words": 20,
 		"required_phrases":  []string{"verified result"},
-		"forbidden_phrases": []string{"TODO"},
+		"forbidden_phrases": []string{"private"},
 		"required_headings": []string{"Findings"},
 	}}
 	if err := verifier.NormalizeConfig(&spec); err != nil {
@@ -117,7 +117,7 @@ func TestTextConstraintsVerifierChecksStructureAndContent(t *testing.T) {
 	if passed.Status != domain.VerificationPassed || passed.Details["word_count"] == nil || len(passed.Artifacts) != 1 {
 		t.Fatalf("expected text constraints to pass: %#v", passed)
 	}
-	failed := verifier.Verify(context.Background(), spec, SubjectForRunOutput("No result. TODO"))
+	failed := verifier.Verify(context.Background(), spec, SubjectForRunOutput("No result. private"))
 	if failed.Status != domain.VerificationFailed || !strings.Contains(failed.Summary, "violation") {
 		t.Fatalf("expected text constraints to fail: %#v", failed)
 	}
