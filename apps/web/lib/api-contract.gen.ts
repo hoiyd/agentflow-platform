@@ -398,6 +398,14 @@ export interface components {
         };
         ContinueRunRequest: {
             plan: string;
+            routing_requirements?: components["schemas"]["AgentRoutingRequirements"];
+        };
+        AgentRoutingRequirements: {
+            required_tools?: string[];
+            prohibited_tools?: string[];
+            require_memory?: boolean;
+            require_retrieval?: boolean;
+            preferred_capabilities?: string[];
         };
         ResumeRunRequest: {
             user_input: string;
@@ -447,6 +455,7 @@ export interface components {
             name?: string;
             description?: string;
             system_prompt?: string;
+            routing_hints?: components["schemas"]["AgentRoutingHints"];
             tools?: string[];
             memory_enabled?: boolean;
             retrieval_enabled?: boolean;
@@ -456,6 +465,7 @@ export interface components {
             name: string;
             description: string;
             system_prompt: string;
+            routing_hints?: components["schemas"]["AgentRoutingHints"];
             tools: string[];
             memory_enabled: boolean;
             retrieval_enabled: boolean;
@@ -465,6 +475,11 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        AgentRoutingHints: {
+            capabilities: string[];
+            task_examples: string[];
+            exclusions: string[];
         };
         ToolInfo: {
             name: string;

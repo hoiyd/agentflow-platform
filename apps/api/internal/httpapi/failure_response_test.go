@@ -126,6 +126,12 @@ func TestContinuationFailurePolicyPreservesRetryableRunState(t *testing.T) {
 	if status, failRun := continuationFailurePolicy(agentpkg.ErrNoEligibleAgent); status != http.StatusUnprocessableEntity || !failRun {
 		t.Fatalf("no-route policy: status=%d fail_run=%t", status, failRun)
 	}
+	if status, failRun := continuationFailurePolicy(agentpkg.ErrNoSuitableAgent); status != http.StatusUnprocessableEntity || !failRun {
+		t.Fatalf("no-suitable policy: status=%d fail_run=%t", status, failRun)
+	}
+	if status, failRun := continuationFailurePolicy(agentpkg.ErrInvalidRoutingRequirements); status != http.StatusUnprocessableEntity || !failRun {
+		t.Fatalf("invalid routing requirements policy: status=%d fail_run=%t", status, failRun)
+	}
 }
 
 func TestFormatHTTPFailureLogKeepsRawErrorAndCorrelationFields(t *testing.T) {

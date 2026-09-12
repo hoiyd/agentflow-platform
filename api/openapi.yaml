@@ -675,6 +675,27 @@ components:
       properties:
         plan:
           type: string
+        routing_requirements:
+          $ref: '#/components/schemas/AgentRoutingRequirements'
+    AgentRoutingRequirements:
+      type: object
+      properties:
+        required_tools:
+          type: array
+          items:
+            type: string
+        prohibited_tools:
+          type: array
+          items:
+            type: string
+        require_memory:
+          type: boolean
+        require_retrieval:
+          type: boolean
+        preferred_capabilities:
+          type: array
+          items:
+            type: string
     ResumeRunRequest:
       type: object
       required: [user_input]
@@ -769,6 +790,8 @@ components:
           type: string
         system_prompt:
           type: string
+        routing_hints:
+          $ref: '#/components/schemas/AgentRoutingHints'
         tools:
           type: array
           items:
@@ -789,6 +812,8 @@ components:
           type: string
         system_prompt:
           type: string
+        routing_hints:
+          $ref: '#/components/schemas/AgentRoutingHints'
         tools:
           type: array
           items:
@@ -807,6 +832,23 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    AgentRoutingHints:
+      type: object
+      required: [capabilities, task_examples, exclusions]
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: string
+        task_examples:
+          type: array
+          items:
+            type: string
+        exclusions:
+          type: array
+          items:
+            type: string
 
     ToolInfo:
       type: object

@@ -34,6 +34,18 @@ func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
 	}
 }
 
+func TestPostgresMigrationsAddAgentRoutingHints(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, expected := range []string{
+		"routing_hints jsonb NOT NULL DEFAULT '{}'::jsonb",
+		"ALTER TABLE agents ADD COLUMN IF NOT EXISTS routing_hints",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing Agent routing hints migration step %q", expected)
+		}
+	}
+}
+
 func TestPostgresMigrationsAddDurableRecoveryState(t *testing.T) {
 	joined := strings.Join(postgresMigrations, "\n")
 	for _, expected := range []string{

@@ -167,6 +167,13 @@ func applyAgentConfigRequest(agent *domain.Agent, req apicontract.AgentConfigReq
 	if req.SystemPrompt != nil {
 		agent.SystemPrompt = *req.SystemPrompt
 	}
+	if req.RoutingHints != nil {
+		agent.RoutingHints = domain.AgentRoutingHints{
+			Capabilities: append([]string(nil), req.RoutingHints.Capabilities...),
+			TaskExamples: append([]string(nil), req.RoutingHints.TaskExamples...),
+			Exclusions:   append([]string(nil), req.RoutingHints.Exclusions...),
+		}
+	}
 	if req.Tools != nil {
 		agent.Tools = append([]string(nil), (*req.Tools)...)
 	}

@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 import { GitBranch, PanelRightOpen } from "lucide-react";
 
-import type { AgentInfo, ChatMode, Message, TaskState } from "../../lib/api";
+import type { AgentInfo, AgentRoutingRequirements, ChatMode, Message, TaskState } from "../../lib/api";
 import { CollaborationDag } from "./CollaborationDag";
 import {
   AutonomousPanel,
@@ -29,17 +29,19 @@ type ChatWorkspaceProps = {
   messages: Message[];
   messagesRef: RefObject<HTMLElement | null>;
   onCancel: () => void;
-  onContinue: (plan?: string) => void;
+  onContinue: (plan?: string, requirements?: AgentRoutingRequirements) => void;
   onHumanInputChange: (value: string) => void;
   onModeChange: (mode: ChatMode) => void;
   onPanelOpenChange: (open: boolean) => void;
   onPromptSelect: (prompt: string) => void;
   onResume: (value?: string) => void;
   onRoleSelect: (role: string) => void;
+  onRoutingRequirementsChange: (requirements: AgentRoutingRequirements) => void;
   onTaskStateClose: () => void;
   onTaskStateRefresh: () => void;
   onPlanDraftChange: (value: string) => void;
   planDraft: string;
+  routingRequirements: AgentRoutingRequirements;
   runStatus: string;
   selectedRole: string;
   showAutonomousTrace: boolean;
@@ -75,9 +77,11 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
     onPromptSelect,
     onResume,
     onRoleSelect,
+    onRoutingRequirementsChange,
     onTaskStateClose,
     onTaskStateRefresh,
     planDraft,
+    routingRequirements,
     runStatus,
     selectedRole,
     showAutonomousTrace,
@@ -162,9 +166,11 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
             onCollapse={() => onPanelOpenChange(false)}
             onContinue={onContinue}
             planDraft={planDraft}
+            routingRequirements={routingRequirements}
             runStatus={runStatus}
             selectedRole={selectedRole}
             setPlanDraft={onPlanDraftChange}
+            setRoutingRequirements={onRoutingRequirementsChange}
             steps={collaborationSteps}
           />
         )

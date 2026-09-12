@@ -102,7 +102,7 @@ and current versions, source actor/Run metadata, and commit time. These
 Conversation-scoped endpoints enforce the same Workspace scope as Messages and
 Runs.
 
-Runtime Snapshot v8 introduced Structured Task State context. Current v12 Runs
+Runtime Snapshot v8 introduced Structured Task State context. Current Runs
 retain that protocol, and Agent
 execution also receives the runtime-owned `update_task_state` Tool. The Tool
 applies the same patch contract and derives source identity from the active Run
@@ -118,6 +118,11 @@ Context/Replay semantics.
   "name": "Incident Responder",
   "description": "Diagnoses production incidents from runbooks and runtime evidence.",
   "system_prompt": "Separate evidence from assumptions and return ordered recovery steps.",
+  "routing_hints": {
+    "capabilities": ["incident diagnosis", "runbook execution"],
+    "task_examples": ["Diagnose a production API outage"],
+    "exclusions": ["marketing copy"]
+  },
   "tools": ["calculator", "get_current_time"],
   "memory_enabled": true,
   "retrieval_enabled": true
@@ -130,11 +135,18 @@ archived with `DELETE /api/agents/{id}`; built-in Agents cannot be archived.
 Creating a Run freezes the effective profile and, for Multi mode, its candidate
 profiles, so later edits do not change Resume or Replay semantics.
 
-`POST /api/runs/{id}/continue` applies the approved Multi plan. The Router only
-selects from eligible frozen profiles; a 422-class SSE error with
+`POST /api/runs/{id}/continue` applies the approved Multi plan. Its optional
+`routing_requirements` object accepts hard `required_tools`,
+`prohibited_tools`, `require_memory`, and `require_retrieval` fields plus soft
+`preferred_capabilities`. Hard requirements restrict frozen candidate
+eligibility but never grant authority; preferences affect ranking only. The
+Router only selects from eligible frozen profiles. A 422-class SSE error with
 `agent_route_no_eligible_candidate` means every candidate failed identity or
-frozen Tool availability checks and no Child Run was created. Replay records
-the decision as `agent.selection.decided`.
+frozen capability checks. `agent_route_requirements_invalid` means the request
+contains conflicting requirements. `agent_route_no_suitable_candidate` means
+the eligible candidates did not pass the versioned score, margin, confidence,
+or coverage gate. None of these cases creates a Child Run. Replay records the decision as
+`agent.selection.decided`.
 
 See [Configurable Agent Profiles](../runtime/agent-profiles.md) for mode behavior, Router
 participation, Snapshot ownership, and current boundaries.

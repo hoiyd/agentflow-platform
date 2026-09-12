@@ -162,7 +162,8 @@ func (r *Runtime) withHarnessTools(names []string) []string {
 func snapshotAgent(agent domain.Agent) domain.RuntimeAgentSnapshot {
 	return domain.RuntimeAgentSnapshot{
 		ID: agent.ID, Name: agent.Name, Description: agent.Description, SystemPrompt: agent.SystemPrompt,
-		Tools: append([]string(nil), agent.Tools...), MemoryEnabled: agent.MemoryEnabled,
+		RoutingHints: cloneAgentRoutingHints(agent.RoutingHints),
+		Tools:        append([]string(nil), agent.Tools...), MemoryEnabled: agent.MemoryEnabled,
 		RetrievalEnabled: agent.RetrievalEnabled, Executor: domain.DefaultAgentExecutor,
 	}
 }
@@ -173,10 +174,19 @@ func restoreAgent(snapshot domain.RuntimeAgentSnapshot) domain.Agent {
 		Name:             snapshot.Name,
 		Description:      snapshot.Description,
 		SystemPrompt:     snapshot.SystemPrompt,
+		RoutingHints:     cloneAgentRoutingHints(snapshot.RoutingHints),
 		Tools:            append([]string(nil), snapshot.Tools...),
 		MemoryEnabled:    snapshot.MemoryEnabled,
 		RetrievalEnabled: snapshot.RetrievalEnabled,
 		Executor:         domain.DefaultAgentExecutor,
+	}
+}
+
+func cloneAgentRoutingHints(hints domain.AgentRoutingHints) domain.AgentRoutingHints {
+	return domain.AgentRoutingHints{
+		Capabilities: append([]string(nil), hints.Capabilities...),
+		TaskExamples: append([]string(nil), hints.TaskExamples...),
+		Exclusions:   append([]string(nil), hints.Exclusions...),
 	}
 }
 
@@ -243,8 +253,8 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 	if err != nil {
 		return restoredRuntime{}, err
 	}
-	selectionPolicyVersion := LegacyAgentSelectionPolicyVersion
-	if snapshot.SchemaVersion >= domain.AgentSelectionRuntimeSnapshotVersion {
+	selectionPolicyVersion := AgentSelectionPolicyVersionV1
+	if snapshot.SchemaVersion >= domain.RoutingHintsRuntimeSnapshotVersion {
 		selectionPolicyVersion = snapshot.AgentSelectionPolicyVersion
 	}
 	return restoredRuntime{
@@ -273,7 +283,13 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 		if snapshot.SchemaVersion >= domain.DelegationRuntimeSnapshotVersion && (snapshot.ChildRunPolicy == nil || snapshot.ChildRunPolicy.MaxDepth != 1 || snapshot.ChildRunPolicy.TimeoutMS <= 0 || snapshot.ChildRunPolicy.SummaryMaxChars <= 0 || strings.TrimSpace(snapshot.ChildRunPolicy.AgentDefinitionSource) == "") {
 			return errors.New("multi-agent runtime snapshot has no valid child run policy")
 		}
-		if snapshot.SchemaVersion >= domain.AgentSelectionRuntimeSnapshotVersion && snapshot.AgentSelectionPolicyVersion != CurrentAgentSelectionPolicyVersion {
+		if snapshot.SchemaVersion == domain.AgentSelectionRuntimeSnapshotVersion && snapshot.AgentSelectionPolicyVersion != AgentSelectionPolicyVersionV1 {
+			return fmt.Errorf("multi-agent runtime snapshot has unsupported agent selection policy %q", snapshot.AgentSelectionPolicyVersion)
+		}
+		if snapshot.SchemaVersion == domain.RoutingHintsRuntimeSnapshotVersion && snapshot.AgentSelectionPolicyVersion != AgentSelectionPolicyVersionV2 {
+			return fmt.Errorf("multi-agent runtime snapshot has unsupported agent selection policy %q", snapshot.AgentSelectionPolicyVersion)
+		}
+		if snapshot.SchemaVersion >= domain.RoutingRequirementsSnapshotVersion && snapshot.AgentSelectionPolicyVersion != CurrentAgentSelectionPolicyVersion {
 			return fmt.Errorf("multi-agent runtime snapshot has unsupported agent selection policy %q", snapshot.AgentSelectionPolicyVersion)
 		}
 	case ChatModeAutonomous:

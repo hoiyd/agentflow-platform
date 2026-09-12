@@ -15,6 +15,7 @@ export type Message = Omit<APIMessage, "workspace_id"> & { workspace_id?: string
 export type RunEvent = ContractSchemas["RunEvent"];
 export type ChatEvent = Exclude<ContractSchemas["ChatStreamEvent"], RunEvent>;
 export type AgentInfo = ContractSchemas["Agent"];
+export type AgentRoutingRequirements = ContractSchemas["AgentRoutingRequirements"];
 export type ToolInfo = ContractSchemas["ToolInfo"];
 export type ChatMode = ContractSchemas["ChatMode"];
 export type RunInfo = ContractSchemas["Run"];
@@ -617,10 +618,13 @@ export async function streamChat(
 }
 
 export async function continueRun(
-  input: { run_id: string; plan: string },
+  input: { run_id: string; plan: string; routing_requirements?: AgentRoutingRequirements },
   onEvent: (event: ChatEvent) => void
 ) {
-  const body: ContractSchemas["ContinueRunRequest"] = { plan: input.plan };
+  const body: ContractSchemas["ContinueRunRequest"] = {
+    plan: input.plan,
+    routing_requirements: input.routing_requirements
+  };
   const response = await apiRequest(
     `/api/runs/${input.run_id}/continue`,
     {
@@ -796,6 +800,11 @@ export async function archiveAgent(agentId: string): Promise<void> {
 function normalizeAgentInfo(agent: AgentInfo): AgentInfo {
   return {
     ...agent,
+    routing_hints: {
+      capabilities: agent.routing_hints?.capabilities ?? [],
+      task_examples: agent.routing_hints?.task_examples ?? [],
+      exclusions: agent.routing_hints?.exclusions ?? []
+    },
     tools: Array.isArray(agent.tools) ? agent.tools : [],
     memory_enabled: agent.memory_enabled ?? true,
     retrieval_enabled: agent.retrieval_enabled ?? true

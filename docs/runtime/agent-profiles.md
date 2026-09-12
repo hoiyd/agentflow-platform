@@ -10,8 +10,11 @@ participates in a Run.
 | Field | Runtime effect |
 | --- | --- |
 | `name` | Human-readable identity shown in the workbench, Replay, and Episode Report. |
-| `description` | Declares the Agent's responsibility and supplies routing evidence in Multi mode. |
+| `description` | Declares the Agent's responsibility and supplies low-weight routing evidence in Multi mode. |
 | `system_prompt` | Defines the Agent persona and task-specific instructions used by its model calls. |
+| `routing_hints.capabilities` | Declares tasks the Agent is designed to perform; supplies strong deterministic routing evidence. |
+| `routing_hints.task_examples` | Gives representative tasks used as supporting lexical routing evidence. |
+| `routing_hints.exclusions` | Declares tasks that should demote this Agent during deterministic routing. |
 | `tools` | Per-Agent allowlist drawn from installed platform tools. Unknown tools are rejected when the profile is saved. |
 | `memory_enabled` | Enables scoped semantic Memory retrieval before a Turn. |
 | `retrieval_enabled` | Enables Knowledge/RAG retrieval before a Turn. |
@@ -26,8 +29,9 @@ built-in profiles remain available as stable defaults and cannot be archived.
 - **Multi:** all active profiles are frozen as Router candidates. After plan
   approval, the Router first excludes candidates with invalid identity or
   unavailable frozen Tools, then ranks only eligible Workers using the task,
-  approved plan, Agent description, and routing policy. An explicitly requested
-  Agent remains the initial profile for the Run.
+  approved plan, declarative routing hints, Agent description, Tool names, and
+  routing policy. An explicitly requested Agent remains the initial profile for
+  the Run.
 - **Loop:** the selected Agent supplies the persona and capabilities for bounded
   Act stages while Observe, Plan, Review, and Decide retain their stage-specific
   prompts.
@@ -40,7 +44,7 @@ Tracing.
 
 Creating a Run captures the effective Agent profile in its Runtime Snapshot.
 Multi mode also captures every candidate profile. The Snapshot includes Agent
-identity, description, system prompt, tool names, and Memory/RAG switches,
+identity, description, system prompt, routing hints, tool names, and Memory/RAG switches,
 together with the native execution protocol, model identity, tool schemas,
 context policy, Agent selection policy revision, and Run Budget.
 
@@ -63,6 +67,11 @@ Content-Type: application/json
   "name": "Incident Responder",
   "description": "Diagnoses production incidents from runbooks and runtime evidence.",
   "system_prompt": "Act as a concise incident responder. Separate evidence from assumptions and return ordered recovery steps.",
+  "routing_hints": {
+    "capabilities": ["incident diagnosis", "runbook execution"],
+    "task_examples": ["Diagnose a production API outage"],
+    "exclusions": ["marketing copy"]
+  },
   "tools": ["calculator", "get_current_time"],
   "memory_enabled": true,
   "retrieval_enabled": true
@@ -118,9 +127,9 @@ deployment limits stay live.
   create a per-Workspace Agent registry.
 - Profiles select from installed in-process tools; remote tool discovery and
   tenant-specific tool registries are not implemented.
-- The Router can use deterministic profile matching or an LLM-backed policy.
-  Both produce typed eligibility and decision evidence, but routing quality is
-  not yet calibrated against a versioned routing dataset.
+- The Router can use deterministic declarative matching or an LLM-backed
+  policy. Both produce typed eligibility and decision evidence, but routing
+  quality is not yet calibrated against a versioned routing dataset.
 
 See [Execution modes](execution-modes.md) for orchestration behavior,
 [Capability-aware Agent Selection](agent-selection.md) for routing rules,
