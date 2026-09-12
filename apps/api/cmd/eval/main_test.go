@@ -14,6 +14,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/evaluation/contexteval"
 	"agentflow-platform/apps/api/internal/evaluation/rageval"
+	"agentflow-platform/apps/api/internal/evaluation/routeeval"
 	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 )
 
@@ -82,6 +83,25 @@ func TestToolCLIJSONSummaryAndGate(t *testing.T) {
 	}
 	if code := run(context.Background(), args, failWriter{}, &bytes.Buffer{}); code != 2 {
 		t.Fatal("output write failure ignored")
+	}
+}
+
+func TestRouteCLIProducesOfflineReportAndRejectsUnauthorizedLiveRun(t *testing.T) {
+	dataset := filepath.Join("..", "..", "..", "..", "examples", "routing", "golden-dataset.v1.json")
+	var out, stderr bytes.Buffer
+	if code := run(context.Background(), []string{"route", "--dataset", dataset, "--enforce"}, &out, &stderr); code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	var report routeeval.Report
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil || !report.Gate.Passed || report.Calibration == nil {
+		t.Fatalf("invalid route report: %v %#v", err, report)
+	}
+	if !strings.Contains(stderr.String(), "top1=") || !strings.Contains(stderr.String(), "fallback=n/a") {
+		t.Fatalf("route summary missing: %s", stderr.String())
+	}
+	t.Setenv("OPENAI_API_KEY", "")
+	if code := run(context.Background(), []string{"route", "--dataset", dataset, "--live", "--model", "fixture", "--max-model-calls", "1", "--max-total-tokens", "1000"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
+		t.Fatal("live route evaluation accepted missing credentials")
 	}
 }
 

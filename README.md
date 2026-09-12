@@ -192,8 +192,9 @@ persistence.
 3. Open **Knowledge** and upload [`examples/example.md`](examples/example.md).
 4. Search for that identifier and inspect Semantic rank, Keyword rank, RRF,
    final rerank, and the transformed model context.
-5. Run `make benchmark-evidence` and `make context-eval` to produce the CASE-001
-   evidence pack and execute the final-model-input regression gate.
+5. Run `make benchmark-evidence`, `make context-eval`, and `make routing-eval`
+   to produce the CASE-001 evidence pack and execute the Context and Agent
+   routing regression gates.
 6. Run a Multi-Agent task against the runbook, then open **View trace** to
    connect orchestration stages, retrieval, model calls, usage, and final Run
    state. Export the Episode Report when a compact machine-readable review

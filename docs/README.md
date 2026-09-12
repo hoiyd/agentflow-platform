@@ -67,7 +67,7 @@ the project.
 | [Knowledge / RAG](knowledge/knowledge-rag.md) | How do ingestion, source tracking, hybrid recall, RRF, reranking, gating, and context transformation work? |
 | [Golden Dataset v1 schema](schemas/rag-golden-dataset-v1.schema.json) | Which versioned fields define answerable, expected-source, forbidden-source, and tagged RAG evaluation cases? |
 | [RAG Golden Dataset v1](knowledge/rag-golden-dataset.md) | Which canonical retrieval cases and corpus exercise facts, exact IDs, multi-source recall, no-answer behavior, ACL/staleness leakage, and injection filtering? |
-| [Offline evaluation reports](operations/offline-evaluation.md) | How do Context, Tool, and RAG evaluations share provenance, failure accounting, regression gates, and opt-in semantic retrieval profiles? |
+| [Offline evaluation reports](operations/offline-evaluation.md) | How do Context, Agent routing, Tool, and RAG evaluations share provenance, failure accounting, regression gates, and opt-in live profiles? |
 | [Memory management](context/memory-management.md) | Which conversation facts become durable semantic memory, and how is unsafe persistence avoided? |
 | [Model request reconstruction](context/model-request-reconstruction.md) | What did a physical provider attempt actually receive, and when is its content retained? |
 
