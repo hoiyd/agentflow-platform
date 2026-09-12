@@ -7,8 +7,8 @@ source directory. Start with the path that matches the depth of review you need.
 
 1. [Project README](../README.md): scope, architecture, capabilities, and known
    limitations.
-2. [Interview demo](guides/demo.md): repeatable three-to-five-minute walkthrough and
-   fallback path.
+2. [Interview demo](guides/demo.md): a timed five-minute walkthrough with online
+   and no-network paths.
 3. [Execution modes](runtime/execution-modes.md): how Single, Multi, and Loop differ,
    when to choose each, and which runtime contracts they share.
 4. [Agent profiles](runtime/agent-profiles.md): how custom prompts, Tool/RAG/Memory

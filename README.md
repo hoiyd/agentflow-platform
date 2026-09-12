@@ -178,7 +178,7 @@ Manual Tests validate system behavior. The same Run, Event, Budget, and
 Verification contracts apply across execution modes and Postgres
 persistence.
 
-## Three-to-Five-Minute Demo
+## Five-Minute Demo
 
 1. Start the complete local stack. No API key is required for the deterministic
    workflow demonstration:
@@ -193,9 +193,10 @@ persistence.
 3. Open **Knowledge** and upload [`examples/example.md`](examples/example.md).
 4. Search for that identifier and inspect Semantic rank, Keyword rank, RRF,
    final rerank, and the transformed model context.
-5. Run `make benchmark-evidence`, `make context-eval`, and `make routing-eval`
-   to produce the CASE-001 evidence pack and execute the Context and Agent
-   routing regression gates.
+5. Run `make benchmark-evidence`, then `make demo-check`, to validate the
+   no-network CASE-001 and recovery backup before presenting. Run
+   `make context-eval` and `make routing-eval` for the independent Context and
+   Agent routing regression gates.
 6. Run a Multi-Agent task against the runbook, then open **View trace** to
    connect orchestration stages, retrieval, model calls, usage, and final Run
    state. Export the Episode Report when a compact machine-readable review
@@ -205,11 +206,10 @@ persistence.
    only identical or single-variable Runs receive metric deltas.
 
 With an OpenAI-compatible key in `apps/api/.env`, the same path exercises a real
-model. The key is optional so an interviewer can still inspect runtime behavior,
-persistence, and Replay without provider setup or cost.
+model. Without one, use the generated Replay and regression reports to inspect
+runtime behavior without presenting fixture output as model quality.
 
-The timed walkthrough and talking points are in
-[`docs/guides/demo.md`](docs/guides/demo.md).
+The timed walkthrough is in [`docs/guides/demo.md`](docs/guides/demo.md).
 
 ## Engineering Evolution and Evidence
 

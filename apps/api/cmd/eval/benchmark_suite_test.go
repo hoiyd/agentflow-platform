@@ -69,7 +69,7 @@ func TestBenchmarkSuiteManifestMatchesSourceDatasets(t *testing.T) {
 		}
 		evidenceFiles[evidence.File] = true
 	}
-	for _, required := range []string{"rag-offline.json", "tool-task-protocol.json", "benchmark-recovery-replay.json"} {
+	for _, required := range []string{"rag-offline.json", "tool-task-protocol.json", "benchmark-recovery-before-replay.json", "benchmark-recovery-replay.json"} {
 		if !evidenceFiles[required] {
 			t.Fatalf("benchmark evidence does not declare %q", required)
 		}

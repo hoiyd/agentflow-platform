@@ -229,7 +229,9 @@ make benchmark-evidence
 By default the command writes to `.cache/benchmark-suite`; set
 `BENCHMARK_REPORT_DIR` to choose another directory. The pack contains the
 manifest, `rag-offline.json`, `tool-task-protocol.json`, failure/recovery JSONL,
-and `benchmark-recovery-replay.json`. Every offline item is explicitly marked or
+and the before/after recovery Replays
+`benchmark-recovery-before-replay.json` and
+`benchmark-recovery-replay.json`. Every offline item is explicitly marked or
 named as deterministic/simulated evidence. It proves protocol, accounting,
 retrieval, and recovery behavior, not real-model quality.
 

@@ -1,185 +1,173 @@
-# Interview Demo
+# Five-minute Interview Demo
 
-This walkthrough demonstrates the platform in three to five minutes. It uses a
-small fictional runbook so exact-identifier recall and semantic recall are both
-repeatable. No API key is required for the local workflow path.
+This walkthrough presents AgentFlow as a verifiable, recoverable, and bounded
+AI Agent Runtime. It follows one evidence task from configuration to evaluation
+instead of touring every screen.
 
-## Before the Call
+## Demo Contract
 
-Start PostgreSQL with pgvector and confirm `DATABASE_URL` in `apps/api/.env`
-points to it. The launcher starts AgentFlow, not the database.
+- **Online path:** a configured model provider, PostgreSQL with pgvector, and the
+  workbench show a newly executed Run. Model quality claims require a saved
+  CASE-001A live report.
+- **Offline fallback:** deterministic fixtures produce Replay and regression
+  evidence without a model provider. They demonstrate protocol behavior, not
+  live-model quality.
+- **Do not mix the two:** a fixture pass proves wiring and invariants; only a
+  budgeted multi-trial report supports model-quality or cost claims.
+
+## Prepare Before the Call
+
+In one terminal, start the application:
 
 ```bash
 make quickstart
 ```
 
-Open `http://localhost:3000/workspace`. Upload
-[`examples/example.md`](../../examples/example.md) from the **Knowledge** view. This
-file is sample knowledge content, not the Demo instructions themselves. Keep one
-completed Multi-Agent Run available if the interview environment has unreliable
-network access.
-
-In a second terminal, build the fixed CASE-001 benchmark evidence pack:
+In a second terminal, generate the network-free backup pack:
 
 ```bash
 make benchmark-evidence
-make routing-eval
 ```
 
-`make benchmark-evidence` writes six machine-readable files under `.cache/benchmark-suite`:
-the 12-task manifest, deterministic RAG report, Tool protocol report, Tool
-failure events, recovery events, and a saved recoverable Replay. The
-offline provider and hash embedder are explicit fixtures; do not present their
-results as live-model quality. ACL remains diagnostic because authenticated
-identity and document authorization are not implemented.
-
-The routing command runs a separate 16-case calibration/holdout gate against
-the production eligibility, ranking, fallback, and abstention code. Keep its
-terminal output available for the routing discussion below.
-
-## Walkthrough
-
-### 0:00-0:35 - Platform Boundary
-
-Show **Single**, **Multi**, and **Loop** and name their execution shapes: one
-direct Turn; plan/approve/route/work/review/finalize; and bounded
-observe/plan/act/review/decide Iterations. Explain that they share one Turn
-Engine, retrieval pipeline, Tool executor, Usage Ledger, and event model; each
-mode owns only its orchestration policy. Briefly point out that Run admission,
-per-Conversation single-writer execution, model-request limits, and Run Budget
-remain shared performance and concurrency controls rather than mode-specific
-implementations.
-
-### 0:35-1:15 - Configurable Agent Profile and Routing Evidence
-
-In **Single**, open **New agent** or **Configure**. Show that one persisted
-profile owns its responsibility, system prompt, Tool allowlist, and Memory/RAG
-switches. Explain that starting a Run freezes
-the effective profile; Multi additionally freezes all active profiles as Router
-candidates, so later edits cannot change Resume or Replay semantics.
-
-Briefly distinguish platform Tool enablement from the per-Agent allowlist. The
-Tool Executor still applies timeout, result-size, panic-recovery, tracing, and
-concurrency policy after both layers admit a call.
-
-Use the `make routing-eval` output to show that the single Router algorithm
-records 10/10 acceptable selections, zero unsafe false routes, and 6/6 no-route
-recall on the fixed Dataset v1. The tracked retirement Artifact preserves how
-the deleted v1/v2 implementations produced unsafe or missed no-route decisions.
-The Dataset recommends score/margin
-`4/1`, but production remains at conservative `6/1`; this is the deliberate
-decision not to auto-publish a policy from a small offline fixture. No live LLM
-quality claim is made.
-
-### 1:15-2:05 - Hybrid Retrieval
-
-Search for `AUTH-7F31`. Point out that keyword recall preserves identifiers that
-semantic similarity may miss. Then search for `login failures after a key
-rotation` to exercise semantic recall. Inspect source details, independent
-recall ranks, RRF score, final rank, relevance decision, and selected model
-context.
-
-For an AI-systems-focused review, open
-`.cache/benchmark-suite/rag-offline.json`. This is the canonical
-`agentflow-rag-baseline@1.2.0` result produced by the same production retrieval
-components against the isolated corpus. Point out Hit@1/3/5, per-case misses,
-prompt-injection blocks, gating versus diagnostic cases, and the active
-Embedding/Fusion/Reranker/Relevance Gate versions. Find `stale-refund-window`:
-the expected source is policy `3.2`, policy `2.4` is forbidden, and a weak or
-conflicting result remains visible instead of disappearing from the
-denominator. The UI searches above validate the interactive path; they are not
-the canonical Dataset run.
-
-### 2:05-3:15 - Multi-Agent Run
-
-Start a Multi-Agent task:
+Open `http://localhost:3000/workspace`, then upload
+[`examples/example.md`](../../examples/example.md) in **Knowledge**. Configure an
+Agent with RAG enabled and `get_current_time` allowed. In **Verification**, enable
+the Text verifier with one attempt, `Wait for user`, and these required phrases:
 
 ```text
-Use the incident runbook to diagnose authentication failures after a signing-key
-rotation. Return the relevant incident code, likely cause, and recovery steps.
+AUTH-7F31
+401 invalid_signature
 ```
 
-Show planning, delegated steps, tool activity, and the final answer. If no model
-provider is configured, use the deterministic fallback to demonstrate lifecycle
-and persistence rather than answer quality.
-
-### 3:15-4:25 - Trace, Replay, and Episode Report
-
-Open **View trace**. Connect the visible events to the persisted Run lifecycle:
-retrieval, context selection, model/tool operations, usage settlement, and the
-terminal state. Show that Replay reads stored evidence rather than reconstructing
-the Run from UI state. Point out the Episode Report's task, retrieval, LLM,
-Tool, error, and Verification summary, then export its JSON as a compact
-machine-readable artifact for offline evaluation or incident review.
-
-If the live provider is unavailable, open
-`.cache/benchmark-suite/benchmark-recovery-replay.json` instead. It is a
-synthetic saved Replay produced through the same HTTP Resume and persistence
-contracts, not a screenshot or reconstructed UI object.
-
-### Optional - Runtime Verification
-
-Enable **Verification** for a new Run and select a deterministic
-text, citation, JSON Schema, HTTP, or allowlisted command verifier. Show that
-the candidate output, Evidence, Artifacts, and `verification.*` events are
-persisted before the Completion Gate permits `run.completed`.
-
-Emphasize that this is **verification of one runtime outcome**, not execution
-of the repository's unit or integration tests.
-
-### Optional - Controlled Run Comparison
-
-Create a Single Agent with Memory and RAG disabled, then run the same prompt in
-two new Conversations without changing its model, Tools, or limits. Open
-**Evaluate > Run comparison**, select those Runs, and show that the
-Comparability Gate enables token, duration, call-count, and error deltas.
-
-Then select an unrelated Run. The outputs remain available side by side, but
-the page lists the changed identities and disables deltas. This demonstrates
-that the view is an evaluation surface for repeated or single-variable tests,
-not a performance claim over arbitrary production traffic. See
-[Evidence Comparison](../operations/evidence-comparison.md) for the complete
-gate.
-
-### 4:25-5:00 - Engineering Boundaries
-
-Close with explicit limits: mandatory Workspace namespace filtering and
-stale-source replacement are implemented, but authentication, Membership, ACL,
-and complete Workspace lifecycle are not; the ACL case therefore remains
-diagnostic rather than a release gate. Routing is protected by a deterministic
-offline regression gate, but live LLM routing and production threshold promotion
-still need budgeted multi-trial evidence. This distinguishes implemented
-platform behavior from planned production hardening.
-
-## Recorded README Assets
-
-- `agentflow-demo.gif`: end-to-end Multi-Agent execution and Replay overview.
-- `hybrid-rag-demo.gif`: ingestion, Hybrid recall, RRF, reranking, Relevance
-  Gate metadata, and final model-context selection.
-- `completion-verification-demo.gif`: Completion Contract configuration,
-  `passed` status, Usage/Replay, verification lifecycle events, and immutable
-  Evidence details.
-- `single-mode.png`: direct Single-Agent result with the selected Agent visible.
-- `multi-mode.png`: Multi plan approval checkpoint and queued collaboration
-  stages.
-- `loop-mode.png`: bounded Loop Iteration, resource counters, and Stage trace.
-
-The GIFs explain state transitions. The PNGs provide one stable, distinguishing
-state for each execution mode; they are not separate walkthroughs. Focused
-recordings remain short and use key state transitions instead of high frame
-rates so labels and trace payloads stay readable on GitHub.
-
-## Offline Demo Fallback
-
-If live execution is unavailable, run:
+If a budgeted CASE-001A run is available, keep its `manifest.json`,
+`tool-context-vs-tools.json`, and `route-llm-ranking.json` open. Run the preflight
+after both services are ready:
 
 ```bash
-make benchmark-evidence
-make routing-eval
-make test
+LIVE_BENCHMARK_DIR=.cache/live-benchmark/MODEL-REVISION make demo-check
 ```
 
-The first command produces the fixed benchmark evidence; the second runs every
-Go package test, frontend lint, frontend contract tests, and the Next.js
-production build. Automated tests validate the codebase; the saved Replay
-demonstrates runtime behavior without a provider request.
+Without network or provider access, validate only the fallback artifacts:
+
+```bash
+DEMO_MODE=offline make demo-check
+```
+
+## The Five-minute Script
+
+### 0:00-0:30 - State the System Boundary
+
+Open **Chat** and say:
+
+> AgentFlow is a Go runtime for bounded Agent execution. Single, Multi, and Loop
+> have different orchestration policies, but share one Turn Engine, Context
+> assembly, Tool executor, Usage Ledger, event protocol, and Completion Gate.
+
+Point to the mode selector only. Do not explain every control. State that Run
+admission, per-Conversation single-writer execution, request limits, and Run
+Budget bound resource use before work starts.
+
+### 0:30-1:20 - Create One Evidence-backed Run
+
+Select **Multi** and submit:
+
+```text
+Use the authentication incident runbook to diagnose login failures after a
+signing-key rotation. Return the incident code, the observed error, likely cause,
+and recovery steps. Use get_current_time to include the current UTC time. If the
+runbook is insufficient, say so instead of guessing.
+```
+
+Approve the plan. Show the selected Agent and candidate evidence or abstention.
+Explain that the Run freezes effective Agent profiles, model/provider identity,
+Context assembly settings, Tool definitions and policy, budgets, and Verification
+contract. Later configuration edits therefore cannot change Resume semantics.
+
+### 1:20-2:35 - Connect Execution to Evidence
+
+Open **View trace** and make four connections:
+
+1. Retrieval events identify the selected runbook chunks and final model context.
+2. Model and Tool events show physical calls, duration, errors, and returned
+   evidence without treating streaming deltas as durable history.
+3. Usage shows model calls, Tool calls, input/output tokens, active runtime, and
+   whether provider usage was estimated.
+4. Verification Evidence records the Text result before the Completion Gate
+   permits `run.completed`.
+
+Export the **Episode report**. It is the compact review artifact joining task,
+retrieval, model calls, Tool calls, errors, final output, and Verification; the
+event log remains the detailed execution record.
+
+### 2:35-3:35 - Show Recovery Without Demo-only Runtime Code
+
+The `make benchmark-evidence` command injects the existing recoverable-run test
+scenario. Open these files side by side:
+
+- `.cache/benchmark-suite/benchmark-recovery-before-replay.json`
+- `.cache/benchmark-suite/benchmark-recovery-replay.json`
+
+In the first, show `failed_recoverable`, the reason execution stopped, durable evidence,
+and the enabled `Resume run` Recovery Action. In the second, find `run.resumed`,
+the recovery Stage, committed `checkpoint.captured` events, and the terminal
+`completed` state. Then point to `recovery-paths.jsonl`: the integration test
+exercises Resume through the HTTP/SSE and persistence contracts, including stale
+or unsafe duplicate-action rejection. No production-only failure switch is added.
+
+If an actual recoverable Run is already present in PostgreSQL, use its **Run
+replay** page instead and click the projected Recovery Action. Keep the fixture
+pair as the no-network backup.
+
+### 3:35-4:35 - Present Measured Comparison, Not a Vague Claim
+
+Open the CASE-001A `manifest.json`. Show the frozen Dataset hash, Git revision,
+model identities, trial count, suite-wide budgets, report hashes, and retained
+failed/skipped samples. Then open:
+
+- `tool-context-vs-tools.json` for the same-model `full_context` versus
+  `with_tools` comparison;
+- `route-llm-ranking.json` beside `route-query-match.json` for deterministic
+  selection versus explicitly enabled LLM ranking;
+- `rag-semantic.json` for retrieval and no-answer evidence.
+
+Report verified success, unsafe false routes, no-route/no-answer behavior,
+input/output tokens, calls, latency, fallback, and failures separately. Mention
+an unchanged or regressed pair before any improvement. Do not collapse the
+reports into one intelligence score.
+
+If no live report exists, use `.cache/benchmark-suite/rag-offline.json` and say
+explicitly that it is deterministic regression evidence. Do not quote it as
+live-model quality.
+
+### 4:35-5:00 - Close With Boundaries
+
+Close with four limits: authentication/Membership/ACL are not implemented;
+process-local concurrency is not a multi-instance scheduler; uncertain external
+side effects require reconciliation rather than an exactly-once claim; and the
+small frozen datasets measure known cases, not general model intelligence.
+
+The final sentence is:
+
+> The design goal is not maximum autonomy. It is bounded execution whose result,
+> cost, failure, and recovery path can be inspected and reproduced.
+
+## Optional Follow-ups
+
+- Open **Evaluate > Run comparison** only for two prepared identical or
+  single-variable Runs. Uncontrolled pairs stay review-only and receive no deltas.
+- Show a failed Verification and `Wait for user` only when the interviewer asks
+  about human review.
+- Show Knowledge rank details only when the discussion moves into retrieval.
+
+## Recorded Assets
+
+- `agentflow-demo.gif`: end-to-end Multi execution and Replay.
+- `hybrid-rag-demo.gif`: ingestion, Hybrid recall, RRF, reranking, Relevance Gate,
+  and final Context selection.
+- `completion-verification-demo.gif`: Completion Contract, Verification Evidence,
+  Usage, and Replay.
+- `single-mode.png`, `multi-mode.png`, and `loop-mode.png`: stable mode-specific
+  states for a no-network screen-share fallback.
+
+The recordings explain state transitions; they are not separate demos or
+benchmark evidence.

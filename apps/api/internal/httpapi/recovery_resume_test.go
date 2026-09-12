@@ -49,6 +49,14 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunFailedRecoverable, "heartbeat expired"); err != nil {
 		t.Fatalf("mark recoverable: %v", err)
 	}
+	beforeResume, ok, err := fixtureStore.GetRunReplay(run.ID)
+	if err != nil || !ok || beforeResume.RecoverySummary == nil || beforeResume.RecoverySummary.Reason != domain.RecoveryRunRecoverable {
+		t.Fatalf("expected recoverable pre-resume replay, got %#v ok=%v err=%v", beforeResume.RecoverySummary, ok, err)
+	}
+	if len(beforeResume.RecoverySummary.Actions) != 1 || beforeResume.RecoverySummary.Actions[0].Kind != "resume_run" || !beforeResume.RecoverySummary.Actions[0].Enabled {
+		t.Fatalf("expected enabled resume action, got %#v", beforeResume.RecoverySummary.Actions)
+	}
+	writeBenchmarkReplayArtifact(t, "benchmark-recovery-before-replay.json", beforeResume)
 
 	client := newLocalFallbackOpenAIClientForTest()
 	runtime := agent.NewRuntime(agent.RuntimeOptions{
@@ -117,10 +125,20 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	if !foundRecovery {
 		t.Fatalf("expected recovery step in replay, got %#v", replay.Steps)
 	}
-	writeBenchmarkReplayArtifact(t, replay)
+	foundCheckpoint := false
+	for _, event := range replay.RunEvents {
+		if event.Type == domain.EventCheckpointCaptured {
+			foundCheckpoint = true
+			break
+		}
+	}
+	if !foundCheckpoint {
+		t.Fatal("expected a durable checkpoint in recovered replay")
+	}
+	writeBenchmarkReplayArtifact(t, "benchmark-recovery-replay.json", replay)
 }
 
-func writeBenchmarkReplayArtifact(t *testing.T, replay domain.RunReplay) {
+func writeBenchmarkReplayArtifact(t *testing.T, name string, replay domain.RunReplay) {
 	t.Helper()
 	dir := os.Getenv("EVALUATION_REPORT_DIR")
 	if dir == "" {
@@ -133,7 +151,7 @@ func writeBenchmarkReplayArtifact(t *testing.T, replay domain.RunReplay) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "benchmark-recovery-replay.json"), content, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, name), content, 0600); err != nil {
 		t.Fatal(err)
 	}
 }
