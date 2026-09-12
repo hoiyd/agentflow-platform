@@ -29,10 +29,12 @@ func main() {
 
 func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: eval <context|rag|route|tool> [options]")
+		fmt.Fprintln(stderr, "usage: eval <benchmark|context|rag|route|tool> [options]")
 		return 2
 	}
 	switch args[0] {
+	case "benchmark":
+		return runBenchmark(ctx, args[1:], out, stderr)
 	case "context":
 		return runContext(ctx, args[1:], out, stderr)
 	case "rag":
@@ -42,7 +44,7 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	case "tool":
 		return runTool(ctx, args[1:], out, stderr)
 	default:
-		fmt.Fprintf(stderr, "unknown evaluation suite %q; use context, rag, route, or tool\n", args[0])
+		fmt.Fprintf(stderr, "unknown evaluation suite %q; use benchmark, context, rag, route, or tool\n", args[0])
 		return 2
 	}
 }

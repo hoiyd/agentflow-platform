@@ -51,14 +51,16 @@ type ToolFailure struct {
 }
 
 type Summary struct {
-	Samples        int     `json:"samples"`
-	Evaluated      int     `json:"evaluated"`
-	Verified       int     `json:"verified"`
-	SuccessRate    float64 `json:"success_rate"`
-	MeanTokens     float64 `json:"mean_tokens"`
-	MeanToolCalls  float64 `json:"mean_tool_calls"`
-	MeanModelCalls float64 `json:"mean_model_calls"`
-	MeanLatencyMS  float64 `json:"mean_latency_ms"`
+	Samples          int     `json:"samples"`
+	Evaluated        int     `json:"evaluated"`
+	Verified         int     `json:"verified"`
+	SuccessRate      float64 `json:"success_rate"`
+	MeanInputTokens  float64 `json:"mean_input_tokens"`
+	MeanOutputTokens float64 `json:"mean_output_tokens"`
+	MeanTokens       float64 `json:"mean_tokens"`
+	MeanToolCalls    float64 `json:"mean_tool_calls"`
+	MeanModelCalls   float64 `json:"mean_model_calls"`
+	MeanLatencyMS    float64 `json:"mean_latency_ms"`
 }
 
 type Report struct {
@@ -68,6 +70,8 @@ type Report struct {
 	Provider         string                       `json:"provider"`
 	Config           Options                      `json:"config"`
 	ContextAssembly  domain.ContextAssemblyConfig `json:"context_assembly"`
+	PromptRevision   string                       `json:"prompt_revision"`
+	PromptHash       string                       `json:"prompt_hash"`
 	ToolContractHash string                       `json:"tool_contract_hash"`
 	CostSource       string                       `json:"cost_source"`
 	Samples          []Sample                     `json:"samples"`
@@ -117,7 +121,9 @@ func Run(ctx context.Context, client *openai.Client, opts Options) (Report, erro
 	report := Report{Identity: evalreport.Identity{ReportFormat: evalreport.Format, EvaluationKind: "live_model", DatasetID: data.ID,
 		DatasetVersion: data.Version, DatasetHash: data.Hash, GitRevision: opts.Revision, StartedAt: startedAt},
 		SchemaVersion: "task-eval-v1", Model: identity.Model, Provider: identity.Provider, Config: opts,
-		ContextAssembly: assembly, ToolContractHash: digest(string(definitions)), CostSource: "unavailable: no price table; token usage only",
+		ContextAssembly: assembly, PromptRevision: PromptRevision,
+		PromptHash:       digest(systemPrompt + "\n" + taskPromptTemplate + fullContextPromptTemplate),
+		ToolContractHash: digest(string(definitions)), CostSource: "unavailable: no price table; token usage only",
 		Samples: []Sample{}, Summary: map[string]Summary{}}
 	client.SetRetryPolicy(openai.RetryPolicy{MaxAttempts: 1})
 	fixture := evaluationFixture{fs, recorder, catalog, data, assembly}
@@ -193,9 +199,9 @@ func (f evaluationFixture) runSample(ctx context.Context, client *openai.Client,
 			return err
 		}
 	}
-	input := fmt.Sprintf("Requested IDs: %s\nArtifact: %s\nPreview (not the full export):\n%s", strings.Join(task.IDs, ", "), artifact.ID, content[:256])
+	input := fmt.Sprintf(taskPromptTemplate, strings.Join(task.IDs, ", "), artifact.ID, content[:256])
 	if sample.Arm == "full_context" {
-		input += "\nFull immutable export:\n" + content
+		input += fmt.Sprintf(fullContextPromptTemplate, content)
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -280,6 +286,8 @@ func summarize(samples []Sample) map[string]Summary {
 			summary.Evaluated++
 		}
 		summary.MeanTokens += float64(sample.Usage.TotalTokens)
+		summary.MeanInputTokens += float64(sample.Usage.PromptTokens)
+		summary.MeanOutputTokens += float64(sample.Usage.CompletionTokens)
 		summary.MeanToolCalls += float64(sample.Usage.ToolCalls)
 		summary.MeanModelCalls += float64(sample.Usage.ModelCalls)
 		summary.MeanLatencyMS += float64(sample.LatencyMS)
@@ -291,6 +299,8 @@ func summarize(samples []Sample) map[string]Summary {
 		// they measured zero latency/token consumption.
 		count := float64(max(1, summary.Evaluated))
 		summary.MeanTokens /= count
+		summary.MeanInputTokens /= count
+		summary.MeanOutputTokens /= count
 		summary.MeanToolCalls /= count
 		summary.MeanModelCalls /= count
 		summary.MeanLatencyMS /= count
