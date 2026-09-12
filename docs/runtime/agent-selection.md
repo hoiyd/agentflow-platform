@@ -42,10 +42,11 @@ hard-requirement coverage is below the policy threshold. The decision retains
 the proposed Agent, observed values, thresholds, threshold source, and stable
 reason codes, but clears the selected Agent so no Child Run can be created.
 
-The current `conservative-safety-baseline-v1` thresholds are safety defaults,
-not empirical quality claims. H-33 owns replacing them with a versioned result
-from calibration and holdout data. Until then, evidence must report this source
-verbatim and must not describe the policy as empirically calibrated.
+The versioned routing Dataset v1 recommends a minimum score/margin of `4/1`
+after calibration and holdout. Production intentionally remains on the stricter
+`conservative-safety-baseline-v1` values of `6/1`: the 16-case offline fixture
+is regression evidence, not enough evidence to publish a broader production
+policy. Decision evidence reports the active threshold source verbatim.
 
 If every eligible candidate has a zero score, the compatibility v2 policy returns
 `agent_route_no_suitable_candidate` instead of selecting an arbitrary Worker.
@@ -91,6 +92,13 @@ selected and proposed Agent IDs, fallback code, candidate scores, requirement
 coverage, exclusion reasons, threshold observations, and abstention reason codes
 for Replay and evaluation.
 
+The offline routing gate reuses the production eligibility, ranking, response
+validation, fallback, and abstention code. On Dataset v1, v3 records 10/10
+acceptable selections, zero unsafe false routes, and 6/6 no-route recall;
+v1/v2 remain diagnostic migration baselines. These numbers do not claim live
+LLM quality. See [Offline evaluation](../operations/offline-evaluation.md#agent-routing-gate)
+for the dataset boundary, commands, and full metrics.
+
 ## Design References
 
 The policy follows the common code-first routing shape used by current agent
@@ -106,5 +114,6 @@ bound delegated work.
 
 This implementation deliberately does not add dynamic Agent discovery,
 recursive delegation, load-aware scheduling, a capability ontology, or a
-general-purpose Agent Gateway. H-33 remains the owner of empirical threshold
-calibration and routing quality claims.
+general-purpose Agent Gateway. A new production threshold requires reviewed
+live-model evidence and the H-35 policy lifecycle; semantic candidate retrieval
+remains conditional on candidate scale or measured recall failure.

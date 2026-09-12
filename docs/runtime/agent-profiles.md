@@ -128,8 +128,10 @@ deployment limits stay live.
 - Profiles select from installed in-process tools; remote tool discovery and
   tenant-specific tool registries are not implemented.
 - The Router can use deterministic declarative matching or an LLM-backed
-  policy. Both produce typed eligibility and decision evidence, but routing
-  quality is not yet calibrated against a versioned routing dataset.
+  policy. Both produce typed eligibility and decision evidence. A versioned
+  offline calibration/holdout gate now protects the deterministic policy;
+  live-model routing quality remains unmeasured until a budgeted multi-trial
+  run is explicitly authorized.
 
 See [Execution modes](execution-modes.md) for orchestration behavior,
 [Capability-aware Agent Selection](agent-selection.md) for routing rules,
