@@ -12,6 +12,10 @@ file into a second handbook.
    an architectural change.
 4. Do not revert or overwrite unrelated user changes in a dirty worktree.
 5. Keep command output bounded. Use `rg` before slower search tools.
+6. Before implementing a backlog item, search for complete and partial existing
+   behavior. Extend or consolidate it instead of creating a parallel path.
+7. Trace cross-layer changes through backend behavior, API contracts, generated
+   clients, and frontend consumers before treating the work as complete.
 
 For commands with unknown output size:
 
@@ -58,10 +62,14 @@ Backend rules:
 
 - Keep `cmd/server` thin and construct production dependencies in `app`.
 - Depend on the smallest capability interface required by a consumer.
+- Use responsibility-specific filenames; avoid generic names such as
+  `service.go` when the owner or behavior can be named directly.
 - Keep HTTP parsing/SSE in `httpapi`; orchestration belongs in `agent`/`turn`.
 - Keep retrieval policy in `rag`/`knowledge`, not in handlers or Store adapters.
-- Add focused tests for changed behavior and failure boundaries.
+- Add focused tests for changed behavior, failure paths, and state transitions.
 - For API shape changes, test serialized JSON rather than structs alone.
+- For API shape changes, regenerate the shared client and run
+  `make contract-check` from the repository root.
 
 ## Database Schema Changes
 
@@ -93,6 +101,8 @@ npm run build
 Frontend rules:
 
 - Follow [Frontend experience principles](docs/architecture/frontend-experience.md).
+- Treat desktop as the supported product surface unless mobile behavior is
+  explicitly requested.
 - Add CSS to the narrowest owning module described in
   [Stylesheet organization](apps/web/app/styles/README.md).
 - Preserve one vertical scroll owner; avoid nested cards and nested scrolling.
@@ -128,12 +138,23 @@ are complete. Mandatory namespace filtering alone is not authorization.
   persistence, events, or failure semantics change.
 - Prefer concrete contracts, trade-offs, and evidence over claims such as
   "production-ready" or "intelligent".
+- Keep public documentation product-focused. Store personal notes and private
+  preparation outside the repository or under the untracked `docs/private/`.
+- Distinguish deterministic fixture evidence from live-model measurements, and
+  trace every published number to a retained report field.
 - Keep terminology aligned with `docs/architecture/terms.md` and control
   ownership aligned with `docs/runtime/execution-controls.md`.
 - State limitations explicitly; never imply a stronger security, evaluation, or
   tenant-isolation guarantee than the code provides.
-- `docs/private/` is local planning and interview prep material. Do not stage or commit it unless the
-  user explicitly asks for it.
+
+## Verification Before Finishing
+
+- Run focused tests while editing, then the relevant package or application
+  checks before reporting completion.
+- Non-trivial behavior needs both a success case and its important failure path.
+  When CI measures patch coverage, target at least 90% without filler tests.
+- Treat sandbox, network, provider quota, and unavailable external services as
+  environment failures; do not misreport them as code regressions.
 
 ## Git and Scope
 
@@ -149,8 +170,9 @@ are complete. Mandatory namespace filtering alone is not authorization.
   `git rev-parse --abbrev-ref --symbolic-full-name @{upstream}` returns the same
   branch name on `origin` before reporting the push as complete.
 - Stage explicit files only; never use `git add -A` in a dirty worktree.
-- Do not stage local files such as `docs/private/` unless the
-  user explicitly requests them.
+- Before pushing, inspect staged filenames and content for credentials, `.env`
+  files, local paths, private notes, and generated evidence containing prompts.
+- Do not stage local files such as `docs/private/` unless explicitly requested.
 - Do not create a commit, push, or PR unless requested.
 - If blocked, ask for the missing input or propose a focused next step instead
   of broad speculative changes.
