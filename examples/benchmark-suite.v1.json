@@ -35,6 +35,7 @@
     {"file": "rag-offline.json", "kind": "deterministic_retrieval", "simulated": true},
     {"file": "tool-task-protocol.json", "kind": "provider_protocol_fixture", "simulated": true},
     {"file": "tool-failure-paths.jsonl", "kind": "failure_test_events", "simulated": true},
+    {"file": "benchmark-recovery-before-replay.json", "kind": "recoverable_run_replay", "simulated": true},
     {"file": "benchmark-recovery-replay.json", "kind": "run_replay", "simulated": true},
     {"file": "recovery-paths.jsonl", "kind": "recovery_test_events", "simulated": true}
   ],
