@@ -26,8 +26,8 @@ func TestObservableStorePublishesCommittedEventWithAssignedSequence(t *testing.T
 	}
 	run, err := observed.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{}, Mode: "single",
-		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
-		Model: domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
+		Agent:     domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
+		Embedding: domain.RuntimeEmbeddingSnapshot{Provider: "local", BaseURL: "http://localhost:11434/api/embed", Model: "test", Dimensions: 1},
 		ContextAssembly: domain.ContextAssemblyConfig{
 			AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 128000,
 			OutputReserveTokens: 8192, SafetyMarginTokens: 4096, HistoryMaxTokens: 64000,

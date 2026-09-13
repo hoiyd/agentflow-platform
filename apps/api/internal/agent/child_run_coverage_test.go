@@ -34,7 +34,7 @@ func TestRunDelegatedWorkerPropagatesDurableBoundaryFailures(t *testing.T) {
 			fault := test.fault
 			fault.Store = fixtureStore
 			runtime := NewRuntime(RuntimeOptions{
-				Store: &fault, ModelClient: baseRuntime.modelClient, RouterMode: RouterModeQuery,
+				Store: &fault, EmbeddingClient: baseRuntime.embeddingClient, ModelRoutes: baseRuntime.modelRoutes, RouterMode: RouterModeQuery,
 				ChildRuns: baseRuntime.childRunLimits,
 			})
 			if test.mutate != nil {
@@ -62,7 +62,7 @@ func TestRunChildWorkerStepPropagatesStagePersistenceFailures(t *testing.T) {
 			baseRuntime, fixtureStore, prepared := preparedCollaborationForChildTest(t)
 			fault := test.fault
 			fault.Store = fixtureStore
-			runtime := NewRuntime(RuntimeOptions{Store: &fault, ModelClient: baseRuntime.modelClient})
+			runtime := NewRuntime(RuntimeOptions{Store: &fault, EmbeddingClient: baseRuntime.embeddingClient, ModelRoutes: baseRuntime.modelRoutes})
 			if _, err := runtime.runChildWorkerStep(context.Background(), prepared.Run, prepared.WorkerAgent, tools.DefaultCatalog(), "delegated task"); err == nil {
 				t.Fatal("expected child stage persistence error")
 			}

@@ -16,6 +16,7 @@ type RuntimeIdentity struct {
 	EmbeddingBaseURL    string
 	EmbeddingModel      string
 	EmbeddingDimensions int
+	EmbeddingProvider   string
 }
 
 type Message struct {

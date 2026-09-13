@@ -143,6 +143,16 @@ func (c *Catalog) Resolve(id string) (Binding, bool) {
 }
 
 func (c *Catalog) Select(requirements Requirements) (Decision, error) {
+	return c.selectRoute("", requirements)
+}
+
+// SelectRoute validates a previously chosen route against the current Turn.
+// It preserves Run-level model affinity without weakening capability checks.
+func (c *Catalog) SelectRoute(routeID string, requirements Requirements) (Decision, error) {
+	return c.selectRoute(strings.TrimSpace(routeID), requirements)
+}
+
+func (c *Catalog) selectRoute(routeID string, requirements Requirements) (Decision, error) {
 	requirements.Purpose = strings.TrimSpace(requirements.Purpose)
 	if c == nil || requirements.Purpose == "" || requirements.EstimatedInputTokens < 0 || requirements.MaxOutputTokens <= 0 {
 		return Decision{Requirements: requirements}, ErrInvalidRequirements
@@ -154,6 +164,9 @@ func (c *Catalog) Select(requirements Requirements) (Decision, error) {
 	eligible := make([]Binding, 0, len(c.bindings))
 	for _, binding := range c.bindings {
 		reasons := exclusionReasons(binding.Descriptor, requirements)
+		if routeID != "" && binding.Descriptor.ID != routeID {
+			reasons = append(reasons, "run_route_affinity")
+		}
 		decision.Candidates = append(decision.Candidates, CandidateDecision{
 			RouteID: binding.Descriptor.ID, Eligible: len(reasons) == 0, ExclusionReasons: reasons,
 		})
@@ -173,6 +186,18 @@ func (c *Catalog) Select(requirements Requirements) (Decision, error) {
 	decision.Route = eligible[0].Descriptor
 	decision.Client = eligible[0].Client
 	return decision, nil
+}
+
+func (c *Catalog) HasConfiguredClient() bool {
+	if c == nil {
+		return false
+	}
+	for _, binding := range c.bindings {
+		if binding.Client.HasAPIKey() {
+			return true
+		}
+	}
+	return false
 }
 
 func ValidateDescriptor(descriptor Descriptor) (Descriptor, error) {

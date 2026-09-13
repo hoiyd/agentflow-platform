@@ -148,9 +148,9 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if restored.catalog.SecurityPolicy().Version != toolpolicy.CurrentVersion {
 		t.Fatalf("current operator config changed frozen Tool policy: %#v", restored.catalog.SecurityPolicy())
 	}
-	identity := restored.client.RuntimeIdentity()
-	if identity.Model != "test-model-v1" || identity.Provider != "openrouter" {
-		t.Fatalf("unexpected restored model identity: %#v", identity)
+	routes, err := runtime.restoreModelRouteCatalog(prepared.Run.RuntimeSnapshot.ModelRouting)
+	if err != nil || len(routes.Descriptors()) != 1 || routes.Descriptors()[0].Model != "test-model-v1" || routes.Descriptors()[0].Provider != "openrouter" {
+		t.Fatalf("unexpected restored model route: %#v err=%v", routes.Descriptors(), err)
 	}
 
 	prepared.Run.RuntimeSnapshot.Tools[0].Description = "changed tool contract"
@@ -379,23 +379,24 @@ func TestRestoreRuntimeRejectsReplayOnlySnapshotWithTypedError(t *testing.T) {
 	}
 }
 
-func TestClientForRunRejectsMissingSnapshot(t *testing.T) {
+func TestEmbeddingClientForRunRejectsMissingSnapshot(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
 	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: openai.NewClient("", "", "test")})
 
-	if _, err := runtime.clientForRun("missing"); !errors.Is(err, ErrRuntimeSnapshotUnavailable) {
+	if _, err := runtime.embeddingClientForRun("missing"); !errors.Is(err, ErrRuntimeSnapshotUnavailable) {
 		t.Fatalf("expected missing snapshot error, got %v", err)
 	}
 }
 
-func TestClientFromSnapshotRejectsCurrentCredentialForAnotherProvider(t *testing.T) {
-	runtime := &Runtime{modelClient: openai.NewClient("current-key", "https://api.openai.com/v1", "current-model")}
-	snapshot := &domain.RuntimeSnapshot{Model: domain.RuntimeModelSnapshot{
-		Provider: "openrouter", BaseURL: "https://openrouter.ai/api/v1", Model: "frozen-model",
+func TestEmbeddingClientFromSnapshotRejectsCurrentCredentialForAnotherProvider(t *testing.T) {
+	client := openai.NewClientWithTimeoutAndEmbeddingModel("current-key", "https://api.openai.com/v1", "https://api.openai.com/v1", "current-model", "embed", 3, time.Second)
+	runtime := &Runtime{embeddingClient: client}
+	snapshot := &domain.RuntimeSnapshot{Embedding: domain.RuntimeEmbeddingSnapshot{
+		Provider: "openrouter", BaseURL: "https://openrouter.ai/api/v1", Model: "frozen-embedding", Dimensions: 3,
 	}}
 
-	if _, err := runtime.clientFromSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "credential for frozen provider") {
+	if _, err := runtime.embeddingClientFromSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "credential for frozen embedding provider") {
 		t.Fatalf("expected provider credential mismatch, got %v", err)
 	}
 }

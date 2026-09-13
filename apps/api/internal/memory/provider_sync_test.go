@@ -146,7 +146,7 @@ func TestProviderPersistsAdaptiveCandidateInShadowModeWithoutCommittingMemory(t 
 	provider := newTestProvider(t, store, immediateEmbedder{}, ProviderOptions{
 		QueueSize: 4, JobTimeout: time.Second, AdaptiveMode: AdaptiveModeShadow,
 		Extractor: CompositeCandidateExtractor{
-			Primary: RuleBasedCandidateExtractor{}, Fallback: AdaptiveCandidateExtractor{Model: model},
+			Primary: RuleBasedCandidateExtractor{}, Fallback: adaptiveExtractor(model),
 		},
 	})
 	if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_shadow", Message: domain.Message{
@@ -172,7 +172,7 @@ func TestProviderCommitsHighConfidenceAdaptiveCandidateInAutoMode(t *testing.T) 
 	model := &stubCandidateModel{response: `{"decision":"add","kind":"project_convention","content":"The backend uses Go 1.26.5.","confidence":0.96}`}
 	provider := newTestProvider(t, store, immediateEmbedder{}, ProviderOptions{
 		QueueSize: 4, JobTimeout: time.Second, AdaptiveMode: AdaptiveModeAuto,
-		Extractor: AdaptiveCandidateExtractor{Model: model},
+		Extractor: adaptiveExtractor(model),
 	})
 	if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_auto", Message: domain.Message{
 		ID: "msg_auto", ConversationID: "conv_test", Role: "user",
@@ -194,7 +194,7 @@ func TestProviderPublishesAdaptiveExtractionFailure(t *testing.T) {
 	model := &stubCandidateModel{response: "not json"}
 	provider := newTestProvider(t, store, immediateEmbedder{}, ProviderOptions{
 		QueueSize: 4, JobTimeout: time.Second, AdaptiveMode: AdaptiveModeShadow,
-		Extractor: AdaptiveCandidateExtractor{Model: model},
+		Extractor: adaptiveExtractor(model),
 	})
 	if err := provider.SyncTurn(TurnSyncRequest{RunID: "run_failed", Message: domain.Message{
 		ID: "msg_failed", Role: "user", Content: "The backend always uses a typed event contract for observability.",

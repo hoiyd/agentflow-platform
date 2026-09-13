@@ -56,15 +56,18 @@ const (
 	RoutingHintsRuntimeSnapshotVersion   = 14
 	RoutingRequirementsSnapshotVersion   = 15
 	ModelRoutingRuntimeSnapshotVersion   = 16
-	CurrentRuntimeSnapshotVersion        = ModelRoutingRuntimeSnapshotVersion
+	IndependentEmbeddingSnapshotVersion  = 17
+	CurrentRuntimeSnapshotVersion        = IndependentEmbeddingSnapshotVersion
 )
 
 type RuntimeSnapshot struct {
-	SchemaVersion      int                       `json:"schema_version"`
-	Mode               string                    `json:"mode"`
-	Agent              RuntimeAgentSnapshot      `json:"agent"`
-	CandidateAgents    []RuntimeAgentSnapshot    `json:"candidate_agents,omitempty"`
-	Model              RuntimeModelSnapshot      `json:"model"`
+	SchemaVersion   int                    `json:"schema_version"`
+	Mode            string                 `json:"mode"`
+	Agent           RuntimeAgentSnapshot   `json:"agent"`
+	CandidateAgents []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
+	// LegacyModel is populated only when replaying pre-v17 snapshots.
+	LegacyModel        *RuntimeModelSnapshot     `json:"model,omitempty"`
+	Embedding          RuntimeEmbeddingSnapshot  `json:"embedding"`
 	ModelRouting       ModelRouteCatalogSnapshot `json:"model_routing"`
 	Tools              []RuntimeToolSnapshot     `json:"tools"`
 	ToolSecurityPolicy toolpolicy.Policy         `json:"tool_security_policy"`
@@ -187,12 +190,22 @@ type RuntimeModelSnapshot struct {
 	EmbeddingDimensions int    `json:"embedding_dimensions"`
 }
 
+// RuntimeEmbeddingSnapshot freezes the single embedding service independently
+// from the peer Chat LLM routes.
+type RuntimeEmbeddingSnapshot struct {
+	Provider   string `json:"provider"`
+	BaseURL    string `json:"base_url"`
+	Model      string `json:"model"`
+	Dimensions int    `json:"dimensions"`
+}
+
 // ModelRouteCatalogSnapshot freezes the only routes a resumed Run may use.
 // CredentialEnvironment names a process environment variable; its value is
 // deliberately resolved at runtime and never persisted.
 type ModelRouteCatalogSnapshot struct {
 	PolicyRevision  string                 `json:"policy_revision"`
 	CatalogRevision string                 `json:"catalog_revision"`
+	PinnedRouteID   string                 `json:"pinned_route_id,omitempty"`
 	Routes          []ModelRouteDescriptor `json:"routes"`
 }
 

@@ -30,13 +30,14 @@ VERIFICATION_ALLOWED_COMMANDS=
 VERIFICATION_ALLOWED_HTTP_HOSTS=
 VERIFICATION_MAX_ARTIFACT_BYTES=65536
 
-OPENAI_API_KEY=
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
+MODEL_ROUTE_CONFIG_PATH=config/model-routes.json
+PROVIDER_A_API_KEY=
+PROVIDER_B_API_KEY=
+EMBEDDING_API_KEY=
 EMBEDDING_BASE_URL=http://localhost:11434/api/embed
 EMBEDDING_MODEL=embeddinggemma
 EMBEDDING_DIMENSIONS=1536
-OPENAI_REQUEST_TIMEOUT=5m
+EMBEDDING_REQUEST_TIMEOUT=5m
 
 MAX_CONCURRENT_RUNS=8
 RUN_QUEUE_SIZE=32
@@ -97,9 +98,10 @@ grant access to that namespace.
 
 Do not commit `.env` files. Runtime Snapshots freeze provider endpoints and
 model identity for reproducibility, but credentials remain live process
-configuration and are never persisted with a Run. `OPENAI_API_KEY` is resolved
-at application composition and passed directly to the provider client; it is
-not stored in the general `Config` value. See
+configuration and are never persisted with a Run. `EMBEDDING_API_KEY` and the
+credential variables named by route configuration are resolved at application
+composition and passed directly to provider clients; they are not stored in the
+general `Config` value. See
 [Credential boundary and redaction](credential-boundary.md).
 
 ## Concurrency, Rate Limits, and Retry
@@ -178,16 +180,29 @@ while preserving the existing Autonomous safety profile.
 
 ## Model and Embedding Providers
 
-`OPENAI_BASE_URL`, `OPENAI_MODEL`, the Context limits, and configured prices
-currently define the single production `primary` entry in the frozen Model
-Route Catalog. The credential reference `OPENAI_API_KEY` is persisted by name;
-its value is not. Multi-route environment configuration and cross-route
-failover are not enabled. See [Model Route Contract and Catalog](../runtime/model-routing.md).
+Set `MODEL_ROUTE_CONFIG_PATH` to a JSON file containing the complete set of
+peer OpenAI-compatible Chat LLM routes. Each entry defines its stable ID,
+endpoint, model, request timeout, credential environment variable name,
+capabilities, limits, priority, and pricing metadata. The path and a non-empty
+Catalog are required at startup. Add referenced credentials separately to the
+process environment; startup fails when one is unset, and its value is never
+read into general Config or persisted. See
+`apps/api/config/model-routes.example.json` for the schema.
 
-If `OPENAI_API_KEY` is empty, chat uses a deterministic local fallback for
-workflow exercises. Embeddings call Ollama when `EMBEDDING_BASE_URL` points to
-`http://localhost:11434/api/embed`; otherwise they use deterministic local
-fallback. The frontend search panel shows whether RAG search used
+Higher priority wins whenever the route passes every hard requirement. Equal
+priority uses the stable route ID as the tie-breaker. The first successful
+decision is reused for the Run, including Context compaction, adaptive Memory
+extraction, and title generation. All route clients share the global
+concurrency limit while RPM/TPM remain isolated by API key. H-10A does not retry
+a failed request on another route. See
+[Model Route Contract and Catalog](../runtime/model-routing.md).
+
+Embedding is one independent service and never enters Chat routing. It calls
+Ollama when `EMBEDDING_BASE_URL` points to
+`http://localhost:11434/api/embed`. For a credentialed OpenAI-compatible
+embedding endpoint, set `EMBEDDING_API_KEY`; without it, non-Ollama embedding
+uses the deterministic local fallback. The frontend search panel shows whether
+RAG search used
 `ollama / <model>`, `local / local_hash_embedding`, or an OpenAI-compatible
 embedding provider.
 
@@ -195,15 +210,16 @@ The local fallback is intended to verify workflows and persistence without
 provider cost. It is not a substitute for evaluating model quality or semantic
 retrieval quality.
 
-To split providers, keep chat on a hosted OpenAI-compatible API and point embeddings to local Ollama:
+To keep Chat on hosted routes and embeddings on local Ollama:
 
 ```bash
-OPENAI_BASE_URL=https://api.openai.com/v1
+MODEL_ROUTE_CONFIG_PATH=config/model-routes.json
 EMBEDDING_BASE_URL=http://localhost:11434/api/embed
 EMBEDDING_MODEL=embeddinggemma
+EMBEDDING_REQUEST_TIMEOUT=5m
 ```
 
-Ollama's `/api/embed` endpoint is supported directly. To use an OpenAI-compatible embedding provider instead, set `EMBEDDING_BASE_URL` to that provider's `/v1` base URL and set `EMBEDDING_MODEL` accordingly.
+Ollama's `/api/embed` endpoint is supported directly. To use a credentialed OpenAI-compatible embedding provider instead, set `EMBEDDING_API_KEY`, point `EMBEDDING_BASE_URL` to its `/v1` base URL, and set `EMBEDDING_MODEL` accordingly.
 
 Ollama embedding dimensions depend on the selected model. The bundled Postgres schema currently uses `vector(1536)`, so use a 1536-dimensional Ollama embedding model with Postgres, or migrate the vector columns to the model's actual dimension.
 
@@ -242,9 +258,9 @@ MEMORY_ADAPTIVE_EXTRACTION_MODE=shadow
 MEMORY_ADAPTIVE_MIN_CONFIDENCE=0.85
 ```
 
-Modes are `off`, `shadow`, and `auto`. `shadow` records model proposals for evaluation but does not commit them to durable Memory. `auto` commits only proposals that pass the confidence threshold and the deterministic safety policy. No adaptive model request is made when `OPENAI_API_KEY` is empty.
+Modes are `off`, `shadow`, and `auto`. `shadow` records model proposals for evaluation but does not commit them to durable Memory. `auto` commits only proposals that pass the confidence threshold and the deterministic safety policy. No adaptive model request is made when no Chat route has a credential.
 
-Adaptive extraction uses the configured chat model and therefore consumes the same global concurrency, RPM, and TPM budgets as normal model requests. Explicit rule matches remain model-free.
+Adaptive extraction uses the model selected for the originating Run and therefore consumes the same global concurrency, RPM, and TPM budgets as that conversation. Explicit rule matches remain model-free.
 
 ## Postgres + pgvector
 

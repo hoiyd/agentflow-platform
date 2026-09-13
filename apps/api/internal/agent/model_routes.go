@@ -15,19 +15,18 @@ import (
 	turnpkg "agentflow-platform/apps/api/internal/turn"
 )
 
-func defaultModelRouteCatalog(client modelprovider.Client, config domain.ContextAssemblyConfig, budget domain.RuntimeRunBudget) (*modelrouting.Catalog, error) {
+func singleModelRouteCatalog(client modelprovider.Client, config domain.ContextAssemblyConfig, budget domain.RuntimeRunBudget) (*modelrouting.Catalog, error) {
 	if client == nil {
-		return nil, errors.Join(modelrouting.ErrInvalidCatalog, errors.New("primary model client is required"))
+		return nil, errors.Join(modelrouting.ErrInvalidCatalog, errors.New("model route client is required"))
 	}
 	config = contextassembly.NormalizeConfig(config)
 	identity := client.RuntimeIdentity()
 	return modelrouting.NewCatalog(modelrouting.Binding{Descriptor: modelrouting.Descriptor{
-		ID: "primary", Provider: identity.Provider, Model: identity.Model, Endpoint: identity.BaseURL,
+		ID: "single", Provider: identity.Provider, Model: identity.Model, Endpoint: identity.BaseURL,
 		Capabilities:        modelrouting.Capabilities{ToolCalling: true, StructuredOutput: true, Streaming: true},
 		ContextWindowTokens: config.ContextWindowTokens, MaxOutputTokens: config.OutputReserveTokens,
-		Priority: 100,
-		Pricing: modelrouting.Pricing{
-			Source: "runtime_options", InputPerMillionTokensMicros: budget.InputCostPerMillionTokensMicros,
+		Priority: 100, Pricing: modelrouting.Pricing{
+			Source: "single_route", InputPerMillionTokensMicros: budget.InputCostPerMillionTokensMicros,
 			OutputPerMillionTokensMicros: budget.OutputCostPerMillionTokensMicros,
 		},
 	}, Client: client})
@@ -99,6 +98,9 @@ func validateModelRoutingSnapshot(snapshot domain.ModelRouteCatalogSnapshot) err
 		seen[descriptor.ID] = true
 		descriptors = append(descriptors, descriptor)
 	}
+	if snapshot.PinnedRouteID != "" && !seen[snapshot.PinnedRouteID] {
+		return fmt.Errorf("runtime snapshot pinned model route %q is absent from the catalog", snapshot.PinnedRouteID)
+	}
 	revision, err := modelrouting.CatalogRevision(descriptors)
 	if err != nil || revision != snapshot.CatalogRevision {
 		return errors.New("runtime snapshot model route catalog revision does not match")
@@ -112,17 +114,85 @@ func (r *Runtime) selectModelRoute(ctx context.Context, request turnpkg.Request,
 		return modelrouting.Decision{}, err
 	}
 	requirements := modelRequirements(request, snapshot)
-	decision, routeErr := catalog.Select(requirements)
+	selectedRouteID := snapshot.ModelRouting.PinnedRouteID
+	if selectedRouteID == "" {
+		if selected, ok, selectedErr := r.selectedModelRoute(request.RunID, snapshot); selectedErr != nil {
+			return modelrouting.Decision{}, selectedErr
+		} else if ok {
+			selectedRouteID = selected.Route.ID
+		}
+	}
+	var decision modelrouting.Decision
+	var routeErr error
+	if selectedRouteID == "" {
+		decision, routeErr = catalog.Select(requirements)
+	} else {
+		decision, routeErr = catalog.SelectRoute(selectedRouteID, requirements)
+	}
 	if eventErr := publishModelRouteDecision(ctx, request, decision, routeErr); eventErr != nil {
 		return decision, errors.Join(routeErr, eventErr)
 	}
 	return decision, routeErr
 }
 
+// ModelClientForRun returns the Chat LLM selected by the first successful
+// routing decision. Auxiliary work uses this method instead of a default model.
+func (r *Runtime) ModelClientForRun(runID string) (modelprovider.Client, error) {
+	snapshot, err := r.snapshotForRun(runID)
+	if err != nil {
+		return nil, err
+	}
+	decision, ok, err := r.selectedModelRoute(runID, snapshot)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, errors.Join(modelrouting.ErrNoCompatibleRoute, errors.New("run has no selected model route"))
+	}
+	return decision.Client, nil
+}
+
+func (r *Runtime) selectedModelRoute(runID string, snapshot *domain.RuntimeSnapshot) (modelrouting.Decision, bool, error) {
+	catalog, err := r.restoreModelRouteCatalog(snapshot.ModelRouting)
+	if err != nil {
+		return modelrouting.Decision{}, false, err
+	}
+	routeID := strings.TrimSpace(snapshot.ModelRouting.PinnedRouteID)
+	if routeID == "" {
+		if r.store == nil {
+			return modelrouting.Decision{}, false, nil
+		}
+		events, listErr := r.store.ListRunEvents(runID)
+		if listErr != nil {
+			return modelrouting.Decision{}, false, listErr
+		}
+		for _, item := range events {
+			if item.Type == domain.EventModelRouteDecided && item.Payload["outcome"] == "selected" {
+				routeID, _ = item.Payload["selected_route_id"].(string)
+				routeID = strings.TrimSpace(routeID)
+				if routeID != "" {
+					break
+				}
+			}
+		}
+	}
+	if routeID == "" {
+		return modelrouting.Decision{}, false, nil
+	}
+	binding, ok := catalog.Resolve(routeID)
+	if !ok {
+		return modelrouting.Decision{}, false, errors.Join(modelrouting.ErrNoCompatibleRoute, fmt.Errorf("selected model route %q is unavailable", routeID))
+	}
+	return modelrouting.Decision{
+		PolicyRevision: modelrouting.PolicyRevision, CatalogRevision: catalog.Revision(),
+		Route: binding.Descriptor, Client: binding.Client,
+	}, true, nil
+}
+
 func modelRequirements(request turnpkg.Request, snapshot *domain.RuntimeSnapshot) modelrouting.Requirements {
 	purpose := strings.TrimSpace(request.Role)
 	if purpose == "" {
-		purpose = "primary"
+		purpose = "answer"
 	}
 	systemPrompt := request.SystemPrompt
 	if strings.TrimSpace(systemPrompt) == "" {
@@ -139,17 +209,26 @@ func modelRequirements(request turnpkg.Request, snapshot *domain.RuntimeSnapshot
 		estimated += contextassembly.EstimateTokens(chunk.Chunk.Content)
 	}
 	toolCalling := request.Catalog != nil && len(request.Catalog.EnabledNames()) > 0
+	structuredOutput := purpose == "router" || purpose == "decide"
+	streaming := request.ModelMode != turnpkg.ModelModeText
+	if snapshot.Mode == ChatModeMultiAgent {
+		toolCalling = toolCalling || len(snapshot.Tools) > 0
+		structuredOutput = structuredOutput || NormalizeRouterMode(snapshot.RouterMode) == RouterModeAuto
+		streaming = true
+	}
 	if toolCalling {
-		definitions, _ := json.Marshal(request.Catalog.Definitions())
-		estimated += contextassembly.EstimateTokens(string(definitions))
+		if request.Catalog != nil {
+			definitions, _ := json.Marshal(request.Catalog.Definitions())
+			estimated += contextassembly.EstimateTokens(string(definitions))
+		}
 	}
 	maxInput := snapshot.ContextAssembly.ContextWindowTokens - snapshot.ContextAssembly.OutputReserveTokens - snapshot.ContextAssembly.SafetyMarginTokens
 	if maxInput > 0 && estimated > maxInput {
 		estimated = maxInput
 	}
 	return modelrouting.Requirements{
-		Purpose: purpose, ToolCalling: toolCalling, StructuredOutput: purpose == "router" || purpose == "decide",
-		Streaming: request.ModelMode != turnpkg.ModelModeText, EstimatedInputTokens: estimated,
+		Purpose: purpose, ToolCalling: toolCalling, StructuredOutput: structuredOutput,
+		Streaming: streaming, EstimatedInputTokens: estimated,
 		MaxOutputTokens: snapshot.ContextAssembly.OutputReserveTokens,
 	}
 }

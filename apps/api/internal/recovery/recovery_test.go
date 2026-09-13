@@ -106,7 +106,7 @@ func TestReconcileChildRunDelegationRebuildsCompletedResult(t *testing.T) {
 	base := domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single",
 		Agent:     domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
-		Model:     domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
+		Embedding: domain.RuntimeEmbeddingSnapshot{Provider: "local", BaseURL: "http://localhost:11434/api/embed", Model: "test", Dimensions: 3},
 		RunBudget: &domain.RuntimeRunBudget{}, CreatedAt: time.Now().UTC(),
 	}
 	parent, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, base, nil)
@@ -268,7 +268,7 @@ func createDelegationForRecovery(t *testing.T, completedChildStep bool) (*fixtur
 	base := domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single",
 		Agent:     domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
-		Model:     domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
+		Embedding: domain.RuntimeEmbeddingSnapshot{Provider: "local", BaseURL: "http://localhost:11434/api/embed", Model: "test", Dimensions: 3},
 		RunBudget: &domain.RuntimeRunBudget{}, CreatedAt: time.Now().UTC(),
 	}
 	parent, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, base, nil)

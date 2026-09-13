@@ -48,7 +48,7 @@ The rule extractor remains the high-precision fast path. It recognizes explicit 
 - `Correction: ...` / `更正：...`
 - `For this project, ...` / `项目约定：...`
 
-When no rule matches, adaptive extraction can ask the configured chat model for one structured `ADD` or `NOOP` decision. A cheap prefilter skips assistant messages, obvious questions, short or oversized messages, temporary/task-result content, and potential secrets before any auxiliary model call. Model output is constrained to durable facts, preferences, corrections, and project conventions.
+When no rule matches, adaptive extraction can ask the originating Run's selected Chat LLM for one structured `ADD` or `NOOP` decision. A cheap prefilter skips assistant messages, obvious questions, short or oversized messages, temporary/task-result content, and potential secrets before any auxiliary model call. Model output is constrained to durable facts, preferences, corrections, and project conventions.
 
 The composite extractor always runs rules first, so explicit requests do not spend an additional model request. The original Message remains authoritative evidence and every Candidate stores its `source_message_id`; model-generated text is never treated as evidence by itself.
 
@@ -58,7 +58,7 @@ Adaptive extraction has three modes:
 - `shadow`: persist adaptive Candidates as rejected with `policy_reason=adaptive_shadow_mode`, without embedding or adding durable Memory.
 - `auto`: allow adaptive Candidates above the confidence threshold to continue through policy and persistence.
 
-`shadow` is the default rollout mode. Adaptive extraction is disabled automatically when `OPENAI_API_KEY` is empty. Promote to `auto` only after reviewing shadow Candidates against representative conversations.
+`shadow` is the default rollout mode. Adaptive extraction is disabled automatically when no Chat route has a credential. Promote to `auto` only after reviewing shadow Candidates against representative conversations.
 
 ```bash
 MEMORY_ADAPTIVE_EXTRACTION_MODE=shadow

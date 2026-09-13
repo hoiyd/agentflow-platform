@@ -46,15 +46,15 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		}
 	}()
 	isolatedChild := snapshot.Delegation != nil && snapshot.Delegation.IsolatedContext
-	if !isolatedChild {
-		m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerHard, request.TurnID)
-	}
-	modelCtx := ctx
-	ctx, compaction := m.withContextSession(modelCtx, request, snapshot, isolatedChild)
 	route, err := m.runtime.selectModelRoute(ctx, request, snapshot)
 	if err != nil {
 		return turn.Result{}, err
 	}
+	if !isolatedChild {
+		m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerHard, request.TurnID, route.Client)
+	}
+	modelCtx := ctx
+	ctx, compaction := m.withContextSession(modelCtx, request, snapshot, isolatedChild)
 	if request.ModelMode == turn.ModelModeText {
 		result, executeErr := m.executeText(ctx, request, route.Client)
 		if executeErr == nil || isolatedChild || failure.Describe(executeErr).Code != "context_length_exceeded" {
@@ -64,7 +64,7 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		if compaction != nil {
 			beforeGeneration = compaction.Generation
 		}
-		advanced, compactErr := m.runtime.compactContext(modelCtx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerOverflow, request.TurnID)
+		advanced, compactErr := m.runtime.compactContext(modelCtx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerOverflow, request.TurnID, route.Client)
 		if compactErr != nil || advanced == nil || advanced.Generation <= beforeGeneration {
 			return result, executeErr
 		}

@@ -571,9 +571,8 @@ func (r *Runtime) routeEligibleWorkerAgent(ctx context.Context, runID string, re
 		log.Printf("router_start run_id=%s router_mode=query_match candidate_count=%d", runID, len(agents))
 		return rankWorkerAgentsDeclarative(agents, task, plan, requirements), nil
 	}
-	client := restored.client
-	log.Printf("router_start run_id=%s router_mode=auto candidate_count=%d llm_available=%t", runID, len(agents), client.HasAPIKey())
-	if !client.HasAPIKey() {
+	log.Printf("router_start run_id=%s router_mode=auto candidate_count=%d llm_available=%t", runID, len(agents), restored.modelConfigured)
+	if !restored.modelConfigured {
 		decision := rankWorkerAgentsDeclarative(agents, task, plan, requirements)
 		decision.FallbackReasonCode = "router_model_unconfigured"
 		log.Printf("router_auto_fallback run_id=%s reason_code=%s fallback_mode=query_match", runID, decision.FallbackReasonCode)

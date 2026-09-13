@@ -48,7 +48,7 @@ type restoredRuntime struct {
 	agent           domain.Agent
 	candidateAgents []domain.Agent
 	catalog         *tools.Catalog
-	client          modelprovider.Client
+	modelConfigured bool
 	routerMode      string
 }
 
@@ -72,17 +72,19 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 	if err != nil {
 		return domain.RuntimeSnapshot{}, err
 	}
-	identity := r.modelClient.RuntimeIdentity()
+	if r.embeddingClient == nil {
+		return domain.RuntimeSnapshot{}, errors.New("embedding client is required")
+	}
+	identity := r.embeddingClient.RuntimeIdentity()
 	runBudget := r.runBudget
 	snapshot := domain.RuntimeSnapshot{
 		SchemaVersion:   domain.CurrentRuntimeSnapshotVersion,
 		Mode:            mode,
 		Agent:           snapshotAgent(agent),
 		CandidateAgents: candidateSnapshots,
-		Model: domain.RuntimeModelSnapshot{
-			Provider: identity.Provider, BaseURL: identity.BaseURL, Model: identity.Model,
-			EmbeddingBaseURL: identity.EmbeddingBaseURL, EmbeddingModel: identity.EmbeddingModel,
-			EmbeddingDimensions: identity.EmbeddingDimensions,
+		Embedding: domain.RuntimeEmbeddingSnapshot{
+			Provider: identity.EmbeddingProvider, BaseURL: identity.EmbeddingBaseURL,
+			Model: identity.EmbeddingModel, Dimensions: identity.EmbeddingDimensions,
 		},
 		ModelRouting:       modelRouting,
 		Tools:              toolSnapshots,
@@ -248,20 +250,17 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 	if err != nil {
 		return restoredRuntime{}, err
 	}
-	if _, err := r.restoreModelRouteCatalog(snapshot.ModelRouting); err != nil {
+	modelRoutes, err := r.restoreModelRouteCatalog(snapshot.ModelRouting)
+	if err != nil {
 		return restoredRuntime{}, err
 	}
 	candidates := make([]domain.Agent, 0, len(snapshot.CandidateAgents))
 	for _, candidate := range snapshot.CandidateAgents {
 		candidates = append(candidates, restoreAgent(candidate))
 	}
-	client, err := r.clientFromSnapshot(snapshot)
-	if err != nil {
-		return restoredRuntime{}, err
-	}
 	return restoredRuntime{
 		mode: snapshot.Mode, agent: restoreAgent(snapshot.Agent), candidateAgents: candidates,
-		catalog: catalog, client: client, routerMode: NormalizeRouterMode(snapshot.RouterMode),
+		catalog: catalog, modelConfigured: modelRoutes.HasConfiguredClient(), routerMode: NormalizeRouterMode(snapshot.RouterMode),
 	}, nil
 }
 
@@ -302,22 +301,12 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 			return err
 		}
 	}
-	if strings.TrimSpace(snapshot.Model.Model) == "" {
-		return errors.New("runtime snapshot has no model")
+	if strings.TrimSpace(snapshot.Embedding.Provider) == "" || strings.TrimSpace(snapshot.Embedding.Model) == "" || strings.TrimSpace(snapshot.Embedding.BaseURL) == "" || snapshot.Embedding.Dimensions <= 0 {
+		return errors.New("runtime snapshot has no valid embedding service")
 	}
 	if snapshot.SchemaVersion >= domain.ModelRoutingRuntimeSnapshotVersion {
 		if err := validateModelRoutingSnapshot(snapshot.ModelRouting); err != nil {
 			return err
-		}
-		defaultRouteFound := false
-		for _, route := range snapshot.ModelRouting.Routes {
-			if route.Provider == snapshot.Model.Provider && route.Model == snapshot.Model.Model && route.Endpoint == snapshot.Model.BaseURL {
-				defaultRouteFound = true
-				break
-			}
-		}
-		if !defaultRouteFound {
-			return errors.New("runtime snapshot default model is absent from the model route catalog")
 		}
 	}
 	if snapshot.RunBudget == nil {
@@ -426,24 +415,27 @@ func (r *Runtime) snapshotForRun(runID string) (*domain.RuntimeSnapshot, error) 
 	return run.RuntimeSnapshot, nil
 }
 
-func (r *Runtime) clientForRun(runID string) (modelprovider.Client, error) {
+func (r *Runtime) embeddingClientForRun(runID string) (modelprovider.Client, error) {
 	snapshot, err := r.snapshotForRun(runID)
 	if err != nil {
 		return nil, err
 	}
-	return r.clientFromSnapshot(snapshot)
+	return r.embeddingClientFromSnapshot(snapshot)
 }
 
-func (r *Runtime) clientFromSnapshot(snapshot *domain.RuntimeSnapshot) (modelprovider.Client, error) {
-	current := r.modelClient.RuntimeIdentity()
-	model := snapshot.Model
-	if r.modelClient.HasAPIKey() && current.Provider != model.Provider {
-		return nil, fmt.Errorf("credential for frozen provider %q is unavailable; current provider is %q", model.Provider, current.Provider)
+func (r *Runtime) embeddingClientFromSnapshot(snapshot *domain.RuntimeSnapshot) (modelprovider.Client, error) {
+	if r.embeddingClient == nil {
+		return nil, errors.New("embedding client is unavailable")
 	}
-	return r.modelClient.WithRuntimeIdentity(modelprovider.RuntimeIdentity{
-		Provider: model.Provider, BaseURL: model.BaseURL, Model: model.Model,
-		EmbeddingBaseURL: model.EmbeddingBaseURL, EmbeddingModel: model.EmbeddingModel,
-		EmbeddingDimensions: model.EmbeddingDimensions,
+	current := r.embeddingClient.RuntimeIdentity()
+	embedding := snapshot.Embedding
+	if current.EmbeddingProvider != embedding.Provider {
+		return nil, fmt.Errorf("credential for frozen embedding provider %q is unavailable; current provider is %q", embedding.Provider, current.EmbeddingProvider)
+	}
+	return r.embeddingClient.WithRuntimeIdentity(modelprovider.RuntimeIdentity{
+		Provider: current.Provider, BaseURL: current.BaseURL, Model: current.Model,
+		EmbeddingProvider: embedding.Provider, EmbeddingBaseURL: embedding.BaseURL,
+		EmbeddingModel: embedding.Model, EmbeddingDimensions: embedding.Dimensions,
 	}), nil
 }
 

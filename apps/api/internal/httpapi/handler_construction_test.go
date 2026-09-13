@@ -56,7 +56,6 @@ func TestNewHandlerValidatesEveryRequiredDependency(t *testing.T) {
 		want string
 	}{
 		{name: "store", edit: func(d *Dependencies) { d.Store = nil }, want: "http api store is required"},
-		{name: "model client", edit: func(d *Dependencies) { d.ModelClient = nil }, want: "http api model client is required"},
 		{name: "tools", edit: func(d *Dependencies) { d.Tools = nil }, want: "http api tools manager is required"},
 		{name: "agent runtime", edit: func(d *Dependencies) { d.AgentRuntime = nil }, want: "http api agent runtime is required"},
 		{name: "memory", edit: func(d *Dependencies) { d.Memory = nil }, want: "http api memory operations are required"},
@@ -123,7 +122,7 @@ func completeHandlerDependencies(t *testing.T) Dependencies {
 	}
 	registry := verification.NewRegistry(verification.Options{})
 	return Dependencies{
-		Store: fixtureStore, ModelClient: client, Tools: manager,
+		Store: fixtureStore, Tools: manager,
 		AgentRuntime: agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fixtureStore, ModelClient: client}),
 		Memory:       &memoryOperationsStub{},
 		Knowledge:    &knowledgeOperationsStub{},

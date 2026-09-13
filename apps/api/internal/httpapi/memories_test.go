@@ -75,7 +75,7 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 	if err := provider.Initialize(context.Background()); err != nil {
 		t.Fatalf("initialize memory provider: %v", err)
 	}
-	handler := &Handler{store: fixtureStore, modelClient: client, memories: provider}
+	handler := &Handler{store: fixtureStore, memories: provider}
 	conversation, err := fixtureStore.CreateConversation("memory sync")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)

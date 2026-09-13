@@ -78,7 +78,7 @@ func TestRuntimeTurnModelDoesNotRetryOverflowWhenCompactionFails(t *testing.T) {
 }
 
 func TestCompactContextBestEffortReturnsSuccessAndSuppressesFailure(t *testing.T) {
-	makeRuntime := func(t *testing.T, summaryErr error) (*Runtime, *fixturestore.Store, domain.Run) {
+	makeRuntime := func(t *testing.T, summaryErr error) (*Runtime, *fixturestore.Store, domain.Run, modelprovider.Client) {
 		t.Helper()
 		fixtureStore := fixturestore.New()
 
@@ -101,18 +101,18 @@ func TestCompactContextBestEffortReturnsSuccessAndSuppressesFailure(t *testing.T
 		runtime := NewRuntime(RuntimeOptions{
 			Store: fixtureStore, ModelClient: client, ContextAssembly: config,
 		})
-		return runtime, fixtureStore, run
+		return runtime, fixtureStore, run, client
 	}
 
-	successRuntime, _, successRun := makeRuntime(t, nil)
-	if compaction := successRuntime.compactContextBestEffort(context.Background(), successRun.ID, successRun.ConversationID, successRun.RuntimeSnapshot, contextassembly.CompactionTriggerHard, "turn-success"); compaction == nil || compaction.Generation != 1 {
+	successRuntime, _, successRun, successClient := makeRuntime(t, nil)
+	if compaction := successRuntime.compactContextBestEffort(context.Background(), successRun.ID, successRun.ConversationID, successRun.RuntimeSnapshot, contextassembly.CompactionTriggerHard, "turn-success", successClient); compaction == nil || compaction.Generation != 1 {
 		t.Fatalf("best-effort success did not return committed generation: %#v", compaction)
 	}
-	failureRuntime, _, failureRun := makeRuntime(t, context.DeadlineExceeded)
-	if compaction := failureRuntime.compactContextBestEffort(context.Background(), failureRun.ID, failureRun.ConversationID, failureRun.RuntimeSnapshot, contextassembly.CompactionTriggerHard, "turn-failure"); compaction != nil {
+	failureRuntime, _, failureRun, failureClient := makeRuntime(t, context.DeadlineExceeded)
+	if compaction := failureRuntime.compactContextBestEffort(context.Background(), failureRun.ID, failureRun.ConversationID, failureRun.RuntimeSnapshot, contextassembly.CompactionTriggerHard, "turn-failure", failureClient); compaction != nil {
 		t.Fatalf("best-effort failure should be suppressed: %#v", compaction)
 	}
-	if compaction, err := (*Runtime)(nil).compactContext(context.Background(), "run", "conversation", nil, contextassembly.CompactionTriggerHard, ""); err != nil || compaction != nil {
+	if compaction, err := (*Runtime)(nil).compactContext(context.Background(), "run", "conversation", nil, contextassembly.CompactionTriggerHard, "", nil); err != nil || compaction != nil {
 		t.Fatalf("nil runtime should be a no-op: compaction=%#v err=%v", compaction, err)
 	}
 }
@@ -151,8 +151,6 @@ func setOverflowModelSnapshot(t *testing.T, snapshot *domain.RuntimeSnapshot, cl
 	if err != nil {
 		t.Fatal(err)
 	}
-	identity := client.RuntimeIdentity()
-	snapshot.Model = domain.RuntimeModelSnapshot{Provider: identity.Provider, BaseURL: identity.BaseURL, Model: identity.Model}
 	snapshot.ModelRouting = modelRouting
 }
 

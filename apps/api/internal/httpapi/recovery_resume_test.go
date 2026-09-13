@@ -69,7 +69,7 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 		},
 	})
 	handler := &Handler{
-		store: fixtureStore, modelClient: client, agentRuntime: runtime,
+		store: fixtureStore, agentRuntime: runtime,
 		runController: concurrency.NewRunController(concurrency.RunOptions{
 			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
 		}),
@@ -208,7 +208,8 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testi
 	delegationID := "delegation-api-resume"
 	childSnapshot := domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: agent.ChatModeSingle,
-		Agent: selected, Model: prepared.Run.RuntimeSnapshot.Model,
+		Agent: selected, Embedding: prepared.Run.RuntimeSnapshot.Embedding,
+		ModelRouting:       prepared.Run.RuntimeSnapshot.ModelRouting,
 		ContextAssembly:    prepared.Run.RuntimeSnapshot.ContextAssembly,
 		RunBudget:          &domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000},
 		ToolSecurityPolicy: prepared.Run.RuntimeSnapshot.ToolSecurityPolicy,
@@ -242,7 +243,7 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testi
 	}
 
 	handler := &Handler{
-		store: fixtureStore, modelClient: client, agentRuntime: runtime,
+		store: fixtureStore, agentRuntime: runtime,
 		runController: concurrency.NewRunController(concurrency.RunOptions{
 			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
 		}),

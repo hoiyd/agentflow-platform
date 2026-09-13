@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,6 +14,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/modelrouting"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
@@ -95,6 +98,49 @@ func TestContextAssemblyConfigMapsAllSettings(t *testing.T) {
 	}
 }
 
+func TestModelRouteCatalogTreatsConfiguredModelsAsPeers(t *testing.T) {
+	generalClient := openai.NewClient("", "https://general.example/v1", "general-chat")
+	priorityClient := openai.NewClient("", "https://priority.example/v1", "priority-chat")
+	general := modelrouting.RouteConfig{
+		ID: "general", BaseURL: "https://general.example/v1", Model: "general-chat",
+		CredentialEnvironment: "GENERAL_MODEL_API_KEY", RequestTimeoutSeconds: 300,
+		Capabilities:        modelrouting.Capabilities{ToolCalling: true, StructuredOutput: true, Streaming: true},
+		ContextWindowTokens: 128000, MaxOutputTokens: 4096, Priority: 100,
+		Pricing: modelrouting.Pricing{Source: "test_fixture"},
+	}
+	route := modelrouting.RouteConfig{
+		ID: "priority", BaseURL: "https://priority.example/v1", Model: "priority-chat",
+		CredentialEnvironment: "PRIORITY_MODEL_API_KEY", RequestTimeoutSeconds: 300,
+		Capabilities:        modelrouting.Capabilities{StructuredOutput: true, Streaming: true},
+		ContextWindowTokens: 64000, MaxOutputTokens: 4096, Priority: 120,
+		Pricing: modelrouting.Pricing{Source: "test_fixture"},
+	}
+	catalog, err := modelrouting.NewCatalog(modelrouting.Binding{
+		Descriptor: general.Descriptor(generalClient.RuntimeIdentity().Provider), Client: generalClient,
+	}, modelrouting.Binding{
+		Descriptor: route.Descriptor(priorityClient.RuntimeIdentity().Provider), Client: priorityClient,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptors := catalog.Descriptors()
+	if len(descriptors) != 2 || descriptors[1].ID != "priority" || descriptors[1].Model != "priority-chat" ||
+		descriptors[1].Priority != 120 || descriptors[1].Capabilities.ToolCalling ||
+		!descriptors[1].Capabilities.StructuredOutput || descriptors[1].CredentialEnvironment != "PRIORITY_MODEL_API_KEY" {
+		t.Fatalf("unexpected model route catalog: %#v", descriptors)
+	}
+	decision, err := catalog.Select(domain.ModelRouteRequirements{Purpose: "primary", Streaming: true, MaxOutputTokens: 4096})
+	if err != nil || decision.Route.ID != "priority" {
+		t.Fatalf("configured priority did not select priority route: route=%q err=%v", decision.Route.ID, err)
+	}
+	decision, err = catalog.Select(domain.ModelRouteRequirements{
+		Purpose: "primary", Streaming: true, EstimatedInputTokens: 70000, MaxOutputTokens: 4096,
+	})
+	if err != nil || decision.Route.ID != "general" {
+		t.Fatalf("capacity filter did not retain the compatible general route: route=%q err=%v", decision.Route.ID, err)
+	}
+}
+
 func TestAnswerRelevanceEmbedderMapsEmbeddingAndError(t *testing.T) {
 	client := &answerRelevanceEmbeddingClientStub{embedding: openai.Embedding{
 		Vector: []float64{0.1, 0.2}, Model: "embedding-model", Provider: "provider",
@@ -118,14 +164,18 @@ func TestAnswerRelevanceEmbedderMapsEmbeddingAndError(t *testing.T) {
 }
 
 func TestNewApplicationWiresHealthRoute(t *testing.T) {
+	routePath := filepath.Join(t.TempDir(), "model-routes.json")
+	if err := os.WriteFile(routePath, []byte(`{"routes":[{"id":"test","base_url":"https://api.openai.com/v1","model":"test-model","credential_environment":"TEST_MODEL_API_KEY","request_timeout_seconds":1,"capabilities":{"tool_calling":true,"structured_output":true,"streaming":true},"context_window_tokens":128000,"max_output_tokens":8192,"priority":100,"pricing":{"source":"test"}}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TEST_MODEL_API_KEY", "fixture-key")
 	cfg := config.Config{
 		Port:                       "0",
-		OpenAIBaseURL:              "https://api.openai.com/v1",
-		OpenAIModel:                "test-model",
+		ModelRouteConfigPath:       routePath,
 		EmbeddingBaseURL:           "http://localhost:11434/api/embed",
 		EmbeddingModel:             "test-embedding",
 		EmbeddingDimensions:        1536,
-		OpenAITimeout:              time.Second,
+		EmbeddingRequestTimeout:    time.Second,
 		MaxConcurrentRuns:          1,
 		RunQueueSize:               1,
 		RunQueueWaitTimeout:        time.Second,

@@ -5,11 +5,11 @@ import { compareEvidence, evidenceDelta } from "./evidence-comparison.ts";
 
 function bundle(overrides = {}) {
   const snapshot = overrides.snapshot === undefined ? {
-    schema_version: 12,
+    schema_version: 17,
     mode: "single",
     agent: { id: "agent-1", system_prompt: "Be precise" },
-    model: { provider: "openai", model: "gpt-test" },
-    model_routing: { policy_revision: "model-route-priority-v1", routes: [{ id: "primary", model: "gpt-test" }] },
+    embedding: { provider: "local", base_url: "http://localhost:11434/api/embed", model: "embedding-test", dimensions: 1536 },
+    model_routing: { policy_revision: "model-route-priority-v1", routes: [{ id: "general", model: "gpt-test" }] },
     tools: [{ name: "get_current_time" }],
     context_assembly: { history_max_tokens: 2000 },
     run_budget: { max_total_tokens: 4000 },
@@ -21,7 +21,7 @@ function bundle(overrides = {}) {
     replay: {
       run: { id: overrides.runId ?? "run-current", status: overrides.status ?? "completed" },
       runtime_snapshot: snapshot,
-      run_events: overrides.events ?? [],
+      run_events: overrides.events ?? [{ type: "model.route_decided", payload: { outcome: "selected", selected_route_id: "general", provider: "openai", model: "gpt-test" } }],
       tool_artifacts: overrides.toolArtifacts ?? []
     },
     report: {
@@ -84,7 +84,7 @@ test("one predeclared runtime dimension is accepted as a single-variable compari
 test("identity drift stays side-by-side and suppresses deltas", () => {
   const baseline = bundle({ runId: "run-baseline" });
   const currentSnapshot = structuredClone(baseline.replay.runtime_snapshot);
-  currentSnapshot.model.model = "other-model";
+  currentSnapshot.model_routing.routes[0].model = "other-model";
   currentSnapshot.tools = [];
 
   const comparison = compareEvidence(bundle({ task: "A different task", snapshot: currentSnapshot }), baseline);

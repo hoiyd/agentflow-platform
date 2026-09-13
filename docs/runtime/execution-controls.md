@@ -116,13 +116,14 @@ ordered by explicit priority and stable route ID. No candidate returns
 ## 3. Provider Timeout and Retry
 
 ```env
-OPENAI_REQUEST_TIMEOUT=5m
+# Per Chat route: "request_timeout_seconds": 300
+EMBEDDING_REQUEST_TIMEOUT=5m
 MODEL_RETRY_MAX_ATTEMPTS=3
 MODEL_RETRY_BASE_DELAY=500ms
 MODEL_RETRY_MAX_DELAY=5s
 ```
 
-- Request timeout applies to one physical provider attempt.
+- Each Chat route owns its request timeout; Embedding has an independent timeout.
 - Maximum attempts includes the initial request; `1` disables retries.
 - Base and maximum delay control exponential backoff; the maximum also caps a
   provider `Retry-After` value.

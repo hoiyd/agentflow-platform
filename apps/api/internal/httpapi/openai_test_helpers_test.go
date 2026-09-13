@@ -15,7 +15,7 @@ func testRuntimeSnapshot() domain.RuntimeSnapshot {
 	client := newLocalFallbackOpenAIClientForTest()
 	identity := client.RuntimeIdentity()
 	catalog, err := modelrouting.NewCatalog(modelrouting.Binding{Descriptor: modelrouting.Descriptor{
-		ID: "primary", Provider: identity.Provider, Model: identity.Model, Endpoint: identity.BaseURL,
+		ID: "single", Provider: identity.Provider, Model: identity.Model, Endpoint: identity.BaseURL,
 		Capabilities:        modelrouting.Capabilities{ToolCalling: true, StructuredOutput: true, Streaming: true},
 		ContextWindowTokens: 128000, MaxOutputTokens: 8192, Priority: 100,
 		Pricing: modelrouting.Pricing{Source: "test_fixture"},
@@ -28,7 +28,7 @@ func testRuntimeSnapshot() domain.RuntimeSnapshot {
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: agentpkg.ChatModeAutonomous,
 		RunBudget: &domain.RuntimeRunBudget{},
 		Agent:     domain.RuntimeAgentSnapshot{ID: "agent_planner", Name: "Planner", SystemPrompt: "Plan carefully.", Executor: domain.DefaultAgentExecutor},
-		Model:     domain.RuntimeModelSnapshot{Provider: identity.Provider, BaseURL: identity.BaseURL, Model: identity.Model, EmbeddingBaseURL: identity.EmbeddingBaseURL, EmbeddingModel: identity.EmbeddingModel, EmbeddingDimensions: identity.EmbeddingDimensions},
+		Embedding: domain.RuntimeEmbeddingSnapshot{Provider: identity.EmbeddingProvider, BaseURL: identity.EmbeddingBaseURL, Model: identity.EmbeddingModel, Dimensions: identity.EmbeddingDimensions},
 		ModelRouting: domain.ModelRouteCatalogSnapshot{
 			PolicyRevision: modelrouting.PolicyRevision, CatalogRevision: catalog.Revision(),
 			Routes: []domain.ModelRouteDescriptor{route},

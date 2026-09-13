@@ -46,7 +46,8 @@ export type EvidenceMetric = keyof EvidenceSide["metrics"];
 
 const experimentDimensions = [
   { key: "agent", label: "Agent definition", fields: ["agent", "candidate_agents"] },
-  { key: "model", label: "Model", fields: ["model", "model_routing"] },
+  { key: "model", label: "Model routing", fields: ["model_routing"] },
+  { key: "embedding", label: "Embedding", fields: ["embedding"] },
   { key: "tools", label: "Tool set", fields: ["tools"] },
   { key: "context_assembly", label: "Context assembly", fields: ["context_assembly"] },
   { key: "run_budget", label: "Run budget", fields: ["run_budget"] },
@@ -174,10 +175,12 @@ function agentIdentity(replay: RunReplay, report: EpisodeReport): string | null 
 }
 
 function modelIdentity(replay: RunReplay, report: EpisodeReport): string | null {
-  const model = recordOrNull(replay.runtime_snapshot?.model);
-  const provider = stringOrNull(model?.provider);
-  const name = stringOrNull(model?.model) ?? report.llm_calls.map((call) => stringOrNull(call.model)).find(Boolean) ?? null;
-  return name ? [provider, name].filter(Boolean).join(" / ") : null;
+	const decision = replay.run_events.find((event) =>
+		event.type === "model.route_decided" && stringOrNull(event.payload.outcome) === "selected"
+	);
+	const provider = stringOrNull(decision?.payload.provider);
+	const name = stringOrNull(decision?.payload.model) ?? report.llm_calls.map((call) => stringOrNull(call.model)).find(Boolean) ?? null;
+	return name ? [provider, name].filter(Boolean).join(" / ") : null;
 }
 
 function runtimeSnapshotHash(requests: ModelRequestDebugResponse): string | null {

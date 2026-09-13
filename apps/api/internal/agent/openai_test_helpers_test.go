@@ -11,7 +11,7 @@ import (
 
 func testRuntimeSnapshot() domain.RuntimeSnapshot {
 	client := newLocalFallbackOpenAIClientForTest()
-	catalog, err := defaultModelRouteCatalog(client, domain.ContextAssemblyConfig{}, domain.RuntimeRunBudget{})
+	catalog, err := singleModelRouteCatalog(client, domain.ContextAssemblyConfig{}, domain.RuntimeRunBudget{})
 	if err != nil {
 		panic(err)
 	}
@@ -25,7 +25,7 @@ func testRuntimeSnapshot() domain.RuntimeSnapshot {
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: ChatModeAutonomous,
 		RunBudget:          &domain.RuntimeRunBudget{},
 		Agent:              domain.RuntimeAgentSnapshot{ID: "agent_planner", Name: "Planner", SystemPrompt: "Plan carefully.", Executor: domain.DefaultAgentExecutor},
-		Model:              domain.RuntimeModelSnapshot{Provider: identity.Provider, BaseURL: identity.BaseURL, Model: identity.Model, EmbeddingBaseURL: identity.EmbeddingBaseURL, EmbeddingModel: identity.EmbeddingModel, EmbeddingDimensions: identity.EmbeddingDimensions},
+		Embedding:          domain.RuntimeEmbeddingSnapshot{Provider: identity.EmbeddingProvider, BaseURL: identity.EmbeddingBaseURL, Model: identity.EmbeddingModel, Dimensions: identity.EmbeddingDimensions},
 		ModelRouting:       modelRouting,
 		AutonomousLimits:   &domain.RuntimeLimitsSnapshot{MaxIterations: 5, MaxRuntimeMS: 300000, MaxOutputChars: 60000, MaxToolCalls: 20},
 		ToolSecurityPolicy: toolpolicy.DefaultPolicy(),

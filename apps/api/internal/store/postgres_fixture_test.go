@@ -42,7 +42,7 @@ func testRuntimeSnapshot() domain.RuntimeSnapshot {
 		RunBudget:     &domain.RuntimeRunBudget{},
 		Mode:          "single",
 		Agent:         domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
-		Model:         domain.RuntimeModelSnapshot{Provider: "local", BaseURL: route.Endpoint, Model: "test"},
+		Embedding:     domain.RuntimeEmbeddingSnapshot{Provider: "local", BaseURL: "http://localhost:11434/api/embed", Model: "test-embedding", Dimensions: 1536},
 		ModelRouting:  domain.ModelRouteCatalogSnapshot{PolicyRevision: modelrouting.PolicyRevision, CatalogRevision: catalogRevision, Routes: []domain.ModelRouteDescriptor{route}},
 		ToolSecurityPolicy: toolpolicy.Policy{
 			Version: "round-trip-policy-v1", DefaultAction: toolpolicy.ActionDeny,

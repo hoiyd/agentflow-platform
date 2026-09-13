@@ -28,7 +28,7 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 	}
 	metadata := []string{
 		snapshot.Agent.Name, snapshot.Agent.Description, snapshot.Agent.SystemPrompt,
-		snapshot.Model.BaseURL, snapshot.Model.EmbeddingBaseURL,
+		snapshot.Embedding.BaseURL,
 	}
 	for _, route := range snapshot.ModelRouting.Routes {
 		metadata = append(metadata, route.ID, route.Provider, route.Model, route.Endpoint, route.Pricing.Source, route.CredentialEnvironment)

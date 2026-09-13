@@ -59,7 +59,7 @@ func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flush
 
 	title := ""
 	if request.GenerateTitle {
-		title = h.summarizeConversationTitleBestEffort(ctx, scoped, request.ConversationID, request.UserInput, request.Assistant)
+		title = h.summarizeConversationTitleBestEffort(ctx, scoped, request.RunID, request.ConversationID, request.UserInput, request.Assistant)
 	}
 	writeSSE(w, "done", domain.ChatChunk{
 		Type:               "done",

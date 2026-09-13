@@ -123,6 +123,10 @@ func NewClientWithTimeout(apiKey string, baseURL string, model string, timeout t
 	return NewClientWithTimeoutAndEmbeddingModel(apiKey, baseURL, defaultEmbeddingBaseURL, model, defaultEmbeddingModel, 1536, timeout)
 }
 
+func NewEmbeddingClient(apiKey string, baseURL string, model string, dimensions int, timeout time.Duration) *Client {
+	return NewClientWithTimeoutAndEmbeddingModel(apiKey, baseURL, baseURL, "", model, dimensions, timeout)
+}
+
 func NewClientWithTimeoutAndEmbeddingModel(apiKey string, baseURL string, embeddingBaseURL string, model string, embeddingModel string, embeddingDimensions int, timeout time.Duration) *Client {
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
@@ -195,7 +199,7 @@ func (c *Client) RuntimeIdentity() RuntimeIdentity {
 	return RuntimeIdentity{
 		Provider: providerForURL(c.baseURL), BaseURL: safeRuntimeURL(c.baseURL), Model: c.model,
 		EmbeddingBaseURL: safeRuntimeURL(c.embeddingBaseURL), EmbeddingModel: c.embeddingModel,
-		EmbeddingDimensions: c.embeddingDimensions,
+		EmbeddingDimensions: c.embeddingDimensions, EmbeddingProvider: providerForURL(c.embeddingBaseURL),
 	}
 }
 

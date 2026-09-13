@@ -31,7 +31,7 @@ import (
 
 type Runtime struct {
 	store                 RuntimeStore
-	modelClient           modelprovider.Client
+	embeddingClient       modelprovider.Client
 	modelRoutes           *modelrouting.Catalog
 	modelRoutesErr        error
 	tools                 *tools.Manager
@@ -102,8 +102,11 @@ type PreparedRun struct {
 // RuntimeOptions captures the complete runtime policy at construction time so
 // new Runs can freeze one coherent snapshot without post-construction setters.
 type RuntimeOptions struct {
-	Store              RuntimeStore
+	Store RuntimeStore
+	// ModelClient is a one-route compatibility shorthand for existing tests.
+	// Production composition supplies ModelRoutes and EmbeddingClient separately.
 	ModelClient        modelprovider.Client
+	EmbeddingClient    modelprovider.Client
 	ModelRoutes        *modelrouting.Catalog
 	Tools              *tools.Manager
 	RouterMode         string
@@ -122,7 +125,11 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 	modelRoutes := options.ModelRoutes
 	var modelRoutesErr error
 	if modelRoutes == nil {
-		modelRoutes, modelRoutesErr = defaultModelRouteCatalog(options.ModelClient, options.ContextAssembly, options.RunBudget)
+		modelRoutes, modelRoutesErr = singleModelRouteCatalog(options.ModelClient, options.ContextAssembly, options.RunBudget)
+	}
+	embeddingClient := options.EmbeddingClient
+	if embeddingClient == nil {
+		embeddingClient = options.ModelClient
 	}
 	progressConfig := options.ToolProgressGuard
 	if strings.TrimSpace(progressConfig.Version) == "" {
@@ -150,7 +157,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 	}
 	runtime := &Runtime{
 		store:                 options.Store,
-		modelClient:           options.ModelClient,
+		embeddingClient:       embeddingClient,
 		modelRoutes:           modelRoutes,
 		modelRoutesErr:        modelRoutesErr,
 		tools:                 options.Tools,
@@ -241,12 +248,6 @@ func (r *Runtime) PrepareChatRunWithContract(ctx context.Context, agentID string
 func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string) (<-chan domain.RunEvent, <-chan error) {
 	events := make(chan domain.RunEvent)
 	errs := make(chan error, 1)
-	if _, err := r.clientForRun(prepared.Run.ID); err != nil {
-		close(events)
-		errs <- err
-		close(errs)
-		return events, errs
-	}
 	catalog := prepared.Catalog
 	if catalog == nil {
 		catalog, _ = tools.NewCatalog()
@@ -398,7 +399,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
 		return nil, nil
 	}
-	client, err := r.clientForRun(runID)
+	client, err := r.embeddingClientForRun(runID)
 	if err != nil {
 		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: failure.Merge(map[string]any{"error": err.Error()}, err)})
 		return nil, nil

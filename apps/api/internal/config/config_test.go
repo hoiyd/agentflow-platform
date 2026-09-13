@@ -38,6 +38,15 @@ func TestLoadRunBudgetConfiguration(t *testing.T) {
 	}
 }
 
+func TestLoadModelRouteConfigPath(t *testing.T) {
+	t.Setenv("MODEL_ROUTE_CONFIG_PATH", ".data/model-routes.json")
+	t.Setenv("EMBEDDING_REQUEST_TIMEOUT", "45s")
+	cfg := Load()
+	if cfg.ModelRouteConfigPath != ".data/model-routes.json" || cfg.EmbeddingRequestTimeout != 45*time.Second {
+		t.Fatalf("model and embedding config: %#v", cfg)
+	}
+}
+
 func TestLoadChildRunDelegationConfiguration(t *testing.T) {
 	t.Setenv("MAX_CONCURRENT_CHILD_RUNS", "3")
 	t.Setenv("MAX_CHILD_RUNS_PER_PARENT", "2")
