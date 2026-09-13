@@ -19,6 +19,9 @@ assembler's last input-budget check.
 
 Context compaction is non-destructive. It creates a persisted structured summary for older conversation messages; it never deletes or overwrites the original messages. On subsequent model calls, the assembler injects that summary, excludes the covered raw messages, and keeps the recent raw tail.
 
+The summarizer always uses the Chat LLM selected for the originating Run. It
+does not use the independent embedding service or a default Chat model.
+
 Source-aware session history retrieval closes the remaining recovery gap. Before
 each model call, the Runtime searches the durable conversation Messages and
 execution Events using terms from the current input. It can reintroduce exact
@@ -47,7 +50,7 @@ Structured Task State is injected as bounded JSON and recorded in the Manifest
 with a versioned reference such as `conversation_id:v3`. Its raw facts remain in
 the immutable Revision snapshot rather than the Manifest. See
 [Structured Durable Task State](../runtime/task-state.md). Runtime Snapshot v8
-introduced this protocol; the current v15 Snapshot always uses it. Earlier
+introduced this protocol; the current v16 Snapshot always uses it. Earlier
 snapshots are Replay-only.
 
 After assembly and application of effective request limits, the model adapter
@@ -80,11 +83,11 @@ query-bearing retrieval and context trace Events from recursively matching
 themselves. Explicit Event ID/type queries can search any persisted Event type.
 
 Retrieval is best effort. Store or search failures emit
-`session_history.search_failed` and do not block the primary model call.
+`session_history.search_failed` and do not block the answer model call.
 Successful calls emit `session_history.search_started` and
 `session_history.search_completed` with references and counts, not raw source
 content. Runtime Snapshot v6 introduced frozen retrieval limits; the current
-v15 Snapshot retains them. Earlier snapshots are Replay-only.
+v17 Snapshot retains them. Snapshot v16 and earlier are Replay-only.
 
 ## When Compaction Runs
 

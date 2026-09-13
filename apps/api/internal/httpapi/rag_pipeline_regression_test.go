@@ -144,7 +144,6 @@ func newPipelineRegressionFixture(t *testing.T) *pipelineRegressionFixture {
 	fullStore := fullStoreForTest(t, dependencies)
 	pipeline := rag.NewRetrievalPipeline(fullStore)
 	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(fullStore, client, pipeline)
-	dependencies.ModelClient = client
 	dependencies.Knowledge = knowledgeBase
 	dependencies.AgentRuntime = agentpkg.NewRuntime(agentpkg.RuntimeOptions{
 		Store:              fullStore,

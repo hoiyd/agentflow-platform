@@ -1,0 +1,44 @@
+{
+  "routes": [
+    {
+      "id": "deepseek-flash",
+      "base_url": "https://api.deepseek.com",
+      "model": "deepseek-flash",
+      "credential_environment": "DEEPSEEK_API_KEY",
+      "request_timeout_seconds": 300,
+      "capabilities": {
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true
+      },
+      "context_window_tokens": 128000,
+      "max_output_tokens": 8192,
+      "priority": 100,
+      "pricing": {
+        "source": "local_configuration",
+        "input_per_million_tokens_micros": 0,
+        "output_per_million_tokens_micros": 0
+      }
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "base_url": "https://api.deepseek.com",
+      "model": "deepseek-v4-pro",
+      "credential_environment": "DEEPSEEK_API_KEY",
+      "request_timeout_seconds": 300,
+      "capabilities": {
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": true
+      },
+      "context_window_tokens": 128000,
+      "max_output_tokens": 8192,
+      "priority": 50,
+      "pricing": {
+        "source": "local_configuration",
+        "input_per_million_tokens_micros": 0,
+        "output_per_million_tokens_micros": 0
+      }
+    }
+  ]
+}

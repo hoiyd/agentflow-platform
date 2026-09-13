@@ -200,7 +200,7 @@ func TestValidateReconstructabilityRejectsDuplicatePreparedEvent(t *testing.T) {
 func TestRecorderFailsClosedAndSkipsUnscopedCalls(t *testing.T) {
 	snapshot := domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single",
-		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Model: domain.RuntimeModelSnapshot{Provider: "test", Model: "test-model"},
+		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Embedding: domain.RuntimeEmbeddingSnapshot{Provider: "test", BaseURL: "https://embedding.test/v1", Model: "test-embedding", Dimensions: 3},
 		ContextAssembly: domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1"}, RunBudget: &domain.RuntimeRunBudget{},
 	}
 	validRun := domain.Run{ID: "run-recorder", ConversationID: "conversation-recorder", RuntimeSnapshot: &snapshot}
@@ -311,7 +311,7 @@ func newCaptureTestRun(t *testing.T) (*store.PostgresStore, domain.Run, string) 
 	}
 	run, err := pgStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single",
-		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Model: domain.RuntimeModelSnapshot{Provider: "test", Model: "test-model"},
+		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Embedding: domain.RuntimeEmbeddingSnapshot{Provider: "test", BaseURL: "https://embedding.test/v1", Model: "test-embedding", Dimensions: 3},
 		ContextAssembly: domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1"}, RunBudget: &domain.RuntimeRunBudget{},
 	}, nil)
 

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"agentflow-platform/apps/api/internal/httpapi"
 	"agentflow-platform/apps/api/internal/knowledge"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
+	"agentflow-platform/apps/api/internal/modelrouting"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/recovery"
@@ -27,11 +29,10 @@ import (
 )
 
 type applicationDependencies struct {
-	store           store.Store
-	handler         *httpapi.Handler
-	memoryProvider  memorypkg.Provider
-	runController   *concurrency.RunController
-	modelConfigured bool
+	store          store.Store
+	handler        *httpapi.Handler
+	memoryProvider memorypkg.Provider
+	runController  *concurrency.RunController
 }
 
 func buildDependencies(cfg config.Config) (applicationDependencies, error) {
@@ -60,20 +61,40 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		log.Printf("native recovery reconciled %d child run delegation(s)", reconciled)
 	}
 
-	providerCredential := credential.FromEnvironment("OPENAI_API_KEY")
-	modelClient := newModelClient(cfg, providerCredential)
-	modelClient.SetToolEffectJournal(appStore)
-	modelClient.SetToolArtifactStore(appStore)
-	modelClient.SetToolArtifactPolicy(openai.ToolArtifactPolicy{
-		MaxBatchResultBytes: cfg.ToolResultMaxBatchBytes,
-		MaxArtifactBytes:    cfg.ToolArtifactMaxBytes,
-		PreviewBytes:        cfg.ToolArtifactPreviewBytes,
-		Retention:           cfg.ToolArtifactRetention,
+	requestLimiter := concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{
+		MaxConcurrent:     cfg.MaxConcurrentModelRequests,
+		RequestsPerPeriod: cfg.ModelRequestsPerMinute,
+		TokensPerPeriod:   cfg.ModelTokensPerMinute,
 	})
-	modelClient.SetRequestRecorder(requestcapture.NewRecorder(appStore, requestcapture.Options{
+	requestRecorder := requestcapture.NewRecorder(appStore, requestcapture.Options{
 		Mode: domain.ModelRequestCaptureMode(cfg.ModelRequestCaptureMode), MaxBytes: cfg.ModelRequestCaptureMaxBytes,
 		Retention: cfg.ModelRequestCaptureRetention,
-	}))
+	})
+	embeddingClient := newEmbeddingClient(cfg, credential.FromEnvironment("EMBEDDING_API_KEY"), requestLimiter)
+	embeddingClient.SetRequestRecorder(requestRecorder)
+	routeFile, err := modelrouting.LoadRouteFile(cfg.ModelRouteConfigPath)
+	if err != nil {
+		return applicationDependencies{}, err
+	}
+	configured := make([]modelrouting.Binding, 0, len(routeFile.Routes))
+	for _, route := range routeFile.Routes {
+		if strings.TrimSpace(route.CredentialEnvironment) == "" {
+			return applicationDependencies{}, fmt.Errorf("model route %q has no credential environment reference", route.ID)
+		}
+		routeCredential := credential.FromEnvironment(route.CredentialEnvironment)
+		if !routeCredential.Available() {
+			return applicationDependencies{}, fmt.Errorf("model route %q credential environment %q is unset", route.ID, route.CredentialEnvironment)
+		}
+		routeClient := newModelClient(cfg, routeCredential, route, requestLimiter)
+		configureModelClient(routeClient, cfg, appStore, requestRecorder)
+		configured = append(configured, modelrouting.Binding{
+			Descriptor: route.Descriptor(routeClient.RuntimeIdentity().Provider), Client: routeClient,
+		})
+	}
+	modelRoutes, err := modelrouting.NewCatalog(configured...)
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("create model route catalog: %w", err)
+	}
 	toolManager, err := tools.NewManager(cfg.ToolConfigPath)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
@@ -83,19 +104,23 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		AllowedCommands:         splitCSV(cfg.VerificationAllowedCommands),
 		AllowedHTTPHosts:        splitCSV(cfg.VerificationAllowedHTTPHosts),
 		MaxArtifactBytes:        cfg.VerificationMaxArtifactBytes,
-		AnswerRelevanceEmbedder: newAnswerRelevanceEmbedder(modelClient),
+		AnswerRelevanceEmbedder: newAnswerRelevanceEmbedder(embeddingClient),
 	})
 	verificationEngine := verification.NewEngine(appStore, verifierRegistry)
 	retrievalPipeline := rag.NewRetrievalPipeline(appStore)
-	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, modelClient, retrievalPipeline)
-	memoryProvider := newMemoryProvider(cfg, appStore, modelClient, providerCredential.Available())
-	if err := memoryProvider.Initialize(context.Background()); err != nil {
-		return applicationDependencies{}, fmt.Errorf("initialize memory provider: %w", err)
-	}
+	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, embeddingClient, retrievalPipeline)
+	var agentRuntime *agent.Runtime
+	memoryProvider := newMemoryProvider(cfg, appStore, embeddingClient, modelRoutes.HasConfiguredClient(), func(runID string) (memorypkg.CandidateCompletionModel, error) {
+		if agentRuntime == nil {
+			return nil, errors.New("agent runtime is not initialized")
+		}
+		return agentRuntime.ModelClientForRun(runID)
+	})
 
-	agentRuntime := agent.NewRuntime(agent.RuntimeOptions{
+	agentRuntime = agent.NewRuntime(agent.RuntimeOptions{
 		Store:           appStore,
-		ModelClient:     modelClient,
+		EmbeddingClient: embeddingClient,
+		ModelRoutes:     modelRoutes,
 		Tools:           toolManager,
 		RouterMode:      cfg.RouterMode,
 		ContextAssembly: contextAssemblyConfig(cfg),
@@ -132,6 +157,9 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			},
 		},
 	})
+	if err := memoryProvider.Initialize(context.Background()); err != nil {
+		return applicationDependencies{}, fmt.Errorf("initialize memory provider: %w", err)
+	}
 	runController := concurrency.NewRunController(concurrency.RunOptions{
 		MaxConcurrent: cfg.MaxConcurrentRuns,
 		QueueSize:     cfg.RunQueueSize,
@@ -139,7 +167,6 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	})
 	handler, err := httpapi.NewHandler(httpapi.Dependencies{
 		Store:          appStore,
-		ModelClient:    modelClient,
 		Tools:          toolManager,
 		AgentRuntime:   agentRuntime,
 		Memory:         memoryProvider,
@@ -158,7 +185,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	cleanupStore = false
 	return applicationDependencies{
 		store: appStore, handler: handler, memoryProvider: memoryProvider,
-		runController: runController, modelConfigured: providerCredential.Available(),
+		runController: runController,
 	}, nil
 }
 
@@ -179,13 +206,13 @@ func newAnswerRelevanceEmbedder(client answerRelevanceEmbeddingClient) verificat
 	}
 }
 
-func newMemoryProvider(cfg config.Config, appStore store.Store, modelClient *openai.Client, modelConfigured bool) *memorypkg.BuiltinProvider {
+func newMemoryProvider(cfg config.Config, appStore store.Store, embeddingClient *openai.Client, modelConfigured bool, modelForRun func(string) (memorypkg.CandidateCompletionModel, error)) *memorypkg.BuiltinProvider {
 	var fallback memorypkg.CandidateExtractor
 	adaptiveEnabled := cfg.MemoryAdaptiveExtractionMode == memorypkg.AdaptiveModeShadow || cfg.MemoryAdaptiveExtractionMode == memorypkg.AdaptiveModeAuto
 	if modelConfigured && adaptiveEnabled {
-		fallback = memorypkg.AdaptiveCandidateExtractor{Model: modelClient}
+		fallback = memorypkg.AdaptiveCandidateExtractor{ModelForRun: modelForRun}
 	}
-	return memorypkg.NewBuiltinProvider(appStore, modelClient, memorypkg.ProviderOptions{
+	return memorypkg.NewBuiltinProvider(appStore, embeddingClient, memorypkg.ProviderOptions{
 		QueueSize: cfg.MemorySyncQueueSize, JobTimeout: cfg.MemorySyncJobTimeout,
 		MaxAttempts: cfg.MemoryProviderMaxAttempts, RetryBaseDelay: cfg.MemoryProviderRetryBaseDelay,
 		Extractor: memorypkg.CompositeCandidateExtractor{
@@ -196,27 +223,38 @@ func newMemoryProvider(cfg config.Config, appStore store.Store, modelClient *ope
 	})
 }
 
-func newModelClient(cfg config.Config, providerCredential credential.Value) *openai.Client {
-	client := openai.NewClientWithTimeoutAndEmbeddingModel(
-		providerCredential.Reveal(),
-		cfg.OpenAIBaseURL,
-		cfg.EmbeddingBaseURL,
-		cfg.OpenAIModel,
-		cfg.EmbeddingModel,
-		cfg.EmbeddingDimensions,
-		cfg.OpenAITimeout,
-	)
-	client.SetRequestLimiter(concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{
-		MaxConcurrent:     cfg.MaxConcurrentModelRequests,
-		RequestsPerPeriod: cfg.ModelRequestsPerMinute,
-		TokensPerPeriod:   cfg.ModelTokensPerMinute,
-	}))
+func newModelClient(cfg config.Config, providerCredential credential.Value, route modelrouting.RouteConfig, limiter *concurrency.ModelRequestLimiter) *openai.Client {
+	client := openai.NewClientWithTimeout(providerCredential.Reveal(), route.BaseURL, route.Model, time.Duration(route.RequestTimeoutSeconds)*time.Second)
+	client.SetRequestLimiter(limiter)
 	retryPolicy := openai.DefaultRetryPolicy()
 	retryPolicy.MaxAttempts = cfg.ModelRetryMaxAttempts
 	retryPolicy.BaseDelay = cfg.ModelRetryBaseDelay
 	retryPolicy.MaxDelay = cfg.ModelRetryMaxDelay
 	client.SetRetryPolicy(retryPolicy)
 	return client
+}
+
+func newEmbeddingClient(cfg config.Config, providerCredential credential.Value, limiter *concurrency.ModelRequestLimiter) *openai.Client {
+	client := openai.NewEmbeddingClient(providerCredential.Reveal(), cfg.EmbeddingBaseURL, cfg.EmbeddingModel, cfg.EmbeddingDimensions, cfg.EmbeddingRequestTimeout)
+	client.SetRequestLimiter(limiter)
+	retryPolicy := openai.DefaultRetryPolicy()
+	retryPolicy.MaxAttempts = cfg.ModelRetryMaxAttempts
+	retryPolicy.BaseDelay = cfg.ModelRetryBaseDelay
+	retryPolicy.MaxDelay = cfg.ModelRetryMaxDelay
+	client.SetRetryPolicy(retryPolicy)
+	return client
+}
+
+func configureModelClient(client *openai.Client, cfg config.Config, appStore store.Store, recorder *requestcapture.Recorder) {
+	client.SetToolEffectJournal(appStore)
+	client.SetToolArtifactStore(appStore)
+	client.SetToolArtifactPolicy(openai.ToolArtifactPolicy{
+		MaxBatchResultBytes: cfg.ToolResultMaxBatchBytes,
+		MaxArtifactBytes:    cfg.ToolArtifactMaxBytes,
+		PreviewBytes:        cfg.ToolArtifactPreviewBytes,
+		Retention:           cfg.ToolArtifactRetention,
+	})
+	client.SetRequestRecorder(recorder)
 }
 
 func contextAssemblyConfig(cfg config.Config) domain.ContextAssemblyConfig {

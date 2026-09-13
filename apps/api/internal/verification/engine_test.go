@@ -213,7 +213,7 @@ func verificationSnapshot() domain.RuntimeSnapshot {
 	return domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single", RunBudget: &domain.RuntimeRunBudget{},
 		Agent:           domain.RuntimeAgentSnapshot{ID: "agent_planner", Executor: domain.DefaultAgentExecutor},
-		Model:           domain.RuntimeModelSnapshot{Provider: "local", Model: "test"},
+		Embedding:       domain.RuntimeEmbeddingSnapshot{Provider: "local", BaseURL: "http://localhost:11434/api/embed", Model: "test", Dimensions: 3},
 		ContextAssembly: domain.ContextAssemblyConfig{AssemblerVersion: "context-assembler-v1"},
 	}
 }

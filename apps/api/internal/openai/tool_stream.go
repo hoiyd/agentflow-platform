@@ -40,7 +40,7 @@ func truncateText(value string, limit int) string {
 }
 
 func fallbackEventResponse(latest string) string {
-	return "Local fallback response: backend streaming is working. Add OPENAI_API_KEY in apps/api/.env to enable model-directed tool calling. You said: " + latest
+	return "Local fallback response: backend streaming is working. Configure a credentialed Chat route to enable model-directed tool calling. You said: " + latest
 }
 
 func (c *Client) streamText(ctx context.Context, text string, delay time.Duration, events chan<- StreamEvent) {

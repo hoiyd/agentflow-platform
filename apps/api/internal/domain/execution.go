@@ -55,25 +55,30 @@ const (
 	AgentSelectionRuntimeSnapshotVersion = 13
 	RoutingHintsRuntimeSnapshotVersion   = 14
 	RoutingRequirementsSnapshotVersion   = 15
-	CurrentRuntimeSnapshotVersion        = RoutingRequirementsSnapshotVersion
+	ModelRoutingRuntimeSnapshotVersion   = 16
+	IndependentEmbeddingSnapshotVersion  = 17
+	CurrentRuntimeSnapshotVersion        = IndependentEmbeddingSnapshotVersion
 )
 
 type RuntimeSnapshot struct {
-	SchemaVersion      int                    `json:"schema_version"`
-	Mode               string                 `json:"mode"`
-	Agent              RuntimeAgentSnapshot   `json:"agent"`
-	CandidateAgents    []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
-	Model              RuntimeModelSnapshot   `json:"model"`
-	Tools              []RuntimeToolSnapshot  `json:"tools"`
-	ToolSecurityPolicy toolpolicy.Policy      `json:"tool_security_policy"`
-	ToolProgressGuard  toolprogress.Config    `json:"tool_progress_guard"`
-	ContextAssembly    ContextAssemblyConfig  `json:"context_assembly"`
-	RouterMode         string                 `json:"router_mode,omitempty"`
-	AutonomousLimits   *RuntimeLimitsSnapshot `json:"autonomous_limits,omitempty"`
-	RunBudget          *RuntimeRunBudget      `json:"run_budget,omitempty"`
-	ChildRunPolicy     *RuntimeChildRunPolicy `json:"child_run_policy,omitempty"`
-	Delegation         *RuntimeDelegation     `json:"delegation,omitempty"`
-	CreatedAt          time.Time              `json:"created_at"`
+	SchemaVersion   int                    `json:"schema_version"`
+	Mode            string                 `json:"mode"`
+	Agent           RuntimeAgentSnapshot   `json:"agent"`
+	CandidateAgents []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
+	// LegacyModel is populated only when replaying pre-v17 snapshots.
+	LegacyModel        *RuntimeModelSnapshot     `json:"model,omitempty"`
+	Embedding          RuntimeEmbeddingSnapshot  `json:"embedding"`
+	ModelRouting       ModelRouteCatalogSnapshot `json:"model_routing"`
+	Tools              []RuntimeToolSnapshot     `json:"tools"`
+	ToolSecurityPolicy toolpolicy.Policy         `json:"tool_security_policy"`
+	ToolProgressGuard  toolprogress.Config       `json:"tool_progress_guard"`
+	ContextAssembly    ContextAssemblyConfig     `json:"context_assembly"`
+	RouterMode         string                    `json:"router_mode,omitempty"`
+	AutonomousLimits   *RuntimeLimitsSnapshot    `json:"autonomous_limits,omitempty"`
+	RunBudget          *RuntimeRunBudget         `json:"run_budget,omitempty"`
+	ChildRunPolicy     *RuntimeChildRunPolicy    `json:"child_run_policy,omitempty"`
+	Delegation         *RuntimeDelegation        `json:"delegation,omitempty"`
+	CreatedAt          time.Time                 `json:"created_at"`
 }
 
 // RuntimeChildRunPolicy is frozen with a parent Multi-Agent Run. Process-level
@@ -183,6 +188,66 @@ type RuntimeModelSnapshot struct {
 	EmbeddingBaseURL    string `json:"embedding_base_url"`
 	EmbeddingModel      string `json:"embedding_model"`
 	EmbeddingDimensions int    `json:"embedding_dimensions"`
+}
+
+// RuntimeEmbeddingSnapshot freezes the single embedding service independently
+// from the peer Chat LLM routes.
+type RuntimeEmbeddingSnapshot struct {
+	Provider   string `json:"provider"`
+	BaseURL    string `json:"base_url"`
+	Model      string `json:"model"`
+	Dimensions int    `json:"dimensions"`
+}
+
+// ModelRouteCatalogSnapshot freezes the only routes a resumed Run may use.
+// CredentialEnvironment names a process environment variable; its value is
+// deliberately resolved at runtime and never persisted.
+type ModelRouteCatalogSnapshot struct {
+	PolicyRevision  string                 `json:"policy_revision"`
+	CatalogRevision string                 `json:"catalog_revision"`
+	PinnedRouteID   string                 `json:"pinned_route_id,omitempty"`
+	Routes          []ModelRouteDescriptor `json:"routes"`
+}
+
+type ModelRouteDescriptor struct {
+	ID                    string                 `json:"id"`
+	Provider              string                 `json:"provider"`
+	Model                 string                 `json:"model"`
+	Endpoint              string                 `json:"endpoint"`
+	Capabilities          ModelRouteCapabilities `json:"capabilities"`
+	ContextWindowTokens   int                    `json:"context_window_tokens"`
+	MaxOutputTokens       int                    `json:"max_output_tokens"`
+	Priority              int                    `json:"priority"`
+	Pricing               ModelRoutePricing      `json:"pricing"`
+	CredentialEnvironment string                 `json:"credential_environment,omitempty"`
+	DefinitionRevision    string                 `json:"definition_revision"`
+}
+
+type ModelRouteCapabilities struct {
+	ToolCalling      bool `json:"tool_calling"`
+	StructuredOutput bool `json:"structured_output"`
+	Streaming        bool `json:"streaming"`
+}
+
+type ModelRoutePricing struct {
+	Source                       string `json:"source"`
+	InputPerMillionTokensMicros  int64  `json:"input_per_million_tokens_micros"`
+	OutputPerMillionTokensMicros int64  `json:"output_per_million_tokens_micros"`
+}
+
+type ModelRouteRequirements struct {
+	Purpose              string `json:"purpose"`
+	ToolCalling          bool   `json:"tool_calling"`
+	StructuredOutput     bool   `json:"structured_output"`
+	Streaming            bool   `json:"streaming"`
+	EstimatedInputTokens int    `json:"estimated_input_tokens"`
+	MaxOutputTokens      int    `json:"max_output_tokens"`
+}
+
+type ModelRouteCandidateDecision struct {
+	RouteID          string   `json:"route_id"`
+	Eligible         bool     `json:"eligible"`
+	ExclusionReasons []string `json:"exclusion_reasons,omitempty"`
 }
 
 type RuntimeToolSnapshot struct {
@@ -305,6 +370,7 @@ const (
 	EventTurnFailed                     RunEventType = "turn.failed"
 	EventTurnCanceled                   RunEventType = "turn.canceled"
 	EventModelStarted                   RunEventType = "model.started"
+	EventModelRouteDecided              RunEventType = "model.route_decided"
 	EventModelRequestPrepared           RunEventType = "model.request_prepared"
 	EventModelDelta                     RunEventType = "model.delta"
 	EventModelCompleted                 RunEventType = "model.completed"

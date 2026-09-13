@@ -95,7 +95,7 @@ func (p *BuiltinProvider) propose(ctx context.Context, request ProposalRequest, 
 	var proposed bool
 	if err := p.retry(ctx, "propose.extract", func() error {
 		var err error
-		draft, proposed, err = p.extractor.Extract(ctx, request.Message)
+		draft, proposed, err = p.extractor.Extract(ctx, request.RunID, request.Message)
 		return err
 	}); err != nil {
 		p.publish(request.RunID, request.Message, domain.EventMemoryCandidateFailed, candidatePayload(candidate, request.IdempotencyKey, "failed", err))

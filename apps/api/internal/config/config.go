@@ -10,14 +10,14 @@ import (
 )
 
 type Config struct {
-	BindAddress         string
-	Port                string
-	OpenAIBaseURL       string
-	OpenAIModel         string
-	EmbeddingBaseURL    string
-	EmbeddingModel      string
-	EmbeddingDimensions int
-	OpenAITimeout       time.Duration
+	BindAddress string
+	Port        string
+	// ModelRouteConfigPath points to the complete secret-free Chat LLM route catalog.
+	ModelRouteConfigPath    string
+	EmbeddingBaseURL        string
+	EmbeddingModel          string
+	EmbeddingDimensions     int
+	EmbeddingRequestTimeout time.Duration
 	// MaxConcurrentRuns caps active Agent runs across all conversations.
 	MaxConcurrentRuns int
 	// RunQueueSize is the additional bounded waiting capacity beyond active runs.
@@ -163,12 +163,11 @@ func Load() Config {
 	return Config{
 		BindAddress:                       getEnv("BIND_ADDRESS", "127.0.0.1"),
 		Port:                              getEnv("PORT", "8080"),
-		OpenAIBaseURL:                     getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-		OpenAIModel:                       getEnv("OPENAI_MODEL", "gpt-4o-mini"),
+		ModelRouteConfigPath:              getEnv("MODEL_ROUTE_CONFIG_PATH", ""),
 		EmbeddingBaseURL:                  getEnv("EMBEDDING_BASE_URL", "http://localhost:11434/api/embed"),
 		EmbeddingModel:                    getEnv("EMBEDDING_MODEL", "embeddinggemma"),
 		EmbeddingDimensions:               getIntEnv("EMBEDDING_DIMENSIONS", 1536),
-		OpenAITimeout:                     getDurationEnv("OPENAI_REQUEST_TIMEOUT", 5*time.Minute),
+		EmbeddingRequestTimeout:           getDurationEnv("EMBEDDING_REQUEST_TIMEOUT", 5*time.Minute),
 		MaxConcurrentRuns:                 getIntEnv("MAX_CONCURRENT_RUNS", 8),
 		RunQueueSize:                      getNonNegativeIntEnv("RUN_QUEUE_SIZE", 32),
 		RunQueueWaitTimeout:               getDurationEnv("RUN_QUEUE_WAIT_TIMEOUT", 30*time.Second),

@@ -15,7 +15,6 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
-	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tools"
@@ -81,7 +80,6 @@ type VerificationOperations interface {
 // Construction and lifecycle ownership remain in the app composition root.
 type Dependencies struct {
 	Store          HTTPStore
-	ModelClient    modelprovider.TextCompleter
 	Tools          ToolOperations
 	AgentRuntime   AgentRuntimeOperations
 	Memory         MemoryOperations
@@ -93,7 +91,6 @@ type Dependencies struct {
 
 type Handler struct {
 	store          HTTPStore
-	modelClient    modelprovider.TextCompleter
 	tools          ToolOperations
 	agentRuntime   AgentRuntimeOperations
 	memories       MemoryOperations
@@ -106,9 +103,6 @@ type Handler struct {
 func NewHandler(dependencies Dependencies) (*Handler, error) {
 	if dependencies.Store == nil {
 		return nil, errors.New("http api store is required")
-	}
-	if dependencies.ModelClient == nil {
-		return nil, errors.New("http api model client is required")
 	}
 	if dependencies.Tools == nil {
 		return nil, errors.New("http api tools manager is required")
@@ -130,7 +124,6 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 	}
 	return &Handler{
 		store:          dependencies.Store,
-		modelClient:    dependencies.ModelClient,
 		tools:          dependencies.Tools,
 		agentRuntime:   dependencies.AgentRuntime,
 		memories:       dependencies.Memory,

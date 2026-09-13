@@ -11,6 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/contextcompaction"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/modelprovider"
 )
 
 func (r *Runtime) scheduleSoftContextCompaction(run domain.Run) {
@@ -19,12 +20,16 @@ func (r *Runtime) scheduleSoftContextCompaction(run domain.Run) {
 		if err != nil {
 			return
 		}
-		r.compactContextBestEffort(context.Background(), run.ID, run.ConversationID, snapshot, contextassembly.CompactionTriggerSoft, "")
+		client, err := r.ModelClientForRun(run.ID)
+		if err != nil {
+			return
+		}
+		r.compactContextBestEffort(context.Background(), run.ID, run.ConversationID, snapshot, contextassembly.CompactionTriggerSoft, "", client)
 	}()
 }
 
-func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversationID string, snapshot *domain.RuntimeSnapshot, trigger string, triggerKey string) *domain.ContextCompaction {
-	compaction, err := r.compactContext(ctx, runID, conversationID, snapshot, trigger, triggerKey)
+func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversationID string, snapshot *domain.RuntimeSnapshot, trigger string, triggerKey string, client modelprovider.Client) *domain.ContextCompaction {
+	compaction, err := r.compactContext(ctx, runID, conversationID, snapshot, trigger, triggerKey, client)
 	if err != nil {
 		log.Printf("context_compaction_failed run_id=%s trigger=%s error=%q", runID, trigger, err.Error())
 		return nil
@@ -35,7 +40,7 @@ func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversat
 	return compaction
 }
 
-func (r *Runtime) compactContext(ctx context.Context, runID, conversationID string, snapshot *domain.RuntimeSnapshot, trigger string, triggerKey string) (*domain.ContextCompaction, error) {
+func (r *Runtime) compactContext(ctx context.Context, runID, conversationID string, snapshot *domain.RuntimeSnapshot, trigger string, triggerKey string, client modelprovider.Client) (*domain.ContextCompaction, error) {
 	if r == nil || r.contextCompactor == nil || snapshot == nil || conversationID == "" {
 		return nil, nil
 	}
@@ -48,13 +53,9 @@ func (r *Runtime) compactContext(ctx context.Context, runID, conversationID stri
 	compactCtx = eventpkg.WithScope(compactCtx, eventpkg.Scope{RunID: runID, ConversationID: conversationID})
 
 	var summarizer contextcompaction.Summarizer
-	if r.modelClient.HasAPIKey() {
+	if client != nil && client.HasAPIKey() {
 		summarizer = contextcompaction.SummarizerFunc(func(ctx context.Context, request contextcompaction.SummaryRequest) (contextcompaction.SummaryResult, error) {
 			ctx = budget.WithPurpose(ctx, domain.UsagePurposeCompaction)
-			client, err := r.clientFromSnapshot(snapshot)
-			if err != nil {
-				return contextcompaction.SummaryResult{}, err
-			}
 			completion, err := client.CompleteTextDetailed(ctx, request.SystemPrompt, request.Prompt)
 			return contextcompaction.SummaryResult{Text: completion.Text, Model: completion.Model}, err
 		})

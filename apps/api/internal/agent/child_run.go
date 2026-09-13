@@ -189,9 +189,16 @@ func (r *Runtime) childRuntimeSnapshot(parent domain.Run, selected domain.Agent,
 	contextConfig.HistoryRetrievalEnabled = false
 	contextConfig.CompactionMode = "off"
 	childPolicy := parent.RuntimeSnapshot.ChildRunPolicy
+	modelRouting := parent.RuntimeSnapshot.ModelRouting
+	if selectedRoute, ok, err := r.selectedModelRoute(parent.ID, parent.RuntimeSnapshot); err != nil {
+		return domain.RuntimeSnapshot{}, err
+	} else if ok {
+		modelRouting.PinnedRouteID = selectedRoute.Route.ID
+	}
 	return domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: ChatModeSingle,
-		Agent: selectedSnapshot, Model: parent.RuntimeSnapshot.Model, Tools: toolSnapshots,
+		Agent: selectedSnapshot, Embedding: parent.RuntimeSnapshot.Embedding,
+		ModelRouting: modelRouting, Tools: toolSnapshots,
 		ToolSecurityPolicy: parent.RuntimeSnapshot.ToolSecurityPolicy,
 		ToolProgressGuard:  parent.RuntimeSnapshot.ToolProgressGuard,
 		ContextAssembly:    contextConfig, RunBudget: cloneRunBudget(childPolicy.RunBudget),

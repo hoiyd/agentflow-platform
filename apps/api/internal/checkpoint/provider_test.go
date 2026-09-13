@@ -55,7 +55,7 @@ func TestInternalProviderRejectsStaleRuntimeSnapshot(t *testing.T) {
 	}
 	changed := run
 	copySnapshot := *run.RuntimeSnapshot
-	copySnapshot.Model.Model = "different-model"
+	copySnapshot.Embedding.Model = "different-embedding-model"
 	changed.RuntimeSnapshot = &copySnapshot
 	if _, err := provider.RestoreRun(context.Background(), changed); !errors.Is(err, ErrCheckpointStale) {
 		t.Fatalf("expected stale checkpoint error, got %v", err)
@@ -261,7 +261,7 @@ func checkpointTestRun(t *testing.T) (*fixturestore.Store, domain.Run) {
 		SchemaVersion:    domain.CurrentRuntimeSnapshotVersion,
 		Mode:             "autonomous",
 		Agent:            domain.RuntimeAgentSnapshot{ID: "agent_planner"},
-		Model:            domain.RuntimeModelSnapshot{Provider: "test", Model: "test-model"},
+		Embedding:        domain.RuntimeEmbeddingSnapshot{Provider: "test", BaseURL: "https://embedding.test/v1", Model: "test-embedding", Dimensions: 3},
 		Tools:            []domain.RuntimeToolSnapshot{},
 		AutonomousLimits: &domain.RuntimeLimitsSnapshot{MaxIterations: 2},
 		RunBudget:        &domain.RuntimeRunBudget{},

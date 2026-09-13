@@ -35,7 +35,7 @@ type CandidateDraft struct {
 }
 
 type CandidateExtractor interface {
-	Extract(context.Context, domain.Message) (CandidateDraft, bool, error)
+	Extract(context.Context, string, domain.Message) (CandidateDraft, bool, error)
 }
 
 type CandidatePolicy interface {
@@ -83,7 +83,7 @@ var candidatePatterns = []candidatePattern{
 	{prefix: "项目约定:", kind: "project_convention", reason: CandidateReasonConvention},
 }
 
-func (RuleBasedCandidateExtractor) Extract(_ context.Context, message domain.Message) (CandidateDraft, bool, error) {
+func (RuleBasedCandidateExtractor) Extract(_ context.Context, _ string, message domain.Message) (CandidateDraft, bool, error) {
 	if !strings.EqualFold(strings.TrimSpace(message.Role), "user") {
 		return CandidateDraft{}, false, nil
 	}

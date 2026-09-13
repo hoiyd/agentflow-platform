@@ -8,10 +8,15 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/store"
 )
 
-func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, scoped store.WorkspaceStore, conversationID string, userMessage string, assistantMessage string) string {
+type runModelResolver interface {
+	ModelClientForRun(string) (modelprovider.Client, error)
+}
+
+func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, scoped store.WorkspaceStore, runID string, conversationID string, userMessage string, assistantMessage string) string {
 	conversation, ok, err := scoped.GetConversation(conversationID)
 	if err != nil || !ok {
 		if err != nil {
@@ -23,7 +28,7 @@ func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, scop
 		return conversation.Title
 	}
 
-	title, err := h.generateConversationTitle(ctx, userMessage, assistantMessage)
+	title, err := h.generateConversationTitle(ctx, runID, userMessage, assistantMessage)
 	if err != nil {
 		log.Printf("conversation_title skip=llm_failed conversation_id=%s error=%v", conversationID, err)
 		return conversation.Title
@@ -38,9 +43,14 @@ func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, scop
 	return title
 }
 
-func (h *Handler) generateConversationTitle(ctx context.Context, userMessage string, assistantMessage string) (string, error) {
-	if h.modelClient == nil {
+func (h *Handler) generateConversationTitle(ctx context.Context, runID string, userMessage string, assistantMessage string) (string, error) {
+	resolver, ok := h.agentRuntime.(runModelResolver)
+	if !ok {
 		return cleanConversationTitle(userMessage), nil
+	}
+	modelClient, err := resolver.ModelClientForRun(runID)
+	if err != nil {
+		return "", err
 	}
 
 	titleCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
@@ -48,7 +58,7 @@ func (h *Handler) generateConversationTitle(ctx context.Context, userMessage str
 
 	systemPrompt := "Generate a concise conversation title. Return only the title, no quotes, no punctuation-only wrappers. Use the same language as the user when possible. Keep it under 8 words or 20 Chinese characters."
 	prompt := "User message:\n" + truncateForTitle(userMessage, 900) + "\n\nAssistant response:\n" + truncateForTitle(assistantMessage, 900)
-	completion, err := h.modelClient.CompleteTextDetailed(titleCtx, systemPrompt, prompt)
+	completion, err := modelClient.CompleteTextDetailed(titleCtx, systemPrompt, prompt)
 	if err != nil {
 		return "", err
 	}

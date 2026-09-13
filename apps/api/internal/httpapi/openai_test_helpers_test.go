@@ -5,17 +5,34 @@ import (
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/modelrouting"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/toolpolicy"
 	"agentflow-platform/apps/api/internal/toolprogress"
 )
 
 func testRuntimeSnapshot() domain.RuntimeSnapshot {
+	client := newLocalFallbackOpenAIClientForTest()
+	identity := client.RuntimeIdentity()
+	catalog, err := modelrouting.NewCatalog(modelrouting.Binding{Descriptor: modelrouting.Descriptor{
+		ID: "single", Provider: identity.Provider, Model: identity.Model, Endpoint: identity.BaseURL,
+		Capabilities:        modelrouting.Capabilities{ToolCalling: true, StructuredOutput: true, Streaming: true},
+		ContextWindowTokens: 128000, MaxOutputTokens: 8192, Priority: 100,
+		Pricing: modelrouting.Pricing{Source: "test_fixture"},
+	}, Client: client})
+	if err != nil {
+		panic(err)
+	}
+	route := catalog.Descriptors()[0]
 	return domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: agentpkg.ChatModeAutonomous,
-		RunBudget:          &domain.RuntimeRunBudget{},
-		Agent:              domain.RuntimeAgentSnapshot{ID: "agent_planner", Name: "Planner", SystemPrompt: "Plan carefully.", Executor: domain.DefaultAgentExecutor},
-		Model:              domain.RuntimeModelSnapshot{Provider: "local", Model: "test", EmbeddingBaseURL: "https://embedding.test/v1", EmbeddingModel: "local-test-embedding", EmbeddingDimensions: 1536},
+		RunBudget: &domain.RuntimeRunBudget{},
+		Agent:     domain.RuntimeAgentSnapshot{ID: "agent_planner", Name: "Planner", SystemPrompt: "Plan carefully.", Executor: domain.DefaultAgentExecutor},
+		Embedding: domain.RuntimeEmbeddingSnapshot{Provider: identity.EmbeddingProvider, BaseURL: identity.EmbeddingBaseURL, Model: identity.EmbeddingModel, Dimensions: identity.EmbeddingDimensions},
+		ModelRouting: domain.ModelRouteCatalogSnapshot{
+			PolicyRevision: modelrouting.PolicyRevision, CatalogRevision: catalog.Revision(),
+			Routes: []domain.ModelRouteDescriptor{route},
+		},
 		AutonomousLimits:   &domain.RuntimeLimitsSnapshot{MaxIterations: 5, MaxRuntimeMS: 300000, MaxOutputChars: 60000, MaxToolCalls: 20},
 		ToolSecurityPolicy: toolpolicy.DefaultPolicy(),
 		ToolProgressGuard:  toolprogress.DefaultConfig(),

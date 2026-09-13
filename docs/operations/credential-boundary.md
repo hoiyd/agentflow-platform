@@ -1,10 +1,12 @@
 # Credential Boundary and Redaction
 
 AgentFlow treats credentials as process configuration, not application data.
-`OPENAI_API_KEY` is resolved from the environment while application dependencies
-are composed, wrapped in a non-serializable value, and revealed only when the
-provider client is constructed. It is absent from general Config, Runtime
-Snapshots, Context Manifests, Events, Artifacts, and API responses.
+`EMBEDDING_API_KEY` and each credential environment variable named by the
+Model Route Catalog are resolved
+while application dependencies are composed, wrapped
+in non-serializable values, and revealed only when provider clients are
+constructed. They are absent from general Config, Runtime Snapshots, Context
+Manifests, Events, Artifacts, and API responses.
 
 ## Source-to-Sink Policy
 

@@ -545,7 +545,7 @@ func newCompactionTestStore(t *testing.T) (*fixturestore.Store, domain.Conversat
 	}
 	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: "single", RunBudget: &domain.RuntimeRunBudget{},
-		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Model: domain.RuntimeModelSnapshot{Model: "test"},
+		Agent: domain.RuntimeAgentSnapshot{ID: "agent_planner"}, Embedding: domain.RuntimeEmbeddingSnapshot{Provider: "test", BaseURL: "https://embedding.test/v1", Model: "test", Dimensions: 3},
 		ContextAssembly: compactionTestConfig(),
 	}, nil)
 
