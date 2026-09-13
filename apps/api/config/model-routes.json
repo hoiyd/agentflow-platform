@@ -33,7 +33,7 @@
       },
       "context_window_tokens": 128000,
       "max_output_tokens": 8192,
-      "priority": 100,
+      "priority": 50,
       "pricing": {
         "source": "local_configuration",
         "input_per_million_tokens_micros": 0,
