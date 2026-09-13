@@ -18,6 +18,8 @@ complete Single, Multi, and Loop lifecycles, read
   interfaces; they do not recreate Memory, Knowledge, or Runtime services.
 - Single-Agent, Multi-Agent, and Autonomous execution share one Turn-level
   implementation for retrieval, tools, context, events, and model access.
+- Turn-level model access uses a frozen, deterministic Model Route Catalog;
+  provider retries and process-level request limits remain separate owners.
 - Stores persist domain contracts but do not own retrieval policy, reranking,
   or orchestration.
 - Every `/api/*` operation resolves a non-empty Workspace namespace. HTTP handlers
@@ -62,6 +64,7 @@ apps/api/
     failure/        shared failure classification and event projection
     contextassembly/
     contextcompaction/
+    modelrouting/   secret-free route contracts and deterministic selection
     modelrequest/    request limiting plus provider-neutral observation contract
     requestcapture/  request envelope, capture policy, and reconstructability invariant
     tools/          tool catalog and guarded execution

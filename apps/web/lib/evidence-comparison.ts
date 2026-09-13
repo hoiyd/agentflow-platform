@@ -46,7 +46,7 @@ export type EvidenceMetric = keyof EvidenceSide["metrics"];
 
 const experimentDimensions = [
   { key: "agent", label: "Agent definition", fields: ["agent", "candidate_agents"] },
-  { key: "model", label: "Model", fields: ["model"] },
+  { key: "model", label: "Model", fields: ["model", "model_routing"] },
   { key: "tools", label: "Tool set", fields: ["tools"] },
   { key: "context_assembly", label: "Context assembly", fields: ["context_assembly"] },
   { key: "run_budget", label: "Run budget", fields: ["run_budget"] },

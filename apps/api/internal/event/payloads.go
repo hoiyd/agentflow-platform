@@ -166,6 +166,24 @@ type ModelPayload struct {
 	Error               string `json:"error,omitempty"`
 }
 
+// ModelRouteDecisionPayload explains the deterministic pre-request route
+// decision. It contains only secret-free catalog metadata.
+type ModelRouteDecisionPayload struct {
+	Outcome         string                               `json:"outcome"`
+	PolicyRevision  string                               `json:"policy_revision"`
+	CatalogRevision string                               `json:"catalog_revision"`
+	Purpose         string                               `json:"purpose"`
+	SelectedRouteID string                               `json:"selected_route_id,omitempty"`
+	Provider        string                               `json:"provider,omitempty"`
+	Model           string                               `json:"model,omitempty"`
+	Requirements    domain.ModelRouteRequirements        `json:"requirements"`
+	Candidates      []domain.ModelRouteCandidateDecision `json:"candidates"`
+}
+
+func (ModelRouteDecisionPayload) supports(eventType domain.RunEventType) bool {
+	return eventType == domain.EventModelRouteDecided
+}
+
 func (ModelPayload) supports(eventType domain.RunEventType) bool {
 	switch eventType {
 	case domain.EventModelStarted, domain.EventModelDelta, domain.EventModelCompleted, domain.EventModelFailed:

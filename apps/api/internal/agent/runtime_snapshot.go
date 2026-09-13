@@ -68,6 +68,10 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		toolNames = append(toolNames, candidate.Tools...)
 	}
 	toolSnapshots := snapshotTools(catalog, toolNames)
+	modelRouting, err := r.captureModelRoutingSnapshot()
+	if err != nil {
+		return domain.RuntimeSnapshot{}, err
+	}
 	identity := r.modelClient.RuntimeIdentity()
 	runBudget := r.runBudget
 	snapshot := domain.RuntimeSnapshot{
@@ -80,6 +84,7 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 			EmbeddingBaseURL: identity.EmbeddingBaseURL, EmbeddingModel: identity.EmbeddingModel,
 			EmbeddingDimensions: identity.EmbeddingDimensions,
 		},
+		ModelRouting:       modelRouting,
 		Tools:              toolSnapshots,
 		ToolSecurityPolicy: catalog.SecurityPolicy(),
 		ToolProgressGuard:  toolprogress.NormalizeConfig(r.toolProgressConfig),
@@ -243,6 +248,9 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 	if err != nil {
 		return restoredRuntime{}, err
 	}
+	if _, err := r.restoreModelRouteCatalog(snapshot.ModelRouting); err != nil {
+		return restoredRuntime{}, err
+	}
 	candidates := make([]domain.Agent, 0, len(snapshot.CandidateAgents))
 	for _, candidate := range snapshot.CandidateAgents {
 		candidates = append(candidates, restoreAgent(candidate))
@@ -296,6 +304,21 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	}
 	if strings.TrimSpace(snapshot.Model.Model) == "" {
 		return errors.New("runtime snapshot has no model")
+	}
+	if snapshot.SchemaVersion >= domain.ModelRoutingRuntimeSnapshotVersion {
+		if err := validateModelRoutingSnapshot(snapshot.ModelRouting); err != nil {
+			return err
+		}
+		defaultRouteFound := false
+		for _, route := range snapshot.ModelRouting.Routes {
+			if route.Provider == snapshot.Model.Provider && route.Model == snapshot.Model.Model && route.Endpoint == snapshot.Model.BaseURL {
+				defaultRouteFound = true
+				break
+			}
+		}
+		if !defaultRouteFound {
+			return errors.New("runtime snapshot default model is absent from the model route catalog")
+		}
 	}
 	if snapshot.RunBudget == nil {
 		return errors.New("runtime snapshot has no run budget")

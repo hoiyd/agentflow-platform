@@ -76,9 +76,9 @@ concerns.
 ## Frozen And Observable Decisions
 
 New Multi Runs freeze all candidate routing hints and Router mode in Runtime
-Snapshot v15. The Snapshot schema defines the only resumable Agent selection
+Snapshot v16. The Snapshot schema defines the only resumable Agent selection
 protocol; there is no separate algorithm-version field or runtime selector.
-Snapshot v14 and earlier remain available for Replay but are not resumable.
+Snapshot v15 and earlier remain available for Replay but are not resumable.
 Configuration changes or
 newly-created Agent profiles cannot enter a frozen candidate set. The approved
 requirements belong to that continuation decision and are persisted in its

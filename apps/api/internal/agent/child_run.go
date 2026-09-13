@@ -191,7 +191,8 @@ func (r *Runtime) childRuntimeSnapshot(parent domain.Run, selected domain.Agent,
 	childPolicy := parent.RuntimeSnapshot.ChildRunPolicy
 	return domain.RuntimeSnapshot{
 		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: ChatModeSingle,
-		Agent: selectedSnapshot, Model: parent.RuntimeSnapshot.Model, Tools: toolSnapshots,
+		Agent: selectedSnapshot, Model: parent.RuntimeSnapshot.Model,
+		ModelRouting: parent.RuntimeSnapshot.ModelRouting, Tools: toolSnapshots,
 		ToolSecurityPolicy: parent.RuntimeSnapshot.ToolSecurityPolicy,
 		ToolProgressGuard:  parent.RuntimeSnapshot.ToolProgressGuard,
 		ContextAssembly:    contextConfig, RunBudget: cloneRunBudget(childPolicy.RunBudget),

@@ -16,6 +16,7 @@ import (
 	"agentflow-platform/apps/api/internal/httpapi"
 	"agentflow-platform/apps/api/internal/knowledge"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
+	"agentflow-platform/apps/api/internal/modelrouting"
 	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/recovery"
@@ -74,6 +75,20 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		Mode: domain.ModelRequestCaptureMode(cfg.ModelRequestCaptureMode), MaxBytes: cfg.ModelRequestCaptureMaxBytes,
 		Retention: cfg.ModelRequestCaptureRetention,
 	}))
+	modelIdentity := modelClient.RuntimeIdentity()
+	modelRoutes, err := modelrouting.NewCatalog(modelrouting.Binding{Descriptor: modelrouting.Descriptor{
+		ID: "primary", Provider: modelIdentity.Provider, Model: modelIdentity.Model, Endpoint: modelIdentity.BaseURL,
+		Capabilities:        modelrouting.Capabilities{ToolCalling: true, StructuredOutput: true, Streaming: true},
+		ContextWindowTokens: cfg.ModelContextWindowTokens, MaxOutputTokens: cfg.ModelOutputReserveTokens,
+		Priority: 100, CredentialEnvironment: "OPENAI_API_KEY",
+		Pricing: modelrouting.Pricing{
+			Source: "environment_config", InputPerMillionTokensMicros: cfg.ModelInputCostPerMillionMicros,
+			OutputPerMillionTokensMicros: cfg.ModelOutputCostPerMillionMicros,
+		},
+	}, Client: modelClient})
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("create model route catalog: %w", err)
+	}
 	toolManager, err := tools.NewManager(cfg.ToolConfigPath)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
@@ -96,6 +111,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	agentRuntime := agent.NewRuntime(agent.RuntimeOptions{
 		Store:           appStore,
 		ModelClient:     modelClient,
+		ModelRoutes:     modelRoutes,
 		Tools:           toolManager,
 		RouterMode:      cfg.RouterMode,
 		ContextAssembly: contextAssemblyConfig(cfg),

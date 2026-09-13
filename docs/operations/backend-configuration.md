@@ -178,6 +178,12 @@ while preserving the existing Autonomous safety profile.
 
 ## Model and Embedding Providers
 
+`OPENAI_BASE_URL`, `OPENAI_MODEL`, the Context limits, and configured prices
+currently define the single production `primary` entry in the frozen Model
+Route Catalog. The credential reference `OPENAI_API_KEY` is persisted by name;
+its value is not. Multi-route environment configuration and cross-route
+failover are not enabled. See [Model Route Contract and Catalog](../runtime/model-routing.md).
+
 If `OPENAI_API_KEY` is empty, chat uses a deterministic local fallback for
 workflow exercises. Embeddings call Ollama when `EMBEDDING_BASE_URL` points to
 `http://localhost:11434/api/embed`; otherwise they use deterministic local

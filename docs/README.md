@@ -43,6 +43,7 @@ the project.
 | [Execution modes](runtime/execution-modes.md) | How do Single, Multi, and Loop execution differ in lifecycle, checkpoints, trace shape, cost, and use case? |
 | [Internal terms](architecture/terms.md) | What do the execution entities mean, and how do Run Events, Trace, Replay, and Episode Report differ? |
 | [Execution controls](runtime/execution-controls.md) | Which layer owns concurrency, rate limits, retries, budgets, context capacity, and stopping rules? |
+| [Model route contract and catalog](runtime/model-routing.md) | How are model targets validated, capability-filtered, frozen, selected, and explained before provider access? |
 | [Bounded load and soak testing](operations/load-soak-testing.md) | How are backpressure, cancellation, rate and budget boundaries, background Memory work, and cleanup tested under reproducible controlled load? |
 | [Evidence comparison view](operations/evidence-comparison.md) | How does the Evaluation workspace compare outcomes, cost, and traceable evidence without treating unrelated Runs as an improvement? |
 | [Tool contract testing](tools/tool-contract-testing.md) | How are Binding contracts, runtime failure paths, durable effects, and Tool selection regressions tested without a network or model? |

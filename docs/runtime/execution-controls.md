@@ -14,6 +14,7 @@ capacity, resource consumption, timeouts, and stopping conditions.
 | --- | --- | --- |
 | Too many tasks run concurrently | Run Admission | calls made by one Run |
 | Provider concurrency or 429 pressure | Model Request Limiter | Run Budget |
+| A model cannot satisfy Tool, JSON, streaming, or Context requirements | Model Route Catalog | Provider Retry |
 | One Run consumes too many calls, tokens, or cost | Run Budget | RPM/TPM |
 | One prompt does not fit the model context window | Context Assembly | cumulative Run tokens |
 | Autonomous execution loops or expands output | Autonomous Loop Guards | Model Retry |
@@ -42,6 +43,7 @@ capacity, resource consumption, timeouts, and stopping conditions.
 | Run Admission | process + Conversation | active and queued Runs | `concurrency.RunController` | no |
 | Child Run Admission | process + parent Run | active delegated Runs; no queue | `delegation.Controller` | relationship persisted; permits are not |
 | Model Request Limiter | process + API key | physical HTTP requests and approximate input tokens | `concurrency.ModelRequestLimiter` | no |
+| Model Route Catalog | one persisted Run | eligible target for one logical Model Call | `modelrouting.Catalog` | route contracts and policy frozen |
 | Model Retry | one logical Model Call | physical attempts | `openai.RetryPolicy` | no |
 | Run Budget | one persisted Run | logical calls, provider tokens, tools, active runtime, cost | `budget.Tracker` + Usage Store | yes |
 | Context Assembly | one logical Model Call | context tokens | `contextassembly.Assembler` | config frozen with Run |
@@ -103,6 +105,13 @@ MODEL_TOKENS_PER_MINUTE=120000
 
 A request larger than total TPM bucket capacity returns
 `request_token_capacity_exceeded`. That is not a Run Budget error.
+
+Before the selected adapter acquires these limits, the frozen Model Route
+Catalog excludes targets that cannot satisfy Tool calling, structured output,
+streaming, context-window, or output-limit requirements. Remaining routes are
+ordered by explicit priority and stable route ID. No candidate returns
+`model_route_unavailable` before an HTTP request. See
+[Model Route Contract and Catalog](model-routing.md).
 
 ## 3. Provider Timeout and Retry
 
@@ -259,7 +268,7 @@ Budget denial, tracing, and effect-journal boundaries. See
 
 Tool name, description, normalized parameter schema, schema version, definition
 revision, capability, and operator policy have been frozen since Snapshot v11.
-The current v15 Snapshot preserves that policy; v14 and earlier snapshots are
+The current v16 Snapshot preserves that policy; v15 and earlier snapshots are
 Replay-only. The live Binding owns
 handler, timeout, result-size, and concurrency policy. Execution is serial
 unless a Binding declares a safe `read_only` or keyed parallel group. Oversized

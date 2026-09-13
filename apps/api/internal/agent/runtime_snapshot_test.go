@@ -178,12 +178,10 @@ func containsFrozenTool(items []domain.RuntimeToolSnapshot, want string) bool {
 }
 
 func TestRuntimeSnapshotResumeSupportsOnlyCurrentVersion(t *testing.T) {
-	snapshot := &domain.RuntimeSnapshot{
-		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: ChatModeSingle,
-		Agent: domain.RuntimeAgentSnapshot{ID: "agent"}, Model: domain.RuntimeModelSnapshot{Model: "model"},
-		RunBudget: &domain.RuntimeRunBudget{}, ToolSecurityPolicy: toolpolicy.DefaultPolicy(),
-		ToolProgressGuard: toolprogress.DefaultConfig(),
-	}
+	value := testRuntimeSnapshot()
+	value.Mode = ChatModeSingle
+	value.AutonomousLimits = nil
+	snapshot := &value
 	if err := validateRuntimeSnapshot(snapshot); err != nil {
 		t.Fatalf("current snapshot should be resumable: %v", err)
 	}
@@ -319,16 +317,16 @@ func TestEffectiveAutonomousRunBudgetUsesStricterModeProfile(t *testing.T) {
 }
 
 func TestCaptureAutonomousSnapshotStoresRuntimeAndToolsOnlyInRunBudget(t *testing.T) {
-	runtime := &Runtime{
-		modelClient: openai.NewClient("", "", "test-model"),
-		autonomousLimits: AutonomousLimits{
+	runtime := NewRuntime(RuntimeOptions{
+		ModelClient: openai.NewClient("", "", "test-model"),
+		Autonomous: AutonomousLimits{
 			MaxIterations: 5, MaxRuntime: 5 * time.Minute,
 			MaxOutputChars: 1000, MaxToolCalls: 20,
 		},
-		runBudget: domain.RuntimeRunBudget{
+		RunBudget: domain.RuntimeRunBudget{
 			MaxRuntimeMS: (15 * time.Minute).Milliseconds(), MaxToolCalls: 50,
 		},
-	}
+	})
 	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeAutonomous, domain.Agent{ID: "agent"}, nil)
 	if err != nil {
 		t.Fatalf("capture snapshot: %v", err)

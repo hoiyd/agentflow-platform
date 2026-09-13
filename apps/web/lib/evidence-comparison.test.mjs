@@ -9,6 +9,7 @@ function bundle(overrides = {}) {
     mode: "single",
     agent: { id: "agent-1", system_prompt: "Be precise" },
     model: { provider: "openai", model: "gpt-test" },
+    model_routing: { policy_revision: "model-route-priority-v1", routes: [{ id: "primary", model: "gpt-test" }] },
     tools: [{ name: "get_current_time" }],
     context_assembly: { history_max_tokens: 2000 },
     run_budget: { max_total_tokens: 4000 },

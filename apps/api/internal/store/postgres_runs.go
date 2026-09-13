@@ -26,10 +26,14 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 	if snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion || snapshot.RunBudget == nil {
 		return domain.Run{}, errors.New("runtime snapshot is required")
 	}
-	if err := redaction.ValidateText(
+	metadata := []string{
 		snapshot.Agent.Name, snapshot.Agent.Description, snapshot.Agent.SystemPrompt,
 		snapshot.Model.BaseURL, snapshot.Model.EmbeddingBaseURL,
-	); err != nil {
+	}
+	for _, route := range snapshot.ModelRouting.Routes {
+		metadata = append(metadata, route.ID, route.Provider, route.Model, route.Endpoint, route.Pricing.Source, route.CredentialEnvironment)
+	}
+	if err := redaction.ValidateText(metadata...); err != nil {
 		return domain.Run{}, err
 	}
 	snapshotJSON, err := json.Marshal(snapshot)

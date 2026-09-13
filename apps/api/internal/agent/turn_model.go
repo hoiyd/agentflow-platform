@@ -9,6 +9,7 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/modelprovider"
 	"agentflow-platform/apps/api/internal/toolprogress"
 	"agentflow-platform/apps/api/internal/turn"
 )
@@ -50,8 +51,12 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	}
 	modelCtx := ctx
 	ctx, compaction := m.withContextSession(modelCtx, request, snapshot, isolatedChild)
+	route, err := m.runtime.selectModelRoute(ctx, request, snapshot)
+	if err != nil {
+		return turn.Result{}, err
+	}
 	if request.ModelMode == turn.ModelModeText {
-		result, executeErr := m.executeText(ctx, request)
+		result, executeErr := m.executeText(ctx, request, route.Client)
 		if executeErr == nil || isolatedChild || failure.Describe(executeErr).Code != "context_length_exceeded" {
 			return result, executeErr
 		}
@@ -64,9 +69,9 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 			return result, executeErr
 		}
 		retryCtx, _ := m.withContextSession(modelCtx, request, snapshot, isolatedChild)
-		return m.executeText(retryCtx, request)
+		return m.executeText(retryCtx, request, route.Client)
 	}
-	return m.executeStream(ctx, request, emit)
+	return m.executeStream(ctx, request, route.Client, emit)
 }
 
 func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.Request, snapshot *domain.RuntimeSnapshot, isolatedChild bool) (context.Context, *domain.ContextCompaction) {
@@ -95,11 +100,7 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 	return contextassembly.WithSession(ctx, session), compaction
 }
 
-func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, emit func(turn.ModelEvent)) (turn.Result, error) {
-	client, err := m.runtime.clientForRun(request.RunID)
-	if err != nil {
-		return turn.Result{}, err
-	}
+func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client modelprovider.Client, emit func(turn.ModelEvent)) (turn.Result, error) {
 	events, errs := client.StreamAgentChatWithToolsTrace(
 		ctx,
 		request.Agent.SystemPrompt,
@@ -142,7 +143,7 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 	return turn.Result{Output: output.String()}, nil
 }
 
-func (m runtimeTurnModel) executeText(ctx context.Context, request turn.Request) (turn.Result, error) {
+func (m runtimeTurnModel) executeText(ctx context.Context, request turn.Request, client modelprovider.Client) (turn.Result, error) {
 	payload := map[string]any{
 		"role": request.Role, "agent_id": request.Agent.ID, "system": request.SystemPrompt,
 		"input": request.Input, "input_chars": len(request.Input),
@@ -152,10 +153,6 @@ func (m runtimeTurnModel) executeText(ctx context.Context, request turn.Request)
 	}
 	for key, value := range retrievalTracePayload(request.Context.Memories, request.Context.Chunks) {
 		payload[key] = value
-	}
-	client, err := m.runtime.clientForRun(request.RunID)
-	if err != nil {
-		return turn.Result{}, err
 	}
 	prepared, err := client.PrepareText(ctx, request.SystemPrompt, request.Input)
 	if err != nil {
