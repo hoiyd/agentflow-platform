@@ -219,6 +219,24 @@ func TestRunAPIReturnsSnapshotOnlyFromReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
+	delegationID := "delegation-api-boundary"
+	childSnapshot := testRuntimeSnapshot()
+	childSnapshot.Mode = "single"
+	childSnapshot.AutonomousLimits = nil
+	childSnapshot.Delegation = &domain.RuntimeDelegation{
+		DelegationID: delegationID, ParentRunID: run.ID, ParentTurnID: "turn-api-boundary",
+		Depth: 1, IsolatedContext: true, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+	}
+	child, _, err := fixtureStore.CreateChildRun(domain.ChildRunRequest{
+		Delegation: domain.RunDelegation{
+			ID: delegationID, ParentRunID: run.ID, ParentTurnID: "turn-api-boundary",
+			AgentID: "agent_planner", Depth: 1, Task: "isolated worker task", TimeoutMS: time.Minute.Milliseconds(),
+		},
+		RuntimeSnapshot: childSnapshot,
+	})
+	if err != nil {
+		t.Fatalf("create child run: %v", err)
+	}
 	handler := &Handler{store: fixtureStore}
 
 	for _, path := range []string{"/api/runs", "/api/runs/" + run.ID} {
@@ -235,6 +253,18 @@ func TestRunAPIReturnsSnapshotOnlyFromReplay(t *testing.T) {
 		if bytes.Contains(recorder.Body.Bytes(), []byte("runtime_snapshot")) || bytes.Contains(recorder.Body.Bytes(), []byte("private frozen prompt")) {
 			t.Fatalf("expected %s to omit runtime snapshot, got %s", path, recorder.Body.String())
 		}
+		if path == "/api/runs" {
+			var listed []domain.Run
+			if err := json.Unmarshal(recorder.Body.Bytes(), &listed); err != nil || len(listed) != 1 || listed[0].ID != run.ID {
+				t.Fatalf("expected run list to contain only parent %s, got %#v err=%v", run.ID, listed, err)
+			}
+		}
+	}
+
+	childRecorder := httptest.NewRecorder()
+	handler.getRun(childRecorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+child.ID, nil))
+	if childRecorder.Code != http.StatusOK {
+		t.Fatalf("expected child run direct lookup status 200, got %d", childRecorder.Code)
 	}
 
 	recorder := httptest.NewRecorder()

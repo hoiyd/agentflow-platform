@@ -246,7 +246,7 @@ paths:
       tags: [Runs]
       responses:
         '200':
-          description: Runs ordered by the store.
+          description: Top-level Runs ordered by the store. Child Runs remain available by ID and through Replay delegation topology.
           content:
             application/json:
               schema:
@@ -327,6 +327,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '429':
           $ref: '#/components/responses/TooManyRequests'
         '500':
@@ -347,6 +349,8 @@ paths:
                 $ref: '#/components/schemas/Run'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
 

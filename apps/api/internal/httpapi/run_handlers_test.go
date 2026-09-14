@@ -3,11 +3,14 @@ package httpapi
 import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
@@ -30,6 +33,36 @@ func TestCancelRunHandlerCancelsQueuedRun(t *testing.T) {
 	}
 	if canceled.Status != domain.RunCanceled || canceled.RuntimeSnapshot != nil {
 		t.Fatalf("unexpected canceled run: %#v", canceled)
+	}
+}
+
+func TestDelegatedChildRunMutationsRequireParent(t *testing.T) {
+	fixtureStore, parent := createHTTPTestRun(t)
+	child := createHTTPChildRun(t, fixtureStore, parent)
+	runtime := agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	handler := &Handler{store: fixtureStore, agentRuntime: runtime}
+
+	requests := []struct {
+		name   string
+		handle http.HandlerFunc
+		req    *http.Request
+	}{
+		{name: "cancel", handle: handler.cancelRun, req: httptest.NewRequest(http.MethodPost, "/api/runs/"+child.ID+"/cancel", nil)},
+		{name: "resume", handle: handler.resumeRun, req: httptest.NewRequest(http.MethodPost, "/api/runs/"+child.ID+"/resume", bytes.NewBufferString(`{}`))},
+	}
+	for _, test := range requests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			test.handle(recorder, test.req)
+			if recorder.Code != http.StatusConflict || !strings.Contains(recorder.Body.String(), parent.ID) {
+				t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+
+	unchanged, ok, err := fixtureStore.GetRun(child.ID)
+	if err != nil || !ok || unchanged.Status != domain.RunQueued {
+		t.Fatalf("child mutation escaped parent boundary: run=%#v ok=%t err=%v", unchanged, ok, err)
 	}
 }
 
@@ -178,4 +211,28 @@ func createHTTPTestRun(t *testing.T) (*fixturestore.Store, domain.Run) {
 		t.Fatalf("create run: %v", err)
 	}
 	return fixtureStore, run
+}
+
+func createHTTPChildRun(t *testing.T, fixtureStore *fixturestore.Store, parent domain.Run) domain.Run {
+	t.Helper()
+	snapshot := testRuntimeSnapshot()
+	snapshot.Mode = agentpkg.ChatModeSingle
+	snapshot.AutonomousLimits = nil
+	snapshot.Delegation = &domain.RuntimeDelegation{
+		DelegationID: "delegation-http-child", ParentRunID: parent.ID, ParentTurnID: "turn-http-child",
+		ParentStageID: "stage-http-child", Depth: 1, IsolatedContext: true,
+		TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
+	}
+	child, _, err := fixtureStore.CreateChildRun(domain.ChildRunRequest{
+		Delegation: domain.RunDelegation{
+			ID: snapshot.Delegation.DelegationID, ParentRunID: parent.ID, ParentTurnID: snapshot.Delegation.ParentTurnID,
+			ParentStageID: snapshot.Delegation.ParentStageID, AgentID: snapshot.Agent.ID, Depth: 1,
+			Task: "delegated work", TimeoutMS: snapshot.Delegation.TimeoutMS,
+		},
+		RuntimeSnapshot: snapshot,
+	})
+	if err != nil {
+		t.Fatalf("create child run: %v", err)
+	}
+	return child
 }

@@ -367,6 +367,10 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
+	if parentID := delegatedParentRunID(run); parentID != "" {
+		writeError(w, http.StatusConflict, "delegated child runs must be resumed through parent run "+parentID)
+		return
+	}
 	if run.Status == domain.RunWaitingForUser && req.UserInput == "" {
 		writeError(w, http.StatusBadRequest, "user input is required")
 		return

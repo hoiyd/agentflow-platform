@@ -160,6 +160,12 @@ Runs created without the field remain `verification_status=not_required`. A cont
 `verification_status` always describes runtime Verification for that Run. It
 does not report Automated or Manual Test results.
 
+`GET /api/runs` returns top-level Runs only. Delegated Child Runs remain
+available through direct Run lookup and Replay delegation topology, but are not
+mixed into conversation-level selection or controlled-comparison candidates.
+`resume` and `cancel` return `409` when called with a Child Run ID; those lifecycle
+operations must target its Parent Run.
+
 `GET /api/runs/{id}/collaboration_steps` returns the persisted records for
 orchestration Stages. Each `CollaborationStep.id` is the `stage_id` used by its
 related Run Events.

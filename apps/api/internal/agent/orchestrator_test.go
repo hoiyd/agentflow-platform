@@ -378,6 +378,16 @@ func TestMultiAgentWorkerUsesBoundedIsolatedChildRun(t *testing.T) {
 			t.Fatalf("missing parent event %s", eventType)
 		}
 	}
+	steps, err := fixtureStore.ListCollaborationSteps(prepared.Run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{"planner", "router", "worker", "reviewer", "finalizer"} {
+		step, found := findCollaborationStep(steps, role)
+		if !found || step.Status != domain.CollaborationStepCompleted {
+			t.Fatalf("expected completed parent %s stage, got %#v", role, step)
+		}
+	}
 }
 
 func TestContinueCollaborationRefusesIneligibleCandidatesWithoutChildRun(t *testing.T) {
@@ -859,7 +869,7 @@ func TestResumeRecoverableCollaborationUsesCompletedChildResult(t *testing.T) {
 	}
 }
 
-func TestResumeRecoverableCollaborationRejectsNonResumableDelegation(t *testing.T) {
+func TestResumeRecoverableCollaborationResumesCreatedQueuedChild(t *testing.T) {
 	runtime, fixtureStore, run := newRecoverableCollaborationForTest(t)
 	createRecoveryStep(t, fixtureStore, run, "planner", "agent_planner", "task", "plan")
 	createRecoveryStep(t, fixtureStore, run, "router", "agent_planner", "route", "agent_planner")
@@ -869,7 +879,7 @@ func TestResumeRecoverableCollaborationRejectsNonResumableDelegation(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, relation, err := fixtureStore.CreateChildRun(domain.ChildRunRequest{
+	child, relation, err := fixtureStore.CreateChildRun(domain.ChildRunRequest{
 		Delegation: domain.RunDelegation{
 			ID: "delegation-created", ParentRunID: run.ID, ParentTurnID: "turn-created",
 			ParentStageID: worker.ID, AgentID: selected.ID, Depth: 1,
@@ -880,8 +890,35 @@ func TestResumeRecoverableCollaborationRejectsNonResumableDelegation(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := resumeCollaborationError(runtime, run.ID); err == nil || !strings.Contains(err.Error(), "not resumable") {
-		t.Fatalf("expected created delegation rejection, got %v", err)
+	if err := resumeCollaborationError(runtime, run.ID); err != nil {
+		t.Fatalf("resume created delegation: %v", err)
+	}
+	updated, ok, err := fixtureStore.GetRunDelegation(relation.ID)
+	if err != nil || !ok || updated.Status != domain.DelegationCompleted || updated.ChildRunID != child.ID {
+		t.Fatalf("resumed relation=%#v ok=%v err=%v", updated, ok, err)
+	}
+}
+
+func TestResumeRecoverableCollaborationRejectsCompletedChildWithoutOutput(t *testing.T) {
+	runtime, fixtureStore, run := newRecoverableCollaborationForTest(t)
+	createRecoveryStep(t, fixtureStore, run, "planner", "agent_planner", "task", "plan")
+	createRecoveryStep(t, fixtureStore, run, "router", "agent_planner", "route", "agent_planner")
+	worker := createRecoveryStep(t, fixtureStore, run, "worker", "agent_planner", "work", "")
+	selected, _ := findAgentByID(restoreCandidates(run.RuntimeSnapshot.CandidateAgents), "agent_planner")
+	childSnapshot, err := runtime.childRuntimeSnapshot(run, selected, "delegation-completed-empty", "turn-completed-empty", worker.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, relation, err := fixtureStore.CreateChildRun(domain.ChildRunRequest{
+		Delegation: domain.RunDelegation{
+			ID: "delegation-completed-empty", ParentRunID: run.ID, ParentTurnID: "turn-completed-empty",
+			ParentStageID: worker.ID, AgentID: selected.ID, Depth: 1,
+			Task: worker.Input, TimeoutMS: childSnapshot.Delegation.TimeoutMS,
+		},
+		RuntimeSnapshot: childSnapshot,
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 	if _, err := fixtureStore.UpdateRunDelegation(relation.ID, domain.DelegationResult{Status: domain.DelegationCompleted}); err != nil {
 		t.Fatal(err)
