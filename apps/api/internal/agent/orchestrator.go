@@ -385,8 +385,8 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 				errs <- errors.New("completed delegation has no child output reference")
 				return
 			}
-		case domain.DelegationBlocked:
-			if relation.BlockReason != domain.DelegationBlockReasonChildRecoveryRequired {
+		case domain.DelegationCreated, domain.DelegationBlocked:
+			if relation.Status == domain.DelegationBlocked && relation.BlockReason != domain.DelegationBlockReasonChildRecoveryRequired {
 				errs <- fmt.Errorf("delegation %s has unsupported block reason %q", relation.ID, relation.BlockReason)
 				return
 			}
@@ -404,8 +404,20 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 				errs <- err
 				return
 			}
-			if !childFound || childRun.Status != domain.RunFailedRecoverable {
-				errs <- errors.New("blocked child run is not recoverable")
+			expectedChildStatus := domain.RunFailedRecoverable
+			if relation.Status == domain.DelegationCreated {
+				expectedChildStatus = domain.RunQueued
+			}
+			if !childFound {
+				errs <- errors.New("delegated child run not found")
+				return
+			}
+			if childRun.Status != expectedChildStatus {
+				if relation.Status == domain.DelegationBlocked {
+					errs <- errors.New("blocked child run is not recoverable")
+				} else {
+					errs <- fmt.Errorf("created child run is not resumable from status %q", childRun.Status)
+				}
 				return
 			}
 		default:
@@ -423,7 +435,7 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 		workerOutput := relation.Summary + "\n\nChild trace: " + relation.OutputRef
 		switch relation.Status {
 		case domain.DelegationCompleted:
-		case domain.DelegationBlocked:
+		case domain.DelegationCreated, domain.DelegationBlocked:
 			workerStep, err = r.store.UpdateCollaborationStep(workerStep.ID, domain.CollaborationStepRunning, "", "")
 			if err != nil {
 				errs <- err

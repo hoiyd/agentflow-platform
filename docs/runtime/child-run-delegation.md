@@ -70,6 +70,8 @@ Delegation contract。
 
 Postgres 会原子创建 Child Run 与 `RunDelegation`。父 Run 的
 Replay 返回 `child_delegations`，Child Replay 返回 `parent_delegation`。
+Child Replay 可直接查看，但恢复和取消必须通过 Parent Run 发起，避免两条控制链
+并发修改同一 Delegation。
 
 启动恢复先由 H-08 将 stale Child Run 修复为 `failed_recoverable`，再对仍处于
 `created/running` 的 Delegation 做幂等 reconciliation：
@@ -80,7 +82,9 @@ Replay 返回 `child_delegations`，Child Replay 返回 `parent_delegation`。
   `block_reason=child_recovery_required`；父 Run Resume 使用同一 Child Run、
   冻结 Snapshot 和 Delegation 继续执行；
 - Child canceled：关闭 Delegation 并失败父 Worker Stage；
-- Child 仍有效运行或 queued：保持原状态，不猜测结果。
+- Child 仍有效运行：保持原状态，不猜测结果；
+- Child 尚未启动且仍为 queued：保留 `created` 关系，Parent Resume 使用同一个
+  Child Run 开始执行，不创建重复 Child。
 
 reconciliation 会补写 synthetic typed `delegation.completed/blocked/failed/canceled`
 事件。它不会自动重放未知副作用；外部 Tool 的安全恢复仍由 H-08 Tool Effect
@@ -92,6 +96,7 @@ Journal 负责。
 
 - `delegation.created`
 - `delegation.started`
+- `delegation.blocked`
 - `delegation.completed`
 - `delegation.failed`
 - `delegation.canceled`

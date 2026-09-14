@@ -1118,7 +1118,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Runs ordered by the store. */
+            /** @description Top-level Runs ordered by the store. Child Runs remain available by ID and through Replay delegation topology. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1211,6 +1211,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
         };
@@ -1236,6 +1237,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
         };
     };
