@@ -14,8 +14,9 @@ file into a second handbook.
 5. Keep command output bounded. Use `rg` before slower search tools.
 6. Before implementing a backlog item, search for complete and partial existing
    behavior. Extend or consolidate it instead of creating a parallel path.
-7. Never directly remove/delete a backlog item. Instead, move it/them to a proper
-   place inside `docs/archive` folder.
+7. Never delete a backlog item. Move completed, superseded, or retired items to
+   that backlog's archive folder, preserving the ID, final status, and the
+   replacement or retirement reason.
 8. Trace cross-layer changes through backend behavior, API contracts, generated
    clients, and frontend consumers before treating the work as complete.
 
