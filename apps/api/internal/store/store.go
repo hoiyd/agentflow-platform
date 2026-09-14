@@ -63,15 +63,6 @@ type RunStore interface {
 	ListRunsByWorkspace(workspaceID string) ([]domain.Run, error)
 }
 
-type DelegationStore interface {
-	CreateChildRun(domain.ChildRunRequest) (domain.Run, domain.RunDelegation, error)
-	UpdateRunDelegation(string, domain.DelegationResult) (domain.RunDelegation, error)
-	GetRunDelegation(string) (domain.RunDelegation, bool, error)
-	GetParentDelegation(string) (domain.RunDelegation, bool, error)
-	ListRunDelegations(string) ([]domain.RunDelegation, error)
-	ListActiveRunDelegations() ([]domain.RunDelegation, error)
-}
-
 type VerificationStore interface {
 	UpdateRunVerificationStatus(id string, status domain.VerificationStatus) (domain.Run, error)
 	AppendVerificationRecord(record domain.VerificationRecord) error
@@ -219,7 +210,6 @@ type Store interface {
 	ConversationStore
 	AgentStore
 	RunStore
-	DelegationStore
 	CollaborationStore
 	RunEventStore
 	RecoveryStore

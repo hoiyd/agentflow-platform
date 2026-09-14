@@ -54,7 +54,7 @@ the project.
 | [Failure handling](runtime/failure-handling.md) | How do subsystem errors retain specific types while exposing one structured trace and Episode contract? |
 | [Run Budget](runtime/run-budget.md) | How are logical calls, provider usage, tools, runtime, and cost accounted for? |
 | [Durable recovery](runtime/durable-recovery.md) | How are interrupted lifecycles repaired, Stage boundaries checkpointed, and external Tool effects replayed safely? |
-| [Bounded Child Run Delegation](runtime/child-run-delegation.md) | How does Multi-Agent isolate Worker authority, context, budget, cancellation, result size, and parent-child Replay topology? |
+| [Isolated Worker Stage](runtime/isolated-worker-stage.md) | How does Multi-Agent isolate Worker authority and context while keeping one Run lifecycle, budget, recovery path, and Replay? |
 | [Context management](context/context-management.md) | How is each model input assembled, bounded, compacted, and explained? |
 | [Structured Task State](runtime/task-state.md) | How do goals, tasks, decisions, constraints, blockers, and Artifact references remain versioned across Runs and compaction? |
 | [Model request reconstruction](context/model-request-reconstruction.md) | How are final model payloads hashed, optionally captured, and checked against Runtime Snapshot and Context Manifest records? |

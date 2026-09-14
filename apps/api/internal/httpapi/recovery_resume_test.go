@@ -156,87 +156,28 @@ func writeBenchmarkReplayArtifact(t *testing.T, name string, replay domain.RunRe
 	}
 }
 
-func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testing.T) {
+func TestResumeRecoverableCollaborationThroughAPIUsesDurableStages(t *testing.T) {
 	fixtureStore := fixturestore.New()
-
 	conversation, err := fixtureStore.CreateConversation("Recoverable collaboration API resume")
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := newLocalFallbackOpenAIClientForTest()
 	runtime := agent.NewRuntime(agent.RuntimeOptions{
-		Store: fixtureStore, ModelClient: client, RouterMode: agent.RouterModeQuery,
-		ChildRuns: agent.ChildRunLimits{
-			MaxConcurrent: 1, MaxPerParent: 1, Timeout: time.Minute, SummaryMaxChars: 100,
-			RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000},
-		},
+		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: agent.RouterModeQuery,
 	})
 	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	planner, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
-		RunID: prepared.Run.ID, ConversationID: conversation.ID, Role: "planner",
-		AgentID: "agent_planner", Status: domain.CollaborationStepCompleted,
-		Input: "Implement the API change", Output: "Inspect, implement, and test.",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
-		RunID: prepared.Run.ID, ConversationID: conversation.ID, Role: "router",
-		AgentID: "agent_planner", Status: domain.CollaborationStepCompleted,
-		Input: "route", Output: "agent_planner",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	worker, err := fixtureStore.CreateCollaborationStep(domain.CollaborationStep{
-		RunID: prepared.Run.ID, ConversationID: conversation.ID, Role: "worker",
-		AgentID: "agent_planner", Status: domain.CollaborationStepFailed,
-		Input: "delegated work", Error: "worker interrupted",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	selected := prepared.Run.RuntimeSnapshot.Agent
-	for _, candidate := range prepared.Run.RuntimeSnapshot.CandidateAgents {
-		if candidate.ID == "agent_planner" {
-			selected = candidate
-			break
+	for _, step := range []domain.CollaborationStep{
+		{Role: "planner", AgentID: "agent_planner", Input: "Implement the API change", Output: "Inspect, implement, and test."},
+		{Role: "router", AgentID: "agent_planner", Input: "route", Output: "agent_planner"},
+		{Role: "worker", AgentID: "agent_planner", Input: "work", Output: "durable worker result"},
+	} {
+		step.RunID, step.ConversationID, step.Status = prepared.Run.ID, conversation.ID, domain.CollaborationStepCompleted
+		if _, err := fixtureStore.CreateCollaborationStep(step); err != nil {
+			t.Fatal(err)
 		}
-	}
-	delegationID := "delegation-api-resume"
-	childSnapshot := domain.RuntimeSnapshot{
-		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, Mode: agent.ChatModeSingle,
-		Agent: selected, Embedding: prepared.Run.RuntimeSnapshot.Embedding,
-		ModelRouting:       prepared.Run.RuntimeSnapshot.ModelRouting,
-		ContextAssembly:    prepared.Run.RuntimeSnapshot.ContextAssembly,
-		RunBudget:          &domain.RuntimeRunBudget{MaxModelCalls: 2, MaxTotalTokens: 4000},
-		ToolSecurityPolicy: prepared.Run.RuntimeSnapshot.ToolSecurityPolicy,
-		ToolProgressGuard:  prepared.Run.RuntimeSnapshot.ToolProgressGuard,
-		Delegation: &domain.RuntimeDelegation{
-			DelegationID: delegationID, ParentRunID: prepared.Run.ID, ParentTurnID: "turn-api-resume",
-			ParentStageID: worker.ID, Depth: 1, IsolatedContext: true,
-			TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
-		},
-		CreatedAt: time.Now().UTC(),
-	}
-	child, relation, err := fixtureStore.CreateChildRun(domain.ChildRunRequest{
-		Delegation: domain.RunDelegation{
-			ID: delegationID, ParentRunID: prepared.Run.ID, ParentTurnID: "turn-api-resume",
-			ParentStageID: worker.ID, AgentID: selected.ID, Depth: 1,
-			Task: worker.Input, TimeoutMS: time.Minute.Milliseconds(),
-		},
-		RuntimeSnapshot: childSnapshot,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := fixtureStore.UpdateRunDelegation(relation.ID, domain.DelegationResult{
-		Status: domain.DelegationCompleted, Summary: "durable worker result",
-		OutputRef: "run://" + child.ID + "/stages/worker", OutputHash: "hash", OutputBytes: 21,
-	}); err != nil {
-		t.Fatal(err)
 	}
 	if _, err := fixtureStore.UpdateRunStatus(prepared.Run.ID, domain.RunFailedRecoverable, "worker interrupted"); err != nil {
 		t.Fatal(err)
@@ -244,26 +185,20 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableChildResult(t *testi
 
 	handler := &Handler{
 		store: fixtureStore, agentRuntime: runtime,
-		runController: concurrency.NewRunController(concurrency.RunOptions{
-			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
-		}),
+		runController: concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second}),
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/runs/"+prepared.Run.ID+"/resume", bytes.NewReader([]byte(`{}`)))
 	recorder := httptest.NewRecorder()
-	handler.resumeRun(recorder, req)
+	handler.resumeRun(recorder, httptest.NewRequest(http.MethodPost, "/api/runs/"+prepared.Run.ID+"/resume", bytes.NewReader([]byte(`{}`))))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "event: done") {
 		t.Fatalf("resume response: status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 	updated, ok, err := fixtureStore.GetRun(prepared.Run.ID)
 	if err != nil || !ok || updated.Status != domain.RunCompleted {
-		t.Fatalf("resumed parent=%#v ok=%v err=%v", updated, ok, err)
+		t.Fatalf("resumed run=%#v ok=%v err=%v", updated, ok, err)
 	}
 	steps, err := fixtureStore.ListCollaborationSteps(prepared.Run.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !hasStepRole(steps, "reviewer") || !hasStepRole(steps, "finalizer") || planner.ID == "" {
-		t.Fatalf("resumed collaboration steps=%#v", steps)
+	if err != nil || !hasStepRole(steps, "reviewer") || !hasStepRole(steps, "finalizer") {
+		t.Fatalf("resumed collaboration steps=%#v err=%v", steps, err)
 	}
 }
 

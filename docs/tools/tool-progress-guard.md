@@ -2,7 +2,7 @@
 
 AgentFlow uses a Run-scoped Tool Progress Guard to stop repeated Tool work that
 consumes Budget without changing execution state. It runs in the shared Tool
-Executor, so Single, Multi-Agent Child Runs, and Autonomous mode use the same
+Executor, so Single, Multi-Agent Worker Stages, and Autonomous mode use the same
 rules.
 
 ## What Is Tracked

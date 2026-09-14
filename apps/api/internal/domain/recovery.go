@@ -129,8 +129,6 @@ const (
 	RecoveryTaskBlocked         RecoveryReason = "task_blocked"
 	RecoveryVerificationFailed  RecoveryReason = "verification_failed"
 	RecoveryVerificationBlocked RecoveryReason = "verification_blocked"
-	RecoveryChildBlocked        RecoveryReason = "child_run_blocked"
-	RecoveryChildOwnedByParent  RecoveryReason = "child_run_owned_by_parent"
 	RecoveryToolEffectUncertain RecoveryReason = "tool_effect_reconciliation_required"
 )
 

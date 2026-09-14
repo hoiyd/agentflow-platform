@@ -52,11 +52,11 @@ const experimentDimensions = [
   { key: "context_assembly", label: "Context assembly", fields: ["context_assembly"] },
   { key: "run_budget", label: "Run budget", fields: ["run_budget"] },
   { key: "tool_governance", label: "Tool governance", fields: ["tool_security_policy", "tool_progress_guard"] },
-  { key: "orchestration", label: "Orchestration limits", fields: ["router_mode", "autonomous_limits", "child_run_policy"] }
+  { key: "orchestration", label: "Orchestration limits", fields: ["router_mode", "autonomous_limits"] }
 ] as const;
 
 const ownedSnapshotFields = new Set([
-  "schema_version", "mode", "created_at", "delegation",
+  "schema_version", "mode", "created_at",
   ...experimentDimensions.flatMap((dimension) => dimension.fields)
 ]);
 
@@ -78,9 +78,6 @@ export function compareEvidence(currentBundle: EvidenceBundle, baselineBundle: E
   if (currentSnapshot && baselineSnapshot) {
     compareRequiredIdentity("Snapshot schema", numberOrNull(currentSnapshot.schema_version), numberOrNull(baselineSnapshot.schema_version), reasons);
     compareRequiredIdentity("Execution mode", stringOrNull(currentSnapshot.mode), stringOrNull(baselineSnapshot.mode), reasons);
-    if (!sameValue(currentSnapshot.delegation, baselineSnapshot.delegation)) {
-      reasons.push("Delegation identity differs");
-    }
     for (const dimension of experimentDimensions) {
       if (!sameValue(selectFields(currentSnapshot, dimension.fields), selectFields(baselineSnapshot, dimension.fields))) {
         changed.push(dimension);

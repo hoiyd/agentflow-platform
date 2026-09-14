@@ -244,18 +244,6 @@ func (s *Store) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		}
 	}
 	sort.Slice(taskStateRevisions, func(i, j int) bool { return taskStateRevisions[i].Version < taskStateRevisions[j].Version })
-	childDelegations := []domain.RunDelegation{}
-	var parentDelegation *domain.RunDelegation
-	for _, item := range s.data.RunDelegations {
-		if item.ParentRunID == runID {
-			childDelegations = append(childDelegations, item)
-		}
-		if item.ChildRunID == runID {
-			copy := item
-			parentDelegation = &copy
-		}
-	}
-	sort.Slice(childDelegations, func(i, j int) bool { return childDelegations[i].CreatedAt.Before(childDelegations[j].CreatedAt) })
 	replay := domain.RunReplay{
 		Run:                   store.CloneRun(run),
 		Projection:            readModel,
@@ -272,8 +260,6 @@ func (s *Store) GetRunReplay(runID string) (domain.RunReplay, bool, error) {
 		VerificationEvidence:  verificationEvidence,
 		VerificationArtifacts: store.VerificationArtifactsForRun(s.data.VerificationArtifacts, runID),
 		TaskStateRevisions:    taskStateRevisions,
-		ParentDelegation:      parentDelegation,
-		ChildDelegations:      childDelegations,
 	}
 	replay.RecoverySummary = projection.BuildRecoverySummary(replay)
 	return replay, true, nil

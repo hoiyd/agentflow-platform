@@ -145,7 +145,7 @@ Router only selects from eligible frozen profiles. A 422-class SSE error with
 frozen capability checks. `agent_route_requirements_invalid` means the request
 contains conflicting requirements. `agent_route_no_suitable_candidate` means
 the eligible candidates did not pass the versioned score, margin, confidence,
-or coverage gate. None of these cases creates a Child Run. Replay records the decision as
+or coverage gate. None of these cases starts a Worker Stage. Replay records the decision as
 `agent.selection.decided`.
 
 See [Configurable Agent Profiles](../runtime/agent-profiles.md) for mode behavior, Router
@@ -160,11 +160,9 @@ Runs created without the field remain `verification_status=not_required`. A cont
 `verification_status` always describes runtime Verification for that Run. It
 does not report Automated or Manual Test results.
 
-`GET /api/runs` returns top-level Runs only. Delegated Child Runs remain
-available through direct Run lookup and Replay delegation topology, but are not
-mixed into conversation-level selection or controlled-comparison candidates.
-`resume` and `cancel` return `409` when called with a Child Run ID; those lifecycle
-operations must target its Parent Run.
+`GET /api/runs` returns persisted Runs ordered by the store. Multi-Agent Worker
+execution is represented as a Stage on its owning Run, so there is no separate
+Child Run lifecycle or mutation API.
 
 `GET /api/runs/{id}/collaboration_steps` returns the persisted records for
 orchestration Stages. Each `CollaborationStep.id` is the `stage_id` used by its

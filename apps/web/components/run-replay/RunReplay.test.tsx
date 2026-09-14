@@ -124,6 +124,5 @@ function replayFixture(): RunReplayData {
     verification_evidence: [],
     verification_artifacts: [],
     task_state_revisions: [],
-    child_delegations: []
   };
 }

@@ -171,30 +171,6 @@ export type TaskStateRevision = {
   created_at: string;
 };
 
-export type RunDelegation = {
-  id: string;
-  workspace_id: string;
-  conversation_id: string;
-  parent_run_id: string;
-  parent_turn_id: string;
-  parent_stage_id?: string;
-  child_run_id: string;
-  agent_id: string;
-  depth: number;
-  status: "created" | "running" | "blocked" | "completed" | "failed" | "canceled" | string;
-  block_reason?: "child_recovery_required" | string;
-  task: string;
-  summary?: string;
-  output_ref?: string;
-  output_hash?: string;
-  output_bytes?: number;
-  summary_truncated?: boolean;
-  timeout_ms: number;
-  error?: string;
-  created_at: string;
-  updated_at: string;
-};
-
 export type ToolArtifact = {
 	id: string;
 	schema_version: number;
@@ -297,8 +273,6 @@ export type RunReplay = {
   verification_evidence: Array<Record<string, unknown>>;
   verification_artifacts: Array<Record<string, unknown>>;
   task_state_revisions: TaskStateRevision[];
-  parent_delegation?: RunDelegation;
-  child_delegations: RunDelegation[];
 	recovery_summary?: RecoverySummary;
 };
 
@@ -374,8 +348,6 @@ function normalizeRunReplay(data: unknown): RunReplay {
     verification_evidence: Array.isArray(replay.verification_evidence) ? replay.verification_evidence : [],
     verification_artifacts: Array.isArray(replay.verification_artifacts) ? replay.verification_artifacts : [],
     task_state_revisions: Array.isArray(replay.task_state_revisions) ? replay.task_state_revisions : [],
-    parent_delegation: isObject(replay.parent_delegation) ? replay.parent_delegation as RunDelegation : undefined,
-    child_delegations: Array.isArray(replay.child_delegations) ? replay.child_delegations as RunDelegation[] : [],
     recovery_summary: normalizeRecoverySummary(replay.recovery_summary)
   };
 }

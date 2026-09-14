@@ -38,7 +38,7 @@ const executionModes = [
     icon: Users,
     label: "Coordinate",
     title: "Multi-agent",
-    body: "Planner, researcher, worker, and reviewer collaborate through persisted stages and bounded child runs."
+    body: "Planner, router, worker, reviewer, and finalizer collaborate through persisted, isolated stages."
   },
   {
     icon: Repeat2,
@@ -67,7 +67,7 @@ const platformCapabilities = [
     icon: Wrench,
     phase: "Execute",
     title: "Tool-aware orchestration",
-    body: "Stream every mode through the same Go runtime with guarded tools, durable stage checkpoints, resumable child runs, and compacted context.",
+    body: "Stream every mode through the same Go runtime with guarded tools, durable stage checkpoints, resumable runs, and compacted context.",
     details: ["Tool artifact spillover", "Checkpoint recovery", "Context manifest"]
   },
   {

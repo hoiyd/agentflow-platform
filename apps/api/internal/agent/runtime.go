@@ -11,7 +11,6 @@ import (
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/contextcompaction"
-	"agentflow-platform/apps/api/internal/delegation"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	tracepkg "agentflow-platform/apps/api/internal/event"
@@ -50,9 +49,12 @@ type Runtime struct {
 	taskStates            *taskstate.Service
 	toolArtifacts         *toolartifact.Service
 	liveEvents            eventpkg.LivePublisher
-	delegations           *delegation.Controller
-	childRunLimits        ChildRunLimits
 	memoryRecall          memorypkg.Recaller
+	activeRunCancels      sync.Map
+}
+
+type activeRunCancellation struct {
+	cancel context.CancelFunc
 }
 
 type RuntimeStore interface {
@@ -75,7 +77,6 @@ type RuntimeStore interface {
 	store.SessionHistoryStore
 	store.RunUsageStore
 	store.CheckpointStore
-	store.DelegationStore
 }
 
 type AutonomousLimits struct {
@@ -83,14 +84,6 @@ type AutonomousLimits struct {
 	MaxRuntime     time.Duration
 	MaxOutputChars int
 	MaxToolCalls   int
-}
-
-type ChildRunLimits struct {
-	MaxConcurrent   int
-	MaxPerParent    int
-	Timeout         time.Duration
-	SummaryMaxChars int
-	RunBudget       domain.RuntimeRunBudget
 }
 
 type PreparedRun struct {
@@ -117,7 +110,6 @@ type RuntimeOptions struct {
 	KnowledgeRetriever rag.Retriever
 	CheckpointProvider checkpoint.Provider
 	LiveEvents         eventpkg.LivePublisher
-	ChildRuns          ChildRunLimits
 	MemoryRecall       memorypkg.Recaller
 }
 
@@ -174,35 +166,10 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		taskStates:            taskStates,
 		toolArtifacts:         toolArtifacts,
 		liveEvents:            options.LiveEvents,
-		childRunLimits:        normalizeChildRunLimits(options.ChildRuns),
 		memoryRecall:          options.MemoryRecall,
 	}
-	runtime.delegations = delegation.NewController(delegation.Options{
-		MaxConcurrent: runtime.childRunLimits.MaxConcurrent,
-		MaxPerParent:  runtime.childRunLimits.MaxPerParent,
-		MaxDepth:      1,
-	})
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime
-}
-
-func normalizeChildRunLimits(limits ChildRunLimits) ChildRunLimits {
-	if limits.MaxConcurrent <= 0 {
-		limits.MaxConcurrent = 2
-	}
-	if limits.MaxPerParent <= 0 {
-		limits.MaxPerParent = 1
-	}
-	if limits.Timeout <= 0 {
-		limits.Timeout = 2 * time.Minute
-	}
-	if limits.SummaryMaxChars <= 0 {
-		limits.SummaryMaxChars = 4000
-	}
-	if limits.RunBudget.MaxRuntimeMS <= 0 || limits.RunBudget.MaxRuntimeMS > limits.Timeout.Milliseconds() {
-		limits.RunBudget.MaxRuntimeMS = limits.Timeout.Milliseconds()
-	}
-	return limits
 }
 
 func DefaultAutonomousLimits() AutonomousLimits {
@@ -622,6 +589,24 @@ func (r *Runtime) RejectRunCompletion(id string, status domain.RunStatus, reason
 	return run, err
 }
 
+func (r *Runtime) bindRunCancellation(ctx context.Context, runID string) (context.Context, func()) {
+	ctx, cancel := context.WithCancel(ctx)
+	active := &activeRunCancellation{cancel: cancel}
+	if previous, loaded := r.activeRunCancels.Swap(runID, active); loaded {
+		previous.(*activeRunCancellation).cancel()
+	}
+	return ctx, func() {
+		r.activeRunCancels.CompareAndDelete(runID, active)
+		cancel()
+	}
+}
+
+func (r *Runtime) cancelActiveRun(runID string) {
+	if active, ok := r.activeRunCancels.Load(runID); ok {
+		active.(*activeRunCancellation).cancel()
+	}
+}
+
 func (r *Runtime) CancelRun(id string) (domain.Run, error) {
 	run, ok, err := r.store.GetRun(strings.TrimSpace(id))
 	if err != nil {
@@ -630,7 +615,6 @@ func (r *Runtime) CancelRun(id string) (domain.Run, error) {
 	if !ok {
 		return domain.Run{}, store.ErrNotFound("run")
 	}
-	r.delegations.CancelParent(run.ID, context.Canceled)
 	switch run.Status {
 	case domain.RunCompleted, domain.RunFailed, domain.RunCanceled:
 		r.forgetProgressGuard(run.ID)
@@ -639,8 +623,12 @@ func (r *Runtime) CancelRun(id string) (domain.Run, error) {
 		updated, err := r.store.UpdateRunStatus(run.ID, domain.RunCanceling, "cancel requested by user")
 		if err == nil {
 			r.publishRunLifecycle(context.Background(), updated, domain.EventRunCancelRequested, map[string]any{"status": updated.Status})
+			r.cancelActiveRun(run.ID)
 		}
 		return updated, err
+	case domain.RunCanceling:
+		r.cancelActiveRun(run.ID)
+		return run, nil
 	default:
 		updated, err := r.store.UpdateRunStatus(run.ID, domain.RunCanceled, "canceled by user")
 		if err == nil {

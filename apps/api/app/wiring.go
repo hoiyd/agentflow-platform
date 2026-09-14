@@ -55,12 +55,6 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	} else if recovered > 0 {
 		log.Printf("native recovery repaired %d stale running run(s) as failed_recoverable", recovered)
 	}
-	if reconciled, recoveryErr := recovery.ReconcileChildRunDelegations(appStore); recoveryErr != nil {
-		return applicationDependencies{}, fmt.Errorf("reconcile child run delegations: %w", recoveryErr)
-	} else if reconciled > 0 {
-		log.Printf("native recovery reconciled %d child run delegation(s)", reconciled)
-	}
-
 	requestLimiter := concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{
 		MaxConcurrent:     cfg.MaxConcurrentModelRequests,
 		RequestsPerPeriod: cfg.ModelRequestsPerMinute,
@@ -146,16 +140,6 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		KnowledgeRetriever: retrievalPipeline,
 		MemoryRecall:       memoryProvider,
 		LiveEvents:         eventHub,
-		ChildRuns: agent.ChildRunLimits{
-			MaxConcurrent: cfg.MaxConcurrentChildRuns, MaxPerParent: cfg.MaxChildRunsPerParent,
-			Timeout: cfg.ChildRunTimeout, SummaryMaxChars: cfg.ChildRunSummaryMaxCharacters,
-			RunBudget: domain.RuntimeRunBudget{
-				MaxModelCalls: cfg.ChildRunMaxModelCalls, MaxTotalTokens: cfg.ChildRunMaxTotalTokens,
-				MaxToolCalls: cfg.ChildRunMaxToolCalls, MaxRuntimeMS: cfg.ChildRunTimeout.Milliseconds(),
-				InputCostPerMillionTokensMicros:  cfg.ModelInputCostPerMillionMicros,
-				OutputCostPerMillionTokensMicros: cfg.ModelOutputCostPerMillionMicros,
-			},
-		},
 	})
 	if err := memoryProvider.Initialize(context.Background()); err != nil {
 		return applicationDependencies{}, fmt.Errorf("initialize memory provider: %w", err)

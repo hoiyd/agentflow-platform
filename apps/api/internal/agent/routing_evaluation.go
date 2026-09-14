@@ -76,7 +76,7 @@ func AgentRoutingPrompts(task, plan string, requirements domain.AgentRoutingRequ
 }
 
 // EvaluateAgentRouting runs the same policy primitives as production without
-// creating Runs, stages, events, or child Runs.
+// creating runtime Runs, stages, or events.
 func EvaluateAgentRouting(input RoutingEvaluationInput) RoutingEvaluationResult {
 	input.Requirements = domain.NormalizeAgentRoutingRequirements(input.Requirements)
 	result := RoutingEvaluationResult{Mode: NormalizeRouterMode(input.RouterMode), Candidates: []RoutingEvaluationCandidate{}}

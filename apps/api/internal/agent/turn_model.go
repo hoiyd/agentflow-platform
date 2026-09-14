@@ -45,19 +45,19 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 			err = runBudgetCause(ctx, err)
 		}
 	}()
-	isolatedChild := snapshot.Delegation != nil && snapshot.Delegation.IsolatedContext
+	isolatedContext := request.Context.Isolated
 	route, err := m.runtime.selectModelRoute(ctx, request, snapshot)
 	if err != nil {
 		return turn.Result{}, err
 	}
-	if !isolatedChild {
+	if !isolatedContext {
 		m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerHard, request.TurnID, route.Client)
 	}
 	modelCtx := ctx
-	ctx, compaction := m.withContextSession(modelCtx, request, snapshot, isolatedChild)
+	ctx, compaction := m.withContextSession(modelCtx, request, snapshot, isolatedContext)
 	if request.ModelMode == turn.ModelModeText {
 		result, executeErr := m.executeText(ctx, request, route.Client)
-		if executeErr == nil || isolatedChild || failure.Describe(executeErr).Code != "context_length_exceeded" {
+		if executeErr == nil || isolatedContext || failure.Describe(executeErr).Code != "context_length_exceeded" {
 			return result, executeErr
 		}
 		beforeGeneration := int64(0)
@@ -68,31 +68,35 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		if compactErr != nil || advanced == nil || advanced.Generation <= beforeGeneration {
 			return result, executeErr
 		}
-		retryCtx, _ := m.withContextSession(modelCtx, request, snapshot, isolatedChild)
+		retryCtx, _ := m.withContextSession(modelCtx, request, snapshot, isolatedContext)
 		return m.executeText(retryCtx, request, route.Client)
 	}
 	return m.executeStream(ctx, request, route.Client, emit)
 }
 
-func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.Request, snapshot *domain.RuntimeSnapshot, isolatedChild bool) (context.Context, *domain.ContextCompaction) {
+func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.Request, snapshot *domain.RuntimeSnapshot, isolatedContext bool) (context.Context, *domain.ContextCompaction) {
+	history := request.History
+	if isolatedContext {
+		history = nil
+	}
 	var compaction *domain.ContextCompaction
-	if !isolatedChild && snapshot.ContextAssembly.CompactionMode != contextassembly.CompactionModeOff {
+	if !isolatedContext && snapshot.ContextAssembly.CompactionMode != contextassembly.CompactionModeOff {
 		if latest, ok, loadErr := m.runtime.store.GetLatestContextCompaction(request.ConversationID); loadErr == nil && ok {
 			compaction = &latest
 		}
 	}
 	var historySearch []domain.RetrievedSessionHistory
-	if !isolatedChild {
+	if !isolatedContext {
 		historySearch = m.runtime.retrieveSessionHistory(ctx, request.RunID, request.ConversationID, request.Input)
 	}
 	session := contextassembly.Session{
 		Config: snapshot.ContextAssembly, Sink: request.Sink,
-		History: request.History, CurrentInput: request.Input,
+		History: history, CurrentInput: request.Input,
 		Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
 		HistorySearch: historySearch,
 		Compaction:    compaction,
 	}
-	if !isolatedChild && m.runtime.taskStates != nil {
+	if !isolatedContext && m.runtime.taskStates != nil {
 		session.LoadTaskState = func() (domain.TaskState, bool, error) {
 			return m.runtime.taskStates.Get(request.ConversationID)
 		}

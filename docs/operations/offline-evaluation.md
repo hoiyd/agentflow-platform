@@ -62,7 +62,7 @@ used as a release threshold.
 
 `eval route` calls the production hard-eligibility, deterministic ranking, LLM
 response parser, fallback, and abstention gate through a narrow offline adapter.
-It does not create a Run, stage, event, or child Run. The versioned dataset freezes
+It does not create runtime Runs, Stages, or Events. The versioned dataset freezes
 the Agent catalog and calibration/holdout split and allows either a set of
 acceptable Agents or an explicit `no_eligible_agent` / `no_suitable_agent`
 outcome. Dataset cases cover clear and multiple specialists, hard capability

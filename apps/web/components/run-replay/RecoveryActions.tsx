@@ -202,7 +202,7 @@ function ToolEffectForm({ effect, runId, onApplied }: { effect: ToolEffect; runI
 }
 
 function evidenceLabel(kind: string) {
-	return ({ run_error: "Run error", tool_effect: "Tool effect", verification: "Verification", task_blocker: "Task blocker", child_run: "Child run", parent_run: "Parent run" } as Record<string, string>)[kind] ?? kind;
+	return ({ run_error: "Run error", tool_effect: "Tool effect", verification: "Verification", task_blocker: "Task blocker" } as Record<string, string>)[kind] ?? kind;
 }
 
 function actionLabel(action: ToolEffectReconciliationAction) {
