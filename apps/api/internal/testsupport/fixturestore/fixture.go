@@ -23,7 +23,6 @@ type state struct {
 	Messages              []domain.Message
 	Agents                []domain.Agent
 	Runs                  []domain.Run
-	RunDelegations        []domain.RunDelegation
 	CollaborationSteps    []domain.CollaborationStep
 	RunEvents             []domain.RunEvent
 	StageCheckpoints      []domain.StageCheckpoint

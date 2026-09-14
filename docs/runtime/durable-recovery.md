@@ -124,15 +124,14 @@ for the operator API and complete transition rules.
 ## Recovery Summary and Actions
 
 Run Replay derives an optional `recovery_summary` from the existing Run,
-TaskState, Verification Evidence, parent/child delegation, and Tool Effect
-records. It is a read model, not a persisted recovery state or a replacement
+TaskState, Verification Evidence, Stage checkpoints, and Tool Effect records.
+It is a read model, not a persisted recovery state or a replacement
 for those source records. Healthy queued, running, and completed Runs omit it.
 
 The summary contains one current reason, bounded supporting evidence, partial
-output references, and actions with explicit availability. It distinguishes a
-recoverable parent from a child whose delegation stage is owned by that parent;
-the child Replay links to the parent instead of offering an invalid Resume.
-Failed and canceled Runs do not expose Resume. Missing Verification Evidence is
+output references, and actions with explicit availability. Multi-Agent Resume
+reuses completed Stages and reruns only the first interrupted boundary. Failed
+and canceled Runs do not expose Resume. Missing Verification Evidence is
 reported as the reason that its review action is unavailable.
 
 An unresolved `needs_reconciliation` or `reconciling` Tool Effect takes

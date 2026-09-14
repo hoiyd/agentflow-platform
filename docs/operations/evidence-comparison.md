@@ -26,7 +26,7 @@ Verification Artifact references. Missing values are shown as `Unknown`.
 
 The browser compares the two persisted frozen snapshots. Snapshot timestamps
 are ignored. Task, retrieved-material identity, snapshot schema, execution mode,
-and delegation identity must match. Runtime differences are grouped into the
+must match. Runtime differences are grouped into the
 following predeclared experiment variables:
 
 - Agent definition;
@@ -39,7 +39,7 @@ following predeclared experiment variables:
 
 A pair is comparable when all runtime inputs match or exactly one of those
 variables differs. Multiple variable changes, unknown required identity,
-unrecognized runtime changes, or task/material/mode/delegation drift make the
+unrecognized runtime changes, or task/material/mode drift make the
 pair review-only. In that state the UI lists every failed comparability check
 and does not calculate deltas. This prevents an unrelated Run from being
 presented as an improvement.

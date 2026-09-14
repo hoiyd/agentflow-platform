@@ -14,7 +14,7 @@ or persistence.
 
 | Dimension | Single | Multi | Loop |
 | --- | --- | --- | --- |
-| Primary use | Focused request handled by one Agent | Planned work with delegation and review | Open-ended work requiring iterative progress |
+| Primary use | Focused request handled by one Agent | Planned work with specialist routing and review | Open-ended work requiring iterative progress |
 | API `mode` | `single` | `multi_agent` | `autonomous` |
 | UI label | Direct / Single agent | Coordinate / Multi-agent | Autonomous / Bounded loop |
 | Topology | One direct Turn | Fixed collaboration Stages | Repeated Iterations of fixed Stages |
@@ -71,8 +71,8 @@ Planner -> waiting_for_user -> Router -> Worker -> Reviewer -> Finalizer
    model when available and falls back to deterministic declarative profile matching
    only for transient provider or invalid-response failures. Terminal Auth,
    Budget, cancellation, and configuration failures are not hidden.
-4. **Worker** executes the approved plan in an isolated, bounded Child Run using
-   the selected Agent profile.
+4. **Worker** executes the approved plan in an isolated Stage using the selected
+   frozen Agent profile and Tool allowlist.
 5. **Reviewer** evaluates the Worker result against the task and plan.
 6. **Finalizer** synthesizes the candidate final output.
 
@@ -84,14 +84,14 @@ Worker, review, final answer, and per-Stage latency.
 Choose Multi when:
 
 - a user must inspect the plan before execution;
-- specialist routing or explicit delegation improves the result;
+- specialist routing improves the result;
 - independent review is worth additional latency and model usage;
 - handoffs and responsibility boundaries must be explainable afterward.
 
-The Worker Child Run has its own frozen Tool allowlist, Context, Budget, Usage
-Ledger, timeout, heartbeat, and Trace. The parent receives only a bounded
-summary and Child Trace reference. See
-[Bounded Child Run Delegation](child-run-delegation.md).
+The Worker Stage excludes conversation history, Context Compaction, durable
+Task State injection, and Task State mutation. Its complete output remains on
+the parent Run while Reviewer and Finalizer receive a bounded handoff. See
+[Isolated Worker Stage](isolated-worker-stage.md).
 
 The current topology is intentionally fixed rather than a generic arbitrary
 DAG. This keeps lifecycle, continue semantics, and Replay predictable while

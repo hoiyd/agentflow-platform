@@ -659,12 +659,6 @@ export interface components {
             task_state_revisions: {
                 [key: string]: unknown;
             }[];
-            parent_delegation?: {
-                [key: string]: unknown;
-            };
-            child_delegations: {
-                [key: string]: unknown;
-            }[];
             recovery_summary?: {
                 [key: string]: unknown;
             };
@@ -1118,7 +1112,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Top-level Runs ordered by the store. Child Runs remain available by ID and through Replay delegation topology. */
+            /** @description Runs ordered by the store. */
             200: {
                 headers: {
                     [name: string]: unknown;

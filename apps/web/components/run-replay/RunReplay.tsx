@@ -20,7 +20,6 @@ import {
 } from "./RunEventDetails";
 import { TaskStateChanges } from "./TaskStateChanges";
 import { RuntimeDiagnostics } from "./RuntimeDiagnostics";
-import { DelegationTopology } from "./DelegationTopology";
 import { RecoverySummaryPanel, ToolEffectReconciliationPanel } from "./RecoveryActions";
 
 type Props = {
@@ -145,10 +144,6 @@ export function RunReplay({ runId }: Props) {
 			case "continue_in_chat":
 				router.push(`/workspace?conversation=${encodeURIComponent(action.target_id ?? replay?.run.conversation_id ?? "")}`);
 				return;
-			case "inspect_parent_run":
-			case "inspect_child_run":
-				if (action.target_id) router.push(`/runs/${encodeURIComponent(action.target_id)}`);
-				return;
 			case "review_verification":
 				document.getElementById("run-verification-evidence")?.scrollIntoView({ behavior: "smooth", block: "start" });
 				return;
@@ -219,8 +214,6 @@ export function RunReplay({ runId }: Props) {
         failures={replay.projection.invariant_failures}
         onInspectEvent={inspectDiagnosticEvent}
       />
-
-      <DelegationTopology parent={replay.parent_delegation} childRuns={replay.child_delegations} />
 
       <section className="replay-summary">
         <Metric label="Total duration" value={formatDuration(replay.summary.total_duration_ms)} />

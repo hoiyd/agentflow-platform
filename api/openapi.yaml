@@ -246,7 +246,7 @@ paths:
       tags: [Runs]
       responses:
         '200':
-          description: Top-level Runs ordered by the store. Child Runs remain available by ID and through Replay delegation topology.
+          description: Runs ordered by the store.
           content:
             application/json:
               schema:
@@ -1082,7 +1082,7 @@ components:
         kind: { type: string }
     RunReplay:
       type: object
-      required: [run, projection, conversation, messages, steps, summary, usage_ledger, run_events, stage_checkpoints, tool_effects, tool_artifacts, verification_evidence, verification_artifacts, task_state_revisions, child_delegations]
+      required: [run, projection, conversation, messages, steps, summary, usage_ledger, run_events, stage_checkpoints, tool_effects, tool_artifacts, verification_evidence, verification_artifacts, task_state_revisions]
       properties:
         run:
           $ref: '#/components/schemas/Run'
@@ -1134,14 +1134,6 @@ components:
           items:
             $ref: '#/components/schemas/VerificationArtifact'
         task_state_revisions:
-          type: array
-          items:
-            type: object
-            additionalProperties: true
-        parent_delegation:
-          type: object
-          additionalProperties: true
-        child_delegations:
           type: array
           items:
             type: object

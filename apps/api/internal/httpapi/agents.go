@@ -192,15 +192,11 @@ func (h *Handler) listRuns(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	publicRuns := make([]domain.Run, 0, len(runs))
-	for _, run := range runs {
-		if delegatedParentRunID(run) != "" {
-			continue
-		}
+	for index := range runs {
+		run := &runs[index]
 		run.RuntimeSnapshot = nil
-		publicRuns = append(publicRuns, run)
 	}
-	writeJSON(w, http.StatusOK, publicRuns)
+	writeJSON(w, http.StatusOK, runs)
 }
 
 func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
@@ -239,11 +235,6 @@ func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
-	if parentID := delegatedParentRunID(run); parentID != "" {
-		writeError(w, http.StatusConflict, "delegated child runs are controlled by parent run "+parentID)
-		return
-	}
-
 	run, err = h.agentRuntime.CancelRun(id)
 	if err != nil {
 		if store.IsNotFound(err) {
@@ -255,13 +246,6 @@ func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 	}
 	run.RuntimeSnapshot = nil
 	writeJSON(w, http.StatusOK, run)
-}
-
-func delegatedParentRunID(run domain.Run) string {
-	if run.RuntimeSnapshot == nil || run.RuntimeSnapshot.Delegation == nil {
-		return ""
-	}
-	return strings.TrimSpace(run.RuntimeSnapshot.Delegation.ParentRunID)
 }
 
 func (h *Handler) listCollaborationSteps(w http.ResponseWriter, r *http.Request) {

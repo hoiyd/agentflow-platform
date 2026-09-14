@@ -484,10 +484,8 @@ type RunEvent struct {
 
 // RunReplay defines model for RunReplay.
 type RunReplay struct {
-	ChildDelegations      []map[string]interface{} `json:"child_delegations"`
 	Conversation          Conversation             `json:"conversation"`
 	Messages              []Message                `json:"messages"`
-	ParentDelegation      *map[string]interface{}  `json:"parent_delegation,omitempty"`
 	Projection            map[string]interface{}   `json:"projection"`
 	RecoverySummary       *map[string]interface{}  `json:"recovery_summary,omitempty"`
 	Run                   Run                      `json:"run"`

@@ -3,7 +3,7 @@
 Multi mode routes an approved plan with a two-phase policy:
 
 ```text
-frozen candidates -> deterministic eligibility -> deterministic or LLM ranking -> bounded Child Run
+frozen candidates -> deterministic eligibility -> deterministic or LLM ranking -> isolated Worker Stage
 ```
 
 ## Typed Requirements And Eligibility
@@ -23,7 +23,7 @@ Tool requirements are rejected as `agent_route_requirements_invalid`.
 
 If every candidate is excluded, the Router returns
 `agent_route_no_eligible_candidate`, records a failed Router Stage, emits
-`agent.selection.decided`, and does not create a Child Run.
+`agent.selection.decided`, and does not start a Worker Stage.
 
 ## Ranking And Fallback
 
@@ -40,7 +40,7 @@ After ranking, the algorithm applies an explicit abstention gate. It rejects a p
 candidate when its score, first-to-second margin, LLM confidence, or verified
 hard-requirement coverage is below the policy threshold. The decision retains
 the proposed Agent, observed values, thresholds, threshold source, and stable
-reason codes, but clears the selected Agent so no Child Run can be created.
+reason codes, but clears the selected Agent so no Worker Stage can start.
 
 The versioned routing Dataset v1 recommends a minimum score/margin of `4/1`
 after calibration and holdout. Production intentionally remains on the stricter
@@ -65,8 +65,8 @@ Fallback is intentionally narrow:
 | --- | --- |
 | Router model intentionally not configured for the deployment, timeout, rate limit, temporary provider failure, or invalid structured response | Use `query_match` and record `fallback_reason_code` |
 | Cancellation, Run Budget exhaustion, provider authentication, quota, route identity/configuration, or content-policy failure | Return the original typed error; do not delegate |
-| No eligible candidate | Return a typed 422-class error in the continuation stream; fail the Run without a Child Run |
-| No candidate with positive routing evidence | Return `agent_route_no_suitable_candidate`; fail the Run without a Child Run |
+| No eligible candidate | Return a typed 422-class error in the continuation stream; fail the Run before Worker execution |
+| No candidate with positive routing evidence | Return `agent_route_no_suitable_candidate`; fail the Run before Worker execution |
 
 The Router model call remains a normal Turn Engine request with
 `UsagePurposeRouter`, so existing request limits, Run Budget, Usage Ledger,

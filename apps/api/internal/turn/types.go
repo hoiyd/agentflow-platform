@@ -53,6 +53,9 @@ type Request struct {
 type Context struct {
 	Memories []domain.RetrievedMemory
 	Chunks   []domain.RetrievedDocumentChunk
+	// Isolated excludes conversation history, compaction, and durable task state
+	// while preserving explicitly retrieved memory and knowledge for this stage.
+	Isolated bool
 }
 
 type Usage struct {

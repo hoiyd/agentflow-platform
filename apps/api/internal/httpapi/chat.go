@@ -11,7 +11,6 @@ import (
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -332,10 +331,6 @@ func continuationFailurePolicy(err error) (status int, failRun bool) {
 	if errors.Is(err, agentpkg.ErrNoEligibleAgent) || errors.Is(err, agentpkg.ErrNoSuitableAgent) || errors.Is(err, agentpkg.ErrInvalidRoutingRequirements) {
 		return http.StatusUnprocessableEntity, true
 	}
-	info := failure.Describe(err)
-	if info.Source == "delegation" && info.Category == failure.CategoryCapacity {
-		return http.StatusServiceUnavailable, false
-	}
 	return http.StatusInternalServerError, !strings.Contains(err.Error(), "not waiting for user input")
 }
 
@@ -365,10 +360,6 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "run not found")
-		return
-	}
-	if parentID := delegatedParentRunID(run); parentID != "" {
-		writeError(w, http.StatusConflict, "delegated child runs must be resumed through parent run "+parentID)
 		return
 	}
 	if run.Status == domain.RunWaitingForUser && req.UserInput == "" {

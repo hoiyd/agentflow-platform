@@ -46,7 +46,7 @@ stable tie-breaker.
 
 That first successful decision establishes Run-level route affinity. Later
 Turns validate and reuse the same route rather than silently switching models.
-Multi-Agent child Runs inherit the parent's selected route.
+Multi-Agent Worker Stages use the route frozen by their owning Run.
 
 If every route is excluded, the Turn fails before a provider request with
 `model_route_unavailable`. It does not silently use the default model.

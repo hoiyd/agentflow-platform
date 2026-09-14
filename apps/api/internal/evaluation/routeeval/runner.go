@@ -1,5 +1,5 @@
 // Package routeeval benchmarks the production Agent selection policy against a
-// frozen calibration/holdout dataset. It never creates Runs or child Runs.
+// frozen calibration/holdout dataset. It never creates runtime Runs or stages.
 package routeeval
 
 import (

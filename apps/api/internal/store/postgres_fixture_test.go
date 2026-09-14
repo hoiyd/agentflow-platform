@@ -4,25 +4,8 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/modelrouting"
 	"agentflow-platform/apps/api/internal/toolpolicy"
-	"time"
 )
 
-func validChildRunRequest(parent domain.Run, delegationID string) domain.ChildRunRequest {
-	snapshot := testRuntimeSnapshot()
-	snapshot.Mode = "single"
-	snapshot.AutonomousLimits = nil
-	snapshot.Delegation = &domain.RuntimeDelegation{
-		DelegationID: delegationID, ParentRunID: parent.ID, ParentTurnID: "turn-validation",
-		Depth: 1, IsolatedContext: true, TimeoutMS: time.Minute.Milliseconds(), SummaryMaxChars: 100,
-	}
-	return domain.ChildRunRequest{
-		Delegation: domain.RunDelegation{
-			ID: delegationID, ParentRunID: parent.ID, ParentTurnID: "turn-validation",
-			AgentID: "agent_planner", Depth: 1, Task: "validate work", TimeoutMS: time.Minute.Milliseconds(),
-		},
-		RuntimeSnapshot: snapshot,
-	}
-}
 func testRuntimeSnapshot() domain.RuntimeSnapshot {
 	route, err := modelrouting.ValidateDescriptor(domain.ModelRouteDescriptor{
 		ID: "primary", Provider: "local", Model: "test", Endpoint: "https://models.test/v1",

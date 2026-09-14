@@ -17,6 +17,41 @@ import (
 	"agentflow-platform/apps/api/internal/turn"
 )
 
+func TestIsolatedTurnContextExcludesConversationHistory(t *testing.T) {
+	snapshot := testRuntimeSnapshot()
+	model := runtimeTurnModel{runtime: &Runtime{}}
+	ctx, _ := model.withContextSession(context.Background(), turn.Request{
+		History: []domain.Message{{ID: "message-old", Role: "user", Content: "private conversation history"}},
+		Input:   "explicit worker task",
+		Context: turn.Context{
+			Memories: []domain.RetrievedMemory{{Memory: domain.Memory{ID: "memory-1", Content: "explicit memory"}}},
+			Chunks: []domain.RetrievedDocumentChunk{{
+				Document: domain.Document{ID: "document-1", Title: "Explicit knowledge"},
+				Chunk:    domain.DocumentChunk{ID: "chunk-1", Content: "explicit knowledge"},
+			}},
+		},
+	}, &snapshot, true)
+	pack, err := contextassembly.Assemble(ctx, contextassembly.Request{Model: "test", Messages: []contextassembly.Message{
+		{Source: contextassembly.SourceSystem, Role: "system", Content: "worker instructions"},
+		{Source: contextassembly.SourceCurrentInput, Role: "user", Content: "explicit worker task"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := map[string]bool{}
+	for _, entry := range pack.Manifest.Entries {
+		if entry.Selected {
+			sources[entry.Source] = true
+		}
+	}
+	if sources[contextassembly.SourceHistory] {
+		t.Fatal("isolated stage included conversation history")
+	}
+	if !sources[contextassembly.SourceMemory] || !sources[contextassembly.SourceKnowledge] {
+		t.Fatalf("isolated stage dropped explicit retrieval context: %#v", sources)
+	}
+}
+
 func TestRuntimeTurnModelRetriesTextOverflowOnlyAfterGenerationAdvances(t *testing.T) {
 	fixtureStore := fixturestore.New()
 

@@ -41,35 +41,6 @@ func TestBuildRecoverySummaryBlocksResumeForUncertainToolEffect(t *testing.T) {
 	assertRecoveryAction(t, summary.Actions, "resume_run", false, "Resolve uncertain tool effects before resuming")
 }
 
-func TestBuildRecoverySummaryDistinguishesParentAndChildRecovery(t *testing.T) {
-	child := domain.RunReplay{
-		Run:              domain.Run{ID: "child", Status: domain.RunFailedRecoverable},
-		ParentDelegation: &domain.RunDelegation{ParentRunID: "parent", ChildRunID: "child", Status: domain.DelegationBlocked},
-	}
-	childSummary := BuildRecoverySummary(child)
-	if childSummary == nil || childSummary.Reason != domain.RecoveryChildOwnedByParent {
-		t.Fatalf("child summary: %#v", childSummary)
-	}
-	assertRecoveryAction(t, childSummary.Actions, "inspect_parent_run", true, "")
-	if hasRecoveryAction(childSummary.Actions, "resume_run") {
-		t.Fatalf("child replay must not expose resume: %#v", childSummary.Actions)
-	}
-
-	parent := domain.RunReplay{
-		Run:              domain.Run{ID: "parent", Status: domain.RunFailedRecoverable},
-		ChildDelegations: []domain.RunDelegation{{ChildRunID: "child", Status: domain.DelegationBlocked, Error: "child heartbeat expired", OutputRef: "run://child/stages/worker"}},
-	}
-	parentSummary := BuildRecoverySummary(parent)
-	if parentSummary == nil || parentSummary.Reason != domain.RecoveryChildBlocked {
-		t.Fatalf("parent summary: %#v", parentSummary)
-	}
-	assertRecoveryAction(t, parentSummary.Actions, "resume_run", true, "")
-	assertRecoveryAction(t, parentSummary.Actions, "inspect_child_run", true, "")
-	if len(parentSummary.ArtifactRefs) != 1 || parentSummary.ArtifactRefs[0] != "run://child/stages/worker" {
-		t.Fatalf("parent output refs: %#v", parentSummary.ArtifactRefs)
-	}
-}
-
 func TestBuildRecoverySummaryExplainsVerificationTaskAndTerminalStates(t *testing.T) {
 	tests := []struct {
 		name   string
