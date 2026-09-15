@@ -6,15 +6,17 @@ import { EvidenceComparison } from "../../../components/evaluation/EvidenceCompa
 export default async function RunComparisonPage({
   searchParams
 }: {
-  searchParams?: Promise<{ run?: string }>;
+  searchParams?: Promise<{ run?: string; conversation?: string }>;
 }) {
   const params = await searchParams;
+  const conversationId = params?.conversation ?? "";
+  const chatHref = conversationId ? `/workspace?conversation=${encodeURIComponent(conversationId)}` : "/workspace";
   return (
     <main className="evaluation-page">
       <header className="evaluation-header">
-        <Link className="back-link" href="/workspace">
+        <Link className="back-link" href={chatHref}>
           <ArrowLeft aria-hidden="true" size={14} />
-          Back to workspace
+          Back to chat
         </Link>
         <div className="evaluation-heading">
           <FlaskConical aria-hidden="true" size={22} />

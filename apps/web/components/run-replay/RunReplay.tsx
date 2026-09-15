@@ -66,6 +66,15 @@ export function RunReplay({ runId }: Props) {
     [replay, selectedEventId]
   );
   const retrievalSummary = useMemo(() => buildRetrievalSummary(replay?.run_events ?? []), [replay?.run_events]);
+  // The Run page always belongs to a Conversation, so "back" returns to the
+  // workbench that owns it rather than the landing page. The comparison page
+  // carries the same Conversation so its own back link stays equivalent.
+  const conversationId = replay?.run.conversation_id ?? "";
+  const chatHref = conversationId ? `/workspace?conversation=${encodeURIComponent(conversationId)}` : "/workspace";
+  const compareParams = new URLSearchParams();
+  if (replay?.run.id) compareParams.set("run", replay.run.id);
+  if (conversationId) compareParams.set("conversation", conversationId);
+  const compareHref = `/evaluations/compare?${compareParams.toString()}`;
   async function handleResumeRecoverable() {
     if (!replay || isResuming) {
       return;
@@ -158,7 +167,7 @@ export function RunReplay({ runId }: Props) {
   if (error) {
     return (
       <main className="replay-page">
-        <Link className="back-link" href="/">
+        <Link className="back-link" href={chatHref}>
           Back to chat
         </Link>
         <div className="error">{error}</div>
@@ -169,7 +178,7 @@ export function RunReplay({ runId }: Props) {
   if (!replay) {
     return (
       <main className="replay-page">
-        <Link className="back-link" href="/">
+        <Link className="back-link" href={chatHref}>
           Back to chat
         </Link>
         <div className="empty">Loading run replay...</div>
@@ -181,7 +190,7 @@ export function RunReplay({ runId }: Props) {
     <main className="replay-page">
       <header className="replay-header">
         <div>
-          <Link className="back-link" href="/">
+          <Link className="back-link" href={chatHref}>
             Back to chat
           </Link>
           <h1>Run replay</h1>
@@ -195,7 +204,7 @@ export function RunReplay({ runId }: Props) {
               <ChevronDown aria-hidden="true" size={13} />
             </summary>
             <div className="replay-evaluation-menu-content">
-              <Link href={`/evaluations/compare?run=${encodeURIComponent(replay.run.id)}`}>
+              <Link href={compareHref}>
                 <GitCompareArrows aria-hidden="true" size={15} />
                 Compare with another run
               </Link>

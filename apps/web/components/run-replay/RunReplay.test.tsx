@@ -42,8 +42,22 @@ it("keeps run comparison behind the replay evaluation menu", async () => {
 
   fireEvent.click(menuLabel);
   expect(screen.getByRole("link", { name: "Compare with another run" }).getAttribute("href")).toBe(
-    "/evaluations/compare?run=run-1"
+    "/evaluations/compare?run=run-1&conversation=conversation-1"
   );
+});
+
+it("returns to the owning conversation instead of the landing page", async () => {
+  getReplayPageData.mockResolvedValue({
+    data: replayFixture(),
+    report: null,
+    reportError: ""
+  });
+
+  render(<RunReplay runId="run-1" />);
+
+  await screen.findByRole("heading", { name: "Run replay" });
+  const backLink = screen.getByRole("link", { name: "Back to chat" });
+  expect(backLink.getAttribute("href")).toBe("/workspace?conversation=conversation-1");
 });
 
 function replayFixture(): RunReplayData {
