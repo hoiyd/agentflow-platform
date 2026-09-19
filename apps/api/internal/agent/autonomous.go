@@ -251,6 +251,8 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 	go func() {
 		defer close(events)
 		defer close(errs)
+		executionCtx, releaseCancellation := r.bindRunCancellation(ctx, prepared.Run.ID)
+		defer releaseCancellation()
 
 		limits, err := r.limitsForRun(prepared.Run.ID)
 		if err != nil {
@@ -276,7 +278,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 		if nextIter > limits.MaxIterations {
 			reason := "recovered after max_iterations reached"
 			r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, limits.MaxIterations, outputChars, toolCalls, reason)
-			if err := r.finishAutonomous(ctx, events, prepared, limits.MaxIterations, task, lastAct, lastReview, reason); err != nil {
+			if err := r.finishAutonomous(executionCtx, events, prepared, limits.MaxIterations, task, lastAct, lastReview, reason); err != nil {
 				errs <- err
 			}
 			return
@@ -296,7 +298,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 			}
 			if reason := limitStopReason(limits, outputChars); reason != "" {
 				r.emitAutonomousProgress(events, prepared.Run.ID, limits, startedAt, iteration, outputChars, toolCalls, reason)
-				if err := r.finishAutonomous(ctx, events, prepared, iteration, task, lastAct, lastReview, reason); err != nil {
+				if err := r.finishAutonomous(executionCtx, events, prepared, iteration, task, lastAct, lastReview, reason); err != nil {
 					errs <- err
 				}
 				return
@@ -304,7 +306,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 
 			log.Printf("autonomous_iteration_start run_id=%s iteration=%d output_chars=%d tool_calls=%d", prepared.Run.ID, iteration, outputChars, toolCalls)
 
-			observe, err := r.runAutonomousStep(ctx, events, prepared, iteration, "observe", autonomousObservePrompt(), autonomousObserveInput(task, state, limits, startedAt, outputChars, toolCalls))
+			observe, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "observe", autonomousObservePrompt(), autonomousObserveInput(task, state, limits, startedAt, outputChars, toolCalls))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -321,7 +323,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 
-			plan, err := r.runAutonomousStep(ctx, events, prepared, iteration, "plan", autonomousPlanPrompt(), autonomousPlanInput(task, observe, state))
+			plan, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "plan", autonomousPlanPrompt(), autonomousPlanInput(task, observe, state))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -338,7 +340,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 
-			act, err := r.runAutonomousStep(ctx, events, prepared, iteration, "act", autonomousActPrompt(prepared.WorkerAgent), autonomousActInput(task, plan, state))
+			act, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "act", autonomousActPrompt(prepared.WorkerAgent), autonomousActInput(task, plan, state))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -356,7 +358,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 
-			review, err := r.runAutonomousStep(ctx, events, prepared, iteration, "review", autonomousReviewPrompt(), autonomousReviewInput(task, plan, act))
+			review, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "review", autonomousReviewPrompt(), autonomousReviewInput(task, plan, act))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -374,7 +376,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 
-			decide, err := r.runAutonomousStep(ctx, events, prepared, iteration, "decide", autonomousDecidePrompt(), autonomousDecideInput(task, observe, plan, act, review, iteration, limits))
+			decide, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "decide", autonomousDecidePrompt(), autonomousDecideInput(task, observe, plan, act, review, iteration, limits))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -438,11 +440,11 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 					return
 				}
 				log.Printf("autonomous_waiting_for_user run_id=%s iteration=%d question=%q reason=%q", prepared.Run.ID, iteration, question, decision.Reason)
-				if err := r.publishStage(ctx, step, domain.EventStageStarted); err != nil {
+				if err := r.publishStage(executionCtx, step, domain.EventStageStarted); err != nil {
 					errs <- err
 					return
 				}
-				r.publishRunLifecycle(ctx, run, domain.EventRunWaitingForUser, map[string]any{"status": run.Status, "question": question})
+				r.publishRunLifecycle(executionCtx, run, domain.EventRunWaitingForUser, map[string]any{"status": run.Status, "question": question})
 				events <- liveStageEvent(step)
 				events <- liveRunEvent(run)
 				return
@@ -457,7 +459,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				if finalAnswer == "" {
 					finalAnswer = formatAutonomousFallbackFinal(task, lastAct, lastReview, reason)
 				}
-				if err := r.emitAutonomousFinal(ctx, events, prepared, iteration, reason, finalAnswer); err != nil {
+				if err := r.emitAutonomousFinal(executionCtx, events, prepared, iteration, reason, finalAnswer); err != nil {
 					errs <- err
 				}
 				return

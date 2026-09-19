@@ -156,6 +156,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		Memory:         memoryProvider,
 		Knowledge:      knowledgeBase,
 		RunController:  runController,
+		RunEvents:      eventHub,
 		Verification:   verificationEngine,
 		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
 	})

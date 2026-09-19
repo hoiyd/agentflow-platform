@@ -246,6 +246,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{id}/events": {
+        parameters: {
+            query?: {
+                /** @description Resume after this durable Run event sequence. */
+                after?: number;
+            };
+            header?: {
+                /** @description SSE resume cursor; takes precedence over the after query parameter. */
+                "Last-Event-ID"?: number;
+            };
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get: operations["observeRunEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{id}/usage": {
         parameters: {
             query?: never;
@@ -1282,6 +1306,38 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    observeRunEvents: {
+        parameters: {
+            query?: {
+                /** @description Resume after this durable Run event sequence. */
+                after?: number;
+            };
+            header?: {
+                /** @description SSE resume cursor; takes precedence over the after query parameter. */
+                "Last-Event-ID"?: number;
+            };
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Snapshot, durable event replay, and live Run events as server-sent events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
         };
     };

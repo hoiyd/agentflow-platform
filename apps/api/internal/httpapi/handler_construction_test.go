@@ -14,6 +14,7 @@ import (
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/event"
 	knowledgepkg "agentflow-platform/apps/api/internal/knowledge"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/store"
@@ -61,6 +62,7 @@ func TestNewHandlerValidatesEveryRequiredDependency(t *testing.T) {
 		{name: "memory", edit: func(d *Dependencies) { d.Memory = nil }, want: "http api memory operations are required"},
 		{name: "knowledge", edit: func(d *Dependencies) { d.Knowledge = nil }, want: "http api knowledge operations are required"},
 		{name: "run controller", edit: func(d *Dependencies) { d.RunController = nil }, want: "http api run controller is required"},
+		{name: "run events", edit: func(d *Dependencies) { d.RunEvents = nil }, want: "http api run event hub is required"},
 		{name: "verification", edit: func(d *Dependencies) { d.Verification = nil }, want: "http api verification engine is required"},
 	}
 	for _, test := range tests {
@@ -129,6 +131,7 @@ func completeHandlerDependencies(t *testing.T) Dependencies {
 		RunController: concurrency.NewRunController(concurrency.RunOptions{
 			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
 		}),
+		RunEvents:      event.NewHub(256),
 		Verification:   verification.NewEngine(fixtureStore, registry),
 		AllowedOrigins: []string{"https://app.example.com"},
 	}

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { APIError, apiRequest } from "./api-client.ts";
-import { continueRun, getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listToolEffects, patchTaskState, reconcileToolEffect } from "./api.ts";
+import { continueRun, getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listToolEffects, observeRunEvents, patchTaskState, reconcileToolEffect } from "./api.ts";
 import {
   createDocument,
   deleteDocument,
@@ -253,6 +253,32 @@ test("projection client reads the dedicated read-model endpoint", async (t) => {
 
   assert.equal(projection.as_of_sequence, 2);
   assert.match(requestedURL, /\/api\/runs\/run-1\/projection$/);
+});
+
+test("run observer reconnects from the latest durable sequence", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const urls = [];
+  const streams = [
+    `id: 1\nevent: run.started\ndata: {"id":"event-1","type":"run.started","schema_version":1,"sequence":1,"run_id":"run-1","payload":{"status":"running"},"timestamp":"2026-09-14T00:00:00Z"}\n\nid: 1\nevent: run.snapshot\ndata: {"run":{"run_id":"run-1","conversation_id":"conversation-1","status":"running","verification_status":"not_required"},"as_of_sequence":1}\n\n`,
+    `id: 1\nevent: run.started\ndata: {"id":"event-1","type":"run.started","schema_version":1,"sequence":1,"run_id":"run-1","payload":{"status":"running"},"timestamp":"2026-09-14T00:00:00Z"}\n\nid: 2\nevent: run.completed\ndata: {"id":"event-2","type":"run.completed","schema_version":1,"sequence":2,"run_id":"run-1","payload":{"status":"completed"},"timestamp":"2026-09-14T00:00:01Z"}\n\nid: 2\nevent: run.snapshot\ndata: {"run":{"run_id":"run-1","conversation_id":"conversation-1","status":"completed","verification_status":"not_required"},"as_of_sequence":2}\n\n`
+  ];
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    return new Response(streams.shift(), { status: 200, headers: { "Content-Type": "text/event-stream" } });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const statuses = [];
+
+  await observeRunEvents("run-1", {
+    onEvent: (event) => {
+      if (event.type === "run_state") statuses.push(event.status);
+    },
+    onSnapshot: (snapshot) => statuses.push(snapshot.run.status)
+  });
+
+  assert.deepEqual(statuses, ["running", "running", "completed", "completed"]);
+  assert.match(urls[0], /after=0$/);
+  assert.match(urls[1], /after=1$/);
 });
 
 test("task state client uses conversation-scoped get and patch endpoints", async (t) => {

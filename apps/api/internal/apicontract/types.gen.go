@@ -682,6 +682,15 @@ type NotFound = ErrorResponse
 // TooManyRequests defines model for TooManyRequests.
 type TooManyRequests = ErrorResponse
 
+// ObserveRunEventsParams defines parameters for ObserveRunEvents.
+type ObserveRunEventsParams struct {
+	// After Resume after this durable Run event sequence.
+	After *int64 `form:"after,omitempty" json:"after,omitempty"`
+
+	// LastEventID SSE resume cursor; takes precedence over the after query parameter.
+	LastEventID *int64 `json:"Last-Event-ID,omitempty"`
+}
+
 // CreateAgentJSONRequestBody defines body for CreateAgent for application/json ContentType.
 type CreateAgentJSONRequestBody = AgentConfigRequest
 

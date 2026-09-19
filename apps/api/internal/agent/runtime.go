@@ -215,11 +215,12 @@ func (r *Runtime) PrepareChatRunWithContract(ctx context.Context, agentID string
 func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history []domain.Message, latest string) (<-chan domain.RunEvent, <-chan error) {
 	events := make(chan domain.RunEvent)
 	errs := make(chan error, 1)
+	executionCtx, releaseCancellation := r.bindRunCancellation(ctx, prepared.Run.ID)
 	catalog := prepared.Catalog
 	if catalog == nil {
 		catalog, _ = tools.NewCatalog()
 	}
-	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, latest, prepared.Agent.MemoryEnabled, prepared.Agent.RetrievalEnabled, map[string]any{
+	retrievedMemories, retrievedChunks := r.retrieveContext(executionCtx, prepared.Run.ID, latest, prepared.Agent.MemoryEnabled, prepared.Agent.RetrievalEnabled, map[string]any{
 		"agent_id":           prepared.Agent.ID,
 		"agent_name":         prepared.Agent.Name,
 		"executor":           domain.DefaultAgentExecutor,
@@ -232,7 +233,8 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 	go func() {
 		defer close(events)
 		defer close(errs)
-		_, err := r.turnEngine.Execute(ctx, turnpkg.Request{
+		defer releaseCancellation()
+		_, err := r.turnEngine.Execute(executionCtx, turnpkg.Request{
 			RunID:          prepared.Run.ID,
 			ConversationID: prepared.Run.ConversationID,
 			Agent:          prepared.Agent,

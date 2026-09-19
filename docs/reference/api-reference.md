@@ -55,6 +55,7 @@ POST   /api/runs/{id}/verify
 GET    /api/runs/{id}/collaboration_steps
 GET    /api/runs/{id}/replay
 GET    /api/runs/{id}/projection
+GET    /api/runs/{id}/events
 GET    /api/runs/{id}/usage
 GET    /api/runs/{id}/model_requests
 GET    /api/runs/{id}/artifacts
@@ -81,6 +82,15 @@ DELETE /api/documents/{id}
 POST   /api/rag/search
 POST   /api/rag/evaluations/run
 ```
+
+`GET /api/runs/{id}/events` observes an already admitted Run independently of
+the request that started it. Supply either `Last-Event-ID` or `after` with the
+last durable event sequence received; the header takes precedence. The SSE
+response contains replayed durable `RunEvent` frames, a `run.snapshot` frame at
+the current projection watermark, and subsequent live events. It closes when
+the current execution stops at completion, failure, cancellation, or a human
+checkpoint. Clients reconnect with the latest SSE `id` and reload persisted
+Messages after a terminal event.
 
 ## Conversations and Agent Profiles
 

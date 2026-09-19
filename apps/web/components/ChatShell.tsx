@@ -22,6 +22,7 @@ import {
   listTools,
   listMessages,
   getTaskState,
+  observeRunEvents,
   resumeRun,
   setToolEnabled,
   streamChat,
@@ -187,6 +188,61 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   }, [messages]);
 
   useEffect(() => () => conversationRequests.cancel(), [conversationRequests]);
+
+  useEffect(() => {
+    const runID = runState?.id;
+    const status = runState?.status;
+    if (!activeId || view !== "chat" || isStreaming || isContinuingRun || isResumingRun || !runID ||
+      (status !== "queued" && status !== "running" && status !== "canceling")) {
+      return;
+    }
+
+    const controller = new AbortController();
+    let refreshed = false;
+    const refreshStoppedRun = () => {
+      if (!refreshed) {
+        refreshed = true;
+        void refreshConversations(activeId);
+      }
+    };
+    const handleObservedEvent = createRunEventHandler({
+      assistantDraftId: "",
+      defaultVerificationStatus: runState.verificationStatus,
+      fallbackAgentId: runState.agentId,
+      fallbackRunId: runID,
+      onRunState: (event) => {
+        if (isStoppedRunStatus(event.status)) refreshStoppedRun();
+      },
+      setAutonomousProgress,
+      setCollaborationSteps,
+      setError,
+      setIsCancelingRun,
+      setMessages,
+      setPlanDraft,
+      setRunState
+    });
+
+    void observeRunEvents(runID, {
+      signal: controller.signal,
+      onEvent: (event) => handleObservedEvent(event),
+      onSnapshot: (snapshot) => {
+        if (snapshot.run.conversation_id !== activeId) return;
+        setRunState({
+          id: snapshot.run.run_id,
+          agentId: runState.agentId,
+          status: snapshot.run.status,
+          verificationStatus: snapshot.run.verification_status
+        });
+        if (isStoppedRunStatus(snapshot.run.status)) refreshStoppedRun();
+      }
+    }).catch((err) => {
+      if (!controller.signal.aborted) {
+        setError(err instanceof Error ? `Live run updates unavailable: ${err.message}` : "Live run updates unavailable");
+      }
+    });
+
+    return () => controller.abort();
+  }, [activeId, isContinuingRun, isResumingRun, isStreaming, runState?.id, runState?.status, view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleChatModeChange(mode: ChatMode, preserveTaskState = false) {
     setChatMode(mode);
@@ -1155,4 +1211,9 @@ function emptyRoutingRequirements(): AgentRoutingRequirements {
     require_retrieval: false,
     preferred_capabilities: []
   };
+}
+
+function isStoppedRunStatus(status: string) {
+  return status === "waiting_for_user" || status === "completed" || status === "failed" ||
+    status === "failed_recoverable" || status === "canceled";
 }
