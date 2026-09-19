@@ -131,9 +131,10 @@ Each sample belongs to an explicit `calibration` or `holdout` split, and the rep
 publishes metrics for both. Ranked source diagnostics include confidence,
 similarity, evidence coverage, and the Gate reason without copying document text.
 
-The current `heuristic-relevance-calibrated-v1` profile removes common English
+The current `heuristic-relevance-hardened-v2` profile removes common English
 query stop words and requires at least `0.25` query-term evidence coverage before
-weak vector/reranker paths may admit a result. The value was selected on the
+weak vector/reranker paths may admit a result. Saturated lexical scores require
+the same coverage or an exact alphanumeric identifier match. The value was selected on the
 calibration split and must also pass the untouched holdout split. It is a baseline
 for this corpus and deterministic embedder, not a universal threshold. Compare a
 candidate as one explicit ablation:

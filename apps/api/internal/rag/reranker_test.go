@@ -129,7 +129,7 @@ func TestRetrievalPipelineUsesInjectedReranker(t *testing.T) {
 	if response.Items[0].Confidence != "high" || response.Items[0].FilterReason == "" {
 		t.Fatalf("expected the relevance gate to classify score-only output, got %#v", response.Items[0])
 	}
-	if response.RelevanceGate.Version != "heuristic-relevance-gate-v2" || response.RelevanceGate.ConfigVersion != "heuristic-relevance-calibrated-v1" {
+	if response.RelevanceGate.Version != "heuristic-relevance-gate-v3" || response.RelevanceGate.ConfigVersion != "heuristic-relevance-hardened-v2" {
 		t.Fatalf("expected versioned relevance gate metadata, got %#v", response.RelevanceGate)
 	}
 }

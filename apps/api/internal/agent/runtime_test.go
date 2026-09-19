@@ -155,8 +155,12 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 			t.Fatalf("expected active reranker configuration in retrieval trace, got %#v", event.Payload["reranker"])
 		}
 		relevanceGate, ok := event.Payload["relevance_gate"].(domain.RelevanceGateInfo)
-		if !ok || relevanceGate.Policy != "heuristic" || relevanceGate.Version != "heuristic-relevance-gate-v2" || relevanceGate.ConfigVersion != "heuristic-relevance-calibrated-v1" {
+		if !ok || relevanceGate.Policy != "heuristic" || relevanceGate.Version != "heuristic-relevance-gate-v3" || relevanceGate.ConfigVersion != "heuristic-relevance-hardened-v2" {
 			t.Fatalf("expected active relevance gate configuration in retrieval trace, got %#v", event.Payload["relevance_gate"])
+		}
+		decisions, ok := event.Payload["relevance_decisions"].([]domain.RelevanceGateDecision)
+		if !ok || len(decisions) != 1 || decisions[0].ChunkID == "" || decisions[0].Confidence == "" || decisions[0].FilterReason == "" {
+			t.Fatalf("expected candidate-level relevance decisions in retrieval trace, got %#v", event.Payload["relevance_decisions"])
 		}
 		security, ok := event.Payload["knowledge_security"].(domain.KnowledgeSecurityInfo)
 		if !ok || security.PolicyVersion != domain.RAGPromptGuardPolicyVersion || !security.UntrustedContext || security.CheckedCandidates == 0 {

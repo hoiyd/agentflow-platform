@@ -501,6 +501,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query retri
 				payload["fusion"] = response.Fusion
 				payload["reranker"] = response.Reranker
 				payload["relevance_gate"] = response.RelevanceGate
+				payload["relevance_decisions"] = response.RelevanceDecisions
 				payload["citation_sources"] = response.CitationSources
 				payload["knowledge_security"] = response.Security
 				if response.ContextSelection.Version != "" {

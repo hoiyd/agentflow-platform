@@ -12,8 +12,8 @@ import (
 
 const (
 	heuristicRelevanceGatePolicy      = "heuristic"
-	heuristicRelevanceGateVersion     = "heuristic-relevance-gate-v2"
-	defaultRelevanceGateConfigVersion = "heuristic-relevance-calibrated-v1"
+	heuristicRelevanceGateVersion     = "heuristic-relevance-gate-v3"
+	defaultRelevanceGateConfigVersion = "heuristic-relevance-hardened-v2"
 	defaultMinimumEvidenceCoverage    = 0.25
 )
 
@@ -24,8 +24,9 @@ type RelevanceGateRequest struct {
 }
 
 type RelevanceGateResult struct {
-	Items []domain.RetrievedDocumentChunk
-	Info  domain.RelevanceGateInfo
+	Items     []domain.RetrievedDocumentChunk
+	Decisions []domain.RelevanceGateDecision
+	Info      domain.RelevanceGateInfo
 }
 
 // RelevanceGate owns confidence classification and filtering independently of
@@ -81,19 +82,30 @@ func (g *HeuristicRelevanceGate) Info() domain.RelevanceGateInfo {
 
 func (g *HeuristicRelevanceGate) Evaluate(_ context.Context, request RelevanceGateRequest) (RelevanceGateResult, error) {
 	filtered := make([]domain.RetrievedDocumentChunk, 0, len(request.Candidates))
+	decisions := make([]domain.RelevanceGateDecision, 0, len(request.Candidates))
 	queryTerms := QueryTerms(request.Query)
 	for _, item := range request.Candidates {
 		item.MatchedTerms = matchedTerms(request.Query, queryTerms, item)
 		item.EvidenceCoverage = evidenceCoverage(queryTerms, item.MatchedTerms)
 		item.EvidenceScore = evidenceScore(request.Query, queryTerms, item)
-		item.Confidence, item.FilterReason = relevanceConfidence(item, request.Reranker, g.config)
+		identifier := matchedIdentifier(request.Query, item)
+		item.Confidence, item.FilterReason = relevanceConfidence(item, identifier != "", request.Reranker, g.config)
+		decisions = append(decisions, domain.RelevanceGateDecision{
+			DocumentID: item.Document.ID, ChunkID: item.Chunk.ID,
+			LexicalRank: item.LexicalRank, LexicalScore: item.LexicalScore,
+			Similarity: item.Similarity, RerankScore: item.RerankScore,
+			MatchedTerms:  append([]string{}, item.MatchedTerms...),
+			EvidenceScore: item.EvidenceScore, EvidenceCoverage: item.EvidenceCoverage,
+			IdentifierMatch: identifier, Confidence: item.Confidence,
+			FilterReason: item.FilterReason, Accepted: item.Confidence != "low",
+		})
 		if item.Confidence == "low" {
 			continue
 		}
 		item.RerankRank = len(filtered) + 1
 		filtered = append(filtered, item)
 	}
-	return RelevanceGateResult{Items: filtered, Info: g.Info()}, nil
+	return RelevanceGateResult{Items: filtered, Decisions: decisions, Info: g.Info()}, nil
 }
 
 func validateRelevanceGateResult(input []domain.RetrievedDocumentChunk, result RelevanceGateResult) error {
@@ -105,6 +117,28 @@ func validateRelevanceGateResult(input []domain.RetrievedDocumentChunk, result R
 	for index, item := range input {
 		allowed[item.Chunk.ID] = item
 		positions[item.Chunk.ID] = index
+	}
+	if len(result.Decisions) != len(input) {
+		return fmt.Errorf("returned %d decisions; expected one for each of %d candidates", len(result.Decisions), len(input))
+	}
+	acceptedDecisions := make(map[string]struct{}, len(result.Items))
+	for index, decision := range result.Decisions {
+		candidate := input[index]
+		if decision.DocumentID != candidate.Document.ID || decision.ChunkID != candidate.Chunk.ID {
+			return fmt.Errorf("decision %d does not match candidate %q", index, candidate.Chunk.ID)
+		}
+		if decision.Confidence != "high" && decision.Confidence != "medium" && decision.Confidence != "low" {
+			return fmt.Errorf("decision %d has invalid confidence %q", index, decision.Confidence)
+		}
+		if strings.TrimSpace(decision.FilterReason) == "" {
+			return fmt.Errorf("decision %d is missing filter_reason", index)
+		}
+		if decision.Accepted != (decision.Confidence != "low") {
+			return fmt.Errorf("decision %d has inconsistent accepted state", index)
+		}
+		if decision.Accepted {
+			acceptedDecisions[decision.ChunkID] = struct{}{}
+		}
 	}
 	seen := make(map[string]struct{}, len(result.Items))
 	previousPosition := -1
@@ -134,6 +168,13 @@ func validateRelevanceGateResult(input []domain.RetrievedDocumentChunk, result R
 		if strings.TrimSpace(item.FilterReason) == "" {
 			return fmt.Errorf("item %d is missing filter_reason", index)
 		}
+		if _, ok := acceptedDecisions[item.Chunk.ID]; !ok {
+			return fmt.Errorf("item %d is not accepted by its relevance decision", index)
+		}
+		delete(acceptedDecisions, item.Chunk.ID)
+	}
+	if len(acceptedDecisions) != 0 {
+		return errors.New("relevance decisions accept candidates missing from output")
 	}
 	return nil
 }

@@ -180,8 +180,21 @@ The versioned `RelevanceGate` is the next independent stage. It ignores any
 incoming `confidence`, `filter_reason`, or derived evidence, recomputes evidence
 from the query and trusted candidate data, then owns filtering and final rank
 compaction. Gate output must remain an ordered subset of the reranked input. The
-default policy reports `heuristic-relevance-gate-v2` with configuration
-`heuristic-relevance-calibrated-v1` and its `minimum_evidence_coverage`.
+default policy reports `heuristic-relevance-gate-v3` with configuration
+`heuristic-relevance-hardened-v2` and its `minimum_evidence_coverage`.
+It computes all candidate signals before classification. A saturated lexical
+score reaches `high` only when evidence coverage meets the configured minimum
+or the candidate contains an exact alphanumeric identifier from the query.
+This preserves lexical-only error-code and product-ID recall without allowing a
+score of `1.0` to bypass evidence checks.
+
+Every candidate produces a content-free `relevance_decisions` audit record with
+its chunk identity, lexical/vector/rerank signals, matched terms, evidence
+coverage, identifier match, final confidence, acceptance state, and decision
+reason. HTTP search returns these records and Agent retrieval persists them in
+Replay beside the versioned gate configuration. Empty candidate sets produce an
+explicit empty decision list; embedding failures remain execution failures and
+never degrade into accepted candidates.
 Model-backed rerankers must return normalized
 scores in `[0,1]`; malformed metadata, unknown/duplicate candidates, invalid
 ranks, or non-finite scores fail the pipeline instead of bypassing the Gate.
@@ -189,7 +202,7 @@ ranks, or non-finite scores fail the pipeline instead of bypassing the Gate.
 The UI labels the dense/vector path as **Semantic** and the lexical path as
 **Keyword**. These user-facing names map to the existing `vector_rank`,
 `lexical_rank`, `dense_weight`, and `lexical_weight` API fields; the wire
-contract remains unchanged.
+contract adds only the `relevance_decisions` audit field.
 
 ## Parent-Child Context Selection
 
