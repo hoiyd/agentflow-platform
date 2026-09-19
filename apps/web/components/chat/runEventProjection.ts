@@ -48,7 +48,7 @@ export function createRunEventHandler(options: RunEventProjectionOptions) {
     if (event.type === "run_state") {
       options.setRunState((current) => ({
         id: event.run_id,
-        agentId: event.agent_id,
+        agentId: event.agent_id || current?.agentId || options.fallbackAgentId,
         status: event.status,
         verificationStatus: current?.verificationStatus ?? options.defaultVerificationStatus
       }));

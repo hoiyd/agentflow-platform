@@ -104,7 +104,8 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prepared, err := h.agentRuntime.PrepareChatRunWithContract(r.Context(), req.AgentID, conversationID, req.CompletionContract)
+	runCtx := runExecutionContext(r)
+	prepared, err := h.agentRuntime.PrepareChatRunWithContract(runCtx, req.AgentID, conversationID, req.CompletionContract)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if store.IsNotFound(err) {
@@ -116,7 +117,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	writeRunStateSSE(w, flusher, conversationID, prepared.Run.ID, prepared.Agent.ID, prepared.Run.Status)
 
-	events, errs := h.agentRuntime.StreamChat(r.Context(), prepared, history, req.Message)
+	events, errs := h.agentRuntime.StreamChat(runCtx, prepared, history, req.Message)
 	var assistant strings.Builder
 	for event := range events {
 		writeUnifiedRunEvent(w, flusher, event, &assistant)
@@ -141,7 +142,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.completeStreamingRun(w, flusher, r, r.Context(), runCompletionRequest{
+	h.completeStreamingRun(w, flusher, r, runCtx, runCompletionRequest{
 		WorkspaceID: workspaceID, RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
 		Assistant: assistant.String(), UserMessage: &userMessage, GenerateTitle: true,
 	})
@@ -149,7 +150,8 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
 	scoped := h.scopedStoreForID(req.WorkspaceID)
-	prepared, err := h.agentRuntime.PrepareCollaborationRunWithContract(r.Context(), req.AgentID, conversationID, req.CompletionContract)
+	runCtx := runExecutionContext(r)
+	prepared, err := h.agentRuntime.PrepareCollaborationRunWithContract(runCtx, req.AgentID, conversationID, req.CompletionContract)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if store.IsNotFound(err) {
@@ -162,7 +164,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 
 	writeRunStateSSE(w, flusher, conversationID, prepared.Run.ID, prepared.WorkerAgent.ID, prepared.Run.Status)
 
-	events, errs := h.agentRuntime.RunCollaboration(r.Context(), prepared, req.Message)
+	events, errs := h.agentRuntime.RunCollaboration(runCtx, prepared, req.Message)
 	var assistant strings.Builder
 	for event := range events {
 		writeUnifiedRunEvent(w, flusher, event, &assistant)
@@ -193,7 +195,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 		return
 	}
 
-	h.completeStreamingRun(w, flusher, r, r.Context(), runCompletionRequest{
+	h.completeStreamingRun(w, flusher, r, runCtx, runCompletionRequest{
 		WorkspaceID: req.WorkspaceID, RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
 		Assistant: assistant.String(), UserMessage: &userMessage, GenerateTitle: true,
 	})
@@ -201,7 +203,8 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 
 func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
 	scoped := h.scopedStoreForID(req.WorkspaceID)
-	prepared, err := h.agentRuntime.PrepareAutonomousRunWithContract(r.Context(), req.AgentID, conversationID, req.CompletionContract)
+	runCtx := runExecutionContext(r)
+	prepared, err := h.agentRuntime.PrepareAutonomousRunWithContract(runCtx, req.AgentID, conversationID, req.CompletionContract)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if store.IsNotFound(err) {
@@ -214,7 +217,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 
 	writeRunStateSSE(w, flusher, conversationID, prepared.Run.ID, prepared.WorkerAgent.ID, prepared.Run.Status)
 
-	events, errs := h.agentRuntime.RunAutonomous(r.Context(), prepared, req.Message)
+	events, errs := h.agentRuntime.RunAutonomous(runCtx, prepared, req.Message)
 	var assistant strings.Builder
 	for event := range events {
 		writeUnifiedRunEvent(w, flusher, event, &assistant)
@@ -250,7 +253,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 		return
 	}
 
-	h.completeStreamingRun(w, flusher, r, r.Context(), runCompletionRequest{
+	h.completeStreamingRun(w, flusher, r, runCtx, runCompletionRequest{
 		WorkspaceID: req.WorkspaceID, RunID: prepared.Run.ID, ConversationID: conversationID, UserInput: req.Message,
 		Assistant: assistant.String(), UserMessage: &userMessage, GenerateTitle: true,
 	})
@@ -306,7 +309,8 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 
 	writeRunStateSSE(w, flusher, run.ConversationID, run.ID, run.AgentID, run.Status)
 
-	events, errs := h.agentRuntime.ContinueCollaboration(r.Context(), id, req.Plan, routingRequirementsFromInput(req.RoutingRequirements))
+	runCtx := runExecutionContext(r)
+	events, errs := h.agentRuntime.ContinueCollaboration(runCtx, id, req.Plan, routingRequirementsFromInput(req.RoutingRequirements))
 	var assistant strings.Builder
 	for event := range events {
 		writeUnifiedRunEvent(w, flusher, event, &assistant)
@@ -322,7 +326,7 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.completeStreamingRun(w, flusher, r, r.Context(), runCompletionRequest{
+	h.completeStreamingRun(w, flusher, r, runCtx, runCompletionRequest{
 		WorkspaceID: run.WorkspaceID, RunID: id, ConversationID: run.ConversationID, Assistant: assistant.String(),
 	})
 }
@@ -404,7 +408,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 
 	writeRunStateSSE(w, flusher, run.ConversationID, run.ID, run.AgentID, run.Status)
 
-	resumeCtx := detachedRequestContext(r)
+	resumeCtx := runExecutionContext(r)
 	events, errs := h.agentRuntime.ResumeAutonomous(resumeCtx, id, req.UserInput)
 	if run.Status == domain.RunFailedRecoverable {
 		if run.RuntimeSnapshot != nil && run.RuntimeSnapshot.Mode == agentpkg.ChatModeMultiAgent {
@@ -445,7 +449,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.completeStreamingRun(w, flusher, r, r.Context(), runCompletionRequest{
+	h.completeStreamingRun(w, flusher, r, resumeCtx, runCompletionRequest{
 		WorkspaceID: current.WorkspaceID, RunID: id, ConversationID: current.ConversationID, Assistant: assistant.String(),
 	})
 }
@@ -484,7 +488,9 @@ func writeRunStateSSE(w http.ResponseWriter, flusher http.Flusher, conversationI
 		ConversationID: conversationID, RunID: runID, Payload: map[string]any{"agent_id": agentID, "status": status}}, nil)
 }
 
-func detachedRequestContext(r *http.Request) context.Context {
+// runExecutionContext keeps admitted work alive when its initiating HTTP
+// connection closes. Explicit Run cancellation is bound inside Runtime.
+func runExecutionContext(r *http.Request) context.Context {
 	return context.WithoutCancel(r.Context())
 }
 

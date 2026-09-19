@@ -457,6 +457,80 @@ func TestCancelRunStopsActiveWorkerStage(t *testing.T) {
 	}
 }
 
+func TestCancelRunStopsActiveSingleTurn(t *testing.T) {
+	fixtureStore := fixturestore.New()
+	conversation, err := fixtureStore.CreateConversation("cancel single turn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &blockingPreparedClient{Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1)}
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client})
+	prepared, err := runtime.PrepareChatRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, errs := runtime.StreamChat(context.Background(), prepared, nil, "wait")
+	done := make(chan error, 1)
+	go func() {
+		for range events {
+		}
+		done <- <-errs
+	}()
+	select {
+	case <-client.started:
+	case <-time.After(time.Second):
+		t.Fatal("single turn did not start")
+	}
+	if _, err := runtime.CancelRun(prepared.Run.ID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected context cancellation, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("single turn ignored cancellation")
+	}
+}
+
+func TestCancelRunStopsActivePlannerStage(t *testing.T) {
+	fixtureStore := fixturestore.New()
+	conversation, err := fixtureStore.CreateConversation("cancel planner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &blockingPreparedClient{Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1)}
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client})
+	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, errs := runtime.RunCollaboration(context.Background(), prepared, "wait")
+	done := make(chan error, 1)
+	go func() {
+		for range events {
+		}
+		done <- <-errs
+	}()
+	select {
+	case <-client.started:
+	case <-time.After(time.Second):
+		t.Fatal("planner stage did not start")
+	}
+	if _, err := runtime.CancelRun(prepared.Run.ID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected context cancellation, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("planner stage ignored cancellation")
+	}
+}
+
 func TestResumeRecoverableCollaborationReusesCompletedStages(t *testing.T) {
 	runtime, fixtureStore, run := newStageRecoverableCollaboration(t)
 	createCompletedStage(t, runtime, run, "planner", "agent_planner", "task", "plan")

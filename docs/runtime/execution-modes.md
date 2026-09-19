@@ -55,6 +55,22 @@ Single is not a reduced-policy path. Run admission, per-Conversation
 single-writer execution, Runtime Snapshot, Run Budget, Verification,
 Replay, and Memory curation remain active.
 
+## Client Disconnects and Run Continuity
+
+After admission, the Run owns its execution context. Closing or refreshing the
+browser ends only that SSE observation; it does not cancel model or Tool work.
+An explicit `POST /api/runs/{id}/cancel` remains the cancellation boundary.
+
+The workbench reconnects active Runs through `GET /api/runs/{id}/events`. The
+stream first closes the read/subscribe race with a canonical Run Projection,
+replays durable events after the supplied sequence, and then forwards live
+events. SSE `id` values are durable Run event sequences. `model.delta` remains
+live-only, so after a disconnect the persisted assistant Message, not partial
+token replay, is the authoritative final output.
+
+This continuity is process-local: an API process crash still uses the durable
+checkpoint and Resume protocol described in [Durable recovery](durable-recovery.md).
+
 ## Multi Mode
 
 Multi mode implements a fixed, inspectable plan-and-review workflow:

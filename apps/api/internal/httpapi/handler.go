@@ -13,6 +13,7 @@ import (
 	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/redaction"
@@ -85,6 +86,7 @@ type Dependencies struct {
 	Memory         MemoryOperations
 	Knowledge      KnowledgeOperations
 	RunController  RunCapacity
+	RunEvents      *event.Hub
 	Verification   VerificationOperations
 	AllowedOrigins []string
 }
@@ -96,6 +98,7 @@ type Handler struct {
 	memories       MemoryOperations
 	knowledge      KnowledgeOperations
 	runController  RunCapacity
+	runEvents      *event.Hub
 	verification   VerificationOperations
 	allowedOrigins []string
 }
@@ -119,6 +122,9 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 	if dependencies.RunController == nil {
 		return nil, errors.New("http api run controller is required")
 	}
+	if dependencies.RunEvents == nil {
+		return nil, errors.New("http api run event hub is required")
+	}
 	if dependencies.Verification == nil {
 		return nil, errors.New("http api verification engine is required")
 	}
@@ -129,6 +135,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		memories:       dependencies.Memory,
 		knowledge:      dependencies.Knowledge,
 		runController:  dependencies.RunController,
+		runEvents:      dependencies.RunEvents,
 		verification:   dependencies.Verification,
 		allowedOrigins: append([]string(nil), dependencies.AllowedOrigins...),
 	}, nil
@@ -151,7 +158,7 @@ func (h *Handler) withCORS(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Workspace-ID")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Last-Event-ID, X-Workspace-ID")
 		w.Header().Set("Access-Control-Expose-Headers", "Retry-After, X-Request-ID")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
 

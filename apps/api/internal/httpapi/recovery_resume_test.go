@@ -211,14 +211,14 @@ func hasStepRole(steps []domain.CollaborationStep, role string) bool {
 	return false
 }
 
-func TestDetachedRequestContextIgnoresCancellationAndKeepsValues(t *testing.T) {
+func TestRunExecutionContextIgnoresCancellationAndKeepsValues(t *testing.T) {
 	type contextKey string
 	ctx := context.WithValue(context.Background(), contextKey("request-id"), "req_test")
 	ctx, cancel := context.WithCancel(ctx)
 	cancel()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/runs/run_test/resume", bytes.NewReader([]byte(`{}`))).WithContext(ctx)
-	detached := detachedRequestContext(req)
+	detached := runExecutionContext(req)
 	if err := detached.Err(); err != nil {
 		t.Fatalf("expected detached context to ignore request cancellation, got %v", err)
 	}

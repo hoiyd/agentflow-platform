@@ -394,6 +394,42 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/runs/{id}/events:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - name: after
+        in: query
+        description: Resume after this durable Run event sequence.
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      - name: Last-Event-ID
+        in: header
+        description: SSE resume cursor; takes precedence over the after query parameter.
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+    get:
+      operationId: observeRunEvents
+      tags: [Runs]
+      responses:
+        '200':
+          description: Snapshot, durable event replay, and live Run events as server-sent events.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/runs/{id}/usage:
     parameters:
       - $ref: '#/components/parameters/RunId'

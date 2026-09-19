@@ -80,8 +80,10 @@ model or workload requires them.
   backward-compatible migrations with exercised backup and restore.
 - Persist Run dispatch atomically with Run creation; bounded Workers claim work
   with stable operation IDs and idempotent usage accounting.
-- Decouple SSE delivery from Worker lifetime. Reconnection follows a durable
-  event cursor, while the persisted final Message remains authoritative.
+- Promote the current process-local Run continuity contract to durable Worker
+  dispatch. Browser SSE delivery is already detached from Run execution and
+  reconnects by durable event sequence; the persisted final Message remains
+  authoritative.
 - Use Lease, Heartbeat, and Fencing to prevent stale Workers from committing;
   promote Conversation single-writer control from a process lock to distributed
   ownership when multiple Workers are introduced.

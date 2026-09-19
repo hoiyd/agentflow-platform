@@ -153,8 +153,10 @@ func (r *Runtime) RunCollaboration(ctx context.Context, prepared PreparedCollabo
 	go func() {
 		defer close(events)
 		defer close(errs)
+		executionCtx, releaseCancellation := r.bindRunCancellation(ctx, prepared.Run.ID)
+		defer releaseCancellation()
 
-		_, err := r.runCollaborationStep(ctx, events, prepared, "planner", "", plannerPrompt(), task)
+		_, err := r.runCollaborationStep(executionCtx, events, prepared, "planner", "", plannerPrompt(), task)
 		if err != nil {
 			errs <- err
 			return
@@ -164,7 +166,7 @@ func (r *Runtime) RunCollaboration(ctx context.Context, prepared PreparedCollabo
 			errs <- err
 			return
 		}
-		r.publishRunLifecycle(ctx, waiting, domain.EventRunWaitingForUser, map[string]any{"status": waiting.Status})
+		r.publishRunLifecycle(executionCtx, waiting, domain.EventRunWaitingForUser, map[string]any{"status": waiting.Status})
 	}()
 
 	return events, errs
@@ -192,6 +194,8 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			errs <- fmt.Errorf("run is not waiting for user input")
 			return
 		}
+		executionCtx, releaseCancellation := r.bindRunCancellation(ctx, run.ID)
+		defer releaseCancellation()
 
 		restored, err := r.restoreRuntime(run)
 		if err != nil {
@@ -228,7 +232,7 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			errs <- err
 			return
 		}
-		_ = r.runEventSink().Publish(ctx, domain.RunEvent{
+		_ = r.runEventSink().Publish(executionCtx, domain.RunEvent{
 			Type: domain.EventRunProgress, RunID: run.ID, ConversationID: run.ConversationID,
 			StageID: updatedPlan.ID, Payload: map[string]any{"kind": "plan_approved", "plan": updatedPlan.Output},
 		})
@@ -238,8 +242,8 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			errs <- err
 			return
 		}
-		r.publishRunLifecycle(ctx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
-		route, routeErr := r.routeWorkerAgent(ctx, run.ID, restored, agents, task, plan, requirements)
+		r.publishRunLifecycle(executionCtx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
+		route, routeErr := r.routeWorkerAgent(executionCtx, run.ID, restored, agents, task, plan, requirements)
 		routerInput := fmt.Sprintf("User task:\n%s\n\nApproved plan:\n%s\n\nRouting requirements:\n%s\n\nCandidate agents:\n%s", task, plan, formatRoutingRequirements(requirements), formatCandidateAgents(agents))
 		routerStatus := domain.CollaborationStepCompleted
 		routerError := ""
@@ -265,11 +269,11 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 		if routeErr != nil {
 			routerEventType = domain.EventStageFailed
 		}
-		if err := r.publishStage(ctx, routerStep, routerEventType); err != nil {
+		if err := r.publishStage(executionCtx, routerStep, routerEventType); err != nil {
 			errs <- err
 			return
 		}
-		if err := r.publishAgentSelection(ctx, run, routerStep.ID, route); err != nil {
+		if err := r.publishAgentSelection(executionCtx, run, routerStep.ID, route); err != nil {
 			errs <- err
 			return
 		}
@@ -287,9 +291,6 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 		log.Printf("collaboration_router_decision run_id=%s router_mode=%s selected_agent_id=%s selected_agent_name=%q score=%d confidence=%.2f reason=%q", run.ID, route.Mode, route.Agent.ID, route.Agent.Name, route.Score, route.Confidence, route.Reason)
 
 		prepared := PreparedCollaborationRun{WorkerAgent: route.Agent, Run: run}
-		executionCtx, releaseCancellation := r.bindRunCancellation(ctx, run.ID)
-		defer releaseCancellation()
-
 		workerInput := fmt.Sprintf("User task:\n%s\n\nPlanner output:\n%s\n\nRouter-selected worker:\n%s (%s)\nSelection reason: %s", task, plan, route.Agent.Name, route.Agent.ID, route.Reason)
 		worker, err := r.runWorkerStage(executionCtx, events, prepared, restored.catalog, workerInput)
 		if err != nil {
@@ -325,6 +326,8 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 			errs <- errors.New("run is not recoverable")
 			return
 		}
+		executionCtx, releaseCancellation := r.bindRunCancellation(ctx, run.ID)
+		defer releaseCancellation()
 		restored, err := r.restoreRuntime(run)
 		if err != nil {
 			errs <- err
@@ -334,7 +337,7 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeMultiAgent)
 			return
 		}
-		if _, err := r.checkpoints.RestoreRun(ctx, run); err != nil {
+		if _, err := r.checkpoints.RestoreRun(executionCtx, run); err != nil {
 			errs <- fmt.Errorf("restore durable checkpoints: %w", err)
 			return
 		}
@@ -363,11 +366,9 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 			errs <- err
 			return
 		}
-		r.publishRunLifecycle(ctx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
+		r.publishRunLifecycle(executionCtx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
 		events <- liveRunEvent(run)
 		prepared := PreparedCollaborationRun{WorkerAgent: workerAgent, Run: run}
-		executionCtx, releaseCancellation := r.bindRunCancellation(ctx, run.ID)
-		defer releaseCancellation()
 		workerStep, found := latestCompletedCollaborationStep(steps, "worker")
 		workerOutput := ""
 		if found {

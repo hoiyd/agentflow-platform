@@ -2,13 +2,24 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
+
+type disconnectRecorder struct {
+	*httptest.ResponseRecorder
+	flushed chan struct{}
+	once    sync.Once
+}
+
+func (r *disconnectRecorder) Flush() { r.once.Do(func() { close(r.flushed) }) }
 
 func TestChatRoutesExecuteDirectAndCollaborationLifecycles(t *testing.T) {
 	dependencies := completeHandlerDependencies(t)
@@ -66,6 +77,46 @@ func TestChatRouteExecutesBoundedAutonomousLifecycle(t *testing.T) {
 	runs, err := fullStore.ListRuns()
 	if err != nil || len(runs) != 1 || runs[0].Status != domain.RunCompleted {
 		t.Fatalf("autonomous run lifecycle: runs=%#v err=%v", runs, err)
+	}
+}
+
+func TestChatRunCompletesAfterRequestDisconnect(t *testing.T) {
+	dependencies := completeHandlerDependencies(t)
+	fullStore := fullStoreForTest(t, dependencies)
+	handler, err := NewHandler(dependencies)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/chat", bytes.NewBufferString(`{"message":"Finish after disconnect.","mode":"single"}`))
+	request.Header.Set("Content-Type", "application/json")
+	ctx, cancel := context.WithCancel(request.Context())
+	request = request.WithContext(ctx)
+	recorder := &disconnectRecorder{ResponseRecorder: httptest.NewRecorder(), flushed: make(chan struct{})}
+	done := make(chan struct{})
+	go func() {
+		handler.Routes().ServeHTTP(recorder, request)
+		close(done)
+	}()
+
+	select {
+	case <-recorder.flushed:
+		cancel()
+	case <-time.After(time.Second):
+		t.Fatal("chat stream did not start")
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("detached run did not finish")
+	}
+
+	runs, err := fullStore.ListRuns()
+	if err != nil || len(runs) != 1 || runs[0].Status != domain.RunCompleted {
+		t.Fatalf("run continuity failed: runs=%#v err=%v", runs, err)
+	}
+	messages, err := fullStore.ListMessages(runs[0].ConversationID)
+	if err != nil || len(messages) != 2 || messages[1].Role != "assistant" || messages[1].Content == "" {
+		t.Fatalf("assistant response was not persisted: messages=%#v err=%v", messages, err)
 	}
 }
 
