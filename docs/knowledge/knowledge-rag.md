@@ -124,6 +124,11 @@ compares ranked child IDs, selected Context IDs, citations, stage metadata,
 no-match decisions, and embedding failures so the two entry points cannot
 silently diverge.
 
+The RAG-035 regression extends that fixture across HTTP, Single-Agent,
+Multi-Agent, and Autonomous/Loop paths with five saturated lexical candidates.
+Every path must reject all five, select no model Context, emit no citations, and
+persist the same user-query boundary plus candidate-level rejection evidence.
+
 ## Workspace Boundary
 
 Document ingestion stores the request workspace on the Document. HTTP search
