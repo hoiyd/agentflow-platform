@@ -2,6 +2,7 @@ package rag
 
 import (
 	"strings"
+	"unicode"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
@@ -102,14 +103,17 @@ func evidenceScore(query string, queryTerms []string, item domain.RetrievedDocum
 	return score
 }
 
-func relevanceConfidence(item domain.RetrievedDocumentChunk, reranker domain.RerankerInfo, config HeuristicRelevanceGateConfig) (string, string) {
-	if item.LexicalRank > 0 && item.LexicalScore >= 0.95 {
-		return "high", "strong lexical recall match"
-	}
+func relevanceConfidence(item domain.RetrievedDocumentChunk, identifierMatch bool, reranker domain.RerankerInfo, config HeuristicRelevanceGateConfig) (string, string) {
 	if item.EvidenceCoverage >= 0.6 || item.EvidenceScore >= 0.24 {
 		return "high", "strong evidence match"
 	}
-	if item.EvidenceCoverage < config.MinimumEvidenceCoverage {
+	if item.LexicalRank > 0 && item.LexicalScore >= 0.95 && identifierMatch {
+		return "high", "strong lexical recall with exact identifier"
+	}
+	if item.LexicalRank > 0 && item.LexicalScore >= 0.95 && item.EvidenceCoverage >= config.MinimumEvidenceCoverage {
+		return "high", "strong lexical recall with evidence coverage"
+	}
+	if item.EvidenceCoverage < config.MinimumEvidenceCoverage && !identifierMatch {
 		return "low", "filtered: evidence coverage below calibrated minimum"
 	}
 	if item.Similarity >= 0.72 {
@@ -140,6 +144,46 @@ func relevanceConfidence(item domain.RetrievedDocumentChunk, reranker domain.Rer
 		return "medium", "lexical recall passed with supporting terms"
 	}
 	return "low", "filtered: weak similarity and no supporting evidence"
+}
+
+func matchedIdentifier(query string, item domain.RetrievedDocumentChunk) string {
+	text := strings.ToLower(strings.Join([]string{
+		item.Document.Title,
+		item.Document.SourceURI,
+		item.Chunk.Content,
+		metadataText(item.Document.Metadata, "filename"),
+		metadataText(item.Chunk.Metadata, "title"),
+		metadataText(item.Chunk.Metadata, "heading_path"),
+	}, " "))
+	identifiers := map[string]bool{}
+	for _, token := range identifierTokens(text) {
+		identifiers[strings.ToLower(token)] = true
+	}
+	for _, token := range identifierTokens(query) {
+		if identifiers[strings.ToLower(token)] {
+			return token
+		}
+	}
+	return ""
+}
+
+func identifierTokens(value string) []string {
+	tokens := strings.FieldsFunc(value, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_'
+	})
+	identifiers := tokens[:0]
+	for _, token := range tokens {
+		hasLetter := false
+		hasDigit := false
+		for _, r := range token {
+			hasLetter = hasLetter || unicode.IsLetter(r)
+			hasDigit = hasDigit || unicode.IsDigit(r)
+		}
+		if hasLetter && hasDigit {
+			identifiers = append(identifiers, token)
+		}
+	}
+	return identifiers
 }
 
 func matchedTerms(query string, queryTerms []string, item domain.RetrievedDocumentChunk) []string {

@@ -362,10 +362,27 @@ knowledge for model context.
   },
   "relevance_gate": {
     "policy": "heuristic",
-    "version": "heuristic-relevance-gate-v2",
-    "config_version": "heuristic-relevance-calibrated-v1",
+    "version": "heuristic-relevance-gate-v3",
+    "config_version": "heuristic-relevance-hardened-v2",
     "minimum_evidence_coverage": 0.25
   },
+  "relevance_decisions": [
+    {
+      "document_id": "doc_123",
+      "chunk_id": "chunk_456",
+      "lexical_rank": 1,
+      "lexical_score": 0.92,
+      "similarity": 0.71,
+      "rerank_score": 1.02,
+      "matched_terms": ["launch", "password"],
+      "evidence_score": 0.38,
+      "evidence_coverage": 1,
+      "identifier_match": "",
+      "confidence": "high",
+      "filter_reason": "strong evidence match",
+      "accepted": true
+    }
+  ],
   "security": {
     "policy_version": "rag-prompt-guard-v2",
     "untrusted_context": true,

@@ -156,7 +156,7 @@ func (r *Runtime) RunCollaboration(ctx context.Context, prepared PreparedCollabo
 		executionCtx, releaseCancellation := r.bindRunCancellation(ctx, prepared.Run.ID)
 		defer releaseCancellation()
 
-		_, err := r.runCollaborationStep(executionCtx, events, prepared, "planner", "", plannerPrompt(), task)
+		_, err := r.runCollaborationStep(executionCtx, events, prepared, "planner", "", plannerPrompt(), task, userInputRetrievalQuery(task))
 		if err != nil {
 			errs <- err
 			return
@@ -292,7 +292,7 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 
 		prepared := PreparedCollaborationRun{WorkerAgent: route.Agent, Run: run}
 		workerInput := fmt.Sprintf("User task:\n%s\n\nPlanner output:\n%s\n\nRouter-selected worker:\n%s (%s)\nSelection reason: %s", task, plan, route.Agent.Name, route.Agent.ID, route.Reason)
-		worker, err := r.runWorkerStage(executionCtx, events, prepared, restored.catalog, workerInput)
+		worker, err := r.runWorkerStage(executionCtx, events, prepared, restored.catalog, workerInput, userInputRetrievalQuery(task))
 		if err != nil {
 			errs <- err
 			return
@@ -375,7 +375,7 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 			workerOutput = boundedWorkerHandoff(workerStep)
 		} else {
 			workerInput := fmt.Sprintf("User task:\n%s\n\nPlanner output:\n%s\n\nRouter-selected worker:\n%s (%s)", planner.Input, planner.Output, workerAgent.Name, workerAgent.ID)
-			workerOutput, err = r.runWorkerStage(executionCtx, events, prepared, restored.catalog, workerInput)
+			workerOutput, err = r.runWorkerStage(executionCtx, events, prepared, restored.catalog, workerInput, userInputRetrievalQuery(planner.Input))
 			if err != nil {
 				errs <- err
 				return
@@ -387,7 +387,7 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 			review = reviewStep.Output
 		} else {
 			reviewInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s", planner.Input, planner.Output, workerOutput)
-			review, err = r.runCollaborationStep(executionCtx, events, prepared, "reviewer", "", reviewerPrompt(), reviewInput)
+			review, err = r.runCollaborationStep(executionCtx, events, prepared, "reviewer", "", reviewerPrompt(), reviewInput, userInputRetrievalQuery(planner.Input))
 			if err != nil {
 				errs <- err
 				return
@@ -399,7 +399,7 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 			final = finalStep.Output
 		} else {
 			finalInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s\n\nReview:\n%s", planner.Input, planner.Output, workerOutput, review)
-			final, err = r.runCollaborationStep(executionCtx, events, prepared, "finalizer", "", finalizerPrompt(), finalInput)
+			final, err = r.runCollaborationStep(executionCtx, events, prepared, "finalizer", "", finalizerPrompt(), finalInput, userInputRetrievalQuery(planner.Input))
 			if err != nil {
 				errs <- err
 				return
@@ -412,12 +412,12 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 
 func (r *Runtime) finishCollaboration(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, task, plan, worker string) error {
 	reviewInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s", task, plan, worker)
-	review, err := r.runCollaborationStep(ctx, events, prepared, "reviewer", "", reviewerPrompt(), reviewInput)
+	review, err := r.runCollaborationStep(ctx, events, prepared, "reviewer", "", reviewerPrompt(), reviewInput, userInputRetrievalQuery(task))
 	if err != nil {
 		return err
 	}
 	finalInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s\n\nReview:\n%s", task, plan, worker, review)
-	final, err := r.runCollaborationStep(ctx, events, prepared, "finalizer", "", finalizerPrompt(), finalInput)
+	final, err := r.runCollaborationStep(ctx, events, prepared, "finalizer", "", finalizerPrompt(), finalInput, userInputRetrievalQuery(task))
 	if err != nil {
 		return err
 	}
@@ -952,7 +952,7 @@ func routerUserPrompt(task string, plan string, requirements domain.AgentRouting
 	return fmt.Sprintf("User task:\n%s\n\nApproved plan:\n%s\n\nUser-approved routing requirements:\n%s\n\nCandidate agents:\n%s\n\nReturn JSON only. The selected agent_id must be one of the candidate ids.", task, plan, formatRoutingRequirements(requirements), formatCandidateAgents(agents))
 }
 
-func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, role string, agentID string, systemPrompt string, input string) (string, error) {
+func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, role string, agentID string, systemPrompt string, input string, query retrievalQuery) (string, error) {
 	step, err := r.store.CreateCollaborationStep(domain.CollaborationStep{
 		RunID:          prepared.Run.ID,
 		ConversationID: prepared.Run.ConversationID,
@@ -969,9 +969,11 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- domain
 		return "", err
 	}
 
-	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input, true, true, map[string]any{
-		"executor":  domain.DefaultAgentExecutor,
-		"framework": "agentflow-native",
+	query.StageID = step.ID
+	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, query, true, true, map[string]any{
+		"executor":   domain.DefaultAgentExecutor,
+		"framework":  "agentflow-native",
+		"stage_role": role,
 	})
 	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{
 		RunID: prepared.Run.ID, StepID: step.ID, ConversationID: prepared.Run.ConversationID,

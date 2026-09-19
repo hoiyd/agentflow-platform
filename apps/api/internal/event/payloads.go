@@ -368,10 +368,13 @@ func (ToolPayload) supports(eventType domain.RunEventType) bool {
 }
 
 type RetrievalPayload struct {
-	Query       string `json:"query,omitempty"`
-	MemoryCount int    `json:"memory_count"`
-	ChunkCount  int    `json:"chunk_count"`
-	Error       string `json:"error,omitempty"`
+	Query           string `json:"query,omitempty"`
+	QuerySource     string `json:"query_source,omitempty"`
+	QuerySkipped    bool   `json:"query_skipped,omitempty"`
+	QuerySkipReason string `json:"query_skip_reason,omitempty"`
+	MemoryCount     int    `json:"memory_count"`
+	ChunkCount      int    `json:"chunk_count"`
+	Error           string `json:"error,omitempty"`
 }
 
 func (RetrievalPayload) supports(eventType domain.RunEventType) bool {

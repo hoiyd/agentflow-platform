@@ -192,9 +192,10 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 			Dimensions: embedding.Dimensions,
 			Estimated:  embedding.Estimated,
 		},
-		Reranker:      rerankResult.Info,
-		RelevanceGate: gateResult.Info,
-		NoMatch:       len(items) == 0,
+		Reranker:           rerankResult.Info,
+		RelevanceGate:      gateResult.Info,
+		RelevanceDecisions: gateResult.Decisions,
+		NoMatch:            len(items) == 0,
 	}
 	if response.NoMatch {
 		if security.BlockedCandidates > 0 && security.BlockedCandidates == security.CheckedCandidates {

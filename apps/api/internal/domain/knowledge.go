@@ -179,6 +179,24 @@ type RelevanceGateInfo struct {
 	MinimumEvidenceCoverage float64 `json:"minimum_evidence_coverage"`
 }
 
+// RelevanceGateDecision is the bounded, content-free audit record for one
+// candidate evaluated by the relevance gate.
+type RelevanceGateDecision struct {
+	DocumentID       string   `json:"document_id"`
+	ChunkID          string   `json:"chunk_id"`
+	LexicalRank      int      `json:"lexical_rank"`
+	LexicalScore     float64  `json:"lexical_score"`
+	Similarity       float64  `json:"similarity"`
+	RerankScore      float64  `json:"rerank_score"`
+	MatchedTerms     []string `json:"matched_terms"`
+	EvidenceScore    float64  `json:"evidence_score"`
+	EvidenceCoverage float64  `json:"evidence_coverage"`
+	IdentifierMatch  string   `json:"identifier_match"`
+	Confidence       string   `json:"confidence"`
+	FilterReason     string   `json:"filter_reason"`
+	Accepted         bool     `json:"accepted"`
+}
+
 type KnowledgeSecurityDecision struct {
 	DocumentID string   `json:"document_id"`
 	ChunkID    string   `json:"chunk_id"`
@@ -218,17 +236,18 @@ type ContextTransformationInfo struct {
 }
 
 type DocumentSearchResponse struct {
-	Items            []RetrievedDocumentChunk `json:"items"`
-	ContextItems     []RetrievedDocumentChunk `json:"context_items,omitempty"`
-	CitationSources  []RAGCitation            `json:"citation_sources,omitempty"`
-	ContextSelection ContextSelectionInfo     `json:"context_selection"`
-	Embedding        EmbeddingInfo            `json:"embedding"`
-	Fusion           FusionInfo               `json:"fusion"`
-	Reranker         RerankerInfo             `json:"reranker"`
-	RelevanceGate    RelevanceGateInfo        `json:"relevance_gate"`
-	Security         KnowledgeSecurityInfo    `json:"security"`
-	NoMatch          bool                     `json:"no_match,omitempty"`
-	Reason           string                   `json:"reason,omitempty"`
+	Items              []RetrievedDocumentChunk `json:"items"`
+	ContextItems       []RetrievedDocumentChunk `json:"context_items,omitempty"`
+	CitationSources    []RAGCitation            `json:"citation_sources,omitempty"`
+	ContextSelection   ContextSelectionInfo     `json:"context_selection"`
+	Embedding          EmbeddingInfo            `json:"embedding"`
+	Fusion             FusionInfo               `json:"fusion"`
+	Reranker           RerankerInfo             `json:"reranker"`
+	RelevanceGate      RelevanceGateInfo        `json:"relevance_gate"`
+	RelevanceDecisions []RelevanceGateDecision  `json:"relevance_decisions"`
+	Security           KnowledgeSecurityInfo    `json:"security"`
+	NoMatch            bool                     `json:"no_match,omitempty"`
+	Reason             string                   `json:"reason,omitempty"`
 }
 
 const RAGGoldenDatasetSchemaVersion = "rag-golden-dataset-v1"

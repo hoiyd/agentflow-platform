@@ -9,12 +9,22 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag"
 )
 
 type memoryRecallFunc func(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error)
 
 func (fn memoryRecallFunc) Recall(ctx context.Context, search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
 	return fn(ctx, search)
+}
+
+type recordingKnowledgeRetriever struct {
+	searches []domain.DocumentSearch
+}
+
+func (r *recordingKnowledgeRetriever) Search(_ context.Context, search domain.DocumentSearch, _ int, _ rag.Embedding) (domain.DocumentSearchResponse, error) {
+	r.searches = append(r.searches, search)
+	return domain.DocumentSearchResponse{NoMatch: true, Reason: "no relevant knowledge"}, nil
 }
 
 func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
@@ -82,9 +92,13 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 		t.Fatalf("create document: %v", err)
 	}
 
-	memories, chunks := runtime.retrieveContext(ctx, run.ID, "pgvector memory retrieval and replay knowledge chunk", true, true, map[string]any{
-		"executor":  domain.DefaultAgentExecutor,
-		"framework": "agentflow-native",
+	memories, chunks := runtime.retrieveContext(ctx, run.ID, retrievalQuery{
+		Text: "pgvector memory retrieval and replay knowledge chunk", Source: retrievalQuerySourceUserInput, StageID: "stage-retrieval",
+	}, true, true, map[string]any{
+		"executor":     domain.DefaultAgentExecutor,
+		"framework":    "agentflow-native",
+		"query":        "metadata must not replace the query",
+		"query_source": "metadata_override",
 	})
 	if len(memories) == 0 {
 		t.Fatal("expected retrieved memories")
@@ -106,6 +120,9 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 	for _, event := range replay.RunEvents {
 		if event.Type != domain.EventRetrievalCompleted {
 			continue
+		}
+		if event.StageID != "stage-retrieval" || event.Payload["query"] != "pgvector memory retrieval and replay knowledge chunk" || event.Payload["query_source"] != string(retrievalQuerySourceUserInput) {
+			t.Fatalf("expected query provenance in retrieval event, got %#v", event)
 		}
 		if event.Payload["memory_count"] != len(memories) {
 			t.Fatalf("expected memory_count %d, got %#v", len(memories), event.Payload["memory_count"])
@@ -138,8 +155,12 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 			t.Fatalf("expected active reranker configuration in retrieval trace, got %#v", event.Payload["reranker"])
 		}
 		relevanceGate, ok := event.Payload["relevance_gate"].(domain.RelevanceGateInfo)
-		if !ok || relevanceGate.Policy != "heuristic" || relevanceGate.Version != "heuristic-relevance-gate-v2" || relevanceGate.ConfigVersion != "heuristic-relevance-calibrated-v1" {
+		if !ok || relevanceGate.Policy != "heuristic" || relevanceGate.Version != "heuristic-relevance-gate-v3" || relevanceGate.ConfigVersion != "heuristic-relevance-hardened-v2" {
 			t.Fatalf("expected active relevance gate configuration in retrieval trace, got %#v", event.Payload["relevance_gate"])
+		}
+		decisions, ok := event.Payload["relevance_decisions"].([]domain.RelevanceGateDecision)
+		if !ok || len(decisions) != 1 || decisions[0].ChunkID == "" || decisions[0].Confidence == "" || decisions[0].FilterReason == "" {
+			t.Fatalf("expected candidate-level relevance decisions in retrieval trace, got %#v", event.Payload["relevance_decisions"])
 		}
 		security, ok := event.Payload["knowledge_security"].(domain.KnowledgeSecurityInfo)
 		if !ok || security.PolicyVersion != domain.RAGPromptGuardPolicyVersion || !security.UntrustedContext || security.CheckedCandidates == 0 {
@@ -186,7 +207,9 @@ func TestRetrieveContextDegradesMemoryRecallFailureToEmptySet(t *testing.T) {
 		}),
 	})
 
-	memories, chunks := runtime.retrieveContext(context.Background(), run.ID, "continue without memory", true, false, nil)
+	memories, chunks := runtime.retrieveContext(context.Background(), run.ID, retrievalQuery{
+		Text: "continue without memory", Source: retrievalQuerySourceUserInput,
+	}, true, false, nil)
 	if len(memories) != 0 || len(chunks) != 0 {
 		t.Fatalf("recall failure should degrade to empty context: memories=%#v chunks=%#v", memories, chunks)
 	}
@@ -257,7 +280,9 @@ func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 		t.Fatalf("create run: %v", err)
 	}
 
-	memories, chunks := runtime.retrieveContext(ctx, run.ID, "pgvector memory retrieval and replay knowledge chunk", false, false, map[string]any{
+	memories, chunks := runtime.retrieveContext(ctx, run.ID, retrievalQuery{
+		Text: "pgvector memory retrieval and replay knowledge chunk", Source: retrievalQuerySourceUserInput,
+	}, false, false, map[string]any{
 		"agent_id":          "agent_planner",
 		"agent_name":        "Planner",
 		"executor":          domain.DefaultAgentExecutor,
@@ -313,7 +338,7 @@ func TestRetrieveContextTruncatesEmbeddingQuery(t *testing.T) {
 	}
 
 	query := strings.Repeat("retrieval query ", 300)
-	runtime.retrieveContext(ctx, run.ID, query, true, true, map[string]any{
+	runtime.retrieveContext(ctx, run.ID, retrievalQuery{Text: query, Source: retrievalQuerySourceUserInput}, true, true, map[string]any{
 		"executor": domain.DefaultAgentExecutor,
 	})
 
@@ -331,8 +356,8 @@ func TestRetrieveContextTruncatesEmbeddingQuery(t *testing.T) {
 		if event.Payload["embedding_query_chars"] != 3000 {
 			t.Fatalf("expected embedding query to be truncated to 3000 chars, got %#v", event.Payload["embedding_query_chars"])
 		}
-		if event.Payload["embedding_query_original_chars"] != len(query) {
-			t.Fatalf("expected original query chars %d, got %#v", len(query), event.Payload["embedding_query_original_chars"])
+		if event.Payload["embedding_query_original_chars"] != len(strings.TrimSpace(query)) {
+			t.Fatalf("expected normalized query chars %d, got %#v", len(strings.TrimSpace(query)), event.Payload["embedding_query_original_chars"])
 		}
 		if event.Payload["embedding_query_truncated"] != true {
 			t.Fatalf("expected embedding query truncated flag, got %#v", event.Payload["embedding_query_truncated"])
@@ -340,4 +365,113 @@ func TestRetrieveContextTruncatesEmbeddingQuery(t *testing.T) {
 		return
 	}
 	t.Fatal("expected retrieval trace event")
+}
+
+func TestRetrieveContextSkipsQueriesWithoutAUsableBoundary(t *testing.T) {
+	tests := []struct {
+		name   string
+		query  retrievalQuery
+		reason string
+	}{
+		{name: "empty query", query: retrievalQuery{Source: retrievalQuerySourceUserInput}, reason: "empty_query"},
+		{name: "missing source", query: retrievalQuery{Text: "planner-generated scaffolding"}, reason: "query_source_required"},
+		{name: "unsupported source", query: retrievalQuery{Text: "planner-generated scaffolding", Source: "stage_input"}, reason: "unsupported_query_source"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixtureStore := fixturestore.New()
+			conversation, err := fixtureStore.CreateConversation(test.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+			memories, chunks := runtime.retrieveContext(context.Background(), run.ID, test.query, true, true, nil)
+			if len(memories) != 0 || len(chunks) != 0 {
+				t.Fatalf("skipped query returned context: memories=%#v chunks=%#v", memories, chunks)
+			}
+			events, err := fixtureStore.ListRunEvents(run.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, item := range events {
+				if item.Type == domain.EventRetrievalFailed {
+					t.Fatalf("query boundary skip became a retrieval failure: %#v", item)
+				}
+				if item.Type == domain.EventRetrievalCompleted {
+					if item.Payload["query_skipped"] != true || item.Payload["query_skip_reason"] != test.reason || item.Payload["chunk_count"] != 0 {
+						t.Fatalf("unexpected skip evidence: %#v", item.Payload)
+					}
+					return
+				}
+			}
+			t.Fatal("expected retrieval skip event")
+		})
+	}
+}
+
+func TestRetrieveContextAllowsTraceableBoundedSubquestion(t *testing.T) {
+	fixtureStore := fixturestore.New()
+	conversation, err := fixtureStore.CreateConversation("bounded subquestion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retriever := &recordingKnowledgeRetriever{}
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), KnowledgeRetriever: retriever,
+	})
+	runtime.retrieveContext(context.Background(), run.ID, retrievalQuery{
+		Text:    "Which alpha-4242 recovery step restarts the coordinator?",
+		Source:  retrievalQuerySourceBoundedSubquestion,
+		StageID: "stage-subquestion",
+	}, false, true, nil)
+	if len(retriever.searches) != 1 || retriever.searches[0].Query != "Which alpha-4242 recovery step restarts the coordinator?" {
+		t.Fatalf("bounded subquestion did not reach retrieval unchanged: %#v", retriever.searches)
+	}
+	events, err := fixtureStore.ListRunEvents(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range events {
+		if item.Type == domain.EventRetrievalCompleted {
+			if item.StageID != "stage-subquestion" || item.Payload["query_source"] != string(retrievalQuerySourceBoundedSubquestion) {
+				t.Fatalf("bounded subquestion provenance missing: %#v", item)
+			}
+			return
+		}
+	}
+	t.Fatal("expected bounded subquestion retrieval event")
+}
+
+func TestSingleRunUsesUserInputAsRetrievalQuery(t *testing.T) {
+	fixtureStore := fixturestore.New()
+	conversation, err := fixtureStore.CreateConversation("single query boundary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	retriever := &recordingKnowledgeRetriever{}
+	runtime := NewRuntime(RuntimeOptions{
+		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), KnowledgeRetriever: retriever,
+	})
+	prepared, err := runtime.PrepareChatRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const query = "Explain a retrieval boundary."
+	events, errs := runtime.StreamChat(context.Background(), prepared, nil, query)
+	for range events {
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	if len(retriever.searches) != 1 || retriever.searches[0].Query != query {
+		t.Fatalf("single run retrieval queries=%#v", retriever.searches)
+	}
 }

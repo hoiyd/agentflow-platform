@@ -108,6 +108,22 @@ export type RelevanceGateInfo = {
   minimum_evidence_coverage: number;
 };
 
+export type RelevanceGateDecision = {
+  document_id: string;
+  chunk_id: string;
+  lexical_rank: number;
+  lexical_score: number;
+  similarity: number;
+  rerank_score: number;
+  matched_terms: string[];
+  evidence_score: number;
+  evidence_coverage: number;
+  identifier_match: string;
+  confidence: string;
+  filter_reason: string;
+  accepted: boolean;
+};
+
 export type KnowledgeSecurityDecision = {
   document_id: string;
   chunk_id: string;
@@ -156,6 +172,7 @@ export type DocumentSearchResponse = {
   fusion?: FusionInfo;
   reranker?: RerankerInfo;
   relevance_gate?: RelevanceGateInfo;
+  relevance_decisions?: RelevanceGateDecision[];
   security?: KnowledgeSecurityInfo;
   no_match?: boolean;
   reason?: string;
@@ -346,6 +363,7 @@ export async function searchRAG(input: {
     fusion: payload.fusion,
     reranker: payload.reranker,
     relevance_gate: payload.relevance_gate,
+    relevance_decisions: Array.isArray(payload.relevance_decisions) ? payload.relevance_decisions : [],
     security: payload.security,
     no_match: payload.no_match,
     reason: payload.reason

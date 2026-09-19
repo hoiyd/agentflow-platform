@@ -220,7 +220,7 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 	if catalog == nil {
 		catalog, _ = tools.NewCatalog()
 	}
-	retrievedMemories, retrievedChunks := r.retrieveContext(executionCtx, prepared.Run.ID, latest, prepared.Agent.MemoryEnabled, prepared.Agent.RetrievalEnabled, map[string]any{
+	retrievedMemories, retrievedChunks := r.retrieveContext(executionCtx, prepared.Run.ID, userInputRetrievalQuery(latest), prepared.Agent.MemoryEnabled, prepared.Agent.RetrievalEnabled, map[string]any{
 		"agent_id":           prepared.Agent.ID,
 		"agent_name":         prepared.Agent.Name,
 		"executor":           domain.DefaultAgentExecutor,
@@ -343,37 +343,85 @@ func (r *Runtime) publishStage(ctx context.Context, step domain.CollaborationSte
 	return err
 }
 
-func (r *Runtime) retrieveContext(ctx context.Context, runID string, query string, memoryEnabled bool, retrievalEnabled bool, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
+type retrievalQuerySource string
+
+const (
+	retrievalQuerySourceUserInput          retrievalQuerySource = "user_input"
+	retrievalQuerySourceBoundedSubquestion retrievalQuerySource = "bounded_subquestion"
+)
+
+type retrievalQuery struct {
+	Text    string
+	Source  retrievalQuerySource
+	StageID string
+}
+
+func userInputRetrievalQuery(text string) retrievalQuery {
+	return retrievalQuery{Text: text, Source: retrievalQuerySourceUserInput}
+}
+
+func (q retrievalQuery) normalize() (retrievalQuery, string) {
+	q.Text = strings.TrimSpace(q.Text)
+	q.StageID = strings.TrimSpace(q.StageID)
+	if q.Text == "" {
+		return q, "empty_query"
+	}
+	switch q.Source {
+	case retrievalQuerySourceUserInput, retrievalQuerySourceBoundedSubquestion:
+		return q, ""
+	case "":
+		return q, "query_source_required"
+	default:
+		return q, "unsupported_query_source"
+	}
+}
+
+func (r *Runtime) retrieveContext(ctx context.Context, runID string, query retrievalQuery, memoryEnabled bool, retrievalEnabled bool, metadata map[string]any) ([]domain.RetrievedMemory, []domain.RetrievedDocumentChunk) {
 	conversationID := ""
 	workspaceID := ""
 	if run, ok, _ := r.store.GetRun(runID); ok {
 		conversationID = run.ConversationID
 		workspaceID = run.WorkspaceID
 	}
-	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalStarted, RunID: runID, ConversationID: conversationID, Payload: map[string]any{"query": truncateRuntimeText(query, 1200)}})
-	embeddingQuery := rag.EmbeddingQuery(query)
-	payload := map[string]any{
-		"workspace_id":                   workspaceID,
-		"query":                          truncateRuntimeText(query, 1200),
-		"embedding_query_chars":          len(embeddingQuery),
-		"embedding_query_original_chars": len(query),
-		"embedding_query_truncated":      len(embeddingQuery) < len(query),
+	query, skipReason := query.normalize()
+	queryPayload := map[string]any{
+		"query":        truncateRuntimeText(query.Text, 1200),
+		"query_source": string(query.Source),
 	}
+	r.publishRetrievalEvent(ctx, domain.EventRetrievalStarted, runID, conversationID, query.StageID, queryPayload)
+	embeddingQuery := rag.EmbeddingQuery(query.Text)
+	payload := map[string]any{}
 	for key, value := range metadata {
 		payload[key] = value
+	}
+	payload["workspace_id"] = workspaceID
+	payload["query"] = truncateRuntimeText(query.Text, 1200)
+	payload["query_source"] = string(query.Source)
+	payload["embedding_query_chars"] = len(embeddingQuery)
+	payload["embedding_query_original_chars"] = len(query.Text)
+	payload["embedding_query_truncated"] = len(embeddingQuery) < len(query.Text)
+	if skipReason != "" {
+		payload["query_skipped"] = true
+		payload["query_skip_reason"] = skipReason
+		payload["memory_count"] = 0
+		payload["chunk_count"] = 0
+		payload["matched_chunk_count"] = 0
+		r.publishRetrievalEvent(ctx, domain.EventRetrievalCompleted, runID, conversationID, query.StageID, payload)
+		return nil, nil
 	}
 	if !memoryEnabled && !retrievalEnabled {
 		payload["memory_count"] = 0
 		payload["chunk_count"] = 0
-		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
+		r.publishRetrievalEvent(ctx, domain.EventRetrievalCompleted, runID, conversationID, query.StageID, payload)
 		return nil, nil
 	}
 	client, err := r.embeddingClientForRun(runID)
 	if err != nil {
-		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: failure.Merge(map[string]any{"error": err.Error()}, err)})
+		payload["error"] = err.Error()
+		r.publishRetrievalEvent(ctx, domain.EventRetrievalFailed, runID, conversationID, query.StageID, failure.Merge(payload, err))
 		return nil, nil
 	}
-	embedding, err := rag.EmbedQuery(ctx, query, func(ctx context.Context, query string) (rag.Embedding, error) {
+	embedding, err := rag.EmbedQuery(ctx, query.Text, func(ctx context.Context, query string) (rag.Embedding, error) {
 		result, embedErr := client.EmbedText(ctx, query)
 		return rag.Embedding{
 			Vector:     result.Vector,
@@ -384,7 +432,8 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		}, embedErr
 	})
 	if err != nil {
-		_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalFailed, RunID: runID, ConversationID: conversationID, Payload: failure.Merge(map[string]any{"error": err.Error()}, err)})
+		payload["error"] = err.Error()
+		r.publishRetrievalEvent(ctx, domain.EventRetrievalFailed, runID, conversationID, query.StageID, failure.Merge(payload, err))
 		return nil, nil
 	}
 	payload["embedding_provider"] = embedding.Provider
@@ -399,7 +448,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		} else {
 			memories, recallErr = r.memoryRecall.Recall(ctx, domain.MemorySearch{
 				WorkspaceID:       workspaceID,
-				Query:             query,
+				Query:             query.Text,
 				Embedding:         embedding.Vector,
 				EmbeddingProvider: embedding.Provider,
 				EmbeddingModel:    embedding.Model,
@@ -409,15 +458,18 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 		if recallErr != nil {
 			payload["memory_error"] = recallErr.Error()
 			memories = nil
+			memoryPayload := map[string]any{
+				"workspace_id": workspaceID,
+				"query":        truncateRuntimeText(query.Text, 1200),
+				"query_source": string(query.Source),
+				"error":        recallErr.Error(),
+			}
 			_ = r.runEventSink().Publish(ctx, domain.RunEvent{
 				Type:           domain.EventMemoryRecallFailed,
 				RunID:          runID,
 				ConversationID: conversationID,
-				Payload: failure.Merge(map[string]any{
-					"workspace_id": workspaceID,
-					"query":        truncateRuntimeText(query, 1200),
-					"error":        recallErr.Error(),
-				}, recallErr),
+				StageID:        query.StageID,
+				Payload:        failure.Merge(memoryPayload, recallErr),
 			})
 		}
 	}
@@ -433,7 +485,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 			}
 			response, searchErr := r.knowledgeRetriever.Search(ctx, domain.DocumentSearch{
 				WorkspaceID:               workspaceID,
-				Query:                     query,
+				Query:                     query.Text,
 				Limit:                     5,
 				KnowledgeContextMaxTokens: knowledgeContextMaxTokens,
 			}, 5, embedding)
@@ -449,6 +501,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 				payload["fusion"] = response.Fusion
 				payload["reranker"] = response.Reranker
 				payload["relevance_gate"] = response.RelevanceGate
+				payload["relevance_decisions"] = response.RelevanceDecisions
 				payload["citation_sources"] = response.CitationSources
 				payload["knowledge_security"] = response.Security
 				if response.ContextSelection.Version != "" {
@@ -470,8 +523,14 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query strin
 	if len(matchedChunks) > 0 {
 		payload["matched_chunks"] = retrievedChunkTraceItems(matchedChunks)
 	}
-	_ = r.runEventSink().Publish(ctx, domain.RunEvent{Type: domain.EventRetrievalCompleted, RunID: runID, ConversationID: conversationID, Payload: payload})
+	r.publishRetrievalEvent(ctx, domain.EventRetrievalCompleted, runID, conversationID, query.StageID, payload)
 	return memories, chunks
+}
+
+func (r *Runtime) publishRetrievalEvent(ctx context.Context, eventType domain.RunEventType, runID, conversationID, stageID string, payload map[string]any) {
+	_ = r.runEventSink().Publish(ctx, domain.RunEvent{
+		Type: eventType, RunID: runID, ConversationID: conversationID, StageID: stageID, Payload: payload,
+	})
 }
 
 func retrievalTracePayload(memories []domain.RetrievedMemory, chunks []domain.RetrievedDocumentChunk) map[string]any {

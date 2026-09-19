@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -83,7 +84,61 @@ func TestRAGPipelineAPIAndAgentRuntimeRemainConsistent(t *testing.T) {
 	})
 }
 
+func TestRAG035RejectsSaturatedLexicalCandidatesAcrossAllPaths(t *testing.T) {
+	const query = "What is the lunar capacitor recovery procedure for ZZ-0000?"
+	paths := []struct {
+		name string
+		mode string
+	}{
+		{name: "http"},
+		{name: "single", mode: "single"},
+		{name: "multi", mode: "multi_agent"},
+		{name: "loop", mode: "autonomous"},
+	}
+	for _, path := range paths {
+		t.Run(path.name, func(t *testing.T) {
+			fixture := newPipelineRegressionFixtureWithSearchStore(t, saturatedLexicalSearchStore())
+			if path.mode == "" {
+				response := fixture.search(t, query)
+				if !response.NoMatch || len(response.Items) != 0 || len(response.ContextItems) != 0 || len(response.CitationSources) != 0 {
+					t.Fatalf("HTTP search returned rejected candidates: %#v", response)
+				}
+				assertRAG035Decisions(t, response.RelevanceDecisions)
+				return
+			}
+			replay := fixture.runModeAndReplay(t, query, path.mode)
+			completed := 0
+			for _, event := range replay.RunEvents {
+				if event.Type != domain.EventRetrievalCompleted {
+					continue
+				}
+				completed++
+				decisions := decodeRelevanceDecisions(t, event.Payload["relevance_decisions"])
+				assertRAG035Decisions(t, decisions)
+				if !boolValue(event.Payload["rag_no_match"]) || intValue(event.Payload["matched_chunk_count"]) != 0 || intValue(event.Payload["chunk_count"]) != 0 || len(traceChunkIDs(event.Payload["matched_chunks"])) != 0 || len(traceChunkIDs(event.Payload["retrieved_chunks"])) != 0 || len(traceSourceIDs(event.Payload["citation_sources"])) != 0 {
+					t.Fatalf("%s injected rejected candidates into model context: %#v", path.name, event.Payload)
+				}
+				if stringValue(event.Payload["query"]) != query || stringValue(event.Payload["query_source"]) != "user_input" {
+					t.Fatalf("%s retrieval lost the user-query boundary: %#v", path.name, event.Payload)
+				}
+			}
+			if completed == 0 {
+				t.Fatalf("%s produced no retrieval evidence", path.name)
+			}
+			for _, message := range replay.Messages {
+				if len(message.Citations) != 0 || strings.Contains(message.Content, "[S") {
+					t.Fatalf("%s leaked citations into the answer: %#v", path.name, message)
+				}
+			}
+		})
+	}
+}
+
 func newPipelineRegressionFixture(t *testing.T) *pipelineRegressionFixture {
+	return newPipelineRegressionFixtureWithSearchStore(t, nil)
+}
+
+func newPipelineRegressionFixtureWithSearchStore(t *testing.T, searchStore rag.SearchStore) *pipelineRegressionFixture {
 	t.Helper()
 	fixture := &pipelineRegressionFixture{}
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -142,13 +197,17 @@ func newPipelineRegressionFixture(t *testing.T) *pipelineRegressionFixture {
 
 	dependencies := completeHandlerDependencies(t)
 	fullStore := fullStoreForTest(t, dependencies)
-	pipeline := rag.NewRetrievalPipeline(fullStore)
+	if searchStore == nil {
+		searchStore = fullStore
+	}
+	pipeline := rag.NewRetrievalPipeline(searchStore)
 	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(fullStore, client, pipeline)
 	dependencies.Knowledge = knowledgeBase
 	dependencies.AgentRuntime = agentpkg.NewRuntime(agentpkg.RuntimeOptions{
 		Store:              fullStore,
 		ModelClient:        client,
 		KnowledgeRetriever: pipeline,
+		Autonomous:         agentpkg.AutonomousLimits{MaxIterations: 1},
 	})
 	handler, err := NewHandler(dependencies)
 	if err != nil {
@@ -159,6 +218,39 @@ func newPipelineRegressionFixture(t *testing.T) *pipelineRegressionFixture {
 	fixture.store = fullStore
 	fixture.knowledge = knowledgeBase
 	return fixture
+}
+
+type fixedLexicalSearchStore struct {
+	candidates []domain.RetrievedDocumentChunk
+}
+
+func saturatedLexicalSearchStore() *fixedLexicalSearchStore {
+	candidates := make([]domain.RetrievedDocumentChunk, 5)
+	for index := range candidates {
+		suffix := strconv.Itoa(index + 1)
+		candidates[index] = domain.RetrievedDocumentChunk{
+			Document:     domain.Document{ID: "unrelated-doc-" + suffix, WorkspaceID: pipelineRegressionWorkspace, Title: "Unrelated operations note"},
+			Chunk:        domain.DocumentChunk{ID: "unrelated-chunk-" + suffix, Content: "Routine tenant maintenance and release coordination."},
+			LexicalScore: 1,
+		}
+	}
+	return &fixedLexicalSearchStore{candidates: candidates}
+}
+
+func (s *fixedLexicalSearchStore) ListDocumentIndexIdentities(string) ([]domain.DocumentIndexIdentity, error) {
+	return nil, nil
+}
+
+func (s *fixedLexicalSearchStore) SearchDocumentChunks(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	return nil, nil
+}
+
+func (s *fixedLexicalSearchStore) SearchDocumentChunksLexical(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	return append([]domain.RetrievedDocumentChunk(nil), s.candidates...), nil
+}
+
+func (s *fixedLexicalSearchStore) ListDocumentContextChunks(domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error) {
+	return nil, nil
 }
 
 func (f *pipelineRegressionFixture) seedDocument(t *testing.T) {
@@ -228,6 +320,58 @@ func (f *pipelineRegressionFixture) runAgentAndGetRetrievalEvent(t *testing.T, q
 	return domain.RunEvent{}
 }
 
+func (f *pipelineRegressionFixture) runModeAndReplay(t *testing.T, query, mode string) domain.RunReplay {
+	t.Helper()
+	chat := f.request(t, http.MethodPost, "/api/chat", `{"message":`+quotedJSON(t, query)+`,"mode":`+quotedJSON(t, mode)+`}`)
+	if chat.Code != http.StatusOK || !strings.Contains(chat.Body.String(), "event: done") {
+		t.Fatalf("%s chat failed: status=%d body=%s", mode, chat.Code, chat.Body.String())
+	}
+	runs, err := f.store.ListRunsByWorkspace(pipelineRegressionWorkspace)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("list %s runs: runs=%#v err=%v", mode, runs, err)
+	}
+	if mode == "multi_agent" {
+		continued := f.request(t, http.MethodPost, "/api/runs/"+runs[0].ID+"/continue", `{"plan":"Inspect the requested recovery procedure and review the result."}`)
+		if continued.Code != http.StatusOK || !strings.Contains(continued.Body.String(), "event: done") {
+			t.Fatalf("continue multi-agent run: status=%d body=%s", continued.Code, continued.Body.String())
+		}
+	}
+	replay := f.request(t, http.MethodGet, "/api/runs/"+runs[0].ID+"/replay", "")
+	if replay.Code != http.StatusOK {
+		t.Fatalf("get %s replay: status=%d body=%s", mode, replay.Code, replay.Body.String())
+	}
+	var decoded domain.RunReplay
+	if err := json.Unmarshal(replay.Body.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode %s replay: %v", mode, err)
+	}
+	return decoded
+}
+
+func assertRAG035Decisions(t *testing.T, decisions []domain.RelevanceGateDecision) {
+	t.Helper()
+	if len(decisions) != 5 {
+		t.Fatalf("expected five relevance decisions, got %#v", decisions)
+	}
+	for _, decision := range decisions {
+		if decision.Accepted || decision.Confidence != "low" || decision.LexicalScore != 1 || decision.EvidenceCoverage != 0 || decision.FilterReason == "" {
+			t.Fatalf("saturated lexical candidate bypassed the hardened gate: %#v", decision)
+		}
+	}
+}
+
+func decodeRelevanceDecisions(t *testing.T, value any) []domain.RelevanceGateDecision {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decisions []domain.RelevanceGateDecision
+	if err := json.Unmarshal(encoded, &decisions); err != nil {
+		t.Fatal(err)
+	}
+	return decisions
+}
+
 func (f *pipelineRegressionFixture) request(t *testing.T, method string, path string, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	recorder := httptest.NewRecorder()
@@ -258,6 +402,7 @@ func assertPipelineSuccessConsistent(t *testing.T, api domain.DocumentSearchResp
 	assertJSONFieldEqual(t, "fusion", api.Fusion, runtime["fusion"])
 	assertJSONFieldEqual(t, "reranker", api.Reranker, runtime["reranker"])
 	assertJSONFieldEqual(t, "relevance_gate", api.RelevanceGate, runtime["relevance_gate"])
+	assertJSONFieldEqual(t, "relevance_decisions", api.RelevanceDecisions, runtime["relevance_decisions"])
 	assertJSONFieldEqual(t, "knowledge_security", api.Security, runtime["knowledge_security"])
 	assertJSONFieldEqual(t, "context_selection", api.ContextSelection, runtime["context_selection"])
 	if got, want := traceSourceIDs(runtime["citation_sources"]), citationSourceIDsForRegression(api.CitationSources); !equalStrings(got, want) {

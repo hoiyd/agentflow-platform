@@ -99,11 +99,35 @@ HTTP search, Single-Agent, Multi-Agent, and Autonomous runs use the same
    include each matched child, prefer same-parent section chunks, and fall back
    to adjacent chunks when no parent expansion can be selected.
 
+## Retrieval Query Boundary
+
+Retrieval evaluates the user's question, not the surrounding Agent prompt.
+Direct HTTP search uses the request's `query`. Runtime retrieval records one of
+two explicit query sources:
+
+- `user_input` is the original input that started the Run. Single-Agent,
+  Multi-Agent, and Autonomous stages keep this query even when their model
+  input also contains plans, prior outputs, reviews, or loop state.
+- `bounded_subquestion` is reserved for an explicit, traceable subquestion.
+  AgentFlow does not currently generate these subquestions or perform Query
+  Rewrite.
+
+Empty queries and queries without a recognized source skip retrieval instead
+of falling back to the complete Stage input. Replay exposes the actual bounded
+`query`, `query_source`, and the owning event `stage_id`.
+Skipped attempts record `query_skipped` and `query_skip_reason`. This boundary
+applies before Memory and Knowledge retrieval, so both receive the same intent.
+
 The API/Runtime regression fixture runs the same query, Store, Workspace, and
 embedding provider through `POST /api/rag/search` and a Single-Agent Run. It
 compares ranked child IDs, selected Context IDs, citations, stage metadata,
 no-match decisions, and embedding failures so the two entry points cannot
 silently diverge.
+
+The RAG-035 regression extends that fixture across HTTP, Single-Agent,
+Multi-Agent, and Autonomous/Loop paths with five saturated lexical candidates.
+Every path must reject all five, select no model Context, emit no citations, and
+persist the same user-query boundary plus candidate-level rejection evidence.
 
 ## Workspace Boundary
 
@@ -161,8 +185,21 @@ The versioned `RelevanceGate` is the next independent stage. It ignores any
 incoming `confidence`, `filter_reason`, or derived evidence, recomputes evidence
 from the query and trusted candidate data, then owns filtering and final rank
 compaction. Gate output must remain an ordered subset of the reranked input. The
-default policy reports `heuristic-relevance-gate-v2` with configuration
-`heuristic-relevance-calibrated-v1` and its `minimum_evidence_coverage`.
+default policy reports `heuristic-relevance-gate-v3` with configuration
+`heuristic-relevance-hardened-v2` and its `minimum_evidence_coverage`.
+It computes all candidate signals before classification. A saturated lexical
+score reaches `high` only when evidence coverage meets the configured minimum
+or the candidate contains an exact alphanumeric identifier from the query.
+This preserves lexical-only error-code and product-ID recall without allowing a
+score of `1.0` to bypass evidence checks.
+
+Every candidate produces a content-free `relevance_decisions` audit record with
+its chunk identity, lexical/vector/rerank signals, matched terms, evidence
+coverage, identifier match, final confidence, acceptance state, and decision
+reason. HTTP search returns these records and Agent retrieval persists them in
+Replay beside the versioned gate configuration. Empty candidate sets produce an
+explicit empty decision list; embedding failures remain execution failures and
+never degrade into accepted candidates.
 Model-backed rerankers must return normalized
 scores in `[0,1]`; malformed metadata, unknown/duplicate candidates, invalid
 ranks, or non-finite scores fail the pipeline instead of bypassing the Gate.
@@ -170,7 +207,7 @@ ranks, or non-finite scores fail the pipeline instead of bypassing the Gate.
 The UI labels the dense/vector path as **Semantic** and the lexical path as
 **Keyword**. These user-facing names map to the existing `vector_rank`,
 `lexical_rank`, `dense_weight`, and `lexical_weight` API fields; the wire
-contract remains unchanged.
+contract adds only the `relevance_decisions` audit field.
 
 ## Parent-Child Context Selection
 
