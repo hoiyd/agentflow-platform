@@ -224,7 +224,11 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
 
     void observeRunEvents(runID, {
       signal: controller.signal,
-      onEvent: (event) => handleObservedEvent(event),
+      onEvent: (event, _sequence, replayed) => {
+        // The canonical snapshot owns current Run status; historical lifecycle
+        // events still rebuild Stage details but must not regress that status.
+        if (!replayed || event.type !== "run_state") handleObservedEvent(event);
+      },
       onSnapshot: (snapshot) => {
         if (snapshot.run.conversation_id !== activeId) return;
         setRunState({

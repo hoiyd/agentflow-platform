@@ -268,15 +268,18 @@ test("run observer reconnects from the latest durable sequence", async (t) => {
   };
   t.after(() => { globalThis.fetch = originalFetch; });
   const statuses = [];
+  const replayed = [];
 
   await observeRunEvents("run-1", {
-    onEvent: (event) => {
+    onEvent: (event, _sequence, isReplay) => {
       if (event.type === "run_state") statuses.push(event.status);
+      replayed.push(isReplay);
     },
     onSnapshot: (snapshot) => statuses.push(snapshot.run.status)
   });
 
   assert.deepEqual(statuses, ["running", "running", "completed", "completed"]);
+  assert.deepEqual(replayed, [true, true]);
   assert.match(urls[0], /after=0$/);
   assert.match(urls[1], /after=1$/);
 });

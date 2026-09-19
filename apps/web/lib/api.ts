@@ -64,7 +64,7 @@ export type RunProjectionSnapshot = {
 type RunObservationOptions = {
   afterSequence?: number;
   signal?: AbortSignal;
-  onEvent: (event: ChatEvent, sequence: number) => void;
+  onEvent: (event: ChatEvent, sequence: number, replayed: boolean) => void;
   onSnapshot: (snapshot: RunProjectionSnapshot) => void;
 };
 
@@ -663,6 +663,7 @@ async function readChatEventStream(response: Response, onEvent: (event: ChatEven
 export async function observeRunEvents(runId: string, options: RunObservationOptions): Promise<void> {
   let cursor = Math.max(0, options.afterSequence ?? 0);
   for (let attempt = 0; attempt < 4 && !options.signal?.aborted; attempt += 1) {
+    let snapshotReceived = false;
     let stopped = false;
     let streamError = "";
     try {
@@ -676,6 +677,7 @@ export async function observeRunEvents(runId: string, options: RunObservationOpt
           if (id > cursor) cursor = id;
           const snapshot = JSON.parse(data) as RunProjectionSnapshot;
           options.onSnapshot(snapshot);
+          snapshotReceived = true;
           stopped = runObservationStopped(snapshot.run.status);
           return;
         }
@@ -687,7 +689,7 @@ export async function observeRunEvents(runId: string, options: RunObservationOpt
           streamError = projected.error;
           return;
         }
-        options.onEvent(projected, id);
+        options.onEvent(projected, id, !snapshotReceived);
         if (projected.type === "run_state") stopped = runObservationStopped(projected.status);
       });
       if (stopped) return;
