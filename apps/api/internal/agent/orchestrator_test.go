@@ -307,14 +307,17 @@ func TestMultiAgentWorkerRunsAsIsolatedParentStage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	retriever := &recordingKnowledgeRetriever{}
 	runtime := NewRuntime(RuntimeOptions{
 		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+		KnowledgeRetriever: retriever,
 	})
 	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, errs := runtime.RunCollaboration(context.Background(), prepared, "Implement and test a Go API change")
+	const task = "Implement and test a Go API change"
+	events, errs := runtime.RunCollaboration(context.Background(), prepared, task)
 	for range events {
 	}
 	if err := <-errs; err != nil {
@@ -346,6 +349,7 @@ func TestMultiAgentWorkerRunsAsIsolatedParentStage(t *testing.T) {
 			t.Fatalf("legacy child reference leaked into stage %s", item.ID)
 		}
 	}
+	assertRuntimeRetrievalBoundary(t, fixtureStore, prepared.Run.ID, task, retriever.searches)
 }
 
 func TestWorkerStageToolAndContextBoundary(t *testing.T) {
@@ -694,8 +698,10 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
+	retriever := &recordingKnowledgeRetriever{}
 	runtime := NewRuntime(RuntimeOptions{
 		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
+		KnowledgeRetriever: retriever,
 		Autonomous: AutonomousLimits{
 			MaxIterations: 1, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
 		},
@@ -705,7 +711,8 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 		t.Fatalf("prepare autonomous run: %v", err)
 	}
 
-	events, errs := runtime.RunAutonomous(context.Background(), prepared, "Write a concise project update.")
+	const task = "Write a concise project update."
+	events, errs := runtime.RunAutonomous(context.Background(), prepared, task)
 	seenProgress := false
 	for event := range events {
 		if event.Type == domain.EventRunProgress {
@@ -738,6 +745,45 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 	}
 	if err := eventpkg.ValidateLifecycle(runEvents); err != nil {
 		t.Fatalf("invalid autonomous event lifecycle: %v", err)
+	}
+	assertRuntimeRetrievalBoundary(t, fixtureStore, prepared.Run.ID, task, retriever.searches)
+}
+
+func assertRuntimeRetrievalBoundary(t *testing.T, fixtureStore *fixturestore.Store, runID, query string, searches []domain.DocumentSearch) {
+	t.Helper()
+	if len(searches) == 0 {
+		t.Fatal("expected knowledge retrieval")
+	}
+	for _, search := range searches {
+		if search.Query != query {
+			t.Fatalf("stage scaffolding leaked into retrieval query: got %q want %q", search.Query, query)
+		}
+	}
+	events, err := fixtureStore.ListRunEvents(runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed := 0
+	for _, item := range events {
+		if item.Type != domain.EventRetrievalCompleted {
+			continue
+		}
+		completed++
+		if item.StageID == "" || item.Payload["query"] != query || item.Payload["query_source"] != string(retrievalQuerySourceUserInput) {
+			t.Fatalf("retrieval provenance does not identify the user query and owning stage: %#v", item)
+		}
+		if item.Payload["chunk_count"] != 0 {
+			t.Fatalf("no-match retrieval leaked context: %#v", item.Payload)
+		}
+		if noMatch, present := item.Payload["rag_no_match"]; present && noMatch != true {
+			t.Fatalf("unexpected no-match decision: %#v", item.Payload)
+		}
+		if sources, ok := item.Payload["citation_sources"].([]domain.RAGCitation); ok && len(sources) > 0 {
+			t.Fatalf("no-match retrieval produced citation sources: %#v", item.Payload)
+		}
+	}
+	if completed == 0 {
+		t.Fatal("expected completed retrieval evidence")
 	}
 }
 

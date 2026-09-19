@@ -16,7 +16,7 @@ const workerHandoffMaxCharacters = 4000
 // runWorkerStage preserves the useful delegation boundary without creating a
 // second Run: the selected agent receives only the explicit task, its frozen
 // tool allowlist, and explicitly retrieved memory/knowledge.
-func (r *Runtime) runWorkerStage(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, catalog *tools.Catalog, input string) (string, error) {
+func (r *Runtime) runWorkerStage(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, catalog *tools.Catalog, input string, query retrievalQuery) (string, error) {
 	step, err := r.store.CreateCollaborationStep(domain.CollaborationStep{
 		RunID: prepared.Run.ID, ConversationID: prepared.Run.ConversationID, Role: "worker",
 		AgentID: prepared.WorkerAgent.ID, Status: domain.CollaborationStepRunning, Input: input,
@@ -33,7 +33,8 @@ func (r *Runtime) runWorkerStage(ctx context.Context, events chan<- domain.RunEv
 	if err != nil {
 		return "", r.failWorkerStage(ctx, events, step, err)
 	}
-	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input, prepared.WorkerAgent.MemoryEnabled, prepared.WorkerAgent.RetrievalEnabled, map[string]any{
+	query.StageID = step.ID
+	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, query, prepared.WorkerAgent.MemoryEnabled, prepared.WorkerAgent.RetrievalEnabled, map[string]any{
 		"executor": domain.DefaultAgentExecutor, "framework": "agentflow-native", "isolated_stage": true,
 	})
 	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{

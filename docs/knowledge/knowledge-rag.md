@@ -99,6 +99,25 @@ HTTP search, Single-Agent, Multi-Agent, and Autonomous runs use the same
    include each matched child, prefer same-parent section chunks, and fall back
    to adjacent chunks when no parent expansion can be selected.
 
+## Retrieval Query Boundary
+
+Retrieval evaluates the user's question, not the surrounding Agent prompt.
+Direct HTTP search uses the request's `query`. Runtime retrieval records one of
+two explicit query sources:
+
+- `user_input` is the original input that started the Run. Single-Agent,
+  Multi-Agent, and Autonomous stages keep this query even when their model
+  input also contains plans, prior outputs, reviews, or loop state.
+- `bounded_subquestion` is reserved for an explicit, traceable subquestion.
+  AgentFlow does not currently generate these subquestions or perform Query
+  Rewrite.
+
+Empty queries and queries without a recognized source skip retrieval instead
+of falling back to the complete Stage input. Replay exposes the actual bounded
+`query`, `query_source`, and the owning event `stage_id`.
+Skipped attempts record `query_skipped` and `query_skip_reason`. This boundary
+applies before Memory and Knowledge retrieval, so both receive the same intent.
+
 The API/Runtime regression fixture runs the same query, Store, Workspace, and
 embedding provider through `POST /api/rag/search` and a Single-Agent Run. It
 compares ranked child IDs, selected Context IDs, citations, stage metadata,

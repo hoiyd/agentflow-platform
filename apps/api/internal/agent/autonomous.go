@@ -306,7 +306,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 
 			log.Printf("autonomous_iteration_start run_id=%s iteration=%d output_chars=%d tool_calls=%d", prepared.Run.ID, iteration, outputChars, toolCalls)
 
-			observe, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "observe", autonomousObservePrompt(), autonomousObserveInput(task, state, limits, startedAt, outputChars, toolCalls))
+			observe, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "observe", autonomousObservePrompt(), autonomousObserveInput(task, state, limits, startedAt, outputChars, toolCalls), userInputRetrievalQuery(task))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -323,7 +323,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 
-			plan, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "plan", autonomousPlanPrompt(), autonomousPlanInput(task, observe, state))
+			plan, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "plan", autonomousPlanPrompt(), autonomousPlanInput(task, observe, state), userInputRetrievalQuery(task))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -340,7 +340,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 
-			act, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "act", autonomousActPrompt(prepared.WorkerAgent), autonomousActInput(task, plan, state))
+			act, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "act", autonomousActPrompt(prepared.WorkerAgent), autonomousActInput(task, plan, state), userInputRetrievalQuery(task))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -358,7 +358,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 
-			review, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "review", autonomousReviewPrompt(), autonomousReviewInput(task, plan, act))
+			review, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "review", autonomousReviewPrompt(), autonomousReviewInput(task, plan, act), userInputRetrievalQuery(task))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -376,7 +376,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				return
 			}
 
-			decide, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "decide", autonomousDecidePrompt(), autonomousDecideInput(task, observe, plan, act, review, iteration, limits))
+			decide, err := r.runAutonomousStep(executionCtx, events, prepared, iteration, "decide", autonomousDecidePrompt(), autonomousDecideInput(task, observe, plan, act, review, iteration, limits), userInputRetrievalQuery(task))
 			if err != nil {
 				if err == errRunCanceled {
 					return
@@ -472,7 +472,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 	return events, errs
 }
 
-func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, iteration int, role string, systemPrompt string, input string) (string, error) {
+func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, iteration int, role string, systemPrompt string, input string, query retrievalQuery) (string, error) {
 	if err := r.heartbeatRun(prepared.Run.ID); err != nil {
 		return "", err
 	}
@@ -505,9 +505,11 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 		}
 		return "", errRunCanceled
 	}
-	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, input, true, true, map[string]any{
-		"executor":  domain.DefaultAgentExecutor,
-		"framework": "agentflow-native",
+	query.StageID = step.ID
+	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, query, true, true, map[string]any{
+		"executor":   domain.DefaultAgentExecutor,
+		"framework":  "agentflow-native",
+		"stage_role": role,
 	})
 	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{
 		RunID: prepared.Run.ID, StepID: step.ID, ConversationID: prepared.Run.ConversationID,
