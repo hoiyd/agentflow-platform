@@ -7,6 +7,7 @@ RAG, and Agent routing checks plus explicitly authorized live checks:
 cd apps/api
 go run ./cmd/eval context --enforce
 go run ./cmd/eval rag --enforce
+go run ./cmd/eval relevance --live-embeddings [profile options]
 go run ./cmd/eval route --enforce
 go run ./cmd/eval tool --live --model MODEL \
   --max-model-calls 45 --max-total-tokens 250000 --trials 3 --enforce
@@ -15,8 +16,9 @@ go run ./cmd/eval tool --live --model MODEL \
 Every report uses `agentflow-evaluation-report-v1` identity fields: evaluation
 kind, Dataset ID/version/hash, Git revision, start/end time, and an explicit
 gate. Domain payload schemas remain separate (`context-quality-eval-v1`,
-`rag-eval-v1`, `agent-routing-eval-v1`, and `task-eval-v1`) so Context selection,
-retrieval ranks, routing outcomes, model tokens, and Tool calls are not confused.
+`rag-eval-v1`, `answer-relevance-eval-v1`, `agent-routing-eval-v1`, and
+`task-eval-v1`) so Context selection, retrieval ranks, answer relevance,
+routing outcomes, model tokens, and Tool calls are not confused.
 
 ## Context Quality Gate
 
@@ -118,6 +120,51 @@ OPENAI_API_KEY=... go run ./cmd/eval route --live --model MODEL \
 
 The default command and CI tests never call a public model. No embedding,
 classifier, Router database, or dashboard is introduced by this evaluator.
+
+## Answer Relevance Calibration
+
+`eval relevance` runs the production `answer-relevance-embedding-v1` verifier
+against a human-labeled question/answer Dataset. “Relevant” means that the
+answer directly addresses the main request; factual correctness, grounding,
+citations, and writing quality are deliberately separate checks. The Dataset
+contains balanced calibration and untouched holdout splits, English and Chinese,
+direct answers, paraphrases, refusals, partial answers, question repetition,
+related-but-unanswered negatives, and responsive but factually wrong answers.
+
+The runner chooses a cosine threshold only from calibration scores. It then
+reports the holdout confusion matrix, accuracy, precision, recall, false-accept
+rate, false-reject rate, provider failures, short-answer decisions, embedding
+latency, and model identity. Failed, blocked, canceled, or budget-exhausted
+samples stay visible and fail the gate. Reports store Case IDs and content hashes,
+not raw questions or answers.
+
+Live embeddings are mandatory because the production verifier rejects estimated
+hash vectors. Requests and retries reuse the bounded semantic embedding profile:
+
+```bash
+cd apps/api
+go run ./cmd/eval relevance \
+  --min-answer-characters 8 \
+  --embedding-profile ollama --live-embeddings \
+  --embedding-base-url http://localhost:11434/api/embed \
+  --embedding-model qwen3-embedding:latest --embedding-dimensions 4096 \
+  --max-embedding-calls 48 --max-embedding-input-tokens 20000 \
+  --embedding-retry-attempts 1 --embedding-timeout 5m --enforce
+```
+
+The canonical `qwen3-embedding` run selected threshold `0.740581` from 12
+calibration cases. On 12 holdout cases it produced 5 true positives, 5 true
+negatives, 1 false positive, and 1 false negative. Both error rates were `16.7%`,
+above the strict `10%` limits, so the accepted rollout recommendation is
+`warn_only`, not a required Completion Gate. The complete immutable report is
+[`qwen3-embedding-answer-relevance.v1.json`](../../examples/verification/evidence/qwen3-embedding-answer-relevance.v1.json).
+
+This result is profile-specific and intentionally does not change the global
+`0.65` verifier default. The frontend therefore defaults Answer Relevance to
+advisory: `required=false` records Evidence but does not affect completion;
+`required=true` makes failure block the Completion Gate. Promote a model/profile
+combination only after its own holdout report passes. The command never updates
+runtime policy automatically and does not use an LLM Judge.
 
 ## RAG Gate
 
