@@ -31,6 +31,7 @@ import "./styles/workbench/evidence-comparison.css";
 import "./styles/workbench/runtime-diagnostics.css";
 import "./styles/workbench/recovery-summary.css";
 import "./styles/workbench/task-state-replay.css";
+import "./styles/workbench/operator-attention.css";
 import "./styles/knowledge/layout.css";
 import "./styles/knowledge/documents.css";
 import "./styles/knowledge/retrieval.css";

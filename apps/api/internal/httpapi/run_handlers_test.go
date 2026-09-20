@@ -65,6 +65,28 @@ func TestListCollaborationStepsHandler(t *testing.T) {
 	}
 }
 
+func TestListRunAttentionReturnsOnlyActionableRuns(t *testing.T) {
+	fixtureStore, run := createHTTPTestRun(t)
+	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunFailedRecoverable, "worker interrupted"); err != nil {
+		t.Fatal(err)
+	}
+	handler := &Handler{store: fixtureStore}
+	recorder := httptest.NewRecorder()
+
+	handler.listRunAttention(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/attention", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("attention status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var items []domain.OperatorAttentionItem
+	if err := json.Unmarshal(recorder.Body.Bytes(), &items); err != nil || len(items) != 1 {
+		t.Fatalf("items=%#v err=%v", items, err)
+	}
+	if items[0].RunID != run.ID || items[0].Reason != domain.AttentionRecoveryAvailable || items[0].RecommendedAction == nil || items[0].RecommendedAction.Kind != "resume_run" {
+		t.Fatalf("unexpected attention item: %#v", items[0])
+	}
+}
+
 func TestGetRunProjectionReturnsCanonicalWatermarkAndDiagnostics(t *testing.T) {
 	fixtureStore, run := createHTTPTestRun(t)
 	if _, err := fixtureStore.CreateRunEvent(domain.RunEvent{Type: domain.EventRunCreated, RunID: run.ID, ConversationID: run.ConversationID}); err != nil {

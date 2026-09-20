@@ -19,7 +19,7 @@ export function RecoverySummaryPanel({
 }) {
 	if (!summary) return null;
 	return (
-		<section className="recovery-summary" aria-labelledby="recovery-summary-title">
+		<section className="recovery-summary" id="recovery-summary" aria-labelledby="recovery-summary-title">
 			<header>
 				<div>
 					<div className="recovery-summary-kicker">Recovery status</div>

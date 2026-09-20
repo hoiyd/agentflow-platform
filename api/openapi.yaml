@@ -256,6 +256,22 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/runs/attention:
+    get:
+      operationId: listRunAttention
+      tags: [Runs]
+      responses:
+        '200':
+          description: Highest-priority operator attention item for each actionable Run.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OperatorAttentionItem'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/runs/{id}:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -942,6 +958,53 @@ components:
         created_at:
           type: string
           format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OperatorAttentionEvidence:
+      type: object
+      required: [kind, summary]
+      properties:
+        kind: { type: string }
+        id: { type: string }
+        status: { type: string }
+        summary: { type: string }
+        artifact_refs:
+          type: array
+          items: { type: string }
+    OperatorAttentionAction:
+      type: object
+      required: [kind, label, enabled]
+      properties:
+        kind: { type: string }
+        label: { type: string }
+        enabled: { type: boolean }
+        target_id: { type: string }
+        unavailable_reason: { type: string }
+    OperatorAttentionItem:
+      type: object
+      required: [run_id, conversation_id, conversation_title, run_status, reason, title, message, evidence, observation_sequence, updated_at]
+      properties:
+        run_id: { type: string }
+        conversation_id: { type: string }
+        conversation_title: { type: string }
+        run_status:
+          $ref: '#/components/schemas/RunStatus'
+        reason:
+          type: string
+          enum: [reconciliation_required, recovery_available, waiting_for_user, verification_attention, budget_exhausted, failure]
+        title: { type: string }
+        message: { type: string }
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/OperatorAttentionEvidence'
+        recommended_action:
+          $ref: '#/components/schemas/OperatorAttentionAction'
+        observation_sequence:
+          type: integer
+          format: int64
         updated_at:
           type: string
           format: date-time

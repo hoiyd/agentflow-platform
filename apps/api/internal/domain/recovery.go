@@ -129,6 +129,7 @@ const (
 	RecoveryTaskBlocked         RecoveryReason = "task_blocked"
 	RecoveryVerificationFailed  RecoveryReason = "verification_failed"
 	RecoveryVerificationBlocked RecoveryReason = "verification_blocked"
+	RecoveryBudgetExhausted     RecoveryReason = "budget_exhausted"
 	RecoveryToolEffectUncertain RecoveryReason = "tool_effect_reconciliation_required"
 )
 
@@ -157,6 +158,33 @@ type RecoverySummary struct {
 	Evidence     []RecoveryEvidence `json:"evidence"`
 	ArtifactRefs []string           `json:"artifact_refs"`
 	Actions      []RecoveryAction   `json:"actions"`
+}
+
+type OperatorAttentionReason string
+
+const (
+	AttentionReconciliationRequired OperatorAttentionReason = "reconciliation_required"
+	AttentionRecoveryAvailable      OperatorAttentionReason = "recovery_available"
+	AttentionWaitingForUser         OperatorAttentionReason = "waiting_for_user"
+	AttentionVerification           OperatorAttentionReason = "verification_attention"
+	AttentionBudgetExhausted        OperatorAttentionReason = "budget_exhausted"
+	AttentionFailure                OperatorAttentionReason = "failure"
+)
+
+// OperatorAttentionItem is a read-only projection over one Run's durable
+// records. It is rebuilt on read and is never persisted as a second status.
+type OperatorAttentionItem struct {
+	RunID               string                  `json:"run_id"`
+	ConversationID      string                  `json:"conversation_id"`
+	ConversationTitle   string                  `json:"conversation_title"`
+	RunStatus           RunStatus               `json:"run_status"`
+	Reason              OperatorAttentionReason `json:"reason"`
+	Title               string                  `json:"title"`
+	Message             string                  `json:"message"`
+	Evidence            []RecoveryEvidence      `json:"evidence"`
+	RecommendedAction   *RecoveryAction         `json:"recommended_action,omitempty"`
+	ObservationSequence int64                   `json:"observation_sequence"`
+	UpdatedAt           time.Time               `json:"updated_at"`
 }
 
 func SummarizeToolEffects(records []ToolEffectRecord) []ToolEffectSummary {

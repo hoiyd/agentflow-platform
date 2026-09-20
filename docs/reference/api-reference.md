@@ -174,6 +174,12 @@ does not report Automated or Manual Test results.
 execution is represented as a Stage on its owning Run, so there is no separate
 Child Run lifecycle or mutation API.
 
+`GET /api/runs/attention` derives one highest-priority operator item for each
+actionable Run from Recovery Summary, Verification, Tool Effects, Task State,
+Budget Events, and terminal Run status. It persists no separate attention
+state. Each item includes supporting Evidence, the existing recommended
+Recovery Action, and an `observation_sequence` watermark.
+
 `GET /api/runs/{id}/collaboration_steps` returns the persisted records for
 orchestration Stages. Each `CollaborationStep.id` is the `stage_id` used by its
 related Run Events.

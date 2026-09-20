@@ -50,6 +50,7 @@ func TestBuildRecoverySummaryExplainsVerificationTaskAndTerminalStates(t *testin
 		{name: "verification without evidence", replay: domain.RunReplay{Run: domain.Run{Status: domain.RunWaitingForUser, VerificationStatus: domain.VerificationBlocked}}, reason: domain.RecoveryVerificationBlocked},
 		{name: "open task blocker", replay: domain.RunReplay{Run: domain.Run{Status: domain.RunWaitingForUser}, TaskStateRevisions: []domain.TaskStateRevision{{Version: 1, State: domain.TaskState{Blockers: []domain.TaskBlocker{{ID: "blocker-1", Description: "Missing approval", Status: domain.TaskBlockerOpen}}}}}}, reason: domain.RecoveryTaskBlocked},
 		{name: "waiting", replay: domain.RunReplay{Run: domain.Run{Status: domain.RunWaitingForUser}}, reason: domain.RecoveryInputRequired},
+		{name: "budget exhausted", replay: domain.RunReplay{Run: domain.Run{Status: domain.RunFailed}, RunEvents: []domain.RunEvent{{ID: "budget-1", Type: domain.EventBudgetExceeded, Sequence: 4, Payload: map[string]any{"resource": "total_tokens", "limit": 100, "used": 90, "requested": 20}}}}, reason: domain.RecoveryBudgetExhausted},
 		{name: "failed", replay: domain.RunReplay{Run: domain.Run{Status: domain.RunFailed}}, reason: domain.RecoveryRunFailed},
 		{name: "canceled", replay: domain.RunReplay{Run: domain.Run{Status: domain.RunCanceled}}, reason: domain.RecoveryRunCanceled},
 	}
@@ -71,6 +72,10 @@ func TestBuildRecoverySummaryExplainsVerificationTaskAndTerminalStates(t *testin
 	assertRecoveryAction(t, verification.Actions, "review_verification", false, "No verification evidence was recorded")
 	blocked := BuildRecoverySummary(tests[1].replay)
 	assertRecoveryAction(t, blocked.Actions, "review_task_state", true, "")
+	budget := BuildRecoverySummary(tests[3].replay)
+	if len(budget.Evidence) != 1 || budget.Evidence[0].Kind != "budget" || budget.Evidence[0].ID != "budget-1" {
+		t.Fatalf("unexpected budget evidence: %#v", budget.Evidence)
+	}
 }
 
 func assertRecoveryAction(t *testing.T, actions []domain.RecoveryAction, kind string, enabled bool, reason string) {

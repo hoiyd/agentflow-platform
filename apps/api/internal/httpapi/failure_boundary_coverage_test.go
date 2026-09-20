@@ -56,6 +56,7 @@ func TestAgentAndRunHandlersProjectStoreFailures(t *testing.T) {
 
 	workspace.listRunsErr = want
 	assertHandlerFailure(t, handler.listRuns, httptest.NewRequest(http.MethodGet, "/api/runs", nil), http.StatusInternalServerError)
+	assertHandlerFailure(t, handler.listRunAttention, httptest.NewRequest(http.MethodGet, "/api/runs/attention", nil), http.StatusInternalServerError)
 	workspace.listRunsErr = nil
 	workspace.getRunErr = want
 	for _, test := range []struct {
@@ -83,6 +84,7 @@ func TestAgentAndRunHandlersProjectStoreFailures(t *testing.T) {
 	workspace.listCollaborationStepsErr = nil
 	workspace.getRunReplayErr = want
 	assertHandlerFailure(t, handler.getRunReplay, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/replay", nil), http.StatusInternalServerError)
+	assertHandlerFailure(t, handler.listRunAttention, httptest.NewRequest(http.MethodGet, "/api/runs/attention", nil), http.StatusInternalServerError)
 	workspace.getRunReplayErr = nil
 	workspace.getRunUsageErr = want
 	assertHandlerFailure(t, handler.getRunUsage, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/usage", nil), http.StatusInternalServerError)

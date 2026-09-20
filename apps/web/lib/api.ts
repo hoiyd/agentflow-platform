@@ -19,6 +19,7 @@ export type AgentRoutingRequirements = ContractSchemas["AgentRoutingRequirements
 export type ToolInfo = ContractSchemas["ToolInfo"];
 export type ChatMode = ContractSchemas["ChatMode"];
 export type RunInfo = ContractSchemas["Run"];
+export type OperatorAttentionItem = ContractSchemas["OperatorAttentionItem"];
 export type CollaborationStepInfo = ContractSchemas["CollaborationStep"];
 export type RunTraceSummary = ContractSchemas["RunTraceSummary"];
 export type RuntimeRunBudget = ContractSchemas["RuntimeRunBudget"];
@@ -857,6 +858,14 @@ export async function listRuns(signal?: AbortSignal): Promise<RunInfo[]> {
     "/api/runs",
     { cache: "no-store", signal },
     { errorMessage: "Failed to load runs" }
+  );
+}
+
+export async function listRunAttention(signal?: AbortSignal): Promise<OperatorAttentionItem[]> {
+  return apiArray<OperatorAttentionItem>(
+    "/api/runs/attention",
+    { cache: "no-store", signal },
+    { errorMessage: "Failed to load operator attention" }
   );
 }
 

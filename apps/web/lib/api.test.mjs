@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { APIError, apiRequest } from "./api-client.ts";
-import { continueRun, getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listToolEffects, observeRunEvents, patchTaskState, reconcileToolEffect } from "./api.ts";
+import { continueRun, getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listRunAttention, listToolEffects, observeRunEvents, patchTaskState, reconcileToolEffect } from "./api.ts";
 import {
   createDocument,
   deleteDocument,
@@ -60,6 +60,18 @@ test("legacy replay receives an empty usage ledger", async (t) => {
     },
     entries: []
   });
+});
+
+test("operator attention client reads the derived run queue", async (t) => {
+  mockFetch(t, [{ run_id: "run-1", reason: "recovery_available", evidence: [], observation_sequence: 7 }], (url, options) => {
+    assert.equal(url, "http://localhost:8080/api/runs/attention");
+    assert.equal(options?.cache, "no-store");
+  });
+
+  const items = await listRunAttention();
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].observation_sequence, 7);
 });
 
 test("replay preserves frozen budget and settled usage", async (t) => {
