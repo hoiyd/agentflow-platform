@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import {
   Activity,
   BrainCircuit,
+  CircleAlert,
   ClipboardList,
   Database,
   Menu,
@@ -20,7 +21,7 @@ import {
 
 import type { Conversation, ToolInfo } from "../../lib/api";
 
-export type ChatView = "chat" | "tools" | "knowledge" | "memory";
+export type ChatView = "chat" | "tools" | "knowledge" | "memory" | "attention";
 export type APIConnectionStatus = "checking" | "connected" | "unavailable";
 
 export type VisibleRunState = {
@@ -101,6 +102,7 @@ export function Sidebar({
           <NavButton active={view === "tools"} icon={<Wrench size={16} />} label="Tools" onClick={() => selectView("tools")} />
           <NavButton active={view === "memory"} icon={<BrainCircuit size={16} />} label="Memory" onClick={() => selectView("memory")} />
           <NavButton active={view === "knowledge"} icon={<Database size={16} />} label="Knowledge" onClick={() => selectView("knowledge")} />
+          <NavButton active={view === "attention"} icon={<CircleAlert size={16} />} label="Needs attention" onClick={() => selectView("attention")} />
         </div>
         <div className="sidebar-section-title conversation-section-title">Recent runs</div>
         <div className="conversation-list">
@@ -254,7 +256,7 @@ export function Topbar({
       ) : (
         <div className="topbar-heading">
           <span className="topbar-eyebrow">Workspace</span>
-          <h2>{view === "tools" ? "Tools" : view === "memory" ? "Memory" : view === "knowledge" ? "Knowledge" : "New conversation"}</h2>
+          <h2>{view === "tools" ? "Tools" : view === "memory" ? "Memory" : view === "knowledge" ? "Knowledge" : view === "attention" ? "Needs attention" : "New conversation"}</h2>
         </div>
       )}
       <div className="topbar-actions">

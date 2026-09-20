@@ -59,6 +59,7 @@ the project.
 | [Structured Task State](runtime/task-state.md) | How do goals, tasks, decisions, constraints, blockers, and Artifact references remain versioned across Runs and compaction? |
 | [Model request reconstruction](context/model-request-reconstruction.md) | How are final model payloads hashed, optionally captured, and checked against Runtime Snapshot and Context Manifest records? |
 | [Event projections and runtime invariants](runtime/event-projections-runtime-invariants.md) | How are typed events converted into one read model, checked as an executable protocol, and handed off to live subscribers without a read/subscribe gap? |
+| [Operator attention projection](runtime/operator-attention.md) | How are actionable Runs derived into a low-noise operator queue without persisting a second status? |
 | [Execution modes](runtime/execution-modes.md#client-disconnects-and-run-continuity) | Why does an admitted Run survive browser disconnects, and how does the UI resume observation by durable event sequence? |
 | [Verification](runtime/verification.md) | How can a candidate output be checked before a Run is considered complete? |
 

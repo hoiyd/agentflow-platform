@@ -57,6 +57,7 @@ func (h *Handler) registerAgentRoutes(mux *http.ServeMux) {
 
 func (h *Handler) registerRunRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/runs", h.listRuns)
+	mux.HandleFunc("GET /api/runs/attention", h.listRunAttention)
 	mux.HandleFunc("GET /api/runs/{id}", h.getRun)
 	mux.HandleFunc("POST /api/runs/{id}/continue", h.continueRun)
 	mux.HandleFunc("POST /api/runs/{id}/resume", h.resumeRun)

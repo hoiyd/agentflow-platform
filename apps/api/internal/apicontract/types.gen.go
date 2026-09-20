@@ -96,6 +96,36 @@ func (e MessageRole) Valid() bool {
 	}
 }
 
+// Defines values for OperatorAttentionItemReason.
+const (
+	OperatorAttentionItemReasonBudgetExhausted        OperatorAttentionItemReason = "budget_exhausted"
+	OperatorAttentionItemReasonFailure                OperatorAttentionItemReason = "failure"
+	OperatorAttentionItemReasonReconciliationRequired OperatorAttentionItemReason = "reconciliation_required"
+	OperatorAttentionItemReasonRecoveryAvailable      OperatorAttentionItemReason = "recovery_available"
+	OperatorAttentionItemReasonVerificationAttention  OperatorAttentionItemReason = "verification_attention"
+	OperatorAttentionItemReasonWaitingForUser         OperatorAttentionItemReason = "waiting_for_user"
+)
+
+// Valid indicates whether the value is a known member of the OperatorAttentionItemReason enum.
+func (e OperatorAttentionItemReason) Valid() bool {
+	switch e {
+	case OperatorAttentionItemReasonBudgetExhausted:
+		return true
+	case OperatorAttentionItemReasonFailure:
+		return true
+	case OperatorAttentionItemReasonReconciliationRequired:
+		return true
+	case OperatorAttentionItemReasonRecoveryAvailable:
+		return true
+	case OperatorAttentionItemReasonVerificationAttention:
+		return true
+	case OperatorAttentionItemReasonWaitingForUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunStatus.
 const (
 	RunStatusCanceled          RunStatus = "canceled"
@@ -429,6 +459,42 @@ type Message struct {
 
 // MessageRole defines model for Message.Role.
 type MessageRole string
+
+// OperatorAttentionAction defines model for OperatorAttentionAction.
+type OperatorAttentionAction struct {
+	Enabled           bool    `json:"enabled"`
+	Kind              string  `json:"kind"`
+	Label             string  `json:"label"`
+	TargetId          *string `json:"target_id,omitempty"`
+	UnavailableReason *string `json:"unavailable_reason,omitempty"`
+}
+
+// OperatorAttentionEvidence defines model for OperatorAttentionEvidence.
+type OperatorAttentionEvidence struct {
+	ArtifactRefs *[]string `json:"artifact_refs,omitempty"`
+	Id           *string   `json:"id,omitempty"`
+	Kind         string    `json:"kind"`
+	Status       *string   `json:"status,omitempty"`
+	Summary      string    `json:"summary"`
+}
+
+// OperatorAttentionItem defines model for OperatorAttentionItem.
+type OperatorAttentionItem struct {
+	ConversationId      string                      `json:"conversation_id"`
+	ConversationTitle   string                      `json:"conversation_title"`
+	Evidence            []OperatorAttentionEvidence `json:"evidence"`
+	Message             string                      `json:"message"`
+	ObservationSequence int64                       `json:"observation_sequence"`
+	Reason              OperatorAttentionItemReason `json:"reason"`
+	RecommendedAction   *OperatorAttentionAction    `json:"recommended_action,omitempty"`
+	RunId               string                      `json:"run_id"`
+	RunStatus           RunStatus                   `json:"run_status"`
+	Title               string                      `json:"title"`
+	UpdatedAt           time.Time                   `json:"updated_at"`
+}
+
+// OperatorAttentionItemReason defines model for OperatorAttentionItem.Reason.
+type OperatorAttentionItemReason string
 
 // RAGCitation defines model for RAGCitation.
 type RAGCitation struct {

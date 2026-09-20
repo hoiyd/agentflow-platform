@@ -115,8 +115,10 @@ exercises Resume through the HTTP/SSE and persistence contracts, including stale
 or unsafe duplicate-action rejection. No production-only failure switch is added.
 
 If an actual recoverable Run is already present in PostgreSQL, use its **Run
-replay** page instead and click the projected Recovery Action. Keep the fixture
-pair as the no-network backup.
+replay** page instead and click the projected Recovery Action. Open **Needs
+attention** first to show the same reason, Evidence, action, and durable event
+watermark in the cross-Run operator queue. Keep the fixture pair as the
+no-network backup.
 
 For a process-level follow-up outside the timed walkthrough, run PROD-014
 against a disposable PostgreSQL database:

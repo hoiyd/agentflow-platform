@@ -37,6 +37,9 @@ func recoveryReason(replay domain.RunReplay, effects []domain.ToolEffectSummary,
 	if len(blockers) > 0 && (replay.Run.Status == domain.RunWaitingForUser || replay.Run.Status == domain.RunFailed || replay.Run.Status == domain.RunFailedRecoverable) {
 		return newRecoverySummary(domain.RecoveryTaskBlocked, "Task is blocked", "Structured task state records unresolved blockers for this conversation.")
 	}
+	if replay.Run.Status == domain.RunFailed && latestBudgetExceeded(replay.RunEvents) != nil {
+		return newRecoverySummary(domain.RecoveryBudgetExhausted, "Run budget exhausted", "The run stopped after reaching a configured resource limit.")
+	}
 	switch replay.Run.Status {
 	case domain.RunFailedRecoverable:
 		return newRecoverySummary(domain.RecoveryRunRecoverable, "Run can be resumed", "The run stopped unexpectedly and has a durable recovery point.")
@@ -71,6 +74,14 @@ func recoveryEvidence(replay domain.RunReplay, effects []domain.ToolEffectSummar
 	}
 	for _, blocker := range blockers {
 		items = appendRecoveryEvidence(items, domain.RecoveryEvidence{Kind: "task_blocker", ID: blocker.ID, Status: string(blocker.Status), Summary: blocker.Description})
+	}
+	if event := latestBudgetExceeded(replay.RunEvents); event != nil {
+		items = appendRecoveryEvidence(items, domain.RecoveryEvidence{
+			Kind: "budget", ID: event.ID, Status: "exhausted",
+			Summary: fmt.Sprintf("%s limit reached (limit=%d, used=%d, requested=%d)",
+				stringPayload(event.Payload, "resource"), intPayload(event.Payload, "limit"),
+				intPayload(event.Payload, "used"), intPayload(event.Payload, "requested")),
+		})
 	}
 	return items
 }
@@ -174,4 +185,14 @@ func appendUnique(items []string, values ...string) []string {
 		}
 	}
 	return items
+}
+
+func latestBudgetExceeded(events []domain.RunEvent) *domain.RunEvent {
+	var latest *domain.RunEvent
+	for index := range events {
+		if events[index].Type == domain.EventBudgetExceeded && (latest == nil || events[index].Sequence > latest.Sequence) {
+			latest = &events[index]
+		}
+	}
+	return latest
 }

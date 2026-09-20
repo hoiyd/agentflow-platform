@@ -49,6 +49,7 @@ import { KnowledgePanel } from "./knowledge/KnowledgePanel";
 import { useKnowledgeWorkbench } from "./knowledge/useKnowledgeWorkbench";
 import { MemoryPanel } from "./memory/MemoryPanel";
 import { useMemoryWorkbench } from "./memory/useMemoryWorkbench";
+import { OperatorAttentionPanel } from "./attention/OperatorAttentionPanel";
 
 type ChatShellProps = {
   initialConversationId?: string;
@@ -1069,6 +1070,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           <KnowledgePanel model={knowledge} />
         ) : view === "memory" ? (
           <MemoryPanel model={memory} />
+        ) : view === "attention" ? (
+          <OperatorAttentionPanel />
         ) : (
           <ChatWorkspace
             agents={agents}

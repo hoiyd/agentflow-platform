@@ -138,6 +138,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRunAttention"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{id}": {
         parameters: {
             query?: never;
@@ -534,6 +550,36 @@ export interface components {
             completed_at?: string;
             /** Format: date-time */
             created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        OperatorAttentionEvidence: {
+            kind: string;
+            id?: string;
+            status?: string;
+            summary: string;
+            artifact_refs?: string[];
+        };
+        OperatorAttentionAction: {
+            kind: string;
+            label: string;
+            enabled: boolean;
+            target_id?: string;
+            unavailable_reason?: string;
+        };
+        OperatorAttentionItem: {
+            run_id: string;
+            conversation_id: string;
+            conversation_title: string;
+            run_status: components["schemas"]["RunStatus"];
+            /** @enum {string} */
+            reason: "reconciliation_required" | "recovery_available" | "waiting_for_user" | "verification_attention" | "budget_exhausted" | "failure";
+            title: string;
+            message: string;
+            evidence: components["schemas"]["OperatorAttentionEvidence"][];
+            recommended_action?: components["schemas"]["OperatorAttentionAction"];
+            /** Format: int64 */
+            observation_sequence: number;
             /** Format: date-time */
             updated_at: string;
         };
@@ -1143,6 +1189,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Run"][];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listRunAttention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Highest-priority operator attention item for each actionable Run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorAttentionItem"][];
                 };
             };
             500: components["responses"]["InternalError"];
