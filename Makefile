@@ -1,4 +1,4 @@
-.PHONY: help setup quickstart dev test golden-eval context-eval routing-eval benchmark-evidence demo-check load-evidence contract-generate contract-check
+.PHONY: help setup quickstart dev test golden-eval context-eval routing-eval benchmark-evidence demo-check load-evidence release-recovery-drill contract-generate contract-check
 
 help:
 	@printf '%s\n' \
@@ -11,6 +11,7 @@ help:
 	  'make benchmark-evidence Build the offline CASE-001 benchmark evidence pack' \
 	  'make demo-check     Check the demo services and evidence pack' \
 	  'make load-evidence Run bounded load and soak evidence tests' \
+	  'make release-recovery-drill Run the single-instance restart and recovery drill' \
 	  'make test        Run backend tests, frontend lint/tests, and production build' \
 	  'make contract-check Regenerate shared API DTOs and reject drift'
 
@@ -40,6 +41,9 @@ demo-check:
 
 load-evidence:
 	@bash scripts/load-evidence.sh
+
+release-recovery-drill:
+	@bash scripts/release-recovery-drill.sh
 
 test:
 	@bash scripts/test.sh

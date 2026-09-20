@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/event"
 )
 
 func TestMarkStaleRunningRuns(t *testing.T) {
@@ -35,6 +36,8 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 		t.Fatalf("create running step: %v", err)
 	}
 	for _, item := range []domain.RunEvent{
+		{Type: domain.EventRunCreated, RunID: run.ID, ConversationID: conversation.ID},
+		{Type: domain.EventRunStarted, RunID: run.ID, ConversationID: conversation.ID},
 		{Type: domain.EventStageStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1"},
 		{Type: domain.EventTurnStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1", TurnID: "turn-1"},
 		{Type: domain.EventModelStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1", TurnID: "turn-1"},
@@ -73,13 +76,16 @@ func TestMarkStaleRunningRuns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list repaired events: %v", err)
 	}
-	if len(events) != 8 {
-		t.Fatalf("expected four synthetic terminals, got %d events", len(events))
+	if len(events) != 11 {
+		t.Fatalf("expected five synthetic terminals, got %d events", len(events))
 	}
-	for _, item := range events[4:] {
+	for _, item := range events[6:] {
 		if item.Payload["synthetic"] != true {
 			t.Fatalf("expected synthetic terminal event, got %#v", item)
 		}
+	}
+	if failures := event.CheckRuntimeInvariants(updated, events); len(failures) != 0 {
+		t.Fatalf("repaired runtime invariants: %#v", failures)
 	}
 	steps, err := fixtureStore.ListCollaborationSteps(run.ID)
 	if err != nil || len(steps) != 1 || steps[0].ID != step.ID || steps[0].Status != domain.CollaborationStepFailed {
@@ -123,6 +129,25 @@ func TestMarkStaleRunningRunsHandlesDisabledAndFailurePaths(t *testing.T) {
 	notApplied := &recoveryTestStore{runs: []domain.Run{{ID: "run-1"}}}
 	if count, err := MarkStaleRunningRuns(notApplied, time.Second); err != nil || count != 0 {
 		t.Fatalf("non-applied repair: count=%d err=%v", count, err)
+	}
+}
+
+func TestOpenRunLifecyclePreservesLegacyAndTerminalStreams(t *testing.T) {
+	if _, ok := openRunLifecycle(nil); ok {
+		t.Fatal("empty legacy stream reported an open Run lifecycle")
+	}
+	opened, ok := openRunLifecycle([]domain.RunEvent{
+		{ID: "created", Type: domain.EventRunCreated},
+		{ID: "started", Type: domain.EventRunStarted},
+	})
+	if !ok || opened.ID != "started" {
+		t.Fatal("started Run lifecycle was not detected")
+	}
+	if _, ok := openRunLifecycle([]domain.RunEvent{
+		{Type: domain.EventRunCreated},
+		{Type: domain.EventRunCompleted},
+	}); ok {
+		t.Fatal("terminal Run lifecycle reported as open")
 	}
 }
 
