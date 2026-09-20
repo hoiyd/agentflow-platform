@@ -39,7 +39,7 @@ evaluation, internal use, or a controlled demonstration:
 | Tenancy | Namespace filtering is mandatory and supports isolated Workspace IDs, but the API trusts the caller-selected ID. Operate as a single tenant or with trusted clients until identity, Membership, and ACL enforcement are complete. |
 | Runtime | Run admission, bounded queueing, Conversation single-writer control, interrupted lifecycle repair, Stage checkpoints, and Tool effect idempotency operate within one process. |
 | Tools | Use built-in or operator-reviewed Tools. All calls pass through Agent allowlists, Budget, timeout, result limits, tracing, and conservative concurrency. |
-| Data | Postgres provides durable storage, including local operation. Automated backup, restore, and migration drills remain deployment responsibilities. |
+| Data | Postgres provides durable storage, including local operation. The single-instance [release and recovery drill](release-recovery-drill.md) exercises startup migration, restart, repair, and Resume; backup/restore and version rollback remain deployment responsibilities. |
 | Quality | Retrieval evaluation is repeatable against the canonical v1 corpus. Persisted Evaluation Runs, broader representative coverage, and calibrated release thresholds are the next quality steps. |
 
 This profile deliberately excludes untrusted public access, hard multi-tenant

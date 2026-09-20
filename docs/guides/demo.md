@@ -118,6 +118,19 @@ If an actual recoverable Run is already present in PostgreSQL, use its **Run
 replay** page instead and click the projected Recovery Action. Keep the fixture
 pair as the no-network backup.
 
+For a process-level follow-up outside the timed walkthrough, run PROD-014
+against a disposable PostgreSQL database:
+
+```bash
+RELEASE_DRILL_DATABASE_URL='postgres://...' make release-recovery-drill
+```
+
+Open `.cache/release-drill/latest.json` and follow the drained and crashed Run
+IDs through readiness, abrupt termination, stale repair, checkpoint
+compensation, Resume, and duplicate-Resume rejection. This deterministic drill
+proves single-instance lifecycle recovery; it is separate from live-model
+quality evidence and does not claim backup/restore or rolling-release coverage.
+
 ### 3:35-4:35 - Review a Controlled Comparison
 
 Open the CASE-001A `manifest.json`. Inspect the frozen Dataset hash, Git revision,

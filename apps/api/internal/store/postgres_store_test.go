@@ -298,6 +298,8 @@ func TestPostgresInterruptedRunRepairIsAtomicAndIdempotent(t *testing.T) {
 		t.Fatalf("begin stale effect: effect=%#v execute=%v err=%v", staleEffect, execute, err)
 	}
 	for _, item := range []domain.RunEvent{
+		{Type: domain.EventRunCreated, RunID: run.ID, ConversationID: conversation.ID},
+		{Type: domain.EventRunStarted, RunID: run.ID, ConversationID: conversation.ID},
 		{Type: domain.EventStageStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: step.ID},
 		{Type: domain.EventTurnStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: step.ID, TurnID: "turn-1"},
 		{Type: domain.EventModelStarted, RunID: run.ID, ConversationID: conversation.ID, StageID: step.ID, TurnID: "turn-1"},
@@ -320,8 +322,13 @@ func TestPostgresInterruptedRunRepairIsAtomicAndIdempotent(t *testing.T) {
 		ExpectedEventCursor: events[len(events)-1].Sequence, TerminalEvents: terminal,
 		ErrorMessage: "worker interrupted",
 	}
+	terminal = append(terminal, domain.RunEvent{
+		Type: domain.EventRunFailed, RunID: run.ID, ConversationID: conversation.ID,
+		Payload: map[string]any{"status": string(domain.RunFailedRecoverable), "error": "worker interrupted"},
+	})
+	request.TerminalEvents = terminal
 	result, err := postgresStore.RepairInterruptedRun(request)
-	if err != nil || !result.Applied || result.Run.Status != domain.RunFailedRecoverable || len(result.AppendedEvents) != 4 {
+	if err != nil || !result.Applied || result.Run.Status != domain.RunFailedRecoverable || len(result.AppendedEvents) != 5 {
 		t.Fatalf("repair run: %#v err=%v", result, err)
 	}
 	repairedEvents, err := postgresStore.ListRunEvents(run.ID)

@@ -39,6 +39,17 @@ func MarkStaleRunningRuns(appStore Store, staleTimeout time.Duration) (int, erro
 		if err != nil {
 			return repaired, fmt.Errorf("plan interrupted run repair %s: %w", run.ID, err)
 		}
+		if opened, ok := openRunLifecycle(events); ok {
+			terminal = append(terminal, domain.RunEvent{
+				Type: domain.EventRunFailed, RunID: run.ID, ConversationID: run.ConversationID,
+				ParentEventID: opened.ID,
+				Payload: map[string]any{
+					"status": string(domain.RunFailedRecoverable), "error": staleRunMessage,
+					"synthetic": true, "reason": domain.InterruptedWorkerReason,
+					"repaired_from_event_id": opened.ID,
+				},
+			})
+		}
 		var cursor int64
 		if len(events) > 0 {
 			cursor = events[len(events)-1].Sequence
@@ -61,4 +72,17 @@ func MarkStaleRunningRuns(appStore Store, staleTimeout time.Duration) (int, erro
 		log.Printf("native_recovery_repaired run_id=%s synthetic_events=%d heartbeat_at=%v cutoff=%s", run.ID, len(result.AppendedEvents), run.HeartbeatAt, cutoff.Format(time.RFC3339))
 	}
 	return repaired, nil
+}
+
+func openRunLifecycle(events []domain.RunEvent) (domain.RunEvent, bool) {
+	var opened domain.RunEvent
+	for _, item := range events {
+		switch item.Type {
+		case domain.EventRunCreated, domain.EventRunStarted:
+			opened = item
+		case domain.EventRunCompleted, domain.EventRunFailed, domain.EventRunCanceled:
+			return domain.RunEvent{}, false
+		}
+	}
+	return opened, opened.Type != ""
 }

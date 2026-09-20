@@ -78,6 +78,7 @@ the project.
 | Document | Question answered |
 | --- | --- |
 | [Production readiness roadmap](operations/production-readiness-roadmap.md) | Which implemented controls form the baseline, what blocks a controlled production beta, and what is deliberately deferred? |
+| [Release and recovery drill](operations/release-recovery-drill.md) | How can a real API process be drained, killed, repaired, resumed, and checked for duplicate recovery against disposable PostgreSQL? |
 | [Backend configuration](operations/backend-configuration.md) | Which environment variables configure providers, storage, limits, tools, Verification, and the mandatory Workspace namespace? |
 | [Credential boundary and redaction](operations/credential-boundary.md) | Where are credentials resolved, rejected, dropped, hashed, or redacted before durable and observable sinks? |
 | [Bounded load and soak testing](operations/load-soak-testing.md) | How can process-local concurrency and cleanup behavior be reproduced without public models or unsupported capacity claims? |

@@ -20,7 +20,7 @@ For each stale Run, the event protocol finds open scopes and appends synthetic
 terminal events in inner-to-outer order:
 
 ```text
-tool.failed -> model.failed -> turn.failed -> stage.failed
+tool.failed -> model.failed -> turn.failed -> stage.failed -> run.failed
 ```
 
 Every synthetic payload includes:
@@ -33,11 +33,12 @@ Every synthetic payload includes:
 }
 ```
 
-The store rechecks the stale heartbeat and expected event cursor before making
-changes. Appending terminal events, changing running Stage records to `failed`,
-and changing the Run to `failed_recoverable` occur in one Postgres transaction.
-A second startup scan observes a non-running Run and does nothing, so repair is
-idempotent.
+The typed `run.failed` payload records `failed_recoverable`, keeping the event
+projection aligned with the authoritative Run row. The store rechecks the stale
+heartbeat and expected event cursor before making changes. Appending terminal
+events, changing running Stage records to `failed`, and changing the Run to
+`failed_recoverable` occur in one Postgres transaction. A second startup scan
+observes a non-running Run and does nothing, so repair is idempotent.
 
 Recovery planning or persistence failure prevents API startup. It does not
 silently leave an inconsistent Run active.
@@ -45,6 +46,8 @@ silently leave an inconsistent Run active.
 Historical event streams created before strict Stage pairing may contain a
 terminal Stage event without a start event. They remain readable. New streams
 that contain checkpoint events use strict Stage start/terminal validation.
+Streams that predate typed Run lifecycle events are repaired without inventing
+an orphan `run.failed` event.
 
 ## Stage Checkpoint Protocol
 
