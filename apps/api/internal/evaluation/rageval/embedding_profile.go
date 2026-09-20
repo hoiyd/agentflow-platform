@@ -97,6 +97,15 @@ type evaluationEmbedder struct {
 	identity domain.EmbeddingInfo
 }
 
+// NewEmbeddingProfile exposes the same bounded embedding profile to other
+// offline evaluators so request budgets, retries, and identity checks have one owner.
+func NewEmbeddingProfile(options EmbeddingProfileOptions) (*evaluationEmbedder, error) {
+	return newEvaluationEmbedder(options)
+}
+
+// Report returns the observed embedding identity and bounded request usage.
+func (e *evaluationEmbedder) Report() (domain.EmbeddingInfo, EmbeddingUsage) { return e.report() }
+
 func newEvaluationEmbedder(options EmbeddingProfileOptions) (*evaluationEmbedder, error) {
 	normalized, err := normalizeEmbeddingProfile(options)
 	if err != nil {

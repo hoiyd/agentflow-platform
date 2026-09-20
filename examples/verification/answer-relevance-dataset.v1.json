@@ -1,0 +1,200 @@
+{
+  "schema_version": "answer-relevance-dataset-v1",
+  "id": "agentflow-answer-relevance-baseline",
+  "version": "1.0.0",
+  "label_policy": "Relevant means the answer directly addresses the main information or action requested by the question. Factual correctness, grounding, writing quality, and citation quality are out of scope; a factually wrong but responsive answer is still relevant.",
+  "cases": [
+    {
+      "id": "cal-hours-direct",
+      "split": "calibration",
+      "coverage": ["direct_answer", "english"],
+      "question": "What are the support desk opening hours?",
+      "answer": "The support desk is open from 09:00 to 18:00 on weekdays.",
+      "expected_relevant": true
+    },
+    {
+      "id": "cal-hours-related-topic",
+      "split": "calibration",
+      "coverage": ["related_but_unanswered", "english"],
+      "question": "What are the support desk opening hours?",
+      "answer": "The support desk handles billing, account access, and product questions.",
+      "expected_relevant": false
+    },
+    {
+      "id": "cal-reset-procedure",
+      "split": "calibration",
+      "coverage": ["procedural", "english"],
+      "question": "How do I reset my account password?",
+      "answer": "Open Account Settings, choose Security, select Reset password, and confirm the email link.",
+      "expected_relevant": true
+    },
+    {
+      "id": "cal-reset-evasion",
+      "split": "calibration",
+      "coverage": ["evasive", "english"],
+      "question": "How do I reset my account password?",
+      "answer": "Account security is important, and our product includes several modern protection features.",
+      "expected_relevant": false
+    },
+    {
+      "id": "cal-wrong-but-responsive",
+      "split": "calibration",
+      "coverage": ["factuality_out_of_scope", "english"],
+      "question": "What is the capital of France?",
+      "answer": "The capital of France is Lyon.",
+      "expected_relevant": true
+    },
+    {
+      "id": "cal-capital-off-topic",
+      "split": "calibration",
+      "coverage": ["off_topic", "english"],
+      "question": "What is the capital of France?",
+      "answer": "Tomorrow will be cloudy with light rain and moderate winds.",
+      "expected_relevant": false
+    },
+    {
+      "id": "cal-refund-zh",
+      "split": "calibration",
+      "coverage": ["direct_answer", "chinese"],
+      "question": "退款申请需要在多少天内提交？",
+      "answer": "退款申请需要在购买后的十四天内提交，并附上订单编号。",
+      "expected_relevant": true
+    },
+    {
+      "id": "cal-refund-related-zh",
+      "split": "calibration",
+      "coverage": ["related_but_unanswered", "chinese"],
+      "question": "退款申请需要在多少天内提交？",
+      "answer": "订单发货后可以在账户页面查看物流状态和承运商信息。",
+      "expected_relevant": false
+    },
+    {
+      "id": "cal-two-part-complete",
+      "split": "calibration",
+      "coverage": ["multi_part", "english"],
+      "question": "How do I deploy the service and roll it back if health checks fail?",
+      "answer": "Deploy the signed image with the release command; if health checks fail, run the rollback command with the previous release ID.",
+      "expected_relevant": true
+    },
+    {
+      "id": "cal-two-part-incomplete",
+      "split": "calibration",
+      "coverage": ["partial_answer", "english"],
+      "question": "How do I deploy the service and roll it back if health checks fail?",
+      "answer": "Deploy the signed image with the standard release command.",
+      "expected_relevant": false
+    },
+    {
+      "id": "cal-billing-paraphrase",
+      "split": "calibration",
+      "coverage": ["paraphrase", "english"],
+      "question": "When will the annual subscription renew?",
+      "answer": "Your next yearly charge occurs on the anniversary of the original purchase date.",
+      "expected_relevant": true
+    },
+    {
+      "id": "cal-billing-refusal",
+      "split": "calibration",
+      "coverage": ["refusal", "english"],
+      "question": "When will the annual subscription renew?",
+      "answer": "I cannot provide an answer to that request, but I can discuss the product generally.",
+      "expected_relevant": false
+    },
+    {
+      "id": "hold-cancel-procedure",
+      "split": "holdout",
+      "coverage": ["procedural", "english"],
+      "question": "How can I cancel the scheduled export job?",
+      "answer": "Open Scheduled jobs, select the export, choose Cancel, and confirm the cancellation.",
+      "expected_relevant": true
+    },
+    {
+      "id": "hold-cancel-pricing",
+      "split": "holdout",
+      "coverage": ["related_but_unanswered", "english"],
+      "question": "How can I cancel the scheduled export job?",
+      "answer": "Export jobs are included in the enterprise plan without an additional usage fee.",
+      "expected_relevant": false
+    },
+    {
+      "id": "hold-error-explanation",
+      "split": "holdout",
+      "coverage": ["diagnosis", "english"],
+      "question": "What does error code PX-2049 mean?",
+      "answer": "PX-2049 means the signing key was rejected because its configured region does not match the release region.",
+      "expected_relevant": true
+    },
+    {
+      "id": "hold-error-generic",
+      "split": "holdout",
+      "coverage": ["evasive", "english"],
+      "question": "What does error code PX-2049 mean?",
+      "answer": "Please consult the documentation or contact an administrator for additional assistance.",
+      "expected_relevant": false
+    },
+    {
+      "id": "hold-window-zh",
+      "split": "holdout",
+      "coverage": ["direct_answer", "chinese"],
+      "question": "生产环境允许在哪个时间窗口发布？",
+      "answer": "生产环境的标准发布时间窗口是每周二和周四晚上九点到十一点。",
+      "expected_relevant": true
+    },
+    {
+      "id": "hold-window-off-topic-zh",
+      "split": "holdout",
+      "coverage": ["off_topic", "chinese"],
+      "question": "生产环境允许在哪个时间窗口发布？",
+      "answer": "生产环境使用法兰克福区域的控制平面，并启用了每日备份。",
+      "expected_relevant": false
+    },
+    {
+      "id": "hold-retention-paraphrase",
+      "split": "holdout",
+      "coverage": ["paraphrase", "english"],
+      "question": "How long are audit records retained?",
+      "answer": "Audit records remain available for ninety days before scheduled deletion.",
+      "expected_relevant": true
+    },
+    {
+      "id": "hold-question-parroting",
+      "split": "holdout",
+      "coverage": ["question_repetition", "english"],
+      "question": "How long are audit records retained?",
+      "answer": "How long are audit records retained? I received your question and will consider it carefully.",
+      "expected_relevant": false
+    },
+    {
+      "id": "hold-wrong-but-responsive-zh",
+      "split": "holdout",
+      "coverage": ["factuality_out_of_scope", "chinese"],
+      "question": "默认的项目配额是多少？",
+      "answer": "默认的项目配额是一百万次请求。",
+      "expected_relevant": true
+    },
+    {
+      "id": "hold-quota-refusal-zh",
+      "split": "holdout",
+      "coverage": ["refusal", "chinese"],
+      "question": "默认的项目配额是多少？",
+      "answer": "我无法回答这个问题，但可以介绍项目管理页面的其他功能。",
+      "expected_relevant": false
+    },
+    {
+      "id": "hold-owner-direct",
+      "split": "holdout",
+      "coverage": ["direct_answer", "english"],
+      "question": "Which team owns the payment webhook service?",
+      "answer": "The Commerce Platform team owns the payment webhook service.",
+      "expected_relevant": true
+    },
+    {
+      "id": "hold-owner-neighbor-topic",
+      "split": "holdout",
+      "coverage": ["related_but_unanswered", "english"],
+      "question": "Which team owns the payment webhook service?",
+      "answer": "The payment webhook service uses signed callbacks and retries failed deliveries.",
+      "expected_relevant": false
+    }
+  ]
+}

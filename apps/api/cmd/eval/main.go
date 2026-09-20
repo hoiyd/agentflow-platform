@@ -16,6 +16,7 @@ import (
 	"agentflow-platform/apps/api/internal/credential"
 	"agentflow-platform/apps/api/internal/evaluation/contexteval"
 	"agentflow-platform/apps/api/internal/evaluation/rageval"
+	"agentflow-platform/apps/api/internal/evaluation/relevanceeval"
 	"agentflow-platform/apps/api/internal/evaluation/routeeval"
 	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 	"agentflow-platform/apps/api/internal/openai"
@@ -29,7 +30,7 @@ func main() {
 
 func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: eval <benchmark|context|rag|route|tool> [options]")
+		fmt.Fprintln(stderr, "usage: eval <benchmark|context|rag|relevance|route|tool> [options]")
 		return 2
 	}
 	switch args[0] {
@@ -39,14 +40,73 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return runContext(ctx, args[1:], out, stderr)
 	case "rag":
 		return runRAG(ctx, args[1:], out, stderr)
+	case "relevance":
+		return runRelevance(ctx, args[1:], out, stderr)
 	case "route":
 		return runRoute(ctx, args[1:], out, stderr)
 	case "tool":
 		return runTool(ctx, args[1:], out, stderr)
 	default:
-		fmt.Fprintf(stderr, "unknown evaluation suite %q; use benchmark, context, rag, route, or tool\n", args[0])
+		fmt.Fprintf(stderr, "unknown evaluation suite %q; use benchmark, context, rag, relevance, route, or tool\n", args[0])
 		return 2
 	}
+}
+
+func runRelevance(ctx context.Context, args []string, out, stderr io.Writer) int {
+	flags := flag.NewFlagSet("eval relevance", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	dataset := flags.String("dataset", "../../examples/verification/answer-relevance-dataset.v1.json", "human-labeled answer relevance dataset JSON path")
+	minimumCharacters := flags.Int("min-answer-characters", 20, "minimum substantive answer length (1-100000)")
+	maxFalseAccept := flags.Float64("max-false-accept-rate", 0.10, "maximum holdout irrelevant-answer acceptance rate (0-1)")
+	maxFalseReject := flags.Float64("max-false-reject-rate", 0.10, "maximum holdout relevant-answer rejection rate (0-1)")
+	profileName := flags.String("embedding-profile", "", "required embedding profile: openai_compatible or ollama")
+	live := flags.Bool("live-embeddings", false, "explicitly authorize embedding model requests")
+	baseURL := flags.String("embedding-base-url", "http://localhost:11434/api/embed", "OpenAI-compatible base URL or Ollama /api/embed URL")
+	model := flags.String("embedding-model", "", "required embedding model ID")
+	dimensions := flags.Int("embedding-dimensions", 0, "required vector dimensions")
+	maxCalls := flags.Int("max-embedding-calls", 0, "required physical request budget including retries")
+	maxInputTokens := flags.Int("max-embedding-input-tokens", 0, "required estimated input-token budget")
+	retryAttempts := flags.Int("embedding-retry-attempts", 2, "maximum attempts per embedding input (1-5)")
+	timeout := flags.Duration("embedding-timeout", 2*time.Minute, "deadline for the complete calibration, at most 5m")
+	enforce := flags.Bool("enforce", false, "exit 1 when the holdout error-rate gate fails")
+	if flags.Parse(args) != nil || flags.NArg() != 0 {
+		return 2
+	}
+	if !*live || (*profileName != rageval.EmbeddingProfileOpenAICompatible && *profileName != rageval.EmbeddingProfileOllama) {
+		fmt.Fprintln(stderr, "Answer relevance calibration requires --live-embeddings and --embedding-profile openai_compatible or ollama; estimated hash vectors are not valid calibration evidence")
+		return 2
+	}
+	provider := map[string]string{rageval.EmbeddingProfileOpenAICompatible: "openai_compatible", rageval.EmbeddingProfileOllama: "ollama"}[*profileName]
+	profile, err := rageval.NewEmbeddingProfile(rageval.EmbeddingProfileOptions{Name: *profileName, Live: true,
+		APIKey: credential.FromEnvironment("OPENAI_API_KEY").Reveal(), BaseURL: *baseURL, Model: *model, Dimensions: *dimensions,
+		MaxCalls: *maxCalls, MaxInputTokens: *maxInputTokens, RetryMaxAttempts: *retryAttempts, Timeout: *timeout})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	evaluationCtx, cancel := context.WithTimeout(ctx, *timeout)
+	defer cancel()
+	report, err := relevanceeval.Run(evaluationCtx, profile, relevanceeval.Options{DatasetPath: *dataset, Revision: gitRevision(ctx),
+		MinimumAnswerCharacters: *minimumCharacters, MaxFalseAcceptRate: *maxFalseAccept, MaxFalseRejectRate: *maxFalseReject,
+		Embedding: relevanceeval.EmbeddingConfig{Profile: *profileName, ConfiguredModel: *model, Provider: provider,
+			Dimensions: *dimensions, MaxCalls: *maxCalls, MaxInputTokens: *maxInputTokens, RetryAttempts: *retryAttempts, TimeoutMS: timeout.Milliseconds()}})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	_, usage := profile.Report()
+	report.Embedding.PhysicalRequests = usage.PhysicalRequests
+	if !writeJSON(out, stderr, report) {
+		return 2
+	}
+	holdout := report.Summary[relevanceeval.SplitHoldout]
+	fmt.Fprintf(stderr, "relevance: threshold=%.6f holdout=%d/%d false_accept=%.3f false_reject=%.3f not_evaluated=%d latency_ms=%.1f embedding_requests=%d rollout=%s\n",
+		report.Calibration.RecommendedThreshold, holdout.Correct, holdout.Evaluated, holdout.FalseAcceptRate,
+		holdout.FalseRejectRate, holdout.NotEvaluated, holdout.MeanLatencyMS, report.Embedding.PhysicalRequests, report.Rollout.Mode)
+	if *enforce && !report.Gate.Passed {
+		return 1
+	}
+	return 0
 }
 
 func runRoute(ctx context.Context, args []string, out, stderr io.Writer) int {

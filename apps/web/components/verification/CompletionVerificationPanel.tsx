@@ -2,7 +2,7 @@ import { BookCheck, Braces, Globe2, Quote, Target, Terminal, TextCursorInput, X 
 import { useState } from "react";
 
 import type { CompletionVerificationSettings, VerifierTypeInput } from "../../lib/verification";
-import { enabledVerifierCount } from "../../lib/verification";
+import { requiredVerifierCount } from "../../lib/verification";
 import { VerifierConfigEditor } from "./VerifierConfigEditor";
 
 type CompletionVerificationPanelProps = {
@@ -31,7 +31,7 @@ export function CompletionVerificationPanel({
   onSave
 }: CompletionVerificationPanelProps) {
   const [selectedVerifier, setSelectedVerifier] = useState<VerifierTypeInput>("text_constraints");
-  const enabledCount = enabledVerifierCount(draft);
+  const requiredCount = requiredVerifierCount(draft);
 
   return (
     <section className="verification-config-panel">
@@ -78,7 +78,7 @@ export function CompletionVerificationPanel({
         </label>
         <div className="verification-enabled-count">
           <span>Required verifiers</span>
-          <strong>{enabledCount}</strong>
+          <strong>{requiredCount}</strong>
         </div>
       </div>
 

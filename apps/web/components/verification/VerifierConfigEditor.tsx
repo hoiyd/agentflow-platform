@@ -23,7 +23,8 @@ export function VerifierConfigEditor({ disabled, draft, onChange, type }: Verifi
           <NumberField disabled={disabled || !settings.enabled} label="Minimum cosine similarity" min={0.05} max={1} step={0.05} value={settings.minimumScore} onChange={(minimumScore) => update({ minimumScore })} />
           <NumberField disabled={disabled || !settings.enabled} label="Minimum answer characters" min={1} max={100000} value={settings.minimumAnswerCharacters} onChange={(minimumAnswerCharacters) => update({ minimumAnswerCharacters })} />
         </div>
-        <small className="verifier-requirement">Embeds the question and substantive answer with the configured embedding model. Similarity and model metadata are recorded in verification evidence.</small>
+        <CheckboxField checked={settings.required} disabled={disabled || !settings.enabled} label="Block completion when relevance fails" onChange={(required) => update({ required })} framed />
+        <small className="verifier-requirement">Advisory mode records evidence without blocking completion. Enable blocking only with a calibration report for the active embedding model.</small>
       </VerifierSection>
     );
   }

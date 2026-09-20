@@ -18,6 +18,7 @@ test("all seven backend verifiers have a compatible frontend contract", () => {
     enabled: true,
     answerRelevance: {
       enabled: true,
+      required: false,
       minimumScore: 0.45,
       minimumAnswerCharacters: 40
     },
@@ -62,7 +63,7 @@ test("all seven backend verifiers have a compatible frontend contract", () => {
       {
         id: "answer-relevance",
         type: "answer_relevance",
-        required: true,
+        required: false,
         config: {
           minimum_score: 0.45,
           minimum_answer_characters: 40
@@ -141,6 +142,7 @@ test("each verifier can be enabled independently", () => {
     verifierKeys.forEach((key) => {
       settings[key].enabled = key === enabledKey;
     });
+    if (enabledKey === "answerRelevance") settings.answerRelevance.required = true;
     const contract = buildCompletionContract(settings);
     assert.equal(contract.verifiers.length, 1);
     assert.equal(contract.verifiers[0].type, verifierTypes[index]);
@@ -151,7 +153,10 @@ test("invalid enabled verifier settings are rejected before the request", () => 
   const settings = structuredClone(DEFAULT_COMPLETION_VERIFICATION);
   settings.enabled = true;
   settings.textConstraints.enabled = false;
-  assert.deepEqual(validateCompletionVerification(settings), ["Enable at least one verifier."]);
+  assert.deepEqual(validateCompletionVerification(settings), [
+    "Enable at least one verifier.",
+    "At least one enabled verifier must block completion."
+  ]);
 
   settings.jsonSchema.enabled = true;
   settings.jsonSchema.schema = "not-json";
