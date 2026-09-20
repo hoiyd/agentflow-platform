@@ -64,7 +64,7 @@
 
 .attention-row {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-columns: 144px minmax(0, 1fr);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
@@ -78,7 +78,7 @@
 }
 
 .attention-rank span { color: var(--accent); }
-.attention-rank code { color: var(--muted-strong); font-size: 10px; }
+.attention-rank code { color: var(--muted-strong); font-size: 10px; white-space: nowrap; }
 
 .attention-main { min-width: 0; padding: 16px 18px; }
 
