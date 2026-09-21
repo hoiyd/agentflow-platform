@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/toolpolicy"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/policy"
 )
 
 type InvalidCall struct {
@@ -26,7 +26,7 @@ type BadResult struct {
 }
 
 type BindingContract struct {
-	Binding        tools.Binding
+	Binding        tool.Binding
 	ValidArguments json.RawMessage
 	GoodResult     any
 	InvalidCalls   []InvalidCall
@@ -55,7 +55,7 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 		t.Fatalf("register binding: %v", err)
 	}
 	installed, ok := catalog.Installed(binding.Descriptor.Name)
-	if !ok || installed.Descriptor.SchemaVersion != tools.ToolSchemaVersion || installed.Descriptor.DefinitionRevision == "" {
+	if !ok || installed.Descriptor.SchemaVersion != tool.ToolSchemaVersion || installed.Descriptor.DefinitionRevision == "" {
 		t.Fatalf("binding has no compiled schema identity: %#v", installed.Descriptor)
 	}
 	if err := validateModelSchemaContract(catalog.Definitions(), installed.Descriptor.Parameters); err != nil {
@@ -64,8 +64,8 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 
 	tracer := &recordingTracer{}
 	journal := newMemoryEffectJournal()
-	executor := tools.NewExecutor(catalog, tools.ExecutorOptions{Tracer: tracer, EffectJournal: journal})
-	request := tools.ExecutionRequest{
+	executor := tool.NewExecutor(catalog, tool.ExecutorOptions{Tracer: tracer, EffectJournal: journal})
+	request := tool.ExecutionRequest{
 		CallID: "contract-valid", RunID: "run-contract", StageID: "stage-contract", TurnID: "turn-contract",
 		Tool: binding.Descriptor.Name, Arguments: spec.ValidArguments,
 	}
@@ -84,11 +84,11 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 	for index, invalid := range spec.InvalidCalls {
 		t.Run("reject arguments "+invalid.Name, func(t *testing.T) {
 			before := handlerCalls.Load()
-			result := executor.Execute(context.Background(), tools.ExecutionRequest{
+			result := executor.Execute(context.Background(), tool.ExecutionRequest{
 				CallID: fmt.Sprintf("contract-invalid-%d", index), RunID: "run-contract", StageID: "stage-contract",
 				Tool: binding.Descriptor.Name, Arguments: invalid.Arguments,
 			})
-			if result.Error == nil || result.Error.Code != tools.ErrorInvalidArgs || result.Error.Argument == nil {
+			if result.Error == nil || result.Error.Code != tool.ErrorInvalidArgs || result.Error.Argument == nil {
 				t.Fatalf("expected typed invalid arguments, got %#v", result.Error)
 			}
 			if invalid.WantArgumentCode != "" && result.Error.Argument.Code != invalid.WantArgumentCode {
@@ -100,7 +100,7 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 		})
 	}
 
-	if binding.Descriptor.SideEffect.Mode == tools.SideEffectExternal {
+	if binding.Descriptor.SideEffect.Mode == tool.SideEffectExternal {
 		replayed := executor.Execute(context.Background(), request)
 		if replayed.Error != nil || !replayed.Replayed || handlerCalls.Load() != 1 {
 			t.Fatalf("side-effect replay violated contract: result=%#v calls=%d", replayed, handlerCalls.Load())
@@ -113,20 +113,20 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 
 // NewAuthorizedCatalog gives failure/contract fixtures the minimum explicit
 // test-only grant required by their declared capability.
-func NewAuthorizedCatalog(binding tools.Binding) (*tools.Catalog, tools.Binding, error) {
-	policy := toolpolicy.DefaultPolicy()
-	if binding.Descriptor.SideEffect.Mode == tools.SideEffectExternal && binding.Descriptor.Name != "update_task_state" {
+func NewAuthorizedCatalog(binding tool.Binding) (*tool.Catalog, tool.Binding, error) {
+	securityPolicy := policy.DefaultPolicy()
+	if binding.Descriptor.SideEffect.Mode == tool.SideEffectExternal && binding.Descriptor.Name != "update_task_state" {
 		binding.Descriptor.Security = testExternalWriteCapability()
-		policy.Rules = append(policy.Rules, toolpolicy.Rule{
+		securityPolicy.Rules = append(securityPolicy.Rules, policy.Rule{
 			ID: "contract-" + binding.Descriptor.Name, Tool: binding.Descriptor.Name,
-			Action: toolpolicy.ActionAllow, Capability: binding.Descriptor.Security,
+			Action: policy.ActionAllow, Capability: binding.Descriptor.Security,
 		})
 	}
-	catalog, err := tools.NewCatalogWithPolicy(policy, binding)
+	catalog, err := tool.NewCatalogWithPolicy(securityPolicy, binding)
 	return catalog, binding, err
 }
 
-func validateSuccessfulExecution(result tools.ExecutionResult, handlerCalls int32, revision string, sensor func(any) error) error {
+func validateSuccessfulExecution(result tool.ExecutionResult, handlerCalls int32, revision string, sensor func(any) error) error {
 	if result.Error != nil {
 		return fmt.Errorf("valid call failed: %#v", result.Error)
 	}
@@ -186,7 +186,7 @@ type recordingTracer struct {
 	validRevision string
 }
 
-func (t *recordingTracer) ToolStarted(_ context.Context, request tools.ExecutionRequest) {
+func (t *recordingTracer) ToolStarted(_ context.Context, request tool.ExecutionRequest) {
 	t.starts.Add(1)
 	if request.CallID == "contract-valid" {
 		t.validHash = request.ArgumentsHash
@@ -194,21 +194,21 @@ func (t *recordingTracer) ToolStarted(_ context.Context, request tools.Execution
 	}
 }
 
-func (t *recordingTracer) ToolFinished(context.Context, tools.ExecutionResult) {
+func (t *recordingTracer) ToolFinished(context.Context, tool.ExecutionResult) {
 	t.finishes.Add(1)
 }
 
-func (t *recordingTracer) ToolPolicyEvaluated(context.Context, tools.ExecutionRequest, toolpolicy.Decision) error {
+func (t *recordingTracer) ToolPolicyEvaluated(context.Context, tool.ExecutionRequest, policy.Decision) error {
 	return nil
 }
 
-func testExternalWriteCapability() toolpolicy.Capability {
-	return toolpolicy.NormalizeCapability(toolpolicy.Capability{
-		Scope: toolpolicy.Scope{Resources: []toolpolicy.ResourceScope{{
-			Kind: toolpolicy.ResourceExternal, Name: "test_fixture", Access: toolpolicy.AccessWrite,
+func testExternalWriteCapability() policy.Capability {
+	return policy.NormalizeCapability(policy.Capability{
+		Scope: policy.Scope{Resources: []policy.ResourceScope{{
+			Kind: policy.ResourceExternal, Name: "test_fixture", Access: policy.AccessWrite,
 		}}},
-		SideEffect: toolpolicy.SideEffectExternalWrite, Reversibility: toolpolicy.Compensatable,
-		Visibility: toolpolicy.VisibilityOperator, Audit: toolpolicy.AuditFull,
+		SideEffect: policy.SideEffectExternalWrite, Reversibility: policy.Compensatable,
+		Visibility: policy.VisibilityOperator, Audit: policy.AuditFull,
 	})
 }
 

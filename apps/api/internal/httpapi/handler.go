@@ -18,7 +18,7 @@ import (
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/verification"
 )
 
@@ -63,9 +63,9 @@ type AgentRuntimeOperations interface {
 }
 
 type ToolOperations interface {
-	Catalog() (*tools.Catalog, error)
-	List() ([]tools.ToolInfo, error)
-	SetEnabled(string, bool) ([]tools.ToolInfo, error)
+	Catalog() (*tool.Catalog, error)
+	List() ([]tool.ToolInfo, error)
+	SetEnabled(string, bool) ([]tool.ToolInfo, error)
 }
 
 type RunCapacity interface {

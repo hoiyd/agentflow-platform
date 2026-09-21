@@ -14,12 +14,12 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/inference/openai"
 
 	"agentflow-platform/apps/api/internal/taskstate"
-	"agentflow-platform/apps/api/internal/toolpolicy"
-	"agentflow-platform/apps/api/internal/toolprogress"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/policy"
+	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
 func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T) {
@@ -27,10 +27,10 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	fixtureStore := fixturestore.New()
 
 	toolPath := filepath.Join(t.TempDir(), "tools.json")
-	if err := tools.SaveConfig(toolPath, tools.DefaultConfig()); err != nil {
+	if err := tool.SaveConfig(toolPath, tool.DefaultConfig()); err != nil {
 		t.Fatalf("save tools config: %v", err)
 	}
-	manager, err := tools.NewManager(toolPath)
+	manager, err := tool.NewManager(toolPath)
 	if err != nil {
 		t.Fatalf("new tools manager: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	runtime := NewRuntime(RuntimeOptions{
 		Store: fixtureStore, ModelClient: client, Tools: manager,
 		RunBudget:         domain.RuntimeRunBudget{MaxModelCalls: 12, MaxRuntimeMS: 90_000, MaxToolCalls: 7},
-		ToolProgressGuard: toolprogress.DefaultConfig(),
+		ToolProgressGuard: progress.DefaultConfig(),
 		ContextAssembly: domain.ContextAssemblyConfig{
 			AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 32000, OutputReserveTokens: 2048,
 			SafetyMarginTokens: 1024, HistoryMaxTokens: 12000, MemoryMaxTokens: 2000, KnowledgeMaxTokens: 4000,
@@ -84,11 +84,11 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 		t.Fatalf("runtime-owned task state tool was not frozen: agent=%#v tools=%#v", prepared.Run.RuntimeSnapshot.Agent.Tools, prepared.Run.RuntimeSnapshot.Tools)
 	}
 	for _, frozen := range prepared.Run.RuntimeSnapshot.Tools {
-		if frozen.SchemaVersion != tools.ToolSchemaVersion || frozen.DefinitionRevision == "" || frozen.Security.Source == "" {
+		if frozen.SchemaVersion != tool.ToolSchemaVersion || frozen.DefinitionRevision == "" || frozen.Security.Source == "" {
 			t.Fatalf("tool schema contract was not frozen: %#v", frozen)
 		}
 	}
-	if prepared.Run.RuntimeSnapshot.ToolSecurityPolicy.Version != toolpolicy.CurrentVersion {
+	if prepared.Run.RuntimeSnapshot.ToolSecurityPolicy.Version != policy.CurrentVersion {
 		t.Fatalf("Tool security policy was not frozen: %#v", prepared.Run.RuntimeSnapshot.ToolSecurityPolicy)
 	}
 	if !prepared.Run.RuntimeSnapshot.ToolProgressGuard.Enabled || prepared.Run.RuntimeSnapshot.ToolProgressGuard.BlockAfter != 4 {
@@ -116,13 +116,13 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if _, err := manager.SetEnabled("calculator", false); err != nil {
 		t.Fatalf("disable calculator: %v", err)
 	}
-	changedConfig, err := tools.LoadConfig(toolPath)
+	changedConfig, err := tool.LoadConfig(toolPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	changedConfig.SecurityPolicy = toolpolicy.Policy{Version: "operator-v2", DefaultAction: toolpolicy.ActionDeny}
+	changedConfig.SecurityPolicy = policy.Policy{Version: "operator-v2", DefaultAction: policy.ActionDeny}
 	time.Sleep(2 * time.Millisecond)
-	if err := tools.SaveConfig(toolPath, changedConfig); err != nil {
+	if err := tool.SaveConfig(toolPath, changedConfig); err != nil {
 		t.Fatal(err)
 	}
 	if err := manager.ReloadIfChanged(); err != nil {
@@ -145,7 +145,7 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if _, ok := restored.catalog.Resolve(taskstate.UpdateToolName); !ok {
 		t.Fatal("expected frozen task state tool to remain available")
 	}
-	if restored.catalog.SecurityPolicy().Version != toolpolicy.CurrentVersion {
+	if restored.catalog.SecurityPolicy().Version != policy.CurrentVersion {
 		t.Fatalf("current operator config changed frozen Tool policy: %#v", restored.catalog.SecurityPolicy())
 	}
 	routes, err := runtime.restoreModelRouteCatalog(prepared.Run.RuntimeSnapshot.ModelRouting)
@@ -209,7 +209,7 @@ func TestV14MultiAgentSnapshotIsReplayOnly(t *testing.T) {
 
 func TestCurrentRuntimeSnapshotRequiresFrozenToolSecurityPolicy(t *testing.T) {
 	snapshot := testRuntimeSnapshot()
-	snapshot.ToolSecurityPolicy = toolpolicy.Policy{}
+	snapshot.ToolSecurityPolicy = policy.Policy{}
 	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "Tool security policy") {
 		t.Fatalf("missing frozen Tool policy must fail closed: %v", err)
 	}
@@ -217,10 +217,10 @@ func TestCurrentRuntimeSnapshotRequiresFrozenToolSecurityPolicy(t *testing.T) {
 
 func TestCurrentRuntimeSnapshotRejectsInvalidToolSecurityCapability(t *testing.T) {
 	snapshot := testRuntimeSnapshot()
-	snapshot.ToolSecurityPolicy = toolpolicy.DefaultPolicy()
+	snapshot.ToolSecurityPolicy = policy.DefaultPolicy()
 	snapshot.Tools = []domain.RuntimeToolSnapshot{{
-		Name: "unsafe", SchemaVersion: tools.ToolSchemaVersion, DefinitionRevision: "sha256:test",
-		Security: toolpolicy.Capability{Source: "invalid"},
+		Name: "unsafe", SchemaVersion: tool.ToolSchemaVersion, DefinitionRevision: "sha256:test",
+		Security: policy.Capability{Source: "invalid"},
 	}}
 	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "security capability") {
 		t.Fatalf("invalid frozen Tool capability must fail closed: %v", err)
@@ -229,7 +229,7 @@ func TestCurrentRuntimeSnapshotRejectsInvalidToolSecurityCapability(t *testing.T
 
 func TestCurrentRuntimeSnapshotRequiresFrozenToolProgressGuard(t *testing.T) {
 	snapshot := testRuntimeSnapshot()
-	snapshot.ToolProgressGuard = toolprogress.Config{}
+	snapshot.ToolProgressGuard = progress.Config{}
 	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "Progress Guard") {
 		t.Fatalf("missing frozen Tool Progress Guard must fail closed: %v", err)
 	}
@@ -252,26 +252,26 @@ func TestTaskStateToolIsAddedToNativeRuntime(t *testing.T) {
 }
 
 func TestToolDefinitionMatchIncludesSideEffectDeclaration(t *testing.T) {
-	binding := tools.Binding{Descriptor: tools.Descriptor{
-		Name: "writer", Description: "write", Parameters: tools.ObjectSchema(nil, nil),
-		SideEffect: tools.SideEffectPolicy{Mode: tools.SideEffectExternal},
+	binding := tool.Binding{Descriptor: tool.Descriptor{
+		Name: "writer", Description: "write", Parameters: tool.ObjectSchema(nil, nil),
+		SideEffect: tool.SideEffectPolicy{Mode: tool.SideEffectExternal},
 	}}
 	frozen := domain.RuntimeToolSnapshot{
-		Name: "writer", Description: "write", Parameters: tools.ObjectSchema(nil, nil),
-		SideEffect: string(tools.SideEffectExternal),
+		Name: "writer", Description: "write", Parameters: tool.ObjectSchema(nil, nil),
+		SideEffect: string(tool.SideEffectExternal),
 	}
 	if !toolDefinitionMatches(binding, frozen) {
 		t.Fatal("matching side-effect declaration was rejected")
 	}
-	binding.Descriptor.SideEffect.Mode = tools.SideEffectNone
+	binding.Descriptor.SideEffect.Mode = tool.SideEffectNone
 	if toolDefinitionMatches(binding, frozen) {
 		t.Fatal("changed side-effect declaration must fail closed")
 	}
 }
 
 func TestToolDefinitionMatchUsesFrozenSchemaRevision(t *testing.T) {
-	catalog, err := tools.NewCatalog(tools.Binding{
-		Descriptor: tools.Descriptor{Name: "reader", Description: "read", Parameters: tools.ObjectSchema(nil, nil)},
+	catalog, err := tool.NewCatalog(tool.Binding{
+		Descriptor: tool.Descriptor{Name: "reader", Description: "read", Parameters: tool.ObjectSchema(nil, nil)},
 		Handler:    func(context.Context, json.RawMessage) (any, error) { return nil, nil },
 	})
 	if err != nil {
@@ -294,7 +294,7 @@ func TestToolDefinitionMatchUsesFrozenSchemaRevision(t *testing.T) {
 
 func TestCurrentRuntimeSnapshotRequiresToolSchemaContract(t *testing.T) {
 	snapshot := testRuntimeSnapshot()
-	snapshot.Tools = []domain.RuntimeToolSnapshot{{Name: "reader", Parameters: tools.ObjectSchema(nil, nil)}}
+	snapshot.Tools = []domain.RuntimeToolSnapshot{{Name: "reader", Parameters: tool.ObjectSchema(nil, nil)}}
 	if err := validateRuntimeSnapshot(&snapshot); err == nil || !strings.Contains(err.Error(), "schema contract") {
 		t.Fatalf("expected missing tool contract error, got %v", err)
 	}

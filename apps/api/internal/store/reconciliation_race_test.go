@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/toolreconciliation"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/reconciliation"
 )
 
 // Both callers must pass the read checks before either can claim/settle.
@@ -33,7 +33,7 @@ func TestReconciliationCASAfterCompetingPreflightReads(t *testing.T) {
 	for _, variant := range []string{"same-command", "different-command", "changed-payload", "manual-changed-payload"} {
 		t.Run(variant, func(t *testing.T) {
 			var calls atomic.Int32
-			target, _, run, catalog, effect := safetyFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) { calls.Add(1); return true, nil }})
+			target, _, run, catalog, effect := safetyFixture(t, tool.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) { calls.Add(1); return true, nil }})
 			first := retryCommand(effect)
 			phase := domain.EventToolEffectReconciliationStarted
 			if variant == "manual-changed-payload" {
@@ -49,9 +49,9 @@ func TestReconciliationCASAfterCompetingPreflightReads(t *testing.T) {
 			}
 			barrier := commitBarrier{target, make(chan struct{}, 2), make(chan struct{}), phase}
 			done := make(chan error, 2)
-			for _, cmd := range []toolreconciliation.ToolEffectReconciliationCommand{first, second} {
-				go func(command toolreconciliation.ToolEffectReconciliationCommand) {
-					_, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, barrier, run, effect.IdempotencyKey, command)
+			for _, cmd := range []reconciliation.ToolEffectReconciliationCommand{first, second} {
+				go func(command reconciliation.ToolEffectReconciliationCommand) {
+					_, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, barrier, run, effect.IdempotencyKey, command)
 					done <- err
 				}(cmd)
 			}
@@ -68,7 +68,7 @@ func TestReconciliationCASAfterCompetingPreflightReads(t *testing.T) {
 			for range 2 {
 				if err := <-done; err != nil {
 					failures++
-					if !IsToolEffectConflict(err) && reconciliationCode(err) != toolreconciliation.ReconciliationConflict {
+					if !IsToolEffectConflict(err) && reconciliationCode(err) != reconciliation.ReconciliationConflict {
 						t.Fatal(err)
 					}
 				}
@@ -93,35 +93,35 @@ func TestReconciliationCASAfterCompetingPreflightReads(t *testing.T) {
 
 func TestCallbackDeadlineAndCompensationIdentity(t *testing.T) {
 	t.Run("deadline", func(t *testing.T) {
-		target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(ctx context.Context, _ tools.EffectReconciliationContext) (any, error) {
+		target, run, catalog, effect := postgresReconciliationFixture(t, tool.SideEffectReconciliation{RetryWithSameKey: func(ctx context.Context, _ tool.EffectReconciliationContext) (any, error) {
 			<-ctx.Done()
 			return true, nil
 		}})
 		binding, _ := catalog.Resolve(effect.ToolName)
 		binding.Policy.Timeout = 10 * time.Millisecond
-		catalog, err := tools.NewCatalogWithPolicy(catalog.SecurityPolicy(), binding)
+		catalog, err := tool.NewCatalogWithPolicy(catalog.SecurityPolicy(), binding)
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, retryCommand(effect))
+		result, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, retryCommand(effect))
 		if err != nil || result.Outcome != "failed" || result.Effect.Status != domain.ToolEffectReconciling || !strings.Contains(result.Effect.Error, "deadline") {
 			t.Fatalf("deadline: %#v %v", result, err)
 		}
 	})
 	t.Run("stable compensation key", func(t *testing.T) {
 		keys := make(chan string, 2)
-		target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{Compensate: func(_ context.Context, recovery tools.EffectReconciliationContext) error {
+		target, run, catalog, effect := postgresReconciliationFixture(t, tool.SideEffectReconciliation{Compensate: func(_ context.Context, recovery tool.EffectReconciliationContext) error {
 			keys <- recovery.CompensationKey
 			return errors.New("temporary failure")
 		}})
 		command := retryCommand(effect)
 		command.Action = domain.ToolEffectCompensate
-		first, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command)
+		first, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command)
 		if err != nil {
 			t.Fatal(err)
 		}
 		command.CommandID, command.ExpectedVersion = "another-command", first.Effect.Version
-		if _, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command); err != nil {
+		if _, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command); err != nil {
 			t.Fatal(err)
 		}
 		if firstKey, secondKey := <-keys, <-keys; firstKey == "" || firstKey != secondKey {
@@ -133,14 +133,14 @@ func TestCallbackDeadlineAndCompensationIdentity(t *testing.T) {
 func TestCanceledRequestDoesNotClaimAndCallbackResultIsGoverned(t *testing.T) {
 	for _, variant := range []string{"canceled", "panic", "large", "redacted"} {
 		t.Run(variant, func(t *testing.T) {
-			target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
+			target, run, catalog, effect := postgresReconciliationFixture(t, tool.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) {
 				switch variant {
 				case "canceled":
 					t.Error("canceled request invoked callback")
 				case "panic":
 					panic("Bearer panic-secret")
 				case "large":
-					return strings.Repeat("x", tools.DefaultMaxResultBytes), nil
+					return strings.Repeat("x", tool.DefaultMaxResultBytes), nil
 				}
 				return map[string]any{"api_key": "callback-secret", "value": "Bearer result-secret"}, nil
 			}})
@@ -149,7 +149,7 @@ func TestCanceledRequestDoesNotClaimAndCallbackResultIsGoverned(t *testing.T) {
 			if variant == "canceled" {
 				cancel()
 			}
-			result, err := toolreconciliation.ReconcileToolEffect(ctx, catalog, target, run, effect.IdempotencyKey, retryCommand(effect))
+			result, err := reconciliation.ReconcileToolEffect(ctx, catalog, target, run, effect.IdempotencyKey, retryCommand(effect))
 			if variant == "canceled" {
 				if !errors.Is(err, context.Canceled) {
 					t.Fatal(err)

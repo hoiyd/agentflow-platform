@@ -13,8 +13,8 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/store"
-	"agentflow-platform/apps/api/internal/toolreconciliation"
-	toolpkg "agentflow-platform/apps/api/internal/tools"
+	toolpkg "agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/reconciliation"
 )
 
 func TestToolEffectReconciliationHTTPFlow(t *testing.T) {
@@ -178,7 +178,7 @@ func TestToolEffectClaimHTTPAndReplayContract(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.listToolEffects(response, request)
 	var body struct {
-		Effects []toolreconciliation.ToolEffectView `json:"effects"`
+		Effects []reconciliation.ToolEffectView `json:"effects"`
 	}
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || len(body.Effects) != 1 || body.Effects[0].Status != domain.ToolEffectReconciling || len(body.Effects[0].AvailableActions) != 2 {
 		t.Fatalf("claim list contract: %d %s", response.Code, response.Body.String())
@@ -196,9 +196,9 @@ func TestWriteToolEffectFailureMapsStatus(t *testing.T) {
 	}{
 		{store.ErrNotFound("effect"), http.StatusNotFound},
 		{&store.ToolEffectVersionConflict{Expected: 1, Actual: 2}, http.StatusConflict},
-		{&toolreconciliation.ReconciliationError{Code: toolreconciliation.ReconciliationNotFound, Message: "missing"}, http.StatusNotFound},
-		{&toolreconciliation.ReconciliationError{Code: toolreconciliation.ReconciliationUnavailable, Message: "unavailable"}, http.StatusConflict},
-		{&toolreconciliation.ReconciliationError{Code: toolreconciliation.ReconciliationInvalid, Message: "invalid"}, http.StatusBadRequest},
+		{&reconciliation.ReconciliationError{Code: reconciliation.ReconciliationNotFound, Message: "missing"}, http.StatusNotFound},
+		{&reconciliation.ReconciliationError{Code: reconciliation.ReconciliationUnavailable, Message: "unavailable"}, http.StatusConflict},
+		{&reconciliation.ReconciliationError{Code: reconciliation.ReconciliationInvalid, Message: "invalid"}, http.StatusBadRequest},
 		{errors.New("failed"), http.StatusInternalServerError},
 	}
 	for _, test := range tests {

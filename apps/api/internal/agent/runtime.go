@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/contextcompaction"
@@ -15,25 +16,24 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	tracepkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/inference/provider"
+	"agentflow-platform/apps/api/internal/inference/routing"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
-	"agentflow-platform/apps/api/internal/modelprovider"
-	"agentflow-platform/apps/api/internal/modelrouting"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/sessionhistory"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/taskstate"
-	"agentflow-platform/apps/api/internal/toolartifact"
-	"agentflow-platform/apps/api/internal/toolprogress"
-	"agentflow-platform/apps/api/internal/tools"
-	turnpkg "agentflow-platform/apps/api/internal/turn"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/artifact"
+	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
 type Runtime struct {
 	store                 RuntimeStore
-	embeddingClient       modelprovider.Client
-	modelRoutes           *modelrouting.Catalog
+	embeddingClient       provider.Client
+	modelRoutes           *routing.Catalog
 	modelRoutesErr        error
-	tools                 *tools.Manager
+	tools                 *tool.Manager
 	trace                 *eventpkg.Recorder
 	turnEngine            *turnpkg.Engine
 	routerMode            string
@@ -41,13 +41,13 @@ type Runtime struct {
 	contextCompactor      *contextcompaction.Compactor
 	autonomousLimits      AutonomousLimits
 	runBudget             domain.RuntimeRunBudget
-	toolProgressConfig    toolprogress.Config
+	toolProgressConfig    progress.Config
 	toolProgressMu        sync.Mutex
-	toolProgressGuards    map[string]*toolprogress.Guard
+	toolProgressGuards    map[string]*progress.Guard
 	knowledgeRetriever    rag.Retriever
 	checkpoints           checkpoint.Provider
 	taskStates            *taskstate.Service
-	toolArtifacts         *toolartifact.Service
+	toolArtifacts         *artifact.Service
 	liveEvents            eventpkg.LivePublisher
 	memoryRecall          memorypkg.Recaller
 	activeRunCancels      sync.Map
@@ -89,7 +89,7 @@ type AutonomousLimits struct {
 type PreparedRun struct {
 	Agent   domain.Agent
 	Run     domain.Run
-	Catalog *tools.Catalog
+	Catalog *tool.Catalog
 }
 
 // RuntimeOptions captures the complete runtime policy at construction time so
@@ -98,15 +98,15 @@ type RuntimeOptions struct {
 	Store RuntimeStore
 	// ModelClient is a one-route compatibility shorthand for existing tests.
 	// Production composition supplies ModelRoutes and EmbeddingClient separately.
-	ModelClient        modelprovider.Client
-	EmbeddingClient    modelprovider.Client
-	ModelRoutes        *modelrouting.Catalog
-	Tools              *tools.Manager
+	ModelClient        provider.Client
+	EmbeddingClient    provider.Client
+	ModelRoutes        *routing.Catalog
+	Tools              *tool.Manager
 	RouterMode         string
 	ContextAssembly    domain.ContextAssemblyConfig
 	Autonomous         AutonomousLimits
 	RunBudget          domain.RuntimeRunBudget
-	ToolProgressGuard  toolprogress.Config
+	ToolProgressGuard  progress.Config
 	KnowledgeRetriever rag.Retriever
 	CheckpointProvider checkpoint.Provider
 	LiveEvents         eventpkg.LivePublisher
@@ -125,9 +125,9 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 	}
 	progressConfig := options.ToolProgressGuard
 	if strings.TrimSpace(progressConfig.Version) == "" {
-		progressConfig = toolprogress.DefaultConfig()
+		progressConfig = progress.DefaultConfig()
 	} else {
-		progressConfig = toolprogress.NormalizeConfig(progressConfig)
+		progressConfig = progress.NormalizeConfig(progressConfig)
 	}
 	knowledgeRetriever := options.KnowledgeRetriever
 	if knowledgeRetriever == nil {
@@ -143,9 +143,9 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 	if taskStore, ok := options.Store.(taskstate.Store); ok {
 		taskStates = taskstate.NewService(taskStore, eventpkg.StoreSink{Store: options.Store})
 	}
-	var toolArtifacts *toolartifact.Service
+	var toolArtifacts *artifact.Service
 	if artifactStore, ok := options.Store.(store.ToolArtifactStore); ok {
-		toolArtifacts = toolartifact.NewService(artifactStore, tracepkg.NewRecorder(options.Store))
+		toolArtifacts = artifact.NewService(artifactStore, tracepkg.NewRecorder(options.Store))
 	}
 	runtime := &Runtime{
 		store:                 options.Store,
@@ -160,7 +160,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		autonomousLimits:      normalizeAutonomousLimits(options.Autonomous),
 		runBudget:             options.RunBudget,
 		toolProgressConfig:    progressConfig,
-		toolProgressGuards:    map[string]*toolprogress.Guard{},
+		toolProgressGuards:    map[string]*progress.Guard{},
 		knowledgeRetriever:    knowledgeRetriever,
 		checkpoints:           checkpointProvider,
 		taskStates:            taskStates,
@@ -218,7 +218,7 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 	executionCtx, releaseCancellation := r.bindRunCancellation(ctx, prepared.Run.ID)
 	catalog := prepared.Catalog
 	if catalog == nil {
-		catalog, _ = tools.NewCatalog()
+		catalog, _ = tool.NewCatalog()
 	}
 	retrievedMemories, retrievedChunks := r.retrieveContext(executionCtx, prepared.Run.ID, userInputRetrievalQuery(latest), prepared.Agent.MemoryEnabled, prepared.Agent.RetrievalEnabled, map[string]any{
 		"agent_id":           prepared.Agent.ID,
@@ -314,7 +314,7 @@ func sessionHistorySearchPayload(payload eventpkg.SessionHistorySearchPayload) m
 	return encoded
 }
 
-func enabledToolCount(catalog *tools.Catalog) int {
+func enabledToolCount(catalog *tool.Catalog) int {
 	if catalog == nil {
 		return 0
 	}

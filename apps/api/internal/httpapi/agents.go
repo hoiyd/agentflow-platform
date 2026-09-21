@@ -9,7 +9,7 @@ import (
 	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
@@ -150,11 +150,11 @@ func (h *Handler) validateAgentTools(names []string) error {
 	return nil
 }
 
-func (h *Handler) currentToolCatalog() (*tools.Catalog, error) {
+func (h *Handler) currentToolCatalog() (*tool.Catalog, error) {
 	if h.tools != nil {
 		return h.tools.Catalog()
 	}
-	return tools.DefaultCatalog(), nil
+	return tool.DefaultCatalog(), nil
 }
 
 func applyAgentConfigRequest(agent *domain.Agent, req apicontract.AgentConfigRequest) {

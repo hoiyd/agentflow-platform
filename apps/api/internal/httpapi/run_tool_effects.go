@@ -9,7 +9,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
-	"agentflow-platform/apps/api/internal/toolreconciliation"
+	"agentflow-platform/apps/api/internal/tool/reconciliation"
 )
 
 const maxToolEffectCommandBytes = 64 << 10
@@ -29,7 +29,7 @@ func (h *Handler) listToolEffects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := domain.ToolEffectStatus(strings.TrimSpace(r.URL.Query().Get("status")))
-	if status != "" && !toolreconciliation.ValidToolEffectStatus(status) {
+	if status != "" && !reconciliation.ValidToolEffectStatus(status) {
 		writeError(w, http.StatusBadRequest, "invalid tool effect status")
 		return
 	}
@@ -54,7 +54,7 @@ func (h *Handler) listToolEffects(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"run_id": runID, "effects": toolreconciliation.NewToolEffectViews(catalog, filtered)})
+	writeJSON(w, http.StatusOK, map[string]any{"run_id": runID, "effects": reconciliation.NewToolEffectViews(catalog, filtered)})
 }
 
 func (h *Handler) reconcileToolEffect(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +64,7 @@ func (h *Handler) reconcileToolEffect(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "valid run id and idempotency key are required")
 		return
 	}
-	var command toolreconciliation.ToolEffectReconciliationCommand
+	var command reconciliation.ToolEffectReconciliationCommand
 	r.Body = http.MaxBytesReader(w, r.Body, maxToolEffectCommandBytes)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -91,7 +91,7 @@ func (h *Handler) reconcileToolEffect(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	outcome, err := toolreconciliation.ReconcileToolEffect(r.Context(), catalog, scoped, run, idempotencyKey, command)
+	outcome, err := reconciliation.ReconcileToolEffect(r.Context(), catalog, scoped, run, idempotencyKey, command)
 	if err != nil {
 		writeToolEffectFailure(w, r, err)
 		return
@@ -100,17 +100,17 @@ func (h *Handler) reconcileToolEffect(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeToolEffectFailure(w http.ResponseWriter, r *http.Request, err error) {
-	var reconciliation *toolreconciliation.ReconciliationError
+	var reconciliationError *reconciliation.ReconciliationError
 	switch {
 	case store.IsNotFound(err):
 		writeFailure(w, r, http.StatusNotFound, err)
 	case store.IsToolEffectConflict(err):
 		writeFailure(w, r, http.StatusConflict, err)
-	case errors.As(err, &reconciliation):
-		switch reconciliation.Code {
-		case toolreconciliation.ReconciliationNotFound:
+	case errors.As(err, &reconciliationError):
+		switch reconciliationError.Code {
+		case reconciliation.ReconciliationNotFound:
 			writeFailure(w, r, http.StatusNotFound, err)
-		case toolreconciliation.ReconciliationConflict, toolreconciliation.ReconciliationUnavailable, toolreconciliation.ReconciliationMismatch:
+		case reconciliation.ReconciliationConflict, reconciliation.ReconciliationUnavailable, reconciliation.ReconciliationMismatch:
 			writeFailure(w, r, http.StatusConflict, err)
 		default:
 			writeFailure(w, r, http.StatusBadRequest, err)

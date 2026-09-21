@@ -7,7 +7,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 // RoutingEvaluationInput is the narrow offline-evaluation entry point for the
@@ -15,7 +15,7 @@ import (
 // exclusive and are only used when RouterMode is auto.
 type RoutingEvaluationInput struct {
 	Agents        []domain.Agent
-	Catalog       *tools.Catalog
+	Catalog       *tool.Catalog
 	Task          string
 	Plan          string
 	Requirements  domain.AgentRoutingRequirements

@@ -8,18 +8,18 @@ import (
 	"sync/atomic"
 	"testing"
 
+	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/modelrouting"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/inference/routing"
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
-	"agentflow-platform/apps/api/internal/tools"
-	turnpkg "agentflow-platform/apps/api/internal/turn"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 func TestFrozenModelCatalogIgnoresLaterRoutesAndRetainsIdentity(t *testing.T) {
-	original := modelRouteBinding(t, "general", "model-v1", 100, modelrouting.Capabilities{Streaming: true})
-	originalCatalog, err := modelrouting.NewCatalog(original)
+	original := modelRouteBinding(t, "general", "model-v1", 100, routing.Capabilities{Streaming: true})
+	originalCatalog, err := routing.NewCatalog(original)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,9 +32,9 @@ func TestFrozenModelCatalogIgnoresLaterRoutesAndRetainsIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	changed := modelRouteBinding(t, "general", "model-v2", 100, modelrouting.Capabilities{Streaming: true})
-	later := modelRouteBinding(t, "later", "model-v3", 200, modelrouting.Capabilities{Streaming: true})
-	runtime.modelRoutes, err = modelrouting.NewCatalog(changed, later)
+	changed := modelRouteBinding(t, "general", "model-v2", 100, routing.Capabilities{Streaming: true})
+	later := modelRouteBinding(t, "later", "model-v3", 200, routing.Capabilities{Streaming: true})
+	runtime.modelRoutes, err = routing.NewCatalog(changed, later)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,15 +47,15 @@ func TestFrozenModelCatalogIgnoresLaterRoutesAndRetainsIdentity(t *testing.T) {
 		t.Fatalf("resume adopted live route changes: %#v", descriptors)
 	}
 
-	runtime.modelRoutes, _ = modelrouting.NewCatalog(later)
-	if _, err := runtime.restoreModelRouteCatalog(snapshot.ModelRouting); !errors.Is(err, modelrouting.ErrNoCompatibleRoute) {
+	runtime.modelRoutes, _ = routing.NewCatalog(later)
+	if _, err := runtime.restoreModelRouteCatalog(snapshot.ModelRouting); !errors.Is(err, routing.ErrNoCompatibleRoute) {
 		t.Fatalf("missing frozen route should fail closed: %v", err)
 	}
 }
 
 func TestModelRouteDecisionRecordsNoCandidateEvidence(t *testing.T) {
-	binding := modelRouteBinding(t, "text_only", "model-v1", 100, modelrouting.Capabilities{})
-	catalog, err := modelrouting.NewCatalog(binding)
+	binding := modelRouteBinding(t, "text_only", "model-v1", 100, routing.Capabilities{})
+	catalog, err := routing.NewCatalog(binding)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestModelRouteDecisionRecordsNoCandidateEvidence(t *testing.T) {
 		Sink: eventpkg.SinkFunc(func(_ context.Context, item domain.RunEvent) error { recorded = item; return nil }),
 	}
 	decision, err := runtime.selectModelRoute(context.Background(), request, &snapshot)
-	if !errors.Is(err, modelrouting.ErrNoCompatibleRoute) || len(decision.Candidates) != 1 {
+	if !errors.Is(err, routing.ErrNoCompatibleRoute) || len(decision.Candidates) != 1 {
 		t.Fatalf("expected typed no-route decision, decision=%#v err=%v", decision, err)
 	}
 	if recorded.Type != domain.EventModelRouteDecided || recorded.Payload["outcome"] != "no_compatible_route" {
@@ -93,7 +93,7 @@ func TestModelRequirementsReflectTurnContract(t *testing.T) {
 	snapshot.ContextAssembly.SafetyMarginTokens = 50
 	requirements := modelRequirements(turnpkg.Request{
 		Role: "decide", Agent: domain.Agent{SystemPrompt: "decide as JSON"}, Input: "finish",
-		History: []domain.Message{{Role: "user", Content: "history"}}, Catalog: tools.DefaultCatalog(),
+		History: []domain.Message{{Role: "user", Content: "history"}}, Catalog: tool.DefaultCatalog(),
 	}, &snapshot)
 	if requirements.Purpose != "decide" || !requirements.StructuredOutput || !requirements.Streaming || !requirements.ToolCalling || requirements.EstimatedInputTokens <= 0 || requirements.MaxOutputTokens != 100 {
 		t.Fatalf("turn requirements lost routing constraints: %#v", requirements)
@@ -119,18 +119,18 @@ func TestRuntimeTurnModelRoutesCallsAcrossProviders(t *testing.T) {
 
 	structuredClient := openai.NewClient("test-key", structuredServer.URL+"/v1", "structured-model")
 	fastClient := openai.NewClient("test-key", fastServer.URL+"/v1", "fast-model")
-	binding := func(id string, priority int, capabilities modelrouting.Capabilities, client *openai.Client) modelrouting.Binding {
+	binding := func(id string, priority int, capabilities routing.Capabilities, client *openai.Client) routing.Binding {
 		identity := client.RuntimeIdentity()
-		return modelrouting.Binding{Descriptor: modelrouting.Descriptor{
+		return routing.Binding{Descriptor: routing.Descriptor{
 			ID: id, Provider: identity.Provider, Model: identity.Model, Endpoint: identity.BaseURL,
 			Capabilities: capabilities, ContextWindowTokens: 1000, MaxOutputTokens: 100,
-			Priority: priority, Pricing: modelrouting.Pricing{Source: "test_fixture"},
+			Priority: priority, Pricing: routing.Pricing{Source: "test_fixture"},
 			CredentialEnvironment: "TEST_MODEL_API_KEY",
 		}, Client: client}
 	}
-	catalog, err := modelrouting.NewCatalog(
-		binding("structured", 100, modelrouting.Capabilities{StructuredOutput: true}, structuredClient),
-		binding("fast", 200, modelrouting.Capabilities{}, fastClient),
+	catalog, err := routing.NewCatalog(
+		binding("structured", 100, routing.Capabilities{StructuredOutput: true}, structuredClient),
+		binding("fast", 200, routing.Capabilities{}, fastClient),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -175,11 +175,11 @@ func TestRuntimeTurnModelRoutesCallsAcrossProviders(t *testing.T) {
 }
 
 func TestRunKeepsFirstSelectedModelRoute(t *testing.T) {
-	preferred := modelRouteBinding(t, "preferred", "preferred-model", 200, modelrouting.Capabilities{})
-	streaming := modelRouteBinding(t, "streaming", "streaming-model", 100, modelrouting.Capabilities{Streaming: true})
+	preferred := modelRouteBinding(t, "preferred", "preferred-model", 200, routing.Capabilities{})
+	streaming := modelRouteBinding(t, "streaming", "streaming-model", 100, routing.Capabilities{Streaming: true})
 	preferred.Descriptor.MaxOutputTokens = 500
 	streaming.Descriptor.MaxOutputTokens = 500
-	catalog, err := modelrouting.NewCatalog(preferred, streaming)
+	catalog, err := routing.NewCatalog(preferred, streaming)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestRunKeepsFirstSelectedModelRoute(t *testing.T) {
 		RunID: run.ID, ConversationID: conversation.ID, Role: "answer", ModelMode: turnpkg.ModelModeAgentStream,
 		Sink: runtime.runEventSink(),
 	}, &snapshot)
-	if !errors.Is(err, modelrouting.ErrNoCompatibleRoute) || second.Route.ID != "" {
+	if !errors.Is(err, routing.ErrNoCompatibleRoute) || second.Route.ID != "" {
 		t.Fatalf("run silently switched model routes: decision=%#v err=%v", second, err)
 	}
 	client, err := runtime.ModelClientForRun(run.ID)
@@ -217,14 +217,14 @@ func TestRunKeepsFirstSelectedModelRoute(t *testing.T) {
 	}
 }
 
-func modelRouteBinding(t *testing.T, id string, model string, priority int, capabilities modelrouting.Capabilities) modelrouting.Binding {
+func modelRouteBinding(t *testing.T, id string, model string, priority int, capabilities routing.Capabilities) routing.Binding {
 	t.Helper()
 	client := openai.NewClient("", "https://models.test/v1", model)
 	identity := client.RuntimeIdentity()
-	return modelrouting.Binding{Descriptor: modelrouting.Descriptor{
+	return routing.Binding{Descriptor: routing.Descriptor{
 		ID: id, Provider: identity.Provider, Model: identity.Model, Endpoint: identity.BaseURL,
 		Capabilities: capabilities, ContextWindowTokens: 1000, MaxOutputTokens: 100,
-		Priority: priority, Pricing: modelrouting.Pricing{Source: "test_fixture"},
+		Priority: priority, Pricing: routing.Pricing{Source: "test_fixture"},
 		CredentialEnvironment: "TEST_MODEL_API_KEY",
 	}, Client: client}
 }

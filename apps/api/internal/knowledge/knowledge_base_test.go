@@ -11,7 +11,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/redaction"
 )

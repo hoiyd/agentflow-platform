@@ -1,0 +1,408 @@
+package reconciliation
+
+import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+
+	"agentflow-platform/apps/api/internal/domain"
+
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/policy"
+)
+
+func TestConfirmCommittedIsAuditedAndIdempotent(t *testing.T) {
+	fixtureStore, run, catalog, effect := reconciliationFixture(t, tool.SideEffectReconciliation{})
+	command := ToolEffectReconciliationCommand{
+		CommandID: "command-1", Action: domain.ToolEffectConfirmCommitted,
+		ExpectedVersion: effect.Version, Actor: "operator@example.com", Reason: "verified in provider audit log",
+		Result: json.RawMessage(`{"remote_id":"record-1"}`),
+	}
+	first, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
+	if err != nil || !first.Applied || first.Outcome != "completed" || first.Effect.Status != domain.ToolEffectCommitted || first.Effect.Version != effect.Version+1 {
+		t.Fatalf("first reconciliation: outcome=%#v err=%v", first, err)
+	}
+	second, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
+	if err != nil || second.Applied || second.Effect.Status != domain.ToolEffectCommitted {
+		t.Fatalf("duplicate reconciliation: outcome=%#v err=%v", second, err)
+	}
+	events, _ := fixtureStore.ListRunEvents(run.ID)
+	if len(events) != 1 || events[0].Type != domain.EventToolEffectReconciled || events[0].Payload["actor"] != command.Actor || events[0].Payload["result_version"] != effect.Version+1 {
+		t.Fatalf("unexpected audit events: %#v", events)
+	}
+	records, _ := fixtureStore.ListToolEffects(run.ID)
+	var replay tool.ExecutionResult
+	if err := json.Unmarshal(records[0].Result, &replay); err != nil || replay.Tool != effect.ToolName || replay.Result.(map[string]any)["remote_id"] != "record-1" {
+		t.Fatalf("invalid replay envelope: %#v err=%v", replay, err)
+	}
+}
+
+func TestRetryAndCompensationRequireExplicitBindingCapabilities(t *testing.T) {
+	fixtureStore, run, catalog, effect := reconciliationFixture(t, tool.SideEffectReconciliation{})
+	command := ToolEffectReconciliationCommand{
+		CommandID: "retry-denied", Action: domain.ToolEffectRetrySameKey,
+		ExpectedVersion: effect.Version, Actor: "operator", Reason: "provider confirmed safe retry",
+	}
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationUnavailable {
+		t.Fatalf("expected unavailable retry, got %v", err)
+	}
+	records, _ := fixtureStore.ListToolEffects(run.ID)
+	if records[0].Version != effect.Version || records[0].Status != domain.ToolEffectNeedsReconciliation {
+		t.Fatalf("denied command changed effect: %#v", records[0])
+	}
+
+	retryCalls := 0
+	fixtureStore, run, catalog, effect = reconciliationFixture(t, tool.SideEffectReconciliation{
+		RetryWithSameKey: func(_ context.Context, recovery tool.EffectReconciliationContext) (any, error) {
+			retryCalls++
+			if recovery.IdempotencyKey != effect.IdempotencyKey {
+				t.Fatalf("retry changed idempotency key: %#v", recovery)
+			}
+			return map[string]any{"retried": true}, nil
+		},
+	})
+	command.CommandID, command.ExpectedVersion = "retry-allowed", effect.Version
+	first, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
+	if err != nil || first.Effect.Status != domain.ToolEffectCommitted || retryCalls != 1 {
+		t.Fatalf("retry outcome=%#v calls=%d err=%v", first, retryCalls, err)
+	}
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command); err != nil || retryCalls != 1 {
+		t.Fatalf("duplicate retry called provider again: calls=%d err=%v", retryCalls, err)
+	}
+
+	compensated := false
+	fixtureStore, run, catalog, effect = reconciliationFixture(t, tool.SideEffectReconciliation{
+		Compensate: func(_ context.Context, recovery tool.EffectReconciliationContext) error {
+			compensated = recovery.CompensationKey != ""
+			return nil
+		},
+	})
+	command = ToolEffectReconciliationCommand{
+		CommandID: "compensate-1", Action: domain.ToolEffectCompensate,
+		ExpectedVersion: effect.Version, Actor: "operator", Reason: "rollback approved",
+	}
+	outcome, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
+	if err != nil || !compensated || outcome.Effect.Status != domain.ToolEffectCompensated {
+		t.Fatalf("compensation outcome=%#v called=%v err=%v", outcome, compensated, err)
+	}
+}
+
+func TestFailedRetryRemainsQueryableAndDoesNotRepeatCommand(t *testing.T) {
+	calls := 0
+	fixtureStore, run, catalog, effect := reconciliationFixture(t, tool.SideEffectReconciliation{
+		RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) {
+			calls++
+			return nil, errors.New("provider still unavailable")
+		},
+	})
+	command := ToolEffectReconciliationCommand{
+		CommandID: "retry-failed", Action: domain.ToolEffectRetrySameKey,
+		ExpectedVersion: effect.Version, Actor: "operator", Reason: "retry after outage",
+	}
+	first, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
+	if err != nil || first.Outcome != "failed" || first.Effect.Status != domain.ToolEffectNeedsReconciliation || first.Effect.Version != effect.Version+2 || calls != 1 {
+		t.Fatalf("failed retry: outcome=%#v calls=%d err=%v", first, calls, err)
+	}
+	second, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command)
+	if err != nil || second.Applied || calls != 1 {
+		t.Fatalf("duplicate failed retry: outcome=%#v calls=%d err=%v", second, calls, err)
+	}
+	events, _ := fixtureStore.ListRunEvents(run.ID)
+	if len(events) != 2 || events[0].Type != domain.EventToolEffectReconciliationStarted || events[1].Type != domain.EventToolEffectReconciliationFailed || events[1].Payload["error"] != "provider still unavailable" {
+		t.Fatalf("unexpected failure audit: %#v", events)
+	}
+}
+
+func TestReconciliationRejectsInvalidStateVersionAndDefinition(t *testing.T) {
+	fixtureStore, run, catalog, effect := reconciliationFixture(t, tool.SideEffectReconciliation{
+		RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) { return nil, nil },
+	})
+	base := ToolEffectReconciliationCommand{CommandID: "command", Action: domain.ToolEffectConfirmFailed, ExpectedVersion: effect.Version, Actor: "operator", Reason: "not applied"}
+	wrongVersion := base
+	wrongVersion.ExpectedVersion++
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, wrongVersion); reconciliationCode(err) != ReconciliationConflict {
+		t.Fatalf("expected version conflict, got %v", err)
+	}
+	if _, err := fixtureStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "still uncertain"); err != nil {
+		t.Fatal(err)
+	}
+	command := base
+	command.CommandID, command.Action, command.ExpectedVersion = "retry-mismatch", domain.ToolEffectRetrySameKey, effect.Version+1
+	// The persisted revision remains stable; use a second catalog to emulate Binding drift.
+	drifted, err := tool.NewCatalog(externalBinding(tool.SideEffectReconciliation{
+		RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) { return nil, nil },
+	}, "changed description"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReconcileToolEffect(context.Background(), drifted, fixtureStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationMismatch {
+		t.Fatalf("expected definition mismatch, got %v", err)
+	}
+	base.CommandID = "invalid"
+	base.Action = "unknown"
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, base); reconciliationCode(err) != ReconciliationInvalid {
+		t.Fatalf("expected invalid action, got %v", err)
+	}
+}
+
+func TestReconciliationValidationAndHelpers(t *testing.T) {
+	valid := ToolEffectReconciliationCommand{
+		CommandID: "command", Action: domain.ToolEffectConfirmFailed, ExpectedVersion: 1,
+		Actor: "operator", Reason: "checked",
+	}
+	for _, test := range []struct {
+		name   string
+		key    string
+		mutate func(*ToolEffectReconciliationCommand)
+	}{
+		{name: "missing identity", key: "", mutate: func(*ToolEffectReconciliationCommand) {}},
+		{name: "large metadata", key: "effect", mutate: func(item *ToolEffectReconciliationCommand) { item.Actor = string(make([]byte, 129)) }},
+		{name: "missing result", key: "effect", mutate: func(item *ToolEffectReconciliationCommand) { item.Action = domain.ToolEffectConfirmCommitted }},
+		{name: "unexpected result", key: "effect", mutate: func(item *ToolEffectReconciliationCommand) { item.Result = json.RawMessage(`{}`) }},
+		{name: "unknown action", key: "effect", mutate: func(item *ToolEffectReconciliationCommand) { item.Action = "unknown" }},
+		{name: "credential in command ID", key: "effect", mutate: func(item *ToolEffectReconciliationCommand) { item.CommandID = "sk-command-secret-1234" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			command := valid
+			test.mutate(&command)
+			if reconciliationCode(validateReconciliationCommand(test.key, command)) != ReconciliationInvalid {
+				t.Fatal("expected invalid command")
+			}
+		})
+	}
+
+	typed := &ReconciliationError{Code: ReconciliationNotFound, Message: "missing"}
+	if typed.Error() != "missing" || typed.FailureInfo().Category == "" {
+		t.Fatalf("invalid reconciliation error: %#v", typed)
+	}
+	if ValidToolEffectStatus("unknown") || !ValidToolEffectStatus(domain.ToolEffectFailed) {
+		t.Fatal("unexpected status validation")
+	}
+	if actions := NewToolEffectViews(nil, []domain.ToolEffectRecord{{Status: domain.ToolEffectCommitted}})[0].AvailableActions; len(actions) != 0 {
+		t.Fatalf("terminal effect actions: %v", actions)
+	}
+	if _, err := reconciliationBinding(nil, domain.ToolEffectRecord{}); reconciliationCode(err) != ReconciliationUnavailable {
+		t.Fatalf("nil catalog error: %v", err)
+	}
+	if _, _, err := executeReconciliationAction(context.Background(), nil, domain.ToolEffectRecord{}, ToolEffectReconciliationCommand{Action: "unknown"}); reconciliationCode(err) != ReconciliationInvalid {
+		t.Fatalf("unknown action error: %v", err)
+	}
+	if _, _, err := executeReconciliationAction(context.Background(), nil, domain.ToolEffectRecord{}, ToolEffectReconciliationCommand{Action: domain.ToolEffectConfirmCommitted, Result: json.RawMessage(`{`)}); reconciliationCode(err) != ReconciliationInvalid {
+		t.Fatalf("invalid result error: %v", err)
+	}
+	if _, err := encodeReconciledResult(domain.ToolEffectRecord{}, make(chan int)); err == nil {
+		t.Fatal("unsupported result should fail encoding")
+	}
+	if _, err := callEffectRetry(context.Background(), func(context.Context, tool.EffectReconciliationContext) (any, error) { panic("retry") }, tool.EffectReconciliationContext{}); err == nil {
+		t.Fatal("retry panic should become an error")
+	}
+	if err := callEffectCompensation(context.Background(), func(context.Context, tool.EffectReconciliationContext) error { panic("compensate") }, tool.EffectReconciliationContext{}); err == nil {
+		t.Fatal("compensation panic should become an error")
+	}
+	if got := boundedReconciliationText("abc\xe4\xb8", 4); got != "abc" {
+		t.Fatalf("invalid UTF-8 boundary: %q", got)
+	}
+}
+
+func TestReconciliationRejectsTerminalStateAndUnavailableCompensation(t *testing.T) {
+	fixtureStore, run, catalog, effect := reconciliationFixture(t, tool.SideEffectReconciliation{})
+	command := ToolEffectReconciliationCommand{
+		CommandID: "compensate-denied", Action: domain.ToolEffectCompensate,
+		ExpectedVersion: effect.Version, Actor: "operator", Reason: "rollback requested",
+	}
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationUnavailable {
+		t.Fatalf("expected unavailable compensation, got %v", err)
+	}
+	command.CommandID, command.Action = "confirm-failed", domain.ToolEffectConfirmFailed
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command); err != nil {
+		t.Fatal(err)
+	}
+	command.CommandID, command.ExpectedVersion = "terminal-command", effect.Version+1
+	if _, err := ReconcileToolEffect(context.Background(), catalog, fixtureStore, run, effect.IdempotencyKey, command); reconciliationCode(err) != ReconciliationConflict {
+		t.Fatalf("expected terminal state conflict, got %v", err)
+	}
+
+	_, _, compensationCatalog, uncertain := reconciliationFixture(t, tool.SideEffectReconciliation{
+		Compensate: func(context.Context, tool.EffectReconciliationContext) error { return nil },
+	})
+	views := NewToolEffectViews(compensationCatalog, []domain.ToolEffectRecord{uncertain})
+	if len(views[0].AvailableActions) != 3 || views[0].AvailableActions[2] != domain.ToolEffectCompensate {
+		t.Fatalf("compensation action missing: %#v", views)
+	}
+}
+
+func TestReconciliationPropagatesStoreFailures(t *testing.T) {
+	want := errors.New("store failed")
+	run := domain.Run{ID: "run-1"}
+	command := ToolEffectReconciliationCommand{
+		CommandID: "command", Action: domain.ToolEffectConfirmFailed, ExpectedVersion: 1,
+		Actor: "operator", Reason: "checked",
+	}
+	stub := &reconciliationStoreStub{listErr: want}
+	if _, err := ReconcileToolEffect(context.Background(), nil, stub, run, "effect", command); !errors.Is(err, want) {
+		t.Fatalf("list error: %v", err)
+	}
+	stub = &reconciliationStoreStub{effects: []domain.ToolEffectRecord{{
+		IdempotencyKey: "effect", Version: 1, RunID: run.ID, StageID: "stage-1",
+		Status: domain.ToolEffectNeedsReconciliation,
+	}}, eventErr: want}
+	if _, err := ReconcileToolEffect(context.Background(), nil, stub, run, "effect", command); !errors.Is(err, want) {
+		t.Fatalf("event error: %v", err)
+	}
+	stub.eventErr, stub.commitErr = nil, want
+	stub.events = []domain.RunEvent{{Type: domain.EventRunStarted}}
+	if _, err := ReconcileToolEffect(context.Background(), nil, stub, run, "effect", command); !errors.Is(err, want) {
+		t.Fatalf("commit error: %v", err)
+	}
+}
+
+type reconciliationStoreStub struct {
+	effects   []domain.ToolEffectRecord
+	events    []domain.RunEvent
+	listErr   error
+	eventErr  error
+	commitErr error
+}
+
+func (s *reconciliationStoreStub) ListToolEffects(string) ([]domain.ToolEffectRecord, error) {
+	return s.effects, s.listErr
+}
+
+func (s *reconciliationStoreStub) ListRunEvents(string) ([]domain.RunEvent, error) {
+	return s.events, s.eventErr
+}
+
+func (s *reconciliationStoreStub) CommitToolEffectReconciliation(mutation domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error) {
+	return s.effects[0], mutation.Event, s.commitErr == nil, s.commitErr
+}
+
+func reconciliationFixture(t *testing.T, recovery tool.SideEffectReconciliation) (*fixturestore.Store, domain.Run, *tool.Catalog, domain.ToolEffectRecord) {
+	t.Helper()
+	fixtureStore := fixturestore.New()
+
+	conversation, err := fixtureStore.CreateConversation("reconciliation")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, domain.RuntimeSnapshot{
+		SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	external := externalBinding(recovery, "writes a record")
+	catalog, err := tool.NewCatalogWithPolicy(policy.Policy{
+		Version: policy.CurrentVersion, DefaultAction: policy.ActionDeny,
+		Rules: []policy.Rule{{ID: "operator-recovery", Tool: external.Descriptor.Name, Action: policy.ActionAllowAndLog, Capability: external.Descriptor.Security}},
+	}, external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, _ := catalog.Installed("write_record")
+	effect, execute, err := fixtureStore.BeginToolEffect(domain.ToolEffectRecord{
+		IdempotencyKey: "effect-1", RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
+		ToolCallID: "call-1", ToolName: binding.Descriptor.Name,
+		DefinitionRevision: binding.Descriptor.DefinitionRevision, RequestHash: "request-hash",
+	})
+	if err != nil || !execute {
+		t.Fatalf("begin effect: effect=%#v execute=%v err=%v", effect, execute, err)
+	}
+	effect, err = fixtureStore.MarkToolEffectNeedsReconciliation(effect.IdempotencyKey, "timeout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return fixtureStore, run, catalog, effect
+}
+
+func externalBinding(recovery tool.SideEffectReconciliation, description string) tool.Binding {
+	capability := policy.NormalizeCapability(policy.Capability{
+		Scope:      policy.Scope{Resources: []policy.ResourceScope{{Kind: policy.ResourceExternal, Name: "records", Access: policy.AccessWrite}}},
+		SideEffect: policy.SideEffectExternalWrite, Reversibility: policy.Compensatable,
+		Visibility: policy.VisibilityOperator, Audit: policy.AuditFull,
+	})
+	return tool.Binding{
+		Descriptor: tool.Descriptor{
+			Name: "write_record", Description: description, Parameters: tool.ObjectSchema(nil, nil),
+			SideEffect: tool.SideEffectPolicy{
+				Mode: tool.SideEffectExternal, RetryWithSameKey: recovery.RetryWithSameKey != nil,
+				Compensate: recovery.Compensate != nil,
+			}, Security: capability,
+		},
+		Handler:        func(context.Context, json.RawMessage) (any, error) { return nil, nil },
+		Reconciliation: recovery,
+	}
+}
+
+func reconciliationCode(err error) string {
+	var typed *ReconciliationError
+	if errors.As(err, &typed) {
+		return typed.Code
+	}
+	return ""
+}
+
+func TestReconciliationRecoveryReadFailuresAndRedactionExpansion(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := boundedReconciliationAction(ctx, nil, domain.ToolEffectRecord{}, ToolEffectReconciliationCommand{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled dispatch: %v", err)
+	}
+	record := domain.ToolEffectRecord{IdempotencyKey: "effect", RunID: "run", Status: domain.ToolEffectReconciling}
+	for _, failRead := range []bool{false, true} {
+		stub := &reconciliationStoreStub{events: []domain.RunEvent{{
+			Type:    domain.EventToolEffectReconciliationStarted,
+			Payload: map[string]any{"command_id": "command", "command_hash": "hash", "idempotency_key": "effect", "outcome": "pending"},
+		}}}
+		if failRead {
+			stub.listErr = errors.New("read failed")
+		}
+		_, err := reconciliationCommandOutcome(stub, nil, "run", record, "command", "hash")
+		if failRead && !errors.Is(err, stub.listErr) || !failRead && reconciliationCode(err) != ReconciliationNotFound {
+			t.Fatalf("read failure after duplicate event: %v", err)
+		}
+	}
+	// Redaction can expand many empty credential fields. Enforce the limit on
+	// the final stored bytes as well as the original envelope.
+	values := make([]any, tool.DefaultMaxResultBytes/20)
+	for index := range values {
+		values[index] = map[string]any{"token": ""}
+	}
+	if _, err := encodeReconciledResult(record, values); err == nil || !strings.Contains(err.Error(), "safely persisted") {
+		t.Fatalf("redaction expansion should fail closed: %v", err)
+	}
+}
+
+type panicJSONResult struct{}
+
+func (panicJSONResult) MarshalJSON() ([]byte, error) { panic("secret marshal failure") }
+
+func TestReconciliationGuardsResultEncodingAndBindingLimit(t *testing.T) {
+	for _, variant := range []string{"marshal panic", "binding limit"} {
+		t.Run(variant, func(t *testing.T) {
+			target, run, catalog, effect := reconciliationFixture(t, tool.SideEffectReconciliation{
+				RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) {
+					if variant == "marshal panic" {
+						return panicJSONResult{}, nil
+					}
+					return map[string]any{"ok": true}, nil
+				},
+			})
+			binding, _ := catalog.Resolve(effect.ToolName)
+			binding.Policy.MaxResultBytes = 1
+			catalog, err := tool.NewCatalogWithPolicy(catalog.SecurityPolicy(), binding)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, ToolEffectReconciliationCommand{
+				CommandID: "retry", Action: domain.ToolEffectRetrySameKey, ExpectedVersion: effect.Version, Actor: "operator", Reason: "checked",
+			})
+			if err != nil || result.Outcome != "failed" || result.Effect.HasResult || strings.Contains(result.Effect.Error, "secret marshal failure") {
+				t.Fatalf("unsafe callback result: %#v %v", result, err)
+			}
+		})
+	}
+}

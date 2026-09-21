@@ -11,9 +11,9 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 
-	"agentflow-platform/apps/api/internal/toolpolicy"
-	"agentflow-platform/apps/api/internal/toolprogress"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/policy"
+	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
 func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
@@ -30,8 +30,8 @@ func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create run: %v", err)
 	}
-	catalog, err := tools.NewCatalog(tools.Binding{
-		Descriptor: tools.Descriptor{Name: "blocking", Parameters: tools.ObjectSchema(nil, nil)},
+	catalog, err := tool.NewCatalog(tool.Binding{
+		Descriptor: tool.Descriptor{Name: "blocking", Parameters: tool.ObjectSchema(nil, nil)},
 		Handler: func(ctx context.Context, _ json.RawMessage) (any, error) {
 			<-ctx.Done()
 			return nil, ctx.Err()
@@ -40,13 +40,13 @@ func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new catalog: %v", err)
 	}
-	executor := tools.NewExecutor(catalog, tools.ExecutorOptions{
+	executor := tool.NewExecutor(catalog, tool.ExecutorOptions{
 		Tracer: NewToolExecutionTracer(NewRecorder(fixtureStore), run.ID, ""),
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	result := executor.Execute(ctx, tools.ExecutionRequest{CallID: "call-1", Tool: "blocking"})
-	if result.Error == nil || result.Error.Code != tools.ErrorExecutionCanceled {
+	result := executor.Execute(ctx, tool.ExecutionRequest{CallID: "call-1", Tool: "blocking"})
+	if result.Error == nil || result.Error.Code != tool.ErrorExecutionCanceled {
 		t.Fatalf("expected cancellation error, got %#v", result.Error)
 	}
 
@@ -60,10 +60,10 @@ func TestToolExecutionTracerRecordsCanceledExecution(t *testing.T) {
 	if events[1].Payload["allowed"] != true || events[1].Payload["policy_version"] == "" {
 		t.Fatalf("Tool policy decision is missing: %#v", events[1].Payload)
 	}
-	if events[2].Payload["error_code"] != string(tools.ErrorExecutionCanceled) {
+	if events[2].Payload["error_code"] != string(tool.ErrorExecutionCanceled) {
 		t.Fatalf("unexpected error code payload: %#v", events[2].Payload)
 	}
-	if events[2].Payload["error_kind"] != string(tools.ErrorExecutionCanceled) ||
+	if events[2].Payload["error_kind"] != string(tool.ErrorExecutionCanceled) ||
 		events[2].Payload["error_source"] != "tool" || events[2].Payload["error_category"] != "canceled" {
 		t.Fatalf("structured failure fields are missing: %#v", events[2].Payload)
 	}
@@ -83,13 +83,13 @@ func TestToolPolicyTracePersistsDecisionWithoutSensitiveScopeNames(t *testing.T)
 		t.Fatal(err)
 	}
 	tracer := NewToolExecutionTracer(NewRecorder(fixtureStore), run.ID, "stage-1")
-	capability := toolpolicy.NormalizeCapability(toolpolicy.Capability{Scope: toolpolicy.Scope{
-		Resources:   []toolpolicy.ResourceScope{{Kind: toolpolicy.ResourceWorkspace, Name: "private-customer-records", Access: toolpolicy.AccessRead}},
-		Network:     toolpolicy.NetworkScope{Mode: toolpolicy.NetworkExternal, Targets: []string{"secret.internal.example"}},
+	capability := policy.NormalizeCapability(policy.Capability{Scope: policy.Scope{
+		Resources:   []policy.ResourceScope{{Kind: policy.ResourceWorkspace, Name: "private-customer-records", Access: policy.AccessRead}},
+		Network:     policy.NetworkScope{Mode: policy.NetworkExternal, Targets: []string{"secret.internal.example"}},
 		Credentials: []string{"production-api-key"},
 	}})
-	err = tracer.ToolPolicyEvaluated(context.Background(), tools.ExecutionRequest{CallID: "call-1", Tool: "reader"}, toolpolicy.Decision{
-		Action: toolpolicy.ActionDeny, PolicyVersion: "operator-v4", RuleID: "reader-rule",
+	err = tracer.ToolPolicyEvaluated(context.Background(), tool.ExecutionRequest{CallID: "call-1", Tool: "reader"}, policy.Decision{
+		Action: policy.ActionDeny, PolicyVersion: "operator-v4", RuleID: "reader-rule",
 		Reason: "credential_scope_unavailable", Capability: capability,
 	})
 	if err != nil {
@@ -122,24 +122,24 @@ func TestToolProgressTracePersistsEscalationsAndTerminalRecoveryMetadata(t *test
 	}
 	tracer := NewToolExecutionTracer(NewRecorder(fixtureStore), run.ID, "stage-1")
 	ctx := WithScope(context.Background(), Scope{RunID: run.ID, ConversationID: conversation.ID, StageID: "stage-1", TurnID: "turn-1"})
-	request := tools.ExecutionRequest{CallID: "call-1", Tool: "reader", TurnID: "turn-1"}
-	base := toolprogress.Decision{
-		Version: toolprogress.CurrentVersion, Rule: toolprogress.RuleRepeatedFailure,
+	request := tool.ExecutionRequest{CallID: "call-1", Tool: "reader", TurnID: "turn-1"}
+	base := progress.Decision{
+		Version: progress.CurrentVersion, Rule: progress.RuleRepeatedFailure,
 		Count: 2, Reason: "bounded reason", SignatureHash: strings.Repeat("a", 64),
 		OutcomeFingerprint: strings.Repeat("b", 64), Trackable: true, Executed: true,
 	}
-	for _, action := range []toolprogress.Action{toolprogress.ActionWarn, toolprogress.ActionBlockCall, toolprogress.ActionHaltTurn} {
+	for _, action := range []progress.Action{progress.ActionWarn, progress.ActionBlockCall, progress.ActionHaltTurn} {
 		decision := base
 		decision.Action = action
 		tracer.ToolProgressEvaluated(ctx, request, decision)
 	}
 	tracer.ToolStarted(ctx, request)
 	terminal := base
-	terminal.Action = toolprogress.ActionBlockCall
+	terminal.Action = progress.ActionBlockCall
 	terminal.Executed = false
-	tracer.ToolFinished(ctx, tools.ExecutionResult{
+	tracer.ToolFinished(ctx, tool.ExecutionResult{
 		CallID: request.CallID, Tool: request.Tool,
-		Error:            &tools.ExecutionError{Code: tools.ErrorProgressBlocked, Message: "blocked"},
+		Error:            &tool.ExecutionError{Code: tool.ErrorProgressBlocked, Message: "blocked"},
 		ProgressDecision: &terminal,
 	})
 
@@ -156,7 +156,7 @@ func TestToolProgressTracePersistsEscalationsAndTerminalRecoveryMetadata(t *test
 			t.Fatalf("event %d=%s, want %s", index, events[index].Type, eventType)
 		}
 	}
-	if events[4].Payload["progress_guard_action"] != string(toolprogress.ActionBlockCall) ||
+	if events[4].Payload["progress_guard_action"] != string(progress.ActionBlockCall) ||
 		events[4].Payload["progress_guard_signature"] != terminal.SignatureHash ||
 		events[4].Payload["progress_guard_executed"] != false {
 		t.Fatalf("terminal recovery metadata missing: %#v", events[4].Payload)
@@ -173,20 +173,20 @@ func TestToolExecutionTracerLinksPersistedArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := tools.NewCatalog(tools.Binding{
-		Descriptor: tools.Descriptor{Name: "future_tool", Parameters: tools.ObjectSchema(nil, nil)},
+	catalog, err := tool.NewCatalog(tool.Binding{
+		Descriptor: tool.Descriptor{Name: "future_tool", Parameters: tool.ObjectSchema(nil, nil)},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
 			return strings.Repeat("x", 4096), nil
 		},
-		Policy: tools.ExecutionPolicy{MaxResultBytes: 128},
+		Policy: tool.ExecutionPolicy{MaxResultBytes: 128},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	result := tools.NewExecutor(catalog, tools.ExecutorOptions{
+	result := tool.NewExecutor(catalog, tool.ExecutorOptions{
 		ArtifactStore: fixtureStore,
 		Tracer:        NewToolExecutionTracer(NewRecorder(fixtureStore), run.ID, "stage-1"),
-	}).Execute(context.Background(), tools.ExecutionRequest{
+	}).Execute(context.Background(), tool.ExecutionRequest{
 		RunID: run.ID, StageID: "stage-1", CallID: "call-1", Tool: "future_tool",
 	})
 	if result.Artifact == nil {

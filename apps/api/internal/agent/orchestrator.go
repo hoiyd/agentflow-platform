@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
+	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/store"
-	"agentflow-platform/apps/api/internal/tools"
-	turnpkg "agentflow-platform/apps/api/internal/turn"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 const (
@@ -564,7 +564,7 @@ func shouldFallbackAgentSelection(err error) bool {
 	return info.Category == failure.CategoryAvailability || info.Category == failure.CategoryTimeout || info.Category == failure.CategoryExecution
 }
 
-func eligibleWorkerAgents(agents []domain.Agent, catalog *tools.Catalog, requirements domain.AgentRoutingRequirements) ([]domain.Agent, []agentEligibility) {
+func eligibleWorkerAgents(agents []domain.Agent, catalog *tool.Catalog, requirements domain.AgentRoutingRequirements) ([]domain.Agent, []agentEligibility) {
 	counts := make(map[string]int, len(agents))
 	for _, agent := range agents {
 		counts[strings.TrimSpace(agent.ID)]++
@@ -603,7 +603,7 @@ func eligibleWorkerAgents(agents []domain.Agent, catalog *tools.Catalog, require
 	return eligible, results
 }
 
-func applyRoutingRequirements(result *agentEligibility, requirements domain.AgentRoutingRequirements, catalog *tools.Catalog) {
+func applyRoutingRequirements(result *agentEligibility, requirements domain.AgentRoutingRequirements, catalog *tool.Catalog) {
 	total := len(requirements.RequiredTools) + len(requirements.ProhibitedTools)
 	if requirements.RequireMemory {
 		total++

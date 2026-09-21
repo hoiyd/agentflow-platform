@@ -11,7 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/contextcompaction"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 )
 
 func (r *Runtime) scheduleSoftContextCompaction(run domain.Run) {
@@ -28,7 +28,7 @@ func (r *Runtime) scheduleSoftContextCompaction(run domain.Run) {
 	}()
 }
 
-func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversationID string, snapshot *domain.RuntimeSnapshot, trigger string, triggerKey string, client modelprovider.Client) *domain.ContextCompaction {
+func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversationID string, snapshot *domain.RuntimeSnapshot, trigger string, triggerKey string, client provider.Client) *domain.ContextCompaction {
 	compaction, err := r.compactContext(ctx, runID, conversationID, snapshot, trigger, triggerKey, client)
 	if err != nil {
 		log.Printf("context_compaction_failed run_id=%s trigger=%s error=%q", runID, trigger, err.Error())
@@ -40,7 +40,7 @@ func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversat
 	return compaction
 }
 
-func (r *Runtime) compactContext(ctx context.Context, runID, conversationID string, snapshot *domain.RuntimeSnapshot, trigger string, triggerKey string, client modelprovider.Client) (*domain.ContextCompaction, error) {
+func (r *Runtime) compactContext(ctx context.Context, runID, conversationID string, snapshot *domain.RuntimeSnapshot, trigger string, triggerKey string, client provider.Client) (*domain.ContextCompaction, error) {
 	if r == nil || r.contextCompactor == nil || snapshot == nil || conversationID == "" {
 		return nil, nil
 	}

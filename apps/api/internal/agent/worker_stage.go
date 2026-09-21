@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/taskstate"
-	"agentflow-platform/apps/api/internal/tools"
-	turnpkg "agentflow-platform/apps/api/internal/turn"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 const workerHandoffMaxCharacters = 4000
@@ -16,7 +16,7 @@ const workerHandoffMaxCharacters = 4000
 // runWorkerStage preserves the useful delegation boundary without creating a
 // second Run: the selected agent receives only the explicit task, its frozen
 // tool allowlist, and explicitly retrieved memory/knowledge.
-func (r *Runtime) runWorkerStage(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, catalog *tools.Catalog, input string, query retrievalQuery) (string, error) {
+func (r *Runtime) runWorkerStage(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, catalog *tool.Catalog, input string, query retrievalQuery) (string, error) {
 	step, err := r.store.CreateCollaborationStep(domain.CollaborationStep{
 		RunID: prepared.Run.ID, ConversationID: prepared.Run.ConversationID, Role: "worker",
 		AgentID: prepared.WorkerAgent.ID, Status: domain.CollaborationStepRunning, Input: input,
@@ -57,11 +57,11 @@ func (r *Runtime) runWorkerStage(ctx context.Context, events chan<- domain.RunEv
 	return boundedWorkerHandoff(completed), nil
 }
 
-func catalogForAgent(catalog *tools.Catalog, agent domain.Agent) (*tools.Catalog, error) {
+func catalogForAgent(catalog *tool.Catalog, agent domain.Agent) (*tool.Catalog, error) {
 	if catalog == nil {
-		return tools.NewCatalog()
+		return tool.NewCatalog()
 	}
-	bindings := make([]tools.Binding, 0, len(agent.Tools))
+	bindings := make([]tool.Binding, 0, len(agent.Tools))
 	for _, name := range agent.Tools {
 		if name == taskstate.UpdateToolName {
 			continue
@@ -70,7 +70,7 @@ func catalogForAgent(catalog *tools.Catalog, agent domain.Agent) (*tools.Catalog
 			bindings = append(bindings, binding)
 		}
 	}
-	return tools.NewCatalogWithPolicy(catalog.SecurityPolicy(), bindings...)
+	return tool.NewCatalogWithPolicy(catalog.SecurityPolicy(), bindings...)
 }
 
 func boundedWorkerHandoff(step domain.CollaborationStep) string {

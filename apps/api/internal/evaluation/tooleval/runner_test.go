@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/openai"
-	"agentflow-platform/apps/api/internal/toolartifact"
+	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/tool/artifact"
 )
 
 // The local provider selects tools and produces answers from actual returned
@@ -75,7 +75,7 @@ func fixtureProvider(t *testing.T, mode string) *httptest.Server {
 				if mode == "invalid_args" {
 					args = []byte(`{"artifact_id":"x"}`)
 				}
-				calls = append(calls, map[string]any{"id": fmt.Sprintf("call-%d", i), "type": "function", "function": map[string]any{"name": toolartifact.SearchToolName, "arguments": string(args)}})
+				calls = append(calls, map[string]any{"id": fmt.Sprintf("call-%d", i), "type": "function", "function": map[string]any{"name": artifact.SearchToolName, "arguments": string(args)}})
 			}
 			json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "tool_calls": calls}}}, "usage": providerUsage})
 			return
@@ -276,7 +276,7 @@ func TestEvidenceSensorRejectsPlausibleWrongAnswers(t *testing.T) {
 	good, _ := json.Marshal(map[string]any{"facts": []Fact{fact}, "missing": []string{}})
 	duplicate, _ := json.Marshal(map[string]any{"facts": []Fact{fact, fact}, "missing": []string{}})
 	read, _ := json.Marshal(domain.ToolArtifactRead{Artifact: domain.ToolArtifact{ID: "a"}, Content: fact.Quote})
-	evidence := []Evidence{{Tool: toolartifact.ReadToolName, Result: read}}
+	evidence := []Evidence{{Tool: artifact.ReadToolName, Result: read}}
 	if got := verify(data, data.Cases[0], string(good), "a", evidence, true); len(got) != 0 {
 		t.Fatal(got)
 	}
@@ -297,13 +297,13 @@ func TestEvidenceSensorRejectsPlausibleWrongAnswers(t *testing.T) {
 		}
 	}
 	search, _ := json.Marshal(domain.ToolArtifactSearchResult{Artifact: domain.ToolArtifact{ID: "a"}, Query: "INV-0000", ScannedBytes: 70000})
-	if !observedEvidence([]Evidence{{Tool: toolartifact.SearchToolName, Result: search}}, "a", "INV-0000", "", true) {
+	if !observedEvidence([]Evidence{{Tool: artifact.SearchToolName, Result: search}}, "a", "INV-0000", "", true) {
 		t.Fatal("absence not recognized")
 	}
-	if observedEvidence([]Evidence{{Tool: toolartifact.SearchToolName, Result: search}}, "a", "different", "", true) {
+	if observedEvidence([]Evidence{{Tool: artifact.SearchToolName, Result: search}}, "a", "different", "", true) {
 		t.Fatal("wrong query proves absence")
 	}
-	if observedEvidence([]Evidence{{Tool: toolartifact.SearchToolName, Result: json.RawMessage(`{`)}}, "a", "x", "quote", false) {
+	if observedEvidence([]Evidence{{Tool: artifact.SearchToolName, Result: json.RawMessage(`{`)}}, "a", "x", "quote", false) {
 		t.Fatal("invalid evidence accepted")
 	}
 	if len(collectEvidence([]domain.RunEvent{{Type: domain.EventToolFailed}, {Type: domain.EventToolCompleted}})) != 0 {

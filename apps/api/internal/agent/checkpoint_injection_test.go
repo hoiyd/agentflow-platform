@@ -8,7 +8,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/inference/openai"
 )
 
 type checkpointProviderStub struct {

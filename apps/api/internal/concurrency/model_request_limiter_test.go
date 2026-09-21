@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"agentflow-platform/apps/api/internal/modelrequest"
+	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 )
 
 func TestModelRequestLimiterEnforcesGlobalSemaphore(t *testing.T) {
@@ -65,7 +65,7 @@ func TestModelRequestLimiterRejectsRequestAboveTokenCapacity(t *testing.T) {
 	if _, err := limiter.AcquireRequest(context.Background(), "secret-key", 11); err == nil {
 		t.Fatal("expected token capacity error")
 	} else {
-		var limitErr *modelrequest.TokenBucketCapacityError
+		var limitErr *requestcontrol.TokenBucketCapacityError
 		if !errors.As(err, &limitErr) || limitErr.EstimatedTokens != 11 || limitErr.Capacity != 10 {
 			t.Fatalf("unexpected token capacity error: %#v", err)
 		}

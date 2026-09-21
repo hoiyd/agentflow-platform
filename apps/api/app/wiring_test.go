@@ -14,8 +14,8 @@ import (
 
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/modelrouting"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/inference/routing"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
@@ -101,23 +101,23 @@ func TestContextAssemblyConfigMapsAllSettings(t *testing.T) {
 func TestModelRouteCatalogTreatsConfiguredModelsAsPeers(t *testing.T) {
 	generalClient := openai.NewClient("", "https://general.example/v1", "general-chat")
 	priorityClient := openai.NewClient("", "https://priority.example/v1", "priority-chat")
-	general := modelrouting.RouteConfig{
+	general := routing.RouteConfig{
 		ID: "general", BaseURL: "https://general.example/v1", Model: "general-chat",
 		CredentialEnvironment: "GENERAL_MODEL_API_KEY", RequestTimeoutSeconds: 300,
-		Capabilities:        modelrouting.Capabilities{ToolCalling: true, StructuredOutput: true, Streaming: true},
+		Capabilities:        routing.Capabilities{ToolCalling: true, StructuredOutput: true, Streaming: true},
 		ContextWindowTokens: 128000, MaxOutputTokens: 4096, Priority: 100,
-		Pricing: modelrouting.Pricing{Source: "test_fixture"},
+		Pricing: routing.Pricing{Source: "test_fixture"},
 	}
-	route := modelrouting.RouteConfig{
+	route := routing.RouteConfig{
 		ID: "priority", BaseURL: "https://priority.example/v1", Model: "priority-chat",
 		CredentialEnvironment: "PRIORITY_MODEL_API_KEY", RequestTimeoutSeconds: 300,
-		Capabilities:        modelrouting.Capabilities{StructuredOutput: true, Streaming: true},
+		Capabilities:        routing.Capabilities{StructuredOutput: true, Streaming: true},
 		ContextWindowTokens: 64000, MaxOutputTokens: 4096, Priority: 120,
-		Pricing: modelrouting.Pricing{Source: "test_fixture"},
+		Pricing: routing.Pricing{Source: "test_fixture"},
 	}
-	catalog, err := modelrouting.NewCatalog(modelrouting.Binding{
+	catalog, err := routing.NewCatalog(routing.Binding{
 		Descriptor: general.Descriptor(generalClient.RuntimeIdentity().Provider), Client: generalClient,
-	}, modelrouting.Binding{
+	}, routing.Binding{
 		Descriptor: route.Descriptor(priorityClient.RuntimeIdentity().Provider), Client: priorityClient,
 	})
 	if err != nil {

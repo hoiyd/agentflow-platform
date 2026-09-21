@@ -15,8 +15,8 @@ import (
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/knowledge"
-	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/store"
 )

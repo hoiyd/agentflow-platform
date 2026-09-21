@@ -59,16 +59,23 @@ apps/api/
     domain/         persisted entities and shared contracts
     httpapi/        HTTP transport and route handlers
     agent/          run orchestration and execution modes
-    turn/           shared Turn Engine
+      turn/         shared Turn Engine
+    inference/      model request and provider boundary
+      provider/       provider-neutral contracts
+      routing/        secret-free routes and deterministic selection
+      requestcontrol/ request limiting and observation contracts
+      capture/        reconstructable model request envelopes
+      openai/         OpenAI-compatible provider adapter
+    tool/           Tool execution and governance boundary
+      *.go           catalog, schema, Bindings, and guarded execution
+      policy/        authorization and side-effect policy
+      progress/      repeated failure and result guards
+      artifact/      large-result Artifact governance
+      reconciliation/ uncertain side-effect reconciliation
     event/          typed execution events and tracing
     failure/        shared failure classification and event projection
     contextassembly/
     contextcompaction/
-    modelrouting/   secret-free route contracts and deterministic selection
-    modelrequest/    request limiting plus provider-neutral observation contract
-    requestcapture/  request envelope, capture policy, and reconstructability invariant
-    tools/          tool catalog and guarded execution
-    openai/         model-provider adapter
     store/          PostgreSQL persistence adapter
     memory/         semantic memory operations and asynchronous curation
     knowledge/      knowledge-base ingestion, embedding, search, and RAG evaluation
@@ -94,9 +101,9 @@ app
     |             |                    |
     |             |                    +--> memory, knowledge
     |             |
-    |             +--> internal/agent --> internal/turn
+    |             +--> internal/agent --> agent/turn
     |                                      |
-    |                                      +--> context, events, tools, model adapter
+    |                                      +--> context, events, tool, inference
     |
     +--> store, recovery, concurrency, config
 ```
@@ -106,6 +113,13 @@ app
 `app` is the composition root. It creates every long-lived service and concrete adapter, applies runtime policies, injects a complete dependency set into the HTTP handler, owns the HTTP server, and closes background work before persistence.
 
 `internal` is Go's module-private visibility boundary, not a lower architectural layer. Keeping product implementation under `internal` prevents other modules from accidentally depending on unstable backend packages. Packages inside it should continue to expose the smallest interfaces required by their consumers.
+
+The three execution-facing areas are deliberately visible in the tree. `agent`
+owns orchestration and the Turn protocol, `tool` owns callable capabilities and
+their safety controls, and `inference` owns model contracts, routing, request
+controls, capture, and provider adapters. Context, Memory, Knowledge, and RAG
+remain separate domains because they prepare or persist information rather than
+perform model inference.
 
 ## Design Decisions
 
@@ -119,7 +133,7 @@ Empty `api`, `core`, and `services` directories do not create useful boundaries.
 
 ### Keep Transport and Execution Separate
 
-`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.Provider` separates Recall, proposal, explicit commit, asynchronous Turn sync, and lifecycle ownership behind narrow consumer interfaces; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and RAG evaluation. Agent execution remains in `agent` and `turn`.
+`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.Provider` separates Recall, proposal, explicit commit, asynchronous Turn sync, and lifecycle ownership behind narrow consumer interfaces; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and RAG evaluation. Agent execution remains in `agent`, including its `turn` subpackage.
 
 The HTTP package defines the small service interfaces it consumes. Concrete implementations are selected only by `app`, so adding caching, another embedding implementation, or a different service adapter does not change transport code.
 
@@ -178,7 +192,7 @@ These paths can be followed directly from:
 
 - `apps/api/internal/httpapi/chat.go`
 - `apps/api/internal/agent/runtime.go`
-- `apps/api/internal/turn/`
+- `apps/api/internal/agent/turn/`
 - `apps/api/internal/knowledge/knowledge_base.go`
 - `apps/api/internal/rag/retrieval.go`
 - `apps/api/internal/contextassembly/assembler.go`

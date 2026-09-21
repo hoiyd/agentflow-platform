@@ -42,13 +42,13 @@ capacity, resource consumption, timeouts, and stopping conditions.
 | --- | --- | --- | --- | --- |
 | Run Admission | process + Conversation | active and queued Runs | `concurrency.RunController` | no |
 | Model Request Limiter | process + API key | physical HTTP requests and approximate input tokens | `concurrency.ModelRequestLimiter` | no |
-| Model Route Catalog | one persisted Run | eligible target for one logical Model Call | `modelrouting.Catalog` | route contracts and policy frozen |
+| Model Route Catalog | one persisted Run | eligible target for one logical Model Call | `routing.Catalog` | route contracts and policy frozen |
 | Model Retry | one logical Model Call | physical attempts | `openai.RetryPolicy` | no |
 | Run Budget | one persisted Run | logical calls, provider tokens, tools, active runtime, cost | `budget.Tracker` + Usage Store | yes |
 | Context Assembly | one logical Model Call | context tokens | `contextassembly.Assembler` | config frozen with Run |
 | Loop Guard | one Loop (`autonomous`) Run | iterations and accumulated output characters | `autonomous` runtime | config frozen with Run |
 | Tool Policy | one Tool Call or batch | timeout, bytes, parallel group, side-effect idempotency, artifact spill | `tools.Executor` | schema and side-effect declaration frozen; artifact metadata durable |
-| Tool Progress Guard | one Run | repeated typed failures, unchanged read-only results, alternating loops | `toolprogress.Guard` through `tools.Executor` | thresholds frozen; decisions durable |
+| Tool Progress Guard | one Run | repeated typed failures, unchanged read-only results, alternating loops | `progress.Guard` through `tool.Executor` | thresholds frozen; decisions durable |
 | Verification | one contracted Run | attempts, timeout, artifacts | `verification.Engine` | contract and evidence |
 | Recovery | startup scan + Resume | stale lifecycle, Stage checkpoints, Tool effects | `recovery` + `checkpoint` | recovery state persisted; threshold live |
 | Observability | one Run | Run Events and derived Trace, Replay, and Episode Report views | Event Store / projection builders | durable events only; projections do not enforce policy |

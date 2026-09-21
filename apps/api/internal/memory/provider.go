@@ -11,7 +11,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/redaction"
 )
 
@@ -47,7 +47,7 @@ var (
 )
 
 type Embedder interface {
-	EmbedText(context.Context, string) (modelprovider.Embedding, error)
+	EmbedText(context.Context, string) (provider.Embedding, error)
 }
 
 type ProviderStore interface {
@@ -195,7 +195,7 @@ func (p *BuiltinProvider) Recall(ctx context.Context, search domain.MemorySearch
 		return nil, err
 	}
 	if len(search.Embedding) == 0 {
-		var embedding modelprovider.Embedding
+		var embedding provider.Embedding
 		if err := p.retry(ctx, "recall.embed", func() error {
 			var err error
 			embedding, err = p.embedder.EmbedText(ctx, search.Query)
@@ -254,7 +254,7 @@ func (p *BuiltinProvider) commit(ctx context.Context, item domain.Memory, allowC
 		}
 		item.ID = id
 	}
-	var embedding modelprovider.Embedding
+	var embedding provider.Embedding
 	if err := p.retry(ctx, "commit.embed", func() error {
 		var err error
 		embedding, err = p.embedder.EmbedText(ctx, item.Content)

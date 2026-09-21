@@ -19,7 +19,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/modelrequest"
+	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 )
 
 const (
@@ -273,7 +273,7 @@ func runSample(ctx context.Context, model string, config domain.ContextAssemblyC
 	return sample
 }
 
-func observeModelInput(pack contextassembly.Pack, request contextassembly.Request) (modelrequest.Observation, error) {
+func observeModelInput(pack contextassembly.Pack, request contextassembly.Request) (requestcontrol.Observation, error) {
 	type message struct {
 		Role       string          `json:"role"`
 		Content    string          `json:"content,omitempty"`
@@ -290,9 +290,9 @@ func observeModelInput(pack contextassembly.Pack, request contextassembly.Reques
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return modelrequest.Observation{}, err
+		return requestcontrol.Observation{}, err
 	}
-	return modelrequest.Observation{ModelCallID: pack.Manifest.ModelCallID, Operation: "context.eval.preview", Provider: "offline", Model: request.Model,
+	return requestcontrol.Observation{ModelCallID: pack.Manifest.ModelCallID, Operation: "context.eval.preview", Provider: "offline", Model: request.Model,
 		ContextManifestID: pack.Manifest.ID, SourceTokenBreakdown: sourceTokens(pack.Manifest), Payload: encoded}, nil
 }
 

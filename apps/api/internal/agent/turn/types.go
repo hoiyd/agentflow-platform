@@ -1,0 +1,92 @@
+package turn
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/tool"
+)
+
+type StopReason string
+type ModelMode string
+
+const (
+	StopCompleted StopReason = "completed"
+	StopCanceled  StopReason = "canceled"
+	StopFailed    StopReason = "failed"
+)
+
+const (
+	ModelModeAgentStream ModelMode = "agent_stream"
+	ModelModeText        ModelMode = "text"
+)
+
+var ErrInvalidRequest = failure.New(failure.Definition{
+	Message: "invalid turn request",
+	Info: failure.Info{
+		Code: "invalid_turn_request", Source: "turn",
+		Category: failure.CategoryValidation, Retryable: false,
+	},
+})
+
+type Request struct {
+	RunID          string
+	StepID         string
+	TurnID         string
+	ConversationID string
+	Agent          domain.Agent
+	Role           string
+	SystemPrompt   string
+	History        []domain.Message
+	Input          string
+	ModelMode      ModelMode
+	Catalog        *tool.Catalog
+	Context        Context
+	Metadata       map[string]any
+	Sink           eventpkg.Sink
+}
+
+type Context struct {
+	Memories []domain.RetrievedMemory
+	Chunks   []domain.RetrievedDocumentChunk
+	// Isolated excludes conversation history, compaction, and durable task state
+	// while preserving explicitly retrieved memory and knowledge for this stage.
+	Isolated bool
+}
+
+type Usage struct {
+	Model            string
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+	Estimated        bool
+}
+
+type Result struct {
+	Output     string
+	Usage      Usage
+	StopReason StopReason
+}
+
+type ModelEvent struct {
+	Type       EventType
+	Delta      string
+	ToolName   string
+	ToolCallID string
+	Error      string
+}
+
+type Model interface {
+	Execute(context.Context, Request, func(ModelEvent)) (Result, error)
+}
+
+func (r Request) Validate() error {
+	if strings.TrimSpace(r.Input) == "" {
+		return errors.Join(ErrInvalidRequest, errors.New("turn input is required"))
+	}
+	return nil
+}

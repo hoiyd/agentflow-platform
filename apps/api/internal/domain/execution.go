@@ -3,8 +3,8 @@ package domain
 import (
 	"time"
 
-	"agentflow-platform/apps/api/internal/toolpolicy"
-	"agentflow-platform/apps/api/internal/toolprogress"
+	"agentflow-platform/apps/api/internal/tool/policy"
+	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
 type RunStatus string
@@ -69,8 +69,8 @@ type RuntimeSnapshot struct {
 	Embedding          RuntimeEmbeddingSnapshot  `json:"embedding"`
 	ModelRouting       ModelRouteCatalogSnapshot `json:"model_routing"`
 	Tools              []RuntimeToolSnapshot     `json:"tools"`
-	ToolSecurityPolicy toolpolicy.Policy         `json:"tool_security_policy"`
-	ToolProgressGuard  toolprogress.Config       `json:"tool_progress_guard"`
+	ToolSecurityPolicy policy.Policy             `json:"tool_security_policy"`
+	ToolProgressGuard  progress.Config           `json:"tool_progress_guard"`
 	ContextAssembly    ContextAssemblyConfig     `json:"context_assembly"`
 	RouterMode         string                    `json:"router_mode,omitempty"`
 	AutonomousLimits   *RuntimeLimitsSnapshot    `json:"autonomous_limits,omitempty"`
@@ -223,13 +223,13 @@ type ModelRouteCandidateDecision struct {
 }
 
 type RuntimeToolSnapshot struct {
-	Name               string                `json:"name"`
-	Description        string                `json:"description"`
-	Parameters         map[string]any        `json:"parameters"`
-	SchemaVersion      string                `json:"schema_version,omitempty"`
-	DefinitionRevision string                `json:"definition_revision,omitempty"`
-	SideEffect         string                `json:"side_effect,omitempty"`
-	Security           toolpolicy.Capability `json:"security,omitempty"`
+	Name               string            `json:"name"`
+	Description        string            `json:"description"`
+	Parameters         map[string]any    `json:"parameters"`
+	SchemaVersion      string            `json:"schema_version,omitempty"`
+	DefinitionRevision string            `json:"definition_revision,omitempty"`
+	SideEffect         string            `json:"side_effect,omitempty"`
+	Security           policy.Capability `json:"security,omitempty"`
 }
 
 type RuntimeLimitsSnapshot struct {

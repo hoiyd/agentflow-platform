@@ -13,8 +13,8 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/modelprovider"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/inference/provider"
 )
 
 const (
@@ -160,18 +160,18 @@ func normalizeEmbeddingProfile(options EmbeddingProfileOptions) (EmbeddingProfil
 	return options, nil
 }
 
-func (e *evaluationEmbedder) EmbedText(ctx context.Context, input string) (modelprovider.Embedding, error) {
+func (e *evaluationEmbedder) EmbedText(ctx context.Context, input string) (provider.Embedding, error) {
 	tokens := contextassembly.EstimateTokens(input)
 	phase := embeddingPhase(ctx)
 	if err := e.reserveInput(phase, tokens); err != nil {
-		return modelprovider.Embedding{}, err
+		return provider.Embedding{}, err
 	}
 	embedding, err := e.client.EmbedText(ctx, input)
 	if err != nil {
 		return embedding, err
 	}
 	if err := e.validate(embedding); err != nil {
-		return modelprovider.Embedding{}, err
+		return provider.Embedding{}, err
 	}
 	return embedding, nil
 }
@@ -209,7 +209,7 @@ func (e *evaluationEmbedder) reserveInput(phaseName string, tokens int) error {
 	return nil
 }
 
-func (e *evaluationEmbedder) validate(embedding modelprovider.Embedding) error {
+func (e *evaluationEmbedder) validate(embedding provider.Embedding) error {
 	if len(embedding.Vector) == 0 || embedding.Dimensions != len(embedding.Vector) {
 		return &embeddingProfileError{code: "embedding_invalid_vector", category: failure.CategoryExecution, message: "embedding response returned an empty or inconsistent vector"}
 	}

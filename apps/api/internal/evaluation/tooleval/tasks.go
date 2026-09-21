@@ -13,7 +13,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/redaction"
-	"agentflow-platform/apps/api/internal/toolartifact"
+	"agentflow-platform/apps/api/internal/tool/artifact"
 )
 
 //go:embed testdata/artifact_tasks.json
@@ -136,7 +136,7 @@ func verify(data dataset, task Task, output, artifactID string, evidence []Evide
 
 func observedEvidence(items []Evidence, artifactID, id, quote string, absent bool) bool {
 	for _, item := range items {
-		if item.Tool == toolartifact.SearchToolName {
+		if item.Tool == artifact.SearchToolName {
 			var result domain.ToolArtifactSearchResult
 			if json.Unmarshal(item.Result, &result) != nil || result.Artifact.ID != artifactID {
 				continue
@@ -152,7 +152,7 @@ func observedEvidence(items []Evidence, artifactID, id, quote string, absent boo
 				}
 			}
 		}
-		if !absent && item.Tool == toolartifact.ReadToolName {
+		if !absent && item.Tool == artifact.ReadToolName {
 			var result domain.ToolArtifactRead
 			if json.Unmarshal(item.Result, &result) == nil && result.Artifact.ID == artifactID && strings.Contains(result.Content, quote) {
 				return true

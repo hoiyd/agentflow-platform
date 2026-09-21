@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 )
 
 func TestRuleBasedCandidateExtractorUsesExplicitDurabilitySignals(t *testing.T) {
@@ -41,9 +41,9 @@ type stubCandidateModel struct {
 	calls    int
 }
 
-func (m *stubCandidateModel) CompleteTextDetailed(context.Context, string, string) (modelprovider.TextCompletion, error) {
+func (m *stubCandidateModel) CompleteTextDetailed(context.Context, string, string) (provider.TextCompletion, error) {
 	m.calls++
-	return modelprovider.TextCompletion{Text: m.response}, m.err
+	return provider.TextCompletion{Text: m.response}, m.err
 }
 
 func adaptiveExtractor(model CandidateCompletionModel) AdaptiveCandidateExtractor {

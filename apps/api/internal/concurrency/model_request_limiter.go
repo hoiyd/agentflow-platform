@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"agentflow-platform/apps/api/internal/modelrequest"
+	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 )
 
 type ModelRequestLimits struct {
@@ -30,7 +30,7 @@ type ModelRequestLimiter struct {
 	keys map[string]*apiKeyLimiter
 }
 
-var _ modelrequest.Limiter = (*ModelRequestLimiter)(nil)
+var _ requestcontrol.Limiter = (*ModelRequestLimiter)(nil)
 
 func NewModelRequestLimiter(limits ModelRequestLimits) *ModelRequestLimiter {
 	if limits.MaxConcurrent <= 0 {
@@ -106,7 +106,7 @@ func (l *apiKeyLimiter) take(ctx context.Context, tokenCost int) error {
 		tokenWait, tokenOK := l.tokens.waitDuration(now, float64(tokenCost))
 		if !tokenOK {
 			l.mu.Unlock()
-			return &modelrequest.TokenBucketCapacityError{EstimatedTokens: tokenCost, Capacity: int(l.tokens.capacity)}
+			return &requestcontrol.TokenBucketCapacityError{EstimatedTokens: tokenCost, Capacity: int(l.tokens.capacity)}
 		}
 		if requestWait <= 0 && tokenWait <= 0 {
 			l.requests.consume(1)

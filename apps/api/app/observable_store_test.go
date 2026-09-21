@@ -10,8 +10,8 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/inference/openai"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
-	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/store"
 )
 

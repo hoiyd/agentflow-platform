@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/domain"
-	turnpkg "agentflow-platform/apps/api/internal/turn"
 )
 
 var errRunCanceled = errors.New("run canceled")
