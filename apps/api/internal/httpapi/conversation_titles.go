@@ -8,12 +8,12 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/store"
 )
 
 type runModelResolver interface {
-	ModelClientForRun(string) (modelprovider.Client, error)
+	ModelClientForRun(string) (provider.Client, error)
 }
 
 func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, scoped store.WorkspaceStore, runID string, conversationID string, userMessage string, assistantMessage string) string {

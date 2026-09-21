@@ -60,7 +60,7 @@ external service. A settlement failure must leave the effect in
 
 ## Selection dataset
 
-`internal/tools/testdata/tool_selection_golden.json` is a versioned,
+`internal/tool/testdata/tool_selection_golden.json` is a versioned,
 deterministic dataset. It covers ordinary no-Tool and correct-Tool decisions,
 similar Tool confusion, invalid arguments, execution failure recovery, required
 evidence, unsupported tasks, and every current model-visible Binding.
@@ -91,8 +91,8 @@ the production client/Executor path, separately from selection scoring.
 
 ```bash
 cd apps/api
-go test ./internal/tools ./internal/taskstate
-go test -race ./internal/tools ./internal/taskstate
+go test ./internal/tool ./internal/taskstate
+go test -race ./internal/tool ./internal/taskstate
 ```
 
 The shared harness supplements owner tests; it does not replace assertions for

@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 const SelectionDatasetVersion = "tool-selection-v1"
@@ -74,7 +74,7 @@ func ParseSelectionDataset(data []byte) (SelectionDataset, error) {
 	return dataset, nil
 }
 
-func EvaluateSelection(catalog *tools.Catalog, item SelectionCase, candidate SelectionCandidate) []SelectionFinding {
+func EvaluateSelection(catalog *tool.Catalog, item SelectionCase, candidate SelectionCandidate) []SelectionFinding {
 	findings := make([]SelectionFinding, 0)
 	if candidate.Decision != item.Expected.Decision {
 		findings = append(findings, SelectionFinding{Code: "decision_mismatch", Message: "Tool/no-Tool decision differs from expectation"})
@@ -92,8 +92,8 @@ func EvaluateSelection(catalog *tools.Catalog, item SelectionCase, candidate Sel
 		findings = append(findings, SelectionFinding{Code: "tool_mismatch", Message: "selected Tool differs from expectation"})
 	}
 	_, contractErr := catalog.ValidateCall(candidate.Tool, candidate.Arguments)
-	if item.Expected.Outcome == string(tools.ErrorInvalidArgs) {
-		if contractErr == nil || contractErr.Code != tools.ErrorInvalidArgs {
+	if item.Expected.Outcome == string(tool.ErrorInvalidArgs) {
+		if contractErr == nil || contractErr.Code != tool.ErrorInvalidArgs {
 			findings = append(findings, SelectionFinding{Code: "argument_outcome_mismatch", Message: "arguments did not produce the expected validation failure"})
 		}
 	} else if contractErr != nil {
@@ -131,7 +131,7 @@ func validateSelectionCase(item SelectionCase) error {
 			return errors.New("Tool expectation requires Tool, arguments, and outcome")
 		}
 		switch item.Expected.Outcome {
-		case "success", string(tools.ErrorInvalidArgs), string(tools.ErrorExecutionFailed):
+		case "success", string(tool.ErrorInvalidArgs), string(tool.ErrorExecutionFailed):
 		default:
 			return fmt.Errorf("unsupported Tool outcome %q", item.Expected.Outcome)
 		}

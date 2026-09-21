@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/requestcapture"
+	"agentflow-platform/apps/api/internal/inference/capture"
 )
 
 type modelRequestDebugRecord struct {
@@ -78,7 +78,7 @@ func (h *Handler) listModelRequests(w http.ResponseWriter, r *http.Request) {
 		items = append(items, item)
 	}
 	response := modelRequestDebugResponse{RunID: id, ReconstructabilityStatus: "valid", Records: items}
-	if err := requestcapture.ValidateReconstructability(run, records, events); err != nil {
+	if err := capture.ValidateReconstructability(run, records, events); err != nil {
 		response.ReconstructabilityStatus = "invalid"
 		response.InvariantError = err.Error()
 	}

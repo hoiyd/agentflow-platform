@@ -11,7 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/modelrouting"
+	"agentflow-platform/apps/api/internal/inference/routing"
 )
 
 func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
@@ -876,7 +876,7 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 	if replay.RuntimeSnapshot.ContextAssembly.AssemblerVersion != "context-assembler-v1" {
 		t.Fatalf("expected context assembly config round trip, got %#v", replay.RuntimeSnapshot.ContextAssembly)
 	}
-	if replay.RuntimeSnapshot.ModelRouting.PolicyRevision != modelrouting.PolicyRevision || len(replay.RuntimeSnapshot.ModelRouting.Routes) != 1 || replay.RuntimeSnapshot.ModelRouting.Routes[0].ID != "primary" {
+	if replay.RuntimeSnapshot.ModelRouting.PolicyRevision != routing.PolicyRevision || len(replay.RuntimeSnapshot.ModelRouting.Routes) != 1 || replay.RuntimeSnapshot.ModelRouting.Routes[0].ID != "primary" {
 		t.Fatalf("expected model route catalog round trip, got %#v", replay.RuntimeSnapshot.ModelRouting)
 	}
 	if replay.RuntimeSnapshot.ToolSecurityPolicy.Version != "round-trip-policy-v1" || replay.RuntimeSnapshot.ToolSecurityPolicy.DefaultAction != "deny" {

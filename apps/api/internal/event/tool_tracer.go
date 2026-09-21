@@ -7,9 +7,9 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/toolpolicy"
-	"agentflow-platform/apps/api/internal/toolprogress"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/policy"
+	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
 type ToolExecutionTracer struct {
@@ -20,7 +20,7 @@ type ToolExecutionTracer struct {
 	spans    map[string]Span
 }
 
-func (t *ToolExecutionTracer) ToolPolicyEvaluated(ctx context.Context, request tools.ExecutionRequest, decision toolpolicy.Decision) error {
+func (t *ToolExecutionTracer) ToolPolicyEvaluated(ctx context.Context, request tool.ExecutionRequest, decision policy.Decision) error {
 	if t == nil || t.recorder == nil || t.recorder.store == nil {
 		return errors.New("Tool policy event recorder is unavailable")
 	}
@@ -61,17 +61,17 @@ func NewToolExecutionTracer(recorder *Recorder, runID, stepID string) *ToolExecu
 	}
 }
 
-func (t *ToolExecutionTracer) ToolProgressEvaluated(ctx context.Context, request tools.ExecutionRequest, decision toolprogress.Decision) {
+func (t *ToolExecutionTracer) ToolProgressEvaluated(ctx context.Context, request tool.ExecutionRequest, decision progress.Decision) {
 	if t == nil || t.recorder == nil || t.recorder.store == nil {
 		return
 	}
 	eventType := domain.EventToolGuardWarned
 	switch decision.Action {
-	case toolprogress.ActionBlockCall:
+	case progress.ActionBlockCall:
 		eventType = domain.EventToolGuardBlocked
-	case toolprogress.ActionHaltTurn:
+	case progress.ActionHaltTurn:
 		eventType = domain.EventTurnNoProgress
-	case toolprogress.ActionWarn:
+	case progress.ActionWarn:
 	default:
 		return
 	}
@@ -100,7 +100,7 @@ func (t *ToolExecutionTracer) ToolProgressEvaluated(ctx context.Context, request
 	_, _ = t.recorder.store.CreateRunEvent(event)
 }
 
-func (t *ToolExecutionTracer) ToolStarted(ctx context.Context, request tools.ExecutionRequest) {
+func (t *ToolExecutionTracer) ToolStarted(ctx context.Context, request tool.ExecutionRequest) {
 	if t == nil || t.recorder == nil {
 		return
 	}
@@ -116,7 +116,7 @@ func (t *ToolExecutionTracer) ToolStarted(ctx context.Context, request tools.Exe
 	t.mu.Unlock()
 }
 
-func (t *ToolExecutionTracer) ToolFinished(ctx context.Context, result tools.ExecutionResult) {
+func (t *ToolExecutionTracer) ToolFinished(ctx context.Context, result tool.ExecutionResult) {
 	if t == nil || t.recorder == nil {
 		return
 	}

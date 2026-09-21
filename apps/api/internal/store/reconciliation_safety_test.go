@@ -14,23 +14,23 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/toolpolicy"
-	"agentflow-platform/apps/api/internal/toolreconciliation"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/policy"
+	"agentflow-platform/apps/api/internal/tool/reconciliation"
 )
 
-func safetyFixture(t *testing.T, callbacks tools.SideEffectReconciliation) (Store, func() Store, domain.Run, *tools.Catalog, domain.ToolEffectRecord) {
+func safetyFixture(t *testing.T, callbacks tool.SideEffectReconciliation) (Store, func() Store, domain.Run, *tool.Catalog, domain.ToolEffectRecord) {
 	t.Helper()
-	binding := tools.Binding{
-		Descriptor: tools.Descriptor{Name: "write_record", Description: "writes a record", Parameters: tools.ObjectSchema(nil, nil),
-			SideEffect: tools.SideEffectPolicy{Mode: tools.SideEffectExternal, RetryWithSameKey: callbacks.RetryWithSameKey != nil, Compensate: callbacks.Compensate != nil},
-			Security:   toolpolicy.NormalizeCapability(toolpolicy.Capability{SideEffect: toolpolicy.SideEffectExternalWrite, Reversibility: toolpolicy.Compensatable}),
+	binding := tool.Binding{
+		Descriptor: tool.Descriptor{Name: "write_record", Description: "writes a record", Parameters: tool.ObjectSchema(nil, nil),
+			SideEffect: tool.SideEffectPolicy{Mode: tool.SideEffectExternal, RetryWithSameKey: callbacks.RetryWithSameKey != nil, Compensate: callbacks.Compensate != nil},
+			Security:   policy.NormalizeCapability(policy.Capability{SideEffect: policy.SideEffectExternalWrite, Reversibility: policy.Compensatable}),
 		},
 		Handler:        func(context.Context, json.RawMessage) (any, error) { return nil, nil },
 		Reconciliation: callbacks,
 	}
-	catalog, err := tools.NewCatalogWithPolicy(toolpolicy.Policy{Version: toolpolicy.CurrentVersion, DefaultAction: toolpolicy.ActionDeny,
-		Rules: []toolpolicy.Rule{{ID: "recovery", Tool: binding.Descriptor.Name, Action: toolpolicy.ActionAllowAndLog, Capability: binding.Descriptor.Security}},
+	catalog, err := tool.NewCatalogWithPolicy(policy.Policy{Version: policy.CurrentVersion, DefaultAction: policy.ActionDeny,
+		Rules: []policy.Rule{{ID: "recovery", Tool: binding.Descriptor.Name, Action: policy.ActionAllowAndLog, Capability: binding.Descriptor.Security}},
 	}, binding)
 	if err != nil {
 		t.Fatal(err)
@@ -72,8 +72,8 @@ func safetyFixture(t *testing.T, callbacks tools.SideEffectReconciliation) (Stor
 	return target, open, run, catalog, effect
 }
 
-func retryCommand(effect domain.ToolEffectRecord) toolreconciliation.ToolEffectReconciliationCommand {
-	return toolreconciliation.ToolEffectReconciliationCommand{CommandID: "retry-1", Action: domain.ToolEffectRetrySameKey,
+func retryCommand(effect domain.ToolEffectRecord) reconciliation.ToolEffectReconciliationCommand {
+	return reconciliation.ToolEffectReconciliationCommand{CommandID: "retry-1", Action: domain.ToolEffectRetrySameKey,
 		ExpectedVersion: effect.Version, Actor: "operator", Reason: "checked provider"}
 }
 
@@ -83,8 +83,8 @@ func TestCallbackClaimSerializesConcurrentCommands(t *testing.T) {
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
 	var calls atomic.Int32
-	target, _, run, catalog, effect := safetyFixture(t, tools.SideEffectReconciliation{
-		RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
+	target, _, run, catalog, effect := safetyFixture(t, tool.SideEffectReconciliation{
+		RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) {
 			if calls.Add(1) == 1 {
 				close(entered)
 			}
@@ -95,7 +95,7 @@ func TestCallbackClaimSerializesConcurrentCommands(t *testing.T) {
 	command := retryCommand(effect)
 	done := make(chan error, 1)
 	go func() {
-		result, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command)
+		result, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command)
 		if err == nil && (result.Effect.Status != domain.ToolEffectCommitted || result.Effect.Version != effect.Version+2) {
 			err = errors.New("incorrect settlement")
 		}
@@ -118,12 +118,12 @@ func TestCallbackClaimSerializesConcurrentCommands(t *testing.T) {
 			if index%3 == 2 {
 				other.Reason = "changed payload"
 			}
-			result, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, other)
+			result, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, other)
 			if index%3 == 0 {
 				if err != nil || result.Applied || result.Outcome != "pending" || result.Effect.Status != domain.ToolEffectReconciling || len(result.Effect.AvailableActions) != 2 {
 					t.Errorf("duplicate: %#v %v", result, err)
 				}
-			} else if reconciliationCode(err) != toolreconciliation.ReconciliationConflict {
+			} else if reconciliationCode(err) != reconciliation.ReconciliationConflict {
 				t.Errorf("expected conflict: %v", err)
 			}
 		}(i)
@@ -142,7 +142,7 @@ func TestCallbackClaimSerializesConcurrentCommands(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	duplicate, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command)
+	duplicate, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command)
 	if err != nil || duplicate.Applied || duplicate.Outcome != "completed" || calls.Load() != 1 {
 		t.Fatalf("settled duplicate: %#v %v", duplicate, err)
 	}
@@ -170,11 +170,11 @@ func TestClaimAndSettlementFailureWindows(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			var calls atomic.Int32
-			target, reopen, run, catalog, effect := safetyFixture(t, tools.SideEffectReconciliation{
-				RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) { calls.Add(1); return true, nil },
+			target, reopen, run, catalog, effect := safetyFixture(t, tool.SideEffectReconciliation{
+				RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) { calls.Add(1); return true, nil },
 			})
 			command := retryCommand(effect)
-			_, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, failingSettlementStore{target, failClaim}, run, effect.IdempotencyKey, command)
+			_, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, failingSettlementStore{target, failClaim}, run, effect.IdempotencyKey, command)
 			if err == nil {
 				t.Fatal("expected persistence failure")
 			}
@@ -192,13 +192,13 @@ func TestClaimAndSettlementFailureWindows(t *testing.T) {
 			if calls.Load() != 1 || effects[0].Status != domain.ToolEffectReconciling {
 				t.Fatal("lost durable claim")
 			}
-			duplicate, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, restarted, run, effect.IdempotencyKey, command)
+			duplicate, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, restarted, run, effect.IdempotencyKey, command)
 			if err != nil || duplicate.Outcome != "pending" || calls.Load() != 1 {
 				t.Fatalf("replayed unknown callback: %#v %v", duplicate, err)
 			}
 			confirm := command
 			confirm.CommandID, confirm.Action, confirm.ExpectedVersion = "manual", domain.ToolEffectConfirmFailed, effects[0].Version
-			result, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, restarted, run, effect.IdempotencyKey, confirm)
+			result, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, restarted, run, effect.IdempotencyKey, confirm)
 			if err != nil || result.Effect.Status != domain.ToolEffectFailed {
 				t.Fatalf("manual recovery: %#v %v", result, err)
 			}
@@ -212,8 +212,8 @@ func TestClaimAndSettlementFailureWindows(t *testing.T) {
 
 func TestCanceledCallbackRemainsClaimedAndCannotOverwriteManualResolution(t *testing.T) {
 	entered, release, finished := make(chan struct{}), make(chan struct{}), make(chan struct{})
-	target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{
-		RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
+	target, run, catalog, effect := postgresReconciliationFixture(t, tool.SideEffectReconciliation{
+		RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) {
 			close(entered)
 			<-release
 			defer close(finished)
@@ -232,9 +232,9 @@ func TestCanceledCallbackRemainsClaimedAndCannotOverwriteManualResolution(t *tes
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	command := retryCommand(effect)
-	done := make(chan toolreconciliation.ToolEffectReconciliationOutcome, 1)
+	done := make(chan reconciliation.ToolEffectReconciliationOutcome, 1)
 	go func() {
-		result, err := toolreconciliation.ReconcileToolEffect(ctx, catalog, target, run, effect.IdempotencyKey, command)
+		result, err := reconciliation.ReconcileToolEffect(ctx, catalog, target, run, effect.IdempotencyKey, command)
 		if err != nil {
 			t.Error(err)
 		}
@@ -246,7 +246,7 @@ func TestCanceledCallbackRemainsClaimedAndCannotOverwriteManualResolution(t *tes
 		t.Fatal("callback did not start")
 	}
 	cancel()
-	var result toolreconciliation.ToolEffectReconciliationOutcome
+	var result reconciliation.ToolEffectReconciliationOutcome
 	select {
 	case result = <-done:
 	case <-time.After(time.Second):
@@ -257,18 +257,18 @@ func TestCanceledCallbackRemainsClaimedAndCannotOverwriteManualResolution(t *tes
 	}
 	other := command
 	other.CommandID, other.ExpectedVersion = "second", result.Effect.Version
-	if _, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, other); reconciliationCode(err) != toolreconciliation.ReconciliationConflict {
+	if _, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, other); reconciliationCode(err) != reconciliation.ReconciliationConflict {
 		t.Fatalf("callback reopened: %v", err)
 	}
 	other.Action = domain.ToolEffectConfirmCommitted
-	other.Result = json.RawMessage(`"` + strings.Repeat("x", tools.DefaultMaxResultBytes-2) + `"`)
-	invalid, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, other)
+	other.Result = json.RawMessage(`"` + strings.Repeat("x", tool.DefaultMaxResultBytes-2) + `"`)
+	invalid, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, other)
 	if err != nil || invalid.Outcome != "failed" || invalid.Effect.Status != domain.ToolEffectReconciling {
 		t.Fatalf("invalid confirmation released callback claim: %#v %v", invalid, err)
 	}
 	other.CommandID, other.ExpectedVersion = "valid-confirmation", invalid.Effect.Version
 	other.Result = json.RawMessage(`{"checked":true}`)
-	confirmed, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, other)
+	confirmed, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, other)
 	if err != nil || confirmed.Effect.Status != domain.ToolEffectCommitted {
 		t.Fatalf("manual confirmation: %#v %v", confirmed, err)
 	}
@@ -277,7 +277,7 @@ func TestCanceledCallbackRemainsClaimedAndCannotOverwriteManualResolution(t *tes
 func TestReconciliationRedactsAllPersistedSurfaces(t *testing.T) {
 	for _, action := range []domain.ToolEffectReconciliationAction{domain.ToolEffectConfirmCommitted, domain.ToolEffectConfirmFailed, domain.ToolEffectRetrySameKey} {
 		t.Run(string(action), func(t *testing.T) {
-			target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
+			target, run, catalog, effect := postgresReconciliationFixture(t, tool.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) {
 				return nil, errors.New("Bearer callback-secret")
 			}})
 			command := retryCommand(effect)
@@ -285,7 +285,7 @@ func TestReconciliationRedactsAllPersistedSurfaces(t *testing.T) {
 			if action == domain.ToolEffectConfirmCommitted {
 				command.Result = json.RawMessage(`{"authorization":"result-secret","nested":["Bearer nested-secret"]}`)
 			}
-			if _, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command); err != nil {
+			if _, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, command); err != nil {
 				t.Fatal(err)
 			}
 			effects, _ := target.ListToolEffects(run.ID)
@@ -304,24 +304,24 @@ func TestReconciliationRedactsAllPersistedSurfaces(t *testing.T) {
 func TestReconciliationPolicyAndEnablementFailClosed(t *testing.T) {
 	for _, mode := range []string{"denied", "disabled", "credential", "approval"} {
 		t.Run(mode, func(t *testing.T) {
-			target, run, catalog, effect := postgresReconciliationFixture(t, tools.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tools.EffectReconciliationContext) (any, error) {
+			target, run, catalog, effect := postgresReconciliationFixture(t, tool.SideEffectReconciliation{RetryWithSameKey: func(context.Context, tool.EffectReconciliationContext) (any, error) {
 				t.Error("unauthorized callback")
 				return nil, nil
 			}})
 			binding, _ := catalog.Resolve(effect.ToolName)
-			policy := catalog.SecurityPolicy()
+			securityPolicy := catalog.SecurityPolicy()
 			switch mode {
 			case "denied":
-				policy.Rules[0].Action = toolpolicy.ActionDeny
+				securityPolicy.Rules[0].Action = policy.ActionDeny
 			case "credential":
 				binding.Descriptor.DefinitionRevision = ""
 				binding.Descriptor.Security.Scope.Credentials = []string{"payments"}
-				policy.Rules[0].Capability = binding.Descriptor.Security
+				securityPolicy.Rules[0].Capability = binding.Descriptor.Security
 			case "approval":
-				policy.Rules[0].Action = toolpolicy.ActionAsk
+				securityPolicy.Rules[0].Action = policy.ActionAsk
 			}
 			var err error
-			catalog, err = tools.NewCatalogWithPolicy(policy, binding)
+			catalog, err = tool.NewCatalogWithPolicy(securityPolicy, binding)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -329,7 +329,7 @@ func TestReconciliationPolicyAndEnablementFailClosed(t *testing.T) {
 				current, _ := catalog.Resolve(effect.ToolName)
 				effect.DefinitionRevision = current.Descriptor.DefinitionRevision
 				targetAdapter := &reconciliationRecordView{Store: target, effects: []domain.ToolEffectRecord{effect}}
-				if _, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, targetAdapter, run, effect.IdempotencyKey, retryCommand(effect)); reconciliationCode(err) != toolreconciliation.ReconciliationUnavailable {
+				if _, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, targetAdapter, run, effect.IdempotencyKey, retryCommand(effect)); reconciliationCode(err) != reconciliation.ReconciliationUnavailable {
 					t.Fatalf("credentials: %v", err)
 				}
 				return
@@ -337,7 +337,7 @@ func TestReconciliationPolicyAndEnablementFailClosed(t *testing.T) {
 			if mode == "disabled" {
 				_ = catalog.SetEnabled(effect.ToolName, false)
 			}
-			if _, err := toolreconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, retryCommand(effect)); reconciliationCode(err) != toolreconciliation.ReconciliationUnavailable {
+			if _, err := reconciliation.ReconcileToolEffect(context.Background(), catalog, target, run, effect.IdempotencyKey, retryCommand(effect)); reconciliationCode(err) != reconciliation.ReconciliationUnavailable {
 				t.Fatalf("policy: %v", err)
 			}
 			events, _ := target.ListRunEvents(run.ID)
@@ -348,7 +348,7 @@ func TestReconciliationPolicyAndEnablementFailClosed(t *testing.T) {
 	}
 }
 
-func postgresReconciliationFixture(t *testing.T, callbacks tools.SideEffectReconciliation) (*PostgresStore, domain.Run, *tools.Catalog, domain.ToolEffectRecord) {
+func postgresReconciliationFixture(t *testing.T, callbacks tool.SideEffectReconciliation) (*PostgresStore, domain.Run, *tool.Catalog, domain.ToolEffectRecord) {
 	target, _, run, catalog, effect := safetyFixture(t, callbacks)
 	return target.(*PostgresStore), run, catalog, effect
 }
@@ -362,7 +362,7 @@ func (s reconciliationRecordView) ListToolEffects(string) ([]domain.ToolEffectRe
 	return s.effects, nil
 }
 func reconciliationCode(err error) string {
-	var typed *toolreconciliation.ReconciliationError
+	var typed *reconciliation.ReconciliationError
 	if errors.As(err, &typed) {
 		return typed.Code
 	}

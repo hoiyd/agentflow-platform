@@ -7,25 +7,25 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/toolpolicy"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/policy"
 )
 
 const UpdateToolName = "update_task_state"
 
-func (s *Service) ToolBinding() tools.Binding {
-	return tools.Binding{
-		Descriptor: tools.Descriptor{
+func (s *Service) ToolBinding() tool.Binding {
+	return tool.Binding{
+		Descriptor: tool.Descriptor{
 			Name:        UpdateToolName,
 			Description: "Apply a version-checked patch to durable conversation task state. Use the version shown in <task_state>; use 0 when no task state exists. Patch only facts that actually changed.",
-			Concurrency: tools.ConcurrencyPolicy{Mode: tools.ConcurrencySerial},
-			SideEffect:  tools.SideEffectPolicy{Mode: tools.SideEffectExternal},
-			Security: toolpolicy.NormalizeCapability(toolpolicy.Capability{
-				Scope: toolpolicy.Scope{Resources: []toolpolicy.ResourceScope{{
-					Kind: toolpolicy.ResourceConversation, Name: "task_state", Access: toolpolicy.AccessWrite,
+			Concurrency: tool.ConcurrencyPolicy{Mode: tool.ConcurrencySerial},
+			SideEffect:  tool.SideEffectPolicy{Mode: tool.SideEffectExternal},
+			Security: policy.NormalizeCapability(policy.Capability{
+				Scope: policy.Scope{Resources: []policy.ResourceScope{{
+					Kind: policy.ResourceConversation, Name: "task_state", Access: policy.AccessWrite,
 				}}},
-				SideEffect: toolpolicy.SideEffectInternalWrite, Reversibility: toolpolicy.Compensatable,
-				Visibility: toolpolicy.VisibilityUser, Audit: toolpolicy.AuditFull,
+				SideEffect: policy.SideEffectInternalWrite, Reversibility: policy.Compensatable,
+				Visibility: policy.VisibilityUser, Audit: policy.AuditFull,
 			}),
 			Parameters: taskStatePatchSchema(),
 		},
@@ -58,7 +58,7 @@ func (s *Service) ToolBinding() tools.Binding {
 func taskStatePatchSchema() map[string]any {
 	stringID := map[string]any{"type": "string", "minLength": 1, "maxLength": 128}
 	artifactRefs := map[string]any{"type": "array", "maxItems": 20, "items": map[string]any{"type": "string", "minLength": 1, "maxLength": 500}}
-	return tools.ObjectSchema(map[string]any{
+	return tool.ObjectSchema(map[string]any{
 		"expected_version": map[string]any{"type": "integer", "minimum": 0},
 		"operations": map[string]any{
 			"type": "array", "minItems": 1, "maxItems": 50,
@@ -74,22 +74,22 @@ func taskStatePatchSchema() map[string]any {
 					"goal":        map[string]any{"type": "string", "maxLength": 2000},
 					"task_id":     stringID,
 					"task_status": map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "canceled"}},
-					"task": tools.ObjectSchema(map[string]any{
+					"task": tool.ObjectSchema(map[string]any{
 						"id": stringID, "title": map[string]any{"type": "string", "minLength": 1, "maxLength": 500},
 						"details":       map[string]any{"type": "string", "maxLength": 2000},
 						"status":        map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "canceled"}},
 						"artifact_refs": artifactRefs,
 					}, []string{"id", "title", "status"}),
-					"decision": tools.ObjectSchema(map[string]any{
+					"decision": tool.ObjectSchema(map[string]any{
 						"id": stringID, "statement": map[string]any{"type": "string", "minLength": 1, "maxLength": 1000},
 						"rationale": map[string]any{"type": "string", "maxLength": 2000}, "supersedes_id": stringID,
 					}, []string{"id", "statement"}),
 					"constraint_id": stringID,
-					"constraint": tools.ObjectSchema(map[string]any{
+					"constraint": tool.ObjectSchema(map[string]any{
 						"id": stringID, "statement": map[string]any{"type": "string", "minLength": 1, "maxLength": 1000},
 					}, []string{"id", "statement"}),
 					"blocker_id": stringID,
-					"blocker": tools.ObjectSchema(map[string]any{
+					"blocker": tool.ObjectSchema(map[string]any{
 						"id": stringID, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": 1000},
 						"status": map[string]any{"type": "string", "enum": []string{"open", "resolved"}},
 					}, []string{"id", "description", "status"}),

@@ -27,12 +27,12 @@ import (
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/inference/provider"
+	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 	"agentflow-platform/apps/api/internal/memory"
-	"agentflow-platform/apps/api/internal/modelprovider"
-	"agentflow-platform/apps/api/internal/modelrequest"
-	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 const reportSchema = "agentflow-bounded-load-report-v1"
@@ -272,9 +272,9 @@ type gatedEmbedder struct {
 	release chan struct{}
 }
 
-func (e *gatedEmbedder) EmbedText(context.Context, string) (modelprovider.Embedding, error) {
+func (e *gatedEmbedder) EmbedText(context.Context, string) (provider.Embedding, error) {
 	<-e.release
-	return modelprovider.Embedding{Provider: "load-fixture", Model: "load-fixture", Vector: []float64{1}}, nil
+	return provider.Embedding{Provider: "load-fixture", Model: "load-fixture", Vector: []float64{1}}, nil
 }
 
 type harness struct {
@@ -286,7 +286,7 @@ type harness struct {
 	store          *fixturestore.Store
 	memoryProvider *memory.BuiltinProvider
 	memoryEmbedder *gatedEmbedder
-	toolExecutor   *tools.Executor
+	toolExecutor   *tool.Executor
 	toolActive     atomic.Int64
 	toolPeak       atomic.Int64
 	memoryAccepted atomic.Int64
@@ -318,20 +318,20 @@ func newHarness(t *testing.T, config suiteConfig) *harness {
 		memoryProvider: memoryProvider, memoryEmbedder: embedder,
 	}
 	t.Cleanup(func() { harness.close(t) })
-	catalog, err := tools.NewCatalog(
-		harness.loadTool("load_probe", config.ToolDelay, tools.ExecutionPolicy{}),
-		harness.loadTool("slow_load_probe", config.ToolDelay*10, tools.ExecutionPolicy{Timeout: config.ToolDelay}),
+	catalog, err := tool.NewCatalog(
+		harness.loadTool("load_probe", config.ToolDelay, tool.ExecutionPolicy{}),
+		harness.loadTool("slow_load_probe", config.ToolDelay*10, tool.ExecutionPolicy{Timeout: config.ToolDelay}),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	harness.toolExecutor = tools.NewExecutor(catalog, tools.ExecutorOptions{})
+	harness.toolExecutor = tool.NewExecutor(catalog, tool.ExecutorOptions{})
 	return harness
 }
 
-func (h *harness) loadTool(name string, delay time.Duration, policy tools.ExecutionPolicy) tools.Binding {
-	return tools.Binding{
-		Descriptor: tools.Descriptor{Name: name, Parameters: tools.ObjectSchema(nil, nil)}, Policy: policy,
+func (h *harness) loadTool(name string, delay time.Duration, policy tool.ExecutionPolicy) tool.Binding {
+	return tool.Binding{
+		Descriptor: tool.Descriptor{Name: name, Parameters: tool.ObjectSchema(nil, nil)}, Policy: policy,
 		Handler: func(ctx context.Context, _ json.RawMessage) (any, error) {
 			active := h.toolActive.Add(1)
 			updatePeak(&h.toolPeak, active)
@@ -394,7 +394,7 @@ func (h *harness) runReservation(phase string, task int, writerID string, reserv
 		ctx = budget.WithController(ctx, budget.NewTracker(h.store, nil, run))
 		_, err = h.client.CompleteTextDetailed(ctx, "Return ok.", fmt.Sprintf("phase=%s task=%d", phase, task))
 		if err == nil {
-			result := h.toolExecutor.Execute(ctx, tools.ExecutionRequest{
+			result := h.toolExecutor.Execute(ctx, tool.ExecutionRequest{
 				CallID: fmt.Sprintf("tool-%s-%d", phase, task), RunID: run.ID,
 				Tool: "load_probe", Arguments: json.RawMessage(`{}`),
 			})
@@ -539,7 +539,7 @@ func exerciseFailureBoundaries(t *testing.T, harness *harness) controlReport {
 	} else {
 		result.Provider429Code = failure.Describe(err).Code
 	}
-	toolResult := harness.toolExecutor.Execute(context.Background(), tools.ExecutionRequest{
+	toolResult := harness.toolExecutor.Execute(context.Background(), tool.ExecutionRequest{
 		Tool: "slow_load_probe", Arguments: json.RawMessage(`{}`),
 	})
 	if toolResult.Error == nil {
@@ -626,7 +626,7 @@ func exerciseFailureBoundaries(t *testing.T, harness *harness) controlReport {
 		release()
 	}
 	_, err = rateLimiter.AcquireRequest(context.Background(), "token-key", 11)
-	var capacityErr *modelrequest.TokenBucketCapacityError
+	var capacityErr *requestcontrol.TokenBucketCapacityError
 	if errors.As(err, &capacityErr) {
 		result.TPMCapacityCode = failure.Describe(err).Code
 	}

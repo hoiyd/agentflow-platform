@@ -91,7 +91,7 @@ gain recovery authority retroactively.
 ## Execution Boundary
 
 Callbacks must be enabled, match the recorded definition revision, and pass
-`toolpolicy.Evaluate` using their full declared scope and the current operator
+`policy.Evaluate` using their full declared scope and the current operator
 policy. A missing rule, `ask`/`human_only`, revoked enablement, or unavailable
 credential scope fails closed before a claim. There is no credential resolver
 on this path yet; declaring a credential scope does not supply a credential.

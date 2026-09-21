@@ -18,7 +18,7 @@ import (
 	"agentflow-platform/apps/api/internal/evaluation/rageval"
 	"agentflow-platform/apps/api/internal/evaluation/routeeval"
 	"agentflow-platform/apps/api/internal/evaluation/tooleval"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/inference/openai"
 )
 
 func main() {

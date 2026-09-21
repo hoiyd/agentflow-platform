@@ -18,9 +18,9 @@ import (
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/evaluation/evalreport"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/redaction"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 const (
@@ -162,7 +162,7 @@ type Report struct {
 	Gate          evalreport.Gate    `json:"gate"`
 }
 
-func Run(ctx context.Context, completer modelprovider.TextCompleter, opts Options) (Report, error) {
+func Run(ctx context.Context, completer provider.TextCompleter, opts Options) (Report, error) {
 	data, datasetHash, err := loadDataset(opts.DatasetPath)
 	if err != nil {
 		return Report{}, err
@@ -179,7 +179,7 @@ func Run(ctx context.Context, completer modelprovider.TextCompleter, opts Option
 	} else if completer == nil || opts.Trials < 1 || opts.Trials > 20 || opts.MaxModelCalls < 1 || opts.MaxTotalTokens < 1 || opts.Timeout <= 0 || opts.Timeout > 5*time.Minute {
 		return Report{}, errors.New("live routing requires a model client, 1-20 trials, positive call/token budgets and sample timeout <= 5m")
 	}
-	catalog := tools.DefaultCatalog()
+	catalog := tool.DefaultCatalog()
 	systemPrompt, _ := agent.AgentRoutingPrompts("", "", domain.AgentRoutingRequirements{}, nil)
 	startedAt := time.Now().UTC()
 	report := Report{
@@ -227,19 +227,19 @@ func Run(ctx context.Context, completer modelprovider.TextCompleter, opts Option
 	return report, nil
 }
 
-func evaluateSample(ctx context.Context, completer modelprovider.TextCompleter, catalog *tools.Catalog, agents []domain.Agent, item EvaluationCase, opts Options, remainingTokens int) (agent.RoutingEvaluationResult, modelprovider.Usage, int64, string) {
+func evaluateSample(ctx context.Context, completer provider.TextCompleter, catalog *tool.Catalog, agents []domain.Agent, item EvaluationCase, opts Options, remainingTokens int) (agent.RoutingEvaluationResult, provider.Usage, int64, string) {
 	input := agent.RoutingEvaluationInput{Agents: agents, Catalog: catalog, Task: item.Task, Plan: item.Plan,
 		Requirements: item.Requirements, RouterMode: opts.RouterMode}
 	started := time.Now()
 	if opts.RouterMode == agent.RouterModeAuto {
 		eligible := eligibleAgents(agents, catalog, item.Requirements)
 		if len(eligible) == 0 {
-			return agent.EvaluateAgentRouting(input), modelprovider.Usage{}, time.Since(started).Milliseconds(), ""
+			return agent.EvaluateAgentRouting(input), provider.Usage{}, time.Since(started).Milliseconds(), ""
 		}
 		systemPrompt, userPrompt := agent.AgentRoutingPrompts(item.Task, item.Plan, item.Requirements, eligible)
 		estimatedPromptTokens := estimateTokens(systemPrompt + "\n" + userPrompt)
 		if remainingTokens <= estimatedPromptTokens {
-			return agent.RoutingEvaluationResult{Outcome: agent.AgentSelectionOutcomeRouterFailed, FailureCode: "suite_token_budget_exhausted", Reason: "suite token budget exhausted before model request"}, modelprovider.Usage{}, time.Since(started).Milliseconds(), ""
+			return agent.RoutingEvaluationResult{Outcome: agent.AgentSelectionOutcomeRouterFailed, FailureCode: "suite_token_budget_exhausted", Reason: "suite token budget exhausted before model request"}, provider.Usage{}, time.Since(started).Milliseconds(), ""
 		}
 		callCtx, cancel := context.WithTimeout(ctx, opts.Timeout)
 		completion, err := completer.CompleteTextDetailed(callCtx, systemPrompt, userPrompt)
@@ -247,15 +247,15 @@ func evaluateSample(ctx context.Context, completer modelprovider.TextCompleter, 
 		input.ModelResponse, input.ModelError = completion.Text, err
 		usage := completion.Usage
 		if !usage.Valid() {
-			usage = modelprovider.Usage{PromptTokens: estimatedPromptTokens, CompletionTokens: estimateTokens(completion.Text), Estimated: true}
+			usage = provider.Usage{PromptTokens: estimatedPromptTokens, CompletionTokens: estimateTokens(completion.Text), Estimated: true}
 			usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 		}
 		return agent.EvaluateAgentRouting(input), usage, time.Since(started).Milliseconds(), completion.Model
 	}
-	return agent.EvaluateAgentRouting(input), modelprovider.Usage{}, time.Since(started).Milliseconds(), ""
+	return agent.EvaluateAgentRouting(input), provider.Usage{}, time.Since(started).Milliseconds(), ""
 }
 
-func applyResult(sample *Sample, result agent.RoutingEvaluationResult, usage modelprovider.Usage, latency int64, actualModel string) {
+func applyResult(sample *Sample, result agent.RoutingEvaluationResult, usage provider.Usage, latency int64, actualModel string) {
 	sample.ActualOutcome, sample.DecisionMode, sample.SelectedAgentID, sample.ProposedAgentID = result.Outcome, result.Mode, result.SelectedAgentID, result.ProposedAgentID
 	sample.InvalidResponse, sample.FailureCode, sample.Reason = result.InvalidResponse, result.FailureCode, result.Reason
 	sample.TopScore, sample.RunnerUpScore, sample.ScoreMargin = result.TopScore, result.RunnerUpScore, result.ScoreMargin
@@ -525,7 +525,7 @@ func validateDataset(data *Dataset) error {
 	return nil
 }
 
-func eligibleAgents(agents []domain.Agent, catalog *tools.Catalog, requirements domain.AgentRoutingRequirements) []domain.Agent {
+func eligibleAgents(agents []domain.Agent, catalog *tool.Catalog, requirements domain.AgentRoutingRequirements) []domain.Agent {
 	result := make([]domain.Agent, 0, len(agents))
 	for _, item := range agent.EvaluateAgentRouting(agent.RoutingEvaluationInput{Agents: agents, Catalog: catalog, Task: "", Plan: "",
 		Requirements: requirements, RouterMode: agent.RouterModeQuery}).Candidates {

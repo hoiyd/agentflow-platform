@@ -45,8 +45,8 @@ This is not an evaluation of multi-round search/read planning.
 From `apps/api`, using the repository Go version:
 
 ```bash
-go test ./internal/evaluation/tooleval ./cmd/eval ./internal/toolartifact ./internal/tools
-go test -race ./internal/evaluation/tooleval ./cmd/eval ./internal/toolartifact
+go test ./internal/evaluation/tooleval ./cmd/eval ./internal/tool/artifact ./internal/tool
+go test -race ./internal/evaluation/tooleval ./cmd/eval ./internal/tool/artifact
 EVALUATION_REPORT_DIR=/tmp/evaluation-reports go test ./internal/evaluation/tooleval -count=1
 ```
 

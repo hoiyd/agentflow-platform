@@ -15,16 +15,16 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/httpapi"
+	"agentflow-platform/apps/api/internal/inference/capture"
+	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/inference/routing"
 	"agentflow-platform/apps/api/internal/knowledge"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
-	"agentflow-platform/apps/api/internal/modelrouting"
-	"agentflow-platform/apps/api/internal/openai"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/recovery"
-	"agentflow-platform/apps/api/internal/requestcapture"
 	"agentflow-platform/apps/api/internal/store"
-	"agentflow-platform/apps/api/internal/toolprogress"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/progress"
 	"agentflow-platform/apps/api/internal/verification"
 )
 
@@ -60,17 +60,17 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		RequestsPerPeriod: cfg.ModelRequestsPerMinute,
 		TokensPerPeriod:   cfg.ModelTokensPerMinute,
 	})
-	requestRecorder := requestcapture.NewRecorder(appStore, requestcapture.Options{
+	requestRecorder := capture.NewRecorder(appStore, capture.Options{
 		Mode: domain.ModelRequestCaptureMode(cfg.ModelRequestCaptureMode), MaxBytes: cfg.ModelRequestCaptureMaxBytes,
 		Retention: cfg.ModelRequestCaptureRetention,
 	})
 	embeddingClient := newEmbeddingClient(cfg, credential.FromEnvironment("EMBEDDING_API_KEY"), requestLimiter)
 	embeddingClient.SetRequestRecorder(requestRecorder)
-	routeFile, err := modelrouting.LoadRouteFile(cfg.ModelRouteConfigPath)
+	routeFile, err := routing.LoadRouteFile(cfg.ModelRouteConfigPath)
 	if err != nil {
 		return applicationDependencies{}, err
 	}
-	configured := make([]modelrouting.Binding, 0, len(routeFile.Routes))
+	configured := make([]routing.Binding, 0, len(routeFile.Routes))
 	for _, route := range routeFile.Routes {
 		if strings.TrimSpace(route.CredentialEnvironment) == "" {
 			return applicationDependencies{}, fmt.Errorf("model route %q has no credential environment reference", route.ID)
@@ -81,15 +81,15 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		}
 		routeClient := newModelClient(cfg, routeCredential, route, requestLimiter)
 		configureModelClient(routeClient, cfg, appStore, requestRecorder)
-		configured = append(configured, modelrouting.Binding{
+		configured = append(configured, routing.Binding{
 			Descriptor: route.Descriptor(routeClient.RuntimeIdentity().Provider), Client: routeClient,
 		})
 	}
-	modelRoutes, err := modelrouting.NewCatalog(configured...)
+	modelRoutes, err := routing.NewCatalog(configured...)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create model route catalog: %w", err)
 	}
-	toolManager, err := tools.NewManager(cfg.ToolConfigPath)
+	toolManager, err := tool.NewManager(cfg.ToolConfigPath)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
 	}
@@ -132,8 +132,8 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			InputCostPerMillionTokensMicros:  cfg.ModelInputCostPerMillionMicros,
 			OutputCostPerMillionTokensMicros: cfg.ModelOutputCostPerMillionMicros,
 		},
-		ToolProgressGuard: toolprogress.Config{
-			Version: toolprogress.CurrentVersion, Enabled: cfg.ToolProgressGuardEnabled,
+		ToolProgressGuard: progress.Config{
+			Version: progress.CurrentVersion, Enabled: cfg.ToolProgressGuardEnabled,
 			WarnAfter: cfg.ToolProgressWarnAfter, BlockAfter: cfg.ToolProgressBlockAfter,
 			HaltAfter: cfg.ToolProgressHaltAfter, HistoryMax: 8,
 		},
@@ -208,7 +208,7 @@ func newMemoryProvider(cfg config.Config, appStore store.Store, embeddingClient 
 	})
 }
 
-func newModelClient(cfg config.Config, providerCredential credential.Value, route modelrouting.RouteConfig, limiter *concurrency.ModelRequestLimiter) *openai.Client {
+func newModelClient(cfg config.Config, providerCredential credential.Value, route routing.RouteConfig, limiter *concurrency.ModelRequestLimiter) *openai.Client {
 	client := openai.NewClientWithTimeout(providerCredential.Reveal(), route.BaseURL, route.Model, time.Duration(route.RequestTimeoutSeconds)*time.Second)
 	client.SetRequestLimiter(limiter)
 	retryPolicy := openai.DefaultRetryPolicy()
@@ -230,7 +230,7 @@ func newEmbeddingClient(cfg config.Config, providerCredential credential.Value, 
 	return client
 }
 
-func configureModelClient(client *openai.Client, cfg config.Config, appStore store.Store, recorder *requestcapture.Recorder) {
+func configureModelClient(client *openai.Client, cfg config.Config, appStore store.Store, recorder *capture.Recorder) {
 	client.SetToolEffectJournal(appStore)
 	client.SetToolArtifactStore(appStore)
 	client.SetToolArtifactPolicy(openai.ToolArtifactPolicy{

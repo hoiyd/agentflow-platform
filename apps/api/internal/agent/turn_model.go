@@ -5,13 +5,13 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/modelprovider"
-	"agentflow-platform/apps/api/internal/toolprogress"
-	"agentflow-platform/apps/api/internal/turn"
+	"agentflow-platform/apps/api/internal/inference/provider"
+	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
 // runtimeTurnModel adapts the existing executor implementations to the
@@ -34,7 +34,7 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	if err != nil {
 		return turn.Result{}, err
 	}
-	ctx = toolprogress.WithGuard(ctx, guard)
+	ctx = progress.WithGuard(ctx, guard)
 	if request.Role == "router" {
 		ctx = budget.WithPurpose(ctx, domain.UsagePurposeRouter)
 	} else {
@@ -104,7 +104,7 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 	return contextassembly.WithSession(ctx, session), compaction
 }
 
-func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client modelprovider.Client, emit func(turn.ModelEvent)) (turn.Result, error) {
+func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client provider.Client, emit func(turn.ModelEvent)) (turn.Result, error) {
 	events, errs := client.StreamAgentChatWithToolsTrace(
 		ctx,
 		request.Agent.SystemPrompt,
@@ -147,7 +147,7 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 	return turn.Result{Output: output.String()}, nil
 }
 
-func (m runtimeTurnModel) executeText(ctx context.Context, request turn.Request, client modelprovider.Client) (turn.Result, error) {
+func (m runtimeTurnModel) executeText(ctx context.Context, request turn.Request, client provider.Client) (turn.Result, error) {
 	payload := map[string]any{
 		"role": request.Role, "agent_id": request.Agent.ID, "system": request.SystemPrompt,
 		"input": request.Input, "input_chars": len(request.Input),

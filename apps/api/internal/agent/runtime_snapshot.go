@@ -12,11 +12,11 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/taskstate"
-	"agentflow-platform/apps/api/internal/toolpolicy"
-	"agentflow-platform/apps/api/internal/toolprogress"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/policy"
+	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
 var ErrRuntimeSnapshotUnavailable = failure.New(failure.Definition{
@@ -47,7 +47,7 @@ type restoredRuntime struct {
 	mode            string
 	agent           domain.Agent
 	candidateAgents []domain.Agent
-	catalog         *tools.Catalog
+	catalog         *tool.Catalog
 	modelConfigured bool
 	routerMode      string
 }
@@ -89,7 +89,7 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		ModelRouting:       modelRouting,
 		Tools:              toolSnapshots,
 		ToolSecurityPolicy: catalog.SecurityPolicy(),
-		ToolProgressGuard:  toolprogress.NormalizeConfig(r.toolProgressConfig),
+		ToolProgressGuard:  progress.NormalizeConfig(r.toolProgressConfig),
 		ContextAssembly:    contextassembly.NormalizeConfig(r.contextAssemblyConfig),
 		RouterMode:         r.routerMode,
 		RunBudget:          cloneRunBudget(runBudget),
@@ -107,18 +107,18 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 	return snapshot, nil
 }
 
-func (r *Runtime) currentCatalog() (*tools.Catalog, error) {
-	var catalog *tools.Catalog
+func (r *Runtime) currentCatalog() (*tool.Catalog, error) {
+	var catalog *tool.Catalog
 	var err error
 	if r.tools == nil {
-		catalog = tools.DefaultCatalog()
+		catalog = tool.DefaultCatalog()
 	} else {
 		catalog, err = r.tools.Catalog()
 		if err != nil {
 			return nil, err
 		}
 	}
-	bindings := make([]tools.Binding, 0, 3)
+	bindings := make([]tool.Binding, 0, 3)
 	if r.taskStates != nil {
 		bindings = append(bindings, r.taskStates.ToolBinding())
 	}
@@ -186,7 +186,7 @@ func cloneAgentRoutingHints(hints domain.AgentRoutingHints) domain.AgentRoutingH
 	}
 }
 
-func snapshotTools(catalog *tools.Catalog, names []string) []domain.RuntimeToolSnapshot {
+func snapshotTools(catalog *tool.Catalog, names []string) []domain.RuntimeToolSnapshot {
 	seen := map[string]bool{}
 	items := make([]domain.RuntimeToolSnapshot, 0, len(names))
 	for _, name := range names {
@@ -222,7 +222,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 	if err != nil {
 		return restoredRuntime{}, err
 	}
-	restoredBindings := make([]tools.Binding, 0, len(snapshot.Tools))
+	restoredBindings := make([]tool.Binding, 0, len(snapshot.Tools))
 	for _, frozen := range snapshot.Tools {
 		installed, ok := current.Installed(frozen.Name)
 		if !ok {
@@ -237,7 +237,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 	if snapshot.SchemaVersion >= domain.ToolSecurityRuntimeSnapshotVersion {
 		securityPolicy = snapshot.ToolSecurityPolicy
 	}
-	catalog, err := tools.NewCatalogWithPolicy(securityPolicy, restoredBindings...)
+	catalog, err := tool.NewCatalogWithPolicy(securityPolicy, restoredBindings...)
 	if err != nil {
 		return restoredRuntime{}, err
 	}
@@ -301,23 +301,23 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 		return errors.New("runtime snapshot has no run budget")
 	}
 	if snapshot.SchemaVersion >= domain.ToolContractRuntimeSnapshotVersion {
-		for _, tool := range snapshot.Tools {
-			if tool.SchemaVersion != tools.ToolSchemaVersion || strings.TrimSpace(tool.DefinitionRevision) == "" {
-				return fmt.Errorf("runtime snapshot tool %q has no valid schema contract", tool.Name)
+		for _, snapshotTool := range snapshot.Tools {
+			if snapshotTool.SchemaVersion != tool.ToolSchemaVersion || strings.TrimSpace(snapshotTool.DefinitionRevision) == "" {
+				return fmt.Errorf("runtime snapshot tool %q has no valid schema contract", snapshotTool.Name)
 			}
 		}
 	}
 	if snapshot.SchemaVersion >= domain.ToolSecurityRuntimeSnapshotVersion {
-		if err := toolpolicy.ValidatePolicy(snapshot.ToolSecurityPolicy); err != nil {
+		if err := policy.ValidatePolicy(snapshot.ToolSecurityPolicy); err != nil {
 			return fmt.Errorf("runtime snapshot has invalid Tool security policy: %w", err)
 		}
 		for _, tool := range snapshot.Tools {
-			if err := toolpolicy.ValidateCapability(tool.Security); err != nil {
+			if err := policy.ValidateCapability(tool.Security); err != nil {
 				return fmt.Errorf("runtime snapshot tool %q has invalid security capability: %w", tool.Name, err)
 			}
 		}
 	}
-	if snapshot.SchemaVersion >= domain.ToolProgressRuntimeSnapshotVersion && !toolprogress.ValidateConfig(snapshot.ToolProgressGuard) {
+	if snapshot.SchemaVersion >= domain.ToolProgressRuntimeSnapshotVersion && !progress.ValidateConfig(snapshot.ToolProgressGuard) {
 		return errors.New("runtime snapshot has invalid Tool Progress Guard config")
 	}
 	return nil
@@ -350,7 +350,7 @@ func effectiveAutonomousRunBudget(runBudget domain.RuntimeRunBudget, limits Auto
 	return runBudget
 }
 
-func toolDefinitionMatches(installed tools.Binding, frozen domain.RuntimeToolSnapshot) bool {
+func toolDefinitionMatches(installed tool.Binding, frozen domain.RuntimeToolSnapshot) bool {
 	current := domain.RuntimeToolSnapshot{
 		Name: installed.Descriptor.Name, Description: installed.Descriptor.Description,
 		Parameters: installed.Descriptor.Parameters, SideEffect: string(installed.Descriptor.SideEffect.Mode),
@@ -363,7 +363,7 @@ func toolDefinitionMatches(installed tools.Binding, frozen domain.RuntimeToolSna
 		if frozen.Security.Source == "" {
 			// Version 10 snapshots predate Tool security in the definition digest.
 			// Structural fields still have to match before a fail-closed live policy is applied.
-			legacyRevision, err := tools.LegacyDefinitionRevision(installed.Descriptor)
+			legacyRevision, err := tool.LegacyDefinitionRevision(installed.Descriptor)
 			if err != nil || (frozen.DefinitionRevision != legacyRevision && frozen.DefinitionRevision != installed.Descriptor.DefinitionRevision) {
 				return false
 			}
@@ -395,7 +395,7 @@ func (r *Runtime) snapshotForRun(runID string) (*domain.RuntimeSnapshot, error) 
 	return run.RuntimeSnapshot, nil
 }
 
-func (r *Runtime) embeddingClientForRun(runID string) (modelprovider.Client, error) {
+func (r *Runtime) embeddingClientForRun(runID string) (provider.Client, error) {
 	snapshot, err := r.snapshotForRun(runID)
 	if err != nil {
 		return nil, err
@@ -403,7 +403,7 @@ func (r *Runtime) embeddingClientForRun(runID string) (modelprovider.Client, err
 	return r.embeddingClientFromSnapshot(snapshot)
 }
 
-func (r *Runtime) embeddingClientFromSnapshot(snapshot *domain.RuntimeSnapshot) (modelprovider.Client, error) {
+func (r *Runtime) embeddingClientFromSnapshot(snapshot *domain.RuntimeSnapshot) (provider.Client, error) {
 	if r.embeddingClient == nil {
 		return nil, errors.New("embedding client is unavailable")
 	}
@@ -412,7 +412,7 @@ func (r *Runtime) embeddingClientFromSnapshot(snapshot *domain.RuntimeSnapshot) 
 	if current.EmbeddingProvider != embedding.Provider {
 		return nil, fmt.Errorf("credential for frozen embedding provider %q is unavailable; current provider is %q", embedding.Provider, current.EmbeddingProvider)
 	}
-	return r.embeddingClient.WithRuntimeIdentity(modelprovider.RuntimeIdentity{
+	return r.embeddingClient.WithRuntimeIdentity(provider.RuntimeIdentity{
 		Provider: current.Provider, BaseURL: current.BaseURL, Model: current.Model,
 		EmbeddingProvider: embedding.Provider, EmbeddingBaseURL: embedding.BaseURL,
 		EmbeddingModel: embedding.Model, EmbeddingDimensions: embedding.Dimensions,

@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/store"
 )
 
-type mutationEmbedderFunc func(context.Context, string) (modelprovider.Embedding, error)
+type mutationEmbedderFunc func(context.Context, string) (provider.Embedding, error)
 
-func (f mutationEmbedderFunc) EmbedText(ctx context.Context, text string) (modelprovider.Embedding, error) {
+func (f mutationEmbedderFunc) EmbedText(ctx context.Context, text string) (provider.Embedding, error) {
 	return f(ctx, text)
 }
 
@@ -53,8 +53,8 @@ func TestMemoryAdministrationLifecycleAndFailures(t *testing.T) {
 	if _, err := p.MutateMemory(canceled, "", m.ID, cmd); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
-	p.embedder = mutationEmbedderFunc(func(context.Context, string) (modelprovider.Embedding, error) {
-		return modelprovider.Embedding{}, errors.New("embedding offline")
+	p.embedder = mutationEmbedderFunc(func(context.Context, string) (provider.Embedding, error) {
+		return provider.Embedding{}, errors.New("embedding offline")
 	})
 	if _, err := p.MutateMemory(ctx, "", m.ID, cmd); !IsEmbeddingError(err) {
 		t.Fatalf("embedding error: %v", err)
@@ -68,9 +68,9 @@ func TestMemoryAdministrationLifecycleAndFailures(t *testing.T) {
 	if err != nil || !r.Applied {
 		t.Fatalf("correction: %+v %v", r, err)
 	}
-	p.embedder = mutationEmbedderFunc(func(context.Context, string) (modelprovider.Embedding, error) {
+	p.embedder = mutationEmbedderFunc(func(context.Context, string) (provider.Embedding, error) {
 		t.Error("duplicate/deletion must not embed")
-		return modelprovider.Embedding{}, errors.New("offline")
+		return provider.Embedding{}, errors.New("offline")
 	})
 	r, err = p.MutateMemory(ctx, "", m.ID, cmd)
 	if err != nil || r.Applied {
@@ -110,7 +110,7 @@ func TestMemoryMutationRechecksAfterEmbedding(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			p.embedder = mutationEmbedderFunc(func(context.Context, string) (modelprovider.Embedding, error) {
+			p.embedder = mutationEmbedderFunc(func(context.Context, string) (provider.Embedding, error) {
 				if mode == "cancel" {
 					cancel()
 				} else {
@@ -119,7 +119,7 @@ func TestMemoryMutationRechecksAfterEmbedding(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				return modelprovider.Embedding{Vector: []float64{1}}, nil
+				return provider.Embedding{Vector: []float64{1}}, nil
 			})
 			_, err = p.MutateMemory(ctx, "", m.ID, domain.MemoryMutation{OperationID: "correction", Action: "replace", Content: "new", ExpectedVersion: 1, Actor: "user", Reason: "correction"})
 			want := error(store.ErrMemoryConflict)

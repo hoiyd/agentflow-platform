@@ -9,7 +9,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 func TestExecutorFaultHarness(t *testing.T) {
@@ -18,13 +18,13 @@ func TestExecutorFaultHarness(t *testing.T) {
 
 func TestBindingContractHarness(t *testing.T) {
 	RunBindingContract(t, BindingContract{
-		Binding: tools.Binding{
-			Descriptor: tools.Descriptor{
+		Binding: tool.Binding{
+			Descriptor: tool.Descriptor{
 				Name: "write_value",
-				Parameters: tools.ObjectSchema(map[string]any{
+				Parameters: tool.ObjectSchema(map[string]any{
 					"value": map[string]any{"type": "string", "minLength": 1},
 				}, []string{"value"}),
-				SideEffect: tools.SideEffectPolicy{Mode: tools.SideEffectExternal},
+				SideEffect: tool.SideEffectPolicy{Mode: tool.SideEffectExternal},
 			},
 			Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil },
 		},
@@ -46,8 +46,8 @@ func TestBindingContractHarness(t *testing.T) {
 
 func TestBindingContractSpecValidation(t *testing.T) {
 	complete := BindingContract{
-		Binding: tools.Binding{
-			Descriptor: tools.Descriptor{Name: "lookup", Parameters: tools.ObjectSchema(nil, nil)},
+		Binding: tool.Binding{
+			Descriptor: tool.Descriptor{Name: "lookup", Parameters: tool.ObjectSchema(nil, nil)},
 			Handler:    func(context.Context, json.RawMessage) (any, error) { return nil, nil },
 		},
 		ValidArguments: json.RawMessage(`{}`),
@@ -71,7 +71,7 @@ func TestBindingContractSpecValidation(t *testing.T) {
 }
 
 func TestModelSchemaContractValidation(t *testing.T) {
-	schema := tools.ObjectSchema(nil, nil)
+	schema := tool.ObjectSchema(nil, nil)
 	tests := []struct {
 		name        string
 		definitions []map[string]any
@@ -93,7 +93,7 @@ func TestModelSchemaContractValidation(t *testing.T) {
 }
 
 func TestSuccessfulExecutionValidation(t *testing.T) {
-	valid := tools.ExecutionResult{
+	valid := tool.ExecutionResult{
 		DefinitionRevision: "revision-1", ArgumentsHash: "hash-1", Result: map[string]any{"ok": true},
 	}
 	sensor := func(value any) error {
@@ -107,14 +107,14 @@ func TestSuccessfulExecutionValidation(t *testing.T) {
 	}
 	tests := []struct {
 		name   string
-		result tools.ExecutionResult
+		result tool.ExecutionResult
 		calls  int32
 		sensor func(any) error
 	}{
-		{name: "execution error", result: tools.ExecutionResult{Error: &tools.ExecutionError{Code: tools.ErrorExecutionFailed}}, calls: 1, sensor: sensor},
+		{name: "execution error", result: tool.ExecutionResult{Error: &tool.ExecutionError{Code: tool.ErrorExecutionFailed}}, calls: 1, sensor: sensor},
 		{name: "handler count", result: valid, calls: 2, sensor: sensor},
-		{name: "contract identity", result: tools.ExecutionResult{DefinitionRevision: "wrong", ArgumentsHash: "hash-1"}, calls: 1, sensor: sensor},
-		{name: "result sensor", result: tools.ExecutionResult{DefinitionRevision: "revision-1", ArgumentsHash: "hash-1"}, calls: 1, sensor: sensor},
+		{name: "contract identity", result: tool.ExecutionResult{DefinitionRevision: "wrong", ArgumentsHash: "hash-1"}, calls: 1, sensor: sensor},
+		{name: "result sensor", result: tool.ExecutionResult{DefinitionRevision: "revision-1", ArgumentsHash: "hash-1"}, calls: 1, sensor: sensor},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -150,11 +150,11 @@ func TestEffectGateFixtureLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new catalog: %v", err)
 	}
-	resultCh := make(chan tools.ExecutionResult, 1)
+	resultCh := make(chan tool.ExecutionResult, 1)
 	go func() {
-		resultCh <- tools.NewExecutor(catalog, tools.ExecutorOptions{EffectJournal: fixture}).Execute(
+		resultCh <- tool.NewExecutor(catalog, tool.ExecutorOptions{EffectJournal: fixture}).Execute(
 			context.Background(),
-			tools.ExecutionRequest{
+			tool.ExecutionRequest{
 				CallID: "call-1", RunID: "run-1", StageID: "stage-1", Tool: "write_value",
 				Arguments: json.RawMessage(`{"value":"ok"}`),
 			},
@@ -183,7 +183,7 @@ func TestEffectGateFixtureFailureInjection(t *testing.T) {
 	beginFailure := NewEffectGateFixture()
 	beginFailure.FailBegin(errors.New("intent failed"))
 	result := executeEffectGateFixture(t, beginFailure)
-	AssertTypedFailure(t, result, tools.ErrorEffectJournal)
+	AssertTypedFailure(t, result, tool.ErrorEffectJournal)
 	if beginFailure.HandlerCalls() != 0 {
 		t.Fatal("intent failure reached handler")
 	}
@@ -194,7 +194,7 @@ func TestEffectGateFixtureFailureInjection(t *testing.T) {
 		completeFailure.Release(phase)
 	}
 	result = executeEffectGateFixture(t, completeFailure)
-	AssertTypedFailure(t, result, tools.ErrorEffectJournal)
+	AssertTypedFailure(t, result, tool.ErrorEffectJournal)
 	if completeFailure.Record().Status != domain.ToolEffectNeedsReconciliation {
 		t.Fatalf("settlement failure was not marked for reconciliation: %#v", completeFailure.Record())
 	}
@@ -263,9 +263,9 @@ func TestSelectionDatasetAndEvaluator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse dataset: %v", err)
 	}
-	catalog, err := tools.NewCatalog(tools.Binding{
-		Descriptor: tools.Descriptor{
-			Name: "lookup", Parameters: tools.ObjectSchema(map[string]any{
+	catalog, err := tool.NewCatalog(tool.Binding{
+		Descriptor: tool.Descriptor{
+			Name: "lookup", Parameters: tool.ObjectSchema(map[string]any{
 				"query": map[string]any{"type": "string", "minLength": 1},
 			}, []string{"query"}),
 		},
@@ -298,7 +298,7 @@ func TestSelectionDatasetAndEvaluator(t *testing.T) {
 		t.Fatalf("bad candidate escaped deterministic sensors: %#v", findings)
 	}
 	invalidArgumentsCase := dataset.Cases[1]
-	invalidArgumentsCase.Expected.Outcome = string(tools.ErrorInvalidArgs)
+	invalidArgumentsCase.Expected.Outcome = string(tool.ErrorInvalidArgs)
 	invalidArgumentsCase.Expected.RecoveryAction = "correct_arguments"
 	findings = EvaluateSelection(catalog, invalidArgumentsCase, valid)
 	if !hasFinding(findings, "argument_outcome_mismatch") || !hasFinding(findings, "outcome_mismatch") || !hasFinding(findings, "recovery_mismatch") {
@@ -326,14 +326,14 @@ func TestSelectionDatasetRejectsMalformedContracts(t *testing.T) {
 }
 
 func TestTypedFailureValidation(t *testing.T) {
-	valid := tools.ExecutionResult{Error: &tools.ExecutionError{Code: tools.ErrorExecutionFailed, Message: "failed"}}
-	if err := validateTypedFailure(valid, tools.ErrorExecutionFailed); err != nil {
+	valid := tool.ExecutionResult{Error: &tool.ExecutionError{Code: tool.ErrorExecutionFailed, Message: "failed"}}
+	if err := validateTypedFailure(valid, tool.ErrorExecutionFailed); err != nil {
 		t.Fatalf("valid failure rejected: %v", err)
 	}
-	if err := validateTypedFailure(tools.ExecutionResult{}, tools.ErrorExecutionFailed); err == nil {
+	if err := validateTypedFailure(tool.ExecutionResult{}, tool.ErrorExecutionFailed); err == nil {
 		t.Fatal("missing failure was accepted")
 	}
-	if err := validateTypedFailure(valid, tools.ErrorExecutionTimeout); err == nil {
+	if err := validateTypedFailure(valid, tool.ErrorExecutionTimeout); err == nil {
 		t.Fatal("wrong failure code was accepted")
 	}
 }
@@ -356,15 +356,15 @@ func TestDeniedBudgetControllerOnlyDeniesToolCalls(t *testing.T) {
 	}
 }
 
-func executeEffectGateFixture(t *testing.T, fixture *EffectGateFixture) tools.ExecutionResult {
+func executeEffectGateFixture(t *testing.T, fixture *EffectGateFixture) tool.ExecutionResult {
 	t.Helper()
 	catalog, _, err := NewAuthorizedCatalog(fixture.Binding("write_value"))
 	if err != nil {
 		t.Fatalf("new catalog: %v", err)
 	}
-	return tools.NewExecutor(catalog, tools.ExecutorOptions{EffectJournal: fixture}).Execute(
+	return tool.NewExecutor(catalog, tool.ExecutorOptions{EffectJournal: fixture}).Execute(
 		context.Background(),
-		tools.ExecutionRequest{
+		tool.ExecutionRequest{
 			CallID: "call-1", RunID: "run-1", StageID: "stage-1", Tool: "write_value",
 			Arguments: json.RawMessage(`{"value":"ok"}`),
 		},

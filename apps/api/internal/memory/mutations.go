@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -62,7 +62,7 @@ func (p *BuiltinProvider) MutateMemory(ctx context.Context, workspaceID, id stri
 	if detail.Memory.Version != command.ExpectedVersion || detail.Memory.DeletedAt != nil {
 		return domain.MemoryMutationResult{}, store.ErrMemoryConflict
 	}
-	var embedding modelprovider.Embedding
+	var embedding provider.Embedding
 	if err := p.retry(ctx, "mutate.embed", func() error {
 		var err error
 		embedding, err = p.embedder.EmbedText(ctx, command.Content)

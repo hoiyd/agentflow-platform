@@ -10,8 +10,8 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 
-	"agentflow-platform/apps/api/internal/toolpolicy"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/policy"
 )
 
 func TestUpdateTaskStateToolAppliesPatchAndPublishesEvent(t *testing.T) {
@@ -23,7 +23,7 @@ func TestUpdateTaskStateToolAppliesPatchAndPublishesEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := NewService(fixtureStore, eventpkg.StoreSink{Store: fixtureStore})
-	catalog, err := tools.NewCatalog(service.ToolBinding())
+	catalog, err := tool.NewCatalog(service.ToolBinding())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,8 +31,8 @@ func TestUpdateTaskStateToolAppliesPatchAndPublishesEvent(t *testing.T) {
 		ConversationID: conversation.ID, RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
 	})
 	arguments := json.RawMessage(`{"expected_version":0,"operations":[{"type":"set_goal","goal":"Keep exact task facts durable"}]}`)
-	executor := tools.NewExecutor(catalog, tools.ExecutorOptions{EffectJournal: fixtureStore, Tracer: taskStateAuditTracer{}})
-	request := tools.ExecutionRequest{
+	executor := tool.NewExecutor(catalog, tool.ExecutorOptions{EffectJournal: fixtureStore, Tracer: taskStateAuditTracer{}})
+	request := tool.ExecutionRequest{
 		CallID: "call-1", RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
 		Tool: UpdateToolName, Arguments: arguments,
 	}
@@ -60,7 +60,7 @@ func TestUpdateTaskStateToolAppliesPatchAndPublishesEvent(t *testing.T) {
 		t.Fatalf("replayed call appended another revision: revisions=%#v err=%v", revisions, err)
 	}
 
-	stale := executor.Execute(ctx, tools.ExecutionRequest{
+	stale := executor.Execute(ctx, tool.ExecutionRequest{
 		CallID: "call-2", RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
 		Tool: UpdateToolName, Arguments: arguments,
 	})
@@ -71,9 +71,9 @@ func TestUpdateTaskStateToolAppliesPatchAndPublishesEvent(t *testing.T) {
 
 type taskStateAuditTracer struct{}
 
-func (taskStateAuditTracer) ToolStarted(context.Context, tools.ExecutionRequest) {}
-func (taskStateAuditTracer) ToolFinished(context.Context, tools.ExecutionResult) {}
-func (taskStateAuditTracer) ToolPolicyEvaluated(context.Context, tools.ExecutionRequest, toolpolicy.Decision) error {
+func (taskStateAuditTracer) ToolStarted(context.Context, tool.ExecutionRequest) {}
+func (taskStateAuditTracer) ToolFinished(context.Context, tool.ExecutionResult) {}
+func (taskStateAuditTracer) ToolPolicyEvaluated(context.Context, tool.ExecutionRequest, policy.Decision) error {
 	return nil
 }
 

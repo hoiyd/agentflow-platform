@@ -11,10 +11,10 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 
-	"agentflow-platform/apps/api/internal/tools"
-	"agentflow-platform/apps/api/internal/turn"
+	"agentflow-platform/apps/api/internal/agent/turn"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 func TestIsolatedTurnContextExcludesConversationHistory(t *testing.T) {
@@ -113,7 +113,7 @@ func TestRuntimeTurnModelDoesNotRetryOverflowWhenCompactionFails(t *testing.T) {
 }
 
 func TestCompactContextBestEffortReturnsSuccessAndSuppressesFailure(t *testing.T) {
-	makeRuntime := func(t *testing.T, summaryErr error) (*Runtime, *fixturestore.Store, domain.Run, modelprovider.Client) {
+	makeRuntime := func(t *testing.T, summaryErr error) (*Runtime, *fixturestore.Store, domain.Run, provider.Client) {
 		t.Helper()
 		fixtureStore := fixturestore.New()
 
@@ -171,15 +171,15 @@ type overflowRecoveryClient struct {
 
 func (c *overflowRecoveryClient) HasAPIKey() bool { return true }
 
-func (c *overflowRecoveryClient) RuntimeIdentity() modelprovider.RuntimeIdentity {
-	return modelprovider.RuntimeIdentity{Provider: "test", BaseURL: "https://model.test/v1", Model: "test-model"}
+func (c *overflowRecoveryClient) RuntimeIdentity() provider.RuntimeIdentity {
+	return provider.RuntimeIdentity{Provider: "test", BaseURL: "https://model.test/v1", Model: "test-model"}
 }
 
-func (c *overflowRecoveryClient) WithRuntimeIdentity(modelprovider.RuntimeIdentity) modelprovider.Client {
+func (c *overflowRecoveryClient) WithRuntimeIdentity(provider.RuntimeIdentity) provider.Client {
 	return c
 }
 
-func setOverflowModelSnapshot(t *testing.T, snapshot *domain.RuntimeSnapshot, client modelprovider.Client, config domain.ContextAssemblyConfig) {
+func setOverflowModelSnapshot(t *testing.T, snapshot *domain.RuntimeSnapshot, client provider.Client, config domain.ContextAssemblyConfig) {
 	t.Helper()
 	runtime := NewRuntime(RuntimeOptions{ModelClient: client, ContextAssembly: config})
 	modelRouting, err := runtime.captureModelRoutingSnapshot()
@@ -189,41 +189,41 @@ func setOverflowModelSnapshot(t *testing.T, snapshot *domain.RuntimeSnapshot, cl
 	snapshot.ModelRouting = modelRouting
 }
 
-func (c *overflowRecoveryClient) StreamAgentChatWithToolsTrace(context.Context, string, []domain.Message, string, *tools.Catalog, *eventpkg.Recorder, string, string, []domain.RetrievedMemory, []domain.RetrievedDocumentChunk) (<-chan modelprovider.StreamEvent, <-chan error) {
-	events := make(chan modelprovider.StreamEvent)
+func (c *overflowRecoveryClient) StreamAgentChatWithToolsTrace(context.Context, string, []domain.Message, string, *tool.Catalog, *eventpkg.Recorder, string, string, []domain.RetrievedMemory, []domain.RetrievedDocumentChunk) (<-chan provider.StreamEvent, <-chan error) {
+	events := make(chan provider.StreamEvent)
 	errs := make(chan error)
 	close(events)
 	close(errs)
 	return events, errs
 }
 
-func (c *overflowRecoveryClient) CompleteTextDetailed(context.Context, string, string) (modelprovider.TextCompletion, error) {
+func (c *overflowRecoveryClient) CompleteTextDetailed(context.Context, string, string) (provider.TextCompletion, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.summaryCalls++
 	if c.summaryErr != nil {
-		return modelprovider.TextCompletion{}, c.summaryErr
+		return provider.TextCompletion{}, c.summaryErr
 	}
-	return modelprovider.TextCompletion{Text: "## Goal\nPreserve context\n## Superseded Instructions\nNone", Model: "summary-model"}, nil
+	return provider.TextCompletion{Text: "## Goal\nPreserve context\n## Superseded Instructions\nNone", Model: "summary-model"}, nil
 }
 
-func (c *overflowRecoveryClient) PrepareText(context.Context, string, string) (modelprovider.PreparedText, error) {
-	return modelprovider.PreparedText{Manifest: domain.ContextManifest{ID: "manifest", ModelCallID: "call", OutputReserveTokens: 100}}, nil
+func (c *overflowRecoveryClient) PrepareText(context.Context, string, string) (provider.PreparedText, error) {
+	return provider.PreparedText{Manifest: domain.ContextManifest{ID: "manifest", ModelCallID: "call", OutputReserveTokens: 100}}, nil
 }
 
-func (c *overflowRecoveryClient) CompletePreparedText(context.Context, modelprovider.PreparedText) (modelprovider.TextCompletion, error) {
+func (c *overflowRecoveryClient) CompletePreparedText(context.Context, provider.PreparedText) (provider.TextCompletion, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.preparedCalls++
 	if c.preparedCalls == 1 {
-		return modelprovider.TextCompletion{}, failure.New(failure.Definition{
+		return provider.TextCompletion{}, failure.New(failure.Definition{
 			Message: "maximum context length exceeded",
 			Info:    failure.Info{Code: "context_length_exceeded", Source: "model_provider", Category: failure.CategoryValidation},
 		})
 	}
-	return modelprovider.TextCompletion{Text: "recovered answer", Model: "test-model"}, nil
+	return provider.TextCompletion{Text: "recovered answer", Model: "test-model"}, nil
 }
 
-func (c *overflowRecoveryClient) EmbedText(context.Context, string) (modelprovider.Embedding, error) {
-	return modelprovider.Embedding{}, nil
+func (c *overflowRecoveryClient) EmbedText(context.Context, string) (provider.Embedding, error) {
+	return provider.Embedding{}, nil
 }

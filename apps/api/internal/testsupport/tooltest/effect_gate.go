@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 type EffectPhase string
@@ -46,13 +46,13 @@ func NewEffectGateFixture() *EffectGateFixture {
 	return fixture
 }
 
-func (f *EffectGateFixture) Binding(name string) tools.Binding {
-	return tools.Binding{
-		Descriptor: tools.Descriptor{
-			Name: name, Parameters: tools.ObjectSchema(map[string]any{
+func (f *EffectGateFixture) Binding(name string) tool.Binding {
+	return tool.Binding{
+		Descriptor: tool.Descriptor{
+			Name: name, Parameters: tool.ObjectSchema(map[string]any{
 				"value": map[string]any{"type": "string", "minLength": 1},
 			}, []string{"value"}),
-			SideEffect: tools.SideEffectPolicy{Mode: tools.SideEffectExternal},
+			SideEffect: tool.SideEffectPolicy{Mode: tool.SideEffectExternal},
 			Security:   testExternalWriteCapability(),
 		},
 		Handler: func(ctx context.Context, arguments json.RawMessage) (any, error) {

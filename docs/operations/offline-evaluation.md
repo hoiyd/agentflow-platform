@@ -34,7 +34,7 @@ summaries. This proves assembly, shadowing, budget, and constraint-retention
 behavior; it does not claim that a live model can generate summaries of the
 same quality or that the final answer is correct. No model request is sent.
 Each successful sample hashes a canonical final-input payload using the same
-provider-neutral `modelrequest.Observation` contract as production capture,
+provider-neutral `requestcontrol.Observation` contract as production capture,
 but the offline report stores no prompt content.
 
 Generate a controlled one-variable comparison with:

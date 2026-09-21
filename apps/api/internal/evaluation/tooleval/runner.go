@@ -14,11 +14,11 @@ import (
 	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
-	"agentflow-platform/apps/api/internal/toolartifact"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/artifact"
 )
 
 type Options struct {
@@ -84,7 +84,7 @@ type Report struct {
 type evaluationFixture struct {
 	store    *fixturestore.Store
 	recorder *eventpkg.Recorder
-	catalog  *tools.Catalog
+	catalog  *tool.Catalog
 	data     dataset
 	assembly domain.ContextAssemblyConfig
 }
@@ -105,7 +105,7 @@ func Run(ctx context.Context, client *openai.Client, opts Options) (Report, erro
 	}
 	fs := fixturestore.New()
 	recorder := eventpkg.NewRecorder(fs)
-	catalog, err := tools.NewCatalog(toolartifact.NewService(fs, recorder).ToolBindings()...)
+	catalog, err := tool.NewCatalog(artifact.NewService(fs, recorder).ToolBindings()...)
 	if err != nil {
 		return Report{}, err
 	}
@@ -194,7 +194,7 @@ func (f evaluationFixture) runSample(ctx context.Context, client *openai.Client,
 	}
 	active := f.catalog
 	if sample.Arm != "with_tools" {
-		active, err = tools.NewCatalog()
+		active, err = tool.NewCatalog()
 		if err != nil {
 			return err
 		}

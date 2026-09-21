@@ -11,8 +11,8 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/modelrequest"
-	"agentflow-platform/apps/api/internal/requestcapture"
+	"agentflow-platform/apps/api/internal/inference/capture"
+	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -31,10 +31,10 @@ func TestListModelRequestsHidesContentByDefaultAndReturnsManifest(t *testing.T) 
 	}); err != nil {
 		t.Fatalf("create manifest: %v", err)
 	}
-	recorder := requestcapture.NewRecorder(fixtureStore, requestcapture.Options{Mode: domain.ModelRequestCaptureFull})
+	recorder := capture.NewRecorder(fixtureStore, capture.Options{Mode: domain.ModelRequestCaptureFull})
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
 	payload := []byte(`{"model":"test","messages":[{"role":"user","content":"debug me"}]}`)
-	if err := recorder.Record(ctx, modelrequest.Observation{
+	if err := recorder.Record(ctx, requestcontrol.Observation{
 		ModelCallID: "call-http", Operation: "chat.completion", Provider: "local", Model: "test",
 		ContextManifestID: manifest.ID, SourceTokenBreakdown: map[string]int{"system": 5}, Payload: payload,
 	}); err != nil {

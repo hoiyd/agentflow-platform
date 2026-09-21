@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	toolpkg "agentflow-platform/apps/api/internal/tools"
+	toolpkg "agentflow-platform/apps/api/internal/tool"
 )
 
 func TestToolHandlersListAndToggleTools(t *testing.T) {

@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/openai"
-	"agentflow-platform/apps/api/internal/toolpolicy"
-	"agentflow-platform/apps/api/internal/toolprogress"
+	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/tool/policy"
+	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
 func testRuntimeSnapshot() domain.RuntimeSnapshot {
@@ -28,8 +28,8 @@ func testRuntimeSnapshot() domain.RuntimeSnapshot {
 		Embedding:          domain.RuntimeEmbeddingSnapshot{Provider: identity.EmbeddingProvider, BaseURL: identity.EmbeddingBaseURL, Model: identity.EmbeddingModel, Dimensions: identity.EmbeddingDimensions},
 		ModelRouting:       modelRouting,
 		AutonomousLimits:   &domain.RuntimeLimitsSnapshot{MaxIterations: 5, MaxRuntimeMS: 300000, MaxOutputChars: 60000, MaxToolCalls: 20},
-		ToolSecurityPolicy: toolpolicy.DefaultPolicy(),
-		ToolProgressGuard:  toolprogress.DefaultConfig(),
+		ToolSecurityPolicy: policy.DefaultPolicy(),
+		ToolProgressGuard:  progress.DefaultConfig(),
 	}
 }
 

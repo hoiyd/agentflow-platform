@@ -14,8 +14,8 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/evaluation/evalreport"
-	"agentflow-platform/apps/api/internal/modelprovider"
-	"agentflow-platform/apps/api/internal/openai"
+	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/rag"
 )
 
@@ -304,7 +304,7 @@ func TestEmbeddingProfileValidationAndVectorContract(t *testing.T) {
 		t.Fatalf("valid Ollama profile was rejected or retained an unrelated API key: err=%v profile=%#v", err, validOllama)
 	}
 	embedder := &evaluationEmbedder{options: EmbeddingProfileOptions{Name: EmbeddingProfileOpenAICompatible, Model: "semantic-v1", Dimensions: 2}}
-	for _, embedding := range []modelprovider.Embedding{
+	for _, embedding := range []provider.Embedding{
 		{Vector: []float64{}, Provider: "openai_compatible", Model: "semantic-v1"},
 		{Vector: []float64{math.NaN(), 0}, Provider: "openai_compatible", Model: "semantic-v1", Dimensions: 2},
 		{Vector: []float64{1}, Provider: "openai_compatible", Model: "semantic-v1", Dimensions: 1},

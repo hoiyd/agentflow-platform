@@ -7,7 +7,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/redaction"
 )
@@ -21,7 +21,7 @@ type Store interface {
 }
 
 type Embedder interface {
-	EmbedText(context.Context, string) (modelprovider.Embedding, error)
+	EmbedText(context.Context, string) (provider.Embedding, error)
 }
 
 type KnowledgeBase struct {

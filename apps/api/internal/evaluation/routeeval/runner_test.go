@@ -11,7 +11,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 )
 
 func TestDeterministicBenchmarkPassesHoldoutAndProducesCalibration(t *testing.T) {
@@ -72,7 +72,7 @@ func TestDeterministicBenchmarkPassesHoldoutAndProducesCalibration(t *testing.T)
 }
 
 func TestLiveInvalidResponsesFallBackAndRemainInDenominator(t *testing.T) {
-	client := fakeCompleter{completion: modelprovider.TextCompletion{Text: "not json", Model: "fixture-actual", Usage: modelprovider.Usage{PromptTokens: 10, CompletionTokens: 2, TotalTokens: 12}}}
+	client := fakeCompleter{completion: provider.TextCompletion{Text: "not json", Model: "fixture-actual", Usage: provider.Usage{PromptTokens: 10, CompletionTokens: 2, TotalTokens: 12}}}
 	report, err := Run(context.Background(), client, Options{DatasetPath: datasetPath(),
 		RouterMode: agent.RouterModeAuto, Trials: 1, MaxModelCalls: 20, MaxTotalTokens: 10000, Timeout: time.Second, Revision: "test", Model: "fixture", Provider: "fixture"})
 	if err != nil {
@@ -165,10 +165,10 @@ func legacyBaselinePath() string {
 }
 
 type fakeCompleter struct {
-	completion modelprovider.TextCompletion
+	completion provider.TextCompletion
 	err        error
 }
 
-func (f fakeCompleter) CompleteTextDetailed(context.Context, string, string) (modelprovider.TextCompletion, error) {
+func (f fakeCompleter) CompleteTextDetailed(context.Context, string, string) (provider.TextCompletion, error) {
 	return f.completion, f.err
 }

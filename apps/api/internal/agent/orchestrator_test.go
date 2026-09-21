@@ -12,10 +12,10 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/taskstate"
-	"agentflow-platform/apps/api/internal/tools"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 func TestSelectWorkerAgentChoosesCodingForImplementationTask(t *testing.T) {
@@ -95,7 +95,7 @@ func TestEligibleWorkerAgentsAppliesTypedHardRequirements(t *testing.T) {
 		RequiredTools: []string{"calculator"}, ProhibitedTools: []string{"get_current_time"},
 		RequireMemory: true, RequireRetrieval: true,
 	}
-	eligible, evidence := eligibleWorkerAgents(agents, tools.DefaultCatalog(), requirements)
+	eligible, evidence := eligibleWorkerAgents(agents, tool.DefaultCatalog(), requirements)
 	if len(eligible) != 1 || eligible[0].ID != "qualified" {
 		t.Fatalf("eligible agents = %#v", eligible)
 	}
@@ -151,7 +151,7 @@ func TestSelectionGateAcceptsQualifiedClearWinner(t *testing.T) {
 func TestRouteWorkerAgentRejectsConflictingRequirements(t *testing.T) {
 	runtime := &Runtime{}
 	decision, err := runtime.routeWorkerAgent(context.Background(), "run_conflict", restoredRuntime{
-		routerMode: RouterModeQuery, catalog: tools.DefaultCatalog(),
+		routerMode: RouterModeQuery, catalog: tool.DefaultCatalog(),
 	}, testAgents(), "calculate", "use calculator", domain.AgentRoutingRequirements{
 		RequiredTools: []string{"calculator"}, ProhibitedTools: []string{"calculator"},
 	})
@@ -215,7 +215,7 @@ func TestParseLLMRouteDecisionRejectsIncompleteOrInconsistentScores(t *testing.T
 func TestAgentSelectionReturnsTypedNoSuitableOutcome(t *testing.T) {
 	runtime := &Runtime{}
 	decision, err := runtime.routeWorkerAgent(context.Background(), "run_v2", restoredRuntime{
-		routerMode: RouterModeQuery, catalog: tools.DefaultCatalog(),
+		routerMode: RouterModeQuery, catalog: tool.DefaultCatalog(),
 	}, []domain.Agent{{ID: "invoices", Name: "Invoice Clerk", Description: "Reconciles invoices."}}, "write a sonnet", "use imagery", domain.AgentRoutingRequirements{})
 	if !errors.Is(err, ErrNoSuitableAgent) || decision.Outcome != AgentSelectionOutcomeNoSuitable || decision.FailureCode != "agent_route_no_suitable_candidate" {
 		t.Fatalf("unexpected no-suitable route: decision=%#v err=%v", decision, err)
@@ -230,7 +230,7 @@ func TestEligibleWorkerAgentsRequiresStableIdentityAndFrozenTools(t *testing.T) 
 		{ID: "duplicate"},
 		{ID: " "},
 	}
-	eligible, evidence := eligibleWorkerAgents(agents, tools.DefaultCatalog(), domain.AgentRoutingRequirements{})
+	eligible, evidence := eligibleWorkerAgents(agents, tool.DefaultCatalog(), domain.AgentRoutingRequirements{})
 	if len(eligible) != 1 || eligible[0].ID != "eligible" {
 		t.Fatalf("eligible agents = %#v", eligible)
 	}
@@ -353,7 +353,7 @@ func TestMultiAgentWorkerRunsAsIsolatedParentStage(t *testing.T) {
 }
 
 func TestWorkerStageToolAndContextBoundary(t *testing.T) {
-	catalog := tools.DefaultCatalog()
+	catalog := tool.DefaultCatalog()
 	agent := domain.Agent{Tools: []string{"get_current_time", taskstate.UpdateToolName, "not-installed"}}
 	isolated, err := catalogForAgent(catalog, agent)
 	if err != nil {
@@ -375,25 +375,25 @@ func TestWorkerStageToolAndContextBoundary(t *testing.T) {
 }
 
 type blockingPreparedClient struct {
-	modelprovider.Client
+	provider.Client
 	started chan struct{}
 }
 
-func (c *blockingPreparedClient) WithRuntimeIdentity(identity modelprovider.RuntimeIdentity) modelprovider.Client {
+func (c *blockingPreparedClient) WithRuntimeIdentity(identity provider.RuntimeIdentity) provider.Client {
 	return &blockingPreparedClient{Client: c.Client.WithRuntimeIdentity(identity), started: c.started}
 }
 
-func (c *blockingPreparedClient) CompletePreparedText(ctx context.Context, _ modelprovider.PreparedText) (modelprovider.TextCompletion, error) {
+func (c *blockingPreparedClient) CompletePreparedText(ctx context.Context, _ provider.PreparedText) (provider.TextCompletion, error) {
 	select {
 	case c.started <- struct{}{}:
 	default:
 	}
 	<-ctx.Done()
-	return modelprovider.TextCompletion{}, ctx.Err()
+	return provider.TextCompletion{}, ctx.Err()
 }
 
-func (c *blockingPreparedClient) StreamAgentChatWithToolsTrace(ctx context.Context, _ string, _ []domain.Message, _ string, _ *tools.Catalog, _ *eventpkg.Recorder, _, _ string, _ []domain.RetrievedMemory, _ []domain.RetrievedDocumentChunk) (<-chan modelprovider.StreamEvent, <-chan error) {
-	events := make(chan modelprovider.StreamEvent)
+func (c *blockingPreparedClient) StreamAgentChatWithToolsTrace(ctx context.Context, _ string, _ []domain.Message, _ string, _ *tool.Catalog, _ *eventpkg.Recorder, _, _ string, _ []domain.RetrievedMemory, _ []domain.RetrievedDocumentChunk) (<-chan provider.StreamEvent, <-chan error) {
+	events := make(chan provider.StreamEvent)
 	errs := make(chan error, 1)
 	select {
 	case c.started <- struct{}{}:

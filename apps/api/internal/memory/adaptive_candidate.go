@@ -9,12 +9,12 @@ import (
 	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/modelprovider"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/redaction"
 )
 
 type CandidateCompletionModel interface {
-	CompleteTextDetailed(context.Context, string, string) (modelprovider.TextCompletion, error)
+	CompleteTextDetailed(context.Context, string, string) (provider.TextCompletion, error)
 }
 
 // CompositeCandidateExtractor keeps explicit durability signals as the cheap,

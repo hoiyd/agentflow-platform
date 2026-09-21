@@ -18,7 +18,7 @@ import (
 	knowledgepkg "agentflow-platform/apps/api/internal/knowledge"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/store"
-	toolpkg "agentflow-platform/apps/api/internal/tools"
+	toolpkg "agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/verification"
 )
 

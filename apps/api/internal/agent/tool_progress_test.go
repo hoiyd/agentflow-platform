@@ -7,7 +7,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 
-	"agentflow-platform/apps/api/internal/toolprogress"
+	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
 func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
@@ -19,10 +19,10 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	call := toolprogress.Call{Source: "local", Tool: "reader", DefinitionRevision: "revision", ArgumentsHash: "arguments"}
-	seed := toolprogress.New(snapshot.ToolProgressGuard)
+	call := progress.Call{Source: "local", Tool: "reader", DefinitionRevision: "revision", ArgumentsHash: "arguments"}
+	seed := progress.New(snapshot.ToolProgressGuard)
 	for count := 1; count <= 3; count++ {
-		decision := seed.Observe(call, toolprogress.Outcome{ErrorCode: "execution_failed", ErrorCategory: "execution"})
+		decision := seed.Observe(call, progress.Outcome{ErrorCode: "execution_failed", ErrorCategory: "execution"})
 		_, err = fixtureStore.CreateRunEvent(domain.RunEvent{
 			Type: domain.EventToolFailed, SchemaVersion: domain.CurrentRunEventSchemaVersion,
 			RunID: run.ID, Payload: progressPayload(decision),
@@ -36,7 +36,7 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if decision := guard.Before(call); decision.Action != toolprogress.ActionBlockCall || decision.Count != 4 {
+	if decision := guard.Before(call); decision.Action != progress.ActionBlockCall || decision.Count != 4 {
 		t.Fatalf("restored decision=%#v", decision)
 	}
 	if runtimeGuard, err := runtime.progressGuardForRun(run.ID, run.RuntimeSnapshot); err != nil || runtimeGuard != guard {
@@ -45,7 +45,7 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 	if err := runtime.resetProgressGuard(run); err != nil {
 		t.Fatal(err)
 	}
-	if decision := guard.Before(call); decision.Action != toolprogress.ActionAllow {
+	if decision := guard.Before(call); decision.Action != progress.ActionAllow {
 		t.Fatalf("human-input reset retained history: %#v", decision)
 	}
 	runtime.forgetProgressGuard(run.ID)
@@ -59,7 +59,7 @@ func TestProgressGuardForHistoricalSnapshotIsDisabled(t *testing.T) {
 
 	snapshot := testRuntimeSnapshot()
 	snapshot.SchemaVersion = domain.ToolSecurityRuntimeSnapshotVersion
-	snapshot.ToolProgressGuard = toolprogress.Config{}
+	snapshot.ToolProgressGuard = progress.Config{}
 	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
 	guard, err := runtime.progressGuardForRun("historical-run", &snapshot)
 	if err != nil {
@@ -75,9 +75,9 @@ func TestProgressDecisionFromPayloadRejectsIncompleteAndDecodesJSONNumbers(t *te
 		t.Fatal("incomplete payload was accepted")
 	}
 	decision, ok := progressDecisionFromPayload(map[string]any{
-		"progress_guard_version":   toolprogress.CurrentVersion,
-		"progress_guard_action":    string(toolprogress.ActionWarn),
-		"progress_guard_rule":      string(toolprogress.RuleRepeatedResult),
+		"progress_guard_version":   progress.CurrentVersion,
+		"progress_guard_action":    string(progress.ActionWarn),
+		"progress_guard_rule":      string(progress.RuleRepeatedResult),
 		"progress_guard_count":     float64(2),
 		"progress_guard_trackable": true,
 		"progress_guard_executed":  true,
@@ -90,7 +90,7 @@ func TestProgressDecisionFromPayloadRejectsIncompleteAndDecodesJSONNumbers(t *te
 	}
 }
 
-func progressPayload(decision toolprogress.Decision) map[string]any {
+func progressPayload(decision progress.Decision) map[string]any {
 	return map[string]any{
 		"progress_guard_version":   decision.Version,
 		"progress_guard_rule":      string(decision.Rule),
