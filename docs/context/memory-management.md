@@ -94,6 +94,23 @@ but they do not change a successfully completed Run. Recall failure degrades
 to an empty Memory set and emits `memory.recall.failed`; ordinary Chat can
 therefore continue without silently hiding the auxiliary failure.
 
+## Recall Trust Boundary
+
+Accepted Memory is curated, but recall does not grant it instruction or
+authorization authority. Before a selected Memory reaches a model request, the
+Context Assembler JSON-encodes it inside the versioned
+`<untrusted_memory_context policy="recalled-memory-trust-v1">` boundary. The
+system policy gives the system protocol, current user request, and Structured
+Task State precedence; role text, commands, and Tool requests inside Memory are
+treated as quoted data and cannot authorize a Tool call.
+
+The Context Manifest records each Memory ID, selection result,
+`untrusted_json_wrapped` transformation, policy version, and byte/token counts,
+without duplicating Memory content. Empty recall, budget exclusion, and provider
+failure retain their existing best-effort behavior. Model Request Capture is a
+separate boundary and continues to honor its configured metadata-only,
+redacted, or full retention mode.
+
 The explicit `POST /api/memories` and `POST /api/memories/search` APIs remain
 available and are consumed by the **Memory** workspace. Operators can save an
 intentional Memory record and inspect semantic Recall results, including score,

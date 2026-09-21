@@ -406,6 +406,7 @@ type ContextManifestEntry struct {
 	Selected         bool     `json:"selected"`
 	Reason           string   `json:"reason"`
 	Transformation   string   `json:"transformation,omitempty"`
+	PolicyVersion    string   `json:"policy_version,omitempty"`
 	EstimatedTokens  int      `json:"estimated_tokens"`
 	OriginalBytes    int      `json:"original_bytes"`
 	IncludedBytes    int      `json:"included_bytes"`

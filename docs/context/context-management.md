@@ -37,7 +37,7 @@ the original Session Log is never changed.
 | Tool definitions and active tool results | required, with result compaction when oversized |
 | Structured Task State | required when a Revision exists; reloaded before every physical Model Call |
 | Recent conversation history | selected within the history budget |
-| Curated semantic memory | selected within the memory budget |
+| Curated semantic memory | selected within the memory budget and wrapped as versioned untrusted data |
 | RAG knowledge | selected within the knowledge budget and wrapped as untrusted data |
 | Persisted conversation summary | required when an active compaction exists |
 | Retrieved original session sources | relevant matches within dedicated result, character, token, and input budgets |
@@ -45,6 +45,16 @@ the original Session Log is never changed.
 Every assembly emits a Context Manifest containing source IDs, selection
 reasons, transformations, token estimates, and a stable prefix hash without
 copying raw dynamic context into the event.
+
+Selected recalled Memory is JSON-encoded inside
+`<untrusted_memory_context policy="recalled-memory-trust-v1">`. The system
+policy treats it as historical data rather than instructions: it cannot
+override the system protocol, current user request, or Structured Task State,
+and cannot authorize Tool calls. Each Memory Manifest entry records
+`transformation=untrusted_json_wrapped` and the policy version whether the item
+was selected or excluded by budget. The Manifest retains only metadata; Model
+Request Capture continues to follow its independent metadata/redacted/full
+retention policy.
 
 Structured Task State is injected as bounded JSON and recorded in the Manifest
 with a versioned reference such as `conversation_id:v3`. Its raw facts remain in
