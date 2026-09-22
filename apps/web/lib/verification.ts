@@ -3,6 +3,7 @@ export type VerifierTypeInput = "command" | "http" | "json_schema" | "text_const
 
 export type AnswerRelevanceSettings = {
   enabled: boolean;
+  required: boolean;
   minimumScore: number;
   minimumAnswerCharacters: number;
 };
@@ -69,7 +70,7 @@ export type CompletionVerificationSettings = {
 export type VerifierSpecInput = {
   id: string;
   type: VerifierTypeInput;
-  required: true;
+  required: boolean;
   config: Record<string, unknown>;
 };
 
@@ -87,6 +88,7 @@ export const DEFAULT_COMPLETION_VERIFICATION: CompletionVerificationSettings = {
   enabled: false,
   answerRelevance: {
     enabled: false,
+    required: false,
     minimumScore: 0.65,
     minimumAnswerCharacters: 20
   },
@@ -155,7 +157,7 @@ export function buildCompletionContract(
     verifiers.push({
       id: "answer-relevance",
       type: "answer_relevance",
-      required: true,
+      required: normalized.answerRelevance.required,
       config: {
         minimum_score: normalized.answerRelevance.minimumScore,
         minimum_answer_characters: normalized.answerRelevance.minimumAnswerCharacters
@@ -254,6 +256,7 @@ export function normalizeCompletionVerification(
     ...settings,
     answerRelevance: {
       ...settings.answerRelevance,
+      required: settings.answerRelevance.required === true,
       minimumScore: clampNumber(settings.answerRelevance.minimumScore, 0.05, 1),
       minimumAnswerCharacters: clampInteger(settings.answerRelevance.minimumAnswerCharacters, 1, 100_000)
     },
@@ -291,6 +294,9 @@ export function validateCompletionVerification(settings: CompletionVerificationS
   const errors: string[] = [];
   if (enabledVerifierCount(settings) === 0) {
     errors.push("Enable at least one verifier.");
+  }
+  if (requiredVerifierCount(settings) === 0) {
+    errors.push("At least one enabled verifier must block completion.");
   }
 
   const text = settings.textConstraints;
@@ -367,6 +373,18 @@ export function validateCompletionVerification(settings: CompletionVerificationS
 export function enabledVerifierCount(settings: CompletionVerificationSettings): number {
   return [
     settings.answerRelevance.enabled,
+    settings.groundedAnswer.enabled,
+    settings.textConstraints.enabled,
+    settings.citation.enabled,
+    settings.jsonSchema.enabled,
+    settings.http.enabled,
+    settings.command.enabled
+  ].filter(Boolean).length;
+}
+
+export function requiredVerifierCount(settings: CompletionVerificationSettings): number {
+  return [
+    settings.answerRelevance.enabled && settings.answerRelevance.required,
     settings.groundedAnswer.enabled,
     settings.textConstraints.enabled,
     settings.citation.enabled,

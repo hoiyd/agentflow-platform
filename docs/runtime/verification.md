@@ -181,7 +181,7 @@ All verifier-specific settings live under `config`. Each registered verifier str
 }
 ```
 
-The Answer Relevance MVP can be added to any contract as follows:
+The embedding-based Answer Relevance verifier can be added to a contract as follows:
 
 ```json
 {
@@ -197,7 +197,8 @@ The Answer Relevance MVP can be added to any contract as follows:
 
 Version `answer-relevance-embedding-v1` uses the platform's configured
 embedding provider and records cosine similarity, threshold, model, provider,
-dimensions, and question-repetition handling in Evidence. Verbatim question
+dimensions, question-repetition handling, and a stable `decision_reason` in
+Evidence. Verbatim question
 repetition is removed before the answer is embedded. Missing embedding service,
 estimated local-hash vectors, mixed models/providers, malformed vectors, and
 timeouts produce `blocked` rather than silently falling back to lexical
@@ -205,6 +206,14 @@ matching. The threshold is embedding-model-specific and must be calibrated on
 representative outputs before it is used as a strict production quality gate.
 The verifier adds two embedding requests per attempt; those calls are not yet
 represented as generation-token usage in the Run Usage Ledger.
+
+The workbench defaults Answer Relevance to advisory. A spec with
+`required=false` still persists Evidence and Replay diagnostics, but its failure
+does not reject completion; `required=true` participates in the Completion Gate.
+Every Completion Contract must still contain at least one required verifier.
+The versioned calibration/holdout workflow and current `qwen3-embedding`
+warn-only result are documented in
+[Offline Evaluation Reports](../operations/offline-evaluation.md#answer-relevance-calibration).
 
 `citation` counts unique external URLs from explicit Markdown links and CommonMark autolinks. Relative links, images, and bare URL-like text are not citations. Host rules match the configured host and its subdomains. This verifier does not fetch sources or judge whether a source supports a claim; source reachability and claim groundedness belong in separate verifiers.
 

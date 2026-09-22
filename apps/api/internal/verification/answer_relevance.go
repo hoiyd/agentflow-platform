@@ -81,6 +81,7 @@ func (v answerRelevanceVerifier) Verify(ctx context.Context, spec domain.Verifie
 	if scoringAnswerCharacters < config.MinimumAnswerCharacters {
 		details := answerRelevanceDetails(config, answerCharacters, scoringAnswerCharacters, questionRepetitionRemoved)
 		details["score"] = 0.0
+		details["decision_reason"] = "answer_too_short"
 		return Result{
 			Status:  domain.VerificationFailed,
 			Summary: fmt.Sprintf("answer relevance failed: substantive answer has %d characters (minimum %d)", scoringAnswerCharacters, config.MinimumAnswerCharacters),
@@ -127,8 +128,10 @@ func (v answerRelevanceVerifier) Verify(ctx context.Context, spec domain.Verifie
 
 	status := domain.VerificationPassed
 	summary := fmt.Sprintf("answer relevance passed with cosine similarity %.3f", score)
+	details["decision_reason"] = "score_at_or_above_threshold"
 	if score < config.MinimumScore {
 		status = domain.VerificationFailed
+		details["decision_reason"] = "score_below_threshold"
 		summary = fmt.Sprintf("answer relevance failed with cosine similarity %.3f (minimum %.3f)", score, config.MinimumScore)
 	}
 	return Result{Status: status, Summary: summary, Details: details, Artifacts: []Artifact{diagnosticArtifact(details)}}

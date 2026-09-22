@@ -14,6 +14,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/evaluation/contexteval"
 	"agentflow-platform/apps/api/internal/evaluation/rageval"
+	"agentflow-platform/apps/api/internal/evaluation/relevanceeval"
 	"agentflow-platform/apps/api/internal/evaluation/routeeval"
 	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 )
@@ -231,6 +232,52 @@ func TestRAGCLIUsesExplicitSemanticProfile(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "fixture-key") || !strings.Contains(stderr.String(), "embedding_requests=2") {
 		t.Fatalf("credential leaked or summary missing: out=%s stderr=%s", out.String(), stderr.String())
+	}
+}
+
+func TestRelevanceCLIProducesCalibratedHoldoutReport(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "fixture-key")
+	dataset := filepath.Join(t.TempDir(), "relevance.json")
+	content := `{"schema_version":"answer-relevance-dataset-v1","id":"fixture","version":"1","label_policy":"directly answers the main request","cases":[` +
+		`{"id":"cal-positive","split":"calibration","coverage":["direct"],"question":"fixture question","answer":"relevant direct answer","expected_relevant":true},` +
+		`{"id":"cal-negative","split":"calibration","coverage":["off_topic"],"question":"fixture question","answer":"off-topic unrelated answer","expected_relevant":false},` +
+		`{"id":"hold-positive","split":"holdout","coverage":["direct"],"question":"fixture question","answer":"relevant holdout answer","expected_relevant":true},` +
+		`{"id":"hold-negative","split":"holdout","coverage":["off_topic"],"question":"fixture question","answer":"off-topic holdout answer","expected_relevant":false}]}`
+	if err := os.WriteFile(dataset, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Input string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		vector := `[1,0]`
+		if strings.Contains(body.Input, "off-topic") {
+			vector = `[0,1]`
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"embedding":` + vector + `}],"model":"fixture-embedding"}`))
+	}))
+	defer server.Close()
+	args := []string{"relevance", "--dataset", dataset, "--min-answer-characters", "5",
+		"--embedding-profile", "openai_compatible", "--live-embeddings", "--embedding-base-url", server.URL,
+		"--embedding-model", "fixture-embedding", "--embedding-dimensions", "2",
+		"--max-embedding-calls", "8", "--max-embedding-input-tokens", "1000", "--embedding-retry-attempts", "1", "--enforce"}
+	var out, stderr bytes.Buffer
+	if code := run(context.Background(), args, &out, &stderr); code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	var report relevanceeval.Report
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil || !report.Gate.Passed || report.Embedding.PhysicalRequests != 8 {
+		t.Fatalf("invalid relevance report: err=%v report=%+v", err, report)
+	}
+	if !strings.Contains(stderr.String(), "false_accept=0.000") || strings.Contains(out.String(), "fixture-key") {
+		t.Fatalf("summary missing or credential leaked: out=%s stderr=%s", out.String(), stderr.String())
+	}
+	if code := run(context.Background(), []string{"relevance"}, &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
+		t.Fatal("relevance calibration accepted implicit model access")
 	}
 }
 

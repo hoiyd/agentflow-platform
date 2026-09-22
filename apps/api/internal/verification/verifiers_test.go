@@ -160,11 +160,17 @@ func TestAnswerRelevanceVerifierScoresQuestionCoverage(t *testing.T) {
 	if passed.Status != domain.VerificationPassed || passed.Details["score"].(float64) < 0.65 || passed.Details["embedding_model"] != "test-embedding" {
 		t.Fatalf("expected relevant answer to pass: %#v", passed)
 	}
+	if passed.Details["decision_reason"] != "score_at_or_above_threshold" {
+		t.Fatalf("missing pass decision reason: %#v", passed)
+	}
 
 	failed := verifier.Verify(context.Background(), spec, SubjectForQuestionAnswer(
 		"What are your opening hours?", "The stock market closed higher after the earnings report."))
 	if failed.Status != domain.VerificationFailed || failed.Details["score"].(float64) >= 0.65 {
 		t.Fatalf("expected unrelated answer to fail: %#v", failed)
+	}
+	if failed.Details["decision_reason"] != "score_below_threshold" {
+		t.Fatalf("missing failure decision reason: %#v", failed)
 	}
 
 	parroted := verifier.Verify(context.Background(), spec, SubjectForQuestionAnswer(
