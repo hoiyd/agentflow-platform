@@ -46,6 +46,7 @@ the project.
 | [Model route contract and catalog](runtime/model-routing.md) | How are model targets validated, capability-filtered, frozen, selected, and explained before provider access? |
 | [Bounded load and soak testing](operations/load-soak-testing.md) | How are backpressure, cancellation, rate and budget boundaries, background Memory work, and cleanup tested under reproducible controlled load? |
 | [llama.cpp compatibility evidence](operations/local-inference-compatibility.md) | How is a real local OpenAI-compatible target checked for streaming, usage, errors, cancellation recovery, route identity, and Runtime Replay evidence? |
+| [Tokenization calibration](operations/tokenization-calibration.md) | How do Context estimates, the final serialized request, llama.cpp template tokens, and exact provider usage compare? |
 | [Evidence comparison view](operations/evidence-comparison.md) | How does the Evaluation workspace compare outcomes, cost, and traceable evidence without treating unrelated Runs as an improvement? |
 | [Tool contract testing](tools/tool-contract-testing.md) | How are Binding contracts, runtime failure paths, durable effects, and Tool selection regressions tested without a network or model? |
 | [Tool task evaluations](tools/tool-task-evaluations.md) | Can Artifact Tools complete evidence-backed tasks, and how are offline checks separated from budgeted live-model comparisons? |
