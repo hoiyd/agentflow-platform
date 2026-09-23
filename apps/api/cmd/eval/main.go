@@ -15,10 +15,12 @@ import (
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/credential"
 	"agentflow-platform/apps/api/internal/evaluation/contexteval"
+	"agentflow-platform/apps/api/internal/evaluation/inferencecompat"
 	"agentflow-platform/apps/api/internal/evaluation/rageval"
 	"agentflow-platform/apps/api/internal/evaluation/routeeval"
 	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/inference/routing"
 )
 
 func main() {
@@ -29,7 +31,7 @@ func main() {
 
 func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: eval <benchmark|context|rag|route|tool> [options]")
+		fmt.Fprintln(stderr, "usage: eval <benchmark|context|inference|rag|route|tool> [options]")
 		return 2
 	}
 	switch args[0] {
@@ -37,6 +39,8 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return runBenchmark(ctx, args[1:], out, stderr)
 	case "context":
 		return runContext(ctx, args[1:], out, stderr)
+	case "inference":
+		return runInference(ctx, args[1:], out, stderr)
 	case "rag":
 		return runRAG(ctx, args[1:], out, stderr)
 	case "route":
@@ -44,9 +48,54 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	case "tool":
 		return runTool(ctx, args[1:], out, stderr)
 	default:
-		fmt.Fprintf(stderr, "unknown evaluation suite %q; use benchmark, context, rag, route, or tool\n", args[0])
+		fmt.Fprintf(stderr, "unknown evaluation suite %q; use benchmark, context, inference, rag, route, or tool\n", args[0])
 		return 2
 	}
+}
+
+func runInference(ctx context.Context, args []string, out, stderr io.Writer) int {
+	flags := flag.NewFlagSet("eval inference", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	baseURL := flags.String("base-url", "http://127.0.0.1:8081/v1", "llama.cpp OpenAI-compatible base URL")
+	model := flags.String("model", "", "required model ID sent to llama.cpp")
+	backendVersion := flags.String("backend-version", "", "required llama.cpp version/commit")
+	modelArtifact := flags.String("model-artifact", "", "required stable model artifact or repository ID")
+	quantization := flags.String("quantization", "", "required model quantization")
+	hardware := flags.String("hardware", "", "required hardware identity")
+	contextWindow := flags.Int("context-window-tokens", 0, "required llama.cpp context limit")
+	maxOutput := flags.Int("max-output-tokens", 0, "required route output limit")
+	requestTimeout := flags.Duration("request-timeout", 30*time.Second, "bounded duration for each compatibility check")
+	routeID := flags.String("route-id", "llama-cpp", "AgentFlow route ID")
+	toolCalling := flags.Bool("tool-calling", false, "route explicitly supports Tool Calling")
+	structuredOutput := flags.Bool("structured-output", false, "route explicitly supports structured output")
+	agentFlowBaseURL := flags.String("agentflow-base-url", "", "optional AgentFlow API root for Single/Multi/Loop evidence")
+	workspaceID := flags.String("workspace-id", "", "required with --agentflow-base-url")
+	agentID := flags.String("agent-id", "", "required with --agentflow-base-url")
+	enforce := flags.Bool("enforce", false, "exit 1 when any compatibility check fails")
+	if flags.Parse(args) != nil || flags.NArg() != 0 {
+		return 2
+	}
+	report, err := inferencecompat.Run(ctx, inferencecompat.Options{
+		Target: inferencecompat.Target{BackendVersion: *backendVersion, BaseURL: *baseURL, Model: *model, ModelArtifact: *modelArtifact,
+			Quantization: *quantization, ContextWindow: *contextWindow, MaxOutputTokens: *maxOutput, Hardware: *hardware,
+			Capabilities: routing.Capabilities{ToolCalling: *toolCalling, StructuredOutput: *structuredOutput, Streaming: true}},
+		APIKey: credential.FromEnvironment("LLAMA_CPP_API_KEY").Reveal(), RouteID: *routeID, CredentialEnv: "LLAMA_CPP_API_KEY",
+		RequestTimeout: *requestTimeout, AgentFlowBaseURL: *agentFlowBaseURL,
+		WorkspaceID: *workspaceID, AgentID: *agentID, Revision: gitRevision(ctx),
+	})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if !writeJSON(out, stderr, report) {
+		return 2
+	}
+	fmt.Fprintf(stderr, "inference: backend=%s model=%s checks=%d modes=%d passed=%t failures=%d\n",
+		report.Target.BackendVersion, report.Target.Model, len(report.Checks), len(report.Modes), report.Gate.Passed, report.Gate.BlockingFailures)
+	if *enforce && !report.Gate.Passed {
+		return 1
+	}
+	return 0
 }
 
 func runRoute(ctx context.Context, args []string, out, stderr io.Writer) int {

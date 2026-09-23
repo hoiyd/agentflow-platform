@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
@@ -73,6 +74,35 @@ func TestToolRoundTripCreatesManifestPerLogicalModelCall(t *testing.T) {
 	}
 	if budgetController.estimates[0].OperationID == budgetController.estimates[1].OperationID {
 		t.Fatalf("tool selection and final response reused operation id %q", budgetController.estimates[0].OperationID)
+	}
+}
+
+func TestToolFreeChatStreamsWithoutToolSchema(t *testing.T) {
+	client := retryTestClient()
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(request *http.Request) (*http.Response, error) {
+		var payload map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["stream"] != true || payload["tools"] != nil || payload["tool_choice"] != nil {
+			t.Fatalf("unexpected tool-free model request: %#v", payload)
+		}
+		return modelHTTPResponse(200, "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\ndata: {\"choices\":[],\"usage\":{\"prompt_tokens\":2,\"completion_tokens\":1,\"total_tokens\":3}}\n\ndata: [DONE]\n\n"), nil
+	})}
+	store := &recordingEventStore{}
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{ConversationID: "conv-1", RunID: "run-1", StageID: "stage-1", TurnID: "turn-1"})
+	catalog, err := tool.NewCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, errs := client.StreamAgentChatWithToolsTrace(ctx, "Reply briefly.", nil, "hello", catalog,
+		eventpkg.NewRecorder(store), "run-1", "stage-1", nil, nil)
+	var output string
+	for item := range events {
+		output += item.Delta
+	}
+	if err := <-errs; err != nil || output != "hello" {
+		t.Fatalf("tool-free stream output=%q error=%v", output, err)
 	}
 }
 

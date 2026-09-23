@@ -64,6 +64,36 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		return err
 	}
 	messages := prepared.messages
+	if len(definitions) == 0 {
+		startPayload := mergePayload(map[string]any{
+			"model": c.model, "call_kind": "answer_stream", "messages": messages,
+			"input_chars": messagesTextLength(messages),
+		}, contextTracePayload(prepared.manifest))
+		if len(retrievedMemories) > 0 {
+			startPayload["retrieved_memories"] = retrievedMemoryPayload(retrievedMemories)
+		}
+		if len(retrievedChunks) > 0 {
+			startPayload["retrieved_chunks"] = retrievedChunkPayload(retrievedChunks)
+		}
+		span := recorder.LLMStart(ctx, runID, stepID, startPayload)
+		streamCtx := budget.WithOperation(ctx, prepared.manifest.ModelCallID)
+		streamCtx = withOutputTokenLimit(streamCtx, prepared.manifest.OutputReserveTokens)
+		streamCtx = withRequestManifest(streamCtx, prepared.manifest)
+		emitted, output, usage, err := c.streamMessages(streamCtx, messages, events)
+		if err != nil {
+			recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
+				"source": "llm", "stage": "answer_stream", "model": c.model, "error": err.Error(),
+			}, err))
+			return err
+		}
+		if !emitted {
+			return invalidResponseError("chat.stream", "model stream returned no content", nil)
+		}
+		recorder.LLMEnd(ctx, span, tokenPayload(map[string]any{
+			"model": c.model, "output": output, "output_chars": len(output),
+		}, usage))
+		return nil
+	}
 	startPayload := mergePayload(map[string]any{
 		"model":         c.model,
 		"call_kind":     "tool_selection",

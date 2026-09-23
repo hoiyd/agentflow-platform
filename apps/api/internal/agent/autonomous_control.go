@@ -41,6 +41,18 @@ func (r *Runtime) stopIfCanceled(events chan<- domain.RunEvent, runID string) (b
 	return true, errRunCanceled
 }
 
+func (r *Runtime) stopAutonomousStageIfCanceled(ctx context.Context, events chan<- domain.RunEvent, step domain.CollaborationStep) (bool, error) {
+	run, ok, err := r.store.GetRun(step.RunID)
+	if err != nil || !ok {
+		return false, err
+	}
+	if run.Status != domain.RunCanceling && run.Status != domain.RunCanceled {
+		return false, nil
+	}
+	_ = r.failCollaborationStage(ctx, events, step, errRunCanceled)
+	return r.stopIfCanceled(events, step.RunID)
+}
+
 func limitStopReason(limits AutonomousLimits, outputChars int) string {
 	if outputChars >= limits.MaxOutputChars {
 		return "max_output_chars reached"
