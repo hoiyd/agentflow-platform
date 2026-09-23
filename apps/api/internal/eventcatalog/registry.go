@@ -153,6 +153,7 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventModelDelta}, LiveOnly, optional, "event.ModelPayload", none, "live_ui")
 	add([]domain.RunEventType{domain.EventModelRouteDecided}, DurableFact, optional, "event.ModelRouteDecisionPayload", transition("model"), "request_capture", "replay")
 	add([]domain.RunEventType{domain.EventModelRequestPrepared}, DurableFact, optional, "event.ModelRequestPreparedPayload", transition("model"), "request_capture", "replay")
+	add([]domain.RunEventType{domain.EventModelAttemptFinished}, DurableFact, optional, "event.ModelAttemptFinishedPayload", none, "request_capture", "replay")
 
 	add([]domain.RunEventType{domain.EventContextAssembled}, DurableFact, optional, "event.ContextAssembledPayload", none, "request_capture", "replay")
 	add([]domain.RunEventType{domain.EventCompactionStarted}, DurableFact, optional, "event.ContextCompactionPayload", start("compaction"), "replay")
@@ -207,7 +208,7 @@ func producerFor(eventType domain.RunEventType) string {
 		return "agent/turn"
 	case domain.EventModelRouteDecided:
 		return "agent/modelrouting"
-	case domain.EventModelRequestPrepared, domain.EventContextAssembled:
+	case domain.EventModelRequestPrepared, domain.EventModelAttemptFinished, domain.EventContextAssembled:
 		return "requestcapture/contextassembly"
 	case domain.EventCompactionStarted, domain.EventCompactionCompleted, domain.EventCompactionFailed:
 		return "contextcompaction"

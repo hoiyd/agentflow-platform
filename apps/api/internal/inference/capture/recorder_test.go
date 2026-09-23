@@ -38,11 +38,23 @@ func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
 		ModelCallID: "call-1", Operation: "chat.completion", Provider: "test", Model: "test-model",
 		ContextManifestID: manifestID, SourceTokenBreakdown: map[string]int{"system": 7}, Payload: payload,
 	}
-	if err := recorder.Record(ctx, observation); err != nil {
+	first, err := recorder.Begin(ctx, observation)
+	if err != nil {
 		t.Fatalf("record request: %v", err)
 	}
-	if err := recorder.Record(ctx, observation); err != nil {
+	if err := recorder.Finish(ctx, first, requestcontrol.AttemptOutcome{
+		Status: "failed", DurationMS: 25, ErrorKind: "provider_unavailable", HTTPStatus: 503,
+	}); err != nil {
+		t.Fatalf("record failed attempt: %v", err)
+	}
+	second, err := recorder.Begin(ctx, observation)
+	if err != nil {
 		t.Fatalf("record retry: %v", err)
+	}
+	if err := recorder.Finish(ctx, second, requestcontrol.AttemptOutcome{
+		Status: "completed", DurationMS: 40, PromptTokens: 3, CompletionTokens: 2, TotalTokens: 5, UsageAvailable: true,
+	}); err != nil {
+		t.Fatalf("record completed attempt: %v", err)
 	}
 
 	if err := pgStore.Close(); err != nil {
@@ -70,6 +82,23 @@ func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
 	loadedRun, _, _ := reopened.GetRun(run.ID)
 	if err := ValidateReconstructability(loadedRun, records, events); err != nil {
 		t.Fatalf("validate reconstructability: %v", err)
+	}
+	finished := 0
+	for _, item := range events {
+		if item.Type != domain.EventModelAttemptFinished {
+			continue
+		}
+		finished++
+		want := first
+		if item.Payload["status"] == "completed" {
+			want = second
+		}
+		if item.Payload["record_id"] != want.RecordID || item.Payload["attempt"] != float64(want.Attempt) {
+			t.Fatalf("attempt telemetry did not survive round-trip: %#v", item)
+		}
+	}
+	if finished != 2 {
+		t.Fatalf("expected two durable attempt outcomes, got %d", finished)
 	}
 }
 
@@ -279,6 +308,7 @@ type captureStoreStub struct {
 	getErr    error
 	createErr error
 	eventErr  error
+	events    []domain.RunEvent
 }
 
 func (s *captureStoreStub) GetRun(string) (domain.Run, bool, error) {
@@ -294,7 +324,43 @@ func (s *captureStoreStub) CreateModelRequestRecord(record domain.ModelRequestRe
 }
 
 func (s *captureStoreStub) CreateRunEvent(event domain.RunEvent) (domain.RunEvent, error) {
+	if s.eventErr == nil {
+		s.events = append(s.events, event)
+	}
 	return event, s.eventErr
+}
+
+func TestAttemptTelemetryLinksPreparedRequestAndDoesNotPersistErrorText(t *testing.T) {
+	run := domain.Run{ID: "run-1", ConversationID: "conversation-1", RuntimeSnapshot: &domain.RuntimeSnapshot{SchemaVersion: domain.CurrentRuntimeSnapshotVersion}}
+	stub := &captureStoreStub{run: run, ok: true}
+	recorder := NewRecorder(stub, Options{})
+	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID, TurnID: "turn-1"})
+	ref, err := recorder.Begin(ctx, requestcontrol.Observation{
+		ModelCallID: "call-1", Operation: "chat.stream", Provider: "test", Model: "model-1", Payload: []byte(`{"model":"model-1","messages":[]}`),
+	})
+	if err != nil || ref.RecordID == "" || ref.Attempt != 1 {
+		t.Fatalf("begin attempt: ref=%#v err=%v", ref, err)
+	}
+	firstToken := int64(12)
+	if err := recorder.Finish(ctx, ref, requestcontrol.AttemptOutcome{
+		Status: "failed", DurationMS: 30, TimeToFirstTokenMS: &firstToken, ErrorKind: "invalid_response", HTTPStatus: 502,
+	}); err != nil {
+		t.Fatalf("finish attempt: %v", err)
+	}
+	if len(stub.events) != 2 || stub.events[1].Type != domain.EventModelAttemptFinished || stub.events[1].TurnID != "turn-1" {
+		t.Fatalf("missing scoped attempt event: %#v", stub.events)
+	}
+	payload := stub.events[1].Payload
+	if payload["record_id"] != ref.RecordID || payload["model_call_id"] != ref.ModelCallID || payload["attempt"] != float64(1) ||
+		payload["status"] != "failed" || payload["time_to_first_token_ms"] != float64(12) || payload["error_kind"] != "invalid_response" {
+		t.Fatalf("unexpected attempt payload: %#v", payload)
+	}
+	if _, present := payload["message"]; present {
+		t.Fatal("raw provider message leaked into telemetry")
+	}
+	if err := recorder.Finish(context.Background(), ref, requestcontrol.AttemptOutcome{Status: "completed"}); err == nil {
+		t.Fatal("unscoped outcome should be rejected")
+	}
 }
 
 func newCaptureTestRun(t *testing.T) (*store.PostgresStore, domain.Run, string) {

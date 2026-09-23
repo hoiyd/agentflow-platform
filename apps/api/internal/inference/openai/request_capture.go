@@ -2,7 +2,9 @@ package openai
 
 import (
 	"context"
+	"log"
 	"strings"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
@@ -35,19 +37,55 @@ func requestManifestFromContext(ctx context.Context) requestManifest {
 	return value
 }
 
-func (c *Client) recordModelRequest(ctx context.Context, modelCallID, operation, model string, payload []byte) error {
+func (c *Client) recordModelRequest(ctx context.Context, modelCallID, operation, model string, payload []byte) (requestcontrol.AttemptRef, error) {
 	if c == nil || c.requestRecorder == nil {
-		return nil
+		return requestcontrol.AttemptRef{}, nil
 	}
 	provider := providerForURL(c.baseURL)
 	if model == "local_fallback" {
 		provider = "local"
 	}
 	manifest := requestManifestFromContext(ctx)
-	return c.requestRecorder.Record(ctx, requestcontrol.Observation{
+	observation := requestcontrol.Observation{
 		ModelCallID: strings.TrimSpace(modelCallID), Operation: strings.TrimSpace(operation),
 		Provider: provider, Model: strings.TrimSpace(model), ContextManifestID: manifest.id,
 		SourceTokenBreakdown: manifest.sourceTokenBreakdown,
 		Payload:              append([]byte(nil), payload...),
-	})
+	}
+	if recorder, ok := c.requestRecorder.(requestcontrol.AttemptRecorder); ok {
+		return recorder.Begin(ctx, observation)
+	}
+	return requestcontrol.AttemptRef{}, c.requestRecorder.Record(ctx, observation)
+}
+
+func (c *Client) finishModelAttempt(ctx context.Context, ref requestcontrol.AttemptRef, started, firstToken time.Time, usage Usage, attemptErr error) {
+	if ref.RecordID == "" {
+		return
+	}
+	recorder, ok := c.requestRecorder.(requestcontrol.AttemptRecorder)
+	if !ok {
+		return
+	}
+	outcome := requestcontrol.AttemptOutcome{
+		Status: "completed", DurationMS: time.Since(started).Milliseconds(),
+		PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens,
+		UsageEstimated: usage.Estimated, UsageAvailable: usage.Valid(),
+	}
+	if !firstToken.IsZero() {
+		firstTokenMS := firstToken.Sub(started).Milliseconds()
+		outcome.TimeToFirstTokenMS = &firstTokenMS
+		if !usage.Estimated && usage.CompletionTokens > 0 {
+			generationMS := outcome.DurationMS - firstTokenMS
+			if generationMS > 0 {
+				outcome.OutputTokensPerSecond = float64(usage.CompletionTokens) * 1000 / float64(generationMS)
+			}
+		}
+	}
+	if attemptErr != nil {
+		modelErr := classifyModelError("", attemptErr)
+		outcome.Status, outcome.ErrorKind, outcome.HTTPStatus = "failed", string(modelErr.Kind), modelErr.StatusCode
+	}
+	if err := recorder.Finish(context.WithoutCancel(ctx), ref, outcome); err != nil {
+		log.Printf("model_attempt_telemetry_error record_id=%s error=%q", ref.RecordID, err.Error())
+	}
 }

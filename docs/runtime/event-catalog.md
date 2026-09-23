@@ -28,6 +28,7 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 | `memory.sync.failed` | durable | 1 | run | memory | `event.TracePayload` | memory_sync:terminal | `memory.sync.requested` | run_projection, replay |
 | `memory.sync.rejected` | durable | 1 | run | memory | `event.TracePayload` | none | `` | run_projection, replay |
 | `memory.sync.requested` | durable | 1 | run | memory | `event.TracePayload` | memory_sync:start | `` | replay |
+| `model.attempt_finished` | durable | 1 | run | requestcapture/contextassembly | `event.ModelAttemptFinishedPayload` | none | `` | request_capture, replay |
 | `model.completed` | durable | 1 | run | agent/turn | `event.ModelPayload` | model:terminal | `model.started` | run_projection, replay |
 | `model.delta` | live | 1 | run | agent/turn | `event.ModelPayload` | none | `` | live_ui |
 | `model.failed` | durable | 1 | run | agent/turn | `event.ModelPayload` | model:terminal | `model.started` | run_projection, replay |

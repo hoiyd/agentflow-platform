@@ -344,6 +344,7 @@ const (
 	EventModelStarted                   RunEventType = "model.started"
 	EventModelRouteDecided              RunEventType = "model.route_decided"
 	EventModelRequestPrepared           RunEventType = "model.request_prepared"
+	EventModelAttemptFinished           RunEventType = "model.attempt_finished"
 	EventModelDelta                     RunEventType = "model.delta"
 	EventModelCompleted                 RunEventType = "model.completed"
 	EventModelFailed                    RunEventType = "model.failed"

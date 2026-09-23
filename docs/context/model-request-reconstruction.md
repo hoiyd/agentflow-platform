@@ -59,6 +59,31 @@ The recorder runs before the provider request. A run-scoped persistence failure
 fails closed rather than sending an unrecorded request. Postgres stores
 assign attempt numbers atomically per `(run_id, model_call_id)`.
 
+## Per-Attempt Inference Telemetry
+
+Each recorded chat attempt writes a `model.attempt_finished` Run Event linked to
+its prepared Envelope by `record_id`, `model_call_id`, and `attempt`. Replay
+shows the event's completed/failed outcome, request-to-response duration,
+streaming time to first content token when observed, prompt/completion/total
+tokens, whether usage was estimated, and a typed error kind/HTTP status on
+failure. It does not persist raw provider errors, prompts, or credentials.
+Observed output tokens/second is reported only when exact completion usage and
+a measurable interval after the first token are both available; it includes
+transport time and is not a pure hardware decode benchmark.
+Stream usage-capability fallback and provider retries produce separate attempt
+events under the same logical Model Call; Run Budget still settles that logical
+call once. A missing provider usage value is marked estimated when a completed
+response permits fallback counting. Failed attempts without usage do not claim
+zero-token billing.
+
+Timing starts after the request Envelope is persisted and includes request
+limiter wait, transport, and response parsing. First-token timing is available
+only for a stream with a content delta; it is not an HTTP header latency metric.
+Attempt telemetry is best-effort after the provider attempt so a telemetry
+write failure cannot turn a successful response into an unsafe retry. An
+Envelope without a finishing event may therefore indicate a crash or a
+telemetry persistence failure, not necessarily an in-flight request.
+
 ## Inspection API
 
 ```http

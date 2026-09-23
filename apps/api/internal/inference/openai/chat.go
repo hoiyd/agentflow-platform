@@ -45,10 +45,12 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 				errs <- err
 				return
 			}
-			if err := c.recordModelRequest(callCtx, reservation.OperationID, "local.stream", "local_fallback", requestPayload); err != nil {
+			ref, err := c.recordModelRequest(callCtx, reservation.OperationID, "local.stream", "local_fallback", requestPayload)
+			if err != nil {
 				errs <- err
 				return
 			}
+			started := time.Now()
 			startPayload := mergePayload(map[string]any{
 				"model":       "local_fallback",
 				"system":      systemPrompt,
@@ -64,6 +66,7 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 			span := recorder.LLMStart(ctx, runID, stepID, startPayload)
 			c.streamText(ctx, output, 45*time.Millisecond, events)
 			usage := estimateUsage(messagesToText(prepared.messages), output)
+			c.finishModelAttempt(callCtx, ref, started, time.Time{}, usage, ctx.Err())
 			if err := settleBudgetedModelCall(callCtx, reservation, usage); err != nil {
 				errs <- err
 				return
@@ -133,10 +136,13 @@ func (c *Client) CompletePreparedText(ctx context.Context, prepared PreparedText
 		if err != nil {
 			return TextCompletion{}, err
 		}
-		if err := c.recordModelRequest(ctx, reservation.OperationID, "local.completion", "local_fallback", payload); err != nil {
+		ref, err := c.recordModelRequest(ctx, reservation.OperationID, "local.completion", "local_fallback", payload)
+		if err != nil {
 			return TextCompletion{}, err
 		}
+		started := time.Now()
 		usage := estimateUsage(systemPrompt+"\n"+prompt, text)
+		c.finishModelAttempt(ctx, ref, started, time.Time{}, usage, ctx.Err())
 		if err := settleBudgetedModelCall(ctx, reservation, usage); err != nil {
 			return TextCompletion{}, err
 		}
