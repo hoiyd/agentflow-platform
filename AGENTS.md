@@ -177,5 +177,7 @@ are complete. Mandatory namespace filtering alone is not authorization.
   files, local paths, private notes, and generated evidence containing prompts.
 - Do not stage local files such as `docs/private/` unless explicitly requested.
 - Do not create a commit, push, or PR unless requested.
+- Use [.github/pull_request_template.md](.github/pull_request_template.md) for new
+  and updated PR descriptions, including PRs created through `gh`.
 - If blocked, ask for the missing input or propose a focused next step instead
   of broad speculative changes.
