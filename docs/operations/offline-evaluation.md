@@ -12,6 +12,10 @@ go run ./cmd/eval tool --live --model MODEL \
   --max-model-calls 45 --max-total-tokens 250000 --trials 3 --enforce
 ```
 
+The live [`llama.cpp` compatibility suite](local-inference-compatibility.md)
+uses the same CLI but is a target protocol and Runtime evidence check, not an
+offline quality score.
+
 Every report uses `agentflow-evaluation-report-v1` identity fields: evaluation
 kind, Dataset ID/version/hash, Git revision, start/end time, and an explicit
 gate. Domain payload schemas remain separate (`context-quality-eval-v1`,

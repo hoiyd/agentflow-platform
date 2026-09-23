@@ -73,7 +73,10 @@ func (r *Recorder) Retrieval(ctx context.Context, runID string, stepID string, p
 }
 
 func (r *Recorder) Error(ctx context.Context, runID string, stepID string, payload map[string]any) {
-	r.event(ctx, runID, stepID, domain.EventModelFailed, payload)
+	if ctx == nil {
+		return
+	}
+	r.event(context.WithoutCancel(ctx), runID, stepID, domain.EventModelFailed, payload)
 }
 
 func (r *Recorder) event(ctx context.Context, runID string, stepID string, eventType domain.RunEventType, payload map[string]any) {

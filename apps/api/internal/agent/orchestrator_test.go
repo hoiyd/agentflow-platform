@@ -830,6 +830,60 @@ func TestAutonomousRunCanBeCanceledBeforeLoop(t *testing.T) {
 	}
 }
 
+func TestAutonomousCancelClosesActiveStage(t *testing.T) {
+	fixtureStore := fixturestore.New()
+	conversation, err := fixtureStore.CreateConversation("cancel active autonomous stage")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &blockingPreparedClient{Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1)}
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client, RouterMode: RouterModeQuery})
+	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, errs := runtime.RunAutonomous(context.Background(), prepared, "wait")
+	done := make(chan error, 1)
+	go func() {
+		for range events {
+		}
+		done <- <-errs
+	}()
+	select {
+	case <-client.started:
+	case <-time.After(time.Second):
+		t.Fatal("autonomous model request did not start")
+	}
+	if _, err := runtime.CancelRun(prepared.Run.ID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("autonomous cancellation returned error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("autonomous cancellation did not finish")
+	}
+	runEvents, err := fixtureStore.ListRunEvents(prepared.Run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var startedStage string
+	var failedStage bool
+	for _, event := range runEvents {
+		switch event.Type {
+		case domain.EventStageStarted:
+			startedStage = event.StageID
+		case domain.EventStageFailed:
+			failedStage = event.StageID == startedStage
+		}
+	}
+	if startedStage == "" || !failedStage {
+		t.Fatalf("canceled autonomous stage has no terminal event: %#v", runEvents)
+	}
+}
+
 func TestResumeAutonomousCompletesHumanInputCheckpoint(t *testing.T) {
 	fixtureStore := fixturestore.New()
 

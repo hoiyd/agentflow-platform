@@ -20,7 +20,7 @@ import (
 
 func TestCLIRejectsUnknownSuiteAndUnauthorizedToolEvaluation(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "fixture-key")
-	for _, args := range [][]string{nil, {"unknown"}, {"tool"}, {"tool", "--live"}, {"tool", "--live", "--model", "fixture"}, {"tool", "--live", "--model", "fixture", "unexpected"}} {
+	for _, args := range [][]string{nil, {"unknown"}, {"inference"}, {"tool"}, {"tool", "--live"}, {"tool", "--live", "--model", "fixture"}, {"tool", "--live", "--model", "fixture", "unexpected"}} {
 		var out, stderr bytes.Buffer
 		if code := run(context.Background(), args, &out, &stderr); code != 2 || out.Len() != 0 {
 			t.Fatalf("unexpected CLI result: %d %s", code, out.String())

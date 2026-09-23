@@ -58,12 +58,22 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		return domain.RuntimeSnapshot{}, err
 	}
 	agent = domain.NormalizeAgentConfig(agent)
-	agent.Tools = r.withHarnessTools(agent.Tools)
+	toolCallingAvailable := false
+	if r.modelRoutes != nil {
+		for _, route := range r.modelRoutes.Descriptors() {
+			toolCallingAvailable = toolCallingAvailable || route.Capabilities.ToolCalling
+		}
+	}
+	if toolCallingAvailable {
+		agent.Tools = r.withHarnessTools(agent.Tools)
+	}
 	candidateSnapshots := make([]domain.RuntimeAgentSnapshot, 0, len(candidates))
 	toolNames := append([]string(nil), agent.Tools...)
 	for _, candidate := range candidates {
 		candidate = domain.NormalizeAgentConfig(candidate)
-		candidate.Tools = r.withHarnessTools(candidate.Tools)
+		if toolCallingAvailable {
+			candidate.Tools = r.withHarnessTools(candidate.Tools)
+		}
 		candidateSnapshots = append(candidateSnapshots, snapshotAgent(candidate))
 		toolNames = append(toolNames, candidate.Tools...)
 	}

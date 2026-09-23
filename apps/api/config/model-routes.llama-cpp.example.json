@@ -1,0 +1,24 @@
+{
+  "routes": [
+    {
+      "id": "llama-cpp",
+      "base_url": "http://127.0.0.1:18081/v1",
+      "model": "Qwen/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M",
+      "credential_environment": "LLAMA_CPP_API_KEY",
+      "request_timeout_seconds": 120,
+      "capabilities": {
+        "tool_calling": false,
+        "structured_output": true,
+        "streaming": true
+      },
+      "context_window_tokens": 4096,
+      "max_output_tokens": 256,
+      "priority": 100,
+      "pricing": {
+        "source": "local_compatibility_evidence",
+        "input_per_million_tokens_micros": 0,
+        "output_per_million_tokens_micros": 0
+      }
+    }
+  ]
+}

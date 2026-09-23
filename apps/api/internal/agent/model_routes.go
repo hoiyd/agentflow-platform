@@ -212,7 +212,6 @@ func modelRequirements(request turnpkg.Request, snapshot *domain.RuntimeSnapshot
 	structuredOutput := purpose == "router" || purpose == "decide"
 	streaming := request.ModelMode != turnpkg.ModelModeText
 	if snapshot.Mode == ChatModeMultiAgent {
-		toolCalling = toolCalling || len(snapshot.Tools) > 0
 		structuredOutput = structuredOutput || NormalizeRouterMode(snapshot.RouterMode) == RouterModeAuto
 		streaming = true
 	}

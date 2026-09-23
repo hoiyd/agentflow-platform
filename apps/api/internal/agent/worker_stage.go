@@ -31,7 +31,7 @@ func (r *Runtime) runWorkerStage(ctx context.Context, events chan<- domain.RunEv
 
 	workerCatalog, err := catalogForAgent(catalog, prepared.WorkerAgent)
 	if err != nil {
-		return "", r.failWorkerStage(ctx, events, step, err)
+		return "", r.failCollaborationStage(ctx, events, step, err)
 	}
 	query.StageID = step.ID
 	retrievedMemories, retrievedChunks := r.retrieveContext(ctx, prepared.Run.ID, query, prepared.WorkerAgent.MemoryEnabled, prepared.WorkerAgent.RetrievalEnabled, map[string]any{
@@ -44,7 +44,7 @@ func (r *Runtime) runWorkerStage(ctx context.Context, events chan<- domain.RunEv
 		Context: turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks, Isolated: true}, Sink: r.runEventSink(),
 	}, nil)
 	if err != nil {
-		return "", r.failWorkerStage(ctx, events, step, err)
+		return "", r.failCollaborationStage(ctx, events, step, err)
 	}
 	completed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepCompleted, result.Output, "")
 	if err != nil {
@@ -87,11 +87,11 @@ func boundedWorkerHandoff(step domain.CollaborationStep) string {
 	return string(append(runes[:limit], suffix...))
 }
 
-func (r *Runtime) failWorkerStage(ctx context.Context, events chan<- domain.RunEvent, step domain.CollaborationStep, cause error) error {
+func (r *Runtime) failCollaborationStage(ctx context.Context, events chan<- domain.RunEvent, step domain.CollaborationStep, cause error) error {
 	failed, err := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", cause.Error())
 	if err == nil {
 		emitCollaborationEvent(events, liveStageEvent(failed))
-		_ = r.publishStage(ctx, failed, domain.EventStageFailed)
+		_ = r.publishStage(context.WithoutCancel(ctx), failed, domain.EventStageFailed)
 	}
 	return cause
 }

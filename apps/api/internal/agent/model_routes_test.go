@@ -53,6 +53,34 @@ func TestFrozenModelCatalogIgnoresLaterRoutesAndRetainsIdentity(t *testing.T) {
 	}
 }
 
+func TestTextOnlyRouteDoesNotInjectHarnessTools(t *testing.T) {
+	binding := modelRouteBinding(t, "text_only", "model-v1", 100, routing.Capabilities{Streaming: true})
+	catalog, err := routing.NewCatalog(binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := NewRuntime(RuntimeOptions{EmbeddingClient: binding.Client, ModelRoutes: catalog,
+		ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}})
+	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeMultiAgent, domain.Agent{ID: "agent"}, []domain.Agent{{ID: "candidate"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Agent.Tools) != 0 || len(snapshot.CandidateAgents[0].Tools) != 0 || len(snapshot.Tools) != 0 {
+		t.Fatalf("text-only route gained harness tools: %#v", snapshot)
+	}
+	requirements := modelRequirements(turnpkg.Request{Role: "planner", ModelMode: turnpkg.ModelModeText}, &snapshot)
+	if requirements.ToolCalling {
+		t.Fatalf("text-only multi stage unexpectedly requires Tool Calling: %#v", requirements)
+	}
+	configured, err := runtime.captureRuntimeSnapshot(ChatModeSingle, domain.Agent{ID: "agent", Tools: []string{"get_current_time"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(configured.Agent.Tools) != 1 || configured.Agent.Tools[0] != "get_current_time" || len(configured.Tools) != 1 {
+		t.Fatalf("text-only route silently removed explicit Agent Tools: %#v", configured)
+	}
+}
+
 func TestModelRouteDecisionRecordsNoCandidateEvidence(t *testing.T) {
 	binding := modelRouteBinding(t, "text_only", "model-v1", 100, routing.Capabilities{})
 	catalog, err := routing.NewCatalog(binding)

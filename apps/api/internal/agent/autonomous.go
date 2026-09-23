@@ -499,7 +499,7 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 		return "", err
 	}
 
-	if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
+	if stopped, err := r.stopAutonomousStageIfCanceled(ctx, events, step); stopped || err != nil {
 		if err != nil {
 			return "", err
 		}
@@ -521,23 +521,16 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 	}, nil)
 	if err != nil {
 		if ctx.Err() != nil {
-			if stopped, stopErr := r.stopIfCanceled(events, prepared.Run.ID); stopped || stopErr != nil {
+			if stopped, stopErr := r.stopAutonomousStageIfCanceled(ctx, events, step); stopped || stopErr != nil {
 				if stopErr != nil {
 					return "", stopErr
 				}
 				return "", errRunCanceled
 			}
 		}
-		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
-		if updateErr == nil {
-			events <- liveStageEvent(failed)
-			if checkpointErr := r.publishStage(ctx, failed, domain.EventStageFailed); checkpointErr != nil {
-				return "", fmt.Errorf("stage failed: %w; persist checkpoint: %v", err, checkpointErr)
-			}
-		}
-		return "", err
+		return "", r.failCollaborationStage(ctx, events, step, err)
 	}
-	if stopped, err := r.stopIfCanceled(events, prepared.Run.ID); stopped || err != nil {
+	if stopped, err := r.stopAutonomousStageIfCanceled(ctx, events, step); stopped || err != nil {
 		if err != nil {
 			return "", err
 		}
