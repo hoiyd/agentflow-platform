@@ -67,6 +67,21 @@ shows the event's completed/failed outcome, request-to-response duration,
 streaming time to first content token when observed, prompt/completion/total
 tokens, whether usage was estimated, and a typed error kind/HTTP status on
 failure. It does not persist raw provider errors, prompts, or credentials.
+For chat attempts, `finish_reason` records `stop`, `tool_calls`, `length`,
+`content_filter`, `unknown`, or `missing` in the same Run Event and Replay
+detail. `missing` means an OpenAI-compatible provider omitted the field: the
+legacy text response remains accepted for compatibility, but its completion is
+not confirmed by a provider finish reason. Tool calls without a confirmed
+`tool_calls` finish reason are rejected before execution. `[DONE]` only
+establishes that the SSE stream ended, not that the generation stopped normally.
+`length` and content filtering fail with typed `incomplete_output` and
+`content_policy` errors. Partial text and observed usage remain diagnostic;
+streamed deltas remain in Run events, while a truncated non-stream Tool
+decision records a bounded, redacted partial-text preview when present.
+Truncated Tool arguments are not persisted in that preview and never reach
+execution. A stream failure after the first
+content delta is not retried. Provider-reported usage on a terminal failed
+generation still settles the logical Model Call once.
 Observed output tokens/second is reported only when exact completion usage and
 a measurable interval after the first token are both available; it includes
 transport time and is not a pure hardware decode benchmark.

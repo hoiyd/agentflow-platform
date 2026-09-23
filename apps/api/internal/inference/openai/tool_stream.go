@@ -11,6 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	tracepkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/progress"
 )
@@ -122,12 +123,21 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		if isToolCallingUnsupported(err) {
 			err = toolCallingUnsupportedError(err)
 		}
-		recorder.Error(ctx, runID, stepID, addModelErrorMetadata(map[string]any{
+		failurePayload := addModelErrorMetadata(map[string]any{
 			"source": "llm",
 			"stage":  "tool_selection",
 			"model":  c.model,
 			"error":  err.Error(),
-		}, err))
+		}, err)
+		if modelErr, ok := AsModelError(err); ok && modelErr.Kind == ErrorIncompleteOutput && len(decision.Choices) > 0 {
+			partial := decision.Choices[0].Message.Content
+			if partial != "" {
+				redacted, _ := redaction.Text(partial)
+				failurePayload["partial_output_preview"] = truncateText(redacted, 600)
+				failurePayload["partial_output_chars"] = len(partial)
+			}
+		}
+		recorder.Error(ctx, runID, stepID, failurePayload)
 		return err
 	}
 

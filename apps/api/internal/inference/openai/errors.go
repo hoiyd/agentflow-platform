@@ -36,6 +36,7 @@ const (
 	ErrorRequestCallCapacity    ErrorKind = "request_call_capacity_exceeded"
 	ErrorRequestTokenCapacity   ErrorKind = "request_token_capacity_exceeded"
 	ErrorInvalidResponse        ErrorKind = "invalid_response"
+	ErrorIncompleteOutput       ErrorKind = "incomplete_output"
 )
 
 // ModelError preserves provider details without exposing credentials or raw bodies.
@@ -123,7 +124,7 @@ func modelErrorCategory(kind ErrorKind) failure.Category {
 		return failure.CategoryCapacity
 	case ErrorInvalidRequest, ErrorContextLengthExceeded, ErrorContentPolicy:
 		return failure.CategoryValidation
-	case ErrorInvalidResponse:
+	case ErrorInvalidResponse, ErrorIncompleteOutput:
 		return failure.CategoryExecution
 	default:
 		return failure.CategoryInternal

@@ -147,7 +147,7 @@ func (r *Recorder) Finish(ctx context.Context, ref requestcontrol.AttemptRef, ou
 		OutputTokensPerSecond: outcome.OutputTokensPerSecond,
 		PromptTokens:          outcome.PromptTokens, CompletionTokens: outcome.CompletionTokens, TotalTokens: outcome.TotalTokens,
 		UsageEstimated: outcome.UsageEstimated, UsageAvailable: outcome.UsageAvailable,
-		ErrorKind: outcome.ErrorKind, HTTPStatus: outcome.HTTPStatus,
+		FinishReason: outcome.FinishReason, ErrorKind: outcome.ErrorKind, HTTPStatus: outcome.HTTPStatus,
 	})
 	if err != nil {
 		return err

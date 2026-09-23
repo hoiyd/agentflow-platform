@@ -39,6 +39,21 @@ it("shows failed attempt diagnostics without inventing token usage", () => {
   expect(screen.queryByText("Prompt")).toBeNull();
 });
 
+it("distinguishes truncated generation and a missing provider finish reason", () => {
+  const base: RunReplayData["run_events"][number] = {
+    id: "attempt-1", schema_version: 1, sequence: 1, run_id: "run-1",
+    type: "model.attempt_finished", timestamp: "2026-09-10T00:00:00Z",
+    payload: { attempt: 1, status: "failed", finish_reason: "length", error_kind: "incomplete_output" }
+  };
+  const view = render(<EventDetail event={base} />);
+  expect(screen.getByText("Generation finish")).toBeTruthy();
+  expect(screen.getByText("length")).toBeTruthy();
+  expect(screen.getByText("incomplete_output")).toBeTruthy();
+
+  view.rerender(<EventDetail event={{ ...base, payload: { attempt: 2, status: "completed", finish_reason: "missing" } }} />);
+  expect(screen.getByText("Unconfirmed (not provided)")).toBeTruthy();
+});
+
 it("keeps replay available when the episode report fails", async () => {
   getReplayPageData.mockResolvedValue({
     data: replayFixture(),

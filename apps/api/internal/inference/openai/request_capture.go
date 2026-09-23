@@ -58,7 +58,7 @@ func (c *Client) recordModelRequest(ctx context.Context, modelCallID, operation,
 	return requestcontrol.AttemptRef{}, c.requestRecorder.Record(ctx, observation)
 }
 
-func (c *Client) finishModelAttempt(ctx context.Context, ref requestcontrol.AttemptRef, started, firstToken time.Time, usage Usage, attemptErr error) {
+func (c *Client) finishModelAttempt(ctx context.Context, ref requestcontrol.AttemptRef, started, firstToken time.Time, usage Usage, finishReason string, attemptErr error) {
 	if ref.RecordID == "" {
 		return
 	}
@@ -70,6 +70,7 @@ func (c *Client) finishModelAttempt(ctx context.Context, ref requestcontrol.Atte
 		Status: "completed", DurationMS: time.Since(started).Milliseconds(),
 		PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens,
 		UsageEstimated: usage.Estimated, UsageAvailable: usage.Valid(),
+		FinishReason: finishReason,
 	}
 	if !firstToken.IsZero() {
 		firstTokenMS := firstToken.Sub(started).Milliseconds()

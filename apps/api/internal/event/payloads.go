@@ -227,6 +227,7 @@ type ModelAttemptFinishedPayload struct {
 	TotalTokens           int     `json:"total_tokens,omitempty"`
 	UsageEstimated        bool    `json:"usage_estimated,omitempty"`
 	UsageAvailable        bool    `json:"usage_available"`
+	FinishReason          string  `json:"finish_reason,omitempty"`
 	ErrorKind             string  `json:"error_kind,omitempty"`
 	HTTPStatus            int     `json:"http_status,omitempty"`
 }

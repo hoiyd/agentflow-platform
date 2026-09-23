@@ -52,7 +52,7 @@ func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
 		t.Fatalf("record retry: %v", err)
 	}
 	if err := recorder.Finish(ctx, second, requestcontrol.AttemptOutcome{
-		Status: "completed", DurationMS: 40, PromptTokens: 3, CompletionTokens: 2, TotalTokens: 5, UsageAvailable: true,
+		Status: "completed", DurationMS: 40, PromptTokens: 3, CompletionTokens: 2, TotalTokens: 5, UsageAvailable: true, FinishReason: "stop",
 	}); err != nil {
 		t.Fatalf("record completed attempt: %v", err)
 	}
@@ -95,6 +95,9 @@ func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
 		}
 		if item.Payload["record_id"] != want.RecordID || item.Payload["attempt"] != float64(want.Attempt) {
 			t.Fatalf("attempt telemetry did not survive round-trip: %#v", item)
+		}
+		if item.Payload["status"] == "completed" && item.Payload["finish_reason"] != "stop" {
+			t.Fatalf("generation finish reason did not survive round-trip: %#v", item)
 		}
 	}
 	if finished != 2 {

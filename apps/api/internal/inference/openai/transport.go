@@ -39,6 +39,11 @@ func (c *Client) complete(ctx context.Context, body map[string]any) (chatComplet
 		return c.completeAttempt(ctx, reservation.OperationID, operation, payload)
 	})
 	if err != nil {
+		if len(response.Choices) > 0 && response.Usage.Valid() {
+			if settleErr := settleBudgetedModelCall(ctx, reservation, response.Usage); settleErr != nil {
+				return response, errors.Join(err, settleErr)
+			}
+		}
 		return response, err
 	}
 	if !response.Usage.Valid() {
@@ -56,7 +61,13 @@ func (c *Client) completeAttempt(ctx context.Context, modelCallID, operation str
 		return decoded, withoutRetry(err, operation)
 	}
 	started := time.Now()
-	defer func() { c.finishModelAttempt(ctx, ref, started, time.Time{}, decoded.Usage, attemptErr) }()
+	defer func() {
+		reason := ""
+		if len(decoded.Choices) > 0 {
+			reason = finishReasonLabel(decoded.Choices[0].FinishReason)
+		}
+		c.finishModelAttempt(ctx, ref, started, time.Time{}, decoded.Usage, reason, attemptErr)
+	}()
 	resp, err := c.doRequest(ctx, payload)
 	if err != nil {
 		return decoded, err
@@ -74,7 +85,49 @@ func (c *Client) completeAttempt(ctx context.Context, modelCallID, operation str
 	if !decoded.Usage.Valid() {
 		decoded.Usage = estimateUsage(string(payload), decoded.Choices[0].Message.Content)
 	}
+	choice := decoded.Choices[0]
+	if err := generationOutcomeError(operation, finishReasonLabel(choice.FinishReason), len(choice.Message.ToolCalls) > 0, choice.Message.Refusal != ""); err != nil {
+		return decoded, err
+	}
 	return decoded, nil
+}
+
+func finishReasonLabel(reason *string) string {
+	if reason == nil {
+		return "missing"
+	}
+	switch *reason {
+	case "stop", "tool_calls", "length", "content_filter":
+		return *reason
+	default:
+		return "unknown"
+	}
+}
+
+func generationOutcomeError(operation, label string, hasToolCalls, refused bool) error {
+	if refused || label == "content_filter" {
+		return &ModelError{Kind: ErrorContentPolicy, Operation: operation, Message: "generation blocked by provider content policy"}
+	}
+	switch label {
+	case "missing":
+		// Some OpenAI-compatible providers omit finish_reason. Record this as
+		// unconfirmed evidence; [DONE] alone does not prove a normal stop.
+		if hasToolCalls {
+			return &ModelError{Kind: ErrorInvalidResponse, Operation: operation, Message: "tool calls require a confirmed generation finish reason"}
+		}
+		return nil
+	case "stop":
+		if !hasToolCalls {
+			return nil
+		}
+	case "tool_calls":
+		if hasToolCalls {
+			return nil
+		}
+	case "length":
+		return &ModelError{Kind: ErrorIncompleteOutput, Operation: operation, Message: "generation reached the output limit"}
+	}
+	return &ModelError{Kind: ErrorInvalidResponse, Operation: operation, Message: "unrecognized or inconsistent generation finish reason"}
 }
 
 func (c *Client) streamMessages(ctx context.Context, messages []Message, events chan<- StreamEvent) (bool, string, Usage, error) {
@@ -84,38 +137,28 @@ func (c *Client) streamMessages(ctx context.Context, messages []Message, events 
 	}
 	maxCompletionTokens := minPositive(reservation.MaxCompletionTokens, outputTokenLimit(ctx))
 	ctx = budget.WithOperation(ctx, reservation.OperationID)
-	emitted, output, usage, err := c.streamMessagesWithUsageLimit(ctx, messages, events, true, maxCompletionTokens)
-	if err == nil {
-		if !usage.Valid() {
-			usage = estimateUsage(messagesToText(messages), output)
+	result, err := c.streamMessagesWithUsageLimit(ctx, messages, events, true, maxCompletionTokens)
+	if isStreamUsageUnsupported(err) {
+		log.Printf("chat_stream_capability_fallback capability=stream_usage model=%s reason=%q", c.model, err.Error())
+		result, err = c.streamMessagesWithUsageLimit(ctx, messages, events, false, maxCompletionTokens)
+	}
+	if result.terminal {
+		if !result.usage.Valid() {
+			result.usage = estimateUsage(messagesToText(messages), result.output)
 		}
-		if settleErr := settleBudgetedModelCall(ctx, reservation, usage); settleErr != nil {
-			return emitted, output, usage, settleErr
+		if settleErr := settleBudgetedModelCall(ctx, reservation, result.usage); settleErr != nil {
+			return result.emitted, result.output, result.usage, errors.Join(err, settleErr)
 		}
-		return emitted, output, usage, nil
 	}
-	if !isStreamUsageUnsupported(err) {
-		return emitted, output, usage, err
-	}
-	log.Printf("chat_stream_capability_fallback capability=stream_usage model=%s reason=%q", c.model, err.Error())
-	emitted, output, usage, err = c.streamMessagesWithUsageLimit(ctx, messages, events, false, maxCompletionTokens)
-	if err != nil {
-		return emitted, output, usage, err
-	}
-	if !usage.Valid() {
-		usage = estimateUsage(messagesToText(messages), output)
-	}
-	if err := settleBudgetedModelCall(ctx, reservation, usage); err != nil {
-		return emitted, output, usage, err
-	}
-	return emitted, output, usage, nil
+	return result.emitted, result.output, result.usage, err
 }
 
 func (c *Client) streamMessagesWithUsageOption(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool) (bool, string, Usage, error) {
-	return c.streamMessagesWithUsageLimit(ctx, messages, events, includeUsage, 0)
+	result, err := c.streamMessagesWithUsageLimit(ctx, messages, events, includeUsage, 0)
+	return result.emitted, result.output, result.usage, err
 }
 
-func (c *Client) streamMessagesWithUsageLimit(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool, maxCompletionTokens int) (bool, string, Usage, error) {
+func (c *Client) streamMessagesWithUsageLimit(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool, maxCompletionTokens int) (streamAttemptResult, error) {
 	const operation = "chat.stream"
 	result, err := executeWithRetry(ctx, c.retryPolicy, operation, func() (streamAttemptResult, error) {
 		attemptResult, attemptErr := c.streamMessagesAttempt(ctx, messages, events, includeUsage, maxCompletionTokens)
@@ -124,7 +167,7 @@ func (c *Client) streamMessagesWithUsageLimit(ctx context.Context, messages []Me
 		}
 		return attemptResult, attemptErr
 	})
-	return result.emitted, result.output, result.usage, err
+	return result, err
 }
 
 func beginBudgetedModelCall(ctx context.Context, model string, estimatedPromptTokens int) (budget.ModelReservation, error) {
@@ -182,9 +225,11 @@ func minPositive(values ...int) int {
 }
 
 type streamAttemptResult struct {
-	emitted bool
-	output  string
-	usage   Usage
+	emitted      bool
+	output       string
+	usage        Usage
+	terminal     bool
+	finishReason string
 }
 
 func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool, maxCompletionTokens int) (result streamAttemptResult, attemptErr error) {
@@ -213,7 +258,9 @@ func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, 
 	}
 	started := time.Now()
 	var firstToken time.Time
-	defer func() { c.finishModelAttempt(ctx, ref, started, firstToken, result.usage, attemptErr) }()
+	defer func() {
+		c.finishModelAttempt(ctx, ref, started, firstToken, result.usage, result.finishReason, attemptErr)
+	}()
 	resp, err := c.doRequest(ctx, payload)
 	if err != nil {
 		return streamAttemptResult{}, err
@@ -224,54 +271,100 @@ func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, 
 		return streamAttemptResult{}, modelErrorFromHTTPResponse(operation, resp)
 	}
 
+	const maxSSEEventBytes = 1024 * 1024
 	scanner := bufio.NewScanner(resp.Body)
-	buf := make([]byte, 0, 1024*1024)
-	scanner.Buffer(buf, 1024*1024)
-
-	emitted := false
+	scanner.Buffer(make([]byte, 4096), maxSSEEventBytes+1)
 	var output strings.Builder
-	var usage Usage
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || !strings.HasPrefix(line, "data: ") {
-			continue
+	var data strings.Builder
+	finishReasonSeen := false
+	refused := false
+	processEvent := func() (bool, error) {
+		if data.Len() == 0 {
+			return false, nil
 		}
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
-			if !usage.Valid() {
-				usage = estimateUsage(messagesToText(messages), output.String())
+		payload := strings.TrimSuffix(data.String(), "\n")
+		data.Reset()
+		if payload == "[DONE]" {
+			if err := ctx.Err(); err != nil {
+				return true, err
 			}
-			return streamAttemptResult{emitted: emitted, output: output.String(), usage: usage}, nil
+			result.terminal = true
+			result.output = output.String()
+			if !result.usage.Valid() {
+				result.usage = estimateUsage(messagesToText(messages), result.output)
+			}
+			if !finishReasonSeen {
+				result.finishReason = "missing"
+			}
+			if err := generationOutcomeError(operation, result.finishReason, false, refused); err != nil {
+				return true, err
+			}
+			return true, nil
 		}
-
 		var event chatCompletionChunk
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			return streamAttemptResult{emitted: emitted, output: output.String(), usage: usage}, invalidResponseError(operation, "failed to decode stream event", err)
+		if err := json.Unmarshal([]byte(payload), &event); err != nil {
+			return false, invalidResponseError(operation, "failed to decode stream event", err)
 		}
 		if event.Usage != nil {
-			usage = *event.Usage
+			result.usage = *event.Usage
 		}
 		for _, choice := range event.Choices {
+			if finishReasonSeen && (choice.Delta.Content != "" || choice.Delta.Refusal != "") {
+				return false, invalidResponseError(operation, "model stream sent content after finish reason", nil)
+			}
+			if choice.FinishReason != nil {
+				if finishReasonSeen {
+					return false, invalidResponseError(operation, "model stream sent multiple finish reasons", nil)
+				}
+				result.finishReason = finishReasonLabel(choice.FinishReason)
+				finishReasonSeen = true
+			}
+			refused = refused || choice.Delta.Refusal != ""
 			if choice.Delta.Content == "" {
 				continue
 			}
 			if firstToken.IsZero() {
 				firstToken = time.Now()
 			}
-			emitted = true
+			result.emitted = true
 			output.WriteString(choice.Delta.Content)
 			select {
 			case <-ctx.Done():
-				return streamAttemptResult{emitted: emitted, output: output.String(), usage: usage}, ctx.Err()
+				return false, ctx.Err()
 			case events <- StreamEvent{Type: "delta", Delta: choice.Delta.Content}:
 			}
 		}
+		return false, nil
 	}
-
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			done, err := processEvent()
+			if done || err != nil {
+				result.output = output.String()
+				return result, err
+			}
+			continue
+		}
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		field := strings.TrimPrefix(line, "data:")
+		if strings.HasPrefix(field, " ") {
+			field = field[1:]
+		}
+		if data.Len()+len(field)+1 > maxSSEEventBytes {
+			result.output = output.String()
+			return result, invalidResponseError(operation, "model stream event exceeds size limit", nil)
+		}
+		data.WriteString(field)
+		data.WriteByte('\n')
+	}
+	result.output = output.String()
 	if err := scanner.Err(); err != nil {
-		return streamAttemptResult{emitted: emitted, output: output.String(), usage: usage}, invalidResponseError(operation, "model stream read failed", err)
+		return result, invalidResponseError(operation, "model stream read failed", err)
 	}
-	return streamAttemptResult{emitted: emitted, output: output.String(), usage: usage}, invalidResponseError(operation, "model stream ended without [DONE]", nil)
+	return result, invalidResponseError(operation, "model stream ended without [DONE]", nil)
 }
 
 func (c *Client) doRequest(ctx context.Context, payload []byte) (*http.Response, error) {
