@@ -267,7 +267,7 @@ The request accepts exactly one of:
 
 The Golden Dataset v1 contract is available as a
 [machine-readable JSON Schema](../schemas/rag-golden-dataset-v1.schema.json) and a
-[canonical Dataset and corpus](../knowledge/rag-golden-dataset.md). A Dataset has
+[canonical Dataset and corpus](../evaluation/rag-golden-dataset.md). A Dataset has
 a stable `id`, explicit `version`, optional tags/description, and uniquely
 identified cases. Every case declares `query`, `answerable`, optional tags and
 forbidden sources. Answerable cases require at least one expected source;
@@ -300,7 +300,7 @@ gate. These report metrics do not change the online response contract.
 The workbench exposes this endpoint under **Knowledge -> Retrieval evaluation**
 and accepts either a Dataset object or a legacy case array. RAG-006 defines and
 validates the schema; the maintained v1 asset and coverage matrix are described
-in [RAG Golden Dataset v1](../knowledge/rag-golden-dataset.md). Dataset and corpus
+in [RAG Golden Dataset v1](../evaluation/rag-golden-dataset.md). Dataset and corpus
 hashes, Git history, and archived CI reports provide the current version discipline.
 The project deliberately does not add an online Evaluation Registry or database.
 

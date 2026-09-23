@@ -15,6 +15,9 @@ go run ./cmd/eval tool --live --model MODEL \
 The live [`llama.cpp` compatibility suite](local-inference-compatibility.md)
 uses the same CLI but is a target protocol and Runtime evidence check, not an
 offline quality score.
+The [tokenization calibration](tokenization-calibration.md) uses a fixed corpus
+and live llama.cpp token-count endpoints to measure Context estimate error;
+it does not change production preflight or Budget settlement.
 
 Every report uses `agentflow-evaluation-report-v1` identity fields: evaluation
 kind, Dataset ID/version/hash, Git revision, start/end time, and an explicit

@@ -18,6 +18,7 @@ import (
 	"agentflow-platform/apps/api/internal/evaluation/inferencecompat"
 	"agentflow-platform/apps/api/internal/evaluation/rageval"
 	"agentflow-platform/apps/api/internal/evaluation/routeeval"
+	"agentflow-platform/apps/api/internal/evaluation/tokenization"
 	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/inference/routing"
@@ -31,7 +32,7 @@ func main() {
 
 func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: eval <benchmark|context|inference|rag|route|tool> [options]")
+		fmt.Fprintln(stderr, "usage: eval <benchmark|context|inference|rag|route|tokenization|tool> [options]")
 		return 2
 	}
 	switch args[0] {
@@ -47,10 +48,48 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return runRoute(ctx, args[1:], out, stderr)
 	case "tool":
 		return runTool(ctx, args[1:], out, stderr)
+	case "tokenization":
+		return runTokenization(ctx, args[1:], out, stderr)
 	default:
-		fmt.Fprintf(stderr, "unknown evaluation suite %q; use benchmark, context, inference, rag, route, or tool\n", args[0])
+		fmt.Fprintf(stderr, "unknown evaluation suite %q; use benchmark, context, inference, rag, route, tokenization, or tool\n", args[0])
 		return 2
 	}
+}
+
+func runTokenization(ctx context.Context, args []string, out, stderr io.Writer) int {
+	flags := flag.NewFlagSet("eval tokenization", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	baseURL := flags.String("base-url", "http://127.0.0.1:8081/v1", "llama.cpp OpenAI-compatible base URL")
+	model := flags.String("model", "", "model ID sent to llama.cpp")
+	artifact := flags.String("model-artifact", "", "pinned GGUF model artifact ID")
+	ggufSHA := flags.String("gguf-sha256", "", "SHA-256 of the loaded GGUF, including tokenizer metadata")
+	window := flags.Int("context-window-tokens", 0, "server context window")
+	reserve := flags.Int("output-reserve-tokens", 0, "AgentFlow output reserve")
+	margin := flags.Int("safety-margin-tokens", 0, "AgentFlow preflight safety margin")
+	timeout := flags.Duration("request-timeout", time.Minute, "deadline per calibration sample")
+	enforce := flags.Bool("enforce", false, "exit 1 when the calibration gate fails")
+	if flags.Parse(args) != nil || flags.NArg() != 0 {
+		return 2
+	}
+	report, err := tokenization.Run(ctx, tokenization.Options{
+		BaseURL: *baseURL, Model: *model, ModelArtifact: *artifact, GGUFSHA256: *ggufSHA,
+		ContextWindowTokens: *window, OutputReserveTokens: *reserve, SafetyMarginTokens: *margin,
+		APIKey: credential.FromEnvironment("LLAMA_CPP_API_KEY").Reveal(), RequestTimeout: *timeout, Revision: gitRevision(ctx),
+	})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if !writeJSON(out, stderr, report) {
+		return 2
+	}
+	fmt.Fprintf(stderr, "tokenization: samples=%d passed=%t worst_absolute=%d worst_relative=%.1f%% failures=%d\n",
+		len(report.Samples), report.Gate.Passed, report.Summary.WorstAbsoluteTokens,
+		report.Summary.WorstRelativePercent, report.Gate.BlockingFailures)
+	if *enforce && !report.Gate.Passed {
+		return 1
+	}
+	return 0
 }
 
 func runInference(ctx context.Context, args []string, out, stderr io.Writer) int {

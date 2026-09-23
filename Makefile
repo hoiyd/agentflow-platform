@@ -1,4 +1,4 @@
-.PHONY: help setup quickstart dev test golden-eval context-eval routing-eval benchmark-evidence llama-compatibility-evidence demo-check load-evidence release-recovery-drill contract-generate contract-check
+.PHONY: help setup quickstart dev test golden-eval context-eval routing-eval benchmark-evidence llama-compatibility-evidence tokenization-calibration demo-check load-evidence release-recovery-drill contract-generate contract-check
 
 help:
 	@printf '%s\n' \
@@ -10,6 +10,7 @@ help:
 	  'make routing-eval Run the deterministic Agent routing calibration/holdout gate' \
 	  'make benchmark-evidence Build the offline CASE-001 benchmark evidence pack' \
 	  'make llama-compatibility-evidence Validate a live llama.cpp route and write INF-001 evidence' \
+	  'make tokenization-calibration Compare Context estimates with llama.cpp token counts and usage' \
 	  'make demo-check     Check the demo services and evidence pack' \
 	  'make load-evidence Run bounded load and soak evidence tests' \
 	  'make release-recovery-drill Run the single-instance restart and recovery drill' \
@@ -35,16 +36,19 @@ routing-eval:
 	@bash -c 'source scripts/go-env.sh && activate_agentflow_go && cd apps/api && go run ./cmd/eval route --enforce'
 
 benchmark-evidence:
-	@bash scripts/benchmark-evidence.sh
+	@bash scripts/evaluation/benchmark-evidence.sh
 
 llama-compatibility-evidence:
-	@bash scripts/llama-compatibility-evidence.sh
+	@bash scripts/evaluation/llama-compatibility-evidence.sh
+
+tokenization-calibration:
+	@bash scripts/evaluation/tokenization-calibration.sh
 
 demo-check:
 	@bash scripts/demo-preflight.sh
 
 load-evidence:
-	@bash scripts/load-evidence.sh
+	@bash scripts/evaluation/load-evidence.sh
 
 release-recovery-drill:
 	@bash scripts/release-recovery-drill.sh

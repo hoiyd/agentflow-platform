@@ -368,7 +368,7 @@ content boundary, filtering, and audit trail provide defense in depth.
   noise; the token limit and downstream transformation bound that trade-off.
 - Prompt-injection filtering is defense in depth, not a semantic proof that a
   document is safe.
-- The [`agentflow-rag-baseline@1.2.0`](rag-golden-dataset.md) asset pairs a
+- The [`agentflow-rag-baseline@1.2.0`](../evaluation/rag-golden-dataset.md) asset pairs a
   canonical corpus with fact, paraphrase, exact-ID, multi-source, no-answer,
   ACL, stale-data, and prompt-injection cases. No-answer cases are gating across
   calibration and holdout splits. Index lifecycle makes stale-data gating; ACL

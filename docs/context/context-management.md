@@ -127,7 +127,7 @@ production Assembler. It verifies required facts, stale-content exclusion,
 source token distribution, irrelevant-context ratio, total input tokens, prefix
 stability, overflow handling, and raw-history fallback. A `full_history` report
 can be compared with `compacted_history` as one explicit ablation. See
-[Offline evaluation reports](../operations/offline-evaluation.md#context-quality-gate).
+[Offline evaluation reports](../evaluation/offline-evaluation.md#context-quality-gate).
 
 The suite uses fixed compaction summaries and never calls a model, so it tests
 the assembly contract rather than learned summarization quality. Real summary

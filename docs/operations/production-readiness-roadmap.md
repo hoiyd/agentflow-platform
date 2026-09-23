@@ -21,7 +21,7 @@ a controlled pilot.
 | Workspace scope | Every request resolves a non-empty Workspace namespace. Conversation, Message, Run, Document, Memory, retrieval, Replay, and Verification paths preserve that scope in Postgres stores. |
 | Tool execution | [Platform enablement and Agent allowlists](../runtime/agent-profiles.md#two-tool-control-layers) precede a bounded Executor with typed errors, timeout, result limits, tracing, and conservative concurrency. |
 | RAG | [Hybrid recall, RRF, reranking, relevance gating, scoped context expansion, injection filtering, and citations](../knowledge/knowledge-rag.md) use one observable pipeline. |
-| Evaluation | The [Golden Dataset v1](../knowledge/rag-golden-dataset.md) pairs a versioned schema and canonical corpus with the production retrieval path, reporting Hit@1/3/5, misses, security decisions, and active component versions. |
+| Evaluation | The [Golden Dataset v1](../evaluation/rag-golden-dataset.md) pairs a versioned schema and canonical corpus with the production retrieval path, reporting Hit@1/3/5, misses, security decisions, and active component versions. |
 | Evidence | [Run Events, Replay, Episode Reports](../architecture/terms.md#observability-records-and-views), Usage Ledger, and [Verification Evidence](../runtime/verification.md) explain execution and configured outcome checks. |
 
 These controls are useful now: they bound work, preserve execution evidence,

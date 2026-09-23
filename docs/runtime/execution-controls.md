@@ -350,7 +350,7 @@ Run `make load-evidence` after changing these controls. The bounded profile
 records underload, saturation, overload, recovery, and soak behavior while
 keeping Run admission, model concurrency, RPM/TPM, Run Budget, Tool timeout,
 and Memory queue outcomes distinct. See
-[Bounded Load and Soak Testing](../operations/load-soak-testing.md).
+[Bounded Load and Soak Testing](../evaluation/load-soak-testing.md).
 
 ## Checklist for a New Control
 
