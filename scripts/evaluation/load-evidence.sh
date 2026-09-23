@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPORT_DIR="${LOAD_REPORT_DIR:-${ROOT_DIR}/.cache/load-soak}"
 SOAK_DURATION="${SOAK_DURATION:-2s}"
 

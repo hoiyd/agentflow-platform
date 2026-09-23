@@ -73,7 +73,7 @@ reproducibility and false-positive rate are measured.
 The selection dataset's outcome enum does not cover every runtime failure.
 Production Tool Security Policy and its owner tests cover policy denial;
 selection fixture conformance must not be presented as complete security or
-end-to-end task verification. [Task evaluations](tool-task-evaluations.md)
+end-to-end task verification. [Task evaluations](../evaluation/tool-task-evaluations.md)
 exercise actual Artifact Bindings and verify returned source evidence through
 the production client/Executor path, separately from selection scoring.
 

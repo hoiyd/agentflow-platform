@@ -42,7 +42,7 @@ export LLAMA_CPP_QUANTIZATION=Q4_K_M
 export LLAMA_CPP_CONTEXT_WINDOW_TOKENS=4096
 export LLAMA_CPP_MAX_OUTPUT_TOKENS=256
 export LLAMA_CPP_HARDWARE='Apple M1 Pro; Darwin x86_64 llama-server'
-./scripts/llama-compatibility-evidence.sh
+./scripts/evaluation/llama-compatibility-evidence.sh
 ```
 
 The script writes `.cache/llama-cpp-compatibility/report.json`. With AgentFlow
@@ -91,7 +91,7 @@ Add the live Runtime inputs before running the same script:
 export AGENTFLOW_BASE_URL=http://127.0.0.1:8080
 export AGENTFLOW_WORKSPACE_ID=llama-compatibility
 export AGENTFLOW_AGENT_ID=<agent-id>
-./scripts/llama-compatibility-evidence.sh
+./scripts/evaluation/llama-compatibility-evidence.sh
 ```
 
 The report then runs Single, Multi, and Loop (`autonomous`) through the same

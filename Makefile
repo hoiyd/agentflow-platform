@@ -36,19 +36,19 @@ routing-eval:
 	@bash -c 'source scripts/go-env.sh && activate_agentflow_go && cd apps/api && go run ./cmd/eval route --enforce'
 
 benchmark-evidence:
-	@bash scripts/benchmark-evidence.sh
+	@bash scripts/evaluation/benchmark-evidence.sh
 
 llama-compatibility-evidence:
-	@bash scripts/llama-compatibility-evidence.sh
+	@bash scripts/evaluation/llama-compatibility-evidence.sh
 
 tokenization-calibration:
-	@bash scripts/tokenization-calibration.sh
+	@bash scripts/evaluation/tokenization-calibration.sh
 
 demo-check:
 	@bash scripts/demo-preflight.sh
 
 load-evidence:
-	@bash scripts/load-evidence.sh
+	@bash scripts/evaluation/load-evidence.sh
 
 release-recovery-drill:
 	@bash scripts/release-recovery-drill.sh

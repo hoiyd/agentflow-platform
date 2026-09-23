@@ -44,12 +44,7 @@ the project.
 | [Internal terms](architecture/terms.md) | What do the execution entities mean, and how do Run Events, Trace, Replay, and Episode Report differ? |
 | [Execution controls](runtime/execution-controls.md) | Which layer owns concurrency, rate limits, retries, budgets, context capacity, and stopping rules? |
 | [Model route contract and catalog](runtime/model-routing.md) | How are model targets validated, capability-filtered, frozen, selected, and explained before provider access? |
-| [Bounded load and soak testing](operations/load-soak-testing.md) | How are backpressure, cancellation, rate and budget boundaries, background Memory work, and cleanup tested under reproducible controlled load? |
-| [llama.cpp compatibility evidence](operations/local-inference-compatibility.md) | How is a real local OpenAI-compatible target checked for streaming, usage, errors, cancellation recovery, route identity, and Runtime Replay evidence? |
-| [Tokenization calibration](operations/tokenization-calibration.md) | How do Context estimates, the final serialized request, llama.cpp template tokens, and exact provider usage compare? |
-| [Evidence comparison view](operations/evidence-comparison.md) | How does the Evaluation workspace compare outcomes, cost, and traceable evidence without treating unrelated Runs as an improvement? |
 | [Tool contract testing](tools/tool-contract-testing.md) | How are Binding contracts, runtime failure paths, durable effects, and Tool selection regressions tested without a network or model? |
-| [Tool task evaluations](tools/tool-task-evaluations.md) | Can Artifact Tools complete evidence-backed tasks, and how are offline checks separated from budgeted live-model comparisons? |
 | [Tool result artifacts](tools/tool-result-artifacts.md) | How are oversized Tool results redacted, persisted, recovered, bounded in Context, and traced? |
 | [Tool Progress Guard](tools/tool-progress-guard.md) | How are repeated failures, unchanged read-only results, and oscillating Tool calls warned, blocked, and explained in Replay? |
 | [Tool side-effect reconciliation](tools/tool-side-effect-reconciliation.md) | How are uncertain external writes queried, reviewed, retried, compensated, and audited without unsafe automatic replay? |
@@ -71,10 +66,21 @@ the project.
 | --- | --- |
 | [Knowledge / RAG](knowledge/knowledge-rag.md) | How do ingestion, source tracking, hybrid recall, RRF, reranking, gating, and context transformation work? |
 | [Golden Dataset v1 schema](schemas/rag-golden-dataset-v1.schema.json) | Which versioned fields define answerable, expected-source, forbidden-source, and tagged RAG evaluation cases? |
-| [RAG Golden Dataset v1](knowledge/rag-golden-dataset.md) | Which canonical retrieval cases and corpus exercise facts, exact IDs, multi-source recall, no-answer behavior, ACL/staleness leakage, and injection filtering? |
-| [Offline evaluation reports](operations/offline-evaluation.md) | How do Context, Agent routing, Tool, and RAG evaluations share provenance, failure accounting, regression gates, and opt-in live profiles? |
 | [Memory management](context/memory-management.md) | Which conversation facts become durable semantic memory, and how is unsafe persistence avoided? |
 | [Model request reconstruction](context/model-request-reconstruction.md) | What did a physical provider attempt actually receive, and when is its content retained? |
+
+## Evaluation and Evidence
+
+| Document | Question answered |
+| --- | --- |
+| [Evaluation guide](evaluation/README.md) | Which CLI, test suite, script, or UI owns each type of evidence, and what does it prove? |
+| [Offline evaluation reports](evaluation/offline-evaluation.md) | How do Context, Agent routing, Tool, and RAG evaluations share provenance, failure accounting, regression gates, and opt-in live profiles? |
+| [RAG Golden Dataset v1](evaluation/rag-golden-dataset.md) | Which canonical retrieval cases and corpus exercise facts, exact IDs, multi-source recall, no-answer behavior, ACL/staleness leakage, and injection filtering? |
+| [Tool task evaluations](evaluation/tool-task-evaluations.md) | Can Artifact Tools complete evidence-backed tasks, and how are offline checks separated from budgeted live-model comparisons? |
+| [llama.cpp compatibility evidence](evaluation/local-inference-compatibility.md) | How is a real local OpenAI-compatible target checked for streaming, usage, errors, cancellation recovery, route identity, and Runtime Replay evidence? |
+| [Tokenization calibration](evaluation/tokenization-calibration.md) | How do Context estimates, the final serialized request, llama.cpp template tokens, and exact provider usage compare? |
+| [Bounded load and soak testing](evaluation/load-soak-testing.md) | How are backpressure, cancellation, rate and budget boundaries, background Memory work, and cleanup tested under reproducible controlled load? |
+| [Evidence comparison view](evaluation/evidence-comparison.md) | Which identity and single-variable rules allow controlled Evaluation deltas to be shown? |
 
 ## Operations and Interfaces
 
@@ -84,8 +90,6 @@ the project.
 | [Release and recovery drill](operations/release-recovery-drill.md) | How can a real API process be drained, killed, repaired, resumed, and checked for duplicate recovery against disposable PostgreSQL? |
 | [Backend configuration](operations/backend-configuration.md) | Which environment variables configure providers, storage, limits, tools, Verification, and the mandatory Workspace namespace? |
 | [Credential boundary and redaction](operations/credential-boundary.md) | Where are credentials resolved, rejected, dropped, hashed, or redacted before durable and observable sinks? |
-| [Bounded load and soak testing](operations/load-soak-testing.md) | How can process-local concurrency and cleanup behavior be reproduced without public models or unsupported capacity claims? |
-| [Evidence comparison view](operations/evidence-comparison.md) | Which identity and single-variable rules allow controlled Evaluation deltas to be shown? |
 | [API reference](reference/api-reference.md) | Which HTTP endpoints and response contracts are available? |
 | [API contract](architecture/api-contract.md) | How do OpenAPI-generated Go DTOs and TypeScript types prevent backend/frontend drift? |
 | [Manual tests](operations/manual-tests.md) | How can the major behaviors be tested manually? |

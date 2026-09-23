@@ -96,7 +96,7 @@ validation, fallback, and abstention code. On Dataset v1, the current algorithm
 records 10/10 acceptable selections, zero unsafe false routes, and 6/6 no-route
 recall. The retired implementation results remain in a read-only Artifact, not
 in executable selectors. These numbers do not claim live
-LLM quality. See [Offline evaluation](../operations/offline-evaluation.md#agent-routing-gate)
+LLM quality. See [Offline evaluation](../evaluation/offline-evaluation.md#agent-routing-gate)
 for the dataset boundary, commands, and full metrics.
 
 ## Design References

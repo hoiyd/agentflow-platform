@@ -86,7 +86,7 @@ apps/api/
     checkpoint/     Stage checkpoint capture, validation, and internal compensation
     taskstate/      versioned Conversation task facts and runtime Tool binding
     config/         environment configuration
-    evaluation/     offline context, RAG, and Tool evaluation suites plus reports
+    evaluation/     isolated quality, compatibility, load, and recovery evidence
 ```
 
 ## Dependency Direction
