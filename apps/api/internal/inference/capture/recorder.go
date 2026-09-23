@@ -64,31 +64,36 @@ func NormalizeMode(value string) domain.ModelRequestCaptureMode {
 }
 
 func (r *Recorder) Record(ctx context.Context, observation requestcontrol.Observation) error {
+	_, err := r.Begin(ctx, observation)
+	return err
+}
+
+func (r *Recorder) Begin(ctx context.Context, observation requestcontrol.Observation) (requestcontrol.AttemptRef, error) {
 	if r == nil || r.store == nil {
-		return errors.New("model request recorder store is required")
+		return requestcontrol.AttemptRef{}, errors.New("model request recorder store is required")
 	}
 	scope := eventpkg.ScopeFromContext(ctx)
 	if strings.TrimSpace(scope.RunID) == "" {
-		return nil
+		return requestcontrol.AttemptRef{}, nil
 	}
 	if len(observation.Payload) == 0 || strings.TrimSpace(observation.ModelCallID) == "" ||
 		strings.TrimSpace(observation.Operation) == "" || strings.TrimSpace(observation.Model) == "" {
-		return errors.New("run-scoped model request requires model call, operation, model, and payload")
+		return requestcontrol.AttemptRef{}, errors.New("run-scoped model request requires model call, operation, model, and payload")
 	}
 	run, ok, err := r.store.GetRun(scope.RunID)
 	if err != nil {
-		return fmt.Errorf("load model request run: %w", err)
+		return requestcontrol.AttemptRef{}, fmt.Errorf("load model request run: %w", err)
 	}
 	if !ok || run.RuntimeSnapshot == nil {
-		return errors.New("model request run or runtime snapshot not found")
+		return requestcontrol.AttemptRef{}, errors.New("model request run or runtime snapshot not found")
 	}
 	snapshotHash, err := hashJSON(run.RuntimeSnapshot)
 	if err != nil {
-		return fmt.Errorf("hash runtime snapshot: %w", err)
+		return requestcontrol.AttemptRef{}, fmt.Errorf("hash runtime snapshot: %w", err)
 	}
 	parameters, messageCount, toolCount, err := summarizePayload(observation.Payload)
 	if err != nil {
-		return fmt.Errorf("summarize model request payload: %w", err)
+		return requestcontrol.AttemptRef{}, fmt.Errorf("summarize model request payload: %w", err)
 	}
 	now := time.Now().UTC()
 	record := domain.ModelRequestRecord{
@@ -105,7 +110,7 @@ func (r *Recorder) Record(ctx context.Context, observation requestcontrol.Observ
 	}
 	created, err := r.store.CreateModelRequestRecord(record)
 	if err != nil {
-		return fmt.Errorf("persist model request envelope: %w", err)
+		return requestcontrol.AttemptRef{}, fmt.Errorf("persist model request envelope: %w", err)
 	}
 	payload, err := eventpkg.Payload(eventpkg.ModelRequestPreparedPayload{
 		RecordID: created.Envelope.ID, ModelCallID: created.Envelope.ModelCallID, Attempt: created.Envelope.Attempt,
@@ -115,15 +120,40 @@ func (r *Recorder) Record(ctx context.Context, observation requestcontrol.Observ
 		CaptureMode: string(created.Capture.Mode), CaptureReconstructable: created.Capture.Reconstructable,
 	})
 	if err != nil {
-		return err
+		return requestcontrol.AttemptRef{}, err
 	}
 	if _, err := r.store.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventModelRequestPrepared, RunID: scope.RunID, ConversationID: run.ConversationID,
 		StageID: scope.StageID, TurnID: scope.TurnID, Payload: payload, Timestamp: now,
 	}); err != nil {
-		return fmt.Errorf("persist model request event: %w", err)
+		return requestcontrol.AttemptRef{}, fmt.Errorf("persist model request event: %w", err)
 	}
-	return nil
+	return requestcontrol.AttemptRef{RecordID: created.Envelope.ID, ModelCallID: created.Envelope.ModelCallID, Attempt: created.Envelope.Attempt}, nil
+}
+
+func (r *Recorder) Finish(ctx context.Context, ref requestcontrol.AttemptRef, outcome requestcontrol.AttemptOutcome) error {
+	if r == nil || r.store == nil || ref.RecordID == "" {
+		return errors.New("model attempt requires a durable request record")
+	}
+	scope := eventpkg.ScopeFromContext(ctx)
+	if scope.RunID == "" || ref.Attempt <= 0 || (outcome.Status != "completed" && outcome.Status != "failed") {
+		return errors.New("model attempt requires run scope, attempt number, and terminal status")
+	}
+	event, err := eventpkg.NewRunEvent(domain.EventModelAttemptFinished, eventpkg.EventMetadata{
+		RunID: scope.RunID, ConversationID: scope.ConversationID, StageID: scope.StageID, TurnID: scope.TurnID,
+	}, eventpkg.ModelAttemptFinishedPayload{
+		RecordID: ref.RecordID, ModelCallID: ref.ModelCallID, Attempt: ref.Attempt,
+		Status: outcome.Status, DurationMS: outcome.DurationMS, TimeToFirstTokenMS: outcome.TimeToFirstTokenMS,
+		OutputTokensPerSecond: outcome.OutputTokensPerSecond,
+		PromptTokens:          outcome.PromptTokens, CompletionTokens: outcome.CompletionTokens, TotalTokens: outcome.TotalTokens,
+		UsageEstimated: outcome.UsageEstimated, UsageAvailable: outcome.UsageAvailable,
+		ErrorKind: outcome.ErrorKind, HTTPStatus: outcome.HTTPStatus,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = r.store.CreateRunEvent(event)
+	return err
 }
 
 func capturePayload(payload []byte, mode domain.ModelRequestCaptureMode, maxBytes int, retention time.Duration, now time.Time) domain.ModelRequestCapture {

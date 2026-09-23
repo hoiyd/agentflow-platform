@@ -84,6 +84,21 @@ export function EventDetail({ event }: { event: RunEvent }) {
         <span>Timestamp</span>
         <strong>{new Date(event.timestamp).toLocaleString()}</strong>
       </div>
+	  {event.type === "model.attempt_finished" ? (
+		<>
+		  <div className="detail-kv"><span>Attempt</span><strong>{String(payload.attempt ?? "Unknown")}</strong></div>
+		  <div className="detail-kv"><span>Outcome</span><strong>{stringPayload(payload, "status") || "Unknown"}</strong></div>
+		  {typeof payload.time_to_first_token_ms === "number" ? (
+			<div className="detail-kv"><span>First token</span><strong>{formatDuration(payload.time_to_first_token_ms)}</strong></div>
+		  ) : null}
+		  {typeof payload.output_tokens_per_second === "number" && payload.output_tokens_per_second > 0 ? (
+			<div className="detail-kv"><span>Output rate</span><strong>{payload.output_tokens_per_second.toFixed(1)} tok/s</strong></div>
+		  ) : null}
+		  {stringPayload(payload, "error_kind") ? (
+			<div className="detail-kv"><span>Error kind</span><strong>{stringPayload(payload, "error_kind")}</strong></div>
+		  ) : null}
+		</>
+	  ) : null}
 	  {eventDuration(event) ? (
         <div className="detail-kv">
           <span>Duration</span>
@@ -156,7 +171,7 @@ export function EventDetail({ event }: { event: RunEvent }) {
           <strong>{payload.configured_tools.length > 0 ? payload.configured_tools.join(", ") : "None"}</strong>
         </div>
       ) : null}
-      {"prompt_tokens" in payload || "completion_tokens" in payload || "total_tokens" in payload ? (
+      {payload.usage_available !== false && ("prompt_tokens" in payload || "completion_tokens" in payload || "total_tokens" in payload) ? (
         <div className="token-strip">
           <Metric label="Prompt" value={formatTokenValue(payload.prompt_tokens, isEstimated)} />
           <Metric label="Completion" value={formatTokenValue(payload.completion_tokens, isEstimated)} />
@@ -476,7 +491,7 @@ export function formatTokenValue(value: unknown, estimated: boolean) {
 
 export function stepDuration(events: RunEvent[], stepId: string) {
   return events
-	  .filter((event) => event.stage_id === stepId)
+	  .filter((event) => event.stage_id === stepId && event.type !== "model.attempt_finished")
 	  .reduce((total, event) => total + eventDuration(event), 0);
 }
 

@@ -18,3 +18,31 @@ type Observation struct {
 type Recorder interface {
 	Record(context.Context, Observation) error
 }
+
+// AttemptRecorder extends request capture with an outcome for the same durable
+// physical attempt. Offline capture-only recorders need not implement it.
+type AttemptRecorder interface {
+	Recorder
+	Begin(context.Context, Observation) (AttemptRef, error)
+	Finish(context.Context, AttemptRef, AttemptOutcome) error
+}
+
+type AttemptRef struct {
+	RecordID    string
+	ModelCallID string
+	Attempt     int
+}
+
+type AttemptOutcome struct {
+	Status                string
+	DurationMS            int64
+	TimeToFirstTokenMS    *int64
+	OutputTokensPerSecond float64
+	PromptTokens          int
+	CompletionTokens      int
+	TotalTokens           int
+	UsageEstimated        bool
+	UsageAvailable        bool
+	ErrorKind             string
+	HTTPStatus            int
+}

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
@@ -35,26 +36,7 @@ func (c *Client) complete(ctx context.Context, body map[string]any) (chatComplet
 	ctx = budget.WithOperation(ctx, reservation.OperationID)
 	const operation = "chat.completion"
 	response, err := executeWithRetry(ctx, c.retryPolicy, operation, func() (chatCompletionResponse, error) {
-		if err := c.recordModelRequest(ctx, reservation.OperationID, operation, c.model, payload); err != nil {
-			return chatCompletionResponse{}, withoutRetry(err, operation)
-		}
-		resp, err := c.doRequest(ctx, payload)
-		if err != nil {
-			return chatCompletionResponse{}, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return chatCompletionResponse{}, modelErrorFromHTTPResponse(operation, resp)
-		}
-
-		var decoded chatCompletionResponse
-		if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-			return chatCompletionResponse{}, invalidResponseError(operation, "failed to decode model response", err)
-		}
-		if len(decoded.Choices) == 0 {
-			return chatCompletionResponse{}, invalidResponseError(operation, "model returned no choices", nil)
-		}
-		return decoded, nil
+		return c.completeAttempt(ctx, reservation.OperationID, operation, payload)
 	})
 	if err != nil {
 		return response, err
@@ -66,6 +48,33 @@ func (c *Client) complete(ctx context.Context, body map[string]any) (chatComplet
 		return response, err
 	}
 	return response, nil
+}
+
+func (c *Client) completeAttempt(ctx context.Context, modelCallID, operation string, payload []byte) (decoded chatCompletionResponse, attemptErr error) {
+	ref, err := c.recordModelRequest(ctx, modelCallID, operation, c.model, payload)
+	if err != nil {
+		return decoded, withoutRetry(err, operation)
+	}
+	started := time.Now()
+	defer func() { c.finishModelAttempt(ctx, ref, started, time.Time{}, decoded.Usage, attemptErr) }()
+	resp, err := c.doRequest(ctx, payload)
+	if err != nil {
+		return decoded, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return decoded, modelErrorFromHTTPResponse(operation, resp)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return decoded, invalidResponseError(operation, "failed to decode model response", err)
+	}
+	if len(decoded.Choices) == 0 {
+		return decoded, invalidResponseError(operation, "model returned no choices", nil)
+	}
+	if !decoded.Usage.Valid() {
+		decoded.Usage = estimateUsage(string(payload), decoded.Choices[0].Message.Content)
+	}
+	return decoded, nil
 }
 
 func (c *Client) streamMessages(ctx context.Context, messages []Message, events chan<- StreamEvent) (bool, string, Usage, error) {
@@ -178,7 +187,7 @@ type streamAttemptResult struct {
 	usage   Usage
 }
 
-func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool, maxCompletionTokens int) (streamAttemptResult, error) {
+func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool, maxCompletionTokens int) (result streamAttemptResult, attemptErr error) {
 	const operation = "chat.stream"
 	body := map[string]any{
 		"model":       c.model,
@@ -198,9 +207,13 @@ func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, 
 	}
 
 	modelCallID := budget.OperationFromContext(ctx)
-	if err := c.recordModelRequest(ctx, modelCallID, operation, c.model, payload); err != nil {
+	ref, err := c.recordModelRequest(ctx, modelCallID, operation, c.model, payload)
+	if err != nil {
 		return streamAttemptResult{}, withoutRetry(err, operation)
 	}
+	started := time.Now()
+	var firstToken time.Time
+	defer func() { c.finishModelAttempt(ctx, ref, started, firstToken, result.usage, attemptErr) }()
 	resp, err := c.doRequest(ctx, payload)
 	if err != nil {
 		return streamAttemptResult{}, err
@@ -225,6 +238,9 @@ func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, 
 		}
 		data := strings.TrimPrefix(line, "data: ")
 		if data == "[DONE]" {
+			if !usage.Valid() {
+				usage = estimateUsage(messagesToText(messages), output.String())
+			}
 			return streamAttemptResult{emitted: emitted, output: output.String(), usage: usage}, nil
 		}
 
@@ -238,6 +254,9 @@ func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, 
 		for _, choice := range event.Choices {
 			if choice.Delta.Content == "" {
 				continue
+			}
+			if firstToken.IsZero() {
+				firstToken = time.Now()
 			}
 			emitted = true
 			output.WriteString(choice.Delta.Content)

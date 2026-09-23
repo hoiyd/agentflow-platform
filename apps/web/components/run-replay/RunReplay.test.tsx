@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import type { RunReplay as RunReplayData } from "../../lib/api";
+import { EventDetail, stepDuration } from "./RunEventDetails";
 import { RunReplay } from "./RunReplay";
 
 const getReplayPageData = vi.hoisted(() => vi.fn());
@@ -12,6 +13,30 @@ vi.mock("../../lib/replay-page-data", () => ({ getReplayPageData }));
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+it("does not double-count physical attempt latency in the step total", () => {
+  const events: RunReplayData["run_events"] = [
+    { id: "model-1", schema_version: 1, sequence: 1, run_id: "run-1", type: "model.completed", stage_id: "stage-1", timestamp: "2026-09-10T00:00:00Z", payload: { duration_ms: 120 } },
+    { id: "attempt-1", schema_version: 1, sequence: 2, run_id: "run-1", type: "model.attempt_finished", stage_id: "stage-1", timestamp: "2026-09-10T00:00:01Z", payload: { duration_ms: 95 } }
+  ];
+  expect(stepDuration(events, "stage-1")).toBe(120);
+});
+
+it("shows failed attempt diagnostics without inventing token usage", () => {
+  const event: RunReplayData["run_events"][number] = {
+    id: "attempt-1",
+    schema_version: 1,
+    sequence: 1,
+    run_id: "run-1",
+    type: "model.attempt_finished",
+    timestamp: "2026-09-10T00:00:00Z",
+    payload: { attempt: 2, status: "failed", duration_ms: 80, time_to_first_token_ms: 12, error_kind: "invalid_response", usage_available: false }
+  };
+  render(<EventDetail event={event} />);
+  expect(screen.getByText("First token")).toBeTruthy();
+  expect(screen.getByText("invalid_response")).toBeTruthy();
+  expect(screen.queryByText("Prompt")).toBeNull();
 });
 
 it("keeps replay available when the episode report fails", async () => {

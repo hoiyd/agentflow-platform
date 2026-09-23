@@ -180,10 +180,10 @@ func TestLocalCompletionCapturesCanonicalRequest(t *testing.T) {
 	}
 
 	var nilClient *Client
-	if err := nilClient.recordModelRequest(context.Background(), "call", "operation", "model", []byte(`{}`)); err != nil {
+	if _, err := nilClient.recordModelRequest(context.Background(), "call", "operation", "model", []byte(`{}`)); err != nil {
 		t.Fatalf("nil client should have no recorder side effect: %v", err)
 	}
-	if err := NewClient("", "", "model").recordModelRequest(context.Background(), "call", "operation", "model", []byte(`{}`)); err != nil {
+	if _, err := NewClient("", "", "model").recordModelRequest(context.Background(), "call", "operation", "model", []byte(`{}`)); err != nil {
 		t.Fatalf("client without recorder should be a no-op: %v", err)
 	}
 }
