@@ -127,7 +127,7 @@ function EmbeddingStatus({ embedding }: { embedding: EmbeddingInfo | null }) {
   return (
     <DiagnosticRow
       label="Embedding"
-      value={`${embedding.provider} / ${embedding.model}${embedding.dimensions ? ` / ${embedding.dimensions}d` : ""}${embedding.estimated ? " / local fallback" : ""}`}
+      value={`${embedding.provider} / ${embedding.model}${embedding.dimensions ? ` / ${embedding.dimensions}d` : ""}${embedding.provider === "simulated" ? " / offline fixture" : embedding.estimated ? " / estimated" : ""}`}
       warning={Boolean(embedding.estimated)}
     />
   );

@@ -154,7 +154,7 @@ func TestRecorderFailurePreventsProviderRequest(t *testing.T) {
 }
 
 func TestLocalCompletionCapturesCanonicalRequest(t *testing.T) {
-	client := NewClient("", "https://provider.example/v1", "test-model")
+	client := NewSimulatedClient()
 	observations := []requestcontrol.Observation{}
 	client.SetRequestRecorder(requestRecorderFunc(func(_ context.Context, observation requestcontrol.Observation) error {
 		observations = append(observations, observation)
@@ -173,7 +173,7 @@ func TestLocalCompletionCapturesCanonicalRequest(t *testing.T) {
 		t.Fatalf("local completion capture failed: completion=%#v observations=%#v err=%v", completion, observations, err)
 	}
 	observation := observations[0]
-	if observation.Operation != "local.completion" || observation.Provider != "local" ||
+	if observation.Operation != "simulated.completion" || observation.Provider != "simulated" ||
 		observation.ModelCallID != prepared.Manifest.ModelCallID || observation.ContextManifestID != prepared.Manifest.ID ||
 		observation.SourceTokenBreakdown["system"] != 2 || !json.Valid(observation.Payload) {
 		t.Fatalf("unexpected local request observation: %#v", observation)

@@ -10,8 +10,8 @@ replay.
 
 The backend is written in Go. The frontend is a Next.js workbench for running
 and inspecting Single, Multi, and bounded Loop workflows.
-The project uses OpenAI-compatible model and embedding APIs, with deterministic
-local fallbacks for development.
+The project uses OpenAI-compatible model APIs and supports local Ollama
+embeddings. Deterministic simulation is explicit and limited to offline fixtures.
 
 ## Project at a Glance: Three Execution Modes
 
@@ -63,7 +63,7 @@ guide are in [Execution modes](docs/runtime/execution-modes.md).
 This walkthrough follows one incident task through plan review, worker routing,
 execution, review, finalization, and persisted Replay. It demonstrates **Multi**
 mode; Single and Loop use the same runtime controls and evidence model with the
-different orchestration shapes above. No API key is required.
+different orchestration shapes above. The recording can be viewed without an API key.
 
 ### RAG Pipeline
 
@@ -181,8 +181,8 @@ persistence.
 
 ## Five-Minute Demo
 
-1. Start the complete local stack. No API key is required for the deterministic
-   workflow demonstration:
+1. Configure a credentialed model route and start the complete local stack.
+   Offline evidence can be generated separately without a model provider:
 
    ```bash
    make quickstart
@@ -262,8 +262,8 @@ scope and its expansion path are documented in the
   and promoted from diagnostic results to release criteria.
 - RAG `no_match` prevents weak candidates from entering model context, but it
   does not yet force the model to abstain from answering from prior knowledge.
-- The local hash embedding fallback is for deterministic development, not
-  retrieval-quality evaluation.
+- Explicit local hash embedding fixtures are for deterministic offline tests,
+  not retrieval-quality evaluation or live Knowledge search.
 - The routing Dataset v1 is a 16-case deterministic regression fixture. It
   recommends score/margin `4/1`, while production intentionally remains at
   conservative `6/1`; no live LLM routing quality is claimed without a
@@ -325,8 +325,9 @@ GOCACHE=/private/tmp/agentflow-go-build-cache go run ./cmd/server
 ```
 
 The API listens on `http://127.0.0.1:8080` by default. Set `BIND_ADDRESS`
-explicitly when a trusted deployment needs another interface. With no API key, the
-backend uses deterministic local behavior suitable for exercising workflows.
+explicitly when a trusted deployment needs another interface. A model route
+without its configured credential fails startup; it never silently produces a
+simulated answer. Offline tests and evaluation use explicit simulated fixtures.
 
 Frontend, in another terminal:
 

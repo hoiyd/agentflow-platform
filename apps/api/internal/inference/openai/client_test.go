@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/inference/provider"
+	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 	"agentflow-platform/apps/api/internal/tool"
 )
 
@@ -29,6 +32,7 @@ func TestLocalClientPublicFallbacks(t *testing.T) {
 	if derived.RuntimeIdentity().Provider != "local" || derived.RuntimeIdentity().Model != "local-test" {
 		t.Fatalf("unexpected derived runtime identity: %#v", derived.RuntimeIdentity())
 	}
+	client = NewSimulatedClient()
 
 	catalog, err := tool.NewCatalog()
 	if err != nil {
@@ -65,11 +69,75 @@ func TestLocalClientPublicFallbacks(t *testing.T) {
 	}
 
 	embedding, err := client.EmbedText(context.Background(), "stable local embedding")
-	if err != nil || len(embedding.Vector) != 32 || embedding.Provider != "local" || !embedding.Estimated {
+	if err != nil || len(embedding.Vector) != 1536 || embedding.Provider != "simulated" || !embedding.Estimated {
 		t.Fatalf("local embedding: embedding=%#v err=%v", embedding, err)
 	}
 	if _, err := client.EmbedText(context.Background(), "   "); err == nil {
 		t.Fatal("expected blank embedding input rejection")
+	}
+}
+
+func TestMissingChatCredentialDoesNotSimulate(t *testing.T) {
+	client := NewClient("", "https://example.test/v1", "gpt-test")
+	if _, err := client.CompleteText(context.Background(), "system", "hello"); err == nil {
+		t.Fatal("missing credential must not produce a simulated completion")
+	}
+	if _, err := client.PrepareAgentChat(context.Background(), provider.ChatRequest{Latest: "hello"}); err == nil {
+		t.Fatal("missing credential must not prepare a simulated chat")
+	}
+	if _, err := client.CompletePreparedText(context.Background(), PreparedText{}); err == nil {
+		t.Fatal("prepared completion must not bypass the credential boundary")
+	}
+	if _, err := client.EmbedText(context.Background(), "hello"); err == nil {
+		t.Fatal("missing embedding credential must not produce synthetic vectors")
+	}
+}
+
+func TestExplicitSimulationIdentifiesItsResults(t *testing.T) {
+	client := NewSimulatedClient()
+	var observation requestcontrol.Observation
+	client.SetRequestRecorder(requestRecorderFunc(func(_ context.Context, item requestcontrol.Observation) error {
+		observation = item
+		return nil
+	}))
+	identity := client.RuntimeIdentity()
+	if identity.Provider != "simulated" || identity.Model != "local_fallback" {
+		t.Fatalf("simulation identity is ambiguous: %#v", identity)
+	}
+	completion, err := client.CompleteTextDetailed(context.Background(), "system", "hello")
+	if err != nil || completion.Model != "local_fallback" || !completion.Usage.Estimated {
+		t.Fatalf("simulation completion is ambiguous: %#v, %v", completion, err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(observation.Payload, &payload); err != nil || observation.Provider != "simulated" || observation.Operation != "simulated.completion" || payload["simulated"] != true {
+		t.Fatalf("simulation request capture is ambiguous: %#v, %v", observation, err)
+	}
+	if derived := client.WithRuntimeIdentity(identity); derived.RuntimeIdentity().Provider != "simulated" {
+		t.Fatalf("simulation identity lost during snapshot restore: %#v", derived.RuntimeIdentity())
+	}
+}
+
+func TestSimulatedStreamMarksReplayEvents(t *testing.T) {
+	client := NewSimulatedClient()
+	prepared, err := client.PrepareAgentChat(context.Background(), provider.ChatRequest{Latest: "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &recordingEventStore{}
+	events := make(chan StreamEvent, 64)
+	emitted, err := client.StreamAnswer(context.Background(), prepared, provider.ChatStreamAnswer,
+		provider.ChatTrace{Recorder: event.NewRecorder(store), RunID: "run-simulated", StepID: "step-simulated"}, events)
+	if err != nil || !emitted {
+		t.Fatalf("simulated stream failed: emitted=%v err=%v", emitted, err)
+	}
+	items := store.items()
+	if len(items) != 2 || items[0].Type != domain.EventModelStarted || items[1].Type != domain.EventModelCompleted {
+		t.Fatalf("unexpected simulation events: %#v", items)
+	}
+	for _, item := range items {
+		if item.Payload["simulated"] != true || item.Payload["provider"] != "simulated" {
+			t.Fatalf("simulation event lacks source identity: %#v", item)
+		}
 	}
 }
 

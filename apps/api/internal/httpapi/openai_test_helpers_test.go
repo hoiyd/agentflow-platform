@@ -1,8 +1,6 @@
 package httpapi
 
 import (
-	"time"
-
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/openai"
@@ -40,5 +38,5 @@ func testRuntimeSnapshot() domain.RuntimeSnapshot {
 }
 
 func newLocalFallbackOpenAIClientForTest() *openai.Client {
-	return openai.NewClientWithTimeoutAndEmbeddingModel("", "", "https://embedding.test/v1", "test", "local-test-embedding", 1536, time.Second)
+	return openai.NewSimulatedClient()
 }

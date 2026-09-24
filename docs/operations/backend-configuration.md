@@ -190,14 +190,10 @@ Embedding is one independent service and never enters Chat routing. It calls
 Ollama when `EMBEDDING_BASE_URL` points to
 `http://localhost:11434/api/embed`. For a credentialed OpenAI-compatible
 embedding endpoint, set `EMBEDDING_API_KEY`; without it, non-Ollama embedding
-uses the deterministic local fallback. The frontend search panel shows whether
-RAG search used
-`ollama / <model>`, `local / local_hash_embedding`, or an OpenAI-compatible
-embedding provider.
-
-The local fallback is intended to verify workflows and persistence without
-provider cost. It is not a substitute for evaluating model quality or semantic
-retrieval quality.
+requests fail instead of returning synthetic vectors. The frontend search panel
+shows the embedding provider and model used by RAG search. Explicit offline
+fixtures report `simulated / local_hash_embedding`; they verify protocol
+behavior without claiming model or semantic retrieval quality.
 
 To keep Chat on hosted routes and embeddings on local Ollama:
 

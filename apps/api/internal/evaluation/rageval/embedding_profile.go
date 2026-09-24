@@ -103,6 +103,9 @@ func newEvaluationEmbedder(options EmbeddingProfileOptions) (*evaluationEmbedder
 		return nil, err
 	}
 	client := openai.NewClientWithTimeoutAndEmbeddingModel(normalized.APIKey, "", normalized.BaseURL, "", normalized.Model, normalized.Dimensions, normalized.Timeout)
+	if normalized.Name == EmbeddingProfileHash {
+		client = openai.NewSimulatedClient()
+	}
 	client.SetRetryPolicy(openai.RetryPolicy{MaxAttempts: normalized.RetryMaxAttempts})
 	embedder := &evaluationEmbedder{client: client, options: normalized, usage: EmbeddingUsage{Source: "estimated_input_tokens_and_physical_requests"}}
 	if normalized.Name != EmbeddingProfileHash {
@@ -218,7 +221,7 @@ func (e *evaluationEmbedder) validate(embedding provider.Embedding) error {
 			return &embeddingProfileError{code: "embedding_invalid_vector", category: failure.CategoryExecution, message: "embedding response returned a non-finite vector"}
 		}
 	}
-	expectedProvider := map[string]string{EmbeddingProfileHash: "local", EmbeddingProfileOpenAICompatible: "openai_compatible", EmbeddingProfileOllama: "ollama"}[e.options.Name]
+	expectedProvider := map[string]string{EmbeddingProfileHash: "simulated", EmbeddingProfileOpenAICompatible: "openai_compatible", EmbeddingProfileOllama: "ollama"}[e.options.Name]
 	if embedding.Provider != expectedProvider || embedding.Model != e.options.Model || embedding.Dimensions != e.options.Dimensions {
 		return &embeddingProfileError{code: "embedding_profile_mismatch", category: failure.CategoryValidation, message: "embedding response does not match the configured provider, model, or dimensions"}
 	}

@@ -41,7 +41,7 @@ func TestOfflineRAGEvaluationIsReproducibleAndBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(encoded), "The control plane is in Frankfurt") || first.ReportFormat != evalreport.Format || first.Pipeline.Embedding.Provider != "local" {
+	if strings.Contains(string(encoded), "The control plane is in Frankfurt") || first.ReportFormat != evalreport.Format || first.Pipeline.Embedding.Provider != "simulated" {
 		t.Fatalf("report leaked corpus content or lost identity: %s", encoded)
 	}
 }

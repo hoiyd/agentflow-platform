@@ -207,6 +207,10 @@ func invalidResponseError(operation, message string, cause error) *ModelError {
 	}
 }
 
+func missingCredentialError(operation string) *ModelError {
+	return &ModelError{Kind: ErrorAuthentication, Operation: operation, Message: "model API key is not configured"}
+}
+
 func withoutRetry(err error, operation string) *ModelError {
 	modelErr := classifyModelError(operation, err)
 	modelErr.Retryable = false
