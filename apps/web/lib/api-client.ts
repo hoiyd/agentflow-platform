@@ -145,6 +145,10 @@ function parseErrorEnvelope(body: string): APIErrorEnvelope {
   }
 }
 
-function stringValue(value: unknown): string | undefined {
+export function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+export function numberValue(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
 }

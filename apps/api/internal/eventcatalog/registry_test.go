@@ -16,7 +16,7 @@ import (
 
 func TestRegistryCoversEveryDeclaredRunEventType(t *testing.T) {
 	_, currentFile, _, _ := runtime.Caller(0)
-	domainFile := filepath.Join(filepath.Dir(currentFile), "..", "domain", "execution.go")
+	domainFile := filepath.Join(filepath.Dir(currentFile), "..", "domain", "run_events.go")
 	parsed, err := parser.ParseFile(token.NewFileSet(), domainFile, nil, 0)
 	if err != nil {
 		t.Fatal(err)
