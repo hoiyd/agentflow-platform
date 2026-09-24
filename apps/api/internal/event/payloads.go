@@ -194,18 +194,19 @@ func (ModelPayload) supports(eventType domain.RunEventType) bool {
 }
 
 type ModelRequestPreparedPayload struct {
-	RecordID               string `json:"record_id"`
-	ModelCallID            string `json:"model_call_id"`
-	Attempt                int    `json:"attempt"`
-	Operation              string `json:"operation"`
-	Provider               string `json:"provider"`
-	Model                  string `json:"model"`
-	ContextManifestID      string `json:"context_manifest_id,omitempty"`
-	RuntimeSnapshotHash    string `json:"runtime_snapshot_hash"`
-	PayloadHash            string `json:"payload_hash"`
-	PayloadBytes           int    `json:"payload_bytes"`
-	CaptureMode            string `json:"capture_mode"`
-	CaptureReconstructable bool   `json:"capture_reconstructable"`
+	RecordID               string         `json:"record_id"`
+	ModelCallID            string         `json:"model_call_id"`
+	Attempt                int            `json:"attempt"`
+	Operation              string         `json:"operation"`
+	Provider               string         `json:"provider"`
+	Model                  string         `json:"model"`
+	Parameters             map[string]any `json:"parameters,omitempty"`
+	ContextManifestID      string         `json:"context_manifest_id,omitempty"`
+	RuntimeSnapshotHash    string         `json:"runtime_snapshot_hash"`
+	PayloadHash            string         `json:"payload_hash"`
+	PayloadBytes           int            `json:"payload_bytes"`
+	CaptureMode            string         `json:"capture_mode"`
+	CaptureReconstructable bool           `json:"capture_reconstructable"`
 }
 
 func (ModelRequestPreparedPayload) supports(eventType domain.RunEventType) bool {

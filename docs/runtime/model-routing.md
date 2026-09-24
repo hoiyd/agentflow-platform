@@ -26,15 +26,29 @@ each route references, but never contains, its credential environment variable.
 Each route has a stable ID and captures:
 
 - provider, model, and secret-free endpoint;
-- request timeout plus Tool calling, structured-output, and streaming capabilities;
+- request timeout plus Tool calling, structured-output, streaming, and optional
+  `seed` capabilities;
 - context-window and maximum-output token limits;
-- deterministic priority, pricing metadata, and definition revision;
+- deterministic priority, pricing metadata, definition revision, and effective
+  generation policy;
 - the name of the environment variable that supplies credentials, never its
   value.
 
 Catalog construction validates endpoint shape, token limits, credential
 references, descriptor/client identity, duplicate IDs, and credential-like
 metadata. Route and Catalog revisions are SHA-256 digests of canonical JSON.
+
+`generation_policy` has two profiles: `answer_stream` for streamed answers and
+`completion` for non-stream calls, including Tool decisions, compaction, and
+other auxiliary completions. Their default temperatures remain `0.4` and
+`0.2`. Each profile requires a `temperature` in `[0, 2]`; optional `top_p`
+must be in `(0, 1]`. An omitted `top_p` is left to the provider, not recorded
+as an assumed value. `seed` is accepted only when the route explicitly sets
+`capabilities.seed: true`. Unsupported or invalid values fail Catalog
+validation before a model request. Seed support is a provider claim, not a
+guarantee of identical output across calls or backend revisions.
+The local no-credential fallback does not sample model tokens and therefore
+does not apply these profiles.
 
 ## Decision Protocol
 
@@ -67,15 +81,20 @@ verification use it directly; it never participates in Chat model routing.
 
 ## Snapshot and Resume
 
-Runtime Snapshot v17 freezes the route policy revision, Catalog revision, all
+Runtime Snapshot v18 freezes the route policy revision, Catalog revision, all
 route contracts, and the independent embedding identity required by the Run.
+Effective generation profiles are part of each frozen route and its revision;
+Resume sends the frozen values even if the current route file has changed.
+Each physical model request records the actual sent parameters in its request
+envelope and `model.request_prepared` event, so Replay can show the effective
+sampling settings beside the request evidence.
 Resume rebuilds a Catalog only from those frozen routes:
 
 - routes added after Run creation are ignored;
 - a removed route or changed credential reference fails closed;
 - changed model configuration does not replace the frozen provider, model,
   endpoint, capabilities, limits, or pricing metadata;
-- Snapshot v16 and earlier remain readable through Replay but are not resumable.
+- Snapshot v17 and earlier remain readable through Replay but are not resumable.
 
 ## Current Boundary
 

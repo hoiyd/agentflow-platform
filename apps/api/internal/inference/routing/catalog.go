@@ -98,6 +98,9 @@ func NewCatalog(bindings ...Binding) (*Catalog, error) {
 		}
 		seen[descriptor.ID] = true
 		binding.Descriptor = descriptor
+		identity.GenerationPolicy = descriptor.GenerationPolicy.Clone()
+		identity.SeedSupported = descriptor.Capabilities.Seed
+		binding.Client = binding.Client.WithRuntimeIdentity(identity)
 		normalized = append(normalized, binding)
 	}
 	sort.Slice(normalized, func(i, j int) bool { return normalized[i].Descriptor.ID < normalized[j].Descriptor.ID })
@@ -129,7 +132,7 @@ func (c *Catalog) Descriptors() []Descriptor {
 	}
 	result := make([]Descriptor, 0, len(c.bindings))
 	for _, binding := range c.bindings {
-		result = append(result, binding.Descriptor)
+		result = append(result, cloneDescriptor(binding.Descriptor))
 	}
 	return result
 }
@@ -139,6 +142,7 @@ func (c *Catalog) Resolve(id string) (Binding, bool) {
 		return Binding{}, false
 	}
 	binding, ok := c.byID[id]
+	binding.Descriptor = cloneDescriptor(binding.Descriptor)
 	return binding, ok
 }
 
@@ -183,7 +187,7 @@ func (c *Catalog) selectRoute(routeID string, requirements Requirements) (Decisi
 		}
 		return eligible[i].Descriptor.ID < eligible[j].Descriptor.ID
 	})
-	decision.Route = eligible[0].Descriptor
+	decision.Route = cloneDescriptor(eligible[0].Descriptor)
 	decision.Client = eligible[0].Client
 	return decision, nil
 }
@@ -226,6 +230,14 @@ func ValidateDescriptor(descriptor Descriptor) (Descriptor, error) {
 	if descriptor.CredentialEnvironment != "" && !credentialEnvPattern.MatchString(descriptor.CredentialEnvironment) {
 		return Descriptor{}, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q has an invalid credential environment reference", descriptor.ID))
 	}
+	policy := domain.DefaultGenerationPolicy()
+	if descriptor.GenerationPolicy != nil {
+		policy = descriptor.GenerationPolicy.Clone()
+	}
+	if err := policy.Validate(descriptor.Capabilities.Seed); err != nil {
+		return Descriptor{}, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q has invalid generation policy: %w", descriptor.ID, err))
+	}
+	descriptor.GenerationPolicy = &policy
 	if err := redaction.ValidateText(descriptor.Provider, descriptor.Model, descriptor.Endpoint, descriptor.Pricing.Source, descriptor.CredentialEnvironment); err != nil {
 		return Descriptor{}, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q contains credential-like metadata", descriptor.ID))
 	}
@@ -238,6 +250,14 @@ func ValidateDescriptor(descriptor Descriptor) (Descriptor, error) {
 	}
 	descriptor.DefinitionRevision = revision
 	return descriptor, nil
+}
+
+func cloneDescriptor(descriptor Descriptor) Descriptor {
+	if descriptor.GenerationPolicy != nil {
+		policy := descriptor.GenerationPolicy.Clone()
+		descriptor.GenerationPolicy = &policy
+	}
+	return descriptor
 }
 
 func exclusionReasons(route Descriptor, requirements Requirements) []string {

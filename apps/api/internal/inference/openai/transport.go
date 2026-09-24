@@ -18,6 +18,9 @@ import (
 )
 
 func (c *Client) complete(ctx context.Context, body map[string]any) (chatCompletionResponse, error) {
+	if err := c.applySampling(body, c.generationPolicy.Completion, "chat.completion"); err != nil {
+		return chatCompletionResponse{}, err
+	}
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return chatCompletionResponse{}, err
@@ -131,6 +134,9 @@ func generationOutcomeError(operation, label string, hasToolCalls, refused bool)
 }
 
 func (c *Client) streamMessages(ctx context.Context, messages []Message, events chan<- StreamEvent) (bool, string, Usage, error) {
+	if err := c.validateSampling("chat.stream"); err != nil {
+		return false, "", Usage{}, err
+	}
 	reservation, err := beginBudgetedModelCall(ctx, c.model, estimateTokens(messagesToText(messages)))
 	if err != nil {
 		return false, "", Usage{}, err
@@ -235,10 +241,12 @@ type streamAttemptResult struct {
 func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool, maxCompletionTokens int) (result streamAttemptResult, attemptErr error) {
 	const operation = "chat.stream"
 	body := map[string]any{
-		"model":       c.model,
-		"messages":    messages,
-		"stream":      true,
-		"temperature": 0.4,
+		"model":    c.model,
+		"messages": messages,
+		"stream":   true,
+	}
+	if err := c.applySampling(body, c.generationPolicy.AnswerStream, operation); err != nil {
+		return streamAttemptResult{}, err
 	}
 	if maxCompletionTokens > 0 {
 		body["max_tokens"] = maxCompletionTokens

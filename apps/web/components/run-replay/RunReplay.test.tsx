@@ -54,6 +54,17 @@ it("distinguishes truncated generation and a missing provider finish reason", ()
   expect(screen.getByText("Unconfirmed (not provided)")).toBeTruthy();
 });
 
+it("shows the effective sampling parameters recorded for a model request", () => {
+  const event: RunReplayData["run_events"][number] = {
+    id: "request-1", schema_version: 1, sequence: 1, run_id: "run-1",
+    type: "model.request_prepared", timestamp: "2026-09-10T00:00:00Z",
+    payload: { attempt: 1, operation: "chat.completion", parameters: { temperature: 0, top_p: 0.8, seed: 42 } }
+  };
+  render(<EventDetail event={event} />);
+  expect(screen.getByText("Sampling")).toBeTruthy();
+  expect(screen.getByText("Temperature 0 · Top-p 0.8 · Seed 42")).toBeTruthy();
+});
+
 it("keeps replay available when the episode report fails", async () => {
   getReplayPageData.mockResolvedValue({
     data: replayFixture(),

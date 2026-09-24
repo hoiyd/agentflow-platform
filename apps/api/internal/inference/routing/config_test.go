@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,6 +39,34 @@ func TestLoadRouteFile(t *testing.T) {
 	descriptor := config.Routes[0].Descriptor("openai_compatible")
 	if descriptor.Provider != "openai_compatible" || descriptor.Model != "fast-chat" || descriptor.Priority != 120 {
 		t.Fatalf("route config lost descriptor fields: %#v", descriptor)
+	}
+}
+
+func TestRouteSamplingPolicyIsExplicitAndSecretFree(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "routes.json")
+	data := `{"routes":[{"id":"fast","base_url":"https://models.example/v1","model":"fast-chat","credential_environment":"FAST_MODEL_API_KEY","request_timeout_seconds":300,"capabilities":{"streaming":true,"seed":true},"context_window_tokens":64000,"max_output_tokens":4096,"priority":100,"pricing":{"source":"test"},"generation_policy":{"answer_stream":{"temperature":0,"top_p":0.9,"seed":42},"completion":{"temperature":0.2,"top_p":1}}}]}`
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config, err := LoadRouteFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(config.Routes[0].Descriptor("openai_compatible"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var descriptor map[string]any
+	if err := json.Unmarshal(encoded, &descriptor); err != nil {
+		t.Fatal(err)
+	}
+	policy, ok := descriptor["generation_policy"].(map[string]any)
+	if !ok {
+		t.Fatalf("route descriptor lost effective generation policy: %s", encoded)
+	}
+	answer, ok := policy["answer_stream"].(map[string]any)
+	if !ok || answer["temperature"] != float64(0) || answer["top_p"] != 0.9 || answer["seed"] != float64(42) {
+		t.Fatalf("answer policy changed: %#v", policy)
 	}
 }
 

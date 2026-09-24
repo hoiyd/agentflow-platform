@@ -56,7 +56,8 @@ const (
 	RoutingRequirementsSnapshotVersion   = 15
 	ModelRoutingRuntimeSnapshotVersion   = 16
 	IndependentEmbeddingSnapshotVersion  = 17
-	CurrentRuntimeSnapshotVersion        = IndependentEmbeddingSnapshotVersion
+	SamplingRuntimeSnapshotVersion       = 18
+	CurrentRuntimeSnapshotVersion        = SamplingRuntimeSnapshotVersion
 )
 
 type RuntimeSnapshot struct {
@@ -187,6 +188,7 @@ type ModelRouteDescriptor struct {
 	Model                 string                 `json:"model"`
 	Endpoint              string                 `json:"endpoint"`
 	Capabilities          ModelRouteCapabilities `json:"capabilities"`
+	GenerationPolicy      *GenerationPolicy      `json:"generation_policy,omitempty"`
 	ContextWindowTokens   int                    `json:"context_window_tokens"`
 	MaxOutputTokens       int                    `json:"max_output_tokens"`
 	Priority              int                    `json:"priority"`
@@ -199,6 +201,7 @@ type ModelRouteCapabilities struct {
 	ToolCalling      bool `json:"tool_calling"`
 	StructuredOutput bool `json:"structured_output"`
 	Streaming        bool `json:"streaming"`
+	Seed             bool `json:"seed,omitempty"`
 }
 
 type ModelRoutePricing struct {

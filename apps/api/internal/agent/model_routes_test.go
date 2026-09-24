@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -50,6 +51,83 @@ func TestFrozenModelCatalogIgnoresLaterRoutesAndRetainsIdentity(t *testing.T) {
 	runtime.modelRoutes, _ = routing.NewCatalog(later)
 	if _, err := runtime.restoreModelRouteCatalog(snapshot.ModelRouting); !errors.Is(err, routing.ErrNoCompatibleRoute) {
 		t.Fatalf("missing frozen route should fail closed: %v", err)
+	}
+}
+
+func TestRestoredRunUsesFrozenSamplingAfterRouteConfigChanges(t *testing.T) {
+	var sent map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if err := json.NewDecoder(request.Body).Decode(&sent); err != nil {
+			t.Error(err)
+		}
+		_, _ = response.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	client := openai.NewClient("test-key", server.URL+"/v1", "test-model")
+	identity := client.RuntimeIdentity()
+	policy := domain.DefaultGenerationPolicy()
+	oldTemp, oldTopP := 0.1, 0.8
+	policy.Completion.Temperature, policy.Completion.TopP = &oldTemp, &oldTopP
+	binding := routing.Binding{Descriptor: routing.Descriptor{
+		ID: "primary", Provider: identity.Provider, Model: identity.Model, Endpoint: identity.BaseURL,
+		Capabilities: routing.Capabilities{Streaming: true}, ContextWindowTokens: 1000, MaxOutputTokens: 100,
+		Pricing: routing.Pricing{Source: "test_fixture"}, GenerationPolicy: &policy,
+	}, Client: client}
+	original, err := routing.NewCatalog(binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selectedOriginal, _ := original.Resolve("primary")
+	if _, err := selectedOriginal.Client.CompleteTextDetailed(context.Background(), "system", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if sent["temperature"] != 0.1 || sent["top_p"] != 0.8 {
+		t.Fatalf("initial route ignored configured sampling: %#v", sent)
+	}
+	runtime := NewRuntime(RuntimeOptions{EmbeddingClient: client, ModelRoutes: original,
+		ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}})
+	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeSingle, domain.Agent{ID: "agent"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored domain.RuntimeSnapshot
+	if err := json.Unmarshal(data, &stored); err != nil {
+		t.Fatal(err)
+	}
+	newTemp := 0.9
+	policy.Completion.Temperature = &newTemp
+	binding.Descriptor.GenerationPolicy = &policy
+	runtime.modelRoutes, err = routing.NewCatalog(binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.modelRoutes.Revision() == original.Revision() {
+		t.Fatal("sampling contrast reused the same catalog revision")
+	}
+	selectedCurrent, _ := runtime.modelRoutes.Resolve("primary")
+	if _, err := selectedCurrent.Client.CompleteTextDetailed(context.Background(), "system", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if sent["temperature"] != 0.9 || sent["top_p"] != 0.8 {
+		t.Fatalf("same-prompt contrast did not change the actual request: %#v", sent)
+	}
+	if _, err := runtime.restoreRuntime(domain.Run{ID: "run-1", RuntimeSnapshot: &stored}); err != nil {
+		t.Fatalf("old policy prevented safe resume: %v", err)
+	}
+	restored, err := runtime.restoreModelRouteCatalog(stored.ModelRouting)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected, _ := restored.Resolve("primary")
+	if _, err := selected.Client.CompleteTextDetailed(context.Background(), "system", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if sent["temperature"] != 0.1 || sent["top_p"] != 0.8 {
+		t.Fatalf("resume used current sampling defaults instead of frozen values: %#v", sent)
 	}
 }
 

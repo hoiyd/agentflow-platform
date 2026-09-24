@@ -39,7 +39,7 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 				return
 			}
 			requestPayload, err := json.Marshal(map[string]any{
-				"model": "local_fallback", "messages": prepared.messages, "stream": true, "temperature": 0.4,
+				"model": "local_fallback", "messages": prepared.messages, "stream": true,
 			})
 			if err != nil {
 				errs <- err
@@ -131,7 +131,7 @@ func (c *Client) CompletePreparedText(ctx context.Context, prepared PreparedText
 			return TextCompletion{}, err
 		}
 		payload, err := json.Marshal(map[string]any{
-			"model": "local_fallback", "messages": prepared.Messages, "temperature": 0.2,
+			"model": "local_fallback", "messages": prepared.Messages,
 		})
 		if err != nil {
 			return TextCompletion{}, err
@@ -154,9 +154,8 @@ func (c *Client) CompletePreparedText(ctx context.Context, prepared PreparedText
 	}
 
 	response, err := c.complete(ctx, map[string]any{
-		"model":       c.model,
-		"messages":    prepared.Messages,
-		"temperature": 0.2,
+		"model":    c.model,
+		"messages": prepared.Messages,
 	})
 	if err != nil {
 		if modelErr, ok := AsModelError(err); ok && modelErr.Kind == ErrorIncompleteOutput && len(response.Choices) > 0 {
