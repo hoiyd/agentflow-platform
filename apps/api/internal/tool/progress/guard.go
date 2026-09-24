@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"strings"
 	"sync"
+
+	"agentflow-platform/apps/api/internal/domain"
 )
 
 const CurrentVersion = "tool-progress-guard-v1"
@@ -29,14 +31,7 @@ const (
 
 // Config is frozen in a Runtime Snapshot so Resume applies the same no-progress
 // thresholds that governed the original Run.
-type Config struct {
-	Version    string `json:"version"`
-	Enabled    bool   `json:"enabled"`
-	WarnAfter  int    `json:"warn_after"`
-	BlockAfter int    `json:"block_after"`
-	HaltAfter  int    `json:"halt_after"`
-	HistoryMax int    `json:"history_max"`
-}
+type Config = domain.ToolProgressGuardConfig
 
 func DefaultConfig() Config {
 	return Config{

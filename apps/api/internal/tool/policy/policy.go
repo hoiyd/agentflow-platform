@@ -4,18 +4,20 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"agentflow-platform/apps/api/internal/domain"
 )
 
 const CurrentVersion = "tool-security-policy-v1"
 
-type Source string
+type Source = domain.ToolSecuritySource
 
 const (
 	SourceLocal  Source = "local"
 	SourceRemote Source = "remote"
 )
 
-type ResourceKind string
+type ResourceKind = domain.ToolResourceKind
 
 const (
 	ResourceRun          ResourceKind = "run"
@@ -25,20 +27,16 @@ const (
 	ResourceExternal     ResourceKind = "external_service"
 )
 
-type Access string
+type Access = domain.ToolResourceAccess
 
 const (
 	AccessRead  Access = "read"
 	AccessWrite Access = "write"
 )
 
-type ResourceScope struct {
-	Kind   ResourceKind `json:"kind"`
-	Name   string       `json:"name"`
-	Access Access       `json:"access"`
-}
+type ResourceScope = domain.ToolResourceScope
 
-type NetworkMode string
+type NetworkMode = domain.ToolNetworkMode
 
 const (
 	NetworkNone     NetworkMode = "none"
@@ -46,18 +44,10 @@ const (
 	NetworkExternal NetworkMode = "external"
 )
 
-type NetworkScope struct {
-	Mode    NetworkMode `json:"mode"`
-	Targets []string    `json:"targets,omitempty"`
-}
+type NetworkScope = domain.ToolNetworkScope
+type Scope = domain.ToolScope
 
-type Scope struct {
-	Resources   []ResourceScope `json:"resources,omitempty"`
-	Network     NetworkScope    `json:"network"`
-	Credentials []string        `json:"credential_scopes,omitempty"`
-}
-
-type SideEffectClass string
+type SideEffectClass = domain.ToolSideEffectClass
 
 const (
 	SideEffectNone          SideEffectClass = "none"
@@ -66,7 +56,7 @@ const (
 	SideEffectDestructive   SideEffectClass = "destructive"
 )
 
-type RateClass string
+type RateClass = domain.ToolRateClass
 
 const (
 	// RateBounded means the shared Run Budget remains the enforcement owner.
@@ -74,7 +64,7 @@ const (
 	RateElevated RateClass = "elevated"
 )
 
-type Reversibility string
+type Reversibility = domain.ToolReversibility
 
 const (
 	Reversible    Reversibility = "reversible"
@@ -82,7 +72,7 @@ const (
 	Irreversible  Reversibility = "irreversible"
 )
 
-type Visibility string
+type Visibility = domain.ToolVisibility
 
 const (
 	VisibilityRun      Visibility = "run"
@@ -90,7 +80,7 @@ const (
 	VisibilityOperator Visibility = "operator"
 )
 
-type ApprovalMode string
+type ApprovalMode = domain.ToolApprovalMode
 
 const (
 	ApprovalNone      ApprovalMode = "none"
@@ -98,7 +88,7 @@ const (
 	ApprovalHumanOnly ApprovalMode = "human_only"
 )
 
-type AuditLevel string
+type AuditLevel = domain.ToolAuditLevel
 
 const (
 	AuditBasic AuditLevel = "basic"
@@ -108,18 +98,9 @@ const (
 // Capability is the trusted local declaration of a Tool's maximum authority.
 // Scope, Rate, Reversibility, and Visibility are explicit and orthogonal to
 // timeout, concurrency, and the aggregate Run Budget.
-type Capability struct {
-	Source        Source          `json:"source"`
-	Scope         Scope           `json:"scope"`
-	SideEffect    SideEffectClass `json:"side_effect_class"`
-	Rate          RateClass       `json:"rate"`
-	Reversibility Reversibility   `json:"reversibility"`
-	Visibility    Visibility      `json:"visibility"`
-	Approval      ApprovalMode    `json:"approval_mode"`
-	Audit         AuditLevel      `json:"audit_level"`
-}
+type Capability = domain.ToolCapability
 
-type Action string
+type Action = domain.ToolPolicyAction
 
 const (
 	ActionAllow       Action = "allow"
@@ -131,18 +112,8 @@ const (
 
 // Rule is operator-owned. Capability is the maximum authority granted to the
 // named Tool; model output and remote annotations never create or widen rules.
-type Rule struct {
-	ID         string     `json:"id"`
-	Tool       string     `json:"tool"`
-	Action     Action     `json:"action"`
-	Capability Capability `json:"capability"`
-}
-
-type Policy struct {
-	Version       string `json:"version"`
-	DefaultAction Action `json:"default_action"`
-	Rules         []Rule `json:"rules,omitempty"`
-}
+type Rule = domain.ToolSecurityRule
+type Policy = domain.ToolSecurityPolicy
 
 type Request struct {
 	Tool                      string

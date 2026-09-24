@@ -22,6 +22,9 @@ complete Single, Multi, and Loop lifecycles, read
   provider retries and process-level request limits remain separate owners.
 - Stores persist domain contracts but do not own retrieval policy, reranking,
   or orchestration.
+- `domain` owns the durable Tool policy, capability, and progress values frozen
+  in Runtime Snapshots; `tool/policy` and `tool/progress` own their validation
+  and execution behavior.
 - Every `/api/*` operation resolves a non-empty Workspace namespace. HTTP handlers
   receive only a `WorkspaceStore` view, so unscoped resource access is unavailable
   at compile time. Store lookups,
