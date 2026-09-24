@@ -1,11 +1,6 @@
 package domain
 
-import (
-	"time"
-
-	"agentflow-platform/apps/api/internal/tool/policy"
-	"agentflow-platform/apps/api/internal/tool/progress"
-)
+import "time"
 
 const (
 	LegacyRuntimeSnapshotVersion         = 1
@@ -38,8 +33,8 @@ type RuntimeSnapshot struct {
 	Embedding          RuntimeEmbeddingSnapshot  `json:"embedding"`
 	ModelRouting       ModelRouteCatalogSnapshot `json:"model_routing"`
 	Tools              []RuntimeToolSnapshot     `json:"tools"`
-	ToolSecurityPolicy policy.Policy             `json:"tool_security_policy"`
-	ToolProgressGuard  progress.Config           `json:"tool_progress_guard"`
+	ToolSecurityPolicy ToolSecurityPolicy        `json:"tool_security_policy"`
+	ToolProgressGuard  ToolProgressGuardConfig   `json:"tool_progress_guard"`
 	ContextAssembly    ContextAssemblyConfig     `json:"context_assembly"`
 	RouterMode         string                    `json:"router_mode,omitempty"`
 	AutonomousLimits   *RuntimeLimitsSnapshot    `json:"autonomous_limits,omitempty"`
@@ -194,13 +189,13 @@ type ModelRouteCandidateDecision struct {
 }
 
 type RuntimeToolSnapshot struct {
-	Name               string            `json:"name"`
-	Description        string            `json:"description"`
-	Parameters         map[string]any    `json:"parameters"`
-	SchemaVersion      string            `json:"schema_version,omitempty"`
-	DefinitionRevision string            `json:"definition_revision,omitempty"`
-	SideEffect         string            `json:"side_effect,omitempty"`
-	Security           policy.Capability `json:"security,omitempty"`
+	Name               string         `json:"name"`
+	Description        string         `json:"description"`
+	Parameters         map[string]any `json:"parameters"`
+	SchemaVersion      string         `json:"schema_version,omitempty"`
+	DefinitionRevision string         `json:"definition_revision,omitempty"`
+	SideEffect         string         `json:"side_effect,omitempty"`
+	Security           ToolCapability `json:"security,omitempty"`
 }
 
 type RuntimeLimitsSnapshot struct {
