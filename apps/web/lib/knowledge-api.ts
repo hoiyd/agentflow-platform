@@ -268,10 +268,10 @@ export type DocumentDetail = {
   chunks: RetrievedDocumentChunk["chunk"][];
 };
 
-export async function listDocuments(): Promise<DocumentInfo[]> {
+export async function listDocuments(signal?: AbortSignal): Promise<DocumentInfo[]> {
   return apiArray<DocumentInfo>(
     "/api/documents",
-    { cache: "no-store" },
+    { cache: "no-store", signal },
     { errorMessage: "Failed to load documents" }
   );
 }
@@ -340,13 +340,14 @@ export async function searchRAG(input: {
   limit?: number;
   min_similarity?: number;
   knowledge_context_max_tokens?: number;
-}): Promise<DocumentSearchResponse> {
+}, signal?: AbortSignal): Promise<DocumentSearchResponse> {
   const data = await apiJSON(
     "/api/rag/search",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input)
+      body: JSON.stringify(input),
+      signal
     },
     { errorMessage: "Failed to search knowledge" }
   );
@@ -379,13 +380,14 @@ type RAGEvaluationRunInput = (
   metadata?: Record<string, string>;
 };
 
-export async function runRAGEvaluation(input: RAGEvaluationRunInput): Promise<RAGEvaluationRunResponse> {
+export async function runRAGEvaluation(input: RAGEvaluationRunInput, signal?: AbortSignal): Promise<RAGEvaluationRunResponse> {
   return apiObject<RAGEvaluationRunResponse>(
     "/api/rag/evaluations/run",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input)
+      body: JSON.stringify(input),
+      signal
     },
     { errorMessage: "Failed to run retrieval evaluation" },
     "retrieval evaluation"

@@ -1,11 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   AgentRoutingRequirements,
   ChatMode,
-  Conversation,
-  ToolInfo,
   TaskState,
   cancelRun,
   continueRun,
@@ -15,22 +13,13 @@ import {
   listCollaborationSteps,
   listConversations,
   listRuns,
-  listTools,
   listMessages,
   getTaskState,
   observeRunEvents,
   resumeRun,
-  setToolEnabled,
-  streamChat,
-  updateConversationTitle
+  streamChat
 } from "../lib/api";
-import {
-  DEFAULT_COMPLETION_VERIFICATION,
-  buildCompletionContract,
-  normalizeCompletionVerification,
-  validateCompletionVerification
-} from "../lib/verification";
-import type { CompletionVerificationSettings } from "../lib/verification";
+import { buildCompletionContract } from "../lib/verification";
 import { createLatestRequestController, type LatestRequestLease } from "../lib/latest-request";
 import { removePendingMessages } from "../lib/pending-messages";
 import { Sidebar, ToolsPanel, Topbar, type APIConnectionStatus, type ChatView } from "./chat/ChatChrome";
@@ -39,7 +28,11 @@ import { ChatDialogs } from "./chat/ChatDialogs";
 import { ChatWorkspace } from "./chat/ChatWorkspace";
 import { createRunEventHandler, type DraftMessage, type RunState } from "./chat/runEventProjection";
 import { useAgentManagement } from "./chat/useAgentManagement";
-import { autonomousRoles, toCollaborationStepView, type AutonomousProgress, type CollaborationStepView } from "./chat/CollaborationPanels";
+import { useCompletionVerification } from "./chat/useCompletionVerification";
+import { useConversationWorkspace } from "./chat/useConversationWorkspace";
+import { useToolCatalog } from "./chat/useToolCatalog";
+import { autonomousRoles, toCollaborationStepView } from "./chat/CollaborationPanels";
+import { useRunTrace } from "./chat/useRunTrace";
 import { KnowledgePanel } from "./knowledge/KnowledgePanel";
 import { useKnowledgeWorkbench } from "./knowledge/useKnowledgeWorkbench";
 import { MemoryPanel } from "./memory/MemoryPanel";
@@ -53,40 +46,25 @@ type ChatShellProps = {
 type ChatSidePanel = "trace" | "task_state" | "closed";
 
 export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeId, setActiveId] = useState<string>("");
-  const [messages, setMessages] = useState<DraftMessage[]>([]);
-  const [input, setInput] = useState("");
+  const {
+    conversations, setConversations, activeId, setActiveId, activeConversation,
+    messages, setMessages, input, setInput, error, setError,
+    editingConversationId, conversationTitleDraft, isSavingConversationTitle,
+    startEditingTitle, cancelEditingTitle, setConversationTitleDraft, saveTitle, applyTitle
+  } = useConversationWorkspace();
   const [isStreaming, setIsStreaming] = useState(false);
-  const [error, setError] = useState("");
   const [chatMode, setChatMode] = useState<ChatMode>("multi_agent");
-  const [collaborationSteps, setCollaborationSteps] = useState<CollaborationStepView[]>([]);
-  const [autonomousProgress, setAutonomousProgress] = useState<AutonomousProgress | null>(null);
-  const [humanInputDraft, setHumanInputDraft] = useState("");
   const [sidePanel, setSidePanel] = useState<ChatSidePanel>("trace");
   const [taskState, setTaskState] = useState<TaskState | null>(null);
   const [taskStateError, setTaskStateError] = useState("");
   const [isTaskStateLoading, setIsTaskStateLoading] = useState(false);
-  const [selectedCollaborationRole, setSelectedCollaborationRole] = useState("planner");
-  const [planDraft, setPlanDraft] = useState("");
-  const [routingRequirements, setRoutingRequirements] = useState<AgentRoutingRequirements>(emptyRoutingRequirements);
   const [isContinuingRun, setIsContinuingRun] = useState(false);
   const [isResumingRun, setIsResumingRun] = useState(false);
   const [isCancelingRun, setIsCancelingRun] = useState(false);
   const [runState, setRunState] = useState<RunState | null>(null);
-  const [completionVerification, setCompletionVerification] = useState<CompletionVerificationSettings>(
-    DEFAULT_COMPLETION_VERIFICATION
-  );
-  const [completionVerificationDraft, setCompletionVerificationDraft] =
-    useState<CompletionVerificationSettings | null>(null);
-  const [completionVerificationError, setCompletionVerificationError] = useState("");
+  const currentRunId = useRef(runState?.id);
+  currentRunId.current = runState?.id;
   const [view, setView] = useState<ChatView>("chat");
-  const [tools, setTools] = useState<ToolInfo[]>([]);
-  const [toolsError, setToolsError] = useState("");
-  const [updatingTool, setUpdatingTool] = useState("");
-  const [editingConversationId, setEditingConversationId] = useState("");
-  const [conversationTitleDraft, setConversationTitleDraft] = useState("");
-  const [isSavingConversationTitle, setIsSavingConversationTitle] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [apiConnectionStatus, setAPIConnectionStatus] = useState<APIConnectionStatus>("checking");
@@ -96,8 +74,19 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     conversationRequestsRef.current = createLatestRequestController();
   }
   const conversationRequests = conversationRequestsRef.current;
+  const streamRequestsRef = useRef<ReturnType<typeof createLatestRequestController> | null>(null);
+  if (!streamRequestsRef.current) streamRequestsRef.current = createLatestRequestController();
+  const streamRequests = streamRequestsRef.current;
+  const navigationRevision = useRef(0);
   const knowledge = useKnowledgeWorkbench();
   const memory = useMemoryWorkbench();
+  const {
+    collaborationSteps, setCollaborationSteps, autonomousProgress, setAutonomousProgress,
+    humanInputDraft, setHumanInputDraft, selectedCollaborationRole, setSelectedCollaborationRole,
+    planDraft, setPlanDraft, routingRequirements, setRoutingRequirements, reset: resetRunTrace
+  } = useRunTrace();
+  const verification = useCompletionVerification();
+  const toolCatalog = useToolCatalog();
   const {
     agents, activeAgent, activeAgentId, isAgentDescriptionExpanded, agentsError,
     isAgentConfigOpen, agentConfigDraft, newAgentDraft, isNewAgentFormOpen,
@@ -109,10 +98,6 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     handleCreateAgent, handleArchiveAgent, confirmArchiveAgent, cancelArchiveAgent
   } = useAgentManagement(isStreaming, () => setRunState(null));
 
-  const activeConversation = useMemo(
-    () => conversations.find((conversation) => conversation.id === activeId),
-    [activeId, conversations]
-  );
   const showCollaborationPanel = chatMode === "multi_agent" || chatMode === "autonomous";
   const showCollaborationDag = chatMode === "multi_agent";
   const showAutonomousTrace = chatMode === "autonomous";
@@ -153,8 +138,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   useEffect(() => {
     void refreshConversations(initialConversationId || undefined);
     void refreshAgents();
-    void refreshTools();
-    void knowledge.refreshDocuments();
+    void toolCatalog.refresh();
+    void knowledge.documents.refreshDocuments();
   }, [initialConversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -175,7 +160,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => () => conversationRequests.cancel(), [conversationRequests]);
+  useEffect(() => () => {
+    conversationRequests.cancel();
+    streamRequests.cancel();
+  }, [conversationRequests, streamRequests]);
 
   useEffect(() => {
     const runID = runState?.id;
@@ -186,9 +174,11 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     }
 
     const controller = new AbortController();
+    const targetRevision = navigationRevision.current;
+    const isCurrent = () => !controller.signal.aborted && targetRevision === navigationRevision.current;
     let refreshed = false;
     const refreshStoppedRun = () => {
-      if (!refreshed) {
+      if (isCurrent() && !refreshed) {
         refreshed = true;
         void refreshConversations(activeId);
       }
@@ -213,11 +203,13 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     void observeRunEvents(runID, {
       signal: controller.signal,
       onEvent: (event, _sequence, replayed) => {
+        if (!isCurrent()) return;
         // The canonical snapshot owns current Run status; historical lifecycle
         // events still rebuild Stage details but must not regress that status.
         if (!replayed || event.type !== "run_state") handleObservedEvent(event);
       },
       onSnapshot: (snapshot) => {
+        if (!isCurrent()) return;
         if (snapshot.run.conversation_id !== activeId) return;
         setRunState({
           id: snapshot.run.run_id,
@@ -228,7 +220,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         if (isStoppedRunStatus(snapshot.run.status)) refreshStoppedRun();
       }
     }).catch((err) => {
-      if (!controller.signal.aborted) {
+      if (isCurrent()) {
         setError(err instanceof Error ? `Live run updates unavailable: ${err.message}` : "Live run updates unavailable");
       }
     });
@@ -381,24 +373,16 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
 
   function resetConversationRuntimeState() {
     setRunState(null);
-    setCollaborationSteps([]);
-    setAutonomousProgress(null);
-    setPlanDraft("");
-    setRoutingRequirements(emptyRoutingRequirements());
-    setHumanInputDraft("");
+    resetRunTrace();
     setIsCancelingRun(false);
   }
 
-  async function refreshTools() {
-    try {
-      setToolsError("");
-      setTools(await listTools());
-    } catch (err) {
-      setToolsError(err instanceof Error ? err.message : "Failed to load tools");
-    }
-  }
-
   async function openConversation(id: string) {
+    navigationRevision.current += 1;
+    streamRequests.cancel();
+    setIsStreaming(false);
+    setIsContinuingRun(false);
+    setIsResumingRun(false);
     setError("");
     resetConversationRuntimeState();
     setMessages([]);
@@ -410,9 +394,13 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   }
 
   async function startNewConversation() {
+    navigationRevision.current += 1;
+    streamRequests.cancel();
+    setIsStreaming(false);
+    setIsContinuingRun(false);
+    setIsResumingRun(false);
     const request = conversationRequests.begin();
     setError("");
-    resetConversationRuntimeState();
     setView("chat");
     try {
       const conversation = await createConversation("New conversation");
@@ -420,6 +408,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         return;
       }
       setConversations((items) => [conversation, ...items]);
+      resetConversationRuntimeState();
       setActiveId(conversation.id);
       setMessages([]);
       await refreshTaskState(conversation.id, request);
@@ -431,7 +420,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   }
 
   async function handleDeleteConversation(conversationId: string) {
-    if (isStreaming || isContinuingRun) {
+    if (isStreaming || isContinuingRun || isResumingRun) {
       return;
     }
     const confirmed = window.confirm("Delete this conversation? This cannot be undone.");
@@ -440,12 +429,23 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     }
 
     setError("");
+    const request = conversationRequests.begin();
     try {
       await deleteConversationApi(conversationId);
-      const items = await listConversations();
+      if (!request.isCurrent()) {
+        setConversations((items) => items.filter((item) => item.id !== conversationId));
+        return;
+      }
+      const items = await listConversations(request.signal);
+      if (!request.isCurrent()) {
+        setConversations((current) => current.filter((item) => item.id !== conversationId));
+        return;
+      }
       setConversations(items);
 
       if (conversationId === activeId) {
+        navigationRevision.current += 1;
+        streamRequests.cancel();
         conversationRequests.cancel();
         const nextConversation = items[0];
         resetConversationRuntimeState();
@@ -464,61 +464,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete conversation");
-    }
-  }
-
-  function startEditingConversationTitle(conversation: Conversation) {
-    setEditingConversationId(conversation.id);
-    setConversationTitleDraft(conversation.title);
-    setError("");
-  }
-
-  function cancelEditingConversationTitle() {
-    setEditingConversationId("");
-    setConversationTitleDraft("");
-  }
-
-  async function saveConversationTitle() {
-    const conversationId = editingConversationId;
-    const title = conversationTitleDraft.trim();
-    if (!conversationId || !title || isSavingConversationTitle) {
-      return;
-    }
-    setIsSavingConversationTitle(true);
-    setError("");
-    try {
-      const updated = await updateConversationTitle(conversationId, title);
-      setConversations((items) => items.map((item) => (item.id === updated.id ? updated : item)));
-      cancelEditingConversationTitle();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update conversation title");
-    } finally {
-      setIsSavingConversationTitle(false);
-    }
-  }
-
-  function applyConversationTitle(conversationId: string, title?: string) {
-    const trimmed = title?.trim();
-    if (!trimmed) {
-      return;
-    }
-    setConversations((items) =>
-      items.map((item) =>
-        item.id === conversationId ? { ...item, title: trimmed, updated_at: new Date().toISOString() } : item
-      )
-    );
-  }
-
-  async function toggleTool(tool: ToolInfo) {
-    setUpdatingTool(tool.name);
-    setToolsError("");
-    try {
-      setTools(await setToolEnabled(tool.name, !tool.enabled));
-    } catch (err) {
-      setToolsError(err instanceof Error ? err.message : "Failed to update tool");
-    } finally {
-      setUpdatingTool("");
+      if (request.isCurrent()) setError(err instanceof Error ? err.message : "Failed to delete conversation");
     }
   }
 
@@ -526,23 +472,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     if (isStreaming) {
       return;
     }
-    setCompletionVerificationError("");
-    setCompletionVerificationDraft(structuredClone(completionVerification));
-  }
-
-  function handleSaveCompletionVerification() {
-    if (!completionVerificationDraft) {
-      return;
-    }
-    const normalized = normalizeCompletionVerification(completionVerificationDraft);
-    const validationErrors = validateCompletionVerification(normalized);
-    if (validationErrors.length > 0) {
-      setCompletionVerificationError(validationErrors[0]);
-      return;
-    }
-    setCompletionVerification(normalized);
-    setCompletionVerificationError("");
-    setCompletionVerificationDraft(null);
+    verification.open();
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -553,20 +483,20 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     }
     let completionContract;
     try {
-      completionContract = buildCompletionContract(completionVerification);
+      completionContract = buildCompletionContract(verification.settings);
     } catch (contractError) {
       setError(contractError instanceof Error ? contractError.message : "Invalid verification policy");
       return;
     }
 
+    const previousRuntime = {
+      runState, collaborationSteps, autonomousProgress, humanInputDraft,
+      planDraft, routingRequirements, selectedCollaborationRole, sidePanel
+    };
     setInput("");
     setError("");
     setRunState(null);
-    setCollaborationSteps([]);
-    setAutonomousProgress(null);
-    setHumanInputDraft("");
-    setPlanDraft("");
-    setRoutingRequirements(emptyRoutingRequirements());
+    resetRunTrace();
     setIsCancelingRun(false);
     setSidePanel(chatMode === "multi_agent" || chatMode === "autonomous" ? "trace" : "closed");
     setIsStreaming(true);
@@ -589,6 +519,27 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
 
     let conversationId = activeId;
     let receivedStreamEvent = false;
+    const request = streamRequests.begin();
+    const handleEvent = createRunEventHandler({
+      assistantDraftId: assistantDraft.id,
+      defaultVerificationStatus: completionContract ? "pending" : "not_required",
+      fallbackAgentId: activeAgentId,
+      fallbackRunId: "",
+      onConversation: (event) => {
+        conversationId = event.conversation_id;
+        conversationRequests.cancel();
+        setActiveId(event.conversation_id);
+      },
+      onDone: (event) => applyTitle(event.conversation_id, event.title),
+      onEvent: () => { receivedStreamEvent = true; },
+      setAutonomousProgress,
+      setCollaborationSteps,
+      setError,
+      setIsCancelingRun,
+      setMessages,
+      setPlanDraft,
+      setRunState
+    });
 
     try {
       await streamChat(
@@ -599,38 +550,31 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           message: content,
           completion_contract: completionContract
         },
-        createRunEventHandler({
-          assistantDraftId: assistantDraft.id,
-          defaultVerificationStatus: completionContract ? "pending" : "not_required",
-          fallbackAgentId: activeAgentId,
-          fallbackRunId: "",
-          onConversation: (event) => {
-            conversationId = event.conversation_id;
-            conversationRequests.cancel();
-            setActiveId(event.conversation_id);
-          },
-          onDone: (event) => applyConversationTitle(event.conversation_id, event.title),
-          onEvent: () => { receivedStreamEvent = true; },
-          setAutonomousProgress,
-          setCollaborationSteps,
-          setError,
-          setIsCancelingRun,
-          setMessages,
-          setPlanDraft,
-          setRunState
-        })
+        (event) => {
+          if (request.isCurrent()) handleEvent(event);
+        }
       );
 
-      await refreshConversations(conversationId);
+      if (request.isCurrent()) await refreshConversations(conversationId);
     } catch (err) {
+      if (!request.isCurrent()) return;
       if (!receivedStreamEvent) {
         setMessages((items) => removePendingMessages(items, [optimisticUser.id, assistantDraft.id]));
         setInput(content);
+        setRunState(previousRuntime.runState);
+        setCollaborationSteps(previousRuntime.collaborationSteps);
+        setAutonomousProgress(previousRuntime.autonomousProgress);
+        setHumanInputDraft(previousRuntime.humanInputDraft);
+        setPlanDraft(previousRuntime.planDraft);
+        setRoutingRequirements(previousRuntime.routingRequirements);
+        setSelectedCollaborationRole(previousRuntime.selectedCollaborationRole);
+        setSidePanel(previousRuntime.sidePanel);
       }
       setError(err instanceof Error ? err.message : "Unexpected chat error");
     } finally {
-      setIsStreaming(false);
+      if (request.isCurrent()) setIsStreaming(false);
     }
+
   }
 
   async function handleContinuePlan(planOverride?: string, requirementsOverride?: AgentRoutingRequirements) {
@@ -654,37 +598,42 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     };
     setMessages((items) => [...items, assistantDraft]);
     let receivedStreamEvent = false;
+    const request = streamRequests.begin();
+    const handleEvent = createRunEventHandler({
+      assistantDraftId: assistantDraft.id,
+      defaultVerificationStatus: "not_required",
+      fallbackAgentId: activeAgentId,
+      fallbackRunId: runID,
+      onEvent: () => { receivedStreamEvent = true; },
+      setAutonomousProgress,
+      setCollaborationSteps,
+      setError,
+      setIsCancelingRun,
+      setMessages,
+      setPlanDraft,
+      setRunState
+    });
 
     try {
       await continueRun(
         { run_id: runID, plan, routing_requirements: requirementsOverride ?? routingRequirements },
-        createRunEventHandler({
-          assistantDraftId: assistantDraft.id,
-          defaultVerificationStatus: "not_required",
-          fallbackAgentId: activeAgentId,
-          fallbackRunId: runID,
-          onEvent: () => { receivedStreamEvent = true; },
-          setAutonomousProgress,
-          setCollaborationSteps,
-          setError,
-          setIsCancelingRun,
-          setMessages,
-          setPlanDraft,
-          setRunState
-        })
+        (event) => { if (request.isCurrent()) handleEvent(event); }
       );
 
-      if (activeId) {
+      if (request.isCurrent() && activeId) {
         await loadConversation(activeId);
       }
     } catch (err) {
+      if (!request.isCurrent()) return;
       if (!receivedStreamEvent) {
         setMessages((items) => removePendingMessages(items, [assistantDraft.id]));
       }
       setError(err instanceof Error ? err.message : "Unexpected continue error");
     } finally {
-      setIsContinuingRun(false);
-      setIsStreaming(false);
+      if (request.isCurrent()) {
+        setIsContinuingRun(false);
+        setIsStreaming(false);
+      }
     }
   }
 
@@ -718,43 +667,46 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     };
     setMessages((items) => [...items, assistantDraft]);
     let receivedStreamEvent = false;
+    const request = streamRequests.begin();
+    const handleEvent = createRunEventHandler({
+      assistantDraftId: assistantDraft.id,
+      defaultVerificationStatus: "not_required",
+      fallbackAgentId: activeAgentId,
+      fallbackRunId: runID,
+      onEvent: () => { receivedStreamEvent = true; },
+      onRunState: (event) => {
+        if (event.status !== "waiting_for_user") setHumanInputDraft("");
+      },
+      setAutonomousProgress,
+      setCollaborationSteps,
+      setError,
+      setIsCancelingRun,
+      setMessages,
+      setPlanDraft,
+      setRunState
+    });
 
     try {
       await resumeRun(
         { run_id: runID, user_input: userInput },
-        createRunEventHandler({
-          assistantDraftId: assistantDraft.id,
-          defaultVerificationStatus: "not_required",
-          fallbackAgentId: activeAgentId,
-          fallbackRunId: runID,
-          onEvent: () => { receivedStreamEvent = true; },
-          onRunState: (event) => {
-            if (event.status !== "waiting_for_user") {
-              setHumanInputDraft("");
-            }
-          },
-          setAutonomousProgress,
-          setCollaborationSteps,
-          setError,
-          setIsCancelingRun,
-          setMessages,
-          setPlanDraft,
-          setRunState
-        })
+        (event) => { if (request.isCurrent()) handleEvent(event); }
       );
 
-      if (activeId) {
+      if (request.isCurrent() && activeId) {
         await loadConversation(activeId);
       }
     } catch (err) {
+      if (!request.isCurrent()) return;
       if (!receivedStreamEvent) {
         setMessages((items) => removePendingMessages(items, [assistantDraft.id]));
         setRunState(previousRunState);
       }
       setError(err instanceof Error ? err.message : "Unexpected resume error");
     } finally {
-      setIsResumingRun(false);
-      setIsStreaming(false);
+      if (request.isCurrent()) {
+        setIsResumingRun(false);
+        setIsStreaming(false);
+      }
     }
   }
 
@@ -765,8 +717,10 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
     }
     setError("");
     setIsCancelingRun(true);
+    const targetRevision = navigationRevision.current;
     try {
       const canceled = await cancelRun(runID);
+      if (targetRevision !== navigationRevision.current || currentRunId.current !== runID) return;
       setRunState({
         id: canceled.id,
         agentId: canceled.agent_id,
@@ -782,6 +736,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         setIsCancelingRun(false);
       }
     } catch (err) {
+      if (targetRevision !== navigationRevision.current || currentRunId.current !== runID) return;
       setError(err instanceof Error ? err.message : "Failed to cancel run");
       setIsCancelingRun(false);
     }
@@ -803,8 +758,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         onOpenChange={setIsSidebarOpen}
         onViewChange={setView}
         onViewRefresh={(nextView) => {
-          if (nextView === "tools") void refreshTools();
-          if (nextView === "knowledge") void knowledge.refreshDocuments();
+          if (nextView === "tools") void toolCatalog.refresh();
+          if (nextView === "knowledge") void knowledge.documents.refreshDocuments();
         }}
         view={view}
       />
@@ -814,28 +769,28 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
           activeConversation={activeConversation}
           canCancelRun={canCancelRun}
           conversationTitleDraft={conversationTitleDraft}
-          documentCount={knowledge.documents.length}
+          documentCount={knowledge.documents.documents.length}
           editingConversationId={editingConversationId}
           isCancelingRun={isCancelingRun}
           isRunStreaming={isRunStreaming}
           isSavingConversationTitle={isSavingConversationTitle}
           memoryStatus={memory.hasSearched ? `${memory.results.length} matches` : "Recall ready"}
-          onCancelEdit={cancelEditingConversationTitle}
+          onCancelEdit={cancelEditingTitle}
           onCancelRun={() => void handleCancelRun()}
           onConversationTitleDraftChange={setConversationTitleDraft}
           onOpenNavigation={() => setIsSidebarOpen(true)}
           onTaskStateToggle={() => setSidePanel((current) => current === "task_state" ? "closed" : "task_state")}
-          onSaveTitle={() => void saveConversationTitle()}
-          onStartEdit={startEditingConversationTitle}
+          onSaveTitle={() => void saveTitle()}
+          onStartEdit={startEditingTitle}
           runState={runState}
           taskStateOpen={isTaskStatePanelOpen}
           taskStateVersion={taskState?.version ?? 0}
-          toolCount={tools.filter((tool) => tool.enabled).length}
+          toolCount={toolCatalog.tools.filter((tool) => tool.enabled).length}
           view={view}
         />
 
         {view === "tools" ? (
-          <ToolsPanel error={toolsError} onToggle={(tool) => void toggleTool(tool)} tools={tools} updatingTool={updatingTool} />
+          <ToolsPanel error={toolCatalog.error} onToggle={(tool) => void toolCatalog.toggle(tool)} tools={toolCatalog.tools} updatingTool={toolCatalog.updatingTool} />
         ) : view === "knowledge" ? (
           <KnowledgePanel model={knowledge} />
         ) : view === "memory" ? (
@@ -890,7 +845,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
             agents={agents}
             agentsError={agentsError}
             chatMode={chatMode}
-            completionVerificationEnabled={completionVerification.enabled}
+            completionVerificationEnabled={verification.settings.enabled}
             error={error}
             input={input}
             isAgentDescriptionExpanded={isAgentDescriptionExpanded}
@@ -918,8 +873,8 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         agentOperationNotice={agentOperationNotice}
         archivingAgentId={archivingAgentId}
         chatMode={chatMode}
-        completionVerificationDraft={completionVerificationDraft}
-        completionVerificationError={completionVerificationError}
+        completionVerificationDraft={verification.draft}
+        completionVerificationError={verification.error}
         isAgentConfigOpen={isAgentConfigOpen}
         isCreatingAgent={isCreatingAgent}
         isNewAgentFormOpen={isNewAgentFormOpen}
@@ -930,37 +885,21 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
         onCancelAgentConfig={handleCancelAgentConfig}
         onCancelArchive={cancelArchiveAgent}
         onCancelNewAgent={handleCancelNewAgent}
-        onCompletionVerificationCancel={() => {
-          setCompletionVerificationDraft(null);
-          setCompletionVerificationError("");
-        }}
-        onCompletionVerificationChange={(update) => {
-          setCompletionVerificationError("");
-          setCompletionVerificationDraft((current) => (current ? { ...current, ...update } : current));
-        }}
+        onCompletionVerificationCancel={verification.cancel}
+        onCompletionVerificationChange={verification.change}
         onConfirmArchive={() => void confirmArchiveAgent()}
         onCreateAgent={() => void handleCreateAgent()}
         onDismissNotice={dismissNotice}
         onNewAgentChange={updateNewAgentDraft}
         onNewAgentToolToggle={toggleNewAgentTool}
         onSaveAgentConfig={() => void handleSaveAgentConfig()}
-        onSaveCompletionVerification={handleSaveCompletionVerification}
+        onSaveCompletionVerification={verification.save}
         onUpdateAgentChange={updateAgentConfigDraft}
         onUpdateAgentToolToggle={toggleAgentConfigTool}
-        tools={tools}
+        tools={toolCatalog.tools}
       />
     </div>
   );
-}
-
-function emptyRoutingRequirements(): AgentRoutingRequirements {
-  return {
-    required_tools: [],
-    prohibited_tools: [],
-    require_memory: false,
-    require_retrieval: false,
-    preferred_capabilities: []
-  };
 }
 
 function isStoppedRunStatus(status: string) {

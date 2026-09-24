@@ -1,7 +1,7 @@
-import type { KnowledgeWorkbenchModel } from "./useKnowledgeWorkbench";
+import type { KnowledgeSearchModel } from "./useKnowledgeSearch";
 import { KnowledgeResultCard, ModelContextPreview, RetrievalDiagnostics } from "./KnowledgeRetrieval";
 
-export function KnowledgeSearch({ model }: { model: KnowledgeWorkbenchModel }) {
+export function KnowledgeSearch({ model }: { model: KnowledgeSearchModel }) {
   return (
     <section className="knowledge-search">
       <div className="knowledge-search-row">
