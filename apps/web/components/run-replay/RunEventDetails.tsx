@@ -87,7 +87,10 @@ export function EventDetail({ event }: { event: RunEvent }) {
 	  {event.type === "model.attempt_finished" ? (
 		<>
 		  <div className="detail-kv"><span>Attempt</span><strong>{String(payload.attempt ?? "Unknown")}</strong></div>
-		  <div className="detail-kv"><span>Outcome</span><strong>{stringPayload(payload, "status") || "Unknown"}</strong></div>
+		  <div className="detail-kv"><span>Attempt status</span><strong>{stringPayload(payload, "status") || "Unknown"}</strong></div>
+		  {stringPayload(payload, "finish_reason") ? (
+			<div className="detail-kv"><span>Generation finish</span><strong>{stringPayload(payload, "finish_reason") === "missing" ? "Unconfirmed (not provided)" : stringPayload(payload, "finish_reason")}</strong></div>
+		  ) : null}
 		  {typeof payload.time_to_first_token_ms === "number" ? (
 			<div className="detail-kv"><span>First token</span><strong>{formatDuration(payload.time_to_first_token_ms)}</strong></div>
 		  ) : null}

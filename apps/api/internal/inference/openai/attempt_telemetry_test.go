@@ -136,9 +136,9 @@ func TestOutputRateRequiresExactUsageAndMeasuredGenerationInterval(t *testing.T)
 	started := time.Now().Add(-200 * time.Millisecond)
 	firstToken := started.Add(50 * time.Millisecond)
 	client.finishModelAttempt(context.Background(), requestcontrol.AttemptRef{RecordID: "exact", Attempt: 1}, started, firstToken,
-		Usage{PromptTokens: 4, CompletionTokens: 12, TotalTokens: 16}, nil)
+		Usage{PromptTokens: 4, CompletionTokens: 12, TotalTokens: 16}, "stop", nil)
 	client.finishModelAttempt(context.Background(), requestcontrol.AttemptRef{RecordID: "estimated", Attempt: 2}, started, firstToken,
-		Usage{PromptTokens: 4, CompletionTokens: 12, TotalTokens: 16, Estimated: true}, nil)
+		Usage{PromptTokens: 4, CompletionTokens: 12, TotalTokens: 16, Estimated: true}, "stop", nil)
 	if len(recorder.outcomes) != 2 || recorder.outcomes[0].OutputTokensPerSecond <= 0 || recorder.outcomes[1].OutputTokensPerSecond != 0 {
 		t.Fatalf("output rate must use exact usage only: %#v", recorder.outcomes)
 	}

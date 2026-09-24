@@ -43,6 +43,7 @@ type AttemptOutcome struct {
 	TotalTokens           int
 	UsageEstimated        bool
 	UsageAvailable        bool
+	FinishReason          string
 	ErrorKind             string
 	HTTPStatus            int
 }

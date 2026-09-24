@@ -24,6 +24,7 @@ type Message struct {
 	Content     string     `json:"content,omitempty"`
 	ToolCallID  string     `json:"tool_call_id,omitempty"`
 	ToolCalls   []ToolCall `json:"tool_calls,omitempty"`
+	Refusal     string     `json:"refusal,omitempty"`
 	Source      string     `json:"-"`
 	ReferenceID string     `json:"-"`
 }

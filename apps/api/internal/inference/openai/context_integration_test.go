@@ -21,7 +21,7 @@ func TestToolRoundTripCreatesManifestPerLogicalModelCall(t *testing.T) {
 	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
 		attempts++
 		if attempts == 1 {
-			return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call-1","type":"function","function":{"name":"calculator","arguments":"{\"expression\":\"1 + 1\"}"}}]}}]}`), nil
+			return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call-1","type":"function","function":{"name":"calculator","arguments":"{\"expression\":\"1 + 1\"}"}}]},"finish_reason":"tool_calls"}]}`), nil
 		}
 		return modelHTTPResponse(200, "data: {\"choices\":[{\"delta\":{\"content\":\"2\"}}]}\n\ndata: [DONE]\n\n"), nil
 	})}
@@ -186,7 +186,7 @@ func TestToolStreamReturnsFinalStreamError(t *testing.T) {
 			return modelHTTPResponse(200, `{
 				"choices":[{"message":{"role":"assistant","tool_calls":[{
 					"id":"call-1","type":"function","function":{"name":"calculator","arguments":"{\"expression\":\"2 + 3\"}"}
-				}]}}]
+				}]},"finish_reason":"tool_calls"}]
 			}`), nil
 		}
 		return modelHTTPResponse(401, `{"error":{"message":"invalid API key","code":"invalid_api_key"}}`), nil

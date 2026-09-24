@@ -17,14 +17,17 @@ type chatCompletionChunk struct {
 	Choices []struct {
 		Delta struct {
 			Content string `json:"content"`
+			Refusal string `json:"refusal"`
 		} `json:"delta"`
+		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage *Usage `json:"usage"`
 }
 
 type chatCompletionResponse struct {
 	Choices []struct {
-		Message Message `json:"message"`
+		Message      Message `json:"message"`
+		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage Usage `json:"usage"`
 }

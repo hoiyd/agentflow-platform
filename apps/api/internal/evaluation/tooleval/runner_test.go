@@ -77,7 +77,7 @@ func fixtureProvider(t *testing.T, mode string) *httptest.Server {
 				}
 				calls = append(calls, map[string]any{"id": fmt.Sprintf("call-%d", i), "type": "function", "function": map[string]any{"name": artifact.SearchToolName, "arguments": string(args)}})
 			}
-			json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "tool_calls": calls}}}, "usage": providerUsage})
+			json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "tool_calls": calls}, "finish_reason": "tool_calls"}}, "usage": providerUsage})
 			return
 		}
 		facts := []Fact{}

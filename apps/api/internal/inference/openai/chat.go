@@ -66,7 +66,7 @@ func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt
 			span := recorder.LLMStart(ctx, runID, stepID, startPayload)
 			c.streamText(ctx, output, 45*time.Millisecond, events)
 			usage := estimateUsage(messagesToText(prepared.messages), output)
-			c.finishModelAttempt(callCtx, ref, started, time.Time{}, usage, ctx.Err())
+			c.finishModelAttempt(callCtx, ref, started, time.Time{}, usage, "local", ctx.Err())
 			if err := settleBudgetedModelCall(callCtx, reservation, usage); err != nil {
 				errs <- err
 				return
@@ -142,7 +142,7 @@ func (c *Client) CompletePreparedText(ctx context.Context, prepared PreparedText
 		}
 		started := time.Now()
 		usage := estimateUsage(systemPrompt+"\n"+prompt, text)
-		c.finishModelAttempt(ctx, ref, started, time.Time{}, usage, ctx.Err())
+		c.finishModelAttempt(ctx, ref, started, time.Time{}, usage, "local", ctx.Err())
 		if err := settleBudgetedModelCall(ctx, reservation, usage); err != nil {
 			return TextCompletion{}, err
 		}
@@ -159,6 +159,9 @@ func (c *Client) CompletePreparedText(ctx context.Context, prepared PreparedText
 		"temperature": 0.2,
 	})
 	if err != nil {
+		if modelErr, ok := AsModelError(err); ok && modelErr.Kind == ErrorIncompleteOutput && len(response.Choices) > 0 {
+			return TextCompletion{Text: response.Choices[0].Message.Content, Model: c.model, Usage: response.Usage}, err
+		}
 		return TextCompletion{}, err
 	}
 	usage := response.Usage

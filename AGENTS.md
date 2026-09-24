@@ -152,6 +152,18 @@ are complete. Mandatory namespace filtering alone is not authorization.
 
 ## Verification Before Finishing
 
+- Never write unit tests after writing the implementation. When a unit test is
+  necessary, write the test first, confirm that it fails for the intended
+  reason, and only then write the implementation.
+- Strongly prefer end-to-end tests as the sole testing mechanism for complex
+  features. During development, run only the smallest E2E scope necessary and
+  never run the full-scale E2E suite by default. A completed E2E run must
+  produce a verifiable, repeatable artifact that records enough identity,
+  inputs, configuration, results, and limitations to reproduce the evidence.
+- If a system must be tested in isolation, first write down all known ways the
+  behavior could fail and the expected outcome for each failure mode. Only
+  after that failure inventory is explicit should tests and implementation be
+  written.
 - Run focused tests while editing, then the relevant package or application
   checks before reporting completion.
 - Non-trivial behavior needs both a success case and its important failure path.
