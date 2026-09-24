@@ -1,8 +1,8 @@
 import type { RAGEvaluationRunResponse } from "../../lib/knowledge-api";
-import type { KnowledgeWorkbenchModel } from "./useKnowledgeWorkbench";
+import type { KnowledgeEvaluationModel } from "./useKnowledgeEvaluation";
 import { formatPercent, KnowledgeResultCard, RetrievalDiagnostics } from "./KnowledgeRetrieval";
 
-export function KnowledgeEvaluation({ model }: { model: KnowledgeWorkbenchModel }) {
+export function KnowledgeEvaluation({ model }: { model: KnowledgeEvaluationModel }) {
   return (
     <section className="rag-evaluation">
       <div className="evaluation-controls">

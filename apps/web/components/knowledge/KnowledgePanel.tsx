@@ -35,18 +35,18 @@ export function KnowledgePanel({ model }: { model: KnowledgeWorkbenchModel }) {
               type="button"
             >
               {item.label}
-              {item.id === "documents" ? <span>{model.documents.length}</span> : null}
+              {item.id === "documents" ? <span>{model.documents.documents.length}</span> : null}
             </button>
           ))}
         </nav>
       </header>
 
-      {model.error ? <div className="knowledge-error" role="alert">{model.error}</div> : null}
+      {model[view].error ? <div className="knowledge-error" role="alert">{model[view].error}</div> : null}
 
       <div aria-labelledby={`knowledge-tab-${view}`} className="knowledge-workspace" id="knowledge-workspace" role="tabpanel">
-        {view === "search" ? <KnowledgeSearch model={model} /> : null}
-        {view === "documents" ? <KnowledgeDocuments model={model} /> : null}
-        {view === "evaluation" ? <KnowledgeEvaluation model={model} /> : null}
+        {view === "search" ? <KnowledgeSearch model={model.search} /> : null}
+        {view === "documents" ? <KnowledgeDocuments model={model.documents} /> : null}
+        {view === "evaluation" ? <KnowledgeEvaluation model={model.evaluation} /> : null}
       </div>
     </section>
   );

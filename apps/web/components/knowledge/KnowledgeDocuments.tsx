@@ -3,12 +3,12 @@
 import { useState } from "react";
 
 import type { DocumentDetail, RetrievedDocumentChunk } from "../../lib/knowledge-api";
-import type { KnowledgeWorkbenchModel } from "./useKnowledgeWorkbench";
+import type { KnowledgeDocumentsModel } from "./useKnowledgeDocuments";
 import { documentFilename, documentFormat, metadataString, shortSourceLabel } from "./knowledgeFormatters";
 
 type IngestMode = "file" | "text";
 
-export function KnowledgeDocuments({ model }: { model: KnowledgeWorkbenchModel }) {
+export function KnowledgeDocuments({ model }: { model: KnowledgeDocumentsModel }) {
   const [ingestMode, setIngestMode] = useState<IngestMode>("file");
 
   return (
