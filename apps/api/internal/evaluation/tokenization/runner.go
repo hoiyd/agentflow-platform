@@ -11,11 +11,13 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/agent/toolloop"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/evaluation/evalreport"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 )
 
@@ -307,8 +309,10 @@ func captureRequest(ctx context.Context, options Options, config domain.ContextA
 		if catalogErr != nil {
 			return requestcontrol.Observation{}, catalogErr
 		}
-		events, errs := client.StreamAgentChatWithToolsTrace(ctx, item.system, nil, item.user, catalog,
-			eventpkg.NewRecorder(nil), "", "", nil, nil)
+		events, errs := toolloop.Stream(ctx, client, toolloop.Request{
+			SystemPrompt: item.system, Latest: item.user, Catalog: catalog,
+			Trace: provider.ChatTrace{Recorder: eventpkg.NewRecorder(nil)},
+		})
 		for range events {
 		}
 		err = <-errs

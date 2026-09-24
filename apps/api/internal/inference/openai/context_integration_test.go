@@ -37,7 +37,7 @@ func TestToolRoundTripCreatesManifestPerLogicalModelCall(t *testing.T) {
 	})
 	history := []domain.Message{{ID: "message-1", Role: "user", Content: "calculate 1 + 1"}}
 
-	events, errs := client.StreamAgentChatWithToolsTrace(
+	events, errs := streamToolLoopForTest(client,
 		ctx, "You calculate.", history, "calculate 1 + 1", tool.DefaultCatalog(), recorder,
 		"run-1", "stage-1", nil, nil,
 	)
@@ -95,7 +95,7 @@ func TestToolFreeChatStreamsWithoutToolSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, errs := client.StreamAgentChatWithToolsTrace(ctx, "Reply briefly.", nil, "hello", catalog,
+	events, errs := streamToolLoopForTest(client, ctx, "Reply briefly.", nil, "hello", catalog,
 		eventpkg.NewRecorder(store), "run-1", "stage-1", nil, nil)
 	var output string
 	for item := range events {
@@ -117,7 +117,7 @@ func TestToolStreamReturnsDirectModelAnswer(t *testing.T) {
 		}`), nil
 	})}
 
-	events, errs := client.StreamAgentChatWithToolsTrace(
+	events, errs := streamToolLoopForTest(client,
 		context.Background(), "Answer directly when no tool is needed.", nil, "say hello", tool.DefaultCatalog(), nil, "run-1", "stage-1",
 		[]domain.RetrievedMemory{{Memory: domain.Memory{ID: "memory-1", Content: "Remember the preferred greeting."}, Score: 0.9}},
 		[]domain.RetrievedDocumentChunk{{Chunk: domain.DocumentChunk{ID: "chunk-1", Content: "A grounded greeting."}, Score: 0.8}},
@@ -144,7 +144,7 @@ func TestToolStreamReturnsTypedUnsupportedCapability(t *testing.T) {
 		return modelHTTPResponse(400, `{"error":{"message":"tool_choice is not supported","code":"invalid_request_error"}}`), nil
 	})}
 
-	events, errs := client.StreamAgentChatWithToolsTrace(
+	events, errs := streamToolLoopForTest(client,
 		context.Background(), "Use the calculator when needed.", nil, "calculate 2 + 3", tool.DefaultCatalog(), nil, "", "", nil, nil)
 
 	for range events {
@@ -166,7 +166,7 @@ func TestToolStreamReturnsTerminalSelectionError(t *testing.T) {
 		return modelHTTPResponse(401, `{"error":{"message":"invalid API key","code":"invalid_api_key"}}`), nil
 	})}
 
-	events, errs := client.StreamAgentChatWithToolsTrace(
+	events, errs := streamToolLoopForTest(client,
 		context.Background(), "Use tools when needed.", nil, "calculate 2 + 3", tool.DefaultCatalog(), nil, "", "", nil, nil)
 
 	for range events {
@@ -192,7 +192,7 @@ func TestToolStreamReturnsFinalStreamError(t *testing.T) {
 		return modelHTTPResponse(401, `{"error":{"message":"invalid API key","code":"invalid_api_key"}}`), nil
 	})}
 
-	events, errs := client.StreamAgentChatWithToolsTrace(
+	events, errs := streamToolLoopForTest(client,
 		context.Background(), "Use the calculator when needed.", nil, "calculate 2 + 3", tool.DefaultCatalog(), nil, "", "", nil, nil)
 
 	for range events {

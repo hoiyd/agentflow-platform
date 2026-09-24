@@ -5,7 +5,6 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/tool"
 )
 
 // RuntimeIdentity is the provider-neutral model configuration frozen into a Run.
@@ -50,6 +49,52 @@ type StreamEvent struct {
 	Error      string
 }
 
+// ChatRequest is the provider-neutral input for one agent turn.
+type ChatRequest struct {
+	SystemPrompt string
+	History      []domain.Message
+	Latest       string
+	ToolNames    []string
+	Definitions  []map[string]any
+}
+
+type PreparedChat struct {
+	RawMessages  []Message
+	Messages     []Message
+	Manifest     domain.ContextManifest
+	Latest       string
+	SystemPrompt string
+}
+
+type ChatChoice struct {
+	Content   string
+	ToolCalls []ToolCall
+}
+
+type ChatTrace struct {
+	Recorder  *eventpkg.Recorder
+	RunID     string
+	StepID    string
+	Memories  []domain.RetrievedMemory
+	Knowledge []domain.RetrievedDocumentChunk
+}
+
+type ChatStreamKind string
+
+const (
+	ChatStreamAnswer     ChatStreamKind = "answer_stream"
+	ChatStreamToolResult ChatStreamKind = "tool_result_response"
+)
+
+// ChatModel exposes model calls; the caller owns Tool execution and follow-up sequencing.
+type ChatModel interface {
+	HasAPIKey() bool
+	PrepareAgentChat(context.Context, ChatRequest) (PreparedChat, error)
+	PrepareFollowup(context.Context, []Message) (PreparedChat, error)
+	SelectTools(context.Context, PreparedChat, []map[string]any, ChatTrace) (ChatChoice, error)
+	StreamAnswer(context.Context, PreparedChat, ChatStreamKind, ChatTrace, chan<- StreamEvent) (bool, error)
+}
+
 type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
@@ -83,10 +128,9 @@ type Embedding struct {
 // Client is the provider-neutral capability contract used by orchestration.
 // Provider adapters may implement OpenAI-compatible, local, or future native APIs.
 type Client interface {
-	HasAPIKey() bool
+	ChatModel
 	RuntimeIdentity() RuntimeIdentity
 	WithRuntimeIdentity(RuntimeIdentity) Client
-	StreamAgentChatWithToolsTrace(context.Context, string, []domain.Message, string, *tool.Catalog, *eventpkg.Recorder, string, string, []domain.RetrievedMemory, []domain.RetrievedDocumentChunk) (<-chan StreamEvent, <-chan error)
 	CompleteTextDetailed(context.Context, string, string) (TextCompletion, error)
 	PrepareText(context.Context, string, string) (PreparedText, error)
 	CompletePreparedText(context.Context, PreparedText) (TextCompletion, error)

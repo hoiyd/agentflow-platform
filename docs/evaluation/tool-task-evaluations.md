@@ -34,10 +34,11 @@ Tool success requires an exact-ID search with no matches and a complete scan.
 Duplicate, unexpected, omitted or fabricated facts fail. No LLM judge or exact
 call order is required. `completed` and `verified` are separate fields.
 
-The runner calls the production OpenAI-compatible client, Context Assembler,
-Tool Executor, recorder and Usage Ledger. It does not run full Chat/Multi/Loop
-orchestration, seed Memory, or bypass Tool validation. The current client supports
-one Tool-selection batch followed by the answer; these tasks fit that protocol.
+The runner calls the shared `agent/toolloop` path with the production
+OpenAI-compatible client, Context Assembler, Tool Executor, recorder and Usage
+Ledger. It does not run full Chat/Multi/Loop orchestration, seed Memory, or
+bypass Tool validation. The loop supports one Tool-selection batch followed by
+the answer; these tasks fit that protocol.
 This is not an evaluation of multi-round search/read planning.
 
 ## Offline Checks

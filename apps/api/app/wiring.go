@@ -80,7 +80,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			return applicationDependencies{}, fmt.Errorf("model route %q credential environment %q is unset", route.ID, route.CredentialEnvironment)
 		}
 		routeClient := newModelClient(cfg, routeCredential, route, requestLimiter)
-		configureModelClient(routeClient, cfg, appStore, requestRecorder)
+		configureModelClient(routeClient, requestRecorder)
 		configured = append(configured, routing.Binding{
 			Descriptor: route.Descriptor(routeClient.RuntimeIdentity().Provider), Client: routeClient,
 		})
@@ -131,6 +131,13 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			MaxEstimatedCostMicros:           cfg.RunMaxEstimatedCostMicros,
 			InputCostPerMillionTokensMicros:  cfg.ModelInputCostPerMillionMicros,
 			OutputCostPerMillionTokensMicros: cfg.ModelOutputCostPerMillionMicros,
+		},
+		ToolExecution: tool.ExecutorOptions{
+			EffectJournal: appStore, ArtifactStore: appStore,
+			MaxBatchResultBytes:  cfg.ToolResultMaxBatchBytes,
+			MaxArtifactBytes:     cfg.ToolArtifactMaxBytes,
+			ArtifactPreviewBytes: cfg.ToolArtifactPreviewBytes,
+			ArtifactRetention:    cfg.ToolArtifactRetention,
 		},
 		ToolProgressGuard: progress.Config{
 			Version: progress.CurrentVersion, Enabled: cfg.ToolProgressGuardEnabled,
@@ -230,15 +237,7 @@ func newEmbeddingClient(cfg config.Config, providerCredential credential.Value, 
 	return client
 }
 
-func configureModelClient(client *openai.Client, cfg config.Config, appStore store.Store, recorder *capture.Recorder) {
-	client.SetToolEffectJournal(appStore)
-	client.SetToolArtifactStore(appStore)
-	client.SetToolArtifactPolicy(openai.ToolArtifactPolicy{
-		MaxBatchResultBytes: cfg.ToolResultMaxBatchBytes,
-		MaxArtifactBytes:    cfg.ToolArtifactMaxBytes,
-		PreviewBytes:        cfg.ToolArtifactPreviewBytes,
-		Retention:           cfg.ToolArtifactRetention,
-	})
+func configureModelClient(client *openai.Client, recorder *capture.Recorder) {
 	client.SetRequestRecorder(recorder)
 }
 
