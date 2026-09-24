@@ -216,21 +216,25 @@ func (ModelRequestPreparedPayload) supports(eventType domain.RunEventType) bool 
 // ModelAttemptFinishedPayload describes one physical transport attempt, not
 // the logical Model Call or its Budget settlement.
 type ModelAttemptFinishedPayload struct {
-	RecordID              string  `json:"record_id"`
-	ModelCallID           string  `json:"model_call_id"`
-	Attempt               int     `json:"attempt"`
-	Status                string  `json:"status"`
-	DurationMS            int64   `json:"duration_ms"`
-	TimeToFirstTokenMS    *int64  `json:"time_to_first_token_ms,omitempty"`
-	OutputTokensPerSecond float64 `json:"output_tokens_per_second,omitempty"`
-	PromptTokens          int     `json:"prompt_tokens,omitempty"`
-	CompletionTokens      int     `json:"completion_tokens,omitempty"`
-	TotalTokens           int     `json:"total_tokens,omitempty"`
-	UsageEstimated        bool    `json:"usage_estimated,omitempty"`
-	UsageAvailable        bool    `json:"usage_available"`
-	FinishReason          string  `json:"finish_reason,omitempty"`
-	ErrorKind             string  `json:"error_kind,omitempty"`
-	HTTPStatus            int     `json:"http_status,omitempty"`
+	RecordID               string  `json:"record_id"`
+	ModelCallID            string  `json:"model_call_id"`
+	Attempt                int     `json:"attempt"`
+	Status                 string  `json:"status"`
+	DurationMS             int64   `json:"duration_ms"`
+	RateLimitWaitMS        *int64  `json:"rate_limit_wait_ms,omitempty"`
+	ModelPermitWaitMS      *int64  `json:"model_permit_wait_ms,omitempty"`
+	HTTPDurationMS         *int64  `json:"http_duration_ms,omitempty"`
+	HTTPTimeToFirstTokenMS *int64  `json:"http_time_to_first_token_ms,omitempty"`
+	TimeToFirstTokenMS     *int64  `json:"time_to_first_token_ms,omitempty"`
+	OutputTokensPerSecond  float64 `json:"output_tokens_per_second,omitempty"`
+	PromptTokens           int     `json:"prompt_tokens,omitempty"`
+	CompletionTokens       int     `json:"completion_tokens,omitempty"`
+	TotalTokens            int     `json:"total_tokens,omitempty"`
+	UsageEstimated         bool    `json:"usage_estimated,omitempty"`
+	UsageAvailable         bool    `json:"usage_available"`
+	FinishReason           string  `json:"finish_reason,omitempty"`
+	ErrorKind              string  `json:"error_kind,omitempty"`
+	HTTPStatus             int     `json:"http_status,omitempty"`
 }
 
 func (ModelAttemptFinishedPayload) supports(eventType domain.RunEventType) bool {

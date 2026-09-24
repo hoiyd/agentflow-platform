@@ -34,9 +34,23 @@ it("shows failed attempt diagnostics without inventing token usage", () => {
     payload: { attempt: 2, status: "failed", duration_ms: 80, time_to_first_token_ms: 12, error_kind: "invalid_response", usage_available: false }
   };
   render(<EventDetail event={event} />);
-  expect(screen.getByText("First token")).toBeTruthy();
+  expect(screen.getByText("Attempt first token")).toBeTruthy();
   expect(screen.getByText("invalid_response")).toBeTruthy();
   expect(screen.queryByText("Prompt")).toBeNull();
+});
+
+it("separates local admission waits from HTTP and stream timing", () => {
+  const event: RunReplayData["run_events"][number] = {
+    id: "attempt-2", schema_version: 1, sequence: 2, run_id: "run-1",
+    type: "model.attempt_finished", timestamp: "2026-09-10T00:00:00Z",
+    payload: { attempt: 1, status: "completed", duration_ms: 80, rate_limit_wait_ms: 12,
+      model_permit_wait_ms: 25, http_duration_ms: 42, http_time_to_first_token_ms: 10 }
+  };
+  render(<EventDetail event={event} />);
+  expect(screen.getByText("Local rate wait")).toBeTruthy();
+  expect(screen.getByText("Model permit wait")).toBeTruthy();
+  expect(screen.getByText("HTTP + stream")).toBeTruthy();
+  expect(screen.getByText("HTTP first token")).toBeTruthy();
 });
 
 it("distinguishes truncated generation and a missing provider finish reason", () => {

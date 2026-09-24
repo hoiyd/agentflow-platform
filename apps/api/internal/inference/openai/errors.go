@@ -35,6 +35,7 @@ const (
 	ErrorToolCallingUnsupported ErrorKind = "tool_calling_unsupported"
 	ErrorRequestCallCapacity    ErrorKind = "request_call_capacity_exceeded"
 	ErrorRequestTokenCapacity   ErrorKind = "request_token_capacity_exceeded"
+	ErrorLocalAdmissionTimeout  ErrorKind = "model_admission_timeout"
 	ErrorInvalidResponse        ErrorKind = "invalid_response"
 	ErrorIncompleteOutput       ErrorKind = "incomplete_output"
 )
@@ -100,8 +101,12 @@ func (e *ModelError) FailureInfo() failure.Info {
 	if e.RetryAfter > 0 {
 		details["retry_after_ms"] = e.RetryAfter.Milliseconds()
 	}
+	source := "model_provider"
+	if e.Kind == ErrorLocalAdmissionTimeout {
+		source = "model_request_limiter"
+	}
 	return failure.Info{
-		Code: string(e.Kind), Source: "model_provider", Category: modelErrorCategory(e.Kind),
+		Code: string(e.Kind), Source: source, Category: modelErrorCategory(e.Kind),
 		Retryable: e.Retryable, Operation: e.Operation, Details: details,
 	}
 }
@@ -120,7 +125,7 @@ func modelErrorCategory(kind ErrorKind) failure.Category {
 		return failure.CategoryQuota
 	case ErrorModelNotFound:
 		return failure.CategoryNotFound
-	case ErrorRequestCallCapacity, ErrorRequestTokenCapacity:
+	case ErrorRequestCallCapacity, ErrorRequestTokenCapacity, ErrorLocalAdmissionTimeout:
 		return failure.CategoryCapacity
 	case ErrorInvalidRequest, ErrorContextLengthExceeded, ErrorContentPolicy:
 		return failure.CategoryValidation

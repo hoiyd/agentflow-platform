@@ -145,6 +145,8 @@ func (r *Recorder) Finish(ctx context.Context, ref requestcontrol.AttemptRef, ou
 	}, eventpkg.ModelAttemptFinishedPayload{
 		RecordID: ref.RecordID, ModelCallID: ref.ModelCallID, Attempt: ref.Attempt,
 		Status: outcome.Status, DurationMS: outcome.DurationMS, TimeToFirstTokenMS: outcome.TimeToFirstTokenMS,
+		RateLimitWaitMS: outcome.RateLimitWaitMS, ModelPermitWaitMS: outcome.ModelPermitWaitMS,
+		HTTPDurationMS: outcome.HTTPDurationMS, HTTPTimeToFirstTokenMS: outcome.HTTPTimeToFirstTokenMS,
 		OutputTokensPerSecond: outcome.OutputTokensPerSecond,
 		PromptTokens:          outcome.PromptTokens, CompletionTokens: outcome.CompletionTokens, TotalTokens: outcome.TotalTokens,
 		UsageEstimated: outcome.UsageEstimated, UsageAvailable: outcome.UsageAvailable,

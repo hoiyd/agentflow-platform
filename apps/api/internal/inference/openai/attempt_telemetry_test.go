@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 )
 
@@ -53,7 +56,8 @@ func TestCompletionTelemetryRecordsEachPhysicalRetry(t *testing.T) {
 	}
 	failed, passed := recorder.outcomes[0], recorder.outcomes[1]
 	if failed.Status != "failed" || failed.ErrorKind != string(ErrorProviderUnavailable) || failed.HTTPStatus != 503 || failed.UsageAvailable ||
-		passed.Status != "completed" || passed.PromptTokens != 3 || passed.CompletionTokens != 2 || !passed.UsageAvailable || passed.UsageEstimated {
+		failed.HTTPDurationMS == nil || passed.HTTPDurationMS == nil || passed.Status != "completed" ||
+		passed.PromptTokens != 3 || passed.CompletionTokens != 2 || !passed.UsageAvailable || passed.UsageEstimated {
 		t.Fatalf("physical attempts were conflated: failed=%#v passed=%#v", failed, passed)
 	}
 }
@@ -76,7 +80,8 @@ func TestStreamTelemetryMeasuresFirstTokenAndEstimatedUsageFallback(t *testing.T
 		t.Fatalf("unexpected stream fallback: output=%q outcomes=%#v err=%v", output, recorder.outcomes, err)
 	}
 	if recorder.outcomes[0].Status != "failed" || recorder.outcomes[0].HTTPStatus != 400 || recorder.outcomes[0].TimeToFirstTokenMS != nil ||
-		recorder.outcomes[1].Status != "completed" || recorder.outcomes[1].TimeToFirstTokenMS == nil || !recorder.outcomes[1].UsageEstimated {
+		recorder.outcomes[1].Status != "completed" || recorder.outcomes[1].TimeToFirstTokenMS == nil ||
+		recorder.outcomes[1].HTTPTimeToFirstTokenMS == nil || !recorder.outcomes[1].UsageEstimated {
 		t.Fatalf("stream attempt telemetry incorrect: %#v", recorder.outcomes)
 	}
 }
@@ -141,5 +146,115 @@ func TestOutputRateRequiresExactUsageAndMeasuredGenerationInterval(t *testing.T)
 		Usage{PromptTokens: 4, CompletionTokens: 12, TotalTokens: 16, Estimated: true}, "stop", nil)
 	if len(recorder.outcomes) != 2 || recorder.outcomes[0].OutputTokensPerSecond <= 0 || recorder.outcomes[1].OutputTokensPerSecond != 0 {
 		t.Fatalf("output rate must use exact usage only: %#v", recorder.outcomes)
+	}
+}
+
+func TestPermitTimeoutRecordsLocalWaitAndRecovers(t *testing.T) {
+	client := NewClientWithTimeout("test-key", "https://provider.example/v1", "test-model", 80*time.Millisecond)
+	client.SetRequestLimiter(concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{MaxConcurrent: 1}))
+	recorder := &attemptRecorderStub{}
+	client.SetRequestRecorder(recorder)
+	requests := 0
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		requests++
+		return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`), nil
+	})}
+	first, err := client.doRequest(context.Background(), []byte(`{"model":"test-model"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Body.Close()
+	_, err = client.CompleteTextDetailed(context.Background(), "system", "same prompt")
+	modelErr, ok := AsModelError(err)
+	if !ok || modelErr.Kind != ErrorLocalAdmissionTimeout || modelErr.Retryable || requests != 1 || len(recorder.outcomes) != 1 {
+		t.Fatalf("permit wait did not stop at route deadline: requests=%d outcomes=%#v err=%v", requests, recorder.outcomes, err)
+	}
+	if wait := recorder.outcomes[0].ModelPermitWaitMS; wait == nil || *wait < 50 || recorder.outcomes[0].HTTPDurationMS != nil {
+		t.Fatalf("local wait was conflated with HTTP time: %#v", recorder.outcomes[0])
+	}
+	if err := first.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	completion, err := client.CompleteTextDetailed(context.Background(), "system", "same prompt")
+	if err != nil || completion.Text != "ok" || requests != 2 || len(recorder.outcomes) != 2 || recorder.outcomes[1].HTTPDurationMS == nil {
+		t.Fatalf("released permit did not recover: completion=%#v outcomes=%#v err=%v", completion, recorder.outcomes, err)
+	}
+}
+
+func TestRateWaitTimeoutIsLocalAndDoesNotRetry(t *testing.T) {
+	client := NewClientWithTimeout("test-key", "https://provider.example/v1", "test-model", 50*time.Millisecond)
+	client.SetRequestLimiter(concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{
+		MaxConcurrent: 1, RequestsPerPeriod: 1, RatePeriod: 200 * time.Millisecond,
+	}))
+	recorder := &attemptRecorderStub{}
+	client.SetRequestRecorder(recorder)
+	requests := 0
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		requests++
+		return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`), nil
+	})}
+	if _, err := client.CompleteTextDetailed(context.Background(), "system", "same prompt"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.CompleteTextDetailed(context.Background(), "system", "same prompt")
+	modelErr, ok := AsModelError(err)
+	if !ok || modelErr.Kind != ErrorLocalAdmissionTimeout || modelErr.FailureInfo().Source != "model_request_limiter" ||
+		requests != 1 || len(recorder.outcomes) != 2 || recorder.outcomes[1].RateLimitWaitMS == nil ||
+		*recorder.outcomes[1].RateLimitWaitMS < 30 || recorder.outcomes[1].HTTPDurationMS != nil {
+		t.Fatalf("rate wait was retried or mislabeled: requests=%d outcomes=%#v err=%v", requests, recorder.outcomes, err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if _, err := client.CompleteTextDetailed(context.Background(), "system", "same prompt"); err != nil || requests != 2 {
+		t.Fatalf("rate bucket did not recover: requests=%d err=%v", requests, err)
+	}
+}
+
+func TestTimedOutStreamBodyKeepsPartialOutputAndReleasesPermit(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requests.Add(1) == 1 {
+			_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n"))
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"recovered"},"finish_reason":"stop"}]}`))
+	}))
+	defer server.Close()
+	client := NewClientWithTimeout("test-key", server.URL, "test-model", 200*time.Millisecond)
+	client.SetRequestLimiter(concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{MaxConcurrent: 1}))
+	events := make(chan StreamEvent, 2)
+	emitted, output, _, err := client.streamMessagesWithUsageOption(context.Background(), []Message{{Role: "user", Content: "hello"}}, events, false)
+	modelErr, ok := AsModelError(err)
+	if !ok || modelErr.Kind != ErrorTimeout || !emitted || output != "partial" || requests.Load() != 1 {
+		t.Fatalf("stream timeout was misclassified or retried: output=%q requests=%d err=%v", output, requests.Load(), err)
+	}
+	if completion, err := client.CompleteTextDetailed(context.Background(), "system", "hello"); err != nil || completion.Text != "recovered" || requests.Load() != 2 {
+		t.Fatalf("stream timeout retained permit: completion=%#v requests=%d err=%v", completion, requests.Load(), err)
+	}
+}
+
+func TestTimedOutCompletionBodyIsNotAnInvalidResponse(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if requests.Add(1) == 1 {
+			_, _ = w.Write([]byte(`{"choices":[`))
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"recovered"},"finish_reason":"stop"}]}`))
+	}))
+	defer server.Close()
+	client := NewClientWithTimeout("test-key", server.URL, "test-model", 200*time.Millisecond)
+	client.SetRetryPolicy(RetryPolicy{MaxAttempts: 1})
+	client.SetRequestLimiter(concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{MaxConcurrent: 1}))
+	_, err := client.CompleteTextDetailed(context.Background(), "system", "hello")
+	modelErr, ok := AsModelError(err)
+	if !ok || modelErr.Kind != ErrorTimeout || requests.Load() != 1 {
+		t.Fatalf("completion body timeout was misclassified: requests=%d err=%v", requests.Load(), err)
+	}
+	if completion, err := client.CompleteTextDetailed(context.Background(), "system", "hello"); err != nil || completion.Text != "recovered" || requests.Load() != 2 {
+		t.Fatalf("completion timeout retained permit: completion=%#v requests=%d err=%v", completion, requests.Load(), err)
 	}
 }

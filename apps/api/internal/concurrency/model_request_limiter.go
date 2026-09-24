@@ -52,19 +52,42 @@ func (l *ModelRequestLimiter) AcquireRequest(ctx context.Context, apiKey string,
 	if l == nil {
 		return func() {}, nil
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	timing := requestcontrol.AttemptTimingFromContext(ctx)
+	if timing != nil {
+		timing.Limited = true
+	}
 	if estimatedTokens < 1 {
 		estimatedTokens = 1
 	}
 	if strings.TrimSpace(apiKey) != "" && (l.rpm > 0 || l.tpm > 0) {
-		if err := l.apiKeyLimiter(apiKey).take(ctx, estimatedTokens); err != nil {
+		started := time.Now()
+		err := l.apiKeyLimiter(apiKey).take(ctx, estimatedTokens)
+		if timing != nil {
+			timing.RateWait = time.Since(started)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
 
+	started := time.Now()
 	select {
 	case l.global <- struct{}{}:
 	case <-ctx.Done():
+		if timing != nil {
+			timing.PermitWait = time.Since(started)
+		}
 		return nil, ctx.Err()
+	}
+	if timing != nil {
+		timing.PermitWait = time.Since(started)
+	}
+	if err := ctx.Err(); err != nil {
+		<-l.global
+		return nil, err
 	}
 
 	var once sync.Once
@@ -109,6 +132,10 @@ func (l *apiKeyLimiter) take(ctx context.Context, tokenCost int) error {
 			return &requestcontrol.TokenBucketCapacityError{EstimatedTokens: tokenCost, Capacity: int(l.tokens.capacity)}
 		}
 		if requestWait <= 0 && tokenWait <= 0 {
+			if err := ctx.Err(); err != nil {
+				l.mu.Unlock()
+				return err
+			}
 			l.requests.consume(1)
 			l.tokens.consume(float64(tokenCost))
 			l.mu.Unlock()

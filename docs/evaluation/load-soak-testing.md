@@ -67,7 +67,9 @@ accepted = completed + failed
 - `RunController`: bounded admission, queueing, per-Conversation single writer,
   overload rejection, drain, and post-overload recovery.
 - `ModelRequestLimiter`: global HTTP request semaphore plus explicit RPM wait
-  cancellation, refill recovery, and TPM capacity rejection.
+  cancellation, refill recovery, and TPM capacity rejection. Focused limiter
+  tests additionally distinguish RPM/TPM wait from permit wait and verify
+  cancellation does not retain a permit.
 - `budget.Tracker`: real reservation and settlement through the fixture Store;
   an oversized Run is rejected as `budget_exceeded` before provider work.
 - `tools.Executor`: a normal bounded Tool call runs inside each accepted sample;
@@ -75,7 +77,9 @@ accepted = completed + failed
 - `memory.BuiltinProvider`: post-response sync remains non-blocking; a full
   bounded queue reports accepted and rejected jobs without changing Run results.
 - OpenAI-compatible transport: controlled latency, long-tail responses, provider
-  `429`, timeout, and a handler that intentionally ignores cancellation.
+  `429`/`503`, timeout, and a handler that intentionally ignores cancellation.
+  A post-overload request must succeed; route-timeout tests verify that a
+  blocked local permit wait fails without retry and recovers after release.
 
 After faults, the suite requires a successful request, drained Run and Memory
 workers, zero fixture connections, bounded goroutine growth, and no concurrency

@@ -63,6 +63,7 @@ func (c *Client) completeAttempt(ctx context.Context, modelCallID, operation str
 	if err != nil {
 		return decoded, withoutRetry(err, operation)
 	}
+	ctx = requestcontrol.WithAttemptTiming(ctx, &requestcontrol.AttemptTiming{})
 	started := time.Now()
 	defer func() {
 		reason := ""
@@ -80,6 +81,9 @@ func (c *Client) completeAttempt(ctx context.Context, modelCallID, operation str
 		return decoded, modelErrorFromHTTPResponse(operation, resp)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return decoded, err
+		}
 		return decoded, invalidResponseError(operation, "failed to decode model response", err)
 	}
 	if len(decoded.Choices) == 0 {
@@ -264,6 +268,7 @@ func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, 
 	if err != nil {
 		return streamAttemptResult{}, withoutRetry(err, operation)
 	}
+	ctx = requestcontrol.WithAttemptTiming(ctx, &requestcontrol.AttemptTiming{})
 	started := time.Now()
 	var firstToken time.Time
 	defer func() {
@@ -370,6 +375,9 @@ func (c *Client) streamMessagesAttempt(ctx context.Context, messages []Message, 
 	}
 	result.output = output.String()
 	if err := scanner.Err(); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return result, err
+		}
 		return result, invalidResponseError(operation, "model stream read failed", err)
 	}
 	return result, invalidResponseError(operation, "model stream ended without [DONE]", nil)
@@ -388,13 +396,30 @@ func (c *Client) doRawRequest(ctx context.Context, url string, payload []byte) (
 }
 
 func (c *Client) doPathRequest(ctx context.Context, baseURL string, path string, payload []byte) (*http.Response, error) {
+	parent := ctx
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	release, err := c.acquireRequestPermit(ctx, estimatedRequestTokens(payload))
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) && parent.Err() == nil {
+			phase := "model permit"
+			if timing := requestcontrol.AttemptTimingFromContext(ctx); timing != nil && timing.PermitWait == 0 {
+				phase = "rate limit"
+			}
+			err = &ModelError{Kind: ErrorLocalAdmissionTimeout, Message: "local " + phase + " wait exceeded route timeout", Cause: err}
+		}
+		cancel()
 		return nil, err
+	}
+	cleanup := func() {
+		release()
+		cancel()
+	}
+	if timing := requestcontrol.AttemptTimingFromContext(ctx); timing != nil {
+		timing.TransportStartedAt = time.Now()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+path, bytes.NewReader(payload))
 	if err != nil {
-		release()
+		cleanup()
 		return nil, err
 	}
 	if c.apiKey != "" {
@@ -405,10 +430,10 @@ func (c *Client) doPathRequest(ctx context.Context, baseURL string, path string,
 	req.Header.Set("X-Title", "AgentFlow Platform")
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		release()
+		cleanup()
 		return nil, err
 	}
-	resp.Body = &releaseReadCloser{ReadCloser: resp.Body, release: release}
+	resp.Body = &releaseReadCloser{ReadCloser: resp.Body, release: cleanup, ctx: ctx}
 	return resp, nil
 }
 
@@ -436,11 +461,15 @@ type releaseReadCloser struct {
 	io.ReadCloser
 	release func()
 	once    sync.Once
+	ctx     context.Context
 }
 
 func (r *releaseReadCloser) Read(p []byte) (int, error) {
 	n, err := r.ReadCloser.Read(p)
 	if err != nil {
+		if r.ctx != nil && r.ctx.Err() != nil {
+			err = r.ctx.Err()
+		}
 		r.once.Do(r.release)
 	}
 	return n, err

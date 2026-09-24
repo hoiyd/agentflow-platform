@@ -93,6 +93,13 @@ MODEL_TOKENS_PER_MINUTE=120000
 - Backoff does not hold a concurrency slot.
 - With no API key, no per-key bucket is created; real HTTP work still uses the
   global concurrency control.
+- Each attempt records local RPM/TPM wait and model-permit wait separately from
+  HTTP/stream time. These are client-side measurements, not provider queue or
+  prefill time. Run admission wait is measured by `RunController`, not here.
+- The route request timeout covers permit acquisition through response-body
+  completion. A local admission timeout fails with `model_admission_timeout`
+  and is not retried; caller cancellation remains `canceled`. No second model
+  queue or limiter is introduced.
 
 A request larger than total TPM bucket capacity returns
 `request_token_capacity_exceeded`. That is not a Run Budget error.
@@ -120,6 +127,8 @@ MODEL_RETRY_MAX_DELAY=5s
   provider `Retry-After` value.
 - Transport failures, timeouts, rate limits, and provider `5xx` errors are
   retryable.
+- Provider `429`/`503` retain their own typed errors and bounded retry policy;
+  they are not classified as local permit pressure.
 - Authentication, quota, model-not-found, invalid request, context length,
   content policy, and cancellation errors fail immediately.
 - Streaming retries only before the first delta, preventing duplicated output.

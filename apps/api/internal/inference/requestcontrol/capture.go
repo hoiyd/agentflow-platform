@@ -34,16 +34,20 @@ type AttemptRef struct {
 }
 
 type AttemptOutcome struct {
-	Status                string
-	DurationMS            int64
-	TimeToFirstTokenMS    *int64
-	OutputTokensPerSecond float64
-	PromptTokens          int
-	CompletionTokens      int
-	TotalTokens           int
-	UsageEstimated        bool
-	UsageAvailable        bool
-	FinishReason          string
-	ErrorKind             string
-	HTTPStatus            int
+	Status                 string
+	DurationMS             int64
+	RateLimitWaitMS        *int64
+	ModelPermitWaitMS      *int64
+	HTTPDurationMS         *int64
+	HTTPTimeToFirstTokenMS *int64
+	TimeToFirstTokenMS     *int64
+	OutputTokensPerSecond  float64
+	PromptTokens           int
+	CompletionTokens       int
+	TotalTokens            int
+	UsageEstimated         bool
+	UsageAvailable         bool
+	FinishReason           string
+	ErrorKind              string
+	HTTPStatus             int
 }

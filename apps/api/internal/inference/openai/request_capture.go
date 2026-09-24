@@ -66,11 +66,26 @@ func (c *Client) finishModelAttempt(ctx context.Context, ref requestcontrol.Atte
 	if !ok {
 		return
 	}
+	finished := time.Now()
 	outcome := requestcontrol.AttemptOutcome{
-		Status: "completed", DurationMS: time.Since(started).Milliseconds(),
+		Status: "completed", DurationMS: finished.Sub(started).Milliseconds(),
 		PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens,
 		UsageEstimated: usage.Estimated, UsageAvailable: usage.Valid(),
 		FinishReason: finishReason,
+	}
+	if timing := requestcontrol.AttemptTimingFromContext(ctx); timing != nil {
+		if timing.Limited {
+			rateWaitMS, permitWaitMS := timing.RateWait.Milliseconds(), timing.PermitWait.Milliseconds()
+			outcome.RateLimitWaitMS, outcome.ModelPermitWaitMS = &rateWaitMS, &permitWaitMS
+		}
+		if !timing.TransportStartedAt.IsZero() {
+			httpDurationMS := finished.Sub(timing.TransportStartedAt).Milliseconds()
+			outcome.HTTPDurationMS = &httpDurationMS
+			if !firstToken.IsZero() {
+				httpFirstTokenMS := firstToken.Sub(timing.TransportStartedAt).Milliseconds()
+				outcome.HTTPTimeToFirstTokenMS = &httpFirstTokenMS
+			}
+		}
 	}
 	if !firstToken.IsZero() {
 		firstTokenMS := firstToken.Sub(started).Milliseconds()
