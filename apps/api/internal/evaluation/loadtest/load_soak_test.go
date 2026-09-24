@@ -243,6 +243,11 @@ func (p *providerFixture) serveHTTP(w http.ResponseWriter, request *http.Request
 		_, _ = io.WriteString(w, `{"error":{"message":"fixture capacity","type":"rate_limit_error","code":"rate_limit_exceeded"}}`)
 		return
 	}
+	if bytes.Contains(body, []byte("provider-503")) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, `{"error":{"message":"fixture slot unavailable"}}`)
+		return
+	}
 
 	delay := p.delay
 	requestNumber := p.requests.Add(1)
@@ -538,6 +543,12 @@ func exerciseFailureBoundaries(t *testing.T, harness *harness) controlReport {
 		t.Fatal("provider 429 was accepted")
 	} else {
 		result.Provider429Code = failure.Describe(err).Code
+	}
+	if err := harness.probe(context.Background(), "provider-503", 512); failure.Describe(err).Code != "provider_unavailable" {
+		t.Fatalf("provider 503 was not classified: %v", err)
+	}
+	if err := harness.probe(context.Background(), "post-provider-overload", 512); err != nil {
+		t.Fatalf("provider overload did not recover: %v", err)
 	}
 	toolResult := harness.toolExecutor.Execute(context.Background(), tool.ExecutionRequest{
 		Tool: "slow_load_probe", Arguments: json.RawMessage(`{}`),

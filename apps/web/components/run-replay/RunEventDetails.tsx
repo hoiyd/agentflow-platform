@@ -103,7 +103,19 @@ export function EventDetail({ event }: { event: RunEvent }) {
 			<div className="detail-kv"><span>Generation finish</span><strong>{stringPayload(payload, "finish_reason") === "missing" ? "Unconfirmed (not provided)" : stringPayload(payload, "finish_reason")}</strong></div>
 		  ) : null}
 		  {typeof payload.time_to_first_token_ms === "number" ? (
-			<div className="detail-kv"><span>First token</span><strong>{formatDuration(payload.time_to_first_token_ms)}</strong></div>
+			<div className="detail-kv"><span>Attempt first token</span><strong>{formatDuration(payload.time_to_first_token_ms)}</strong></div>
+		  ) : null}
+		  {typeof payload.rate_limit_wait_ms === "number" ? (
+			<div className="detail-kv"><span>Local rate wait</span><strong>{formatDuration(payload.rate_limit_wait_ms)}</strong></div>
+		  ) : null}
+		  {typeof payload.model_permit_wait_ms === "number" ? (
+			<div className="detail-kv"><span>Model permit wait</span><strong>{formatDuration(payload.model_permit_wait_ms)}</strong></div>
+		  ) : null}
+		  {typeof payload.http_duration_ms === "number" ? (
+			<div className="detail-kv"><span>HTTP + stream</span><strong>{formatDuration(payload.http_duration_ms)}</strong></div>
+		  ) : null}
+		  {typeof payload.http_time_to_first_token_ms === "number" ? (
+			<div className="detail-kv"><span>HTTP first token</span><strong>{formatDuration(payload.http_time_to_first_token_ms)}</strong></div>
 		  ) : null}
 		  {typeof payload.output_tokens_per_second === "number" && payload.output_tokens_per_second > 0 ? (
 			<div className="detail-kv"><span>Output rate</span><strong>{payload.output_tokens_per_second.toFixed(1)} tok/s</strong></div>

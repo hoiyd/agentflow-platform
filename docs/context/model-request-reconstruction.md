@@ -91,9 +91,15 @@ call once. A missing provider usage value is marked estimated when a completed
 response permits fallback counting. Failed attempts without usage do not claim
 zero-token billing.
 
-Timing starts after the request Envelope is persisted and includes request
-limiter wait, transport, and response parsing. First-token timing is available
-only for a stream with a content delta; it is not an HTTP header latency metric.
+Timing starts after the request Envelope is persisted. `duration_ms` and
+`time_to_first_token_ms` include local request-limiter wait. The separate
+`rate_limit_wait_ms` and `model_permit_wait_ms` fields isolate RPM/TPM and
+semaphore waiting; `http_duration_ms` starts after admission and includes HTTP
+and response-body processing. For streams with a content delta,
+`http_time_to_first_token_ms` measures from that same post-admission boundary.
+These are client-observed intervals, not server queue, prefill, or decode
+measurements. A local wait that reaches the route deadline records a failed
+attempt with typed `model_admission_timeout`, without an automatic retry.
 Attempt telemetry is best-effort after the provider attempt so a telemetry
 write failure cannot turn a successful response into an unsafe retry. An
 Envelope without a finishing event may therefore indicate a crash or a
