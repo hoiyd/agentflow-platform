@@ -42,8 +42,8 @@ func (c *Client) recordModelRequest(ctx context.Context, modelCallID, operation,
 		return requestcontrol.AttemptRef{}, nil
 	}
 	provider := providerForURL(c.baseURL)
-	if model == "local_fallback" {
-		provider = "local"
+	if c.simulated {
+		provider = "simulated"
 	}
 	manifest := requestManifestFromContext(ctx)
 	observation := requestcontrol.Observation{

@@ -79,6 +79,16 @@ it("shows the effective sampling parameters recorded for a model request", () =>
   expect(screen.getByText("Temperature 0 · Top-p 0.8 · Seed 42")).toBeTruthy();
 });
 
+it("identifies simulated model events in replay", () => {
+  const event: RunReplayData["run_events"][number] = {
+    id: "simulated-1", schema_version: 1, sequence: 1, run_id: "run-1",
+    type: "model.started", timestamp: "2026-09-10T00:00:00Z",
+    payload: { model: "local_fallback", provider: "simulated", simulated: true }
+  };
+  render(<EventDetail event={event} />);
+  expect(screen.getByText("Offline simulation")).toBeTruthy();
+});
+
 it("keeps replay available when the episode report fails", async () => {
   getReplayPageData.mockResolvedValue({
     data: replayFixture(),

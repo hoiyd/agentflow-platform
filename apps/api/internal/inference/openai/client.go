@@ -19,6 +19,7 @@ const (
 
 type Client struct {
 	apiKey              string
+	simulated           bool
 	baseURL             string
 	embeddingBaseURL    string
 	model               string
@@ -48,6 +49,13 @@ type Embedding = provider.Embedding
 
 func NewClient(apiKey string, baseURL string, model string) *Client {
 	return NewClientWithTimeout(apiKey, baseURL, model, 5*time.Minute)
+}
+
+// NewSimulatedClient is an explicit, offline-only fixture. Production route wiring never creates it.
+func NewSimulatedClient() *Client {
+	client := NewClientWithTimeoutAndEmbeddingModel("", "http://localhost/simulated", "http://localhost/simulated", "local_fallback", "local_hash_embedding", 1536, time.Second)
+	client.simulated = true
+	return client
 }
 
 func NewClientWithTimeout(apiKey string, baseURL string, model string, timeout time.Duration) *Client {
@@ -116,6 +124,14 @@ func (c *Client) SetRetryPolicy(policy RetryPolicy) {
 }
 
 func (c *Client) RuntimeIdentity() RuntimeIdentity {
+	if c.simulated {
+		return RuntimeIdentity{
+			Provider: "simulated", BaseURL: safeRuntimeURL(c.baseURL), Model: "local_fallback",
+			EmbeddingBaseURL: safeRuntimeURL(c.embeddingBaseURL), EmbeddingModel: "local_hash_embedding",
+			EmbeddingDimensions: c.embeddingDimensions, EmbeddingProvider: "simulated",
+			GenerationPolicy: c.generationPolicy.Clone(), SeedSupported: c.seedSupported,
+		}
+	}
 	return RuntimeIdentity{
 		Provider: providerForURL(c.baseURL), BaseURL: safeRuntimeURL(c.baseURL), Model: c.model,
 		EmbeddingBaseURL: safeRuntimeURL(c.embeddingBaseURL), EmbeddingModel: c.embeddingModel,
@@ -127,6 +143,7 @@ func (c *Client) RuntimeIdentity() RuntimeIdentity {
 func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) provider.Client {
 	client := NewClientWithTimeoutAndEmbeddingModel(c.apiKey, identity.BaseURL, identity.EmbeddingBaseURL,
 		identity.Model, identity.EmbeddingModel, identity.EmbeddingDimensions, c.timeout)
+	client.simulated = c.simulated
 	client.requestLimiter = c.requestLimiter
 	client.requestRecorder = c.requestRecorder
 	client.retryPolicy = c.retryPolicy

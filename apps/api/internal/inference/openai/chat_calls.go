@@ -12,10 +12,13 @@ import (
 )
 
 func (c *Client) PrepareAgentChat(ctx context.Context, request provider.ChatRequest) (provider.PreparedChat, error) {
+	if !c.HasAPIKey() && !c.simulated {
+		return provider.PreparedChat{}, missingCredentialError("chat.prepare")
+	}
 	raw := ensureCurrentInput(buildMessagesWithSystemPrompt(request.SystemPrompt, request.History, request.ToolNames), request.Latest)
 	model := c.model
 	definitions := request.Definitions
-	if !c.HasAPIKey() {
+	if c.simulated {
 		model = "local_fallback"
 		definitions = nil
 	}
@@ -27,6 +30,9 @@ func (c *Client) PrepareAgentChat(ctx context.Context, request provider.ChatRequ
 }
 
 func (c *Client) PrepareFollowup(ctx context.Context, raw []provider.Message) (provider.PreparedChat, error) {
+	if !c.HasAPIKey() && !c.simulated {
+		return provider.PreparedChat{}, missingCredentialError("chat.prepare_followup")
+	}
 	prepared, err := c.prepareModelContext(ctx, raw, nil)
 	if err != nil {
 		return provider.PreparedChat{}, err
@@ -35,6 +41,9 @@ func (c *Client) PrepareFollowup(ctx context.Context, raw []provider.Message) (p
 }
 
 func (c *Client) SelectTools(ctx context.Context, prepared provider.PreparedChat, definitions []map[string]any, trace provider.ChatTrace) (provider.ChatChoice, error) {
+	if !c.HasAPIKey() {
+		return provider.ChatChoice{}, missingCredentialError("chat.tool_selection")
+	}
 	startPayload := mergePayload(map[string]any{
 		"model": c.model, "call_kind": "tool_selection", "messages": prepared.Messages,
 		"enabled_tools": toolNames(definitions), "input_chars": messagesTextLength(prepared.Messages),
@@ -96,8 +105,11 @@ func toolNames(definitions []map[string]any) []string {
 }
 
 func (c *Client) StreamAnswer(ctx context.Context, prepared provider.PreparedChat, kind provider.ChatStreamKind, trace provider.ChatTrace, events chan<- provider.StreamEvent) (bool, error) {
+	if c.simulated {
+		return c.streamSimulatedAnswer(ctx, prepared, trace, events)
+	}
 	if !c.HasAPIKey() {
-		return c.streamLocalAnswer(ctx, prepared, trace, events)
+		return false, missingCredentialError("chat.stream")
 	}
 	startPayload := map[string]any{
 		"model": c.model, "call_kind": string(kind), "messages": prepared.Messages,
@@ -140,8 +152,8 @@ func (c *Client) StreamAnswer(ctx context.Context, prepared provider.PreparedCha
 	return emitted, nil
 }
 
-func (c *Client) streamLocalAnswer(ctx context.Context, prepared provider.PreparedChat, trace provider.ChatTrace, events chan<- provider.StreamEvent) (bool, error) {
-	log.Printf("chat_fallback mode=local_no_api_key latest_len=%d", len(prepared.Latest))
+func (c *Client) streamSimulatedAnswer(ctx context.Context, prepared provider.PreparedChat, trace provider.ChatTrace, events chan<- provider.StreamEvent) (bool, error) {
+	log.Printf("chat_simulation latest_len=%d", len(prepared.Latest))
 	output := fallbackEventResponse(prepared.Latest)
 	callCtx := budget.WithOperation(ctx, prepared.Manifest.ModelCallID)
 	callCtx = withRequestManifest(callCtx, prepared.Manifest)
@@ -149,17 +161,17 @@ func (c *Client) streamLocalAnswer(ctx context.Context, prepared provider.Prepar
 	if err != nil {
 		return false, err
 	}
-	payload, err := json.Marshal(map[string]any{"model": "local_fallback", "messages": prepared.Messages, "stream": true})
+	payload, err := json.Marshal(map[string]any{"model": "local_fallback", "messages": prepared.Messages, "stream": true, "simulated": true})
 	if err != nil {
 		return false, err
 	}
-	ref, err := c.recordModelRequest(callCtx, reservation.OperationID, "local.stream", "local_fallback", payload)
+	ref, err := c.recordModelRequest(callCtx, reservation.OperationID, "simulated.stream", "local_fallback", payload)
 	if err != nil {
 		return false, err
 	}
 	started := time.Now()
 	startPayload := mergePayload(map[string]any{
-		"model": "local_fallback", "system": prepared.SystemPrompt,
+		"model": "local_fallback", "provider": "simulated", "simulated": true, "system": prepared.SystemPrompt,
 		"input": prepared.Latest, "input_chars": len(prepared.Latest),
 	}, contextTracePayload(prepared.Manifest))
 	if len(trace.Memories) > 0 {
@@ -171,12 +183,12 @@ func (c *Client) streamLocalAnswer(ctx context.Context, prepared provider.Prepar
 	span := trace.Recorder.LLMStart(ctx, trace.RunID, trace.StepID, startPayload)
 	c.streamText(ctx, output, 45*time.Millisecond, events)
 	usage := estimateUsage(messagesToText(prepared.Messages), output)
-	c.finishModelAttempt(callCtx, ref, started, time.Time{}, usage, "local", ctx.Err())
+	c.finishModelAttempt(callCtx, ref, started, time.Time{}, usage, "simulated", ctx.Err())
 	if err := settleBudgetedModelCall(callCtx, reservation, usage); err != nil {
 		return false, err
 	}
 	trace.Recorder.LLMEnd(ctx, span, tokenPayload(map[string]any{
-		"model": "local_fallback", "output": output, "output_chars": len(output),
+		"model": "local_fallback", "provider": "simulated", "simulated": true, "output": output, "output_chars": len(output),
 	}, usage))
 	return true, nil
 }

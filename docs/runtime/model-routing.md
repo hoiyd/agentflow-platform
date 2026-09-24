@@ -47,8 +47,9 @@ as an assumed value. `seed` is accepted only when the route explicitly sets
 `capabilities.seed: true`. Unsupported or invalid values fail Catalog
 validation before a model request. Seed support is a provider claim, not a
 guarantee of identical output across calls or backend revisions.
-The local no-credential fallback does not sample model tokens and therefore
-does not apply these profiles.
+Offline simulated fixtures do not sample model tokens and therefore do not
+apply these profiles. Production routes require configured credentials; a
+missing key never selects a simulated model.
 
 ## Decision Protocol
 

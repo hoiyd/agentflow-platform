@@ -92,6 +92,9 @@ export function EventDetail({ event }: { event: RunEvent }) {
         <span>Timestamp</span>
         <strong>{new Date(event.timestamp).toLocaleString()}</strong>
       </div>
+	  {payload.simulated === true ? (
+		<div className="detail-kv"><span>Model source</span><strong>Offline simulation</strong></div>
+	  ) : null}
 	  {event.type === "model.request_prepared" && sampling ? (
 		<div className="detail-kv"><span>Sampling</span><strong>{sampling}</strong></div>
 	  ) : null}

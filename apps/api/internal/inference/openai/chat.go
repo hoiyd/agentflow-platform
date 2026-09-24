@@ -27,9 +27,12 @@ func (c *Client) CompleteTextDetailed(ctx context.Context, systemPrompt string, 
 }
 
 func (c *Client) PrepareText(ctx context.Context, systemPrompt string, prompt string) (PreparedText, error) {
+	if !c.HasAPIKey() && !c.simulated {
+		return PreparedText{}, missingCredentialError("chat.prepare")
+	}
 	prompt = strings.TrimSpace(prompt)
 	model := c.model
-	if c.apiKey == "" {
+	if c.simulated {
 		model = "local_fallback"
 	}
 	prepared, err := c.prepareModelContextForModel(ctx, model, []Message{
@@ -43,29 +46,32 @@ func (c *Client) PrepareText(ctx context.Context, systemPrompt string, prompt st
 }
 
 func (c *Client) CompletePreparedText(ctx context.Context, prepared PreparedText) (TextCompletion, error) {
+	if !c.HasAPIKey() && !c.simulated {
+		return TextCompletion{}, missingCredentialError("chat.completion")
+	}
 	ctx = budget.WithOperation(ctx, prepared.Manifest.ModelCallID)
 	ctx = withOutputTokenLimit(ctx, prepared.Manifest.OutputReserveTokens)
 	ctx = withRequestManifest(ctx, prepared.Manifest)
 	systemPrompt, prompt := textPromptParts(prepared.Messages)
-	if c.apiKey == "" {
+	if c.simulated {
 		text := fallbackCompletion(systemPrompt, prompt)
 		reservation, err := beginBudgetedModelCall(ctx, "local_fallback", estimateTokens(messagesToText(prepared.Messages)))
 		if err != nil {
 			return TextCompletion{}, err
 		}
 		payload, err := json.Marshal(map[string]any{
-			"model": "local_fallback", "messages": prepared.Messages,
+			"model": "local_fallback", "messages": prepared.Messages, "simulated": true,
 		})
 		if err != nil {
 			return TextCompletion{}, err
 		}
-		ref, err := c.recordModelRequest(ctx, reservation.OperationID, "local.completion", "local_fallback", payload)
+		ref, err := c.recordModelRequest(ctx, reservation.OperationID, "simulated.completion", "local_fallback", payload)
 		if err != nil {
 			return TextCompletion{}, err
 		}
 		started := time.Now()
 		usage := estimateUsage(systemPrompt+"\n"+prompt, text)
-		c.finishModelAttempt(ctx, ref, started, time.Time{}, usage, "local", ctx.Err())
+		c.finishModelAttempt(ctx, ref, started, time.Time{}, usage, "simulated", ctx.Err())
 		if err := settleBudgetedModelCall(ctx, reservation, usage); err != nil {
 			return TextCompletion{}, err
 		}
