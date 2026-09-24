@@ -67,6 +67,8 @@ func (r *Runtime) restoreModelRouteCatalog(snapshot domain.ModelRouteCatalogSnap
 		identity.Provider = frozen.Provider
 		identity.BaseURL = frozen.Endpoint
 		identity.Model = frozen.Model
+		identity.GenerationPolicy = frozen.GenerationPolicy.Clone()
+		identity.SeedSupported = frozen.Capabilities.Seed
 		bindings = append(bindings, routing.Binding{
 			Descriptor: frozen, Client: current.Client.WithRuntimeIdentity(identity),
 		})

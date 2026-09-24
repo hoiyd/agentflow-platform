@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"agentflow-platform/apps/api/internal/domain"
 )
 
 type RouteFile struct {
@@ -16,16 +18,17 @@ type RouteFile struct {
 // RouteConfig is secret-free. CredentialEnvironment names the environment
 // variable resolved only when the provider client is constructed.
 type RouteConfig struct {
-	ID                    string       `json:"id"`
-	BaseURL               string       `json:"base_url"`
-	Model                 string       `json:"model"`
-	CredentialEnvironment string       `json:"credential_environment"`
-	RequestTimeoutSeconds int          `json:"request_timeout_seconds"`
-	Capabilities          Capabilities `json:"capabilities"`
-	ContextWindowTokens   int          `json:"context_window_tokens"`
-	MaxOutputTokens       int          `json:"max_output_tokens"`
-	Priority              int          `json:"priority"`
-	Pricing               Pricing      `json:"pricing"`
+	ID                    string                   `json:"id"`
+	BaseURL               string                   `json:"base_url"`
+	Model                 string                   `json:"model"`
+	CredentialEnvironment string                   `json:"credential_environment"`
+	RequestTimeoutSeconds int                      `json:"request_timeout_seconds"`
+	Capabilities          Capabilities             `json:"capabilities"`
+	GenerationPolicy      *domain.GenerationPolicy `json:"generation_policy,omitempty"`
+	ContextWindowTokens   int                      `json:"context_window_tokens"`
+	MaxOutputTokens       int                      `json:"max_output_tokens"`
+	Priority              int                      `json:"priority"`
+	Pricing               Pricing                  `json:"pricing"`
 }
 
 func LoadRouteFile(path string) (RouteFile, error) {
@@ -62,7 +65,8 @@ func (c RouteConfig) Descriptor(provider string) Descriptor {
 	return Descriptor{
 		ID: c.ID, Provider: provider, Model: c.Model, Endpoint: c.BaseURL,
 		Capabilities: c.Capabilities, ContextWindowTokens: c.ContextWindowTokens,
-		MaxOutputTokens: c.MaxOutputTokens, Priority: c.Priority, Pricing: c.Pricing,
+		GenerationPolicy: c.GenerationPolicy,
+		MaxOutputTokens:  c.MaxOutputTokens, Priority: c.Priority, Pricing: c.Pricing,
 		CredentialEnvironment: c.CredentialEnvironment,
 	}
 }

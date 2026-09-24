@@ -66,6 +66,14 @@ export function Metric({ label, value, tone = "" }: { label: string; value: stri
 
 export function EventDetail({ event }: { event: RunEvent }) {
   const payload = event.payload ?? {};
+  const parameters = payload.parameters && typeof payload.parameters === "object" && !Array.isArray(payload.parameters)
+    ? payload.parameters as Record<string, unknown> : null;
+  const sampling = parameters && typeof parameters.temperature === "number"
+    ? [
+        `Temperature ${parameters.temperature}`,
+        typeof parameters.top_p === "number" ? `Top-p ${parameters.top_p}` : "Top-p provider default",
+        ...(typeof parameters.seed === "number" ? [`Seed ${parameters.seed}`] : [])
+      ].join(" · ") : null;
   const isEstimated = payload.token_usage_estimated === true || payload.usage_estimated === true;
   const memories = retrievedMemories(payload);
   const chunks = retrievedChunks(payload);
@@ -84,6 +92,9 @@ export function EventDetail({ event }: { event: RunEvent }) {
         <span>Timestamp</span>
         <strong>{new Date(event.timestamp).toLocaleString()}</strong>
       </div>
+	  {event.type === "model.request_prepared" && sampling ? (
+		<div className="detail-kv"><span>Sampling</span><strong>{sampling}</strong></div>
+	  ) : null}
 	  {event.type === "model.attempt_finished" ? (
 		<>
 		  <div className="detail-kv"><span>Attempt</span><strong>{String(payload.attempt ?? "Unknown")}</strong></div>

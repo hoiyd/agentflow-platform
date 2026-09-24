@@ -17,6 +17,8 @@ type RuntimeIdentity struct {
 	EmbeddingModel      string
 	EmbeddingDimensions int
 	EmbeddingProvider   string
+	GenerationPolicy    domain.GenerationPolicy
+	SeedSupported       bool
 }
 
 type Message struct {

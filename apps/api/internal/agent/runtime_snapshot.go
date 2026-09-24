@@ -307,6 +307,16 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 			return err
 		}
 	}
+	if snapshot.SchemaVersion >= domain.SamplingRuntimeSnapshotVersion {
+		for _, route := range snapshot.ModelRouting.Routes {
+			if route.GenerationPolicy == nil {
+				return fmt.Errorf("runtime snapshot route %q has no frozen generation policy", route.ID)
+			}
+			if err := route.GenerationPolicy.Validate(route.Capabilities.Seed); err != nil {
+				return fmt.Errorf("runtime snapshot route %q has invalid generation policy: %w", route.ID, err)
+			}
+		}
+	}
 	if snapshot.RunBudget == nil {
 		return errors.New("runtime snapshot has no run budget")
 	}

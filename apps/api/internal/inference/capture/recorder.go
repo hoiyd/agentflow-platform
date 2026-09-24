@@ -115,6 +115,7 @@ func (r *Recorder) Begin(ctx context.Context, observation requestcontrol.Observa
 	payload, err := eventpkg.Payload(eventpkg.ModelRequestPreparedPayload{
 		RecordID: created.Envelope.ID, ModelCallID: created.Envelope.ModelCallID, Attempt: created.Envelope.Attempt,
 		Operation: created.Envelope.Operation, Provider: created.Envelope.Provider, Model: created.Envelope.Model,
+		Parameters:        created.Envelope.Parameters,
 		ContextManifestID: created.Envelope.ContextManifestID, RuntimeSnapshotHash: created.Envelope.RuntimeSnapshotHash,
 		PayloadHash: created.Envelope.PayloadHash, PayloadBytes: created.Envelope.PayloadBytes,
 		CaptureMode: string(created.Capture.Mode), CaptureReconstructable: created.Capture.Reconstructable,

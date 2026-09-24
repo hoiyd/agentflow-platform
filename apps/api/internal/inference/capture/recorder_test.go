@@ -84,7 +84,15 @@ func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
 		t.Fatalf("validate reconstructability: %v", err)
 	}
 	finished := 0
+	prepared := 0
 	for _, item := range events {
+		if item.Type == domain.EventModelRequestPrepared {
+			prepared++
+			parameters, ok := item.Payload["parameters"].(map[string]any)
+			if !ok || parameters["temperature"] != float64(0.2) {
+				t.Fatalf("prepared event lost the effective request parameters: %#v", item.Payload)
+			}
+		}
 		if item.Type != domain.EventModelAttemptFinished {
 			continue
 		}
@@ -100,8 +108,8 @@ func TestFullCaptureRoundTripAndReconstructability(t *testing.T) {
 			t.Fatalf("generation finish reason did not survive round-trip: %#v", item)
 		}
 	}
-	if finished != 2 {
-		t.Fatalf("expected two durable attempt outcomes, got %d", finished)
+	if finished != 2 || prepared != 2 {
+		t.Fatalf("expected two durable prepared and finished events, prepared=%d finished=%d", prepared, finished)
 	}
 }
 
@@ -125,6 +133,10 @@ func TestCaptureModesNeverPersistDetectedCredentials(t *testing.T) {
 			parameters := records[0].Envelope.Parameters
 			if strings.Contains(encoded, secret) || strings.Contains(string(mustJSON(parameters)), secret) || records[0].Capture.Reconstructable {
 				t.Fatalf("secret or reconstructability leaked in %s capture: %#v", mode, records[0])
+			}
+			events, err := pgStore.ListRunEvents(run.ID)
+			if err != nil || len(events) == 0 || strings.Contains(string(mustJSON(events[0].Payload)), secret) {
+				t.Fatalf("secret leaked in %s request event: events=%#v err=%v", mode, events, err)
 			}
 			if mode == domain.ModelRequestCaptureMetadata && encoded != "" {
 				t.Fatalf("metadata capture stored content: %q", encoded)

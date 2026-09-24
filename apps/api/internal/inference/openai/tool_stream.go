@@ -117,7 +117,6 @@ func (c *Client) streamOpenAIWithTools(ctx context.Context, systemPrompt string,
 		"messages":    messages,
 		"tools":       definitions,
 		"tool_choice": "auto",
-		"temperature": 0.2,
 	})
 	if err != nil {
 		if isToolCallingUnsupported(err) {

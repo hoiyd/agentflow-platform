@@ -2,22 +2,30 @@
 
 <!-- In 1-2 sentences, explain the problem and the outcome of this PR. -->
 
+## Context and intent
+
+<!-- Why is this change needed now? State the intended outcome and any important non-goals. -->
+
 ## Changes
 
 <!-- List the main behavior or contract changes, not every edited file. -->
 - [Describe the main change]
 
-## Validation
+## Test/Validation plan and evidence
 
-<!-- Record checks actually run and their results. Say why a relevant check was not run. -->
+<!-- Record checks actually run and their results; distinguish automated, manual, and external evidence. Say why a relevant check was not run. -->
 - [Command or manual check] - [result, or reason not run]
-<!-- If applicable, include manual verification. For evaluation or performance claims,
-     link reproducible evidence and state its scope. -->
+<!-- For evaluation or performance claims, link reproducible evidence and state its scope. -->
 
-## Compatibility and risks
+## Compatibility Risks and Rollback
 
-<!-- Include only when relevant: API/schema/config changes, migration or rollback,
-     security implications, known limitations. Delete this section otherwise. -->
+<!-- State compatibility/config/schema impact, known risks, and how to revert safely.
+     Write "None" or "Revert this PR" when that is genuinely sufficient. -->
+
+## Security and privacy checks (optional)
+
+<!-- Note credential, authorization, data exposure, or retention checks when relevant.
+     Delete this section when the change has no security/privacy impact. -->
 
 ## Review focus
 

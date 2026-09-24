@@ -2,9 +2,11 @@ package routing
 
 import (
 	"errors"
+	"math"
 	"slices"
 	"testing"
 
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/openai"
 )
@@ -40,6 +42,44 @@ func TestCatalogSelectsStableCompatibleRoute(t *testing.T) {
 	tieDecision, err := tied.Select(Requirements{Purpose: "primary", MaxOutputTokens: 10})
 	if err != nil || tieDecision.Route.ID != "alpha" {
 		t.Fatalf("route ID must break priority ties: %#v err=%v", tieDecision, err)
+	}
+}
+
+func TestCatalogFreezesEffectiveSamplingAndRejectsUnsupportedValues(t *testing.T) {
+	binding := testBinding("primary", 1, Capabilities{Streaming: true}, 1000, 100)
+	defaultCatalog, err := NewCatalog(binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaultRoute := defaultCatalog.Descriptors()[0]
+	if defaultRoute.GenerationPolicy == nil || *defaultRoute.GenerationPolicy.AnswerStream.Temperature != 0.4 ||
+		*defaultRoute.GenerationPolicy.Completion.Temperature != 0.2 || defaultRoute.GenerationPolicy.AnswerStream.TopP != nil {
+		t.Fatalf("unexpected effective defaults: %#v", defaultRoute.GenerationPolicy)
+	}
+	policy := domain.DefaultGenerationPolicy()
+	zero := 0.0
+	policy.AnswerStream.Temperature = &zero
+	binding.Descriptor.GenerationPolicy = &policy
+	changed, err := NewCatalog(binding)
+	if err != nil || changed.Revision() == defaultCatalog.Revision() {
+		t.Fatalf("sampling changes did not change experiment identity: revision=%q err=%v", changed.Revision(), err)
+	}
+	seed := int64(42)
+	policy.AnswerStream.Seed = &seed
+	binding.Descriptor.GenerationPolicy = &policy
+	if _, err := NewCatalog(binding); !errors.Is(err, ErrInvalidCatalog) {
+		t.Fatalf("unsupported seed reached a route: %v", err)
+	}
+	binding.Descriptor.Capabilities.Seed = true
+	policy.AnswerStream.TopP = &zero
+	if _, err := NewCatalog(binding); !errors.Is(err, ErrInvalidCatalog) {
+		t.Fatalf("invalid top_p reached a route: %v", err)
+	}
+	policy.AnswerStream.TopP = nil
+	invalid := math.NaN()
+	policy.AnswerStream.Temperature = &invalid
+	if _, err := NewCatalog(binding); !errors.Is(err, ErrInvalidCatalog) {
+		t.Fatalf("non-finite temperature reached a route: %v", err)
 	}
 }
 

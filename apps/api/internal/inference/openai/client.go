@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 	"agentflow-platform/apps/api/internal/tool"
@@ -38,6 +39,8 @@ type Client struct {
 	toolEffectJournal   tool.ToolEffectJournal
 	toolArtifactStore   tool.ToolArtifactWriter
 	toolArtifactPolicy  ToolArtifactPolicy
+	generationPolicy    domain.GenerationPolicy
+	seedSupported       bool
 }
 
 var _ provider.Client = (*Client)(nil)
@@ -162,8 +165,9 @@ func NewClientWithTimeoutAndEmbeddingModel(apiKey string, baseURL string, embedd
 				ExpectContinueTimeout: 1 * time.Second,
 			},
 		},
-		timeout:     timeout,
-		retryPolicy: DefaultRetryPolicy(),
+		timeout:          timeout,
+		retryPolicy:      DefaultRetryPolicy(),
+		generationPolicy: domain.DefaultGenerationPolicy(),
 	}
 }
 
@@ -200,6 +204,7 @@ func (c *Client) RuntimeIdentity() RuntimeIdentity {
 		Provider: providerForURL(c.baseURL), BaseURL: safeRuntimeURL(c.baseURL), Model: c.model,
 		EmbeddingBaseURL: safeRuntimeURL(c.embeddingBaseURL), EmbeddingModel: c.embeddingModel,
 		EmbeddingDimensions: c.embeddingDimensions, EmbeddingProvider: providerForURL(c.embeddingBaseURL),
+		GenerationPolicy: c.generationPolicy.Clone(), SeedSupported: c.seedSupported,
 	}
 }
 
@@ -212,6 +217,11 @@ func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) provider.Client {
 	client.toolEffectJournal = c.toolEffectJournal
 	client.toolArtifactStore = c.toolArtifactStore
 	client.toolArtifactPolicy = c.toolArtifactPolicy
+	client.generationPolicy = identity.GenerationPolicy.Clone()
+	if client.generationPolicy.AnswerStream.Temperature == nil && client.generationPolicy.Completion.Temperature == nil {
+		client.generationPolicy = domain.DefaultGenerationPolicy()
+	}
+	client.seedSupported = identity.SeedSupported
 	return client
 }
 

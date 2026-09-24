@@ -11,6 +11,10 @@
         "structured_output": true,
         "streaming": true
       },
+      "generation_policy": {
+        "answer_stream": {"temperature": 0.4},
+        "completion": {"temperature": 0.2}
+      },
       "context_window_tokens": 128000,
       "max_output_tokens": 8192,
       "priority": 100,
