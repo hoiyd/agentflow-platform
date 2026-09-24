@@ -3,89 +3,12 @@ package openai
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"strings"
 	"time"
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
-	"agentflow-platform/apps/api/internal/domain"
-	tracepkg "agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/tool"
 )
-
-func (c *Client) StreamAgentChatWithToolsTrace(ctx context.Context, systemPrompt string, history []domain.Message, latest string, catalog *tool.Catalog, recorder *tracepkg.Recorder, runID string, stepID string, retrievedMemories []domain.RetrievedMemory, retrievedChunks []domain.RetrievedDocumentChunk) (<-chan StreamEvent, <-chan error) {
-	events := make(chan StreamEvent)
-	errs := make(chan error, 1)
-
-	go func() {
-		defer close(events)
-		defer close(errs)
-
-		if c.apiKey == "" {
-			log.Printf("chat_fallback mode=local_no_api_key latest_len=%d enabled_tools=%q", len(latest), strings.Join(catalog.EnabledNames(), ","))
-			rawMessages := ensureCurrentInput(buildMessagesWithSystemPrompt(systemPrompt, history, catalog.EnabledNames()), latest)
-			prepared, err := c.prepareModelContextForModel(ctx, "local_fallback", rawMessages, nil)
-			if err != nil {
-				errs <- err
-				return
-			}
-			output := fallbackEventResponse(latest)
-			callCtx := budget.WithOperation(ctx, prepared.manifest.ModelCallID)
-			callCtx = withRequestManifest(callCtx, prepared.manifest)
-			reservation, err := beginBudgetedModelCall(callCtx, "local_fallback", estimateTokens(messagesToText(prepared.messages)))
-			if err != nil {
-				errs <- err
-				return
-			}
-			requestPayload, err := json.Marshal(map[string]any{
-				"model": "local_fallback", "messages": prepared.messages, "stream": true,
-			})
-			if err != nil {
-				errs <- err
-				return
-			}
-			ref, err := c.recordModelRequest(callCtx, reservation.OperationID, "local.stream", "local_fallback", requestPayload)
-			if err != nil {
-				errs <- err
-				return
-			}
-			started := time.Now()
-			startPayload := mergePayload(map[string]any{
-				"model":       "local_fallback",
-				"system":      systemPrompt,
-				"input":       latest,
-				"input_chars": len(latest),
-			}, contextTracePayload(prepared.manifest))
-			if len(retrievedMemories) > 0 {
-				startPayload["retrieved_memories"] = retrievedMemoryPayload(retrievedMemories)
-			}
-			if len(retrievedChunks) > 0 {
-				startPayload["retrieved_chunks"] = retrievedChunkPayload(retrievedChunks)
-			}
-			span := recorder.LLMStart(ctx, runID, stepID, startPayload)
-			c.streamText(ctx, output, 45*time.Millisecond, events)
-			usage := estimateUsage(messagesToText(prepared.messages), output)
-			c.finishModelAttempt(callCtx, ref, started, time.Time{}, usage, "local", ctx.Err())
-			if err := settleBudgetedModelCall(callCtx, reservation, usage); err != nil {
-				errs <- err
-				return
-			}
-			recorder.LLMEnd(ctx, span, tokenPayload(map[string]any{
-				"model":        "local_fallback",
-				"output":       output,
-				"output_chars": len(output),
-			}, usage))
-			return
-		}
-
-		if err := c.streamOpenAIWithTools(ctx, systemPrompt, history, latest, catalog, events, recorder, runID, stepID, retrievedMemories, retrievedChunks); err != nil {
-			errs <- err
-		}
-	}()
-
-	return events, errs
-}
 
 func (c *Client) CompleteText(ctx context.Context, systemPrompt string, prompt string) (string, error) {
 	completion, err := c.CompleteTextDetailed(ctx, systemPrompt, prompt)

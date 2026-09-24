@@ -125,7 +125,7 @@ func TestTruncatedToolCallNeverExecutes(t *testing.T) {
 		return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","content":"partial thought","tool_calls":[{"id":"call-1","type":"function","function":{"name":"calculator","arguments":"{\"expression\":"}}]},"finish_reason":"length"}]}`), nil
 	})}
 	store := &recordingEventStore{}
-	events, errs := client.StreamAgentChatWithToolsTrace(context.Background(), "Use tools.", nil, "calculate 2+3", tool.DefaultCatalog(), eventpkg.NewRecorder(store), "run-1", "stage-1", nil, nil)
+	events, errs := streamToolLoopForTest(client, context.Background(), "Use tools.", nil, "calculate 2+3", tool.DefaultCatalog(), eventpkg.NewRecorder(store), "run-1", "stage-1", nil, nil)
 	for range events {
 	}
 	modelErr, ok := AsModelError(<-errs)

@@ -36,7 +36,7 @@ func TestSamplingProfilesReachAnswerAndToolRequests(t *testing.T) {
 	if _, _, _, err := client.streamMessages(context.Background(), []Message{{Role: "user", Content: "hello"}}, make(chan StreamEvent, 2)); err != nil {
 		t.Fatal(err)
 	}
-	events, errs := client.StreamAgentChatWithToolsTrace(context.Background(), "Use tools when needed.", nil, "hello", tool.DefaultCatalog(), nil, "", "", nil, nil)
+	events, errs := streamToolLoopForTest(client, context.Background(), "Use tools when needed.", nil, "hello", tool.DefaultCatalog(), nil, "", "", nil, nil)
 	for range events {
 	}
 	if err := <-errs; err != nil {

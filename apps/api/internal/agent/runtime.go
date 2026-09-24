@@ -42,6 +42,7 @@ type Runtime struct {
 	autonomousLimits      AutonomousLimits
 	runBudget             domain.RuntimeRunBudget
 	toolProgressConfig    progress.Config
+	toolExecutionOptions  tool.ExecutorOptions
 	toolProgressMu        sync.Mutex
 	toolProgressGuards    map[string]*progress.Guard
 	knowledgeRetriever    rag.Retriever
@@ -107,6 +108,7 @@ type RuntimeOptions struct {
 	Autonomous         AutonomousLimits
 	RunBudget          domain.RuntimeRunBudget
 	ToolProgressGuard  progress.Config
+	ToolExecution      tool.ExecutorOptions
 	KnowledgeRetriever rag.Retriever
 	CheckpointProvider checkpoint.Provider
 	LiveEvents         eventpkg.LivePublisher
@@ -160,6 +162,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		autonomousLimits:      normalizeAutonomousLimits(options.Autonomous),
 		runBudget:             options.RunBudget,
 		toolProgressConfig:    progressConfig,
+		toolExecutionOptions:  options.ToolExecution,
 		toolProgressGuards:    map[string]*progress.Guard{},
 		knowledgeRetriever:    knowledgeRetriever,
 		checkpoints:           checkpointProvider,

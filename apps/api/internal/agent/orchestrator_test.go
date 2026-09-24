@@ -392,20 +392,13 @@ func (c *blockingPreparedClient) CompletePreparedText(ctx context.Context, _ pro
 	return provider.TextCompletion{}, ctx.Err()
 }
 
-func (c *blockingPreparedClient) StreamAgentChatWithToolsTrace(ctx context.Context, _ string, _ []domain.Message, _ string, _ *tool.Catalog, _ *eventpkg.Recorder, _, _ string, _ []domain.RetrievedMemory, _ []domain.RetrievedDocumentChunk) (<-chan provider.StreamEvent, <-chan error) {
-	events := make(chan provider.StreamEvent)
-	errs := make(chan error, 1)
+func (c *blockingPreparedClient) StreamAnswer(ctx context.Context, _ provider.PreparedChat, _ provider.ChatStreamKind, _ provider.ChatTrace, _ chan<- provider.StreamEvent) (bool, error) {
 	select {
 	case c.started <- struct{}{}:
 	default:
 	}
-	go func() {
-		defer close(events)
-		defer close(errs)
-		<-ctx.Done()
-		errs <- ctx.Err()
-	}()
-	return events, errs
+	<-ctx.Done()
+	return false, ctx.Err()
 }
 
 func TestCancelRunStopsActiveWorkerStage(t *testing.T) {

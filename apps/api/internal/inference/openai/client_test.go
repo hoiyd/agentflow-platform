@@ -34,7 +34,7 @@ func TestLocalClientPublicFallbacks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new empty tool catalog: %v", err)
 	}
-	events, eventErrors := client.StreamAgentChatWithToolsTrace(
+	events, eventErrors := streamToolLoopForTest(client,
 		context.Background(), "You are AgentFlow's assistant. Use tools when they help.", nil, "tool-free", catalog,
 		nil, "", "", nil, nil,
 	)
@@ -135,32 +135,6 @@ func TestClientHelperContracts(t *testing.T) {
 	if normalized[0].ID != "call_1" || normalized[0].Type != "function" || normalized[0].Function.Arguments != "{}" {
 		t.Fatalf("normalize tool calls: %#v", normalized)
 	}
-	if summarizeToolResults(nil) != "Tool execution completed." || summarizeToolResults([]tool.ExecutionResult{{Tool: "calculator"}}) != "Tool execution completed." {
-		t.Fatal("unexpected tool result summary")
-	}
-	toolPayload := marshalResult(tool.ExecutionResult{Tool: "test", Result: map[string]any{"api_key": "sk-abcdefgh"}})
-	if strings.Contains(toolPayload, "abcdefgh") || !strings.Contains(toolPayload, "[REDACTED]") {
-		t.Fatalf("tool result credential leaked to model payload: %s", toolPayload)
-	}
-
-	events := make(chan StreamEvent, 8)
-	if err := emitText(context.Background(), "one two", events); err != nil {
-		t.Fatalf("emit text: %v", err)
-	}
-	close(events)
-	var emitted strings.Builder
-	for event := range events {
-		emitted.WriteString(event.Delta)
-	}
-	if emitted.String() != "one two" {
-		t.Fatalf("emitted text = %q", emitted.String())
-	}
-	canceled, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := emitText(canceled, "cancel me", make(chan StreamEvent)); err != context.Canceled {
-		t.Fatalf("expected canceled emit, got %v", err)
-	}
-
 	payload := retrievedMemoryPayload([]domain.RetrievedMemory{{
 		Memory:     domain.Memory{ID: "memory-1", Kind: "fact", Content: strings.Repeat("x", 1300), Metadata: map[string]any{"topic": "coverage"}, ConversationID: "conversation-1", RunID: "run-1"},
 		Similarity: 0.8, RecencyBoost: 0.1, Score: 0.9,

@@ -4,17 +4,16 @@ import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
-	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
 
 	"agentflow-platform/apps/api/internal/agent/turn"
-	"agentflow-platform/apps/api/internal/tool"
 )
 
 func TestIsolatedTurnContextExcludesConversationHistory(t *testing.T) {
@@ -189,12 +188,20 @@ func setOverflowModelSnapshot(t *testing.T, snapshot *domain.RuntimeSnapshot, cl
 	snapshot.ModelRouting = modelRouting
 }
 
-func (c *overflowRecoveryClient) StreamAgentChatWithToolsTrace(context.Context, string, []domain.Message, string, *tool.Catalog, *eventpkg.Recorder, string, string, []domain.RetrievedMemory, []domain.RetrievedDocumentChunk) (<-chan provider.StreamEvent, <-chan error) {
-	events := make(chan provider.StreamEvent)
-	errs := make(chan error)
-	close(events)
-	close(errs)
-	return events, errs
+func (c *overflowRecoveryClient) PrepareAgentChat(context.Context, provider.ChatRequest) (provider.PreparedChat, error) {
+	return provider.PreparedChat{}, errors.New("unexpected streaming turn")
+}
+
+func (c *overflowRecoveryClient) PrepareFollowup(context.Context, []provider.Message) (provider.PreparedChat, error) {
+	return provider.PreparedChat{}, errors.New("unexpected tool follow-up")
+}
+
+func (c *overflowRecoveryClient) SelectTools(context.Context, provider.PreparedChat, []map[string]any, provider.ChatTrace) (provider.ChatChoice, error) {
+	return provider.ChatChoice{}, errors.New("unexpected tool selection")
+}
+
+func (c *overflowRecoveryClient) StreamAnswer(context.Context, provider.PreparedChat, provider.ChatStreamKind, provider.ChatTrace, chan<- provider.StreamEvent) (bool, error) {
+	return false, errors.New("unexpected streamed answer")
 }
 
 func (c *overflowRecoveryClient) CompleteTextDetailed(context.Context, string, string) (provider.TextCompletion, error) {

@@ -1,16 +1,11 @@
 package openai
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
-	"agentflow-platform/apps/api/internal/redaction"
-	"agentflow-platform/apps/api/internal/tool"
 )
 
 type chatCompletionChunk struct {
@@ -104,25 +99,6 @@ func ensureCurrentInput(messages []Message, latest string) []Message {
 	})
 }
 
-func emitText(ctx context.Context, text string, events chan<- StreamEvent) error {
-	if strings.TrimSpace(text) == "" {
-		text = "I do not have a response yet."
-	}
-	parts := strings.SplitAfter(text, " ")
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case events <- StreamEvent{Type: "delta", Delta: part}:
-			time.Sleep(20 * time.Millisecond)
-		}
-	}
-	return nil
-}
-
 func normalizeToolCalls(toolCalls []ToolCall) []ToolCall {
 	normalized := make([]ToolCall, 0, len(toolCalls))
 	for index, call := range toolCalls {
@@ -138,24 +114,4 @@ func normalizeToolCalls(toolCalls []ToolCall) []ToolCall {
 		normalized = append(normalized, call)
 	}
 	return normalized
-}
-
-func marshalResult(result tool.ExecutionResult) string {
-	bytes, err := json.Marshal(result)
-	if err != nil {
-		message, _ := redaction.Text(err.Error())
-		return fmt.Sprintf(`{"tool":%q,"error":%q}`, result.Tool, message)
-	}
-	redacted, _, err := redaction.JSON(bytes)
-	if err != nil {
-		return fmt.Sprintf(`{"tool":%q,"error":"tool result redaction failed"}`, result.Tool)
-	}
-	return string(redacted)
-}
-
-func summarizeToolResults(results []tool.ExecutionResult) string {
-	if len(results) == 0 {
-		return "Tool execution completed."
-	}
-	return "Tool execution completed."
 }

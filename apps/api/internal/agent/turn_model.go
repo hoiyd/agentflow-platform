@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/agent/toolloop"
 	"agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
@@ -105,18 +106,15 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 }
 
 func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client provider.Client, emit func(turn.ModelEvent)) (turn.Result, error) {
-	events, errs := client.StreamAgentChatWithToolsTrace(
-		ctx,
-		request.Agent.SystemPrompt,
-		request.History,
-		request.Input,
-		request.Catalog,
-		m.runtime.trace,
-		request.RunID,
-		request.StepID,
-		request.Context.Memories,
-		request.Context.Chunks,
-	)
+	events, errs := toolloop.Stream(ctx, client, toolloop.Request{
+		SystemPrompt: request.Agent.SystemPrompt, History: request.History, Latest: request.Input,
+		Catalog: request.Catalog,
+		Trace: provider.ChatTrace{
+			Recorder: m.runtime.trace, RunID: request.RunID, StepID: request.StepID,
+			Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
+		},
+		ExecutorOptions: m.runtime.toolExecutionOptions,
+	})
 
 	var output strings.Builder
 	for events != nil || errs != nil {

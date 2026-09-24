@@ -60,6 +60,7 @@ apps/api/
     httpapi/        HTTP transport and route handlers
     agent/          run orchestration and execution modes
       turn/         shared Turn Engine
+      toolloop/     one bounded Tool batch and model follow-up per Turn
     inference/      model request and provider boundary
       provider/       provider-neutral contracts
       routing/        secret-free routes and deterministic selection
@@ -101,8 +102,8 @@ app
     |             |                    |
     |             |                    +--> memory, knowledge
     |             |
-    |             +--> internal/agent --> agent/turn
-    |                                      |
+    |             +--> internal/agent --> agent/turn --> agent/toolloop
+    |                                      |                 |
     |                                      +--> context, events, tool, inference
     |
     +--> store, recovery, concurrency, config
@@ -113,6 +114,14 @@ app
 `app` is the composition root. It creates every long-lived service and concrete adapter, applies runtime policies, injects a complete dependency set into the HTTP handler, owns the HTTP server, and closes background work before persistence.
 
 `internal` is Go's module-private visibility boundary, not a lower architectural layer. Keeping product implementation under `internal` prevents other modules from accidentally depending on unstable backend packages. Packages inside it should continue to expose the smallest interfaces required by their consumers.
+
+For streamed agent turns, `agent/toolloop` sequences Tool selection, guarded
+execution, result injection, and the final model response. `tool` owns the
+Executor and its safety policies. The provider adapter prepares model context,
+sends individual selection/stream requests, and records model attempts; it does
+not construct a Tool Executor. The loop remains one Tool batch, not an open-ended
+multi-round planner. Local evaluations use this same bounded loop without
+starting the full Agent Runtime.
 
 The three execution-facing areas are deliberately visible in the tree. `agent`
 owns orchestration and the Turn protocol, `tool` owns callable capabilities and

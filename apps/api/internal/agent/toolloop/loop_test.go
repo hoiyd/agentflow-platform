@@ -2,6 +2,7 @@ package toolloop
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/inference/provider"
@@ -11,7 +12,7 @@ import (
 type modelStub struct {
 	selected provider.ChatChoice
 	steps    []string
-	final   []provider.Message
+	final    []provider.Message
 }
 
 func (m *modelStub) HasAPIKey() bool { return true }
@@ -67,5 +68,44 @@ func TestToolLoopDirectAnswerSkipsExecutor(t *testing.T) {
 	}
 	if err := <-errs; err != nil || output != "done" || len(model.steps) != 2 {
 		t.Fatalf("direct answer: output=%q steps=%#v err=%v", output, model.steps, err)
+	}
+}
+
+func TestToolFailureIsReturnedToModel(t *testing.T) {
+	model := &modelStub{selected: provider.ChatChoice{ToolCalls: []provider.ToolCall{{
+		ID: "missing-1", Type: "function", Function: provider.FunctionCall{Name: "missing_tool", Arguments: "{}"},
+	}}}}
+	events, errs := Stream(context.Background(), model, Request{Latest: "try missing tool", Catalog: tool.DefaultCatalog()})
+	for range events {
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	if len(model.final) != 3 || model.final[2].Role != "tool" || model.final[2].ToolCallID != "missing-1" || !strings.Contains(model.final[2].Content, "error") {
+		t.Fatalf("Tool failure was not returned as a bounded model message: %#v", model.final)
+	}
+}
+
+func TestToolResultRedactionAndEmission(t *testing.T) {
+	payload := marshalResult(tool.ExecutionResult{Tool: "test", Result: map[string]any{"api_key": "sk-abcdefgh"}})
+	if strings.Contains(payload, "abcdefgh") || !strings.Contains(payload, "[REDACTED]") {
+		t.Fatalf("tool result credential leaked to model payload: %s", payload)
+	}
+	events := make(chan provider.StreamEvent, 8)
+	if err := emitText(context.Background(), "one two", events); err != nil {
+		t.Fatal(err)
+	}
+	close(events)
+	var output string
+	for event := range events {
+		output += event.Delta
+	}
+	if output != "one two" {
+		t.Fatalf("emitted text = %q", output)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := emitText(ctx, "cancel me", make(chan provider.StreamEvent)); err != context.Canceled {
+		t.Fatalf("expected canceled emit, got %v", err)
 	}
 }

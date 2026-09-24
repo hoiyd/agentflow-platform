@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow-platform/apps/api/internal/agent/toolloop"
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
@@ -15,6 +16,7 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
 	"agentflow-platform/apps/api/internal/tool"
@@ -209,7 +211,10 @@ func (f evaluationFixture) runSample(ctx context.Context, client *openai.Client,
 	ctx = budget.WithController(ctx, budget.NewTracker(fs, nil, run))
 	ctx = contextassembly.WithSession(ctx, contextassembly.Session{Config: f.assembly, CurrentInput: input})
 	started := time.Now()
-	events, errs := client.StreamAgentChatWithToolsTrace(ctx, systemPrompt, nil, input, active, f.recorder, run.ID, "evaluation", nil, nil)
+	events, errs := toolloop.Stream(ctx, client, toolloop.Request{
+		SystemPrompt: systemPrompt, Latest: input, Catalog: active,
+		Trace: provider.ChatTrace{Recorder: f.recorder, RunID: run.ID, StepID: "evaluation"},
+	})
 	var output strings.Builder
 	var executionErr error
 	// Drain both channels so provider goroutines finish before temporary storage
