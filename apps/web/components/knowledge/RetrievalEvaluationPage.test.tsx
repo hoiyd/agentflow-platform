@@ -20,6 +20,7 @@ it("runs a Golden Dataset against the current index from the dedicated page", as
   render(<RetrievalEvaluationPage />);
 
   expect(screen.getByRole("link", { name: "Back to Knowledge" }).getAttribute("href")).toBe("/workspace?view=knowledge");
+  expect(screen.getByRole("textbox", { name: "Golden dataset" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }));
 
   await waitFor(() => expect(runRAGEvaluation).toHaveBeenCalledTimes(1));

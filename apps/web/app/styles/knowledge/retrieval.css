@@ -1,5 +1,4 @@
-.knowledge-search,
-.rag-evaluation {
+.knowledge-search {
   border: 1px solid var(--border);
   background: var(--surface);
   padding: 18px;

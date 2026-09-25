@@ -1,13 +1,23 @@
+.retrieval-evaluation-page {
+  width: min(1080px, calc(100% - 64px));
+}
+
+.rag-evaluation {
+  gap: 12px;
+}
+
 .evaluation-controls {
   display: flex;
   align-items: end;
-  justify-content: flex-end;
   gap: 10px;
 }
 
-.evaluation-input {
-  display: grid;
-  gap: 6px;
+.evaluation-dataset-label {
+  margin-right: auto;
+  padding-bottom: 12px;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .evaluation-cases-input {

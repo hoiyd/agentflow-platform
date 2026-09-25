@@ -10,7 +10,7 @@ export default function RetrievalEvaluationPage() {
   const evaluation = useKnowledgeEvaluation();
 
   return (
-    <main className="evaluation-page">
+    <main className="evaluation-page retrieval-evaluation-page">
       <header className="evaluation-header">
         <Link className="back-link" href="/workspace?view=knowledge">
           <ArrowLeft aria-hidden="true" size={14} /> Back to Knowledge

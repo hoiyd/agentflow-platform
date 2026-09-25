@@ -115,8 +115,7 @@
   font-variation-settings: "wght" 640;
 }
 
-.knowledge-section-heading > span,
-.evaluation-input > span {
+.knowledge-section-heading > span {
   color: var(--muted);
   font-size: 12px;
 }
