@@ -9,7 +9,6 @@ const knowledgeAPI = vi.hoisted(() => ({
   deleteDocument: vi.fn(),
   getDocument: vi.fn(),
   listDocuments: vi.fn(),
-  runRAGEvaluation: vi.fn(),
   searchRAG: vi.fn(),
   uploadDocument: vi.fn()
 }));
@@ -67,23 +66,18 @@ it("ignores an older document refresh", async () => {
   expect(result.current.documents.documents.map((item) => item.id)).toEqual(["second"]);
 });
 
-it("invalidates in-flight search and evaluation when the shared threshold changes", async () => {
+it("invalidates an in-flight search when its threshold changes", async () => {
   const search = deferred<{ items: [] }>();
-  const evaluation = deferred<never>();
   knowledgeAPI.searchRAG.mockReturnValue(search.promise);
-  knowledgeAPI.runRAGEvaluation.mockReturnValue(evaluation.promise);
   const { result } = renderHook(() => useKnowledgeWorkbench());
 
   act(() => result.current.search.setQuery("query"));
-  act(() => { void result.current.search.searchKnowledge(); void result.current.evaluation.runEvaluation(); });
+  act(() => { void result.current.search.searchKnowledge(); });
   act(() => result.current.search.setMinSimilarity("0.5"));
   await act(async () => { search.resolve({ items: [] }); await search.promise; });
-  await act(async () => { evaluation.reject(new Error("old evaluation")); await evaluation.promise.catch(() => {}); });
 
   expect(result.current.search.hasSearched).toBe(false);
   expect(result.current.search.isSearching).toBe(false);
-  expect(result.current.evaluation.error).toBe("");
-  expect(result.current.evaluation.isRunningEvaluation).toBe(false);
 });
 
 function documentDetail(id: string): DocumentDetail {

@@ -6,6 +6,7 @@ export function KnowledgeEvaluation({ model }: { model: KnowledgeEvaluationModel
   return (
     <section className="rag-evaluation">
       <div className="evaluation-controls">
+        <label className="evaluation-dataset-label" htmlFor="evaluation-cases">Golden dataset</label>
         <label className="threshold-input">
           <span>Min similarity</span>
           <input
@@ -26,15 +27,14 @@ export function KnowledgeEvaluation({ model }: { model: KnowledgeEvaluationModel
           {model.isRunningEvaluation ? "Running..." : "Run evaluation"}
         </button>
       </div>
-      <label className="evaluation-input">
-        <span>Golden dataset</span>
-        <textarea
-          className="evaluation-cases-input"
-          onChange={(event) => model.setEvaluationCases(event.target.value)}
-          spellCheck={false}
-          value={model.evaluationCases}
-        />
-      </label>
+      <textarea
+        className="evaluation-cases-input"
+        id="evaluation-cases"
+        onChange={(event) => model.setEvaluationCases(event.target.value)}
+        spellCheck={false}
+        value={model.evaluationCases}
+      />
+      {model.error ? <div className="knowledge-error" role="alert">{model.error}</div> : null}
       <EvaluationResult result={model.evaluationResult} />
     </section>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useState } from "react";
 import { runRAGEvaluation, type RAGEvaluationCase, type RAGEvaluationRunResponse, type RAGGoldenDataset } from "../../lib/knowledge-api";
 import { createLatestRequestController } from "../../lib/latest-request";
 
@@ -23,7 +23,8 @@ const DEFAULT_RAG_EVAL_CASES = `{
   ]
 }`;
 
-export function useKnowledgeEvaluation(minSimilarity: string, setMinSimilarity: Dispatch<SetStateAction<string>>) {
+export function useKnowledgeEvaluation() {
+  const [minSimilarity, setMinSimilarityValue] = useState("0.15");
   const [evaluationCases, setEvaluationCasesValue] = useState(DEFAULT_RAG_EVAL_CASES);
   const [evaluationResult, setEvaluationResult] = useState<RAGEvaluationRunResponse | null>(null);
   const [isRunningEvaluation, setIsRunningEvaluation] = useState(false);
@@ -42,6 +43,11 @@ export function useKnowledgeEvaluation(minSimilarity: string, setMinSimilarity: 
   function setEvaluationCases(value: string) {
     invalidate();
     setEvaluationCasesValue(value);
+  }
+
+  function setMinSimilarity(value: string) {
+    invalidate();
+    setMinSimilarityValue(value);
   }
 
   async function runEvaluation() {

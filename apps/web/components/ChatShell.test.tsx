@@ -38,6 +38,14 @@ vi.mock("./chat/ChatDialogs", () => ({ ChatDialogs: () => null }));
 
 afterEach(cleanup);
 
+it("opens Knowledge when returning from retrieval evaluation", async () => {
+  setupAPI();
+  render(<ChatShell initialView="knowledge" />);
+
+  expect(await screen.findByRole("heading", { name: "Knowledge" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Evaluate index" })).toBeTruthy();
+});
+
 it("does not apply a previous conversation's stream events after navigation", async () => {
   setupAPI();
   let emit!: (event: { type: string; delta?: string }) => void;

@@ -53,9 +53,9 @@ go run ./cmd/eval rag --enforce > /tmp/rag-baseline.json
 go run ./cmd/eval rag --baseline /tmp/rag-baseline.json --enforce > /tmp/rag-candidate.json
 ```
 
-The same Dataset can be pasted into **Knowledge -> Retrieval evaluation** in the
-workbench after the corpus files have been indexed. The text area expects the
-Dataset object itself; the frontend wraps it in the API request.
+The same Dataset can be pasted into the dedicated **Retrieval evaluation** page
+(linked from Knowledge) after the corpus files have been indexed. The text area
+expects the Dataset object itself; the frontend wraps it in the API request.
 
 The CLI can also run this fixed corpus through a real semantic embedding profile.
 It already separates calibration and holdout cases and covers paraphrase,

@@ -30,6 +30,25 @@
   letter-spacing: 0;
 }
 
+.knowledge-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.knowledge-evaluation-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.knowledge-evaluation-link:hover {
+  color: var(--accent);
+}
+
 .knowledge-tabs {
   display: flex;
   align-items: flex-end;
@@ -96,8 +115,7 @@
   font-variation-settings: "wght" 640;
 }
 
-.knowledge-section-heading > span,
-.evaluation-input > span {
+.knowledge-section-heading > span {
   color: var(--muted);
   font-size: 12px;
 }

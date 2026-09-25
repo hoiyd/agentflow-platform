@@ -297,8 +297,10 @@ The offline report additionally computes MRR, binary-relevance NDCG,
 no-answer Precision/Recall, forbidden-source leak counts, latency, and a release
 gate. These report metrics do not change the online response contract.
 
-The workbench exposes this endpoint under **Knowledge -> Retrieval evaluation**
-and accepts either a Dataset object or a legacy case array. RAG-006 defines and
+The dedicated `/evaluations/retrieval` page is linked from
+Knowledge and accepts either a Dataset object or a legacy case array. It runs
+against the current indexed corpus; the offline CLI uses its canonical fixture
+for reproducible regression evidence. RAG-006 defines and
 validates the schema; the maintained v1 asset and coverage matrix are described
 in [RAG Golden Dataset v1](../evaluation/rag-golden-dataset.md). Dataset and corpus
 hashes, Git history, and archived CI reports provide the current version discipline.
