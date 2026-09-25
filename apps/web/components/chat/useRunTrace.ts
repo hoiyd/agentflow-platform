@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AgentRoutingRequirements } from "../../lib/api";
-import type { AutonomousProgress, CollaborationStepView } from "./CollaborationPanels";
+import type { AutonomousProgress } from "./AutonomousPanel";
+import type { CollaborationStepView } from "./CollaborationPanels";
 
 function emptyRoutingRequirements(): AgentRoutingRequirements {
   return {

@@ -89,6 +89,21 @@ it("identifies simulated model events in replay", () => {
   expect(screen.getByText("Offline simulation")).toBeTruthy();
 });
 
+it("keeps retrieval metadata and source content in event details", () => {
+  const event: RunReplayData["run_events"][number] = {
+    id: "retrieval-1", schema_version: 1, sequence: 1, run_id: "run-1",
+    type: "retrieval.completed", timestamp: "2026-09-10T00:00:00Z",
+    payload: {
+      fusion: { algorithm: "rrf", version: "v1", rank_constant: 60 },
+      retrieved_chunks: [{ source_id: "S1", document_title: "Architecture", content: "Relevant passage", score: 0.9 }]
+    }
+  };
+  render(<EventDetail event={event} />);
+  expect(screen.getByText("Fusion")).toBeTruthy();
+  expect(screen.getByText("Architecture")).toBeTruthy();
+  expect(screen.getByText("Relevant passage")).toBeTruthy();
+});
+
 it("keeps replay available when the episode report fails", async () => {
   getReplayPageData.mockResolvedValue({
     data: replayFixture(),
