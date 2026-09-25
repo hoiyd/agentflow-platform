@@ -7,7 +7,7 @@ import type { KnowledgeWorkbenchModel } from "./useKnowledgeWorkbench";
 afterEach(cleanup);
 
 describe("KnowledgePanel navigation", () => {
-  it("separates search, document management, and evaluation tasks", () => {
+  it("keeps search and documents in Knowledge and links to evaluation", () => {
     render(<KnowledgePanel model={modelFixture()} />);
 
     expect(screen.getByRole("textbox", { name: "Search indexed knowledge" })).toBeTruthy();
@@ -19,9 +19,8 @@ describe("KnowledgePanel navigation", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Paste text" }));
     expect(screen.getByRole("textbox", { name: "Document content" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Evaluation" }));
-    expect(screen.getByText("Golden dataset")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Run evaluation" })).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: "Evaluation" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Evaluate index" }).getAttribute("href")).toBe("/evaluations/retrieval");
   });
 });
 
@@ -42,11 +41,6 @@ function modelFixture() {
       results: [], searchEmbedding: null, searchFusion: null, searchReranker: null,
       searchRelevanceGate: null, searchSecurity: null, searchKnowledge: noop,
       setKnowledgeContextMaxTokens: noop, setMinSimilarity: noop, setQuery: noop
-    },
-    evaluation: {
-      evaluationCases: "[]", evaluationResult: null, isRunningEvaluation: false,
-      minSimilarity: "0.15", error: "", runEvaluation: noop, setEvaluationCases: noop,
-      setMinSimilarity: noop
     }
   } as unknown as KnowledgeWorkbenchModel;
 }

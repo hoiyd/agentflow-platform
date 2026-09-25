@@ -35,6 +35,7 @@ export function KnowledgeEvaluation({ model }: { model: KnowledgeEvaluationModel
           value={model.evaluationCases}
         />
       </label>
+      {model.error ? <div className="knowledge-error" role="alert">{model.error}</div> : null}
       <EvaluationResult result={model.evaluationResult} />
     </section>
   );

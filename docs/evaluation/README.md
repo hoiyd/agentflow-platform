@@ -8,6 +8,7 @@ comparisons across Runs or code revisions.
 | Evidence | Entry point | Scope |
 | --- | --- | --- |
 | Context, RAG, routing, and Tool quality | [`cmd/eval`](../../apps/api/cmd/eval/main.go), [offline evaluation](offline-evaluation.md) | Versioned datasets, explicit gates, and opt-in budgeted live checks. |
+| Current Knowledge index | `/evaluations/retrieval`, [RAG dataset](rag-golden-dataset.md) | On-demand Golden Dataset check against the indexed corpus and configured retrieval pipeline. |
 | RAG corpus and Tool tasks | [RAG dataset](rag-golden-dataset.md), [Tool tasks](tool-task-evaluations.md) | Reproducible cases and source-backed outcomes. |
 | Local model protocol and token counts | [llama.cpp compatibility](local-inference-compatibility.md), [tokenization calibration](tokenization-calibration.md) | Live target evidence; neither changes production routing or Context limits. |
 | Bounded concurrency | [Load and soak](load-soak-testing.md) | Controlled process-local load, not a model-capacity claim. |
@@ -20,7 +21,11 @@ Go evaluation runners and report envelopes live in
 [`scripts/evaluation`](../../scripts/evaluation), exposed through the Makefile.
 The production RAG evaluation endpoint remains with the
 [knowledge/retrieval owner](../../apps/api/internal/rag/evaluation.go), while
-its offline regression runner lives in `internal/evaluation/rageval`.
+its offline regression runner lives in `internal/evaluation/rageval`. The
+online endpoint and page remain available for current-index checks, but the
+low-frequency UI no longer occupies a Knowledge workbench tab. The offline
+runner uses a canonical fixture for repeatable regression evidence; its result
+is not a substitute for checking the current index.
 
 Offline fixture results, live-model measurements, load tests, and operational
 drills answer different questions. Keep their configuration and provenance

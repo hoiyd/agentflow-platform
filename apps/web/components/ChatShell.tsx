@@ -42,11 +42,12 @@ import { OperatorAttentionPanel } from "./attention/OperatorAttentionPanel";
 
 type ChatShellProps = {
   initialConversationId?: string;
+  initialView?: ChatView;
 };
 
 type ChatSidePanel = "trace" | "task_state" | "closed";
 
-export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
+export function ChatShell({ initialConversationId = "", initialView = "chat" }: ChatShellProps) {
   const {
     conversations, setConversations, activeId, setActiveId, activeConversation,
     messages, setMessages, input, setInput, error, setError,
@@ -65,7 +66,7 @@ export function ChatShell({ initialConversationId = "" }: ChatShellProps) {
   const [runState, setRunState] = useState<RunState | null>(null);
   const currentRunId = useRef(runState?.id);
   currentRunId.current = runState?.id;
-  const [view, setView] = useState<ChatView>("chat");
+  const [view, setView] = useState<ChatView>(initialView);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [apiConnectionStatus, setAPIConnectionStatus] = useState<APIConnectionStatus>("checking");
