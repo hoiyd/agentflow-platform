@@ -11,13 +11,12 @@ import { RunUsagePanel } from "./RunUsagePanel";
 import {
   EventDetail,
   Metric,
-  RetrievalOverview,
-  buildRetrievalSummary,
   eventDuration,
   formatDuration,
   formatTokenValue,
   stepDuration
 } from "./RunEventDetails";
+import { RetrievalOverview, buildRetrievalSummary } from "./RunRetrievalDetails";
 import { TaskStateChanges } from "./TaskStateChanges";
 import { RuntimeDiagnostics } from "./RuntimeDiagnostics";
 import { RecoverySummaryPanel, ToolEffectReconciliationPanel } from "./RecoveryActions";

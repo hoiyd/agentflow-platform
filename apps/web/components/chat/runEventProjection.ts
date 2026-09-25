@@ -1,10 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import type { ChatEvent, Message } from "../../lib/api";
+import { toAutonomousProgress, type AutonomousProgress } from "./AutonomousPanel";
 import {
-  toAutonomousProgress,
   upsertCollaborationStep,
-  type AutonomousProgress,
   type CollaborationStepView
 } from "./CollaborationPanels";
 

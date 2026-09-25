@@ -2,12 +2,11 @@ import type { RefObject } from "react";
 import { GitBranch, PanelRightOpen } from "lucide-react";
 
 import type { AgentInfo, AgentRoutingRequirements, ChatMode, Message, TaskState } from "../../lib/api";
+import { AutonomousPanel, type AutonomousProgress } from "./AutonomousPanel";
 import { CollaborationDag } from "./CollaborationDag";
 import {
-  AutonomousPanel,
   CollaborationPanel,
   collaborationRoles,
-  type AutonomousProgress,
   type CollaborationStepView
 } from "./CollaborationPanels";
 import { MessageCitations, renderMarkdown } from "./MarkdownContent";
