@@ -128,6 +128,7 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bbasic\s+[a-z0-9+/=]{8,}`),
 	regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{8,}\b`),
 	regexp.MustCompile(`\bgsk_[A-Za-z0-9_-]{8,}\b`),
+	regexp.MustCompile(`\btvly-[A-Za-z0-9_-]{8,}\b`),
 	regexp.MustCompile(`\b(?:ghp|github_pat)_[A-Za-z0-9_]{8,}\b`),
 	regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`),
 	regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{20,}\b`),

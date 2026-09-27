@@ -2,11 +2,13 @@ package toolloop
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/policy"
 )
 
 type modelStub struct {
@@ -107,5 +109,54 @@ func TestToolResultRedactionAndEmission(t *testing.T) {
 	cancel()
 	if err := emitText(ctx, "cancel me", make(chan provider.StreamEvent)); err != context.Canceled {
 		t.Fatalf("expected canceled emit, got %v", err)
+	}
+}
+
+func TestToolLoopGrantsOnlyTrustedCredentialScopes(t *testing.T) {
+	capability := policy.NormalizeCapability(policy.Capability{Scope: policy.Scope{
+		Network:     policy.NetworkScope{Mode: policy.NetworkExternal, Targets: []string{"api.tavily.com"}},
+		Credentials: []string{tool.TavilyCredentialScope},
+	}})
+	security := policy.Policy{Version: "test-v1", DefaultAction: policy.ActionDeny, Rules: []policy.Rule{{
+		ID: "web-search", Tool: "web_search", Action: policy.ActionAllow, Capability: capability,
+	}}}
+	calls := 0
+	catalog, err := tool.NewCatalogWithPolicy(security, tool.Binding{
+		Descriptor: tool.Descriptor{Name: "web_search", Parameters: tool.ObjectSchema(nil, nil), Security: capability},
+		Handler: func(context.Context, json.RawMessage) (any, error) {
+			calls++
+			return map[string]string{"status": "ok"}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	selection := provider.ChatChoice{ToolCalls: []provider.ToolCall{{
+		ID: "search-1", Type: "function", Function: provider.FunctionCall{Name: "web_search", Arguments: `{}`},
+	}}}
+	for _, test := range []struct {
+		name   string
+		scopes []string
+		want   string
+		calls  int
+	}{
+		{name: "missing", want: "credential_scope_unavailable", calls: 0},
+		{name: "granted", scopes: []string{tool.TavilyCredentialScope}, want: `"status":"ok"`, calls: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			model := &modelStub{selected: selection}
+			events, errs := Stream(context.Background(), model, Request{
+				Latest: "search", Catalog: catalog,
+				ExecutorOptions: tool.ExecutorOptions{CredentialScopes: test.scopes},
+			})
+			for range events {
+			}
+			if err := <-errs; err != nil {
+				t.Fatal(err)
+			}
+			if calls != test.calls || len(model.final) != 3 || !strings.Contains(model.final[2].Content, test.want) {
+				t.Fatalf("credential scope enforcement: calls=%d final=%#v", calls, model.final)
+			}
+		})
 	}
 }

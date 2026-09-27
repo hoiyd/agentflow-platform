@@ -93,6 +93,10 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
 	}
+	var toolCredentialScopes []string
+	if credential.FromEnvironment("TAVILY_API_KEY").Available() {
+		toolCredentialScopes = []string{tool.TavilyCredentialScope}
+	}
 	verifierRegistry := verification.NewRegistry(verification.Options{
 		WorkspaceRoot:           cfg.VerificationWorkspaceRoot,
 		AllowedCommands:         splitCSV(cfg.VerificationAllowedCommands),
@@ -134,6 +138,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		},
 		ToolExecution: tool.ExecutorOptions{
 			EffectJournal: appStore, ArtifactStore: appStore,
+			CredentialScopes:     toolCredentialScopes,
 			MaxBatchResultBytes:  cfg.ToolResultMaxBatchBytes,
 			MaxArtifactBytes:     cfg.ToolArtifactMaxBytes,
 			ArtifactPreviewBytes: cfg.ToolArtifactPreviewBytes,
