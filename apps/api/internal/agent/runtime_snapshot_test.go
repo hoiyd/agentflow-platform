@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/contextassembly"
+	"agentflow-platform/apps/api/internal/credential"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/openai"
@@ -166,6 +167,50 @@ func containsString(items []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestFrozenToolRequiresRuntimePrerequisitesOnResume(t *testing.T) {
+	t.Setenv("TEST_TAVILY_KEY", "test-only-credential")
+	client, err := tool.NewTavilyClient(credential.FromEnvironment("TEST_TAVILY_KEY"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready, err := tool.NewManager("", tool.WebSearchTool(client))
+	if err != nil {
+		t.Fatal(err)
+	}
+	unavailable, err := tool.NewManager("", tool.WebSearchTool(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixtureStore := fixturestore.New()
+	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), Tools: ready})
+	agent, err := fixtureStore.CreateAgent(domain.Agent{Name: "Research", Tools: []string{"web_search"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := fixtureStore.CreateConversation("search")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := runtime.PrepareChatRunWithContract(context.Background(), agent.ID, conversation.ID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsFrozenTool(prepared.Run.RuntimeSnapshot.Tools, "web_search") {
+		t.Fatal("ready web search was not frozen")
+	}
+	runtime.tools = unavailable
+	if _, err := runtime.restoreRuntime(prepared.Run); err == nil || !strings.Contains(err.Error(), "credential_unavailable") {
+		t.Fatalf("resume did not reject the missing credential: %v", err)
+	}
+	catalog, err := unavailable.Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tools := snapshotTools(catalog, agent.Tools); len(tools) != 0 {
+		t.Fatalf("new Run froze an unavailable optional tool: %#v", tools)
+	}
 }
 
 func containsFrozenTool(items []domain.RuntimeToolSnapshot, want string) bool {

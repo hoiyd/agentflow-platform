@@ -651,6 +651,9 @@ type ToolInfo struct {
 	Enabled     bool                   `json:"enabled"`
 	Name        string                 `json:"name"`
 	Parameters  map[string]interface{} `json:"parameters"`
+
+	// UnavailableReason Runtime prerequisite that prevents an enabled Tool from being offered to the model.
+	UnavailableReason *string `json:"unavailable_reason,omitempty"`
 }
 
 // UpdateConversationRequest defines model for UpdateConversationRequest.

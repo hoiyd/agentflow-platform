@@ -42,6 +42,10 @@ type webSearchOutput struct {
 }
 
 func WebSearchTool(client *TavilyClient) Binding {
+	unavailableReason := ""
+	if client == nil {
+		unavailableReason = "credential_unavailable"
+	}
 	return Binding{
 		Descriptor: Descriptor{
 			Name:        "web_search",
@@ -55,7 +59,8 @@ func WebSearchTool(client *TavilyClient) Binding {
 				"time_range":      map[string]any{"type": "string", "enum": []string{"day", "week", "month", "year"}, "description": "Optional publish/update recency filter."},
 			}, []string{"query"}),
 		},
-		Policy: ExecutionPolicy{Timeout: 12 * time.Second, MaxResultBytes: 12_000},
+		Policy:            ExecutionPolicy{Timeout: 12 * time.Second, MaxResultBytes: 12_000},
+		UnavailableReason: unavailableReason,
 		Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
 			var input webSearchInput
 			if err := json.Unmarshal(args, &input); err != nil {

@@ -40,10 +40,7 @@ func NewCatalogWithPolicy(securityPolicy policy.Policy, bindings ...Binding) (*C
 }
 
 func DefaultCatalog() *Catalog {
-	catalog, err := NewCatalogWithPolicy(policy.DefaultPolicy(),
-		CalculatorTool(),
-		CurrentTimeTool(),
-	)
+	catalog, err := BuildCatalog(DefaultConfig())
 	if err != nil {
 		panic(err)
 	}
@@ -121,6 +118,13 @@ func (c *Catalog) Resolve(name string) (Binding, bool) {
 	return binding, ok
 }
 
+// ResolveReady excludes disabled Bindings and Bindings missing runtime prerequisites.
+// Agent allowlists and per-call security policy are checked separately.
+func (c *Catalog) ResolveReady(name string) (Binding, bool) {
+	binding, ok := c.Resolve(name)
+	return binding, ok && binding.UnavailableReason == ""
+}
+
 func (c *Catalog) Installed(name string) (Binding, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -148,11 +152,13 @@ func (c *Catalog) List() []ToolInfo {
 		items = append(items, ToolInfo{
 			Name: descriptor.Name, Description: descriptor.Description,
 			Parameters: descriptor.Parameters, Enabled: c.enabled[name],
+			UnavailableReason: c.bindings[name].UnavailableReason,
 		})
 	}
 	return items
 }
 
+// EnabledNames lists model-visible Bindings, excluding missing runtime prerequisites.
 func (c *Catalog) EnabledNames() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -209,10 +215,10 @@ func (c *Catalog) Definitions() []map[string]any {
 	return definitions
 }
 
-func (c *Catalog) sortedNamesLocked(enabledOnly bool) []string {
+func (c *Catalog) sortedNamesLocked(readyOnly bool) []string {
 	names := make([]string, 0, len(c.bindings))
 	for name := range c.bindings {
-		if !enabledOnly || c.enabled[name] {
+		if !readyOnly || (c.enabled[name] && c.bindings[name].UnavailableReason == "") {
 			names = append(names, name)
 		}
 	}

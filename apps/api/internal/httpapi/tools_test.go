@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,9 @@ func TestToolHandlersListAndToggleTools(t *testing.T) {
 	var listed []toolpkg.ToolInfo
 	if err := json.Unmarshal(listRecorder.Body.Bytes(), &listed); err != nil || !toolEnabled(listed, "calculator") {
 		t.Fatalf("expected enabled calculator: items=%#v err=%v", listed, err)
+	}
+	if !strings.Contains(listRecorder.Body.String(), `"unavailable_reason":"credential_unavailable"`) {
+		t.Fatalf("missing credential status from Tool response: %s", listRecorder.Body.String())
 	}
 
 	disableRecorder := httptest.NewRecorder()

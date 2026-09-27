@@ -324,14 +324,22 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: st
         {tools.map((tool) => (
           <article className="tool-card" key={tool.name}>
             <div className="tool-card-header">
-              <div><h3>{tool.name}</h3></div>
+              <h3>{tool.name}</h3>
               <label className="tool-toggle">
                 <input type="checkbox" checked={tool.enabled} disabled={updatingTool === tool.name} onChange={() => onToggle(tool)} />
                 <span>{tool.enabled ? "Enabled" : "Disabled"}</span>
               </label>
             </div>
             <p>{tool.description}</p>
-            <pre>{JSON.stringify(tool.parameters, null, 2)}</pre>
+            {tool.enabled && tool.unavailable_reason ? (
+              <p className="tool-availability">
+                {tool.unavailable_reason === "credential_unavailable" ? "Credential unavailable" : "Unavailable"}
+              </p>
+            ) : null}
+            <details className="tool-card-schema">
+              <summary>Parameters</summary>
+              <pre>{JSON.stringify(tool.parameters, null, 2)}</pre>
+            </details>
           </article>
         ))}
       </div>

@@ -80,9 +80,9 @@ func TestToolSelectionSensorRejectsAdversarialCandidates(t *testing.T) {
 			}, wantCode: "required_evidence_missing",
 		},
 		{
-			name: "schema-valid semantic misuse", caseID: "unsupported-stock-price",
+			name: "schema-valid semantic misuse", caseID: "unsupported-local-file",
 			candidate: tooltest.SelectionCandidate{
-				Decision: "tool", Tool: "calculator", Arguments: json.RawMessage(`{"expression":"latest stock price"}`), Outcome: "success",
+				Decision: "tool", Tool: "calculator", Arguments: json.RawMessage(`{"expression":"contents of local file"}`), Outcome: "success",
 			}, wantCode: "unexpected_tool",
 		},
 	}

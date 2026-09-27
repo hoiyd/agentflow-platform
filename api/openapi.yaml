@@ -919,6 +919,9 @@ components:
           additionalProperties: true
         enabled:
           type: boolean
+        unavailable_reason:
+          type: string
+          description: Runtime prerequisite that prevents an enabled Tool from being offered to the model.
 
     Run:
       type: object

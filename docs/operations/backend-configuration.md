@@ -280,10 +280,20 @@ file, not an application persistence backend. See [Storage Boundary](../architec
 
 The backend loads enabled Tools and the operator-owned Tool Security Policy from
 `TOOL_CONFIG_PATH`, defaulting to `.data/tools.json`. If the file is missing,
-only `calculator` and `get_current_time` are enabled. The built-in `web_search`
-is installed but disabled; it needs `TAVILY_API_KEY`, explicit enablement, and
-an exact security-policy rule. New default configs include that rule, while
-existing custom policies are not silently widened.
+`calculator`, `get_current_time`, and `web_search` are enabled. Search also
+requires `TAVILY_API_KEY`, an Agent Tool allowlist entry, and an exact
+security-policy rule. New default configs include that rule; existing custom
+policies are not silently widened. Saved Tool settings and existing Agent
+allowlists keep their explicit choices; newly seeded `Field Researcher` includes
+`web_search`.
+
+Tool enablement and runtime readiness are separate. An enabled Tool without a
+required credential remains visible in Tool configuration with
+`unavailable_reason: credential_unavailable`, but is not offered to the model or
+frozen into a new Run. An Agent's Tool list is an allowlist, not a list of hard
+requirements; only explicit `required_tools` constraints can exclude a
+Multi-Agent candidate for a missing Tool. A frozen Tool that later loses a
+required runtime prerequisite blocks Resume with an explicit error.
 
 Oversized Tool results use the centralized Artifact boundary. The batch setting
 caps aggregate model-visible result content, the Artifact maximum caps one
@@ -294,7 +304,8 @@ stored on each Artifact. See [Tool Result Artifact Governance](../tools/tool-res
 {
   "enabled_tools": [
     "calculator",
-    "get_current_time"
+    "get_current_time",
+    "web_search"
   ]
 }
 ```

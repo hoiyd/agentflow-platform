@@ -66,7 +66,7 @@ func catalogForAgent(catalog *tool.Catalog, agent domain.Agent) (*tool.Catalog, 
 		if name == taskstate.UpdateToolName {
 			continue
 		}
-		if binding, ok := catalog.Resolve(name); ok {
+		if binding, ok := catalog.ResolveReady(name); ok {
 			bindings = append(bindings, binding)
 		}
 	}

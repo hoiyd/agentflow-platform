@@ -107,6 +107,31 @@ func TestEligibleWorkerAgentsAppliesTypedHardRequirements(t *testing.T) {
 	}
 }
 
+func TestOptionalAgentToolDoesNotBlockRoutingWhenDisabled(t *testing.T) {
+	cfg := tool.DefaultConfig()
+	cfg.EnabledTools = []string{"calculator", "get_current_time"}
+	catalog, err := tool.BuildCatalog(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agents := []domain.Agent{{ID: "research", Tools: []string{"web_search"}}}
+	eligible, evidence := eligibleWorkerAgents(agents, catalog, domain.AgentRoutingRequirements{})
+	if len(eligible) != 1 || !evidence[0].Eligible {
+		t.Fatalf("optional disabled tool excluded agent: eligible=%#v evidence=%#v", eligible, evidence)
+	}
+	if len(eligible[0].Tools) != 0 || len(evidence[0].Agent.Tools) != 1 {
+		t.Fatalf("router must see effective Tools without changing configured evidence: eligible=%#v evidence=%#v", eligible, evidence)
+	}
+	eligible, evidence = eligibleWorkerAgents(agents, catalog, domain.AgentRoutingRequirements{RequiredTools: []string{"web_search"}})
+	if len(eligible) != 0 || evidence[0].Eligible {
+		t.Fatalf("required disabled tool did not exclude agent: eligible=%#v evidence=%#v", eligible, evidence)
+	}
+	eligible, evidence = eligibleWorkerAgents(agents, catalog, domain.AgentRoutingRequirements{ProhibitedTools: []string{"web_search"}})
+	if len(eligible) != 1 || !evidence[0].Eligible {
+		t.Fatalf("disabled tool should not violate prohibition: eligible=%#v evidence=%#v", eligible, evidence)
+	}
+}
+
 func TestSelectionGateAbstainsOnAmbiguityAndLowConfidence(t *testing.T) {
 	agents := []domain.Agent{{ID: "first"}, {ID: "second"}}
 	tests := []struct {
@@ -222,7 +247,7 @@ func TestAgentSelectionReturnsTypedNoSuitableOutcome(t *testing.T) {
 	}
 }
 
-func TestEligibleWorkerAgentsRequiresStableIdentityAndFrozenTools(t *testing.T) {
+func TestEligibleWorkerAgentsRequiresStableIdentity(t *testing.T) {
 	agents := []domain.Agent{
 		{ID: "eligible", Tools: []string{"calculator"}},
 		{ID: "missing-tool", Tools: []string{"not_frozen"}},
@@ -231,14 +256,14 @@ func TestEligibleWorkerAgentsRequiresStableIdentityAndFrozenTools(t *testing.T) 
 		{ID: " "},
 	}
 	eligible, evidence := eligibleWorkerAgents(agents, tool.DefaultCatalog(), domain.AgentRoutingRequirements{})
-	if len(eligible) != 1 || eligible[0].ID != "eligible" {
+	if len(eligible) != 2 || eligible[0].ID != "eligible" || eligible[1].ID != "missing-tool" {
 		t.Fatalf("eligible agents = %#v", eligible)
 	}
 	joined := ""
 	for _, item := range evidence {
 		joined += strings.Join(item.ExclusionReasons, ",")
 	}
-	for _, reason := range []string{"tool_unavailable:not_frozen", "agent_id_duplicate", "agent_id_missing"} {
+	for _, reason := range []string{"agent_id_duplicate", "agent_id_missing"} {
 		if !strings.Contains(joined, reason) {
 			t.Fatalf("missing exclusion reason %q in %#v", reason, evidence)
 		}

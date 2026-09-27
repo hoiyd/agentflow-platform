@@ -22,6 +22,12 @@ func TestBuildCatalogRejectsUnknownConfiguredTool(t *testing.T) {
 	}
 }
 
+func TestBuildCatalogRejectsNonInjectableBuiltinOverride(t *testing.T) {
+	if _, err := BuildCatalog(DefaultConfig(), CalculatorTool()); err == nil {
+		t.Fatal("calculator override was accepted")
+	}
+}
+
 func TestBuildCatalogRejectsInvalidSecurityPolicy(t *testing.T) {
 	_, err := BuildCatalog(Config{
 		EnabledTools:   []string{"calculator"},

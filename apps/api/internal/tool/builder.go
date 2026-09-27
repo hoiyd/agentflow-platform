@@ -12,7 +12,18 @@ func BuildCatalog(config Config, extra ...Binding) (*Catalog, error) {
 	if securityPolicy.Version == "" && securityPolicy.DefaultAction == "" && len(securityPolicy.Rules) == 0 {
 		securityPolicy = policy.DefaultPolicy()
 	}
-	bindings := append([]Binding{CalculatorTool(), CurrentTimeTool()}, extra...)
+	builtins := builtinTools()
+	bindings := make([]Binding, 0, len(builtins)+len(extra))
+	provided := make(map[string]bool, len(extra))
+	for _, binding := range extra {
+		provided[binding.Descriptor.Name] = true
+	}
+	for _, builtin := range builtins {
+		if !builtin.runtimeInjectable || !provided[builtin.binding.Descriptor.Name] {
+			bindings = append(bindings, builtin.binding)
+		}
+	}
+	bindings = append(bindings, extra...)
 	catalog, err := NewCatalogWithPolicy(securityPolicy, bindings...)
 	if err != nil {
 		return nil, err
