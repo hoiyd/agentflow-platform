@@ -7,12 +7,13 @@ import (
 	"agentflow-platform/apps/api/internal/tool/policy"
 )
 
-func BuildCatalog(config Config) (*Catalog, error) {
+func BuildCatalog(config Config, extra ...Binding) (*Catalog, error) {
 	securityPolicy := config.SecurityPolicy
 	if securityPolicy.Version == "" && securityPolicy.DefaultAction == "" && len(securityPolicy.Rules) == 0 {
 		securityPolicy = policy.DefaultPolicy()
 	}
-	catalog, err := NewCatalogWithPolicy(securityPolicy, CalculatorTool(), CurrentTimeTool())
+	bindings := append([]Binding{CalculatorTool(), CurrentTimeTool()}, extra...)
+	catalog, err := NewCatalogWithPolicy(securityPolicy, bindings...)
 	if err != nil {
 		return nil, err
 	}

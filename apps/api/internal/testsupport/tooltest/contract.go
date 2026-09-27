@@ -64,7 +64,10 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 
 	tracer := &recordingTracer{}
 	journal := newMemoryEffectJournal()
-	executor := tool.NewExecutor(catalog, tool.ExecutorOptions{Tracer: tracer, EffectJournal: journal})
+	executor := tool.NewExecutor(catalog, tool.ExecutorOptions{
+		Tracer: tracer, EffectJournal: journal,
+		CredentialScopes: binding.Descriptor.Security.Scope.Credentials,
+	})
 	request := tool.ExecutionRequest{
 		CallID: "contract-valid", RunID: "run-contract", StageID: "stage-contract", TurnID: "turn-contract",
 		Tool: binding.Descriptor.Name, Arguments: spec.ValidArguments,
@@ -117,6 +120,8 @@ func NewAuthorizedCatalog(binding tool.Binding) (*tool.Catalog, tool.Binding, er
 	securityPolicy := policy.DefaultPolicy()
 	if binding.Descriptor.SideEffect.Mode == tool.SideEffectExternal && binding.Descriptor.Name != "update_task_state" {
 		binding.Descriptor.Security = testExternalWriteCapability()
+	}
+	if binding.Descriptor.Name != "update_task_state" {
 		securityPolicy.Rules = append(securityPolicy.Rules, policy.Rule{
 			ID: "contract-" + binding.Descriptor.Name, Tool: binding.Descriptor.Name,
 			Action: policy.ActionAllow, Capability: binding.Descriptor.Security,

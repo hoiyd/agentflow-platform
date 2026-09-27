@@ -280,7 +280,10 @@ file, not an application persistence backend. See [Storage Boundary](../architec
 
 The backend loads enabled Tools and the operator-owned Tool Security Policy from
 `TOOL_CONFIG_PATH`, defaulting to `.data/tools.json`. If the file is missing,
-all built-in Tools are enabled with the fail-closed default security policy.
+only `calculator` and `get_current_time` are enabled. The built-in `web_search`
+is installed but disabled; it needs `TAVILY_API_KEY`, explicit enablement, and
+an exact security-policy rule. New default configs include that rule, while
+existing custom policies are not silently widened.
 
 Oversized Tool results use the centralized Artifact boundary. The batch setting
 caps aggregate model-visible result content, the Artifact maximum caps one
