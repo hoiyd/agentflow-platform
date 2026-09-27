@@ -324,7 +324,7 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: st
         {tools.map((tool) => (
           <article className="tool-card" key={tool.name}>
             <div className="tool-card-header">
-              <div><h3>{tool.name}</h3></div>
+              <h3>{tool.name}</h3>
               <label className="tool-toggle">
                 <input type="checkbox" checked={tool.enabled} disabled={updatingTool === tool.name} onChange={() => onToggle(tool)} />
                 <span>{tool.enabled ? "Enabled" : "Disabled"}</span>
@@ -336,7 +336,10 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: st
                 {tool.unavailable_reason === "credential_unavailable" ? "Credential unavailable" : "Unavailable"}
               </p>
             ) : null}
-            <pre>{JSON.stringify(tool.parameters, null, 2)}</pre>
+            <details className="tool-card-schema">
+              <summary>Parameters</summary>
+              <pre>{JSON.stringify(tool.parameters, null, 2)}</pre>
+            </details>
           </article>
         ))}
       </div>
