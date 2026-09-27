@@ -69,6 +69,7 @@ func TestDefaultBindingsSatisfyContractHarness(t *testing.T) {
 			t.Fatalf("default Binding %q has no contract harness case", item.Name)
 		}
 		binding, _ := catalog.Installed(item.Name)
+		binding.UnavailableReason = ""
 		spec.Binding = binding
 		t.Run(item.Name, func(t *testing.T) { tooltest.RunBindingContract(t, spec) })
 		delete(specs, item.Name)

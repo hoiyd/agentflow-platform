@@ -80,8 +80,19 @@
       }
     },
     {
-      "id": "unsupported-stock-price",
-      "task": "Look up the latest stock price using only the available built-in tools.",
+      "id": "web-search-invalid-arguments",
+      "task": "Search the public web, but the candidate omitted the required query.",
+      "expected": {
+        "decision": "tool",
+        "tool": "web_search",
+        "arguments": {},
+        "outcome": "invalid_arguments",
+        "recovery_action": "correct_arguments"
+      }
+    },
+    {
+      "id": "unsupported-local-file",
+      "task": "Read a private local file using only the available built-in tools.",
       "expected": {
         "decision": "no_tool",
         "outcome": "no_tool"

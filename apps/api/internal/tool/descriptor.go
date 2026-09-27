@@ -78,19 +78,21 @@ type SideEffectReconciliation struct {
 }
 
 type Binding struct {
-	Descriptor     Descriptor
-	Handler        Handler
-	Policy         ExecutionPolicy
-	ResolveScope   ScopeResolver
-	Reconciliation SideEffectReconciliation
-	contract       *argumentContract
+	Descriptor        Descriptor
+	Handler           Handler
+	Policy            ExecutionPolicy
+	ResolveScope      ScopeResolver
+	Reconciliation    SideEffectReconciliation
+	UnavailableReason string
+	contract          *argumentContract
 }
 
 type ToolInfo struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
-	Enabled     bool           `json:"enabled"`
+	Name              string         `json:"name"`
+	Description       string         `json:"description"`
+	Parameters        map[string]any `json:"parameters"`
+	Enabled           bool           `json:"enabled"`
+	UnavailableReason string         `json:"unavailable_reason,omitempty"`
 }
 
 func ObjectSchema(properties map[string]any, required []string) map[string]any {

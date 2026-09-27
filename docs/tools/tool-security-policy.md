@@ -50,10 +50,16 @@ typed errors and redacted JSON. The endpoint and Bearer-header format follow
 the [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search).
 
 The built-in `web_search` Binding uses this client through the existing Catalog
-and Executor. It is disabled by default and must also appear in an Agent's Tool
-allowlist. New default Tool configs include a rule limited to the exact Tavily
-network target and `tavily_search` credential scope. Existing custom policies
+and Executor. It is enabled by default and must also appear in an Agent's Tool
+allowlist. Newly seeded `Field Researcher` Agents include it; existing Agents
+retain their saved allowlists and may need it enabled in Agent configuration.
+New default Tool configs include a rule limited to the exact Tavily network
+target and `tavily_search` credential scope. Existing custom policies
 must add the same rule explicitly; a missing grant is denied before egress.
+An enabled Binding with no client reports `credential_unavailable`; it remains
+listed for operators but is excluded from model definitions and new Run
+snapshots. Existing Runs with a frozen search Tool fail Resume explicitly if
+the credential is no longer available.
 
 The Binding accepts a bounded query, 1-5 results (default 3), and optional
 `include_domains` or `time_range` filters. It fixes Tavily search depth to
@@ -83,9 +89,9 @@ the following unless an exact operator-owned Tool rule grants them:
 
 The built-in `update_task_state` Tool has an explicit `allow_and_log` rule for
 its version-checked Conversation write. New default Tool configs also include
-a narrow `allow` rule for `web_search`, which remains disabled until selected
-in both platform enablement and an Agent allowlist. The task-state audit event must be persisted before
-the handler executes. Irreversible calls cannot use plain `allow`; they need at
+a narrow `allow` rule for `web_search`, which still requires a Tavily credential
+and an Agent allowlist entry. The task-state audit event must be persisted
+before the handler executes. Irreversible calls cannot use plain `allow`; they need at
 least explicit `allow_and_log` authorization. `ask` and `human_only` are
 reserved in the first version and return a typed `approval_required` result
 until a durable approval flow exists.

@@ -528,6 +528,8 @@ export interface components {
                 [key: string]: unknown;
             };
             enabled: boolean;
+            /** @description Runtime prerequisite that prevents an enabled Tool from being offered to the model. */
+            unavailable_reason?: string;
         };
         Run: {
             id: string;

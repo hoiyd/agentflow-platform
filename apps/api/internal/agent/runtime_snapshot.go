@@ -205,7 +205,7 @@ func snapshotTools(catalog *tool.Catalog, names []string) []domain.RuntimeToolSn
 			continue
 		}
 		seen[name] = true
-		binding, ok := catalog.Resolve(name)
+		binding, ok := catalog.ResolveReady(name)
 		if !ok {
 			continue
 		}
@@ -240,6 +240,9 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 		}
 		if !toolDefinitionMatches(installed, frozen) {
 			return restoredRuntime{}, fmt.Errorf("frozen tool %q no longer matches its captured definition", frozen.Name)
+		}
+		if installed.UnavailableReason != "" {
+			return restoredRuntime{}, fmt.Errorf("frozen tool %q is unavailable: %s", frozen.Name, installed.UnavailableReason)
 		}
 		restoredBindings = append(restoredBindings, installed)
 	}

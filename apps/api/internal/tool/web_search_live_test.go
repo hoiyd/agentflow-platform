@@ -24,7 +24,6 @@ func TestWebSearchLiveTavily(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := DefaultConfig()
-	config.EnabledTools = append(config.EnabledTools, "web_search")
 	path := filepath.Join(t.TempDir(), "tools.json")
 	if err := SaveConfig(path, config); err != nil {
 		t.Fatal(err)

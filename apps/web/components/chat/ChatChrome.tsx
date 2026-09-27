@@ -331,6 +331,11 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: st
               </label>
             </div>
             <p>{tool.description}</p>
+            {tool.enabled && tool.unavailable_reason ? (
+              <p className="tool-availability">
+                {tool.unavailable_reason === "credential_unavailable" ? "Credential unavailable" : "Unavailable"}
+              </p>
+            ) : null}
             <pre>{JSON.stringify(tool.parameters, null, 2)}</pre>
           </article>
         ))}

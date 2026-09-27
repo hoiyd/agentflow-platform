@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { Sidebar, type APIConnectionStatus } from "./ChatChrome";
+import { Sidebar, ToolsPanel, type APIConnectionStatus } from "./ChatChrome";
 
 afterEach(cleanup);
 
@@ -15,6 +15,18 @@ describe("Sidebar API status", () => {
 
     expect(screen.getByText(label)).toBeTruthy();
     expect(screen.getByText(detail)).toBeTruthy();
+  });
+});
+
+describe("ToolsPanel availability", () => {
+  it("distinguishes enabled search from missing credentials", () => {
+    render(<ToolsPanel error="" onToggle={vi.fn()} updatingTool="" tools={[{
+      name: "web_search", description: "Search the web", parameters: {}, enabled: true,
+      unavailable_reason: "credential_unavailable"
+    }]} />);
+
+    expect(screen.getByText("Credential unavailable")).toBeTruthy();
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
   });
 });
 

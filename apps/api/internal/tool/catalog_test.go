@@ -12,7 +12,7 @@ func TestDefaultCatalogDefinitions(t *testing.T) {
 	catalog := DefaultCatalog()
 	definitions := catalog.Definitions()
 	if len(definitions) != 2 {
-		t.Fatalf("expected 2 tool definitions, got %d", len(definitions))
+		t.Fatalf("expected 2 ready tool definitions, got %d", len(definitions))
 	}
 
 	names := map[string]bool{}

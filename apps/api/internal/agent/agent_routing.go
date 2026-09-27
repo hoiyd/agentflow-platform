@@ -144,24 +144,21 @@ func eligibleWorkerAgents(agents []domain.Agent, catalog *tool.Catalog, requirem
 		if id != "" && counts[id] > 1 {
 			result.ExclusionReasons = append(result.ExclusionReasons, "agent_id_duplicate")
 		}
-		for _, toolName := range agent.Tools {
-			toolName = strings.TrimSpace(toolName)
-			if toolName == "" {
-				continue
-			}
-			if catalog == nil {
-				result.ExclusionReasons = append(result.ExclusionReasons, "tool_catalog_unavailable")
-				break
-			}
-			if _, ok := catalog.Resolve(toolName); !ok {
-				result.ExclusionReasons = append(result.ExclusionReasons, "tool_unavailable:"+toolName)
-			}
-		}
 		applyRoutingRequirements(&result, requirements, catalog)
 		result.Eligible = len(result.ExclusionReasons) == 0
 		results = append(results, result)
 		if result.Eligible {
-			eligible = append(eligible, agent)
+			available := agent
+			available.Tools = nil
+			if catalog != nil {
+				for _, name := range agent.Tools {
+					name = strings.TrimSpace(name)
+					if _, ok := catalog.ResolveReady(name); ok {
+						available.Tools = append(available.Tools, name)
+					}
+				}
+			}
+			eligible = append(eligible, available)
 		}
 	}
 	return eligible, results
@@ -184,7 +181,7 @@ func applyRoutingRequirements(result *agentEligibility, requirements domain.Agen
 			result.ExclusionReasons = append(result.ExclusionReasons, "required_tool_catalog_unavailable")
 			continue
 		}
-		if _, ok := catalog.Resolve(name); !ok {
+		if _, ok := catalog.ResolveReady(name); !ok {
 			result.ExclusionReasons = append(result.ExclusionReasons, "required_tool_unavailable:"+name)
 			continue
 		}
@@ -196,9 +193,11 @@ func applyRoutingRequirements(result *agentEligibility, requirements domain.Agen
 		result.MatchedRequirements = append(result.MatchedRequirements, "required_tool:"+name)
 	}
 	for _, name := range requirements.ProhibitedTools {
-		if agentHasTool(result.Agent, name) {
-			result.ExclusionReasons = append(result.ExclusionReasons, "prohibited_tool:"+name)
-			continue
+		if catalog != nil && agentHasTool(result.Agent, name) {
+			if _, ready := catalog.ResolveReady(name); ready {
+				result.ExclusionReasons = append(result.ExclusionReasons, "prohibited_tool:"+name)
+				continue
+			}
 		}
 		matched++
 		result.MatchedRequirements = append(result.MatchedRequirements, "prohibited_tool_absent:"+name)
