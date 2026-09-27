@@ -13,10 +13,7 @@ import (
 )
 
 func TestDefaultBindingsSatisfyContractHarness(t *testing.T) {
-	catalog, err := tool.BuildCatalog(tool.DefaultConfig(), tool.WebSearchTool(nil))
-	if err != nil {
-		t.Fatal(err)
-	}
+	catalog := tool.DefaultCatalog()
 	specs := map[string]tooltest.BindingContract{
 		"calculator": {
 			ValidArguments: json.RawMessage(`{"expression":"2 + 2"}`),
@@ -46,22 +43,6 @@ func TestDefaultBindingsSatisfyContractHarness(t *testing.T) {
 			},
 			ValidateResult: validateCurrentTimeResult,
 		},
-		"web_search": {
-			ValidArguments: json.RawMessage(`{"query":"Go releases","max_results":1}`),
-			GoodResult: map[string]any{
-				"query": "Go releases", "trust_boundary": "untrusted_external_content", "truncated": false,
-				"results": []map[string]any{{"source_id": "W1", "title": "Go releases", "url": "https://go.dev/doc/devel/release", "snippet": "Release notes", "provider_rank": 1}},
-			},
-			InvalidCalls: []tooltest.InvalidCall{
-				{Name: "missing query", Arguments: json.RawMessage(`{}`), WantArgumentCode: "required"},
-				{Name: "too many results", Arguments: json.RawMessage(`{"query":"Go","max_results":6}`), WantArgumentCode: "maximum"},
-			},
-			BadResults: []tooltest.BadResult{
-				{Name: "missing results", Value: map[string]any{"query": "Go releases"}},
-				{Name: "missing source", Value: map[string]any{"results": []map[string]any{{"title": "Go releases"}}}},
-			},
-			ValidateResult: validateWebSearchResult,
-		},
 	}
 	for _, item := range catalog.List() {
 		spec, ok := specs[item.Name]
@@ -76,28 +57,6 @@ func TestDefaultBindingsSatisfyContractHarness(t *testing.T) {
 	if len(specs) != 0 {
 		t.Fatalf("contract cases reference non-default Bindings: %#v", specs)
 	}
-}
-
-func validateWebSearchResult(value any) error {
-	result, ok := value.(map[string]any)
-	if !ok || result["trust_boundary"] != "untrusted_external_content" {
-		return errors.New("result must mark web content as untrusted")
-	}
-	rows, ok := result["results"].([]map[string]any)
-	if !ok || len(rows) == 0 {
-		return errors.New("result requires sources")
-	}
-	for _, row := range rows {
-		for _, field := range []string{"source_id", "title", "url", "snippet"} {
-			if text, ok := row[field].(string); !ok || text == "" {
-				return fmt.Errorf("source requires %s", field)
-			}
-		}
-		if rank, ok := row["provider_rank"].(int); !ok || rank <= 0 {
-			return errors.New("source requires provider rank")
-		}
-	}
-	return nil
 }
 
 func validateCalculatorResult(value any) error {

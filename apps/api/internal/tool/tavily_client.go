@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -80,24 +79,11 @@ func (c *TavilyClient) Search(ctx context.Context, payload json.RawMessage) (jso
 		if errors.Is(err, errTavilyRedirect) {
 			return nil, executionError(ErrorSecurityScopeInvalid, "Tavily redirect blocked", nil)
 		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, executionError(ErrorExecutionTimeout, "Tavily request timed out", context.DeadlineExceeded)
-		}
-		if errors.Is(err, context.Canceled) {
-			return nil, executionError(ErrorExecutionCanceled, "Tavily request was canceled", context.Canceled)
-		}
 		return nil, executionError(ErrorExecutionFailed, "Tavily request failed", nil)
 	}
 	defer response.Body.Close()
-	status := fmt.Errorf("Tavily HTTP %d %s", response.StatusCode, http.StatusText(response.StatusCode))
-	if response.StatusCode == http.StatusTooManyRequests {
-		return nil, executionError(ErrorProviderRateLimited, "Tavily rate limit reached", status)
-	}
-	if response.StatusCode >= http.StatusInternalServerError {
-		return nil, executionError(ErrorProviderUnavailable, "Tavily service is unavailable", status)
-	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, executionError(ErrorExecutionFailed, "Tavily returned an unsuccessful status", status)
+		return nil, executionError(ErrorExecutionFailed, "Tavily returned an unsuccessful status", nil)
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, tavilyMaxResponseBytes+1))
 	if err != nil || len(body) > tavilyMaxResponseBytes {

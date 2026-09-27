@@ -117,7 +117,7 @@ func TestTavilyNeverReturnsCredentialInErrorsOrResults(t *testing.T) {
 		return &http.Response{StatusCode: 500, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(fakeTavilyKey))}, nil
 	})
 	_, err = client.Search(context.Background(), json.RawMessage(`{"query":"test"}`))
-	if !tavilyErrorCode(err, ErrorProviderUnavailable) || strings.Contains(err.Error(), fakeTavilyKey) {
+	if !tavilyErrorCode(err, ErrorExecutionFailed) || strings.Contains(err.Error(), fakeTavilyKey) {
 		t.Fatalf("upstream error leaked credential: %v", err)
 	}
 	client.http.Transport = tavilyRoundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -126,35 +126,6 @@ func TestTavilyNeverReturnsCredentialInErrorsOrResults(t *testing.T) {
 	response, err := client.Search(context.Background(), json.RawMessage(`{"query":"test"}`))
 	if err != nil || strings.Contains(string(response), fakeTavilyKey) || !strings.Contains(string(response), "[REDACTED]") {
 		t.Fatalf("upstream response leaked credential: response=%s err=%v", response, err)
-	}
-}
-
-func TestTavilyMapsProviderFailuresWithoutReturningProviderBody(t *testing.T) {
-	client := tavilyTestClient(t)
-	for _, test := range []struct {
-		status int
-		code   ErrorCode
-	}{
-		{status: http.StatusTooManyRequests, code: ErrorProviderRateLimited},
-		{status: http.StatusServiceUnavailable, code: ErrorProviderUnavailable},
-	} {
-		client.http.Transport = tavilyRoundTripFunc(func(*http.Request) (*http.Response, error) {
-			return &http.Response{StatusCode: test.status, Body: io.NopCloser(strings.NewReader("private provider body"))}, nil
-		})
-		_, err := client.Search(context.Background(), json.RawMessage(`{"query":"test"}`))
-		if !tavilyErrorCode(err, test.code) || strings.Contains(err.Error(), "private provider body") {
-			t.Fatalf("status %d: %v", test.status, err)
-		}
-		if cause := errors.Unwrap(err); cause == nil || !strings.Contains(cause.Error(), http.StatusText(test.status)) || strings.Contains(cause.Error(), "private provider body") {
-			t.Fatalf("status %d lost safe diagnostic: %v", test.status, cause)
-		}
-	}
-	client.http.Transport = tavilyRoundTripFunc(func(*http.Request) (*http.Response, error) {
-		return nil, context.DeadlineExceeded
-	})
-	_, err := client.Search(context.Background(), json.RawMessage(`{"query":"test"}`))
-	if !tavilyErrorCode(err, ErrorExecutionTimeout) {
-		t.Fatalf("timeout: %v", err)
 	}
 }
 

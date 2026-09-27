@@ -89,18 +89,13 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create model route catalog: %w", err)
 	}
-	var tavilyClient *tool.TavilyClient
-	var toolCredentialScopes []string
-	if tavilyKey := credential.FromEnvironment("TAVILY_API_KEY"); tavilyKey.Available() {
-		tavilyClient, err = tool.NewTavilyClient(tavilyKey)
-		if err != nil {
-			return applicationDependencies{}, fmt.Errorf("create Tavily client: %w", err)
-		}
-		toolCredentialScopes = []string{tool.TavilyCredentialScope}
-	}
-	toolManager, err := tool.NewManager(cfg.ToolConfigPath, tool.WebSearchTool(tavilyClient))
+	toolManager, err := tool.NewManager(cfg.ToolConfigPath)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
+	}
+	var toolCredentialScopes []string
+	if credential.FromEnvironment("TAVILY_API_KEY").Available() {
+		toolCredentialScopes = []string{tool.TavilyCredentialScope}
 	}
 	verifierRegistry := verification.NewRegistry(verification.Options{
 		WorkspaceRoot:           cfg.VerificationWorkspaceRoot,

@@ -49,25 +49,10 @@ rejects all redirects, bounds requests and responses, and returns only safe
 typed errors and redacted JSON. The endpoint and Bearer-header format follow
 the [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search).
 
-The built-in `web_search` Binding uses this client through the existing Catalog
-and Executor. It is disabled by default and must also appear in an Agent's Tool
-allowlist. New default Tool configs include a rule limited to the exact Tavily
-network target and `tavily_search` credential scope. Existing custom policies
-must add the same rule explicitly; a missing grant is denied before egress.
-
-The Binding accepts a bounded query, 1-5 results (default 3), and optional
-`include_domains` or `time_range` filters. It fixes Tavily search depth to
-`basic` and excludes provider-generated answers, raw content, and images.
-Results contain a per-call `[Wn]` source ID, title, HTTPS URL, bounded snippet,
-provider rank, and an `untrusted_external_content` marker; they are not
-verified citations. TOOL-024 will bind final-answer citations to the actual
-Tool Call and persisted source. No results, provider 429, timeout, 5xx, and
-malformed responses produce typed failures without returning provider error bodies.
-
-An opt-in live check exercises Manager -> Catalog -> Executor -> Tavily using
-`TAVILY_LIVE_TEST=1 go test ./internal/tool -run '^TestWebSearchLiveTavily$' -count=1 -v`
-from `apps/api` after loading `TAVILY_API_KEY` into the process environment.
-It is skipped by default and consumes one Tavily search credit when enabled.
+This is the boundary for TOOL-023; TOOL-022 alone does **not** register or
+enable `web_search`. Once its Binding is installed, it must declare the exact
+Tavily network target and `tavily_search` credential scope, with an explicit
+operator rule. A missing grant is denied before its handler makes a request.
 
 ## Default Policy
 
@@ -82,9 +67,7 @@ the following unless an exact operator-owned Tool rule grants them:
 - every `remote` Tool, even when the Agent selected it.
 
 The built-in `update_task_state` Tool has an explicit `allow_and_log` rule for
-its version-checked Conversation write. New default Tool configs also include
-a narrow `allow` rule for `web_search`, which remains disabled until selected
-in both platform enablement and an Agent allowlist. The task-state audit event must be persisted before
+its version-checked Conversation write. Its audit event must be persisted before
 the handler executes. Irreversible calls cannot use plain `allow`; they need at
 least explicit `allow_and_log` authorization. `ask` and `human_only` are
 reserved in the first version and return a typed `approval_required` result

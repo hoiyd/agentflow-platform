@@ -14,22 +14,21 @@ type Manager struct {
 	configPath string
 	config     Config
 	catalog    *Catalog
-	bindings   []Binding
 	modTime    time.Time
 }
 
-func NewManager(configPath string, bindings ...Binding) (*Manager, error) {
+func NewManager(configPath string) (*Manager, error) {
 	cfg, modTime, err := loadConfigWithModTime(configPath)
 	if err != nil {
 		return nil, err
 	}
-	catalog, err := BuildCatalog(cfg, bindings...)
+	catalog, err := BuildCatalog(cfg)
 	if err != nil {
 		return nil, err
 	}
 	return &Manager{
 		configPath: strings.TrimSpace(configPath), config: cfg,
-		catalog: catalog, bindings: append([]Binding(nil), bindings...), modTime: modTime,
+		catalog: catalog, modTime: modTime,
 	}, nil
 }
 
@@ -92,7 +91,7 @@ func (m *Manager) reloadIfChangedLocked() error {
 	if err != nil {
 		return err
 	}
-	catalog, err := BuildCatalog(cfg, m.bindings...)
+	catalog, err := BuildCatalog(cfg)
 	if err != nil {
 		return err
 	}

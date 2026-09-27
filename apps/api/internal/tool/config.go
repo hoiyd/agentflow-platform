@@ -18,14 +18,9 @@ type Config struct {
 }
 
 func DefaultConfig() Config {
-	securityPolicy := policy.DefaultPolicy()
-	securityPolicy.Rules = append(securityPolicy.Rules, policy.Rule{
-		ID: "builtin-web-search-read", Tool: "web_search", Action: policy.ActionAllow,
-		Capability: webSearchCapability(),
-	})
 	return Config{
 		EnabledTools:   []string{"calculator", "get_current_time"},
-		SecurityPolicy: securityPolicy,
+		SecurityPolicy: policy.DefaultPolicy(),
 	}
 }
 

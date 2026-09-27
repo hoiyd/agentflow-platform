@@ -31,11 +31,10 @@ runner. Each production Binding supplies:
 - a deterministic result sensor;
 - at least one known-bad result that the sensor must reject.
 
-The built-in Catalog contract test includes the credential-backed `web_search`
-Binding with a fake Handler and test-only credential scope. Adding a Binding
-to that test Catalog without a matching contract case fails the suite.
-Runtime-injected harness Bindings, such as `update_task_state`, own an
-equivalent contract test in their package.
+The default Catalog test is intentionally exhaustive: adding a new default
+Binding without a matching contract case fails the suite. Runtime-injected
+Bindings, currently `update_task_state`, own an equivalent contract test in
+their package.
 
 Result sensors validate useful domain evidence, not only JSON encoding. For
 example, the calculator sensor requires a finite numeric value, the time sensor
