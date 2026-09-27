@@ -66,6 +66,11 @@ func TestExecutorSecurityPolicyRequiresCredentialGrant(t *testing.T) {
 	if granted.Error != nil {
 		t.Fatalf("granted credential scope failed: %#v", granted.Error)
 	}
+	configured := NewExecutor(catalog, ExecutorOptions{CredentialScopes: []string{"search_api"}}).
+		Execute(context.Background(), ExecutionRequest{Tool: "search"})
+	if configured.Error != nil {
+		t.Fatalf("executor-owned credential grant failed: %#v", configured.Error)
+	}
 }
 
 func TestExecutorScopeResolverMayNarrowButNotWiden(t *testing.T) {

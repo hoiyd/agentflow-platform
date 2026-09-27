@@ -37,6 +37,23 @@ Event. A Tool that declares a credential scope must receive the same logical
 grant from a trusted resolver; a missing grant fails closed. There is no
 ambient-environment fallback.
 
+## Tavily Credential and Egress Boundary
+
+`TAVILY_API_KEY` is read from the process environment through `credential.Value`.
+When unset, the runtime does not grant the logical `tavily_search` scope. The
+value is never placed in Tool configuration, a Descriptor, a Snapshot, or a
+Tool execution request. The trusted `TavilyClient` accepts the credential only
+at construction and sends it in the Authorization header to the fixed
+`https://api.tavily.com/search` endpoint. It uses a direct HTTPS transport,
+rejects all redirects, bounds requests and responses, and returns only safe
+typed errors and redacted JSON. The endpoint and Bearer-header format follow
+the [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search).
+
+This is the boundary for TOOL-023; TOOL-022 alone does **not** register or
+enable `web_search`. Once its Binding is installed, it must declare the exact
+Tavily network target and `tavily_search` credential scope, with an explicit
+operator rule. A missing grant is denied before its handler makes a request.
+
 ## Default Policy
 
 The default policy permits bounded, local, side-effect-free computation and

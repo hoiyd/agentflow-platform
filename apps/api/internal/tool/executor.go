@@ -88,7 +88,9 @@ type ToolEffectJournal interface {
 }
 
 type ExecutorOptions struct {
-	DefaultPolicy        ExecutionPolicy
+	DefaultPolicy ExecutionPolicy
+	// CredentialScopes are trusted logical grants, never credential values.
+	CredentialScopes     []string `json:"-"`
 	Tracer               ExecutionTracer
 	MaxConcurrency       int
 	EffectJournal        ToolEffectJournal
@@ -104,6 +106,7 @@ type ExecutorOptions struct {
 type Executor struct {
 	catalog             *Catalog
 	defaultPolicy       ExecutionPolicy
+	credentialScopes    []string
 	tracer              ExecutionTracer
 	maxConcurrency      int
 	effectJournal       ToolEffectJournal
@@ -132,7 +135,8 @@ func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
 	securityPolicy := catalog.SecurityPolicy()
 	return &Executor{
 		catalog: catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency,
-		effectJournal: options.EffectJournal, maxBatchResultBytes: maxBatchResultBytes,
+		credentialScopes: append([]string(nil), options.CredentialScopes...),
+		effectJournal:    options.EffectJournal, maxBatchResultBytes: maxBatchResultBytes,
 		artifactGovernor: newResultArtifactGovernor(options),
 		securityPolicy:   securityPolicy,
 		progressGuard:    options.ProgressGuard,
@@ -147,6 +151,7 @@ func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) Execut
 
 func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finishTrace bool) (result ExecutionResult) {
 	started := time.Now()
+	request.CredentialScopes = append(append([]string(nil), request.CredentialScopes...), e.credentialScopes...)
 	request.Arguments = normalizeArguments(request.Arguments)
 	result = ExecutionResult{
 		CallID: request.CallID, Tool: request.Tool,
@@ -250,7 +255,12 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 			case errors.Is(executionCtx.Err(), context.DeadlineExceeded):
 				result.Error = executionError(ErrorExecutionTimeout, fmt.Sprintf("tool execution exceeded %s", policy.Timeout), executionCtx.Err())
 			default:
-				result.Error = executionError(ErrorExecutionFailed, completed.err.Error(), completed.err)
+				var typed *ExecutionError
+				if errors.As(completed.err, &typed) {
+					result.Error = executionError(typed.Code, typed.Message, typed.Cause)
+				} else {
+					result.Error = executionError(ErrorExecutionFailed, completed.err.Error(), completed.err)
+				}
 			}
 			e.markSideEffectUncertain(effectKey, result.ErrorMessage())
 			return result
