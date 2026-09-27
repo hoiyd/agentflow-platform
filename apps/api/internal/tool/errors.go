@@ -10,6 +10,9 @@ const (
 	ErrorExecutionFailed      ErrorCode = "execution_failed"
 	ErrorExecutionTimeout     ErrorCode = "execution_timeout"
 	ErrorExecutionCanceled    ErrorCode = "execution_canceled"
+	ErrorProviderRateLimited  ErrorCode = "provider_rate_limited"
+	ErrorProviderUnavailable  ErrorCode = "provider_unavailable"
+	ErrorNoResults            ErrorCode = "no_results"
 	ErrorResultEncoding       ErrorCode = "result_encoding_failed"
 	ErrorBudgetExceeded       ErrorCode = "budget_exceeded"
 	ErrorIdempotencyRequired  ErrorCode = "idempotency_required"
@@ -54,12 +57,18 @@ func (e *ExecutionError) FailureInfo() failure.Info {
 	switch e.Code {
 	case ErrorToolNotFound:
 		info.Category = failure.CategoryNotFound
+	case ErrorNoResults:
+		info.Category = failure.CategoryNotFound
 	case ErrorInvalidArgs:
 		info.Category = failure.CategoryValidation
 	case ErrorExecutionTimeout:
 		info.Category, info.Retryable = failure.CategoryTimeout, true
 	case ErrorExecutionCanceled:
 		info.Category = failure.CategoryCanceled
+	case ErrorProviderRateLimited:
+		info.Category, info.Retryable = failure.CategoryCapacity, true
+	case ErrorProviderUnavailable:
+		info.Category, info.Retryable = failure.CategoryAvailability, true
 	case ErrorBudgetExceeded:
 		info.Category = failure.CategoryCapacity
 	case ErrorIdempotencyRequired:

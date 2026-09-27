@@ -28,7 +28,7 @@ func TestLoadConfigPreservesDefaultSecurityPolicyWhenOmitted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(config.SecurityPolicy, policy.DefaultPolicy()) {
+	if !reflect.DeepEqual(config.SecurityPolicy, DefaultConfig().SecurityPolicy) {
 		t.Fatalf("default security policy was lost: %#v", config.SecurityPolicy)
 	}
 }
