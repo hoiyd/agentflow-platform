@@ -8,6 +8,7 @@ import (
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/apicontract"
+	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -210,6 +211,8 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 func resumeFailurePolicy(err error) (status int, failRun bool) {
 	if errors.Is(err, agentpkg.ErrRuntimeSnapshotResumeUnsupported) ||
 		errors.Is(err, agentpkg.ErrRuntimeSnapshotUnavailable) ||
+		errors.Is(err, checkpoint.ErrNeedsReconciliation) ||
+		errors.Is(err, checkpoint.ErrCheckpointStale) ||
 		errors.Is(err, agentpkg.ErrRuntimeExecutorUnsupported) {
 		return http.StatusConflict, false
 	}

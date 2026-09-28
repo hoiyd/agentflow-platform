@@ -2,17 +2,18 @@ package toolloop
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/tool"
@@ -31,7 +32,7 @@ type Request struct {
 	RunEvents       func() ([]domain.RunEvent, error)
 }
 
-// Stream owns the bounded selection -> Tool batch -> final answer protocol.
+// Stream owns the bounded model -> Tools -> observations -> model protocol.
 // Model adapters only prepare context and perform individual model calls.
 func Stream(ctx context.Context, model provider.ChatModel, request Request) (<-chan provider.StreamEvent, <-chan error) {
 	events := make(chan provider.StreamEvent)
@@ -55,6 +56,11 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 			return err
 		}
 	}
+	// An in-flight Turn keeps the same bindings, enabled set and security policy.
+	catalog, err := catalog.CloneWith()
+	if err != nil {
+		return err
+	}
 	definitions := catalog.Definitions()
 	prepared, err := model.PrepareAgentChat(ctx, provider.ChatRequest{
 		SystemPrompt: request.SystemPrompt, History: request.History, Latest: request.Latest,
@@ -67,41 +73,117 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		_, err = model.StreamAnswer(ctx, prepared, provider.ChatStreamAnswer, request.Trace, events)
 		return err
 	}
-	choice, err := model.SelectTools(ctx, prepared, definitions, request.Trace)
-	if err != nil {
-		return err
-	}
-	if len(choice.ToolCalls) == 0 {
-		return emitText(ctx, choice.Content, events)
-	}
-
-	rawMessages := append(prepared.RawMessages, provider.Message{
-		Role: "assistant", Content: choice.Content, ToolCalls: choice.ToolCalls,
-		Source: contextassembly.SourceToolCall, ReferenceID: "tool_calls",
-	})
 	options := request.ExecutorOptions
 	options.Tracer = &executionTracer{
 		delegate: eventpkg.NewToolExecutionTracer(request.Trace.Recorder, request.Trace.RunID, request.Trace.StepID),
 		events:   events,
 	}
-	options.ProgressGuard = progress.FromContext(ctx)
+	if guard := progress.FromContext(ctx); guard != nil {
+		options.ProgressGuard = guard
+	}
 	executor := tool.NewExecutor(catalog, options)
 	scope := eventpkg.ScopeFromContext(ctx)
-	requests := make([]tool.ExecutionRequest, 0, len(choice.ToolCalls))
-	for _, call := range choice.ToolCalls {
-		requests = append(requests, tool.ExecutionRequest{
-			CallID: call.ID, RunID: request.Trace.RunID, StageID: request.Trace.StepID, TurnID: scope.TurnID,
-			Tool: call.Function.Name, Arguments: json.RawMessage(call.Function.Arguments),
-		})
+	identity := budget.NewOperationID("call")
+	if request.Trace.RunID != "" && request.Trace.StepID != "" {
+		// Stage retry revisits logical slots; the Effect Journal also checks arguments.
+		sum := sha256.Sum256([]byte(request.Trace.RunID + "\x00" + request.Trace.StepID))
+		identity = fmt.Sprintf("call_%x", sum[:16])
 	}
-	results := executor.ExecuteBatch(ctx, requests)
-	if request.RunEvents != nil {
+	rawMessages := append([]provider.Message(nil), prepared.RawMessages...)
+	for round := 1; ; round++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		choice, err := model.SelectTools(ctx, prepared, definitions, request.Trace)
+		if err != nil {
+			return err
+		}
+		if len(choice.ToolCalls) == 0 {
+			return emitText(ctx, choice.Content, events)
+		}
+		if _, deadline := ctx.Deadline(); !deadline && !budget.HasModelCallLimit(ctx) {
+			return failure.New(failure.Definition{Message: "Tool loop requires a finite model-call/token budget or an active deadline", Info: failure.Info{Code: "tool_loop_unbounded", Source: "toolloop", Category: failure.CategoryValidation}})
+		}
+		if err := validateCalls(choice.ToolCalls); err != nil {
+			return err
+		}
+		calls := append([]provider.ToolCall(nil), choice.ToolCalls...)
+		requests := make([]tool.ExecutionRequest, len(calls))
+		for index := range calls {
+			calls[index].ID = fmt.Sprintf("%s_%d_%d", identity, round, index+1)
+			requests[index] = tool.ExecutionRequest{
+				CallID: calls[index].ID, RunID: request.Trace.RunID, StageID: request.Trace.StepID, TurnID: scope.TurnID,
+				Tool: calls[index].Function.Name, Arguments: json.RawMessage(calls[index].Function.Arguments),
+			}
+		}
+		rawMessages = append(rawMessages, provider.Message{
+			Role: "assistant", Content: choice.Content, ToolCalls: calls,
+			Source: contextassembly.SourceToolCall, ReferenceID: calls[0].ID,
+		})
+		results := executor.ExecuteBatch(ctx, requests)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		for _, result := range results {
+			if err := terminalToolError(catalog, result); err != nil {
+				return err
+			}
+		}
+		if err := labelWebSources(request.RunEvents, results); err != nil {
+			return err
+		}
+		for _, result := range results {
+			rawMessages = append(rawMessages, provider.Message{
+				Role: "tool", ToolCallID: result.CallID, Content: marshalResult(result),
+				Source: contextassembly.SourceToolResult, ReferenceID: result.CallID,
+			})
+		}
+		prepared, err = model.PrepareFollowup(ctx, rawMessages, definitions)
+		if err != nil {
+			return err
+		}
+	}
+}
+
+func validateCalls(calls []provider.ToolCall) error {
+	ids := make(map[string]bool, len(calls))
+	for _, call := range calls {
+		if ids[call.ID] || strings.TrimSpace(call.ID) == "" || call.Type != "function" || strings.TrimSpace(call.Function.Name) == "" || !json.Valid([]byte(call.Function.Arguments)) {
+			return failure.New(failure.Definition{Message: "model returned an invalid Tool-call batch", Info: failure.Info{Code: "tool_call_protocol_invalid", Source: "toolloop", Category: failure.CategoryValidation}})
+		}
+		ids[call.ID] = true
+	}
+	return nil
+}
+
+func terminalToolError(catalog *tool.Catalog, result tool.ExecutionResult) error {
+	if result.Error == nil {
+		return nil
+	}
+	if exceeded, ok := budget.AsExceeded(result.Error); ok {
+		return exceeded
+	}
+	blockedBeforeExecution := result.ProgressDecision != nil && result.ProgressDecision.Action == progress.ActionBlockCall
+	if binding, ok := catalog.Resolve(result.Tool); ok && binding.Descriptor.SideEffect.Mode == tool.SideEffectExternal && result.PolicyDecision != nil && result.PolicyDecision.Allowed && !blockedBeforeExecution {
+		// A handler can return a validation-style error after starting a write.
+		// Its journal uncertainty still takes precedence over model correction.
+		return result.Error
+	}
+	switch result.Error.Code {
+	case tool.ErrorBudgetExceeded, tool.ErrorNoProgress, tool.ErrorExecutionCanceled, tool.ErrorEffectReconciliation, tool.ErrorEffectJournal, tool.ErrorSecurityAudit, tool.ErrorIdempotencyRequired:
+		return result.Error
+	}
+	return nil
+}
+
+func labelWebSources(load func() ([]domain.RunEvent, error), results []tool.ExecutionResult) error {
+	if load != nil {
 		needsCatalog := false
 		for _, result := range results {
 			needsCatalog = needsCatalog || result.Tool == "web_search" && result.Error == nil && !result.Truncated
 		}
 		if needsCatalog {
-			runEvents, err := request.RunEvents()
+			runEvents, err := load()
 			if err != nil {
 				return fmt.Errorf("load web source catalog: %w", err)
 			}
@@ -121,52 +203,22 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 			}
 		}
 	}
-	for _, result := range results {
-		if exceeded, ok := budget.AsExceeded(result.Error); ok {
-			return exceeded
-		}
-		if result.Error != nil && result.Error.Code == tool.ErrorNoProgress {
-			return result.Error
-		}
-	}
-	for index, result := range results {
-		call := choice.ToolCalls[index]
-		rawMessages = append(rawMessages, provider.Message{
-			Role: "tool", ToolCallID: call.ID, Content: marshalResult(result),
-			Source: contextassembly.SourceToolResult, ReferenceID: call.ID,
-		})
-	}
-	prepared, err = model.PrepareFollowup(ctx, rawMessages)
-	if err != nil {
-		return err
-	}
-	emitted, err := model.StreamAnswer(ctx, prepared, provider.ChatStreamToolResult, request.Trace, events)
-	if err != nil {
-		return err
-	}
-	if !emitted {
-		log.Printf("chat_fallback mode=tool_summary_no_stream tool_count=%d", len(results))
-		return emitText(ctx, "Tool execution completed.", events)
-	}
 	return nil
 }
 
 func emitText(ctx context.Context, text string, events chan<- provider.StreamEvent) error {
 	if strings.TrimSpace(text) == "" {
-		text = "I do not have a response yet."
+		return failure.New(failure.Definition{Message: "model returned an empty final answer", Info: failure.Info{Code: "invalid_response", Source: "model", Category: failure.CategoryValidation}})
 	}
-	for _, part := range strings.SplitAfter(text, " ") {
-		if part == "" {
-			continue
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case events <- provider.StreamEvent{Type: "delta", Delta: part}:
-			time.Sleep(20 * time.Millisecond)
-		}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	return nil
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case events <- provider.StreamEvent{Type: "delta", Delta: text}:
+		return nil
+	}
 }
 
 func marshalResult(result tool.ExecutionResult) string {

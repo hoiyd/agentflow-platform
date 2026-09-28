@@ -234,6 +234,14 @@ Budget. See [Tool Progress Guard](../tools/tool-progress-guard.md).
 
 ## 7. Tool Execution Policy
 
+One Turn can contain multiple model/Tool/observation rounds. The loop has no
+separate round-count setting: Run Budget owns logical model calls, tokens, Tool
+calls and active runtime; Progress Guard owns repeated work. Before executing a
+Tool batch, the caller must have an enforced model-call/prompt-token/total-token
+limit or an enclosing context deadline. A Tool-only limit is insufficient
+because schema-invalid calls are not charged. A configured runtime value is not
+an active deadline by itself. See [Bounded Tool loop](../tools/bounded-tool-loop.md).
+
 | Control | Default | Scope |
 | --- | --- | --- |
 | Execution timeout | 30s | one Tool Call |

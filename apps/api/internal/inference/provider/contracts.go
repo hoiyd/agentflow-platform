@@ -81,16 +81,13 @@ type ChatTrace struct {
 
 type ChatStreamKind string
 
-const (
-	ChatStreamAnswer     ChatStreamKind = "answer_stream"
-	ChatStreamToolResult ChatStreamKind = "tool_result_response"
-)
+const ChatStreamAnswer ChatStreamKind = "answer_stream"
 
 // ChatModel exposes model calls; the caller owns Tool execution and follow-up sequencing.
 type ChatModel interface {
 	HasAPIKey() bool
 	PrepareAgentChat(context.Context, ChatRequest) (PreparedChat, error)
-	PrepareFollowup(context.Context, []Message) (PreparedChat, error)
+	PrepareFollowup(context.Context, []Message, []map[string]any) (PreparedChat, error)
 	SelectTools(context.Context, PreparedChat, []map[string]any, ChatTrace) (ChatChoice, error)
 	StreamAnswer(context.Context, PreparedChat, ChatStreamKind, ChatTrace, chan<- StreamEvent) (bool, error)
 }

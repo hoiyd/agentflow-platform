@@ -207,6 +207,18 @@ func (p *InternalProvider) RestoreRun(ctx context.Context, run domain.Run) (Rest
 				item = reconciled
 			}
 		}
+		if item.Status != domain.CheckpointCommitted {
+			for _, effect := range effectsByStage[item.StageID] {
+				if effect.Status == domain.ToolEffectCommitted {
+					// Resume abandons an unfinished Stage and creates a new ID.
+					// It cannot reuse that Stage's journal slots automatically.
+					_ = p.publish(ctx, run, item.StageID, domain.EventCheckpointStale, map[string]any{
+						"checkpoint_id": item.ID, "reason": "committed_effect_in_unfinished_stage",
+					})
+					return report, fmt.Errorf("%w: unfinished stage %s has a committed external effect; automatic stage recreation is unsafe", ErrNeedsReconciliation, item.StageID)
+				}
+			}
+		}
 		switch item.Status {
 		case domain.CheckpointCommitted:
 			report.CommittedStageIDs = append(report.CommittedStageIDs, item.StageID)

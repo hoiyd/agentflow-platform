@@ -23,7 +23,7 @@ func TestToolRoundTripCreatesManifestPerLogicalModelCall(t *testing.T) {
 		if attempts == 1 {
 			return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call-1","type":"function","function":{"name":"calculator","arguments":"{\"expression\":\"1 + 1\"}"}}]},"finish_reason":"tool_calls"}]}`), nil
 		}
-		return modelHTTPResponse(200, "data: {\"choices\":[{\"delta\":{\"content\":\"2\"}}]}\n\ndata: [DONE]\n\n"), nil
+		return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","content":"2"},"finish_reason":"stop"}]}`), nil
 	})}
 	store := &recordingEventStore{}
 	recorder := eventpkg.NewRecorder(store)
@@ -37,7 +37,7 @@ func TestToolRoundTripCreatesManifestPerLogicalModelCall(t *testing.T) {
 	})
 	history := []domain.Message{{ID: "message-1", Role: "user", Content: "calculate 1 + 1"}}
 
-	events, errs := streamToolLoopForTest(client,
+	events, errs := streamToolLoopForTest(t, client,
 		ctx, "You calculate.", history, "calculate 1 + 1", tool.DefaultCatalog(), recorder,
 		"run-1", "stage-1", nil, nil,
 	)
@@ -95,7 +95,7 @@ func TestToolFreeChatStreamsWithoutToolSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	events, errs := streamToolLoopForTest(client, ctx, "Reply briefly.", nil, "hello", catalog,
+	events, errs := streamToolLoopForTest(t, client, ctx, "Reply briefly.", nil, "hello", catalog,
 		eventpkg.NewRecorder(store), "run-1", "stage-1", nil, nil)
 	var output string
 	for item := range events {
@@ -117,7 +117,7 @@ func TestToolStreamReturnsDirectModelAnswer(t *testing.T) {
 		}`), nil
 	})}
 
-	events, errs := streamToolLoopForTest(client,
+	events, errs := streamToolLoopForTest(t, client,
 		context.Background(), "Answer directly when no tool is needed.", nil, "say hello", tool.DefaultCatalog(), nil, "run-1", "stage-1",
 		[]domain.RetrievedMemory{{Memory: domain.Memory{ID: "memory-1", Content: "Remember the preferred greeting."}, Score: 0.9}},
 		[]domain.RetrievedDocumentChunk{{Chunk: domain.DocumentChunk{ID: "chunk-1", Content: "A grounded greeting."}, Score: 0.8}},
@@ -144,7 +144,7 @@ func TestToolStreamReturnsTypedUnsupportedCapability(t *testing.T) {
 		return modelHTTPResponse(400, `{"error":{"message":"tool_choice is not supported","code":"invalid_request_error"}}`), nil
 	})}
 
-	events, errs := streamToolLoopForTest(client,
+	events, errs := streamToolLoopForTest(t, client,
 		context.Background(), "Use the calculator when needed.", nil, "calculate 2 + 3", tool.DefaultCatalog(), nil, "", "", nil, nil)
 
 	for range events {
@@ -166,7 +166,7 @@ func TestToolStreamReturnsTerminalSelectionError(t *testing.T) {
 		return modelHTTPResponse(401, `{"error":{"message":"invalid API key","code":"invalid_api_key"}}`), nil
 	})}
 
-	events, errs := streamToolLoopForTest(client,
+	events, errs := streamToolLoopForTest(t, client,
 		context.Background(), "Use tools when needed.", nil, "calculate 2 + 3", tool.DefaultCatalog(), nil, "", "", nil, nil)
 
 	for range events {
@@ -177,7 +177,7 @@ func TestToolStreamReturnsTerminalSelectionError(t *testing.T) {
 	}
 }
 
-func TestToolStreamReturnsFinalStreamError(t *testing.T) {
+func TestToolLoopReturnsFollowupModelError(t *testing.T) {
 	client := retryTestClient()
 	attempts := 0
 	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
@@ -192,7 +192,7 @@ func TestToolStreamReturnsFinalStreamError(t *testing.T) {
 		return modelHTTPResponse(401, `{"error":{"message":"invalid API key","code":"invalid_api_key"}}`), nil
 	})}
 
-	events, errs := streamToolLoopForTest(client,
+	events, errs := streamToolLoopForTest(t, client,
 		context.Background(), "Use the calculator when needed.", nil, "calculate 2 + 3", tool.DefaultCatalog(), nil, "", "", nil, nil)
 
 	for range events {

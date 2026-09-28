@@ -106,8 +106,12 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 }
 
 func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client provider.Client, emit func(turn.ModelEvent)) (turn.Result, error) {
+	systemPrompt := request.SystemPrompt
+	if systemPrompt == "" {
+		systemPrompt = request.Agent.SystemPrompt
+	}
 	events, errs := toolloop.Stream(ctx, client, toolloop.Request{
-		SystemPrompt: request.Agent.SystemPrompt, History: request.History, Latest: request.Input,
+		SystemPrompt: systemPrompt, History: request.History, Latest: request.Input,
 		Catalog: request.Catalog,
 		Trace: provider.ChatTrace{
 			Recorder: m.runtime.trace, RunID: request.RunID, StepID: request.StepID,

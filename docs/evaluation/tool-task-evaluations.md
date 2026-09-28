@@ -37,9 +37,11 @@ call order is required. `completed` and `verified` are separate fields.
 The runner calls the shared `agent/toolloop` path with the production
 OpenAI-compatible client, Context Assembler, Tool Executor, recorder and Usage
 Ledger. It does not run full Chat/Multi/Loop orchestration, seed Memory, or
-bypass Tool validation. The loop supports one Tool-selection batch followed by
-the answer; these tasks fit that protocol.
-This is not an evaluation of multi-round search/read planning.
+bypass Tool validation. The loop supports bounded repeated Tool calls with the
+same definitions on every request. Existing exact-ID tasks can still complete
+with one batch; they do not by themselves measure multi-round planning quality.
+The [Tool-loop protocol fixtures](../tools/bounded-tool-loop.md) separately cover
+dependent calls, argument correction and subsequent Artifact reads.
 
 ## Offline Checks
 

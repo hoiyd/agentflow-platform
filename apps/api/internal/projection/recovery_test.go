@@ -41,6 +41,38 @@ func TestBuildRecoverySummaryBlocksResumeForUncertainToolEffect(t *testing.T) {
 	assertRecoveryAction(t, summary.Actions, "resume_run", false, "Resolve uncertain tool effects before resuming")
 }
 
+func TestBuildRecoverySummaryExplainsCommittedEffectInUnfinishedStage(t *testing.T) {
+	for _, status := range []domain.StageCheckpointStatus{domain.CheckpointExecuting, domain.CheckpointNeedsReconciliation, domain.CheckpointCommitted} {
+		t.Run(string(status), func(t *testing.T) {
+			replay := domain.RunReplay{
+				Run:              domain.Run{ID: "run-1", Status: domain.RunFailedRecoverable},
+				StageCheckpoints: []domain.StageCheckpoint{{StageID: "stage-1", Status: status}},
+				ToolEffects:      []domain.ToolEffectSummary{{StageID: "stage-1", IdempotencyKey: "write-1", ToolName: "writer", Status: domain.ToolEffectCommitted}},
+			}
+			summary := BuildRecoverySummary(replay)
+			if status == domain.CheckpointCommitted {
+				assertRecoveryAction(t, summary.Actions, "resume_run", true, "")
+				return
+			}
+			if summary.Title != "Unfinished stage has a committed effect" || summary.Reason != domain.RecoveryRunRecoverable {
+				t.Fatalf("committed effect mislabeled: %#v", summary)
+			}
+			assertRecoveryAction(t, summary.Actions, "resume_run", false, "Review the unfinished stage and its committed external effects before resuming")
+			if hasRecoveryAction(summary.Actions, "reconcile_tool_effect") {
+				t.Fatal("a confirmed write must not offer uncertain-effect reconciliation")
+			}
+			if len(summary.Evidence) != 1 || summary.Evidence[0].Status != string(domain.ToolEffectCommitted) {
+				t.Fatalf("missing committed effect evidence: %#v", summary.Evidence)
+			}
+			// A durable terminal event may precede the checkpoint's commit write.
+			replay.RunEvents = []domain.RunEvent{{StageID: "stage-1", Sequence: 1, Type: domain.EventStageCompleted}}
+			if status == domain.CheckpointExecuting {
+				assertRecoveryAction(t, BuildRecoverySummary(replay).Actions, "resume_run", true, "")
+			}
+		})
+	}
+}
+
 func TestBuildRecoverySummaryExplainsVerificationTaskAndTerminalStates(t *testing.T) {
 	tests := []struct {
 		name   string

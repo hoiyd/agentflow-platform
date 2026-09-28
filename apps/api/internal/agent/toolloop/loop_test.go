@@ -2,9 +2,12 @@ package toolloop
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/provider"
@@ -27,13 +30,23 @@ func (m *modelStub) PrepareAgentChat(_ context.Context, request provider.ChatReq
 
 func (m *modelStub) SelectTools(_ context.Context, _ provider.PreparedChat, _ []map[string]any, _ provider.ChatTrace) (provider.ChatChoice, error) {
 	m.steps = append(m.steps, "select")
+	if m.final != nil {
+		return provider.ChatChoice{Content: "2"}, nil
+	}
 	return m.selected, nil
 }
 
-func (m *modelStub) PrepareFollowup(_ context.Context, messages []provider.Message) (provider.PreparedChat, error) {
+func (m *modelStub) PrepareFollowup(_ context.Context, messages []provider.Message, definitions []map[string]any) (provider.PreparedChat, error) {
 	m.steps = append(m.steps, "followup")
 	m.final = append([]provider.Message(nil), messages...)
 	return provider.PreparedChat{RawMessages: messages}, nil
+}
+
+func boundedContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	t.Cleanup(cancel)
+	return ctx
 }
 
 func (m *modelStub) StreamAnswer(_ context.Context, _ provider.PreparedChat, kind provider.ChatStreamKind, _ provider.ChatTrace, events chan<- provider.StreamEvent) (bool, error) {
@@ -42,9 +55,9 @@ func (m *modelStub) StreamAnswer(_ context.Context, _ provider.PreparedChat, kin
 	return true, nil
 }
 
-func TestToolLoopOwnsOneToolBatchAndFollowup(t *testing.T) {
+func TestToolLoopOwnsToolBatchAndNextDecision(t *testing.T) {
 	model := &modelStub{selected: provider.ChatChoice{ToolCalls: []provider.ToolCall{{ID: "call-1", Type: "function", Function: provider.FunctionCall{Name: "calculator", Arguments: `{"expression":"1 + 1"}`}}}}}
-	events, errs := Stream(context.Background(), model, Request{Latest: "calculate 1 + 1", Catalog: tool.DefaultCatalog()})
+	events, errs := Stream(boundedContext(t), model, Request{Latest: "calculate 1 + 1", Catalog: tool.DefaultCatalog()})
 	var output string
 	for event := range events {
 		if event.Type == "delta" {
@@ -54,10 +67,10 @@ func TestToolLoopOwnsOneToolBatchAndFollowup(t *testing.T) {
 	if err := <-errs; err != nil {
 		t.Fatal(err)
 	}
-	if output != "2" || len(model.final) != 3 || model.final[1].Role != "assistant" || model.final[2].Role != "tool" || model.final[2].ToolCallID != "call-1" {
+	if output != "2" || len(model.final) != 3 || model.final[1].Role != "assistant" || model.final[2].Role != "tool" || model.final[2].ToolCallID != model.final[1].ToolCalls[0].ID {
 		t.Fatalf("tool exchange was not returned to the model: output=%q messages=%#v", output, model.final)
 	}
-	if len(model.steps) != 4 || model.steps[0] != "prepare" || model.steps[1] != "select" || model.steps[2] != "followup" || model.steps[3] != string(provider.ChatStreamToolResult) {
+	if len(model.steps) != 4 || model.steps[0] != "prepare" || model.steps[1] != "select" || model.steps[2] != "followup" || model.steps[3] != "select" {
 		t.Fatalf("unexpected tool loop order: %#v", model.steps)
 	}
 }
@@ -78,13 +91,13 @@ func TestToolFailureIsReturnedToModel(t *testing.T) {
 	model := &modelStub{selected: provider.ChatChoice{ToolCalls: []provider.ToolCall{{
 		ID: "missing-1", Type: "function", Function: provider.FunctionCall{Name: "missing_tool", Arguments: "{}"},
 	}}}}
-	events, errs := Stream(context.Background(), model, Request{Latest: "try missing tool", Catalog: tool.DefaultCatalog()})
+	events, errs := Stream(boundedContext(t), model, Request{Latest: "try missing tool", Catalog: tool.DefaultCatalog()})
 	for range events {
 	}
 	if err := <-errs; err != nil {
 		t.Fatal(err)
 	}
-	if len(model.final) != 3 || model.final[2].Role != "tool" || model.final[2].ToolCallID != "missing-1" || !strings.Contains(model.final[2].Content, "error") {
+	if len(model.final) != 3 || model.final[2].Role != "tool" || model.final[2].ToolCallID != model.final[1].ToolCalls[0].ID || !strings.Contains(model.final[2].Content, "error") {
 		t.Fatalf("Tool failure was not returned as a bounded model message: %#v", model.final)
 	}
 }
@@ -146,7 +159,7 @@ func TestToolLoopGrantsOnlyTrustedCredentialScopes(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			model := &modelStub{selected: selection}
-			events, errs := Stream(context.Background(), model, Request{
+			events, errs := Stream(boundedContext(t), model, Request{
 				Latest: "search", Catalog: catalog,
 				ExecutorOptions: tool.ExecutorOptions{CredentialScopes: test.scopes},
 			})
@@ -177,11 +190,13 @@ func TestToolLoopRelabelsWebSourcesBeforeModelFollowup(t *testing.T) {
 	model := &modelStub{selected: provider.ChatChoice{ToolCalls: []provider.ToolCall{{
 		ID: "current-call", Type: "function", Function: provider.FunctionCall{Name: "web_search", Arguments: `{}`},
 	}}}}
-	events, errs := Stream(context.Background(), model, Request{
-		Latest: "search", Catalog: catalog, RunEvents: func() ([]domain.RunEvent, error) {
+	sum := sha256.Sum256([]byte("run-1\x00stage-1"))
+	callID := fmt.Sprintf("call_%x_1_1", sum[:16])
+	events, errs := Stream(boundedContext(t), model, Request{
+		Latest: "search", Catalog: catalog, Trace: provider.ChatTrace{RunID: "run-1", StepID: "stage-1"}, RunEvents: func() ([]domain.RunEvent, error) {
 			return []domain.RunEvent{
 				{ID: "prior-event", RunID: "run-1", Sequence: 1, Type: domain.EventToolCompleted, Payload: map[string]any{"tool_name": "web_search", "tool_call_id": "prior-call", "result": map[string]any{"results": []any{map[string]any{"title": "Prior", "url": "https://example.com/prior"}}}}},
-				{ID: "current-event", RunID: "run-1", Sequence: 2, Type: domain.EventToolCompleted, Payload: map[string]any{"tool_name": "web_search", "tool_call_id": "current-call", "result": map[string]any{"results": []any{map[string]any{"title": "Current", "url": "https://example.org/current"}}}}},
+				{ID: "current-event", RunID: "run-1", Sequence: 2, Type: domain.EventToolCompleted, Payload: map[string]any{"tool_name": "web_search", "tool_call_id": callID, "result": map[string]any{"results": []any{map[string]any{"title": "Current", "url": "https://example.org/current"}}}}},
 			}, nil
 		},
 	})

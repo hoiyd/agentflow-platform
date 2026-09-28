@@ -77,8 +77,15 @@ detectable state; Resume never assumes an uncertain Stage committed.
 Resume recalculates the Runtime Snapshot and Tool definition hashes. A mismatch
 emits `checkpoint.stale` and fails closed. A committed Stage emits
 `checkpoint.restored` and is not rerun. An interrupted Stage with no uncertain
-external effect is marked `compensated`; an uncertain effect blocks Resume with
-a reconciliation error.
+or committed external effect is marked `compensated`. An uncertain effect blocks
+Resume with a reconciliation error. A committed external effect in an unfinished
+Stage also blocks automatic Resume: recreating that Stage with a new ID cannot
+reuse its original journal slots and may repeat an external write. Confirming a
+write does not prove the Stage completed. The operator must resolve that boundary;
+there is no automatic per-round recovery or Stage-completion override API.
+Replay disables Resume and exposes the committed effect as evidence, rather than
+mislabeling it as uncertain. Checkpoint refusals retain the recoverable Run state;
+the Resume error uses conflict (409), including the error payload after SSE starts.
 
 Resume compatibility is intentionally bounded to the current Runtime Snapshot
 schema and its immediately preceding version. Older Runs
