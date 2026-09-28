@@ -376,6 +376,7 @@ func TestPostgresRequiredSchemaCoversRuntimeColumns(t *testing.T) {
 		"conversations.workspace_id",
 		"messages.workspace_id",
 		"messages.citations",
+		"messages.web_citations",
 		"runs.workspace_id",
 		"stage_checkpoints.provider",
 		"stage_checkpoints.status",

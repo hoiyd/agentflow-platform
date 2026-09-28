@@ -7,7 +7,7 @@ import {
   type CollaborationStepView
 } from "./CollaborationPanels";
 
-export type DraftMessage = Pick<Message, "role" | "content" | "citations"> & {
+export type DraftMessage = Pick<Message, "role" | "content" | "citations" | "web_citations"> & {
   id: string;
   conversation_id: string;
   created_at: string;
@@ -78,7 +78,7 @@ export function createRunEventHandler(options: RunEventProjectionOptions) {
     if (event.type === "done") {
       options.setMessages((items) =>
         items.map((item) =>
-          item.id === options.assistantDraftId ? { ...item, citations: event.citations } : item
+          item.id === options.assistantDraftId ? { ...item, citations: event.citations, web_citations: event.web_citations } : item
         )
       );
       options.setRunState((current) => ({

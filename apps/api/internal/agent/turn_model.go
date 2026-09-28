@@ -114,6 +114,7 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 			Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
 		},
 		ExecutorOptions: m.runtime.toolExecutionOptions,
+		RunEvents:       func() ([]domain.RunEvent, error) { return m.runtime.store.ListRunEvents(request.RunID) },
 	})
 
 	var output strings.Builder

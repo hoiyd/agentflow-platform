@@ -476,6 +476,7 @@ export interface components {
             role: "user" | "assistant" | "system";
             content: string;
             citations?: components["schemas"]["RAGCitation"][];
+            web_citations?: components["schemas"]["WebCitation"][];
             /** Format: date-time */
             created_at: string;
         };
@@ -489,6 +490,15 @@ export interface components {
             section_path?: string[];
             start_offset?: number;
             end_offset?: number;
+        };
+        WebCitation: {
+            source_id: string;
+            title: string;
+            /** Format: uri */
+            url: string;
+            run_id: string;
+            tool_call_id: string;
+            tool_event_id: string;
         };
         AgentConfigRequest: {
             id?: string;
@@ -806,6 +816,8 @@ export interface components {
             verification_status?: components["schemas"]["VerificationStatus"];
             citations?: components["schemas"]["RAGCitation"][];
             invalid_citation_ids?: string[];
+            web_citations?: components["schemas"]["WebCitation"][];
+            invalid_web_citation_ids?: string[];
         };
         ErrorChunk: {
             /** @constant */

@@ -32,14 +32,16 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 	}
 
 	citations := []domain.RAGCitation{{SourceID: "S1", DocumentID: "doc-1", DocumentTitle: "Runbook", ChunkID: "chunk-1"}}
+	webCitations := []domain.WebCitation{{SourceID: "W1", Title: "Official docs", URL: "https://example.com/", RunID: "run-1", ToolCallID: "call-1", ToolEventID: "event-1"}}
 	if _, err := postgresStore.AddMessage(conversation.ID, "user", "hello"); err != nil {
 		t.Fatalf("add user message: %v", err)
 	}
-	if _, err := postgresStore.AddMessageWithCitations(conversation.ID, "assistant", "answer [S1]", citations); err != nil {
+	if _, err := postgresStore.AddMessageWithSources(conversation.ID, "assistant", "answer [S1] [W1]", citations, webCitations); err != nil {
 		t.Fatalf("add assistant message: %v", err)
 	}
 	messages, err := postgresStore.ListMessages(conversation.ID)
-	if err != nil || len(messages) != 2 || len(messages[1].Citations) != 1 || messages[1].Citations[0].SourceID != "S1" {
+	if err != nil || len(messages) != 2 || len(messages[1].Citations) != 1 || messages[1].Citations[0].SourceID != "S1" ||
+		len(messages[1].WebCitations) != 1 || messages[1].WebCitations[0] != webCitations[0] {
 		t.Fatalf("list messages: items=%#v err=%v", messages, err)
 	}
 

@@ -137,7 +137,7 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
                 <div className="message-meta">{message.role}</div>
                 <div className="bubble">
                   {message.content ? renderMarkdown(message.content) : "..."}
-                  <MessageCitations citations={message.citations} />
+                  <MessageCitations citations={message.citations} webCitations={message.web_citations} />
                 </div>
               </article>
             ))

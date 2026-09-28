@@ -127,6 +127,13 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
    `invalid_citation_ids` in the terminal event, and appears as
    `invalid_source_ids` in the `citation.resolved` trace event.
 
+### Web Source Citations
+
+1. With `web_search` available, ask a current-information question and confirm the model cites `[W1]` for a returned result. The assistant's Source details should label it **Web**, open the HTTPS source, and link to the completed Tool event in Run Replay.
+2. Run two searches in one Run. Web IDs should remain Run-scoped across calls; the same normalized URL should keep one ID.
+3. Force the model to cite an absent `[W9]` or a result omitted from its final model context. Neither should enter `web_citations`; both should appear in `invalid_web_citation_ids` and in the Web `citation.resolved` event's `invalid_source_ids`.
+4. Confirm a failed, truncated, or compacted `web_search` result does not create a structured Web citation. Plain URLs in model text never become structured citations. Knowledge `[S#]` remains a separate protocol.
+
 ### Completion Gate
 
 1. Send `POST /api/chat` with the JSON Schema contract from

@@ -813,6 +813,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RAGCitation'
+        web_citations:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebCitation'
         created_at:
           type: string
           format: date-time
@@ -834,6 +838,17 @@ components:
           items: { type: string }
         start_offset: { type: integer }
         end_offset: { type: integer }
+
+    WebCitation:
+      type: object
+      required: [source_id, title, url, run_id, tool_call_id, tool_event_id]
+      properties:
+        source_id: { type: string }
+        title: { type: string }
+        url: { type: string, format: uri }
+        run_id: { type: string }
+        tool_call_id: { type: string }
+        tool_event_id: { type: string }
 
     AgentConfigRequest:
       type: object
@@ -1348,6 +1363,13 @@ components:
           items:
             $ref: '#/components/schemas/RAGCitation'
         invalid_citation_ids:
+          type: array
+          items: { type: string }
+        web_citations:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebCitation'
+        invalid_web_citation_ids:
           type: array
           items: { type: string }
     ErrorChunk:

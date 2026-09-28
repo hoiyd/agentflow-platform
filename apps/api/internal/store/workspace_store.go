@@ -44,6 +44,10 @@ func (s workspaceStore) AddMessageWithCitations(conversationID string, role stri
 	return s.backend.AddMessageWithCitationsInWorkspace(s.workspaceID, conversationID, role, content, citations)
 }
 
+func (s workspaceStore) AddMessageWithSources(conversationID string, role string, content string, citations []domain.RAGCitation, webCitations []domain.WebCitation) (domain.Message, error) {
+	return s.backend.AddMessageWithSourcesInWorkspace(s.workspaceID, conversationID, role, content, citations, webCitations)
+}
+
 func (s workspaceStore) UpdateConversationTitle(id string, title string) error {
 	return s.backend.UpdateConversationTitleInWorkspace(s.workspaceID, id, title)
 }

@@ -17,6 +17,10 @@ func CloneCitations(citations []domain.RAGCitation) []domain.RAGCitation {
 	return cloned
 }
 
+func CloneWebCitations(citations []domain.WebCitation) []domain.WebCitation {
+	return append([]domain.WebCitation(nil), citations...)
+}
+
 func CloneContextCompaction(item domain.ContextCompaction) domain.ContextCompaction {
 	if item.Status == "" {
 		item.Status = domain.ContextCompactionCompleted

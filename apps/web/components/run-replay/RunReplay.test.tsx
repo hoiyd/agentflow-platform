@@ -150,6 +150,29 @@ it("returns to the owning conversation instead of the landing page", async () =>
   expect(backLink.getAttribute("href")).toBe("/workspace?conversation=conversation-1");
 });
 
+it("shows current Run Web sources and opens their original Tool event", async () => {
+  const data = replayFixture();
+  data.run_events = [{
+    id: "tool-event-1", schema_version: 1, sequence: 1, run_id: "run-1", type: "tool.completed",
+    timestamp: "2026-09-10T00:00:00Z", payload: { tool_name: "web_search" }
+  }];
+  data.messages = [{
+    id: "message-1", conversation_id: "conversation-1", role: "assistant", content: "Answer [W1]",
+    created_at: "2026-09-10T00:00:00Z", web_citations: [{
+      source_id: "W1", title: "Official page", url: "https://example.com/", run_id: "run-1",
+      tool_call_id: "call-1", tool_event_id: "tool-event-1"
+    }]
+  }];
+  getReplayPageData.mockResolvedValue({ data, report: null, reportError: "" });
+  render(<RunReplay initialEventId="tool-event-1" runId="run-1" />);
+
+  expect(await screen.findByRole("link", { name: "Official page" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Tool event" }).getAttribute("href"))
+    .toBe("/runs/run-1?event=tool-event-1#run-event-detail");
+  expect(screen.getByRole("button", { name: /tool.completed/ }).className).toContain("active");
+  expect(screen.getByText(/"tool_name": "web_search"/)).toBeTruthy();
+});
+
 function replayFixture(): RunReplayData {
   const timestamp = "2026-09-10T00:00:00Z";
   const totals = {

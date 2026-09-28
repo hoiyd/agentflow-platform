@@ -271,6 +271,16 @@
   font-size: 11px;
 }
 
+.citation-kind,
+.citation-event-link {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.message-citations a {
+  overflow-wrap: anywhere;
+}
+
 .markdown h1,
 .markdown h2,
 .markdown h3,

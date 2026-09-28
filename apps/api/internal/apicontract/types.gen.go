@@ -454,6 +454,7 @@ type Message struct {
 	CreatedAt      time.Time      `json:"created_at"`
 	Id             string         `json:"id"`
 	Role           MessageRole    `json:"role"`
+	WebCitations   *[]WebCitation `json:"web_citations,omitempty"`
 	WorkspaceId    string         `json:"workspace_id"`
 }
 
@@ -722,6 +723,16 @@ type VerifierType string
 type VerifyRunResponse struct {
 	Decision VerificationDecision `json:"decision"`
 	Run      Run                  `json:"run"`
+}
+
+// WebCitation defines model for WebCitation.
+type WebCitation struct {
+	RunId       string `json:"run_id"`
+	SourceId    string `json:"source_id"`
+	Title       string `json:"title"`
+	ToolCallId  string `json:"tool_call_id"`
+	ToolEventId string `json:"tool_event_id"`
+	Url         string `json:"url"`
 }
 
 // AgentId defines model for AgentId.

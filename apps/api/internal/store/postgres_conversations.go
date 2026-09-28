@@ -115,7 +115,7 @@ func (s *PostgresStore) DeleteConversationInWorkspace(workspaceID string, id str
 
 func (s *PostgresStore) ListMessages(conversationID string) ([]domain.Message, error) {
 	rows, err := s.db.Query(`
-		SELECT id, COALESCE(workspace_id, 'default_workspace'), conversation_id, role, content, citations, created_at
+		SELECT id, COALESCE(workspace_id, 'default_workspace'), conversation_id, role, content, citations, web_citations, created_at
 		FROM messages
 		WHERE conversation_id = $1
 		ORDER BY created_at ASC`, conversationID)
@@ -127,11 +127,14 @@ func (s *PostgresStore) ListMessages(conversationID string) ([]domain.Message, e
 	items := []domain.Message{}
 	for rows.Next() {
 		var item domain.Message
-		var citationsJSON []byte
-		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.ConversationID, &item.Role, &item.Content, &citationsJSON, &item.CreatedAt); err != nil {
+		var citationsJSON, webCitationsJSON []byte
+		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.ConversationID, &item.Role, &item.Content, &citationsJSON, &webCitationsJSON, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(citationsJSON, &item.Citations); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(webCitationsJSON, &item.WebCitations); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -141,7 +144,7 @@ func (s *PostgresStore) ListMessages(conversationID string) ([]domain.Message, e
 
 func (s *PostgresStore) ListMessagesInWorkspace(workspaceID string, conversationID string) ([]domain.Message, error) {
 	rows, err := s.db.Query(`
-		SELECT m.id, m.workspace_id, m.conversation_id, m.role, m.content, m.citations, m.created_at
+		SELECT m.id, m.workspace_id, m.conversation_id, m.role, m.content, m.citations, m.web_citations, m.created_at
 		FROM messages m
 		JOIN conversations c ON c.id = m.conversation_id
 		WHERE m.conversation_id = $1 AND m.workspace_id = $2 AND c.workspace_id = $2
@@ -153,11 +156,14 @@ func (s *PostgresStore) ListMessagesInWorkspace(workspaceID string, conversation
 	items := []domain.Message{}
 	for rows.Next() {
 		var item domain.Message
-		var citationsJSON []byte
-		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.ConversationID, &item.Role, &item.Content, &citationsJSON, &item.CreatedAt); err != nil {
+		var citationsJSON, webCitationsJSON []byte
+		if err := rows.Scan(&item.ID, &item.WorkspaceID, &item.ConversationID, &item.Role, &item.Content, &citationsJSON, &webCitationsJSON, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(citationsJSON, &item.Citations); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(webCitationsJSON, &item.WebCitations); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -170,6 +176,10 @@ func (s *PostgresStore) AddMessage(conversationID string, role string, content s
 }
 
 func (s *PostgresStore) AddMessageWithCitations(conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error) {
+	return s.AddMessageWithSources(conversationID, role, content, citations, nil)
+}
+
+func (s *PostgresStore) AddMessageWithSources(conversationID string, role string, content string, citations []domain.RAGCitation, webCitations []domain.WebCitation) (domain.Message, error) {
 	conversation, ok, err := s.GetConversation(conversationID)
 	if err != nil {
 		return domain.Message{}, err
@@ -185,12 +195,20 @@ func (s *PostgresStore) AddMessageWithCitations(conversationID string, role stri
 		Role:           role,
 		Content:        content,
 		Citations:      CloneCitations(citations),
+		WebCitations:   CloneWebCitations(webCitations),
 		CreatedAt:      now,
 	}
 	citationsJSON := []byte("[]")
 	if len(message.Citations) > 0 {
 		var err error
 		citationsJSON, err = json.Marshal(message.Citations)
+		if err != nil {
+			return domain.Message{}, err
+		}
+	}
+	webCitationsJSON := []byte("[]")
+	if len(message.WebCitations) > 0 {
+		webCitationsJSON, err = json.Marshal(message.WebCitations)
 		if err != nil {
 			return domain.Message{}, err
 		}
@@ -202,9 +220,9 @@ func (s *PostgresStore) AddMessageWithCitations(conversationID string, role stri
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(`
-		INSERT INTO messages (id, workspace_id, conversation_id, role, content, citations, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		message.ID, message.WorkspaceID, message.ConversationID, message.Role, message.Content, citationsJSON, message.CreatedAt); err != nil {
+		INSERT INTO messages (id, workspace_id, conversation_id, role, content, citations, web_citations, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		message.ID, message.WorkspaceID, message.ConversationID, message.Role, message.Content, citationsJSON, webCitationsJSON, message.CreatedAt); err != nil {
 		return domain.Message{}, err
 	}
 	if _, err := tx.Exec(`UPDATE conversations SET updated_at = $1 WHERE id = $2`, now, conversationID); err != nil {
@@ -218,12 +236,16 @@ func (s *PostgresStore) AddMessageInWorkspace(workspaceID string, conversationID
 }
 
 func (s *PostgresStore) AddMessageWithCitationsInWorkspace(workspaceID string, conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error) {
+	return s.AddMessageWithSourcesInWorkspace(workspaceID, conversationID, role, content, citations, nil)
+}
+
+func (s *PostgresStore) AddMessageWithSourcesInWorkspace(workspaceID string, conversationID string, role string, content string, citations []domain.RAGCitation, webCitations []domain.WebCitation) (domain.Message, error) {
 	if _, ok, err := s.GetConversationInWorkspace(workspaceID, conversationID); err != nil {
 		return domain.Message{}, err
 	} else if !ok {
 		return domain.Message{}, ErrNotFound("conversation")
 	}
-	return s.AddMessageWithCitations(conversationID, role, content, citations)
+	return s.AddMessageWithSources(conversationID, role, content, citations, webCitations)
 }
 
 func (s *PostgresStore) CommitContextCompaction(compaction domain.ContextCompaction, completion domain.RunEvent) (domain.ContextCompaction, domain.RunEvent, error) {

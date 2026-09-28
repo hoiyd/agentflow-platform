@@ -16,6 +16,7 @@ var postgresRequiredColumns = []postgresColumnRequirement{
 	{Table: "conversations", Column: "workspace_id", UDTName: "text", NotNull: true},
 	{Table: "messages", Column: "workspace_id", UDTName: "text", NotNull: true},
 	{Table: "messages", Column: "citations", UDTName: "jsonb", NotNull: true},
+	{Table: "messages", Column: "web_citations", UDTName: "jsonb", NotNull: true},
 	{Table: "agents", Column: "memory_enabled", NotNull: true},
 	{Table: "agents", Column: "retrieval_enabled", NotNull: true},
 	{Table: "agents", Column: "executor", NotNull: true},

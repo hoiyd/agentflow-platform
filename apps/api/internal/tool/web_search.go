@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/tool/policy"
+	"agentflow-platform/apps/api/internal/tool/webcitation"
 )
 
 const (
@@ -125,15 +125,15 @@ func normalizeWebSearchResponse(query string, maxResults int, data json.RawMessa
 		if index >= maxResults {
 			break
 		}
-		parsed, err := url.Parse(item.URL)
-		if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || len(item.URL) > 1024 || strings.TrimSpace(item.Title) == "" {
+		normalizedURL, ok := webcitation.NormalizeURL(item.URL)
+		if !ok || strings.TrimSpace(item.Title) == "" {
 			return webSearchOutput{}, executionError(ErrorResultEncoding, "Tavily search result is invalid", nil)
 		}
 		title, titleCut := limitSearchText(item.Title, webSearchMaxTitle)
 		snippet, snippetCut := limitSearchText(item.Content, webSearchMaxSnippet)
 		output.Truncated = output.Truncated || titleCut || snippetCut
 		output.Results = append(output.Results, webSearchResult{
-			SourceID: fmt.Sprintf("W%d", index+1), Title: title, URL: item.URL,
+			SourceID: fmt.Sprintf("W%d", index+1), Title: title, URL: normalizedURL,
 			Snippet: snippet, ProviderRank: index + 1,
 		})
 	}
