@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 )
@@ -231,6 +232,15 @@ func TestResumeFailurePolicyKeepsReplayOnlyRunRecoverable(t *testing.T) {
 	status, failRun := resumeFailurePolicy(agent.ErrRuntimeSnapshotResumeUnsupported)
 	if status != http.StatusConflict || failRun {
 		t.Fatalf("replay-only resume policy: status=%d fail_run=%t", status, failRun)
+	}
+}
+
+func TestResumeFailurePolicyKeepsCheckpointBlockedRunRecoverable(t *testing.T) {
+	for _, err := range []error{checkpoint.ErrNeedsReconciliation, checkpoint.ErrCheckpointStale} {
+		status, failRun := resumeFailurePolicy(err)
+		if status != http.StatusConflict || failRun {
+			t.Fatalf("checkpoint refusal must not permanently fail the Run: status=%d fail=%v err=%v", status, failRun, err)
+		}
 	}
 }
 

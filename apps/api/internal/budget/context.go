@@ -34,6 +34,14 @@ func FromContext(ctx context.Context) Controller {
 	return controller
 }
 
+// HasModelCallLimit reports an existing enforced bound, not a new limiter.
+// Tool-only, completion-only and cost limits cannot bound repeated zero-output
+// decisions or invalid Tool calls. A wall-clock bound must be an active deadline.
+func HasModelCallLimit(ctx context.Context) bool {
+	tracker, ok := FromContext(ctx).(*Tracker)
+	return ok && tracker != nil && (tracker.budget.MaxModelCalls > 0 || tracker.budget.MaxPromptTokens > 0 || tracker.budget.MaxTotalTokens > 0)
+}
+
 func WithOperation(ctx context.Context, operationID string) context.Context {
 	return context.WithValue(ctx, operationKey{}, strings.TrimSpace(operationID))
 }

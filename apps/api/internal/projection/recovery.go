@@ -21,7 +21,50 @@ func BuildRecoverySummary(replay domain.RunReplay) *domain.RecoverySummary {
 	summary.Evidence = recoveryEvidence(replay, effects, blockers)
 	summary.ArtifactRefs = artifactRefs
 	summary.Actions = recoveryActions(replay, len(effects) > 0, len(blockers) > 0)
+	if committed := committedEffectsInUnfinishedStages(replay); len(committed) > 0 {
+		summary.Title = "Unfinished stage has a committed effect"
+		summary.Message = "An external write succeeded, but its enclosing stage did not complete. Automatic stage recreation could repeat the write."
+		for index := range summary.Actions {
+			if summary.Actions[index].Kind == "resume_run" {
+				summary.Actions[index].Enabled = false
+				summary.Actions[index].UnavailableReason = "Review the unfinished stage and its committed external effects before resuming"
+			}
+		}
+		for _, effect := range committed {
+			summary.Evidence = appendRecoveryEvidence(summary.Evidence, domain.RecoveryEvidence{Kind: "tool_effect", ID: effect.IdempotencyKey, Status: string(effect.Status), Summary: fmt.Sprintf("%s committed in unfinished stage %s", effect.ToolName, effect.StageID)})
+		}
+	}
 	return summary
+}
+
+func committedEffectsInUnfinishedStages(replay domain.RunReplay) []domain.ToolEffectSummary {
+	if replay.Run.Status != domain.RunFailedRecoverable {
+		return nil
+	}
+	unfinished := make(map[string]bool)
+	for _, item := range replay.StageCheckpoints {
+		committed := item.Status == domain.CheckpointCommitted
+		// Restore reconciles a terminal event written before the checkpoint update.
+		if item.Status == domain.CheckpointPrepared || item.Status == domain.CheckpointExecuting {
+			for _, event := range replay.RunEvents {
+				if event.StageID != item.StageID || event.Sequence <= item.EventCursor {
+					continue
+				}
+				if event.Type == domain.EventStageCompleted || event.Type == domain.EventStageFailed || event.Type == domain.EventStageCanceled {
+					committed = event.Type == domain.EventStageCompleted
+					break
+				}
+			}
+		}
+		unfinished[item.StageID] = !committed
+	}
+	var effects []domain.ToolEffectSummary
+	for _, effect := range replay.ToolEffects {
+		if unfinished[effect.StageID] && effect.Status == domain.ToolEffectCommitted {
+			effects = append(effects, effect)
+		}
+	}
+	return effects
 }
 
 func recoveryReason(replay domain.RunReplay, effects []domain.ToolEffectSummary, blockers []domain.TaskBlocker) *domain.RecoverySummary {

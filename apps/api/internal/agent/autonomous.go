@@ -511,14 +511,28 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 		"framework":  "agentflow-native",
 		"stage_role": role,
 	})
-	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{
+	request := turnpkg.Request{
 		RunID: prepared.Run.ID, StepID: step.ID, ConversationID: prepared.Run.ConversationID,
 		Agent: prepared.WorkerAgent, Role: role, SystemPrompt: systemPrompt, Input: input,
 		ModelMode: turnpkg.ModelModeText,
 		Context:   turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks},
 		Metadata:  map[string]any{"iteration": iteration},
 		Sink:      r.runEventSink(),
-	}, nil)
+	}
+	if role == "act" {
+		// Only Act has Tool authority. Restore the Run's frozen allowlist rather
+		// than consulting live enabled flags between iterations or on Resume.
+		restored, err := r.restoreRuntime(prepared.Run)
+		if err != nil {
+			return "", r.failCollaborationStage(ctx, events, step, err)
+		}
+		request.Agent = restored.agent
+		if restored.modelConfigured {
+			request.Catalog = restored.catalog
+			request.ModelMode = turnpkg.ModelModeAgentStream
+		}
+	}
+	result, err := r.turnEngine.Execute(ctx, request, nil)
 	if err != nil {
 		if ctx.Err() != nil {
 			if stopped, stopErr := r.stopAutonomousStageIfCanceled(ctx, events, step); stopped || stopErr != nil {

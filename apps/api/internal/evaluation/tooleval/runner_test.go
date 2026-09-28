@@ -68,7 +68,11 @@ func fixtureProvider(t *testing.T, mode string) *httptest.Server {
 		if mode == "estimated" {
 			providerUsage = nil
 		}
-		if !request.Stream && len(request.Tools) > 0 && mode != "no_evidence" {
+		hasObservation := false
+		for _, message := range request.Messages {
+			hasObservation = hasObservation || message.Role == "tool"
+		}
+		if !request.Stream && len(request.Tools) > 0 && !hasObservation && mode != "no_evidence" {
 			calls := []any{}
 			for i, id := range ids {
 				args, _ := json.Marshal(map[string]any{"artifact_id": artifactID, "query": id})

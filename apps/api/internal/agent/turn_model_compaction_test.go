@@ -192,7 +192,7 @@ func (c *overflowRecoveryClient) PrepareAgentChat(context.Context, provider.Chat
 	return provider.PreparedChat{}, errors.New("unexpected streaming turn")
 }
 
-func (c *overflowRecoveryClient) PrepareFollowup(context.Context, []provider.Message) (provider.PreparedChat, error) {
+func (c *overflowRecoveryClient) PrepareFollowup(context.Context, []provider.Message, []map[string]any) (provider.PreparedChat, error) {
 	return provider.PreparedChat{}, errors.New("unexpected tool follow-up")
 }
 

@@ -40,9 +40,12 @@ Run
 ```
 
 The Turn Engine may perform more than one Model Call when the model selects
-Tools, but the whole model/tool exchange is still one Turn. Output streams over
-SSE while typed retrieval, context, model, Tool, usage, and completion events
-are persisted.
+Tools, but the whole model/tool exchange is still one Turn. Tool-enabled requests
+repeat native completion with paired observations until there are no more calls;
+only the final answer is delivered over SSE, buffered rather than token-streamed.
+Tool-free and explicitly simulated Chat retain their existing streaming paths. Typed
+retrieval, context, model, Tool, usage, and completion events are persisted.
+See [Bounded Tool loop](../tools/bounded-tool-loop.md).
 
 Choose Single when:
 
@@ -128,7 +131,8 @@ Observe -> Plan -> Act -> Review -> Decide
 
 - **Observe** summarizes current state, constraints, risks, and missing facts.
 - **Plan** chooses the next concrete action for this Iteration.
-- **Act** executes the plan using the selected Agent and available Tools.
+- **Act** uses the same bounded Tool loop as Single and Multi Worker, with the
+  Run's frozen Agent and Tool allowlist. Other iteration Stages cannot call Tools.
 - **Review** checks progress and remaining gaps.
 - **Decide** returns `continue`, `stop`, or `ask_user` with a reason and optional
   final answer.

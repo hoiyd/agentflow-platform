@@ -29,11 +29,11 @@ func (c *Client) PrepareAgentChat(ctx context.Context, request provider.ChatRequ
 	return provider.PreparedChat{RawMessages: raw, Messages: prepared.messages, Manifest: prepared.manifest, Latest: request.Latest, SystemPrompt: request.SystemPrompt}, nil
 }
 
-func (c *Client) PrepareFollowup(ctx context.Context, raw []provider.Message) (provider.PreparedChat, error) {
+func (c *Client) PrepareFollowup(ctx context.Context, raw []provider.Message, definitions []map[string]any) (provider.PreparedChat, error) {
 	if !c.HasAPIKey() && !c.simulated {
 		return provider.PreparedChat{}, missingCredentialError("chat.prepare_followup")
 	}
-	prepared, err := c.prepareModelContext(ctx, raw, nil)
+	prepared, err := c.prepareModelContext(ctx, raw, definitions)
 	if err != nil {
 		return provider.PreparedChat{}, err
 	}
@@ -130,24 +130,18 @@ func (c *Client) StreamAnswer(ctx context.Context, prepared provider.PreparedCha
 	emitted, output, usage, err := c.streamMessages(streamCtx, prepared.Messages, events)
 	if err != nil {
 		stage := string(kind)
-		if kind == provider.ChatStreamToolResult {
-			stage = "final_stream"
-		}
 		trace.Recorder.Error(ctx, trace.RunID, trace.StepID, addModelErrorMetadata(map[string]any{
 			"source": "llm", "stage": stage, "model": c.model, "error": err.Error(),
 		}, err))
 		return emitted, err
 	}
-	if !emitted && kind == provider.ChatStreamAnswer {
+	if !emitted {
 		return false, invalidResponseError("chat.stream", "model stream returned no content", nil)
 	}
-	if !usage.Valid() && kind == provider.ChatStreamToolResult {
+	if !usage.Valid() {
 		usage = estimateUsage(messagesToText(prepared.Messages), output)
 	}
 	endPayload := map[string]any{"model": c.model, "output": output, "output_chars": len(output)}
-	if kind == provider.ChatStreamToolResult {
-		endPayload["manifest_id"] = prepared.Manifest.ID
-	}
 	trace.Recorder.LLMEnd(ctx, span, tokenPayload(endPayload, usage))
 	return emitted, nil
 }

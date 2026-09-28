@@ -38,7 +38,7 @@ These are cross-cutting runtime capabilities, not mode-specific features:
 
 | Capability | Runtime design | Adaptation boundary |
 | --- | --- | --- |
-| **Performance** | SSE streams output incrementally; context, output, Tool results, Run usage, and background queues are bounded. Active runtime excludes queue and human-wait time. | Limits and provider policies are configured at composition time and frozen into new Runs where replay stability requires it. No benchmark result is implied. |
+| **Performance** | SSE transports answers: Tool-free provider calls stream tokens, while Tool-enabled rounds deliver the buffered final answer. Context, output, Tool results, Run usage, and background queues are bounded. Active runtime excludes queue and human-wait time. | Limits and provider policies are configured at composition time and frozen into new Runs where replay stability requires it. No benchmark result is implied. |
 | **Concurrency** | `RunController` combines global admission, bounded queueing, and per-Conversation single-writer execution. The model limiter owns in-flight requests and RPM/TPM; Tool bindings declare serial, read-only, or keyed parallelism. | Single, Multi-Agent, and Loop (`autonomous`) modes use the shared controls. Multi-Agent Worker isolation is a Stage policy inside the parent Run. Provider retries acquire fresh permits without double-counting logical Run usage. |
 | **Workspace scope** | HTTP resolves `X-Workspace-ID`, query, or payload scope to one normalized namespace; omitted and legacy `default` values become `default_workspace`. Persisted Runs inherit Conversation scope. | Postgres stores enforce namespace predicates. Authentication, Membership, and ACL remain separate future policy layers. |
 | **Tracing** | Typed Run Events cover Run, Stage, Turn, Model, Tool, Retrieval, Context, Memory, Usage, Verification, and recovery lifecycles. `ModelRequestEnvelope` records each physical provider attempt against its Runtime Snapshot and Context Manifest. Durable records are persisted for Replay and debug views; streaming `model.delta` events are intentionally omitted. | Event contracts remain stable across Postgres stores and provider adapters add versioned metadata instead of inventing private trace formats. |
@@ -63,7 +63,7 @@ apps/api/
     httpapi/        HTTP transport and route handlers
     agent/          run orchestration and execution modes
       turn/         shared Turn Engine
-      toolloop/     one bounded Tool batch and model follow-up per Turn
+      toolloop/     bounded model/Tool/observation rounds within one Turn
     inference/      model request and provider boundary
       provider/       provider-neutral contracts
       routing/        secret-free routes and deterministic selection
@@ -118,13 +118,16 @@ app
 
 `internal` is Go's module-private visibility boundary, not a lower architectural layer. Keeping product implementation under `internal` prevents other modules from accidentally depending on unstable backend packages. Packages inside it should continue to expose the smallest interfaces required by their consumers.
 
-For streamed agent turns, `agent/toolloop` sequences Tool selection, guarded
-execution, result injection, and the final model response. `tool` owns the
+For agent turns, `agent/toolloop` sequences model decisions, guarded
+execution, paired observations, and the final model response. `tool` owns the
 Executor and its safety policies. The provider adapter prepares model context,
 sends individual selection/stream requests, and records model attempts; it does
-not construct a Tool Executor. The loop remains one Tool batch, not an open-ended
-multi-round planner. Local evaluations use this same bounded loop without
-starting the full Agent Runtime.
+not construct a Tool Executor. Single, Multi Worker and Autonomous Act share
+the same multi-round loop, bounded by existing Run Budget and active deadlines;
+Progress Guard blocks repeated work. Every request reassembles context with the
+same frozen Tool definitions. Local evaluations use this path without starting
+the full Agent Runtime. See [Bounded Tool loop](../tools/bounded-tool-loop.md)
+for buffered final-answer delivery and the Stage-scoped recovery boundary.
 
 The three execution-facing areas are deliberately visible in the tree. `agent`
 owns orchestration and the Turn protocol, `tool` owns callable capabilities and

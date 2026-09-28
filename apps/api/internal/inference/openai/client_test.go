@@ -38,7 +38,7 @@ func TestLocalClientPublicFallbacks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new empty tool catalog: %v", err)
 	}
-	events, eventErrors := streamToolLoopForTest(client,
+	events, eventErrors := streamToolLoopForTest(t, client,
 		context.Background(), "You are AgentFlow's assistant. Use tools when they help.", nil, "tool-free", catalog,
 		nil, "", "", nil, nil,
 	)
