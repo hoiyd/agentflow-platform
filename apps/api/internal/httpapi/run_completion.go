@@ -31,7 +31,14 @@ func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flush
 		flusher.Flush()
 		return false
 	}
-	message, err := scoped.AddMessageWithCitations(request.ConversationID, "assistant", request.Assistant, citations)
+	webSources, webCitations, invalidWebCitationIDs, err := h.resolveRunWebCitations(scoped, request.RunID, request.Assistant)
+	if err != nil {
+		_, _ = h.agentRuntime.FailRun(request.RunID, err)
+		writeSSE(w, "error", failureChatChunk(w, r, http.StatusInternalServerError, err))
+		flusher.Flush()
+		return false
+	}
+	message, err := scoped.AddMessageWithSources(request.ConversationID, "assistant", request.Assistant, citations, webCitations)
 	if err != nil {
 		_, _ = h.agentRuntime.FailRun(request.RunID, err)
 		writeSSE(w, "error", failureChatChunk(w, r, http.StatusInternalServerError, err))
@@ -48,6 +55,19 @@ func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flush
 			"message_id":           message.ID,
 		},
 	})
+	if len(webSources)+len(invalidWebCitationIDs) > 0 {
+		_, _ = scoped.CreateRunEvent(domain.RunEvent{
+			Type: domain.EventCitationResolved, RunID: request.RunID, ConversationID: request.ConversationID,
+			Payload: map[string]any{
+				"protocol_version":     domain.WebCitationProtocolVersion,
+				"available_source_ids": webCitationSourceIDs(webSources),
+				"cited_source_ids":     webCitationSourceIDs(webCitations),
+				"invalid_source_ids":   invalidWebCitationIDs,
+				"web_citations":        webCitations,
+				"message_id":           message.ID,
+			},
+		})
+	}
 
 	completed, err := h.resolveRunCompletion(ctx, scoped, request.RunID, request.UserInput, request.Assistant)
 	if err != nil {
@@ -62,16 +82,18 @@ func (h *Handler) completeStreamingRun(w http.ResponseWriter, flusher http.Flush
 		title = h.summarizeConversationTitleBestEffort(ctx, scoped, request.RunID, request.ConversationID, request.UserInput, request.Assistant)
 	}
 	writeSSE(w, "done", domain.ChatChunk{
-		Type:               "done",
-		ConversationID:     completed.ConversationID,
-		Title:              title,
-		RunID:              completed.ID,
-		AgentID:            completed.AgentID,
-		Status:             string(completed.Status),
-		VerificationStatus: string(completed.VerificationStatus),
-		MessageID:          message.ID,
-		Citations:          citations,
-		InvalidCitationIDs: invalidCitationIDs,
+		Type:                  "done",
+		ConversationID:        completed.ConversationID,
+		Title:                 title,
+		RunID:                 completed.ID,
+		AgentID:               completed.AgentID,
+		Status:                string(completed.Status),
+		VerificationStatus:    string(completed.VerificationStatus),
+		MessageID:             message.ID,
+		Citations:             citations,
+		InvalidCitationIDs:    invalidCitationIDs,
+		WebCitations:          webCitations,
+		InvalidWebCitationIDs: invalidWebCitationIDs,
 	})
 	flusher.Flush()
 

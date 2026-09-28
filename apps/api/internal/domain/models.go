@@ -44,6 +44,7 @@ type Message struct {
 	Role           string        `json:"role"`
 	Content        string        `json:"content"`
 	Citations      []RAGCitation `json:"citations,omitempty"`
+	WebCitations   []WebCitation `json:"web_citations,omitempty"`
 	CreatedAt      time.Time     `json:"created_at"`
 }
 

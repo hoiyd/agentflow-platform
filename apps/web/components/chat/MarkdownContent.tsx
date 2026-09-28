@@ -8,29 +8,55 @@ export function renderMarkdown(content: string) {
   return <div className="markdown">{renderMarkdownTokens(lexer(content))}</div>;
 }
 
-export function MessageCitations({ citations }: { citations?: Message["citations"] }) {
-  if (!citations || citations.length === 0) {
+export function MessageCitations({ citations, webCitations }: {
+  citations?: Message["citations"];
+  webCitations?: Message["web_citations"];
+}) {
+  if (!citations?.length && !webCitations?.length) {
     return null;
   }
   return (
     <section className="message-citations" aria-label="Source details">
       <div className="message-citations-title">Source details</div>
       <ol>
-        {citations.map((citation) => {
+        {citations?.map((citation) => {
           const location = citation.section_path?.filter(Boolean).join(" / ");
           const sourceCount = citation.source_chunk_ids?.length ?? 0;
           return (
             <li key={citation.source_id}>
               <span className="citation-source-id">[{citation.source_id}]</span>
+              <span className="citation-kind">Knowledge</span>
               <span>{citation.document_title || citation.document_id}</span>
               {location ? <span className="citation-location">{location}</span> : null}
               {sourceCount > 1 ? <span className="citation-location">{sourceCount} chunks</span> : null}
             </li>
           );
         })}
+        {webCitations?.map((citation) => {
+          const href = safeWebCitationURL(citation.url);
+          return (
+            <li key={citation.source_id}>
+              <span className="citation-source-id">[{citation.source_id}]</span>
+              <span className="citation-kind">Web</span>
+              {href ? <a href={href} rel="noopener noreferrer" target="_blank">{citation.title}</a> : <span>{citation.title}</span>}
+              <a className="citation-event-link" href={`/runs/${encodeURIComponent(citation.run_id)}?event=${encodeURIComponent(citation.tool_event_id)}#run-event-detail`}>
+                Tool event
+              </a>
+            </li>
+          );
+        })}
       </ol>
     </section>
   );
+}
+
+function safeWebCitationURL(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && parsed.hostname && !parsed.username && !parsed.password ? parsed.href : null;
+  } catch {
+    return null;
+  }
 }
 
 export function renderMarkdownTokens(tokens: Token[]) {

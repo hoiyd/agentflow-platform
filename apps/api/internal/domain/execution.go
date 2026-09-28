@@ -81,23 +81,25 @@ type ResumeRunRequest struct {
 }
 
 type ChatChunk struct {
-	Type               string        `json:"type"`
-	ConversationID     string        `json:"conversation_id,omitempty"`
-	Title              string        `json:"title,omitempty"`
-	RunID              string        `json:"run_id,omitempty"`
-	AgentID            string        `json:"agent_id,omitempty"`
-	Status             string        `json:"status,omitempty"`
-	VerificationStatus string        `json:"verification_status,omitempty"`
-	MessageID          string        `json:"message_id,omitempty"`
-	Citations          []RAGCitation `json:"citations,omitempty"`
-	InvalidCitationIDs []string      `json:"invalid_citation_ids,omitempty"`
-	Delta              string        `json:"delta,omitempty"`
-	Error              string        `json:"error,omitempty"`
-	ErrorCode          string        `json:"code,omitempty"`
-	ErrorSource        string        `json:"source,omitempty"`
-	ErrorCategory      string        `json:"category,omitempty"`
-	Retryable          *bool         `json:"retryable,omitempty"`
-	RequestID          string        `json:"request_id,omitempty"`
+	Type                  string        `json:"type"`
+	ConversationID        string        `json:"conversation_id,omitempty"`
+	Title                 string        `json:"title,omitempty"`
+	RunID                 string        `json:"run_id,omitempty"`
+	AgentID               string        `json:"agent_id,omitempty"`
+	Status                string        `json:"status,omitempty"`
+	VerificationStatus    string        `json:"verification_status,omitempty"`
+	MessageID             string        `json:"message_id,omitempty"`
+	Citations             []RAGCitation `json:"citations,omitempty"`
+	InvalidCitationIDs    []string      `json:"invalid_citation_ids,omitempty"`
+	WebCitations          []WebCitation `json:"web_citations,omitempty"`
+	InvalidWebCitationIDs []string      `json:"invalid_web_citation_ids,omitempty"`
+	Delta                 string        `json:"delta,omitempty"`
+	Error                 string        `json:"error,omitempty"`
+	ErrorCode             string        `json:"code,omitempty"`
+	ErrorSource           string        `json:"source,omitempty"`
+	ErrorCategory         string        `json:"category,omitempty"`
+	Retryable             *bool         `json:"retryable,omitempty"`
+	RequestID             string        `json:"request_id,omitempty"`
 }
 
 type RunTraceSummary struct {

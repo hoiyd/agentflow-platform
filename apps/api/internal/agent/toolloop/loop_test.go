@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/policy"
@@ -158,5 +159,38 @@ func TestToolLoopGrantsOnlyTrustedCredentialScopes(t *testing.T) {
 				t.Fatalf("credential scope enforcement: calls=%d final=%#v", calls, model.final)
 			}
 		})
+	}
+}
+
+func TestToolLoopRelabelsWebSourcesBeforeModelFollowup(t *testing.T) {
+	catalog, err := tool.NewCatalogWithPolicy(policy.Policy{Version: "test", DefaultAction: policy.ActionAllow}, tool.Binding{
+		Descriptor: tool.Descriptor{Name: "web_search", Parameters: tool.ObjectSchema(nil, nil)},
+		Handler: func(context.Context, json.RawMessage) (any, error) {
+			return map[string]any{"results": []any{map[string]any{
+				"source_id": "W1", "title": "Current", "url": "https://example.org/current",
+			}}}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := &modelStub{selected: provider.ChatChoice{ToolCalls: []provider.ToolCall{{
+		ID: "current-call", Type: "function", Function: provider.FunctionCall{Name: "web_search", Arguments: `{}`},
+	}}}}
+	events, errs := Stream(context.Background(), model, Request{
+		Latest: "search", Catalog: catalog, RunEvents: func() ([]domain.RunEvent, error) {
+			return []domain.RunEvent{
+				{ID: "prior-event", RunID: "run-1", Sequence: 1, Type: domain.EventToolCompleted, Payload: map[string]any{"tool_name": "web_search", "tool_call_id": "prior-call", "result": map[string]any{"results": []any{map[string]any{"title": "Prior", "url": "https://example.com/prior"}}}}},
+				{ID: "current-event", RunID: "run-1", Sequence: 2, Type: domain.EventToolCompleted, Payload: map[string]any{"tool_name": "web_search", "tool_call_id": "current-call", "result": map[string]any{"results": []any{map[string]any{"title": "Current", "url": "https://example.org/current"}}}}},
+			}, nil
+		},
+	})
+	for range events {
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	if len(model.final) != 3 || !strings.Contains(model.final[2].Content, `"source_id":"W2"`) || !strings.Contains(model.final[2].Content, "https://example.org/current") {
+		t.Fatalf("model did not receive Run-scoped Web source: %#v", model.final)
 	}
 }

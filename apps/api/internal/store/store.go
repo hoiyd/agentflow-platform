@@ -37,7 +37,9 @@ type ConversationStore interface {
 	AddMessage(conversationID string, role string, content string) (domain.Message, error)
 	AddMessageInWorkspace(workspaceID string, conversationID string, role string, content string) (domain.Message, error)
 	AddMessageWithCitations(conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error)
+	AddMessageWithSources(conversationID string, role string, content string, citations []domain.RAGCitation, webCitations []domain.WebCitation) (domain.Message, error)
 	AddMessageWithCitationsInWorkspace(workspaceID string, conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error)
+	AddMessageWithSourcesInWorkspace(workspaceID string, conversationID string, role string, content string, citations []domain.RAGCitation, webCitations []domain.WebCitation) (domain.Message, error)
 	UpdateConversationTitle(id string, title string) error
 	UpdateConversationTitleInWorkspace(workspaceID string, id string, title string) error
 }
@@ -178,6 +180,7 @@ type WorkspaceStore interface {
 	ListMessages(conversationID string) ([]domain.Message, error)
 	AddMessage(conversationID string, role string, content string) (domain.Message, error)
 	AddMessageWithCitations(conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error)
+	AddMessageWithSources(conversationID string, role string, content string, citations []domain.RAGCitation, webCitations []domain.WebCitation) (domain.Message, error)
 	UpdateConversationTitle(id string, title string) error
 	GetRun(id string) (domain.Run, bool, error)
 	ListRuns() ([]domain.Run, error)

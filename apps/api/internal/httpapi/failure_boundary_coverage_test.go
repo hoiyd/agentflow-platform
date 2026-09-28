@@ -418,6 +418,12 @@ func (s *boundaryWorkspaceStore) AddMessageWithCitations(id string, role string,
 	}
 	return s.WorkspaceStore.AddMessageWithCitations(id, role, content, citations)
 }
+func (s *boundaryWorkspaceStore) AddMessageWithSources(id string, role string, content string, citations []domain.RAGCitation, webCitations []domain.WebCitation) (domain.Message, error) {
+	if s.addMessageWithCitationsErr != nil {
+		return domain.Message{}, s.addMessageWithCitationsErr
+	}
+	return s.WorkspaceStore.AddMessageWithSources(id, role, content, citations, webCitations)
+}
 func (s *boundaryWorkspaceStore) GetRun(id string) (domain.Run, bool, error) {
 	if s.getRunErr != nil {
 		return domain.Run{}, false, s.getRunErr

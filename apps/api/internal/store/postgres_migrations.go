@@ -69,6 +69,7 @@ var postgresMigrations = []string{
 		role text NOT NULL,
 		content text NOT NULL,
 		citations jsonb NOT NULL DEFAULT '[]'::jsonb,
+		web_citations jsonb NOT NULL DEFAULT '[]'::jsonb,
 		created_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS workspace_id text`,
@@ -77,6 +78,7 @@ var postgresMigrations = []string{
 	`ALTER TABLE messages ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`,
 	`ALTER TABLE messages ALTER COLUMN workspace_id SET NOT NULL`,
 	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS citations jsonb NOT NULL DEFAULT '[]'::jsonb`,
+	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS web_citations jsonb NOT NULL DEFAULT '[]'::jsonb`,
 	`CREATE TABLE IF NOT EXISTS runs (
 		id text PRIMARY KEY,
 		agent_id text NOT NULL REFERENCES agents(id),

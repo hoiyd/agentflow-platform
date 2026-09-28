@@ -20,12 +20,14 @@ import { RetrievalOverview, buildRetrievalSummary } from "./RunRetrievalDetails"
 import { TaskStateChanges } from "./TaskStateChanges";
 import { RuntimeDiagnostics } from "./RuntimeDiagnostics";
 import { RecoverySummaryPanel, ToolEffectReconciliationPanel } from "./RecoveryActions";
+import { MessageCitations } from "../chat/MarkdownContent";
 
 type Props = {
   runId: string;
+  initialEventId?: string;
 };
 
-export function RunReplay({ runId }: Props) {
+export function RunReplay({ runId, initialEventId }: Props) {
   const router = useRouter();
   const [replay, setReplay] = useState<RunReplayData | null>(null);
   const [episodeReport, setEpisodeReport] = useState<EpisodeReport | null>(null);
@@ -47,7 +49,8 @@ export function RunReplay({ runId }: Props) {
         setReplay(data);
         setEpisodeReport(report);
         setEpisodeReportError(reportError);
-        setSelectedEventId(data.run_events[0]?.id ?? "");
+        setSelectedEventId(initialEventId && data.run_events.some((event) => event.id === initialEventId)
+          ? initialEventId : data.run_events[0]?.id ?? "");
       } catch (err) {
         if (!canceled) {
           setError(err instanceof Error ? err.message : "Failed to load run replay");
@@ -58,7 +61,7 @@ export function RunReplay({ runId }: Props) {
     return () => {
       canceled = true;
     };
-  }, [runId]);
+  }, [runId, initialEventId]);
 
   const selectedEvent = useMemo(
     () => replay?.run_events.find((event) => event.id === selectedEventId) ?? replay?.run_events[0],
@@ -250,6 +253,11 @@ export function RunReplay({ runId }: Props) {
       <TaskStateChanges revisions={replay.task_state_revisions} runId={replay.run.id} />
 
       <RetrievalOverview summary={retrievalSummary} />
+
+      {replay.messages.map((message) => {
+        const sources = message.web_citations?.filter((source) => source.run_id === replay.run.id);
+        return sources?.length ? <MessageCitations key={message.id} webCitations={sources} /> : null;
+      })}
 
       <section className="replay-grid">
         <div className="timeline-panel">

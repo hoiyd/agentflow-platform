@@ -1,6 +1,10 @@
 import { RunReplay } from "../../../components/run-replay/RunReplay";
 
-export default async function RunReplayPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RunReplayPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ event?: string }>;
+}) {
   const { id } = await params;
-  return <RunReplay runId={id} />;
+  const { event } = await searchParams;
+  return <RunReplay initialEventId={event} runId={id} />;
 }

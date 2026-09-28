@@ -402,6 +402,83 @@ func TestCompleteStreamingRunPersistsOnlyCitationsSelectedForModelContext(t *tes
 	}
 }
 
+func TestCompleteStreamingRunPersistsOnlyWebSourcesInFinalModelContext(t *testing.T) {
+	fixtureStore := fixturestore.New()
+	conversation, _ := fixtureStore.CreateConversation("web citation completion")
+	run, _ := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
+	_, _ = fixtureStore.UpdateRunStatus(run.ID, domain.RunRunning, "")
+	for _, item := range []struct{ callID, url string }{
+		{"call-1", "https://example.com/selected"},
+		{"call-2", "https://example.org/excluded"},
+	} {
+		_, err := fixtureStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, ConversationID: conversation.ID, Type: domain.EventToolCompleted, Payload: map[string]any{
+			"tool_name": "web_search", "tool_call_id": item.callID, "result": map[string]any{"results": []any{map[string]any{
+				"source_id": "W1", "title": item.callID, "url": item.url,
+			}}},
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _ = fixtureStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventContextAssembled, Payload: map[string]any{
+		"manifest": domain.ContextManifest{ID: "manifest-final", Entries: []domain.ContextManifestEntry{
+			{Source: "tool_result", ReferenceID: "call-1", Selected: true, Transformation: "original", OriginalBytes: 100, IncludedBytes: 100},
+			{Source: "tool_result", ReferenceID: "call-2", Selected: true, Transformation: "tool_result_compacted", OriginalBytes: 100, IncludedBytes: 20},
+		}},
+	}})
+	answer := "Selected [W1], excluded [W2], invented [W9], raw https://example.org/excluded, duplicate [w1]."
+	_, _ = fixtureStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventModelCompleted, Payload: map[string]any{
+		"output": answer, "manifest_id": "manifest-final",
+	}})
+	runtime := agent.NewRuntime(agent.RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	handler := &Handler{store: fixtureStore, agentRuntime: runtime}
+	response := httptest.NewRecorder()
+	if !handler.completeStreamingRun(response, response, nil, context.Background(), runCompletionRequest{
+		RunID: run.ID, ConversationID: conversation.ID, Assistant: answer,
+	}) {
+		t.Fatalf("complete streaming run: %s", response.Body.String())
+	}
+	messages, _ := fixtureStore.ListMessages(conversation.ID)
+	if len(messages) != 1 || len(messages[0].WebCitations) != 1 {
+		t.Fatalf("wrong persisted Web citations: %#v", messages)
+	}
+	web := messages[0].WebCitations[0]
+	if web.SourceID != "W1" || web.URL != "https://example.com/selected" || web.ToolCallID != "call-1" || web.ToolEventID == "" || web.RunID != run.ID {
+		t.Fatalf("wrong Web citation provenance: %#v", web)
+	}
+	if !strings.Contains(response.Body.String(), `"invalid_web_citation_ids":["W2","W9"]`) || !strings.Contains(response.Body.String(), `"web_citations":[{"source_id":"W1"`) {
+		t.Fatalf("terminal SSE missed Web citation resolution: %s", response.Body.String())
+	}
+	replay, ok, err := fixtureStore.GetRunReplay(run.ID)
+	if err != nil || !ok || len(replay.Messages) == 0 || len(replay.Messages[len(replay.Messages)-1].WebCitations) != 1 {
+		t.Fatalf("Replay missed persisted Web citation: replay=%#v ok=%t err=%v", replay.Messages, ok, err)
+	}
+	events, _ := fixtureStore.ListRunEvents(run.ID)
+	var foundEvidence bool
+	for _, item := range events {
+		if item.Type == domain.EventCitationResolved && item.Payload["protocol_version"] == domain.WebCitationProtocolVersion {
+			foundEvidence = strings.Contains(formatValueForTest(item.Payload["invalid_source_ids"]), "W2")
+		}
+	}
+	if !foundEvidence {
+		t.Fatalf("invalid Web citation evidence not persisted: %#v", events)
+	}
+}
+
+func TestModelOutputMatchesAnswerWithBoundedTraceOutput(t *testing.T) {
+	answer := strings.Repeat("a", 20_100) + " [W1]"
+	if !modelOutputMatchesAnswer(map[string]any{
+		"output": answer[:20_000] + "...[truncated]", "output_chars": len(answer),
+	}, answer) {
+		t.Fatal("bounded model trace rejected its full answer")
+	}
+	if modelOutputMatchesAnswer(map[string]any{
+		"output": answer[:20_000] + "...[truncated]", "output_chars": len(answer) + 1,
+	}, answer) {
+		t.Fatal("mismatched model output length was accepted")
+	}
+}
+
 func formatValueForTest(value any) string {
 	return fmt.Sprintf("%v", value)
 }

@@ -228,6 +228,7 @@ func (s *Store) ListMessages(conversationID string) ([]domain.Message, error) {
 	for _, message := range s.data.Messages {
 		if message.ConversationID == conversationID {
 			message.Citations = store.CloneCitations(message.Citations)
+			message.WebCitations = store.CloneWebCitations(message.WebCitations)
 			messages = append(messages, message)
 		}
 	}
@@ -242,6 +243,10 @@ func (s *Store) AddMessage(conversationID string, role string, content string) (
 }
 
 func (s *Store) AddMessageWithCitations(conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error) {
+	return s.AddMessageWithSources(conversationID, role, content, citations, nil)
+}
+
+func (s *Store) AddMessageWithSources(conversationID string, role string, content string, citations []domain.RAGCitation, webCitations []domain.WebCitation) (domain.Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -258,6 +263,7 @@ func (s *Store) AddMessageWithCitations(conversationID string, role string, cont
 		Role:           role,
 		Content:        content,
 		Citations:      store.CloneCitations(citations),
+		WebCitations:   store.CloneWebCitations(webCitations),
 		CreatedAt:      now,
 	}
 	s.data.Messages = append(s.data.Messages, message)
@@ -284,12 +290,16 @@ func (s *Store) AddMessageInWorkspace(workspaceID string, conversationID string,
 }
 
 func (s *Store) AddMessageWithCitationsInWorkspace(workspaceID string, conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error) {
+	return s.AddMessageWithSourcesInWorkspace(workspaceID, conversationID, role, content, citations, nil)
+}
+
+func (s *Store) AddMessageWithSourcesInWorkspace(workspaceID string, conversationID string, role string, content string, citations []domain.RAGCitation, webCitations []domain.WebCitation) (domain.Message, error) {
 	if _, ok, err := s.GetConversationInWorkspace(workspaceID, conversationID); err != nil {
 		return domain.Message{}, err
 	} else if !ok {
 		return domain.Message{}, store.ErrNotFound("conversation")
 	}
-	return s.AddMessageWithCitations(conversationID, role, content, citations)
+	return s.AddMessageWithSources(conversationID, role, content, citations, webCitations)
 }
 
 func (s *Store) CommitContextCompaction(compaction domain.ContextCompaction, completion domain.RunEvent) (domain.ContextCompaction, domain.RunEvent, error) {

@@ -18,6 +18,7 @@ import (
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/policy"
 	"agentflow-platform/apps/api/internal/tool/progress"
+	"agentflow-platform/apps/api/internal/tool/webcitation"
 )
 
 type Request struct {
@@ -27,6 +28,7 @@ type Request struct {
 	Catalog         *tool.Catalog
 	Trace           provider.ChatTrace
 	ExecutorOptions tool.ExecutorOptions
+	RunEvents       func() ([]domain.RunEvent, error)
 }
 
 // Stream owns the bounded selection -> Tool batch -> final answer protocol.
@@ -93,6 +95,32 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		})
 	}
 	results := executor.ExecuteBatch(ctx, requests)
+	if request.RunEvents != nil {
+		needsCatalog := false
+		for _, result := range results {
+			needsCatalog = needsCatalog || result.Tool == "web_search" && result.Error == nil && !result.Truncated
+		}
+		if needsCatalog {
+			runEvents, err := request.RunEvents()
+			if err != nil {
+				return fmt.Errorf("load web source catalog: %w", err)
+			}
+			catalog := webcitation.FromEvents(runEvents)
+			for index := range results {
+				result := &results[index]
+				if result.Tool != "web_search" || result.Error != nil || result.Truncated {
+					continue
+				}
+				if !catalog.HasCall(result.CallID) {
+					return fmt.Errorf("web source catalog missing completed call %s", result.CallID)
+				}
+				result.Result, err = catalog.Relabel(result.CallID, result.Result)
+				if err != nil {
+					return fmt.Errorf("label web sources: %w", err)
+				}
+			}
+		}
+	}
 	for _, result := range results {
 		if exceeded, ok := budget.AsExceeded(result.Error); ok {
 			return exceeded

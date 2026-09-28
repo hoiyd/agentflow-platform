@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/tool/webcitation"
 	"agentflow-platform/apps/api/internal/verification"
 )
 
@@ -18,6 +20,61 @@ func (h *Handler) resolveRunCitations(scoped store.WorkspaceStore, runID, answer
 	}
 	citations, invalidSourceIDs := rag.ResolveCitations(answer, sources)
 	return sources, citations, invalidSourceIDs, nil
+}
+
+func (h *Handler) resolveRunWebCitations(scoped store.WorkspaceStore, runID, answer string) ([]domain.WebCitation, []domain.WebCitation, []string, error) {
+	events, err := scoped.ListRunEvents(runID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	catalog := webcitation.FromEvents(events)
+	var manifestID string
+	for _, event := range events {
+		if event.Type != domain.EventModelCompleted {
+			continue
+		}
+		if modelOutputMatchesAnswer(event.Payload, answer) {
+			manifestID, _ = event.Payload["manifest_id"].(string)
+		}
+	}
+	selectedCalls := map[string]bool{}
+	for _, event := range events {
+		if event.Type != domain.EventContextAssembled || manifestID == "" {
+			continue
+		}
+		var manifest domain.ContextManifest
+		if !decodePayloadField(event.Payload, "manifest", &manifest) || manifest.ID != manifestID {
+			continue
+		}
+		for _, entry := range manifest.Entries {
+			if entry.Source == contextassembly.SourceToolResult && entry.Selected && entry.Transformation == "original" && entry.IncludedBytes == entry.OriginalBytes {
+				selectedCalls[entry.ReferenceID] = true
+			}
+		}
+		break
+	}
+	sources := catalog.SelectedSources(selectedCalls)
+	citations, invalid := catalog.Resolve(answer, selectedCalls)
+	return sources, citations, invalid, nil
+}
+
+func modelOutputMatchesAnswer(payload map[string]any, answer string) bool {
+	output, _ := payload["output"].(string)
+	if output == answer {
+		return true
+	}
+	const suffix = "...[truncated]"
+	var outputChars int
+	return strings.HasSuffix(output, suffix) && decodePayloadField(payload, "output_chars", &outputChars) &&
+		outputChars == len(answer) && strings.HasPrefix(answer, strings.TrimSuffix(output, suffix))
+}
+
+func webCitationSourceIDs(citations []domain.WebCitation) []string {
+	ids := make([]string, 0, len(citations))
+	for _, citation := range citations {
+		ids = append(ids, citation.SourceID)
+	}
+	return ids
 }
 
 func (h *Handler) groundingSourcesForRun(scoped store.WorkspaceStore, runID string) ([]verification.GroundingSource, error) {
