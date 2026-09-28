@@ -490,6 +490,9 @@ export interface components {
             section_path?: string[];
             start_offset?: number;
             end_offset?: number;
+            run_id?: string;
+            tool_call_id?: string;
+            tool_event_id?: string;
         };
         WebCitation: {
             source_id: string;

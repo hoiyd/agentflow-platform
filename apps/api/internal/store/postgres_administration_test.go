@@ -31,7 +31,7 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 		t.Fatalf("list conversations: items=%#v err=%v", conversations, err)
 	}
 
-	citations := []domain.RAGCitation{{SourceID: "S1", DocumentID: "doc-1", DocumentTitle: "Runbook", ChunkID: "chunk-1"}}
+	citations := []domain.RAGCitation{{SourceID: "S1", DocumentID: "doc-1", DocumentTitle: "Runbook", ChunkID: "chunk-1", RunID: "run-1", ToolCallID: "knowledge-call-1", ToolEventID: "knowledge-event-1"}}
 	webCitations := []domain.WebCitation{{SourceID: "W1", Title: "Official docs", URL: "https://example.com/", RunID: "run-1", ToolCallID: "call-1", ToolEventID: "event-1"}}
 	if _, err := postgresStore.AddMessage(conversation.ID, "user", "hello"); err != nil {
 		t.Fatalf("add user message: %v", err)
@@ -41,6 +41,7 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 	}
 	messages, err := postgresStore.ListMessages(conversation.ID)
 	if err != nil || len(messages) != 2 || len(messages[1].Citations) != 1 || messages[1].Citations[0].SourceID != "S1" ||
+		messages[1].Citations[0].ToolCallID != citations[0].ToolCallID || messages[1].Citations[0].ToolEventID != citations[0].ToolEventID || messages[1].Citations[0].RunID != citations[0].RunID ||
 		len(messages[1].WebCitations) != 1 || messages[1].WebCitations[0] != webCitations[0] {
 		t.Fatalf("list messages: items=%#v err=%v", messages, err)
 	}

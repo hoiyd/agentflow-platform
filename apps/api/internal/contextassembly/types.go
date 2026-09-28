@@ -99,6 +99,8 @@ type Session struct {
 	HistorySearch []domain.RetrievedSessionHistory
 	Compaction    *domain.ContextCompaction
 	LoadTaskState func() (domain.TaskState, bool, error)
+	// Prior-stage read pages share the existing Knowledge budget, not Tool authority.
+	LoadKnowledgeReads func() ([]domain.KnowledgeToolReadResult, error)
 }
 
 type sessionKey struct{}

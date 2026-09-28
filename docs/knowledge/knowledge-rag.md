@@ -289,9 +289,12 @@ returned by the terminal SSE event. Repeated markers are deduplicated in first
 appearance order. Unknown and excluded markers never receive source metadata;
 they are reported as invalid in SSE and the `citation.resolved` trace event.
 
-Source aliases are stable within one search response and its Run context. They
-are intentionally not global document IDs and may be reassigned by a later
-search whose final context ordering differs.
+Standalone HTTP search aliases are local to one response and may change when
+ordering changes. Within a Run, automatic retrieval and explicit
+`knowledge_search` / `knowledge_read` share stable aliases keyed by Document,
+version and Chunk identity. Search locators reserve IDs but are not citation
+evidence. See [Scoped Knowledge read tools](../tools/scoped-knowledge-tools.md)
+for pagination, scope validation, selected Tool evidence and Source details.
 
 For Runs that opt into the `grounded_answer` Completion Contract, the server
 reconstructs the selected source chunks from trusted citation metadata. Each
@@ -302,6 +305,12 @@ anchors fail Verification. If the calibrated Relevance Gate selected no source,
 only an explicit insufficient-evidence response passes. A partial answer may mix
 supported cited claims with an explicit statement that the remaining evidence is
 insufficient.
+
+For Tool-only Knowledge evidence, Verification instead uses the immutable read
+pages actually selected into the final Context. It does not load unread bytes
+from the current Chunk. Automatically selected evidence for the same source is
+retained, including its expanded Chunk set. Citation metadata may additionally
+identify the Run, Tool Call and Tool event without changing the `[S#]` protocol.
 
 This is deterministic source-support evidence, not a universal truth oracle.
 Document deletion, version drift, or missing source chunks blocks Verification

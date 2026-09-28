@@ -504,10 +504,13 @@ type RAGCitation struct {
 	DocumentTitle   string    `json:"document_title"`
 	DocumentVersion *string   `json:"document_version,omitempty"`
 	EndOffset       *int      `json:"end_offset,omitempty"`
+	RunId           *string   `json:"run_id,omitempty"`
 	SectionPath     *[]string `json:"section_path,omitempty"`
 	SourceChunkIds  *[]string `json:"source_chunk_ids,omitempty"`
 	SourceId        string    `json:"source_id"`
 	StartOffset     *int      `json:"start_offset,omitempty"`
+	ToolCallId      *string   `json:"tool_call_id,omitempty"`
+	ToolEventId     *string   `json:"tool_event_id,omitempty"`
 }
 
 // ResumeRunRequest defines model for ResumeRunRequest.

@@ -59,7 +59,8 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 		required := isRequiredSource(message.Source)
 		entry := domain.ContextManifestEntry{
 			Source: message.Source, ReferenceID: message.ReferenceID, Role: message.Role,
-			Selected: required, Reason: reasonForMessage(message.Source, required),
+			CitationSourceID: knowledgeToolCitation(message, transformation),
+			Selected:         required, Reason: reasonForMessage(message.Source, required),
 			Transformation: transformation, EstimatedTokens: tokens, OriginalBytes: originalBytes,
 			ArtifactIDs: artifactIDs,
 		}
@@ -83,6 +84,13 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 
 	memoryCandidates := memoryCandidates(session.Memories)
 	knowledgeCandidates := knowledgeCandidates(session.Knowledge)
+	if session.LoadKnowledgeReads != nil {
+		reads, err := session.LoadKnowledgeReads()
+		if err != nil {
+			return Pack{}, fmt.Errorf("load Knowledge read evidence: %w", err)
+		}
+		knowledgeCandidates = append(knowledgeCandidates, knowledgeReadCandidates(reads)...)
+	}
 	historySearchCandidates := historySearchCandidates(session.HistorySearch)
 	compactionCandidate := contextCompactionCandidate(session.Compaction)
 	taskStateCandidate := structuredTaskStateCandidate(taskState)

@@ -78,13 +78,27 @@ func webCitationSourceIDs(citations []domain.WebCitation) []string {
 }
 
 func (h *Handler) groundingSourcesForRun(scoped store.WorkspaceStore, runID string) ([]verification.GroundingSource, error) {
-	citations, err := h.citationSourcesForRun(scoped, runID)
+	evidence, err := h.knowledgeEvidenceForRun(scoped, runID)
 	if err != nil {
 		return nil, err
 	}
 	documents := map[string][]domain.DocumentChunk{}
-	sources := make([]verification.GroundingSource, 0, len(citations))
-	for _, citation := range citations {
+	sources := make([]verification.GroundingSource, 0, len(evidence.sources))
+	for _, citation := range evidence.sources {
+		pages := []string{}
+		for _, read := range evidence.reads {
+			if read.Source.SourceID == citation.SourceID {
+				pages = append(pages, read.Content)
+			}
+		}
+		if automatic, ok := evidence.automatic[citation.SourceID]; ok {
+			// A bounded read must not replace an intact automatic/expanded source.
+			citation = automatic
+		} else if citation.ToolEventID != "" {
+			// Use immutable delivered pages, never unseen current chunk content.
+			sources = append(sources, verification.GroundingSource{SourceID: citation.SourceID, Content: strings.Join(pages, "\n")})
+			continue
+		}
 		chunks, loaded := documents[citation.DocumentID]
 		if !loaded {
 			document, items, ok, loadErr := scoped.GetDocument(citation.DocumentID)
@@ -118,7 +132,7 @@ func (h *Handler) groundingSourcesForRun(scoped store.WorkspaceStore, runID stri
 				return nil, fmt.Errorf("grounding chunk %s is unavailable", chunkID)
 			}
 		}
-		sources = append(sources, verification.GroundingSource{SourceID: citation.SourceID, Content: strings.Join(content, "\n")})
+		sources = append(sources, verification.GroundingSource{SourceID: citation.SourceID, Content: strings.Join(append(content, pages...), "\n")})
 	}
 	return sources, nil
 }
@@ -144,37 +158,77 @@ func completionContractUsesVerifier(contract *domain.CompletionContract, verifie
 }
 
 func (h *Handler) citationSourcesForRun(scoped store.WorkspaceStore, runID string) ([]domain.RAGCitation, error) {
+	evidence, err := h.knowledgeEvidenceForRun(scoped, runID)
+	return evidence.sources, err
+}
+
+type knowledgeRunEvidence struct {
+	sources   []domain.RAGCitation
+	reads     []domain.KnowledgeToolReadResult
+	automatic map[string]domain.RAGCitation
+}
+
+func (h *Handler) knowledgeEvidenceForRun(scoped store.WorkspaceStore, runID string) (knowledgeRunEvidence, error) {
 	events, err := scoped.ListRunEvents(runID)
 	if err != nil {
-		return nil, err
+		return knowledgeRunEvidence{}, err
 	}
-	catalog := map[string]domain.RAGCitation{}
-	selectedSourceIDs := []string(nil)
+	var manifest domain.ContextManifest
 	for _, item := range events {
-		switch item.Type {
-		case domain.EventRetrievalCompleted:
-			var sources []domain.RAGCitation
-			if decodePayloadField(item.Payload, "citation_sources", &sources) {
-				catalog = make(map[string]domain.RAGCitation, len(sources))
-				for _, source := range sources {
-					catalog[source.SourceID] = source
-				}
-			}
-		case domain.EventContextAssembled:
-			var manifest domain.ContextManifest
-			if !decodePayloadField(item.Payload, "manifest", &manifest) {
+		var candidate domain.ContextManifest
+		if item.Type == domain.EventContextAssembled && decodePayloadField(item.Payload, "manifest", &candidate) {
+			manifest = candidate
+		}
+	}
+	selectedSourceIDs := selectedCitationSourceIDs(manifest)
+	selectedCalls := map[string]bool{}
+	selectedAutomatic := map[string]bool{}
+	for _, entry := range manifest.Entries {
+		if isSelectedKnowledgeRead(entry) {
+			selectedCalls[entry.ReferenceID] = true
+		} else if entry.Source == contextassembly.SourceKnowledge && entry.Selected {
+			selectedAutomatic[entry.CitationSourceID] = true
+		}
+	}
+	evidence := knowledgeRunEvidence{sources: []domain.RAGCitation{}, automatic: map[string]domain.RAGCitation{}}
+	automaticEvents := []domain.RunEvent{}
+	for _, event := range events {
+		if event.Type == domain.EventRetrievalCompleted {
+			automaticEvents = append(automaticEvents, event)
+		}
+	}
+	for _, source := range rag.CitationSourcesFromEvents(automaticEvents) {
+		if selectedAutomatic[source.SourceID] {
+			evidence.automatic[source.SourceID] = source
+		}
+	}
+	eligible := make([]domain.RunEvent, 0, len(events))
+	for _, event := range events {
+		if event.Type == domain.EventToolCompleted && event.Payload["tool_name"] == domain.KnowledgeReadToolName {
+			read, ok := rag.KnowledgeReadFromEvent(event)
+			if !ok || !selectedCalls[read.Source.ToolCallID] {
 				continue
 			}
-			selectedSourceIDs = selectedCitationSourceIDs(manifest)
+			evidence.reads = append(evidence.reads, read)
 		}
+		eligible = append(eligible, event)
 	}
-	sources := make([]domain.RAGCitation, 0, len(selectedSourceIDs))
+	catalog := map[string]domain.RAGCitation{}
+	for _, source := range rag.CitationSourcesFromEvents(eligible) {
+		catalog[source.SourceID] = source
+	}
 	for _, sourceID := range selectedSourceIDs {
 		if source, ok := catalog[sourceID]; ok {
-			sources = append(sources, source)
+			evidence.sources = append(evidence.sources, source)
 		}
 	}
-	return sources, nil
+	return evidence, nil
+}
+
+func isSelectedKnowledgeRead(entry domain.ContextManifestEntry) bool {
+	return entry.Selected && entry.CitationSourceID != "" &&
+		(entry.Source == contextassembly.SourceToolResult && entry.Transformation == "original" && entry.OriginalBytes == entry.IncludedBytes ||
+			entry.Source == contextassembly.SourceKnowledge && entry.Transformation == "knowledge_read_wrapped")
 }
 
 func citationSourceIDs(citations []domain.RAGCitation) []string {

@@ -135,6 +135,7 @@ func (r *Runtime) currentCatalog() (*tool.Catalog, error) {
 	if r.toolArtifacts != nil {
 		bindings = append(bindings, r.toolArtifacts.ToolBindings()...)
 	}
+	bindings = append(bindings, r.knowledgeTools...)
 	if len(bindings) == 0 {
 		return catalog, nil
 	}
@@ -149,6 +150,9 @@ func (r *Runtime) withHarnessTools(names []string) []string {
 	}
 	if r.toolArtifacts != nil {
 		harnessNames = append(harnessNames, r.toolArtifacts.ToolNames()...)
+	}
+	for _, binding := range r.knowledgeTools {
+		harnessNames = append(harnessNames, binding.Descriptor.Name)
 	}
 	for _, harnessName := range harnessNames {
 		found := false
