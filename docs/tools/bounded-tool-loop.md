@@ -40,8 +40,10 @@ as provider token streaming or measurable time to first token.
 | Explicit same-Stage retry after a committed external effect | Reuse the existing Effect Journal; do not repeat the committed write or silently accept changed arguments. |
 | Uncertain external effect or journal/audit failure | Stop for existing recovery/reconciliation; the model cannot simply ignore it. |
 
-The deterministic end-to-end fixture uses a local OpenAI-compatible HTTP server,
-real Tool bindings, Context Assembly, event/capture persistence and Usage Ledger.
+The deterministic backend integration tests use a local OpenAI-compatible HTTP
+server, real Tool bindings, Context Assembly, an in-memory Fixture Store for
+events/capture, and Usage Ledger. Their scope is the backend Runtime/Tool protocol,
+not browser-to-API product end-to-end testing or real PostgreSQL integration.
 It is protocol evidence, not a live-model quality benchmark. TOOL-025 owns live
 task-quality evidence; this feature does not introduce another evaluator.
 
