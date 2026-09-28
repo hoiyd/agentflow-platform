@@ -100,6 +100,18 @@ export function ChatComposer(props: ChatComposerProps) {
             </div>
           </div>
           <div className="agent-actions">
+            {activeAgent?.skills?.length ? (
+              <select aria-label="Invoke skill" className="composer-skill-select" title="Invoke a bound skill"
+                disabled={isStreaming || isAwaitingHumanInput || isAwaitingPlanApproval}
+                value={input.match(/^\/skill:([^\s]+)/)?.[1] ?? ""}
+                onChange={(event) => {
+                  const task = input.replace(/^\/skill:[^\s]+\s*/, "");
+                  onInputChange(event.target.value ? `/skill:${event.target.value} ${task}` : task);
+                }}>
+                <option value="">Skill: automatic</option>
+                {activeAgent.skills.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            ) : null}
             {showAgentActions ? (
               <>
                 <button

@@ -22,17 +22,19 @@ const (
 )
 
 const (
-	SourceSystem         = "system"
-	SourceToolDefinition = "tool_definition"
-	SourceHistory        = "history"
-	SourceCurrentInput   = "current_input"
-	SourceMemory         = "memory"
-	SourceKnowledge      = "knowledge"
-	SourceCompaction     = "compaction_summary"
-	SourceHistorySearch  = "session_history_retrieval"
-	SourceToolCall       = "tool_call"
-	SourceToolResult     = "tool_result"
-	SourceTaskState      = "task_state"
+	SourceSystem            = "system"
+	SourceToolDefinition    = "tool_definition"
+	SourceHistory           = "history"
+	SourceCurrentInput      = "current_input"
+	SourceMemory            = "memory"
+	SourceKnowledge         = "knowledge"
+	SourceCompaction        = "compaction_summary"
+	SourceHistorySearch     = "session_history_retrieval"
+	SourceToolCall          = "tool_call"
+	SourceToolResult        = "tool_result"
+	SourceTaskState         = "task_state"
+	SourceSkillMetadata     = "skill_metadata"
+	SourceSkillInstructions = "skill_instructions"
 )
 
 var ErrInputBudgetExceeded = failure.New(failure.Definition{
@@ -101,6 +103,8 @@ type Session struct {
 	LoadTaskState func() (domain.TaskState, bool, error)
 	// Prior-stage read pages share the existing Knowledge budget, not Tool authority.
 	LoadKnowledgeReads func() ([]domain.KnowledgeToolReadResult, error)
+	Skills             []domain.SkillMetadata
+	LoadSkills         func() ([]domain.SkillSnapshot, error)
 }
 
 type sessionKey struct{}

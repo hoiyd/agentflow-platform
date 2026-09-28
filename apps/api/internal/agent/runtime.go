@@ -21,6 +21,7 @@ import (
 	"agentflow-platform/apps/api/internal/knowledge"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/tool"
@@ -47,6 +48,8 @@ type Runtime struct {
 	toolProgressGuards    map[string]*progress.Guard
 	knowledgeRetriever    rag.Retriever
 	knowledgeTools        []tool.Binding
+	skills                *skill.Catalog
+	skillService          *skill.Service
 	checkpoints           checkpoint.Provider
 	taskStates            *taskstate.Service
 	toolArtifacts         *artifact.Service
@@ -113,6 +116,7 @@ type RuntimeOptions struct {
 	KnowledgeRetriever rag.Retriever
 	// Knowledge supplies scoped, read-only harness bindings when installed.
 	Knowledge          *knowledge.KnowledgeBase
+	Skills             *skill.Catalog
 	CheckpointProvider checkpoint.Provider
 	LiveEvents         eventpkg.LivePublisher
 	MemoryRecall       memorypkg.Recaller
@@ -173,6 +177,8 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		toolProgressGuards:    map[string]*progress.Guard{},
 		knowledgeRetriever:    knowledgeRetriever,
 		knowledgeTools:        knowledgeTools,
+		skills:                options.Skills,
+		skillService:          skill.NewService(options.Store),
 		checkpoints:           checkpointProvider,
 		taskStates:            taskStates,
 		toolArtifacts:         toolArtifacts,

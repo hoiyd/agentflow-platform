@@ -164,6 +164,13 @@ func TestAnswerRelevanceEmbedderMapsEmbeddingAndError(t *testing.T) {
 }
 
 func TestNewApplicationWiresHealthRoute(t *testing.T) {
+	skillDir := filepath.Join(t.TempDir(), "startup-method")
+	if err := os.MkdirAll(skillDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: startup-method\ndescription: Check startup\n---\nReviewed instructions."), 0600); err != nil {
+		t.Fatal(err)
+	}
 	routePath := filepath.Join(t.TempDir(), "model-routes.json")
 	if err := os.WriteFile(routePath, []byte(`{"routes":[{"id":"test","base_url":"https://api.openai.com/v1","model":"test-model","credential_environment":"TEST_MODEL_API_KEY","request_timeout_seconds":1,"capabilities":{"tool_calling":true,"structured_output":true,"streaming":true},"context_window_tokens":128000,"max_output_tokens":8192,"priority":100,"pricing":{"source":"test"}}]}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -184,6 +191,7 @@ func TestNewApplicationWiresHealthRoute(t *testing.T) {
 		ModelRetryBaseDelay:        time.Millisecond,
 		ModelRetryMaxDelay:         time.Millisecond,
 		DatabaseURL:                pgfixture.DatabaseURL(t),
+		TrustedSkillDirectories:    skillDir,
 		AllowedOrigins:             "http://localhost:3000",
 	}
 
@@ -208,5 +216,14 @@ func TestNewApplicationWiresHealthRoute(t *testing.T) {
 	}
 	if got := response.Body.String(); got != "{\"status\":\"ok\"}\n" {
 		t.Fatalf("health body: got %q", got)
+	}
+	response = httptest.NewRecorder()
+	application.server.Handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/skills", nil))
+	if response.Code != 200 || !strings.Contains(response.Body.String(), "startup-method") || strings.Contains(response.Body.String(), "Reviewed instructions") {
+		t.Fatalf("startup Skill catalog=%d %s", response.Code, response.Body.String())
+	}
+	cfg.TrustedSkillDirectories = filepath.Join(t.TempDir(), "unavailable")
+	if _, err := New(cfg); err == nil || !strings.Contains(err.Error(), "Trusted Skill directory is unavailable") {
+		t.Fatalf("invalid trusted configuration did not fail startup: %v", err)
 	}
 }

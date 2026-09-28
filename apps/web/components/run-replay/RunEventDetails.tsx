@@ -13,6 +13,8 @@ export function Metric({ label, value, tone = "" }: { label: string; value: stri
 
 export function EventDetail({ event }: { event: RunEvent }) {
   const payload = event.payload ?? {};
+  const skillResult = (payload.tool_name === "skill_load" || payload.tool_name === "skill_read") && payload.result && typeof payload.result === "object" && !Array.isArray(payload.result)
+    ? payload.result as Record<string, unknown> : null;
   const parameters = payload.parameters && typeof payload.parameters === "object" && !Array.isArray(payload.parameters)
     ? payload.parameters as Record<string, unknown> : null;
   const sampling = parameters && typeof parameters.temperature === "number"
@@ -105,6 +107,16 @@ export function EventDetail({ event }: { event: RunEvent }) {
         </div>
       ) : null}
       <RetrievalMetadata payload={payload} />
+      {skillResult ? <>
+        <div className="detail-kv"><span>Skill</span><strong>{stringPayload(skillResult, "name")}</strong></div>
+        <div className="detail-kv"><span>Content hash</span><strong>{stringPayload(skillResult, "hash")}</strong></div>
+        {stringPayload(skillResult, "path") ? <div className="detail-kv"><span>Resource</span><strong>{stringPayload(skillResult, "path")}</strong></div> : null}
+        {typeof skillResult.next_offset === "number" ? <div className="detail-kv"><span>Resource range</span><strong>{String(skillResult.offset ?? 0)}–{skillResult.next_offset} / {String(skillResult.total_bytes ?? 0)} bytes</strong></div> : null}
+        {skillResult.already_loaded === true ? <div className="detail-kv"><span>Activation</span><strong>Already loaded</strong></div> : null}
+      </> : null}
+      {payload.tool_name === "skill_load" || payload.tool_name === "skill_read" ? (
+        stringPayload(payload, "error_code") ? <div className="detail-kv"><span>Skill error</span><strong>{stringPayload(payload, "error_code")}</strong></div> : null
+      ) : null}
       {Array.isArray(payload.configured_tools) ? (
         <div className="detail-kv">
           <span>Tools</span>

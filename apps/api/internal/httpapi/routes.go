@@ -48,6 +48,7 @@ func (h *Handler) registerDocumentRoutes(mux *http.ServeMux) {
 }
 
 func (h *Handler) registerAgentRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/skills", h.listSkills)
 	mux.HandleFunc("GET /api/agents", h.listAgents)
 	mux.HandleFunc("POST /api/agents", h.createAgent)
 	mux.HandleFunc("GET /api/agents/{id}", h.getAgent)

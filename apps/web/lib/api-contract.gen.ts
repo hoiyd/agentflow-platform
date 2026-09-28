@@ -88,6 +88,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listSkills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents": {
         parameters: {
             query?: never;
@@ -510,6 +526,7 @@ export interface components {
             system_prompt?: string;
             routing_hints?: components["schemas"]["AgentRoutingHints"];
             tools?: string[];
+            skills?: string[];
             memory_enabled?: boolean;
             retrieval_enabled?: boolean;
         };
@@ -520,6 +537,7 @@ export interface components {
             system_prompt: string;
             routing_hints?: components["schemas"]["AgentRoutingHints"];
             tools: string[];
+            skills?: string[];
             memory_enabled: boolean;
             retrieval_enabled: boolean;
             executor?: string;
@@ -528,6 +546,12 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        SkillMetadata: {
+            name: string;
+            description: string;
+            hash: string;
+            required_tools?: string[];
         };
         AgentRoutingHints: {
             capabilities: string[];
@@ -1066,6 +1090,26 @@ export interface operations {
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    listSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Operator-trusted Skill metadata, without directory paths or contents. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillMetadata"][];
+                };
+            };
         };
     };
     listAgents: {

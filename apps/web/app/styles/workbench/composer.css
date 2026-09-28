@@ -69,6 +69,20 @@
   gap: 6px;
 }
 
+.composer-skill-select {
+  width: 170px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.agent-actions:has(.composer-skill-select) {
+  width: auto;
+  max-width: 100%;
+}
+
 .agent-config-toggle,
 .agent-create-button {
   min-height: 36px;

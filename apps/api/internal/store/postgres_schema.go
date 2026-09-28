@@ -20,6 +20,7 @@ var postgresRequiredColumns = []postgresColumnRequirement{
 	{Table: "agents", Column: "memory_enabled", NotNull: true},
 	{Table: "agents", Column: "retrieval_enabled", NotNull: true},
 	{Table: "agents", Column: "executor", NotNull: true},
+	{Table: "agents", Column: "skills", UDTName: "jsonb", NotNull: true},
 	{Table: "agents", Column: "deleted_at"},
 	{Table: "runs", Column: "workspace_id", UDTName: "text", NotNull: true},
 	{Table: "runs", Column: "heartbeat_at"},

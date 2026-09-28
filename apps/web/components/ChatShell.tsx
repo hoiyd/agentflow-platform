@@ -90,7 +90,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   const verification = useCompletionVerification();
   const toolCatalog = useToolCatalog();
   const {
-    agents, activeAgent, activeAgentId, isAgentDescriptionExpanded, agentsError,
+    agents, activeAgent, activeAgentId, isAgentDescriptionExpanded, agentsError, skills, skillsError, refreshSkills,
     isAgentConfigOpen, agentConfigDraft, newAgentDraft, isNewAgentFormOpen,
     isSavingAgentConfig, isCreatingAgent, archivingAgentId, agentArchiveCandidate,
     agentOperationNotice, agentConfigStatus, refreshAgents, closeAgentForms,
@@ -140,6 +140,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   useEffect(() => {
     void refreshConversations(initialConversationId || undefined);
     void refreshAgents();
+    void refreshSkills();
     void toolCatalog.refresh();
     void knowledge.documents.refreshDocuments();
   }, [initialConversationId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -899,6 +900,8 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
         onUpdateAgentChange={updateAgentConfigDraft}
         onUpdateAgentToolToggle={toggleAgentConfigTool}
         tools={toolCatalog.tools}
+        skills={skills}
+        skillsError={skillsError}
       />
     </div>
   );

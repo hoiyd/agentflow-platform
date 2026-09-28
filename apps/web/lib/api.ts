@@ -9,7 +9,7 @@ import type {
   CollaborationStepInfo, ContractSchemas, Conversation, EpisodeReport, Message,
   ModelRequestDebugResponse, OperatorAttentionItem, RunInfo, RunProjectionSnapshot,
   RunReplay, RunUsageLedger, TaskState, TaskStatePatch, TaskStateRevision, ToolEffect,
-  ToolEffectReconciliationAction, ToolInfo
+  ToolEffectReconciliationAction, ToolInfo, SkillInfo
 } from "./api-types.ts";
 
 export type {
@@ -19,7 +19,7 @@ export type {
   RecoveryEvidence, RecoverySummary, RunEvent, RunInfo, RunProjectionSnapshot, RunReplay,
   RunTraceSummary, RunUsageEntry, RunUsageLedger, RunUsageTotals, RuntimeInvariantFailure,
   TaskBlockerStatus, TaskItemStatus, TaskState, TaskStateOperation, TaskStatePatch,
-  TaskStateRevision, ToolArtifact, ToolEffect, ToolEffectReconciliationAction, ToolInfo
+  TaskStateRevision, ToolArtifact, ToolEffect, ToolEffectReconciliationAction, ToolInfo, SkillInfo
 } from "./api-types.ts";
 export { observeRunEvents } from "./run-stream.ts";
 
@@ -231,6 +231,7 @@ function normalizeAgentInfo(agent: AgentInfo): AgentInfo {
       exclusions: agent.routing_hints?.exclusions ?? []
     },
     tools: Array.isArray(agent.tools) ? agent.tools : [],
+    skills: Array.isArray(agent.skills) ? agent.skills : [],
     memory_enabled: agent.memory_enabled ?? true,
     retrieval_enabled: agent.retrieval_enabled ?? true
   };
@@ -238,6 +239,10 @@ function normalizeAgentInfo(agent: AgentInfo): AgentInfo {
 
 export async function listTools(): Promise<ToolInfo[]> {
   return apiArray<ToolInfo>("/api/tools", { cache: "no-store" }, { errorMessage: "Failed to load tools" });
+}
+
+export async function listSkills(): Promise<SkillInfo[]> {
+  return apiArray<SkillInfo>("/api/skills", { cache: "no-store" }, { errorMessage: "Failed to load trusted skills" });
 }
 
 export async function listRuns(signal?: AbortSignal): Promise<RunInfo[]> {

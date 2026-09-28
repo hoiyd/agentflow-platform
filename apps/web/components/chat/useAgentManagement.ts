@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { archiveAgent, createAgent, listAgents, updateAgent, type AgentInfo } from "../../lib/api";
+import { archiveAgent, createAgent, listAgents, listSkills, updateAgent, type AgentInfo, type SkillInfo } from "../../lib/api";
 import { isDefaultAgent, type AgentConfigDraft } from "./AgentConfigPanel";
 import type { AgentOperationNotice } from "./ChatDialogs";
 
@@ -8,6 +8,8 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
   const [activeAgentId, setActiveAgentId] = useState("");
   const [isAgentDescriptionExpanded, setIsAgentDescriptionExpanded] = useState(false);
   const [agentsError, setAgentsError] = useState("");
+  const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [skillsError, setSkillsError] = useState("");
   const [isAgentConfigOpen, setIsAgentConfigOpen] = useState(false);
   const [agentConfigDraft, setAgentConfigDraft] = useState<AgentConfigDraft | null>(null);
   const [newAgentDraft, setNewAgentDraft] = useState<AgentConfigDraft | null>(null);
@@ -33,6 +35,15 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
       setAgentConfigDraft(nextAgent ? agentToConfigDraft(nextAgent) : null);
     } catch (err) {
       setAgentsError(err instanceof Error ? err.message : "Failed to load agents");
+    }
+  }
+
+  async function refreshSkills() {
+    try {
+      setSkills(await listSkills());
+      setSkillsError("");
+    } catch (err) {
+      setSkillsError(err instanceof Error ? err.message : "Failed to load trusted skills");
     }
   }
 
@@ -121,6 +132,7 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
         exclusions: base?.routing_hints?.exclusions ?? []
       },
       tools: base?.tools ?? [],
+      skills: base?.skills ?? [],
       memory_enabled: base?.memory_enabled ?? true,
       retrieval_enabled: base?.retrieval_enabled ?? true
     });
@@ -257,7 +269,7 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
   }
 
   return {
-    agents, activeAgent, activeAgentId, isAgentDescriptionExpanded, agentsError,
+    agents, activeAgent, activeAgentId, isAgentDescriptionExpanded, agentsError, skills, skillsError, refreshSkills,
     isAgentConfigOpen, agentConfigDraft, newAgentDraft, isNewAgentFormOpen,
     isSavingAgentConfig, isCreatingAgent, archivingAgentId, agentArchiveCandidate,
     agentOperationNotice, agentConfigStatus, refreshAgents, closeAgentForms,
@@ -281,8 +293,8 @@ function agentToConfigDraft(agent: AgentInfo): AgentConfigDraft {
       exclusions: agent.routing_hints?.exclusions ?? []
     },
     tools: agent.tools ?? [],
+    skills: agent.skills ?? [],
     memory_enabled: agent.memory_enabled ?? true,
     retrieval_enabled: agent.retrieval_enabled ?? true
   };
 }
-

@@ -21,6 +21,10 @@ func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, agents)
 }
 
+func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.skills.List())
+}
+
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 	var req apicontract.AgentConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -42,6 +46,12 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 	if err := h.validateAgentTools(agent.Tools); err != nil {
 		writeFailure(w, r, http.StatusBadRequest, err)
 		return
+	}
+	if len(agent.Skills) > 0 {
+		if err := h.agentRuntime.ValidateAgentSkills(agent); err != nil {
+			writeFailure(w, r, http.StatusBadRequest, err)
+			return
+		}
 	}
 
 	created, err := h.store.CreateAgent(agent)
@@ -129,6 +139,12 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, r, http.StatusBadRequest, err)
 		return
 	}
+	if len(agent.Skills) > 0 {
+		if err := h.agentRuntime.ValidateAgentSkills(agent); err != nil {
+			writeFailure(w, r, http.StatusBadRequest, err)
+			return
+		}
+	}
 	updated, err := h.store.UpdateAgent(agent)
 	if err != nil {
 		writeFailure(w, r, http.StatusBadRequest, err)
@@ -176,6 +192,9 @@ func applyAgentConfigRequest(agent *domain.Agent, req apicontract.AgentConfigReq
 	}
 	if req.Tools != nil {
 		agent.Tools = append([]string(nil), (*req.Tools)...)
+	}
+	if req.Skills != nil {
+		agent.Skills = append([]string(nil), (*req.Skills)...)
 	}
 	if req.MemoryEnabled != nil {
 		agent.MemoryEnabled = *req.MemoryEnabled

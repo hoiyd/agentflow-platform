@@ -47,3 +47,15 @@ const draft: AgentConfigDraft = {
   memory_enabled: false,
   retrieval_enabled: false
 };
+
+it("binds trusted methods without enabling their tool dependencies", () => {
+  const onChange = vi.fn();
+  render(<AgentConfigPanel actionLabel="Save" availableTools={[]} availableSkills={[
+    { name: "knowledge-answer", description: "Evidence-based answers", hash: "abc", required_tools: ["knowledge_read"] }
+  ]} disabled={false} draft={{ ...draft, skills: ["missing-method"] }} isSaving={false}
+    onChange={onChange} onSave={vi.fn()} onToggleTool={vi.fn()} status="" title="Configure agent" />);
+  fireEvent.click(screen.getByRole("checkbox", { name: /knowledge-answer/ }));
+  expect(onChange).toHaveBeenCalledWith({ skills: ["missing-method", "knowledge-answer"] });
+  fireEvent.click(screen.getByRole("checkbox", { name: /missing-method/ }));
+  expect(onChange).toHaveBeenCalledWith({ skills: [] });
+});

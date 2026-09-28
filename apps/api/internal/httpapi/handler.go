@@ -17,6 +17,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/redaction"
+	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/verification"
@@ -46,6 +47,7 @@ type HTTPStore interface {
 // AgentRuntimeOperations is the transport-facing execution capability. HTTP
 // handlers do not depend on Runtime construction or its internal collaborators.
 type AgentRuntimeOperations interface {
+	ValidateAgentSkills(domain.Agent) error
 	PrepareChatRunWithContract(context.Context, string, string, *domain.CompletionContract) (agent.PreparedRun, error)
 	PrepareCollaborationRunWithContract(context.Context, string, string, *domain.CompletionContract) (agent.PreparedCollaborationRun, error)
 	PrepareAutonomousRunWithContract(context.Context, string, string, *domain.CompletionContract) (agent.PreparedCollaborationRun, error)
@@ -85,6 +87,7 @@ type Dependencies struct {
 	AgentRuntime   AgentRuntimeOperations
 	Memory         MemoryOperations
 	Knowledge      KnowledgeOperations
+	Skills         *skill.Catalog
 	RunController  RunCapacity
 	RunEvents      *event.Hub
 	Verification   VerificationOperations
@@ -97,6 +100,7 @@ type Handler struct {
 	agentRuntime   AgentRuntimeOperations
 	memories       MemoryOperations
 	knowledge      KnowledgeOperations
+	skills         *skill.Catalog
 	runController  RunCapacity
 	runEvents      *event.Hub
 	verification   VerificationOperations
@@ -134,6 +138,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		agentRuntime:   dependencies.AgentRuntime,
 		memories:       dependencies.Memory,
 		knowledge:      dependencies.Knowledge,
+		skills:         dependencies.Skills,
 		runController:  dependencies.RunController,
 		runEvents:      dependencies.RunEvents,
 		verification:   dependencies.Verification,
