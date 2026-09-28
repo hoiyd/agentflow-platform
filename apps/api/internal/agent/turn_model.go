@@ -12,6 +12,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
+	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
@@ -100,6 +101,25 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 	if !isolatedContext && m.runtime.taskStates != nil {
 		session.LoadTaskState = func() (domain.TaskState, bool, error) {
 			return m.runtime.taskStates.Get(request.ConversationID)
+		}
+	}
+	if len(m.runtime.knowledgeTools) > 0 {
+		session.LoadKnowledgeReads = func() ([]domain.KnowledgeToolReadResult, error) {
+			events, err := m.runtime.store.ListRunEvents(request.RunID)
+			if err != nil {
+				return nil, err
+			}
+			reads := []domain.KnowledgeToolReadResult{}
+			for _, item := range events {
+				// This Turn already receives its own paired Tool observations.
+				if item.TurnID == request.TurnID {
+					continue
+				}
+				if read, ok := rag.KnowledgeReadFromEvent(item); ok {
+					reads = append(reads, read)
+				}
+			}
+			return reads, nil
 		}
 	}
 	return contextassembly.WithSession(ctx, session), compaction

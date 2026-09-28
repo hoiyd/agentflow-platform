@@ -838,6 +838,9 @@ components:
           items: { type: string }
         start_offset: { type: integer }
         end_offset: { type: integer }
+        run_id: { type: string }
+        tool_call_id: { type: string }
+        tool_event_id: { type: string }
 
     WebCitation:
       type: object

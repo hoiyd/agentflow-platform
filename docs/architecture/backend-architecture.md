@@ -82,7 +82,7 @@ apps/api/
     contextcompaction/
     store/          PostgreSQL persistence adapter
     memory/         semantic memory operations and asynchronous curation
-    knowledge/      knowledge-base ingestion, embedding, search, and RAG evaluation
+    knowledge/      ingestion, embedding, search, scoped read bindings, RAG evaluation
     rag/            chunking and shared recall, reranking, and relevance gating
     concurrency/    run and model-request limits
     budget/         per-Run resource accounting and enforcement

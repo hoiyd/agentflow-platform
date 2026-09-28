@@ -155,6 +155,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			HaltAfter: cfg.ToolProgressHaltAfter, HistoryMax: 8,
 		},
 		KnowledgeRetriever: retrievalPipeline,
+		Knowledge:          knowledgeBase,
 		MemoryRecall:       memoryProvider,
 		LiveEvents:         eventHub,
 	})

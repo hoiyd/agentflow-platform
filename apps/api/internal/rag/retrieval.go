@@ -118,7 +118,7 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 	if err != nil {
 		return domain.DocumentSearchResponse{}, fmt.Errorf("inspect knowledge index identity: %w", err)
 	}
-	if err := validateIndexCompatibility(identities, embedding); err != nil {
+	if err := ValidateIndexCompatibility(identities, embedding); err != nil {
 		return domain.DocumentSearchResponse{}, err
 	}
 
@@ -207,7 +207,8 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 	return response, nil
 }
 
-func validateIndexCompatibility(identities []domain.DocumentIndexIdentity, embedding Embedding) error {
+// ValidateIndexCompatibility is shared by search and scoped reference reads.
+func ValidateIndexCompatibility(identities []domain.DocumentIndexIdentity, embedding Embedding) error {
 	dimensions := embedding.Dimensions
 	if dimensions <= 0 {
 		dimensions = len(embedding.Vector)

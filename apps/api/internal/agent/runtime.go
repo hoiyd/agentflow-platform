@@ -18,6 +18,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/inference/routing"
+	"agentflow-platform/apps/api/internal/knowledge"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/store"
@@ -45,6 +46,7 @@ type Runtime struct {
 	toolProgressMu        sync.Mutex
 	toolProgressGuards    map[string]*progress.Guard
 	knowledgeRetriever    rag.Retriever
+	knowledgeTools        []tool.Binding
 	checkpoints           checkpoint.Provider
 	taskStates            *taskstate.Service
 	toolArtifacts         *artifact.Service
@@ -109,6 +111,8 @@ type RuntimeOptions struct {
 	ToolProgressGuard  progress.Config
 	ToolExecution      tool.ExecutorOptions
 	KnowledgeRetriever rag.Retriever
+	// Knowledge supplies scoped, read-only harness bindings when installed.
+	Knowledge          *knowledge.KnowledgeBase
 	CheckpointProvider checkpoint.Provider
 	LiveEvents         eventpkg.LivePublisher
 	MemoryRecall       memorypkg.Recaller
@@ -148,6 +152,10 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 	if artifactStore, ok := options.Store.(store.ToolArtifactStore); ok {
 		toolArtifacts = artifact.NewService(artifactStore, tracepkg.NewRecorder(options.Store))
 	}
+	var knowledgeTools []tool.Binding
+	if storage, ok := options.Store.(knowledge.ToolStore); ok && options.Knowledge != nil {
+		knowledgeTools = options.Knowledge.ToolBindings(storage)
+	}
 	runtime := &Runtime{
 		store:                 options.Store,
 		embeddingClient:       embeddingClient,
@@ -164,6 +172,7 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		toolExecutionOptions:  options.ToolExecution,
 		toolProgressGuards:    map[string]*progress.Guard{},
 		knowledgeRetriever:    knowledgeRetriever,
+		knowledgeTools:        knowledgeTools,
 		checkpoints:           checkpointProvider,
 		taskStates:            taskStates,
 		toolArtifacts:         toolArtifacts,

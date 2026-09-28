@@ -144,6 +144,9 @@ type RAGCitation struct {
 	SectionPath     []string `json:"section_path,omitempty"`
 	StartOffset     int      `json:"start_offset"`
 	EndOffset       int      `json:"end_offset"`
+	RunID           string   `json:"run_id,omitempty"`
+	ToolCallID      string   `json:"tool_call_id,omitempty"`
+	ToolEventID     string   `json:"tool_event_id,omitempty"`
 }
 
 type EmbeddingInfo struct {

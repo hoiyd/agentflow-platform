@@ -29,6 +29,11 @@ export function MessageCitations({ citations, webCitations }: {
               <span>{citation.document_title || citation.document_id}</span>
               {location ? <span className="citation-location">{location}</span> : null}
               {sourceCount > 1 ? <span className="citation-location">{sourceCount} chunks</span> : null}
+              {citation.run_id && citation.tool_event_id ? (
+                <a className="citation-event-link" href={`/runs/${encodeURIComponent(citation.run_id)}?event=${encodeURIComponent(citation.tool_event_id)}#run-event-detail`}>
+                  Tool event
+                </a>
+              ) : null}
             </li>
           );
         })}

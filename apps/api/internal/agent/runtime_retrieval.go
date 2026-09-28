@@ -217,7 +217,15 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query retri
 				payload["reranker"] = response.Reranker
 				payload["relevance_gate"] = response.RelevanceGate
 				payload["relevance_decisions"] = response.RelevanceDecisions
-				payload["citation_sources"] = response.CitationSources
+				runEvents, sourceErr := r.store.ListRunEvents(runID)
+				if sourceErr != nil {
+					payload["rag_error"] = sourceErr.Error()
+					chunks = nil
+				} else {
+					var sources []domain.RAGCitation
+					chunks, sources = rag.AssignRunCitationSources(chunks, rag.RunCitationReservations(runEvents))
+					payload["citation_sources"] = sources
+				}
 				payload["knowledge_security"] = response.Security
 				if response.ContextSelection.Version != "" {
 					payload["context_selection"] = response.ContextSelection
