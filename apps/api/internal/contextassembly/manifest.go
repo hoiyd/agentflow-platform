@@ -88,7 +88,19 @@ func prefixHash(messages []Message, tools []Tool) string {
 }
 
 func estimateMessageTokens(message Message) int {
-	return messageOverheadTokens + EstimateTokens(message.Role) + EstimateTokens(message.Content) + EstimateTokens(message.ToolCallID) + EstimateTokens(string(message.ToolCalls))
+	tokens := messageOverheadTokens + EstimateTokens(message.Role) + EstimateTokens(message.Content) + EstimateTokens(message.ToolCallID) + EstimateTokens(string(message.ToolCalls))
+	if message.ReasoningContent != nil {
+		tokens += EstimateTokens(*message.ReasoningContent)
+	}
+	return tokens
+}
+
+func messageContentBytes(message Message) int {
+	bytes := len(message.Content)
+	if message.ReasoningContent != nil {
+		bytes += len(*message.ReasoningContent)
+	}
+	return bytes
 }
 
 func EstimateTokens(value string) int {

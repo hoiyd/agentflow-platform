@@ -26,7 +26,7 @@ func normalizeBaseURL(baseURL string) string {
 func messagesTextLength(messages []Message) int {
 	total := 0
 	for _, message := range messages {
-		total += len(message.Content)
+		total += len(messageTextForEstimation(message))
 	}
 	return total
 }
@@ -34,15 +34,33 @@ func messagesTextLength(messages []Message) int {
 func messagesToText(messages []Message) string {
 	var builder strings.Builder
 	for _, message := range messages {
-		if message.Content == "" {
+		text := messageTextForEstimation(message)
+		if text == "" {
 			continue
 		}
 		builder.WriteString(message.Role)
 		builder.WriteString(": ")
-		builder.WriteString(message.Content)
+		builder.WriteString(text)
 		builder.WriteString("\n")
 	}
 	return builder.String()
+}
+
+func messageTextForEstimation(message Message) string {
+	if message.ReasoningContent == nil {
+		return message.Content
+	}
+	return *message.ReasoningContent + message.Content
+}
+
+// Request Capture owns opt-in body storage. Ordinary events must not persist
+// the provider's reasoning text as a side effect of continuation support.
+func messagesForTrace(messages []Message) []Message {
+	result := append([]Message(nil), messages...)
+	for index := range result {
+		result[index].ReasoningContent = nil
+	}
+	return result
 }
 
 func estimateUsage(input string, output string) Usage {

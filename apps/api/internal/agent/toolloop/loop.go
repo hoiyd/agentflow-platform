@@ -118,7 +118,8 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		}
 		rawMessages = append(rawMessages, provider.Message{
 			Role: "assistant", Content: choice.Content, ToolCalls: calls,
-			Source: contextassembly.SourceToolCall, ReferenceID: calls[0].ID,
+			ReasoningContent: choice.ReasoningContent,
+			Source:           contextassembly.SourceToolCall, ReferenceID: calls[0].ID,
 		})
 		results := executor.ExecuteBatch(ctx, requests)
 		if err := ctx.Err(); err != nil {
