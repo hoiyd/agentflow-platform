@@ -54,7 +54,8 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 			TaskExamples: []string{"Exercise Postgres Agent persistence."},
 			Exclusions:   []string{"unrelated work"},
 		},
-		Tools: []string{"calculator", " calculator ", "get_current_time"},
+		Tools:  []string{"calculator", " calculator ", "get_current_time"},
+		Skills: []string{"evidence-research", " evidence-research "},
 	})
 	if err != nil || len(agent.Tools) != 2 || len(agent.RoutingHints.Capabilities) != 1 || !agent.MemoryEnabled || !agent.RetrievalEnabled {
 		t.Fatalf("create agent: agent=%#v err=%v", agent, err)
@@ -66,7 +67,7 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 		t.Fatalf("update agent: agent=%#v err=%v", updated, err)
 	}
 	loadedAgent, found, err := postgresStore.GetAgent(agent.ID)
-	if err != nil || !found || loadedAgent.SystemPrompt != "Updated prompt" || len(loadedAgent.RoutingHints.TaskExamples) != 1 {
+	if err != nil || !found || loadedAgent.SystemPrompt != "Updated prompt" || len(loadedAgent.RoutingHints.TaskExamples) != 1 || len(loadedAgent.Skills) != 1 || loadedAgent.Skills[0] != "evidence-research" {
 		t.Fatalf("get agent: found=%v agent=%#v err=%v", found, loadedAgent, err)
 	}
 	agents, err := postgresStore.ListAgents()

@@ -15,6 +15,20 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+it("shows frozen skill identity and resource read details in tool events", () => {
+  const event: RunReplayData["run_events"][number] = {
+    id: "skill-read", schema_version: 1, sequence: 3, run_id: "run-1",
+    type: "tool.completed", timestamp: "2026-09-10T00:00:00Z",
+    payload: { tool_name: "skill_read", result: { name: "knowledge-answer", hash: "sha256-method", path: "references/checklist.md", offset: 0, next_offset: 32, total_bytes: 64, truncated: true } }
+  };
+  render(<EventDetail event={event} />);
+  expect(screen.getByText("Skill")).toBeTruthy();
+  expect(screen.getByText("knowledge-answer")).toBeTruthy();
+  expect(screen.getByText("sha256-method")).toBeTruthy();
+  expect(screen.getByText("references/checklist.md")).toBeTruthy();
+  expect(screen.getByText("0–32 / 64 bytes")).toBeTruthy();
+});
+
 it("does not double-count physical attempt latency in the step total", () => {
   const events: RunReplayData["run_events"] = [
     { id: "model-1", schema_version: 1, sequence: 1, run_id: "run-1", type: "model.completed", stage_id: "stage-1", timestamp: "2026-09-10T00:00:00Z", payload: { duration_ms: 120 } },

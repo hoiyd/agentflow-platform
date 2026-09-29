@@ -34,6 +34,10 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 		}
 	}
 	messages := normalizeMessages(mergeSessionHistory(request.Messages, session))
+	messages, err := appendSkillContext(messages, session)
+	if err != nil {
+		return Pack{}, fmt.Errorf("load frozen Skill context: %w", err)
+	}
 	messages = applyRetrievedContextTrustPolicy(messages)
 	entries := make([]domain.ContextManifestEntry, 0, len(messages)+len(request.Tools)+len(session.Memories)+len(session.Knowledge)+1)
 	messageCandidates := make([]candidate, 0, len(messages))
@@ -282,7 +286,7 @@ func excludeCompactedHistory(messages []Message, compaction *domain.ContextCompa
 
 func isRequiredSource(source string) bool {
 	switch source {
-	case SourceSystem, SourceCurrentInput, SourceToolCall, SourceToolResult:
+	case SourceSystem, SourceCurrentInput, SourceToolCall, SourceToolResult, SourceSkillMetadata, SourceSkillInstructions:
 		return true
 	default:
 		return false

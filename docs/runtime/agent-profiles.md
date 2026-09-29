@@ -16,6 +16,7 @@ participates in a Run.
 | `routing_hints.task_examples` | Gives representative tasks used as supporting lexical routing evidence. |
 | `routing_hints.exclusions` | Declares tasks that should demote this Agent during deterministic routing. |
 | `tools` | Per-Agent allowlist drawn from installed platform tools. Unknown tools are rejected when the profile is saved. |
+| `skills` | Explicit names from the operator-trusted method catalog; frozen content is loaded progressively and never grants Tool permissions. |
 | `memory_enabled` | Enables scoped semantic Memory retrieval before a Turn. |
 | `retrieval_enabled` | Enables Knowledge/RAG retrieval before a Turn. |
 
@@ -53,6 +54,10 @@ Editing or archiving a profile later does not rewrite an existing Run. Resume
 restores the frozen Agent configuration and verifies that every required tool is
 still installed with the same captured schema. Credentials and live tool
 handlers are deployment policy and are not persisted in the Snapshot.
+
+Bound Skill identities, instructions and bounded text resources are also frozen.
+See [Trusted Skills](../tools/trusted-skills.md) for package setup, invocation,
+dependency failures and Resume after a package directory changes or disappears.
 
 ## Agent API
 

@@ -13,7 +13,7 @@ import (
 
 func (s *PostgresStore) ListAgents() ([]domain.Agent, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, description, system_prompt, routing_hints, tools, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
+		SELECT id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
 		FROM agents
 		WHERE deleted_at IS NULL
 		ORDER BY created_at ASC`)
@@ -58,16 +58,20 @@ func (s *PostgresStore) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 	if err != nil {
 		return domain.Agent{}, err
 	}
+	skillsJSON, err := json.Marshal(agent.Skills)
+	if err != nil {
+		return domain.Agent{}, err
+	}
 	_, err = s.db.Exec(`
-		INSERT INTO agents (id, name, description, system_prompt, routing_hints, tools, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, $10, $11)`,
-		agent.ID, agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.CreatedAt, agent.UpdatedAt)
+		INSERT INTO agents (id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12)`,
+		agent.ID, agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, skillsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.CreatedAt, agent.UpdatedAt)
 	return agent, err
 }
 
 func (s *PostgresStore) GetAgent(id string) (domain.Agent, bool, error) {
 	row := s.db.QueryRow(`
-		SELECT id, name, description, system_prompt, routing_hints, tools, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
+		SELECT id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
 		FROM agents
 		WHERE id = $1`, id)
 	agent, err := scanAgent(row)
@@ -108,11 +112,15 @@ func (s *PostgresStore) UpdateAgent(agent domain.Agent) (domain.Agent, error) {
 	if err != nil {
 		return domain.Agent{}, err
 	}
+	skillsJSON, err := json.Marshal(agent.Skills)
+	if err != nil {
+		return domain.Agent{}, err
+	}
 	_, err = s.db.Exec(`
 		UPDATE agents
-		SET name = $1, description = $2, system_prompt = $3, routing_hints = $4, tools = $5, memory_enabled = $6, retrieval_enabled = $7, executor = $8, updated_at = $9
-		WHERE id = $10`,
-		agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.UpdatedAt, agent.ID)
+		SET name = $1, description = $2, system_prompt = $3, routing_hints = $4, tools = $5, skills = $6, memory_enabled = $7, retrieval_enabled = $8, executor = $9, updated_at = $10
+		WHERE id = $11`,
+		agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, skillsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.UpdatedAt, agent.ID)
 	return agent, err
 }
 
@@ -145,7 +153,7 @@ func (s *PostgresStore) GetDefaultAgent() (domain.Agent, bool, error) {
 		return agent, ok, err
 	}
 	row := s.db.QueryRow(`
-		SELECT id, name, description, system_prompt, routing_hints, tools, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
+		SELECT id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
 		FROM agents
 		WHERE deleted_at IS NULL
 		ORDER BY created_at ASC
@@ -176,10 +184,14 @@ func (s *PostgresStore) seedDefaultAgents(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+			skillsJSON, err := json.Marshal(domain.NormalizeAgentConfig(agent).Skills)
+			if err != nil {
+				return err
+			}
 			if _, err := s.db.ExecContext(ctx, `
-				INSERT INTO agents (id, name, description, system_prompt, routing_hints, tools, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL, $10, $11)`,
-				agent.ID, agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.CreatedAt, agent.UpdatedAt); err != nil {
+				INSERT INTO agents (id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12)`,
+				agent.ID, agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, skillsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.CreatedAt, agent.UpdatedAt); err != nil {
 				return err
 			}
 		}
@@ -207,8 +219,9 @@ func scanAgent(row scanner) (domain.Agent, error) {
 	var agent domain.Agent
 	var routingHintsJSON []byte
 	var toolsJSON []byte
+	var skillsJSON []byte
 	var deletedAt sql.NullTime
-	if err := row.Scan(&agent.ID, &agent.Name, &agent.Description, &agent.SystemPrompt, &routingHintsJSON, &toolsJSON, &agent.MemoryEnabled, &agent.RetrievalEnabled, &agent.Executor, &deletedAt, &agent.CreatedAt, &agent.UpdatedAt); err != nil {
+	if err := row.Scan(&agent.ID, &agent.Name, &agent.Description, &agent.SystemPrompt, &routingHintsJSON, &toolsJSON, &skillsJSON, &agent.MemoryEnabled, &agent.RetrievalEnabled, &agent.Executor, &deletedAt, &agent.CreatedAt, &agent.UpdatedAt); err != nil {
 		return domain.Agent{}, err
 	}
 	agent.Archived = deletedAt.Valid
@@ -219,6 +232,11 @@ func scanAgent(row scanner) (domain.Agent, error) {
 	}
 	if len(toolsJSON) > 0 {
 		if err := json.Unmarshal(toolsJSON, &agent.Tools); err != nil {
+			return domain.Agent{}, err
+		}
+	}
+	if len(skillsJSON) > 0 {
+		if err := json.Unmarshal(skillsJSON, &agent.Skills); err != nil {
 			return domain.Agent{}, err
 		}
 	}

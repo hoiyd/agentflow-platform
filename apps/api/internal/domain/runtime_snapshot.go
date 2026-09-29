@@ -33,6 +33,7 @@ type RuntimeSnapshot struct {
 	Embedding          RuntimeEmbeddingSnapshot  `json:"embedding"`
 	ModelRouting       ModelRouteCatalogSnapshot `json:"model_routing"`
 	Tools              []RuntimeToolSnapshot     `json:"tools"`
+	Skills             []SkillSnapshot           `json:"skills,omitempty"`
 	ToolSecurityPolicy ToolSecurityPolicy        `json:"tool_security_policy"`
 	ToolProgressGuard  ToolProgressGuardConfig   `json:"tool_progress_guard"`
 	ContextAssembly    ContextAssemblyConfig     `json:"context_assembly"`
@@ -112,6 +113,7 @@ type RuntimeAgentSnapshot struct {
 	SystemPrompt     string            `json:"system_prompt"`
 	RoutingHints     AgentRoutingHints `json:"routing_hints,omitempty"`
 	Tools            []string          `json:"tools"`
+	Skills           []string          `json:"skills,omitempty"`
 	MemoryEnabled    bool              `json:"memory_enabled"`
 	RetrievalEnabled bool              `json:"retrieval_enabled"`
 	Executor         string            `json:"executor"`

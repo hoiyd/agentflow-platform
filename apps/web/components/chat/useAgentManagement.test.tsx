@@ -1,11 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { listAgents, updateAgent } from "../../lib/api";
+import { listAgents, listSkills, updateAgent } from "../../lib/api";
 import { useAgentManagement } from "./useAgentManagement";
 
 vi.mock("../../lib/api", () => ({
   listAgents: vi.fn(),
+  listSkills: vi.fn(),
   createAgent: vi.fn(),
   updateAgent: vi.fn(),
   archiveAgent: vi.fn()
@@ -32,6 +33,18 @@ it("keeps agent selection and failed edits inside the agent workbench", async ()
   await act(async () => { await result.current.handleSaveAgentConfig(); });
   expect(result.current.agentsError).toBe("Update denied");
   expect(result.current.agentOperationNotice?.tone).toBe("error");
+});
+
+it("keeps frozen profile bindings editable when the skill catalog fails", async () => {
+  vi.mocked(listAgents).mockResolvedValue([{ ...agent("agent_planner", "Planner"), skills: ["knowledge-answer"] }]);
+  vi.mocked(listSkills).mockRejectedValue(new Error("Catalog unavailable"));
+  const { result } = renderHook(() => useAgentManagement(false, vi.fn()));
+  await act(async () => { await result.current.refreshAgents(); await result.current.refreshSkills(); });
+  expect(result.current.skillsError).toBe("Catalog unavailable");
+  expect(result.current.agentsError).toBe("");
+  expect(result.current.agentConfigDraft?.skills).toEqual(["knowledge-answer"]);
+  act(() => result.current.handleOpenNewAgentForm());
+  expect(result.current.newAgentDraft?.skills).toEqual(["knowledge-answer"]);
 });
 
 function agent(id: string, name: string): Awaited<ReturnType<typeof listAgents>>[number] {

@@ -317,6 +317,7 @@ type Agent struct {
 	Name             string             `json:"name"`
 	RetrievalEnabled bool               `json:"retrieval_enabled"`
 	RoutingHints     *AgentRoutingHints `json:"routing_hints,omitempty"`
+	Skills           *[]string          `json:"skills,omitempty"`
 	SystemPrompt     string             `json:"system_prompt"`
 	Tools            []string           `json:"tools"`
 	UpdatedAt        time.Time          `json:"updated_at"`
@@ -330,6 +331,7 @@ type AgentConfigRequest struct {
 	Name             *string            `json:"name,omitempty"`
 	RetrievalEnabled *bool              `json:"retrieval_enabled,omitempty"`
 	RoutingHints     *AgentRoutingHints `json:"routing_hints,omitempty"`
+	Skills           *[]string          `json:"skills,omitempty"`
 	SystemPrompt     *string            `json:"system_prompt,omitempty"`
 	Tools            *[]string          `json:"tools,omitempty"`
 }
@@ -647,6 +649,14 @@ type RuntimeRunBudget struct {
 	MaxToolCalls                     *int   `json:"max_tool_calls,omitempty"`
 	MaxTotalTokens                   *int   `json:"max_total_tokens,omitempty"`
 	OutputCostPerMillionTokensMicros *int64 `json:"output_cost_per_million_tokens_micros,omitempty"`
+}
+
+// SkillMetadata defines model for SkillMetadata.
+type SkillMetadata struct {
+	Description   string    `json:"description"`
+	Hash          string    `json:"hash"`
+	Name          string    `json:"name"`
+	RequiredTools *[]string `json:"required_tools,omitempty"`
 }
 
 // ToolInfo defines model for ToolInfo.

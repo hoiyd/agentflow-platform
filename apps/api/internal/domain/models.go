@@ -49,18 +49,20 @@ type Message struct {
 }
 
 type Agent struct {
-	ID               string            `json:"id"`
-	Name             string            `json:"name"`
-	Description      string            `json:"description"`
-	SystemPrompt     string            `json:"system_prompt"`
-	RoutingHints     AgentRoutingHints `json:"routing_hints"`
-	Tools            []string          `json:"tools"`
-	MemoryEnabled    bool              `json:"memory_enabled"`
-	RetrievalEnabled bool              `json:"retrieval_enabled"`
-	Executor         string            `json:"executor"`
-	Archived         bool              `json:"archived,omitempty"`
-	CreatedAt        time.Time         `json:"created_at"`
-	UpdatedAt        time.Time         `json:"updated_at"`
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	Description  string            `json:"description"`
+	SystemPrompt string            `json:"system_prompt"`
+	RoutingHints AgentRoutingHints `json:"routing_hints"`
+	Tools        []string          `json:"tools"`
+	// Skills bind trusted methods; they never expand Tools or data scope.
+	Skills           []string  `json:"skills,omitempty"`
+	MemoryEnabled    bool      `json:"memory_enabled"`
+	RetrievalEnabled bool      `json:"retrieval_enabled"`
+	Executor         string    `json:"executor"`
+	Archived         bool      `json:"archived,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // AgentRoutingHints are declarative ranking signals owned by an Agent profile.
@@ -94,6 +96,7 @@ func NormalizeAgentConfig(agent Agent) Agent {
 		agent.RetrievalEnabled = true
 	}
 	agent.RoutingHints = NormalizeAgentRoutingHints(agent.RoutingHints)
+	agent.Skills = normalizeUniqueStrings(agent.Skills)
 	return agent
 }
 

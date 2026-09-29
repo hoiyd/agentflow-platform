@@ -154,6 +154,20 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/skills:
+    get:
+      operationId: listSkills
+      tags: [Agents]
+      responses:
+        '200':
+          description: Operator-trusted Skill metadata, without directory paths or contents.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SkillMetadata'
+
   /api/agents:
     get:
       operationId: listAgents
@@ -870,6 +884,10 @@ components:
           type: array
           items:
             type: string
+        skills:
+          type: array
+          maxItems: 8
+          items: { type: string }
         memory_enabled:
           type: boolean
         retrieval_enabled:
@@ -892,6 +910,9 @@ components:
           type: array
           items:
             type: string
+        skills:
+          type: array
+          items: { type: string }
         memory_enabled:
           type: boolean
         retrieval_enabled:
@@ -906,6 +927,17 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    SkillMetadata:
+      type: object
+      required: [name, description, hash]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        hash: { type: string }
+        required_tools:
+          type: array
+          items: { type: string }
 
     AgentRoutingHints:
       type: object

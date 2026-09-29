@@ -17,6 +17,7 @@ BIND_ADDRESS=127.0.0.1
 PORT=8080
 DATABASE_URL=postgres://agentflow:agentflow@localhost:5432/agentflow?sslmode=disable
 TOOL_CONFIG_PATH=.data/tools.json
+TRUSTED_SKILL_DIRS=
 TAVILY_API_KEY=
 TOOL_RESULT_MAX_BATCH_BYTES=8000
 TOOL_ARTIFACT_MAX_BYTES=5242880
@@ -319,6 +320,17 @@ The Progress Guard thresholds govern repeated typed failures, unchanged
 read-only results, and bounded oscillation. They are frozen into each new Run;
 blocking occurs before Tool Budget and Handler execution. See
 [Tool Progress Guard](../tools/tool-progress-guard.md).
+
+## Trusted Skill Packages
+
+`TRUSTED_SKILL_DIRS` is an operator-owned CSV list of exact reviewed package
+directories containing `SKILL.md`. Relative paths use the process working
+directory. Empty disables new bindings; invalid packages fail startup. Agent
+profiles bind names from `GET /api/skills`, not filesystem paths. This setting
+does not install scripts, enable Tools, or widen operator policy. Existing Runs
+retain bounded package content in their frozen Snapshot and do not reread local
+files on Resume. See [Trusted Skills](../tools/trusted-skills.md) for the format,
+size limits, progressive Context loading and privacy boundary.
 
 ## Verification
 

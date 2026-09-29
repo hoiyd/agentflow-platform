@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { APIError, apiRequest } from "./api-client.ts";
-import { continueRun, getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listRunAttention, listToolEffects, observeRunEvents, patchTaskState, reconcileToolEffect } from "./api.ts";
+import { continueRun, getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listAgents, listSkills, listRunAttention, listToolEffects, observeRunEvents, patchTaskState, reconcileToolEffect } from "./api.ts";
 import {
   createDocument,
   deleteDocument,
@@ -60,6 +60,18 @@ test("legacy replay receives an empty usage ledger", async (t) => {
     },
     entries: []
   });
+});
+
+test("legacy profiles normalize absent skill bindings to an empty list", async (t) => {
+  mockFetch(t, [{ id: "agent-1", skills: null }]);
+  assert.deepEqual((await listAgents())[0].skills, []);
+});
+
+test("trusted skill client reads only the metadata catalog", async (t) => {
+  mockFetch(t, [{ name: "knowledge-answer", description: "Read facts", hash: "frozen" }], (url) => {
+    assert.equal(url, "http://localhost:8080/api/skills");
+  });
+  assert.equal((await listSkills())[0].hash, "frozen");
 });
 
 test("operator attention client reads the derived run queue", async (t) => {

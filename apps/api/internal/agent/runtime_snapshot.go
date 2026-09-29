@@ -13,6 +13,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
+	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/policy"
@@ -67,12 +68,39 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 	if toolCallingAvailable {
 		agent.Tools = r.withHarnessTools(agent.Tools)
 	}
+	skillSnapshots := []domain.SkillSnapshot{}
+	seenSkills := map[string]bool{}
+	freezeSkills := func(agent *domain.Agent) error {
+		if len(agent.Skills) == 0 {
+			return nil
+		}
+		packages, err := r.freezeAgentSkills(*agent, catalog)
+		if err != nil {
+			return err
+		}
+		for _, item := range packages {
+			if !seenSkills[item.Name] {
+				seenSkills[item.Name] = true
+				skillSnapshots = append(skillSnapshots, item)
+			}
+		}
+		if toolCallingAvailable {
+			agent.Tools = append(agent.Tools, skill.LoadToolName, skill.ReadToolName)
+		}
+		return nil
+	}
+	if err := freezeSkills(&agent); err != nil {
+		return domain.RuntimeSnapshot{}, err
+	}
 	candidateSnapshots := make([]domain.RuntimeAgentSnapshot, 0, len(candidates))
 	toolNames := append([]string(nil), agent.Tools...)
 	for _, candidate := range candidates {
 		candidate = domain.NormalizeAgentConfig(candidate)
 		if toolCallingAvailable {
 			candidate.Tools = r.withHarnessTools(candidate.Tools)
+		}
+		if err := freezeSkills(&candidate); err != nil {
+			return domain.RuntimeSnapshot{}, err
 		}
 		candidateSnapshots = append(candidateSnapshots, snapshotAgent(candidate))
 		toolNames = append(toolNames, candidate.Tools...)
@@ -98,6 +126,7 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		},
 		ModelRouting:       modelRouting,
 		Tools:              toolSnapshots,
+		Skills:             skillSnapshots,
 		ToolSecurityPolicy: catalog.SecurityPolicy(),
 		ToolProgressGuard:  progress.NormalizeConfig(r.toolProgressConfig),
 		ContextAssembly:    contextassembly.NormalizeConfig(r.contextAssemblyConfig),
@@ -136,10 +165,34 @@ func (r *Runtime) currentCatalog() (*tool.Catalog, error) {
 		bindings = append(bindings, r.toolArtifacts.ToolBindings()...)
 	}
 	bindings = append(bindings, r.knowledgeTools...)
+	bindings = append(bindings, r.skillService.ToolBindings()...)
 	if len(bindings) == 0 {
 		return catalog, nil
 	}
 	return catalog.CloneWith(bindings...)
+}
+
+// ValidateAgentSkills checks dependencies without installing or granting Tools.
+// The actual Run captures the same packages after harness Tool availability is known.
+func (r *Runtime) ValidateAgentSkills(agent domain.Agent) error {
+	agent = domain.NormalizeAgentConfig(agent)
+	catalog, err := r.currentCatalog()
+	if err != nil {
+		return err
+	}
+	agent.Tools = r.withHarnessTools(agent.Tools)
+	_, err = r.freezeAgentSkills(agent, catalog)
+	return err
+}
+
+func (r *Runtime) freezeAgentSkills(agent domain.Agent, catalog *tool.Catalog) ([]domain.SkillSnapshot, error) {
+	ready := []string{}
+	for _, name := range agent.Tools {
+		if _, ok := catalog.ResolveReady(name); ok {
+			ready = append(ready, name)
+		}
+	}
+	return r.skills.Freeze(agent.Skills, ready)
 }
 
 func (r *Runtime) withHarnessTools(names []string) []string {
@@ -174,6 +227,7 @@ func snapshotAgent(agent domain.Agent) domain.RuntimeAgentSnapshot {
 		ID: agent.ID, Name: agent.Name, Description: agent.Description, SystemPrompt: agent.SystemPrompt,
 		RoutingHints: cloneAgentRoutingHints(agent.RoutingHints),
 		Tools:        append([]string(nil), agent.Tools...), MemoryEnabled: agent.MemoryEnabled,
+		Skills:           append([]string(nil), agent.Skills...),
 		RetrievalEnabled: agent.RetrievalEnabled, Executor: domain.DefaultAgentExecutor,
 	}
 }
@@ -186,6 +240,7 @@ func restoreAgent(snapshot domain.RuntimeAgentSnapshot) domain.Agent {
 		SystemPrompt:     snapshot.SystemPrompt,
 		RoutingHints:     cloneAgentRoutingHints(snapshot.RoutingHints),
 		Tools:            append([]string(nil), snapshot.Tools...),
+		Skills:           append([]string(nil), snapshot.Skills...),
 		MemoryEnabled:    snapshot.MemoryEnabled,
 		RetrievalEnabled: snapshot.RetrievalEnabled,
 		Executor:         domain.DefaultAgentExecutor,
@@ -298,10 +353,16 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	if strings.TrimSpace(snapshot.Agent.ID) == "" {
 		return errors.New("runtime snapshot has no agent")
 	}
+	if _, err := skill.Bound(snapshot, snapshot.Agent.ID); err != nil {
+		return err
+	}
 	if err := validateRuntimeExecutor(snapshot.Agent); err != nil {
 		return err
 	}
 	for _, candidate := range snapshot.CandidateAgents {
+		if _, err := skill.Bound(snapshot, candidate.ID); err != nil {
+			return err
+		}
 		if err := validateRuntimeExecutor(candidate); err != nil {
 			return err
 		}

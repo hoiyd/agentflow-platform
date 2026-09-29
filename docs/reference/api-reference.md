@@ -145,6 +145,15 @@ archived with `DELETE /api/agents/{id}`; built-in Agents cannot be archived.
 Creating a Run freezes the effective profile and, for Multi mode, its candidate
 profiles, so later edits do not change Resume or Replay semantics.
 
+`GET /api/skills` lists operator-trusted metadata only: `name`, `description`,
+`hash` and optional `required_tools`; it exposes neither directory paths nor
+contents. Agent create/update accepts optional `skills: ["knowledge-answer"]`.
+Omitting the field on PATCH preserves bindings; an empty array clears them.
+Unknown packages or unavailable required Agent Tools return typed 400 errors.
+Chat invokes a bound method through a `/skill:name` message prefix or native
+`skill_load`/`skill_read` calls; no request can grant trust to a directory. See
+[Trusted Skills](../tools/trusted-skills.md).
+
 `POST /api/runs/{id}/continue` applies the approved Multi plan. Its optional
 `routing_requirements` object accepts hard `required_tools`,
 `prohibited_tools`, `require_memory`, and `require_retrieval` fields plus soft

@@ -13,6 +13,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
@@ -23,6 +24,7 @@ type runtimeTurnModel struct {
 }
 
 func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emit func(turn.ModelEvent)) (result turn.Result, err error) {
+	ctx = skill.WithAgent(ctx, request.Agent.ID, request.Input)
 	snapshot, err := m.runtime.snapshotForRun(request.RunID)
 	if err != nil {
 		return turn.Result{}, err
@@ -97,6 +99,14 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 		Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
 		HistorySearch: historySearch,
 		Compaction:    compaction,
+	}
+	if len(request.Agent.Skills) > 0 || strings.HasPrefix(strings.TrimSpace(request.Input), "/skill:") {
+		if bound, err := skill.Bound(snapshot, request.Agent.ID); err == nil {
+			for _, item := range bound {
+				session.Skills = append(session.Skills, skill.Metadata(item))
+			}
+		}
+		session.LoadSkills = func() ([]domain.SkillSnapshot, error) { return m.runtime.skillService.Active(ctx, snapshot) }
 	}
 	if !isolatedContext && m.runtime.taskStates != nil {
 		session.LoadTaskState = func() (domain.TaskState, bool, error) {

@@ -13,7 +13,9 @@ type Config struct {
 	BindAddress string
 	Port        string
 	// ModelRouteConfigPath points to the complete secret-free Chat LLM route catalog.
-	ModelRouteConfigPath    string
+	ModelRouteConfigPath string
+	// TrustedSkillDirectories lists explicitly reviewed package directories, not a discovery root.
+	TrustedSkillDirectories string
 	EmbeddingBaseURL        string
 	EmbeddingModel          string
 	EmbeddingDimensions     int
@@ -152,6 +154,7 @@ func Load() Config {
 		BindAddress:                       getEnv("BIND_ADDRESS", "127.0.0.1"),
 		Port:                              getEnv("PORT", "8080"),
 		ModelRouteConfigPath:              getEnv("MODEL_ROUTE_CONFIG_PATH", ""),
+		TrustedSkillDirectories:           getEnv("TRUSTED_SKILL_DIRS", ""),
 		EmbeddingBaseURL:                  getEnv("EMBEDDING_BASE_URL", "http://localhost:11434/api/embed"),
 		EmbeddingModel:                    getEnv("EMBEDDING_MODEL", "embeddinggemma"),
 		EmbeddingDimensions:               getIntEnv("EMBEDDING_DIMENSIONS", 1536),

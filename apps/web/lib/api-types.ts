@@ -13,6 +13,7 @@ export type ChatEvent = Exclude<ContractSchemas["ChatStreamEvent"], RunEvent>;
 export type AgentInfo = ContractSchemas["Agent"];
 export type AgentRoutingRequirements = ContractSchemas["AgentRoutingRequirements"];
 export type ToolInfo = ContractSchemas["ToolInfo"];
+export type SkillInfo = ContractSchemas["SkillMetadata"];
 export type ChatMode = ContractSchemas["ChatMode"];
 export type RunInfo = ContractSchemas["Run"];
 export type OperatorAttentionItem = ContractSchemas["OperatorAttentionItem"];

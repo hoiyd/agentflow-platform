@@ -1,4 +1,4 @@
-import type { AgentInfo, ChatMode, ToolInfo } from "../../lib/api";
+import type { AgentInfo, ChatMode, ToolInfo, SkillInfo } from "../../lib/api";
 import type { CompletionVerificationSettings } from "../../lib/verification";
 import { CompletionVerificationPanel } from "../verification/CompletionVerificationPanel";
 import { AgentConfigPanel, isDefaultAgent, type AgentConfigDraft } from "./AgentConfigPanel";
@@ -41,6 +41,8 @@ type ChatDialogsProps = {
   onUpdateAgentChange: (update: Partial<AgentConfigDraft>) => void;
   onUpdateAgentToolToggle: (toolName: string) => void;
   tools: ToolInfo[];
+  skills?: SkillInfo[];
+  skillsError?: string;
 };
 
 export function ChatDialogs(props: ChatDialogsProps) {
@@ -75,7 +77,9 @@ export function ChatDialogs(props: ChatDialogsProps) {
     onSaveCompletionVerification,
     onUpdateAgentChange,
     onUpdateAgentToolToggle,
-    tools
+    tools,
+    skills,
+    skillsError
   } = props;
 
   return (
@@ -99,6 +103,8 @@ export function ChatDialogs(props: ChatDialogsProps) {
             <AgentConfigPanel
               actionLabel="Create Agent"
               availableTools={tools}
+              availableSkills={skills}
+              skillsError={skillsError}
               draft={newAgentDraft}
               disabled={isStreaming || isCreatingAgent}
               isSaving={isCreatingAgent}
@@ -118,6 +124,8 @@ export function ChatDialogs(props: ChatDialogsProps) {
             <AgentConfigPanel
               actionLabel="Save Config"
               availableTools={tools}
+              availableSkills={skills}
+              skillsError={skillsError}
               canArchive={!isDefaultAgent(activeAgent)}
               draft={agentConfigDraft}
               disabled={isStreaming || isSavingAgentConfig}

@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 
-import type { AgentInfo, ToolInfo } from "../../lib/api";
+import type { AgentInfo, ToolInfo, SkillInfo } from "../../lib/api";
 
 export type AgentConfigDraft = {
   name: string;
@@ -12,6 +12,7 @@ export type AgentConfigDraft = {
     exclusions: string[];
   };
   tools: string[];
+  skills?: string[];
   memory_enabled: boolean;
   retrieval_enabled: boolean;
 };
@@ -23,6 +24,8 @@ export function isDefaultAgent(agent: AgentInfo) {
 type AgentConfigPanelProps = {
   actionLabel: string;
   availableTools: ToolInfo[];
+  availableSkills?: SkillInfo[];
+  skillsError?: string;
   canArchive?: boolean;
   disabled: boolean;
   draft: AgentConfigDraft;
@@ -40,6 +43,8 @@ type AgentConfigPanelProps = {
 export function AgentConfigPanel({
   actionLabel,
   availableTools,
+  availableSkills = [],
+  skillsError = "",
   canArchive = false,
   disabled,
   draft,
@@ -155,6 +160,24 @@ export function AgentConfigPanel({
               </label>
             ))
           )}
+        </div>
+      </div>
+      <div className="agent-config-tools">
+        <span>Skills</span>
+        {skillsError ? <small className="error-text" role="alert">{skillsError}</small> : null}
+        <div>
+          {availableSkills.length === 0 && !draft.skills?.length ? <small>No trusted skills configured.</small> : null}
+          {[...new Set([...availableSkills.map((item) => item.name), ...(draft.skills ?? [])])].map((name) => {
+            const item = availableSkills.find((candidate) => candidate.name === name);
+            const selected = draft.skills ?? [];
+            return (
+              <label key={name} title={item ? `${item.description}${item.required_tools?.length ? ` · Requires: ${item.required_tools.join(", ")}` : ""}` : "Unavailable in the trusted catalog"}>
+                <input checked={selected.includes(name)} disabled={disabled} type="checkbox"
+                  onChange={() => onChange({ skills: selected.includes(name) ? selected.filter((value) => value !== name) : [...selected, name] })} />
+                <span>{name}{item ? "" : " (unavailable)"}</span>
+              </label>
+            );
+          })}
         </div>
       </div>
       <div className="agent-config-actions">

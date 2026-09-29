@@ -22,6 +22,7 @@ import (
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/recovery"
+	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/progress"
@@ -112,6 +113,10 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	verificationEngine := verification.NewEngine(appStore, verifierRegistry)
 	retrievalPipeline := rag.NewRetrievalPipeline(appStore)
 	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, embeddingClient, retrievalPipeline)
+	skills, err := skill.LoadDirectories(splitCSV(cfg.TrustedSkillDirectories))
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("load trusted Skills: %w", err)
+	}
 	var agentRuntime *agent.Runtime
 	memoryProvider := newMemoryProvider(cfg, appStore, embeddingClient, modelRoutes.HasConfiguredClient(), func(runID string) (memorypkg.CandidateCompletionModel, error) {
 		if agentRuntime == nil {
@@ -156,6 +161,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		},
 		KnowledgeRetriever: retrievalPipeline,
 		Knowledge:          knowledgeBase,
+		Skills:             skills,
 		MemoryRecall:       memoryProvider,
 		LiveEvents:         eventHub,
 	})
@@ -173,6 +179,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		AgentRuntime:   agentRuntime,
 		Memory:         memoryProvider,
 		Knowledge:      knowledgeBase,
+		Skills:         skills,
 		RunController:  runController,
 		RunEvents:      eventHub,
 		Verification:   verificationEngine,

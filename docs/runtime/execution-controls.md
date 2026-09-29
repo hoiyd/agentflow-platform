@@ -199,6 +199,12 @@ History, Memory, Knowledge, and Tool Result limits are per-source input caps,
 not cumulative Run budgets. Each assembly emits a Context Manifest explaining
 selection, exclusion, transformation, and token estimates.
 
+Trusted Skill metadata and activated instructions are required inputs under
+that same total input capacity, not a second token budget. Skill resources use
+the existing Tool-result/Artifact boundary. Fixed package byte/count limits
+bound loading and Snapshot storage independently of model Context capacity;
+see [Trusted Skills](../tools/trusted-skills.md).
+
 Both output reserve and remaining Run completion capacity affect provider
 `max_tokens`; the stricter value wins. One protects a single request, while the
 other protects cumulative Run usage.

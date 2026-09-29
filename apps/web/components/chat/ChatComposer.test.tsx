@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import type { AgentInfo, ChatMode } from "../../lib/api";
@@ -24,18 +24,30 @@ it("keeps verification available without agent controls in collaborative modes",
   expect(container.querySelector(".composer-run-options")?.contains(screen.getByRole("button", { name: /Verification/ }))).toBe(true);
 });
 
-function renderComposer(chatMode: ChatMode) {
+it("invokes only bound skills and preserves the task text", () => {
+  const onInputChange = vi.fn();
+  const view = renderComposer("single", ["evidence-research", "knowledge-answer"], "/skill:evidence-research Find evidence", onInputChange);
+  fireEvent.change(screen.getByRole("combobox", { name: "Invoke skill" }), { target: { value: "knowledge-answer" } });
+  expect(onInputChange).toHaveBeenLastCalledWith("/skill:knowledge-answer Find evidence");
+  fireEvent.change(screen.getByRole("combobox", { name: "Invoke skill" }), { target: { value: "" } });
+  expect(onInputChange).toHaveBeenLastCalledWith("Find evidence");
+  view.unmount();
+  renderComposer("multi_agent", ["knowledge-answer"]);
+  expect(screen.queryByRole("combobox", { name: "Invoke skill" })).toBeNull();
+});
+
+function renderComposer(chatMode: ChatMode, skills: string[] = [], input = "", onInputChange = vi.fn()) {
   const noop = vi.fn();
   return render(
     <ChatComposer
-      activeAgent={agent}
+      activeAgent={{ ...agent, skills }}
       activeAgentId={agent.id}
       agents={[agent]}
       agentsError=""
       chatMode={chatMode}
       completionVerificationEnabled={false}
       error=""
-      input=""
+      input={input}
       isAgentDescriptionExpanded={false}
       isAwaitingHumanInput={false}
       isAwaitingPlanApproval={false}
@@ -45,7 +57,7 @@ function renderComposer(chatMode: ChatMode) {
       onAgentChange={noop}
       onConfigureAgent={noop}
       onDescriptionExpandedChange={noop}
-      onInputChange={noop}
+      onInputChange={onInputChange}
       onNewAgent={noop}
       onOpenVerification={noop}
       onSubmit={noop}

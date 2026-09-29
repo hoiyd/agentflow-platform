@@ -136,6 +136,13 @@ controls, capture, and provider adapters. Context, Memory, Knowledge, and RAG
 remain separate domains because they prepare or persist information rather than
 perform model inference.
 
+`skill` owns the operator-trusted method catalog and frozen resource reads. It
+registers two normal Tool Bindings and supplies required inputs to the existing
+Context Assembler. Agent binding names and package contents live in the same
+Runtime Snapshot; activation is derived from Agent-owned Run Tool events, not a
+second workflow, permission layer or persistence subsystem. See
+[Trusted Skills](../tools/trusted-skills.md).
+
 ## Design Decisions
 
 ### Use a Real Composition Root
