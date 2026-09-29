@@ -45,7 +45,7 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 
 	for index := range messages {
 		transformation := "original"
-		originalBytes := len(messages[index].Content)
+		originalBytes := messageContentBytes(messages[index])
 		artifactIDs := toolArtifactIDs(messages[index])
 		if len(artifactIDs) > 0 {
 			transformation = "tool_result_artifact_preview"
@@ -69,7 +69,7 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 			ArtifactIDs: artifactIDs,
 		}
 		if required {
-			entry.IncludedBytes = len(message.Content)
+			entry.IncludedBytes = messageContentBytes(message)
 			requiredTokens += tokens
 		}
 		messageCandidates = append(messageCandidates, candidate{messageIndex: index, entry: entry})

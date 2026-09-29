@@ -21,13 +21,16 @@ type RuntimeIdentity struct {
 }
 
 type Message struct {
-	Role        string     `json:"role"`
-	Content     string     `json:"content,omitempty"`
-	ToolCallID  string     `json:"tool_call_id,omitempty"`
-	ToolCalls   []ToolCall `json:"tool_calls,omitempty"`
-	Refusal     string     `json:"refusal,omitempty"`
-	Source      string     `json:"-"`
-	ReferenceID string     `json:"-"`
+	Role    string `json:"role"`
+	Content string `json:"content,omitempty"`
+	// Provider continuation state, not user-visible answer text. A pointer
+	// preserves a returned empty string while omitting absent fields.
+	ReasoningContent *string    `json:"reasoning_content,omitempty"`
+	ToolCallID       string     `json:"tool_call_id,omitempty"`
+	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
+	Refusal          string     `json:"refusal,omitempty"`
+	Source           string     `json:"-"`
+	ReferenceID      string     `json:"-"`
 }
 
 type ToolCall struct {
@@ -67,8 +70,9 @@ type PreparedChat struct {
 }
 
 type ChatChoice struct {
-	Content   string
-	ToolCalls []ToolCall
+	Content          string
+	ReasoningContent *string
+	ToolCalls        []ToolCall
 }
 
 type ChatTrace struct {

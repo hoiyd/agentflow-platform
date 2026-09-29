@@ -45,7 +45,7 @@ func (c *Client) SelectTools(ctx context.Context, prepared provider.PreparedChat
 		return provider.ChatChoice{}, missingCredentialError("chat.tool_selection")
 	}
 	startPayload := mergePayload(map[string]any{
-		"model": c.model, "call_kind": "tool_selection", "messages": prepared.Messages,
+		"model": c.model, "call_kind": "tool_selection", "messages": messagesForTrace(prepared.Messages),
 		"enabled_tools": toolNames(definitions), "input_chars": messagesTextLength(prepared.Messages),
 	}, contextTracePayload(prepared.Manifest))
 	if len(trace.Memories) > 0 {
@@ -93,7 +93,7 @@ func (c *Client) SelectTools(ctx context.Context, prepared provider.PreparedChat
 		endPayload["manifest_id"] = prepared.Manifest.ID
 	}
 	trace.Recorder.LLMEnd(ctx, span, tokenPayload(endPayload, usage))
-	return provider.ChatChoice{Content: choice.Content, ToolCalls: calls}, nil
+	return provider.ChatChoice{Content: choice.Content, ReasoningContent: choice.ReasoningContent, ToolCalls: calls}, nil
 }
 
 func toolNames(definitions []map[string]any) []string {
@@ -112,7 +112,7 @@ func (c *Client) StreamAnswer(ctx context.Context, prepared provider.PreparedCha
 		return false, missingCredentialError("chat.stream")
 	}
 	startPayload := map[string]any{
-		"model": c.model, "call_kind": string(kind), "messages": prepared.Messages,
+		"model": c.model, "call_kind": string(kind), "messages": messagesForTrace(prepared.Messages),
 		"input_chars": messagesTextLength(prepared.Messages),
 	}
 	if kind == provider.ChatStreamAnswer {

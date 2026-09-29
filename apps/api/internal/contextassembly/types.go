@@ -67,12 +67,13 @@ func (e *InputBudgetError) FailureInfo() failure.Info {
 }
 
 type Message struct {
-	Source      string
-	ReferenceID string
-	Role        string
-	Content     string
-	ToolCallID  string
-	ToolCalls   json.RawMessage
+	Source           string
+	ReferenceID      string
+	Role             string
+	Content          string
+	ReasoningContent *string
+	ToolCallID       string
+	ToolCalls        json.RawMessage
 }
 
 type Tool struct {

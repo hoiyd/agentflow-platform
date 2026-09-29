@@ -22,6 +22,29 @@ answer-generation request is made. Tool-free and explicitly simulated Chat
 retain their existing streaming paths. Do not interpret buffered answer delivery
 as provider token streaming or measurable time to first token.
 
+### Thinking-model continuation
+
+OpenAI-compatible providers may return `message.reasoning_content` alongside
+`content` and `tool_calls`. The shared loop retains this optional field verbatim
+on each assistant Tool-call message for subsequent requests in the same Turn,
+including an explicitly returned empty string. Providers that omit it receive
+no additional field. Context Assembly counts its bytes and estimated tokens;
+required Tool-call messages are not independently truncated to remove reasoning.
+If they exceed the input budget, assembly fails before another model request.
+
+Reasoning is provider continuation state, not answer text. It is neither emitted
+to Chat nor copied into ordinary model events. Request Capture retains the
+outgoing field only under the existing opt-in `full`/`redacted` body policy;
+`metadata_only` does not store it. Provider-reported usage stays authoritative,
+and non-streaming estimated usage includes returned reasoning when usage is absent.
+
+Boundary: this is same-Turn continuation, not durable reasoning history. Chat
+history stores final answers, not complete provider response messages, and Stage
+retry still restarts the Turn. It does not promise providers' cross-Turn reasoning
+requirements, preservation of other opaque fields such as `reasoning_details`,
+or thinking-token streaming. See the provider's
+[thinking-mode contract](https://api-docs.deepseek.com/guides/thinking_mode/).
+
 ## Failure Inventory and Test Plan
 
 | Failure | Required result |
@@ -35,6 +58,8 @@ as provider token streaming or measurable time to first token.
 | Repeated no-progress results | Existing Progress Guard eventually halts the Turn. |
 | Cancellation, provider error or empty final answer | Stop with an error; never synthesize `Tool execution completed.`. |
 | Required context exceeds the window | Persist the failed assembly diagnostic and stop before another model request. |
+| Thinking provider returns reasoning with Tool calls | Retain the exact field across all same-Turn rounds, including empty strings; keep it out of Chat and ordinary events. |
+| Required reasoning exceeds the context budget | Stop before the next model request rather than drop or truncate protocol state. |
 | Optional history exceeds its budget | Clip optional history without dropping or mismatching Tool call/result pairs. |
 | Multiple Web searches each return local W1 | Relabel observations using the durable Run-scoped source catalog; do not collide. |
 | Explicit same-Stage retry after a committed external effect | Reuse the existing Effect Journal; do not repeat the committed write or silently accept changed arguments. |

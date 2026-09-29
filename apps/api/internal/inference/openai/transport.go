@@ -90,7 +90,7 @@ func (c *Client) completeAttempt(ctx context.Context, modelCallID, operation str
 		return decoded, invalidResponseError(operation, "model returned no choices", nil)
 	}
 	if !decoded.Usage.Valid() {
-		decoded.Usage = estimateUsage(string(payload), decoded.Choices[0].Message.Content)
+		decoded.Usage = estimateUsage(string(payload), messageTextForEstimation(decoded.Choices[0].Message))
 	}
 	choice := decoded.Choices[0]
 	if err := generationOutcomeError(operation, finishReasonLabel(choice.FinishReason), len(choice.Message.ToolCalls) > 0, choice.Message.Refusal != ""); err != nil {

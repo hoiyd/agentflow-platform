@@ -31,6 +31,7 @@ func (c *Client) prepareModelContextForModel(ctx context.Context, model string, 
 		request.Messages = append(request.Messages, contextassembly.Message{
 			Source: message.Source, ReferenceID: message.ReferenceID, Role: message.Role,
 			Content: message.Content, ToolCallID: message.ToolCallID, ToolCalls: toolCalls,
+			ReasoningContent: message.ReasoningContent,
 		})
 	}
 	for _, definition := range definitions {
@@ -51,6 +52,7 @@ func (c *Client) prepareModelContextForModel(ctx context.Context, model string, 
 		prepared = append(prepared, Message{
 			Role: message.Role, Content: message.Content, ToolCallID: message.ToolCallID,
 			ToolCalls: toolCalls, Source: message.Source, ReferenceID: message.ReferenceID,
+			ReasoningContent: message.ReasoningContent,
 		})
 	}
 	return preparedModelContext{messages: prepared, manifest: pack.Manifest}, nil
