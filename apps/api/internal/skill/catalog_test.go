@@ -95,7 +95,7 @@ func TestTrustedCatalogFailureLimitsAndUTF8Pages(t *testing.T) {
 	if _, err := ReadResource(item, item.Resources[0].Path, 0, 4); err == nil {
 		t.Fatal("changed package read")
 	}
-	if validResourcePath("references/" + strings.Repeat("a", 260) + ".md") {
+	if SupportedResourcePath("references/" + strings.Repeat("a", 260) + ".md") {
 		t.Fatal("unaddressable long resource path accepted")
 	}
 }

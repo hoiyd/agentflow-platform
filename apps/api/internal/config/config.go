@@ -14,7 +14,8 @@ type Config struct {
 	Port        string
 	// ModelRouteConfigPath points to the complete secret-free Chat LLM route catalog.
 	ModelRouteConfigPath string
-	// TrustedSkillDirectories lists explicitly reviewed package directories, not a discovery root.
+	// TrustedSkillDirectories lists operator-trusted installation roots (CSV).
+	// Immediate SKILL.md packages are discovered; normally ../../.agents/skills from apps/api.
 	TrustedSkillDirectories string
 	EmbeddingBaseURL        string
 	EmbeddingModel          string

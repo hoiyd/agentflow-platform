@@ -93,7 +93,7 @@ func ValidateFrozen(items []domain.SkillSnapshot) error {
 		total := len(item.Instructions)
 		paths := map[string]bool{}
 		for _, resource := range item.Resources {
-			if !validResourcePath(resource.Path) || paths[resource.Path] || resource.Hash != contentHash(resource.Content) {
+			if !SupportedResourcePath(resource.Path) || paths[resource.Path] || resource.Hash != contentHash(resource.Content) {
 				return skillError("skill_invalid_resource", "Invalid frozen Skill resource identity")
 			}
 			paths[resource.Path] = true
@@ -113,7 +113,9 @@ func ValidateFrozen(items []domain.SkillSnapshot) error {
 }
 
 func validName(name string) bool { return len(name) <= 64 && namePattern.MatchString(name) }
-func validResourcePath(value string) bool {
+
+// SupportedResourcePath identifies the Loader's text-resource subset, not permission to read a local file.
+func SupportedResourcePath(value string) bool {
 	if len(value) > 256 || strings.Contains(value, "\\") || strings.ContainsRune(value, 0) || !strings.HasPrefix(value, "references/") && !strings.HasPrefix(value, "assets/") || path.Clean(value) != value {
 		return false
 	}

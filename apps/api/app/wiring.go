@@ -113,9 +113,12 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	verificationEngine := verification.NewEngine(appStore, verifierRegistry)
 	retrievalPipeline := rag.NewRetrievalPipeline(appStore)
 	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, embeddingClient, retrievalPipeline)
-	skills, err := skill.LoadDirectories(splitCSV(cfg.TrustedSkillDirectories))
+	skills, err := skill.LoadRoots(splitCSV(cfg.TrustedSkillDirectories))
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("load trusted Skills: %w", err)
+	}
+	if cfg.TrustedSkillDirectories != "" {
+		log.Printf("trusted Skills loaded=%d roots=%q", len(skills.List()), cfg.TrustedSkillDirectories)
 	}
 	var agentRuntime *agent.Runtime
 	memoryProvider := newMemoryProvider(cfg, appStore, embeddingClient, modelRoutes.HasConfiguredClient(), func(runID string) (memorypkg.CandidateCompletionModel, error) {

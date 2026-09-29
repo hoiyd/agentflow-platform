@@ -4,6 +4,9 @@ dist/
 .idea/
 .env
 .data/
+# Operator-installed runtime Skills and Vercel's local provenance lockfile.
+/.agents/skills/
+/skills-lock.json
 .cache/
 .playwright-cli/
 *.tsbuildinfo
