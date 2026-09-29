@@ -11,6 +11,57 @@ import (
 	"time"
 )
 
+func TestCommitRevisionResolution(t *testing.T) {
+	for _, ref := range []string{"", "main", fixtureCommit} {
+		t.Run("ref="+ref, func(t *testing.T) {
+			f := newFixture()
+			f.before = func(w http.ResponseWriter, r *http.Request) bool {
+				if ref == "" && (r.URL.Path != "/repos/example/writing/commits" || r.URL.RawQuery != "per_page=1") {
+					t.Errorf("default branch request: %s", r.URL)
+				}
+				return false
+			}
+			g := newGitHub("example/writing", fixtureClient(t, f))
+			commit, err := g.commit(context.Background(), ref)
+			if err != nil || commit != fixtureCommit {
+				t.Fatalf("resolved commit: %s %v", commit, err)
+			}
+			if ref == fixtureCommit && f.requests != 0 {
+				t.Fatal("pinned commit triggered resolution")
+			}
+		})
+	}
+}
+
+func TestLatestCommitFailureDoesNotInstall(t *testing.T) {
+	for _, apply := range []bool{false, true} {
+		for _, response := range []string{"[]", "null", `[{"sha":"invalid"}]`, `[{"sha":"` + fixtureCommit + `"},{"sha":"` + fixtureCommit + `"}]`, "{", "404", "429"} {
+			t.Run(fmt.Sprintf("apply=%t/%s", apply, response), func(t *testing.T) {
+				f := newFixture()
+				f.before = func(w http.ResponseWriter, r *http.Request) bool {
+					if response == "404" || response == "429" {
+						status := http.StatusNotFound
+						if response == "429" {
+							status = http.StatusTooManyRequests
+						}
+						http.Error(w, "private remote error", status)
+					} else {
+						fmt.Fprint(w, response)
+					}
+					return true
+				}
+				opts := options(t)
+				opts.Ref, opts.Apply = "", apply
+				_, err := run(context.Background(), opts, fixtureClient(t, f))
+				if err == nil || strings.Contains(err.Error(), "private remote error") || f.requests != 1 {
+					t.Fatalf("latest resolution failure: %v, requests=%d", err, f.requests)
+				}
+				assertEmpty(t, opts.Destination)
+			})
+		}
+	}
+}
+
 func TestGitHubTransportBoundaries(t *testing.T) {
 	for _, raw := range []string{"http://api.github.com/file", "https://api.github.com:443/file", "https://user:secret@api.github.com/file", "https://api.github.com.evil.test/file", "https://127.0.0.1/file", "https://api.github.com/file#fragment"} {
 		u, _ := url.Parse(raw)
@@ -131,7 +182,7 @@ func TestReadAndSourceFailures(t *testing.T) {
 					return true
 				}
 			case "missing ref":
-				o.Apply, o.Ref = false, "missing"
+				o.Ref = "missing"
 				f.before = func(w http.ResponseWriter, r *http.Request) bool { http.NotFound(w, r); return true }
 			case "missing blob":
 				for id, body := range f.blobs {

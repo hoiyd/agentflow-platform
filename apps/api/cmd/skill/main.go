@@ -24,7 +24,7 @@ func main() {
 
 func run(ctx context.Context, args []string, out, stderr io.Writer, installer func(context.Context, fallback.Options) (fallback.Report, error)) int {
 	if len(args) == 0 || args[0] != "install" {
-		fmt.Fprintln(stderr, "usage: skill install --repo owner/repo --path package/path --ref revision [--dest existing/root] [--apply]")
+		fmt.Fprintln(stderr, "usage: skill install --repo owner/repo --path package/path [--ref revision] [--dest existing/root] [--apply]")
 		return 2
 	}
 	flags := flag.NewFlagSet("skill install", flag.ContinueOnError)
@@ -37,7 +37,7 @@ func run(ctx context.Context, args []string, out, stderr io.Writer, installer fu
 	var opts fallback.Options
 	flags.StringVar(&opts.Repo, "repo", "", "public GitHub owner/repo")
 	flags.StringVar(&opts.Path, "path", "", "repository-relative Skill directory")
-	flags.StringVar(&opts.Ref, "ref", "", "preview: branch/tag/commit; apply: complete preview commit SHA")
+	flags.StringVar(&opts.Ref, "ref", "", "branch/tag/commit for preview or apply; omitted: latest default-branch commit")
 	flags.StringVar(&opts.Destination, "dest", "", "existing download root; defaults to the repository root's .agents/skills")
 	flags.DurationVar(&opts.Timeout, "timeout", 30*time.Second, "complete operation deadline, at most 2m")
 	flags.BoolVar(&opts.Apply, "apply", false, "publish validated package without changing runtime trust")
@@ -68,7 +68,7 @@ func run(ctx context.Context, args []string, out, stderr io.Writer, installer fu
 	if opts.Apply {
 		fmt.Fprintf(stderr, "Installed: %s\nReview content, set TRUSTED_SKILL_DIRS to its parent installation directory, and restart the API. No bindings or Tool permissions changed.\n", report.Directory)
 	} else {
-		fmt.Fprintf(stderr, "Preview only; destination unchanged. To install this revision, re-run with --ref %s --apply.\n", report.Commit)
+		fmt.Fprintf(stderr, "Preview only; destination unchanged. To install exactly this revision, re-run with --ref %s --apply.\n", report.Commit)
 	}
 	return 0
 }

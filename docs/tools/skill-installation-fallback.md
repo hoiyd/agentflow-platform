@@ -1,7 +1,7 @@
 # Restricted Go Skill Installer (Fallback)
 
-**Prefer [Vercel Skills CLI](skill-installation.md).** The unchanged
-`go run ./cmd/skill install` backend command is the fallback when Node/npm, Git, or the
+**Prefer [Vercel Skills CLI](skill-installation.md).** Run the Go fallback through
+`./scripts/skill-install.sh --repo ... --path ...` when Node/npm, Git, or the
 Vercel distribution route cannot be used. Its implementation and tests live in
 `apps/api/internal/skill/install/fallback/`; it is not the runtime Loader or a
 wrapper around Vercel. Choose it explicitly; Vercel failures never auto-invoke it.
@@ -19,34 +19,47 @@ repository content and introduces no extraction or process-execution surface.
 
 ## Preview, Install, Review, Activate
 
-Run from the repository root using the repository's Go version. `go -C apps/api`
-selects the existing backend module; the installer checks the project location
-and defaults to the same root `.agents/skills` directory used by Vercel:
+Run `./scripts/skill-install.sh` from the repository root. It rejects any other
+working directory, activates the repository's Go version through the existing
+environment helper and runs `go -C apps/api run ./cmd/skill install`, forwarding
+every argument unchanged through `"$@"`. The installer defaults to the same
+root `.agents/skills` directory used by Vercel:
+
+Replace the placeholders below with a reviewed repository and package subdirectory.
+They are not literal executable values.
 
 ```bash
 mkdir -p .agents/skills
-go -C apps/api run ./cmd/skill install \
-  --repo affaan-m/ECC \
-  --path .agents/skills/article-writing \
-  --ref d3b8a3e908904e242ed2dbe66af62cca71131419
+./scripts/skill-install.sh \
+  --repo '<owner>/<repository>' \
+  --path '<package-subdirectory>/<skill-name>'
 ```
 
 The default is a network-backed preview, not an installation. It downloads and
 validates the supported content in a temporary directory, prints a JSON report,
 then removes that temporary directory. The destination remains unchanged.
-`--ref` is required: previews accept a branch, tag or complete commit SHA, and
-return the resolved `commit`. Apply the exact resolved revision:
+`--ref` is optional for both preview and apply: when omitted, the installer queries GitHub for
+the repository's default branch's latest commit, resolves it once and downloads
+only that immutable revision. It does not assume the branch is named `main`,
+select the latest release/tag, or update an existing installation. A supplied
+`--ref` accepts a branch, tag or complete commit SHA in either mode. The report
+and installed receipt record the resolved `commit`. Install the current default
+branch revision with:
 
 ```bash
-go -C apps/api run ./cmd/skill install \
-  --repo affaan-m/ECC \
-  --path .agents/skills/article-writing \
-  --ref d3b8a3e908904e242ed2dbe66af62cca71131419 \
+./scripts/skill-install.sh \
+  --repo '<owner>/<repository>' \
+  --path '<package-subdirectory>/<skill-name>' \
   --apply
 ```
 
-`--apply` rejects branch/tag names rather than resolving them again. Installation
-also refuses any existing target, including an empty directory, file or symlink;
+To select a branch or tag, add `--ref '<branch-or-tag>'` to either command.
+Mutable revisions are resolved anew for each separate preview/apply operation;
+they may advance between commands. To install exactly what a prior preview
+examined, use `--ref '<resolved-commit-sha>' --apply`. Within one operation,
+resolution happens only once and all downloads use that immutable SHA.
+
+Installation refuses any existing target, including an empty directory, file or symlink;
 there is no force, overwrite or self-update mode. Use a different download root
 to review another revision without disturbing an active package.
 
@@ -57,6 +70,32 @@ existing staging root; relative overrides resolve from the Go process cwd
 not automatically discovered by the API. The Go installer never overwrites
 existing Vercel packages or changes Vercel's lockfile.
 
+### Shortcut Arguments
+
+Use the original Go CLI flags directly. Quote values containing spaces, such as
+`--dest '/absolute/path/skill downloads'`. The script does not parse flags or
+maintain a separate mapping, so future CLI flags are forwarded too. The original
+`go -C apps/api run ./cmd/skill install ...` command remains available.
+
+| CLI flag | Meaning |
+| --- | --- |
+| `--repo` | Required public GitHub `<owner>/<repository>`. |
+| `--path` | Required repository-relative Skill directory. |
+| `--ref` | Optional in preview and apply. Accepts a branch, tag or complete SHA; omitted uses the latest default-branch commit. |
+| `--dest` | Optional existing installation root; defaults to the project root's `.agents/skills`. Relative paths still resolve from `apps/api`. |
+| `--timeout` | Optional complete-operation deadline; default `30s`, positive and at most `2m`. |
+| `--apply` | Publish the package; omitted or `--apply=false` means preview only. |
+| `--help` / `-h` | Print CLI usage without downloading or installing. |
+
+```bash
+./scripts/skill-install.sh --help
+```
+
+The script returns a nonzero status when Go activation or the wrapped command
+fails. It propagates the Go command's status, which can differ from the compiled
+CLI's exit code when using `go run`. The shortcut does not create installation
+directories, change trust, bind Agents or restart the API.
+
 Inspect the installed `SKILL.md` and resource text. Only after operator review,
 configure its parent installation root in `TRUSTED_SKILL_DIRS` if not already
 configured, and restart the API. The standard API setting is
@@ -65,9 +104,8 @@ in **Configure > Skills** and invoke it explicitly
 or let the model select it. See [Trusted Skills](trusted-skills.md) for invocation,
 dependencies, Manifest identities and Frozen Snapshot behavior.
 
-This example's pinned source was used for an installation smoke test, not a
-blanket endorsement of the repository or future revisions. SkillsMP can help
-discover a package, but the CLI takes its actual GitHub repo/path/revision, not
+Example placeholders do not endorse a repository or future revisions. SkillsMP can help
+discover a package, but the CLI takes its actual GitHub repo/path and optional revision, not
 a SkillsMP URL. Stars and directory listings do not establish safety.
 
 ## Supported Content and Receipts
@@ -145,7 +183,8 @@ database migration is needed.
 | Failure | Required outcome |
 | --- | --- |
 | Invalid repo, package path, ref, timeout or destination | Reject before downloading or modifying the destination. |
-| Apply with a mutable branch/tag | Reject; use the complete commit SHA returned by preview. |
+| Unknown branch/tag or failed commit resolution | Fail explicitly without publishing a package; never silently select another revision. |
+| Default-branch commit unavailable, malformed or rate-limited | Fail explicitly; do not guess a branch or change the destination. |
 | Missing package, invalid metadata, duplicate names or unsupported resource identity | Fail validation; no installed package. |
 | Unsafe tree path, symlink, submodule or executable selected file | Reject; never follow or execute it. |
 | Unsupported directories/resources | Report omissions; do not traverse scripts or silently claim full-package compatibility. |
@@ -163,6 +202,7 @@ only prove compatibility with the selected source, not the safety or writing
 quality of its instructions.
 
 ```bash
+bash scripts/test-skill-install.sh
 go -C apps/api test ./internal/skill/install/fallback ./cmd/skill ./internal/skill -count=1
 go -C apps/api test -race ./internal/skill/install/fallback ./cmd/skill ./internal/skill -count=1
 ```
@@ -174,7 +214,7 @@ and the production Loader with local fixtures. Other tests cover the inventory
 above, including concurrent installers and preservation of existing targets.
 Default CI never downloads public packages or calls a model.
 
-An opt-in live smoke can install both the example above and
-`.agents/skills/brand-voice` from the same pinned revision into a fresh temporary
-root. Retain their JSON reports locally and compare Loader hashes to reviewed
+An opt-in live smoke can install multiple reviewed packages from the same pinned
+revision into a fresh temporary root. Retain their JSON reports locally and
+compare Loader hashes to reviewed
 packages. Do not publish package bodies or user-specific paths as test artifacts.

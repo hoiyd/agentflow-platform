@@ -75,6 +75,8 @@ func (f *githubFixture) serve(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var value any
 	switch {
+	case strings.HasSuffix(req.URL.Path, "/commits"):
+		value = []map[string]any{{"sha": fixtureCommit}}
 	case strings.Contains(req.URL.Path, "/commits/"):
 		value = map[string]any{"sha": fixtureCommit}
 	case strings.Contains(req.URL.Path, "/git/trees/"):
@@ -117,7 +119,7 @@ func TestPreviewAndInstallThroughProductionLoader(t *testing.T) {
 	f := newFixture()
 	client := fixtureClient(t, f)
 	opts := options(t)
-	opts.Ref = "main"
+	opts.Ref = ""
 	preview, err := run(context.Background(), opts, client)
 	if err != nil {
 		t.Fatal(err)
@@ -176,11 +178,69 @@ func TestPreviewAndInstallThroughProductionLoader(t *testing.T) {
 	t.Logf("skill_install_evidence: commit=%s package_hash=%s files_hash=%s files=%d ignored=%d trust_changed=false", installed.Commit, installed.PackageHash, installed.FilesHash, len(installed.Files), len(installed.Ignored))
 }
 
+func TestPreviewAndApplyResolveRevisionOnce(t *testing.T) {
+	for _, ref := range []string{"", "feature/writing", "v1.0.0", fixtureCommit} {
+		for _, apply := range []bool{false, true} {
+			t.Run(fmt.Sprintf("ref=%s/apply=%t", ref, apply), func(t *testing.T) {
+				f := newFixture()
+				resolutions := 0
+				f.before = func(w http.ResponseWriter, r *http.Request) bool {
+					if strings.Contains(r.URL.Path, "/commits") {
+						wantPath := "/repos/example/writing/commits"
+						if ref != "" {
+							wantPath += "/" + ref
+						}
+						if r.URL.Path != wantPath || (ref == "" && r.URL.RawQuery != "per_page=1") {
+							t.Errorf("wrong revision requested: %s", r.URL)
+						}
+						resolutions++
+						if resolutions > 1 {
+							// A moving branch must not be resolved again during one operation.
+							_ = json.NewEncoder(w).Encode(map[string]any{"sha": strings.Repeat("9", 40)})
+							return true
+						}
+					}
+					return false
+				}
+				opts := options(t)
+				opts.Ref, opts.Apply = ref, apply
+				report, err := run(context.Background(), opts, fixtureClient(t, f))
+				if err != nil || report.Commit != fixtureCommit || report.PackageHash == "" || report.TrustConfigurationChanged {
+					t.Fatalf("resolved revision: %+v %v", report, err)
+				}
+				wantResolutions := 1
+				if ref == fixtureCommit {
+					wantResolutions = 0
+				}
+				if resolutions != wantResolutions {
+					t.Fatalf("revision resolved %d times, want %d", resolutions, wantResolutions)
+				}
+				if !apply {
+					if report.Status != "preview" {
+						t.Fatal("preview published a package")
+					}
+					assertEmpty(t, opts.Destination)
+					return
+				}
+				data, err := os.ReadFile(filepath.Join(report.Directory, "install-receipt.json"))
+				var receipt Report
+				if err != nil || json.Unmarshal(data, &receipt) != nil || report.Status != "installed" || receipt.Commit != fixtureCommit || receipt.PackageHash != report.PackageHash {
+					t.Fatalf("installed receipt: %s %v", data, err)
+				}
+				catalog, err := skill.LoadRoots([]string{opts.Destination})
+				if err != nil || len(catalog.List()) != 1 || catalog.List()[0].Hash != receipt.PackageHash {
+					t.Fatalf("installed catalog: %v", err)
+				}
+			})
+		}
+	}
+}
+
 func TestInvalidOptionsDoNotDownload(t *testing.T) {
 	for _, change := range []func(*Options){
 		func(o *Options) { o.Repo = "https://github.com/x/y" }, func(o *Options) { o.Repo = "../repo" },
 		func(o *Options) { o.Path = "../escape" }, func(o *Options) { o.Path = "/absolute" }, func(o *Options) { o.Path = "skills\\file" },
-		func(o *Options) { o.Ref = "" }, func(o *Options) { o.Ref = "bad\nref" }, func(o *Options) { o.Apply = true; o.Ref = "main" },
+		func(o *Options) { o.Ref = " " }, func(o *Options) { o.Ref = "bad\nref" },
 		func(o *Options) { o.Timeout = 0 }, func(o *Options) { o.Timeout = 3 * time.Minute }, func(o *Options) { o.Destination = "" },
 	} {
 		f := newFixture()

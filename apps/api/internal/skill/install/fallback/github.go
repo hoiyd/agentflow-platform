@@ -117,8 +117,22 @@ func (g *github) commit(ctx context.Context, ref string) (string, error) {
 	var value struct {
 		SHA string `json:"sha"`
 	}
-	if err := g.get(ctx, "/commits/"+url.PathEscape(ref), &value); err != nil {
-		return "", err
+	if ref == "" {
+		// GitHub defaults this list to the repository's default branch, not necessarily main.
+		var commits []struct {
+			SHA string `json:"sha"`
+		}
+		if err := g.get(ctx, "/commits?per_page=1", &commits); err != nil {
+			return "", err
+		}
+		if len(commits) != 1 {
+			return "", fmt.Errorf("default branch did not return exactly one latest commit")
+		}
+		value.SHA = commits[0].SHA
+	} else {
+		if err := g.get(ctx, "/commits/"+url.PathEscape(ref), &value); err != nil {
+			return "", err
+		}
 	}
 	if !commitPattern.MatchString(value.SHA) {
 		return "", fmt.Errorf("invalid GitHub commit identity")

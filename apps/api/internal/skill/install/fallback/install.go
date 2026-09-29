@@ -71,13 +71,10 @@ func run(ctx context.Context, opts Options, client *http.Client) (Report, error)
 	if !repoPattern.MatchString(opts.Repo) ||
 		!fs.ValidPath(opts.Path) || opts.Path == "." || strings.ContainsAny(opts.Path, "\\\x00\r\n") ||
 		len(opts.Path) > 256 || strings.Count(opts.Path, "/") > 8 ||
-		strings.TrimSpace(opts.Ref) == "" || len(opts.Ref) > 256 || strings.ContainsAny(opts.Ref, "\x00\r\n") ||
+		(opts.Ref != "" && strings.TrimSpace(opts.Ref) == "") || len(opts.Ref) > 256 || strings.ContainsAny(opts.Ref, "\x00\r\n") ||
 		opts.Destination == "" || strings.ContainsAny(opts.Destination, "\x00\r\n") ||
 		opts.Timeout <= 0 || opts.Timeout > 2*time.Minute {
-		return report, fmt.Errorf("require owner/repo, relative package path, revision, existing destination and timeout in (0, 2m]")
-	}
-	if opts.Apply && !commitPattern.MatchString(opts.Ref) {
-		return report, fmt.Errorf("apply requires the complete commit SHA returned by preview")
+		return report, fmt.Errorf("require owner/repo, relative package path, valid optional revision, existing destination and timeout in (0, 2m]")
 	}
 	destination, err := filepath.Abs(opts.Destination)
 	if err != nil {
@@ -98,6 +95,7 @@ func run(ctx context.Context, opts Options, client *http.Client) (Report, error)
 	ctx, cancel := context.WithTimeout(ctx, opts.Timeout)
 	defer cancel()
 	g := newGitHub(opts.Repo, client)
+	// Resolve mutable refs once; preview, publication and the receipt use this immutable commit.
 	commit, err := g.commit(ctx, opts.Ref)
 	if err != nil {
 		return report, err
