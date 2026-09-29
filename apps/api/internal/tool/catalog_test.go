@@ -85,3 +85,31 @@ func TestReconciliationCapabilityChangesDefinitionRevision(t *testing.T) {
 		t.Fatal("reconciliation capability did not change frozen Tool definition revision")
 	}
 }
+
+func TestCatalogRejectsInvalidSideEffectModes(t *testing.T) {
+	// Cover both directions: a write cannot omit its journal, and a journal
+	// mode cannot contradict security classification. Valid pairs still register.
+	for _, test := range []struct {
+		class policy.SideEffectClass
+		mode  SideEffectMode
+	}{
+		{policy.SideEffectNone, SideEffectNone},
+		{policy.SideEffectInternalWrite, SideEffectInternal},
+		{policy.SideEffectExternalWrite, SideEffectExternal},
+		{policy.SideEffectDestructive, SideEffectExternal},
+	} {
+		for _, mode := range []SideEffectMode{"", SideEffectNone, SideEffectInternal, SideEffectExternal, "unsupported"} {
+			t.Run(string(test.class)+"/mode="+string(mode), func(t *testing.T) {
+				_, err := NewCatalog(Binding{
+					Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil),
+						SideEffect: SideEffectPolicy{Mode: mode}, Security: policy.Capability{SideEffect: test.class}},
+					Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil },
+				})
+				allowed := mode == test.mode || mode == "" && test.mode == SideEffectNone
+				if (err == nil) != allowed {
+					t.Fatalf("registration allowed=%v, want %v: %v", err == nil, allowed, err)
+				}
+			})
+		}
+	}
+}

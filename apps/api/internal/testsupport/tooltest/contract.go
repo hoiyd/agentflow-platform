@@ -103,7 +103,7 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 		})
 	}
 
-	if binding.Descriptor.SideEffect.Mode == tool.SideEffectExternal {
+	if binding.Descriptor.SideEffect.RequiresJournal() {
 		replayed := executor.Execute(context.Background(), request)
 		if replayed.Error != nil || !replayed.Replayed || handlerCalls.Load() != 1 {
 			t.Fatalf("side-effect replay violated contract: result=%#v calls=%d", replayed, handlerCalls.Load())

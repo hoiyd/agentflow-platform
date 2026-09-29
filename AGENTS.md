@@ -74,6 +74,55 @@ Backend rules:
 - For API shape changes, regenerate the shared client and run
   `make contract-check` from the repository root.
 
+## Runtime Contract Guardrails
+
+- Before changing Tool or Agent execution, identify what is modified, who owns
+  the operation, which real runtime identities exist, and whether retry is safe.
+  Do not equate "needs durable receipts" with "external write" or copy another
+  Binding's recovery settings without checking those facts.
+- Validate related declarations together, in both directions, at registration:
+  security class, journal mode, model schema, and Binding behavior must agree.
+  Include omitted/default values and invalid combinations, not just valid ones.
+  Follow [Tool security contracts](docs/tools/tool-security-policy.md).
+- For shared execution changes, cover Single without a Stage and affected
+  Multi-Agent/Autonomous staged paths. Never invent Stage IDs or loosen identity,
+  policy, or frozen-definition checks to make a fix or fixture pass.
+- Test real descriptors directly; helpers that rewrite capabilities cannot
+  prove registration correctness. Keep a focused backend integration through
+  the real Binding Handler, persistence, and subsequent state/context reads.
+  Stub the provider or use an isolated Store where needed, not the contract or
+  business behavior being verified.
+- Distinguish pre-write rejection from uncertain post-write failure. Verify
+  permitted argument correction, stale-version rejection, duplicate-call replay,
+  and fail-closed settlement where relevant; assert durable state as well as
+  returned errors. Fix invalid test fixtures without weakening their assertions.
+
+## Model Protocol Guardrails
+
+- OpenAI-compatible does not mean identical provider behavior. Check the
+  relevant provider contract before changing adapters or Tool continuation;
+  fix the shared protocol path rather than patching each execution mode.
+- Display text is not the complete response protocol. Preserve supported,
+  required continuation fields (such as same-Turn `reasoning_content`) through
+  decoding, shared types, Context Assembly in both directions, and outgoing
+  serialization. Preserve absent versus explicitly empty values; do not add
+  optional fields to providers that did not return them.
+- Test actual serialized follow-up requests over multiple Tool rounds, not
+  just Go structs or a successful initial call. Cover distinct per-round state,
+  omitted/empty fields, budget overflow, and affected execution modes. Make the
+  fixture assert the provider's contract rather than always accepting requests.
+- Keep transport state separate from Chat and ordinary traces. Privacy filters
+  must operate on copies without mutating the outgoing request. Sensitive
+  continuation content belongs only in policy-controlled opt-in Request Capture.
+- Count required non-display fields in context estimates and usage fallbacks;
+  provider-reported usage remains authoritative. Fail before sending an
+  over-budget request rather than silently dropping required protocol state.
+  Blind retries or silently disabling thinking are not protocol fixes.
+
+State same-Turn, cross-Turn, streaming, and Resume limitations explicitly; do
+not infer full provider compatibility from one passing case. See
+[Tool-loop protocol boundaries](docs/tools/bounded-tool-loop.md).
+
 ## Database Schema Changes
 
 Any persisted-field change must update and verify the complete path:
@@ -168,6 +217,7 @@ are complete. Mandatory namespace filtering alone is not authorization.
   checks before reporting completion.
 - Non-trivial behavior needs both a success case and its important failure path.
   When CI measures patch coverage, target at least 90% without filler tests.
+  Coverage percentage does not replace runtime-mode and contract-boundary cases.
 - Treat sandbox, network, provider quota, and unavailable external services as
   environment failures; do not misreport them as code regressions.
 

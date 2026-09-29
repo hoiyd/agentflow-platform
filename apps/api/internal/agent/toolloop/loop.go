@@ -165,7 +165,7 @@ func terminalToolError(catalog *tool.Catalog, result tool.ExecutionResult) error
 		return exceeded
 	}
 	blockedBeforeExecution := result.ProgressDecision != nil && result.ProgressDecision.Action == progress.ActionBlockCall
-	if binding, ok := catalog.Resolve(result.Tool); ok && binding.Descriptor.SideEffect.Mode == tool.SideEffectExternal && result.PolicyDecision != nil && result.PolicyDecision.Allowed && !blockedBeforeExecution {
+	if binding, ok := catalog.Resolve(result.Tool); ok && binding.Descriptor.SideEffect.RequiresJournal() && result.PolicyDecision != nil && result.PolicyDecision.Allowed && !blockedBeforeExecution {
 		// A handler can return a validation-style error after starting a write.
 		// Its journal uncertainty still takes precedence over model correction.
 		return result.Error

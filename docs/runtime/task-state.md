@@ -42,6 +42,12 @@ time are runtime-owned. The state has field limits, at most 50 operations per
 patch, and a 16 KB serialized hard limit so it remains suitable for model
 context.
 
+Entity fields belong inside their typed operation payload. For example,
+`upsert_task` accepts `{"type":"upsert_task","task":{"id":"task-1","title":"Check evidence","details":"Retain exact facts","status":"pending"}}`,
+not flattened `id`, `title`, or `details` fields beside `type`. Schema rejection
+happens before writing and is returned as a Tool observation so the model can
+correct the arguments in a later round.
+
 The Store compares `expected_version` while holding a Postgres `FOR UPDATE`
 lock on the owning Conversation. A stale writer receives
 `task_state_version_conflict`; it must reload and intentionally rebase rather
@@ -87,10 +93,24 @@ Revision is durable. The Revision Store remains authoritative if event
 publication fails; retrying the original patch then returns a version conflict
 instead of applying it twice.
 
-The Tool declares a durable side effect, so Stage recovery uses the existing
-Tool Effect Journal. Replaying the same Tool Call returns its committed result
-without appending another Revision; a different stale call still receives a
-version conflict.
+The Tool declares `side_effect.mode=internal` and `internal_write` security
+capability. It uses the existing Tool Effect Journal with a Run, Tool Call, and
+real Stage or Turn owner. Single has no Stage: its record keeps `stage_id` empty
+and the real `turn_id`; no synthetic Stage or database migration is needed.
+Turn-only receipt keys include Turn identity, so distinct Turns cannot reuse a
+receipt. Staged receipt keys retain their existing identity for Stage retry.
+
+Replaying the same Tool Call returns its committed result without appending
+another Revision; a different stale call still receives a version conflict.
+Journal settlement and Task State persistence remain separate commits. An
+error after the handler starts can leave an uncertain effect, which stops the
+Turn and requires reconciliation; it must not become a model-correctable error.
+This does not add Single Stage recovery or a durable per-round cursor.
+
+Tool definition revision includes the side-effect mode. Old Runs frozen with
+`mode=external` remain inspectable through Replay, but Resume rejects that
+changed definition rather than silently replacing their frozen contract. Start
+a new Run to use the corrected internal-write binding.
 
 ## HTTP API
 

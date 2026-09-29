@@ -109,7 +109,7 @@ export function ToolEffectReconciliationPanel({ runId, onChanged }: { runId: str
 			<header>
 				<div>
 					<h2 id="tool-effect-recovery-title">Tool effect reconciliation</h2>
-					<p>Confirm the external outcome before this run resumes.</p>
+					<p>Confirm the write outcome before retrying or resuming this run.</p>
 				</div>
 				<span>{effects.length} unresolved</span>
 			</header>
@@ -184,7 +184,7 @@ function ToolEffectForm({ effect, runId, onApplied }: { effect: ToolEffect; runI
 							{availableActions.map((item) => <option key={item} value={item}>{actionLabel(item)}</option>)}
 						</select></label>
 						<label>Actor<input value={actor} onChange={(event) => setActor(event.target.value)} placeholder="Operator identity" /></label>
-						<label className="tool-effect-reason">Reason<input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Observed external outcome" /></label>
+						<label className="tool-effect-reason">Reason<input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Observed write outcome" /></label>
 					</div>
 					{action === "confirm_committed" ? (
 						<label className="tool-effect-result">Committed result<textarea value={result} onChange={(event) => setResult(event.target.value)} placeholder='{"status":"accepted"}' /></label>
