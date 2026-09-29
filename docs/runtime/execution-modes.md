@@ -41,8 +41,10 @@ Run
 
 The Turn Engine may perform more than one Model Call when the model selects
 Tools, but the whole model/tool exchange is still one Turn. Tool-enabled requests
-repeat native completion with paired observations until there are no more calls;
-only the final answer is delivered over SSE, buffered rather than token-streamed.
+repeat native streaming completion with paired observations until there are no
+more calls. Single forwards answer chunks immediately; if a round subsequently
+chooses Tools, its provisional commentary is retracted with `model.delta.reset`
+before continuing. Only the final answer becomes the persisted assistant Message.
 Tool-free and explicitly simulated Chat retain their existing streaming paths. Typed
 retrieval, context, model, Tool, usage, and completion events are persisted.
 See [Bounded Tool loop](../tools/bounded-tool-loop.md).

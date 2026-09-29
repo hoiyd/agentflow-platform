@@ -16,6 +16,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 	"agentflow-platform/apps/api/internal/tool/artifact"
 )
 
@@ -72,7 +73,7 @@ func fixtureProvider(t *testing.T, mode string) *httptest.Server {
 		for _, message := range request.Messages {
 			hasObservation = hasObservation || message.Role == "tool"
 		}
-		if !request.Stream && len(request.Tools) > 0 && !hasObservation && mode != "no_evidence" {
+		if len(request.Tools) > 0 && !hasObservation && mode != "no_evidence" {
 			calls := []any{}
 			for i, id := range ids {
 				args, _ := json.Marshal(map[string]any{"artifact_id": artifactID, "query": id})
@@ -81,7 +82,17 @@ func fixtureProvider(t *testing.T, mode string) *httptest.Server {
 				}
 				calls = append(calls, map[string]any{"id": fmt.Sprintf("call-%d", i), "type": "function", "function": map[string]any{"name": artifact.SearchToolName, "arguments": string(args)}})
 			}
-			json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "tool_calls": calls}, "finish_reason": "tool_calls"}}, "usage": providerUsage})
+			if !request.Stream {
+				t.Error("Tool evaluation must request streaming")
+			}
+			stream, err := modelstream.Completion(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": "Checking export", "tool_calls": calls}, "finish_reason": "tool_calls"}}, "usage": providerUsage})
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(500)
+				return
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, stream)
 			return
 		}
 		facts := []Fact{}
@@ -333,8 +344,12 @@ func TestMissingProviderUsageRemainsExplicitlyEstimated(t *testing.T) {
 func TestEvaluationDoesNotRequireTemporaryStorage(t *testing.T) {
 	server := fixtureProvider(t, "estimated")
 	t.Setenv("TMPDIR", t.TempDir()+"/missing-parent")
-	report, err := Run(context.Background(), openai.NewClient("fixture", server.URL, "fixture"), options())
+	opts := options()
+	// Two trials send six full exports (~120k estimated input tokens) plus Tool
+	// schemas and follow-ups. This storage check must not exhaust the suite budget.
+	opts.MaxTotalTokens = 200000
+	report, err := Run(context.Background(), openai.NewClient("fixture", server.URL, "fixture"), opts)
 	if err != nil || !report.Passed() {
-		t.Fatalf("in-memory evaluation depended on temporary storage: %v", err)
+		t.Fatalf("in-memory evaluation depended on temporary storage: summary=%+v err=%v", report.Summary, err)
 	}
 }

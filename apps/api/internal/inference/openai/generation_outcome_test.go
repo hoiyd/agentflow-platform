@@ -122,7 +122,7 @@ func TestTruncatedToolCallNeverExecutes(t *testing.T) {
 	calls := 0
 	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
 		calls++
-		return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","content":"partial thought","tool_calls":[{"id":"call-1","type":"function","function":{"name":"calculator","arguments":"{\"expression\":"}}]},"finish_reason":"length"}]}`), nil
+		return toolStreamHTTPResponse(t, `{"choices":[{"message":{"role":"assistant","content":"partial thought","tool_calls":[{"id":"call-1","type":"function","function":{"name":"calculator","arguments":"{\"expression\":"}}]},"finish_reason":"length"}]}`), nil
 	})}
 	store := &recordingEventStore{}
 	events, errs := streamToolLoopForTest(t, client, context.Background(), "Use tools.", nil, "calculate 2+3", tool.DefaultCatalog(), eventpkg.NewRecorder(store), "run-1", "stage-1", nil, nil)

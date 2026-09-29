@@ -17,6 +17,7 @@ import (
 	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
+	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 )
 
 func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
@@ -28,6 +29,7 @@ func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
 				var input struct {
 					Messages []provider.Message `json:"messages"`
 					Tools    []any              `json:"tools"`
+					Stream   bool               `json:"stream"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 					t.Error(err)
@@ -66,8 +68,23 @@ func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
 				} else if len(input.Messages) > 0 && strings.Contains(input.Messages[0].Content, "Decide stage") {
 					content = `{"decision":"stop","reason":"calculation complete","final_answer":"5"}`
 				}
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": content, "tool_calls": calls}, "finish_reason": reason}}, "usage": map[string]int{"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}})
+				response := map[string]any{"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": content, "tool_calls": calls}, "finish_reason": reason}}, "usage": map[string]int{"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}}
+				if len(input.Tools) > 0 && !input.Stream {
+					t.Error("Tool mode did not request streaming")
+				}
+				if input.Stream {
+					stream, err := modelstream.Completion(response)
+					if err != nil {
+						t.Error(err)
+						w.WriteHeader(500)
+						return
+					}
+					w.Header().Set("Content-Type", "text/event-stream")
+					fmt.Fprint(w, stream)
+				} else {
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(response)
+				}
 			}))
 			t.Cleanup(server.Close)
 			storage := fixturestore.New()
@@ -89,6 +106,9 @@ func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
 			drain := func(events <-chan domain.RunEvent, errs <-chan error) {
 				for item := range events {
 					if item.Type == domain.EventModelDelta {
+						if reset, _ := item.Payload["reset"].(bool); reset {
+							output = ""
+						}
 						output += fmt.Sprint(item.Payload["delta"])
 					}
 				}

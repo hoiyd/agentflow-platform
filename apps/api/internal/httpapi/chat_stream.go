@@ -12,6 +12,9 @@ import (
 
 func writeUnifiedRunEvent(w http.ResponseWriter, flusher http.Flusher, event domain.RunEvent, assistant *strings.Builder) {
 	if event.Type == domain.EventModelDelta && assistant != nil {
+		if reset, _ := event.Payload["reset"].(bool); reset {
+			assistant.Reset()
+		}
 		if delta, ok := event.Payload["delta"].(string); ok {
 			assistant.WriteString(delta)
 		}

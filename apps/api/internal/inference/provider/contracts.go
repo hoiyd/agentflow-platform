@@ -45,8 +45,10 @@ type FunctionCall struct {
 }
 
 type StreamEvent struct {
-	Type       string
-	Delta      string
+	Type  string
+	Delta string
+	// Reset retracts provisional answer text when a round chooses Tools instead.
+	Reset      bool
 	ToolName   string
 	ToolCallID string
 	Error      string
@@ -92,7 +94,9 @@ type ChatModel interface {
 	HasAPIKey() bool
 	PrepareAgentChat(context.Context, ChatRequest) (PreparedChat, error)
 	PrepareFollowup(context.Context, []Message, []map[string]any) (PreparedChat, error)
-	SelectTools(context.Context, PreparedChat, []map[string]any, ChatTrace) (ChatChoice, error)
+	// Streams provisional answer deltas, retracting them with Reset if Tools
+	// appear. Returns a fully assembled, finished choice; never executes Tools.
+	StreamToolRound(context.Context, PreparedChat, []map[string]any, ChatTrace, chan<- StreamEvent) (ChatChoice, error)
 	StreamAnswer(context.Context, PreparedChat, ChatStreamKind, ChatTrace, chan<- StreamEvent) (bool, error)
 }
 

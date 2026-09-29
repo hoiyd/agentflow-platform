@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -9,8 +10,18 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/inference/provider"
+	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 	"agentflow-platform/apps/api/internal/tool"
 )
+
+func toolStreamHTTPResponse(t *testing.T, body string) *http.Response {
+	t.Helper()
+	stream, err := modelstream.Completion(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return modelHTTPResponse(200, stream)
+}
 
 func streamToolLoopForTest(t *testing.T, client *Client, ctx context.Context, systemPrompt string, history []domain.Message, latest string, catalog *tool.Catalog, recorder *eventpkg.Recorder, runID string, stepID string, memories []domain.RetrievedMemory, knowledge []domain.RetrievedDocumentChunk) (<-chan provider.StreamEvent, <-chan error) {
 	t.Helper()

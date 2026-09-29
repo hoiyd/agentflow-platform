@@ -817,6 +817,8 @@ export interface components {
             /** @constant */
             type: "model_delta";
             delta: string;
+            /** @description Clear the current assistant draft before appending delta; retracts provisional text when a streamed round chooses tools. */
+            reset?: boolean;
         };
         StageStateChunk: {
             /** @constant */

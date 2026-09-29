@@ -5,9 +5,9 @@ import (
 	"math"
 )
 
-// GenerationPolicy freezes the parameters sent for answer streams and
-// non-stream completions (including Tool decisions). An absent top_p leaves
-// the backend default unspecified.
+// GenerationPolicy freezes the answer-stream and completion profiles. Tool
+// rounds retain Completion even when streamed; other completion calls are
+// non-streaming. An absent top_p leaves the backend default unspecified.
 type GenerationPolicy struct {
 	AnswerStream GenerationProfile `json:"answer_stream"`
 	Completion   GenerationProfile `json:"completion"`

@@ -1,7 +1,6 @@
 package openai
 
 import (
-	"fmt"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/contextassembly"
@@ -10,9 +9,12 @@ import (
 
 type chatCompletionChunk struct {
 	Choices []struct {
+		Index int `json:"index"`
 		Delta struct {
-			Content string `json:"content"`
-			Refusal string `json:"refusal"`
+			Content          string          `json:"content"`
+			Refusal          string          `json:"refusal"`
+			ReasoningContent *string         `json:"reasoning_content"`
+			ToolCalls        []toolCallDelta `json:"tool_calls"`
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
@@ -97,21 +99,4 @@ func ensureCurrentInput(messages []Message, latest string) []Message {
 	return append(messages, Message{
 		Role: "user", Content: latest, Source: contextassembly.SourceCurrentInput, ReferenceID: "current_input",
 	})
-}
-
-func normalizeToolCalls(toolCalls []ToolCall) []ToolCall {
-	normalized := make([]ToolCall, 0, len(toolCalls))
-	for index, call := range toolCalls {
-		if call.ID == "" {
-			call.ID = fmt.Sprintf("call_%d", index+1)
-		}
-		if call.Type == "" {
-			call.Type = "function"
-		}
-		if strings.TrimSpace(call.Function.Arguments) == "" {
-			call.Function.Arguments = "{}"
-		}
-		normalized = append(normalized, call)
-	}
-	return normalized
 }

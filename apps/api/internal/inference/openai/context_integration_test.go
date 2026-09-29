@@ -21,9 +21,9 @@ func TestToolRoundTripCreatesManifestPerLogicalModelCall(t *testing.T) {
 	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
 		attempts++
 		if attempts == 1 {
-			return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call-1","type":"function","function":{"name":"calculator","arguments":"{\"expression\":\"1 + 1\"}"}}]},"finish_reason":"tool_calls"}]}`), nil
+			return toolStreamHTTPResponse(t, `{"choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call-1","type":"function","function":{"name":"calculator","arguments":"{\"expression\":\"1 + 1\"}"}}]},"finish_reason":"tool_calls"}]}`), nil
 		}
-		return modelHTTPResponse(200, `{"choices":[{"message":{"role":"assistant","content":"2"},"finish_reason":"stop"}]}`), nil
+		return toolStreamHTTPResponse(t, `{"choices":[{"message":{"role":"assistant","content":"2"},"finish_reason":"stop"}]}`), nil
 	})}
 	store := &recordingEventStore{}
 	recorder := eventpkg.NewRecorder(store)
@@ -111,7 +111,7 @@ func TestToolStreamReturnsDirectModelAnswer(t *testing.T) {
 	attempts := 0
 	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
 		attempts++
-		return modelHTTPResponse(200, `{
+		return toolStreamHTTPResponse(t, `{
 			"choices":[{"message":{"role":"assistant","content":"direct answer"}}],
 			"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}
 		}`), nil
@@ -183,7 +183,7 @@ func TestToolLoopReturnsFollowupModelError(t *testing.T) {
 	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
 		attempts++
 		if attempts == 1 {
-			return modelHTTPResponse(200, `{
+			return toolStreamHTTPResponse(t, `{
 				"choices":[{"message":{"role":"assistant","tool_calls":[{
 					"id":"call-1","type":"function","function":{"name":"calculator","arguments":"{\"expression\":\"2 + 3\"}"}
 				}]},"finish_reason":"tool_calls"}]

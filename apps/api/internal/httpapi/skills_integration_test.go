@@ -18,6 +18,7 @@ import (
 	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/skill"
+	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 )
 
 func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
@@ -47,6 +48,7 @@ func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
 				var request struct {
 					Messages []provider.Message `json:"messages"`
 					Tools    []any              `json:"tools"`
+					Stream   bool               `json:"stream"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 					t.Error(err)
@@ -96,7 +98,19 @@ func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
 				if len(request.Messages) > 0 && strings.Contains(request.Messages[0].Content, "Decide stage") {
 					content = `{"decision":"stop","reason":"method read","final_answer":"Bounded evidence answer."}`
 				}
-				writeJSON(w, 200, map[string]any{"model": "skill-fixture", "choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": content, "tool_calls": calls}, "finish_reason": reason}}, "usage": map[string]int{"prompt_tokens": 40, "completion_tokens": 10, "total_tokens": 50}})
+				response := map[string]any{"model": "skill-fixture", "choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": content, "tool_calls": calls}, "finish_reason": reason}}, "usage": map[string]int{"prompt_tokens": 40, "completion_tokens": 10, "total_tokens": 50}}
+				if request.Stream {
+					stream, err := modelstream.Completion(response)
+					if err != nil {
+						t.Error(err)
+						w.WriteHeader(500)
+						return
+					}
+					w.Header().Set("Content-Type", "text/event-stream")
+					fmt.Fprint(w, stream)
+				} else {
+					writeJSON(w, 200, response)
+				}
 			}))
 			t.Cleanup(server.Close)
 			dependencies := completeHandlerDependencies(t)

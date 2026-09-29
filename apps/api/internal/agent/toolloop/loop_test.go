@@ -28,10 +28,14 @@ func (m *modelStub) PrepareAgentChat(_ context.Context, request provider.ChatReq
 	return provider.PreparedChat{RawMessages: []provider.Message{{Role: "user", Content: request.Latest}}}, nil
 }
 
-func (m *modelStub) SelectTools(_ context.Context, _ provider.PreparedChat, _ []map[string]any, _ provider.ChatTrace) (provider.ChatChoice, error) {
+func (m *modelStub) StreamToolRound(_ context.Context, _ provider.PreparedChat, _ []map[string]any, _ provider.ChatTrace, events chan<- provider.StreamEvent) (provider.ChatChoice, error) {
 	m.steps = append(m.steps, "select")
 	if m.final != nil {
+		events <- provider.StreamEvent{Type: "delta", Delta: "2"}
 		return provider.ChatChoice{Content: "2"}, nil
+	}
+	if len(m.selected.ToolCalls) == 0 {
+		events <- provider.StreamEvent{Type: "delta", Delta: m.selected.Content}
 	}
 	return m.selected, nil
 }
@@ -102,27 +106,10 @@ func TestToolFailureIsReturnedToModel(t *testing.T) {
 	}
 }
 
-func TestToolResultRedactionAndEmission(t *testing.T) {
+func TestToolResultRedaction(t *testing.T) {
 	payload := marshalResult(tool.ExecutionResult{Tool: "test", Result: map[string]any{"api_key": "sk-abcdefgh"}})
 	if strings.Contains(payload, "abcdefgh") || !strings.Contains(payload, "[REDACTED]") {
 		t.Fatalf("tool result credential leaked to model payload: %s", payload)
-	}
-	events := make(chan provider.StreamEvent, 8)
-	if err := emitText(context.Background(), "one two", events); err != nil {
-		t.Fatal(err)
-	}
-	close(events)
-	var output string
-	for event := range events {
-		output += event.Delta
-	}
-	if output != "one two" {
-		t.Fatalf("emitted text = %q", output)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if err := emitText(ctx, "cancel me", make(chan provider.StreamEvent)); err != context.Canceled {
-		t.Fatalf("expected canceled emit, got %v", err)
 	}
 }
 

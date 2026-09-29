@@ -94,12 +94,12 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		choice, err := model.SelectTools(ctx, prepared, definitions, request.Trace)
+		choice, err := model.StreamToolRound(ctx, prepared, definitions, request.Trace, events)
 		if err != nil {
 			return err
 		}
 		if len(choice.ToolCalls) == 0 {
-			return emitText(ctx, choice.Content, events)
+			return nil
 		}
 		if _, deadline := ctx.Deadline(); !deadline && !budget.HasModelCallLimit(ctx) {
 			return failure.New(failure.Definition{Message: "Tool loop requires a finite model-call/token budget or an active deadline", Info: failure.Info{Code: "tool_loop_unbounded", Source: "toolloop", Category: failure.CategoryValidation}})
@@ -205,21 +205,6 @@ func labelWebSources(load func() ([]domain.RunEvent, error), results []tool.Exec
 		}
 	}
 	return nil
-}
-
-func emitText(ctx context.Context, text string, events chan<- provider.StreamEvent) error {
-	if strings.TrimSpace(text) == "" {
-		return failure.New(failure.Definition{Message: "model returned an empty final answer", Info: failure.Info{Code: "invalid_response", Source: "model", Category: failure.CategoryValidation}})
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case events <- provider.StreamEvent{Type: "delta", Delta: text}:
-		return nil
-	}
 }
 
 func marshalResult(result tool.ExecutionResult) string {

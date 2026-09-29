@@ -1361,6 +1361,9 @@ components:
           type: string
           const: model_delta
         delta: { type: string }
+        reset:
+          type: boolean
+          description: Clear the current assistant draft before appending delta; retracts provisional text when a streamed round chooses tools.
     StageStateChunk:
       type: object
       required: [type, conversation_id, run_id, role, status]

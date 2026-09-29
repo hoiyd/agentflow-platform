@@ -68,7 +68,7 @@ export function createRunEventHandler(options: RunEventProjectionOptions) {
     if (event.type === "model_delta") {
       options.setMessages((items) =>
         items.map((item) =>
-          item.id === options.assistantDraftId ? { ...item, content: item.content + event.delta } : item
+          item.id === options.assistantDraftId ? { ...item, content: (event.reset ? "" : item.content) + event.delta } : item
         )
       );
     }

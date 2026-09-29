@@ -38,7 +38,7 @@ These are cross-cutting runtime capabilities, not mode-specific features:
 
 | Capability | Runtime design | Adaptation boundary |
 | --- | --- | --- |
-| **Performance** | SSE transports answers: Tool-free provider calls stream tokens, while Tool-enabled rounds deliver the buffered final answer. Context, output, Tool results, Run usage, and background queues are bounded. Active runtime excludes queue and human-wait time. | Limits and provider policies are configured at composition time and frozen into new Runs where replay stability requires it. No benchmark result is implied. |
+| **Performance** | Single Chat streams provider answer chunks over SSE, including Tool-enabled rounds; provisional commentary is retracted if a round chooses Tools. Staged modes retain their final-output publication boundaries. Context, output, Tool results, Run usage, and background queues are bounded. Active runtime excludes queue and human-wait time. | Limits and provider policies are configured at composition time and frozen into new Runs where replay stability requires it. No benchmark result is implied. |
 | **Concurrency** | `RunController` combines global admission, bounded queueing, and per-Conversation single-writer execution. The model limiter owns in-flight requests and RPM/TPM; Tool bindings declare serial, read-only, or keyed parallelism. | Single, Multi-Agent, and Loop (`autonomous`) modes use the shared controls. Multi-Agent Worker isolation is a Stage policy inside the parent Run. Provider retries acquire fresh permits without double-counting logical Run usage. |
 | **Workspace scope** | HTTP resolves `X-Workspace-ID`, query, or payload scope to one normalized namespace; omitted and legacy `default` values become `default_workspace`. Persisted Runs inherit Conversation scope. | Postgres stores enforce namespace predicates. Authentication, Membership, and ACL remain separate future policy layers. |
 | **Tracing** | Typed Run Events cover Run, Stage, Turn, Model, Tool, Retrieval, Context, Memory, Usage, Verification, and recovery lifecycles. `ModelRequestEnvelope` records each physical provider attempt against its Runtime Snapshot and Context Manifest. Durable records are persisted for Replay and debug views; streaming `model.delta` events are intentionally omitted. | Event contracts remain stable across Postgres stores and provider adapters add versioned metadata instead of inventing private trace formats. |
@@ -127,7 +127,7 @@ the same multi-round loop, bounded by existing Run Budget and active deadlines;
 Progress Guard blocks repeated work. Every request reassembles context with the
 same frozen Tool definitions. Local evaluations use this path without starting
 the full Agent Runtime. See [Bounded Tool loop](../tools/bounded-tool-loop.md)
-for buffered final-answer delivery and the Stage-scoped recovery boundary.
+for streamed answer/draft-retraction semantics and the Stage-scoped recovery boundary.
 
 The three execution-facing areas are deliberately visible in the tree. `agent`
 owns orchestration and the Turn protocol, `tool` owns callable capabilities and

@@ -155,6 +155,8 @@ func (StagePayload) supports(eventType domain.RunEventType) bool {
 }
 
 type ModelPayload struct {
+	Delta               string `json:"delta,omitempty"`
+	Reset               bool   `json:"reset,omitempty"`
 	Model               string `json:"model,omitempty"`
 	Output              string `json:"output,omitempty"`
 	OutputChars         int    `json:"output_chars,omitempty"`

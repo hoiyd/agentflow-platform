@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
+	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 	"agentflow-platform/apps/api/internal/tool"
 )
 
@@ -107,6 +109,7 @@ func TestSkillResumeExecutesFrozenMethodAfterDirectoryRemoved(t *testing.T) {
 		}
 		var req struct {
 			Messages []provider.Message `json:"messages"`
+			Stream   bool               `json:"stream"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Error(err)
@@ -132,7 +135,19 @@ func TestSkillResumeExecutesFrozenMethodAfterDirectoryRemoved(t *testing.T) {
 		if count == 1 {
 			sawFrozenMethod.Store(true)
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": "Recovered reviewed facts."}, "finish_reason": "stop"}}, "usage": map[string]int{"prompt_tokens": 30, "completion_tokens": 8, "total_tokens": 38}})
+		response := map[string]any{"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": "Recovered reviewed facts."}, "finish_reason": "stop"}}, "usage": map[string]int{"prompt_tokens": 30, "completion_tokens": 8, "total_tokens": 38}}
+		if req.Stream {
+			stream, err := modelstream.Completion(response)
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(500)
+				return
+			}
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprint(w, stream)
+		} else {
+			_ = json.NewEncoder(w).Encode(response)
+		}
 	}))
 	t.Cleanup(server.Close)
 	storage := fixturestore.New()
