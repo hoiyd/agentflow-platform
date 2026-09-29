@@ -274,6 +274,9 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 					Payload:        map[string]any{"delta": event.Delta},
 					Timestamp:      event.Timestamp,
 				}
+				if event.Reset {
+					live.Payload["reset"] = true
+				}
 				r.publishLive(live)
 				events <- live
 			}

@@ -38,9 +38,10 @@ Catalog construction validates endpoint shape, token limits, credential
 references, descriptor/client identity, duplicate IDs, and credential-like
 metadata. Route and Catalog revisions are SHA-256 digests of canonical JSON.
 
-`generation_policy` has two profiles: `answer_stream` for streamed answers and
-`completion` for non-stream calls, including Tool decisions, compaction, and
-other auxiliary completions. Their default temperatures remain `0.4` and
+`generation_policy` has two profiles: `answer_stream` for Tool-free streamed
+answers and `completion` for Tool-enabled rounds, compaction, and other auxiliary
+completions. Tool rounds retain `completion` even with streaming transport;
+compaction and auxiliary completions remain non-streaming. Their default temperatures remain `0.4` and
 `0.2`. Each profile requires a `temperature` in `[0, 2]`; optional `top_p`
 must be in `(0, 1]`. An omitted `top_p` is left to the provider, not recorded
 as an assumed value. `seed` is accepted only when the route explicitly sets

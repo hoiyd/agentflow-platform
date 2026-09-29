@@ -15,12 +15,50 @@ The Autonomous iteration count is not a Tool-loop limit. Each request uses the
 frozen Tool definitions and existing Context Assembler, Manifest, Request
 Capture, Run Budget, Usage Ledger, and Progress Guard.
 
-Tool-enabled rounds use native non-streaming completion so one response can
-choose calls or the final answer. Only the final answer is forwarded as SSE
-deltas; intermediate model commentary is not the persisted answer. No extra
-answer-generation request is made. Tool-free and explicitly simulated Chat
-retain their existing streaming paths. Do not interpret buffered answer delivery
-as provider token streaming or measurable time to first token.
+Tool-enabled rounds use native streaming completion (`stream: true`, frozen
+`tools`, `tool_choice: auto`). Answer chunks are forwarded immediately, even
+when enabled Tools are not used. No extra answer-generation request or typing
+animation is added. Tool-free and explicitly simulated Chat keep their paths.
+
+Until a round finishes, streamed answer text is provisional: a provider may
+emit commentary before choosing a Tool. On the first Tool-call fragment, any
+already-visible text from that round is retracted with `model.delta` payload
+`{ "delta": "", "reset": true }`. Later commentary in that Tool round is
+kept for provider continuation, not appended to the answer. Runtime output,
+the HTTP response accumulator and the Chat draft all apply the reset; only the
+final answer is persisted as the assistant Message. Consumers must clear the
+current draft before appending `delta` when `reset` is true; the absent flag
+retains the existing append behavior. It is a stream-only draft edit, not a
+deletion of historical Messages or durable evidence.
+
+While the active assistant draft is empty, Chat shows `Working...` with a small
+loading indicator. It disappears when answer text arrives or execution stops;
+it is a generic waiting state, not a claim that the model is currently thinking.
+
+Tool calls are assembled by `delta.tool_calls[].index`, including name and JSON
+argument fragments. Execution waits for `[DONE]`, a consistent `tool_calls`
+finish reason and validation of the entire batch. No partial arguments execute,
+and missing identity is rejected rather than synthesized. Individual SSE frames
+and aggregate Tool-round content/continuation state are capped at 1 MiB; Tool
+indices must be contiguous from zero and below 1024. The shared protocol follows
+the [OpenAI streaming Tool-call contract](https://developers.openai.com/api/docs/guides/function-calling#streaming).
+
+Each round retains the existing frozen **Completion** sampling profile (not
+AnswerStream merely because transport is streaming), Manifest, logical call
+identity, Run Budget and Usage Ledger. Provider usage is collected through
+`stream_options.include_usage`; an unsupported-option response can retry without
+that option under the same logical reservation. Missing usage stays explicitly
+estimated. Stream attempts can measure first content/Tool-fragment arrival.
+Once a visible delta has been sent, the adapter does not automatically retry a
+failed stream: partial output remains a failed candidate, never duplicated or
+reported as completed. Providers must support streaming native Tool calling;
+there is no silent non-streaming or Tool-disabling fallback.
+
+Scope: Single Chat delivers these chunks through the existing Chat/Run SSE and
+frontend draft. Multi Worker and Autonomous Act use the same streaming Tool
+protocol internally; their orchestration still chooses when to publish the
+final reviewed/Decide output. This change does not make every planning,
+reviewing or finalizing Stage token-streamed, nor add thinking-text UI.
 
 ### Thinking-model continuation
 
@@ -36,7 +74,9 @@ Reasoning is provider continuation state, not answer text. It is neither emitted
 to Chat nor copied into ordinary model events. Request Capture retains the
 outgoing field only under the existing opt-in `full`/`redacted` body policy;
 `metadata_only` does not store it. Provider-reported usage stays authoritative,
-and non-streaming estimated usage includes returned reasoning when usage is absent.
+and estimated Tool-stream usage includes the serialized request (including Tool
+definitions), returned reasoning, and generated Tool names/arguments when usage
+is absent. This remains a heuristic, not provider-reported tokenization.
 
 Boundary: this is same-Turn continuation, not durable reasoning history. Chat
 history stores final answers, not complete provider response messages, and Stage
@@ -46,6 +86,17 @@ or thinking-token streaming. See the provider's
 [thinking-mode contract](https://api-docs.deepseek.com/guides/thinking_mode/).
 
 ## Failure Inventory and Test Plan
+
+Streaming acceptance: a flushed answer delta must reach the consumer while the
+provider is still waiting to send later chunks and `[DONE]`. Test this with a
+channel handshake, not a sleep or a typing animation. Cover enabled-but-unused
+Tools and an actual Tool round followed by an answer. Additional failure cases:
+fragmented/interleaved calls must assemble by index; incomplete or invalid calls
+must never execute; intermediate commentary must not survive into the final
+answer; reasoning must retain absent/empty semantics without reaching Chat;
+disconnect/cancellation after a visible delta must not retry or duplicate text;
+pre-output retries and unsupported stream-usage fallback must retain the frozen
+schemas, sampling, request identity, usage settlement and permit release.
 
 | Failure | Required result |
 | --- | --- |
@@ -69,6 +120,11 @@ The deterministic backend integration tests use a local OpenAI-compatible HTTP
 server, real Tool bindings, Context Assembly, an in-memory Fixture Store for
 events/capture, and Usage Ledger. Their scope is the backend Runtime/Tool protocol,
 not browser-to-API product end-to-end testing or real PostgreSQL integration.
+`TestChatHTTPStreamsToolAnswerBeforeProviderDone` additionally exercises a real
+HTTP `/api/chat` connection and verifies the final persisted Message after
+retracting intermediate commentary. Its provider waits on a channel released
+only when the HTTP consumer receives the first answer chunk; no sleeps establish
+the streaming claim.
 It is protocol evidence, not a live-model quality benchmark. TOOL-025 owns live
 task-quality evidence; this feature does not introduce another evaluator.
 
@@ -108,6 +164,14 @@ From `apps/api`, using the repository Go version:
 go test -json ./internal/agent ./internal/agent/toolloop ./internal/checkpoint ./internal/httpapi ./internal/projection \
   -run 'TestBoundedToolLoopAcrossExecutionModes|TestMultiRound|TestRestoreDoesNotAbandonCommittedEffect|TestResumeFailurePolicyKeepsCheckpointBlockedRunRecoverable|TestBuildRecoverySummaryExplainsCommittedEffectInUnfinishedStage' \
   -count=1 -timeout=60s > /tmp/bounded-tool-loop-evidence.jsonl
+```
+
+Streaming evidence (no live model or browser):
+
+```bash
+go test -json ./internal/inference/openai ./internal/agent/toolloop ./internal/httpapi \
+  -run 'TestStreamingTool|TestToolLoopStreamsBeforeProviderDone|TestChatHTTPStreamsToolAnswerBeforeProviderDone' \
+  -count=1 -timeout=60s > /tmp/tool-answer-streaming-evidence.jsonl
 ```
 
 The JSONL retains test/subcase identity, Run/Stage IDs, fixture model and budget,

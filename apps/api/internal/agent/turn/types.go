@@ -75,6 +75,7 @@ type Result struct {
 type ModelEvent struct {
 	Type       EventType
 	Delta      string
+	Reset      bool
 	ToolName   string
 	ToolCallID string
 	Error      string

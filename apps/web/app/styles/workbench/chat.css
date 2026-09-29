@@ -230,6 +230,16 @@
   padding-right: 0;
 }
 
+.message-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-strong);
+  font-size: 14px;
+}
+
+.message-pending svg { flex-shrink: 0; }
+
 .message-citations {
   border-top: 1px solid var(--border);
   margin-top: 18px;

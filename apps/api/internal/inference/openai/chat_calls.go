@@ -40,7 +40,7 @@ func (c *Client) PrepareFollowup(ctx context.Context, raw []provider.Message, de
 	return provider.PreparedChat{RawMessages: raw, Messages: prepared.messages, Manifest: prepared.manifest}, nil
 }
 
-func (c *Client) SelectTools(ctx context.Context, prepared provider.PreparedChat, definitions []map[string]any, trace provider.ChatTrace) (provider.ChatChoice, error) {
+func (c *Client) StreamToolRound(ctx context.Context, prepared provider.PreparedChat, definitions []map[string]any, trace provider.ChatTrace, events chan<- provider.StreamEvent) (provider.ChatChoice, error) {
 	if !c.HasAPIKey() {
 		return provider.ChatChoice{}, missingCredentialError("chat.tool_selection")
 	}
@@ -58,9 +58,7 @@ func (c *Client) SelectTools(ctx context.Context, prepared provider.PreparedChat
 	decisionCtx := budget.WithOperation(ctx, prepared.Manifest.ModelCallID)
 	decisionCtx = withOutputTokenLimit(decisionCtx, prepared.Manifest.OutputReserveTokens)
 	decisionCtx = withRequestManifest(decisionCtx, prepared.Manifest)
-	decision, err := c.complete(decisionCtx, map[string]any{
-		"model": c.model, "messages": prepared.Messages, "tools": definitions, "tool_choice": "auto",
-	})
+	decision, err := c.streamChat(decisionCtx, prepared.Messages, definitions, events)
 	if err != nil {
 		if isToolCallingUnsupported(err) {
 			err = toolCallingUnsupportedError(err)
@@ -68,8 +66,8 @@ func (c *Client) SelectTools(ctx context.Context, prepared provider.PreparedChat
 		payload := addModelErrorMetadata(map[string]any{
 			"source": "llm", "stage": "tool_selection", "model": c.model, "error": err.Error(),
 		}, err)
-		if modelErr, ok := AsModelError(err); ok && modelErr.Kind == ErrorIncompleteOutput && len(decision.Choices) > 0 {
-			partial := decision.Choices[0].Message.Content
+		if modelErr, ok := AsModelError(err); ok && modelErr.Kind == ErrorIncompleteOutput {
+			partial := decision.output
 			if partial != "" {
 				redacted, _ := redaction.Text(partial)
 				payload["partial_output_preview"] = truncateText(redacted, 600)
@@ -79,9 +77,9 @@ func (c *Client) SelectTools(ctx context.Context, prepared provider.PreparedChat
 		trace.Recorder.Error(ctx, trace.RunID, trace.StepID, payload)
 		return provider.ChatChoice{}, err
 	}
-	choice := decision.Choices[0].Message
-	calls := normalizeToolCalls(choice.ToolCalls)
-	usage := decision.Usage
+	choice := decision.choice
+	calls := choice.ToolCalls
+	usage := decision.usage
 	if !usage.Valid() {
 		usage = estimateUsage(messagesToText(prepared.Messages), choice.Content)
 	}

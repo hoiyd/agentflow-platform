@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import { GitBranch, PanelRightOpen } from "lucide-react";
+import { GitBranch, LoaderCircle, PanelRightOpen } from "lucide-react";
 
 import type { AgentInfo, AgentRoutingRequirements, ChatMode, Message, TaskState } from "../../lib/api";
 import { AutonomousPanel, type AutonomousProgress } from "./AutonomousPanel";
@@ -132,11 +132,18 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
           {messages.length === 0 ? (
             <EmptyConversation onPromptSelect={onPromptSelect} />
           ) : (
-            messages.map((message) => (
+            messages.map((message, index) => (
               <article className={`message ${message.role}`} key={message.id}>
                 <div className="message-meta">{message.role}</div>
                 <div className="bubble">
-                  {message.content ? renderMarkdown(message.content) : "..."}
+                  {message.content ? renderMarkdown(message.content) : (
+                    message.role === "assistant" && isStreaming && index === messages.length - 1 ? (
+                      <span className="message-pending" role="status">
+                        <LoaderCircle aria-hidden="true" className="is-spinning" size={14} />
+                        Working...
+                      </span>
+                    ) : null
+                  )}
                   <MessageCitations citations={message.citations} webCitations={message.web_citations} />
                 </div>
               </article>

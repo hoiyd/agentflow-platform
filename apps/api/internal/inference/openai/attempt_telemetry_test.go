@@ -113,22 +113,19 @@ func TestPartialStreamAndTelemetryWriteFailureDoNotTriggerRetry(t *testing.T) {
 
 func TestCanceledStreamFinishesAttemptWithoutAnotherRetry(t *testing.T) {
 	client := retryTestClient()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	recorder := &attemptRecorderStub{}
 	client.SetRequestRecorder(recorder)
 	attempts := 0
 	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
 		attempts++
+		cancel()
 		return modelHTTPResponse(200, "data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n"), nil
 	})}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		cancel()
-	}()
 	emitted, _, _, err := client.streamMessagesWithUsageOption(ctx, []Message{{Role: "user", Content: "hello"}}, make(chan StreamEvent), false)
 	modelErr, ok := AsModelError(err)
-	if !ok || modelErr.Kind != ErrorCanceled || !emitted || attempts != 1 || len(recorder.outcomes) != 1 ||
+	if !ok || modelErr.Kind != ErrorCanceled || emitted || attempts != 1 || len(recorder.outcomes) != 1 ||
 		recorder.outcomes[0].Status != "failed" || recorder.outcomes[0].ErrorKind != string(ErrorCanceled) {
 		t.Fatalf("canceled stream telemetry: attempts=%d outcomes=%#v err=%v", attempts, recorder.outcomes, err)
 	}

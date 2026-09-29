@@ -22,6 +22,7 @@ type Event struct {
 	RunID      string
 	StepID     string
 	Delta      string
+	Reset      bool
 	ToolName   string
 	ToolCallID string
 	Result     *Result

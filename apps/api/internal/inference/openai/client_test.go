@@ -199,10 +199,6 @@ func TestClientHelperContracts(t *testing.T) {
 		t.Fatalf("blank current input should not append: %#v", got)
 	}
 
-	normalized := normalizeToolCalls([]ToolCall{{Function: FunctionCall{Name: "calculator"}}})
-	if normalized[0].ID != "call_1" || normalized[0].Type != "function" || normalized[0].Function.Arguments != "{}" {
-		t.Fatalf("normalize tool calls: %#v", normalized)
-	}
 	payload := retrievedMemoryPayload([]domain.RetrievedMemory{{
 		Memory:     domain.Memory{ID: "memory-1", Kind: "fact", Content: strings.Repeat("x", 1300), Metadata: map[string]any{"topic": "coverage"}, ConversationID: "conversation-1", RunID: "run-1"},
 		Similarity: 0.8, RecencyBoost: 0.1, Score: 0.9,

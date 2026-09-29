@@ -227,6 +227,9 @@ func (f evaluationFixture) runSample(ctx context.Context, client *openai.Client,
 				continue
 			}
 			if item.Type == "delta" {
+				if item.Reset {
+					output.Reset()
+				}
 				output.WriteString(item.Delta)
 			}
 		case err, ok := <-errs:

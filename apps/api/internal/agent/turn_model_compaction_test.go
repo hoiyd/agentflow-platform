@@ -196,7 +196,7 @@ func (c *overflowRecoveryClient) PrepareFollowup(context.Context, []provider.Mes
 	return provider.PreparedChat{}, errors.New("unexpected tool follow-up")
 }
 
-func (c *overflowRecoveryClient) SelectTools(context.Context, provider.PreparedChat, []map[string]any, provider.ChatTrace) (provider.ChatChoice, error) {
+func (c *overflowRecoveryClient) StreamToolRound(context.Context, provider.PreparedChat, []map[string]any, provider.ChatTrace, chan<- provider.StreamEvent) (provider.ChatChoice, error) {
 	return provider.ChatChoice{}, errors.New("unexpected tool selection")
 }
 

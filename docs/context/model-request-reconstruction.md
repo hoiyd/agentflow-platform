@@ -64,7 +64,7 @@ assign attempt numbers atomically per `(run_id, model_call_id)`.
 Each recorded chat attempt writes a `model.attempt_finished` Run Event linked to
 its prepared Envelope by `record_id`, `model_call_id`, and `attempt`. Replay
 shows the event's completed/failed outcome, request-to-response duration,
-streaming time to first content token when observed, prompt/completion/total
+streaming time to first content/Tool-call fragment when observed, prompt/completion/total
 tokens, whether usage was estimated, and a typed error kind/HTTP status on
 failure. It does not persist raw provider errors, prompts, or credentials.
 For chat attempts, `finish_reason` records `stop`, `tool_calls`, `length`,
@@ -76,8 +76,8 @@ not confirmed by a provider finish reason. Tool calls without a confirmed
 establishes that the SSE stream ended, not that the generation stopped normally.
 `length` and content filtering fail with typed `incomplete_output` and
 `content_policy` errors. Partial text and observed usage remain diagnostic;
-streamed deltas remain in Run events, while a truncated non-stream Tool
-decision records a bounded, redacted partial-text preview when present.
+streamed deltas are live-only Run events, while a truncated Tool round
+records a bounded, redacted partial-text preview when present.
 Truncated Tool arguments are not persisted in that preview and never reach
 execution. A stream failure after the first
 content delta is not retried. Provider-reported usage on a terminal failed

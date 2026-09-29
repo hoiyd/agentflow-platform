@@ -22,6 +22,7 @@ import (
 	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
+	"agentflow-platform/apps/api/internal/testsupport/modelstream"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/artifact"
 	"agentflow-platform/apps/api/internal/tool/policy"
@@ -64,10 +65,17 @@ func newLoopFixture(t *testing.T, limits domain.RuntimeRunBudget, respond func(i
 			return
 		}
 		output := respond(int(f.requests.Add(1)), input)
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(output); err != nil {
-			t.Error(err)
+		if !input.Stream {
+			t.Error("Tool fixture received a non-streaming request")
 		}
+		stream, err := modelstream.Completion(output)
+		if err != nil {
+			t.Error(err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, stream)
 	}))
 	t.Cleanup(server.Close)
 	f.client = openai.NewClientWithTimeout("fixture-not-a-secret", server.URL, "fixture-model", time.Second)
@@ -110,6 +118,9 @@ func (f *loopFixture) execute() (string, error) {
 	var output strings.Builder
 	for item := range events {
 		if item.Type == "delta" {
+			if item.Reset {
+				output.Reset()
+			}
 			output.WriteString(item.Delta)
 		}
 	}

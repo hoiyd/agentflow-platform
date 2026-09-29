@@ -85,7 +85,12 @@ func TestMultiRoundPreservesReasoningWithoutExposingIt(t *testing.T) {
 			}
 			wantCompletion := 6 // Three responses report two completion tokens each.
 			if test.omitUsage {
-				wantCompletion = len(reasoningForRound(1))/4 + 1 + len(reasoningForRound(2))/4 + 1 + len(reasoningForRound(3)+output)/4 + 1
+				wantCompletion = len(reasoningForRound(3)+output)/4 + 1
+				for round := 1; round < 3; round++ {
+					// Tool selection also generates the name and argument fragments.
+					generated := reasoningForRound(round) + "calculator" + fmt.Sprintf(`{"expression":"%d + 1"}`, round)
+					wantCompletion += len(generated)/4 + 1
+				}
 			}
 			if ledger.Totals.CompletionTokens != wantCompletion {
 				t.Fatalf("completion tokens=%d want=%d", ledger.Totals.CompletionTokens, wantCompletion)

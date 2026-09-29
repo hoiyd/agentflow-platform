@@ -36,6 +36,9 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 		if item.Delta != "" {
 			payload["delta"] = item.Delta
 		}
+		if item.Reset {
+			payload["reset"] = true
+		}
 		if item.ToolName != "" {
 			payload["tool_name"] = item.ToolName
 		}
@@ -76,7 +79,7 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 		if t == "" {
 			t = EventModelDelta
 		}
-		publish(Event{Type: t, RunID: request.RunID, StepID: request.StepID, Delta: item.Delta,
+		publish(Event{Type: t, RunID: request.RunID, StepID: request.StepID, Delta: item.Delta, Reset: item.Reset,
 			ToolName: item.ToolName, ToolCallID: item.ToolCallID, Error: item.Error})
 	})
 	if sinkErr != nil {

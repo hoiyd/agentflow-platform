@@ -99,7 +99,7 @@ function runObservationStopped(status: string) {
 function projectRunEvent(event: ChatEvent | RunEvent): ChatEvent {
   if (!("schema_version" in event)) return event;
   const payload = event.payload;
-  if (event.type === "model.delta") return { type: "model_delta", delta: String(payload.delta ?? "") };
+  if (event.type === "model.delta") return { type: "model_delta", delta: String(payload.delta ?? ""), reset: payload.reset === true };
   if (event.type === "run.progress") return {
     type: "run_progress", conversation_id: event.conversation_id ?? "", run_id: event.run_id,
     agent_id: stringValue(payload.agent_id), iteration: numberValue(payload.iteration), max_iterations: numberValue(payload.max_iterations),
@@ -136,4 +136,3 @@ function fallbackRunStatus(eventType: string): ContractSchemas["RunStatus"] {
   if (eventType === "run.canceled") return "canceled";
   return "running";
 }
-
