@@ -67,16 +67,20 @@ func (c *Catalog) Register(binding Binding) error {
 		return fmt.Errorf("tool %q has invalid security capability: %w", name, err)
 	}
 	switch binding.Descriptor.SideEffect.Mode {
-	case "", SideEffectNone, SideEffectExternal:
+	case "", SideEffectNone:
+		if binding.Descriptor.Security.SideEffect != policy.SideEffectNone {
+			return fmt.Errorf("tool %q write capability requires a matching journaled side-effect mode", name)
+		}
 	case SideEffectInternal:
 		if binding.Descriptor.Security.SideEffect != policy.SideEffectInternalWrite {
 			return fmt.Errorf("tool %q internal side effect requires internal_write security capability", name)
 		}
+	case SideEffectExternal:
+		if binding.Descriptor.Security.SideEffect != policy.SideEffectExternalWrite && binding.Descriptor.Security.SideEffect != policy.SideEffectDestructive {
+			return fmt.Errorf("tool %q external side effect requires external_write or destructive security capability", name)
+		}
 	default:
 		return fmt.Errorf("tool %q has unsupported side-effect mode %q", name, binding.Descriptor.SideEffect.Mode)
-	}
-	if binding.Descriptor.SideEffect.Mode == SideEffectExternal && binding.Descriptor.Security.SideEffect == policy.SideEffectNone {
-		return fmt.Errorf("tool %q external side effect requires an explicit security side-effect class", name)
 	}
 	if binding.Descriptor.SideEffect.Mode != SideEffectExternal && (binding.Descriptor.SideEffect.RetryWithSameKey || binding.Descriptor.SideEffect.Compensate || binding.Reconciliation.RetryWithSameKey != nil || binding.Reconciliation.Compensate != nil) {
 		return fmt.Errorf("tool %q reconciliation requires external side-effect mode", name)

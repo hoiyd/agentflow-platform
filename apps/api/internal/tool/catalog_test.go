@@ -87,24 +87,29 @@ func TestReconciliationCapabilityChangesDefinitionRevision(t *testing.T) {
 }
 
 func TestCatalogRejectsInvalidSideEffectModes(t *testing.T) {
+	// Cover both directions: a write cannot omit its journal, and a journal
+	// mode cannot contradict security classification. Valid pairs still register.
 	for _, test := range []struct {
-		mode  SideEffectMode
 		class policy.SideEffectClass
+		mode  SideEffectMode
 	}{
-		{"unsupported", policy.SideEffectInternalWrite},
-		{"internal", policy.SideEffectNone},
-		{"internal", policy.SideEffectExternalWrite},
-		{"internal", policy.SideEffectDestructive},
+		{policy.SideEffectNone, SideEffectNone},
+		{policy.SideEffectInternalWrite, SideEffectInternal},
+		{policy.SideEffectExternalWrite, SideEffectExternal},
+		{policy.SideEffectDestructive, SideEffectExternal},
 	} {
-		t.Run(string(test.mode)+"/"+string(test.class), func(t *testing.T) {
-			_, err := NewCatalog(Binding{
-				Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil),
-					SideEffect: SideEffectPolicy{Mode: test.mode}, Security: policy.Capability{SideEffect: test.class}},
-				Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil },
+		for _, mode := range []SideEffectMode{"", SideEffectNone, SideEffectInternal, SideEffectExternal, "unsupported"} {
+			t.Run(string(test.class)+"/mode="+string(mode), func(t *testing.T) {
+				_, err := NewCatalog(Binding{
+					Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil),
+						SideEffect: SideEffectPolicy{Mode: mode}, Security: policy.Capability{SideEffect: test.class}},
+					Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil },
+				})
+				allowed := mode == test.mode || mode == "" && test.mode == SideEffectNone
+				if (err == nil) != allowed {
+					t.Fatalf("registration allowed=%v, want %v: %v", err == nil, allowed, err)
+				}
 			})
-			if err == nil {
-				t.Fatal("invalid journal mode/security pairing was accepted")
-			}
-		})
+		}
 	}
 }

@@ -6,7 +6,27 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/testsupport/tooltest"
+	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/policy"
 )
+
+func TestTaskStateBindingRejectsMismatchedJournalModes(t *testing.T) {
+	binding := (&Service{}).ToolBinding()
+	if binding.Descriptor.Security.SideEffect != policy.SideEffectInternalWrite || binding.Descriptor.SideEffect.Mode != tool.SideEffectInternal {
+		t.Fatal("Task State must declare a journaled internal write")
+	}
+	for _, mode := range []tool.SideEffectMode{"", tool.SideEffectNone, tool.SideEffectExternal} {
+		t.Run("mode="+string(mode), func(t *testing.T) {
+			invalid := binding
+			invalid.Descriptor.SideEffect.Mode = mode
+			// Register the real descriptor directly, without test-only capability
+			// rewriting or an invented Stage identity.
+			if _, err := tool.NewCatalog(invalid); err == nil {
+				t.Fatal("misclassified Task State binding was accepted")
+			}
+		})
+	}
+}
 
 func TestUpdateTaskStateBindingSatisfiesContractHarness(t *testing.T) {
 	service := &Service{}
