@@ -5,6 +5,13 @@ but its outcome cannot be proved. The Tool Effect Journal records that window
 as `needs_reconciliation`; it never treats a timeout as proof of failure and
 never automatically replays the write.
 
+Journaled internal writes such as `update_task_state` follow the same
+fail-closed settlement contract. Their Single-mode records may have a real
+`turn_id` and no `stage_id`; manual confirmation must inspect authoritative
+Task State revisions, not assume that a handler error means no write occurred.
+Internal writes do not gain external retry/compensation callbacks or a new
+Single-mode Resume path.
+
 Cold-start stale-Run repair also moves abandoned `executing` effects to
 `needs_reconciliation` in the same transaction as the Run repair, so a worker
 crash cannot leave an external write permanently hidden from this surface.

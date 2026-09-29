@@ -85,3 +85,26 @@ func TestReconciliationCapabilityChangesDefinitionRevision(t *testing.T) {
 		t.Fatal("reconciliation capability did not change frozen Tool definition revision")
 	}
 }
+
+func TestCatalogRejectsInvalidSideEffectModes(t *testing.T) {
+	for _, test := range []struct {
+		mode  SideEffectMode
+		class policy.SideEffectClass
+	}{
+		{"unsupported", policy.SideEffectInternalWrite},
+		{"internal", policy.SideEffectNone},
+		{"internal", policy.SideEffectExternalWrite},
+		{"internal", policy.SideEffectDestructive},
+	} {
+		t.Run(string(test.mode)+"/"+string(test.class), func(t *testing.T) {
+			_, err := NewCatalog(Binding{
+				Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil),
+					SideEffect: SideEffectPolicy{Mode: test.mode}, Security: policy.Capability{SideEffect: test.class}},
+				Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil },
+			})
+			if err == nil {
+				t.Fatal("invalid journal mode/security pairing was accepted")
+			}
+		})
+	}
+}

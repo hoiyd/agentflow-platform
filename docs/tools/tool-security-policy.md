@@ -157,8 +157,12 @@ calls do not consume Tool Budget and cannot create an external side effect.
 2. Add `ResolveScope` when arguments select a resource, target, or credential.
 3. Add an operator rule for remote, write, network, filesystem, credential,
    elevated-rate, or irreversible capability.
-4. Also use `side_effect.mode=external` when execution needs the durable
-   intent/effect/settlement journal; this recovery flag does not replace policy.
+4. Use `side_effect.mode=internal` for journaled local runtime state writes
+   (requires `internal_write` security capability), or `external` for remote
+   effects. Both require a durable journal, Run and Tool Call identity. Internal
+   writes accept a real Stage or Turn owner; external writes require a Stage.
+   These recovery declarations do not replace security policy. Retry and
+   compensation callbacks remain external-only.
 5. Run the shared Tool Contract and Fault Harness plus allow and deny cases.
 
 Policy configuration never contains credential values. Filesystem sandbox,

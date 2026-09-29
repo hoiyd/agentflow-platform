@@ -50,3 +50,24 @@ func TestCheckpointValidationAndTransitionContract(t *testing.T) {
 		}
 	}
 }
+
+func TestToolEffectRequiresStageOrTurnIdentity(t *testing.T) {
+	base := domain.ToolEffectRecord{IdempotencyKey: "effect", RunID: "run", TurnID: "turn", ToolCallID: "call", ToolName: "update_task_state", RequestHash: "hash"}
+	if err := ValidateToolEffect(base); err != nil {
+		t.Fatalf("Turn-scoped effect rejected: %v", err)
+	}
+	for _, change := range []func(*domain.ToolEffectRecord){
+		func(e *domain.ToolEffectRecord) { e.IdempotencyKey = "" },
+		func(e *domain.ToolEffectRecord) { e.RunID = "" },
+		func(e *domain.ToolEffectRecord) { e.TurnID = " " },
+		func(e *domain.ToolEffectRecord) { e.ToolCallID = "" },
+		func(e *domain.ToolEffectRecord) { e.ToolName = "" },
+		func(e *domain.ToolEffectRecord) { e.RequestHash = "" },
+	} {
+		invalid := base
+		change(&invalid)
+		if err := ValidateToolEffect(invalid); err == nil {
+			t.Fatalf("incomplete effect accepted: %#v", invalid)
+		}
+	}
+}

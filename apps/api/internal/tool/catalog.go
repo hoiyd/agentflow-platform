@@ -66,6 +66,15 @@ func (c *Catalog) Register(binding Binding) error {
 	if err := policy.ValidateCapability(binding.Descriptor.Security); err != nil {
 		return fmt.Errorf("tool %q has invalid security capability: %w", name, err)
 	}
+	switch binding.Descriptor.SideEffect.Mode {
+	case "", SideEffectNone, SideEffectExternal:
+	case SideEffectInternal:
+		if binding.Descriptor.Security.SideEffect != policy.SideEffectInternalWrite {
+			return fmt.Errorf("tool %q internal side effect requires internal_write security capability", name)
+		}
+	default:
+		return fmt.Errorf("tool %q has unsupported side-effect mode %q", name, binding.Descriptor.SideEffect.Mode)
+	}
 	if binding.Descriptor.SideEffect.Mode == SideEffectExternal && binding.Descriptor.Security.SideEffect == policy.SideEffectNone {
 		return fmt.Errorf("tool %q external side effect requires an explicit security side-effect class", name)
 	}

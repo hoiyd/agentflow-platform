@@ -81,6 +81,14 @@ committed result. Changed arguments cannot silently repeat a write. An unscoped
 standalone caller receives invocation-local identities, not a durable recovery
 guarantee.
 
+Single's runtime-owned `update_task_state` is a journaled internal write, not
+an external effect. It uses the real Turn identity without inventing a Stage;
+committed calls can replay within that Turn. Single invocation-local call IDs
+still do not provide durable restart continuation. Internal-write uncertainty
+stops the Turn just like external-write uncertainty. See
+[Structured Task State](../runtime/task-state.md) for the version and identity
+contract.
+
 Actual orchestration Resume may abandon an unfinished Stage and create a new
 Stage ID. If that Stage already has a committed external effect, checkpoint
 restore refuses automatic recreation with `ErrNeedsReconciliation`. An operator

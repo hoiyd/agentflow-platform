@@ -23,15 +23,21 @@ type SideEffectMode string
 
 const (
 	SideEffectNone     SideEffectMode = "none"
+	SideEffectInternal SideEffectMode = "internal"
 	SideEffectExternal SideEffectMode = "external"
 )
 
-// SideEffectPolicy is explicit because external writes must use the durable
-// idempotency journal. The zero value is a replay-safe, read-only computation.
+// SideEffectPolicy declares journaled writes. Internal writes may belong directly
+// to a Turn; external writes require a Stage recovery boundary. The zero value
+// is a replay-safe, read-only computation.
 type SideEffectPolicy struct {
 	Mode             SideEffectMode `json:"mode,omitempty"`
 	RetryWithSameKey bool           `json:"retry_with_same_key,omitempty"`
 	Compensate       bool           `json:"compensate,omitempty"`
+}
+
+func (p SideEffectPolicy) RequiresJournal() bool {
+	return p.Mode == SideEffectInternal || p.Mode == SideEffectExternal
 }
 
 type ConcurrencyMode string
