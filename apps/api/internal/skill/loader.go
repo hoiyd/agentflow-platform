@@ -26,12 +26,22 @@ func LoadDirectories(directories []string) (*Catalog, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, exists := catalog.packages[item.Name]; exists {
-			return nil, skillError("skill_name_conflict", fmt.Sprintf("Trusted Skill name %q is duplicated", item.Name))
+		if err := catalog.add(item); err != nil {
+			return nil, err
 		}
-		catalog.packages[item.Name] = item
 	}
 	return catalog, nil
+}
+
+func (c *Catalog) add(item domain.SkillSnapshot) error {
+	if _, exists := c.packages[item.Name]; exists {
+		return skillError("skill_name_conflict", fmt.Sprintf("Trusted Skill name %q is duplicated", item.Name))
+	}
+	if len(c.packages) >= MaxSkills {
+		return skillError("skill_limit_exceeded", "Too many trusted Skill packages")
+	}
+	c.packages[item.Name] = item
+	return nil
 }
 
 func loadDirectory(directory string) (domain.SkillSnapshot, error) {
@@ -40,6 +50,10 @@ func loadDirectory(directory string) (domain.SkillSnapshot, error) {
 		return domain.SkillSnapshot{}, skillError("skill_unavailable", "Trusted Skill directory is unavailable")
 	}
 	defer root.Close()
+	return loadPackage(root, filepath.Base(filepath.Clean(directory)))
+}
+
+func loadPackage(root *os.Root, name string) (domain.SkillSnapshot, error) {
 	data, err := readText(root, "SKILL.md", maxInstructionsBytes+4096)
 	if err != nil {
 		return domain.SkillSnapshot{}, err
@@ -65,7 +79,7 @@ func loadDirectory(directory string) (domain.SkillSnapshot, error) {
 	if decoder.Decode(&extra) != io.EOF {
 		return domain.SkillSnapshot{}, skillError("skill_invalid_package", "SKILL.md has multiple YAML documents")
 	}
-	if header.Name != filepath.Base(filepath.Clean(directory)) {
+	if header.Name != name {
 		return domain.SkillSnapshot{}, skillError("skill_invalid_package", "Skill name must match its directory name")
 	}
 	item := domain.SkillSnapshot{Name: header.Name, Description: header.Description, Instructions: strings.TrimSpace(parts[1]), RequiredTools: strings.Fields(header.Metadata["agentflow-required-tools"])}
@@ -83,7 +97,7 @@ func loadDirectory(directory string) (domain.SkillSnapshot, error) {
 			if entry.IsDir() {
 				return nil
 			}
-			if !validResourcePath(path) {
+			if !SupportedResourcePath(path) {
 				return skillError("skill_invalid_resource", "Only references/assets text resources are supported")
 			}
 			if len(item.Resources) >= maxResources {

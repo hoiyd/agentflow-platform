@@ -147,7 +147,7 @@ profiles, so later edits do not change Resume or Replay semantics.
 
 `GET /api/skills` lists operator-trusted metadata only: `name`, `description`,
 `hash` and optional `required_tools`; it exposes neither directory paths nor
-contents. Agent create/update accepts optional `skills: ["knowledge-answer"]`.
+contents. Agent create/update accepts optional `skills: ["<skill-name>"]`.
 Omitting the field on PATCH preserves bindings; an empty array clears them.
 Unknown packages or unavailable required Agent Tools return typed 400 errors.
 Chat invokes a bound method through a `/skill:name` message prefix or native

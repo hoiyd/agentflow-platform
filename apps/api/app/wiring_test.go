@@ -191,7 +191,7 @@ func TestNewApplicationWiresHealthRoute(t *testing.T) {
 		ModelRetryBaseDelay:        time.Millisecond,
 		ModelRetryMaxDelay:         time.Millisecond,
 		DatabaseURL:                pgfixture.DatabaseURL(t),
-		TrustedSkillDirectories:    skillDir,
+		TrustedSkillDirectories:    filepath.Dir(skillDir),
 		AllowedOrigins:             "http://localhost:3000",
 	}
 

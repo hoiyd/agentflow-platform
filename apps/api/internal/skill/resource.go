@@ -7,7 +7,7 @@ import (
 )
 
 func ReadResource(item domain.SkillSnapshot, path string, offset, limit int) (domain.SkillResourcePage, error) {
-	if !validResourcePath(path) {
+	if !SupportedResourcePath(path) {
 		return domain.SkillResourcePage{}, skillError("skill_resource_denied", "Resource path must be a relative package text path")
 	}
 	if err := ValidateFrozen([]domain.SkillSnapshot{item}); err != nil {

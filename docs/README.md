@@ -48,6 +48,8 @@ the project.
 | [Bounded multi-round Tool loop](tools/bounded-tool-loop.md) | How can one Turn correct arguments, make dependent calls and read Artifacts without introducing another budget or recovery protocol? |
 | [Scoped Knowledge read tools](tools/scoped-knowledge-tools.md) | How can an Agent locate and page Workspace evidence, preserve Run-scoped `[S#]` aliases, and trace citations to actual selected Tool observations? |
 | [Trusted Skills](tools/trusted-skills.md) | How are reviewed task methods bound, progressively loaded, frozen for Resume and kept separate from executable Tool permissions? |
+| [Skill installation](tools/skill-installation.md) | How do native Vercel CLI and the Go fallback share the repository-root .agents/skills directory, and how are discovery, working-directory checks and trust handled? |
+| [Restricted Go Skill installer (fallback)](tools/skill-installation-fallback.md) | When Vercel cannot be used, how can an operator preview, validate and publish a pinned public GitHub Skill with bounded downloads and a receipt? |
 | [Tool result artifacts](tools/tool-result-artifacts.md) | How are oversized Tool results redacted, persisted, recovered, bounded in Context, and traced? |
 | [Tool Progress Guard](tools/tool-progress-guard.md) | How are repeated failures, unchanged read-only results, and oscillating Tool calls warned, blocked, and explained in Replay? |
 | [Tool side-effect reconciliation](tools/tool-side-effect-reconciliation.md) | How are uncertain external writes queried, reviewed, retried, compensated, and audited without unsafe automatic replay? |

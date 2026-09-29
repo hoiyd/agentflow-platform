@@ -3,8 +3,8 @@
 ## Contract
 
 SKILL-001 separates reusable task methods from executable Tool capabilities.
-Only operator-configured directories containing `SKILL.md` are trusted package
-inputs. Agents explicitly bind package names; a Skill never grants tools,
+Only immediate `SKILL.md` packages inside operator-configured installation
+roots are trusted inputs. Agents explicitly bind package names; a Skill never grants tools,
 credentials, Workspace access, or script execution.
 
 The format follows [Agent Skills](https://agentskills.io/specification): YAML
@@ -16,33 +16,48 @@ This implementation deliberately does not adopt executable scripts or
 
 ## Setup and Invocation
 
+Prefer [native Vercel Skills CLI from the repository root](skill-installation.md)
+for remote packages. `./scripts/skill-install.sh --repo ... --path ...`
+runs the existing Go CLI as an
+[operator-only Go fallback](skill-installation-fallback.md) when Vercel cannot
+be used. Download, operator review, runtime trust and Agent binding remain
+separate steps; neither installer changes Loader permissions or configuration.
+
 Run the API from `apps/api`, set this operator-owned environment variable, then
 restart the API:
 
 ```bash
-TRUSTED_SKILL_DIRS=../../examples/skills/evidence-research,../../examples/skills/knowledge-answer
+TRUSTED_SKILL_DIRS=../../.agents/skills
 ```
 
-Each CSV entry names one exact package directory, not a search root. Empty is
-the default and disables new bindings. Missing, conflicting or invalid packages
-fail startup rather than producing a partially trusted catalog. Changes require
-an API restart; no request accepts a local directory or uploaded package.
+Each CSV entry names an operator-trusted installation root. Immediate directories
+containing `SKILL.md` are discovered, without recursive repository scanning or
+following package symlinks. Empty is the default and disables new bindings;
+an existing empty root also produces an empty catalog. Missing roots, individual
+package paths, duplicate names, invalid packages or more than eight packages
+fail startup rather than producing a partially trusted catalog. Installing into
+a configured root makes a valid package available after restart, so review its
+content first. No request accepts a local directory or uploaded package.
+
+To use only the repository's two reviewed fixture methods instead of installed
+packages, set `TRUSTED_SKILL_DIRS=../../examples/skills`. This trusts that parent
+root, not a list of its individual packages.
 
 `GET /api/skills` exposes only name, description, package hash and required Tool
 names. In Single mode, **Configure > Skills** binds these names to an Agent.
 The compact **Invoke skill** selector adds `/skill:name` to the task. An explicit
-invocation such as `/skill:knowledge-answer Explain the release procedure`
+invocation such as `/skill:<skill-name> Explain the release procedure`
 loads the bound method on the first model request. Without that prefix, the
 model sees bound metadata and can select a relevant method with `skill_load`.
 Multi Workers and Loop Act stages use the same tools; there is no separate
 Skills dashboard or Agent-editing surface in those modes.
 
-The two reviewed example methods have different dependencies:
+Example methods can have different dependencies (replace package placeholders):
 
 | Package | Required Tools | Additional setup |
 | --- | --- | --- |
-| `evidence-research` | `web_search` | Agent allowlist, enabled/ready Tavily Binding and operator egress policy. |
-| `knowledge-answer` | `knowledge_search`, `knowledge_read` | Existing scoped Knowledge bindings and indexed Workspace documents. |
+| `<web-research-skill>` | `web_search` | Agent allowlist, enabled/ready Tavily Binding and operator egress policy. |
+| `<knowledge-skill>` | `knowledge_search`, `knowledge_read` | Existing scoped Knowledge bindings and indexed Workspace documents. |
 
 Tool dependencies are checked against ready Agent capabilities on save and Run
 creation. This does not bypass per-call policy or data-scope validation: a
@@ -53,7 +68,7 @@ enabled, installed or granted.
 
 ```markdown
 ---
-name: reviewed-method
+name: <skill-name>
 description: Answer using delivered evidence.
 metadata:
   agentflow-required-tools: knowledge_search knowledge_read

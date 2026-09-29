@@ -12,7 +12,7 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
-mkdir -p "${ROOT_DIR}/.cache/go-build"
+mkdir -p "${ROOT_DIR}/.cache/go-build" "${ROOT_DIR}/.agents/skills"
 
 printf 'Downloading Go modules...\n'
 (
