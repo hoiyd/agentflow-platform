@@ -2,12 +2,12 @@ package contextassembly
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/inference/provider"
 )
 
 const (
@@ -66,15 +66,9 @@ func (e *InputBudgetError) FailureInfo() failure.Info {
 	}
 }
 
-type Message struct {
-	Source           string
-	ReferenceID      string
-	Role             string
-	Content          string
-	ReasoningContent *string
-	ToolCallID       string
-	ToolCalls        json.RawMessage
-}
+// Assembly selects complete protocol messages rather than reconstructing their
+// fields. Source/ReferenceID are manifest metadata, excluded from the wire JSON.
+type Message = provider.Message
 
 type Tool struct {
 	Name       string

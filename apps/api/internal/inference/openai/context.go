@@ -2,7 +2,6 @@ package openai
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/contextassembly"
@@ -19,21 +18,7 @@ func (c *Client) prepareModelContext(ctx context.Context, messages []Message, de
 }
 
 func (c *Client) prepareModelContextForModel(ctx context.Context, model string, messages []Message, definitions []map[string]any) (preparedModelContext, error) {
-	request := contextassembly.Request{Model: model, Messages: make([]contextassembly.Message, 0, len(messages))}
-	for _, message := range messages {
-		toolCalls, err := json.Marshal(message.ToolCalls)
-		if err != nil {
-			return preparedModelContext{}, err
-		}
-		if len(message.ToolCalls) == 0 {
-			toolCalls = nil
-		}
-		request.Messages = append(request.Messages, contextassembly.Message{
-			Source: message.Source, ReferenceID: message.ReferenceID, Role: message.Role,
-			Content: message.Content, ToolCallID: message.ToolCallID, ToolCalls: toolCalls,
-			ReasoningContent: message.ReasoningContent,
-		})
-	}
+	request := contextassembly.Request{Model: model, Messages: messages}
 	for _, definition := range definitions {
 		request.Tools = append(request.Tools, contextassembly.Tool{Name: toolDefinitionName(definition), Definition: definition})
 	}
@@ -41,21 +26,7 @@ func (c *Client) prepareModelContextForModel(ctx context.Context, model string, 
 	if err != nil {
 		return preparedModelContext{}, err
 	}
-	prepared := make([]Message, 0, len(pack.Messages))
-	for _, message := range pack.Messages {
-		var toolCalls []ToolCall
-		if len(message.ToolCalls) > 0 {
-			if err := json.Unmarshal(message.ToolCalls, &toolCalls); err != nil {
-				return preparedModelContext{}, err
-			}
-		}
-		prepared = append(prepared, Message{
-			Role: message.Role, Content: message.Content, ToolCallID: message.ToolCallID,
-			ToolCalls: toolCalls, Source: message.Source, ReferenceID: message.ReferenceID,
-			ReasoningContent: message.ReasoningContent,
-		})
-	}
-	return preparedModelContext{messages: prepared, manifest: pack.Manifest}, nil
+	return preparedModelContext{messages: pack.Messages, manifest: pack.Manifest}, nil
 }
 
 func toolDefinitionName(definition map[string]any) string {

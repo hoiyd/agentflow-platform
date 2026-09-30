@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -88,7 +89,11 @@ func prefixHash(messages []Message, tools []Tool) string {
 }
 
 func estimateMessageTokens(message Message) int {
-	tokens := messageOverheadTokens + EstimateTokens(message.Role) + EstimateTokens(message.Content) + EstimateTokens(message.ToolCallID) + EstimateTokens(string(message.ToolCalls))
+	tokens := messageOverheadTokens + EstimateTokens(message.Role) + EstimateTokens(message.Content) + EstimateTokens(message.Refusal) + EstimateTokens(message.ToolCallID)
+	if len(message.ToolCalls) > 0 {
+		encoded, _ := json.Marshal(message.ToolCalls)
+		tokens += EstimateTokens(string(encoded))
+	}
 	if message.ReasoningContent != nil {
 		tokens += EstimateTokens(*message.ReasoningContent)
 	}
@@ -96,7 +101,7 @@ func estimateMessageTokens(message Message) int {
 }
 
 func messageContentBytes(message Message) int {
-	bytes := len(message.Content)
+	bytes := len(message.Content) + len(message.Refusal)
 	if message.ReasoningContent != nil {
 		bytes += len(*message.ReasoningContent)
 	}
@@ -132,7 +137,11 @@ func cloneMessages(messages []Message) []Message {
 	items := make([]Message, len(messages))
 	copy(items, messages)
 	for index := range items {
-		items[index].ToolCalls = append(json.RawMessage(nil), items[index].ToolCalls...)
+		items[index].ToolCalls = slices.Clone(items[index].ToolCalls)
+		if items[index].ReasoningContent != nil {
+			value := *items[index].ReasoningContent
+			items[index].ReasoningContent = &value
+		}
 	}
 	return items
 }
