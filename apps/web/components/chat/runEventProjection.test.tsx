@@ -7,7 +7,7 @@ it("shows structured stream error identity without requiring raw server details"
   const setError = vi.fn();
   const handler = createRunEventHandler({
     assistantDraftId: "draft", defaultVerificationStatus: "not_required", fallbackAgentId: "", fallbackRunId: "run-1",
-    setAutonomousProgress: vi.fn(), setCollaborationSteps: vi.fn(), setError, setIsCancelingRun: vi.fn(),
+    setAutonomousProgress: vi.fn(), setCollaborationSteps: vi.fn(), setError,
     setMessages: vi.fn(), setPlanDraft: vi.fn(), setRunState: vi.fn()
   });
   const event = { type: "error", error: "Internal Server Error", code: "invalid_request", source: "model_provider", request_id: "req-fixture" };
@@ -32,7 +32,6 @@ it("preserves the known agent when a durable run event omits agent_id", () => {
     setAutonomousProgress: vi.fn(),
     setCollaborationSteps: vi.fn(),
     setError: vi.fn(),
-    setIsCancelingRun: vi.fn(),
     setMessages: vi.fn(),
     setPlanDraft: vi.fn(),
     setRunState: (update) => {
@@ -58,7 +57,7 @@ it("projects streamed deltas and retracts only the current assistant draft", asy
   ];
   const handler = createRunEventHandler({
     assistantDraftId: "draft", defaultVerificationStatus: "not_required", fallbackAgentId: "agent-1", fallbackRunId: "run-1",
-    setAutonomousProgress: vi.fn(), setCollaborationSteps: vi.fn(), setError: vi.fn(), setIsCancelingRun: vi.fn(),
+    setAutonomousProgress: vi.fn(), setCollaborationSteps: vi.fn(), setError: vi.fn(),
     setPlanDraft: vi.fn(), setRunState: vi.fn(),
     setMessages: (update) => { messages = typeof update === "function" ? update(messages) : update; }
   });

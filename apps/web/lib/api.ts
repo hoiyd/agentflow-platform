@@ -109,12 +109,14 @@ export async function patchTaskState(conversationId: string, patch: TaskStatePat
 
 export async function streamChat(
   input: Omit<ChatRequest, "completion_contract"> & { completion_contract?: CompletionContractInput },
-  onEvent: (event: ChatEvent) => void
+  onEvent: (event: ChatEvent) => void,
+  signal?: AbortSignal
 ) {
   const response = await apiRequest(
     "/api/chat",
     {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input)
     },
@@ -126,7 +128,8 @@ export async function streamChat(
 
 export async function continueRun(
   input: { run_id: string; plan: string; routing_requirements?: AgentRoutingRequirements },
-  onEvent: (event: ChatEvent) => void
+  onEvent: (event: ChatEvent) => void,
+  signal?: AbortSignal
 ) {
   const body: ContractSchemas["ContinueRunRequest"] = {
     plan: input.plan,
@@ -136,6 +139,7 @@ export async function continueRun(
     `/api/runs/${input.run_id}/continue`,
     {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     },
@@ -147,13 +151,15 @@ export async function continueRun(
 
 export async function resumeRun(
   input: { run_id: string; user_input: string },
-  onEvent: (event: ChatEvent) => void
+  onEvent: (event: ChatEvent) => void,
+  signal?: AbortSignal
 ) {
   const body: ContractSchemas["ResumeRunRequest"] = { user_input: input.user_input };
   const response = await apiRequest(
     `/api/runs/${input.run_id}/resume`,
     {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     },

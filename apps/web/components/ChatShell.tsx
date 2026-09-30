@@ -2,11 +2,8 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
-  AgentRoutingRequirements,
   ChatMode,
   TaskState,
-  cancelRun,
-  continueRun,
   createConversation,
   deleteConversation as deleteConversationApi,
   getAPIHealth,
@@ -15,25 +12,21 @@ import {
   listRuns,
   listMessages,
   getTaskState,
-  observeRunEvents,
-  resumeRun,
-  streamChat
 } from "../lib/api";
 import { buildCompletionContract } from "../lib/verification";
 import { createLatestRequestController, type LatestRequestLease } from "../lib/latest-request";
-import { removePendingMessages } from "../lib/pending-messages";
 import { Sidebar, ToolsPanel, Topbar, type APIConnectionStatus, type ChatView } from "./chat/ChatChrome";
 import { ChatComposer } from "./chat/ChatComposer";
 import { ChatDialogs } from "./chat/ChatDialogs";
 import { ChatWorkspace } from "./chat/ChatWorkspace";
-import { createRunEventHandler, type DraftMessage, type RunState } from "./chat/runEventProjection";
+import { isTerminalRunStatus } from "./chat/runEventProjection";
 import { useAgentManagement } from "./chat/useAgentManagement";
 import { useCompletionVerification } from "./chat/useCompletionVerification";
 import { useConversationWorkspace } from "./chat/useConversationWorkspace";
 import { useToolCatalog } from "./chat/useToolCatalog";
 import { autonomousRoles } from "./chat/AutonomousPanel";
 import { toCollaborationStepView } from "./chat/CollaborationPanels";
-import { useRunTrace } from "./chat/useRunTrace";
+import { useRunSession } from "./chat/useRunSession";
 import { KnowledgePanel } from "./knowledge/KnowledgePanel";
 import { useKnowledgeWorkbench } from "./knowledge/useKnowledgeWorkbench";
 import { MemoryPanel } from "./memory/MemoryPanel";
@@ -48,45 +41,72 @@ type ChatShellProps = {
 type ChatSidePanel = "trace" | "task_state" | "closed";
 
 export function ChatShell({ initialConversationId = "", initialView = "chat" }: ChatShellProps) {
+  const workspace = useConversationWorkspace();
   const {
     conversations, setConversations, activeId, setActiveId, activeConversation,
     messages, setMessages, input, setInput, error, setError,
     editingConversationId, conversationTitleDraft, isSavingConversationTitle,
-    startEditingTitle, cancelEditingTitle, setConversationTitleDraft, saveTitle, applyTitle
-  } = useConversationWorkspace();
-  const [isStreaming, setIsStreaming] = useState(false);
+    startEditingTitle, cancelEditingTitle, setConversationTitleDraft, saveTitle
+  } = workspace;
   const [chatMode, setChatMode] = useState<ChatMode>("multi_agent");
   const [sidePanel, setSidePanel] = useState<ChatSidePanel>("trace");
   const [taskState, setTaskState] = useState<TaskState | null>(null);
   const [taskStateError, setTaskStateError] = useState("");
   const [isTaskStateLoading, setIsTaskStateLoading] = useState(false);
-  const [isContinuingRun, setIsContinuingRun] = useState(false);
-  const [isResumingRun, setIsResumingRun] = useState(false);
-  const [isCancelingRun, setIsCancelingRun] = useState(false);
-  const [runState, setRunState] = useState<RunState | null>(null);
-  const currentRunId = useRef(runState?.id);
-  currentRunId.current = runState?.id;
   const [view, setView] = useState<ChatView>(initialView);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [apiConnectionStatus, setAPIConnectionStatus] = useState<APIConnectionStatus>("checking");
   const messagesRef = useRef<HTMLElement | null>(null);
-  const conversationRequestsRef = useRef<ReturnType<typeof createLatestRequestController> | null>(null);
-  if (!conversationRequestsRef.current) {
-    conversationRequestsRef.current = createLatestRequestController();
-  }
-  const conversationRequests = conversationRequestsRef.current;
-  const streamRequestsRef = useRef<ReturnType<typeof createLatestRequestController> | null>(null);
-  if (!streamRequestsRef.current) streamRequestsRef.current = createLatestRequestController();
-  const streamRequests = streamRequestsRef.current;
-  const navigationRevision = useRef(0);
+  const [conversationRequests] = useState(createLatestRequestController);
   const knowledge = useKnowledgeWorkbench();
   const memory = useMemoryWorkbench();
+  async function refreshConversations(nextActiveId?: string) {
+    const request = conversationRequests.begin();
+    try {
+      const items = await listConversations(request.signal);
+      if (!request.isCurrent()) {
+        return;
+      }
+      setConversations(items);
+      if (nextActiveId) {
+        setActiveId(nextActiveId);
+        await loadConversation(nextActiveId, request);
+        return;
+      }
+      if (!activeId && items[0]) {
+        setActiveId(items[0].id);
+        await loadConversation(items[0].id, request);
+      }
+    } catch (err) {
+      if (request.isCurrent()) {
+        setError(err instanceof Error ? err.message : "Failed to load conversations");
+      }
+    }
+  }
+
+  const session = useRunSession({
+    workspace,
+    observing: view === "chat",
+    onConversationAccepted: () => conversationRequests.cancel(),
+    onReload: (conversationId, command) => command === "continuing" || command === "resuming"
+      ? loadConversation(conversationId)
+      : refreshConversations(conversationId),
+    onSubmissionStart: (mode) => {
+      const previous = sidePanel;
+      setSidePanel(mode === "multi_agent" || mode === "autonomous" ? "trace" : "closed");
+      return () => setSidePanel(previous);
+    }
+  });
   const {
-    collaborationSteps, setCollaborationSteps, autonomousProgress, setAutonomousProgress,
+    runState, setRunState, isStreaming, isContinuingRun, isResumingRun, isCancelingRun,
+    continuePlan: handleContinuePlan, resume: handleResumeAutonomous, cancel: handleCancelRun
+  } = session;
+  const {
+    collaborationSteps, setCollaborationSteps, autonomousProgress,
     humanInputDraft, setHumanInputDraft, selectedCollaborationRole, setSelectedCollaborationRole,
-    planDraft, setPlanDraft, routingRequirements, setRoutingRequirements, reset: resetRunTrace
-  } = useRunTrace();
+    planDraft, setPlanDraft, routingRequirements, setRoutingRequirements
+  } = session.trace;
   const verification = useCompletionVerification();
   const toolCatalog = useToolCatalog();
   const {
@@ -112,11 +132,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     chatMode === "autonomous" &&
     runState?.status === "waiting_for_user" &&
     collaborationSteps.some((step) => step.role === "human_input" && step.status === "running");
-  const isTerminalRun =
-    runState?.status === "completed" ||
-    runState?.status === "failed" ||
-    runState?.status === "failed_recoverable" ||
-    runState?.status === "canceled";
+  const isTerminalRun = !!runState && isTerminalRunStatus(runState.status);
   const canCancelRun =
     chatMode === "autonomous" &&
     !!runState?.id &&
@@ -165,71 +181,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
 
   useEffect(() => () => {
     conversationRequests.cancel();
-    streamRequests.cancel();
-  }, [conversationRequests, streamRequests]);
-
-  useEffect(() => {
-    const runID = runState?.id;
-    const status = runState?.status;
-    if (!activeId || view !== "chat" || isStreaming || isContinuingRun || isResumingRun || !runID ||
-      (status !== "queued" && status !== "running" && status !== "canceling")) {
-      return;
-    }
-
-    const controller = new AbortController();
-    const targetRevision = navigationRevision.current;
-    const isCurrent = () => !controller.signal.aborted && targetRevision === navigationRevision.current;
-    let refreshed = false;
-    const refreshStoppedRun = () => {
-      if (isCurrent() && !refreshed) {
-        refreshed = true;
-        void refreshConversations(activeId);
-      }
-    };
-    const handleObservedEvent = createRunEventHandler({
-      assistantDraftId: "",
-      defaultVerificationStatus: runState.verificationStatus,
-      fallbackAgentId: runState.agentId,
-      fallbackRunId: runID,
-      onRunState: (event) => {
-        if (isStoppedRunStatus(event.status)) refreshStoppedRun();
-      },
-      setAutonomousProgress,
-      setCollaborationSteps,
-      setError,
-      setIsCancelingRun,
-      setMessages,
-      setPlanDraft,
-      setRunState
-    });
-
-    void observeRunEvents(runID, {
-      signal: controller.signal,
-      onEvent: (event, _sequence, replayed) => {
-        if (!isCurrent()) return;
-        // The canonical snapshot owns current Run status; historical lifecycle
-        // events still rebuild Stage details but must not regress that status.
-        if (!replayed || event.type !== "run_state") handleObservedEvent(event);
-      },
-      onSnapshot: (snapshot) => {
-        if (!isCurrent()) return;
-        if (snapshot.run.conversation_id !== activeId) return;
-        setRunState({
-          id: snapshot.run.run_id,
-          agentId: runState.agentId,
-          status: snapshot.run.status,
-          verificationStatus: snapshot.run.verification_status
-        });
-        if (isStoppedRunStatus(snapshot.run.status)) refreshStoppedRun();
-      }
-    }).catch((err) => {
-      if (isCurrent()) {
-        setError(err instanceof Error ? `Live run updates unavailable: ${err.message}` : "Live run updates unavailable");
-      }
-    });
-
-    return () => controller.abort();
-  }, [activeId, isContinuingRun, isResumingRun, isStreaming, runState?.id, runState?.status, view]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [conversationRequests]);
 
   function handleChatModeChange(mode: ChatMode, preserveTaskState = false) {
     setChatMode(mode);
@@ -242,30 +194,6 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     );
     if (mode !== "single") {
       closeAgentForms();
-    }
-  }
-
-  async function refreshConversations(nextActiveId?: string) {
-    const request = conversationRequests.begin();
-    try {
-      const items = await listConversations(request.signal);
-      if (!request.isCurrent()) {
-        return;
-      }
-      setConversations(items);
-      if (nextActiveId) {
-        setActiveId(nextActiveId);
-        await loadConversation(nextActiveId, request);
-        return;
-      }
-      if (!activeId && items[0]) {
-        setActiveId(items[0].id);
-        await loadConversation(items[0].id, request);
-      }
-    } catch (err) {
-      if (request.isCurrent()) {
-        setError(err instanceof Error ? err.message : "Failed to load conversations");
-      }
     }
   }
 
@@ -375,17 +303,11 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   }
 
   function resetConversationRuntimeState() {
-    setRunState(null);
-    resetRunTrace();
-    setIsCancelingRun(false);
+    session.clearRun();
   }
 
   async function openConversation(id: string) {
-    navigationRevision.current += 1;
-    streamRequests.cancel();
-    setIsStreaming(false);
-    setIsContinuingRun(false);
-    setIsResumingRun(false);
+    session.detach();
     setError("");
     resetConversationRuntimeState();
     setMessages([]);
@@ -397,11 +319,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   }
 
   async function startNewConversation() {
-    navigationRevision.current += 1;
-    streamRequests.cancel();
-    setIsStreaming(false);
-    setIsContinuingRun(false);
-    setIsResumingRun(false);
+    session.detach();
     const request = conversationRequests.begin();
     setError("");
     setView("chat");
@@ -447,8 +365,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
       setConversations(items);
 
       if (conversationId === activeId) {
-        navigationRevision.current += 1;
-        streamRequests.cancel();
+        session.detach();
         conversationRequests.cancel();
         const nextConversation = items[0];
         resetConversationRuntimeState();
@@ -481,268 +398,15 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput) {
-      return;
-    }
+    if (!content || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput) return;
     let completionContract;
     try {
       completionContract = buildCompletionContract(verification.settings);
-    } catch (contractError) {
-      setError(contractError instanceof Error ? contractError.message : "Invalid verification policy");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Invalid verification policy");
       return;
     }
-
-    const previousRuntime = {
-      runState, collaborationSteps, autonomousProgress, humanInputDraft,
-      planDraft, routingRequirements, selectedCollaborationRole, sidePanel
-    };
-    setInput("");
-    setError("");
-    setRunState(null);
-    resetRunTrace();
-    setIsCancelingRun(false);
-    setSidePanel(chatMode === "multi_agent" || chatMode === "autonomous" ? "trace" : "closed");
-    setIsStreaming(true);
-
-    const optimisticUser: DraftMessage = {
-      id: `local-user-${Date.now()}`,
-      conversation_id: activeId,
-      role: "user",
-      content,
-      created_at: new Date().toISOString()
-    };
-    const assistantDraft: DraftMessage = {
-      id: `local-assistant-${Date.now()}`,
-      conversation_id: activeId,
-      role: "assistant",
-      content: "",
-      created_at: new Date().toISOString()
-    };
-    setMessages((items) => [...items, optimisticUser, assistantDraft]);
-
-    let conversationId = activeId;
-    let receivedStreamEvent = false;
-    const request = streamRequests.begin();
-    const handleEvent = createRunEventHandler({
-      assistantDraftId: assistantDraft.id,
-      defaultVerificationStatus: completionContract ? "pending" : "not_required",
-      fallbackAgentId: activeAgentId,
-      fallbackRunId: "",
-      onConversation: (event) => {
-        conversationId = event.conversation_id;
-        conversationRequests.cancel();
-        setActiveId(event.conversation_id);
-      },
-      onDone: (event) => applyTitle(event.conversation_id, event.title),
-      onEvent: () => { receivedStreamEvent = true; },
-      setAutonomousProgress,
-      setCollaborationSteps,
-      setError,
-      setIsCancelingRun,
-      setMessages,
-      setPlanDraft,
-      setRunState
-    });
-
-    try {
-      await streamChat(
-        {
-          conversation_id: conversationId || undefined,
-          agent_id: activeAgentId || undefined,
-          mode: chatMode,
-          message: content,
-          completion_contract: completionContract
-        },
-        (event) => {
-          if (request.isCurrent()) handleEvent(event);
-        }
-      );
-
-      if (request.isCurrent()) await refreshConversations(conversationId);
-    } catch (err) {
-      if (!request.isCurrent()) return;
-      if (!receivedStreamEvent) {
-        setMessages((items) => removePendingMessages(items, [optimisticUser.id, assistantDraft.id]));
-        setInput(content);
-        setRunState(previousRuntime.runState);
-        setCollaborationSteps(previousRuntime.collaborationSteps);
-        setAutonomousProgress(previousRuntime.autonomousProgress);
-        setHumanInputDraft(previousRuntime.humanInputDraft);
-        setPlanDraft(previousRuntime.planDraft);
-        setRoutingRequirements(previousRuntime.routingRequirements);
-        setSelectedCollaborationRole(previousRuntime.selectedCollaborationRole);
-        setSidePanel(previousRuntime.sidePanel);
-      }
-      setError(err instanceof Error ? err.message : "Unexpected chat error");
-    } finally {
-      if (request.isCurrent()) setIsStreaming(false);
-    }
-
-  }
-
-  async function handleContinuePlan(planOverride?: string, requirementsOverride?: AgentRoutingRequirements) {
-    const runID = runState?.id;
-    const plan = (planOverride ?? planDraft).trim();
-    if (!runID || !plan || isContinuingRun || isStreaming) {
-      return;
-    }
-
-    setError("");
-    setPlanDraft(plan);
-    setIsContinuingRun(true);
-    setIsStreaming(true);
-
-    const assistantDraft: DraftMessage = {
-      id: `local-assistant-${Date.now()}`,
-      conversation_id: activeId,
-      role: "assistant",
-      content: "",
-      created_at: new Date().toISOString()
-    };
-    setMessages((items) => [...items, assistantDraft]);
-    let receivedStreamEvent = false;
-    const request = streamRequests.begin();
-    const handleEvent = createRunEventHandler({
-      assistantDraftId: assistantDraft.id,
-      defaultVerificationStatus: "not_required",
-      fallbackAgentId: activeAgentId,
-      fallbackRunId: runID,
-      onEvent: () => { receivedStreamEvent = true; },
-      setAutonomousProgress,
-      setCollaborationSteps,
-      setError,
-      setIsCancelingRun,
-      setMessages,
-      setPlanDraft,
-      setRunState
-    });
-
-    try {
-      await continueRun(
-        { run_id: runID, plan, routing_requirements: requirementsOverride ?? routingRequirements },
-        (event) => { if (request.isCurrent()) handleEvent(event); }
-      );
-
-      if (request.isCurrent() && activeId) {
-        await loadConversation(activeId);
-      }
-    } catch (err) {
-      if (!request.isCurrent()) return;
-      if (!receivedStreamEvent) {
-        setMessages((items) => removePendingMessages(items, [assistantDraft.id]));
-      }
-      setError(err instanceof Error ? err.message : "Unexpected continue error");
-    } finally {
-      if (request.isCurrent()) {
-        setIsContinuingRun(false);
-        setIsStreaming(false);
-      }
-    }
-  }
-
-  async function handleResumeAutonomous(userInputOverride?: string) {
-    const runID = runState?.id;
-    const userInput = (userInputOverride ?? humanInputDraft).trim();
-    if (!runID || !userInput || isResumingRun || isStreaming) {
-      return;
-    }
-
-    setError("");
-    setHumanInputDraft(userInput);
-    setIsResumingRun(true);
-    setIsStreaming(true);
-    const previousRunState = runState;
-    setRunState((current) =>
-      current
-        ? {
-            ...current,
-            status: "running"
-          }
-        : current
-    );
-
-    const assistantDraft: DraftMessage = {
-      id: `local-assistant-${Date.now()}`,
-      conversation_id: activeId,
-      role: "assistant",
-      content: "",
-      created_at: new Date().toISOString()
-    };
-    setMessages((items) => [...items, assistantDraft]);
-    let receivedStreamEvent = false;
-    const request = streamRequests.begin();
-    const handleEvent = createRunEventHandler({
-      assistantDraftId: assistantDraft.id,
-      defaultVerificationStatus: "not_required",
-      fallbackAgentId: activeAgentId,
-      fallbackRunId: runID,
-      onEvent: () => { receivedStreamEvent = true; },
-      onRunState: (event) => {
-        if (event.status !== "waiting_for_user") setHumanInputDraft("");
-      },
-      setAutonomousProgress,
-      setCollaborationSteps,
-      setError,
-      setIsCancelingRun,
-      setMessages,
-      setPlanDraft,
-      setRunState
-    });
-
-    try {
-      await resumeRun(
-        { run_id: runID, user_input: userInput },
-        (event) => { if (request.isCurrent()) handleEvent(event); }
-      );
-
-      if (request.isCurrent() && activeId) {
-        await loadConversation(activeId);
-      }
-    } catch (err) {
-      if (!request.isCurrent()) return;
-      if (!receivedStreamEvent) {
-        setMessages((items) => removePendingMessages(items, [assistantDraft.id]));
-        setRunState(previousRunState);
-      }
-      setError(err instanceof Error ? err.message : "Unexpected resume error");
-    } finally {
-      if (request.isCurrent()) {
-        setIsResumingRun(false);
-        setIsStreaming(false);
-      }
-    }
-  }
-
-  async function handleCancelRun() {
-    const runID = runState?.id;
-    if (!runID || isCancelingRun) {
-      return;
-    }
-    setError("");
-    setIsCancelingRun(true);
-    const targetRevision = navigationRevision.current;
-    try {
-      const canceled = await cancelRun(runID);
-      if (targetRevision !== navigationRevision.current || currentRunId.current !== runID) return;
-      setRunState({
-        id: canceled.id,
-        agentId: canceled.agent_id,
-        status: canceled.status,
-        verificationStatus: canceled.verification_status ?? "not_required"
-      });
-      if (
-        canceled.status === "canceled" ||
-        canceled.status === "completed" ||
-        canceled.status === "failed" ||
-        canceled.status === "failed_recoverable"
-      ) {
-        setIsCancelingRun(false);
-      }
-    } catch (err) {
-      if (targetRevision !== navigationRevision.current || currentRunId.current !== runID) return;
-      setError(err instanceof Error ? err.message : "Failed to cancel run");
-      setIsCancelingRun(false);
-    }
+    await session.submit(content, { mode: chatMode, agentId: activeAgentId, completionContract });
   }
 
   return (
@@ -905,9 +569,4 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
       />
     </div>
   );
-}
-
-function isStoppedRunStatus(status: string) {
-  return status === "waiting_for_user" || status === "completed" || status === "failed" ||
-    status === "failed_recoverable" || status === "canceled";
 }
