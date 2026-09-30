@@ -273,7 +273,7 @@ func snapshotTools(catalog *tool.Catalog, names []string) []domain.RuntimeToolSn
 			Parameters:         binding.Descriptor.Parameters,
 			SchemaVersion:      binding.Descriptor.SchemaVersion,
 			DefinitionRevision: binding.Descriptor.DefinitionRevision,
-			SideEffect:         string(binding.Descriptor.SideEffect.Mode),
+			SideEffect:         string(binding.Descriptor.JournalMode()),
 			Security:           binding.Descriptor.Security,
 		})
 	}
@@ -441,7 +441,7 @@ func effectiveAutonomousRunBudget(runBudget domain.RuntimeRunBudget, limits Auto
 func toolDefinitionMatches(installed tool.Binding, frozen domain.RuntimeToolSnapshot) bool {
 	current := domain.RuntimeToolSnapshot{
 		Name: installed.Descriptor.Name, Description: installed.Descriptor.Description,
-		Parameters: installed.Descriptor.Parameters, SideEffect: string(installed.Descriptor.SideEffect.Mode),
+		Parameters: installed.Descriptor.Parameters, SideEffect: string(installed.Descriptor.JournalMode()),
 	}
 	if frozen.Security.Source != "" {
 		current.Security = installed.Descriptor.Security

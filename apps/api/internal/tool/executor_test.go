@@ -195,7 +195,6 @@ func TestExecutorReplaysCommittedSideEffectWithoutInvokingHandler(t *testing.T) 
 			Name: "write_record", Parameters: ObjectSchema(map[string]any{
 				"value": map[string]any{"type": "string"},
 			}, []string{"value"}),
-			SideEffect: SideEffectPolicy{Mode: SideEffectExternal},
 		},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
 			calls.Add(1)
@@ -232,7 +231,7 @@ func TestExecutorReplaysCommittedSideEffectWithoutInvokingHandler(t *testing.T) 
 
 func TestExecutorFailsClosedForUncertainSideEffect(t *testing.T) {
 	catalog, err := newExternalTestCatalog(Binding{
-		Descriptor: Descriptor{Name: "write_record", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal}},
+		Descriptor: Descriptor{Name: "write_record", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{}},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
 			t.Fatal("uncertain side effect must not execute again")
 			return nil, nil
@@ -254,7 +253,7 @@ func TestExecutorFailsClosedForUncertainSideEffect(t *testing.T) {
 
 func TestExecutorDoesNotReexecuteTerminalReconciledEffects(t *testing.T) {
 	catalog, err := newExternalTestCatalog(Binding{
-		Descriptor: Descriptor{Name: "write_record", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal}},
+		Descriptor: Descriptor{Name: "write_record", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{}},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
 			t.Fatal("terminal reconciled effect must not execute again")
 			return nil, nil
@@ -278,7 +277,7 @@ func TestExecutorDoesNotReexecuteTerminalReconciledEffects(t *testing.T) {
 
 func TestExecutorRequiresJournalAndExecutionIdentityForExternalSideEffects(t *testing.T) {
 	catalog, err := newExternalTestCatalog(Binding{
-		Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal}},
+		Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{}},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
 			t.Fatal("invalid side effect must not execute")
 			return nil, nil
@@ -302,7 +301,7 @@ func TestExecutorRequiresJournalAndExecutionIdentityForExternalSideEffects(t *te
 
 func TestExecutorSurfacesSideEffectJournalFailures(t *testing.T) {
 	catalog, err := newExternalTestCatalog(Binding{
-		Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal}},
+		Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{}},
 		Handler:    func(context.Context, json.RawMessage) (any, error) { return map[string]any{"ok": true}, nil },
 	})
 	if err != nil {
@@ -324,7 +323,7 @@ func TestExecutorSurfacesSideEffectJournalFailures(t *testing.T) {
 
 func TestExecutorRejectsCorruptCommittedSideEffectResult(t *testing.T) {
 	catalog, err := newExternalTestCatalog(Binding{
-		Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal}},
+		Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{}},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
 			t.Fatal("committed side effect must not execute")
 			return nil, nil
@@ -350,7 +349,7 @@ func TestExecutorRejectsCorruptCommittedSideEffectResult(t *testing.T) {
 
 func TestExecutorMarksFailedExternalHandlerForReconciliation(t *testing.T) {
 	catalog, err := newExternalTestCatalog(Binding{
-		Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal}},
+		Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{}},
 		Handler:    func(context.Context, json.RawMessage) (any, error) { return nil, errors.New("remote write uncertain") },
 	})
 	if err != nil {

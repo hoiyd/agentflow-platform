@@ -295,7 +295,8 @@ silently multiply Context usage. See [Tool Result Artifact Governance](../tools/
 Tool timeout bounds one handler. Run runtime budget bounds cumulative active
 execution; neither substitutes for the other.
 
-Bindings that write external state must declare `side_effect.mode=external`.
+Bindings that write external state declare `Security.SideEffect=external_write`
+or `destructive`; the Executor derives the `external` journal mode.
 They execute behind a durable idempotency journal: committed results replay
 without reinvoking the handler, while uncertain attempts require explicit
 reconciliation. See [Durable Recovery and Stage Checkpoints](durable-recovery.md).

@@ -262,7 +262,7 @@ func reconciliationBinding(catalog *tool.Catalog, record domain.ToolEffectRecord
 		return tool.Binding{}, &ReconciliationError{Code: ReconciliationUnavailable, Message: "tool catalog is unavailable"}
 	}
 	binding, ok := catalog.Resolve(record.ToolName)
-	if !ok || binding.Descriptor.SideEffect.Mode != tool.SideEffectExternal {
+	if !ok || binding.Descriptor.JournalMode() != tool.SideEffectExternal {
 		return tool.Binding{}, &ReconciliationError{Code: ReconciliationUnavailable, Message: "tool reconciliation binding is unavailable"}
 	}
 	if record.DefinitionRevision == "" || binding.Descriptor.DefinitionRevision != record.DefinitionRevision {

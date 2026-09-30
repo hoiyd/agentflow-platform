@@ -53,8 +53,8 @@ func (e *Executor) observeProgress(ctx context.Context, request ExecutionRequest
 	outcome := progress.Outcome{
 		EncodedResult: result.encodedResult,
 		ReadOnly: binding.Descriptor.Concurrency.Mode == ConcurrencyReadOnly &&
-			!binding.Descriptor.SideEffect.RequiresJournal(),
-		SuccessfulWrite: result.Error == nil && binding.Descriptor.SideEffect.RequiresJournal(),
+			!binding.Descriptor.RequiresJournal(),
+		SuccessfulWrite: result.Error == nil && binding.Descriptor.RequiresJournal(),
 	}
 	if result.Error != nil && progressTrackableError(result.Error.Code) {
 		info := result.Error.FailureInfo()

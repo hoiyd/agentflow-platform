@@ -124,20 +124,32 @@ func (denyRemoteToolSchemaLoader) Load(location string) (any, error) {
 	return nil, fmt.Errorf("remote schema reference is disabled: %s", location)
 }
 
+// Preserve the persisted definition digest's wire shape while deriving its mode
+// from Security. This serialization value is not another authoring contract.
+type sideEffectContract struct {
+	Mode             SideEffectMode `json:"mode,omitempty"`
+	RetryWithSameKey bool           `json:"retry_with_same_key,omitempty"`
+	Compensate       bool           `json:"compensate,omitempty"`
+}
+
+func (d Descriptor) sideEffectContract() sideEffectContract {
+	return sideEffectContract{Mode: d.JournalMode(), RetryWithSameKey: d.SideEffect.RetryWithSameKey, Compensate: d.SideEffect.Compensate}
+}
+
 func toolDefinitionRevision(descriptor Descriptor) (string, error) {
 	definition := struct {
-		SchemaVersion string            `json:"schema_version"`
-		Name          string            `json:"name"`
-		Description   string            `json:"description"`
-		Parameters    map[string]any    `json:"parameters"`
-		Concurrency   ConcurrencyPolicy `json:"concurrency"`
-		SideEffect    SideEffectPolicy  `json:"side_effect"`
-		Security      any               `json:"security"`
+		SchemaVersion string             `json:"schema_version"`
+		Name          string             `json:"name"`
+		Description   string             `json:"description"`
+		Parameters    map[string]any     `json:"parameters"`
+		Concurrency   ConcurrencyPolicy  `json:"concurrency"`
+		SideEffect    sideEffectContract `json:"side_effect"`
+		Security      any                `json:"security"`
 	}{
 		SchemaVersion: descriptor.SchemaVersion,
 		Name:          descriptor.Name, Description: descriptor.Description,
 		Parameters: descriptor.Parameters, Concurrency: descriptor.Concurrency,
-		SideEffect: descriptor.SideEffect,
+		SideEffect: descriptor.sideEffectContract(),
 		Security:   descriptor.Security,
 	}
 	encoded, err := json.Marshal(definition)
@@ -152,16 +164,16 @@ func toolDefinitionRevision(descriptor Descriptor) (string, error) {
 // security capability became part of the frozen definition.
 func LegacyDefinitionRevision(descriptor Descriptor) (string, error) {
 	definition := struct {
-		SchemaVersion string            `json:"schema_version"`
-		Name          string            `json:"name"`
-		Description   string            `json:"description"`
-		Parameters    map[string]any    `json:"parameters"`
-		Concurrency   ConcurrencyPolicy `json:"concurrency"`
-		SideEffect    SideEffectPolicy  `json:"side_effect"`
+		SchemaVersion string             `json:"schema_version"`
+		Name          string             `json:"name"`
+		Description   string             `json:"description"`
+		Parameters    map[string]any     `json:"parameters"`
+		Concurrency   ConcurrencyPolicy  `json:"concurrency"`
+		SideEffect    sideEffectContract `json:"side_effect"`
 	}{
 		SchemaVersion: descriptor.SchemaVersion, Name: descriptor.Name,
 		Description: descriptor.Description, Parameters: descriptor.Parameters,
-		Concurrency: descriptor.Concurrency, SideEffect: descriptor.SideEffect,
+		Concurrency: descriptor.Concurrency, SideEffect: descriptor.sideEffectContract(),
 	}
 	encoded, err := json.Marshal(definition)
 	if err != nil {
