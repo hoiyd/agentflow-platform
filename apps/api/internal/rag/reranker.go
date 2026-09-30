@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
-	"reflect"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
@@ -19,9 +17,24 @@ type RerankRequest struct {
 	Limit      int
 }
 
+// RerankDecision contains ranking-owned fields only. The Pipeline retains
+// document content, scope, index identity and recall evidence.
+type RerankDecision struct {
+	DocumentID       string
+	ChunkID          string
+	RerankRank       int
+	LexicalBoost     float64
+	MetadataBoost    float64
+	DiversityPenalty float64
+	RerankScore      float64
+	MatchedTerms     []string
+	EvidenceScore    float64
+	EvidenceCoverage float64
+}
+
 type RerankResult struct {
-	Items []domain.RetrievedDocumentChunk
-	Info  domain.RerankerInfo
+	Decisions []RerankDecision
+	Info      domain.RerankerInfo
 }
 
 // Reranker orders fused recall candidates. Implementations must return ranking
@@ -30,70 +43,73 @@ type Reranker interface {
 	Rerank(context.Context, RerankRequest) (RerankResult, error)
 }
 
-func validateRerankResult(request RerankRequest, result RerankResult) error {
+// applyRerankResult validates identities and writes only ranking-owned values.
+func applyRerankResult(request RerankRequest, result RerankResult) ([]domain.RetrievedDocumentChunk, error) {
 	if err := validateRerankerInfo(result.Info); err != nil {
-		return err
+		return nil, err
 	}
 	if request.Limit > 0 {
-		expectedItems := minInt(request.Limit, len(request.Candidates))
-		if len(result.Items) != expectedItems {
-			return fmt.Errorf("returned %d items; expected complete top-k of %d", len(result.Items), expectedItems)
+		expected := minInt(request.Limit, len(request.Candidates))
+		if len(result.Decisions) != expected {
+			return nil, fmt.Errorf("returned %d items; expected complete top-k of %d", len(result.Decisions), expected)
 		}
 	}
-
 	candidates := make(map[string]domain.RetrievedDocumentChunk, len(request.Candidates))
 	for _, candidate := range request.Candidates {
-		if candidate.Chunk.ID != "" {
-			candidates[candidate.Chunk.ID] = candidate
+		if strings.TrimSpace(candidate.Document.ID) == "" || strings.TrimSpace(candidate.Chunk.ID) == "" {
+			return nil, errors.New("candidate is missing document_id or chunk_id")
 		}
+		if _, duplicate := candidates[candidate.Chunk.ID]; duplicate {
+			return nil, fmt.Errorf("duplicate input candidate %q", candidate.Chunk.ID)
+		}
+		candidates[candidate.Chunk.ID] = candidate
 	}
-	seen := make(map[string]struct{}, len(result.Items))
-	for index, item := range result.Items {
-		if strings.TrimSpace(item.Document.ID) == "" || strings.TrimSpace(item.Chunk.ID) == "" {
-			return fmt.Errorf("item %d is missing document_id or chunk_id", index)
+	items := make([]domain.RetrievedDocumentChunk, 0, len(result.Decisions))
+	seen := make(map[string]bool, len(result.Decisions))
+	for index, decision := range result.Decisions {
+		if strings.TrimSpace(decision.DocumentID) == "" || strings.TrimSpace(decision.ChunkID) == "" {
+			return nil, fmt.Errorf("item %d is missing document_id or chunk_id", index)
 		}
-		candidate, ok := candidates[item.Chunk.ID]
-		if !ok || candidate.Document.ID != item.Document.ID {
-			return fmt.Errorf("item %d references unknown candidate %q", index, item.Chunk.ID)
+		candidate, ok := candidates[decision.ChunkID]
+		if !ok || candidate.Document.ID != decision.DocumentID {
+			return nil, fmt.Errorf("item %d references unknown candidate %q", index, decision.ChunkID)
 		}
-		if item.Confidence != "" || item.FilterReason != "" {
-			return fmt.Errorf("item %d sets relevance-gate-owned classification fields", index)
+		if seen[decision.ChunkID] {
+			return nil, fmt.Errorf("item %d duplicates chunk %q", index, decision.ChunkID)
 		}
-		if !reflect.DeepEqual(withoutRerankerOutput(candidate), withoutRerankerOutput(item)) {
-			return fmt.Errorf("item %d modifies upstream candidate fields", index)
+		seen[decision.ChunkID] = true
+		if decision.RerankRank != index+1 {
+			return nil, fmt.Errorf("item %d has rerank_rank %d; expected %d", index, decision.RerankRank, index+1)
 		}
-		if _, duplicate := seen[item.Chunk.ID]; duplicate {
-			return fmt.Errorf("item %d duplicates chunk %q", index, item.Chunk.ID)
+		if !finiteScore(decision.RerankScore) {
+			return nil, fmt.Errorf("item %d has a non-finite rerank_score", index)
 		}
-		seen[item.Chunk.ID] = struct{}{}
-		if item.RerankRank != index+1 {
-			return fmt.Errorf("item %d has rerank_rank %d; expected %d", index, item.RerankRank, index+1)
+		if result.Info.Algorithm != heuristicRerankerAlgorithm && (decision.RerankScore < 0 || decision.RerankScore > 1) {
+			return nil, fmt.Errorf("item %d has rerank_score outside the normalized [0,1] range", index)
 		}
-		if math.IsNaN(item.RerankScore) || math.IsInf(item.RerankScore, 0) {
-			return fmt.Errorf("item %d has a non-finite rerank_score", index)
+		if index > 0 && result.Decisions[index-1].RerankScore < decision.RerankScore {
+			return nil, fmt.Errorf("item %d is out of descending rerank_score order", index)
 		}
-		if result.Info.Algorithm != heuristicRerankerAlgorithm && (item.RerankScore < 0 || item.RerankScore > 1) {
-			return fmt.Errorf("item %d has rerank_score outside the normalized [0,1] range", index)
+		for _, score := range []float64{decision.LexicalBoost, decision.MetadataBoost, decision.DiversityPenalty, decision.EvidenceScore, decision.EvidenceCoverage} {
+			if !finiteScore(score) || score < 0 {
+				return nil, fmt.Errorf("item %d has invalid ranking evidence", index)
+			}
 		}
-		if index > 0 && result.Items[index-1].RerankScore < item.RerankScore {
-			return fmt.Errorf("item %d is out of descending rerank_score order", index)
+		if decision.EvidenceCoverage > 1 {
+			return nil, fmt.Errorf("item %d has invalid evidence coverage", index)
 		}
+		candidate.RerankRank = decision.RerankRank
+		candidate.LexicalBoost = decision.LexicalBoost
+		candidate.MetadataBoost = decision.MetadataBoost
+		candidate.DiversityPenalty = decision.DiversityPenalty
+		candidate.RerankScore = decision.RerankScore
+		candidate.MatchedTerms = append([]string(nil), decision.MatchedTerms...)
+		candidate.EvidenceScore = decision.EvidenceScore
+		candidate.EvidenceCoverage = decision.EvidenceCoverage
+		candidate.Confidence, candidate.FilterReason = "", ""
+		items = append(items, candidate)
 	}
-	return nil
-}
-
-func withoutRerankerOutput(item domain.RetrievedDocumentChunk) domain.RetrievedDocumentChunk {
-	item.RerankRank = 0
-	item.LexicalBoost = 0
-	item.MetadataBoost = 0
-	item.DiversityPenalty = 0
-	item.RerankScore = 0
-	item.MatchedTerms = nil
-	item.EvidenceScore = 0
-	item.EvidenceCoverage = 0
-	item.Confidence = ""
-	item.FilterReason = ""
-	return item
+	return items, nil
 }
 
 func validateRerankerInfo(info domain.RerankerInfo) error {

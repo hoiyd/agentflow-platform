@@ -293,7 +293,7 @@ func TestAgentSelectionFallbackOnlyHandlesTransientOrInvalidModelResults(t *test
 func TestPreparedRunsUseRequestedAgent(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
 	custom, err := fixtureStore.CreateAgent(domain.Agent{
 		Name:             "Resume Reviewer",
 		Description:      "Reviews resumes against job descriptions.",
@@ -333,10 +333,7 @@ func TestMultiAgentWorkerRunsAsIsolatedParentStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	retriever := &recordingKnowledgeRetriever{}
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
-		KnowledgeRetriever: retriever,
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, KnowledgeRetriever: retriever}, newLocalFallbackOpenAIClientForTest())
 	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -433,7 +430,7 @@ func TestCancelRunStopsActiveWorkerStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &blockingPreparedClient{Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1)}
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client, RouterMode: RouterModeQuery})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery}, client)
 	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -486,7 +483,7 @@ func TestCancelRunStopsActiveSingleTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &blockingPreparedClient{Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1)}
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, client)
 	prepared, err := runtime.PrepareChatRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -523,7 +520,7 @@ func TestCancelRunStopsActivePlannerStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &blockingPreparedClient{Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1)}
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, client)
 	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -596,9 +593,7 @@ func newStageRecoverableCollaboration(t *testing.T) (*Runtime, *fixturestore.Sto
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery}, newLocalFallbackOpenAIClientForTest())
 	prepared, err := runtime.PrepareCollaborationRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -717,13 +712,9 @@ func TestAutonomousRunStopsAtMaxIterations(t *testing.T) {
 		t.Fatalf("create conversation: %v", err)
 	}
 	retriever := &recordingKnowledgeRetriever{}
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
-		KnowledgeRetriever: retriever,
-		Autonomous: AutonomousLimits{
-			MaxIterations: 1, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
-		},
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, KnowledgeRetriever: retriever, Autonomous: AutonomousLimits{
+		MaxIterations: 1, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
+	}}, newLocalFallbackOpenAIClientForTest())
 	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
@@ -812,12 +803,9 @@ func TestAutonomousRunCanBeCanceledBeforeLoop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
-		Autonomous: AutonomousLimits{
-			MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
-		},
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, Autonomous: AutonomousLimits{
+		MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
+	}}, newLocalFallbackOpenAIClientForTest())
 	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
@@ -855,7 +843,7 @@ func TestAutonomousCancelClosesActiveStage(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &blockingPreparedClient{Client: newLocalFallbackOpenAIClientForTest(), started: make(chan struct{}, 1)}
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client, RouterMode: RouterModeQuery})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery}, client)
 	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -909,12 +897,9 @@ func TestResumeAutonomousCompletesHumanInputCheckpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
-		Autonomous: AutonomousLimits{
-			MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
-		},
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, Autonomous: AutonomousLimits{
+		MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
+	}}, newLocalFallbackOpenAIClientForTest())
 	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)
@@ -971,12 +956,9 @@ func TestResumeRecoverableAutonomousContinuesFromSavedSteps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery,
-		Autonomous: AutonomousLimits{
-			MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
-		},
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, RouterMode: RouterModeQuery, Autonomous: AutonomousLimits{
+		MaxIterations: 2, MaxRuntime: time.Minute, MaxOutputChars: 60000, MaxToolCalls: 20,
+	}}, newLocalFallbackOpenAIClientForTest())
 	prepared, err := runtime.PrepareAutonomousRunWithContract(context.Background(), "", conversation.ID, nil)
 	if err != nil {
 		t.Fatalf("prepare autonomous run: %v", err)

@@ -51,27 +51,23 @@ func (r *HeuristicReranker) Info() domain.RerankerInfo {
 }
 
 func (r *HeuristicReranker) Rerank(_ context.Context, request RerankRequest) (RerankResult, error) {
-	items := append([]domain.RetrievedDocumentChunk(nil), request.Candidates...)
-	if len(items) == 0 {
-		return RerankResult{Items: items, Info: r.Info()}, nil
-	}
-	if request.Limit <= 0 {
-		return RerankResult{Items: []domain.RetrievedDocumentChunk{}, Info: r.Info()}, nil
+	items := make([]RerankDecision, 0, len(request.Candidates))
+	if len(request.Candidates) == 0 || request.Limit <= 0 {
+		return RerankResult{Decisions: items, Info: r.Info()}, nil
 	}
 	queryTerms := QueryTerms(request.Query)
-	for index := range items {
-		items[index].RerankRank = 0
-		items[index].DiversityPenalty = 0
-		items[index].Confidence = ""
-		items[index].FilterReason = ""
-		items[index].LexicalBoost = lexicalBoost(request.Query, queryTerms, items[index].Chunk.Content)
-		items[index].MetadataBoost = metadataBoost(request.Query, queryTerms, items[index])
-		items[index].RerankScore = normalizedRRFScore(items[index].RRFScore) + items[index].LexicalBoost + items[index].MetadataBoost
-		items[index].MatchedTerms = matchedTerms(request.Query, queryTerms, items[index])
-		items[index].EvidenceCoverage = evidenceCoverage(queryTerms, items[index].MatchedTerms)
-		items[index].EvidenceScore = evidenceScore(request.Query, queryTerms, items[index])
-		items[index].RerankScore += items[index].EvidenceScore
+	for _, candidate := range request.Candidates {
+		decision := RerankDecision{DocumentID: candidate.Document.ID, ChunkID: candidate.Chunk.ID}
+		decision.LexicalBoost = lexicalBoost(request.Query, queryTerms, candidate.Chunk.Content)
+		decision.MetadataBoost = metadataBoost(request.Query, queryTerms, candidate)
+		decision.MatchedTerms = matchedTerms(request.Query, queryTerms, candidate)
+		decision.EvidenceCoverage = evidenceCoverage(queryTerms, decision.MatchedTerms)
+		candidate.EvidenceCoverage = decision.EvidenceCoverage
+		decision.EvidenceScore = evidenceScore(request.Query, queryTerms, candidate)
+		decision.RerankScore = normalizedRRFScore(candidate.RRFScore) + decision.LexicalBoost + decision.MetadataBoost + decision.EvidenceScore
+		items = append(items, decision)
 	}
+
 	sort.SliceStable(items, func(i, j int) bool {
 		return items[i].RerankScore > items[j].RerankScore
 	})
@@ -83,23 +79,23 @@ func (r *HeuristicReranker) Rerank(_ context.Context, request RerankRequest) (Re
 	for index := range selected {
 		selected[index].RerankRank = index + 1
 	}
-	return RerankResult{Items: selected, Info: r.Info()}, nil
+	return RerankResult{Decisions: selected, Info: r.Info()}, nil
 }
 
 // selectWithDocumentDiversity recomputes effective scores after every pick so
 // a diversity penalty can change Top-K membership, not only final ordering.
-func selectWithDocumentDiversity(items []domain.RetrievedDocumentChunk, limit int) []domain.RetrievedDocumentChunk {
-	selected := make([]domain.RetrievedDocumentChunk, 0, minInt(limit, len(items)))
-	remaining := append([]domain.RetrievedDocumentChunk(nil), items...)
+func selectWithDocumentDiversity(items []RerankDecision, limit int) []RerankDecision {
+	selected := make([]RerankDecision, 0, minInt(limit, len(items)))
+	remaining := append([]RerankDecision(nil), items...)
 	usedDocuments := map[string]int{}
 	multipleDocuments := hasMultipleDocuments(items)
 
 	for len(selected) < limit && len(remaining) > 0 {
 		unusedDocumentAvailable := hasUnusedDocument(remaining, usedDocuments)
 		bestIndex := -1
-		var best domain.RetrievedDocumentChunk
+		var best RerankDecision
 		for index, candidate := range remaining {
-			documentUses := usedDocuments[candidate.Document.ID]
+			documentUses := usedDocuments[candidate.DocumentID]
 			if documentUses >= 2 && unusedDocumentAvailable {
 				continue
 			}
@@ -114,28 +110,28 @@ func selectWithDocumentDiversity(items []domain.RetrievedDocumentChunk, limit in
 		}
 
 		selected = append(selected, best)
-		usedDocuments[best.Document.ID]++
+		usedDocuments[best.DocumentID]++
 		remaining = append(remaining[:bestIndex], remaining[bestIndex+1:]...)
 	}
 	return selected
 }
 
-func hasUnusedDocument(items []domain.RetrievedDocumentChunk, usedDocuments map[string]int) bool {
+func hasUnusedDocument(items []RerankDecision, usedDocuments map[string]int) bool {
 	for _, item := range items {
-		if usedDocuments[item.Document.ID] == 0 {
+		if usedDocuments[item.DocumentID] == 0 {
 			return true
 		}
 	}
 	return false
 }
 
-func hasMultipleDocuments(items []domain.RetrievedDocumentChunk) bool {
+func hasMultipleDocuments(items []RerankDecision) bool {
 	if len(items) < 2 {
 		return false
 	}
-	firstDocumentID := items[0].Document.ID
+	firstDocumentID := items[0].DocumentID
 	for _, item := range items[1:] {
-		if item.Document.ID != firstDocumentID {
+		if item.DocumentID != firstDocumentID {
 			return true
 		}
 	}

@@ -24,15 +24,15 @@ func (s *rerankerStub) Rerank(ctx context.Context, request RerankRequest) (Reran
 	if s.err != nil {
 		return RerankResult{}, s.err
 	}
-	items := append([]domain.RetrievedDocumentChunk(nil), request.Candidates...)
-	for index := range items {
-		items[index].RerankRank = index + 1
-		items[index].RerankScore = 0.9 - float64(index)*0.1
+	items := make([]RerankDecision, 0, len(request.Candidates))
+	for index, candidate := range request.Candidates {
+		decision := RerankDecision{DocumentID: candidate.Document.ID, ChunkID: candidate.Chunk.ID, RerankRank: index + 1, RerankScore: 0.9 - float64(index)*0.1}
 		if index < len(s.scores) {
-			items[index].RerankScore = s.scores[index]
+			decision.RerankScore = s.scores[index]
 		}
+		items = append(items, decision)
 	}
-	return RerankResult{Items: items, Info: s.info}, nil
+	return RerankResult{Decisions: items, Info: s.info}, nil
 }
 
 type rerankerContextKey struct{}
@@ -64,27 +64,27 @@ func TestHeuristicRerankerDoesNotMutateCandidates(t *testing.T) {
 	if candidates[0].RerankRank != 0 || candidates[0].RerankScore != 0 || len(candidates[0].MatchedTerms) != 0 {
 		t.Fatalf("expected input candidates to remain unchanged, got %#v", candidates[0])
 	}
-	if len(result.Items) != 1 || result.Items[0].RerankRank != 1 || result.Items[0].RerankScore <= 0 {
-		t.Fatalf("expected independently ranked output, got %#v", result.Items)
+	if len(result.Decisions) != 1 || result.Decisions[0].RerankRank != 1 || result.Decisions[0].RerankScore <= 0 {
+		t.Fatalf("expected independently ranked output, got %#v", result.Decisions)
 	}
 }
 
 func TestDocumentDiversityPenaltyAffectsTopKSelection(t *testing.T) {
 	t.Parallel()
 
-	candidates := []domain.RetrievedDocumentChunk{
-		{Document: domain.Document{ID: "doc-a"}, Chunk: domain.DocumentChunk{ID: "a1"}, RerankScore: 1.0},
-		{Document: domain.Document{ID: "doc-a"}, Chunk: domain.DocumentChunk{ID: "a2"}, RerankScore: 0.95},
-		{Document: domain.Document{ID: "doc-b"}, Chunk: domain.DocumentChunk{ID: "b1"}, RerankScore: 0.94},
+	candidates := []RerankDecision{
+		{DocumentID: "doc-a", ChunkID: "a1", RerankScore: 1.0},
+		{DocumentID: "doc-a", ChunkID: "a2", RerankScore: 0.95},
+		{DocumentID: "doc-b", ChunkID: "b1", RerankScore: 0.94},
 	}
 
 	topTwo := selectWithDocumentDiversity(candidates, 2)
-	if len(topTwo) != 2 || topTwo[0].Chunk.ID != "a1" || topTwo[1].Chunk.ID != "b1" {
+	if len(topTwo) != 2 || topTwo[0].ChunkID != "a1" || topTwo[1].ChunkID != "b1" {
 		t.Fatalf("expected the alternate document to replace the penalized duplicate, got %#v", topTwo)
 	}
 
 	all := selectWithDocumentDiversity(candidates, 3)
-	if len(all) != 3 || all[0].Chunk.ID != "a1" || all[1].Chunk.ID != "b1" || all[2].Chunk.ID != "a2" {
+	if len(all) != 3 || all[0].ChunkID != "a1" || all[1].ChunkID != "b1" || all[2].ChunkID != "a2" {
 		t.Fatalf("expected diversity-adjusted ordering, got %#v", all)
 	}
 	if all[2].DiversityPenalty != 0.04 || math.Abs(all[2].RerankScore-0.91) > 1e-9 {
@@ -185,64 +185,58 @@ func TestScoreOnlyCrossEncoderCannotBypassRelevanceGate(t *testing.T) {
 	}
 }
 
-func TestValidateRerankResultRejectsMalformedOutput(t *testing.T) {
-	t.Parallel()
-
-	candidate := domain.RetrievedDocumentChunk{
-		Document: domain.Document{ID: "doc-1"},
-		Chunk:    domain.DocumentChunk{ID: "chunk-1"},
-	}
-	request := RerankRequest{Candidates: []domain.RetrievedDocumentChunk{candidate}, Limit: 1}
-	validInfo := domain.RerankerInfo{Algorithm: "cross_encoder", Version: "v1", ConfigVersion: "config-v1", Provider: "test", Model: "model"}
-	validItem := candidate
-	validItem.RerankRank = 1
-	validItem.RerankScore = 0.8
-	mutatedCandidate := validItem
-	mutatedCandidate.Similarity = 0.9
-	classifiedCandidate := validItem
-	classifiedCandidate.Confidence = "high"
-	classifiedCandidate.FilterReason = "supplied by reranker"
-
-	testCases := []struct {
-		name   string
-		result RerankResult
-		match  string
+func TestRerankDecisionsRejectMalformedOutput(t *testing.T) {
+	candidate := domain.RetrievedDocumentChunk{Document: domain.Document{ID: "doc-1"}, Chunk: domain.DocumentChunk{ID: "chunk-1"}}
+	info := domain.RerankerInfo{Algorithm: "cross_encoder", Version: "v1", ConfigVersion: "config-v1", Provider: "test", Model: "model"}
+	valid := RerankDecision{DocumentID: "doc-1", ChunkID: "chunk-1", RerankRank: 1, RerankScore: 0.8}
+	for _, tc := range []struct {
+		name, match string
+		change      func(*RerankDecision, *domain.RerankerInfo)
 	}{
-		{name: "empty info", result: RerankResult{Items: []domain.RetrievedDocumentChunk{validItem}}, match: "reranker info"},
-		{name: "missing rank", result: RerankResult{Info: validInfo, Items: []domain.RetrievedDocumentChunk{candidate}}, match: "rerank_rank"},
-		{name: "non finite score", result: RerankResult{Info: validInfo, Items: []domain.RetrievedDocumentChunk{{Document: validItem.Document, Chunk: validItem.Chunk, RerankRank: 1, RerankScore: math.NaN()}}}, match: "non-finite"},
-		{name: "unknown chunk", result: RerankResult{Info: validInfo, Items: []domain.RetrievedDocumentChunk{{Document: domain.Document{ID: "doc-2"}, Chunk: domain.DocumentChunk{ID: "chunk-2"}, RerankRank: 1, RerankScore: 0.8}}}, match: "unknown candidate"},
-		{name: "out of normalized range", result: RerankResult{Info: validInfo, Items: []domain.RetrievedDocumentChunk{{Document: validItem.Document, Chunk: validItem.Chunk, RerankRank: 1, RerankScore: 1.2}}}, match: "normalized"},
-		{name: "modified recall evidence", result: RerankResult{Info: validInfo, Items: []domain.RetrievedDocumentChunk{mutatedCandidate}}, match: "modifies upstream"},
-		{name: "gate-owned classification", result: RerankResult{Info: validInfo, Items: []domain.RetrievedDocumentChunk{classifiedCandidate}}, match: "gate-owned"},
-	}
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-			err := validateRerankResult(request, testCase.result)
-			if err == nil || !strings.Contains(err.Error(), testCase.match) {
-				t.Fatalf("expected error containing %q, got %v", testCase.match, err)
+		{"empty info", "reranker info", func(d *RerankDecision, i *domain.RerankerInfo) { *i = domain.RerankerInfo{} }},
+		{"missing rank", "rerank_rank", func(d *RerankDecision, i *domain.RerankerInfo) { d.RerankRank = 0 }},
+		{"non finite score", "non-finite", func(d *RerankDecision, i *domain.RerankerInfo) { d.RerankScore = math.NaN() }},
+		{"unknown chunk", "unknown candidate", func(d *RerankDecision, i *domain.RerankerInfo) { d.ChunkID = "foreign" }},
+		{"cross document", "unknown candidate", func(d *RerankDecision, i *domain.RerankerInfo) { d.DocumentID = "foreign" }},
+		{"missing identity", "missing", func(d *RerankDecision, i *domain.RerankerInfo) { d.ChunkID = "" }},
+		{"out of normalized range", "normalized", func(d *RerankDecision, i *domain.RerankerInfo) { d.RerankScore = 1.2 }},
+		{"invalid coverage", "coverage", func(d *RerankDecision, i *domain.RerankerInfo) { d.EvidenceCoverage = 2 }},
+		{"non finite evidence", "ranking evidence", func(d *RerankDecision, i *domain.RerankerInfo) { d.EvidenceScore = math.Inf(1) }},
+		{"negative boost", "ranking evidence", func(d *RerankDecision, i *domain.RerankerInfo) { d.MetadataBoost = -1 }},
+		{"provider without model", "together", func(d *RerankDecision, i *domain.RerankerInfo) { i.Model = "" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			decision, metadata := valid, info
+			tc.change(&decision, &metadata)
+			if _, err := applyRerankResult(RerankRequest{Candidates: []domain.RetrievedDocumentChunk{candidate}, Limit: 1}, RerankResult{Decisions: []RerankDecision{decision}, Info: metadata}); err == nil || !strings.Contains(err.Error(), tc.match) {
+				t.Fatalf("expected %s, got %v", tc.match, err)
 			}
 		})
 	}
 }
 
-func TestValidateRerankResultRequiresCompleteTopK(t *testing.T) {
-	t.Parallel()
-
-	candidates := []domain.RetrievedDocumentChunk{
-		{Document: domain.Document{ID: "doc-1"}, Chunk: domain.DocumentChunk{ID: "chunk-1"}},
-		{Document: domain.Document{ID: "doc-2"}, Chunk: domain.DocumentChunk{ID: "chunk-2"}},
-	}
-	first := candidates[0]
-	first.RerankRank = 1
-	first.RerankScore = 0.9
-	result := RerankResult{
-		Info:  domain.RerankerInfo{Algorithm: "cross_encoder", Version: "v1", ConfigVersion: "config-v1", Provider: "test", Model: "model"},
-		Items: []domain.RetrievedDocumentChunk{first},
-	}
-	if err := validateRerankResult(RerankRequest{Candidates: candidates, Limit: 2}, result); err == nil || !strings.Contains(err.Error(), "complete top-k") {
-		t.Fatalf("expected incomplete top-k to be rejected, got %v", err)
+func TestRerankDecisionsRequireCompleteUniqueOrderedTopK(t *testing.T) {
+	input := []domain.RetrievedDocumentChunk{{Document: domain.Document{ID: "d1"}, Chunk: domain.DocumentChunk{ID: "c1"}}, {Document: domain.Document{ID: "d2"}, Chunk: domain.DocumentChunk{ID: "c2"}}}
+	first := RerankDecision{DocumentID: "d1", ChunkID: "c1", RerankRank: 1, RerankScore: 0.8}
+	second := RerankDecision{DocumentID: "d2", ChunkID: "c2", RerankRank: 2, RerankScore: 0.7}
+	duplicate := first
+	duplicate.RerankRank = 2
+	outOfOrder := second
+	outOfOrder.RerankScore = 0.9
+	for _, tc := range []struct {
+		name, match string
+		decisions   []RerankDecision
+	}{
+		{"missing", "complete top-k", []RerankDecision{first}},
+		{"duplicate", "duplicates", []RerankDecision{first, duplicate}},
+		{"order", "descending", []RerankDecision{first, outOfOrder}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := applyRerankResult(RerankRequest{Candidates: input, Limit: 2}, RerankResult{Decisions: tc.decisions, Info: domain.RerankerInfo{Algorithm: "cross_encoder", Version: "v1", ConfigVersion: "v1"}})
+			if err == nil || !strings.Contains(err.Error(), tc.match) {
+				t.Fatalf("expected %s, got %v", tc.match, err)
+			}
+		})
 	}
 }
 

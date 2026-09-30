@@ -15,27 +15,7 @@ import (
 	"agentflow-platform/apps/api/internal/inference/routing"
 )
 
-func singleModelRouteCatalog(client provider.Client, config domain.ContextAssemblyConfig, budget domain.RuntimeRunBudget) (*routing.Catalog, error) {
-	if client == nil {
-		return nil, errors.Join(routing.ErrInvalidCatalog, errors.New("model route client is required"))
-	}
-	config = contextassembly.NormalizeConfig(config)
-	identity := client.RuntimeIdentity()
-	return routing.NewCatalog(routing.Binding{Descriptor: routing.Descriptor{
-		ID: "single", Provider: identity.Provider, Model: identity.Model, Endpoint: identity.BaseURL,
-		Capabilities:        routing.Capabilities{ToolCalling: true, StructuredOutput: true, Streaming: true},
-		ContextWindowTokens: config.ContextWindowTokens, MaxOutputTokens: config.OutputReserveTokens,
-		Priority: 100, Pricing: routing.Pricing{
-			Source: "single_route", InputPerMillionTokensMicros: budget.InputCostPerMillionTokensMicros,
-			OutputPerMillionTokensMicros: budget.OutputCostPerMillionTokensMicros,
-		},
-	}, Client: client})
-}
-
 func (r *Runtime) captureModelRoutingSnapshot() (domain.ModelRouteCatalogSnapshot, error) {
-	if r.modelRoutesErr != nil {
-		return domain.ModelRouteCatalogSnapshot{}, r.modelRoutesErr
-	}
 	if r.modelRoutes == nil {
 		return domain.ModelRouteCatalogSnapshot{}, routing.ErrInvalidCatalog
 	}
@@ -47,9 +27,6 @@ func (r *Runtime) captureModelRoutingSnapshot() (domain.ModelRouteCatalogSnapsho
 func (r *Runtime) restoreModelRouteCatalog(snapshot domain.ModelRouteCatalogSnapshot) (*routing.Catalog, error) {
 	if err := validateModelRoutingSnapshot(snapshot); err != nil {
 		return nil, err
-	}
-	if r.modelRoutesErr != nil {
-		return nil, r.modelRoutesErr
 	}
 	if r.modelRoutes == nil {
 		return nil, routing.ErrInvalidCatalog

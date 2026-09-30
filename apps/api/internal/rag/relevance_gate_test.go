@@ -28,8 +28,8 @@ func TestHeuristicRelevanceGateOwnsConfidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("evaluate relevance gate: %v", err)
 	}
-	if len(result.Items) != 0 {
-		t.Fatalf("expected Gate to overwrite and reject reranker confidence, got %#v", result.Items)
+	if hasAcceptedDecision(result.Decisions) {
+		t.Fatalf("expected Gate to overwrite and reject reranker confidence, got %#v", result.Decisions)
 	}
 	if result.Info.Version != "heuristic-relevance-gate-v3" || result.Info.ConfigVersion != "heuristic-relevance-hardened-v2" || result.Info.MinimumEvidenceCoverage != 0.25 {
 		t.Fatalf("unexpected relevance gate metadata: %#v", result.Info)
@@ -57,8 +57,8 @@ func TestHeuristicRelevanceGateRecomputesEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("evaluate relevance gate: %v", err)
 	}
-	if len(result.Items) != 0 {
-		t.Fatalf("expected fabricated reranker evidence to be ignored, got %#v", result.Items)
+	if hasAcceptedDecision(result.Decisions) {
+		t.Fatalf("expected fabricated reranker evidence to be ignored, got %#v", result.Decisions)
 	}
 }
 
@@ -90,8 +90,8 @@ func TestHeuristicRelevanceGateRejectsWeakTermOverlapDespiteVectorScore(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Items) != 0 {
-		t.Fatalf("weak lexical evidence bypassed calibrated gate: %#v", result.Items)
+	if hasAcceptedDecision(result.Decisions) {
+		t.Fatalf("weak lexical evidence bypassed calibrated gate: %#v", result.Decisions)
 	}
 }
 
@@ -116,7 +116,7 @@ func TestHeuristicRelevanceGateRejectsSaturatedLexicalScoreWithoutEvidence(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Items) != 0 || len(result.Decisions) != len(candidates) {
+	if hasAcceptedDecision(result.Decisions) || len(result.Decisions) != len(candidates) {
 		t.Fatalf("saturated lexical scores bypassed the relevance gate: %#v", result)
 	}
 	for _, decision := range result.Decisions {
@@ -143,7 +143,7 @@ func TestHeuristicRelevanceGatePreservesExactIdentifierRecall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Items) != 1 || len(result.Decisions) != 1 || result.Decisions[0].IdentifierMatch != "AUTH-7F31" || !result.Decisions[0].Accepted {
+	if len(result.Decisions) != 1 || result.Decisions[0].IdentifierMatch != "AUTH-7F31" || !result.Decisions[0].Accepted {
 		t.Fatalf("exact identifier recall regressed: %#v", result)
 	}
 }
@@ -155,7 +155,7 @@ func TestHeuristicRelevanceGateHandlesEmptyCandidates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Items) != 0 || len(result.Decisions) != 0 || result.Info.Version == "" {
+	if hasAcceptedDecision(result.Decisions) || len(result.Decisions) != 0 || result.Info.Version == "" {
 		t.Fatalf("unexpected empty-candidate policy: %#v", result)
 	}
 }
@@ -170,48 +170,40 @@ func TestQueryTermsRemoveEnglishStopWordsAndKeepCJKTerms(t *testing.T) {
 	}
 }
 
-func TestValidateRelevanceGateResultRequiresClassifiedOutput(t *testing.T) {
-	t.Parallel()
-
-	input := []domain.RetrievedDocumentChunk{{Document: domain.Document{ID: "doc-1"}, Chunk: domain.DocumentChunk{ID: "chunk-1"}}}
-	result := RelevanceGateResult{
-		Info:  domain.RelevanceGateInfo{Policy: "test", Version: "v1", ConfigVersion: "config-v1"},
-		Items: []domain.RetrievedDocumentChunk{{Document: input[0].Document, Chunk: input[0].Chunk, RerankRank: 1}},
+func hasAcceptedDecision(decisions []RelevanceDecision) bool {
+	for _, decision := range decisions {
+		if decision.Accepted {
+			return true
+		}
 	}
-	if err := validateRelevanceGateResult(input, result); err == nil {
-		t.Fatal("expected missing Gate confidence and reason to be rejected")
-	}
+	return false
 }
 
-func TestValidateRelevanceGateResultRejectsMutationAndReordering(t *testing.T) {
-	t.Parallel()
-
-	input := []domain.RetrievedDocumentChunk{
-		{Document: domain.Document{ID: "doc-1"}, Chunk: domain.DocumentChunk{ID: "chunk-1"}, RerankRank: 1, RerankScore: 0.9},
-		{Document: domain.Document{ID: "doc-2"}, Chunk: domain.DocumentChunk{ID: "chunk-2"}, RerankRank: 2, RerankScore: 0.8},
-	}
-	classified := func(item domain.RetrievedDocumentChunk, rank int) domain.RetrievedDocumentChunk {
-		item.RerankRank = rank
-		item.Confidence = "medium"
-		item.FilterReason = "test policy"
-		return item
-	}
-	info := domain.RelevanceGateInfo{Policy: "test", Version: "v1", ConfigVersion: "config-v1"}
-	decisions := []domain.RelevanceGateDecision{
-		{DocumentID: "doc-1", ChunkID: "chunk-1", Confidence: "medium", FilterReason: "test policy", Accepted: true},
-		{DocumentID: "doc-2", ChunkID: "chunk-2", Confidence: "medium", FilterReason: "test policy", Accepted: true},
-	}
-
-	reordered := RelevanceGateResult{Info: info, Items: []domain.RetrievedDocumentChunk{
-		classified(input[1], 1), classified(input[0], 2),
-	}, Decisions: decisions}
-	if err := validateRelevanceGateResult(input, reordered); err == nil || !strings.Contains(err.Error(), "ordering") {
-		t.Fatalf("expected reordered candidates to be rejected, got %v", err)
-	}
-
-	mutated := classified(input[0], 1)
-	mutated.RerankScore = 0.1
-	if err := validateRelevanceGateResult(input, RelevanceGateResult{Info: info, Items: []domain.RetrievedDocumentChunk{mutated}, Decisions: decisions}); err == nil || !strings.Contains(err.Error(), "modifies ranked") {
-		t.Fatalf("expected ranked candidate mutation to be rejected, got %v", err)
+func TestRelevanceDecisionsRejectMalformedOutput(t *testing.T) {
+	input := []domain.RetrievedDocumentChunk{{Document: domain.Document{ID: "d1"}, Chunk: domain.DocumentChunk{ID: "c1"}}, {Document: domain.Document{ID: "d2"}, Chunk: domain.DocumentChunk{ID: "c2"}}}
+	valid := []RelevanceDecision{{DocumentID: "d1", ChunkID: "c1", Confidence: "high", FilterReason: "evidence", Accepted: true}, {DocumentID: "d2", ChunkID: "c2", Confidence: "low", FilterReason: "no evidence"}}
+	info := domain.RelevanceGateInfo{Policy: "test", Version: "v1", ConfigVersion: "v1"}
+	for _, tc := range []struct {
+		name, match string
+		change      func(*RelevanceGateResult)
+	}{
+		{"missing info", "gate info", func(r *RelevanceGateResult) { r.Info = domain.RelevanceGateInfo{} }},
+		{"missing decision", "one for each", func(r *RelevanceGateResult) { r.Decisions = r.Decisions[:1] }},
+		{"unknown", "does not match", func(r *RelevanceGateResult) { r.Decisions[0].ChunkID = "foreign" }},
+		{"cross document", "does not match", func(r *RelevanceGateResult) { r.Decisions[0].DocumentID = "foreign" }},
+		{"duplicate", "does not match", func(r *RelevanceGateResult) { r.Decisions[1] = r.Decisions[0] }},
+		{"reordered", "ordering", func(r *RelevanceGateResult) { r.Decisions[0], r.Decisions[1] = r.Decisions[1], r.Decisions[0] }},
+		{"unclassified", "invalid confidence", func(r *RelevanceGateResult) { r.Decisions[0].Confidence = "" }},
+		{"missing reason", "filter_reason", func(r *RelevanceGateResult) { r.Decisions[0].FilterReason = " " }},
+		{"inconsistent acceptance", "inconsistent", func(r *RelevanceGateResult) { r.Decisions[0].Accepted = false }},
+		{"invalid coverage", "invalid evidence", func(r *RelevanceGateResult) { r.Decisions[0].EvidenceCoverage = 2 }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := RelevanceGateResult{Info: info, Decisions: append([]RelevanceDecision(nil), valid...)}
+			tc.change(&result)
+			if _, err := applyRelevanceGateResult(input, result); err == nil || !strings.Contains(err.Error(), tc.match) {
+				t.Fatalf("expected %s, got %v", tc.match, err)
+			}
+		})
 	}
 }

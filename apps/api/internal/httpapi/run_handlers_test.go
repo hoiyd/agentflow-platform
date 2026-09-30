@@ -15,7 +15,7 @@ import (
 
 func TestCancelRunHandlerCancelsQueuedRun(t *testing.T) {
 	fixtureStore, run := createHTTPTestRun(t)
-	runtime := agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	runtime := newRuntimeForTest(agentpkg.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
 	handler := &Handler{store: fixtureStore, agentRuntime: runtime}
 	recorder := httptest.NewRecorder()
 

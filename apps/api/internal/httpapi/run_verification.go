@@ -1,10 +1,11 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
-	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/app/runcompletion"
 )
 
 func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
@@ -23,38 +24,14 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
-	if run.CompletionContract == nil {
-		writeError(w, http.StatusConflict, "run does not require verification")
-		return
-	}
-	if run.Status == domain.RunCompleted || run.Status == domain.RunCanceled {
-		writeError(w, http.StatusConflict, "terminal run cannot be reverified")
-		return
-	}
-	messages, err := scoped.ListMessages(run.ConversationID)
+	result, err := runcompletion.Reverify(r.Context(), scoped, h.completionDependencies(), run)
 	if err != nil {
-		writeFailure(w, r, http.StatusInternalServerError, err)
+		if errors.Is(err, runcompletion.ErrNotRequired) || errors.Is(err, runcompletion.ErrTerminal) || errors.Is(err, runcompletion.ErrNoCandidate) {
+			writeError(w, http.StatusConflict, err.Error())
+		} else {
+			writeFailure(w, r, http.StatusInternalServerError, err)
+		}
 		return
 	}
-	output := latestAssistantOutput(messages)
-	if output == "" {
-		writeError(w, http.StatusConflict, "run has no candidate output to verify")
-		return
-	}
-	decision, err := h.verification.Verify(r.Context(), run.ID, h.verificationSubjectForRun(scoped, run, latestUserInput(messages), output))
-	if err != nil {
-		_, _ = scoped.UpdateRunVerificationStatus(run.ID, domain.VerificationBlocked)
-		writeFailure(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	if decision.AllowCompletion {
-		run, err = h.agentRuntime.CompleteRun(run.ID)
-	} else {
-		run, err = h.agentRuntime.RejectRunCompletion(run.ID, decision.RunStatus, decision.Summary)
-	}
-	if err != nil {
-		writeFailure(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"run": run, "decision": decision})
+	writeJSON(w, http.StatusOK, map[string]any{"run": result.Run, "decision": result.Decision})
 }

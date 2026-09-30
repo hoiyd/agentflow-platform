@@ -1,4 +1,4 @@
-package httpapi
+package runcompletion
 
 import (
 	"encoding/json"
@@ -13,8 +13,8 @@ import (
 	"agentflow-platform/apps/api/internal/verification"
 )
 
-func (h *Handler) resolveRunCitations(scoped store.WorkspaceStore, runID, answer string) ([]domain.RAGCitation, []domain.RAGCitation, []string, error) {
-	sources, err := h.citationSourcesForRun(scoped, runID)
+func ResolveCitations(scoped store.WorkspaceStore, runID, answer string) ([]domain.RAGCitation, []domain.RAGCitation, []string, error) {
+	sources, err := citationSourcesForRun(scoped, runID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -22,7 +22,7 @@ func (h *Handler) resolveRunCitations(scoped store.WorkspaceStore, runID, answer
 	return sources, citations, invalidSourceIDs, nil
 }
 
-func (h *Handler) resolveRunWebCitations(scoped store.WorkspaceStore, runID, answer string) ([]domain.WebCitation, []domain.WebCitation, []string, error) {
+func resolveWebCitations(scoped store.WorkspaceStore, runID, answer string) ([]domain.WebCitation, []domain.WebCitation, []string, error) {
 	events, err := scoped.ListRunEvents(runID)
 	if err != nil {
 		return nil, nil, nil, err
@@ -77,8 +77,8 @@ func webCitationSourceIDs(citations []domain.WebCitation) []string {
 	return ids
 }
 
-func (h *Handler) groundingSourcesForRun(scoped store.WorkspaceStore, runID string) ([]verification.GroundingSource, error) {
-	evidence, err := h.knowledgeEvidenceForRun(scoped, runID)
+func GroundingSources(scoped store.WorkspaceStore, runID string) ([]verification.GroundingSource, error) {
+	evidence, err := knowledgeEvidenceForRun(scoped, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -137,11 +137,11 @@ func (h *Handler) groundingSourcesForRun(scoped store.WorkspaceStore, runID stri
 	return sources, nil
 }
 
-func (h *Handler) verificationSubjectForRun(scoped store.WorkspaceStore, run domain.Run, question, output string) verification.Subject {
+func verificationSubjectForRun(scoped store.WorkspaceStore, run domain.Run, question, output string) verification.Subject {
 	if !completionContractUsesVerifier(run.CompletionContract, domain.VerifierGroundedAnswer) {
 		return verification.SubjectForQuestionAnswer(question, output)
 	}
-	sources, err := h.groundingSourcesForRun(scoped, run.ID)
+	sources, err := GroundingSources(scoped, run.ID)
 	return verification.SubjectForGroundedQuestionAnswer(question, output, sources, err)
 }
 
@@ -157,8 +157,8 @@ func completionContractUsesVerifier(contract *domain.CompletionContract, verifie
 	return false
 }
 
-func (h *Handler) citationSourcesForRun(scoped store.WorkspaceStore, runID string) ([]domain.RAGCitation, error) {
-	evidence, err := h.knowledgeEvidenceForRun(scoped, runID)
+func citationSourcesForRun(scoped store.WorkspaceStore, runID string) ([]domain.RAGCitation, error) {
+	evidence, err := knowledgeEvidenceForRun(scoped, runID)
 	return evidence.sources, err
 }
 
@@ -168,7 +168,7 @@ type knowledgeRunEvidence struct {
 	automatic map[string]domain.RAGCitation
 }
 
-func (h *Handler) knowledgeEvidenceForRun(scoped store.WorkspaceStore, runID string) (knowledgeRunEvidence, error) {
+func knowledgeEvidenceForRun(scoped store.WorkspaceStore, runID string) (knowledgeRunEvidence, error) {
 	events, err := scoped.ListRunEvents(runID)
 	if err != nil {
 		return knowledgeRunEvidence{}, err

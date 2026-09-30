@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/domain"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 )
@@ -92,7 +93,7 @@ func TestExplicitUserMemoryCandidateCreatesSearchableMemory(t *testing.T) {
 		CreatedAt:      time.Now().UTC(),
 	}
 
-	handler.syncMemoryTurn(message, run.ID)
+	runcompletion.SyncMemoryTurn(handler.memories, message, run.ID)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	if err := provider.Close(ctx); err != nil {

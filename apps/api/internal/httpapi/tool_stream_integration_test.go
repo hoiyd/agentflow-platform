@@ -71,7 +71,7 @@ func TestChatHTTPStreamsToolAnswerBeforeProviderDone(t *testing.T) {
 	}
 	client := openai.NewClientWithTimeout("fixture-not-a-secret", model.URL, "fixture-model", time.Second)
 	client.SetRetryPolicy(openai.RetryPolicy{MaxAttempts: 1})
-	dependencies.AgentRuntime = agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: storage, ModelClient: client, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 4, MaxToolCalls: 2, MaxRuntimeMS: 4000}})
+	dependencies.AgentRuntime = newRuntimeForTest(agentpkg.RuntimeOptions{Store: storage, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 4, MaxToolCalls: 2, MaxRuntimeMS: 4000}}, client)
 	handler, err := NewHandler(dependencies)
 	if err != nil {
 		t.Fatal(err)

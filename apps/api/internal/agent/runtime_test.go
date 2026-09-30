@@ -32,12 +32,9 @@ func TestRetrieveContextRecordsReplayRetrievalEvent(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
 	client := newLocalFallbackOpenAIClientForTest()
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: client,
-		MemoryRecall: memoryRecallFunc(func(_ context.Context, search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
-			return fixtureStore.SearchMemories(search)
-		}),
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, MemoryRecall: memoryRecallFunc(func(_ context.Context, search domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+		return fixtureStore.SearchMemories(search)
+	})}, client)
 
 	conversation, err := fixtureStore.CreateConversation("Demo retrieval")
 	if err != nil {
@@ -200,12 +197,9 @@ func TestRetrieveContextDegradesMemoryRecallFailureToEmptySet(t *testing.T) {
 		t.Fatalf("create run: %v", err)
 	}
 	want := errors.New("memory provider unavailable")
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(),
-		MemoryRecall: memoryRecallFunc(func(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
-			return nil, want
-		}),
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, MemoryRecall: memoryRecallFunc(func(context.Context, domain.MemorySearch) ([]domain.RetrievedMemory, error) {
+		return nil, want
+	})}, newLocalFallbackOpenAIClientForTest())
 
 	memories, chunks := runtime.retrieveContext(context.Background(), run.ID, retrievalQuery{
 		Text: "continue without memory", Source: retrievalQuerySourceUserInput,
@@ -269,7 +263,7 @@ func TestRetrieveContextRespectsDisabledAgentConfig(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
 	client := newLocalFallbackOpenAIClientForTest()
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, client)
 
 	conversation, err := fixtureStore.CreateConversation("Disabled retrieval")
 	if err != nil {
@@ -326,7 +320,7 @@ func TestRetrieveContextTruncatesEmbeddingQuery(t *testing.T) {
 	ctx := context.Background()
 	fixtureStore := fixturestore.New()
 
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
 
 	conversation, err := fixtureStore.CreateConversation("Long retrieval query")
 	if err != nil {
@@ -388,7 +382,7 @@ func TestRetrieveContextSkipsQueriesWithoutAUsableBoundary(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+			runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
 			memories, chunks := runtime.retrieveContext(context.Background(), run.ID, test.query, true, true, nil)
 			if len(memories) != 0 || len(chunks) != 0 {
 				t.Fatalf("skipped query returned context: memories=%#v chunks=%#v", memories, chunks)
@@ -424,9 +418,7 @@ func TestRetrieveContextAllowsTraceableBoundedSubquestion(t *testing.T) {
 		t.Fatal(err)
 	}
 	retriever := &recordingKnowledgeRetriever{}
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), KnowledgeRetriever: retriever,
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, KnowledgeRetriever: retriever}, newLocalFallbackOpenAIClientForTest())
 	runtime.retrieveContext(context.Background(), run.ID, retrievalQuery{
 		Text:    "Which alpha-4242 recovery step restarts the coordinator?",
 		Source:  retrievalQuerySourceBoundedSubquestion,
@@ -457,9 +449,7 @@ func TestSingleRunUsesUserInputAsRetrievalQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 	retriever := &recordingKnowledgeRetriever{}
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), KnowledgeRetriever: retriever,
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, KnowledgeRetriever: retriever}, newLocalFallbackOpenAIClientForTest())
 	prepared, err := runtime.PrepareChatRunWithContract(context.Background(), "agent_planner", conversation.ID, nil)
 	if err != nil {
 		t.Fatal(err)

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"agentflow-platform/apps/api/app/runcompletion"
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
@@ -119,7 +120,7 @@ func TestScopedKnowledgeToolsSearchReadCitedAnswerAcrossModes(t *testing.T) {
 				}
 			}
 			dependencies.Knowledge = base
-			dependencies.AgentRuntime = agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: storage, ModelClient: client, EmbeddingClient: client, Knowledge: base, KnowledgeRetriever: rag.NewRetrievalPipeline(storage), RouterMode: agentpkg.RouterModeQuery, Autonomous: agentpkg.AutonomousLimits{MaxIterations: 1}, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 16, MaxToolCalls: 4, MaxRuntimeMS: 20000}})
+			dependencies.AgentRuntime = newRuntimeForTest(agentpkg.RuntimeOptions{Store: storage, EmbeddingClient: client, KnowledgeTools: base.ToolBindings(storage), KnowledgeRetriever: rag.NewRetrievalPipeline(storage), RouterMode: agentpkg.RouterModeQuery, Autonomous: agentpkg.AutonomousLimits{MaxIterations: 1}, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 16, MaxToolCalls: 4, MaxRuntimeMS: 20000}}, client)
 			handler, err := NewHandler(dependencies)
 			if err != nil {
 				t.Fatal(err)
@@ -160,7 +161,7 @@ func TestScopedKnowledgeToolsSearchReadCitedAnswerAcrossModes(t *testing.T) {
 			if strings.Contains(fmt.Sprint(replay.RunEvents), "FOREIGN_SECRET") {
 				t.Fatal("foreign document entered Run")
 			}
-			if _, citations, invalid, err := handler.resolveRunCitations(storage.ForWorkspace(domain.NewWorkspaceScope(pipelineRegressionWorkspace)), replay.Run.ID, "[S2] [S99]"); err != nil || len(citations) != 1 || len(invalid) != 1 || invalid[0] != "S99" {
+			if _, citations, invalid, err := runcompletion.ResolveCitations(storage.ForWorkspace(domain.NewWorkspaceScope(pipelineRegressionWorkspace)), replay.Run.ID, "[S2] [S99]"); err != nil || len(citations) != 1 || len(invalid) != 1 || invalid[0] != "S99" {
 				t.Fatalf("resolution citations=%#v invalid=%#v err=%v", citations, invalid, err)
 			}
 			records, err := storage.ListModelRequestRecords(replay.Run.ID)

@@ -184,7 +184,16 @@ the upstream pipeline.
 The versioned `RelevanceGate` is the next independent stage. It ignores any
 incoming `confidence`, `filter_reason`, or derived evidence, recomputes evidence
 from the query and trusted candidate data, then owns filtering and final rank
-compaction. Gate output must remain an ordered subset of the reranked input. The
+compaction. Gate decisions must match the reranked input one-for-one and in
+order; accepted candidates form an ordered subset.
+
+Stages receive detached read inputs. `RerankResult` returns only candidate IDs
+and ranking-owned fields; `RelevanceGateResult` returns only candidate IDs and
+acceptance/evidence fields. The Pipeline validates identity, uniqueness, order
+and finite scores before merging these decisions into retained candidates.
+Document content, Workspace, index identity and recall signals never come back
+from a stage. Public `items` and `relevance_decisions` retain their existing JSON
+shape; the Pipeline adds recall/ranking signals to the audit records. The
 default policy reports `heuristic-relevance-gate-v3` with configuration
 `heuristic-relevance-hardened-v2` and its `minimum_evidence_coverage`.
 It computes all candidate signals before classification. A saturated lexical

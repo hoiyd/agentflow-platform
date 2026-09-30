@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/domain"
 )
 
@@ -154,11 +155,10 @@ func TestSummarizeConversationTitleBestEffortDoesNotOverwriteManualTitle(t *test
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	handler := &Handler{store: fixtureStore}
-
-	title := handler.summarizeConversationTitleBestEffort(
+	title := runcompletion.SummarizeTitle(
 		httptest.NewRequest(http.MethodGet, "/", nil).Context(),
 		fixtureStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
+		nil,
 		"",
 		conversation.ID,
 		"Please explain vector search in RAG.",
@@ -176,11 +176,10 @@ func TestSummarizeConversationTitleBestEffortUpdatesTemporaryTitle(t *testing.T)
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
-	handler := &Handler{store: fixtureStore}
-
-	title := handler.summarizeConversationTitleBestEffort(
+	title := runcompletion.SummarizeTitle(
 		httptest.NewRequest(http.MethodGet, "/", nil).Context(),
 		fixtureStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
+		nil,
 		"",
 		conversation.ID,
 		"Explain vector search in RAG",

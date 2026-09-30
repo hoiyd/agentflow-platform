@@ -58,6 +58,7 @@ for the distinction between Run Events, Trace, Replay, and Episode Report.
 apps/api/
   cmd/server/       process entry point: config, signals, exit reporting
   app/              application composition root and process lifecycle
+    runcompletion/  answer persistence, citations, verification, terminal state and titles
   internal/
     domain/         persisted entities and shared contracts
     httpapi/        HTTP transport and route handlers
@@ -116,6 +117,13 @@ app
 `cmd/server` is deliberately thin. It reads process configuration, creates the application, binds OS signals, and reports lifecycle errors.
 
 `app` is the composition root. It creates every long-lived service and concrete adapter, applies runtime policies, injects a complete dependency set into the HTTP handler, owns the HTTP server, and closes background work before persistence.
+
+`agent.NewRuntime` accepts the same explicit `RuntimeOptions` in production and
+tests and returns a construction error when Store, model routes, embedding
+client, Tool manager, or checkpoint provider is missing. `app` installs Task
+State, Artifact, Knowledge read bindings, and retrieval explicitly; nil optional
+capabilities are not inferred from the Store implementation. Single-model
+shortcuts and fixture wiring live only in test support, never in production options.
 
 `internal` is Go's module-private visibility boundary, not a lower architectural layer. Keeping product implementation under `internal` prevents other modules from accidentally depending on unstable backend packages. Packages inside it should continue to expose the smallest interfaces required by their consumers.
 
@@ -186,8 +194,9 @@ HTTP chat request
   -> Turn Engine
   -> Context Assembly loads current Structured Task State
   -> typed Run Events
-  -> shared Run completion
-  -> message persistence and asynchronous memory synchronization
+  -> app/runcompletion (citations, message persistence, Verification, terminal state, title)
+  -> HTTP terminal SSE flush
+  -> non-blocking Memory Turn sync
 
 HTTP RAG search or Agent context retrieval
   -> request or persisted Run Workspace scope
@@ -229,7 +238,7 @@ The call paths preserve these ownership boundaries:
 | Context Selector | Expands gated child hits within the matched document, Workspace/metadata scope, and token limit. Ranked hits remain separate from the context sent to the model. |
 | Context Transformer | Deduplicates sources, groups chunks by document, merges adjacent chunks, preserves contributing IDs, and reapplies the knowledge token limit. |
 | Document ingestion | Normalizes source text and derives versioned hashes, section parents, and UTF-8 byte offsets before persistence. Store adapters preserve these values. |
-| Run completion | Persists the assistant message, transitions the Run, flushes the terminal SSE event, and schedules conservative Memory synchronization. All modes emit the same `domain.RunEvent` contract. |
+| Run completion | `app/runcompletion` resolves citations, persists the candidate, gates the terminal state with Verification, and generates the title best-effort. HTTP only formats and flushes SSE, then enqueues auxiliary Memory sync. Reverify shares the same gate without resaving the answer. All modes emit the same `domain.RunEvent` contract. |
 
 Detailed retrieval algorithms and failure boundaries live in
 [Knowledge / RAG](../knowledge/knowledge-rag.md). New executables should reuse the

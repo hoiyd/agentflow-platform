@@ -28,9 +28,7 @@ func TestRuntimeUsesInjectedCheckpointProvider(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
 	provider := &checkpointProviderStub{}
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: openai.NewClient("", "", "test"), CheckpointProvider: provider,
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, CheckpointProvider: provider}, openai.NewClient("", "", "test"))
 	step := domain.CollaborationStep{ID: "stage-1", RunID: "run-1"}
 	if err := runtime.publishStage(context.Background(), step, domain.EventStageStarted); err != nil {
 		t.Fatalf("publish stage: %v", err)
@@ -43,7 +41,7 @@ func TestRuntimeUsesInjectedCheckpointProvider(t *testing.T) {
 func TestRuntimeDefaultsToInternalCheckpointProvider(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: openai.NewClient("", "", "test")})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, openai.NewClient("", "", "test"))
 	if _, ok := runtime.checkpoints.(*checkpoint.InternalProvider); !ok {
 		t.Fatalf("expected internal checkpoint provider, got %T", runtime.checkpoints)
 	}

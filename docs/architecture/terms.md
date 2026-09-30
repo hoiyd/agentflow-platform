@@ -66,6 +66,11 @@ Historical versions or missing Snapshots remain Replay-only; unsupported Resume
 returns `runtime_snapshot_resume_unsupported` rather than using live config.
 Feature pages should link here instead of copying the current version number.
 
+Execution validates the complete current contract, including Tool security,
+schema/revision, progress settings, and route generation policy. It does not
+match legacy Tool digests or substitute live policy for missing frozen fields;
+historical decoding and database migrations remain separate read/upgrade paths.
+
 ## Stage
 
 Named orchestration phase created only by an orchestrator. Multi uses

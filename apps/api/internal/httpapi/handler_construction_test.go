@@ -125,7 +125,7 @@ func completeHandlerDependencies(t *testing.T) Dependencies {
 	registry := verification.NewRegistry(verification.Options{})
 	return Dependencies{
 		Store: fixtureStore, Tools: manager,
-		AgentRuntime: agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fixtureStore, ModelClient: client}),
+		AgentRuntime: newRuntimeForTest(agentpkg.RuntimeOptions{Store: fixtureStore}, client),
 		Memory:       &memoryOperationsStub{},
 		Knowledge:    &knowledgeOperationsStub{},
 		RunController: concurrency.NewRunController(concurrency.RunOptions{

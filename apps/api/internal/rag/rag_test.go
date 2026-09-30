@@ -178,7 +178,10 @@ func TestRerankDocumentChunksBoostsLexicalAndMetadataMatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rerank: %v", err)
 	}
-	reranked := rerankResult.Items
+	reranked, err := applyRerankResult(RerankRequest{Candidates: ReciprocalRankFusion(items), Limit: 2}, rerankResult)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(reranked) != 2 {
 		t.Fatalf("expected two reranked chunks, got %d", len(reranked))
 	}

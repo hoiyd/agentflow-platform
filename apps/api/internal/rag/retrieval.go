@@ -149,26 +149,28 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 	if reranker == nil {
 		reranker = NewHeuristicReranker(DefaultHeuristicRerankerConfig())
 	}
-	rerankResult, err := reranker.Rerank(ctx, RerankRequest{Query: search.Query, Candidates: items, Limit: requestedLimit})
+	rerankResult, err := reranker.Rerank(ctx, RerankRequest{Query: search.Query, Candidates: stageCandidates(items), Limit: requestedLimit})
 	if err != nil {
 		return domain.DocumentSearchResponse{}, fmt.Errorf("rerank candidates: %w", err)
 	}
-	if err := validateRerankResult(RerankRequest{Query: search.Query, Candidates: items, Limit: requestedLimit}, rerankResult); err != nil {
+	ranked, err := applyRerankResult(RerankRequest{Query: search.Query, Candidates: items, Limit: requestedLimit}, rerankResult)
+	if err != nil {
 		return domain.DocumentSearchResponse{}, fmt.Errorf("validate reranker output: %w", err)
 	}
-	items = rerankResult.Items
+	items = ranked
 	relevanceGate := p.relevanceGate
 	if relevanceGate == nil {
 		relevanceGate = NewHeuristicRelevanceGate(DefaultHeuristicRelevanceGateConfig())
 	}
-	gateResult, err := relevanceGate.Evaluate(ctx, RelevanceGateRequest{Query: search.Query, Candidates: items, Reranker: rerankResult.Info})
+	gateResult, err := relevanceGate.Evaluate(ctx, RelevanceGateRequest{Query: search.Query, Candidates: stageCandidates(items), Reranker: rerankResult.Info})
 	if err != nil {
 		return domain.DocumentSearchResponse{}, fmt.Errorf("apply relevance gate: %w", err)
 	}
-	if err := validateRelevanceGateResult(items, gateResult); err != nil {
+	gated, err := applyRelevanceGateResult(items, gateResult)
+	if err != nil {
 		return domain.DocumentSearchResponse{}, fmt.Errorf("validate relevance gate output: %w", err)
 	}
-	items = gateResult.Items
+	items = gated.items
 	contextItems, contextSelection, contextSecurity, err := NewContextSelector(p.store).Select(search, items)
 	if err != nil {
 		return domain.DocumentSearchResponse{}, err
@@ -194,7 +196,7 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 		},
 		Reranker:           rerankResult.Info,
 		RelevanceGate:      gateResult.Info,
-		RelevanceDecisions: gateResult.Decisions,
+		RelevanceDecisions: gated.decisions,
 		NoMatch:            len(items) == 0,
 	}
 	if response.NoMatch {

@@ -98,7 +98,7 @@ func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
 			}
 			client := openai.NewClientWithTimeout("fixture-not-a-secret", server.URL, "fixture-model", time.Second)
 			client.SetRequestRecorder(capture.NewRecorder(storage, capture.Options{Mode: domain.ModelRequestCaptureFull}))
-			runtime := NewRuntime(RuntimeOptions{Store: storage, ModelClient: client, EmbeddingClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 12, MaxToolCalls: 4, MaxRuntimeMS: 10000}, Autonomous: AutonomousLimits{MaxIterations: 1}})
+			runtime := newRuntimeForTest(RuntimeOptions{Store: storage, EmbeddingClient: newLocalFallbackOpenAIClientForTest(), RouterMode: RouterModeQuery, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 12, MaxToolCalls: 4, MaxRuntimeMS: 10000}, Autonomous: AutonomousLimits{MaxIterations: 1}}, client)
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			const task = "Use calculator to calculate 1 + 1, then add 3 to that result."

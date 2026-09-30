@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"agentflow-platform/apps/api/app/runcompletion"
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
@@ -230,7 +231,7 @@ func TestResolveRunCompletionMarksVerificationInfrastructureFailureBlocked(t *te
 	handler, workspace, run, _ := newBoundaryRunningRun(t, contract)
 	handler.verification = verification.NewEngine(nil, nil)
 
-	if _, err := handler.resolveRunCompletion(context.Background(), workspace, run.ID, "question", "answer"); err == nil {
+	if _, err := runcompletion.Resolve(context.Background(), workspace, handler.completionDependencies(), run.ID, "question", "answer"); err == nil {
 		t.Fatal("expected verification infrastructure failure")
 	}
 	updated, ok, err := workspace.GetRun(run.ID)
@@ -301,7 +302,7 @@ func newBoundaryRunningRun(t *testing.T, contract *domain.CompletionContract) (*
 	if _, err := fixtureStore.UpdateRunStatus(run.ID, domain.RunRunning, ""); err != nil {
 		t.Fatalf("start run: %v", err)
 	}
-	runtime := agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
+	runtime := newRuntimeForTest(agentpkg.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
 	return &Handler{store: httpStore, agentRuntime: runtime}, workspace, run, conversation
 }
 

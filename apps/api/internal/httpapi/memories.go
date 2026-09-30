@@ -3,9 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
-	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
@@ -62,19 +60,4 @@ func (h *Handler) searchMemories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, items)
-}
-
-func (h *Handler) syncMemoryTurn(message domain.Message, runID string) {
-	if h.memories == nil {
-		return
-	}
-	idempotencyKey := ""
-	if messageID := strings.TrimSpace(message.ID); messageID != "" {
-		idempotencyKey = "message:" + messageID
-	}
-	if err := h.memories.SyncTurn(memorypkg.TurnSyncRequest{
-		RunID: strings.TrimSpace(runID), IdempotencyKey: idempotencyKey, Message: message,
-	}); err != nil {
-		log.Printf("memory_turn_sync_rejected run_id=%s message_id=%s error=%q", runID, message.ID, err.Error())
-	}
 }

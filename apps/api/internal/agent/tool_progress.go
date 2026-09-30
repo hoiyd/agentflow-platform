@@ -11,17 +11,16 @@ import (
 // are the durable source used after a process restart; in-process Turns reuse
 // the same instance across Single, Multi-Agent, and Autonomous execution.
 func (r *Runtime) progressGuardForRun(runID string, snapshot *domain.RuntimeSnapshot) (*progress.Guard, error) {
+	if err := validateRuntimeSnapshot(snapshot); err != nil {
+		return nil, err
+	}
 	r.toolProgressMu.Lock()
 	defer r.toolProgressMu.Unlock()
 	if guard := r.toolProgressGuards[runID]; guard != nil {
 		return guard, nil
 	}
 
-	config := progress.DisabledConfig()
-	if snapshot != nil && snapshot.SchemaVersion >= domain.ToolProgressRuntimeSnapshotVersion {
-		config = snapshot.ToolProgressGuard
-	}
-	guard := progress.New(config)
+	guard := progress.New(snapshot.ToolProgressGuard)
 	events, err := r.store.ListRunEvents(runID)
 	if err != nil {
 		return nil, fmt.Errorf("restore Tool Progress Guard for run %s: %w", runID, err)
