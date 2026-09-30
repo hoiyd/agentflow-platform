@@ -203,12 +203,7 @@ func newPipelineRegressionFixtureWithSearchStore(t *testing.T, searchStore rag.S
 	pipeline := rag.NewRetrievalPipeline(searchStore)
 	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(fullStore, client, pipeline)
 	dependencies.Knowledge = knowledgeBase
-	dependencies.AgentRuntime = agentpkg.NewRuntime(agentpkg.RuntimeOptions{
-		Store:              fullStore,
-		ModelClient:        client,
-		KnowledgeRetriever: pipeline,
-		Autonomous:         agentpkg.AutonomousLimits{MaxIterations: 1},
-	})
+	dependencies.AgentRuntime = newRuntimeForTest(agentpkg.RuntimeOptions{Store: fullStore, KnowledgeRetriever: pipeline, Autonomous: agentpkg.AutonomousLimits{MaxIterations: 1}}, client)
 	handler, err := NewHandler(dependencies)
 	if err != nil {
 		t.Fatalf("new handler: %v", err)

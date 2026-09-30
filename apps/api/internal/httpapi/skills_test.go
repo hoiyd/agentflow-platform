@@ -37,7 +37,7 @@ func TestSkillCatalogAndAgentBindingAPI(t *testing.T) {
 	dependencies := completeHandlerDependencies(t)
 	storage := fullStoreForTest(t, dependencies)
 	dependencies.Skills = catalog
-	dependencies.AgentRuntime = agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: storage, Skills: catalog})
+	dependencies.AgentRuntime = newRuntimeForTest(agentpkg.RuntimeOptions{Store: storage, Skills: catalog}, nil)
 	handler, err := NewHandler(dependencies)
 	if err != nil {
 		t.Fatal(err)

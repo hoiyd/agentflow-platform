@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/credential"
@@ -24,7 +25,9 @@ import (
 	"agentflow-platform/apps/api/internal/recovery"
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/artifact"
 	"agentflow-platform/apps/api/internal/tool/progress"
 	"agentflow-platform/apps/api/internal/verification"
 )
@@ -128,7 +131,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		return agentRuntime.ModelClientForRun(runID)
 	})
 
-	agentRuntime = agent.NewRuntime(agent.RuntimeOptions{
+	agentRuntime, err = agent.NewRuntime(agent.RuntimeOptions{
 		Store:           appStore,
 		EmbeddingClient: embeddingClient,
 		ModelRoutes:     modelRoutes,
@@ -163,11 +166,17 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			HaltAfter: cfg.ToolProgressHaltAfter, HistoryMax: 8,
 		},
 		KnowledgeRetriever: retrievalPipeline,
-		Knowledge:          knowledgeBase,
+		KnowledgeTools:     knowledgeBase.ToolBindings(appStore),
+		TaskStates:         taskstate.NewService(appStore, event.StoreSink{Store: appStore}),
+		ToolArtifacts:      artifact.NewService(appStore, event.NewRecorder(appStore)),
+		CheckpointProvider: checkpoint.NewInternalProvider(appStore),
 		Skills:             skills,
 		MemoryRecall:       memoryProvider,
 		LiveEvents:         eventHub,
 	})
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("create runtime: %w", err)
+	}
 	if err := memoryProvider.Initialize(context.Background()); err != nil {
 		return applicationDependencies{}, fmt.Errorf("initialize memory provider: %w", err)
 	}

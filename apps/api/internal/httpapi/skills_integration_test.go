@@ -128,7 +128,7 @@ func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
 			client := openai.NewClientWithTimeoutAndEmbeddingModel("fixture-not-a-secret", server.URL, server.URL, "skill-fixture", "embedding-fixture", 2, 2*time.Second)
 			client.SetRequestRecorder(capture.NewRecorder(storage, capture.Options{Mode: domain.ModelRequestCaptureFull}))
 			dependencies.Skills = catalog
-			dependencies.AgentRuntime = agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: storage, ModelClient: client, Skills: catalog, RouterMode: agentpkg.RouterModeQuery, Autonomous: agentpkg.AutonomousLimits{MaxIterations: 1}, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 16, MaxToolCalls: 4, MaxRuntimeMS: 20000}})
+			dependencies.AgentRuntime = newRuntimeForTest(agentpkg.RuntimeOptions{Store: storage, Skills: catalog, RouterMode: agentpkg.RouterModeQuery, Autonomous: agentpkg.AutonomousLimits{MaxIterations: 1}, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 16, MaxToolCalls: 4, MaxRuntimeMS: 20000}}, client)
 			handler, err := NewHandler(dependencies)
 			if err != nil {
 				t.Fatal(err)

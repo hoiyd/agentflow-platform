@@ -3,13 +3,14 @@ package agent
 import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/testsupport/modelroute"
 	"agentflow-platform/apps/api/internal/tool/policy"
 	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
 func testRuntimeSnapshot() domain.RuntimeSnapshot {
 	client := newLocalFallbackOpenAIClientForTest()
-	catalog, err := singleModelRouteCatalog(client, domain.ContextAssemblyConfig{}, domain.RuntimeRunBudget{})
+	catalog, err := modelroute.Catalog(client, domain.ContextAssemblyConfig{}, domain.RuntimeRunBudget{})
 	if err != nil {
 		panic(err)
 	}

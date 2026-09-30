@@ -18,7 +18,6 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/inference/routing"
-	"agentflow-platform/apps/api/internal/knowledge"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/skill"
@@ -33,7 +32,6 @@ type Runtime struct {
 	store                 RuntimeStore
 	embeddingClient       provider.Client
 	modelRoutes           *routing.Catalog
-	modelRoutesErr        error
 	tools                 *tool.Manager
 	trace                 *eventpkg.Recorder
 	turnEngine            *turnpkg.Engine
@@ -100,10 +98,7 @@ type PreparedRun struct {
 // RuntimeOptions captures the complete runtime policy at construction time so
 // new Runs can freeze one coherent snapshot without post-construction setters.
 type RuntimeOptions struct {
-	Store RuntimeStore
-	// ModelClient is a one-route compatibility shorthand for existing tests.
-	// Production composition supplies ModelRoutes and EmbeddingClient separately.
-	ModelClient        provider.Client
+	Store              RuntimeStore
 	EmbeddingClient    provider.Client
 	ModelRoutes        *routing.Catalog
 	Tools              *tool.Manager
@@ -114,23 +109,31 @@ type RuntimeOptions struct {
 	ToolProgressGuard  progress.Config
 	ToolExecution      tool.ExecutorOptions
 	KnowledgeRetriever rag.Retriever
-	// Knowledge supplies scoped, read-only harness bindings when installed.
-	Knowledge          *knowledge.KnowledgeBase
+	// Optional capabilities are injected explicitly; nil disables their surface.
+	TaskStates         *taskstate.Service
+	ToolArtifacts      *artifact.Service
+	KnowledgeTools     []tool.Binding
 	Skills             *skill.Catalog
 	CheckpointProvider checkpoint.Provider
 	LiveEvents         eventpkg.LivePublisher
 	MemoryRecall       memorypkg.Recaller
 }
 
-func NewRuntime(options RuntimeOptions) *Runtime {
-	modelRoutes := options.ModelRoutes
-	var modelRoutesErr error
-	if modelRoutes == nil {
-		modelRoutes, modelRoutesErr = singleModelRouteCatalog(options.ModelClient, options.ContextAssembly, options.RunBudget)
+func NewRuntime(options RuntimeOptions) (*Runtime, error) {
+	if options.Store == nil {
+		return nil, errors.New("runtime Store is required")
 	}
-	embeddingClient := options.EmbeddingClient
-	if embeddingClient == nil {
-		embeddingClient = options.ModelClient
+	if options.ModelRoutes == nil || len(options.ModelRoutes.Descriptors()) == 0 {
+		return nil, errors.New("runtime model route catalog is required")
+	}
+	if options.EmbeddingClient == nil {
+		return nil, errors.New("runtime embedding client is required")
+	}
+	if options.Tools == nil {
+		return nil, errors.New("runtime Tool manager is required")
+	}
+	if options.CheckpointProvider == nil {
+		return nil, errors.New("runtime checkpoint provider is required")
 	}
 	progressConfig := options.ToolProgressGuard
 	if strings.TrimSpace(progressConfig.Version) == "" {
@@ -138,33 +141,10 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 	} else {
 		progressConfig = progress.NormalizeConfig(progressConfig)
 	}
-	knowledgeRetriever := options.KnowledgeRetriever
-	if knowledgeRetriever == nil {
-		if searchStore, ok := options.Store.(rag.SearchStore); ok {
-			knowledgeRetriever = rag.NewRetrievalPipeline(searchStore)
-		}
-	}
-	checkpointProvider := options.CheckpointProvider
-	if checkpointProvider == nil {
-		checkpointProvider = checkpoint.NewInternalProvider(options.Store)
-	}
-	var taskStates *taskstate.Service
-	if taskStore, ok := options.Store.(taskstate.Store); ok {
-		taskStates = taskstate.NewService(taskStore, eventpkg.StoreSink{Store: options.Store})
-	}
-	var toolArtifacts *artifact.Service
-	if artifactStore, ok := options.Store.(store.ToolArtifactStore); ok {
-		toolArtifacts = artifact.NewService(artifactStore, tracepkg.NewRecorder(options.Store))
-	}
-	var knowledgeTools []tool.Binding
-	if storage, ok := options.Store.(knowledge.ToolStore); ok && options.Knowledge != nil {
-		knowledgeTools = options.Knowledge.ToolBindings(storage)
-	}
 	runtime := &Runtime{
 		store:                 options.Store,
-		embeddingClient:       embeddingClient,
-		modelRoutes:           modelRoutes,
-		modelRoutesErr:        modelRoutesErr,
+		embeddingClient:       options.EmbeddingClient,
+		modelRoutes:           options.ModelRoutes,
 		tools:                 options.Tools,
 		trace:                 tracepkg.NewRecorder(options.Store),
 		routerMode:            NormalizeRouterMode(options.RouterMode),
@@ -175,18 +155,18 @@ func NewRuntime(options RuntimeOptions) *Runtime {
 		toolProgressConfig:    progressConfig,
 		toolExecutionOptions:  options.ToolExecution,
 		toolProgressGuards:    map[string]*progress.Guard{},
-		knowledgeRetriever:    knowledgeRetriever,
-		knowledgeTools:        knowledgeTools,
+		knowledgeRetriever:    options.KnowledgeRetriever,
+		knowledgeTools:        options.KnowledgeTools,
 		skills:                options.Skills,
 		skillService:          skill.NewService(options.Store),
-		checkpoints:           checkpointProvider,
-		taskStates:            taskStates,
-		toolArtifacts:         toolArtifacts,
+		checkpoints:           options.CheckpointProvider,
+		taskStates:            options.TaskStates,
+		toolArtifacts:         options.ToolArtifacts,
 		liveEvents:            options.LiveEvents,
 		memoryRecall:          options.MemoryRecall,
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
-	return runtime
+	return runtime, nil
 }
 
 func DefaultAutonomousLimits() AutonomousLimits {

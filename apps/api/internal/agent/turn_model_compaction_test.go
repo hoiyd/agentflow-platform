@@ -69,7 +69,7 @@ func TestRuntimeTurnModelRetriesTextOverflowOnlyAfterGenerationAdvances(t *testi
 		_, _ = fixtureStore.AddMessage(conversation.ID, role, "compactable historical context")
 	}
 	history, _ := fixtureStore.ListMessages(conversation.ID)
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client, ContextAssembly: config})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, ContextAssembly: config}, client)
 	result, err := (runtimeTurnModel{runtime: runtime}).Execute(context.Background(), turn.Request{
 		RunID: run.ID, TurnID: "turn-overflow-1", ConversationID: conversation.ID,
 		Agent: domain.Agent{ID: "agent_planner", SystemPrompt: "help", Executor: domain.DefaultAgentExecutor},
@@ -99,7 +99,7 @@ func TestRuntimeTurnModelDoesNotRetryOverflowWhenCompactionFails(t *testing.T) {
 		_, _ = fixtureStore.AddMessage(conversation.ID, "user", "compactable historical context")
 	}
 	history, _ := fixtureStore.ListMessages(conversation.ID)
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: client, ContextAssembly: config})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, ContextAssembly: config}, client)
 	_, err := (runtimeTurnModel{runtime: runtime}).Execute(context.Background(), turn.Request{
 		RunID: run.ID, TurnID: "turn-overflow-failed", ConversationID: conversation.ID,
 		Agent: domain.Agent{ID: "agent_planner", SystemPrompt: "help", Executor: domain.DefaultAgentExecutor},
@@ -132,9 +132,7 @@ func TestCompactContextBestEffortReturnsSuccessAndSuppressesFailure(t *testing.T
 		for index := 0; index < 8; index++ {
 			_, _ = fixtureStore.AddMessage(conversation.ID, "user", "compactable context repeated several times")
 		}
-		runtime := NewRuntime(RuntimeOptions{
-			Store: fixtureStore, ModelClient: client, ContextAssembly: config,
-		})
+		runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, ContextAssembly: config}, client)
 		return runtime, fixtureStore, run, client
 	}
 
@@ -180,7 +178,7 @@ func (c *overflowRecoveryClient) WithRuntimeIdentity(provider.RuntimeIdentity) p
 
 func setOverflowModelSnapshot(t *testing.T, snapshot *domain.RuntimeSnapshot, client provider.Client, config domain.ContextAssemblyConfig) {
 	t.Helper()
-	runtime := NewRuntime(RuntimeOptions{ModelClient: client, ContextAssembly: config})
+	runtime := newRuntimeForTest(RuntimeOptions{ContextAssembly: config}, client)
 	modelRouting, err := runtime.captureModelRoutingSnapshot()
 	if err != nil {
 		t.Fatal(err)

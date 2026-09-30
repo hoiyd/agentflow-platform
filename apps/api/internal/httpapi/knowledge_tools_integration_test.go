@@ -119,7 +119,7 @@ func TestScopedKnowledgeToolsSearchReadCitedAnswerAcrossModes(t *testing.T) {
 				}
 			}
 			dependencies.Knowledge = base
-			dependencies.AgentRuntime = agentpkg.NewRuntime(agentpkg.RuntimeOptions{Store: storage, ModelClient: client, EmbeddingClient: client, Knowledge: base, KnowledgeRetriever: rag.NewRetrievalPipeline(storage), RouterMode: agentpkg.RouterModeQuery, Autonomous: agentpkg.AutonomousLimits{MaxIterations: 1}, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 16, MaxToolCalls: 4, MaxRuntimeMS: 20000}})
+			dependencies.AgentRuntime = newRuntimeForTest(agentpkg.RuntimeOptions{Store: storage, EmbeddingClient: client, KnowledgeTools: base.ToolBindings(storage), KnowledgeRetriever: rag.NewRetrievalPipeline(storage), RouterMode: agentpkg.RouterModeQuery, Autonomous: agentpkg.AutonomousLimits{MaxIterations: 1}, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 16, MaxToolCalls: 4, MaxRuntimeMS: 20000}}, client)
 			handler, err := NewHandler(dependencies)
 			if err != nil {
 				t.Fatal(err)

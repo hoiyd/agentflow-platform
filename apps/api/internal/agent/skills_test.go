@@ -38,7 +38,7 @@ func TestSkillSnapshotPreservesMethodsWithoutExpandingTools(t *testing.T) {
 	}
 	storage := fixturestore.New()
 	client := openai.NewClientWithTimeoutAndEmbeddingModel("fixture-key", "http://localhost:1234/v1", "http://localhost:1234/v1", "fixture-model", "fixture-embedding", 3, time.Second)
-	runtime := NewRuntime(RuntimeOptions{Store: storage, ModelClient: client, Skills: catalog})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: storage, Skills: catalog}, client)
 	agent, err := storage.CreateAgent(domain.Agent{Name: "Skill Agent", Skills: []string{"trusted-method"}})
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +63,7 @@ func TestSkillSnapshotPreservesMethodsWithoutExpandingTools(t *testing.T) {
 	if err := os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
-	restarted := NewRuntime(RuntimeOptions{Store: storage, ModelClient: client})
+	restarted := newRuntimeForTest(RuntimeOptions{Store: storage}, client)
 	restored, err := restarted.restoreRuntime(prepared.Run)
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +160,7 @@ func TestSkillResumeExecutesFrozenMethodAfterDirectoryRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := openai.NewClientWithTimeoutAndEmbeddingModel("fixture-not-a-secret", server.URL, server.URL, "resume-fixture", "embedding-fixture", 2, time.Second)
-	runtime := NewRuntime(RuntimeOptions{Store: storage, ModelClient: client, Skills: catalog, RouterMode: RouterModeQuery})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: storage, Skills: catalog, RouterMode: RouterModeQuery}, client)
 	conversation, err := storage.CreateConversation("skill recovery")
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +194,7 @@ func TestSkillResumeExecutesFrozenMethodAfterDirectoryRemoved(t *testing.T) {
 	if _, err := storage.UpdateAgent(agent); err != nil {
 		t.Fatal(err)
 	}
-	restarted := NewRuntime(RuntimeOptions{Store: storage, ModelClient: client, RouterMode: RouterModeQuery})
+	restarted := newRuntimeForTest(RuntimeOptions{Store: storage, RouterMode: RouterModeQuery}, client)
 	events, errs := restarted.ResumeRecoverableCollaboration(t.Context(), prepared.Run.ID)
 	for range events {
 	}

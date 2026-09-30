@@ -117,6 +117,13 @@ app
 
 `app` is the composition root. It creates every long-lived service and concrete adapter, applies runtime policies, injects a complete dependency set into the HTTP handler, owns the HTTP server, and closes background work before persistence.
 
+`agent.NewRuntime` accepts the same explicit `RuntimeOptions` in production and
+tests and returns a construction error when Store, model routes, embedding
+client, Tool manager, or checkpoint provider is missing. `app` installs Task
+State, Artifact, Knowledge read bindings, and retrieval explicitly; nil optional
+capabilities are not inferred from the Store implementation. Single-model
+shortcuts and fixture wiring live only in test support, never in production options.
+
 `internal` is Go's module-private visibility boundary, not a lower architectural layer. Keeping product implementation under `internal` prevents other modules from accidentally depending on unstable backend packages. Packages inside it should continue to expose the smallest interfaces required by their consumers.
 
 For agent turns, `agent/toolloop` sequences model decisions, guarded

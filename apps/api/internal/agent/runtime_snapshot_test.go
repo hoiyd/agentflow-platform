@@ -39,15 +39,10 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 		"do-not-persist-this-key", "https://user:password@openrouter.ai/api/v1?token=private", "http://localhost:11434/api/embed",
 		"test-model-v1", "embedding-v1", 1536, time.Second,
 	)
-	runtime := NewRuntime(RuntimeOptions{
-		Store: fixtureStore, ModelClient: client, Tools: manager,
-		RunBudget:         domain.RuntimeRunBudget{MaxModelCalls: 12, MaxRuntimeMS: 90_000, MaxToolCalls: 7},
-		ToolProgressGuard: progress.DefaultConfig(),
-		ContextAssembly: domain.ContextAssemblyConfig{
-			AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 32000, OutputReserveTokens: 2048,
-			SafetyMarginTokens: 1024, HistoryMaxTokens: 12000, MemoryMaxTokens: 2000, KnowledgeMaxTokens: 4000,
-		},
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, Tools: manager, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 12, MaxRuntimeMS: 90_000, MaxToolCalls: 7}, ToolProgressGuard: progress.DefaultConfig(), ContextAssembly: domain.ContextAssemblyConfig{
+		AssemblerVersion: "context-assembler-v1", ContextWindowTokens: 32000, OutputReserveTokens: 2048,
+		SafetyMarginTokens: 1024, HistoryMaxTokens: 12000, MemoryMaxTokens: 2000, KnowledgeMaxTokens: 4000,
+	}}, client)
 	agent, err := fixtureStore.CreateAgent(domain.Agent{
 		Name: "Frozen agent", SystemPrompt: "original prompt", Tools: []string{"calculator"},
 		RoutingHints:  domain.AgentRoutingHints{Capabilities: []string{"original capability"}},
@@ -184,7 +179,7 @@ func TestFrozenToolRequiresRuntimePrerequisitesOnResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixtureStore := fixturestore.New()
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest(), Tools: ready})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore, Tools: ready}, newLocalFallbackOpenAIClientForTest())
 	agent, err := fixtureStore.CreateAgent(domain.Agent{Name: "Research", Tools: []string{"web_search"}})
 	if err != nil {
 		t.Fatal(err)
@@ -245,7 +240,7 @@ func TestV14MultiAgentSnapshotIsReplayOnly(t *testing.T) {
 	snapshot.Mode = ChatModeMultiAgent
 	snapshot.AutonomousLimits = nil
 	snapshot.CandidateAgents = []domain.RuntimeAgentSnapshot{{ID: "worker", Executor: domain.DefaultAgentExecutor}}
-	runtime := NewRuntime(RuntimeOptions{Store: fixturestore.New(), ModelClient: newLocalFallbackOpenAIClientForTest()})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixturestore.New()}, newLocalFallbackOpenAIClientForTest())
 	_, err := runtime.restoreRuntime(domain.Run{ID: "run_v14", RuntimeSnapshot: &snapshot})
 	if !errors.Is(err, ErrRuntimeSnapshotResumeUnsupported) {
 		t.Fatalf("v14 snapshot should be replay-only, got %v", err)
@@ -359,16 +354,12 @@ func TestEffectiveAutonomousRunBudgetUsesStricterModeProfile(t *testing.T) {
 }
 
 func TestCaptureAutonomousSnapshotStoresRuntimeAndToolsOnlyInRunBudget(t *testing.T) {
-	runtime := NewRuntime(RuntimeOptions{
-		ModelClient: openai.NewClient("", "", "test-model"),
-		Autonomous: AutonomousLimits{
-			MaxIterations: 5, MaxRuntime: 5 * time.Minute,
-			MaxOutputChars: 1000, MaxToolCalls: 20,
-		},
-		RunBudget: domain.RuntimeRunBudget{
-			MaxRuntimeMS: (15 * time.Minute).Milliseconds(), MaxToolCalls: 50,
-		},
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Autonomous: AutonomousLimits{
+		MaxIterations: 5, MaxRuntime: 5 * time.Minute,
+		MaxOutputChars: 1000, MaxToolCalls: 20,
+	}, RunBudget: domain.RuntimeRunBudget{
+		MaxRuntimeMS: (15 * time.Minute).Milliseconds(), MaxToolCalls: 50,
+	}}, openai.NewClient("", "", "test-model"))
 	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeAutonomous, domain.Agent{ID: "agent"}, nil)
 	if err != nil {
 		t.Fatalf("capture snapshot: %v", err)
@@ -424,7 +415,7 @@ func TestRestoreRuntimeRejectsReplayOnlySnapshotWithTypedError(t *testing.T) {
 func TestEmbeddingClientForRunRejectsMissingSnapshot(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: openai.NewClient("", "", "test")})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: fixtureStore}, openai.NewClient("", "", "test"))
 
 	if _, err := runtime.embeddingClientForRun("missing"); !errors.Is(err, ErrRuntimeSnapshotUnavailable) {
 		t.Fatalf("expected missing snapshot error, got %v", err)

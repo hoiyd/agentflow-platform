@@ -24,10 +24,7 @@ func TestFrozenModelCatalogIgnoresLaterRoutesAndRetainsIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := NewRuntime(RuntimeOptions{
-		EmbeddingClient: original.Client, ModelRoutes: originalCatalog,
-		ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100},
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{EmbeddingClient: original.Client, ModelRoutes: originalCatalog, ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}}, nil)
 	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeSingle, domain.Agent{ID: "agent"}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -84,8 +81,7 @@ func TestRestoredRunUsesFrozenSamplingAfterRouteConfigChanges(t *testing.T) {
 	if sent["temperature"] != 0.1 || sent["top_p"] != 0.8 {
 		t.Fatalf("initial route ignored configured sampling: %#v", sent)
 	}
-	runtime := NewRuntime(RuntimeOptions{EmbeddingClient: client, ModelRoutes: original,
-		ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}})
+	runtime := newRuntimeForTest(RuntimeOptions{EmbeddingClient: client, ModelRoutes: original, ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}}, nil)
 	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeSingle, domain.Agent{ID: "agent"}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -137,8 +133,7 @@ func TestTextOnlyRouteDoesNotInjectHarnessTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := NewRuntime(RuntimeOptions{EmbeddingClient: binding.Client, ModelRoutes: catalog,
-		ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}})
+	runtime := newRuntimeForTest(RuntimeOptions{EmbeddingClient: binding.Client, ModelRoutes: catalog, ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}}, nil)
 	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeMultiAgent, domain.Agent{ID: "agent"}, []domain.Agent{{ID: "candidate"}})
 	if err != nil {
 		t.Fatal(err)
@@ -165,10 +160,7 @@ func TestModelRouteDecisionRecordsNoCandidateEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := NewRuntime(RuntimeOptions{
-		EmbeddingClient: binding.Client, ModelRoutes: catalog,
-		ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100},
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{EmbeddingClient: binding.Client, ModelRoutes: catalog, ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}}, nil)
 	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeSingle, domain.Agent{ID: "agent"}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +236,7 @@ func TestRuntimeTurnModelRoutesCallsAcrossProviders(t *testing.T) {
 	store := fixturestore.New()
 	conversation, _ := store.CreateConversation("model routing")
 	config := domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100, SafetyMarginTokens: 50}
-	runtime := NewRuntime(RuntimeOptions{Store: store, EmbeddingClient: newLocalFallbackOpenAIClientForTest(), ModelRoutes: catalog, ContextAssembly: config})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: store, EmbeddingClient: newLocalFallbackOpenAIClientForTest(), ModelRoutes: catalog, ContextAssembly: config}, nil)
 	agent, err := store.CreateAgent(domain.Agent{Name: "Routing agent", SystemPrompt: "help"})
 	if err != nil {
 		t.Fatal(err)
@@ -291,10 +283,7 @@ func TestRunKeepsFirstSelectedModelRoute(t *testing.T) {
 	}
 	store := fixturestore.New()
 	conversation, _ := store.CreateConversation("route affinity")
-	runtime := NewRuntime(RuntimeOptions{
-		Store: store, EmbeddingClient: newLocalFallbackOpenAIClientForTest(), ModelRoutes: catalog,
-		ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100},
-	})
+	runtime := newRuntimeForTest(RuntimeOptions{Store: store, EmbeddingClient: newLocalFallbackOpenAIClientForTest(), ModelRoutes: catalog, ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}}, nil)
 	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeSingle, domain.Agent{ID: "agent"}, nil)
 	if err != nil {
 		t.Fatal(err)
