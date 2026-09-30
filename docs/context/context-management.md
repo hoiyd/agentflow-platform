@@ -46,6 +46,21 @@ Every assembly emits a Context Manifest containing source IDs, selection
 reasons, transformations, token estimates, and a stable prefix hash without
 copying raw dynamic context into the event.
 
+### Complete Message Protocol
+
+Context Assembly uses the same `provider.Message` contract as the model
+adapter. It selects and budgets complete messages instead of translating a
+second message schema or round-tripping Tool Calls through JSON. `Source` and
+`ReferenceID` are provenance metadata excluded from the model's wire payload.
+Assembly works on isolated copies of Tool Calls and continuation pointers.
+
+Supported non-display fields, including `reasoning_content` and `refusal`, are
+retained and counted in the input budget; absent and explicitly empty reasoning
+remain distinct. Ordinary tracing removes reasoning from a copy, never from the
+outgoing request. Content retention remains governed by Request Capture, not
+by the Manifest. This preserves existing provider contracts; it does not add
+support for arbitrary provider extensions or expose reasoning in Chat.
+
 Selected recalled Memory is JSON-encoded inside
 `<untrusted_memory_context policy="recalled-memory-trust-v1">`. The system
 policy treats it as historical data rather than instructions: it cannot

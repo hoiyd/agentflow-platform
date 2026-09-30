@@ -23,7 +23,7 @@ func safetyFixture(t *testing.T, callbacks tool.SideEffectReconciliation) (Store
 	t.Helper()
 	binding := tool.Binding{
 		Descriptor: tool.Descriptor{Name: "write_record", Description: "writes a record", Parameters: tool.ObjectSchema(nil, nil),
-			SideEffect: tool.SideEffectPolicy{Mode: tool.SideEffectExternal, RetryWithSameKey: callbacks.RetryWithSameKey != nil, Compensate: callbacks.Compensate != nil},
+			SideEffect: tool.SideEffectPolicy{RetryWithSameKey: callbacks.RetryWithSameKey != nil, Compensate: callbacks.Compensate != nil},
 			Security:   policy.NormalizeCapability(policy.Capability{SideEffect: policy.SideEffectExternalWrite, Reversibility: policy.Compensatable}),
 		},
 		Handler:        func(context.Context, json.RawMessage) (any, error) { return nil, nil },

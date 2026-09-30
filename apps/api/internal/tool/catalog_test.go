@@ -2,6 +2,8 @@ package tool
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"testing"
 
@@ -43,16 +45,67 @@ func TestCatalogKeepsDescriptorSeparateFromBinding(t *testing.T) {
 	}
 }
 
+func TestCatalogDerivesJournalFromSecurity(t *testing.T) {
+	for _, class := range []policy.SideEffectClass{policy.SideEffectNone, policy.SideEffectInternalWrite, policy.SideEffectExternalWrite, policy.SideEffectDestructive} {
+		t.Run(string(class), func(t *testing.T) {
+			binding := Binding{Descriptor: Descriptor{Name: "classified", Parameters: ObjectSchema(nil, nil), Security: policy.Capability{SideEffect: class}},
+				Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil }}
+			if _, err := NewCatalog(binding); err != nil {
+				t.Fatalf("one authoritative security classification must suffice: %v", err)
+			}
+		})
+	}
+}
+
+func TestDerivedJournalPreservesFrozenDefinition(t *testing.T) {
+	for _, test := range []struct {
+		class policy.SideEffectClass
+		mode  string
+	}{{policy.SideEffectNone, ""}, {policy.SideEffectInternalWrite, "internal"}, {policy.SideEffectExternalWrite, "external"}, {policy.SideEffectDestructive, "external"}} {
+		t.Run(string(test.class), func(t *testing.T) {
+			catalog, err := NewCatalog(Binding{Descriptor: Descriptor{Name: "frozen", Parameters: ObjectSchema(nil, nil), Security: policy.Capability{SideEffect: test.class}},
+				Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil }})
+			if err != nil {
+				t.Fatal(err)
+			}
+			binding, _ := catalog.Installed("frozen")
+			d := binding.Descriptor
+			// This is the pre-refactor digest's wire shape and field order, not
+			// the new implementation's serializer. Existing frozen Runs must match.
+			legacy := struct {
+				SchemaVersion string            `json:"schema_version"`
+				Name          string            `json:"name"`
+				Description   string            `json:"description"`
+				Parameters    map[string]any    `json:"parameters"`
+				Concurrency   ConcurrencyPolicy `json:"concurrency"`
+				SideEffect    struct {
+					Mode string `json:"mode,omitempty"`
+				} `json:"side_effect"`
+				Security policy.Capability `json:"security"`
+			}{SchemaVersion: d.SchemaVersion, Name: d.Name, Description: d.Description, Parameters: d.Parameters, Concurrency: d.Concurrency, Security: d.Security}
+			legacy.SideEffect.Mode = test.mode
+			encoded, err := json.Marshal(legacy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			digest := sha256.Sum256(encoded)
+			if d.DefinitionRevision != "sha256:"+hex.EncodeToString(digest[:]) {
+				t.Fatalf("frozen definition drifted for %s: %s", test.class, d.DefinitionRevision)
+			}
+		})
+	}
+}
+
 func TestCatalogRequiresFrozenReconciliationCapabilityToMatchCallbacks(t *testing.T) {
 	handler := func(context.Context, json.RawMessage) (any, error) { return nil, nil }
 	retry := func(context.Context, EffectReconciliationContext) (any, error) { return nil, nil }
 	compensate := func(context.Context, EffectReconciliationContext) error { return nil }
 	tests := []Binding{
 		{Descriptor: Descriptor{Name: "non_external", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{RetryWithSameKey: true}}, Handler: handler, Reconciliation: SideEffectReconciliation{RetryWithSameKey: retry}},
-		{Descriptor: Descriptor{Name: "callback_without_capability", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal}, Security: externalCapability(policy.Compensatable)}, Handler: handler, Reconciliation: SideEffectReconciliation{RetryWithSameKey: retry}},
-		{Descriptor: Descriptor{Name: "capability_without_callback", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal, RetryWithSameKey: true}, Security: externalCapability(policy.Compensatable)}, Handler: handler},
-		{Descriptor: Descriptor{Name: "compensation_without_callback", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal, Compensate: true}, Security: externalCapability(policy.Compensatable)}, Handler: handler},
-		{Descriptor: Descriptor{Name: "irreversible_compensation", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: SideEffectExternal, Compensate: true}, Security: externalCapability(policy.Irreversible)}, Handler: handler, Reconciliation: SideEffectReconciliation{Compensate: compensate}},
+		{Descriptor: Descriptor{Name: "callback_without_capability", Parameters: ObjectSchema(nil, nil), Security: externalCapability(policy.Compensatable)}, Handler: handler, Reconciliation: SideEffectReconciliation{RetryWithSameKey: retry}},
+		{Descriptor: Descriptor{Name: "capability_without_callback", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{RetryWithSameKey: true}, Security: externalCapability(policy.Compensatable)}, Handler: handler},
+		{Descriptor: Descriptor{Name: "compensation_without_callback", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Compensate: true}, Security: externalCapability(policy.Compensatable)}, Handler: handler},
+		{Descriptor: Descriptor{Name: "irreversible_compensation", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Compensate: true}, Security: externalCapability(policy.Irreversible)}, Handler: handler, Reconciliation: SideEffectReconciliation{Compensate: compensate}},
 	}
 	for _, binding := range tests {
 		if _, err := NewCatalog(binding); err == nil {
@@ -65,7 +118,7 @@ func TestReconciliationCapabilityChangesDefinitionRevision(t *testing.T) {
 	handler := func(context.Context, json.RawMessage) (any, error) { return nil, nil }
 	descriptor := Descriptor{
 		Name: "writer", Parameters: ObjectSchema(nil, nil),
-		SideEffect: SideEffectPolicy{Mode: SideEffectExternal}, Security: externalCapability(policy.Compensatable),
+		Security: externalCapability(policy.Compensatable),
 	}
 	without, err := NewCatalog(Binding{Descriptor: descriptor, Handler: handler})
 	if err != nil {
@@ -86,30 +139,12 @@ func TestReconciliationCapabilityChangesDefinitionRevision(t *testing.T) {
 	}
 }
 
-func TestCatalogRejectsInvalidSideEffectModes(t *testing.T) {
-	// Cover both directions: a write cannot omit its journal, and a journal
-	// mode cannot contradict security classification. Valid pairs still register.
-	for _, test := range []struct {
-		class policy.SideEffectClass
-		mode  SideEffectMode
-	}{
-		{policy.SideEffectNone, SideEffectNone},
-		{policy.SideEffectInternalWrite, SideEffectInternal},
-		{policy.SideEffectExternalWrite, SideEffectExternal},
-		{policy.SideEffectDestructive, SideEffectExternal},
-	} {
-		for _, mode := range []SideEffectMode{"", SideEffectNone, SideEffectInternal, SideEffectExternal, "unsupported"} {
-			t.Run(string(test.class)+"/mode="+string(mode), func(t *testing.T) {
-				_, err := NewCatalog(Binding{
-					Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil),
-						SideEffect: SideEffectPolicy{Mode: mode}, Security: policy.Capability{SideEffect: test.class}},
-					Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil },
-				})
-				allowed := mode == test.mode || mode == "" && test.mode == SideEffectNone
-				if (err == nil) != allowed {
-					t.Fatalf("registration allowed=%v, want %v: %v", err == nil, allowed, err)
-				}
-			})
+func TestCatalogRejectsInvalidSideEffectClasses(t *testing.T) {
+	for _, class := range []policy.SideEffectClass{"", "internal", "external", "unsupported"} {
+		_, err := NewCatalog(Binding{Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), Security: policy.Capability{SideEffect: class}},
+			Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil }})
+		if (err == nil) != (class == "") {
+			t.Fatalf("class=%q: only omitted read-only defaults are valid: %v", class, err)
 		}
 	}
 }

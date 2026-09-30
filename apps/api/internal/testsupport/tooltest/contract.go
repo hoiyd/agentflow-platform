@@ -103,7 +103,7 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 		})
 	}
 
-	if binding.Descriptor.SideEffect.RequiresJournal() {
+	if binding.Descriptor.RequiresJournal() {
 		replayed := executor.Execute(context.Background(), request)
 		if replayed.Error != nil || !replayed.Replayed || handlerCalls.Load() != 1 {
 			t.Fatalf("side-effect replay violated contract: result=%#v calls=%d", replayed, handlerCalls.Load())
@@ -118,9 +118,6 @@ func RunBindingContract(t *testing.T, spec BindingContract) {
 // test-only grant required by their declared capability.
 func NewAuthorizedCatalog(binding tool.Binding) (*tool.Catalog, tool.Binding, error) {
 	securityPolicy := policy.DefaultPolicy()
-	if binding.Descriptor.SideEffect.Mode == tool.SideEffectExternal && binding.Descriptor.Name != "update_task_state" {
-		binding.Descriptor.Security = testExternalWriteCapability()
-	}
 	if binding.Descriptor.Name != "update_task_state" {
 		securityPolicy.Rules = append(securityPolicy.Rules, policy.Rule{
 			ID: "contract-" + binding.Descriptor.Name, Tool: binding.Descriptor.Name,

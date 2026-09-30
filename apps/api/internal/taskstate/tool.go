@@ -19,7 +19,6 @@ func (s *Service) ToolBinding() tool.Binding {
 			Name:        UpdateToolName,
 			Description: "Apply a version-checked patch to durable conversation task state. Use the version shown in <task_state>; use 0 when no task state exists. Patch only facts that actually changed.",
 			Concurrency: tool.ConcurrencyPolicy{Mode: tool.ConcurrencySerial},
-			SideEffect:  tool.SideEffectPolicy{Mode: tool.SideEffectInternal},
 			Security: policy.NormalizeCapability(policy.Capability{
 				Scope: policy.Scope{Resources: []policy.ResourceScope{{
 					Kind: policy.ResourceConversation, Name: "task_state", Access: policy.AccessWrite,

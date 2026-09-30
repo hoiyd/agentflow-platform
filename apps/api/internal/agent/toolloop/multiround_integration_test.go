@@ -320,7 +320,7 @@ func TestMultiRoundStageRetryDoesNotRepeatCommittedWrite(t *testing.T) {
 	capability := policy.Capability{SideEffect: policy.SideEffectExternalWrite}
 	catalog, err := tool.NewCatalogWithPolicy(policy.Policy{Version: "fixture", DefaultAction: policy.ActionAllow, Rules: []policy.Rule{{ID: "fixture-write", Tool: "external_write", Action: policy.ActionAllow, Capability: capability}}}, tool.Binding{
 		Descriptor: tool.Descriptor{Name: "external_write", Parameters: tool.ObjectSchema(map[string]any{"value": map[string]any{"type": "integer"}}, nil),
-			SideEffect: tool.SideEffectPolicy{Mode: tool.SideEffectExternal}, Security: capability},
+			Security: capability},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
 			writes.Add(1)
 			return map[string]string{"receipt": "committed"}, nil
@@ -363,7 +363,6 @@ func TestMultiRoundReadFailureCanBeCorrectedButUncertainWriteCannot(t *testing.T
 			})
 			descriptor := tool.Descriptor{Name: "failing_tool", Parameters: tool.ObjectSchema(nil, nil)}
 			if test.external {
-				descriptor.SideEffect.Mode = tool.SideEffectExternal
 				descriptor.Security.SideEffect = policy.SideEffectExternalWrite
 			}
 			security := policy.Policy{Version: "fixture", DefaultAction: policy.ActionAllow, Rules: []policy.Rule{{ID: "fixture-tool", Tool: descriptor.Name, Action: policy.ActionAllow, Capability: descriptor.Security}}}

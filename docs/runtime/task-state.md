@@ -93,8 +93,9 @@ Revision is durable. The Revision Store remains authoritative if event
 publication fails; retrying the original patch then returns a version conflict
 instead of applying it twice.
 
-The Tool declares `side_effect.mode=internal` and `internal_write` security
-capability. It uses the existing Tool Effect Journal with a Run, Tool Call, and
+The Tool declares `internal_write` security capability; the journal mode is
+derived as `internal`, not independently configured. It uses the existing Tool
+Effect Journal with a Run, Tool Call, and
 real Stage or Turn owner. Single has no Stage: its record keeps `stage_id` empty
 and the real `turn_id`; no synthetic Stage or database migration is needed.
 Turn-only receipt keys include Turn identity, so distinct Turns cannot reuse a

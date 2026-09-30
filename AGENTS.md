@@ -80,8 +80,10 @@ Backend rules:
   the operation, which real runtime identities exist, and whether retry is safe.
   Do not equate "needs durable receipts" with "external write" or copy another
   Binding's recovery settings without checking those facts.
-- Validate related declarations together, in both directions, at registration:
-  security class, journal mode, model schema, and Binding behavior must agree.
+- Declare Tool write classification only in `Descriptor.Security.SideEffect`;
+  journal mode is derived, never independently configured by a Binding.
+  Validate related declarations together at registration: security class,
+  derived journal boundary, recovery callbacks, model schema, and Binding behavior must agree.
   Include omitted/default values and invalid combinations, not just valid ones.
   Follow [Tool security contracts](docs/tools/tool-security-policy.md).
 - For shared execution changes, cover Single without a Stage and affected

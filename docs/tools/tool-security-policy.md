@@ -136,8 +136,8 @@ configured policy uses one exact rule per Tool:
 
 Policy and Tool capability have been frozen since Runtime Snapshot v11. Resume
 therefore uses the same authority as the original Run even if the live operator
-file has changed. The current compatibility window is v12 and v11; v11 resumes
-with its frozen security policy and with the later Tool Progress Guard disabled.
+file has changed. Only the current Runtime Snapshot schema is resumable; older
+snapshots remain readable through Replay.
 
 ## Decisions and Replay
 
@@ -157,26 +157,30 @@ calls do not consume Tool Budget and cannot create an external side effect.
 2. Add `ResolveScope` when arguments select a resource, target, or credential.
 3. Add an operator rule for remote, write, network, filesystem, credential,
    elevated-rate, or irreversible capability.
-4. Use `side_effect.mode=internal` for journaled local runtime state writes
-   (requires `internal_write` security capability), or `external` for remote
-   effects. Both require a durable journal, Run and Tool Call identity. Internal
+4. Declare `Security.SideEffect=internal_write` for local runtime state writes,
+   or `external_write`/`destructive` for external effects. `JournalMode()` derives
+   the recovery boundary; Bindings do not separately set a mode. Writes require
+   a durable journal, Run and Tool Call identity. Internal
    writes accept a real Stage or Turn owner; external writes require a Stage.
    These recovery declarations do not replace security policy. Retry and
    compensation callbacks remain external-only.
 5. Run the shared Tool Contract and Fault Harness plus allow and deny cases.
 
-Catalog registration validates both directions of the declaration, before any
-model call. A declared write cannot omit its journal mode, and a mode cannot
-contradict the security class:
+Catalog validates the authoritative classification before any model call.
+Recovery flags and callbacks must agree and remain external-only. Journal mode
+is derived, so a Binding cannot omit or contradict it:
 
-| Security side-effect class | Required journal mode |
+| Security side-effect class | Derived journal mode |
 | --- | --- |
-| `none` (including the default capability) | `none` or omitted |
+| `none` (including the default capability) | omitted; no journal |
 | `internal_write` | `internal` |
 | `external_write` or `destructive` | `external` |
 
-In particular, `internal_write` with `external` is rejected at registration,
-not deferred until a Single Run attempts to supply a nonexistent Stage.
+In particular, `internal_write` always derives `internal`; there is no second
+authoring field that can incorrectly demand a nonexistent Single Stage.
+Persisted Snapshot modes and definition-digest JSON retain their existing
+format. Classification changes still change the digest and fail frozen checks;
+this refactor alone does not change existing production Tool revisions.
 
 Policy configuration never contains credential values. Filesystem sandbox,
 path traversal, SSRF, and Secret resolution remain separate adapters behind the

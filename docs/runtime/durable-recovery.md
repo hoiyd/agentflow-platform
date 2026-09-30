@@ -95,9 +95,11 @@ from silently inheriting current model, Tool, context, or budget behavior.
 
 ## Tool Side-Effect Idempotency
 
-Tool descriptors default to `side_effect.mode=none`. A write-capable Binding
-must explicitly declare `external`. Before such a handler runs, Tool Executor
-requires Run, Stage, and Tool Call identity plus a durable Tool Effect Journal.
+Tool security defaults to `SideEffect=none`, with no journal. A Binding declares
+one authoritative security class: `internal_write` derives an internal journal,
+while `external_write` and `destructive` derive an external journal. Internal
+writes accept a real Turn or Stage; external writes require Run, Stage, and
+Tool Call identity plus a durable Tool Effect Journal.
 It derives a stable idempotency key when the caller does not provide one.
 
 The journal uses these states:

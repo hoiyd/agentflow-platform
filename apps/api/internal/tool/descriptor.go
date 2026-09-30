@@ -27,17 +27,29 @@ const (
 	SideEffectExternal SideEffectMode = "external"
 )
 
-// SideEffectPolicy declares journaled writes. Internal writes may belong directly
-// to a Turn; external writes require a Stage recovery boundary. The zero value
-// is a replay-safe, read-only computation.
+// SideEffectPolicy declares recovery capabilities, not a second write class.
+// Security.SideEffect is authoritative; JournalMode derives the durable boundary.
 type SideEffectPolicy struct {
-	Mode             SideEffectMode `json:"mode,omitempty"`
-	RetryWithSameKey bool           `json:"retry_with_same_key,omitempty"`
-	Compensate       bool           `json:"compensate,omitempty"`
+	RetryWithSameKey bool `json:"retry_with_same_key,omitempty"`
+	Compensate       bool `json:"compensate,omitempty"`
 }
 
-func (p SideEffectPolicy) RequiresJournal() bool {
-	return p.Mode == SideEffectInternal || p.Mode == SideEffectExternal
+// JournalMode is derived from validated Security, never separately declared by
+// a Binding. Empty means no journal and preserves existing read-only snapshots.
+// Internal writes accept a real Turn or Stage; external writes require a Stage.
+func (d Descriptor) JournalMode() SideEffectMode {
+	switch d.Security.SideEffect {
+	case policy.SideEffectInternalWrite:
+		return SideEffectInternal
+	case policy.SideEffectExternalWrite, policy.SideEffectDestructive:
+		return SideEffectExternal
+	default:
+		return ""
+	}
+}
+
+func (d Descriptor) RequiresJournal() bool {
+	return d.JournalMode() != ""
 }
 
 type ConcurrencyMode string

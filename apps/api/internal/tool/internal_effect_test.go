@@ -14,7 +14,7 @@ func TestInternalWriteRequiresJournalAndExecutionIdentity(t *testing.T) {
 	capability := policy.Capability{SideEffect: policy.SideEffectInternalWrite}
 	catalog, err := NewCatalogWithPolicy(policy.Policy{Version: "test", DefaultAction: policy.ActionAllow,
 		Rules: []policy.Rule{{ID: "test-write", Tool: "writer", Action: policy.ActionAllow, Capability: capability}}}, Binding{
-		Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), SideEffect: SideEffectPolicy{Mode: "internal"}, Security: capability},
+		Descriptor: Descriptor{Name: "writer", Parameters: ObjectSchema(nil, nil), Security: capability},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
 			t.Error("unguarded write executed")
 			return nil, nil
@@ -52,7 +52,7 @@ func TestInternalWriteRequiresJournalAndExecutionIdentity(t *testing.T) {
 func TestInternalWriteCountsAsProgressNotReadOnly(t *testing.T) {
 	executor := &Executor{progressGuard: progress.New(progress.DefaultConfig())}
 	request := ExecutionRequest{Tool: "writer", Arguments: json.RawMessage(`{}`)}
-	binding := Binding{Descriptor: Descriptor{Concurrency: ConcurrencyPolicy{Mode: ConcurrencyReadOnly}, SideEffect: SideEffectPolicy{Mode: "internal"}}}
+	binding := Binding{Descriptor: Descriptor{Concurrency: ConcurrencyPolicy{Mode: ConcurrencyReadOnly}, Security: policy.Capability{SideEffect: policy.SideEffectInternalWrite}}}
 	call := executor.progressCall(request, binding)
 	for range 5 {
 		result := ExecutionResult{encodedResult: []byte(`"same receipt"`)}

@@ -143,7 +143,7 @@ func TestMultiRoundExternalWriteStillRequiresStage(t *testing.T) {
 	capability := policy.Capability{SideEffect: policy.SideEffectExternalWrite}
 	catalog, err := tool.NewCatalogWithPolicy(policy.Policy{Version: "fixture", DefaultAction: policy.ActionAllow,
 		Rules: []policy.Rule{{ID: "external-test", Tool: "external_write", Action: policy.ActionAllow, Capability: capability}}}, tool.Binding{
-		Descriptor: tool.Descriptor{Name: "external_write", Parameters: tool.ObjectSchema(nil, nil), SideEffect: tool.SideEffectPolicy{Mode: tool.SideEffectExternal}, Security: capability},
+		Descriptor: tool.Descriptor{Name: "external_write", Parameters: tool.ObjectSchema(nil, nil), Security: capability},
 		Handler:    func(context.Context, json.RawMessage) (any, error) { writes.Add(1); return "written", nil },
 	})
 	if err != nil {

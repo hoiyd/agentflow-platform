@@ -274,20 +274,11 @@ func runSample(ctx context.Context, model string, config domain.ContextAssemblyC
 }
 
 func observeModelInput(pack contextassembly.Pack, request contextassembly.Request) (requestcontrol.Observation, error) {
-	type message struct {
-		Role       string          `json:"role"`
-		Content    string          `json:"content,omitempty"`
-		ToolCallID string          `json:"tool_call_id,omitempty"`
-		ToolCalls  json.RawMessage `json:"tool_calls,omitempty"`
-	}
 	payload := struct {
-		Model    string                 `json:"model"`
-		Messages []message              `json:"messages"`
-		Tools    []contextassembly.Tool `json:"tools,omitempty"`
-	}{Model: request.Model, Tools: request.Tools, Messages: make([]message, 0, len(pack.Messages))}
-	for _, item := range pack.Messages {
-		payload.Messages = append(payload.Messages, message{Role: item.Role, Content: item.Content, ToolCallID: item.ToolCallID, ToolCalls: item.ToolCalls})
-	}
+		Model    string                    `json:"model"`
+		Messages []contextassembly.Message `json:"messages"`
+		Tools    []contextassembly.Tool    `json:"tools,omitempty"`
+	}{Model: request.Model, Tools: request.Tools, Messages: pack.Messages}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return requestcontrol.Observation{}, err

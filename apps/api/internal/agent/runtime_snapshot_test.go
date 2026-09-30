@@ -299,7 +299,7 @@ func TestTaskStateToolIsAddedToNativeRuntime(t *testing.T) {
 func TestToolDefinitionMatchIncludesSideEffectDeclaration(t *testing.T) {
 	binding := tool.Binding{Descriptor: tool.Descriptor{
 		Name: "writer", Description: "write", Parameters: tool.ObjectSchema(nil, nil),
-		SideEffect: tool.SideEffectPolicy{Mode: tool.SideEffectExternal},
+		Security: policy.Capability{SideEffect: policy.SideEffectExternalWrite},
 	}}
 	frozen := domain.RuntimeToolSnapshot{
 		Name: "writer", Description: "write", Parameters: tool.ObjectSchema(nil, nil),
@@ -308,7 +308,7 @@ func TestToolDefinitionMatchIncludesSideEffectDeclaration(t *testing.T) {
 	if !toolDefinitionMatches(binding, frozen) {
 		t.Fatal("matching side-effect declaration was rejected")
 	}
-	binding.Descriptor.SideEffect.Mode = tool.SideEffectNone
+	binding.Descriptor.Security.SideEffect = policy.SideEffectNone
 	if toolDefinitionMatches(binding, frozen) {
 		t.Fatal("changed side-effect declaration must fail closed")
 	}

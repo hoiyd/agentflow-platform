@@ -212,9 +212,9 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 		}
 	}
 	effectKey := ""
-	if binding.Descriptor.SideEffect.RequiresJournal() {
+	if binding.Descriptor.RequiresJournal() {
 		var execute bool
-		effectKey, execute, result = e.beginSideEffect(request, binding.Descriptor.SideEffect.Mode, result)
+		effectKey, execute, result = e.beginSideEffect(request, binding.Descriptor.JournalMode(), result)
 		if result.Error != nil || !execute {
 			return result
 		}

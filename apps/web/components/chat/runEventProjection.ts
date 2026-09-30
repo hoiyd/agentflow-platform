@@ -33,7 +33,6 @@ type RunEventProjectionOptions = {
   setAutonomousProgress: Dispatch<SetStateAction<AutonomousProgress | null>>;
   setCollaborationSteps: Dispatch<SetStateAction<CollaborationStepView[]>>;
   setError: Dispatch<SetStateAction<string>>;
-  setIsCancelingRun: Dispatch<SetStateAction<boolean>>;
   setMessages: Dispatch<SetStateAction<DraftMessage[]>>;
   setPlanDraft: Dispatch<SetStateAction<string>>;
   setRunState: Dispatch<SetStateAction<RunState | null>>;
@@ -52,9 +51,6 @@ export function createRunEventHandler(options: RunEventProjectionOptions) {
         status: event.status,
         verificationStatus: current?.verificationStatus ?? options.defaultVerificationStatus
       }));
-      if (isTerminalStatus(event.status)) {
-        options.setIsCancelingRun(false);
-      }
       options.onRunState?.(event);
     }
     if (event.type === "stage_state") {
@@ -89,12 +85,11 @@ export function createRunEventHandler(options: RunEventProjectionOptions) {
         verificationStatus:
           event.verification_status ?? current?.verificationStatus ?? options.defaultVerificationStatus
       }));
-      options.setIsCancelingRun(false);
       options.onDone?.(event);
     }
   };
 }
 
-function isTerminalStatus(status: string) {
+export function isTerminalRunStatus(status: string) {
   return status === "canceled" || status === "completed" || status === "failed" || status === "failed_recoverable";
 }

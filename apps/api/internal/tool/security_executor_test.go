@@ -16,7 +16,7 @@ func TestExecutorSecurityPolicyDeniesBeforeBudgetAndHandler(t *testing.T) {
 	var calls atomic.Int32
 	capability := externalCapability(policy.Compensatable)
 	binding := Binding{
-		Descriptor: Descriptor{Name: "unapproved_writer", Parameters: ObjectSchema(nil, nil), Security: capability, SideEffect: SideEffectPolicy{Mode: SideEffectExternal}},
+		Descriptor: Descriptor{Name: "unapproved_writer", Parameters: ObjectSchema(nil, nil), Security: capability, SideEffect: SideEffectPolicy{}},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
 			calls.Add(1)
 			return map[string]any{"ok": true}, nil
@@ -139,7 +139,7 @@ func TestExecutorAllowAndLogFailsClosedWithoutDurableAudit(t *testing.T) {
 	capability := externalCapability(policy.Compensatable)
 	securityPolicy := policyFor("audited_writer", policy.ActionAllowAndLog, capability)
 	catalog, err := NewCatalogWithPolicy(securityPolicy, Binding{
-		Descriptor: Descriptor{Name: "audited_writer", Parameters: ObjectSchema(nil, nil), Security: capability, SideEffect: SideEffectPolicy{Mode: SideEffectExternal}},
+		Descriptor: Descriptor{Name: "audited_writer", Parameters: ObjectSchema(nil, nil), Security: capability, SideEffect: SideEffectPolicy{}},
 		Handler: func(context.Context, json.RawMessage) (any, error) {
 			t.Fatal("missing audit reached handler")
 			return nil, nil
@@ -192,10 +192,10 @@ func TestCatalogRejectsInvalidSecurityContracts(t *testing.T) {
 			},
 		},
 		{
-			name: "external effect without capability",
+			name: "unsupported side effect class",
 			descriptor: Descriptor{
 				Name: "writer", Parameters: ObjectSchema(nil, nil),
-				SideEffect: SideEffectPolicy{Mode: SideEffectExternal},
+				Security: policy.Capability{SideEffect: "external"},
 			},
 		},
 	}

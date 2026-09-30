@@ -328,8 +328,8 @@ func externalBinding(recovery tool.SideEffectReconciliation, description string)
 		Descriptor: tool.Descriptor{
 			Name: "write_record", Description: description, Parameters: tool.ObjectSchema(nil, nil),
 			SideEffect: tool.SideEffectPolicy{
-				Mode: tool.SideEffectExternal, RetryWithSameKey: recovery.RetryWithSameKey != nil,
-				Compensate: recovery.Compensate != nil,
+				RetryWithSameKey: recovery.RetryWithSameKey != nil,
+				Compensate:       recovery.Compensate != nil,
 			}, Security: capability,
 		},
 		Handler:        func(context.Context, json.RawMessage) (any, error) { return nil, nil },

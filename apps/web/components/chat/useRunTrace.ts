@@ -27,9 +27,22 @@ export function useRunTrace() {
     setSelectedCollaborationRole("planner");
   }
 
+  function restore(previous: {
+    collaborationSteps: CollaborationStepView[]; autonomousProgress: AutonomousProgress | null;
+    humanInputDraft: string; selectedCollaborationRole: string; planDraft: string;
+    routingRequirements: AgentRoutingRequirements;
+  }) {
+    setCollaborationSteps(previous.collaborationSteps);
+    setAutonomousProgress(previous.autonomousProgress);
+    setHumanInputDraft(previous.humanInputDraft);
+    setSelectedCollaborationRole(previous.selectedCollaborationRole);
+    setPlanDraft(previous.planDraft);
+    setRoutingRequirements(previous.routingRequirements);
+  }
+
   return {
     collaborationSteps, setCollaborationSteps, autonomousProgress, setAutonomousProgress,
     humanInputDraft, setHumanInputDraft, selectedCollaborationRole, setSelectedCollaborationRole,
-    planDraft, setPlanDraft, routingRequirements, setRoutingRequirements, reset
+    planDraft, setPlanDraft, routingRequirements, setRoutingRequirements, reset, restore
   };
 }

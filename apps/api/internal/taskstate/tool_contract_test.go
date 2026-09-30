@@ -10,21 +10,19 @@ import (
 	"agentflow-platform/apps/api/internal/tool/policy"
 )
 
-func TestTaskStateBindingRejectsMismatchedJournalModes(t *testing.T) {
+func TestTaskStateBindingDerivesInternalJournal(t *testing.T) {
 	binding := (&Service{}).ToolBinding()
-	if binding.Descriptor.Security.SideEffect != policy.SideEffectInternalWrite || binding.Descriptor.SideEffect.Mode != tool.SideEffectInternal {
+	if binding.Descriptor.Security.SideEffect != policy.SideEffectInternalWrite || binding.Descriptor.JournalMode() != tool.SideEffectInternal {
 		t.Fatal("Task State must declare a journaled internal write")
 	}
-	for _, mode := range []tool.SideEffectMode{"", tool.SideEffectNone, tool.SideEffectExternal} {
-		t.Run("mode="+string(mode), func(t *testing.T) {
-			invalid := binding
-			invalid.Descriptor.SideEffect.Mode = mode
-			// Register the real descriptor directly, without test-only capability
-			// rewriting or an invented Stage identity.
-			if _, err := tool.NewCatalog(invalid); err == nil {
-				t.Fatal("misclassified Task State binding was accepted")
-			}
-		})
+	// Register the real descriptor; helpers must not rewrite its classification.
+	catalog, err := tool.NewCatalog(binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	installed, _ := catalog.Installed(UpdateToolName)
+	if installed.Descriptor.JournalMode() != tool.SideEffectInternal || !installed.Descriptor.RequiresJournal() {
+		t.Fatal("registration changed the internal recovery boundary")
 	}
 }
 

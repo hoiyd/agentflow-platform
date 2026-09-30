@@ -102,3 +102,35 @@ remain stable across normal laptop and wide-monitor viewports.
   dimensions over viewport-font scaling.
 - Validate behavior through lint, tests, and production build. Use browser-level
   visual tests when a task changes layout or interaction geometry.
+
+## Run Session Ownership
+
+`components/chat/useRunSession.ts` owns submission, Continue, Resume, Cancel,
+optimistic drafts, and durable event observation. It reuses the existing event
+projection and request-lease helpers, not a second Run engine. `ChatShell` keeps
+page layout and conversation loading; Agent, Knowledge, Memory, and Verification
+settings retain their separate owners.
+
+Three dimensions must remain separate:
+
+- **Run status** is the backend's durable business state, including waiting and
+  terminal outcomes. A connection ending is not a completed Run.
+- **Command activity** admits one submission, continuation, or resume at a time,
+  including repeated callbacks before React renders. Cancellation may overlap
+  that command; it is not another mutually exclusive execution state.
+- **Connection leases** invalidate obsolete stream, cancellation, and observation
+  callbacks. Navigating away aborts browser requests, not the backend Run; only
+  an explicit Cancel requests backend cancellation.
+
+Before the first accepted event, a failed submission removes only its optimistic
+drafts and restores input, Run/Trace state, and layout. Once events are accepted,
+partial output stays visible; a transport failure can reconnect to the durable
+Run rather than resubmit the task. Continue/Resume failures remove their own
+drafts and retain editable input; Resume restores the previous waiting status.
+
+Historical events rebuild Trace details without replacing the canonical current
+status. Observation rejects mismatched Run/conversation snapshots and reloads
+persisted messages once when the Run stops or waits for input. Late cancellation
+responses cannot overwrite a terminal Run or another conversation. See
+[functional regression gates](../operations/functional-regression-testing.md)
+for the affected race and browser-to-backend checks.

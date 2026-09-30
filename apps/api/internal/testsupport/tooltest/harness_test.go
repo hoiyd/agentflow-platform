@@ -24,7 +24,7 @@ func TestBindingContractHarness(t *testing.T) {
 				Parameters: tool.ObjectSchema(map[string]any{
 					"value": map[string]any{"type": "string", "minLength": 1},
 				}, []string{"value"}),
-				SideEffect: tool.SideEffectPolicy{Mode: tool.SideEffectExternal},
+				Security: testExternalWriteCapability(),
 			},
 			Handler: func(context.Context, json.RawMessage) (any, error) { return nil, nil },
 		},
