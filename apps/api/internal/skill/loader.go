@@ -45,46 +45,81 @@ func (c *Catalog) add(item domain.SkillSnapshot) error {
 }
 
 func loadDirectory(directory string) (domain.SkillSnapshot, error) {
-	root, err := os.OpenRoot(directory)
+	root, err := openPackageDirectory(directory)
 	if err != nil {
-		return domain.SkillSnapshot{}, skillError("skill_unavailable", "Trusted Skill directory is unavailable")
+		return domain.SkillSnapshot{}, err
 	}
 	defer root.Close()
 	return loadPackage(root, filepath.Base(filepath.Clean(directory)))
 }
 
+func openPackageDirectory(directory string) (*os.Root, error) {
+	directory = filepath.Clean(directory)
+	info, err := os.Lstat(directory)
+	if err != nil || !info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+		return nil, skillError("skill_unavailable", "Skill package directory is unavailable")
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, skillError("skill_invalid_resource", "Skill package directory cannot be a symbolic link")
+	}
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return nil, skillError("skill_unavailable", "Skill package directory cannot be opened")
+	}
+	return root, nil
+}
+
 func loadPackage(root *os.Root, name string) (domain.SkillSnapshot, error) {
-	data, err := readText(root, "SKILL.md", maxInstructionsBytes+4096)
+	document, err := readDocument(root, name)
 	if err != nil {
 		return domain.SkillSnapshot{}, err
 	}
+	return loadDocument(root, document)
+}
+
+// document retains frontmatter for operator diagnostics; only Snapshot fields
+// are runtime capabilities. Unknown fields never grant permissions.
+type document struct {
+	Name         string               `yaml:"name"`
+	Description  string               `yaml:"description"`
+	Metadata     map[string]string    `yaml:"metadata"`
+	Fields       map[string]yaml.Node `yaml:",inline"`
+	Instructions string               `yaml:"-"`
+}
+
+func readDocument(root *os.Root, name string) (document, error) {
+	data, err := readText(root, "SKILL.md", maxInstructionsBytes+4096)
+	if err != nil {
+		return document{}, err
+	}
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
 	if !strings.HasPrefix(text, "---\n") {
-		return domain.SkillSnapshot{}, skillError("skill_invalid_package", "SKILL.md requires YAML frontmatter")
+		return document{}, skillError("skill_invalid_package", "SKILL.md requires YAML frontmatter")
 	}
 	parts := strings.SplitN(text[4:], "\n---\n", 2)
 	if len(parts) != 2 {
-		return domain.SkillSnapshot{}, skillError("skill_invalid_package", "SKILL.md frontmatter is not terminated")
+		return document{}, skillError("skill_invalid_package", "SKILL.md frontmatter is not terminated")
 	}
-	var header struct {
-		Name        string            `yaml:"name"`
-		Description string            `yaml:"description"`
-		Metadata    map[string]string `yaml:"metadata"`
-	}
+	var header document
 	decoder := yaml.NewDecoder(bytes.NewBufferString(parts[0]))
 	if err := decoder.Decode(&header); err != nil {
-		return domain.SkillSnapshot{}, skillError("skill_invalid_package", "SKILL.md has invalid YAML metadata")
+		return document{}, skillError("skill_invalid_package", "SKILL.md has invalid YAML metadata")
 	}
 	var extra any
 	if decoder.Decode(&extra) != io.EOF {
-		return domain.SkillSnapshot{}, skillError("skill_invalid_package", "SKILL.md has multiple YAML documents")
+		return document{}, skillError("skill_invalid_package", "SKILL.md has multiple YAML documents")
 	}
 	if header.Name != name {
-		return domain.SkillSnapshot{}, skillError("skill_invalid_package", "Skill name must match its directory name")
+		return document{}, skillError("skill_invalid_package", "Skill name must match its directory name")
 	}
-	item := domain.SkillSnapshot{Name: header.Name, Description: header.Description, Instructions: strings.TrimSpace(parts[1]), RequiredTools: strings.Fields(header.Metadata["agentflow-required-tools"])}
+	header.Instructions = strings.TrimSpace(parts[1])
+	return header, nil
+}
+
+func loadDocument(root *os.Root, header document) (domain.SkillSnapshot, error) {
+	item := domain.SkillSnapshot{Name: header.Name, Description: header.Description, Instructions: header.Instructions, RequiredTools: strings.Fields(header.Metadata["agentflow-required-tools"])}
 	for _, subdir := range []string{"references", "assets"} {
-		err = fs.WalkDir(root.FS(), subdir, func(path string, entry fs.DirEntry, walkErr error) error {
+		err := fs.WalkDir(root.FS(), subdir, func(path string, entry fs.DirEntry, walkErr error) error {
 			if errors.Is(walkErr, fs.ErrNotExist) && path == subdir {
 				return nil
 			}

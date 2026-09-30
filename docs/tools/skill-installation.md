@@ -64,6 +64,10 @@ Layout compatibility is not full Skill capability compatibility. AgentFlow
 loads bounded UTF-8 instructions/resources, not binary assets, scripts, or
 arbitrary metadata. Native Vercel can copy/dereference files unsupported by that
 Loader. The fallback validates the restricted subset and records omissions.
+After either installer, run [Skill Checker](skill-checker.md) before
+trusting the package: `./scripts/skill-check.sh --root "$PWD/.agents/skills"`
+from the repository root. This read-only JSON check identifies unsupported
+semantics and missing local resources; it neither installs nor grants access.
 
 ## Restricted Go Fallback
 

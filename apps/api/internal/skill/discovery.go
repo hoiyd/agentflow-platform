@@ -26,6 +26,18 @@ func LoadRoots(directories []string) (*Catalog, error) {
 }
 
 func discoverRoot(catalog *Catalog, directory string) error {
+	return visitRoot(directory, func(root *os.Root, name string) error {
+		item, err := loadPackage(root, name)
+		if err != nil {
+			return err
+		}
+		return catalog.add(item)
+	})
+}
+
+// visitRoot is shared by startup and read-only Skill checks; discovery semantics
+// must not depend on the caller or installer used to populate the root.
+func visitRoot(directory string, visit func(*os.Root, string) error) error {
 	absolute, err := filepath.Abs(directory)
 	if err != nil {
 		return err
@@ -64,13 +76,10 @@ func discoverRoot(catalog *Catalog, directory string) error {
 		if err != nil {
 			return skillError("skill_unavailable", "Trusted Skill package is unavailable within its installation root")
 		}
-		item, err := loadPackage(child, entry.Name())
+		err = visit(child, entry.Name())
 		child.Close()
 		if err != nil {
 			return fmt.Errorf("Skill %q in %q: %w", entry.Name(), absolute, err)
-		}
-		if err := catalog.add(item); err != nil {
-			return err
 		}
 	}
 	return nil

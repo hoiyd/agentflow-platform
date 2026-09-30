@@ -23,8 +23,12 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, out, stderr io.Writer, installer func(context.Context, fallback.Options) (fallback.Report, error)) int {
+	if len(args) > 0 && args[0] == "check" {
+		return checkCommand(args[1:], out, stderr)
+	}
 	if len(args) == 0 || args[0] != "install" {
 		fmt.Fprintln(stderr, "usage: skill install --repo owner/repo --path package/path [--ref revision] [--dest existing/root] [--apply]")
+		fmt.Fprintln(stderr, "       skill check --dir package-directory | --root installation-root [--tools comma-separated-effective-tools]")
 		return 2
 	}
 	flags := flag.NewFlagSet("skill install", flag.ContinueOnError)

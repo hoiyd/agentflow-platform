@@ -1,5 +1,9 @@
 # Trusted Skills
 
+Use [Skill Checker](skill-checker.md) to check installed packages before
+trust/binding. Format-valid text can still rely on unsupported execution or
+invocation semantics; Skill Checker is read-only and does not grant permissions.
+
 ## Contract
 
 SKILL-001 separates reusable task methods from executable Tool capabilities.
