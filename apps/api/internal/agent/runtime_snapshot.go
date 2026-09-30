@@ -305,11 +305,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 		}
 		restoredBindings = append(restoredBindings, installed)
 	}
-	securityPolicy := current.SecurityPolicy()
-	if snapshot.SchemaVersion >= domain.ToolSecurityRuntimeSnapshotVersion {
-		securityPolicy = snapshot.ToolSecurityPolicy
-	}
-	catalog, err := tool.NewCatalogWithPolicy(securityPolicy, restoredBindings...)
+	catalog, err := tool.NewCatalogWithPolicy(snapshot.ToolSecurityPolicy, restoredBindings...)
 	if err != nil {
 		return restoredRuntime{}, err
 	}
@@ -370,42 +366,34 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	if strings.TrimSpace(snapshot.Embedding.Provider) == "" || strings.TrimSpace(snapshot.Embedding.Model) == "" || strings.TrimSpace(snapshot.Embedding.BaseURL) == "" || snapshot.Embedding.Dimensions <= 0 {
 		return errors.New("runtime snapshot has no valid embedding service")
 	}
-	if snapshot.SchemaVersion >= domain.ModelRoutingRuntimeSnapshotVersion {
-		if err := validateModelRoutingSnapshot(snapshot.ModelRouting); err != nil {
-			return err
-		}
+	if err := validateModelRoutingSnapshot(snapshot.ModelRouting); err != nil {
+		return err
 	}
-	if snapshot.SchemaVersion >= domain.SamplingRuntimeSnapshotVersion {
-		for _, route := range snapshot.ModelRouting.Routes {
-			if route.GenerationPolicy == nil {
-				return fmt.Errorf("runtime snapshot route %q has no frozen generation policy", route.ID)
-			}
-			if err := route.GenerationPolicy.Validate(route.Capabilities.Seed); err != nil {
-				return fmt.Errorf("runtime snapshot route %q has invalid generation policy: %w", route.ID, err)
-			}
+	for _, route := range snapshot.ModelRouting.Routes {
+		if route.GenerationPolicy == nil {
+			return fmt.Errorf("runtime snapshot route %q has no frozen generation policy", route.ID)
+		}
+		if err := route.GenerationPolicy.Validate(route.Capabilities.Seed); err != nil {
+			return fmt.Errorf("runtime snapshot route %q has invalid generation policy: %w", route.ID, err)
 		}
 	}
 	if snapshot.RunBudget == nil {
 		return errors.New("runtime snapshot has no run budget")
 	}
-	if snapshot.SchemaVersion >= domain.ToolContractRuntimeSnapshotVersion {
-		for _, snapshotTool := range snapshot.Tools {
-			if snapshotTool.SchemaVersion != tool.ToolSchemaVersion || strings.TrimSpace(snapshotTool.DefinitionRevision) == "" {
-				return fmt.Errorf("runtime snapshot tool %q has no valid schema contract", snapshotTool.Name)
-			}
+	for _, snapshotTool := range snapshot.Tools {
+		if snapshotTool.SchemaVersion != tool.ToolSchemaVersion || strings.TrimSpace(snapshotTool.DefinitionRevision) == "" {
+			return fmt.Errorf("runtime snapshot tool %q has no valid schema contract", snapshotTool.Name)
 		}
 	}
-	if snapshot.SchemaVersion >= domain.ToolSecurityRuntimeSnapshotVersion {
-		if err := policy.ValidatePolicy(snapshot.ToolSecurityPolicy); err != nil {
-			return fmt.Errorf("runtime snapshot has invalid Tool security policy: %w", err)
-		}
-		for _, tool := range snapshot.Tools {
-			if err := policy.ValidateCapability(tool.Security); err != nil {
-				return fmt.Errorf("runtime snapshot tool %q has invalid security capability: %w", tool.Name, err)
-			}
+	if err := policy.ValidatePolicy(snapshot.ToolSecurityPolicy); err != nil {
+		return fmt.Errorf("runtime snapshot has invalid Tool security policy: %w", err)
+	}
+	for _, tool := range snapshot.Tools {
+		if err := policy.ValidateCapability(tool.Security); err != nil {
+			return fmt.Errorf("runtime snapshot tool %q has invalid security capability: %w", tool.Name, err)
 		}
 	}
-	if snapshot.SchemaVersion >= domain.ToolProgressRuntimeSnapshotVersion && !progress.ValidateConfig(snapshot.ToolProgressGuard) {
+	if !progress.ValidateConfig(snapshot.ToolProgressGuard) {
 		return errors.New("runtime snapshot has invalid Tool Progress Guard config")
 	}
 	return nil
@@ -439,26 +427,14 @@ func effectiveAutonomousRunBudget(runBudget domain.RuntimeRunBudget, limits Auto
 }
 
 func toolDefinitionMatches(installed tool.Binding, frozen domain.RuntimeToolSnapshot) bool {
+	if frozen.SchemaVersion != tool.ToolSchemaVersion || strings.TrimSpace(frozen.DefinitionRevision) == "" {
+		return false
+	}
 	current := domain.RuntimeToolSnapshot{
 		Name: installed.Descriptor.Name, Description: installed.Descriptor.Description,
 		Parameters: installed.Descriptor.Parameters, SideEffect: string(installed.Descriptor.JournalMode()),
-	}
-	if frozen.Security.Source != "" {
-		current.Security = installed.Descriptor.Security
-	}
-	if frozen.DefinitionRevision != "" || frozen.SchemaVersion != "" {
-		current.SchemaVersion = installed.Descriptor.SchemaVersion
-		if frozen.Security.Source == "" {
-			// Version 10 snapshots predate Tool security in the definition digest.
-			// Structural fields still have to match before a fail-closed live policy is applied.
-			legacyRevision, err := tool.LegacyDefinitionRevision(installed.Descriptor)
-			if err != nil || (frozen.DefinitionRevision != legacyRevision && frozen.DefinitionRevision != installed.Descriptor.DefinitionRevision) {
-				return false
-			}
-			current.DefinitionRevision = frozen.DefinitionRevision
-		} else {
-			current.DefinitionRevision = installed.Descriptor.DefinitionRevision
-		}
+		SchemaVersion: installed.Descriptor.SchemaVersion, DefinitionRevision: installed.Descriptor.DefinitionRevision,
+		Security: installed.Descriptor.Security,
 	}
 	currentJSON, err := json.Marshal(current)
 	if err != nil {

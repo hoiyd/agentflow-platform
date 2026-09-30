@@ -54,19 +54,12 @@ func TestProgressGuardForRunRestoresTerminalToolHistory(t *testing.T) {
 	}
 }
 
-func TestProgressGuardForHistoricalSnapshotIsDisabled(t *testing.T) {
-	fixtureStore := fixturestore.New()
-
+func TestProgressGuardForHistoricalSnapshotIsRejected(t *testing.T) {
+	runtime := &Runtime{store: fixturestore.New()}
 	snapshot := testRuntimeSnapshot()
 	snapshot.SchemaVersion = domain.ToolSecurityRuntimeSnapshotVersion
-	snapshot.ToolProgressGuard = progress.Config{}
-	runtime := NewRuntime(RuntimeOptions{Store: fixtureStore, ModelClient: newLocalFallbackOpenAIClientForTest()})
-	guard, err := runtime.progressGuardForRun("historical-run", &snapshot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if guard.Config().Enabled {
-		t.Fatalf("historical Run unexpectedly enabled guard: %#v", guard.Config())
+	if _, err := runtime.progressGuardForRun("historical-run", &snapshot); err == nil {
+		t.Fatal("historical Snapshot must not enter guard execution")
 	}
 }
 

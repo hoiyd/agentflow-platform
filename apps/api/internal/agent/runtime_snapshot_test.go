@@ -297,14 +297,15 @@ func TestTaskStateToolIsAddedToNativeRuntime(t *testing.T) {
 }
 
 func TestToolDefinitionMatchIncludesSideEffectDeclaration(t *testing.T) {
-	binding := tool.Binding{Descriptor: tool.Descriptor{
-		Name: "writer", Description: "write", Parameters: tool.ObjectSchema(nil, nil),
-		Security: policy.Capability{SideEffect: policy.SideEffectExternalWrite},
-	}}
-	frozen := domain.RuntimeToolSnapshot{
-		Name: "writer", Description: "write", Parameters: tool.ObjectSchema(nil, nil),
-		SideEffect: string(tool.SideEffectExternal),
+	catalog, err := tool.NewCatalog(tool.Binding{
+		Descriptor: tool.Descriptor{Name: "writer", Description: "write", Parameters: tool.ObjectSchema(nil, nil), Security: policy.Capability{SideEffect: policy.SideEffectExternalWrite}},
+		Handler:    func(context.Context, json.RawMessage) (any, error) { return nil, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
+	binding, _ := catalog.Installed("writer")
+	frozen := snapshotTools(catalog, []string{"writer"})[0]
 	if !toolDefinitionMatches(binding, frozen) {
 		t.Fatal("matching side-effect declaration was rejected")
 	}
@@ -326,7 +327,7 @@ func TestToolDefinitionMatchUsesFrozenSchemaRevision(t *testing.T) {
 	frozen := domain.RuntimeToolSnapshot{
 		Name: binding.Descriptor.Name, Description: binding.Descriptor.Description,
 		Parameters: binding.Descriptor.Parameters, SchemaVersion: binding.Descriptor.SchemaVersion,
-		DefinitionRevision: binding.Descriptor.DefinitionRevision,
+		DefinitionRevision: binding.Descriptor.DefinitionRevision, Security: binding.Descriptor.Security,
 	}
 	if !toolDefinitionMatches(binding, frozen) {
 		t.Fatal("matching schema revision was rejected")
