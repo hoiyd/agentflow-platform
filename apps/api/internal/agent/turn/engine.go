@@ -33,6 +33,9 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 			return
 		}
 		payload := map[string]any{}
+		if item.Type == EventTurnStarted {
+			payload["agent_id"] = request.Agent.ID
+		}
 		if item.Delta != "" {
 			payload["delta"] = item.Delta
 		}

@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
+	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
@@ -62,6 +64,11 @@ func TestPostgresSkillsRoundTripAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ctx := skill.WithAgent(eventpkg.WithScope(t.Context(), eventpkg.Scope{RunID: run.ID, ConversationID: conversation.ID, TurnID: "persisted-turn"}), agent.ID, "/skill:persisted-method Begin")
+	session := contextassembly.Session{AgentID: agent.ID, CurrentInput: "/skill:persisted-method Begin", Config: snapshot.ContextAssembly, Sink: eventpkg.StoreSink{Store: storage}, LoadSkills: func() ([]domain.SkillSnapshot, error) { return skill.NewService(storage).Active(ctx, &snapshot) }}
+	if _, err := contextassembly.Assemble(contextassembly.WithSession(ctx, session), contextassembly.Request{Model: "fixture", Messages: []contextassembly.Message{{Role: "system", Content: "Use facts."}, {Role: "user", Content: session.CurrentInput}}}); err != nil {
+		t.Fatal(err)
+	}
 	if err := storage.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +91,11 @@ func TestPostgresSkillsRoundTripAcrossRestart(t *testing.T) {
 	frozen, err := skill.Bound(replay.RuntimeSnapshot, agent.ID)
 	if err != nil || len(frozen) != 1 || frozen[0].Hash != packages[0].Hash || frozen[0].Instructions != "Immutable instructions." {
 		t.Fatalf("frozen=%#v err=%v", frozen, err)
+	}
+	resumed := skill.WithAgent(eventpkg.WithScope(t.Context(), eventpkg.Scope{RunID: run.ID, ConversationID: conversation.ID, TurnID: "resumed-turn"}), agent.ID, "Continue")
+	active, err := skill.NewService(restarted).Active(resumed, replay.RuntimeSnapshot)
+	if err != nil || len(active) != 1 || active[0].Hash != packages[0].Hash {
+		t.Fatalf("explicit activation round-trip=%+v err=%v", active, err)
 	}
 	page, err := skill.ReadResource(frozen[0], "references/check.md", 0, 512)
 	if err != nil || page.Content != "Immutable resource." {

@@ -46,10 +46,10 @@ type RuntimeInvariantFailure struct {
 
 // RunProjectionSnapshot groups independently derived read models at one
 // durable event watermark. It is a coherent query response, not a persisted
-// runtime snapshot. InvariantFailures is populated at the API boundary because
-// some checks also require model-request records that are not part of
-// RunReplay.
+// runtime snapshot. SkillEvidence and InvariantFailures are populated at the
+// API boundary because they require model-request records outside RunReplay.
 type RunProjectionSnapshot struct {
+	SkillEvidence     []SkillEvidence           `json:"skill_evidence,omitempty"`
 	Run               RunProjection             `json:"run"`
 	Usage             UsageProjection           `json:"usage"`
 	Verification      VerificationProjection    `json:"verification"`

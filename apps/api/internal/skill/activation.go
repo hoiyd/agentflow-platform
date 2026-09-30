@@ -85,6 +85,25 @@ func (s *Service) Active(ctx context.Context, snapshot *domain.RuntimeSnapshot) 
 		return nil, err
 	}
 	for _, event := range events {
+		// Explicit activation has no skill_load receipt. Retain its frozen method
+		// from the durable Manifest, independently of trimmed resource history.
+		if event.Type == domain.EventContextAssembled {
+			var manifest domain.ContextManifest
+			encoded, _ := json.Marshal(event.Payload["manifest"])
+			if json.Unmarshal(encoded, &manifest) == nil && manifest.AgentID == caller.agentID && manifest.RunID == eventpkg.ScopeFromContext(ctx).RunID {
+				for _, entry := range manifest.Entries {
+					if entry.Source != "skill_instructions" || !entry.Selected || entry.Activation != "explicit" {
+						continue
+					}
+					for _, item := range bound {
+						if entry.ReferenceID == "skill:"+item.Name+"@"+item.Hash {
+							selected[item.Name] = true
+						}
+					}
+				}
+			}
+			continue
+		}
 		if event.Type != domain.EventToolCompleted || event.Payload["tool_name"] != LoadToolName || event.Payload["truncated"] == true || event.Payload["error"] != nil && event.Payload["error"] != "" {
 			continue
 		}

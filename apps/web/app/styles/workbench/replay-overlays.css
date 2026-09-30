@@ -1,5 +1,41 @@
 /* Replay and overlays */
 
+.skill-evidence {
+  margin-bottom: 20px;
+  border-block: 1px solid var(--border);
+}
+
+.skill-evidence > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  list-style: none;
+}
+
+.skill-evidence > summary::-webkit-details-marker { display: none; }
+.skill-evidence[open] > summary > svg { transform: rotate(90deg); }
+.skill-evidence > summary > span { margin-left: auto; color: var(--muted); font-weight: 400; }
+.skill-evidence > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.skill-evidence-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 3fr);
+  gap: 20px;
+  border-top: 1px solid var(--border);
+  padding: 14px 0;
+  font-size: 12px;
+}
+
+.skill-evidence-identity, .skill-evidence-observations { display: grid; align-content: start; gap: 8px; min-width: 0; }
+.skill-evidence-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.skill-evidence span { color: var(--muted-strong); }
+.skill-evidence code { font-family: var(--font-mono); font-size: 11px; overflow-wrap: anywhere; min-width: 0; }
+
 .replay-page {
   padding: 24px 28px 48px;
 }

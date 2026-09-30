@@ -3,6 +3,8 @@ package domain
 import "time"
 
 type ContextManifestEntry struct {
+	// Activation records explicit invocation, not model compliance or Tool authority.
+	Activation       string   `json:"activation,omitempty"`
 	Source           string   `json:"source"`
 	ReferenceID      string   `json:"reference_id"`
 	CitationSourceID string   `json:"citation_source_id,omitempty"`
@@ -18,6 +20,7 @@ type ContextManifestEntry struct {
 }
 
 type ContextManifest struct {
+	AgentID              string                 `json:"agent_id,omitempty"`
 	ID                   string                 `json:"id"`
 	ModelCallID          string                 `json:"model_call_id"`
 	RunID                string                 `json:"run_id"`

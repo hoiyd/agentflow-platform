@@ -87,6 +87,7 @@ type Pack struct {
 }
 
 type Session struct {
+	AgentID       string
 	Config        domain.ContextAssemblyConfig
 	Sink          eventpkg.Sink
 	History       []domain.Message

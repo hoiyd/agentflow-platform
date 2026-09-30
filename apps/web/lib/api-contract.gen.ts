@@ -740,9 +740,50 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        SkillResourceEvidence: {
+            path: string;
+            hash: string;
+            offset: number;
+            next_offset: number;
+            total_bytes: number;
+            event_id: string;
+            /** Format: int64 */
+            sequence: number;
+        };
+        SkillFailureEvidence: {
+            tool: string;
+            code: string;
+            path?: string;
+            event_id: string;
+            /** Format: int64 */
+            sequence: number;
+        };
+        SkillEvidence: {
+            name: string;
+            hash: string;
+            agent_id: string;
+            stage_id?: string;
+            bound: boolean;
+            /** @enum {string} */
+            instructions: "included" | "not_observed";
+            /** @enum {string} */
+            activation: "explicit" | "model" | "not_observed";
+            /** Format: int64 */
+            first_sequence?: number;
+            /** Format: int64 */
+            first_request_sequence?: number;
+            manifest_id?: string;
+            event_id?: string;
+            request_id?: string;
+            estimated_tokens?: number;
+            resources: components["schemas"]["SkillResourceEvidence"][];
+            failures: components["schemas"]["SkillFailureEvidence"][];
+        };
         RunReplay: {
             run: components["schemas"]["Run"];
             projection: {
+                skill_evidence?: components["schemas"]["SkillEvidence"][];
+            } & {
                 [key: string]: unknown;
             };
             runtime_snapshot?: {

@@ -39,7 +39,7 @@ func (h *Handler) observeRunEvents(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return domain.RunProjectionSnapshot{}, store.ErrNotFound("run")
 		}
-		if loadErr = h.attachRuntimeInvariants(scoped, &replay); loadErr != nil {
+		if loadErr = h.enrichRunProjection(scoped, &replay); loadErr != nil {
 			return domain.RunProjectionSnapshot{}, loadErr
 		}
 		if after > replay.Projection.AsOfSequence {

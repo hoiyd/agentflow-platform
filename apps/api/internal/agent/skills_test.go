@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/inference/openai"
@@ -89,6 +90,15 @@ func TestSkillSnapshotPreservesMethodsWithoutExpandingTools(t *testing.T) {
 }
 
 func TestSkillResumeExecutesFrozenMethodAfterDirectoryRemoved(t *testing.T) {
+	for _, activation := range []string{"model", "explicit"} {
+		t.Run(activation, func(t *testing.T) {
+			testSkillResumeAfterDirectoryRemoved(t, activation)
+		})
+	}
+}
+
+func testSkillResumeAfterDirectoryRemoved(t *testing.T, activation string) {
+	t.Helper()
 	dir := filepath.Join(t.TempDir(), "resume-method")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
@@ -177,9 +187,17 @@ func TestSkillResumeExecutesFrozenMethodAfterDirectoryRemoved(t *testing.T) {
 	}
 	executor := tool.NewExecutor(frozen.catalog, tool.ExecutorOptions{Tracer: eventpkg.NewToolExecutionTracer(eventpkg.NewRecorder(storage), prepared.Run.ID, "prior-worker")})
 	ctx := skill.WithAgent(eventpkg.WithScope(t.Context(), eventpkg.Scope{RunID: prepared.Run.ID, ConversationID: conversation.ID, StageID: "prior-worker", TurnID: "prior-turn"}), agent.ID, "")
-	result := executor.Execute(ctx, tool.ExecutionRequest{CallID: "prior-load", Tool: skill.LoadToolName, Arguments: json.RawMessage(`{"name":"resume-method"}`)})
-	if result.Error != nil {
-		t.Fatal(result.Error)
+	if activation == "model" {
+		result := executor.Execute(ctx, tool.ExecutionRequest{CallID: "prior-load", Tool: skill.LoadToolName, Arguments: json.RawMessage(`{"name":"resume-method"}`)})
+		if result.Error != nil {
+			t.Fatal(result.Error)
+		}
+	} else {
+		// Persist the real assembly, without a fabricated skill_load receipt.
+		session := contextassembly.Session{AgentID: agent.ID, CurrentInput: "/skill:resume-method Recover", Config: prepared.Run.RuntimeSnapshot.ContextAssembly, Sink: eventpkg.StoreSink{Store: storage}, LoadSkills: func() ([]domain.SkillSnapshot, error) { return prepared.Run.RuntimeSnapshot.Skills, nil }}
+		if _, err := contextassembly.Assemble(contextassembly.WithSession(ctx, session), contextassembly.Request{Model: "resume-fixture", Messages: []contextassembly.Message{{Role: "system", Content: "Use facts."}, {Role: "user", Content: session.CurrentInput}}}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := storage.UpdateRunStatus(prepared.Run.ID, domain.RunFailedRecoverable, "worker lost"); err != nil {
 		t.Fatal(err)
