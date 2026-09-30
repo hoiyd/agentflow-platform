@@ -92,6 +92,10 @@ Backend rules:
   the real Binding Handler, persistence, and subsequent state/context reads.
   Stub the provider or use an isolated Store where needed, not the contract or
   business behavior being verified.
+- Protect cross-layer defaults/protocols with an affected browser functional
+  gate through production composition and disposable Postgres, not mocked API
+  success alone. Keep failure, persistence, and reload assertions. Follow
+  [Functional regression gates](docs/operations/functional-regression-testing.md).
 - Distinguish pre-write rejection from uncertain post-write failure. Verify
   permitted argument correction, stale-version rejection, duplicate-call replay,
   and fail-closed settlement where relevant; assert durable state as well as

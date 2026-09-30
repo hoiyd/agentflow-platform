@@ -41,7 +41,7 @@ export async function observeRunEvents(runId: string, options: RunObservationOpt
         const decoded = JSON.parse(data) as ChatEvent | RunEvent;
         const projected = projectRunEvent(decoded);
         if (projected.type === "error") {
-          streamError = projected.error;
+          streamError = formatChatError(projected);
           return;
         }
         options.onEvent(projected, id, !snapshotReceived);
@@ -56,6 +56,13 @@ export async function observeRunEvents(runId: string, options: RunObservationOpt
     }
     await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
   }
+}
+
+export function formatChatError(event: Extract<ChatEvent, { type: "error" }>): string {
+  // The server deliberately hides 5xx bodies; keep its safe diagnostic identity.
+  const identity = event.code ? ` [${event.source ? `${event.source}:` : ""}${event.code}]` : "";
+  const request = event.request_id ? ` (request ${event.request_id})` : "";
+  return `${event.error}${identity}${request}`;
 }
 
 type SSEFrame = { event: string; id: number; data: string };

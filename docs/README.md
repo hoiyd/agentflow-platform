@@ -98,6 +98,7 @@ the project.
 | [API reference](reference/api-reference.md) | Which HTTP endpoints and response contracts are available? |
 | [API contract](architecture/api-contract.md) | How do OpenAPI-generated Go DTOs and TypeScript types prevent backend/frontend drift? |
 | [Manual tests](operations/manual-tests.md) | How can the major behaviors be tested manually? |
+| [Functional regression gates](operations/functional-regression-testing.md) | Which real browser-to-Go-to-Postgres tests protect Tool continuation, guarded writes, streaming, and completion failures? |
 | [Frontend design principles](architecture/frontend-experience.md) | Which product and interaction constraints guide the workbench UI? |
 | [Stylesheet organization](../apps/web/app/styles/README.md) | Where should frontend style changes be made? |
 
