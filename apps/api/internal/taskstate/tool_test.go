@@ -28,12 +28,13 @@ func TestUpdateTaskStateToolAppliesPatchAndPublishesEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{
-		ConversationID: conversation.ID, RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
+		// Single Chat has no Stage; adding one would hide external-write misclassification.
+		ConversationID: conversation.ID, RunID: run.ID, TurnID: "turn-1",
 	})
 	arguments := json.RawMessage(`{"expected_version":0,"operations":[{"type":"set_goal","goal":"Keep exact task facts durable"}]}`)
 	executor := tool.NewExecutor(catalog, tool.ExecutorOptions{EffectJournal: fixtureStore, Tracer: taskStateAuditTracer{}})
 	request := tool.ExecutionRequest{
-		CallID: "call-1", RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
+		CallID: "call-1", RunID: run.ID, TurnID: "turn-1",
 		Tool: UpdateToolName, Arguments: arguments,
 	}
 	result := executor.Execute(ctx, request)
@@ -61,11 +62,18 @@ func TestUpdateTaskStateToolAppliesPatchAndPublishesEvent(t *testing.T) {
 	}
 
 	stale := executor.Execute(ctx, tool.ExecutionRequest{
-		CallID: "call-2", RunID: run.ID, StageID: "stage-1", TurnID: "turn-1",
+		CallID: "call-2", RunID: run.ID, TurnID: "turn-1",
 		Tool: UpdateToolName, Arguments: arguments,
 	})
 	if stale.Error == nil || stale.Error.Message == "" {
 		t.Fatalf("expected stale tool patch to return an error: %#v", stale)
+	}
+	state, _, err = fixtureStore.GetTaskState(conversation.ID)
+	if err != nil || state.Version != 1 || state.Goal != "Keep exact task facts durable" {
+		t.Fatalf("stale patch changed durable state: state=%#v err=%v", state, err)
+	}
+	if revisions, err = fixtureStore.ListTaskStateRevisions(conversation.ID); err != nil || len(revisions) != 1 {
+		t.Fatalf("stale patch appended a revision: revisions=%#v err=%v", revisions, err)
 	}
 }
 

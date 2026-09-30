@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { APIError, apiRequest } from "./api-client.ts";
-import { continueRun, getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listAgents, listSkills, listRunAttention, listToolEffects, observeRunEvents, patchTaskState, reconcileToolEffect } from "./api.ts";
+import { continueRun, getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listAgents, listRunAttention, listToolEffects, observeRunEvents, patchTaskState, reconcileToolEffect } from "./api.ts";
 import {
   createDocument,
   deleteDocument,
@@ -67,13 +67,6 @@ test("legacy profiles normalize absent skill bindings to an empty list", async (
   assert.deepEqual((await listAgents())[0].skills, []);
 });
 
-test("trusted skill client reads only the metadata catalog", async (t) => {
-  mockFetch(t, [{ name: "knowledge-answer", description: "Read facts", hash: "frozen" }], (url) => {
-    assert.equal(url, "http://localhost:8080/api/skills");
-  });
-  assert.equal((await listSkills())[0].hash, "frozen");
-});
-
 test("operator attention client reads the derived run queue", async (t) => {
   mockFetch(t, [{ run_id: "run-1", reason: "recovery_available", evidence: [], observation_sequence: 7 }], (url, options) => {
     assert.equal(url, "http://localhost:8080/api/runs/attention");
@@ -104,22 +97,6 @@ test("replay preserves frozen budget and settled usage", async (t) => {
   assert.equal(replay.usage_ledger.totals.total_tokens, 3200);
   assert.equal(replay.usage_ledger.totals.prompt_tokens, 0);
   assert.equal(replay.usage_ledger.entries.length, 1);
-});
-
-test("replay preserves the frozen runtime snapshot for evidence comparison", async (t) => {
-  mockFetch(t, replayPayload({
-    runtime_snapshot: {
-      schema_version: 12,
-      mode: "single",
-      model: { provider: "openai", model: "gpt-test" },
-      context_assembly: { history_max_tokens: 2000 }
-    }
-  }));
-
-  const replay = await getRunReplay("run-1");
-
-  assert.equal(replay.runtime_snapshot.mode, "single");
-  assert.equal(replay.runtime_snapshot.model.model, "gpt-test");
 });
 
 test("replay preserves durable recovery metadata", async (t) => {

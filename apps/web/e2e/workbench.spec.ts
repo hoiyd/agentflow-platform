@@ -1,0 +1,123 @@
+import { test, expect } from "@playwright/test";
+
+const api = "http://127.0.0.1:18080";
+let browserErrors: string[] = [];
+
+test.beforeEach(async ({ page }) => {
+  browserErrors = [];
+  page.on("pageerror", error => browserErrors.push(error.message));
+  await page.goto("/workspace");
+  await expect(page.getByText("API connected", { exact: true })).toBeVisible();
+});
+
+test.afterEach(() => {
+  expect(browserErrors).toEqual([]);
+});
+
+test("Tools switches persist real catalog configuration across reload", async ({ page, request }) => {
+  await page.getByRole("button", { name: "Tools", exact: true }).click();
+  const card = page.locator(".tool-card").filter({ has: page.getByRole("heading", { name: "get_current_time", exact: true }) });
+  await card.getByRole("checkbox").click();
+  await expect(card.getByRole("checkbox")).not.toBeChecked();
+  await expect(card.getByRole("checkbox")).toBeEnabled();
+  const disabled = await request.get(`${api}/api/tools`);
+  expect(disabled.ok()).toBe(true);
+  expect((await disabled.json()).find((tool: { name: string }) => tool.name === "get_current_time").enabled).toBe(false);
+  await page.reload();
+  await page.getByRole("button", { name: "Tools", exact: true }).click();
+  await expect(card.getByRole("checkbox")).not.toBeChecked();
+  await card.getByRole("checkbox").click();
+  await expect(card.getByRole("checkbox")).toBeChecked();
+  await expect(card.getByRole("checkbox")).toBeEnabled();
+  const enabled = await request.get(`${api}/api/tools`);
+  expect((await enabled.json()).find((tool: { name: string }) => tool.name === "get_current_time").enabled).toBe(true);
+  await test.info().attach("catalog-evidence", { body: JSON.stringify(await enabled.json()), contentType: "application/json" });
+});
+
+test("Knowledge ingestion, detail, retrieval, and deletion use the actual index", async ({ page, request }) => {
+  const content = "Functional regression gates use disposable PostgreSQL databases. Structured evidence persists after reload. Index compatibility uses a fixed embedding model and versioned document identity.";
+  await page.getByRole("button", { name: "Knowledge", exact: true }).click();
+  await page.getByRole("tab", { name: /^Documents/ }).click();
+  await page.getByRole("tab", { name: "Paste text", exact: true }).click();
+  await page.getByRole("textbox", { name: "Document title", exact: true }).fill("Functional evidence guide");
+  await page.getByRole("textbox", { name: "Document content", exact: true }).fill(content);
+  const created = page.waitForResponse(response => response.url() === `${api}/api/documents` && response.request().method() === "POST");
+  await page.getByRole("button", { name: "Add document", exact: true }).click();
+  const response = await created;
+  expect(response.status()).toBe(201);
+  const document = await response.json();
+  const card = page.locator(".document-card").filter({ hasText: "Functional evidence guide" });
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "Details", exact: true }).click();
+  await expect(card).toContainText("fixed embedding model");
+  await page.getByRole("tab", { name: "Search", exact: true }).click();
+  await page.getByRole("textbox", { name: "Search indexed knowledge" }).fill("disposable PostgreSQL databases");
+  const searched = page.waitForResponse(response => response.url() === `${api}/api/rag/search` && response.request().method() === "POST");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const searchResponse = await searched;
+  await test.info().attach("retrieval-evidence", { body: JSON.stringify(await searchResponse.json()), contentType: "application/json" });
+  expect(searchResponse.status()).toBe(200);
+  await expect(page.locator(".rag-results").first()).toContainText("Functional evidence guide");
+  await expect(page.locator(".knowledge-error")).toHaveCount(0);
+  const detail = await request.get(`${api}/api/documents/${document.id}`);
+  expect(detail.ok()).toBe(true);
+  await test.info().attach("index-evidence", { body: JSON.stringify(await detail.json()), contentType: "application/json" });
+  await page.getByRole("tab", { name: /^Documents/ }).click();
+  page.once("dialog", dialog => dialog.accept());
+  await card.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(card).toHaveCount(0);
+  expect((await request.get(`${api}/api/documents/${document.id}`)).status()).toBe(404);
+});
+
+test("Memory save, recall, correction history, and deletion retain their version contract", async ({ page, request }) => {
+  await page.getByRole("button", { name: "Memory", exact: true }).click();
+  const content = "Project convention: functional tests use disposable PostgreSQL databases.";
+  await page.getByRole("textbox", { name: "Content", exact: true }).fill(content);
+  const saved = page.waitForResponse(response => response.url() === `${api}/api/memories` && response.request().method() === "POST");
+  await page.getByRole("button", { name: "Save memory", exact: true }).click();
+  const response = await saved;
+  expect(response.status()).toBe(201);
+  const memory = await response.json();
+  await expect(page.locator(".memory-saved")).toContainText(content);
+  await page.getByRole("textbox", { name: "Memory search query" }).fill("PostgreSQL databases");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(page.locator(".memory-results")).toContainText(content);
+  await page.locator(".memory-saved").getByRole("button", { name: "Correct memory" }).click();
+  const dialog = page.getByRole("dialog", { name: "Correct memory" });
+  const corrected = "Project convention: functional tests use isolated versioned PostgreSQL databases.";
+  await expect(dialog).toContainText("Version 1");
+  await dialog.getByRole("textbox", { name: "Corrected content" }).fill(corrected);
+  await dialog.getByRole("textbox", { name: "Reason", exact: true }).fill("Clarify fixture isolation");
+  await dialog.getByRole("button", { name: "Save correction" }).click();
+  await expect(page.getByRole("dialog", { name: "Memory history" })).toContainText("Version 2");
+  await page.getByRole("button", { name: "Close memory dialog" }).click();
+  const detail = await request.get(`${api}/api/memories/${memory.id}`);
+  expect(detail.ok()).toBe(true);
+  const value = await detail.json();
+  expect(value.memory.version).toBe(2);
+  expect(value.memory.content).toBe(corrected);
+  expect(value.changes).toHaveLength(1);
+  await test.info().attach("memory-evidence", { body: JSON.stringify(value), contentType: "application/json" });
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const recalled = page.locator(".memory-result").filter({ hasText: corrected });
+  await expect(recalled).toBeVisible();
+  await recalled.getByRole("button", { name: "Delete memory" }).click();
+  const deletion = page.getByRole("dialog", { name: "Delete memory" });
+  await deletion.getByRole("textbox", { name: "Reason", exact: true }).fill("Fixture cleanup");
+  await deletion.getByRole("button", { name: "Delete memory", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Memory history" })).toContainText("Deleted from recall");
+  await page.getByRole("button", { name: "Close memory dialog" }).click();
+  const searched = page.waitForResponse(response => response.url() === `${api}/api/memories/search` && response.request().method() === "POST");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const searchResponse = await searched;
+  expect(searchResponse.status()).toBe(200);
+  const matches = await searchResponse.json();
+  expect((matches ?? []).some((item: { memory: { id: string } }) => item.memory.id === memory.id)).toBe(false);
+  await expect(page.getByRole("button", { name: "Search", exact: true })).toBeEnabled();
+  await expect(page.locator(".memory-result").filter({ hasText: corrected })).toHaveCount(0);
+  const deleted = await request.get(`${api}/api/memories/${memory.id}`);
+  const tombstone = await deleted.json();
+  expect(tombstone.memory.version).toBe(3);
+  expect(tombstone.memory.content).toBe("");
+  expect(tombstone.memory.deleted_at).toBeTruthy();
+});

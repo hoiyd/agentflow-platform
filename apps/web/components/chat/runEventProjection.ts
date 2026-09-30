@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import type { ChatEvent, Message } from "../../lib/api";
+import { formatChatError } from "../../lib/run-stream";
 import { toAutonomousProgress, type AutonomousProgress } from "./AutonomousPanel";
 import {
   upsertCollaborationStep,
@@ -73,7 +74,7 @@ export function createRunEventHandler(options: RunEventProjectionOptions) {
       );
     }
     if (event.type === "error") {
-      options.setError(event.error);
+      options.setError(formatChatError(event));
     }
     if (event.type === "done") {
       options.setMessages((items) =>
