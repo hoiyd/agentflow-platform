@@ -175,12 +175,6 @@ The runtime follows this design principle:
 
 ## Recorded Assets
 
-| Asset | What it shows |
-| --- | --- |
-| [Multi recording](../assets/agentflow-demo.gif) | End-to-end execution and Replay |
-| [RAG recording](../assets/hybrid-rag-demo.gif) | Ingestion, recall/ranking/Gate, and Context selection |
-| [Verification recording](../assets/completion-verification-demo.gif) | Contract, Evidence, Usage, and Replay |
-| [Single](../assets/single-mode.png), [Multi](../assets/multi-mode.png), [Loop](../assets/loop-mode.png) | Mode-specific offline visual references |
-
-The recordings explain state transitions; they are not separate demos or
-benchmark evidence.
+The [root README's Demo Gallery](../../README.md#demo-gallery) directly displays
+all three recordings and mode screenshots. This guide owns the reproducible
+walkthrough; the gallery provides a visual overview, not benchmark evidence.

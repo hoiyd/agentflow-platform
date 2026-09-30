@@ -11,6 +11,39 @@ Chat uses credentialed OpenAI-compatible routes; embeddings can use local
 Ollama. Simulation is explicit and confined to offline tests and evaluation.
 PostgreSQL with pgvector is the only application persistence backend.
 
+## Demo Gallery
+
+### Multi-Agent Execution and Replay
+
+![Multi-Agent execution and Replay](docs/assets/agentflow-demo.gif)
+
+An incident task progresses through plan approval, routing, execution, review,
+and Replay.
+
+### Knowledge and Retrieval
+
+![Knowledge ingestion, hybrid retrieval, and Context selection](docs/assets/hybrid-rag-demo.gif)
+
+Document ingestion, hybrid recall, ranking, relevance gating, and source-backed
+Context selection.
+
+### Completion Verification
+
+![Completion Contract, Verification Evidence, Usage, and Replay](docs/assets/completion-verification-demo.gif)
+
+A Completion Contract connects the final output to Verification Evidence,
+Usage, and Replay. Recordings show behavior, not performance or model-quality benchmarks.
+
+### Workbench Modes
+
+| Single | Multi | Loop |
+| --- | --- | --- |
+| [![Single workbench](docs/assets/single-mode.png)](docs/assets/single-mode.png) | [![Multi-Agent workbench](docs/assets/multi-mode.png)](docs/assets/multi-mode.png) | [![Loop workbench](docs/assets/loop-mode.png)](docs/assets/loop-mode.png) |
+
+These mode screenshots are offline visual references; select an image for the
+full-size view. The [five-minute demo](docs/guides/demo.md) covers setup, the
+walkthrough, and a deterministic no-network evidence path.
+
 ## Execution Modes
 
 All modes share one Turn Engine and the same policy, accounting, and event
@@ -26,15 +59,6 @@ Multi's Worker is an isolated Stage inside one Run, not a Child Run. Loop can
 pause for input without discarding progress. See
 [execution modes](docs/runtime/execution-modes.md) for topology, trade-offs,
 streaming, and recovery behavior.
-
-## See It Run
-
-![Multi-Agent execution and Replay](docs/assets/agentflow-demo.gif)
-
-The recording follows an incident task through plan approval, routing,
-execution, review, and Replay. It shows behavior, not a performance benchmark.
-The [five-minute demo](docs/guides/demo.md) includes focused RAG/Verification
-recordings, mode screenshots, and a deterministic no-network evidence path.
 
 ## Architecture
 
