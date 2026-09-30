@@ -46,6 +46,7 @@ related pages link to its contract rather than copying configuration or algorith
 - [Scoped Knowledge bindings](tools/scoped-knowledge-tools.md) and [Web citations](tools/web-source-citations.md).
 - [Trusted Skills](tools/trusted-skills.md): Loader contract, Agent binding, progressive activation, frozen content, and resource limits.
 - [Skill installation](tools/skill-installation.md): native Vercel workflow, root checks, restricted Go fallback, provenance, and publication safety.
+- [Skill Checker](tools/skill-checker.md): read-only compatibility diagnostics, resource references, Tool dependency checks, and unsupported semantics.
 - [Tool contract/fault testing](tools/tool-contract-testing.md): shared Binding suite and adding coverage for a new Tool.
 
 ## Validation and Evidence
