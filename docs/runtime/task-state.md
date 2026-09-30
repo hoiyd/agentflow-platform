@@ -55,8 +55,9 @@ than silently overwriting another actor's change.
 
 ## Runtime Integration
 
-Runtime Snapshot v8 introduced Structured Task State context. The current
-v16 Snapshot retains it; v15 and earlier snapshots are Replay-only.
+Structured Task State context is part of the frozen execution protocol.
+[Snapshot compatibility](../architecture/terms.md#runtime-snapshot) determines
+which historical records can be replayed or resumed.
 Current snapshots freeze the runtime-owned `update_task_state` Tool. The Tool is
 not user-toggleable: it is a
 harness capability backed by the same versioned

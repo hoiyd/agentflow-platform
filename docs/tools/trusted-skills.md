@@ -19,7 +19,7 @@ This implementation deliberately does not adopt executable scripts or
 Prefer [native Vercel Skills CLI from the repository root](skill-installation.md)
 for remote packages. `./scripts/skill-install.sh --repo ... --path ...`
 runs the existing Go CLI as an
-[operator-only Go fallback](skill-installation-fallback.md) when Vercel cannot
+[operator-only Go fallback](skill-installation.md#restricted-go-fallback) when Vercel cannot
 be used. Download, operator review, runtime trust and Agent binding remain
 separate steps; neither installer changes Loader permissions or configuration.
 
@@ -32,7 +32,8 @@ TRUSTED_SKILL_DIRS=../../.agents/skills
 
 Each CSV entry names an operator-trusted installation root. Immediate directories
 containing `SKILL.md` are discovered, without recursive repository scanning or
-following package symlinks. Empty is the default and disables new bindings;
+following package symlinks. Unset/empty configuration disables new bindings;
+`.env.example` explicitly selects the shared installation root;
 an existing empty root also produces an empty catalog. Missing roots, individual
 package paths, duplicate names, invalid packages or more than eight packages
 fail startup rather than producing a partially trusted catalog. Installing into

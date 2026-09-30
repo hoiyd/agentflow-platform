@@ -109,17 +109,33 @@ Choose Multi when:
 - independent review is worth additional latency and model usage;
 - handoffs and responsibility boundaries must be explainable afterward.
 
-The Worker Stage excludes conversation history, Context Compaction, durable
-Task State injection, and Task State mutation. Its complete output remains on
-the parent Run while Reviewer and Finalizer receive a bounded handoff. See
-[Isolated Worker Stage](isolated-worker-stage.md).
-
 The current topology is intentionally fixed rather than a generic arbitrary
-DAG. This keeps lifecycle, continue semantics, and Replay predictable while
-still exposing a bounded Router extension point.
+DAG; lifecycle, Continue, and Replay remain predictable. See
+[Agent selection](agent-selection.md) for eligibility, ranking/fallback,
+Snapshot, and decision-event contracts.
 
-See [Capability-aware Agent Selection](agent-selection.md) for the eligibility,
-structured response, fallback, Snapshot, and decision-event contracts.
+### Isolated Worker Stage
+
+The Worker receives only the approved task, Router-selected frozen Agent,
+its frozen Tool allowlist, and explicitly retrieved Memory/Knowledge.
+Conversation history, Compaction, Task State injection, and the
+`update_task_state` Tool are excluded. It uses the owning Run's routes,
+Budget/Ledger, Tool Effects, Artifacts, events, and checkpoints: no Child Run or
+second lifecycle authority.
+
+The full output persists on the Worker `CollaborationStep`. Reviewer/Finalizer
+receive at most 4,000 characters; truncated handoffs include
+`run://<run_id>/stages/<stage_id>` for the full output.
+Recovery reuses completed Stages and reruns the first missing/interrupted one,
+refusing Resume while effects require reconciliation. See [checkpoints](durable-recovery.md).
+
+### Legacy Worker Data
+
+Upgrade migration copies completed legacy Child output to the owning Worker
+Stage, reassigns usage, request/effect/Artifact/checkpoint and non-lifecycle trace
+evidence, then removes delegation events/Child rows and drops `run_delegations`.
+Legacy in-flight tasks remain replayable but must restart as a new Run across
+that removed protocol boundary; current Runs recover via Stage checkpoints.
 
 ## Loop Mode
 

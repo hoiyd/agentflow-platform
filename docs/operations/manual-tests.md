@@ -11,7 +11,7 @@ Gate tests below exercise that subsystem.
 
 ## Prerequisite
 
-Run the repository's [Automated Tests](../../README.md#automated-tests) before
+Run the repository's [Automated Tests](../guides/local-setup.md#tests-and-offline-evidence) before
 starting the manual cases:
 
 ```bash
@@ -117,8 +117,8 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
 1. Add or upload a knowledge document with a unique phrase.
 2. Ask a chat question that should use that phrase in Single Agent mode.
 3. Open the run replay page from the active run link.
-4. Confirm the Retrieved context panel shows retrieval event count, memory count, matched child count, model-context chunk count, embedding provider/model/dimensions, executor/framework, RRF version/parameters, Reranker implementation/config version, Relevance Gate policy/config version, and the knowledge context token limit.
-5. Select a `retrieval` or `llm_start` event.
+4. Confirm the Retrieved context panel shows retrieval event count, memory count, matched child count, model-context chunk count, embedding provider/model/dimensions, native executor, RRF version/parameters, Reranker implementation/config version, Relevance Gate policy/config version, and the knowledge context token limit.
+5. Select a `retrieval.*` or `model.request_prepared` event.
 6. Confirm retrieved memories and knowledge chunks are visible above the raw JSON payload.
 7. Confirm event detail or raw payload identifies the native execution protocol.
 8. Ask for a grounded answer and confirm the response uses `[S1]`-style markers, the assistant Message shows matching Source details, and Replay contains `citation.resolved` with no invalid source IDs.
@@ -170,7 +170,7 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
    identity/configuration mismatch, keeps both outputs inspectable, and disables
    deltas.
 
-## Interview Demo
+## Demo
 
-For a timed reviewer walkthrough, use [Interview Demo](../guides/demo.md). This guide
+For a timed reviewer walkthrough, use [Five-minute demo](../guides/demo.md). This guide
 remains the source for manual checks and expected observable results.

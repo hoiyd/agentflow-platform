@@ -1,369 +1,192 @@
 # Backend Configuration
 
-Configuration is read at process startup, normalized, and passed through the
-application composition root. `.env.example` is the executable reference for
-local defaults; this document explains ownership and interaction between the
-settings.
-
-For the ownership, scope, unit, interaction rules, and tuning order of every
-major limit, start with [Execution Controls](../runtime/execution-controls.md).
+Configuration is loaded at startup and injected by `app`. Use
+[`.env.example`](../../apps/api/.env.example) for the maintained environment
+list and defaults; this page explains deployment choices. For control scope,
+units, precedence, and tuning, use [Execution controls](../runtime/execution-controls.md).
+For startup commands, use [Local setup](../guides/local-setup.md).
 
 ## Baseline Environment
 
-Common environment variables:
+| Setting | Deployment requirement |
+| --- | --- |
+| `DATABASE_URL` | Required PostgreSQL + pgvector; no File Store fallback |
+| `MODEL_ROUTE_CONFIG_PATH` | Required non-empty peer Chat route catalog; default path resolves from API cwd |
+| Credential variables named by routes | Required separately in process environment or ignored `.env`; never JSON/Snapshot values |
+| `BIND_ADDRESS` / `PORT` | Loopback / 8080 by default; widen binding only behind an access boundary |
+| `ALLOWED_ORIGINS` | Browser CORS origins, not authentication |
+| `EMBEDDING_*` | Independent embedding endpoint/model/dimensions/timeout; dimensions must match stored vectors |
+| `TOOL_CONFIG_PATH` | Operator enablement/security policy file, not application persistence |
+| `TRUSTED_SKILL_DIRS` | Reviewed installation roots; relative to API process cwd |
 
-```bash
-BIND_ADDRESS=127.0.0.1
-PORT=8080
-DATABASE_URL=postgres://agentflow:agentflow@localhost:5432/agentflow?sslmode=disable
-TOOL_CONFIG_PATH=.data/tools.json
-TRUSTED_SKILL_DIRS=
-TAVILY_API_KEY=
-TOOL_RESULT_MAX_BATCH_BYTES=8000
-TOOL_ARTIFACT_MAX_BYTES=5242880
-TOOL_ARTIFACT_PREVIEW_BYTES=1000
-TOOL_ARTIFACT_RETENTION=168h
-TOOL_PROGRESS_GUARD_ENABLED=true
-TOOL_PROGRESS_WARN_AFTER=2
-TOOL_PROGRESS_BLOCK_AFTER=4
-TOOL_PROGRESS_HALT_AFTER=5
-VERIFICATION_WORKSPACE_ROOT=
-VERIFICATION_ALLOWED_COMMANDS=
-VERIFICATION_ALLOWED_HTTP_HOSTS=
-VERIFICATION_MAX_ARTIFACT_BYTES=65536
-
-MODEL_ROUTE_CONFIG_PATH=config/model-routes.json
-PROVIDER_A_API_KEY=
-PROVIDER_B_API_KEY=
-EMBEDDING_API_KEY=
-EMBEDDING_BASE_URL=http://localhost:11434/api/embed
-EMBEDDING_MODEL=embeddinggemma
-EMBEDDING_DIMENSIONS=1536
-EMBEDDING_REQUEST_TIMEOUT=5m
-
-MAX_CONCURRENT_RUNS=8
-RUN_QUEUE_SIZE=32
-RUN_QUEUE_WAIT_TIMEOUT=30s
-MAX_CONCURRENT_MODEL_REQUESTS=8
-MODEL_REQUESTS_PER_MINUTE=60
-MODEL_TOKENS_PER_MINUTE=120000
-MODEL_RETRY_MAX_ATTEMPTS=3
-MODEL_RETRY_BASE_DELAY=500ms
-MODEL_RETRY_MAX_DELAY=5s
-MODEL_REQUEST_CAPTURE_MODE=metadata_only
-MODEL_REQUEST_CAPTURE_MAX_BYTES=262144
-MODEL_REQUEST_CAPTURE_RETENTION=168h
-RUN_MAX_MODEL_CALLS=32
-RUN_MAX_PROMPT_TOKENS=200000
-RUN_MAX_COMPLETION_TOKENS=50000
-RUN_MAX_TOTAL_TOKENS=250000
-RUN_MAX_TOOL_CALLS=50
-RUN_MAX_RUNTIME=15m
-RUN_MAX_ESTIMATED_COST_USD=0
-MODEL_INPUT_COST_PER_MILLION_TOKENS_USD=0
-MODEL_OUTPUT_COST_PER_MILLION_TOKENS_USD=0
-
-ROUTER_MODE=auto
-ALLOWED_ORIGINS=http://localhost:3000
-```
-
-`BIND_ADDRESS` defaults to loopback because the API has no built-in
-authentication. Set it to `0.0.0.0` only behind an intentional external access
-boundary. `ALLOWED_ORIGINS` controls browser CORS and does not provide access
-control.
+The launcher uses `apps/api` as cwd. The template selects
+`config/model-routes.json`, `.data/tools.json`, and `../../.agents/skills`.
+Unset/empty Skill configuration disables bindings; `make setup` creates the
+empty shared root. Do not commit local `.env`, credentials, or operator packages.
 
 ## Workspace Scope
 
-Conversation, Message, Run, Document, Memory, and retrieval requests always
-carry a non-empty workspace scope. Clients may send `X-Workspace-ID`; when it
-is omitted, both API and web client use the reserved `default_workspace`
-namespace. Workspace isolation has no feature flag and cannot be disabled.
+All resource operations resolve a non-empty namespace. Omitted scope and legacy
+`default` use `default_workspace`; explicit custom IDs are unchanged.
+Header/query/payload selectors must agree. Existing empty/default records are
+normalized by startup migration.
 
-Existing Postgres records with an empty workspace or the legacy
-reserved value `default` are migrated to `default_workspace`. Explicit custom
-workspace IDs remain unchanged.
+The web client uses `NEXT_PUBLIC_WORKSPACE_ID` or `default_workspace`.
+Selecting a namespace grants no identity, Membership, or ACL rights; a trusted
+boundary must validate user-controlled selectors before an untrusted deployment.
+Namespace isolation cannot be disabled. See [API access](../reference/api-reference.md#access-and-workspace-scope).
 
-Workspace scope is an isolation key, not authentication. Production deployments
-must derive or validate it at a trusted gateway rather than trusting arbitrary
-client-supplied headers.
-
-The web client sends `NEXT_PUBLIC_WORKSPACE_ID` when configured and otherwise
-uses `default_workspace`. Changing this value selects a namespace; it does not
-grant access to that namespace.
-
-Do not commit `.env` files. Runtime Snapshots freeze provider endpoints and
-model identity for reproducibility, but credentials remain live process
-configuration and are never persisted with a Run. `EMBEDDING_API_KEY` and the
-credential variables named by route configuration are resolved at application
-composition and passed directly to provider clients; they are not stored in the
-general `Config` value. See
-[Credential boundary and redaction](credential-boundary.md).
-
-## Concurrency, Rate Limits, and Retry
-
-Concurrency settings control different layers:
-
-- `MAX_CONCURRENT_RUNS` limits active Agent runs. Runs for the same conversation remain single-writer.
-- `RUN_QUEUE_SIZE` adds bounded waiting capacity beyond active runs. Excess requests receive `429` with `Retry-After`.
-- `RUN_QUEUE_WAIT_TIMEOUT` limits queue waiting time. Timed-out requests receive `503` with `Retry-After`.
-- `MAX_CONCURRENT_MODEL_REQUESTS` limits model HTTP requests currently in flight across Chat and Embeddings. It is a request limit, not a model-count or connection-pool setting. Streaming responses hold a slot until the response body closes.
-- `MODEL_REQUESTS_PER_MINUTE` is the per-API-key request token-bucket capacity and refill rate.
-- `MODEL_TOKENS_PER_MINUTE` is the per-API-key approximate input-token bucket based on serialized request size; streamed output tokens are not included.
-- Each retry attempt acquires a new model-request permit and counts toward RPM/TPM. Backoff waits do not hold a concurrency slot.
-- `MODEL_RETRY_MAX_ATTEMPTS` includes the initial request. Set it to `1` to disable retries.
-- `MODEL_RETRY_BASE_DELAY` starts exponential backoff; `MODEL_RETRY_MAX_DELAY` caps both backoff and provider `Retry-After` values.
-
-Set either per-minute value to `0` to disable that token bucket.
-
-Model errors are classified before retry. Transport failures, timeouts, rate limits, provider `5xx` responses, and invalid provider responses are retryable. Authentication, quota, model-not-found, invalid request, context-length, content-policy, local request token-bucket capacity, and canceled errors fail immediately. Streaming requests retry only before the first output delta, preventing duplicated assistant text.
-
-## Model Request Capture
-
-Every run-scoped physical chat request persists a secret-free Envelope and the
-SHA-256 hash of the exact canonical JSON passed to the model transport.
-`MODEL_REQUEST_CAPTURE_MODE` controls optional content retention:
-
-- `metadata_only`: no prompt content; production-safe default.
-- `redacted`: bounded canonical JSON after deterministic secret redaction.
-- `full`: exact bounded JSON for trusted local debugging only. A detected
-  credential automatically downgrades the individual capture to `redacted`.
-
-`MODEL_REQUEST_CAPTURE_MAX_BYTES` applies only to stored redacted/full content.
-Oversized content is omitted and marked truncated; hashes, counts, effective
-parameters, Runtime Snapshot hash, and Context Manifest reference remain.
-`MODEL_REQUEST_CAPTURE_RETENTION` controls content lifetime. Expired content is
-purged lazily on Postgres reads; durable Envelope and redaction metadata
-remain available.
-Changing this process-level observability policy does not change model input or
-the semantic protocol frozen with a Run. See
-[Model request reconstruction](../context/model-request-reconstruction.md).
-
-## Runtime Invariants
-
-Runtime invariants always log stable codes and return them in
-`projection.invariant_failures` without changing the Run result or making
-Replay unreadable. Invariant checks never mutate model requests, Tool results,
-persisted events, or Run completion state.
-
-## Run Budget
-
-`RUN_MAX_*` values are frozen into each new Run's Runtime Snapshot. Set a call,
-token, tool, cost, or runtime value to `0` to disable that dimension. Runtime
-means accumulated `running` segments; queue and `waiting_for_user` time are not
-charged.
-
-The two model price settings and maximum cost are USD values converted to
-integer microdollars for persistence. Cost enforcement is disabled while
-`RUN_MAX_ESTIMATED_COST_USD=0`. Configure both input and output prices for the
-selected model before enabling it.
-
-Run model calls are logical operations. Provider retries continue to consume
-request concurrency and RPM/TPM, but reuse one Run reservation. See
-[Run Budget and Usage Ledger](../runtime/run-budget.md) for purpose scope, settlement,
-output caps, Autonomous precedence, and observed-overage semantics.
-
-`AUTONOMOUS_MAX_ITERATIONS` and `AUTONOMOUS_MAX_OUTPUT_CHARS` are mode-owned
-loop guards. `AUTONOMOUS_MAX_RUNTIME_SECONDS` and
-`AUTONOMOUS_MAX_TOOL_CALLS` are mode-specific configuration caps: for new Runs
-they are folded into the frozen Run Budget by taking the stricter value, then
-only Run Budget enforces those two resources. This avoids competing counters
-while preserving the existing Autonomous safety profile.
+Route/embedding credentials are resolved at composition and passed directly to
+clients, not stored in general Config or frozen records. Endpoints/model identity
+are secret-free protocol. See [credential boundary](credential-boundary.md).
 
 ## Model and Embedding Providers
 
-Set `MODEL_ROUTE_CONFIG_PATH` to a JSON file containing the complete set of
-peer OpenAI-compatible Chat LLM routes. Each entry defines its stable ID,
-endpoint, model, request timeout, credential environment variable name,
-capabilities, limits, priority, and pricing metadata. The path and a non-empty
-Catalog are required at startup. Add referenced credentials separately to the
-process environment; startup fails when one is unset, and its value is never
-read into general Config or persisted. See
-`apps/api/config/model-routes.example.json` for the schema.
+The secret-free route JSON defines stable ID, provider/model/endpoint,
+capabilities, context/output limits, priority, generation profiles, pricing,
+credential environment-variable name, and live request timeout. Copy/review
+[the example](../../apps/api/config/model-routes.example.json); missing route
+credentials fail startup instead of selecting simulation.
 
-Higher priority wins whenever the route passes every hard requirement. Equal
-priority uses the stable route ID as the tie-breaker. The first successful
-decision is reused for the Run, including Context compaction, adaptive Memory
-extraction, and title generation. All route clients share the global
-concurrency limit while RPM/TPM remain isolated by API key. H-10A does not retry
-a failed request on another route. See
-[Model Route Contract and Catalog](../runtime/model-routing.md).
+The first eligible route is selected by priority, then stable ID. Its affinity
+is reused across the Run, compaction, adaptive extraction, and title generation.
+All clients share model concurrency; per-key RPM/TPM stay separate. Failed calls
+are not retried on another route. Frozen generation parameters are not assumed
+to produce deterministic output. See [model routing](../runtime/model-routing.md).
 
-Embedding is one independent service and never enters Chat routing. It calls
-Ollama when `EMBEDDING_BASE_URL` points to
-`http://localhost:11434/api/embed`. For a credentialed OpenAI-compatible
-embedding endpoint, set `EMBEDDING_API_KEY`; without it, non-Ollama embedding
-requests fail instead of returning synthetic vectors. The frontend search panel
-shows the embedding provider and model used by RAG search. Explicit offline
-fixtures report `simulated / local_hash_embedding`; they verify protocol
-behavior without claiming model or semantic retrieval quality.
+Embedding never participates in Chat routing. The default Ollama endpoint is
+`http://localhost:11434/api/embed`; set the actual model and dimension.
+For credentialed OpenAI-compatible embeddings, use its `/v1` base URL and
+`EMBEDDING_API_KEY`. A keyless non-Ollama call fails rather than returning
+synthetic vectors. Offline `simulated / local_hash_embedding` is explicit and
+not quality evidence.
 
-To keep Chat on hosted routes and embeddings on local Ollama:
+Stored columns use `vector(1536)`. Choose matching output dimensions or migrate
+the vector columns; merely setting `EMBEDDING_DIMENSIONS` is not proof of
+model support. A provider with configurable output dimensions may use a larger
+model at 1536 dimensions. Reindex after provider/model/dimension/chunker changes:
+unknown or mixed active index identities return `knowledge_index_incompatible`,
+not partial search results. See [index lifecycle](../knowledge/knowledge-rag.md#index-lifecycle-and-compatibility).
 
-```bash
-MODEL_ROUTE_CONFIG_PATH=config/model-routes.json
-EMBEDDING_BASE_URL=http://localhost:11434/api/embed
-EMBEDDING_MODEL=embeddinggemma
-EMBEDDING_REQUEST_TIMEOUT=5m
-```
+## Concurrency, Rate Limits, and Retry
 
-Ollama's `/api/embed` endpoint is supported directly. To use a credentialed OpenAI-compatible embedding provider instead, set `EMBEDDING_API_KEY`, point `EMBEDDING_BASE_URL` to its `/v1` base URL, and set `EMBEDDING_MODEL` accordingly.
+| Variables | Owner / distinction |
+| --- | --- |
+| `MAX_CONCURRENT_RUNS`, `RUN_QUEUE_SIZE`, `RUN_QUEUE_WAIT_TIMEOUT` | Active tasks plus bounded waiting; same-Conversation single writer; full/expired waits return 429/503 + Retry-After |
+| `MAX_CONCURRENT_MODEL_REQUESTS` | In-flight Chat/Embedding HTTP requests, not model count; streams hold a slot until body close |
+| `MODEL_REQUESTS_PER_MINUTE` / `MODEL_TOKENS_PER_MINUTE` | Per-key request/input-estimate buckets; zero disables that bucket |
+| `MODEL_RETRY_*` | Physical attempts/backoff inside one logical call; retries reacquire permits, backoff holds none |
 
-Ollama embedding dimensions depend on the selected model. The bundled Postgres schema currently uses `vector(1536)`, so use a 1536-dimensional Ollama embedding model with Postgres, or migrate the vector columns to the model's actual dimension.
+Chat timeout uses the live route `request_timeout_seconds`; Embedding uses
+`EMBEDDING_REQUEST_TIMEOUT`. Local wait phases and provider work are measured
+separately; admission expiry is not transient provider failure.
+[Execution controls](../runtime/execution-controls.md#3-provider-timeout-and-retry)
+owns retryable classes, stream cutoff, and capacity errors.
 
-To use a stronger embedding model without changing the existing `vector(1536)` pgvector schema:
+## Run Budget
 
-```bash
-EMBEDDING_MODEL=text-embedding-3-large
-EMBEDDING_DIMENSIONS=1536
-```
+`RUN_MAX_*` freezes cumulative logical calls, prompt/completion/total tokens,
+Tool calls, active runtime, and estimated cost for new Runs. Zero disables the
+named dimension. Queue/human waiting is not active runtime; physical provider
+retries share a logical reservation.
 
-After changing embedding model/provider, re-upload or reindex documents. Search filters candidates by embedding provider/model so old chunks are not mixed with the new query vector space.
+Prices and maximum cost are USD converted to integer microdollars. Cost is
+unenforced at zero; configure input/output prices before enabling it. Autonomous
+runtime/Tool caps fold once into the stricter Run Budget; iterations and output
+characters remain mode-owned. See [Run Budget](../runtime/run-budget.md) for
+settlement, purpose, and overage semantics.
+
+## Model Request Capture
+
+| `MODEL_REQUEST_CAPTURE_MODE` | Retained content |
+| --- | --- |
+| `metadata_only` (default) | Secret-free Envelope, canonical transport hash/counts, effective parameters, Snapshot/Manifest references; no prompt body |
+| `redacted` | Bounded canonical JSON after deterministic redaction |
+| `full` | Exact bounded JSON for trusted local debugging; detected credentials downgrade that Capture to redacted |
+
+`MODEL_REQUEST_CAPTURE_MAX_BYTES` caps only retained body content; oversized
+captures keep metadata and are marked truncated. Retention expiry lazily purges
+content on Postgres reads, not Envelopes/redaction metadata. Capture policy is
+live observability, not frozen model-input semantics. See
+[request reconstruction](../context/model-request-reconstruction.md).
+
+## Runtime Invariants
+
+Invariants report stable codes in `projection.invariant_failures` and log
+without changing completion, mutating records, or making Replay unreadable.
+There is no fail-mode setting. See [projections](../runtime/event-projections-runtime-invariants.md).
 
 ## Memory Provider
 
-The built-in Memory Provider owns Recall, proposal, explicit commit,
-asynchronous Turn synchronization, and graceful shutdown. Its sync queue is
-bounded and ordered; provider retries cover transient embedding and persistence
-failures:
+`MEMORY_SYNC_QUEUE_SIZE` / `MEMORY_SYNC_JOB_TIMEOUT` bound asynchronous jobs.
+`MEMORY_PROVIDER_MAX_ATTEMPTS` includes the initial attempt; the retry delay
+covers transient embedding/persistence failures. Accepted jobs drain at shutdown;
+a full queue only rejects auxiliary work, never an already completed answer.
+Recall failure degrades to no Memory with typed diagnostics.
 
-```bash
-MEMORY_SYNC_QUEUE_SIZE=256
-MEMORY_SYNC_JOB_TIMEOUT=30s
-MEMORY_PROVIDER_MAX_ATTEMPTS=3
-MEMORY_PROVIDER_RETRY_BASE_DELAY=100ms
-```
-
-`MEMORY_PROVIDER_MAX_ATTEMPTS` includes the initial call. Accepted Turn sync
-jobs are drained during shutdown. A full queue rejects only auxiliary sync
-work; it does not retroactively fail the completed Run. Runtime Recall failure
-degrades to no recalled Memory and emits a typed diagnostic event.
-
-The provider always recognizes explicit durability signals through deterministic rules. Optional adaptive extraction runs only after the rule path returns no Candidate:
-
-```bash
-MEMORY_ADAPTIVE_EXTRACTION_MODE=shadow
-MEMORY_ADAPTIVE_MIN_CONFIDENCE=0.85
-```
-
-Modes are `off`, `shadow`, and `auto`. `shadow` records model proposals for evaluation but does not commit them to durable Memory. `auto` commits only proposals that pass the confidence threshold and the deterministic safety policy. No adaptive model request is made when no Chat route has a credential.
-
-Adaptive extraction uses the model selected for the originating Run and therefore consumes the same global concurrency, RPM, and TPM budgets as that conversation. Explicit rule matches remain model-free.
+Explicit durability rules are model-free. Adaptive extraction runs only when
+rules find no Candidate: `off` disables it, `shadow` (default) audits proposals
+without commit, `auto` commits only above `MEMORY_ADAPTIVE_MIN_CONFIDENCE`
+and after deterministic safety checks. It uses the originating Run's selected
+Chat model and shared request limits. See [Memory](../context/memory-management.md).
 
 ## Postgres + pgvector
 
-PostgreSQL with pgvector is required, including local server development.
-Missing or invalid database configuration fails startup; there is no fallback:
+Postgres performs idempotent startup migrations for execution records, usage,
+request capture, Memory, Knowledge, and their supporting evidence. HNSW indexes
+support vectors; generated `tsvector`/GIN indexes support lexical search without
+another setting. Offline lexical fixtures do not reproduce Postgres query or
+transaction semantics.
 
-```bash
-DATABASE_URL=postgres://agentflow:agentflow@localhost:5432/agentflow?sslmode=disable
-```
-
-The Postgres store runs idempotent startup migrations for:
-
-- conversations, messages, Agents, Runs, Collaboration Steps, and durable Run Events
-- Run active-runtime state and append-only usage entries
-- Model Request Envelopes and optional Context Captures
-- memory candidates, curated memories, and `memory_embeddings`
-- documents, document chunks, and document chunk embeddings
-- pgvector HNSW indexes for semantic search
-- generated `tsvector` columns and GIN indexes for document and chunk lexical search
-
-Lexical search does not require an additional environment variable. The
-Postgres startup migration creates and maintains the generated full-text
-columns automatically. Offline evaluation uses an in-memory fixture with phrase,
-identifier, and term-coverage scoring, not PostgreSQL full-text query semantics.
-
-`STORE_DRIVER` and `DATA_PATH` are retired and ignored. Existing JSON data is
-not read, imported, or deleted. `TOOL_CONFIG_PATH` remains an operator configuration
-file, not an application persistence backend. See [Storage Boundary](../architecture/storage-boundary.md).
+Retired `STORE_DRIVER`/`DATA_PATH` values are ignored; old JSON is not read,
+imported, or deleted. `TOOL_CONFIG_PATH` remains operator policy, not a Store.
+See [storage boundary](../architecture/storage-boundary.md) for fixture separation
+and database-test safety.
 
 ## Tool Configuration
 
-The backend loads enabled Tools and the operator-owned Tool Security Policy from
-`TOOL_CONFIG_PATH`, defaulting to `.data/tools.json`. If the file is missing,
-`calculator`, `get_current_time`, and `web_search` are enabled. Search also
-requires `TAVILY_API_KEY`, an Agent Tool allowlist entry, and an exact
-security-policy rule. New default configs include that rule; existing custom
-policies are not silently widened. Saved Tool settings and existing Agent
-allowlists keep their explicit choices; newly seeded `Field Researcher` includes
-`web_search`.
+Missing Tool config defaults to enabled `calculator`, `get_current_time`, and
+`web_search`. Web search also needs `TAVILY_API_KEY`, Agent allowlist membership,
+and an exact egress/credential policy. New defaults include the rule; existing
+custom policies and saved Agent choices are never silently widened.
 
-Tool enablement and runtime readiness are separate. An enabled Tool without a
-required credential remains visible in Tool configuration with
-`unavailable_reason: credential_unavailable`, but is not offered to the model or
-frozen into a new Run. An Agent's Tool list is an allowlist, not a list of hard
-requirements; only explicit `required_tools` constraints can exclude a
-Multi-Agent candidate for a missing Tool. A frozen Tool that later loses a
-required runtime prerequisite blocks Resume with an explicit error.
+Enablement is not readiness. Missing credentials expose `credential_unavailable`
+and withhold the Tool from new model/Snapshot definitions. Agent lists are
+allowlists, not requirements; only explicit `required_tools` makes a missing
+capability disqualify a Multi candidate. Losing a frozen prerequisite blocks
+Resume. See [Tool security](../tools/tool-security-policy.md).
 
-Oversized Tool results use the centralized Artifact boundary. The batch setting
-caps aggregate model-visible result content, the Artifact maximum caps one
-persisted result, preview bytes cap each model-visible preview, and retention is
-stored on each Artifact. See [Tool Result Artifact Governance](../tools/tool-result-artifacts.md).
-
-```json
-{
-  "enabled_tools": [
-    "calculator",
-    "get_current_time",
-    "web_search"
-  ]
-}
-```
-
-The Tool Executor applies scope authorization before Budget accounting or
-handler execution, then typed errors, per-Tool timeouts, result-size limits,
-and typed Run Events. See [Tool Security Policy and Scope](../tools/tool-security-policy.md)
-for policy JSON, defaults, Frozen Runtime behavior, and decision evidence.
-
-The Progress Guard thresholds govern repeated typed failures, unchanged
-read-only results, and bounded oscillation. They are frozen into each new Run;
-blocking occurs before Tool Budget and Handler execution. See
-[Tool Progress Guard](../tools/tool-progress-guard.md).
+`TOOL_RESULT_MAX_BATCH_BYTES` and `TOOL_ARTIFACT_*` bound aggregate results,
+immutable spills, previews, and persisted expiry; [Artifacts](../tools/tool-result-artifacts.md)
+own details. `TOOL_PROGRESS_*` thresholds are frozen per Run; guard rejection
+precedes Budget/Handler execution. See [Progress Guard](../tools/tool-progress-guard.md).
 
 ## Trusted Skill Packages
 
-`TRUSTED_SKILL_DIRS` is an operator-owned CSV list of exact reviewed package
-directories containing `SKILL.md`. Relative paths use the process working
-directory. Empty disables new bindings; invalid packages fail startup. Agent
-profiles bind names from `GET /api/skills`, not filesystem paths. This setting
-does not install scripts, enable Tools, or widen operator policy. Existing Runs
-retain bounded package content in their frozen Snapshot and do not reread local
-files on Resume. See [Trusted Skills](../tools/trusted-skills.md) for the format,
-size limits, progressive Context loading and privacy boundary.
+`TRUSTED_SKILL_DIRS` is a CSV of installation roots, not individual packages.
+The template uses `../../.agents/skills` from API cwd. Only immediate reviewed
+`SKILL.md` directories are discovered; no recursive scan or package symlinks.
+Empty disables new bindings; missing roots, duplicate names, invalid packages,
+and catalog overflow fail startup. Exact-package paths fail with a parent-root
+hint instead of silently finding zero packages.
+
+Agent profiles bind names from `GET /api/skills`. Roots grant no script, Tool,
+or credential permissions. Old Runs reuse bounded frozen content without
+rereading disk. See [installation](../tools/skill-installation.md) and
+[Loader contract](../tools/trusted-skills.md).
 
 ## Verification
 
-Verification is enabled per Run by including `completion_contract` in the
-initial `POST /api/chat` request. These environment variables only define
-verifier security boundaries and output limits; configuring them does not
-automatically verify Single, Multi-Agent, or Autonomous chats.
-
-The command verifier is disabled when `VERIFICATION_WORKSPACE_ROOT` or
-`VERIFICATION_ALLOWED_COMMANDS` is empty. The command is an argument vector
-executed without a shell; its relative working directory cannot escape the
-configured root. `VERIFICATION_ALLOWED_COMMANDS` is a comma-separated exact
-executable allowlist.
-
-The HTTP verifier permits localhost and loopback IPs.
-`VERIFICATION_ALLOWED_HTTP_HOSTS` adds comma-separated exact hostname or
-host:port values. Redirects follow the same allowlist.
-`VERIFICATION_MAX_ARTIFACT_BYTES` caps persisted output for each verifier while
-the Artifact keeps the output hash, observed byte count, and truncation flag.
-
-See [Verification](../runtime/verification.md) for contract and Gate behavior.
+Only `completion_contract` opts a new Run in; `VERIFICATION_*` settings bound
+safe execution, not activation. Commands require both workspace root and exact
+executable allowlist, run without a shell, and cannot escape the root through
+relative cwd. HTTP permits loopback by default; configured exact hosts/host:port
+and redirects follow the same allowlist. Artifact bytes are capped with hash,
+observed size, and truncation metadata. See [Verification](../runtime/verification.md).
 
 ## Operational Checklist
 
-Before sharing or deploying a configuration:
-
-1. Verify the selected embedding dimension matches the persisted pgvector
-   column dimension.
-2. Reindex documents after changing embedding provider, model, or dimension.
-3. Enable cost enforcement only after configuring prices for the active model.
-4. Keep the command verifier disabled unless its workspace root and executable
-   allowlist are intentionally scoped.
-5. Confirm allowed origins and HTTP verifier hosts are explicit for the target
-   environment.
-6. Create a new Run after changing frozen settings; existing Runs retain their
-   captured protocol.
+Check actual vector dimensions; reindex changed identities; set prices before
+cost limits; deliberately scope verifier commands/hosts and CORS/access; and
+create a new Run after changing frozen settings. Do not reinterpret old Runs
+through current editable config.

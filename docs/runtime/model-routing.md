@@ -26,8 +26,7 @@ each route references, but never contains, its credential environment variable.
 Each route has a stable ID and captures:
 
 - provider, model, and secret-free endpoint;
-- request timeout plus Tool calling, structured-output, streaming, and optional
-  `seed` capabilities;
+- Tool calling, structured-output, streaming, and optional `seed` capabilities;
 - context-window and maximum-output token limits;
 - deterministic priority, pricing metadata, definition revision, and effective
   generation policy;
@@ -51,6 +50,10 @@ guarantee of identical output across calls or backend revisions.
 Offline simulated fixtures do not sample model tokens and therefore do not
 apply these profiles. Production routes require configured credentials; a
 missing key never selects a simulated model.
+
+Request timeout is live client configuration from the route file, not a frozen
+Descriptor field. Request permits, retry, and timeout ownership remain in
+[Execution controls](execution-controls.md).
 
 ## Decision Protocol
 
@@ -83,7 +86,7 @@ verification use it directly; it never participates in Chat model routing.
 
 ## Snapshot and Resume
 
-Runtime Snapshot v18 freezes the route policy revision, Catalog revision, all
+The Runtime Snapshot freezes the route policy revision, Catalog revision, all
 route contracts, and the independent embedding identity required by the Run.
 Effective generation profiles are part of each frozen route and its revision;
 Resume sends the frozen values even if the current route file has changed.
@@ -96,7 +99,8 @@ Resume rebuilds a Catalog only from those frozen routes:
 - a removed route or changed credential reference fails closed;
 - changed model configuration does not replace the frozen provider, model,
   endpoint, capabilities, limits, or pricing metadata;
-- Snapshot v17 and earlier remain readable through Replay but are not resumable.
+- historical schemas remain readable through Replay; only the current schema is
+  resumable under [Snapshot compatibility](../architecture/terms.md#runtime-snapshot).
 
 ## Current Boundary
 

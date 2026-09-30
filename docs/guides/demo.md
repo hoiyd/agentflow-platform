@@ -17,7 +17,8 @@ instead of touring every screen.
 
 ## Preparation
 
-In one terminal, start the application:
+First configure the database, model routes/credentials, and embedding identity
+using [Local setup](local-setup.md). In one terminal, start the application:
 
 ```bash
 make quickstart
@@ -174,13 +175,6 @@ The runtime follows this design principle:
 
 ## Recorded Assets
 
-- `agentflow-demo.gif`: end-to-end Multi execution and Replay.
-- `hybrid-rag-demo.gif`: ingestion, Hybrid recall, RRF, reranking, Relevance Gate,
-  and final Context selection.
-- `completion-verification-demo.gif`: Completion Contract, Verification Evidence,
-  Usage, and Replay.
-- `single-mode.png`, `multi-mode.png`, and `loop-mode.png`: stable mode-specific
-  states for an offline visual reference.
-
-The recordings explain state transitions; they are not separate demos or
-benchmark evidence.
+The [root README's Demo Gallery](../../README.md#demo-gallery) directly displays
+all three recordings and mode screenshots. This guide owns the reproducible
+walkthrough; the gallery provides a visual overview, not benchmark evidence.

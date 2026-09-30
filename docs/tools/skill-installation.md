@@ -1,166 +1,187 @@
 # Skill Installation
 
+Installation, operator review, runtime trust, Agent binding, and execution
+permission are separate steps. This page owns both installer workflows;
+[Trusted Skills](trusted-skills.md) owns package format, Loader limits,
+progressive loading, and frozen content.
+
 ## Preferred Installer: Vercel Skills CLI
 
-Use [Vercel Skills CLI](https://github.com/vercel-labs/skills) directly from the
-**AgentFlow repository root**, not `apps/api`, `apps/web`, or a temporary download
-project. There is no adapter script. The complete restricted Go installer is
-retained as an [explicit fallback](skill-installation-fallback.md).
-Run that fallback from the root with
-`./scripts/skill-install.sh --repo ... --path ...`; the script forwards
-native Go CLI flags without invoking Vercel.
-
-Follow the official [Install a Skill and source-format examples](https://github.com/vercel-labs/skills#install-a-skill).
-From the AgentFlow repository root, the official basic example is:
+Run [Vercel Skills CLI](https://github.com/vercel-labs/skills) directly from the
+**AgentFlow repository root**, not `apps/api` or another project:
 
 ```bash
 npx skills add vercel-labs/agent-skills
 ```
 
-Select only reviewed packages, use **project** scope and the **Universal** target
-when prompted, and confirm the destination is `.agents/skills/` before installing.
-This source is the upstream command example, not a claim that every package is
-compatible with AgentFlow's restricted Loader.
+This is the upstream example, not an endorsement of every package. Select only
+reviewed packages, **project** scope and the **Universal** target; confirm
+`.agents/skills/` before installing. Do not use global scope. `--copy` avoids
+agent-directory symlinks but is not a sandbox. Consult the
+[official source formats](https://github.com/vercel-labs/skills#install-a-skill).
 
-Vercel's [project installation paths](https://github.com/vercel-labs/skills/blob/main/src/installer.ts)
-are based on its working directory. `universal` selects `.agents/skills/`;
-`--copy` avoids agent-directory symlinks. Do not use `--global` for AgentFlow.
-Compatibility was verified with `skills@1.7.0` (Node.js `>=22.20.0`, npm/npx and
-Git for repository sources); the basic command uses the currently published CLI.
-That verified version has no native arbitrary `--dest` option.
+The verified CLI version is 1.7.0 (Node >=22.20.0, npm/npx, Git for repository
+sources). Its project path comes from cwd and has no arbitrary `--dest` option;
+the basic command uses the currently published CLI. Use native list/update/remove
+from this same repository root. Vercel uses OS permissions, Git credentials,
+and network configuration; installs/updates can replace existing files. Review
+instructions, resources, changes, and License before API restart.
+
+## Shared Directory and Runtime Trust
 
 ```text
 agentflow-platform/
-  skills-lock.json                 Vercel-managed source identities
-  .agents/skills/                  shared operator-trusted installation root
-    <skill-name>/
-      SKILL.md
-      install-receipt.json        only if installed by the Go fallback
-    <another-skill-name>/
-      SKILL.md
-  apps/api/
-    .env                          TRUSTED_SKILL_DIRS=../../.agents/skills
+  skills-lock.json                 Vercel-managed provenance, ignored by Git
+  .agents/skills/<skill-name>/
+    SKILL.md
+    install-receipt.json            Go fallback only
+  apps/api/.env                    TRUSTED_SKILL_DIRS=../../.agents/skills
 ```
 
-Installed packages and the local lockfile are ignored by Git. Both installers
-use the same package layout and production Loader. Go fallback code remains
-separate under `apps/api/internal/skill/install/fallback/`; it does not wrap
-Vercel or edit `skills-lock.json`. Vercel can load fallback-installed files,
-but its lockfile-based restore/update does not record the fallback's provenance.
+`TRUSTED_SKILL_DIRS` is a CSV of reviewed **installation roots**. Relative paths
+use API cwd (`apps/api` under `make dev`). Discover only immediate non-hidden
+`SKILL.md` package directories: no recursive scan, symlinks, or trust inferred
+from locks/receipts. Invalid packages, duplicate names, or more than eight fail
+the catalog; empty roots are valid, and empty configuration disables bindings.
+`make setup` creates the normal empty root. Individual-package paths are invalid.
 
-## Directory Checks and Runtime Trust
+Installing a valid package in a configured root makes it discoverable after
+restart, not automatically bound or executed. Neither installer edits `.env`,
+Agent bindings, Tool grants, or old Runs. Bind reviewed names in Single's
+**Configure > Skills**; invoke explicitly or let the model select a bound method.
+Old Runs use frozen content, not updated disk files.
 
-`TRUSTED_SKILL_DIRS` now names **installation roots**, not individual package
-directories. In `apps/api/.env`, for the usual API process cwd of `apps/api`:
+| Directory mistake | Check / outcome |
+| --- | --- |
+| Shell fallback outside repository root | Reject before Go activation/download |
+| Underlying Go CLI outside repository root or API module | Reject using project markers; root `go -C apps/api` is supported |
+| Native Vercel outside root | Cannot be intercepted; first confirm `apps/api/go.mod` and `apps/web/package.json` in cwd |
+| Missing/non-directory configured root | Startup fails with resolved path and install/cwd hint |
+| Config points to one package | Startup requires the parent installation root |
+| Empty root / installation elsewhere | Empty or old catalog may load; startup success does not prove the new install location |
+
+Layout compatibility is not full Skill capability compatibility. AgentFlow
+loads bounded UTF-8 instructions/resources, not binary assets, scripts, or
+arbitrary metadata. Native Vercel can copy/dereference files unsupported by that
+Loader. The fallback validates the restricted subset and records omissions.
+
+## Restricted Go Fallback
+
+Choose the complete Go installer explicitly when native Vercel cannot be used;
+a Vercel failure never triggers it automatically. It lives in
+`internal/skill/install/fallback`, not the Loader or a Vercel adapter.
+
+From the repository root:
 
 ```bash
-TRUSTED_SKILL_DIRS=../../.agents/skills
+mkdir -p .agents/skills
+./scripts/skill-install.sh --repo '<owner>/<repository>' --path '<package-subdirectory>/<skill-name>'
+./scripts/skill-install.sh --repo '<owner>/<repository>' --path '<package-subdirectory>/<skill-name>' --apply
 ```
 
-An absolute repository-root `.agents/skills` path also works. CSV allows multiple
-operator-owned roots, but the normal Vercel/Go workflow uses just this one.
-Existing exact-package entries must be replaced by their parent installation
-root; they fail explicitly rather than silently finding zero packages.
+The first command previews via temporary downloads and leaves the destination
+unchanged; the second publishes. The shell activates the repository's Go version
+and forwards every argument through `"$@"` to
+`go -C apps/api run ./cmd/skill install`. Plain root `go run ./cmd/skill` is not
+valid because there is no root Go module. Quote placeholders/paths as needed.
 
-The Loader discovers only immediate, non-hidden subdirectories containing
-`SKILL.md`. It skips non-package directories, notes and installer staging/lock
-entries; it does not search recursively, follow package symlinks or interpret a
-lockfile/receipt as permission. Invalid packages, duplicate names across roots
-or more than eight discovered packages fail the whole catalog, without partial
-trust. Empty roots are valid; an empty environment value disables new bindings.
-`make setup` creates the empty shared root for a clean checkout.
-
-The configured root is a trust boundary: new valid packages placed there become
-available after an API restart without changing the environment list. **Review
-new instructions/resources and their License before restarting the API.** Agent
-bindings, Tool permissions and credentials are still separate; discovering a
-package does not automatically bind or execute it. Old Runs keep frozen content.
-
-Neither CLI edits `.env`, bindings or Tool permissions. See
-[Trusted Skills](trusted-skills.md) for invocation, Snapshot and Replay behavior.
-
-| Situation | Check / outcome |
+| Flag | Contract |
 | --- | --- |
-| Shell fallback run outside this repository root | Stop with a repository-root hint before Go activation or downloading. |
-| Go installer run outside this repository root or its `apps/api` module | Check project markers and stop before downloading. Root-level `go -C apps/api` is supported. |
-| Vercel run from the wrong directory | Native Vercel cannot know AgentFlow's root; confirm `apps/api/go.mod` and `apps/web/package.json` exist in the current directory first. No wrapper is installed to intercept it. |
-| Configured root is missing or not a directory | API startup fails with the resolved path and a working-directory/install hint. |
-| Configured path points to a single package | API startup reports that the parent installation root is required. |
-| Configured root is empty | API logs zero loaded packages; inspect the installation location rather than expecting auto-discovery elsewhere. |
+| `--repo` | Required public GitHub owner/repository; not a SkillsMP URL |
+| `--path` | Required repository-relative package subdirectory |
+| `--ref` | Optional branch, tag, or full SHA for preview/apply; omitted resolves latest default-branch commit |
+| `--dest` | Optional existing installation root; default project `.agents/skills`. Relative override resolves from Go cwd (`apps/api`); prefer absolute staging paths |
+| `--timeout` | Whole-operation deadline; default 30s, positive and <=2m |
+| `--apply` | Publish; omission or false means preview |
+| `--help` / `-h` | Usage without download |
 
-The Shell shortcut requires the repository root. The underlying Go check accepts
-both the repository root and its `apps/api` module because
-`go -C` changes the child process working directory; it does not require the
-original shell to be at the root. Native `npx skills` alone has no AgentFlow
-directory guard. If the configured root already exists, startup can succeed
-even when a new package was mistakenly installed elsewhere: logging an empty
-catalog or loading old packages is not proof of a correct installation location.
+Resolve the revision once per operation, then fetch immutable tree/blob objects;
+do not assume main/master or choose a release automatically. Separate previews
+and installs may resolve different commits. To reproduce a preview exactly,
+pass `--ref '<resolved-commit-sha>' --apply`. Existing target directories, files,
+and symlinks are never overwritten; there is no force or self-update option.
+Use a separate staging root to review another version; it is not automatically
+trusted by the API. The shell creates no directories, grants, or bindings itself.
 
-Start AgentFlow with `make dev` from the repository root. The script runs the
-API in `apps/api`, matching `.env` and its relative-path conventions. Direct
-backend commands still use that module; from the repository root, prefer
-`./scripts/skill-install.sh --repo ... --path ...` for the fallback.
-It activates the configured Go version and invokes
-`go -C apps/api run ./cmd/skill install ...`. Plain
-`go run ./cmd/skill install` at the repository root is not valid because this
-repository has no root Go module or `cmd/skill` package. No module restructuring
-is needed for Skill installation.
+## Content and Provenance
 
-## Compatibility and Security Boundaries
+GitHub tree/blob API reads avoid archives, checkouts, hooks, and script execution.
+Retain unmodified `SKILL.md` and supported text under references/assets;
+recognized package License files, or first matching root License, are retained.
+Missing License warns without inventing redistribution permission. Other paths
+are reported as omissions; scripts/agents and unsupported directories are not
+traversed or claimed audited. Selected files must be non-executable regular
+blobs and their Git identities must match bytes.
 
-Directory layout is compatible with native Vercel, not every possible Skill
-capability. The existing text-only Loader limits, credential checks, frozen
-hashes and progressive loading still apply. Unsupported binary resources under
-`references/` or `assets/` fail validation; `scripts/`, `agents/` and unrelated
-top-level files are not loaded or executed. Some community metadata shapes
-remain outside this restricted subset.
+Reports/receipts retain repo/path, resolved commit/tree, file identities/bytes,
+omissions, warnings, time, install directory, and Loader `package_hash`.
+`files_hash` covers the sorted retained files including License, excluding the
+receipt; `source_tree` includes omitted content, not proof it was inspected.
+Compare Loader identity with `/api/skills`, Snapshot, and Manifest references.
+Hashes are provenance, not signatures, safety judgments, or execution permission.
 
-Vercel runs with the operator's OS permissions, Git authentication and network
-environment. `--copy` is not a sandbox: files can be copied or source links
-dereferenced, and installs/updates may replace existing packages. Installation
-is not a safety or licensing review. Do not update active trusted files blindly;
-inspect changes before API restart. Run Vercel `list`, `update` and `remove`
-from the repository root, not from a different installation project.
+Vercel and fallback share files/Loader, not provenance management: fallback does
+not edit `skills-lock.json`, and Vercel restore/update does not record Go receipts.
+Installed files and locks are ignored by Git. Reports contain no Skill body or
+credentials, but local paths/provenance should remain local evidence.
+stdout is JSON, stderr diagnostics; compiled CLI exit codes are 0 success/help,
+1 install/output failure, 2 syntax failure. `go run` may remap child exit codes;
+the shell propagates its wrapped status. A post-publication stdout failure does
+not remove the installed package/receipt.
 
-If Vercel cannot be used, invoke the Go fallback explicitly. Its bounded
-HTTPS/API-only downloads, preview/apply flow, no-overwrite checks, receipt and
-atomic publication are retained; these guarantees are not attributed to
-Vercel. A Vercel error never automatically starts another installer.
+## Fallback Safety and Failure Boundaries
+
+| Boundary | Limit / failure outcome |
+| --- | --- |
+| Network | Public HTTPS api.github.com only; no credentials, proxy inheritance, arbitrary hosts, private repositories, auth headers, retries, or model calls |
+| Requests / redirects | 48 total requests; fewer than five redirects per chain, each revalidated |
+| Response / aggregate JSON | 512 KiB / 4 MiB; reject compressed, malformed, truncated, or duplicate data |
+| Blob / tree entries | 32 KiB per blob; 2,048 entries total; Loader imposes tighter content limits |
+| Paths | 256-byte package/resource bound, limited depth, no traversal/backslash, inspected symlink/submodule/executable rejection |
+| Publication | Existing operator-owned root, `os.Root`-bounded exclusive staging writes, owner-only modes, root-wide lock, same-filesystem rename |
+| Errors/cancel/deadline | Stop within bounds, clean staging/lock, preserve old targets, no partial trusted package |
+| Resolution/identity failure | Explicit error; no guessed ref, ignored hash mismatch, or destination mutation |
+| GitHub 403/429 | Explicit failure without printing remote body or falling back to authenticated download |
+
+The root must not be concurrently mutable by untrusted processes. The lock only
+coordinates cooperating installers; it is not an OS sandbox. Targets are checked
+before download and again before publication. Preview stages outside the root
+and takes no publication lock.
+
+SIGINT/SIGTERM cancel cleanly. A forced kill may leave `.skill-install.lock` and
+`.skill-stage-*`; it never exposes an incomplete published Skill. Publication
+may already have finished: inspect receipt before retrying and verify no active
+installer before removing stale state. No automatic lock stealing, interrupted
+resume, or power-failure durability guarantee is provided.
+
+After installation, review instructions/resources/License, configure the parent
+root if needed, restart API, then bind the Skill. No install can enable Tool
+dependencies or alter old Snapshots. Stars and package listings are not safety evidence.
 
 ## Verification
 
-Deterministic discovery tests cover empty roots, immediate-only discovery,
-extra files/staging, exact-path mistakes, root absence, duplicate names, links,
-content/resource limits and frozen identities. CLI tests check project cwd,
-the shared default destination, explicit overrides and unchanged fallback
-failure behavior. No network or model is needed in default CI:
+From root, with configured Go:
 
 ```bash
-# From the repository root, with the repository's Go version.
+bash scripts/test-skill-install.sh
 go -C apps/api test ./internal/skill ./internal/skill/install/fallback ./cmd/skill -count=1
+go -C apps/api test -race ./internal/skill ./internal/skill/install/fallback ./cmd/skill -count=1
 ```
 
-The opt-in test in `vercel_compatibility_test.go` reads the valid packages already
-installed under the selected project's `.agents/skills`, then checks discovery
-and frozen-content validity. An empty catalog fails rather than passing without
-checking a package. It does not install files, execute npx, call a model or modify
-trust:
+Deterministic fixtures cover discovery, cwd/destination checks, supported content,
+limits, deadlines, redirect/blob validation, concurrent installs, no-overwrite,
+receipt, and production Loader compatibility. No default CI downloads packages.
+
+`TestPreviewAndInstallThroughProductionLoader` logs installation evidence for
+HTTP tree/blob -> staging -> receipt -> actual Loader, with unchanged trust.
+The optional Vercel-output smoke reads already installed packages; it does not
+execute npx, install, grant permissions, or call a model. An empty catalog fails:
 
 ```bash
 TEST_VERCEL_SKILL_PROJECT="$PWD" \
   go -C apps/api test ./internal/skill -run TestLiveVercelInstallationCompatibility -count=1 -v
 ```
 
-This is **Vercel output -> AgentFlow Loader/Snapshot compatibility**, not a
-direct comparison between installers. The separate fallback integration test,
-`TestPreviewAndInstallThroughProductionLoader`, checks the Go download,
-preview/apply, receipt and root-discovery path with deterministic HTTP fixtures.
-Tool dependencies in the live smoke are only snapshot-format inputs, not
-evidence that the corresponding Bindings are configured or authorized.
-
-Retain the CLI version, pinned source, installation log and emitted package
-hashes locally. Compare them to the Go receipt's `package_hash`, `/api/skills`
-and Snapshot/Manifest identities. Vercel's lockfile hash and the Go receipt's
-file hash describe provenance, not the Loader's runtime package identity. These
-example packages demonstrate compatibility, not writing quality or future
-revision safety.
+Retain CLI version, resolved source, logs, and identities locally. Live download
+success proves only that revision's compatibility, not writing quality, future
+revision safety, or authorized Tool dependencies.

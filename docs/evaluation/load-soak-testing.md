@@ -72,7 +72,7 @@ accepted = completed + failed
   cancellation does not retain a permit.
 - `budget.Tracker`: real reservation and settlement through the fixture Store;
   an oversized Run is rejected as `budget_exceeded` before provider work.
-- `tools.Executor`: a normal bounded Tool call runs inside each accepted sample;
+- `tool.Executor`: a normal bounded Tool call runs inside each accepted sample;
   a slow Tool must return `execution_timeout`.
 - `memory.BuiltinProvider`: post-response sync remains non-blocking; a full
   bounded queue reports accepted and rejected jobs without changing Run results.
@@ -92,7 +92,7 @@ The command produces:
 
 - `bounded-load.json`: complete machine-readable identity, metrics, controls,
   resource observations, and limitations;
-- `bounded-load.md`: compact saturation table for PRs and interview review.
+- `bounded-load.md`: compact saturation table for operational review.
 
 Default backend CI already sets `EVALUATION_REPORT_DIR`, so `go test ./...`
 retains these files with the other offline evaluation artifacts. No public
