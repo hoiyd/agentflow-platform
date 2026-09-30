@@ -4,12 +4,14 @@ import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/domain"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
@@ -18,7 +20,9 @@ import (
 )
 
 type recordingMemoryOperations struct {
-	jobs []memorypkg.TurnSyncRequest
+	jobs      []memorypkg.TurnSyncRequest
+	onSync    func()
+	syncError error
 }
 
 func (m *recordingMemoryOperations) Commit(_ context.Context, item domain.Memory) (domain.Memory, error) {
@@ -206,8 +210,7 @@ func TestGroundingSourcesForRunFailsClosedOnEvidenceDrift(t *testing.T) {
 			_, _ = fixtureStore.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventContextAssembled, Payload: map[string]any{
 				"manifest": domain.ContextManifest{Entries: []domain.ContextManifestEntry{{Source: "knowledge", CitationSourceID: "S1", Selected: true}}},
 			}})
-			handler := &Handler{store: fixtureStore}
-			_, err := handler.groundingSourcesForRun(fixtureStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)), run.ID)
+			_, err := runcompletion.GroundingSources(fixtureStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)), run.ID)
 			if err == nil || !strings.Contains(err.Error(), testCase.wantError) {
 				t.Fatalf("got %v, want error containing %q", err, testCase.wantError)
 			}
@@ -241,7 +244,7 @@ func TestResolveRunCompletionReturnsQuestionLookupError(t *testing.T) {
 		WorkspaceStore: fixtureStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
 		err:            want,
 	}
-	if _, err := handler.resolveRunCompletion(context.Background(), scoped, run.ID, "", "candidate"); err != want {
+	if _, err := runcompletion.Resolve(context.Background(), scoped, handler.completionDependencies(), run.ID, "", "candidate"); err != want {
 		t.Fatalf("expected question lookup error, got %v", err)
 	}
 }
@@ -309,8 +312,47 @@ func TestVerifyRunRetriesRecoverableEvidenceAndCompletes(t *testing.T) {
 }
 
 func (q *recordingMemoryOperations) SyncTurn(job memorypkg.TurnSyncRequest) error {
+	if q.onSync != nil {
+		q.onSync()
+	}
 	q.jobs = append(q.jobs, job)
-	return nil
+	return q.syncError
+}
+
+func TestCompleteStreamingRunAuxiliaryFailuresPreserveDurableAnswer(t *testing.T) {
+	for _, name := range []string{"title lookup failed", "memory queue rejected"} {
+		t.Run(name, func(t *testing.T) {
+			handler, workspace, run, conversation := newBoundaryRunningRun(t, nil)
+			response := httptest.NewRecorder()
+			queue := &recordingMemoryOperations{onSync: func() {
+				if !response.Flushed || !strings.Contains(response.Body.String(), `"type":"done"`) {
+					t.Fatal("auxiliary memory work ran before terminal SSE flush")
+				}
+			}}
+			handler.memories = queue
+			if name == "title lookup failed" {
+				workspace.getConversationErr = errors.New("title lookup unavailable")
+			}
+			if name == "memory queue rejected" {
+				queue.syncError = errors.New("memory queue full")
+			}
+			user := domain.Message{ID: "user-1", Role: "user", ConversationID: conversation.ID, Content: "question"}
+			if !handler.completeStreamingRun(response, response, nil, context.Background(), runCompletionRequest{
+				RunID: run.ID, ConversationID: conversation.ID, UserInput: user.Content, Assistant: "answer",
+				UserMessage: &user, GenerateTitle: true,
+			}) {
+				t.Fatalf("auxiliary failure stopped completion: %s", response.Body.String())
+			}
+			persisted, ok, err := workspace.GetRun(run.ID)
+			if err != nil || !ok || persisted.Status != domain.RunCompleted {
+				t.Fatalf("terminal state regressed: run=%#v err=%v", persisted, err)
+			}
+			messages, err := workspace.ListMessages(conversation.ID)
+			if err != nil || len(messages) != 1 || messages[0].Content != "answer" || len(queue.jobs) != 1 || queue.jobs[0].IdempotencyKey != "message:user-1" {
+				t.Fatalf("durable answer or auxiliary submission changed: messages=%#v jobs=%#v err=%v", messages, queue.jobs, err)
+			}
+		})
+	}
 }
 
 func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
@@ -460,20 +502,6 @@ func TestCompleteStreamingRunPersistsOnlyWebSourcesInFinalModelContext(t *testin
 	}
 	if !foundEvidence {
 		t.Fatalf("invalid Web citation evidence not persisted: %#v", events)
-	}
-}
-
-func TestModelOutputMatchesAnswerWithBoundedTraceOutput(t *testing.T) {
-	answer := strings.Repeat("a", 20_100) + " [W1]"
-	if !modelOutputMatchesAnswer(map[string]any{
-		"output": answer[:20_000] + "...[truncated]", "output_chars": len(answer),
-	}, answer) {
-		t.Fatal("bounded model trace rejected its full answer")
-	}
-	if modelOutputMatchesAnswer(map[string]any{
-		"output": answer[:20_000] + "...[truncated]", "output_chars": len(answer) + 1,
-	}, answer) {
-		t.Fatal("mismatched model output length was accepted")
 	}
 }
 

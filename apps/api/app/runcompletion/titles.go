@@ -1,4 +1,4 @@
-package httpapi
+package runcompletion
 
 import (
 	"context"
@@ -16,7 +16,7 @@ type runModelResolver interface {
 	ModelClientForRun(string) (provider.Client, error)
 }
 
-func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, scoped store.WorkspaceStore, runID string, conversationID string, userMessage string, assistantMessage string) string {
+func SummarizeTitle(ctx context.Context, scoped store.WorkspaceStore, runtime Lifecycle, runID string, conversationID string, userMessage string, assistantMessage string) string {
 	conversation, ok, err := scoped.GetConversation(conversationID)
 	if err != nil || !ok {
 		if err != nil {
@@ -28,7 +28,7 @@ func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, scop
 		return conversation.Title
 	}
 
-	title, err := h.generateConversationTitle(ctx, runID, userMessage, assistantMessage)
+	title, err := generateConversationTitle(ctx, runtime, runID, userMessage, assistantMessage)
 	if err != nil {
 		log.Printf("conversation_title skip=llm_failed conversation_id=%s error=%v", conversationID, err)
 		return conversation.Title
@@ -43,8 +43,8 @@ func (h *Handler) summarizeConversationTitleBestEffort(ctx context.Context, scop
 	return title
 }
 
-func (h *Handler) generateConversationTitle(ctx context.Context, runID string, userMessage string, assistantMessage string) (string, error) {
-	resolver, ok := h.agentRuntime.(runModelResolver)
+func generateConversationTitle(ctx context.Context, runtime Lifecycle, runID string, userMessage string, assistantMessage string) (string, error) {
+	resolver, ok := runtime.(runModelResolver)
 	if !ok {
 		return cleanConversationTitle(userMessage), nil
 	}

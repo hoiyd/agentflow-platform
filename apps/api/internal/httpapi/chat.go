@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"agentflow-platform/apps/api/app/runcompletion"
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/domain"
@@ -135,7 +136,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	if ok && currentRun.Status == domain.RunWaitingForUser {
 		writeTerminalRunDone(w, flusher, currentRun)
-		h.syncMemoryTurn(userMessage, currentRun.ID)
+		runcompletion.SyncMemoryTurn(h.memories, userMessage, currentRun.ID)
 		return
 	}
 
@@ -188,7 +189,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 	}
 	if run.Status == domain.RunWaitingForUser {
 		writeTerminalRunDone(w, flusher, run)
-		h.syncMemoryTurn(userMessage, run.ID)
+		runcompletion.SyncMemoryTurn(h.memories, userMessage, run.ID)
 		return
 	}
 
@@ -246,7 +247,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 	}
 	if run.Status == domain.RunWaitingForUser || run.Status == domain.RunCanceled {
 		writeTerminalRunDone(w, flusher, run)
-		h.syncMemoryTurn(userMessage, run.ID)
+		runcompletion.SyncMemoryTurn(h.memories, userMessage, run.ID)
 		return
 	}
 

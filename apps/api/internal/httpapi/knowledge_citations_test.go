@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
 )
@@ -29,9 +30,8 @@ func TestKnowledgeReadGroundingUsesOnlyDeliveredPages(t *testing.T) {
 		{Source: "tool_result", ReferenceID: "First selected page.", CitationSourceID: "S1", Selected: true, Transformation: "original", OriginalBytes: 100, IncludedBytes: 100},
 		{Source: "knowledge", ReferenceID: "Second selected page.", CitationSourceID: "S1", Selected: true, Transformation: "knowledge_read_wrapped", OriginalBytes: 21, IncludedBytes: 21},
 	}}}})
-	handler := &Handler{}
 	scoped := storage.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID))
-	sources, err := handler.groundingSourcesForRun(scoped, run.ID)
+	sources, err := runcompletion.GroundingSources(scoped, run.ID)
 	if err != nil || len(sources) != 1 || !strings.Contains(sources[0].Content, "First selected page.") || !strings.Contains(sources[0].Content, "Second selected page.") {
 		t.Fatalf("sources=%#v err=%v", sources, err)
 	}
@@ -55,8 +55,7 @@ func TestKnowledgeReadDoesNotReplaceSelectedAutomaticGrounding(t *testing.T) {
 		{Source: "knowledge", ReferenceID: "chunk-1", CitationSourceID: "S1", Selected: true},
 		{Source: "tool_result", ReferenceID: "call-read", CitationSourceID: "S1", Selected: true, Transformation: "original"},
 	}}}})
-	handler := &Handler{}
-	sources, err := handler.groundingSourcesForRun(storage.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)), run.ID)
+	sources, err := runcompletion.GroundingSources(storage.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)), run.ID)
 	if err != nil || len(sources) != 1 || !strings.Contains(sources[0].Content, "automatic facts") {
 		t.Fatalf("sources=%#v err=%v", sources, err)
 	}
@@ -89,8 +88,7 @@ func TestKnowledgeReadCitationsRequireSelectedIntactPage(t *testing.T) {
 			}
 			_, _ = storage.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventToolCompleted, Payload: payload})
 			_, _ = storage.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventContextAssembled, Payload: map[string]any{"manifest": domain.ContextManifest{Entries: []domain.ContextManifestEntry{entry}}}})
-			handler := &Handler{}
-			_, citations, invalid, err := handler.resolveRunCitations(storage.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)), run.ID, "Facts [S1].")
+			_, citations, invalid, err := runcompletion.ResolveCitations(storage.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)), run.ID, "Facts [S1].")
 			if err != nil || len(citations) != 0 || len(invalid) != 1 {
 				t.Fatalf("citations=%#v invalid=%#v err=%v", citations, invalid, err)
 			}

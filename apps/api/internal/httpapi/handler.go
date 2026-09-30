@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/concurrency"
@@ -20,7 +21,6 @@ import (
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tool"
-	"agentflow-platform/apps/api/internal/verification"
 )
 
 // MemoryOperations is the transport-facing subset of the provider lifecycle.
@@ -74,10 +74,7 @@ type RunCapacity interface {
 	Reserve() (*concurrency.Reservation, error)
 }
 
-type VerificationOperations interface {
-	FreezeContract(*domain.CompletionContract) (*domain.CompletionContract, error)
-	Verify(context.Context, string, verification.Subject) (verification.Decision, error)
-}
+type VerificationOperations = runcompletion.Verifier
 
 // Dependencies is the complete production dependency set for the HTTP adapter.
 // Construction and lifecycle ownership remain in the app composition root.
