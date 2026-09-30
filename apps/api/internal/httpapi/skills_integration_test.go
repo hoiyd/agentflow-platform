@@ -22,7 +22,7 @@ import (
 )
 
 func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
-	for _, mode := range []string{"single", "single_explicit", "multi_agent", "autonomous"} {
+	for _, mode := range []string{"single", "single_explicit", "single_explicit_only", "single_failed_read", "multi_agent", "autonomous"} {
 		t.Run(mode, func(t *testing.T) {
 			dir := filepath.Join(t.TempDir(), "runtime-method")
 			if err := os.MkdirAll(filepath.Join(dir, "references"), 0700); err != nil {
@@ -68,6 +68,10 @@ func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
 					}
 				}
 				if hasSkill {
+					resourceAfter := 3
+					if mode == "single_failed_read" {
+						resourceAfter = 4
+					}
 					bodyCount, resourceCount := 0, 0
 					for _, message := range request.Messages {
 						if strings.Contains(message.Content, "METHOD_SENTINEL") {
@@ -77,19 +81,22 @@ func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
 							resourceCount++
 						}
 					}
-					if observations == 0 && mode != "single_explicit" && bodyCount != 0 || (observations > 0 || mode == "single_explicit") && bodyCount != 1 {
+					if observations == 0 && !strings.HasPrefix(mode, "single_explicit") && bodyCount != 0 || (observations > 0 || strings.HasPrefix(mode, "single_explicit")) && bodyCount != 1 {
 						t.Errorf("progressive body count=%d observations=%d", bodyCount, observations)
 					}
-					if observations < 3 && resourceCount != 0 {
+					if observations < resourceAfter && resourceCount != 0 {
 						t.Error("resource eagerly entered Context")
 					}
-					if observations >= 3 && resourceCount == 0 {
+					if observations >= resourceAfter && resourceCount == 0 {
 						t.Error("resource read not delivered")
 					}
-					if observations < 3 {
+					if observations < resourceAfter && mode != "single_explicit_only" {
 						name, args := "skill_load", `{"name":"runtime-method"}`
-						if observations == 2 {
+						if observations >= 2 {
 							name, args = "skill_read", `{"name":"runtime-method","path":"references/checklist.md"}`
+						}
+						if mode == "single_failed_read" && observations == 2 {
+							args = `{"name":"runtime-method","path":"references/missing.md"}`
 						}
 						content, reason = "", "tool_calls"
 						calls = []provider.ToolCall{{ID: fmt.Sprintf("call-%d", observations), Type: "function", Function: provider.FunctionCall{Name: name, Arguments: args}}}
@@ -127,6 +134,9 @@ func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
 			}
 			client := openai.NewClientWithTimeoutAndEmbeddingModel("fixture-not-a-secret", server.URL, server.URL, "skill-fixture", "embedding-fixture", 2, 2*time.Second)
 			client.SetRequestRecorder(capture.NewRecorder(storage, capture.Options{Mode: domain.ModelRequestCaptureFull}))
+			if mode == "single_explicit_only" {
+				client.SetRequestRecorder(capture.NewRecorder(storage, capture.Options{Mode: domain.ModelRequestCaptureMetadata}))
+			}
 			dependencies.Skills = catalog
 			dependencies.AgentRuntime = newRuntimeForTest(agentpkg.RuntimeOptions{Store: storage, Skills: catalog, RouterMode: agentpkg.RouterModeQuery, Autonomous: agentpkg.AutonomousLimits{MaxIterations: 1}, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 16, MaxToolCalls: 4, MaxRuntimeMS: 20000}}, client)
 			handler, err := NewHandler(dependencies)
@@ -135,7 +145,10 @@ func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
 			}
 			fixture := &pipelineRegressionFixture{routes: handler.Routes(), store: storage}
 			query, executionMode := "Inspect bounded facts.", mode
-			if mode == "single_explicit" {
+			if mode == "single_failed_read" {
+				executionMode = "single"
+			}
+			if strings.HasPrefix(mode, "single_explicit") {
 				query, executionMode = "/skill:runtime-method Inspect bounded facts.", "single"
 			}
 			replay := fixture.runModeAndReplay(t, query, executionMode)
@@ -152,15 +165,46 @@ func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
 					manifestSeen = true
 				}
 			}
-			if counts["skill_load"] != 2 || counts["skill_read"] != 1 || !manifestSeen {
+			expectedLoads, expectedReads, minRequests := 2, 1, 4
+			if mode == "single_explicit_only" {
+				expectedLoads, expectedReads, minRequests = 0, 0, 1
+			}
+			if mode == "single_failed_read" {
+				minRequests = 5
+			}
+			if counts["skill_load"] != expectedLoads || counts["skill_read"] != expectedReads || !manifestSeen {
 				t.Fatalf("counts=%v manifest=%v", counts, manifestSeen)
 			}
 			if err := eventpkg.ValidateLifecycle(replay.RunEvents); err != nil {
 				t.Fatal(err)
 			}
 			records, err := storage.ListModelRequestRecords(replay.Run.ID)
-			if err != nil || len(records) < 4 {
+			if err != nil || len(records) < minRequests {
 				t.Fatalf("capture=%d err=%v", len(records), err)
+			}
+			encodedReplay, _ := json.Marshal(replay)
+			if !strings.Contains(string(encodedReplay), `"instructions":"included"`) || !strings.Contains(string(encodedReplay), `"skill_evidence"`) {
+				t.Fatalf("Replay omitted request-backed Skill evidence: %s", encodedReplay)
+			}
+			if mode == "single_explicit_only" && (!strings.Contains(string(encodedReplay), `"activation":"explicit"`) || records[0].Capture.Content != "") {
+				t.Fatal("explicit metadata-only evidence missing or content persisted")
+			}
+			if mode == "single_failed_read" {
+				foundFailure := false
+				for _, row := range replay.Projection.SkillEvidence {
+					for _, failed := range row.Failures {
+						if failed.Tool == "skill_read" && failed.Code != "" && failed.Path == "references/missing.md" && failed.EventID != "" {
+							foundFailure = true
+						}
+					}
+				}
+				if !foundFailure {
+					t.Fatal("real Binding failure missing from Replay")
+				}
+			}
+			projected := fixture.request(t, http.MethodGet, "/api/runs/"+replay.Run.ID+"/projection", "")
+			if projected.Code != http.StatusOK || !strings.Contains(projected.Body.String(), `"instructions":"included"`) || !strings.Contains(projected.Body.String(), `"first_request_sequence"`) {
+				t.Fatalf("projection missing evidence: status=%d body=%s", projected.Code, projected.Body.String())
 			}
 			evidence, _ := json.Marshal(map[string]any{
 				"mode": mode, "execution_mode": executionMode, "input": query,
@@ -169,7 +213,8 @@ func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
 				"skill":      skill.Metadata(replay.RuntimeSnapshot.Skills[0]),
 				"run_budget": replay.RuntimeSnapshot.RunBudget, "context_assembly": replay.RuntimeSnapshot.ContextAssembly,
 				"tool_calls": counts, "manifest_instructions": manifestSeen, "captured_requests": len(records),
-				"limitations": "local deterministic provider; not live quality or script sandbox evidence",
+				"skill_evidence": replay.Projection.SkillEvidence,
+				"limitations":    "local deterministic provider; not live quality or script sandbox evidence",
 			})
 			t.Logf("trusted_skill_evidence=%s", evidence)
 		})

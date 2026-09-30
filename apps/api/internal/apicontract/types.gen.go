@@ -204,6 +204,45 @@ func (e RunUsageEntryPurpose) Valid() bool {
 	}
 }
 
+// Defines values for SkillEvidenceActivation.
+const (
+	SkillEvidenceActivationExplicit    SkillEvidenceActivation = "explicit"
+	SkillEvidenceActivationModel       SkillEvidenceActivation = "model"
+	SkillEvidenceActivationNotObserved SkillEvidenceActivation = "not_observed"
+)
+
+// Valid indicates whether the value is a known member of the SkillEvidenceActivation enum.
+func (e SkillEvidenceActivation) Valid() bool {
+	switch e {
+	case SkillEvidenceActivationExplicit:
+		return true
+	case SkillEvidenceActivationModel:
+		return true
+	case SkillEvidenceActivationNotObserved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SkillEvidenceInstructions.
+const (
+	SkillEvidenceInstructionsIncluded    SkillEvidenceInstructions = "included"
+	SkillEvidenceInstructionsNotObserved SkillEvidenceInstructions = "not_observed"
+)
+
+// Valid indicates whether the value is a known member of the SkillEvidenceInstructions enum.
+func (e SkillEvidenceInstructions) Valid() bool {
+	switch e {
+	case SkillEvidenceInstructionsIncluded:
+		return true
+	case SkillEvidenceInstructionsNotObserved:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VerificationPolicyInputMode.
 const (
 	AllMustPass VerificationPolicyInputMode = "all_must_pass"
@@ -558,7 +597,7 @@ type RunEvent struct {
 type RunReplay struct {
 	Conversation          Conversation             `json:"conversation"`
 	Messages              []Message                `json:"messages"`
-	Projection            map[string]interface{}   `json:"projection"`
+	Projection            RunReplay_Projection     `json:"projection"`
 	RecoverySummary       *map[string]interface{}  `json:"recovery_summary,omitempty"`
 	Run                   Run                      `json:"run"`
 	RunEvents             []RunEvent               `json:"run_events"`
@@ -572,6 +611,12 @@ type RunReplay struct {
 	UsageLedger           RunUsageLedger           `json:"usage_ledger"`
 	VerificationArtifacts []VerificationArtifact   `json:"verification_artifacts"`
 	VerificationEvidence  []VerificationEvidence   `json:"verification_evidence"`
+}
+
+// RunReplay_Projection defines model for RunReplay.Projection.
+type RunReplay_Projection struct {
+	SkillEvidence        *[]SkillEvidence       `json:"skill_evidence,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // RunStatus defines model for RunStatus.
@@ -651,12 +696,57 @@ type RuntimeRunBudget struct {
 	OutputCostPerMillionTokensMicros *int64 `json:"output_cost_per_million_tokens_micros,omitempty"`
 }
 
+// SkillEvidence defines model for SkillEvidence.
+type SkillEvidence struct {
+	Activation           SkillEvidenceActivation   `json:"activation"`
+	AgentId              string                    `json:"agent_id"`
+	Bound                bool                      `json:"bound"`
+	EstimatedTokens      *int                      `json:"estimated_tokens,omitempty"`
+	EventId              *string                   `json:"event_id,omitempty"`
+	Failures             []SkillFailureEvidence    `json:"failures"`
+	FirstRequestSequence *int64                    `json:"first_request_sequence,omitempty"`
+	FirstSequence        *int64                    `json:"first_sequence,omitempty"`
+	Hash                 string                    `json:"hash"`
+	Instructions         SkillEvidenceInstructions `json:"instructions"`
+	ManifestId           *string                   `json:"manifest_id,omitempty"`
+	Name                 string                    `json:"name"`
+	RequestId            *string                   `json:"request_id,omitempty"`
+	Resources            []SkillResourceEvidence   `json:"resources"`
+	StageId              *string                   `json:"stage_id,omitempty"`
+}
+
+// SkillEvidenceActivation defines model for SkillEvidence.Activation.
+type SkillEvidenceActivation string
+
+// SkillEvidenceInstructions defines model for SkillEvidence.Instructions.
+type SkillEvidenceInstructions string
+
+// SkillFailureEvidence defines model for SkillFailureEvidence.
+type SkillFailureEvidence struct {
+	Code     string  `json:"code"`
+	EventId  string  `json:"event_id"`
+	Path     *string `json:"path,omitempty"`
+	Sequence int64   `json:"sequence"`
+	Tool     string  `json:"tool"`
+}
+
 // SkillMetadata defines model for SkillMetadata.
 type SkillMetadata struct {
 	Description   string    `json:"description"`
 	Hash          string    `json:"hash"`
 	Name          string    `json:"name"`
 	RequiredTools *[]string `json:"required_tools,omitempty"`
+}
+
+// SkillResourceEvidence defines model for SkillResourceEvidence.
+type SkillResourceEvidence struct {
+	EventId    string `json:"event_id"`
+	Hash       string `json:"hash"`
+	NextOffset int    `json:"next_offset"`
+	Offset     int    `json:"offset"`
+	Path       string `json:"path"`
+	Sequence   int64  `json:"sequence"`
+	TotalBytes int    `json:"total_bytes"`
 }
 
 // ToolInfo defines model for ToolInfo.
@@ -804,6 +894,74 @@ type ContinueRunJSONRequestBody = ContinueRunRequest
 
 // ResumeRunJSONRequestBody defines body for ResumeRun for application/json ContentType.
 type ResumeRunJSONRequestBody = ResumeRunRequest
+
+// Getter for additional properties for RunReplay_Projection. Returns the specified
+// element and whether it was found
+func (a RunReplay_Projection) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for RunReplay_Projection
+func (a *RunReplay_Projection) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for RunReplay_Projection to handle AdditionalProperties
+func (a *RunReplay_Projection) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["skill_evidence"]; found {
+		err = json.Unmarshal(raw, &a.SkillEvidence)
+		if err != nil {
+			return fmt.Errorf("error reading 'skill_evidence': %w", err)
+		}
+		delete(object, "skill_evidence")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for RunReplay_Projection to handle AdditionalProperties
+func (a RunReplay_Projection) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.SkillEvidence != nil {
+		object["skill_evidence"], err = json.Marshal(a.SkillEvidence)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'skill_evidence': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
 
 // Getter for additional properties for VerificationArtifact. Returns the specified
 // element and whether it was found

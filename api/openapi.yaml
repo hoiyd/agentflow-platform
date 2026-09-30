@@ -1232,6 +1232,49 @@ components:
         run_id: { type: string }
         evidence_id: { type: string }
         kind: { type: string }
+    SkillResourceEvidence:
+      type: object
+      required: [path, hash, offset, next_offset, total_bytes, event_id, sequence]
+      properties:
+        path: { type: string }
+        hash: { type: string }
+        offset: { type: integer }
+        next_offset: { type: integer }
+        total_bytes: { type: integer }
+        event_id: { type: string }
+        sequence: { type: integer, format: int64 }
+    SkillFailureEvidence:
+      type: object
+      required: [tool, code, event_id, sequence]
+      properties:
+        tool: { type: string }
+        code: { type: string }
+        path: { type: string }
+        event_id: { type: string }
+        sequence: { type: integer, format: int64 }
+    SkillEvidence:
+      type: object
+      required: [name, hash, agent_id, bound, instructions, activation, resources, failures]
+      properties:
+        name: { type: string }
+        hash: { type: string }
+        agent_id: { type: string }
+        stage_id: { type: string }
+        bound: { type: boolean }
+        instructions: { type: string, enum: [included, not_observed] }
+        activation: { type: string, enum: [explicit, model, not_observed] }
+        first_sequence: { type: integer, format: int64 }
+        first_request_sequence: { type: integer, format: int64 }
+        manifest_id: { type: string }
+        event_id: { type: string }
+        request_id: { type: string }
+        estimated_tokens: { type: integer }
+        resources:
+          type: array
+          items: { $ref: '#/components/schemas/SkillResourceEvidence' }
+        failures:
+          type: array
+          items: { $ref: '#/components/schemas/SkillFailureEvidence' }
     RunReplay:
       type: object
       required: [run, projection, conversation, messages, steps, summary, usage_ledger, run_events, stage_checkpoints, tool_effects, tool_artifacts, verification_evidence, verification_artifacts, task_state_revisions]
@@ -1241,6 +1284,10 @@ components:
         projection:
           type: object
           additionalProperties: true
+          properties:
+            skill_evidence:
+              type: array
+              items: { $ref: '#/components/schemas/SkillEvidence' }
         runtime_snapshot:
           type: object
           additionalProperties: true

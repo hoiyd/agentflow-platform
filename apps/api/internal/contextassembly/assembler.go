@@ -68,6 +68,12 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 			Transformation: transformation, EstimatedTokens: tokens, OriginalBytes: originalBytes,
 			ArtifactIDs: artifactIDs,
 		}
+		if message.Source == SourceSkillInstructions {
+			fields := strings.Fields(session.CurrentInput)
+			if len(fields) > 0 && strings.HasPrefix(fields[0], "/skill:") && strings.HasPrefix(message.ReferenceID, "skill:"+strings.TrimPrefix(fields[0], "/skill:")+"@") {
+				entry.Activation = "explicit"
+			}
+		}
 		if required {
 			entry.IncludedBytes = messageContentBytes(message)
 			requiredTokens += tokens

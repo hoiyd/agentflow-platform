@@ -135,6 +135,16 @@ for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
     await page.getByRole("link", { name: "View trace" }).click();
     await expect(page.getByRole("heading", { name: "Run replay", exact: true })).toBeVisible();
     await expect(page.locator(".replay-status")).toHaveText("completed");
+    const skillsPanel = page.locator(".skill-evidence");
+    await expect(skillsPanel).toBeVisible();
+    await expect(skillsPanel).not.toHaveAttribute("open", "");
+    await skillsPanel.getByText(/^Skill evidence/).click();
+    await expect(skillsPanel).toContainText("Instructions included");
+    await expect(skillsPanel).toContainText("Model activation");
+    await skillsPanel.getByRole("button", { name: /^Inspect input/ }).first().click();
+    await expect(page.locator("#run-event-detail")).toContainText("context.assembled");
+    await page.reload();
+    await expect(page.locator(".skill-evidence")).toBeVisible();
     expect(await page.locator("body").innerText()).not.toContain("FIXTURE_PRIVATE_REASONING");
   });
 }

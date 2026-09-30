@@ -25,6 +25,7 @@ Write or update this inventory before adding isolated fixtures.
 | Memory corrections/deletions lose version or remain recalled | History records the correction; version increases; deletion clears content and recall |
 | Two command callbacks fire before a React render | Only one command is admitted and one optimistic message pair is created |
 | A stream fails before or after accepting events | Before acceptance, drafts roll back; after acceptance, partial output stays and durable observation resumes |
+| A frozen Skill is mistaken for an observed model input | Replay joins Manifest with the physical request record; missing evidence remains not observed |
 | A late Cancel response follows a terminal stream event | It cannot regress the Run to `canceling` or revive cancellation UI |
 | Navigation occurs during execution, cancellation, or observation | Local requests detach; their late events, errors and snapshots cannot change the new conversation |
 | Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |

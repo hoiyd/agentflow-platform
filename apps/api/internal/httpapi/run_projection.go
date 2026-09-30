@@ -7,15 +7,18 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/invariant"
+	"agentflow-platform/apps/api/internal/projection"
 	"agentflow-platform/apps/api/internal/runtimeinvariant"
 	"agentflow-platform/apps/api/internal/store"
 )
 
-func (h *Handler) attachRuntimeInvariants(scoped store.WorkspaceStore, replay *domain.RunReplay) error {
+// enrichRunProjection joins request-backed observations without extra Store reads.
+func (h *Handler) enrichRunProjection(scoped store.WorkspaceStore, replay *domain.RunReplay) error {
 	records, err := scoped.ListModelRequestRecords(replay.Run.ID)
 	if err != nil {
 		return err
 	}
+	replay.Projection.SkillEvidence = projection.BuildSkillEvidence(*replay, records)
 	failures := runtimeinvariant.DefaultRegistry().Evaluate(invariant.Input{
 		Replay: *replay, ModelRequests: records,
 	})
@@ -42,7 +45,7 @@ func (h *Handler) getRunProjection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
-	if err := h.attachRuntimeInvariants(scoped, &replay); err != nil {
+	if err := h.enrichRunProjection(scoped, &replay); err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}

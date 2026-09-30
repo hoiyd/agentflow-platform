@@ -45,6 +45,27 @@ func TestSkillContextIsProgressiveDeduplicatedAndBudgeted(t *testing.T) {
 	if !found {
 		t.Fatal("loaded Skill identity not selected in Manifest")
 	}
+	session.AgentID, session.CurrentInput = "agent", "/skill:evidence-method Continue"
+	session.Compaction = &domain.ContextCompaction{ID: "compaction", Generation: 2, Summary: "Earlier resource pages were trimmed."}
+	pack, err = Assemble(WithSession(t.Context(), session), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pack.Manifest.AgentID != "agent" || pack.Manifest.CompactionGeneration != 2 {
+		t.Fatal("assembly scope lost across compaction")
+	}
+	count = 0
+	for _, entry := range pack.Manifest.Entries {
+		if entry.Source == SourceSkillInstructions {
+			count++
+			if !entry.Selected || entry.Activation != "explicit" || entry.ReferenceID != "skill:evidence-method@frozen-hash" {
+				t.Fatalf("compaction changed method: %+v", entry)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatal("compaction duplicated instructions")
+	}
 	session.Config.ContextWindowTokens = 100
 	session.Config.OutputReserveTokens = 10
 	session.Config.SafetyMarginTokens = 10

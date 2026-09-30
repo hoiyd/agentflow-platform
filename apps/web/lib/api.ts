@@ -19,7 +19,7 @@ export type {
   RecoveryEvidence, RecoverySummary, RunEvent, RunInfo, RunProjectionSnapshot, RunReplay,
   RunTraceSummary, RunUsageEntry, RunUsageLedger, RunUsageTotals, RuntimeInvariantFailure,
   TaskBlockerStatus, TaskItemStatus, TaskState, TaskStateOperation, TaskStatePatch,
-  TaskStateRevision, ToolArtifact, ToolEffect, ToolEffectReconciliationAction, ToolInfo, SkillInfo
+  TaskStateRevision, ToolArtifact, ToolEffect, ToolEffectReconciliationAction, ToolInfo, SkillInfo, SkillEvidence
 } from "./api-types.ts";
 export { observeRunEvents } from "./run-stream.ts";
 

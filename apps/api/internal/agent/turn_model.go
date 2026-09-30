@@ -94,7 +94,8 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 		historySearch = m.runtime.retrieveSessionHistory(ctx, request.RunID, request.ConversationID, request.Input)
 	}
 	session := contextassembly.Session{
-		Config: snapshot.ContextAssembly, Sink: request.Sink,
+		AgentID: request.Agent.ID,
+		Config:  snapshot.ContextAssembly, Sink: request.Sink,
 		History: history, CurrentInput: request.Input,
 		Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
 		HistorySearch: historySearch,

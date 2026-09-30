@@ -1,7 +1,7 @@
 import { expectObject, isObject, numberValue, stringValue } from "./api-client.ts";
 import type {
   Conversation, RecoverySummary, RunInfo, RunProjectionSnapshot, RunReplay, RunTraceSummary,
-  RuntimeInvariantFailure, RunUsageLedger, RunUsageTotals, ToolArtifact, ToolEffect
+  RuntimeInvariantFailure, RunUsageLedger, RunUsageTotals, ToolArtifact, ToolEffect, SkillEvidence
 } from "./api-types.ts";
 
 export function normalizeRunReplay(data: unknown): RunReplay {
@@ -91,10 +91,33 @@ export function normalizeRunProjection(value: unknown, run: RunInfo, summaryValu
       as_of_sequence: numberValue(verification.as_of_sequence) ?? watermark
     },
     as_of_sequence: watermark,
+    skill_evidence: normalizeSkillEvidence(projection.skill_evidence),
     invariant_failures: Array.isArray(projection.invariant_failures)
       ? projection.invariant_failures.filter((item): item is RuntimeInvariantFailure => isObject(item) && typeof item.code === "string")
       : []
   };
+}
+
+function normalizeSkillEvidence(value: unknown): SkillEvidence[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isObject).filter(item => typeof item.name === "string" && typeof item.hash === "string" && typeof item.agent_id === "string").map(item => ({
+    name: item.name as string, hash: item.hash as string, agent_id: item.agent_id as string,
+    stage_id: stringValue(item.stage_id), bound: item.bound === true,
+    instructions: item.instructions === "included" ? "included" : "not_observed",
+    activation: item.activation === "explicit" || item.activation === "model" ? item.activation : "not_observed",
+    first_sequence: numberValue(item.first_sequence), manifest_id: stringValue(item.manifest_id),
+    first_request_sequence: numberValue(item.first_request_sequence),
+    event_id: stringValue(item.event_id), request_id: stringValue(item.request_id), estimated_tokens: numberValue(item.estimated_tokens),
+    resources: Array.isArray(item.resources) ? item.resources.filter(isObject).filter(resource => typeof resource.path === "string" && typeof resource.hash === "string" && typeof resource.event_id === "string").map(resource => ({
+      path: resource.path as string, hash: resource.hash as string, event_id: resource.event_id as string,
+      offset: numberValue(resource.offset) ?? 0, next_offset: numberValue(resource.next_offset) ?? 0,
+      total_bytes: numberValue(resource.total_bytes) ?? 0, sequence: numberValue(resource.sequence) ?? 0
+    })) : [],
+    failures: Array.isArray(item.failures) ? item.failures.filter(isObject).filter(failure => typeof failure.tool === "string" && typeof failure.code === "string" && typeof failure.event_id === "string").map(failure => ({
+      tool: failure.tool as string, code: failure.code as string, event_id: failure.event_id as string,
+      path: stringValue(failure.path), sequence: numberValue(failure.sequence) ?? 0
+    })) : []
+  }));
 }
 
 const EMPTY_RUN_USAGE_TOTALS: RunUsageTotals = {

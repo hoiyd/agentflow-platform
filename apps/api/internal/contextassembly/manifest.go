@@ -19,6 +19,7 @@ const messageOverheadTokens = 4
 
 func newManifest(ctx context.Context, model string, config domain.ContextAssemblyConfig, inputBudget int, selectedTokens int, entries []domain.ContextManifestEntry, hash string, compaction *domain.ContextCompaction) domain.ContextManifest {
 	scope := eventpkg.ScopeFromContext(ctx)
+	session, _ := sessionFromContext(ctx)
 	excluded := 0
 	for _, entry := range entries {
 		if !entry.Selected {
@@ -26,7 +27,8 @@ func newManifest(ctx context.Context, model string, config domain.ContextAssembl
 		}
 	}
 	manifest := domain.ContextManifest{
-		ID: newID("ctx"), ModelCallID: newID("call"), RunID: scope.RunID, StageID: scope.StageID,
+		AgentID: session.AgentID,
+		ID:      newID("ctx"), ModelCallID: newID("call"), RunID: scope.RunID, StageID: scope.StageID,
 		TurnID: scope.TurnID, Model: model, AssemblerVersion: config.AssemblerVersion,
 		ContextWindowTokens: config.ContextWindowTokens, OutputReserveTokens: config.OutputReserveTokens,
 		SafetyMarginTokens: config.SafetyMarginTokens, InputBudgetTokens: inputBudget,
