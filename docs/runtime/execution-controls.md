@@ -1,395 +1,214 @@
 # Execution Controls and Resource Boundaries
 
-This document is the canonical map of AgentFlow execution controls. When two
-settings sound similar, compare their **scope**, **unit**, and single
-**enforcement owner** before changing either one.
-
-Business parameters such as search result count, upload size, or Memory
-confidence remain in their subsystem documents. This page covers admission,
-capacity, resource consumption, timeouts, and stopping conditions.
+Compare **scope, unit, and enforcement owner**, not similarly named settings.
+This is the canonical control map. Defaults are in
+[`.env.example`](../../apps/api/.env.example); startup configuration is in
+[backend configuration](../operations/backend-configuration.md). Search counts,
+upload limits, and Memory confidence belong to their subsystem contracts.
 
 ## Quick Diagnosis
 
-| Symptom | Control to inspect | Do not confuse it with |
+| Symptom | Inspect | Not the same as |
 | --- | --- | --- |
-| Too many tasks run concurrently | Run Admission | calls made by one Run |
-| Provider concurrency or 429 pressure | Model Request Limiter | Run Budget |
-| A model cannot satisfy Tool, JSON, streaming, or Context requirements | Model Route Catalog | Provider Retry |
-| One Run consumes too many calls, tokens, or cost | Run Budget | RPM/TPM |
-| One prompt does not fit the model context window | Context Assembly | cumulative Run tokens |
-| Autonomous execution loops or expands output | Autonomous Loop Guards | Model Retry |
-| A tool hangs, returns too much, or is unsafe to parallelize | Tool Execution Policy | Run concurrency |
-| Verification retries or artifacts grow without bounds | Completion Contract and verifier boundaries | Model Retry |
-| A crashed process leaves a Run in `running` | Recovery stale threshold | Run runtime budget |
-
-## Control Types
-
-| Type | Question answered | Typical behavior |
-| --- | --- | --- |
-| Admission | May work enter the system? | reject, queue, `Retry-After` |
-| Concurrency | How much work may be active now? | semaphore, single-writer |
-| Rate limit | How much work may occur over time? | token bucket, wait, reject |
-| Retry policy | How many physical attempts may one logical operation use? | classify, back off, stop |
-| Run budget | How much cumulative work may one Run consume? | reserve, settle, typed error |
-| Capacity | Can one request fit a fixed-size resource? | select, compact, cap output |
-| Timeout | How long may one operation wait? | context cancellation, typed timeout |
-| Loop guard | When must an agent loop stop? | iteration or output limit |
-| Observability | What already happened? | Run Events, Trace, Replay, and Episode Report; no enforcement |
+| Too many tasks active / waiting | Run admission | Calls inside a Run |
+| In-flight requests or provider 429 pressure | Model limiter / provider retry | Run Budget |
+| No model meets required capabilities | Route catalog | Transient retry |
+| One Run consumes too much | Run Budget | RPM/TPM |
+| One input does not fit | Context Assembly | Cumulative Run tokens |
+| Agent repeats work | Loop / Tool Progress Guard | Model Retry |
+| Tool hangs, spills, or is unsafe in parallel | Tool Executor | Run concurrency |
+| Verification cannot pass / artifacts grow | Completion Contract | Model Retry |
+| Crashed Run remains open | Recovery | Active-runtime cap |
 
 ## Ownership Matrix
 
-| Control | Scope | Unit | Owner | Persisted? |
-| --- | --- | --- | --- | --- |
-| Run Admission | process + Conversation | active and queued Runs | `concurrency.RunController` | no |
-| Model Request Limiter | process + API key | physical HTTP requests and approximate input tokens | `concurrency.ModelRequestLimiter` | no |
-| Model Route Catalog | one persisted Run | eligible target for one logical Model Call | `routing.Catalog` | route contracts and policy frozen |
-| Model Retry | one logical Model Call | physical attempts | `openai.RetryPolicy` | no |
-| Run Budget | one persisted Run | logical calls, provider tokens, tools, active runtime, cost | `budget.Tracker` + Usage Store | yes |
-| Context Assembly | one logical Model Call | context tokens | `contextassembly.Assembler` | config frozen with Run |
-| Loop Guard | one Loop (`autonomous`) Run | iterations and accumulated output characters | `autonomous` runtime | config frozen with Run |
-| Tool Policy | one Tool Call or batch | timeout, bytes, parallel group, side-effect idempotency, artifact spill | `tools.Executor` | schema and side-effect declaration frozen; artifact metadata durable |
-| Tool Progress Guard | one Run | repeated typed failures, unchanged read-only results, alternating loops | `progress.Guard` through `tool.Executor` | thresholds frozen; decisions durable |
-| Verification | one contracted Run | attempts, timeout, artifacts | `verification.Engine` | contract and evidence |
-| Recovery | startup scan + Resume | stale lifecycle, Stage checkpoints, Tool effects | `recovery` + `checkpoint` | recovery state persisted; threshold live |
-| Observability | one Run | Run Events and derived Trace, Replay, and Episode Report views | Event Store / projection builders | durable events only; projections do not enforce policy |
+| Control | Scope and unit | Enforcement owner | Persistence |
+| --- | --- | --- | --- |
+| Run admission | Process + Conversation; active/queued Runs | `concurrency.RunController` | Live process policy |
+| Model limiter | Process + API key; physical requests and estimated input tokens/minute | `concurrency.ModelRequestLimiter` | Live buckets/permits |
+| Model routing | Run; eligible target for one logical call | `routing.Catalog` | Frozen contracts and affinity |
+| Retry | Logical Model Call; physical attempts | `openai.RetryPolicy` | Live process policy |
+| Run Budget | Run; calls, tokens, Tools, active time, estimated cost | `budget.Tracker` + Usage Store | Frozen budget; durable ledger |
+| Context | Model Call; input/output capacity | `contextassembly` | Frozen config; Manifest per assembly |
+| Loop guard | Autonomous Run; iterations/output characters | Autonomous runtime | Frozen config |
+| Tool execution | Call/batch; scope, time, bytes, concurrency, idempotency | `tool.Executor` | Frozen definitions/policy; durable receipts/Artifacts |
+| Tool progress | Run; repeated failures, unchanged reads, oscillation | `progress.Guard` | Frozen thresholds; durable decisions |
+| Verification | Contracted Run; attempts/time/artifacts | `verification.Engine` | Frozen contract; immutable Evidence |
+| Recovery | Startup/Resume; stale lifecycle and checkpoints | `recovery` + `checkpoint` | Durable state; live stale threshold |
+| Observability | Run; events and derived views | Event Store / projection builders | Durable facts; no policy enforcement |
 
 ## 1. Run Admission and Conversation Concurrency
 
-```env
-MAX_CONCURRENT_RUNS=8
-RUN_QUEUE_SIZE=32
-RUN_QUEUE_WAIT_TIMEOUT=30s
-```
-
-- `MAX_CONCURRENT_RUNS` limits active Agent Runs in one process.
-- `RUN_QUEUE_SIZE` adds bounded waiting capacity beyond active slots.
-- `RUN_QUEUE_WAIT_TIMEOUT` limits waiting for a conversation writer or global
-  slot.
-- One `conversation_id` remains single-writer even when global capacity exists.
-- A full queue returns `429`; an expired wait returns `503`. Both include
-  `Retry-After`.
-
-Admission does not count Model Calls or limit the number of steps inside an
-admitted Run.
-
-Multi-Agent Worker Stages use the same Run admission slot, Run Budget, and
-Model Request Limiter as the parent orchestration. Their context and Tool
-authority boundary is documented in
-[Isolated Worker Stage](isolated-worker-stage.md).
+`MAX_CONCURRENT_RUNS` caps active Runs. `RUN_QUEUE_SIZE` is additional waiting
+capacity; `RUN_QUEUE_WAIT_TIMEOUT` bounds waiting for either a Conversation
+writer or a global slot. The same Conversation remains single-writer even when
+global capacity exists. Full queues return 429, expired waits 503, both with
+`Retry-After`. Admission does not count calls or steps inside an admitted Run.
+Multi Workers share that Run's admission slot, budget, and model limits; their
+[isolation](execution-modes.md#isolated-worker-stage) is a Stage policy.
 
 ## 2. Model Request Limiter
 
-```env
-MAX_CONCURRENT_MODEL_REQUESTS=8
-MODEL_REQUESTS_PER_MINUTE=60
-MODEL_TOKENS_PER_MINUTE=120000
-```
+- `MAX_CONCURRENT_MODEL_REQUESTS` counts physical Chat/Embedding HTTP requests,
+  not models or pool connections. Streams hold a slot until the body closes.
+- `MODEL_REQUESTS_PER_MINUTE` and `MODEL_TOKENS_PER_MINUTE` are per-key
+  buckets; TPM estimates serialized input, not streamed output. Zero disables
+  that bucket. Keyless requests still use global concurrency, not per-key buckets.
+- Every retry needs a new permit and RPM/TPM reservation. Backoff holds no slot.
+- Each attempt separates RPM/TPM wait, permit wait, and HTTP/stream time. These
+  are local measurements, not provider queue/prefill time. Run admission wait
+  is measured by RunController.
+- The request timeout includes permit acquisition through body completion.
+  Local expiry is `model_admission_timeout`, not retried; caller cancellation
+  stays `canceled`. No second model queue is introduced.
+- Requests above total TPM capacity fail with `request_token_capacity_exceeded`,
+  not a Run Budget error.
 
-- Concurrency counts physical model HTTP requests currently in flight.
-- Chat and Embedding share the limiter; a stream holds its slot until the body
-  closes.
-- RPM and approximate input TPM use per-API-key token buckets.
-- Every retry is another physical request and consumes a new permit.
-- Backoff does not hold a concurrency slot.
-- With no API key, no per-key bucket is created; real HTTP work still uses the
-  global concurrency control.
-- Each attempt records local RPM/TPM wait and model-permit wait separately from
-  HTTP/stream time. These are client-side measurements, not provider queue or
-  prefill time. Run admission wait is measured by `RunController`, not here.
-- The route request timeout covers permit acquisition through response-body
-  completion. A local admission timeout fails with `model_admission_timeout`
-  and is not retried; caller cancellation remains `canceled`. No second model
-  queue or limiter is introduced.
-
-A request larger than total TPM bucket capacity returns
-`request_token_capacity_exceeded`. That is not a Run Budget error.
-
-Before the selected adapter acquires these limits, the frozen Model Route
-Catalog excludes targets that cannot satisfy Tool calling, structured output,
-streaming, context-window, or output-limit requirements. Remaining routes are
-ordered by explicit priority and stable route ID. No candidate returns
-`model_route_unavailable` before an HTTP request. See
-[Model Route Contract and Catalog](model-routing.md).
+The frozen [route catalog](model-routing.md) filters capability, input, and
+output requirements before these permits. No eligible target returns
+`model_route_unavailable` without HTTP work; priority and stable ID decide
+among eligible targets.
 
 ## 3. Provider Timeout and Retry
 
-```env
-# Per Chat route: "request_timeout_seconds": 300
-EMBEDDING_REQUEST_TIMEOUT=5m
-MODEL_RETRY_MAX_ATTEMPTS=3
-MODEL_RETRY_BASE_DELAY=500ms
-MODEL_RETRY_MAX_DELAY=5s
-```
+Chat timeout comes from each route's `request_timeout_seconds`; Embedding uses
+`EMBEDDING_REQUEST_TIMEOUT`. `MODEL_RETRY_MAX_ATTEMPTS` includes the first
+attempt (1 disables retry); base/max delay bound exponential backoff and the
+provider's `Retry-After`.
 
-- Each Chat route owns its request timeout; Embedding has an independent timeout.
-- Maximum attempts includes the initial request; `1` disables retries.
-- Base and maximum delay control exponential backoff; the maximum also caps a
-  provider `Retry-After` value.
-- Transport failures, timeouts, rate limits, and provider `5xx` errors are
-  retryable.
-- Provider `429`/`503` retain their own typed errors and bounded retry policy;
-  they are not classified as local permit pressure.
-- Authentication, quota, model-not-found, invalid request, context length,
-  content policy, and cancellation errors fail immediately.
-- Streaming retries only before the first delta, preventing duplicated output.
-
-One logical Model Call may contain several attempts. Attempts count against
-RPM/TPM; the entire Retry Policy uses one Run Budget reservation.
+Transport failures, timeouts, rate limits, invalid provider responses, and 5xx
+are retryable. Authentication, quota, missing model, invalid request, context
+length, content policy, local token capacity, and cancellation fail immediately.
+Provider 429/503 are distinct from local permit pressure. Stream retry stops
+once a delta has been emitted, preventing duplicate output. Physical attempts
+consume RPM/TPM but share one logical Run reservation.
 
 ## 4. Run Budget and Usage Ledger
 
-```env
-RUN_MAX_MODEL_CALLS=32
-RUN_MAX_PROMPT_TOKENS=200000
-RUN_MAX_COMPLETION_TOKENS=50000
-RUN_MAX_TOTAL_TOKENS=250000
-RUN_MAX_TOOL_CALLS=50
-RUN_MAX_RUNTIME=15m
-RUN_MAX_ESTIMATED_COST_USD=0
-MODEL_INPUT_COST_PER_MILLION_TOKENS_USD=0
-MODEL_OUTPUT_COST_PER_MILLION_TOKENS_USD=0
-```
+`RUN_MAX_*` limits are frozen for one Run; zero disables the named dimension.
 
-Run Budget limits cumulative resources for one persisted Run and is frozen in
-its Runtime Snapshot. Configuration changes affect new Runs only.
-
-| Dimension | Accounting rule |
+| Dimension | Accounting |
 | --- | --- |
-| Model calls | logical operations; provider retries do not add calls |
-| Prompt tokens | estimated reservation followed by provider settlement |
-| Completion tokens | provider usage; also constrains per-request `max_tokens` |
-| Total tokens | cumulative prompt + completion |
-| Tool calls | admitted valid calls; handler errors and timeouts still count |
-| Runtime | accumulated `running` segments; queue and human wait do not count |
-| Estimated cost | frozen prices calculated in integer microdollars |
+| Model calls | Logical operations; retries do not add calls |
+| Prompt tokens | Estimated reservation followed by provider settlement |
+| Completion tokens | Provider usage; remaining capacity also caps per-request output |
+| Total tokens | Cumulative prompt + completion |
+| Tool calls | Admitted valid calls; Handler failures/timeouts count |
+| Runtime | Accumulated running segments; queue and human wait excluded |
+| Estimated cost | Frozen input/output prices in integer microdollars |
 
-Zero disables one dimension. Price configuration becomes an enforced limit only
-when `RUN_MAX_ESTIMATED_COST_USD` is positive.
-
-The Usage Ledger is authoritative for enforcement. Trace Summary and Episode
-are observational projections. See [Run Budget and Usage Ledger](run-budget.md)
-for reservation, settlement, and overage semantics.
+Cost becomes enforced only with a positive `RUN_MAX_ESTIMATED_COST_USD` and
+configured prices. The [Usage Ledger](run-budget.md) is accounting authority;
+Trace/Episode are observational. That document owns reservations, settlement,
+purpose scope, and observed-overage details.
 
 ## 5. Context Assembly and Compaction
 
-```env
-MODEL_CONTEXT_WINDOW_TOKENS=128000
-MODEL_OUTPUT_RESERVE_TOKENS=8192
-CONTEXT_SAFETY_MARGIN_TOKENS=4096
-CONTEXT_HISTORY_MAX_TOKENS=64000
-CONTEXT_MEMORY_MAX_TOKENS=8000
-CONTEXT_KNOWLEDGE_MAX_TOKENS=16000
-CONTEXT_TOOL_RESULT_MAX_TOKENS=2000
+`input capacity = context window - output reserve - safety margin`.
+History, Memory, Knowledge, retrieved session sources, and Tool-result caps
+apply to one input, not accumulated usage. Required protocol cannot be silently
+dropped. Manifests explain selection, transformation, and estimates.
 
-CONTEXT_COMPACTION_MODE=auto
-CONTEXT_COMPACTION_SOFT_THRESHOLD=0.70
-CONTEXT_COMPACTION_HARD_THRESHOLD=0.85
-CONTEXT_COMPACTION_RECENT_TOKENS=16000
-CONTEXT_COMPACTION_SUMMARY_MAX_TOKENS=2000
-CONTEXT_COMPACTION_TIMEOUT=45s
-```
+Skill metadata/active instructions use the same total capacity; resource reads
+use the Tool-result/Artifact boundary. Package byte/count limits are independent
+Loader/Snapshot bounds. Provider output uses the stricter of effective output
+capacity and remaining Run completion budget.
 
-One request has this input capacity:
-
-```text
-context window - output reserve - safety margin
-```
-
-History, Memory, Knowledge, and Tool Result limits are per-source input caps,
-not cumulative Run budgets. Each assembly emits a Context Manifest explaining
-selection, exclusion, transformation, and token estimates.
-
-Trusted Skill metadata and activated instructions are required inputs under
-that same total input capacity, not a second token budget. Skill resources use
-the existing Tool-result/Artifact boundary. Fixed package byte/count limits
-bound loading and Snapshot storage independently of model Context capacity;
-see [Trusted Skills](../tools/trusted-skills.md).
-
-Both output reserve and remaining Run completion capacity affect provider
-`max_tokens`; the stricter value wins. One protects a single request, while the
-other protects cumulative Run usage.
-
-Soft Compaction runs asynchronously after completion. Hard Compaction is Turn
-preflight work and is recorded with `compaction` purpose in the Run Ledger. See
-[Context Management](../context/context-management.md).
+Soft compaction is asynchronous after completion; hard compaction is preflight
+work recorded with `compaction` ledger purpose. Selection, triggers, incremental
+summary lineage, ratios, and failure guards belong to
+[Context management](../context/context-management.md).
 
 ## 6. Autonomous Loop Guards
 
-```env
-AUTONOMOUS_MAX_ITERATIONS=5
-AUTONOMOUS_MAX_RUNTIME_SECONDS=300
-AUTONOMOUS_MAX_OUTPUT_CHARS=60000
-AUTONOMOUS_MAX_TOOL_CALLS=20
-```
-
-- Iterations and accumulated output characters are owned by the Autonomous
-  loop.
-- One iteration normally contains Observe, Plan, Act, Review, and Decide; it is
-  not equivalent to one Model Call.
-- Snapshot v5 introduced resolution of mode-specific runtime/tool values and
-  general Run Budget values to the stricter effective value at creation. Run
-  Budget then becomes the single enforcement owner for those resources.
-- The current Snapshot version retains that single-owner protocol.
-  Earlier Snapshot versions remain readable through Replay but are no longer
-  resumable.
-
-With defaults, the effective Autonomous runtime/tool caps are `5m/20`, not the
-general `15m/50`. Run Budget limits quantity; the Tool Progress Guard detects
-repeated work independently and can block a call before it consumes Tool
-Budget. See [Tool Progress Guard](../tools/tool-progress-guard.md).
+`AUTONOMOUS_MAX_ITERATIONS` and `AUTONOMOUS_MAX_OUTPUT_CHARS` are mode-owned.
+An iteration normally has Observe/Plan/Act/Review/Decide, not one model request.
+`AUTONOMOUS_MAX_RUNTIME_SECONDS` and `AUTONOMOUS_MAX_TOOL_CALLS` are folded
+once into the stricter frozen Run Budget; only Budget enforces those resources.
+Defaults produce effective 5m/20 caps versus general 15m/50. Tool Progress Guard
+independently detects repeated work before Tool Budget is consumed.
 
 ## 7. Tool Execution Policy
 
-One Turn can contain multiple model/Tool/observation rounds. The loop has no
-separate round-count setting: Run Budget owns logical model calls, tokens, Tool
-calls and active runtime; Progress Guard owns repeated work. Before executing a
-Tool batch, the caller must have an enforced model-call/prompt-token/total-token
-limit or an enclosing context deadline. A Tool-only limit is insufficient
-because schema-invalid calls are not charged. A configured runtime value is not
-an active deadline by itself. See [Bounded Tool loop](../tools/bounded-tool-loop.md).
+Before a multi-round Tool batch, the caller needs an enforced logical-model-call,
+prompt-token, or total-token limit, or an enclosing context deadline. A Tool-only
+cap is insufficient because invalid arguments are not charged; a configured
+runtime value alone is not an active deadline. No separate round counter is
+introduced. See [Tool loop](../tools/bounded-tool-loop.md).
 
-| Control | Default | Scope |
+| Boundary | Default / fixed limit | Owning contract |
 | --- | --- | --- |
-| Execution timeout | 30s | one Tool Call |
-| Maximum argument schema | 65,536 bytes | one registered Tool |
-| Maximum arguments | 65,536 bytes | one Tool Call |
-| Maximum result | 20,000 bytes | one Tool Result |
-| `TOOL_RESULT_MAX_BATCH_BYTES` | 8,000 bytes | one source-ordered Tool batch |
-| `TOOL_ARTIFACT_MAX_BYTES` | 5 MiB | one persisted Tool Artifact |
-| `TOOL_ARTIFACT_PREVIEW_BYTES` | 1,000 bytes | one model-visible spill preview |
-| Batch concurrency | 4 workers | one Tool batch |
+| Tool timeout / result | 30s / 20,000 bytes | Live Binding; may override defaults |
+| Schema / arguments | 65,536 bytes each | Catalog / Executor |
+| Batch result / Artifact / preview | 8,000 bytes / 5 MiB / 1,000 bytes | [Result Artifacts](../tools/tool-result-artifacts.md) |
+| Batch concurrency | 4 workers; serial unless declared safe read-only/keyed | Executor + live Binding |
 
-Catalog registration normalizes and compiles each parameter schema as JSON
-Schema 2020-12. The normalized schema is the single source used for the model
-definition, argument validation, definition revision, and Runtime Snapshot.
-Unsupported drafts, remote references, non-object roots, invalid schemas, and
-oversized schemas fail registration.
+JSON Schema 2020-12 normalization/compilation is shared by model definitions,
+validation, frozen revision, and offline evaluation. Unsupported drafts, remote
+references, non-object roots, and invalid/oversized schemas fail registration.
+Arguments are bounded, decoded/canonicalized, schema-checked, and authorized
+before Budget/Handler work. Rejections retain safe typed codes and JSON Pointer
+paths without creating effects; argument hash and frozen revision also identify
+journal/tracing records. See [Tool security](../tools/tool-security-policy.md)
+and [contract/fault testing](../tools/tool-contract-testing.md).
 
-Before budget accounting or handler execution, Tool arguments are bounded,
-decoded once, canonicalized, validated against that compiled contract, and
-authorized against the frozen Tool Security Policy. Policy rejection therefore
-does not consume Tool Budget or create a side effect. See
-[Tool Security Policy and Scope](../tools/tool-security-policy.md).
-Validation failures return a stable code, JSON Pointer path, and non-secret
-message. The canonical argument hash and frozen definition revision are reused
-by tracing and the side-effect journal.
-
-Offline Tool selection evaluation calls the same side-effect-free Catalog
-validation path, so its schema decisions cannot drift from Executor behavior.
-Every production Binding is covered by a shared contract/sensor suite, while a
-deterministic fault harness exercises timeout, cancel, panic, result limits,
-Budget denial, tracing, and effect-journal boundaries. See
-[Tool Contract and Fault Testing](../tools/tool-contract-testing.md).
-
-Tool name, description, normalized parameter schema, schema version, definition
-revision, capability, and operator policy have been frozen since Snapshot v11.
-The current v16 Snapshot preserves that policy; v15 and earlier snapshots are
-Replay-only. The live Binding owns
-handler, timeout, result-size, and concurrency policy. Execution is serial
-unless a Binding declares a safe `read_only` or keyed parallel group. Oversized
-results are redacted and persisted as immutable Tool Artifacts; model Context
-receives a UTF-8-safe bounded preview and opaque recovery reference. Batch
-accounting includes both raw results and previews, so adding more Tools cannot
-silently multiply Context usage. See [Tool Result Artifact Governance](../tools/tool-result-artifacts.md).
-
-Tool timeout bounds one handler. Run runtime budget bounds cumulative active
-execution; neither substitutes for the other.
-
-Bindings that write external state declare `Security.SideEffect=external_write`
-or `destructive`; the Executor derives the `external` journal mode.
-They execute behind a durable idempotency journal: committed results replay
-without reinvoking the handler, while uncertain attempts require explicit
-reconciliation. See [Durable Recovery and Stage Checkpoints](durable-recovery.md).
+Definitions, capability, operator policy, and progress settings are frozen;
+Handler, timeout, result limits, and concurrency stay live. Large results use
+redacted immutable Artifacts and bounded UTF-8 previews; source-ordered batch
+accounting includes both raw results and previews.
+`Security.SideEffect` alone derives the journal boundary: no writes need no
+journal, internal writes use internal receipts, external/destructive writes use
+external reconciliation. Committed results replay; uncertain writes require
+[reconciliation](../tools/tool-side-effect-reconciliation.md), not blind retry.
+One Handler timeout and cumulative Run runtime protect different resources.
 
 ## 8. Verification
 
-Verification runs only when the initial request includes a
-`completion_contract`.
+Only an initial `completion_contract` enables Verification. Defaults/ranges:
+30s per verifier (1ms-5m), two policy attempts (1-5), eight Artifacts per Evidence,
+and 65,536 bytes per persisted Artifact/structured details.
 
-| Control | Default / range | Scope |
-| --- | --- | --- |
-| Verifier timeout | 30s; 1ms-5m | one verifier |
-| Policy attempts | 2; 1-5 | one Completion Contract |
-| Maximum artifacts | 8 | one Evidence record |
-| `VERIFICATION_MAX_ARTIFACT_BYTES` | 65,536 bytes | one persisted artifact |
-
-Verifier attempts are not Model Retries and do not increase model-call usage;
-current built-in verifiers do not call a model. Contract and policy are frozen
-with the Run.
+These attempts are not provider retries. Built-in checks do not generate LLM
+answers; `answer_relevance` does make two embedding requests per attempt under
+shared request controls, not generation-token Ledger accounting.
+See [Verification](verification.md) for config, blocking, and gate semantics.
 
 ## 9. Recovery Stale Threshold
 
-```env
-RECOVERY_STALE_RUN_TIMEOUT=60s
-```
-
-Startup recovery repairs open Tool, Model, Turn, and Stage lifecycles before
-atomically marking a stale `running` Run `failed_recoverable`. Resume validates
-durable Stage checkpoints against the frozen Runtime Snapshot and Tool
-definitions. This is neither an execution timeout nor a Run Budget value. See
-[Durable Recovery and Stage Checkpoints](durable-recovery.md).
+`RECOVERY_STALE_RUN_TIMEOUT` (60s default) repairs stale open lifecycles at
+startup before marking a Run `failed_recoverable`. Resume validates checkpoints
+and the current supported Snapshot/Tool definitions. This threshold is neither
+an operation timeout nor a Run runtime budget. See [recovery](durable-recovery.md).
 
 ## Frozen Protocol vs. Live Policy
 
-| Frozen with Run | Live process policy |
+| Frozen with Run | Live process / Binding policy |
 | --- | --- |
-| Run Budget | Run and model concurrency |
-| Context Assembly and Compaction config | queue size and wait timeout |
-| Autonomous iteration/output config | RPM/TPM buckets |
-| provider/model identity | retry, backoff, and HTTP timeout |
-| tool name, description, parameters, side-effect declaration | tool handler, timeout, result, concurrency |
-| Completion Contract | recovery stale threshold |
+| Run Budget, Context/Compaction, Loop limits | Admission, queues, permits, RPM/TPM |
+| Agent(s), routes/model/endpoint, generation profiles, embedding identity | Credentials, retry/backoff, request timeouts |
+| Tool definitions/capability/security/progress and Skill content | Handler, timeout/result/concurrency, runtime prerequisites |
+| Completion Contract | Verifier deployment allowlists, capture policy, recovery threshold |
 
-Frozen values keep Resume and Replay stable. Live values protect the current
-process and provider without rewriting historical execution protocol.
-
-## Common Category Errors
-
-1. **RPM is not model-call budget.** Retry increases RPM but not logical calls.
-2. **TPM is not cumulative Run tokens.** TPM is a time-window input estimate;
-   the ledger settles provider input and output usage.
-3. **Context Window is not cost budget.** It only determines whether one input
-   fits.
-4. **Iteration is not Model Call.** One iteration normally makes several calls.
-5. **Timeout is not runtime budget.** Operation duration and cumulative active
-   runtime have different owners.
-6. **Trace is not Ledger.** Trace explains; Ledger admits and accounts.
-7. **Multiple policy inputs require one owner.** Resolve precedence at snapshot
-   creation instead of maintaining two counters for the same resource.
+Only the current Snapshot schema is resumable; older records remain Replay-only.
+The version and compatibility rule are owned by
+[Runtime Snapshot](../architecture/terms.md#runtime-snapshot), not copied per feature.
 
 ## Tuning Order
 
-1. Set Context Assembly from the real model context window.
-2. Set RPM/TPM and model-request concurrency from provider limits.
-3. Set Run concurrency and queue from machine capacity.
-4. Set Run Budget from acceptable cost and failure radius.
-5. Set Autonomous iteration/output profile; runtime/tool caps fold into Run
-   Budget.
-6. Tune Tool, Verification, and Recovery operation timeouts last.
+1. Match Context capacity to the real model.
+2. Set provider RPM/TPM and model permits, then Run admission/queue capacity.
+3. Set cumulative Run cost/failure radius and mode iteration/output bounds.
+4. Tune Tool, Verification, and Recovery timeouts separately.
+5. Change one layer at a time; inspect Ledger, events, and Replay.
 
-Change one layer at a time and inspect Usage, Replay, and Run Events before
-adjusting another.
-
-Run `make load-evidence` after changing these controls. The bounded profile
-records underload, saturation, overload, recovery, and soak behavior while
-keeping Run admission, model concurrency, RPM/TPM, Run Budget, Tool timeout,
-and Memory queue outcomes distinct. See
-[Bounded Load and Soak Testing](../evaluation/load-soak-testing.md).
+Use [bounded load evidence](../evaluation/load-soak-testing.md) after changing
+controls. Never equate RPM with logical calls, TPM with accumulated usage,
+iterations with calls, or Trace with Ledger.
 
 ## Checklist for a New Control
 
-Before adding a limit, timeout, quota, or guard, answer:
-
-1. Is its scope request, attempt, Model Call, Turn, Run, Conversation, API key,
-   or process?
-2. Is its unit count, token, byte, duration, cost, or concurrency slot?
-3. Which package is the single enforcement owner?
-4. Is it checked before admission, during execution, or after settlement?
-5. Is configuration frozen with the Run or live deployment policy?
-6. What do zero, negative, and missing values mean?
-7. Which typed error, HTTP/SSE response, and Run Event explain rejection?
-8. How do Replay and Usage expose it, and which test prevents double counting?
-
-Update this document, `.env.example`, `internal/config.Config`, and boundary
-tests in the same change. If an existing control owns the same resource, merge
-policy inputs or define precedence instead of adding another runtime counter.
+State scope, unit, single owner, enforcement point, frozen/live policy,
+zero/negative/absent semantics, typed error/HTTP/SSE evidence, and the test that
+prevents double counting. Update this map, `.env.example`, Config comments, and
+boundary tests together. If an existing owner already limits that resource,
+resolve policy precedence instead of adding another counter.

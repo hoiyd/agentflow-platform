@@ -64,10 +64,12 @@ the credential is no longer available.
 The Binding accepts a bounded query, 1-5 results (default 3), and optional
 `include_domains` or `time_range` filters. It fixes Tavily search depth to
 `basic` and excludes provider-generated answers, raw content, and images.
-Results contain a per-call `[Wn]` source ID, title, HTTPS URL, bounded snippet,
-provider rank, and an `untrusted_external_content` marker; they are not
-verified citations. TOOL-024 will bind final-answer citations to the actual
-Tool Call and persisted source. No results, provider 429, timeout, 5xx, and
+Results contain a source ID, title, HTTPS URL, bounded snippet, provider rank,
+and an `untrusted_external_content` marker. Complete successful results receive
+stable Run-scoped `[W#]` aliases; final-answer citations resolve only against
+the actual Tool event and sources selected in the final model Context.
+This proves provenance, not factual correctness. See
+[Web source citations](web-source-citations.md). No results, provider 429, timeout, 5xx, and
 malformed responses produce typed failures without returning provider error bodies.
 
 An opt-in live check exercises Manager -> Catalog -> Executor -> Tavily using

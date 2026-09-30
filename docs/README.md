@@ -1,116 +1,76 @@
 # Documentation Guide
 
-AgentFlow documentation is organized by engineering question rather than by
-source directory. Start with the path that matches the depth of review you need.
+Start with the question you need to answer. Each topic has one owning document;
+related pages link to its contract rather than copying configuration or algorithms.
 
-## Five-Minute Orientation
+## Start Here
 
-1. [Project README](../README.md): scope, architecture, capabilities, and known
-   limitations.
-2. [Project demo](guides/demo.md): a timed five-minute walkthrough with online
-   and no-network paths.
-3. [Execution modes](runtime/execution-modes.md): how Single, Multi, and Loop differ,
-   when to choose each, and which runtime contracts they share.
-4. [Agent profiles](runtime/agent-profiles.md): how custom prompts, Tool/RAG/Memory
-   policy, Router candidates, and frozen Run semantics fit together.
-5. [Engineering decisions](architecture/engineering-decisions.md): why the platform uses
-   explicit runtime primitives and how the design evolved.
-6. [Backend architecture](architecture/backend-architecture.md): package ownership,
-   dependency direction, and main call paths.
+1. [Project overview](../README.md): capabilities and supported boundaries.
+2. [Local setup](guides/local-setup.md): startup and test prerequisites.
+3. [Five-minute demo](guides/demo.md): one task from execution to evidence.
+4. [Execution modes](runtime/execution-modes.md): Single, Multi, Loop, and disconnect/recovery behavior.
+5. [Backend architecture](architecture/backend-architecture.md) and [internal terms](architecture/terms.md): ownership and execution entities.
 
-## Runtime Systems Review
+## Architecture
 
-For a focused backend or AI-systems review, use this path:
+- [Engineering decisions](architecture/engineering-decisions.md): rationale, trade-offs, and retired approaches.
+- [Storage boundary](architecture/storage-boundary.md): Postgres-only persistence versus non-durable test fixtures.
+- [API contract](architecture/api-contract.md): shared OpenAPI generation and change workflow.
+- [Frontend principles](architecture/frontend-experience.md): desktop workbench constraints and Run Session ownership.
+- [Stylesheet organization](../apps/web/app/styles/README.md): CSS ownership.
 
-| Topic | Start here | What to inspect |
-| --- | --- | --- |
-| **Performance** | [Execution controls](runtime/execution-controls.md) | Streaming, bounded work, context/output capacity, Run budgets, timeouts, and tuning order. The project makes no unsupported benchmark claim. |
-| **Concurrency** | [Run admission and Conversation concurrency](runtime/execution-controls.md#1-run-admission-and-conversation-concurrency) | Global admission, bounded queueing, per-Conversation single-writer behavior, model-request permits, RPM/TPM, and retry slot ownership. |
-| **Tracing** | [Backend architecture](architecture/backend-architecture.md#performance-concurrency-tracing-and-verification) | Typed lifecycle events, persisted payloads, Usage Ledger separation, Replay, and Episode projections. |
-| **Verification** | [Verification](runtime/verification.md) | Runtime outcome contracts, versioned verifiers, immutable Evidence/Artifacts, and the Completion Gate. This is separate from Automated and Manual Tests. |
+## Runtime and Operations
 
-The same runtime contracts apply to Single, Multi, and Loop execution. The API
-names the Loop path `autonomous`. Postgres stores and provider/framework
-adapters preserve those contracts, which is the main portability boundary of
-the project.
+- **Orchestration:** [Agent profiles](runtime/agent-profiles.md), [Agent selection](runtime/agent-selection.md), and [execution modes](runtime/execution-modes.md).
+- **Limits:** [execution controls](runtime/execution-controls.md) maps scope, units, precedence, and tuning; [Run Budget](runtime/run-budget.md) owns reservation and settlement details.
+- **Model access:** [route catalog](runtime/model-routing.md), including sampling, affinity, and Resume.
+- **Completion:** [Verification](runtime/verification.md), distinct from development tests and offline evaluation.
+- **Recovery:** [checkpoints and actions](runtime/durable-recovery.md), [operator attention](runtime/operator-attention.md), and [release/recovery drill](operations/release-recovery-drill.md).
+- **Events:** [generated catalog](runtime/event-catalog.md), [projections/invariants](runtime/event-projections-runtime-invariants.md), and [failure contracts](runtime/failure-handling.md).
+- **Configuration:** [backend settings](operations/backend-configuration.md), [credential/redaction boundary](operations/credential-boundary.md), and [production readiness](operations/production-readiness-roadmap.md).
+- **Interfaces:** [HTTP API reference](reference/api-reference.md) maps routes and operational semantics; [OpenAPI](../api/openapi.yaml) owns DTO shapes.
 
-## Runtime and Reliability
+## Context and Knowledge
 
-| Document | Question answered |
-| --- | --- |
-| [Agent profiles](runtime/agent-profiles.md) | How are reusable Agent personas, prompts, Tool permissions, retrieval policy, and Router candidates configured and frozen? |
-| [Capability-aware Agent selection](runtime/agent-selection.md) | How does Multi mode filter frozen candidates, validate model ranking, refuse unsafe delegation, and preserve routing evidence? |
-| [Execution modes](runtime/execution-modes.md) | How do Single, Multi, and Loop execution differ in lifecycle, checkpoints, trace shape, cost, and use case? |
-| [Internal terms](architecture/terms.md) | What do the execution entities mean, and how do Run Events, Trace, Replay, and Episode Report differ? |
-| [Execution controls](runtime/execution-controls.md) | Which layer owns concurrency, rate limits, retries, budgets, context capacity, and stopping rules? |
-| [Model route contract and catalog](runtime/model-routing.md) | How are model targets validated, capability-filtered, frozen, selected, and explained before provider access? |
-| [Tool contract testing](tools/tool-contract-testing.md) | How are Binding contracts, runtime failure paths, durable effects, and Tool selection regressions tested without a network or model? |
-| [Bounded multi-round Tool loop](tools/bounded-tool-loop.md) | How can one Turn correct arguments, make dependent calls and read Artifacts without introducing another budget or recovery protocol? |
-| [Scoped Knowledge read tools](tools/scoped-knowledge-tools.md) | How can an Agent locate and page Workspace evidence, preserve Run-scoped `[S#]` aliases, and trace citations to actual selected Tool observations? |
-| [Trusted Skills](tools/trusted-skills.md) | How are reviewed task methods bound, progressively loaded, frozen for Resume and kept separate from executable Tool permissions? |
-| [Skill installation](tools/skill-installation.md) | How do native Vercel CLI and the Go fallback share the repository-root .agents/skills directory, and how are discovery, working-directory checks and trust handled? |
-| [Restricted Go Skill installer (fallback)](tools/skill-installation-fallback.md) | When Vercel cannot be used, how can an operator preview, validate and publish a pinned public GitHub Skill with bounded downloads and a receipt? |
-| [Tool result artifacts](tools/tool-result-artifacts.md) | How are oversized Tool results redacted, persisted, recovered, bounded in Context, and traced? |
-| [Tool Progress Guard](tools/tool-progress-guard.md) | How are repeated failures, unchanged read-only results, and oscillating Tool calls warned, blocked, and explained in Replay? |
-| [Tool side-effect reconciliation](tools/tool-side-effect-reconciliation.md) | How are uncertain external writes queried, reviewed, retried, compensated, and audited without unsafe automatic replay? |
-| [Failure handling](runtime/failure-handling.md) | How do subsystem errors retain specific types while exposing one structured trace and Episode contract? |
-| [Run Budget](runtime/run-budget.md) | How are logical calls, provider usage, tools, runtime, and cost accounted for? |
-| [Durable recovery](runtime/durable-recovery.md) | How are interrupted lifecycles repaired, Stage boundaries checkpointed, and external Tool effects replayed safely? |
-| [Isolated Worker Stage](runtime/isolated-worker-stage.md) | How does Multi-Agent isolate Worker authority and context while keeping one Run lifecycle, budget, recovery path, and Replay? |
-| [Context management](context/context-management.md) | How is each model input assembled, bounded, compacted, and explained? |
-| [Structured Task State](runtime/task-state.md) | How do goals, tasks, decisions, constraints, blockers, and Artifact references remain versioned across Runs and compaction? |
-| [Model request reconstruction](context/model-request-reconstruction.md) | How are final model payloads hashed, optionally captured, and checked against Runtime Snapshot and Context Manifest records? |
-| [Event projections and runtime invariants](runtime/event-projections-runtime-invariants.md) | How are typed events converted into one read model, checked as an executable protocol, and handed off to live subscribers without a read/subscribe gap? |
-| [Operator attention projection](runtime/operator-attention.md) | How are actionable Runs derived into a low-noise operator queue without persisting a second status? |
-| [Execution modes](runtime/execution-modes.md#client-disconnects-and-run-continuity) | Why does an admitted Run survive browser disconnects, and how does the UI resume observation by durable event sequence? |
-| [Verification](runtime/verification.md) | How can a candidate output be checked before a Run is considered complete? |
+- [Context management](context/context-management.md): selection, exact compaction algorithm, ratios, and failure behavior.
+- [Model request reconstruction](context/model-request-reconstruction.md): actual attempt payloads, opt-in capture, inference telemetry, and inspection.
+- [Memory management](context/memory-management.md): recall, proposal, sync, trust, corrections, and deletion.
+- [Structured Task State](runtime/task-state.md): versioned facts across Runs, independent of summaries.
+- [Knowledge / RAG](knowledge/knowledge-rag.md): index lifecycle, recall/ranking/Gate, context expansion, injection filtering, and native citations.
 
-## AI Context Systems
+## Tools and Skills
 
-| Document | Question answered |
-| --- | --- |
-| [Knowledge / RAG](knowledge/knowledge-rag.md) | How do ingestion, source tracking, hybrid recall, RRF, reranking, gating, and context transformation work? |
-| [Golden Dataset v1 schema](schemas/rag-golden-dataset-v1.schema.json) | Which versioned fields define answerable, expected-source, forbidden-source, and tagged RAG evaluation cases? |
-| [Memory management](context/memory-management.md) | Which conversation facts become durable semantic memory, and how is unsafe persistence avoided? |
-| [Model request reconstruction](context/model-request-reconstruction.md) | What did a physical provider attempt actually receive, and when is its content retained? |
+- [Security policy](tools/tool-security-policy.md): capabilities, derived journal boundary, scope, credentials, and new-Tool registration.
+- [Bounded Tool loop](tools/bounded-tool-loop.md): model/Tool rounds, complete continuation protocol, streaming, and recovery limits.
+- [Result Artifacts](tools/tool-result-artifacts.md), [Progress Guard](tools/tool-progress-guard.md), and [side-effect reconciliation](tools/tool-side-effect-reconciliation.md).
+- [Scoped Knowledge bindings](tools/scoped-knowledge-tools.md) and [Web citations](tools/web-source-citations.md).
+- [Trusted Skills](tools/trusted-skills.md): Loader contract, Agent binding, progressive activation, frozen content, and resource limits.
+- [Skill installation](tools/skill-installation.md): native Vercel workflow, root checks, restricted Go fallback, provenance, and publication safety.
+- [Tool contract/fault testing](tools/tool-contract-testing.md): shared Binding suite and adding coverage for a new Tool.
 
-## Evaluation and Evidence
+## Validation and Evidence
 
-| Document | Question answered |
-| --- | --- |
-| [Evaluation guide](evaluation/README.md) | Which CLI, test suite, script, or UI owns each type of evidence, and what does it prove? |
-| [Offline evaluation reports](evaluation/offline-evaluation.md) | How do Context, Agent routing, Tool, and RAG evaluations share provenance, failure accounting, regression gates, and opt-in live profiles? |
-| [RAG Golden Dataset v1](evaluation/rag-golden-dataset.md) | Which canonical retrieval cases and corpus exercise facts, exact IDs, multi-source recall, no-answer behavior, ACL/staleness leakage, and injection filtering? |
-| [Tool task evaluations](evaluation/tool-task-evaluations.md) | Can Artifact Tools complete evidence-backed tasks, and how are offline checks separated from budgeted live-model comparisons? |
-| [llama.cpp compatibility evidence](evaluation/local-inference-compatibility.md) | How is a real local OpenAI-compatible target checked for streaming, usage, errors, cancellation recovery, route identity, and Runtime Replay evidence? |
-| [Tokenization calibration](evaluation/tokenization-calibration.md) | How do Context estimates, the final serialized request, llama.cpp template tokens, and exact provider usage compare? |
-| [Bounded load and soak testing](evaluation/load-soak-testing.md) | How are backpressure, cancellation, rate and budget boundaries, background Memory work, and cleanup tested under reproducible controlled load? |
-| [Evidence comparison view](evaluation/evidence-comparison.md) | Which identity and single-variable rules allow controlled Evaluation deltas to be shown? |
+Start with the [evaluation guide](evaluation/README.md) to choose the correct evidence path:
 
-## Operations and Interfaces
+- [Offline regression reports](evaluation/offline-evaluation.md): Context, routing, RAG, Tool, and budgeted live benchmark profiles.
+- [RAG dataset](evaluation/rag-golden-dataset.md) and [JSON Schema](schemas/rag-golden-dataset-v1.schema.json); [Tool task evaluations](evaluation/tool-task-evaluations.md).
+- [llama.cpp compatibility](evaluation/local-inference-compatibility.md) and [tokenization calibration](evaluation/tokenization-calibration.md).
+- [Bounded load/soak](evaluation/load-soak-testing.md) and [controlled Run comparison](evaluation/evidence-comparison.md).
+- [Functional regression gates](operations/functional-regression-testing.md): browser -> Go -> Postgres checks with retained runtime evidence.
+- [Manual tests](operations/manual-tests.md): observable checks performed by an operator.
 
-| Document | Question answered |
-| --- | --- |
-| [Production readiness roadmap](operations/production-readiness-roadmap.md) | Which implemented controls form the baseline, what blocks a controlled production beta, and what is deliberately deferred? |
-| [Release and recovery drill](operations/release-recovery-drill.md) | How can a real API process be drained, killed, repaired, resumed, and checked for duplicate recovery against disposable PostgreSQL? |
-| [Backend configuration](operations/backend-configuration.md) | Which environment variables configure providers, storage, limits, tools, Verification, and the mandatory Workspace namespace? |
-| [Credential boundary and redaction](operations/credential-boundary.md) | Where are credentials resolved, rejected, dropped, hashed, or redacted before durable and observable sinks? |
-| [API reference](reference/api-reference.md) | Which HTTP endpoints and response contracts are available? |
-| [API contract](architecture/api-contract.md) | How do OpenAPI-generated Go DTOs and TypeScript types prevent backend/frontend drift? |
-| [Manual tests](operations/manual-tests.md) | How can the major behaviors be tested manually? |
-| [Functional regression gates](operations/functional-regression-testing.md) | Which real browser-to-Go-to-Postgres tests protect Tool continuation, guarded writes, streaming, and completion failures? |
-| [Frontend design principles](architecture/frontend-experience.md) | Which product and interaction constraints guide the workbench UI? |
-| [Stylesheet organization](../apps/web/app/styles/README.md) | Where should frontend style changes be made? |
+Fixture evidence, live model measurements, runtime Verification, and recovery
+drills answer different questions. Keep configuration, provenance, failures,
+and limitations with each result; a successful trace is not a quality benchmark.
 
-## Reading the Evidence
+## Maintenance Rules
 
-Documentation claims should be traceable to one of four forms of evidence:
-
-- a persisted domain contract such as Runtime Snapshot, Context Manifest,
-  Usage Ledger, Completion Contract, or Verification Evidence;
-- a typed Run Event visible in Replay;
-- an API response exposing versioned metadata;
-- a focused test that exercises the boundary or failure case.
-
-When implementation and documentation disagree, treat the implementation and
-tests as authoritative, then update the affected document in the same change.
+- Keep this index navigational and the project README introductory.
+- Defaults belong in [`.env.example`](../apps/api/.env.example); API shapes in
+  [OpenAPI](../api/openapi.yaml); event names in the generated catalog. Explain
+  non-obvious semantics in the owning topic rather than maintaining copies.
+- Keep executable setup/demo commands and safety limits, even when trimming prose.
+- Update references when moving or merging a page. Keep backlog/archive and
+  private notes separate from supported product documentation.
+- When code and docs disagree, verify the implementation/tests and update the
+  owner. Distinguish current behavior from historical migrations and planned work.

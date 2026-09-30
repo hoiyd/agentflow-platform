@@ -125,9 +125,9 @@ tool handlers, and recovery thresholds stay live.
 This split preserves historical behavior without freezing secrets or preventing
 operators from changing deployment capacity.
 
-**Trade-off:** old Snapshot versions require compatibility code. AgentFlow
-prefers explicit legacy behavior over silently applying a new policy to an old
-Run.
+**Trade-off:** historical read compatibility is retained, but execution supports
+only the current Snapshot schema. Old Runs remain Replay-only; no live config
+is substituted for their protocol. See [Snapshot compatibility](terms.md#runtime-snapshot).
 
 ## Durable Memory Requires Curation
 
@@ -180,11 +180,13 @@ an accidental source of truth.
 - Identity-derived Workspace lifecycle, Membership/ACL authorization, and
   multi-tenant release validation. Mandatory namespace filtering is already
   implemented, but it is not an authorization boundary by itself.
-- Immutable Dataset storage/changelog, persisted Evaluation Runs, and calibrated
-  retrieval/no-answer thresholds.
+- A persisted Evaluation Registry and broader live-domain calibration. Versioned
+  fixtures, hashes, Git/CI history, and deterministic calibration/holdout gates
+  already exist; they do not establish general semantic quality.
 - Semantic prompt-injection classification beyond deterministic high-precision
   patterns and trust boundaries.
-- Progress guards for repeated tool signatures, oscillation, and stalled loops.
+- Semantic goal-progress assessment beyond the implemented Tool signature,
+  unchanged-read, and bounded-oscillation Progress Guard.
 - Asynchronous human evidence ingestion and calibrated model-based graders.
 
 These are represented as explicit boundaries because extending a platform safely

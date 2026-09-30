@@ -76,6 +76,7 @@ apps/api/
       progress/      repeated failure and result guards
       artifact/      large-result Artifact governance
       reconciliation/ uncertain side-effect reconciliation
+    skill/          trusted package loading and explicit operator installation
     event/          typed execution events and tracing
     failure/        shared failure classification and event projection
     contextassembly/

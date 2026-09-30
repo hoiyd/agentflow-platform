@@ -1,7 +1,7 @@
 # Tool Result Artifact Governance
 
 AgentFlow keeps large Tool results recoverable without placing their full
-content in model Context. Governance is centralized in `tools.Executor`, so a
+content in model Context. Governance is centralized in `tool.Executor`, so a
 new Binding receives the same behavior without Tool-specific spill code.
 
 ## Execution Contract

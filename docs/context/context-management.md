@@ -35,7 +35,7 @@ the original Session Log is never changed.
 | --- | --- |
 | System protocol and current input | required |
 | Tool definitions and active tool results | required, with result compaction when oversized |
-| Structured Task State | required when a Revision exists; reloaded before every physical Model Call |
+| Structured Task State | required when a Revision exists; reloaded for each logical Model Call assembly |
 | Recent conversation history | selected within the history budget |
 | Curated semantic memory | selected within the memory budget and wrapped as versioned untrusted data |
 | RAG knowledge | selected within the knowledge budget and wrapped as untrusted data |
@@ -74,9 +74,8 @@ retention policy.
 Structured Task State is injected as bounded JSON and recorded in the Manifest
 with a versioned reference such as `conversation_id:v3`. Its raw facts remain in
 the immutable Revision snapshot rather than the Manifest. See
-[Structured Durable Task State](../runtime/task-state.md). Runtime Snapshot v8
-introduced this protocol; the current v16 Snapshot always uses it. Earlier
-snapshots are Replay-only.
+[Structured Durable Task State](../runtime/task-state.md). This protocol is frozen with the Run; see
+[Snapshot compatibility](../architecture/terms.md#runtime-snapshot).
 
 After assembly and application of effective request limits, the model adapter
 persists a Model Request Envelope for each physical attempt. The Manifest
@@ -111,8 +110,8 @@ Retrieval is best effort. Store or search failures emit
 `session_history.search_failed` and do not block the answer model call.
 Successful calls emit `session_history.search_started` and
 `session_history.search_completed` with references and counts, not raw source
-content. Runtime Snapshot v6 introduced frozen retrieval limits; the current
-v17 Snapshot retains them. Snapshot v16 and earlier are Replay-only.
+content. Retrieval limits are frozen with the Run; historical Snapshot schemas
+are Replay-only under the [shared compatibility rule](../architecture/terms.md#runtime-snapshot).
 
 ## When Compaction Runs
 
@@ -125,28 +124,9 @@ v17 Snapshot retains them. Snapshot v16 and earlier are Replay-only.
 
 ## Compaction Algorithm
 
-1. Load the original conversation messages and the latest persisted compaction, if one exists.
-2. Exclude message IDs already covered by the previous compaction and carry its summary forward as the starting state.
-3. Protect the recent raw tail up to `CONTEXT_COMPACTION_RECENT_TOKENS`. At least four messages are retained. A user exchange, including assistant Tool Calls and their Tool Results, is an indivisible protocol group and is never split at the compaction boundary.
-4. Send only the previous summary and newly eligible older messages to the frozen Run model. The schema explicitly records superseded instructions, uncertainties, conflicts, exact references, and missing evidence. Newer corrections override older summary statements, while the current user request remains outside the historical summary and always has priority when assembled.
-5. Calculate a dynamic target summary budget as approximately 20% of eligible source tokens, with a 256-token useful floor when the configured cap permits it and `CONTEXT_COMPACTION_SUMMARY_MAX_TOKENS` as the hard ceiling.
-6. Assign an immutable generation and persist exact source message/event IDs, the replacement summary ID, previous generation link, source hash, and shadowed message range. Original Messages and Events are retained.
-7. Emit `context.compaction_started`, then atomically persist and activate the summary surface together with `context.compaction_completed`. A stale unmatched start is repaired as `context.compaction_failed`; it never makes a partial summary visible or produces a false completion.
-
-Repeated compactions are incremental: each new summary combines the previous summary with only the newly compactable messages. The Context Manifest records the active compaction ID and generation. Summaries are injected as historical references; Structured Task State and the current user request win on conflict. Original messages remain available for replay and debugging.
-
-## Quality Regression
-
-`make context-eval` runs the deterministic H-30 regression suite through the
-production Assembler. It verifies required facts, stale-content exclusion,
-source token distribution, irrelevant-context ratio, total input tokens, prefix
-stability, overflow handling, and raw-history fallback. A `full_history` report
-can be compared with `compacted_history` as one explicit ablation. See
-[Offline evaluation reports](../evaluation/offline-evaluation.md#context-quality-gate).
-
-The suite uses fixed compaction summaries and never calls a model, so it tests
-the assembly contract rather than learned summarization quality. Real summary
-quality and task success require a separately budgeted model-backed evaluation.
+The incremental summarizer combines the previous summary with newly eligible
+older Messages; originals are never removed. The following sections describe
+selection, generation, and failure guards for `context-compaction-v2`.
 
 ### Exact v2 Selection Algorithm
 
@@ -333,28 +313,22 @@ These values are operational examples, not guarantees. The actual ratio varies w
 
 Oversized tool results use a separate deterministic transformation during every context assembly. AgentFlow preserves their head and tail up to `CONTEXT_TOOL_RESULT_MAX_TOKENS`; this is recorded as `tool_result_compacted` in the Context Manifest and is not part of the LLM summary ratio above.
 
-Relevant configuration:
+Defaults and environment names are maintained in
+[`.env.example`](../../apps/api/.env.example); see
+[backend configuration](../operations/backend-configuration.md) for setup.
 
-```bash
-MODEL_CONTEXT_WINDOW_TOKENS=128000
-MODEL_OUTPUT_RESERVE_TOKENS=8192
-CONTEXT_SAFETY_MARGIN_TOKENS=4096
-CONTEXT_HISTORY_MAX_TOKENS=64000
-CONTEXT_MEMORY_MAX_TOKENS=8000
-CONTEXT_KNOWLEDGE_MAX_TOKENS=16000
-CONTEXT_TOOL_RESULT_MAX_TOKENS=2000
-CONTEXT_HISTORY_RETRIEVAL_MAX_RESULTS=8
-CONTEXT_HISTORY_RETRIEVAL_MAX_CHARACTERS=12000
-CONTEXT_HISTORY_RETRIEVAL_MAX_TOKENS=3000
-CONTEXT_HISTORY_RETRIEVAL_WINDOW=1
+## Quality Regression
 
-CONTEXT_COMPACTION_MODE=auto
-CONTEXT_COMPACTION_SOFT_THRESHOLD=0.70
-CONTEXT_COMPACTION_HARD_THRESHOLD=0.85
-CONTEXT_COMPACTION_RECENT_TOKENS=16000
-CONTEXT_COMPACTION_SUMMARY_MAX_TOKENS=2000
-CONTEXT_COMPACTION_TIMEOUT=45s
-```
+`make context-eval` runs the deterministic H-30 regression suite through the
+production Assembler. It verifies required facts, stale-content exclusion,
+source token distribution, irrelevant-context ratio, total input tokens, prefix
+stability, overflow handling, and raw-history fallback. A `full_history` report
+can be compared with `compacted_history` as one explicit ablation. See
+[Offline evaluation reports](../evaluation/offline-evaluation.md#context-quality-gate).
+
+The suite uses fixed compaction summaries and never calls a model, so it tests
+the assembly contract rather than learned summarization quality. Real summary
+quality and task success require a separately budgeted model-backed evaluation.
 
 ## Failure Semantics
 
@@ -365,12 +339,12 @@ CONTEXT_COMPACTION_TIMEOUT=45s
   the request can still fit.
 - Soft compaction failure is recorded after completion and never changes the
   completed Run outcome.
-- A provider-overflow retry occurs at most once for the same Turn ID. A new Turn,
-  produced by new user input or a Tool Result, supplies a new guard key.
+- A provider-overflow retry occurs at most once for the same Turn ID. Only a new
+  logical Turn supplies a new guard key; Tool rounds inside that Turn do not.
 - Compaction completion is an atomic Store operation across the immutable
   summary surface and terminal event. Orphaned starts are safely closed as
   failures after twice the configured timeout, with a one-minute minimum grace.
 - Original Messages remain authoritative and are never deleted by compaction.
-- Session history retrieval never writes back to Messages or RunEvents. File
-  Store performs a bounded in-process scan; Postgres reads the indexed
-  conversation event timeline before applying the same retrieval policy.
+- Session history retrieval never writes back to Messages or Run Events.
+  Postgres reads the indexed Conversation timeline; bounded offline fixtures
+  exercise policy without claiming persistence or database-query parity.

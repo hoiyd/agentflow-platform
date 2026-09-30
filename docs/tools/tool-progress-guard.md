@@ -40,9 +40,10 @@ Run resumes.
 
 `TOOL_PROGRESS_GUARD_ENABLED`, `TOOL_PROGRESS_WARN_AFTER`,
 `TOOL_PROGRESS_BLOCK_AFTER`, and `TOOL_PROGRESS_HALT_AFTER` configure new Runs.
-The effective values are frozen in Runtime Snapshot v12, so Resume does not
-adopt changed deployment settings. Snapshot v11 Runs retain their historical
-behavior with the Guard disabled.
+The effective values are frozen with each new Run; Resume does not adopt
+changed deployment thresholds. Older records preserve their original evidence
+for Replay, but only the current Snapshot schema is resumable. See
+[Snapshot compatibility](../architecture/terms.md#runtime-snapshot).
 
 ## Replay And Recovery
 

@@ -17,7 +17,8 @@ instead of touring every screen.
 
 ## Preparation
 
-In one terminal, start the application:
+First configure the database, model routes/credentials, and embedding identity
+using [Local setup](local-setup.md). In one terminal, start the application:
 
 ```bash
 make quickstart
@@ -174,13 +175,12 @@ The runtime follows this design principle:
 
 ## Recorded Assets
 
-- `agentflow-demo.gif`: end-to-end Multi execution and Replay.
-- `hybrid-rag-demo.gif`: ingestion, Hybrid recall, RRF, reranking, Relevance Gate,
-  and final Context selection.
-- `completion-verification-demo.gif`: Completion Contract, Verification Evidence,
-  Usage, and Replay.
-- `single-mode.png`, `multi-mode.png`, and `loop-mode.png`: stable mode-specific
-  states for an offline visual reference.
+| Asset | What it shows |
+| --- | --- |
+| [Multi recording](../assets/agentflow-demo.gif) | End-to-end execution and Replay |
+| [RAG recording](../assets/hybrid-rag-demo.gif) | Ingestion, recall/ranking/Gate, and Context selection |
+| [Verification recording](../assets/completion-verification-demo.gif) | Contract, Evidence, Usage, and Replay |
+| [Single](../assets/single-mode.png), [Multi](../assets/multi-mode.png), [Loop](../assets/loop-mode.png) | Mode-specific offline visual references |
 
 The recordings explain state transitions; they are not separate demos or
 benchmark evidence.
