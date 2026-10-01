@@ -137,10 +137,14 @@ func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
 				const task = "Use calculator to calculate 1 + 1, then add 3 to that result."
 				var runID, output string
 				var reasoningEvents []domain.RunEvent
+				var liveReasoning []domain.RunEvent
 				drain := func(events <-chan domain.RunEvent, errs <-chan error) {
 					for item := range events {
 						if item.Type == domain.EventModelReasoning {
 							reasoningEvents = append(reasoningEvents, item)
+						}
+						if item.Type == domain.EventModelReasoningDelta {
+							liveReasoning = append(liveReasoning, item)
 						}
 						if item.Type == domain.EventModelDelta {
 							if reset, _ := item.Payload["reset"].(bool); reset {
@@ -181,6 +185,15 @@ func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
 					t.Fatalf("mode=%s final=%q Tool rounds=%d", mode, output, toolRounds.Load())
 				}
 				if display {
+					if len(liveReasoning) == 0 {
+						t.Fatal("no live reasoning batches across Tool rounds")
+					}
+					for _, item := range liveReasoning {
+						text, _ := item.Payload["text"].(string)
+						if item.RunID != runID || item.TurnID == "" || (mode != ChatModeSingle && item.StageID == "") || item.Payload["status"] != "receiving" || text == "" || strings.Contains(text, "sk-fixture") || strings.Contains(text, "fixture-not-a-secret") || strings.Contains(text, "PRIVATE_KEY_BODY") {
+							t.Fatalf("unsafe or unscoped live reasoning: %#v", item)
+						}
+					}
 					if len(reasoningEvents) != 6 {
 						t.Fatalf("reasoning events=%d", len(reasoningEvents))
 					}
@@ -208,7 +221,7 @@ func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
 							}
 						}
 					}
-				} else if len(reasoningEvents) != 0 {
+				} else if len(reasoningEvents) != 0 || len(liveReasoning) != 0 {
 					t.Fatal("display enabled implicitly")
 				}
 				ledger, _, err := storage.GetRunUsageLedger(runID)
@@ -222,6 +235,9 @@ func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
 				}
 				var durableReasoning []domain.RunEvent
 				for _, item := range items {
+					if item.Type == domain.EventModelReasoningDelta {
+						t.Fatal("live reasoning batch persisted")
+					}
 					if item.Type == domain.EventModelReasoning {
 						durableReasoning = append(durableReasoning, item)
 					}

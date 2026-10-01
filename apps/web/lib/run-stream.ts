@@ -107,14 +107,14 @@ function projectRunEvent(event: ChatEvent | RunEvent): ChatEvent {
   if (!("schema_version" in event)) return event;
   const payload = event.payload ?? {};
   if (event.type === "model.delta") return { type: "model_delta", delta: String(payload.delta ?? ""), reset: payload.reset === true };
-  if (event.type === "model.reasoning") {
-    // Fail closed on unsupported formats, missing scope, oversized text or a
-    // provider attempting to publish text before completing its privacy filter.
+  if (event.type === "model.reasoning" || event.type === "model.reasoning_delta") {
+    // Only the dedicated live event may carry a sanitized receiving prefix.
+    const live = event.type === "model.reasoning_delta";
     if (event.run_id && event.turn_id && typeof payload.model_call_id === "string" && payload.model_call_id &&
       payload.format === "deepseek_reasoning_content" &&
       (payload.status === "receiving" || payload.status === "complete" || payload.status === "interrupted") &&
       (payload.text === undefined || (typeof payload.text === "string" && new TextEncoder().encode(payload.text).length <= 16384)) &&
-      (payload.status === "complete" || !payload.text) &&
+      (live ? payload.status === "receiving" && !!payload.text : payload.status === "complete" || !payload.text) &&
       (payload.truncated === undefined || typeof payload.truncated === "boolean")) {
       return { type: "model_reasoning", run_id: event.run_id, turn_id: event.turn_id,
         stage_id: event.stage_id, model_call_id: payload.model_call_id, format: payload.format,

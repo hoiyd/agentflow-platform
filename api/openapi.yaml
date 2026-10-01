@@ -1536,7 +1536,7 @@ components:
         status: { type: string, enum: [receiving, complete, interrupted] }
         text:
           type: string
-          description: Redacted plain text, at most 16 KiB UTF-8; present only after successful completion.
+          description: Redacted plain-text replacement, at most 16 KiB UTF-8. Receiving text is an ephemeral safe prefix; complete text is durable. Interrupted events contain no text.
         truncated: { type: boolean }
     StageStateChunk:
       type: object

@@ -58,3 +58,24 @@ func TestStoreSinkRoutesNormalizedLiveEventsWithoutPersistence(t *testing.T) {
 		t.Fatalf("live event was not normalized: %#v", live.item)
 	}
 }
+
+func TestReasoningBatchesAreLiveOnly(t *testing.T) {
+	backend, live := &sinkStoreStub{}, &livePublisherStub{}
+	sink := StoreSink{Store: backend, Live: live}
+	for _, display := range []ModelReasoningPayload{
+		{ModelCallID: "call-1", Format: "deepseek_reasoning_content", Status: "receiving"},
+		{ModelCallID: "call-1", Format: "deepseek_reasoning_content", Status: "receiving", Text: "Safe prefix"},
+		{ModelCallID: "call-1", Format: "deepseek_reasoning_content", Status: "complete", Text: "Safe prefix and final text"},
+	} {
+		item, err := NewRunEvent(display.EventType(), EventMetadata{RunID: "run-1", TurnID: "turn-1"}, display)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := sink.Publish(context.Background(), item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if backend.calls != 2 || live.item.Type != domain.EventModelReasoningDelta || live.item.Payload["text"] != "Safe prefix" {
+		t.Fatalf("durable=%d live=%#v", backend.calls, live.item)
+	}
+}

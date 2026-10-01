@@ -7,13 +7,14 @@ import (
 )
 
 // Initiating Chat streams use the same sanitized envelope as subscribers.
-// The Turn sink persists it; this handler only forwards to the response.
+// The Turn sink persists terminal/status facts and broadcasts ephemeral batches;
+// this handler only forwards to the initiating response.
 func forwardReasoning(events chan<- domain.RunEvent) turnpkg.EventHandler {
 	return func(item turnpkg.Event) {
 		if item.Type != turnpkg.EventModelReasoning || item.Reasoning == nil {
 			return
 		}
-		live, err := eventpkg.NewRunEvent(domain.EventModelReasoning, eventpkg.EventMetadata{
+		live, err := eventpkg.NewRunEvent(item.Reasoning.EventType(), eventpkg.EventMetadata{
 			RunID: item.RunID, ConversationID: item.ConversationID, StageID: item.StepID,
 			TurnID: item.TurnID, Timestamp: item.Timestamp,
 		}, *item.Reasoning)

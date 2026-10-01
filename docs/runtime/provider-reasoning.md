@@ -32,20 +32,35 @@ Restart the backend after changing route configuration. New Runs freeze the new
 capability; old Runs keep the frozen display setting. There is no endpoint-name
 heuristic that automatically opts an unverified OpenAI-compatible provider in.
 
-The browser receives a content-free receiving state immediately. Text is released
-only after a successfully finished model call, after redaction of the complete
-text. This intentionally avoids per-chunk credential leakage: a credential can
-span any number of provider chunks. The display copy is capped at 16 KiB after
-redaction, with an explicit truncation marker. Interrupted/invalid calls expose
-no partial reasoning text. Existing protocol and Run budgets remain authoritative.
+The browser receives a content-free receiving state immediately, followed by
+sanitized prefix replacements while the model is generating. The first filter
+check is immediate; subsequent incoming deltas are checked at most once per
+100 ms, bounding both filtering work and live publication frequency.
+Each replacement is redacted as a whole, never appended as an independently
+filtered provider chunk. The adapter withholds the unfinished token and enough
+raw lookahead for the configured API key (including keys spanning whitespace).
+Unfinished private-key blocks are withheld by the whole-prefix filter. Long text
+without whitespace stays buffered until a boundary or successful completion;
+this is batched streaming, not a promise to show each token immediately. There
+is no background timer: when the provider stalls, no new batch is emitted.
+
+Successful completion always replaces the prefix with the sanitized full copy.
+The display copy is capped at 16 KiB after redaction, with an explicit truncation
+marker; capped live displays stop producing updates until finalization.
+Interrupted/invalid calls and canceled Runs remove the unfinished live display
+and persist no partial text. Text already shown cannot be recalled from the
+browser; this boundary prevents unfinished text from becoming durable history,
+not retrospective secrecy. Existing protocol and Run budgets remain authoritative.
 The shared stream accumulator bounds answer, reasoning, and Tool fragments to
 1 MiB per model call, regardless of display permission; fallback output-token
 estimates include returned reasoning even when display is disabled. Exact
 provider-reported usage remains authoritative. Display status `Received` means a
 complete transport response, not successful Run budget settlement or verification.
 
-`model.reasoning` is a typed, durable Run event, scoped to Run, Turn, optional
-Stage, and model-call identity. Chat uses a collapsed plain-text disclosure;
+`model.reasoning` is a typed, durable status/completion event; sanitized live
+replacements use `model.reasoning_delta`, a live-only event with no DB writes or
+durable sequence. Both are scoped to Run, Turn, optional Stage, and model-call
+identity. Chat uses a collapsed plain-text disclosure;
 reasoning never appends to the assistant answer. Non-streaming internal planning
 and routing calls do not produce these display events.
 The browser retains at most the latest 32 pending/live calls (512 KiB maximum
@@ -53,6 +68,10 @@ text). Switching workspace views or execution-mode tabs, or selecting the alread
 active Conversation in Recent runs, keeps the stream connection. Completed
 reasoning is also available beside historical answers after changing Conversation
 or reloading. A remounted disclosure is collapsed; expand it to read saved text.
+Reconnect/reload during generation does not replay prior ephemeral prefixes;
+the next live batch replaces the display, or completion restores the full saved
+copy. Terminal display states cannot be overwritten by late live batches, and a
+replayed text-free receiving fact does not erase newer live text.
 The existing header Stop action is available for active Runs in all three modes,
 so waiting for provider reasoning can be explicitly canceled without closing Chat.
 
@@ -96,9 +115,11 @@ compatibility.
 | --- | --- |
 | Missing, empty, or unsupported reasoning | No empty disclosure; answer path unchanged |
 | Interleaved answer/reasoning and multiple Tool rounds | Separate model-call entries; answer reset never resets reasoning |
-| Split credentials or multiline private keys | Redact the complete display copy; serialized continuation unchanged |
+| Split credentials or multiline private keys | Redact whole safe prefixes/final copy; serialized continuation unchanged |
+| Live batches, split configured keys, or unfinished credential tokens | Publish only sanitized closed prefixes; retain the unsafe tail; never persist live batches |
+| Slow provider, repeated receiving state, or late live batch | Show text before completion without clearing newer text or overwriting a terminal call |
 | Display cap exceeded | Truncated sanitized text; required continuation retained |
-| Missing finish/DONE, malformed SSE, disconnect, refusal, length stop | Interrupted display; real call/Run failure preserved; no partial text |
+| Missing finish/DONE, malformed SSE, disconnect, refusal, length stop | Interrupted display; real call/Run failure preserved; live prefix cleared, no partial text persisted |
 | Cancel or budget exhaustion | No reasoning-only success; no retry after a visible receiving event |
 | View/mode changes or reselecting the active Conversation | Retain reasoning and current stream; a remounted disclosure is collapsed |
 | Different Conversation, new Run, reload | Reload reasoning beside its own historical answer; never leak it into a new Run's display |

@@ -42,6 +42,7 @@ async function evidence(page: Page, request: APIRequestContext, prompt: string) 
   const durable = JSON.stringify({ replay, messages, requests });
   expect(durable).not.toContain(secret);
   const reasoningEvents = replay.run_events.filter((item: { type: string }) => item.type === "model.reasoning");
+  expect(replay.run_events.some((item: { type: string }) => item.type === "model.reasoning_delta")).toBe(false);
   const complete = reasoningEvents.filter((item: { payload: { status: string } }) => item.payload.status === "complete");
   if (complete.length) expect(durable).toContain("DISPLAY_ONLY_REASONING");
   expect(JSON.stringify(requests)).not.toContain("DISPLAY_ONLY_REASONING");
@@ -59,7 +60,7 @@ async function evidence(page: Page, request: APIRequestContext, prompt: string) 
     })),
     limits: { display_bytes_per_call: 16384, retained_browser_calls: 32 },
     privacy: { sanitized_reasoning_persisted: true, metadata_capture_content_absent: true, secret_absent: true },
-    limitations: ["strict local fixture, not live provider evidence", "same-Turn continuation only", "text released after call completion"]
+    limitations: ["strict local fixture, not live provider evidence", "same-Turn continuation only", "live prefixes are ephemeral; only completed text is durable"]
   }, null, 2), contentType: "application/json" });
   return replay;
 }
@@ -147,23 +148,31 @@ for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
   });
 }
 
-test("receiving state is real, text is withheld and a browser disconnect does not cancel execution", async ({ page, request }) => {
+test("safe reasoning is visible before completion and browser disconnect does not cancel execution", async ({ page, request }) => {
   const prompt = "reasoning-gate: wait before final answer";
   await submit(page, prompt);
   const disclosure = page.locator(".provider-reasoning");
   await expect(disclosure).toBeVisible();
   await disclosure.locator("summary").click();
   await expect(disclosure).toContainText("Receiving provider reasoning");
-  await expect(disclosure.locator("pre")).toHaveCount(0);
+  await expect(disclosure.locator("pre")).toContainText("DISPLAY_ONLY_REASONING");
+  const prefix = await disclosure.locator("pre").innerText();
+  expect(prefix).not.toContain("sk-fixture");
+  await expect(disclosure).not.toContainText("Received");
   await expect(page.getByText("Working...", { exact: true })).toBeVisible();
   const href = await page.getByRole("link", { name: "View trace" }).getAttribute("href");
   const runId = href!.split("/").at(-1)!;
+  const pending = await read(request, `/api/runs/${runId}/replay`);
+  expect(pending.run.status).toBe("running");
+  expect(pending.run_events.some((event: { type: string }) => event.type === "model.reasoning_delta")).toBe(false);
+  expect(pending.run_events.filter((event: { type: string }) => event.type === "model.reasoning")
+    .every((event: { payload: { text?: string } }) => !event.payload.text)).toBe(true);
   await page.getByRole("button", { name: "Tools", exact: true }).click();
   await page.locator(".conversation-item.active").click();
   await expect(disclosure).toBeVisible();
   await disclosure.locator("summary").click();
   await expect(disclosure).toContainText("Receiving provider reasoning");
-  await expect(disclosure.locator("pre")).toHaveCount(0);
+  await expect(disclosure.locator("pre")).toHaveText(prefix);
   await expect(page.getByRole("link", { name: "View trace" })).toHaveAttribute("href", href!);
   await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
   await page.goto("about:blank");
@@ -175,6 +184,13 @@ test("receiving state is real, text is withheld and a browser disconnect does no
   await expect(disclosure).toBeVisible();
   await disclosure.locator("summary").click();
   await expect(disclosure).toContainText("DISPLAY_ONLY_REASONING");
+  expect((await disclosure.locator("pre").innerText()).length).toBeGreaterThan(prefix.length);
+  await test.info().attach("live-reasoning-evidence", { body: JSON.stringify({ run_id: runId,
+    prefix_visible_while_running: true, prefix_bytes: new TextEncoder().encode(prefix).length,
+    incomplete_credential_withheld: true, live_batches_persisted: false,
+    view_change_retained_prefix: true, disconnect_did_not_cancel: true,
+    completed_copy_reloaded: true
+  }, null, 2), contentType: "application/json" });
   await evidence(page, request, prompt);
 });
 
@@ -208,6 +224,8 @@ test(`${mode}: explicit cancellation ends normally without publishing private pa
   await expect(disclosure).toBeVisible();
   await disclosure.locator("summary").click();
   await expect(disclosure).toContainText("Receiving provider reasoning");
+  await expect(disclosure.locator("pre")).toContainText("DISPLAY_ONLY_REASONING");
+  expect(await disclosure.locator("pre").innerText()).not.toContain("sk-fixture");
   await page.locator(".topbar").getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByLabel("Task status: canceled", { exact: true })).toBeVisible();
   await expect(disclosure).toContainText("Run canceled; text withheld");
@@ -217,6 +235,7 @@ test(`${mode}: explicit cancellation ends normally without publishing private pa
   expect(replay.run_events.filter((event: { type: string }) => event.type === "run.canceled")).toHaveLength(1);
   expect(replay.run_events.some((event: { type: string }) => event.type === "run.failed")).toBe(false);
   const body = await (await stream).text();
+  expect(body).toContain('"type":"model.reasoning_delta"');
   expect(body).not.toContain("event: error\n");
   expect(body).toContain('"type":"done"');
   expect(body).toContain('"status":"canceled"');

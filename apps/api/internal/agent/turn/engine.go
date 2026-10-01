@@ -34,9 +34,11 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 			return
 		}
 		payload := map[string]any{}
+		eventType := unifiedEventType(item.Type)
 		if item.Reasoning != nil {
 			var err error
 			payload, err = eventpkg.Payload(*item.Reasoning)
+			eventType = item.Reasoning.EventType()
 			if err != nil {
 				sinkErr = err
 				return
@@ -72,7 +74,7 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 			payload["total_tokens"] = item.Result.Usage.TotalTokens
 			payload["token_usage_estimated"] = item.Result.Usage.Estimated
 		}
-		if err := request.Sink.Publish(ctx, domain.RunEvent{Type: unifiedEventType(item.Type), RunID: request.RunID,
+		if err := request.Sink.Publish(ctx, domain.RunEvent{Type: eventType, RunID: request.RunID,
 			ConversationID: request.ConversationID, StageID: request.StepID, TurnID: request.TurnID,
 			Payload: payload, Timestamp: time.Now().UTC()}); err != nil && sinkErr == nil {
 			sinkErr = err

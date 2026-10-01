@@ -4,8 +4,21 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { Message } from "../../lib/api";
 import { ChatWorkspace } from "./ChatWorkspace";
 import type { ReasoningEntry } from "./ReasoningDisclosure";
+import { ReasoningDisclosure } from "./ReasoningDisclosure";
 
 afterEach(cleanup);
+
+it("shows live reasoning separately and drops unfinished text when the Run stops", () => {
+  const entry: ReasoningEntry = { run_id: "run-1", turn_id: "turn-1", model_call_id: "call-1", format: "deepseek_reasoning_content", status: "receiving", text: "Safe live prefix" };
+  const view = render(<ReasoningDisclosure entries={[entry]} runStatus="running" />);
+  expect(screen.getByText("Safe live prefix")).toBeTruthy();
+  for (const runStatus of ["canceled", "failed", "failed_recoverable", "completed", "waiting_for_user"]) {
+    view.rerender(<ReasoningDisclosure entries={[entry]} runStatus={runStatus} />);
+    expect(screen.queryByText("Safe live prefix")).toBeNull();
+  }
+  view.rerender(<ReasoningDisclosure entries={[{ ...entry, status: "complete" }]} runStatus="completed" />);
+  expect(screen.getByText("Safe live prefix")).toBeTruthy();
+});
 
 it("keeps real provider reasoning collapsed and separate from the answer", () => {
   const reasoning: ReasoningEntry = { type: "model_reasoning", run_id: "run-1", turn_id: "turn-1", model_call_id: "call-1", format: "deepseek_reasoning_content", status: "complete", text: "Provider explanation", truncated: true };
