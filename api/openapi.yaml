@@ -925,6 +925,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WebCitation'
+        reasoning:
+          type: array
+          description: Sanitized completed provider reasoning associated with this assistant answer; display-only, not model input.
+          items:
+            $ref: '#/components/schemas/MessageReasoning'
         created_at:
           type: string
           format: date-time
@@ -1505,6 +1510,34 @@ components:
         reset:
           type: boolean
           description: Clear the current assistant draft before appending delta; retracts provisional text when a streamed round chooses tools.
+    MessageReasoning:
+      type: object
+      required: [run_id, turn_id, model_call_id, format, status]
+      properties:
+        run_id: { type: string }
+        turn_id: { type: string }
+        stage_id: { type: string }
+        model_call_id: { type: string }
+        format: { type: string, enum: [deepseek_reasoning_content] }
+        status: { type: string, const: complete }
+        text: { type: string, description: Redacted plain text, at most 16 KiB UTF-8. }
+        truncated: { type: boolean }
+    ModelReasoningChunk:
+      type: object
+      description: Sanitized provider output, never an answer or private continuation. Completed text is durable; live text replaces this call's display copy.
+      required: [type, run_id, turn_id, model_call_id, format, status]
+      properties:
+        type: { type: string, const: model_reasoning }
+        run_id: { type: string }
+        turn_id: { type: string }
+        stage_id: { type: string }
+        model_call_id: { type: string }
+        format: { type: string, enum: [deepseek_reasoning_content] }
+        status: { type: string, enum: [receiving, complete, interrupted] }
+        text:
+          type: string
+          description: Redacted plain text, at most 16 KiB UTF-8; present only after successful completion.
+        truncated: { type: boolean }
     StageStateChunk:
       type: object
       required: [type, conversation_id, run_id, role, status]
@@ -1570,6 +1603,7 @@ components:
         - $ref: '#/components/schemas/RunStateChunk'
         - $ref: '#/components/schemas/RunProgressChunk'
         - $ref: '#/components/schemas/ModelDeltaChunk'
+        - $ref: '#/components/schemas/ModelReasoningChunk'
         - $ref: '#/components/schemas/StageStateChunk'
         - $ref: '#/components/schemas/DoneChunk'
         - $ref: '#/components/schemas/ErrorChunk'

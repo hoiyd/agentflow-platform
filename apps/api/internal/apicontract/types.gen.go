@@ -114,6 +114,36 @@ func (e MessageRole) Valid() bool {
 	}
 }
 
+// Defines values for MessageReasoningFormat.
+const (
+	DeepseekReasoningContent MessageReasoningFormat = "deepseek_reasoning_content"
+)
+
+// Valid indicates whether the value is a known member of the MessageReasoningFormat enum.
+func (e MessageReasoningFormat) Valid() bool {
+	switch e {
+	case DeepseekReasoningContent:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MessageReasoningStatus.
+const (
+	Complete MessageReasoningStatus = "complete"
+)
+
+// Valid indicates whether the value is a known member of the MessageReasoningStatus enum.
+func (e MessageReasoningStatus) Valid() bool {
+	switch e {
+	case Complete:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OperatorAttentionItemReason.
 const (
 	OperatorAttentionItemReasonBudgetExhausted        OperatorAttentionItemReason = "budget_exhausted"
@@ -530,13 +560,36 @@ type Message struct {
 	ConversationId string         `json:"conversation_id"`
 	CreatedAt      time.Time      `json:"created_at"`
 	Id             string         `json:"id"`
-	Role           MessageRole    `json:"role"`
-	WebCitations   *[]WebCitation `json:"web_citations,omitempty"`
-	WorkspaceId    string         `json:"workspace_id"`
+
+	// Reasoning Sanitized completed provider reasoning associated with this assistant answer; display-only, not model input.
+	Reasoning    *[]MessageReasoning `json:"reasoning,omitempty"`
+	Role         MessageRole         `json:"role"`
+	WebCitations *[]WebCitation      `json:"web_citations,omitempty"`
+	WorkspaceId  string              `json:"workspace_id"`
 }
 
 // MessageRole defines model for Message.Role.
 type MessageRole string
+
+// MessageReasoning defines model for MessageReasoning.
+type MessageReasoning struct {
+	Format      MessageReasoningFormat `json:"format"`
+	ModelCallId string                 `json:"model_call_id"`
+	RunId       string                 `json:"run_id"`
+	StageId     *string                `json:"stage_id,omitempty"`
+	Status      MessageReasoningStatus `json:"status"`
+
+	// Text Redacted plain text
+	Text      *string `json:"text,omitempty"`
+	Truncated *bool   `json:"truncated,omitempty"`
+	TurnId    string  `json:"turn_id"`
+}
+
+// MessageReasoningFormat defines model for MessageReasoning.Format.
+type MessageReasoningFormat string
+
+// MessageReasoningStatus defines model for MessageReasoning.Status.
+type MessageReasoningStatus string
 
 // OperatorAttentionAction defines model for OperatorAttentionAction.
 type OperatorAttentionAction struct {

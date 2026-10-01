@@ -3,8 +3,20 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import type { Message } from "../../lib/api";
 import { ChatWorkspace } from "./ChatWorkspace";
+import type { ReasoningEntry } from "./ReasoningDisclosure";
 
 afterEach(cleanup);
+
+it("keeps real provider reasoning collapsed and separate from the answer", () => {
+  const reasoning: ReasoningEntry = { type: "model_reasoning", run_id: "run-1", turn_id: "turn-1", model_call_id: "call-1", format: "deepseek_reasoning_content", status: "complete", text: "Provider explanation", truncated: true };
+  const view = render(workspace([message("answer", "assistant", "Final answer")], false, [reasoning]));
+  const disclosure = screen.getByText(/^Provider reasoning/).closest("details");
+  expect(disclosure?.hasAttribute("open")).toBe(false);
+  expect(disclosure?.textContent).toContain("Display truncated");
+  expect(screen.getByText("Final answer").closest(".bubble")?.textContent).not.toContain("Provider explanation");
+  view.rerender(workspace([], false, []));
+  expect(screen.queryByText(/^Provider reasoning/)).toBeNull();
+});
 
 it("shows a waiting status until text arrives, including Tool-round retraction", () => {
   const view = render(workspace([message("draft", "assistant", "")], true));
@@ -39,7 +51,7 @@ function message(id: string, role: Message["role"], content: string): Message {
   return { id, role, content, conversation_id: "conv-1", created_at: "2026-09-29T00:00:00Z" };
 }
 
-function workspace(messages: Message[], isStreaming: boolean) {
+function workspace(messages: Message[], isStreaming: boolean, reasoning: ReasoningEntry[] = []) {
   const noop = vi.fn();
   return <ChatWorkspace
     agents={[]}
@@ -54,6 +66,7 @@ function workspace(messages: Message[], isStreaming: boolean) {
     isStreaming={isStreaming}
     isTaskStatePanelOpen={false}
     messages={messages}
+    reasoning={reasoning}
     messagesRef={{ current: null }}
     onCancel={noop}
     onContinue={noop}

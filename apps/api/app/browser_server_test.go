@@ -39,10 +39,14 @@ func TestBrowserServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	routePath := filepath.Join(root, "routes.json")
+	capabilities := map[string]any{"tool_calling": true, "structured_output": true, "streaming": true}
+	if os.Getenv("AGENTFLOW_REASONING_TEST") == "1" {
+		capabilities["reasoning_display_format"] = "deepseek_reasoning_content"
+	}
 	routes, err := json.Marshal(map[string]any{"routes": []any{map[string]any{
 		"id": "browser-fixture", "model": "fixture-model", "base_url": providerServer.URL,
 		"credential_environment": "BROWSER_FIXTURE_KEY", "request_timeout_seconds": 45,
-		"capabilities":          map[string]bool{"tool_calling": true, "structured_output": true, "streaming": true},
+		"capabilities":          capabilities,
 		"context_window_tokens": 128000, "max_output_tokens": 8192, "priority": 100,
 		"pricing": map[string]string{"source": "fixture"},
 	}}})

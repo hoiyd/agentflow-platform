@@ -9,15 +9,16 @@ import (
 
 // RuntimeIdentity is the provider-neutral model configuration frozen into a Run.
 type RuntimeIdentity struct {
-	Provider            string
-	BaseURL             string
-	Model               string
-	EmbeddingBaseURL    string
-	EmbeddingModel      string
-	EmbeddingDimensions int
-	EmbeddingProvider   string
-	GenerationPolicy    domain.GenerationPolicy
-	SeedSupported       bool
+	Provider               string
+	BaseURL                string
+	Model                  string
+	EmbeddingBaseURL       string
+	EmbeddingModel         string
+	EmbeddingDimensions    int
+	EmbeddingProvider      string
+	GenerationPolicy       domain.GenerationPolicy
+	SeedSupported          bool
+	ReasoningDisplayFormat string
 }
 
 type Message struct {
@@ -52,6 +53,16 @@ type StreamEvent struct {
 	ToolName   string
 	ToolCallID string
 	Error      string
+	Reasoning  *ReasoningDisplay
+}
+
+type ReasoningDisplay = eventpkg.ModelReasoningPayload
+
+const ReasoningFormatDeepSeek = "deepseek_reasoning_content"
+
+// Providers opt into documented display formats, never opaque continuation fields.
+func ValidReasoningDisplayFormat(format string) bool {
+	return format == "" || format == ReasoningFormatDeepSeek
 }
 
 // ChatRequest is the provider-neutral input for one agent turn.

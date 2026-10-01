@@ -29,7 +29,7 @@ type streamedToolCall struct {
 	arguments strings.Builder
 }
 
-const maxToolStreamBytes = 1024 * 1024
+const maxChoiceStreamBytes = 1024 * 1024
 
 func (s *streamedChoice) add(content string, reasoning *string, deltas []toolCallDelta) error {
 	s.bytes += len(content)
@@ -39,8 +39,8 @@ func (s *streamedChoice) add(content string, reasoning *string, deltas []toolCal
 	for _, delta := range deltas {
 		s.bytes += len(delta.ID) + len(delta.Type) + len(delta.Function.Name) + len(delta.Function.Arguments)
 	}
-	if s.bytes > maxToolStreamBytes {
-		return invalidResponseError("chat.stream", "model Tool stream exceeds aggregate size limit", nil)
+	if s.bytes > maxChoiceStreamBytes {
+		return invalidResponseError("chat.stream", "model stream exceeds aggregate size limit", nil)
 	}
 	s.content.WriteString(content)
 	if reasoning != nil {

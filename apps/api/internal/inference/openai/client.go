@@ -18,20 +18,21 @@ const (
 )
 
 type Client struct {
-	apiKey              string
-	simulated           bool
-	baseURL             string
-	embeddingBaseURL    string
-	model               string
-	embeddingModel      string
-	embeddingDimensions int
-	httpClient          *http.Client
-	timeout             time.Duration
-	requestLimiter      requestcontrol.Limiter
-	requestRecorder     requestcontrol.Recorder
-	retryPolicy         RetryPolicy
-	generationPolicy    domain.GenerationPolicy
-	seedSupported       bool
+	apiKey                 string
+	simulated              bool
+	baseURL                string
+	embeddingBaseURL       string
+	model                  string
+	embeddingModel         string
+	embeddingDimensions    int
+	httpClient             *http.Client
+	timeout                time.Duration
+	requestLimiter         requestcontrol.Limiter
+	requestRecorder        requestcontrol.Recorder
+	retryPolicy            RetryPolicy
+	generationPolicy       domain.GenerationPolicy
+	seedSupported          bool
+	reasoningDisplayFormat string
 }
 
 var _ provider.Client = (*Client)(nil)
@@ -136,7 +137,7 @@ func (c *Client) RuntimeIdentity() RuntimeIdentity {
 		Provider: providerForURL(c.baseURL), BaseURL: safeRuntimeURL(c.baseURL), Model: c.model,
 		EmbeddingBaseURL: safeRuntimeURL(c.embeddingBaseURL), EmbeddingModel: c.embeddingModel,
 		EmbeddingDimensions: c.embeddingDimensions, EmbeddingProvider: providerForURL(c.embeddingBaseURL),
-		GenerationPolicy: c.generationPolicy.Clone(), SeedSupported: c.seedSupported,
+		GenerationPolicy: c.generationPolicy.Clone(), SeedSupported: c.seedSupported, ReasoningDisplayFormat: c.reasoningDisplayFormat,
 	}
 }
 
@@ -152,6 +153,7 @@ func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) provider.Client {
 		client.generationPolicy = domain.DefaultGenerationPolicy()
 	}
 	client.seedSupported = identity.SeedSupported
+	client.reasoningDisplayFormat = identity.ReasoningDisplayFormat
 	return client
 }
 

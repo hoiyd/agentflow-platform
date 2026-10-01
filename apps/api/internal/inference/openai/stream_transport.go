@@ -16,7 +16,7 @@ import (
 
 func (c *Client) streamMessages(ctx context.Context, messages []Message, events chan<- StreamEvent) (bool, string, Usage, error) {
 	result, err := c.streamChat(ctx, messages, nil, events)
-	return result.emitted, result.output, result.usage, err
+	return result.answerEmitted, result.output, result.usage, err
 }
 
 func (c *Client) streamChat(ctx context.Context, messages []Message, definitions []map[string]any, events chan<- StreamEvent) (streamAttemptResult, error) {
@@ -55,7 +55,7 @@ func (c *Client) streamChat(ctx context.Context, messages []Message, definitions
 
 func (c *Client) streamMessagesWithUsageOption(ctx context.Context, messages []Message, events chan<- StreamEvent, includeUsage bool) (bool, string, Usage, error) {
 	result, err := c.streamChatWithUsageLimit(ctx, messages, nil, events, includeUsage, 0)
-	return result.emitted, result.output, result.usage, err
+	return result.answerEmitted, result.output, result.usage, err
 }
 
 func (c *Client) streamChatWithUsageLimit(ctx context.Context, messages []Message, definitions []map[string]any, events chan<- StreamEvent, includeUsage bool, maxCompletionTokens int) (streamAttemptResult, error) {
@@ -71,12 +71,13 @@ func (c *Client) streamChatWithUsageLimit(ctx context.Context, messages []Messag
 }
 
 type streamAttemptResult struct {
-	choice       provider.ChatChoice
-	emitted      bool
-	output       string
-	usage        Usage
-	terminal     bool
-	finishReason string
+	choice        provider.ChatChoice
+	emitted       bool
+	answerEmitted bool
+	output        string
+	usage         Usage
+	terminal      bool
+	finishReason  string
 }
 
 func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, definitions []map[string]any, events chan<- StreamEvent, includeUsage bool, maxCompletionTokens int) (result streamAttemptResult, attemptErr error) {
@@ -131,6 +132,18 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 4096), maxSSEEventBytes+1)
 	var accumulated streamedChoice
+	displayStarted := false
+	defer func() {
+		if !displayStarted {
+			return
+		}
+		display := provider.ReasoningDisplay{ModelCallID: modelCallID, Format: c.reasoningDisplayFormat, Status: "interrupted"}
+		if attemptErr == nil {
+			display.Status = "complete"
+			display.Text, display.Truncated = reasoningDisplayText(accumulated.reasoning.String(), c.apiKey)
+		}
+		sendReasoningDisplay(ctx, events, display)
+	}()
 	answerRetracted := false
 	var data strings.Builder
 	finishReasonSeen := false
@@ -158,11 +171,14 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 					}
 					result.usage = estimateUsage(string(payload), generated.String())
 				} else {
-					result.usage = estimateUsage(messagesToText(messages), result.output)
+					result.usage = estimateUsage(messagesToText(messages), result.output+accumulated.reasoning.String())
 				}
 			}
 			if !finishReasonSeen {
 				result.finishReason = "missing"
+				if displayStarted {
+					return true, invalidResponseError(operation, "reasoning stream has no finish reason", nil)
+				}
 			}
 			if err := generationOutcomeError(operation, result.finishReason, len(accumulated.calls) > 0, refused); err != nil {
 				return true, err
@@ -172,7 +188,7 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 			if err != nil {
 				return true, err
 			}
-			if len(definitions) > 0 && len(result.choice.ToolCalls) == 0 && strings.TrimSpace(result.output) == "" {
+			if len(result.choice.ToolCalls) == 0 && strings.TrimSpace(result.output) == "" {
 				return true, invalidResponseError(operation, "model returned an empty final answer", nil)
 			}
 			return true, nil
@@ -205,18 +221,23 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 			if len(definitions) == 0 && len(choice.Delta.ToolCalls) > 0 {
 				return false, invalidResponseError(operation, "model stream returned unrequested Tool calls", nil)
 			}
-			if len(definitions) > 0 {
-				if err := accumulated.add(choice.Delta.Content, choice.Delta.ReasoningContent, choice.Delta.ToolCalls); err != nil {
-					return false, err
+			// Protocol and usage accounting never depend on display permission.
+			if err := accumulated.add(choice.Delta.Content, choice.Delta.ReasoningContent, choice.Delta.ToolCalls); err != nil {
+				return false, err
+			}
+			if !displayStarted && c.reasoningDisplayFormat == provider.ReasoningFormatDeepSeek && modelCallID != "" && choice.Delta.ReasoningContent != nil && strings.TrimSpace(*choice.Delta.ReasoningContent) != "" {
+				if !sendReasoningDisplay(ctx, events, provider.ReasoningDisplay{ModelCallID: modelCallID, Format: c.reasoningDisplayFormat, Status: "receiving"}) {
+					return false, ctx.Err()
 				}
-			} else {
-				accumulated.content.WriteString(choice.Delta.Content)
+				displayStarted = true
+				// A visible receiving state also forbids transparent retry/replay.
+				result.emitted = true
 			}
 			if firstToken.IsZero() && (choice.Delta.Content != "" || len(choice.Delta.ToolCalls) > 0) {
 				firstToken = time.Now()
 			}
 			if len(accumulated.calls) > 0 {
-				if result.emitted && !answerRetracted {
+				if result.answerEmitted && !answerRetracted {
 					select {
 					case <-ctx.Done():
 						return false, ctx.Err()
@@ -234,6 +255,7 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 				return false, ctx.Err()
 			case events <- StreamEvent{Type: "delta", Delta: choice.Delta.Content}:
 				result.emitted = true
+				result.answerEmitted = true
 			}
 		}
 		return false, nil

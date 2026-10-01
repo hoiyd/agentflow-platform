@@ -1,34 +1,41 @@
 package turn
 
-import "time"
+import (
+	eventpkg "agentflow-platform/apps/api/internal/event"
+	"time"
+)
 
 type EventType string
 
 const (
-	EventTurnStarted   EventType = "turn.started"
-	EventModelStarted  EventType = "model.started"
-	EventModelDelta    EventType = "model.delta"
-	EventModelFinished EventType = "model.finished"
-	EventModelFailed   EventType = "model.failed"
-	EventToolStarted   EventType = "tool.started"
-	EventToolFinished  EventType = "tool.finished"
-	EventToolFailed    EventType = "tool.failed"
-	EventTurnCompleted EventType = "turn.completed"
-	EventTurnFailed    EventType = "turn.failed"
+	EventTurnStarted    EventType = "turn.started"
+	EventModelStarted   EventType = "model.started"
+	EventModelDelta     EventType = "model.delta"
+	EventModelReasoning EventType = "model.reasoning"
+	EventModelFinished  EventType = "model.finished"
+	EventModelFailed    EventType = "model.failed"
+	EventToolStarted    EventType = "tool.started"
+	EventToolFinished   EventType = "tool.finished"
+	EventToolFailed     EventType = "tool.failed"
+	EventTurnCompleted  EventType = "turn.completed"
+	EventTurnFailed     EventType = "turn.failed"
 )
 
 type Event struct {
-	Type       EventType
-	RunID      string
-	StepID     string
-	Delta      string
-	Reset      bool
-	ToolName   string
-	ToolCallID string
-	Result     *Result
-	Error      string
-	Cause      error
-	Timestamp  time.Time
+	Type           EventType
+	RunID          string
+	StepID         string
+	TurnID         string
+	ConversationID string
+	Reasoning      *eventpkg.ModelReasoningPayload
+	Delta          string
+	Reset          bool
+	ToolName       string
+	ToolCallID     string
+	Result         *Result
+	Error          string
+	Cause          error
+	Timestamp      time.Time
 }
 
 type EventHandler func(Event)

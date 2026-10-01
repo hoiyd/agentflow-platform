@@ -178,6 +178,7 @@ type WorkspaceStore interface {
 	GetConversation(id string) (domain.Conversation, bool, error)
 	DeleteConversation(id string) error
 	ListMessages(conversationID string) ([]domain.Message, error)
+	ListConversationRunEvents(conversationID string) ([]domain.RunEvent, error)
 	AddMessage(conversationID string, role string, content string) (domain.Message, error)
 	AddMessageWithCitations(conversationID string, role string, content string, citations []domain.RAGCitation) (domain.Message, error)
 	AddMessageWithSources(conversationID string, role string, content string, citations []domain.RAGCitation, webCitations []domain.WebCitation) (domain.Message, error)

@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { Fragment, type RefObject } from "react";
 import { GitBranch, LoaderCircle, PanelRightOpen } from "lucide-react";
 
 import type { AgentInfo, AgentRoutingRequirements, ChatMode, Message, TaskState } from "../../lib/api";
@@ -12,6 +12,7 @@ import {
 import { MessageCitations, renderMarkdown } from "./MarkdownContent";
 import { ModeChooser } from "./ModeChooser";
 import { TaskStatePanel } from "./TaskStatePanel";
+import { ReasoningDisclosure, type ReasoningEntry } from "./ReasoningDisclosure";
 
 type ChatWorkspaceProps = {
   agents: AgentInfo[];
@@ -26,6 +27,7 @@ type ChatWorkspaceProps = {
   isStreaming: boolean;
   isTaskStatePanelOpen: boolean;
   messages: Message[];
+  reasoning?: ReasoningEntry[];
   messagesRef: RefObject<HTMLElement | null>;
   onCancel: () => void;
   onContinue: (plan?: string, requirements?: AgentRoutingRequirements) => void;
@@ -133,22 +135,31 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
             <EmptyConversation onPromptSelect={onPromptSelect} />
           ) : (
             messages.map((message, index) => (
-              <article className={`message ${message.role}`} key={message.id}>
-                <div className="message-meta">{message.role}</div>
-                <div className="bubble">
-                  {message.content ? renderMarkdown(message.content) : (
-                    message.role === "assistant" && isStreaming && index === messages.length - 1 ? (
-                      <span className="message-pending" role="status">
-                        <LoaderCircle aria-hidden="true" className="is-spinning" size={14} />
-                        Working...
-                      </span>
-                    ) : null
-                  )}
-                  <MessageCitations citations={message.citations} webCitations={message.web_citations} />
-                </div>
-              </article>
+              <Fragment key={message.id}>
+                {message.role === "assistant" ? <ReasoningDisclosure
+                  entries={index === messages.length - 1 && props.reasoning?.length ? props.reasoning : message.reasoning ?? []}
+                  runStatus={index === messages.length - 1 ? runStatus : "completed"}
+                /> : null}
+                <article className={`message ${message.role}`}>
+                  <div className="message-meta">{message.role}</div>
+                  <div className="bubble">
+                    {message.content ? renderMarkdown(message.content) : (
+                      message.role === "assistant" && isStreaming && index === messages.length - 1 ? (
+                        <span className="message-pending" role="status">
+                          <LoaderCircle aria-hidden="true" className="is-spinning" size={14} />
+                          Working...
+                        </span>
+                      ) : null
+                    )}
+                    <MessageCitations citations={message.citations} webCitations={message.web_citations} />
+                  </div>
+                </article>
+              </Fragment>
             ))
           )}
+          {messages.at(-1)?.role !== "assistant" && props.reasoning?.length ? (
+            <ReasoningDisclosure entries={props.reasoning} runStatus={runStatus} />
+          ) : null}
         </section>
       </div>
       {showCollaborationPanel && isCollaborationPanelOpen ? (

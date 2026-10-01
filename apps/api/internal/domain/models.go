@@ -45,7 +45,20 @@ type Message struct {
 	Content        string        `json:"content"`
 	Citations      []RAGCitation `json:"citations,omitempty"`
 	WebCitations   []WebCitation `json:"web_citations,omitempty"`
-	CreatedAt      time.Time     `json:"created_at"`
+	// Reasoning is a display projection, not model-continuation or Memory input.
+	Reasoning []MessageReasoning `json:"reasoning,omitempty"`
+	CreatedAt time.Time          `json:"created_at"`
+}
+
+type MessageReasoning struct {
+	RunID       string `json:"run_id"`
+	TurnID      string `json:"turn_id"`
+	StageID     string `json:"stage_id,omitempty"`
+	ModelCallID string `json:"model_call_id"`
+	Format      string `json:"format"`
+	Status      string `json:"status"`
+	Text        string `json:"text,omitempty"`
+	Truncated   bool   `json:"truncated,omitempty"`
 }
 
 type Agent struct {

@@ -42,7 +42,7 @@ func (r *Runtime) runWorkerStage(ctx context.Context, events chan<- domain.RunEv
 		Agent: prepared.WorkerAgent, Role: "worker", SystemPrompt: workerPrompt(prepared.WorkerAgent), Input: input,
 		Catalog: workerCatalog,
 		Context: turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks, Isolated: true}, Sink: r.runEventSink(),
-	}, nil)
+	}, forwardReasoning(events))
 	if err != nil {
 		return "", r.failCollaborationStage(ctx, events, step, err)
 	}

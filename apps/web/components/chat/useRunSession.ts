@@ -9,6 +9,7 @@ import type { CompletionContractInput } from "../../lib/verification";
 import { createRunEventHandler, isTerminalRunStatus, type DraftMessage, type RunState } from "./runEventProjection";
 import type { useConversationWorkspace } from "./useConversationWorkspace";
 import { useRunTrace } from "./useRunTrace";
+import type { ReasoningEntry } from "./ReasoningDisclosure";
 
 type Command =
   | { kind: "submitting"; content: string; mode: ChatMode; agentId: string; completionContract?: CompletionContractInput }
@@ -26,7 +27,7 @@ type SessionOptions = {
   onSubmissionStart: (mode: ChatMode) => () => void;
 };
 type EventOptions = Omit<Parameters<typeof createRunEventHandler>[0],
-  "setAutonomousProgress" | "setCollaborationSteps" | "setError" | "setMessages" | "setPlanDraft" | "setRunState">;
+  "setAutonomousProgress" | "setCollaborationSteps" | "setError" | "setMessages" | "setPlanDraft" | "setRunState" | "onReasoning">;
 
 // One owner for command admission, optimistic drafts and connection leases.
 // Activity is not the durable Run status; cancellation may overlap a command.
@@ -39,6 +40,8 @@ export function useRunSession(options: SessionOptions) {
   const [isCancelingRun, setCanceling] = useState(false);
   const cancelInFlight = useRef(false);
   const [runState, setStoredRunState] = useState<RunState | null>(null);
+  // Pending display updates; completed history is loaded through message.reasoning.
+  const [reasoning, setReasoning] = useState<ReasoningEntry[]>([]);
   const runRef = useRef<RunState | null>(null);
   const [streams] = useState(createLatestRequestController);
   const [cancellations] = useState(createLatestRequestController);
@@ -59,7 +62,14 @@ export function useRunSession(options: SessionOptions) {
   const { setMessages, setError } = options.workspace;
   const createHandler = useCallback((context: EventOptions) => createRunEventHandler({
     ...context, setAutonomousProgress, setCollaborationSteps, setPlanDraft,
-    setMessages, setError, setRunState
+    setMessages, setError, setRunState,
+    onReasoning: (entry) => setReasoning((items) => {
+      if (entry.run_id !== runRef.current?.id) return items;
+      const index = items.findIndex((item) => item.run_id === entry.run_id && item.turn_id === entry.turn_id && item.model_call_id === entry.model_call_id);
+      // A duplicate receiving event must not overwrite a terminal display.
+      if (index >= 0) return items[index].status !== "receiving" ? items : items.map((item, i) => i === index ? entry : item);
+      return [...items, entry].slice(-32);
+    })
   }), [setAutonomousProgress, setCollaborationSteps, setPlanDraft, setMessages, setError, setRunState]);
 
   useEffect(() => () => {
@@ -110,6 +120,7 @@ export function useRunSession(options: SessionOptions) {
     cancellations.cancel();
     setRunState(null);
     trace.reset();
+    setReasoning([]);
   }
 
   // Detaching closes browser-owned requests, never cancels the backend Run.
@@ -121,11 +132,13 @@ export function useRunSession(options: SessionOptions) {
     setActivity("idle");
     cancelInFlight.current = false;
     setCanceling(false);
+    setReasoning([]);
   }
 
   async function execute(command: Command) {
     if (activityRef.current !== "idle") return;
     const previousRun = runRef.current;
+    const previousReasoning = reasoning;
     if (command.kind !== "submitting" && !previousRun?.id) return;
     activityRef.current = command.kind;
     setActivity(command.kind);
@@ -191,6 +204,7 @@ export function useRunSession(options: SessionOptions) {
         if (command.kind === "submitting") {
           workspace.setInput(command.content);
           setRunState(previousRun);
+          setReasoning(previousReasoning);
           trace.restore(previousTrace);
           rollbackLayout?.();
         } else if (command.kind === "resuming") {
@@ -228,7 +242,7 @@ export function useRunSession(options: SessionOptions) {
   }
 
   return {
-    runState, setRunState, trace, activity, isCancelingRun, clearRun, detach, cancel,
+    runState, setRunState, trace, activity, reasoning, isCancelingRun, clearRun, detach, cancel,
     isStreaming: activity !== "idle", isContinuingRun: activity === "continuing", isResumingRun: activity === "resuming",
     submit: (content: string, settings: { mode: ChatMode; agentId: string; completionContract?: CompletionContractInput }) =>
       content.trim() ? execute({ kind: "submitting", content: content.trim(), ...settings }) : Promise.resolve(),

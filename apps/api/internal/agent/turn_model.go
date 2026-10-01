@@ -163,6 +163,8 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 				continue
 			}
 			switch event.Type {
+			case "reasoning":
+				emit(turn.ModelEvent{Type: turn.EventModelReasoning, Reasoning: event.Reasoning})
 			case "delta":
 				if event.Reset {
 					output.Reset()

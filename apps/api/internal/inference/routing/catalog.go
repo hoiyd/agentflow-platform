@@ -100,6 +100,7 @@ func NewCatalog(bindings ...Binding) (*Catalog, error) {
 		binding.Descriptor = descriptor
 		identity.GenerationPolicy = descriptor.GenerationPolicy.Clone()
 		identity.SeedSupported = descriptor.Capabilities.Seed
+		identity.ReasoningDisplayFormat = descriptor.Capabilities.ReasoningDisplayFormat
 		binding.Client = binding.Client.WithRuntimeIdentity(identity)
 		normalized = append(normalized, binding)
 	}
@@ -231,6 +232,10 @@ func ValidateDescriptor(descriptor Descriptor) (Descriptor, error) {
 		return Descriptor{}, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q has an invalid credential environment reference", descriptor.ID))
 	}
 	policy := domain.DefaultGenerationPolicy()
+	if !provider.ValidReasoningDisplayFormat(descriptor.Capabilities.ReasoningDisplayFormat) ||
+		(descriptor.Capabilities.ReasoningDisplayFormat != "" && !descriptor.Capabilities.Streaming) {
+		return Descriptor{}, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q has an unsupported reasoning display format or no streaming capability", descriptor.ID))
+	}
 	if descriptor.GenerationPolicy != nil {
 		policy = descriptor.GenerationPolicy.Clone()
 	}

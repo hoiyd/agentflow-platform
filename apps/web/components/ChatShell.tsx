@@ -134,7 +134,6 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     collaborationSteps.some((step) => step.role === "human_input" && step.status === "running");
   const isTerminalRun = !!runState && isTerminalRunStatus(runState.status);
   const canCancelRun =
-    chatMode === "autonomous" &&
     !!runState?.id &&
     !isTerminalRun &&
     (isStreaming ||
@@ -307,6 +306,11 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   }
 
   async function openConversation(id: string) {
+    // Returning to the active conversation changes the view, not its Run session.
+    if (id === activeId) {
+      setView("chat");
+      return;
+    }
     session.detach();
     setError("");
     resetConversationRuntimeState();
@@ -478,6 +482,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
             isStreaming={isStreaming}
             isTaskStatePanelOpen={isTaskStatePanelOpen}
             messages={messages}
+            reasoning={session.reasoning}
             messagesRef={messagesRef}
             onCancel={() => void handleCancelRun()}
             onContinue={handleContinuePlan}

@@ -105,8 +105,23 @@ function runObservationStopped(status: string) {
 
 function projectRunEvent(event: ChatEvent | RunEvent): ChatEvent {
   if (!("schema_version" in event)) return event;
-  const payload = event.payload;
+  const payload = event.payload ?? {};
   if (event.type === "model.delta") return { type: "model_delta", delta: String(payload.delta ?? ""), reset: payload.reset === true };
+  if (event.type === "model.reasoning") {
+    // Fail closed on unsupported formats, missing scope, oversized text or a
+    // provider attempting to publish text before completing its privacy filter.
+    if (event.run_id && event.turn_id && typeof payload.model_call_id === "string" && payload.model_call_id &&
+      payload.format === "deepseek_reasoning_content" &&
+      (payload.status === "receiving" || payload.status === "complete" || payload.status === "interrupted") &&
+      (payload.text === undefined || (typeof payload.text === "string" && new TextEncoder().encode(payload.text).length <= 16384)) &&
+      (payload.status === "complete" || !payload.text) &&
+      (payload.truncated === undefined || typeof payload.truncated === "boolean")) {
+      return { type: "model_reasoning", run_id: event.run_id, turn_id: event.turn_id,
+        stage_id: event.stage_id, model_call_id: payload.model_call_id, format: payload.format,
+        status: payload.status, text: payload.text as string | undefined, truncated: payload.truncated as boolean | undefined };
+    }
+    return { type: "model_delta", delta: "" };
+  }
   if (event.type === "run.progress") return {
     type: "run_progress", conversation_id: event.conversation_id ?? "", run_id: event.run_id,
     agent_id: stringValue(payload.agent_id), iteration: numberValue(payload.iteration), max_iterations: numberValue(payload.max_iterations),

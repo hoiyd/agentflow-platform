@@ -79,6 +79,7 @@ type ModelEvent struct {
 	ToolName   string
 	ToolCallID string
 	Error      string
+	Reasoning  *eventpkg.ModelReasoningPayload
 }
 
 type Model interface {

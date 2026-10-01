@@ -28,11 +28,20 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 	}
 	var sinkErr error
 	publish := func(item Event) {
+		item.TurnID, item.ConversationID = request.TurnID, request.ConversationID
 		emit(handler, item)
 		if request.Sink == nil {
 			return
 		}
 		payload := map[string]any{}
+		if item.Reasoning != nil {
+			var err error
+			payload, err = eventpkg.Payload(*item.Reasoning)
+			if err != nil {
+				sinkErr = err
+				return
+			}
+		}
 		if item.Type == EventTurnStarted {
 			payload["agent_id"] = request.Agent.ID
 		}
@@ -83,7 +92,7 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 			t = EventModelDelta
 		}
 		publish(Event{Type: t, RunID: request.RunID, StepID: request.StepID, Delta: item.Delta, Reset: item.Reset,
-			ToolName: item.ToolName, ToolCallID: item.ToolCallID, Error: item.Error})
+			ToolName: item.ToolName, ToolCallID: item.ToolCallID, Error: item.Error, Reasoning: item.Reasoning})
 	})
 	if sinkErr != nil {
 		return result, sinkErr
@@ -121,6 +130,8 @@ func unifiedEventType(value EventType) domain.RunEventType {
 		return domain.EventModelStarted
 	case EventModelDelta:
 		return domain.EventModelDelta
+	case EventModelReasoning:
+		return domain.EventModelReasoning
 	case EventModelFinished:
 		return domain.EventModelCompleted
 	case EventModelFailed:
