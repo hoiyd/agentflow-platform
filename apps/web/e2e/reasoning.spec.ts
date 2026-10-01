@@ -16,19 +16,21 @@ async function submit(page: Page, prompt: string) {
 }
 
 async function createReasoningAgent(page: Page, mode: string) {
+  const capability = `reasoning${mode.toLowerCase().replace(/[^a-z]/g, "")}`;
   await page.getByRole("button", { name: "New agent", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Create new agent" });
   await dialog.getByLabel("Name", { exact: true }).fill(`Reasoning ${mode}`);
   await dialog.getByRole("textbox", { name: "Description", exact: true }).fill("reasoning-display calculator specialist");
   await dialog.getByRole("textbox", { name: "System prompt", exact: true }).fill("Calculate and explain the result.");
   await dialog.getByText("Routing signals", { exact: true }).click();
-  await dialog.getByRole("textbox", { name: "Capabilities", exact: true }).fill(`reasoning${mode.toLowerCase().replace(/[^a-z]/g, "")}`);
+  await dialog.getByRole("textbox", { name: "Capabilities", exact: true }).fill(capability);
   await dialog.getByRole("textbox", { name: "Example tasks", exact: true }).fill("reasoning-display calculate two Tool rounds");
   await dialog.getByLabel("Memory retrieval", { exact: true }).uncheck();
   await dialog.getByLabel("Knowledge retrieval", { exact: true }).uncheck();
   await dialog.getByRole("checkbox", { name: "calculator", exact: true }).check();
   await dialog.getByRole("button", { name: "Create Agent", exact: true }).click();
   await page.getByRole("button", { name: "OK", exact: true }).click();
+  return capability;
 }
 
 async function evidence(page: Page, request: APIRequestContext, prompt: string) {
@@ -75,13 +77,13 @@ test.afterEach(async ({ request }) => {
 
 for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
   test(`${mode}: reasoning survives navigation and reload across Tool rounds and answer reset`, async ({ page, request }) => {
-    await createReasoningAgent(page, mode);
-    await page.getByRole("button", { name: new RegExp(mode) }).click();
+    const capability = await createReasoningAgent(page, mode);
+    await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: new RegExp(mode) }).click();
     const prompt = "reasoning-display: calculate with two Tool rounds";
     await submit(page, prompt);
     if (mode === "Multi-agent") {
       await page.getByText("Routing requirements", { exact: true }).click();
-      await page.getByRole("textbox", { name: "Preferred capabilities", exact: true }).fill("reasoningmultiagent");
+      await page.getByRole("textbox", { name: "Preferred capabilities", exact: true }).fill(capability);
       await page.getByRole("button", { name: "Approve & Continue" }).click();
     }
     await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
@@ -191,15 +193,15 @@ test("provider disconnect keeps failure and withholds all partial reasoning", as
 
 for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
 test(`${mode}: explicit cancellation ends normally without publishing private partial text`, async ({ page, request }) => {
-  await createReasoningAgent(page, mode);
-  await page.getByRole("button", { name: new RegExp(mode) }).click();
+  const capability = await createReasoningAgent(page, `${mode} cancellation`);
+  await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: new RegExp(mode) }).click();
   const stream = page.waitForResponse((response) => response.request().method() === "POST" &&
     (mode === "Multi-agent" ? response.url().endsWith("/continue") : response.url().endsWith("/api/chat")));
   const prompt = "reasoning-cancel: wait for cancellation";
   await submit(page, prompt);
   if (mode === "Multi-agent") {
     await page.getByText("Routing requirements", { exact: true }).click();
-    await page.getByRole("textbox", { name: "Preferred capabilities", exact: true }).fill("reasoningmultiagent");
+    await page.getByRole("textbox", { name: "Preferred capabilities", exact: true }).fill(capability);
     await page.getByRole("button", { name: "Approve & Continue" }).click();
   }
   const disclosure = page.locator(".provider-reasoning");
