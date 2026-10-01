@@ -1,8 +1,11 @@
 import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { IdentityBoundary } from "./IdentityBoundary";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/workspace" }));
+
+const redirect = vi.fn();
+beforeEach(() => { redirect.mockReset(); vi.stubGlobal("location", { replace: redirect }); });
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); sessionStorage.clear(); });
 
@@ -15,8 +18,11 @@ it("does not mount business consumers before authentication resolves", async () 
   vi.stubGlobal("fetch", () => new Promise<Response>(next => { resolve = next; }));
   render(<IdentityBoundary><p>Business content</p></IdentityBoundary>);
   expect(screen.queryByText("Business content")).toBeNull();
+  expect(redirect).not.toHaveBeenCalled();
   resolve(new Response(JSON.stringify({ mode: "oidc", authenticated: false, user: null, workspaces: [] })));
-  expect(await screen.findByRole("link", { name: "Sign in" })).toBeTruthy();
+  await waitFor(() => expect(redirect).toHaveBeenCalledWith(expect.stringContaining("/api/auth/login")));
+  expect(redirect).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("heading", { name: "Sign in to AgentFlow" })).toBeNull();
   expect(screen.queryByText("Business content")).toBeNull();
 });
 
@@ -25,6 +31,15 @@ it("preserves trusted-local use without an identity toolbar", async () => {
   render(<IdentityBoundary><p>Business content</p></IdentityBoundary>);
   expect(await screen.findByText("Business content")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
+  expect(redirect).not.toHaveBeenCalled();
+});
+
+it("uses the provider login page even when registration is enabled", async () => {
+  session({ mode: "oidc", authenticated: false, user: null, workspaces: [], registration_enabled: true });
+  render(<IdentityBoundary><p>Business content</p></IdentityBoundary>);
+  await waitFor(() => expect(redirect).toHaveBeenCalledWith(expect.stringContaining("/api/auth/login")));
+  expect(screen.queryByRole("link", { name: "Create account" })).toBeNull();
+  expect(screen.queryByText("Business content")).toBeNull();
 });
 
 it("keeps authenticated nonmembers outside the workbench", async () => {
@@ -32,6 +47,7 @@ it("keeps authenticated nonmembers outside the workbench", async () => {
   render(<IdentityBoundary><p>Business content</p></IdentityBoundary>);
   expect(await screen.findByRole("heading", { name: "Workspace access required" })).toBeTruthy();
   expect(screen.queryByText("Business content")).toBeNull();
+  expect(redirect).not.toHaveBeenCalled();
 });
 
 it("surfaces storage errors without silently enabling local mode", async () => {
@@ -39,14 +55,17 @@ it("surfaces storage errors without silently enabling local mode", async () => {
   render(<IdentityBoundary><p>Business content</p></IdentityBoundary>);
   expect((await screen.findByRole("alert")).textContent).toContain("503");
   expect(screen.queryByText("Business content")).toBeNull();
+  expect(redirect).not.toHaveBeenCalled();
 });
 
 it("invalidates mounted content on authentication expiry", async () => {
   session({ mode: "oidc", authenticated: true, user: { id: "u", subject: "s", name: "Operator" }, workspaces: ["a", "b"] });
   render(<IdentityBoundary><p>Business content</p></IdentityBoundary>);
   expect(await screen.findByText("Business content")).toBeTruthy();
-  expect(screen.getByRole("combobox", { name: "Workspace" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Workspace: a" })).toBeTruthy();
   fireEvent(window, new Event("agentflow-auth-required"));
   await waitFor(() => expect(screen.queryByText("Business content")).toBeNull());
-  expect(screen.getByRole("link", { name: "Sign in" })).toBeTruthy();
+  await waitFor(() => expect(redirect).toHaveBeenCalledTimes(1));
+  fireEvent(window, new Event("agentflow-auth-required"));
+  await waitFor(() => expect(redirect).toHaveBeenCalledTimes(1));
 });

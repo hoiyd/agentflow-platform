@@ -29,6 +29,7 @@ GET    /health
 
 GET    /api/auth/session
 GET    /api/auth/login
+GET    /api/auth/register
 GET    /api/auth/callback
 POST   /api/auth/logout
 

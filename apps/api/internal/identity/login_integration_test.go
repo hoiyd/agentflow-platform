@@ -235,6 +235,16 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if allowed, _ := manager.IsMember(context.Background(), user.ID, "workspace-a"); !allowed {
+		t.Fatal("restart replaced database membership")
+	}
+	if _, err := sqlDB.Exec(`DELETE FROM auth_memberships WHERE user_id=$1`, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	manager, err = identity.New(context.Background(), cfg, db)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if allowed, _ := manager.IsMember(context.Background(), user.ID, "workspace-a"); allowed {
 		t.Fatal("removed membership remained valid")
 	}
@@ -254,6 +264,11 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 	if _, err := manager.Authenticate(request); err == nil {
 		t.Fatal("revoked session accepted")
 	}
+	cfg.AutoProvisionWorkspace = true
+	manager, err = identity.New(context.Background(), cfg, db)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, kind := range []string{"nonce", "audience", "extra-audience", "authorized-party", "expiry", "issuer", "subject", "signature", "missing-token", "claims", "exchange"} {
 		t.Run(kind, func(t *testing.T) {
 			failure = kind
@@ -264,7 +279,16 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 			if got := login(); got != want {
 				t.Fatalf("bad token accepted: %d want %d", got, want)
 			}
+			var count int
+			if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM auth_personal_workspaces`).Scan(&count); err != nil || count != 0 {
+				t.Fatalf("invalid identity provisioned Workspace: %d %v", count, err)
+			}
 		})
+	}
+	cfg.AutoProvisionWorkspace = false
+	manager, err = identity.New(context.Background(), cfg, db)
+	if err != nil {
+		t.Fatal(err)
 	}
 	failure = ""
 	response, err = client.Get(callback + "?code=fixture-code&state=forged")
@@ -438,7 +462,7 @@ func TestAuthenticationConfigFailsClosed(t *testing.T) {
 	}
 	mux := http.NewServeMux()
 	manager.RegisterRoutes(mux)
-	for _, path := range []string{"/api/auth/login", "/api/auth/callback", "/api/auth/logout", "/api/auth/session"} {
+	for _, path := range []string{"/api/auth/login", "/api/auth/register", "/api/auth/callback", "/api/auth/logout", "/api/auth/session"} {
 		method := "GET"
 		want := 404
 		if path == "/api/auth/logout" {
@@ -460,11 +484,11 @@ type identityFaultStore struct {
 	operation string
 }
 
-func (s *identityFaultStore) SyncMemberships(ctx context.Context, issuer string, members []identity.Member) error {
+func (s *identityFaultStore) ImportMemberships(ctx context.Context, issuer string, members []identity.Member) error {
 	if s.operation == "sync" {
 		return fmt.Errorf("fixture store unavailable")
 	}
-	return s.Store.SyncMemberships(ctx, issuer, members)
+	return s.Store.ImportMemberships(ctx, issuer, members)
 }
 func (s *identityFaultStore) UpsertIdentity(ctx context.Context, u identity.User) error {
 	if s.operation == "upsert" {

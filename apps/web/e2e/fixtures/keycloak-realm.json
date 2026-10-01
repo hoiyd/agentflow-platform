@@ -1,0 +1,21 @@
+{
+  "realm": "agentflow-test",
+  "enabled": true,
+  "registrationAllowed": true,
+  "resetPasswordAllowed": false,
+  "verifyEmail": false,
+  "sslRequired": "none",
+  "loginTheme": "agentflow",
+  "passwordPolicy": "length(10)",
+  "clients": [{
+    "clientId": "fixture-client",
+    "enabled": true,
+    "protocol": "openid-connect",
+    "publicClient": false,
+    "secret": "fixture-only",
+    "standardFlowEnabled": true,
+    "directAccessGrantsEnabled": false,
+    "redirectUris": ["http://127.0.0.1:18080/api/auth/callback"],
+    "attributes": { "pkce.code.challenge.method": "S256" }
+  }]
+}

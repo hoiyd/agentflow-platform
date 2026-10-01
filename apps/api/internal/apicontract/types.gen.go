@@ -539,8 +539,14 @@ type HealthResponseStatus string
 type IdentitySession struct {
 	Authenticated bool                `json:"authenticated"`
 	Mode          IdentitySessionMode `json:"mode"`
-	User          *IdentityUser       `json:"user"`
-	Workspaces    []string            `json:"workspaces"`
+
+	// PersonalWorkspace Personal Workspace ID, present only while its Membership is granted.
+	PersonalWorkspace *string `json:"personal_workspace,omitempty"`
+
+	// RegistrationEnabled Whether the server exposes the IdP registration entry point.
+	RegistrationEnabled *bool         `json:"registration_enabled,omitempty"`
+	User                *IdentityUser `json:"user"`
+	Workspaces          []string      `json:"workspaces"`
 }
 
 // IdentitySessionMode defines model for IdentitySession.Mode.

@@ -14,7 +14,8 @@ export interface paths {
         /**
          * @description Public session probe. OIDC identity is verified from a revocable cookie;
          *     local mode is explicitly unauthenticated trusted development. Memberships
-         *     are operator-managed, not supplied by the browser or inferred from email.
+         *     are database-owned, optionally provisioned for a personal Workspace after
+         *     verified login; never supplied by the browser or inferred from email.
          */
         get: operations["getIdentitySession"];
         put?: never;
@@ -33,6 +34,27 @@ export interface paths {
             cookie?: never;
         };
         get: operations["startLogin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Opt-in authorization redirect with prompt=create, state, nonce and S256
+         *     PKCE. Requires a supporting IdP (Keycloak) and personal Workspace onboarding.
+         *     The IdP receives passwords and owns account creation, policies and MFA.
+         */
+        get: operations["startRegistration"];
         put?: never;
         post?: never;
         delete?: never;
@@ -473,6 +495,10 @@ export interface components {
             /** @enum {string} */
             mode: "local" | "oidc";
             authenticated: boolean;
+            /** @description Whether the server exposes the IdP registration entry point. */
+            registration_enabled?: boolean;
+            /** @description Personal Workspace ID, present only while its Membership is granted. */
+            personal_workspace?: string;
             user: components["schemas"]["IdentityUser"] | null;
             workspaces: string[];
         };
@@ -1122,6 +1148,34 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    startRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to the IdP registration screen. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            /** @description Cannot persist the authorization attempt. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     completeLogin: {
         parameters: {
             query?: {
@@ -1134,7 +1188,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Verified login creates a host-only HttpOnly session and redirects to the workbench. */
+            /** @description Verified login optionally provisions an idempotent personal Workspace before creating a host-only HttpOnly session and redirecting to the workbench. */
             303: {
                 headers: {
                     [name: string]: unknown;
@@ -1144,6 +1198,15 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             /** @description Invalid identity token or nonce. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Identity persistence or personal Workspace provisioning failed; no session is issued. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -205,3 +205,16 @@ jobs:
             apps/web/playwright-report
           retention-days: 14
           if-no-files-found: warn
+
+      - name: Run themed Keycloak registration and onboarding gate
+        run: bash ../../scripts/test-keycloak-auth.sh
+      - name: Retain Workspace onboarding evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workspace-onboarding-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn

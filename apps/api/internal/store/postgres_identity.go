@@ -9,16 +9,30 @@ import (
 	"agentflow-platform/apps/api/internal/identity"
 )
 
-// SyncMemberships replaces only the configured issuer's operator-managed grants
-// atomically. Login never creates a grant, and session cookies contain no grants.
-func (s *PostgresStore) SyncMemberships(ctx context.Context, issuer string, members []identity.Member) error {
+// ImportMemberships bootstraps an issuer once. Database grants are authoritative:
+// restarting or changing the file never restores revocations or removes grants.
+func (s *PostgresStore) ImportMemberships(ctx context.Context, issuer string, members []identity.Member) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM auth_memberships WHERE user_id IN (SELECT id FROM auth_users WHERE issuer=$1)`, issuer); err != nil {
+	var imported string
+	err = tx.QueryRowContext(ctx, `INSERT INTO auth_membership_imports (issuer) VALUES ($1) ON CONFLICT DO NOTHING RETURNING issuer`, issuer).Scan(&imported)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
 		return err
+	}
+	// An upgraded issuer may already have authoritative grants (or revocations).
+	// Consume the legacy bootstrap without regranting anything from a stale file.
+	var existing bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth_users WHERE issuer=$1)`, issuer).Scan(&existing); err != nil {
+		return err
+	}
+	if existing {
+		return tx.Commit()
 	}
 	for _, member := range members {
 		id := identity.UserID(issuer, member.Subject)
@@ -26,7 +40,7 @@ func (s *PostgresStore) SyncMemberships(ctx context.Context, issuer string, memb
 			return err
 		}
 		for _, workspace := range member.Workspaces {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO auth_memberships (user_id,workspace_id) VALUES ($1,$2)`, id, workspace); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO auth_memberships (user_id,workspace_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, id, workspace); err != nil {
 				return err
 			}
 		}
@@ -37,6 +51,29 @@ func (s *PostgresStore) SyncMemberships(ctx context.Context, issuer string, memb
 func (s *PostgresStore) UpsertIdentity(ctx context.Context, user identity.User) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO auth_users (id,issuer,subject,name) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name`, user.ID, user.Issuer, user.Subject, user.Name)
 	return err
+}
+
+// The unique user row is both the personal Workspace record and the durable
+// onboarding marker. Membership removal never deletes this marker; login cannot
+// recreate revoked access. INSERT conflict handling serializes concurrent logins.
+func (s *PostgresStore) ProvisionPersonalWorkspace(ctx context.Context, userID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var workspace string
+	err = tx.QueryRowContext(ctx, `INSERT INTO auth_personal_workspaces (user_id,workspace_id) VALUES ($1,$2) ON CONFLICT (user_id) DO NOTHING RETURNING workspace_id`, userID, identity.PersonalWorkspaceID(userID)).Scan(&workspace)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO auth_memberships (user_id,workspace_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, userID, workspace); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *PostgresStore) ListMemberships(ctx context.Context, userID string) ([]string, error) {

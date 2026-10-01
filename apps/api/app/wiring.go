@@ -65,6 +65,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		Mode: cfg.AuthMode, Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID,
 		RedirectURL: cfg.OIDCRedirectURL, WebURL: cfg.AuthWebURL,
 		MembershipPath: cfg.AuthMembershipPath, SessionTTL: cfg.AuthSessionTTL,
+		AutoProvisionWorkspace: cfg.AuthAutoProvisionWorkspace, RegistrationEnabled: cfg.AuthRegistrationEnabled,
 	}, identityStore)
 	cancelIdentity()
 	if err != nil {

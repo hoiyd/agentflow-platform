@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { LoaderCircle, LogIn, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { apiURL, setWorkspaceID } from "../../lib/api-client";
 import { getIdentitySession, signOut, type IdentitySession } from "../../lib/identity";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 const workspaceKey = "agentflow-workspace";
 
@@ -16,6 +17,7 @@ export function IdentityBoundary({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
+  const loginRedirectStarted = useRef(false);
 
   useEffect(() => {
     if (isPublic) return;
@@ -34,10 +36,17 @@ export function IdentityBoundary({ children }: { children: ReactNode }) {
     }).catch(err => {
       if (!controller.signal.aborted) { setSession(null); setError(err instanceof Error ? err.message : "Failed to check session"); }
     });
-    const expire = () => { controller.abort(); setSession({ mode: "oidc", authenticated: false, user: null, workspaces: [] }); setError(""); };
+    const expire = () => { controller.abort(); setSession(previous => ({ mode: "oidc", authenticated: false, user: null, workspaces: [], registration_enabled: previous?.registration_enabled })); setError(""); };
     window.addEventListener("agentflow-auth-required", expire);
     return () => { controller.abort(); window.removeEventListener("agentflow-auth-required", expire); };
   }, [isPublic, retry]);
+
+  useEffect(() => {
+    if (!isPublic && !error && session?.mode === "oidc" && !session.authenticated && !loginRedirectStarted.current) {
+      loginRedirectStarted.current = true;
+      globalThis.location.replace(apiURL("/api/auth/login"));
+    }
+  }, [isPublic, session, error]);
 
   async function logout() {
     setBusy(true);
@@ -53,16 +62,17 @@ export function IdentityBoundary({ children }: { children: ReactNode }) {
   const allowed = session?.authenticated && session.workspaces.length > 0;
   const unauthenticated = session?.mode === "oidc" && !session.authenticated;
 
-  // An expired API session must not mount/retry business consumers behind a
-  // loading indicator. Offer login rather than repeatedly issuing failed calls.
+  // No intermediate sign-in screen. Keep business consumers unmounted during
+  // the session probe/redirect; only errors and authenticated nonmembers stay here.
+  if (!error && (!session || unauthenticated)) return null;
   if (!allowed) {
     return (
       <main className="identity-gate">
         <section>
           <Link className="identity-brand" href="/">AgentFlow</Link>
-          <h1>{error ? "Connection unavailable" : session?.authenticated ? "Workspace access required" : unauthenticated ? "Sign in to AgentFlow" : "Checking session"}</h1>
+          <h1>{error ? "Connection unavailable" : "Workspace access required"}</h1>
           {error ? <p role="alert">{error}</p> : session?.authenticated ? <p>No Workspace membership is assigned to this account.</p> : null}
-          {session?.authenticated ? <><code>{session.user?.subject}</code><button disabled={busy} onClick={() => void logout()} type="button"><LogOut size={16} /> Sign out</button></> : unauthenticated ? <a className="identity-signin" href={apiURL("/api/auth/login")}><LogIn size={16} /> Sign in</a> : error ? <button onClick={() => setRetry(value => value + 1)} type="button">Retry</button> : <span role="status"><LoaderCircle className="is-spinning" size={16} /> Checking session...</span>}
+          {session?.authenticated ? <><code>{session.user?.subject}</code><button disabled={busy} onClick={() => void logout()} type="button"><LogOut size={16} /> Sign out</button></> : <button onClick={() => setRetry(value => value + 1)} type="button">Retry</button>}
         </section>
       </main>
     );
@@ -71,9 +81,8 @@ export function IdentityBoundary({ children }: { children: ReactNode }) {
     <div className="identity-workspace">
       <header className="identity-toolbar">
         <span>{session.user?.name || session.user?.id}</span>
-        <label>Workspace <select aria-label="Workspace" value={workspace} onChange={event => { sessionStorage.setItem(workspaceKey, event.target.value); window.location.assign("/workspace"); }}>
-          {session.workspaces.map(id => <option key={id} value={id}>{id}</option>)}
-        </select></label>
+        <WorkspaceSwitcher workspaces={session.workspaces} selected={workspace} personalWorkspace={session.personal_workspace}
+          onChange={id => { sessionStorage.setItem(workspaceKey, id); window.location.assign("/workspace"); }} />
         <button disabled={busy} onClick={() => void logout()} type="button"><LogOut size={14} /> Sign out</button>
       </header>
       {error ? <p className="identity-error" role="alert">{error}</p> : null}

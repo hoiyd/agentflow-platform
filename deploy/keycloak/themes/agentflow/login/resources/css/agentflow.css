@@ -1,0 +1,61 @@
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("../fonts/ibm-plex-sans.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+}
+
+/* Inherit Keycloak forms, validation and scripts; replace presentation only. */
+html.login-pf, .login-pf body {
+  background: #f5f7fa;
+  color: #171b22;
+  font-family: "IBM Plex Sans", Arial, sans-serif;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+.login-pf-page { width: min(480px, 100%); margin: 0 auto; padding: 10vh 24px 40px; }
+#kc-header { margin: 0 0 32px; padding: 0; color: #171b22; text-align: left; }
+#kc-header-wrapper { padding: 0; font-size: 24px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.login-pf-page .card-pf {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.login-pf-page .login-pf-header { margin: 0 0 28px; text-align: left; }
+#kc-page-title { margin: 0; font-size: 28px; font-weight: 500; line-height: 1.3; }
+#kc-content-wrapper { margin: 0; }
+.login-pf-page .form-group { margin-bottom: 20px; }
+.login-pf-page label { color: #5d6776; font-size: 14px; font-weight: 400; }
+.login-pf-page .form-control {
+  height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cbd2dd;
+  border-radius: 4px;
+  background: #fff;
+  color: #171b22;
+  font: inherit;
+  box-shadow: none;
+}
+.login-pf-page .form-control:focus { border-color: #315ee8; outline: 2px solid #d9e3fd; outline-offset: 2px; }
+.login-pf-page .form-control[aria-invalid="true"] { border-color: #aa3344; }
+.login-pf-page .btn {
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 4px;
+  font: inherit;
+  box-shadow: none;
+  text-shadow: none;
+}
+.login-pf-page .btn-primary { border-color: #171b22; background: #171b22; color: #fff; }
+.login-pf-page .btn-primary:hover { border-color: #303640; background: #303640; }
+.login-pf-page .btn-primary:disabled { opacity: .55; }
+.login-pf-page .btn-default { border: 1px solid #cbd2dd; background: #fff; color: #171b22; }
+.login-pf-page a { color: #315ee8; }
+.login-pf-page a:focus-visible, .login-pf-page button:focus-visible, .login-pf-page input[type="submit"]:focus-visible { outline: 2px solid #315ee8; outline-offset: 3px; }
+#kc-info-wrapper { padding: 24px 0 0; border-top: 1px solid #dce1e8; background: transparent; font-size: 14px; }
+.login-pf-page .alert { padding: 12px 14px; margin-bottom: 24px; border: 1px solid #cbd2dd; border-radius: 4px; background: #fff; color: #171b22; }
+.login-pf-page .subtitle { color: #5d6776; font-size: 12px; }
+#kc-form-buttons { margin-top: 24px; }

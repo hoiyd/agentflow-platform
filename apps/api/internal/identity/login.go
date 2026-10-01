@@ -16,16 +16,19 @@ import (
 )
 
 type SessionInfo struct {
-	Mode          string   `json:"mode"`
-	Authenticated bool     `json:"authenticated"`
-	User          *User    `json:"user"`
-	Workspaces    []string `json:"workspaces"`
+	Mode                string   `json:"mode"`
+	Authenticated       bool     `json:"authenticated"`
+	User                *User    `json:"user"`
+	Workspaces          []string `json:"workspaces"`
+	RegistrationEnabled bool     `json:"registration_enabled"`
+	PersonalWorkspace   string   `json:"personal_workspace,omitempty"`
 }
 
 // RegisterRoutes is safe on a nil Manager, preserving trusted-local operation.
 func (m *Manager) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/auth/session", m.session)
 	mux.HandleFunc("GET /api/auth/login", m.login)
+	mux.HandleFunc("GET /api/auth/register", m.register)
 	mux.HandleFunc("GET /api/auth/callback", m.callback)
 	mux.HandleFunc("POST /api/auth/logout", m.logout)
 }
@@ -45,6 +48,7 @@ func (m *Manager) session(w http.ResponseWriter, r *http.Request) {
 	info := SessionInfo{Mode: "local", Workspaces: []string{}}
 	if m != nil {
 		info.Mode = "oidc"
+		info.RegistrationEnabled = m.config.RegistrationEnabled
 		user, err := m.Authenticate(r)
 		if err != nil && !errors.Is(err, ErrUnauthenticated) {
 			authError(w, 503, "identity_unavailable", "Identity storage is unavailable")
@@ -57,6 +61,12 @@ func (m *Manager) session(w http.ResponseWriter, r *http.Request) {
 				authError(w, 503, "identity_unavailable", "Identity storage is unavailable")
 				return
 			}
+			// Label only an authorized namespace, never advertise a revoked grant.
+			for _, workspace := range info.Workspaces {
+				if workspace == PersonalWorkspaceID(user.ID) {
+					info.PersonalWorkspace = workspace
+				}
+			}
 		}
 	}
 	authJSON(w, http.StatusOK, info)
@@ -67,6 +77,19 @@ func (m *Manager) login(w http.ResponseWriter, r *http.Request) {
 		authError(w, 404, "login_disabled", "Login is disabled in trusted-local mode")
 		return
 	}
+	m.startAuthorization(w, r, "login")
+}
+
+func (m *Manager) register(w http.ResponseWriter, r *http.Request) {
+	if m == nil || !m.config.RegistrationEnabled {
+		authError(w, 404, "registration_disabled", "Registration is disabled")
+		return
+	}
+	// Passwords, account creation and required actions remain entirely at the IdP.
+	m.startAuthorization(w, r, "create")
+}
+
+func (m *Manager) startAuthorization(w http.ResponseWriter, r *http.Request, prompt string) {
 	state, nonce, verifier := randomToken(), randomToken(), oauth2.GenerateVerifier()
 	attempt := LoginAttempt{StateHash: digest(state), Nonce: nonce, Verifier: verifier, ExpiresAt: time.Now().Add(10 * time.Minute)}
 	if err := m.store.SaveLoginAttempt(r.Context(), attempt); err != nil {
@@ -77,7 +100,7 @@ func (m *Manager) login(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	// Explicit sign-in requires reauthentication, not silent provider SSO reuse.
 	// Reopening a tab uses the existing app session and never reaches this route.
-	http.Redirect(w, r, m.oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier), oauth2.SetAuthURLParam("prompt", "login")), http.StatusFound)
+	http.Redirect(w, r, m.oauth.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier), oauth2.SetAuthURLParam("prompt", prompt)), http.StatusFound)
 }
 
 func (m *Manager) callback(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +161,12 @@ func (m *Manager) callback(w http.ResponseWriter, r *http.Request) {
 	if err := m.store.UpsertIdentity(ctx, user); err != nil {
 		authError(w, 503, "identity_unavailable", "Cannot create session")
 		return
+	}
+	if m.config.AutoProvisionWorkspace {
+		if err := m.store.ProvisionPersonalWorkspace(ctx, user.ID); err != nil {
+			authError(w, 503, "workspace_provisioning_failed", "Cannot open personal Workspace; sign in again to retry")
+			return
+		}
 	}
 	value := randomToken()
 	expires := minTime(time.Now().Add(m.config.SessionTTL), id.Expiry)

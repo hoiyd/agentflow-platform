@@ -34,8 +34,9 @@ type LoginAttempt struct {
 }
 
 type Store interface {
-	SyncMemberships(context.Context, string, []Member) error
+	ImportMemberships(context.Context, string, []Member) error
 	UpsertIdentity(context.Context, User) error
+	ProvisionPersonalWorkspace(context.Context, string) error
 	ListMemberships(context.Context, string) ([]string, error)
 	IsMember(context.Context, string, string) (bool, error)
 	CreateSession(context.Context, string, string, time.Time) error
@@ -51,6 +52,9 @@ func UserID(issuer, subject string) string {
 	hash := sha256.Sum256([]byte(issuer + "\x00" + subject))
 	return "user_" + hex.EncodeToString(hash[:])
 }
+
+// A personal namespace is stable per verified issuer/subject identity, not email.
+func PersonalWorkspaceID(userID string) string { return "personal_" + userID }
 
 func loadMembers(path string) ([]Member, error) {
 	file, err := os.Open(path)

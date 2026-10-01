@@ -37,7 +37,7 @@ func (h *Handler) withIdentity(next http.Handler) http.Handler {
 
 func isIdentityRoute(path string) bool {
 	switch path {
-	case "/api/auth/session", "/api/auth/login", "/api/auth/callback", "/api/auth/logout":
+	case "/api/auth/session", "/api/auth/login", "/api/auth/register", "/api/auth/callback", "/api/auth/logout":
 		return true
 	default:
 		return false
