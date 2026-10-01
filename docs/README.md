@@ -24,6 +24,7 @@ related pages link to its contract rather than copying configuration or algorith
 - **Orchestration:** [Agent profiles](runtime/agent-profiles.md), [Agent selection](runtime/agent-selection.md), and [execution modes](runtime/execution-modes.md).
 - **Limits:** [execution controls](runtime/execution-controls.md) maps scope, units, precedence, and tuning; [Run Budget](runtime/run-budget.md) owns reservation and settlement details.
 - **Model access:** [route catalog](runtime/model-routing.md), including sampling, affinity, and Resume.
+- **Provider output:** [reasoning display](runtime/provider-reasoning.md), explicit format support and live-only privacy boundaries.
 - **Completion:** [Verification](runtime/verification.md), distinct from development tests and offline evaluation.
 - **Recovery:** [checkpoints and actions](runtime/durable-recovery.md), [operator attention](runtime/operator-attention.md), and [release/recovery drill](operations/release-recovery-drill.md).
 - **Events:** [generated catalog](runtime/event-catalog.md), [projections/invariants](runtime/event-projections-runtime-invariants.md), and [failure contracts](runtime/failure-handling.md).

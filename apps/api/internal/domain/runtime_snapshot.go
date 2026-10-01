@@ -167,6 +167,8 @@ type ModelRouteCapabilities struct {
 	StructuredOutput bool `json:"structured_output"`
 	Streaming        bool `json:"streaming"`
 	Seed             bool `json:"seed,omitempty"`
+	// Explicitly trusted wire format for live reasoning display; empty disables it.
+	ReasoningDisplayFormat string `json:"reasoning_display_format,omitempty"`
 }
 
 type ModelRoutePricing struct {

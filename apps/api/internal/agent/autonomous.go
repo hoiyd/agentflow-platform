@@ -532,7 +532,7 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 			request.ModelMode = turnpkg.ModelModeAgentStream
 		}
 	}
-	result, err := r.turnEngine.Execute(ctx, request, nil)
+	result, err := r.turnEngine.Execute(ctx, request, forwardReasoning(events))
 	if err != nil {
 		if ctx.Err() != nil {
 			if stopped, stopErr := r.stopAutonomousStageIfCanceled(ctx, events, step); stopped || stopErr != nil {

@@ -29,6 +29,7 @@ const (
 	EventModelRequestPrepared           RunEventType = "model.request_prepared"
 	EventModelAttemptFinished           RunEventType = "model.attempt_finished"
 	EventModelDelta                     RunEventType = "model.delta"
+	EventModelReasoning                 RunEventType = "model.reasoning"
 	EventModelCompleted                 RunEventType = "model.completed"
 	EventModelFailed                    RunEventType = "model.failed"
 	EventContextAssembled               RunEventType = "context.assembled"

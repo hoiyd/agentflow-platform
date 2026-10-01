@@ -943,6 +943,22 @@ export interface components {
             /** @description Clear the current assistant draft before appending delta; retracts provisional text when a streamed round chooses tools. */
             reset?: boolean;
         };
+        /** @description Live-only sanitized provider output, never an answer or private continuation. Text replaces this call's display copy. */
+        ModelReasoningChunk: {
+            /** @constant */
+            type: "model_reasoning";
+            run_id: string;
+            turn_id: string;
+            stage_id?: string;
+            model_call_id: string;
+            /** @enum {string} */
+            format: "deepseek_reasoning_content";
+            /** @enum {string} */
+            status: "receiving" | "complete" | "interrupted";
+            /** @description Redacted plain text, at most 16 KiB UTF-8; present only after successful completion. */
+            text?: string;
+            truncated?: boolean;
+        };
         StageStateChunk: {
             /** @constant */
             type: "stage_state";
@@ -981,7 +997,7 @@ export interface components {
             retryable?: boolean;
             request_id?: string;
         };
-        ChatStreamEvent: components["schemas"]["ConversationChunk"] | components["schemas"]["RunStateChunk"] | components["schemas"]["RunProgressChunk"] | components["schemas"]["ModelDeltaChunk"] | components["schemas"]["StageStateChunk"] | components["schemas"]["DoneChunk"] | components["schemas"]["ErrorChunk"] | components["schemas"]["RunEvent"];
+        ChatStreamEvent: components["schemas"]["ConversationChunk"] | components["schemas"]["RunStateChunk"] | components["schemas"]["RunProgressChunk"] | components["schemas"]["ModelDeltaChunk"] | components["schemas"]["ModelReasoningChunk"] | components["schemas"]["StageStateChunk"] | components["schemas"]["DoneChunk"] | components["schemas"]["ErrorChunk"] | components["schemas"]["RunEvent"];
     };
     responses: {
         /** @description Invalid request. */

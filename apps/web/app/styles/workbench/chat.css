@@ -1,5 +1,25 @@
 /* Chat and run controls */
 
+.provider-reasoning {
+  max-width: 760px;
+  margin: 0 auto 18px;
+  border-block: 1px solid var(--border);
+  padding: 10px 0;
+  font-size: 13px;
+}
+
+.chat-workspace.expanded-content .provider-reasoning { max-width: 1040px; }
+.provider-reasoning summary { cursor: pointer; font-weight: 500; }
+.provider-reasoning summary span { margin-left: 10px; color: var(--muted); font-weight: 400; }
+.provider-reasoning summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.provider-reasoning ol { list-style: none; margin: 0; padding: 0; }
+.provider-reasoning li { border-top: 1px solid var(--border); padding: 12px 0; }
+.provider-reasoning header { display: flex; justify-content: space-between; gap: 16px; }
+.provider-reasoning header span:last-child, .reasoning-note, .reasoning-identity { color: var(--muted); }
+.reasoning-identity { margin-top: 5px; font-size: 12px; overflow-wrap: anywhere; }
+.provider-reasoning pre { margin: 10px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.reasoning-note { margin: 10px 0; font-size: 12px; }
+
 .chat-workspace {
   grid-template-rows: minmax(0, 1fr);
   gap: 0;

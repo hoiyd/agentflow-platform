@@ -91,6 +91,25 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"message": "Fixture rejected the model request", "code": "invalid_request_error"}})
 		return
 	}
+	if input.Stream && strings.Contains(task, "reasoning-") {
+		previous := 0
+		for _, message := range input.Messages {
+			if message.Role != "assistant" || len(message.ToolCalls) == 0 {
+				continue
+			}
+			if message.ReasoningContent == nil || *message.ReasoningContent != browserDisplayReasoning(previous) {
+				f.reject(w, "display redaction mutated required continuation")
+				return
+			}
+			previous++
+		}
+		if previous != observations {
+			f.reject(w, "reasoning round identity lost")
+			return
+		}
+		f.respondReasoning(w, r, task, observations)
+		return
+	}
 	if strings.Contains(task, "stream-gate") {
 		if !input.Stream {
 			f.reject(w, "answer must use streaming")

@@ -27,6 +27,9 @@ Each route has a stable ID and captures:
 
 - provider, model, and secret-free endpoint;
 - Tool calling, structured-output, streaming, and optional `seed` capabilities;
+- Optional `reasoning_display_format` capability, disabled when omitted; see
+  [provider reasoning display](provider-reasoning.md) for supported wire formats,
+  live-only privacy, limits, and the distinction from private continuation state;
 - context-window and maximum-output token limits;
 - deterministic priority, pricing metadata, definition revision, and effective
   generation policy;

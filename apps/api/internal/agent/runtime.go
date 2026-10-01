@@ -245,6 +245,7 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 			},
 			Sink: r.runEventSink(),
 		}, func(event turnpkg.Event) {
+			forwardReasoning(events)(event)
 			if event.Type == turnpkg.EventModelDelta {
 				live := domain.RunEvent{
 					Type:           domain.EventModelDelta,
