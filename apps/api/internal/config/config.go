@@ -17,8 +17,6 @@ type Config struct {
 	OIDCIssuer, OIDCClientID string
 	// OIDCRedirectURL is the exact registered API callback; AuthWebURL is the frontend origin.
 	OIDCRedirectURL, AuthWebURL string
-	// AuthMembershipPath optionally imports grants once per issuer; DB is authoritative.
-	AuthMembershipPath string
 	// AuthAutoProvisionWorkspace grants only a user's own personal namespace on first verified login.
 	// The durable onboarding marker prevents subsequent logins from restoring revoked access.
 	AuthAutoProvisionWorkspace bool
@@ -173,7 +171,6 @@ func Load() Config {
 		OIDCClientID:                      getEnv("OIDC_CLIENT_ID", ""),
 		OIDCRedirectURL:                   getEnv("OIDC_REDIRECT_URL", ""),
 		AuthWebURL:                        getEnv("AUTH_WEB_URL", "http://localhost:3000"),
-		AuthMembershipPath:                getEnv("AUTH_MEMBERSHIP_PATH", ""),
 		AuthAutoProvisionWorkspace:        getBoolEnv("AUTH_AUTO_PROVISION_WORKSPACE", false),
 		AuthRegistrationEnabled:           getBoolEnv("AUTH_REGISTRATION_ENABLED", false),
 		AuthSessionTTL:                    authSessionTTL(),

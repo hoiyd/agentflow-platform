@@ -25,10 +25,6 @@ var postgresMigrations = []string{
 		workspace_id text NOT NULL,
 		PRIMARY KEY (user_id,workspace_id)
 	)`,
-	`CREATE TABLE IF NOT EXISTS auth_membership_imports (
-		issuer text PRIMARY KEY,
-		imported_at timestamptz NOT NULL DEFAULT NOW()
-	)`,
 	`CREATE TABLE IF NOT EXISTS auth_personal_workspaces (
 		user_id text PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE,
 		workspace_id text NOT NULL UNIQUE,

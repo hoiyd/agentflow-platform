@@ -25,7 +25,7 @@ complete account-management product or the object-authorization audit in PROD-00
 | Duplicate or concurrent first login | One personal Workspace and one Membership; existing grants remain unchanged. |
 | Personal Workspace grant fails | Marker and grant roll back together; no new Session; a fresh login retries. |
 | Membership revoked after onboarding | Relogin/restart does not restore it; empty Membership is not a new-account signal. |
-| Legacy file changed or stale on upgrade | Database remains authoritative; no removal or restoration of grants. |
+| Schema upgrade or API restart | Database Memberships remain unchanged; revoked grants are not restored. |
 
 ## Modes and Scope
 
@@ -59,7 +59,6 @@ AUTH_WEB_URL=https://agentflow.example.com
 ALLOWED_ORIGINS=https://agentflow.example.com
 AUTH_AUTO_PROVISION_WORKSPACE=true
 AUTH_REGISTRATION_ENABLED=true
-AUTH_MEMBERSHIP_PATH=
 AUTH_SESSION_TTL=8h
 ```
 
@@ -93,7 +92,7 @@ and the tested registration behavior are Keycloak-specific.
 3. Enable **Realm settings → Login → User registration**. Password policies,
    brute-force protection, email verification/SMTP and MFA remain IdP settings.
 4. Enable both AgentFlow flags and restart the API once. Subsequent signups
-   return directly to their personal Workspace, without editing member JSON.
+   return directly to their personal Workspace, without manual Membership setup.
 
 The design/assets belong to AgentFlow, but the HTML forms are served by Keycloak
 and post **directly to Keycloak**, not Next.js or Go. The IdP hostname remains
@@ -103,38 +102,23 @@ is offered there by the IdP, not through an intermediate AgentFlow screen.
 AgentFlow never supplies a password form or password-grant proxy. English
 messages are customized; other locales inherit Keycloak's native messages.
 
-### Legacy Membership Bootstrap
+### Database Memberships
 
-For a new issuer needing initial shared grants, optionally set
-`AUTH_MEMBERSHIP_PATH` to an operator-owned regular JSON file, at most 64 KiB:
+Postgres is the sole Membership authority. Startup does not read member files
+or import shared grants. Existing users and grants survive schema upgrades and
+restarts unchanged; automatic onboarding grants only a personal Workspace.
 
-```json
-{
-  "members": [
-    { "subject": "<provider-subject>", "workspaces": ["default_workspace"] },
-    { "subject": "<another-provider-subject>", "workspaces": ["project-workspace"] }
-  ]
-}
-```
+Shared Workspace access is managed by operators in `auth_memberships`, referencing
+the internal `auth_users.id`, not email or display name. The user's OIDC `sub`
+is scoped by issuer; an authenticated nonmember sees it on the access-required
+screen but cannot mount the workbench when onboarding is disabled or access was
+revoked.
 
-Subjects must be the provider's opaque OIDC `sub` claim, not email addresses or
-display names. Obtain it from the provider's administration interface or sign in:
-an authenticated nonmember sees their subject and an access-required screen but
-cannot mount the workbench when onboarding is disabled or its grant was revoked.
-Keep real grant files under ignored `.data/`,
-not in version control. `{ "members": [] }` intentionally grants nobody access.
-
-Startup validates a configured file and consumes an atomic, **one-time per issuer**
-import. File changes never remove, update or regrant Membership. If the issuer
-already has users (including an upgrade from the previous implementation), its
-database grants are preserved and the stale file is not imported. Existing
-deployments can clear `AUTH_MEMBERSHIP_PATH`; an empty path needs no file.
-
-Postgres is the Membership authority. Operator changes to `auth_memberships`
+Operator changes to `auth_memberships`
 are visible on subsequent requests and the next session probe/reload; **no API
 restart required**. There are no pushed UI updates or member-management screens.
 To restore revoked access, explicitly add that Membership in the DB; do not
-delete its onboarding marker or replay a legacy import.
+delete its onboarding marker to trigger re-enrollment.
 
 ## Login, Session and Membership Flow
 
@@ -201,8 +185,10 @@ resources are not newly converted into owner ACLs by this feature.
 ## Persistence and Privacy
 
 Startup idempotently creates `auth_users`, `auth_memberships`, `auth_sessions`,
-`auth_login_attempts`, `auth_personal_workspaces` and `auth_membership_imports`.
-The latter two preserve onboarding/import history, not passwords or roles.
+`auth_login_attempts` and `auth_personal_workspaces`.
+The personal Workspace record preserves onboarding history, not passwords or roles.
+Old file-import bookkeeping is no longer created, required or accessed; any
+existing unused table is left untouched rather than dropped during startup.
 Existing resource rows are not moved or assigned to new owners.
 Sessions survive restart, logout removes them, and expired session/transaction
 rows are purged opportunistically on the next session/login creation. There is
@@ -227,7 +213,7 @@ privileges; tests create/drop disposable databases, never the application data:
 ```bash
 cd apps/api
 go test ./internal/identity ./internal/httpapi \
-  -run 'TestOIDC|TestAuthentication|TestAuthenticatedWorkspace|TestPersonalWorkspace|TestMembershipImport' \
+  -run 'TestOIDC|TestAuthentication|TestAuthenticatedWorkspace|TestPersonalWorkspace|TestIdentitySchema|TestDatabaseMemberships' \
   -count=1 -v
 ```
 
@@ -268,9 +254,8 @@ mode or revert on an exposed deployment without restoring an external access
 boundary. Added tables can remain; no destructive database rollback is needed.
 
 An onboarding-only rollback disables the two flags and retains grants/records.
-Do not roll back to a binary that synchronizes a stale member file: it would
-replace database grants. Back up auth tables and clear that file configuration
-before such a rollback.
+Back up auth tables before a binary downgrade; old file-based Membership behavior
+is no longer supported by the current application.
 
 - [Go OIDC client](https://github.com/coreos/go-oidc)
 - [Go OAuth2 client and PKCE options](https://pkg.go.dev/golang.org/x/oauth2)

@@ -17,27 +17,25 @@ import (
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
-func TestMembershipImportDoesNotOverwriteDatabaseGrants(t *testing.T) {
-	ctx := context.Background()
-	db, err := store.NewPostgresStore(pgfixture.DatabaseURL(t))
+func TestIdentitySchemaDoesNotCreateImportBookkeeping(t *testing.T) {
+	dbURL := pgfixture.DatabaseURL(t)
+	db, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	issuer := "https://identity.example/realm"
-	if err := db.ImportMemberships(ctx, issuer, []identity.Member{{Subject: "operator", Workspaces: []string{"original"}}}); err != nil {
+	sqlDB, err := sql.Open("pgx", dbURL)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.ImportMemberships(ctx, issuer, []identity.Member{{Subject: "operator", Workspaces: []string{"replacement"}}}); err != nil {
-		t.Fatal(err)
-	}
-	items, err := db.ListMemberships(ctx, identity.UserID(issuer, "operator"))
-	if err != nil || len(items) != 1 || items[0] != "original" {
-		t.Fatalf("startup replaced database grants: %v, %v", items, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	var exists bool
+	if err := sqlDB.QueryRow(`SELECT to_regclass('auth_membership_imports') IS NOT NULL`).Scan(&exists); err != nil || exists {
+		t.Fatalf("unused import bookkeeping created: %t %v", exists, err)
 	}
 }
 
-func TestMembershipImportPreservesExistingIssuerOnUpgrade(t *testing.T) {
+func TestDatabaseMembershipsSurviveSchemaUpgradeAndRestart(t *testing.T) {
 	ctx := context.Background()
 	dbURL := pgfixture.DatabaseURL(t)
 	legacy, err := sql.Open("pgx", dbURL)
@@ -47,7 +45,7 @@ func TestMembershipImportPreservesExistingIssuerOnUpgrade(t *testing.T) {
 	t.Cleanup(func() { _ = legacy.Close() })
 	issuer := "https://existing.example/realm"
 	user := identity.User{ID: identity.UserID(issuer, "revoked"), Issuer: issuer, Subject: "revoked"}
-	// Start from the original schema, before onboarding/import records existed.
+	// Upgrading an existing identity database must preserve shared grants.
 	for _, statement := range []string{
 		`CREATE TABLE auth_users (id text PRIMARY KEY, issuer text NOT NULL, subject text NOT NULL, name text NOT NULL DEFAULT '', UNIQUE(issuer,subject))`,
 		`CREATE TABLE auth_memberships (user_id text NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, workspace_id text NOT NULL, PRIMARY KEY(user_id,workspace_id))`,
@@ -67,68 +65,36 @@ func TestMembershipImportPreservesExistingIssuerOnUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	if err := db.ImportMemberships(ctx, issuer, []identity.Member{{Subject: user.Subject, Workspaces: []string{"revoked-grant"}}}); err != nil {
-		t.Fatal(err)
-	}
 	items, err := db.ListMemberships(ctx, user.ID)
 	if err != nil || len(items) != 1 || items[0] != "retained-grant" {
-		t.Fatalf("upgrade restored revoked grant: %v %v", items, err)
+		t.Fatalf("upgrade changed database membership: %v %v", items, err)
+	}
+	if _, err := legacy.Exec(`DELETE FROM auth_memberships WHERE user_id=$1`, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := store.NewPostgresStore(dbURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = restarted.Close() })
+	items, err = restarted.ListMemberships(ctx, user.ID)
+	if err != nil || len(items) != 0 {
+		t.Fatalf("restart restored revoked membership: %v %v", items, err)
 	}
 }
 
-func TestMembershipBootstrapFailureRollsBackAndRetries(t *testing.T) {
+func TestPersonalWorkspaceRejectsUnverifiedUserAndUnavailableStore(t *testing.T) {
 	ctx := context.Background()
-	dbURL := pgfixture.DatabaseURL(t)
-	db, err := store.NewPostgresStore(dbURL)
+	db, err := store.NewPostgresStore(pgfixture.DatabaseURL(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	sqlDB, err := sql.Open("pgx", dbURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	issuer := "https://bootstrap.example/realm"
-	members := []identity.Member{{Subject: "one", Workspaces: []string{"accepted"}}, {Subject: "two", Workspaces: []string{"reject"}}}
-	if _, err := sqlDB.Exec(`ALTER TABLE auth_memberships ADD CONSTRAINT fixture_reject CHECK(workspace_id <> 'reject')`); err != nil {
-		t.Fatal(err)
-	}
-	if err := db.ImportMemberships(ctx, issuer, members); err == nil {
-		t.Fatal("failed grant accepted")
-	}
-	for _, query := range []string{`SELECT COUNT(*) FROM auth_membership_imports WHERE issuer=$1`, `SELECT COUNT(*) FROM auth_users WHERE issuer=$1`} {
-		var count int
-		if err := sqlDB.QueryRow(query, issuer).Scan(&count); err != nil || count != 0 {
-			t.Fatalf("partial bootstrap survived: %d %v", count, err)
-		}
-	}
-	if _, err := sqlDB.Exec(`ALTER TABLE auth_memberships DROP CONSTRAINT fixture_reject`); err != nil {
-		t.Fatal(err)
-	}
-	var wg sync.WaitGroup
-	for range 8 {
-		wg.Go(func() {
-			if err := db.ImportMemberships(ctx, issuer, members); err != nil {
-				t.Error(err)
-			}
-		})
-	}
-	wg.Wait()
-	for _, member := range members {
-		items, err := db.ListMemberships(ctx, identity.UserID(issuer, member.Subject))
-		if err != nil || len(items) != 1 || items[0] != member.Workspaces[0] {
-			t.Fatalf("bootstrap retry: %v %v", items, err)
-		}
-	}
 	if err := db.ProvisionPersonalWorkspace(ctx, "unverified-user"); err == nil {
 		t.Fatal("unverified user received Workspace")
 	}
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
-	}
-	if err := db.ImportMemberships(ctx, issuer, members); err == nil {
-		t.Fatal("closed database accepted bootstrap")
 	}
 	if err := db.ProvisionPersonalWorkspace(ctx, "unverified-user"); err == nil {
 		t.Fatal("closed database accepted onboarding")

@@ -9,45 +9,6 @@ import (
 	"agentflow-platform/apps/api/internal/identity"
 )
 
-// ImportMemberships bootstraps an issuer once. Database grants are authoritative:
-// restarting or changing the file never restores revocations or removes grants.
-func (s *PostgresStore) ImportMemberships(ctx context.Context, issuer string, members []identity.Member) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var imported string
-	err = tx.QueryRowContext(ctx, `INSERT INTO auth_membership_imports (issuer) VALUES ($1) ON CONFLICT DO NOTHING RETURNING issuer`, issuer).Scan(&imported)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	// An upgraded issuer may already have authoritative grants (or revocations).
-	// Consume the legacy bootstrap without regranting anything from a stale file.
-	var existing bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth_users WHERE issuer=$1)`, issuer).Scan(&existing); err != nil {
-		return err
-	}
-	if existing {
-		return tx.Commit()
-	}
-	for _, member := range members {
-		id := identity.UserID(issuer, member.Subject)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO auth_users (id,issuer,subject,name) VALUES ($1,$2,$3,'') ON CONFLICT (id) DO NOTHING`, id, issuer, member.Subject); err != nil {
-			return err
-		}
-		for _, workspace := range member.Workspaces {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO auth_memberships (user_id,workspace_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, id, workspace); err != nil {
-				return err
-			}
-		}
-	}
-	return tx.Commit()
-}
-
 func (s *PostgresStore) UpsertIdentity(ctx context.Context, user identity.User) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO auth_users (id,issuer,subject,name) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name`, user.ID, user.Issuer, user.Subject, user.Name)
 	return err

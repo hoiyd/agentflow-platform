@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +17,8 @@ import (
 )
 
 func TestAuthenticatedWorkspaceBoundary(t *testing.T) {
-	db, err := store.NewPostgresStore(pgfixture.DatabaseURL(t))
+	dbURL := pgfixture.DatabaseURL(t)
+	db, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,11 +29,8 @@ func TestAuthenticatedWorkspaceBoundary(t *testing.T) {
 	}))
 	issuer = provider.URL
 	t.Cleanup(provider.Close)
-	path := filepath.Join(t.TempDir(), "members.json")
-	if err := os.WriteFile(path, []byte(`{"members":[{"subject":"operator","workspaces":["workspace-a"]}]}`), 0600); err != nil {
-		t.Fatal(err)
-	}
-	manager, err := identity.New(context.Background(), identity.Config{Mode: "oidc", Issuer: issuer, ClientID: "client", RedirectURL: "http://localhost:8080/api/auth/callback", WebURL: "http://localhost:3000", MembershipPath: path}, db)
+	pgfixture.GrantMemberships(t, dbURL, issuer, "operator", "workspace-a")
+	manager, err := identity.New(context.Background(), identity.Config{Mode: "oidc", Issuer: issuer, ClientID: "client", RedirectURL: "http://localhost:8080/api/auth/callback", WebURL: "http://localhost:3000"}, db)
 	if err != nil {
 		t.Fatal(err)
 	}

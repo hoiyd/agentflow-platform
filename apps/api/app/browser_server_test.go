@@ -79,19 +79,15 @@ func TestBrowserServer(t *testing.T) {
 		t.Setenv("OIDC_CLIENT_SECRET", "fixture-only")
 		oidcProvider = oidcfixture.New(t, "http://127.0.0.1:18080/api/auth/callback")
 		oidcProvider.RequireSignIn()
-		memberPath := filepath.Join(root, "memberships.json")
-		if err := os.WriteFile(memberPath, []byte(`{"members":[{"subject":"fixture-operator","workspaces":["default_workspace","workspace-test"]}]}`), 0600); err != nil {
-			t.Fatal(err)
-		}
 		cfg.AuthMode, cfg.OIDCIssuer, cfg.OIDCClientID = "oidc", oidcProvider.Server.URL, "fixture-client"
-		cfg.OIDCRedirectURL, cfg.AuthWebURL, cfg.AuthMembershipPath = "http://127.0.0.1:18080/api/auth/callback", "http://127.0.0.1:13000", memberPath
+		cfg.OIDCRedirectURL, cfg.AuthWebURL = "http://127.0.0.1:18080/api/auth/callback", "http://127.0.0.1:13000"
 	}
 	if os.Getenv("AGENTFLOW_KEYCLOAK_TEST") == "1" {
 		// A separate disposable realm validates actual themed password forms, not
 		// the signed fixture. Never connect to the operator's Keycloak realm.
 		t.Setenv("OIDC_CLIENT_SECRET", "fixture-only")
 		cfg.AuthMode, cfg.OIDCIssuer, cfg.OIDCClientID = "oidc", "http://127.0.0.1:19081/realms/agentflow-test", "fixture-client"
-		cfg.OIDCRedirectURL, cfg.AuthWebURL, cfg.AuthMembershipPath = "http://127.0.0.1:18080/api/auth/callback", "http://127.0.0.1:13000", ""
+		cfg.OIDCRedirectURL, cfg.AuthWebURL = "http://127.0.0.1:18080/api/auth/callback", "http://127.0.0.1:13000"
 		cfg.AuthRegistrationEnabled, cfg.AuthAutoProvisionWorkspace = true, true
 	}
 	cfg.VerificationAllowedCommands, cfg.VerificationAllowedHTTPHosts = "", ""
@@ -99,6 +95,9 @@ func TestBrowserServer(t *testing.T) {
 	application, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if oidcProvider != nil {
+		pgfixture.GrantMemberships(t, cfg.DatabaseURL, cfg.OIDCIssuer, "fixture-operator", "default_workspace", "workspace-test")
 	}
 	production := application.server.Handler
 	controls := http.NewServeMux()

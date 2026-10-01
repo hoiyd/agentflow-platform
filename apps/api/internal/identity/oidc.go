@@ -14,8 +14,8 @@ import (
 )
 
 type Config struct {
-	Mode, Issuer, ClientID, RedirectURL, WebURL, MembershipPath string
-	SessionTTL                                                  time.Duration
+	Mode, Issuer, ClientID, RedirectURL, WebURL string
+	SessionTTL                                  time.Duration
 	// RegistrationEnabled requires an IdP supporting prompt=create and automatic onboarding.
 	RegistrationEnabled, AutoProvisionWorkspace bool
 }
@@ -82,15 +82,6 @@ func New(ctx context.Context, cfg Config, storage Store) (*Manager, error) {
 		return nil, errors.New("OIDC key endpoint must use HTTPS (HTTP allowed only on loopback)")
 	}
 	cfg.WebURL = strings.TrimSuffix(cfg.WebURL, "/")
-	if cfg.MembershipPath != "" {
-		members, err := loadMembers(cfg.MembershipPath)
-		if err != nil {
-			return nil, err
-		}
-		if err := storage.ImportMemberships(ctx, cfg.Issuer, members); err != nil {
-			return nil, errors.New("cannot import Workspace memberships")
-		}
-	}
 	return &Manager{
 		config: cfg, store: storage, client: client, secure: redirect.Scheme == "https", origin: web.Scheme + "://" + web.Host,
 		oauth:    oauth2.Config{ClientID: cfg.ClientID, ClientSecret: credential.FromEnvironment("OIDC_CLIENT_SECRET").Reveal(), RedirectURL: cfg.RedirectURL, Endpoint: endpoint, Scopes: []string{oidc.ScopeOpenID, oidc.ScopeProfile}},
