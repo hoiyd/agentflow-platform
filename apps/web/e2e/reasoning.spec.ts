@@ -23,14 +23,24 @@ async function evidence(page: Page, request: APIRequestContext, prompt: string) 
   const requests = await read(request, `/api/runs/${runId}/model_requests`);
   const durable = JSON.stringify({ replay, messages, requests });
   expect(durable).not.toContain(secret);
-  expect(durable).not.toContain("DISPLAY_ONLY_REASONING");
-  expect(replay.run_events.some((item: { type: string }) => item.type === "model.reasoning")).toBe(false);
+  const reasoningEvents = replay.run_events.filter((item: { type: string }) => item.type === "model.reasoning");
+  const complete = reasoningEvents.filter((item: { payload: { status: string } }) => item.payload.status === "complete");
+  if (complete.length) expect(durable).toContain("DISPLAY_ONLY_REASONING");
+  expect(JSON.stringify(requests)).not.toContain("DISPLAY_ONLY_REASONING");
+  const savedReasoning = messages.flatMap((message: { reasoning?: Array<{ run_id: string }> }) => message.reasoning ?? []).filter((entry: { run_id: string }) => entry.run_id === runId);
+  if (replay.run.status === "completed") expect(savedReasoning).toHaveLength(complete.length);
   await test.info().attach("reasoning-runtime-evidence", { body: JSON.stringify({
     prompt, run: replay.run, frozen_routes: replay.runtime_snapshot.model_routing,
     event_types: replay.run_events.map((item: { type: string }) => item.type),
     model_requests: requests, provider_contracts: await read(request, "/__fixture/contracts"),
+    reasoning_bindings: messages.map((message: { id: string; reasoning?: Array<{ run_id: string; model_call_id: string; text?: string }> }) => ({
+      message_id: message.id, calls: (message.reasoning ?? []).map((entry) => ({
+        run_id: entry.run_id, model_call_id: entry.model_call_id,
+        text_bytes: new TextEncoder().encode(entry.text ?? "").length
+      }))
+    })),
     limits: { display_bytes_per_call: 16384, retained_browser_calls: 32 },
-    privacy: { live_only: true, durable_reasoning_absent: true, secret_absent: true },
+    privacy: { sanitized_reasoning_persisted: true, metadata_capture_content_absent: true, secret_absent: true },
     limitations: ["strict local fixture, not live provider evidence", "same-Turn continuation only", "text released after call completion"]
   }, null, 2), contentType: "application/json" });
   return replay;
@@ -48,7 +58,7 @@ test.afterEach(async ({ request }) => {
 });
 
 for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
-  test(`${mode}: reasoning stays live-only across Tool rounds and answer reset`, async ({ page, request }) => {
+  test(`${mode}: reasoning survives navigation and reload across Tool rounds and answer reset`, async ({ page, request }) => {
     await page.getByRole("button", { name: "New agent", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Create new agent" });
     await dialog.getByLabel("Name", { exact: true }).fill(`Reasoning ${mode}`);
@@ -82,9 +92,52 @@ for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
     await expect(page.locator(".message.assistant").last()).not.toContainText("DISPLAY_ONLY_REASONING");
     const replay = await evidence(page, request, prompt);
     expect(replay.run.status).toBe("completed");
+    await page.getByRole("button", { name: "Tools", exact: true }).click();
+    await expect(disclosure).toHaveCount(0);
+    await page.getByRole("button", { name: "Chat", exact: true }).click();
+    await expect(disclosure).toBeVisible();
+    await page.getByRole("button", { name: "Tools", exact: true }).click();
+    await page.locator(".conversation-item.active").click();
+    await expect(disclosure).toBeVisible();
+    await disclosure.locator("summary").click();
+    await expect(disclosure.locator("li")).toHaveCount(3);
+    await expect(disclosure).toContainText("[REDACTED]");
+    expect(await disclosure.innerText()).not.toContain(secret);
+    // Re-selecting the active conversation is a view change, not a new session.
+    await page.locator(".conversation-item.active").press("Enter");
+    await expect(disclosure.locator("li")).toHaveCount(3);
+    await evidence(page, request, prompt);
     await page.reload();
     await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
+    await expect(disclosure).toBeVisible();
+    await disclosure.locator("summary").click();
+    await expect(disclosure.locator("li")).toHaveCount(3);
+    await expect(disclosure).toContainText("[REDACTED]");
+    const title = `Reasoning ${mode} ${replay.run.id}`;
+    await page.getByRole("button", { name: "Rename conversation", exact: true }).click();
+    await page.getByRole("textbox", { name: "Conversation title", exact: true }).fill(title);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "New conversation", exact: true }).click();
     await expect(disclosure).toHaveCount(0);
+    await page.locator(".conversation-item").filter({ has: page.getByText(title, { exact: true }) }).click();
+    await expect(disclosure).toBeVisible();
+    await disclosure.locator("summary").click();
+    await expect(disclosure.locator("li")).toHaveCount(3);
+    await evidence(page, request, prompt);
+    if (mode === "Single agent") {
+      await page.getByRole("button", { name: "Direct Single agent", exact: true }).click();
+      await submit(page, prompt);
+      await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
+      await expect(disclosure).toHaveCount(2);
+      await expect(disclosure.locator("li")).toHaveCount(6);
+      const next = await evidence(page, request, prompt);
+      expect(next.run.id).not.toBe(replay.run.id);
+      await page.reload();
+      await expect(disclosure).toHaveCount(2);
+      await expect(disclosure.locator("li")).toHaveCount(6);
+      await evidence(page, request, prompt);
+    }
   });
 }
 
@@ -99,13 +152,23 @@ test("receiving state is real, text is withheld and a browser disconnect does no
   await expect(page.getByText("Working...", { exact: true })).toBeVisible();
   const href = await page.getByRole("link", { name: "View trace" }).getAttribute("href");
   const runId = href!.split("/").at(-1)!;
+  await page.getByRole("button", { name: "Tools", exact: true }).click();
+  await page.locator(".conversation-item.active").click();
+  await expect(disclosure).toBeVisible();
+  await disclosure.locator("summary").click();
+  await expect(disclosure).toContainText("Receiving provider reasoning");
+  await expect(disclosure.locator("pre")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "View trace" })).toHaveAttribute("href", href!);
+  await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
   await page.goto("about:blank");
   expect((await request.post(`${api}/__fixture/release`)).status()).toBe(204);
   await expect.poll(async () => (await read(request, `/api/runs/${runId}`)).status).toBe("completed");
   const run = await read(request, `/api/runs/${runId}`);
   await page.goto(`/workspace?conversation=${run.conversation_id}`);
   await expect(page.locator(".message.assistant").last()).toContainText("Evidence saved.");
-  await expect(disclosure).toHaveCount(0);
+  await expect(disclosure).toBeVisible();
+  await disclosure.locator("summary").click();
+  await expect(disclosure).toContainText("DISPLAY_ONLY_REASONING");
   await evidence(page, request, prompt);
 });
 

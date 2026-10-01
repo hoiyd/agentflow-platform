@@ -575,6 +575,8 @@ export interface components {
             content: string;
             citations?: components["schemas"]["RAGCitation"][];
             web_citations?: components["schemas"]["WebCitation"][];
+            /** @description Sanitized completed provider reasoning associated with this assistant answer; display-only, not model input. */
+            reasoning?: components["schemas"]["MessageReasoning"][];
             /** Format: date-time */
             created_at: string;
         };
@@ -943,7 +945,20 @@ export interface components {
             /** @description Clear the current assistant draft before appending delta; retracts provisional text when a streamed round chooses tools. */
             reset?: boolean;
         };
-        /** @description Live-only sanitized provider output, never an answer or private continuation. Text replaces this call's display copy. */
+        MessageReasoning: {
+            run_id: string;
+            turn_id: string;
+            stage_id?: string;
+            model_call_id: string;
+            /** @enum {string} */
+            format: "deepseek_reasoning_content";
+            /** @constant */
+            status: "complete";
+            /** @description Redacted plain text */
+            text?: string;
+            truncated?: boolean;
+        };
+        /** @description Sanitized provider output, never an answer or private continuation. Completed text is durable; live text replaces this call's display copy. */
         ModelReasoningChunk: {
             /** @constant */
             type: "model_reasoning";

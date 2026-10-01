@@ -136,7 +136,10 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
           ) : (
             messages.map((message, index) => (
               <Fragment key={message.id}>
-                {index === messages.length - 1 ? <ReasoningDisclosure entries={props.reasoning ?? []} runStatus={runStatus} /> : null}
+                {message.role === "assistant" ? <ReasoningDisclosure
+                  entries={index === messages.length - 1 && props.reasoning?.length ? props.reasoning : message.reasoning ?? []}
+                  runStatus={index === messages.length - 1 ? runStatus : "completed"}
+                /> : null}
                 <article className={`message ${message.role}`}>
                   <div className="message-meta">{message.role}</div>
                   <div className="bubble">
@@ -154,6 +157,9 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
               </Fragment>
             ))
           )}
+          {messages.at(-1)?.role !== "assistant" && props.reasoning?.length ? (
+            <ReasoningDisclosure entries={props.reasoning} runStatus={runStatus} />
+          ) : null}
         </section>
       </div>
       {showCollaborationPanel && isCollaborationPanelOpen ? (

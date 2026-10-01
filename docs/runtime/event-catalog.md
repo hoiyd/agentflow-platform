@@ -32,7 +32,7 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 | `model.completed` | durable | 1 | run | agent/turn | `event.ModelPayload` | model:terminal | `model.started` | run_projection, replay |
 | `model.delta` | live | 1 | run | agent/turn | `event.ModelPayload` | none | `` | live_ui |
 | `model.failed` | durable | 1 | run | agent/turn | `event.ModelPayload` | model:terminal | `model.started` | run_projection, replay |
-| `model.reasoning` | live | 1 | run+turn | agent/turn | `event.ModelReasoningPayload` | none | `` | live_ui |
+| `model.reasoning` | durable | 1 | run+turn | agent/turn | `event.ModelReasoningPayload` | none | `` | live_ui, message_projection, replay |
 | `model.request_prepared` | durable | 1 | run | requestcapture/contextassembly | `event.ModelRequestPreparedPayload` | model:transition | `` | request_capture, replay |
 | `model.route_decided` | durable | 1 | run | agent/modelrouting | `event.ModelRouteDecisionPayload` | model:transition | `` | request_capture, replay |
 | `model.started` | durable | 1 | run | agent/turn | `event.ModelPayload` | model:start | `` | run_projection, request_capture, replay |

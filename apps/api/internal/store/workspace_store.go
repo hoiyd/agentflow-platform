@@ -36,6 +36,15 @@ func (s workspaceStore) ListMessages(conversationID string) ([]domain.Message, e
 	return s.backend.ListMessagesInWorkspace(s.workspaceID, conversationID)
 }
 
+func (s workspaceStore) ListConversationRunEvents(conversationID string) ([]domain.RunEvent, error) {
+	if _, ok, err := s.GetConversation(conversationID); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, ErrNotFound("conversation")
+	}
+	return s.backend.ListConversationRunEvents(conversationID)
+}
+
 func (s workspaceStore) AddMessage(conversationID string, role string, content string) (domain.Message, error) {
 	return s.backend.AddMessageInWorkspace(s.workspaceID, conversationID, role, content)
 }

@@ -151,7 +151,7 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventModelStarted}, DurableFact, optional, "event.ModelPayload", start("model"), "run_projection", "request_capture", "replay")
 	add([]domain.RunEventType{domain.EventModelCompleted, domain.EventModelFailed}, DurableFact, optional, "event.ModelPayload", terminal("model", domain.EventModelStarted), "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventModelDelta}, LiveOnly, optional, "event.ModelPayload", none, "live_ui")
-	add([]domain.RunEventType{domain.EventModelReasoning}, LiveOnly, turn, "event.ModelReasoningPayload", none, "live_ui")
+	add([]domain.RunEventType{domain.EventModelReasoning}, DurableFact, turn, "event.ModelReasoningPayload", none, "live_ui", "message_projection", "replay")
 	add([]domain.RunEventType{domain.EventModelRouteDecided}, DurableFact, optional, "event.ModelRouteDecisionPayload", transition("model"), "request_capture", "replay")
 	add([]domain.RunEventType{domain.EventModelRequestPrepared}, DurableFact, optional, "event.ModelRequestPreparedPayload", transition("model"), "request_capture", "replay")
 	add([]domain.RunEventType{domain.EventModelAttemptFinished}, DurableFact, optional, "event.ModelAttemptFinishedPayload", none, "request_capture", "replay")

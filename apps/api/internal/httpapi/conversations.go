@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"agentflow-platform/apps/api/internal/projection"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -117,5 +118,10 @@ func (h *Handler) listMessages(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, messages)
+	events, err := scoped.ListConversationRunEvents(id)
+	if err != nil {
+		writeFailure(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, projection.AttachMessageReasoning(messages, events))
 }

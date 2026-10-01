@@ -40,7 +40,7 @@ export function useRunSession(options: SessionOptions) {
   const [isCancelingRun, setCanceling] = useState(false);
   const cancelInFlight = useRef(false);
   const [runState, setStoredRunState] = useState<RunState | null>(null);
-  // Browser-only display state: never merge into persisted Conversation messages.
+  // Pending display updates; completed history is loaded through message.reasoning.
   const [reasoning, setReasoning] = useState<ReasoningEntry[]>([]);
   const runRef = useRef<RunState | null>(null);
   const [streams] = useState(createLatestRequestController);

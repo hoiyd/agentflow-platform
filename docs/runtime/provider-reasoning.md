@@ -44,21 +44,44 @@ estimates include returned reasoning even when display is disabled. Exact
 provider-reported usage remains authoritative. Display status `Received` means a
 complete transport response, not successful Run budget settlement or verification.
 
-`model.reasoning` is a typed, live-only Run event, scoped to Run, Turn, optional
+`model.reasoning` is a typed, durable Run event, scoped to Run, Turn, optional
 Stage, and model-call identity. Chat uses a collapsed plain-text disclosure;
 reasoning never appends to the assistant answer. Non-streaming internal planning
 and routing calls do not produce these display events.
-The browser retains at most the latest 32 calls (512 KiB maximum text), clearing
-them on new submission or Conversation navigation; this is not another Run store.
+The browser retains at most the latest 32 pending/live calls (512 KiB maximum
+text). Switching workspace views or execution-mode tabs, or selecting the already
+active Conversation in Recent runs, keeps the stream connection. Completed
+reasoning is also available beside historical answers after changing Conversation
+or reloading. A remounted disclosure is collapsed; expand it to read saved text.
 The existing header Stop action is available for active Runs in all three modes,
 so waiting for provider reasoning can be explicitly canceled without closing Chat.
 
-Display content is not stored in messages, ordinary events, Task State, Memory,
-or metadata-only Request Capture. Reload/reconnect cannot recover earlier display
-text. Existing opt-in, redacted Request Capture may retain continuation fields in
-later outgoing requests under its own retention policy; opening the UI does not
-enable Capture. Redaction catches known credential patterns, not all sensitive
-personal or business information: operators must explicitly trust the route.
+Sanitized display content is saved in ordinary Run events and returned as the
+assistant message's optional `reasoning` array by the messages API. This is a read
+projection over existing events, not a second database copy: completion's existing
+`citation.resolved.message_id` binds all preceding completed calls in that Run to
+the answer, including answers without citations. Event sequence and explicit
+message identity determine association, never timestamps or the latest message.
+Repeated bindings and repeated call events cannot attach the same entry twice;
+later completions/Resume consume only their own pending entries. Workspace access
+is checked before loading Conversation events.
+
+No schema migration is required. Existing Runs remain readable, but previously
+live-only reasoning that was never saved cannot be recovered. Runs without an
+assistant answer (for example, a failed Tool round) retain completed reasoning in
+Run Replay events rather than inventing a Conversation message. Receiving and
+interrupted states contain no reasoning text. The saved display copy has the same
+16 KiB cap and truncation flag; full raw continuation is not saved by this feature.
+Deleting the Conversation removes its Runs and these events through the existing
+Store lifecycle. There is no separate reasoning expiry or automatic deletion on
+view changes.
+
+Reasoning is not merged into answer text, model input, compaction, Task State,
+Memory, or metadata-only Request Capture. Existing opt-in, redacted Request Capture
+may retain continuation fields in later outgoing requests under its own retention
+policy; opening the UI does not enable Capture. Redaction catches known credential
+patterns, not all sensitive personal or business information: operators must
+explicitly trust the route before enabling display and persistence.
 
 Raw `reasoning_content` remains separate and unchanged for same-Turn Tool
 continuation, including absent versus explicitly empty fields. This feature does
@@ -77,23 +100,24 @@ compatibility.
 | Display cap exceeded | Truncated sanitized text; required continuation retained |
 | Missing finish/DONE, malformed SSE, disconnect, refusal, length stop | Interrupted display; real call/Run failure preserved; no partial text |
 | Cancel or budget exhaustion | No reasoning-only success; no retry after a visible receiving event |
-| Browser navigation, new Run, reload | Clear browser-only content; durable answer/recovery unchanged |
+| View/mode changes or reselecting the active Conversation | Retain reasoning and current stream; a remounted disclosure is collapsed |
+| Different Conversation, new Run, reload | Reload reasoning beside its own historical answer; never leak it into a new Run's display |
 | Unknown format or format on a non-streaming route | Reject route configuration, never guess a decoder |
-| Attempts to persist a reasoning event | Reject through the executable event catalog |
+| Duplicate, out-of-order, malformed, or foreign-Conversation events | Bind completed valid text once to the explicit assistant message, in Run sequence order |
 
 ## Adding Another Format
 
 Keep provider wire decoding in its adapter. Map only a documented, displayable
 field into the shared typed payload; preserve separate private continuation state.
 Add the supported format to route validation and frontend contract validation,
-then exercise actual serialized follow-ups and privacy failures with a strict
+then exercise actual serialized follow-ups, persistence and privacy failures with a strict
 provider fixture. The Turn engine, SSE transport, and Chat disclosure need no
 provider-specific execution branches.
 
 ## Reproducible Checks
 
 The strict local provider exercises actual serialized continuation, interleaved
-answer/Tool/reasoning frames, redaction, failure, truncation, disconnect, and the
+answer/Tool/reasoning frames, redaction, persistence/reload, failure, truncation, disconnect, and the
 Single/Multi/Autonomous publication boundaries through real Go composition and
 disposable Postgres. It is compatibility evidence, not a live-model measurement.
 

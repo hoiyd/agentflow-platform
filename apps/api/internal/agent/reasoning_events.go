@@ -6,8 +6,8 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 )
 
-// Initiating Chat streams use the same sanitized envelope as live subscribers.
-// The Turn sink publishes to the hub; this handler only forwards to the response.
+// Initiating Chat streams use the same sanitized envelope as subscribers.
+// The Turn sink persists it; this handler only forwards to the response.
 func forwardReasoning(events chan<- domain.RunEvent) turnpkg.EventHandler {
 	return func(item turnpkg.Event) {
 		if item.Type != turnpkg.EventModelReasoning || item.Reasoning == nil {

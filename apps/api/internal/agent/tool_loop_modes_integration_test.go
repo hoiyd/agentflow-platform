@@ -217,13 +217,20 @@ func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
 				}
 				items, _ := storage.ListRunEvents(runID)
 				encoded, _ := json.Marshal(items)
-				if strings.Contains(string(encoded), "DISPLAY_ONLY_REASONING") {
-					t.Fatal("reasoning persisted in ordinary events")
+				if strings.Contains(string(encoded), "sk-fixtureCredential123456") || strings.Contains(string(encoded), "PRIVATE_KEY_BODY") {
+					t.Fatal("unsanitized reasoning persisted")
 				}
-				if display {
-					if _, err := storage.CreateRunEvent(reasoningEvents[0]); err == nil {
-						t.Fatal("live reasoning accepted as a durable fact")
+				var durableReasoning []domain.RunEvent
+				for _, item := range items {
+					if item.Type == domain.EventModelReasoning {
+						durableReasoning = append(durableReasoning, item)
 					}
+				}
+				if len(durableReasoning) != len(reasoningEvents) {
+					t.Fatalf("durable reasoning=%d streamed=%d", len(durableReasoning), len(reasoningEvents))
+				}
+				if display && !strings.Contains(string(encoded), "DISPLAY_ONLY_REASONING") {
+					t.Fatal("sanitized reasoning was not saved")
 				}
 				if err := eventpkg.ValidateLifecycle(items); err != nil {
 					t.Fatal(err)

@@ -306,6 +306,11 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   }
 
   async function openConversation(id: string) {
+    // Returning to the active conversation changes the view, not its Run session.
+    if (id === activeId) {
+      setView("chat");
+      return;
+    }
     session.detach();
     setError("");
     resetConversationRuntimeState();
