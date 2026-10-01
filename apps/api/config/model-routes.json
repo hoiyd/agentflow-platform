@@ -9,7 +9,8 @@
       "capabilities": {
         "tool_calling": true,
         "structured_output": true,
-        "streaming": true
+        "streaming": true,
+        "reasoning_display_format": "deepseek_reasoning_content"
       },
       "context_window_tokens": 128000,
       "max_output_tokens": 8192,
@@ -29,7 +30,8 @@
       "capabilities": {
         "tool_calling": true,
         "structured_output": true,
-        "streaming": true
+        "streaming": true,
+        "reasoning_display_format": "deepseek_reasoning_content"
       },
       "context_window_tokens": 128000,
       "max_output_tokens": 8192,

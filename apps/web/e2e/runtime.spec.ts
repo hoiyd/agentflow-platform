@@ -78,7 +78,7 @@ for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
     const skills = await read(request, "/api/skills");
     expect(skills.some((skill: { name: string }) => skill.name === "fixture-method")).toBe(true);
     expect(JSON.stringify(skills)).not.toContain("FIXTURE_SKILL_BODY");
-    await page.getByRole("button", { name: new RegExp(mode) }).click();
+    await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: new RegExp(mode) }).click();
     const prompt = "state-protocol: preserve structured evidence using fixture-method";
     await submit(page, prompt);
     if (mode === "Multi-agent") {

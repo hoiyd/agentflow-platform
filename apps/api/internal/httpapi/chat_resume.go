@@ -72,11 +72,7 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 
 	if err := <-errs; err != nil {
 		status, failRun := continuationFailurePolicy(err)
-		if failRun {
-			_, _ = h.agentRuntime.FailRun(id, err)
-		}
-		writeSSE(w, "error", failureChatChunk(w, r, status, err))
-		flusher.Flush()
+		h.finishRunStreamFailure(w, flusher, r, id, status, err, failRun)
 		return
 	}
 
@@ -178,11 +174,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 
 	if err := <-errs; err != nil {
 		status, failRun := resumeFailurePolicy(err)
-		if failRun {
-			_, _ = h.agentRuntime.FailRun(id, err)
-		}
-		writeSSE(w, "error", failureChatChunk(w, r, status, err))
-		flusher.Flush()
+		h.finishRunStreamFailure(w, flusher, r, id, status, err, failRun)
 		return
 	}
 

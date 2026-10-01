@@ -122,9 +122,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := <-errs; err != nil {
-		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
-		writeSSE(w, "error", failureChatChunk(w, r, http.StatusInternalServerError, err))
-		flusher.Flush()
+		h.finishRunStreamFailure(w, flusher, r, prepared.Run.ID, http.StatusInternalServerError, err, true)
 		return
 	}
 
@@ -169,9 +167,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 	}
 
 	if err := <-errs; err != nil {
-		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
-		writeSSE(w, "error", failureChatChunk(w, r, http.StatusInternalServerError, err))
-		flusher.Flush()
+		h.finishRunStreamFailure(w, flusher, r, prepared.Run.ID, http.StatusInternalServerError, err, true)
 		return
 	}
 
@@ -222,14 +218,7 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 	}
 
 	if err := <-errs; err != nil {
-		currentRun, ok, getErr := scoped.GetRun(prepared.Run.ID)
-		if getErr == nil && ok && currentRun.Status == domain.RunCanceled {
-			writeTerminalRunDone(w, flusher, currentRun)
-			return
-		}
-		_, _ = h.agentRuntime.FailRun(prepared.Run.ID, err)
-		writeSSE(w, "error", failureChatChunk(w, r, http.StatusInternalServerError, err))
-		flusher.Flush()
+		h.finishRunStreamFailure(w, flusher, r, prepared.Run.ID, http.StatusInternalServerError, err, true)
 		return
 	}
 
