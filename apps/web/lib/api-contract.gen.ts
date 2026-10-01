@@ -970,7 +970,7 @@ export interface components {
             format: "deepseek_reasoning_content";
             /** @enum {string} */
             status: "receiving" | "complete" | "interrupted";
-            /** @description Redacted plain text, at most 16 KiB UTF-8; present only after successful completion. */
+            /** @description Redacted plain-text replacement, at most 16 KiB UTF-8. Receiving text is an ephemeral safe prefix; complete text is durable. Interrupted events contain no text. */
             text?: string;
             truncated?: boolean;
         };

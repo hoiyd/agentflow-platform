@@ -66,8 +66,12 @@ export function useRunSession(options: SessionOptions) {
     onReasoning: (entry) => setReasoning((items) => {
       if (entry.run_id !== runRef.current?.id) return items;
       const index = items.findIndex((item) => item.run_id === entry.run_id && item.turn_id === entry.turn_id && item.model_call_id === entry.model_call_id);
-      // A duplicate receiving event must not overwrite a terminal display.
-      if (index >= 0) return items[index].status !== "receiving" ? items : items.map((item, i) => i === index ? entry : item);
+      // Replay's text-free receiving fact must not erase a newer live prefix;
+      // late live batches must not overwrite a terminal display.
+      if (index >= 0) {
+        if (items[index].status !== "receiving" || (entry.status === "receiving" && !entry.text && items[index].text)) return items;
+        return items.map((item, i) => i === index ? entry : item);
+      }
       return [...items, entry].slice(-32);
     })
   }), [setAutonomousProgress, setCollaborationSteps, setPlanDraft, setMessages, setError, setRunState]);

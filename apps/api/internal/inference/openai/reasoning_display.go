@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/inference/provider"
@@ -11,9 +12,7 @@ import (
 
 const maxReasoningDisplayBytes = 16 * 1024
 
-// Redact the complete bounded protocol copy before slicing or publishing. Filtering
-// individual deltas can leak a credential split across chunks. Failed calls never
-// release incomplete text (including unterminated credential/private-key fragments).
+// Redact a protocol copy before capping, never individual provider deltas.
 func reasoningDisplayText(raw, apiKey string) (string, bool) {
 	if apiKey != "" {
 		raw = strings.ReplaceAll(raw, apiKey, "[REDACTED]")
@@ -31,6 +30,30 @@ func reasoningDisplayText(raw, apiKey string) (string, bool) {
 		end--
 	}
 	return text[:end], true
+}
+
+// A live replacement contains only closed tokens. Keep enough raw lookahead for
+// a configured key spanning whitespace; unfinished PEM blocks are removed by
+// the same whole-prefix filter as the final copy. No transport state is mutated.
+// ponytail: unbroken text waits for whitespace/completion; no speculative tokenizer.
+func reasoningDisplayPrefix(raw, apiKey string) (string, bool) {
+	// Replace complete configured keys before choosing a boundary: otherwise the
+	// lookahead window itself could cut a multi-word key into a publishable prefix.
+	if apiKey != "" {
+		raw = strings.ReplaceAll(raw, apiKey, "[REDACTED]")
+	}
+	end := len(raw)
+	if apiKey != "" {
+		end -= len(apiKey) - 1
+	}
+	if end <= 0 {
+		return "", false
+	}
+	end = strings.LastIndexFunc(raw[:end], unicode.IsSpace)
+	if end < 0 {
+		return "", false
+	}
+	return reasoningDisplayText(raw[:end], "")
 }
 
 func sendReasoningDisplay(ctx context.Context, events chan<- StreamEvent, display provider.ReasoningDisplay) bool {

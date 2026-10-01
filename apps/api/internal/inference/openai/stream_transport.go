@@ -133,6 +133,9 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 	scanner.Buffer(make([]byte, 4096), maxSSEEventBytes+1)
 	var accumulated streamedChoice
 	displayStarted := false
+	var lastDisplayCheck time.Time
+	var lastDisplayText string
+	displayCapped := false
 	defer func() {
 		if !displayStarted {
 			return
@@ -232,6 +235,18 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 				displayStarted = true
 				// A visible receiving state also forbids transparent retry/replay.
 				result.emitted = true
+			}
+			// Bound both filtering work and live replacements to ten/second. There
+			// is no timer goroutine; terminal success always flushes the full copy.
+			if displayStarted && !displayCapped && choice.Delta.ReasoningContent != nil && time.Since(lastDisplayCheck) >= 100*time.Millisecond {
+				lastDisplayCheck = time.Now()
+				text, truncated := reasoningDisplayPrefix(accumulated.reasoning.String(), c.apiKey)
+				if text != "" && text != lastDisplayText {
+					if !sendReasoningDisplay(ctx, events, provider.ReasoningDisplay{ModelCallID: modelCallID, Format: c.reasoningDisplayFormat, Status: "receiving", Text: text, Truncated: truncated}) {
+						return false, ctx.Err()
+					}
+					lastDisplayText, displayCapped = text, truncated
+				}
 			}
 			if firstToken.IsZero() && (choice.Delta.Content != "" || len(choice.Delta.ToolCalls) > 0) {
 				firstToken = time.Now()
