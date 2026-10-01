@@ -16,12 +16,11 @@ import (
 )
 
 type SessionInfo struct {
-	Mode                string   `json:"mode"`
-	Authenticated       bool     `json:"authenticated"`
-	User                *User    `json:"user"`
-	Workspaces          []string `json:"workspaces"`
-	RegistrationEnabled bool     `json:"registration_enabled"`
-	PersonalWorkspace   string   `json:"personal_workspace,omitempty"`
+	Mode              string   `json:"mode"`
+	Authenticated     bool     `json:"authenticated"`
+	User              *User    `json:"user"`
+	Workspaces        []string `json:"workspaces"`
+	PersonalWorkspace string   `json:"personal_workspace,omitempty"`
 }
 
 // RegisterRoutes is safe on a nil Manager, preserving trusted-local operation.
@@ -48,7 +47,6 @@ func (m *Manager) session(w http.ResponseWriter, r *http.Request) {
 	info := SessionInfo{Mode: "local", Workspaces: []string{}}
 	if m != nil {
 		info.Mode = "oidc"
-		info.RegistrationEnabled = m.config.RegistrationEnabled
 		user, err := m.Authenticate(r)
 		if err != nil && !errors.Is(err, ErrUnauthenticated) {
 			authError(w, 503, "identity_unavailable", "Identity storage is unavailable")
@@ -81,7 +79,7 @@ func (m *Manager) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Manager) register(w http.ResponseWriter, r *http.Request) {
-	if m == nil || !m.config.RegistrationEnabled {
+	if m == nil {
 		authError(w, 404, "registration_disabled", "Registration is disabled")
 		return
 	}
@@ -162,11 +160,11 @@ func (m *Manager) callback(w http.ResponseWriter, r *http.Request) {
 		authError(w, 503, "identity_unavailable", "Cannot create session")
 		return
 	}
-	if m.config.AutoProvisionWorkspace {
-		if err := m.store.ProvisionPersonalWorkspace(ctx, user.ID); err != nil {
-			authError(w, 503, "workspace_provisioning_failed", "Cannot open personal Workspace; sign in again to retry")
-			return
-		}
+	// Every verified OIDC identity gets one personal namespace. The durable marker
+	// makes repeat logins idempotent without restoring a revoked Membership.
+	if err := m.store.ProvisionPersonalWorkspace(ctx, user.ID); err != nil {
+		authError(w, 503, "workspace_provisioning_failed", "Cannot open personal Workspace; sign in again to retry")
+		return
 	}
 	value := randomToken()
 	expires := minTime(time.Now().Add(m.config.SessionTTL), id.Expiry)

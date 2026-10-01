@@ -190,7 +190,7 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = probe.Body.Close()
-	if !info.Authenticated || len(info.Workspaces) != 1 || info.User.ID != user.ID {
+	if !info.Authenticated || len(info.Workspaces) != 2 || info.User.ID != user.ID || info.PersonalWorkspace != identity.PersonalWorkspaceID(user.ID) {
 		t.Fatalf("session info: %+v", info)
 	}
 	sqlDB, err := sql.Open("pgx", dbURL)
@@ -250,11 +250,6 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 	if _, err := manager.Authenticate(request); err == nil {
 		t.Fatal("revoked session accepted")
 	}
-	cfg.AutoProvisionWorkspace = true
-	manager, err = identity.New(context.Background(), cfg, db)
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, kind := range []string{"nonce", "audience", "extra-audience", "authorized-party", "expiry", "issuer", "subject", "signature", "missing-token", "claims", "exchange"} {
 		t.Run(kind, func(t *testing.T) {
 			failure = kind
@@ -266,15 +261,10 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 				t.Fatalf("bad token accepted: %d want %d", got, want)
 			}
 			var count int
-			if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM auth_personal_workspaces`).Scan(&count); err != nil || count != 0 {
+			if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM auth_personal_workspaces`).Scan(&count); err != nil || count != 1 {
 				t.Fatalf("invalid identity provisioned Workspace: %d %v", count, err)
 			}
 		})
-	}
-	cfg.AutoProvisionWorkspace = false
-	manager, err = identity.New(context.Background(), cfg, db)
-	if err != nil {
-		t.Fatal(err)
 	}
 	failure = ""
 	response, err = client.Get(callback + "?code=fixture-code&state=forged")

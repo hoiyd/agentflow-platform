@@ -122,7 +122,7 @@ func TestPersonalWorkspaceOnboardingLifecycle(t *testing.T) {
 	}))
 	t.Cleanup(api.Close)
 	provider := oidcfixture.New(t, api.URL+"/api/auth/callback")
-	cfg := identity.Config{Mode: "oidc", Issuer: provider.Server.URL, ClientID: "fixture-client", RedirectURL: api.URL + "/api/auth/callback", WebURL: "http://127.0.0.1:3000", AutoProvisionWorkspace: true, RegistrationEnabled: true}
+	cfg := identity.Config{Mode: "oidc", Issuer: provider.Server.URL, ClientID: "fixture-client", RedirectURL: api.URL + "/api/auth/callback", WebURL: "http://127.0.0.1:3000"}
 	manager, err = identity.New(ctx, cfg, db)
 	if err != nil {
 		t.Fatal(err)
@@ -159,7 +159,7 @@ func TestPersonalWorkspaceOnboardingLifecycle(t *testing.T) {
 	var info identity.SessionInfo
 	err = json.NewDecoder(response.Body).Decode(&info)
 	response.Body.Close()
-	if err != nil || !info.Authenticated || !info.RegistrationEnabled || info.PersonalWorkspace != workspace {
+	if err != nil || !info.Authenticated || info.PersonalWorkspace != workspace {
 		t.Fatalf("session contract: %+v %v", info, err)
 	}
 	// Concurrent callbacks must share one durable marker and one grant.
@@ -216,15 +216,5 @@ func TestPersonalWorkspaceOnboardingLifecycle(t *testing.T) {
 	items, err = db.ListMemberships(ctx, retryID)
 	if err != nil || len(items) != 1 || items[0] == workspace {
 		t.Fatalf("retry or isolation failed: %v %v", items, err)
-	}
-	cfg.RegistrationEnabled = false
-	manager, err = identity.New(ctx, cfg, db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	login("/api/auth/register", 404)
-	cfg.RegistrationEnabled, cfg.AutoProvisionWorkspace = true, false
-	if _, err := identity.New(ctx, cfg, db); err == nil {
-		t.Fatal("registration without onboarding accepted")
 	}
 }

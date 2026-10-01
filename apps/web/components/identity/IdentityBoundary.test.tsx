@@ -23,6 +23,7 @@ it("does not mount business consumers before authentication resolves", async () 
   await waitFor(() => expect(redirect).toHaveBeenCalledWith(expect.stringContaining("/api/auth/login")));
   expect(redirect).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole("heading", { name: "Sign in to AgentFlow" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "Create account" })).toBeNull();
   expect(screen.queryByText("Business content")).toBeNull();
 });
 
@@ -32,14 +33,6 @@ it("preserves trusted-local use without an identity toolbar", async () => {
   expect(await screen.findByText("Business content")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
   expect(redirect).not.toHaveBeenCalled();
-});
-
-it("uses the provider login page even when registration is enabled", async () => {
-  session({ mode: "oidc", authenticated: false, user: null, workspaces: [], registration_enabled: true });
-  render(<IdentityBoundary><p>Business content</p></IdentityBoundary>);
-  await waitFor(() => expect(redirect).toHaveBeenCalledWith(expect.stringContaining("/api/auth/login")));
-  expect(screen.queryByRole("link", { name: "Create account" })).toBeNull();
-  expect(screen.queryByText("Business content")).toBeNull();
 });
 
 it("keeps authenticated nonmembers outside the workbench", async () => {

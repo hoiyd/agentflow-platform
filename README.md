@@ -133,7 +133,7 @@ are separate: evaluation measures regressions; Verification gates one opted-in R
 
 - Trusted, single-instance deployment only. Optional [OIDC identity and Workspace
   membership](docs/operations/identity-membership.md) provide themed OIDC
-  login/registration, opt-in personal Workspace onboarding and revocable sessions;
+  login/registration, automatic personal Workspace onboarding and revocable sessions;
   the default local mode is unauthenticated. Object ACLs and general Workspace
   administration remain incomplete. CORS is not authorization.
 - Browser disconnects do not cancel admitted Runs. Process crashes still need

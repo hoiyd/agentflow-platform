@@ -36,7 +36,7 @@ export function IdentityBoundary({ children }: { children: ReactNode }) {
     }).catch(err => {
       if (!controller.signal.aborted) { setSession(null); setError(err instanceof Error ? err.message : "Failed to check session"); }
     });
-    const expire = () => { controller.abort(); setSession(previous => ({ mode: "oidc", authenticated: false, user: null, workspaces: [], registration_enabled: previous?.registration_enabled })); setError(""); };
+    const expire = () => { controller.abort(); setSession({ mode: "oidc", authenticated: false, user: null, workspaces: [] }); setError(""); };
     window.addEventListener("agentflow-auth-required", expire);
     return () => { controller.abort(); window.removeEventListener("agentflow-auth-required", expire); };
   }, [isPublic, retry]);

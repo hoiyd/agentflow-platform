@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/config"
+	"agentflow-platform/apps/api/internal/identity"
 	"agentflow-platform/apps/api/internal/testsupport/oidcfixture"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
@@ -73,7 +75,6 @@ func TestBrowserServer(t *testing.T) {
 	cfg.RouterMode, cfg.AutonomousMaxIterations = "query", 1
 	cfg.AllowedOrigins = "http://127.0.0.1:13000"
 	cfg.AuthMode = "local"
-	cfg.AuthRegistrationEnabled, cfg.AuthAutoProvisionWorkspace = false, false
 	var oidcProvider *oidcfixture.Provider
 	if os.Getenv("AGENTFLOW_IDENTITY_TEST") == "1" {
 		t.Setenv("OIDC_CLIENT_SECRET", "fixture-only")
@@ -88,7 +89,6 @@ func TestBrowserServer(t *testing.T) {
 		t.Setenv("OIDC_CLIENT_SECRET", "fixture-only")
 		cfg.AuthMode, cfg.OIDCIssuer, cfg.OIDCClientID = "oidc", "http://127.0.0.1:19081/realms/agentflow-test", "fixture-client"
 		cfg.OIDCRedirectURL, cfg.AuthWebURL = "http://127.0.0.1:18080/api/auth/callback", "http://127.0.0.1:13000"
-		cfg.AuthRegistrationEnabled, cfg.AuthAutoProvisionWorkspace = true, true
 	}
 	cfg.VerificationAllowedCommands, cfg.VerificationAllowedHTTPHosts = "", ""
 	cfg.VerificationWorkspaceRoot = root
@@ -98,6 +98,18 @@ func TestBrowserServer(t *testing.T) {
 	}
 	if oidcProvider != nil {
 		pgfixture.GrantMemberships(t, cfg.DatabaseURL, cfg.OIDCIssuer, "fixture-operator", "default_workspace", "workspace-test")
+		// An already-onboarded identity with revoked access must stay a nonmember.
+		// A fresh identity would now receive a personal Workspace on first login.
+		pgfixture.GrantMemberships(t, cfg.DatabaseURL, cfg.OIDCIssuer, "fixture-nonmember")
+		id := identity.UserID(cfg.OIDCIssuer, "fixture-nonmember")
+		db, err := sql.Open("pgx", cfg.DatabaseURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		if _, err := db.ExecContext(t.Context(), `INSERT INTO auth_personal_workspaces (user_id,workspace_id) VALUES ($1,$2)`, id, identity.PersonalWorkspaceID(id)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	production := application.server.Handler
 	controls := http.NewServeMux()

@@ -15,7 +15,7 @@ For startup commands, use [Local setup](../guides/local-setup.md).
 | Credential variables named by routes | Required separately in process environment or ignored `.env`; never JSON/Snapshot values |
 | `BIND_ADDRESS` / `PORT` | Loopback / 8080 by default; widen binding only behind an access boundary |
 | `ALLOWED_ORIGINS` | Browser CORS origins, not authentication |
-| `AUTH_MODE` / `OIDC_*` / `AUTH_*` | Trusted-local default or OIDC identity, opt-in registration/personal Workspace onboarding, revocable sessions and database-only Membership, see [identity setup](identity-membership.md) |
+| `AUTH_MODE` / `OIDC_*` / `AUTH_*` | Trusted-local default or OIDC identity with IdP-controlled registration, automatic personal Workspace onboarding, revocable sessions and database-only Membership, see [identity setup](identity-membership.md) |
 | `EMBEDDING_*` | Independent embedding endpoint/model/dimensions/timeout; dimensions must match stored vectors |
 | `TOOL_CONFIG_PATH` | Operator enablement/security policy file, not application persistence |
 | `TRUSTED_SKILL_DIRS` | Reviewed installation roots; relative to API process cwd |

@@ -11,17 +11,13 @@ import (
 
 type Config struct {
 	// AuthMode is local (trusted development only) or oidc. Unknown modes fail startup.
+	// OIDC always provisions a personal Workspace; the IdP controls account registration.
 	AuthMode string
 	// OIDCIssuer and OIDCClientID configure the sole trusted identity provider.
 	// OIDC_CLIENT_SECRET remains a transport credential, never serializable Config.
 	OIDCIssuer, OIDCClientID string
 	// OIDCRedirectURL is the exact registered API callback; AuthWebURL is the frontend origin.
 	OIDCRedirectURL, AuthWebURL string
-	// AuthAutoProvisionWorkspace grants only a user's own personal namespace on first verified login.
-	// The durable onboarding marker prevents subsequent logins from restoring revoked access.
-	AuthAutoProvisionWorkspace bool
-	// AuthRegistrationEnabled exposes prompt=create; requires supporting IdP and auto provisioning.
-	AuthRegistrationEnabled bool
 	// AuthSessionTTL bounds absolute browser session lifetime, also capped by ID-token expiry.
 	AuthSessionTTL time.Duration
 	BindAddress    string
@@ -171,8 +167,6 @@ func Load() Config {
 		OIDCClientID:                      getEnv("OIDC_CLIENT_ID", ""),
 		OIDCRedirectURL:                   getEnv("OIDC_REDIRECT_URL", ""),
 		AuthWebURL:                        getEnv("AUTH_WEB_URL", "http://localhost:3000"),
-		AuthAutoProvisionWorkspace:        getBoolEnv("AUTH_AUTO_PROVISION_WORKSPACE", false),
-		AuthRegistrationEnabled:           getBoolEnv("AUTH_REGISTRATION_ENABLED", false),
 		AuthSessionTTL:                    authSessionTTL(),
 		BindAddress:                       getEnv("BIND_ADDRESS", "127.0.0.1"),
 		Port:                              getEnv("PORT", "8080"),

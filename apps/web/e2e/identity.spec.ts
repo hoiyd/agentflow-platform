@@ -19,7 +19,8 @@ test("OIDC login, member Workspace, persistence, forbidden access and logout", a
   const identity = await (await page.request.get(`${api}/api/auth/session`)).json();
   expect(identity.mode).toBe("oidc");
   expect(identity.authenticated).toBe(true);
-  expect(identity.workspaces).toEqual(["default_workspace", "workspace-test"]);
+  expect(identity.personal_workspace).toMatch(/^personal_user_/);
+  expect(identity.workspaces).toEqual(["default_workspace", identity.personal_workspace, "workspace-test"]);
   const forbidden = await page.request.get(`${api}/api/runs?workspace_id=foreign-workspace`);
   expect(forbidden.status()).toBe(403);
   const csrf = await page.request.post(`${api}/api/conversations`, { headers: { Origin: "https://foreign.invalid", "X-Workspace-ID": "default_workspace" }, data: { title: "must not persist" } });
@@ -70,15 +71,19 @@ test("OIDC login, member Workspace, persistence, forbidden access and logout", a
   await testInfo.attach("identity-evidence.json", { body: JSON.stringify({ schema: "identity-membership-evidence-v1", provider: "signed-oidc-fixture", store: "disposable-postgres", user_id: identity.user.id, workspace: "workspace-test", checks: { anonymous: 401, foreign_workspace: 403, cross_origin_write: 403, creation: 201, workspace_menu_keyboard: true, workspace_menu_geometry: true, workspace_switch_persisted: true, reload: true, tab_reopen_preserves_session: true, logout_revocation: 401, reauthentication_prompt: "login" }, limitations: ["not a live IdP or proof of its credential UI", "not PROD-002 object authorization audit"] }, null, 2), contentType: "application/json" });
 });
 
-test("authenticated nonmember cannot mount business consumers", async ({ page }, testInfo) => {
+test("revoked personal Membership stays revoked after login and cannot mount business consumers", async ({ page }, testInfo) => {
   await page.request.post(`${api}/__fixture/identity/subject`, { data: { subject: "fixture-nonmember" } });
   try {
     await page.goto("/workspace");
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Workspace access required" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New conversation", exact: true })).toHaveCount(0);
+    const identity = await (await page.request.get(`${api}/api/auth/session`)).json();
+    expect(identity.authenticated).toBe(true);
+    expect(identity.workspaces).toEqual([]);
+    expect(identity.personal_workspace).toBeUndefined();
     expect((await page.request.get(`${api}/api/conversations`)).status()).toBe(403);
-    await testInfo.attach("nonmember-evidence.json", { body: JSON.stringify({ provider: "signed-oidc-fixture", subject: "fixture-nonmember", business_access: 403, workbench_mounted: false, limitation: "operator-configured membership only" }), contentType: "application/json" });
+    await testInfo.attach("nonmember-evidence.json", { body: JSON.stringify({ provider: "signed-oidc-fixture", subject: "fixture-nonmember", business_access: 403, workbench_mounted: false, revoked_personal_membership_preserved: true, limitation: "Membership boundary, not full object authorization" }), contentType: "application/json" });
   } finally {
     await page.request.post(`${api}/__fixture/identity/subject`, { data: { subject: "fixture-operator" } });
   }

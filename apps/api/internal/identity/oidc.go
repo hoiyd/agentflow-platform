@@ -16,8 +16,6 @@ import (
 type Config struct {
 	Mode, Issuer, ClientID, RedirectURL, WebURL string
 	SessionTTL                                  time.Duration
-	// RegistrationEnabled requires an IdP supporting prompt=create and automatic onboarding.
-	RegistrationEnabled, AutoProvisionWorkspace bool
 }
 
 type Manager struct {
@@ -41,9 +39,6 @@ func New(ctx context.Context, cfg Config, storage Store) (*Manager, error) {
 	}
 	if storage == nil || cfg.ClientID == "" {
 		return nil, errors.New("OIDC requires identity storage and client ID")
-	}
-	if cfg.RegistrationEnabled && !cfg.AutoProvisionWorkspace {
-		return nil, errors.New("registration requires automatic personal Workspace provisioning")
 	}
 	for _, raw := range []string{cfg.Issuer, cfg.RedirectURL, cfg.WebURL} {
 		if !safeURL(raw) {

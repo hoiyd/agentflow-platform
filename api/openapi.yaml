@@ -29,7 +29,7 @@ paths:
       description: |
         Public session probe. OIDC identity is verified from a revocable cookie;
         local mode is explicitly unauthenticated trusted development. Memberships
-        are database-owned, optionally provisioned for a personal Workspace after
+        are database-owned, automatically provisioned for a personal Workspace after
         verified login; never supplied by the browser or inferred from email.
       responses:
         '200':
@@ -58,8 +58,9 @@ paths:
       operationId: startRegistration
       tags: [System]
       description: |
-        Opt-in authorization redirect with prompt=create, state, nonce and S256
-        PKCE. Requires a supporting IdP (Keycloak) and personal Workspace onboarding.
+        OIDC authorization redirect with prompt=create, state, nonce and S256
+        PKCE. Available in OIDC mode; a supporting IdP (Keycloak) controls whether
+        account creation is allowed. Verified login always provisions a personal Workspace.
         The IdP receives passwords and owns account creation, policies and MFA.
       responses:
         '302':
@@ -85,7 +86,7 @@ paths:
           schema: { type: string }
       responses:
         '303':
-          description: Verified login optionally provisions an idempotent personal Workspace before creating a host-only HttpOnly session and redirecting to the workbench.
+          description: Verified OIDC login ensures an idempotent personal Workspace before creating a host-only HttpOnly session and redirecting to the workbench. Revoked Memberships are not restored.
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -735,9 +736,6 @@ components:
           type: string
           enum: [local, oidc]
         authenticated: { type: boolean }
-        registration_enabled:
-          type: boolean
-          description: Whether the server exposes the IdP registration entry point.
         personal_workspace:
           type: string
           description: Personal Workspace ID, present only while its Membership is granted.

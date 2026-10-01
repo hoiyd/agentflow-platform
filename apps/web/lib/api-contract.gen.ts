@@ -14,7 +14,7 @@ export interface paths {
         /**
          * @description Public session probe. OIDC identity is verified from a revocable cookie;
          *     local mode is explicitly unauthenticated trusted development. Memberships
-         *     are database-owned, optionally provisioned for a personal Workspace after
+         *     are database-owned, automatically provisioned for a personal Workspace after
          *     verified login; never supplied by the browser or inferred from email.
          */
         get: operations["getIdentitySession"];
@@ -50,8 +50,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * @description Opt-in authorization redirect with prompt=create, state, nonce and S256
-         *     PKCE. Requires a supporting IdP (Keycloak) and personal Workspace onboarding.
+         * @description OIDC authorization redirect with prompt=create, state, nonce and S256
+         *     PKCE. Available in OIDC mode; a supporting IdP (Keycloak) controls whether
+         *     account creation is allowed. Verified login always provisions a personal Workspace.
          *     The IdP receives passwords and owns account creation, policies and MFA.
          */
         get: operations["startRegistration"];
@@ -495,8 +496,6 @@ export interface components {
             /** @enum {string} */
             mode: "local" | "oidc";
             authenticated: boolean;
-            /** @description Whether the server exposes the IdP registration entry point. */
-            registration_enabled?: boolean;
             /** @description Personal Workspace ID, present only while its Membership is granted. */
             personal_workspace?: string;
             user: components["schemas"]["IdentityUser"] | null;
@@ -1188,7 +1187,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Verified login optionally provisions an idempotent personal Workspace before creating a host-only HttpOnly session and redirecting to the workbench. */
+            /** @description Verified OIDC login ensures an idempotent personal Workspace before creating a host-only HttpOnly session and redirecting to the workbench. Revoked Memberships are not restored. */
             303: {
                 headers: {
                     [name: string]: unknown;
