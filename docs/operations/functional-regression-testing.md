@@ -28,6 +28,7 @@ Write or update this inventory before adding isolated fixtures.
 | A frozen Skill is mistaken for an observed model input | Replay joins Manifest with the physical request record; missing evidence remains not observed |
 | Login or Workspace selection is mistaken for permission | The signed OIDC/Postgres browser gate proves membership, nonmember rejection, scoped reload and server-side logout revocation |
 | A late Cancel response follows a terminal stream event | It cannot regress the Run to `canceling` or revive cancellation UI |
+| Stop cancels an in-flight model request | Single, Multi-Agent Continue and Loop return `done:canceled`, not SSE `error`; the canceled Run survives reload, partial reasoning remains withheld, and the composer accepts another task |
 | Navigation occurs during execution, cancellation, or observation | Local requests detach; their late events, errors and snapshots cannot change the new conversation |
 | Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |
 

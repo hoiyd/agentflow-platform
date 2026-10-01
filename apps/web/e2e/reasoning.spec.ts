@@ -15,6 +15,22 @@ async function submit(page: Page, prompt: string) {
   await page.getByRole("button", { name: "Send message", exact: true }).click();
 }
 
+async function createReasoningAgent(page: Page, mode: string) {
+  await page.getByRole("button", { name: "New agent", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Create new agent" });
+  await dialog.getByLabel("Name", { exact: true }).fill(`Reasoning ${mode}`);
+  await dialog.getByRole("textbox", { name: "Description", exact: true }).fill("reasoning-display calculator specialist");
+  await dialog.getByRole("textbox", { name: "System prompt", exact: true }).fill("Calculate and explain the result.");
+  await dialog.getByText("Routing signals", { exact: true }).click();
+  await dialog.getByRole("textbox", { name: "Capabilities", exact: true }).fill(`reasoning${mode.toLowerCase().replace(/[^a-z]/g, "")}`);
+  await dialog.getByRole("textbox", { name: "Example tasks", exact: true }).fill("reasoning-display calculate two Tool rounds");
+  await dialog.getByLabel("Memory retrieval", { exact: true }).uncheck();
+  await dialog.getByLabel("Knowledge retrieval", { exact: true }).uncheck();
+  await dialog.getByRole("checkbox", { name: "calculator", exact: true }).check();
+  await dialog.getByRole("button", { name: "Create Agent", exact: true }).click();
+  await page.getByRole("button", { name: "OK", exact: true }).click();
+}
+
 async function evidence(page: Page, request: APIRequestContext, prompt: string) {
   const href = await page.getByRole("link", { name: "View trace" }).getAttribute("href");
   const runId = href!.split("/").at(-1)!;
@@ -59,19 +75,7 @@ test.afterEach(async ({ request }) => {
 
 for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
   test(`${mode}: reasoning survives navigation and reload across Tool rounds and answer reset`, async ({ page, request }) => {
-    await page.getByRole("button", { name: "New agent", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "Create new agent" });
-    await dialog.getByLabel("Name", { exact: true }).fill(`Reasoning ${mode}`);
-    await dialog.getByRole("textbox", { name: "Description", exact: true }).fill("reasoning-display calculator specialist");
-    await dialog.getByRole("textbox", { name: "System prompt", exact: true }).fill("Calculate and explain the result.");
-    await dialog.getByText("Routing signals", { exact: true }).click();
-    await dialog.getByRole("textbox", { name: "Capabilities", exact: true }).fill(`reasoning${mode.toLowerCase().replace(/[^a-z]/g, "")}`);
-    await dialog.getByRole("textbox", { name: "Example tasks", exact: true }).fill("reasoning-display calculate two Tool rounds");
-    await dialog.getByLabel("Memory retrieval", { exact: true }).uncheck();
-    await dialog.getByLabel("Knowledge retrieval", { exact: true }).uncheck();
-    await dialog.getByRole("checkbox", { name: "calculator", exact: true }).check();
-    await dialog.getByRole("button", { name: "Create Agent", exact: true }).click();
-    await page.getByRole("button", { name: "OK", exact: true }).click();
+    await createReasoningAgent(page, mode);
     await page.getByRole("button", { name: new RegExp(mode) }).click();
     const prompt = "reasoning-display: calculate with two Tool rounds";
     await submit(page, prompt);
@@ -181,22 +185,53 @@ test("provider disconnect keeps failure and withholds all partial reasoning", as
   await expect(disclosure).toContainText("Interrupted; text withheld");
   await expect(disclosure.locator("pre")).toHaveCount(0);
   await expect(page.getByText("Working...", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".error").filter({ hasText: "Internal Server Error" })).toBeVisible();
   expect((await evidence(page, request, prompt)).run.status).toBe("failed");
 });
 
-test("explicit cancellation preserves Run state without publishing private partial text", async ({ page, request }) => {
+for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
+test(`${mode}: explicit cancellation ends normally without publishing private partial text`, async ({ page, request }) => {
+  await createReasoningAgent(page, mode);
+  await page.getByRole("button", { name: new RegExp(mode) }).click();
+  const stream = page.waitForResponse((response) => response.request().method() === "POST" &&
+    (mode === "Multi-agent" ? response.url().endsWith("/continue") : response.url().endsWith("/api/chat")));
   const prompt = "reasoning-cancel: wait for cancellation";
   await submit(page, prompt);
+  if (mode === "Multi-agent") {
+    await page.getByText("Routing requirements", { exact: true }).click();
+    await page.getByRole("textbox", { name: "Preferred capabilities", exact: true }).fill("reasoningmultiagent");
+    await page.getByRole("button", { name: "Approve & Continue" }).click();
+  }
   const disclosure = page.locator(".provider-reasoning");
   await expect(disclosure).toBeVisible();
   await disclosure.locator("summary").click();
   await expect(disclosure).toContainText("Receiving provider reasoning");
-  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.locator(".topbar").getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByLabel("Task status: canceled", { exact: true })).toBeVisible();
   await expect(disclosure).toContainText("Run canceled; text withheld");
   await expect(disclosure.locator("pre")).toHaveCount(0);
-  expect((await evidence(page, request, prompt)).run.status).toBe("canceled");
+  const replay = await evidence(page, request, prompt);
+  expect(replay.run.status).toBe("canceled");
+  expect(replay.run_events.filter((event: { type: string }) => event.type === "run.canceled")).toHaveLength(1);
+  expect(replay.run_events.some((event: { type: string }) => event.type === "run.failed")).toBe(false);
+  const body = await (await stream).text();
+  expect(body).not.toContain("event: error\n");
+  expect(body).toContain('"type":"done"');
+  expect(body).toContain('"status":"canceled"');
+  await expect(page.locator(".error").filter({ hasText: "Internal Server Error" })).toHaveCount(0);
+  await page.getByPlaceholder("Ask AgentFlow anything...").fill("Next task.");
+  await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
+  await test.info().attach("run-cancellation-evidence", { body: JSON.stringify({
+    mode, prompt, run_id: replay.run.id, status: replay.run.status,
+    event_types: replay.run_events.map((event: { type: string }) => event.type),
+    terminal_stream: "done:canceled", error_frame: false,
+    limitations: ["local deterministic provider; real browser, Go composition and isolated Postgres"]
+  }, null, 2), contentType: "application/json" });
+  await page.reload();
+  await expect(page.getByLabel("Task status: canceled", { exact: true })).toBeVisible();
+  await expect(page.locator(".error").filter({ hasText: "Internal Server Error" })).toHaveCount(0);
 });
+}
 
 test("budget exhaustion cannot turn received reasoning into a successful answer", async ({ page, request }) => {
   const prompt = "reasoning-budget: exhaust completion usage";

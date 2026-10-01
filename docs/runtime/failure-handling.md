@@ -27,6 +27,19 @@ Unknown errors are classified as `unclassified / application / internal`.
 `context.Canceled` and `context.DeadlineExceeded` receive deterministic
 canceled and timeout classifications even when no subsystem wrapper exists.
 
+### Explicit Run Cancellation
+
+Stop cancels the active execution context: `running -> canceling -> canceled`.
+The resulting wrapped `context.Canceled` (including a model-provider cancellation)
+is an expected execution signal, not a server failure. Chat, Multi-Agent Continue,
+Autonomous and Resume use the same stream termination handler: after confirming
+or settling the durable Run as `canceled`, send `done` with `status=canceled`,
+not an SSE `error` frame. Reload and event subscribers read that same Run state.
+
+Cancellation without a durable user cancellation request, provider disconnects,
+and failures reading or saving the terminal state still use the failure contract.
+Do not hide errors merely because their category is `canceled` or Stop was clicked.
+
 ## Trace Projection
 
 Failure events keep the existing human-readable `error` value and add:
