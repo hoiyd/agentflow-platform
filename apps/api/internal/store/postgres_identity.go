@@ -9,34 +9,32 @@ import (
 	"agentflow-platform/apps/api/internal/identity"
 )
 
-// SyncMemberships replaces only the configured issuer's operator-managed grants
-// atomically. Login never creates a grant, and session cookies contain no grants.
-func (s *PostgresStore) SyncMemberships(ctx context.Context, issuer string, members []identity.Member) error {
+func (s *PostgresStore) UpsertIdentity(ctx context.Context, user identity.User) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO auth_users (id,issuer,subject,name) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name`, user.ID, user.Issuer, user.Subject, user.Name)
+	return err
+}
+
+// The unique user row is both the personal Workspace record and the durable
+// onboarding marker. Membership removal never deletes this marker; login cannot
+// recreate revoked access. INSERT conflict handling serializes concurrent logins.
+func (s *PostgresStore) ProvisionPersonalWorkspace(ctx context.Context, userID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `DELETE FROM auth_memberships WHERE user_id IN (SELECT id FROM auth_users WHERE issuer=$1)`, issuer); err != nil {
+	var workspace string
+	err = tx.QueryRowContext(ctx, `INSERT INTO auth_personal_workspaces (user_id,workspace_id) VALUES ($1,$2) ON CONFLICT (user_id) DO NOTHING RETURNING workspace_id`, userID, identity.PersonalWorkspaceID(userID)).Scan(&workspace)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
 		return err
 	}
-	for _, member := range members {
-		id := identity.UserID(issuer, member.Subject)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO auth_users (id,issuer,subject,name) VALUES ($1,$2,$3,'') ON CONFLICT (id) DO NOTHING`, id, issuer, member.Subject); err != nil {
-			return err
-		}
-		for _, workspace := range member.Workspaces {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO auth_memberships (user_id,workspace_id) VALUES ($1,$2)`, id, workspace); err != nil {
-				return err
-			}
-		}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO auth_memberships (user_id,workspace_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, userID, workspace); err != nil {
+		return err
 	}
 	return tx.Commit()
-}
-
-func (s *PostgresStore) UpsertIdentity(ctx context.Context, user identity.User) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO auth_users (id,issuer,subject,name) VALUES ($1,$2,$3,$4) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name`, user.ID, user.Issuer, user.Subject, user.Name)
-	return err
 }
 
 func (s *PostgresStore) ListMemberships(ctx context.Context, userID string) ([]string, error) {

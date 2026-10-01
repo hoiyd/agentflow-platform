@@ -132,9 +132,10 @@ are separate: evaluation measures regressions; Verification gates one opted-in R
 ## Known Boundaries
 
 - Trusted, single-instance deployment only. Optional [OIDC identity and Workspace
-  membership](docs/operations/identity-membership.md) provide login and revocable
-  sessions; the default local mode is unauthenticated. Object ACLs and Workspace
-  lifecycle remain incomplete. CORS is not authorization.
+  membership](docs/operations/identity-membership.md) provide themed OIDC
+  login/registration, automatic personal Workspace onboarding and revocable sessions;
+  the default local mode is unauthenticated. Object ACLs and general Workspace
+  administration remain incomplete. CORS is not authorization.
 - Browser disconnects do not cancel admitted Runs. Process crashes still need
   durable checkpoint repair and explicit Resume; this is not distributed scheduling.
 - Orchestration shapes are fixed, not arbitrary DAGs. Tools/Skills cannot grant

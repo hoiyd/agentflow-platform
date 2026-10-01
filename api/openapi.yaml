@@ -29,7 +29,8 @@ paths:
       description: |
         Public session probe. OIDC identity is verified from a revocable cookie;
         local mode is explicitly unauthenticated trusted development. Memberships
-        are operator-managed, not supplied by the browser or inferred from email.
+        are database-owned, automatically provisioned for a personal Workspace after
+        verified login; never supplied by the browser or inferred from email.
       responses:
         '200':
           description: Current authentication mode, identity and Workspace memberships.
@@ -52,6 +53,26 @@ paths:
           description: OIDC authorization redirect with state, nonce, S256 PKCE and prompt=login to require fresh authentication.
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/auth/register:
+    get:
+      operationId: startRegistration
+      tags: [System]
+      description: |
+        OIDC authorization redirect with prompt=create, state, nonce and S256
+        PKCE. Available in OIDC mode; a supporting IdP (Keycloak) controls whether
+        account creation is allowed. Verified login always provisions a personal Workspace.
+        The IdP receives passwords and owns account creation, policies and MFA.
+      responses:
+        '302':
+          description: Redirect to the IdP registration screen.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          description: Cannot persist the authorization attempt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/auth/callback:
     get:
       operationId: completeLogin
@@ -65,11 +86,17 @@ paths:
           schema: { type: string }
       responses:
         '303':
-          description: Verified login creates a host-only HttpOnly session and redirects to the workbench.
+          description: Verified OIDC login ensures an idempotent personal Workspace before creating a host-only HttpOnly session and redirecting to the workbench. Revoked Memberships are not restored.
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           description: Invalid identity token or nonce.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Identity persistence or personal Workspace provisioning failed; no session is issued.
           content:
             application/json:
               schema:
@@ -709,6 +736,9 @@ components:
           type: string
           enum: [local, oidc]
         authenticated: { type: boolean }
+        personal_workspace:
+          type: string
+          description: Personal Workspace ID, present only while its Membership is granted.
         user:
           oneOf:
             - $ref: '#/components/schemas/IdentityUser'

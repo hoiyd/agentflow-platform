@@ -27,6 +27,7 @@ Write or update this inventory before adding isolated fixtures.
 | A stream fails before or after accepting events | Before acceptance, drafts roll back; after acceptance, partial output stays and durable observation resumes |
 | A frozen Skill is mistaken for an observed model input | Replay joins Manifest with the physical request record; missing evidence remains not observed |
 | Login or Workspace selection is mistaken for permission | The signed OIDC/Postgres browser gate proves membership, nonmember rejection, scoped reload and server-side logout revocation |
+| Signup styling bypasses IdP security or creates shared access | The disposable Keycloak theme gate proves native password validation, direct IdP form submission, personal-only access, reload and repeat-login stability |
 | A late Cancel response follows a terminal stream event | It cannot regress the Run to `canceling` or revive cancellation UI |
 | Stop cancels an in-flight model request | Single, Multi-Agent Continue and Loop return `done:canceled`, not SSE `error`; the canceled Run survives reload, partial reasoning remains withheld, and the composer accepts another task |
 | Earlier cases leave conversation titles containing mode labels | Mode selection is scoped to the named Chat mode region, never the sidebar's conversation or delete buttons; run the affected gate in CI order, not only the new case |
@@ -47,6 +48,11 @@ The [identity gate](identity-membership.md#repeatable-validation) runs separatel
 with `AGENTFLOW_IDENTITY_TEST=1` so the ordinary trusted-local runtime suite remains
 unchanged. CI retains its protocol/boundary attachments separately from runtime
 evidence. This gate does not claim live-provider or complete object-ACL validation.
+
+`bash scripts/test-keycloak-auth.sh` additionally checks real themed authentication
+with a disposable Keycloak realm and independent Postgres. It is a separate narrow
+gate, not part of the trusted-local runtime suite, and retains `onboarding-evidence.json`.
+It never configures an operator's IdP and does not cover every MFA/reset flow.
 
 Focused unit/component tests remain valuable for races, parsers, schema rejection,
 privacy, and uncertain-write settlement. A mocked success response is not evidence

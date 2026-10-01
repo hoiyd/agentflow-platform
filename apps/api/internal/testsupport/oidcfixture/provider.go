@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,12 +19,13 @@ import (
 )
 
 type Provider struct {
-	Server   *httptest.Server
-	mu       sync.Mutex
-	subject  string
-	codes    map[string]grant
-	key      *rsa.PrivateKey
-	callback string
+	Server      *httptest.Server
+	mu          sync.Mutex
+	subject     string
+	codes       map[string]grant
+	key         *rsa.PrivateKey
+	callback    string
+	interactive bool
 }
 type grant struct{ nonce, challenge string }
 
@@ -41,6 +43,10 @@ func New(t testing.TB, callback string) *Provider {
 
 func (p *Provider) SetSubject(subject string) { p.mu.Lock(); defer p.mu.Unlock(); p.subject = subject }
 
+// Browser tests must stop at the IdP until explicit sign-in, like real prompt=login.
+// Protocol-only tests retain their automatic redirect without a credential UI.
+func (p *Provider) RequireSignIn() { p.mu.Lock(); defer p.mu.Unlock(); p.interactive = true }
+
 func (p *Provider) respond(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	issuer := p.Server.URL
@@ -51,8 +57,20 @@ func (p *Provider) respond(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(jose.JSONWebKeySet{Keys: []jose.JSONWebKey{{Key: &p.key.PublicKey, KeyID: "fixture", Algorithm: "RS256", Use: "sig"}}})
 	case "/authorize":
 		q := r.URL.Query()
-		if q.Get("redirect_uri") != p.callback || q.Get("code_challenge_method") != "S256" || q.Get("nonce") == "" || q.Get("state") == "" || q.Get("client_id") != "fixture-client" || q.Get("prompt") != "login" {
+		if q.Get("redirect_uri") != p.callback || q.Get("code_challenge_method") != "S256" || q.Get("nonce") == "" || q.Get("state") == "" || q.Get("client_id") != "fixture-client" || q.Get("prompt") != "login" && q.Get("prompt") != "create" {
 			http.Error(w, "invalid authorization contract", 400)
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		p.mu.Lock()
+		interactive := p.interactive
+		p.mu.Unlock()
+		if interactive && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = io.WriteString(w, `<!doctype html><title>OIDC test provider</title><h1>Fixture sign in</h1><form method="post"><button type="submit">Sign in</button></form>`)
 			return
 		}
 		code := rand.Text()

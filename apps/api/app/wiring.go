@@ -64,7 +64,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	identityManager, err := identity.New(identityCtx, identity.Config{
 		Mode: cfg.AuthMode, Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID,
 		RedirectURL: cfg.OIDCRedirectURL, WebURL: cfg.AuthWebURL,
-		MembershipPath: cfg.AuthMembershipPath, SessionTTL: cfg.AuthSessionTTL,
+		SessionTTL: cfg.AuthSessionTTL,
 	}, identityStore)
 	cancelIdentity()
 	if err != nil {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/config"
+	"agentflow-platform/apps/api/internal/identity"
 	"agentflow-platform/apps/api/internal/testsupport/oidcfixture"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
@@ -77,18 +79,37 @@ func TestBrowserServer(t *testing.T) {
 	if os.Getenv("AGENTFLOW_IDENTITY_TEST") == "1" {
 		t.Setenv("OIDC_CLIENT_SECRET", "fixture-only")
 		oidcProvider = oidcfixture.New(t, "http://127.0.0.1:18080/api/auth/callback")
-		memberPath := filepath.Join(root, "memberships.json")
-		if err := os.WriteFile(memberPath, []byte(`{"members":[{"subject":"fixture-operator","workspaces":["default_workspace","workspace-test"]}]}`), 0600); err != nil {
-			t.Fatal(err)
-		}
+		oidcProvider.RequireSignIn()
 		cfg.AuthMode, cfg.OIDCIssuer, cfg.OIDCClientID = "oidc", oidcProvider.Server.URL, "fixture-client"
-		cfg.OIDCRedirectURL, cfg.AuthWebURL, cfg.AuthMembershipPath = "http://127.0.0.1:18080/api/auth/callback", "http://127.0.0.1:13000", memberPath
+		cfg.OIDCRedirectURL, cfg.AuthWebURL = "http://127.0.0.1:18080/api/auth/callback", "http://127.0.0.1:13000"
+	}
+	if os.Getenv("AGENTFLOW_KEYCLOAK_TEST") == "1" {
+		// A separate disposable realm validates actual themed password forms, not
+		// the signed fixture. Never connect to the operator's Keycloak realm.
+		t.Setenv("OIDC_CLIENT_SECRET", "fixture-only")
+		cfg.AuthMode, cfg.OIDCIssuer, cfg.OIDCClientID = "oidc", "http://127.0.0.1:19081/realms/agentflow-test", "fixture-client"
+		cfg.OIDCRedirectURL, cfg.AuthWebURL = "http://127.0.0.1:18080/api/auth/callback", "http://127.0.0.1:13000"
 	}
 	cfg.VerificationAllowedCommands, cfg.VerificationAllowedHTTPHosts = "", ""
 	cfg.VerificationWorkspaceRoot = root
 	application, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if oidcProvider != nil {
+		pgfixture.GrantMemberships(t, cfg.DatabaseURL, cfg.OIDCIssuer, "fixture-operator", "default_workspace", "workspace-test")
+		// An already-onboarded identity with revoked access must stay a nonmember.
+		// A fresh identity would now receive a personal Workspace on first login.
+		pgfixture.GrantMemberships(t, cfg.DatabaseURL, cfg.OIDCIssuer, "fixture-nonmember")
+		id := identity.UserID(cfg.OIDCIssuer, "fixture-nonmember")
+		db, err := sql.Open("pgx", cfg.DatabaseURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		if _, err := db.ExecContext(t.Context(), `INSERT INTO auth_personal_workspaces (user_id,workspace_id) VALUES ($1,$2)`, id, identity.PersonalWorkspaceID(id)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	production := application.server.Handler
 	controls := http.NewServeMux()

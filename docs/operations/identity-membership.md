@@ -1,6 +1,7 @@
 # Identity and Workspace Membership
 
-PROD-001 establishes authenticated identity and Workspace membership, not a
+OIDC identity, AgentFlow-owned login/registration presentation and personal
+Workspace onboarding. Passwords stay at the identity provider; this is not a
 complete account-management product or the object-authorization audit in PROD-002.
 
 ## Failure Inventory
@@ -21,6 +22,10 @@ complete account-management product or the object-authorization audit in PROD-00
 | Explicit sign out, followed by sign in | Old AgentFlow session is revoked; the next authorization request requires provider reauthentication. |
 | Close and reopen a browser tab without signing out | Existing session remains valid until its absolute expiry; no logout on tab close. |
 | Authentication disabled for trusted local use | Existing namespace and API behavior stay unchanged. |
+| Duplicate or concurrent first login | One personal Workspace and one Membership; existing grants remain unchanged. |
+| Personal Workspace grant fails | Marker and grant roll back together; no new Session; a fresh login retries. |
+| Membership revoked after onboarding | Relogin/restart does not restore it; empty Membership is not a new-account signal. |
+| Schema upgrade or API restart | Database Memberships remain unchanged; revoked grants are not restored. |
 
 ## Modes and Scope
 
@@ -29,11 +34,15 @@ Workspace namespace selection and establishes **no authenticated identity**.
 Do not expose it to untrusted users. `AUTH_MODE=oidc` enables login, revocable
 sessions and server-side membership checks before every business request,
 including SSE, Replay, Artifact, Memory and knowledge endpoints. Only health,
-the four authentication endpoints and CORS preflight are exempt.
+the five authentication endpoints and CORS preflight are exempt. Every verified
+OIDC login ensures that the user's personal Workspace has been provisioned once.
 
-PROD-001 does not add self-registration, passwords, account recovery, invitations,
-roles, per-user object ACLs, Workspace creation/deletion, enterprise SSO management
-or service-account tokens. Agent/Tool configuration remains shared operator
+Registration uses the IdP's native account creation through `prompt=create`.
+The endpoint is always available in OIDC mode, but the IdP alone controls whether
+account creation is permitted. AgentFlow adds only a personal namespace and
+Membership. No local password
+storage, password proxy, invitations, roles, per-user object ACLs, general Workspace
+administration or service-account tokens. Agent/Tool configuration remains shared operator
 configuration; all members currently have the same access. Object ownership and
 the complete cross-tenant authorization audit remain PROD-002. This boundary alone
 does not make the deployment a public multi-tenant SaaS.
@@ -51,7 +60,6 @@ OIDC_CLIENT_SECRET=<client-secret-in-process-environment>
 OIDC_REDIRECT_URL=https://agentflow.example.com/api/auth/callback
 AUTH_WEB_URL=https://agentflow.example.com
 ALLOWED_ORIGINS=https://agentflow.example.com
-AUTH_MEMBERSHIP_PATH=.data/memberships.json
 AUTH_SESSION_TTL=8h
 ```
 
@@ -62,29 +70,57 @@ as Next.js or use an equivalent reverse-proxy arrangement. Set
 `NEXT_PUBLIC_API_BASE_URL` to the browser-facing API origin (empty means same-origin)
 when building the web application. Do not mix `localhost` and `127.0.0.1`.
 
-Use an operator-owned regular JSON file, at most 64 KiB:
+In OIDC mode, a verified first login (including an existing IdP account)
+grants **only that identity's own personal Workspace**, never a shared Workspace
+based on email, domain or browser input. These behaviors have no separate AgentFlow
+feature switches. Registration requires an IdP supporting `prompt=create`; the
+redirect does not enable registration in the IdP. Disable account creation in
+the IdP when sign-in should be limited to existing accounts; those verified
+accounts still receive a personal Workspace on first login.
 
-```json
-{
-  "members": [
-    { "subject": "<provider-subject>", "workspaces": ["default_workspace"] },
-    { "subject": "<another-provider-subject>", "workspaces": ["project-workspace"] }
-  ]
-}
-```
+### AgentFlow Authentication Theme
 
-Subjects must be the provider's opaque OIDC `sub` claim, not email addresses or
-display names. Obtain it from the provider's administration interface or sign in:
-an authenticated nonmember sees their subject and an access-required screen but
-cannot mount the workbench. There is no automatic membership based on login,
-email domain or browser headers. Keep real grant files under ignored `.data/`,
-not in version control. `{ "members": [] }` intentionally grants nobody access.
+The repository owns [`deploy/keycloak/themes/agentflow`](../../deploy/keycloak/themes/agentflow):
+workbench palette, locally hosted IBM Plex Sans and customized English messages.
+It inherits native forms, validation, required actions and scripts rather than
+forking authentication templates. Tested with **Keycloak 26.7.5**; re-run the
+theme gate before upgrades. Other OIDC providers can sign in, but this theme
+and the tested registration behavior are Keycloak-specific.
 
-Startup validates the configuration and atomically replaces the configured
-issuer's grants in Postgres. Restart after changing the file; removal immediately
-affects subsequent requests even when a session is still valid. Keep the same
-issuer/configuration on the supported single instance. Hot reload and distributed
-membership administration are not supported.
+1. Add a persistent read-only mount to your existing Keycloak deployment:
+   `--mount type=bind,src=<repo>/deploy/keycloak/themes/agentflow,dst=/opt/keycloak/themes/agentflow,readonly`.
+   Preserve its existing data/config when recreating the container; `docker cp`
+   alone would not survive recreation.
+2. Select **Realm settings → Themes → Login theme → agentflow** in the intended realm.
+3. Enable **Realm settings → Login → User registration**. Password policies,
+   brute-force protection, email verification/SMTP and MFA remain IdP settings.
+4. Configure `AUTH_MODE=oidc` and restart the API once. Subsequent signups
+   return directly to their personal Workspace, without manual Membership setup.
+
+The design/assets belong to AgentFlow, but the HTML forms are served by Keycloak
+and post **directly to Keycloak**, not Next.js or Go. The IdP hostname remains
+visible; same design does not mean same hosting. Protected Next.js pages redirect
+unauthenticated users directly to the themed IdP login page; account creation
+is offered there by the IdP, not through an intermediate AgentFlow screen.
+AgentFlow never supplies a password form or password-grant proxy. English
+messages are customized; other locales inherit Keycloak's native messages.
+
+### Database Memberships
+
+Postgres is the sole Membership authority. Startup does not read member files
+or import shared grants. Existing users and grants survive schema upgrades and
+restarts unchanged; automatic onboarding grants only a personal Workspace.
+
+Shared Workspace access is managed by operators in `auth_memberships`, referencing
+the internal `auth_users.id`, not email or display name. The user's OIDC `sub`
+is scoped by issuer; an authenticated nonmember sees it on the access-required
+screen but cannot mount the workbench after its access has been revoked.
+
+Operator changes to `auth_memberships`
+are visible on subsequent requests and the next session probe/reload; **no API
+restart required**. There are no pushed UI updates or member-management screens.
+To restore revoked access, explicitly add that Membership in the DB; do not
+delete its onboarding marker to trigger re-enrollment.
 
 ## Login, Session and Membership Flow
 
@@ -92,13 +128,18 @@ membership administration are not supported.
    a host-only HttpOnly SameSite=Lax state cookie. The authorization redirect uses
    state, nonce and S256 PKCE. Explicit sign-in always sends `prompt=login` to
    require provider reauthentication, even if its SSO cookie is still valid.
+   `GET /api/auth/register` reuses the flow with `prompt=create`; no password
+   crosses AgentFlow. Both entry points are available in OIDC mode and return 404
+   in trusted-local mode. The IdP decides whether to accept registration.
 2. `GET /api/auth/callback` compares cookie/query state, atomically consumes the
    transaction, exchanges the code, and verifies ID-token signature, issuer,
    audience, expiry and nonce with `coreos/go-oidc` / `golang.org/x/oauth2`.
    This client accepts only its own audience and rejects a foreign `azp`
    (authorized party); cross-client token sharing is not supported.
 3. Verified `(issuer, subject)` maps to a stable internal `user_id`. Login updates
-   the display name but creates no memberships. Access/refresh/ID tokens are not
+   the display name. A transaction creates a personal namespace
+   record and grant only once. The record outlives grant revocation, preventing
+   future logins from restoring access. Access/refresh/ID tokens are not
    retained or returned to the frontend.
 4. A random 256-bit opaque session cookie references a SHA-256 hash in Postgres.
    Session lifetime is the shorter of the configured absolute TTL (1m..24h) and
@@ -115,16 +156,23 @@ membership administration are not supported.
 Closing a tab does not call logout or delete the session. Reopening AgentFlow
 in the same browser restores the still-valid cookie session without an OIDC
 authorization redirect, up to the shorter of `AUTH_SESSION_TTL` and ID-token
-expiry. Fresh authentication UI is controlled by the identity provider; the
-fixture gate verifies the outgoing `prompt=login`, not a real provider's UI.
+expiry. The identity provider controls fresh authentication; with existing SSO
+it may retain the username and ask only for the password. Full login and
+password-only reauthentication both inherit the theme.
 
 `GET /api/auth/session` returns mode, authentication state, safe user identity
-and current Workspace IDs. Anonymous probes return 200 with no user; persistence
+and current Workspace IDs, plus an optional authorized
+`personal_workspace`. Anonymous probes return 200 with no user; persistence
 failures return 503, never a fallback to local mode. The frontend waits for this
-probe before mounting business consumers, offers Sign in/Sign out and a compact
-Workspace selector, and fully reloads scoped application state on a switch.
-Expired business requests return 401 and replace the workbench with the login
-gate. Nonmembership returns 403. Selecting a Workspace is not itself a grant.
+probe before mounting business consumers, redirects anonymous OIDC users directly
+to `/api/auth/login`, and offers Sign out and a compact
+Workspace menu (personal namespace labeled "Personal workspace"), and fully
+reloads scoped application state on a switch.
+Expired business requests return 401 and redirect to the same login page.
+Session-probe failures and authenticated users without membership retain a local
+error/access-required screen instead of redirecting repeatedly. The public home
+page and local mode do not trigger this redirect. Nonmembership returns 403.
+Selecting a Workspace is not itself a grant.
 
 Cookie-authenticated mutations, including logout, require the exact configured
 frontend `Origin`; missing or foreign Origin is rejected. Credentialed browser
@@ -138,8 +186,12 @@ resources are not newly converted into owner ACLs by this feature.
 
 ## Persistence and Privacy
 
-Startup idempotently creates `auth_users`, `auth_memberships`, `auth_sessions`
-and `auth_login_attempts`; existing resource rows need no ownership backfill.
+Startup idempotently creates `auth_users`, `auth_memberships`, `auth_sessions`,
+`auth_login_attempts` and `auth_personal_workspaces`.
+The personal Workspace record preserves onboarding history, not passwords or roles.
+Old file-import bookkeeping is no longer created, required or accessed; any
+existing unused table is left untouched rather than dropped during startup.
+Existing resource rows are not moved or assigned to new owners.
 Sessions survive restart, logout removes them, and expired session/transaction
 rows are purged opportunistically on the next session/login creation. There is
 no idle refresh, background cleanup scheduler or provider-wide session revocation.
@@ -163,7 +215,7 @@ privileges; tests create/drop disposable databases, never the application data:
 ```bash
 cd apps/api
 go test ./internal/identity ./internal/httpapi \
-  -run 'TestOIDCLoginMembershipLifecycle|TestAuthenticationConfigFailsClosed|TestAuthenticatedWorkspaceBoundary' \
+  -run 'TestOIDC|TestAuthentication|TestAuthenticatedWorkspace|TestPersonalWorkspace|TestIdentitySchema|TestDatabaseMemberships' \
   -count=1 -v
 ```
 
@@ -182,11 +234,32 @@ summary and exercise invalid tokens/configuration, state replay, storage failure
 restart, revocation, and rejection before writes. This is protocol and boundary
 evidence, not a live-provider deployment test or proof of complete PROD-002 ACLs.
 
+The real themed registration gate additionally requires Docker:
+
+```bash
+bash scripts/test-keycloak-auth.sh
+```
+
+It creates a disposable Keycloak **26.7.5** realm on loopback port 19081 with
+the theme. Native registration/password policy, wrong-password rejection,
+personal-only access, conversation reload, logout and repeat login are checked
+through real Next.js/Go/Postgres. The test container is removed on exit; operator
+accounts/realms are untouched. `onboarding-evidence.json` retains results and
+limitations, not cookies/passwords. A cached image can be selected through
+`KEYCLOAK_TEST_IMAGE`; the runner checks its version. This is not full MFA/reset
+coverage, a production-configuration audit or proof of complete object ACLs.
+
 ## Rollback and References
 
 Reverting the feature removes authentication enforcement. Do not switch to local
 mode or revert on an exposed deployment without restoring an external access
 boundary. Added tables can remain; no destructive database rollback is needed.
+
+To stop new account creation, disable registration at the IdP; existing users
+can still sign in and receive their personal Workspace. There is no separate
+AgentFlow onboarding switch. A binary rollback can retain grants/onboarding records.
+Back up auth tables before a binary downgrade; old file-based Membership behavior
+is no longer supported by the current application.
 
 - [Go OIDC client](https://github.com/coreos/go-oidc)
 - [Go OAuth2 client and PKCE options](https://pkg.go.dev/golang.org/x/oauth2)
@@ -194,3 +267,5 @@ boundary. Added tables can remain; no destructive database rollback is needed.
 - [OpenID Connect reauthentication request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest)
 - [OWASP session management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
 - [OWASP authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)
+- [Keycloak theme inheritance](https://www.keycloak.org/ui-customization/themes)
+- [Keycloak registration and prompt=create](https://www.keycloak.org/docs/latest/server_admin/#_user-registration)

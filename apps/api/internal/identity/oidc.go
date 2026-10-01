@@ -14,8 +14,8 @@ import (
 )
 
 type Config struct {
-	Mode, Issuer, ClientID, RedirectURL, WebURL, MembershipPath string
-	SessionTTL                                                  time.Duration
+	Mode, Issuer, ClientID, RedirectURL, WebURL string
+	SessionTTL                                  time.Duration
 }
 
 type Manager struct {
@@ -37,8 +37,8 @@ func New(ctx context.Context, cfg Config, storage Store) (*Manager, error) {
 	if cfg.Mode != "oidc" {
 		return nil, errors.New("AUTH_MODE must be local or oidc")
 	}
-	if storage == nil || cfg.ClientID == "" || cfg.MembershipPath == "" {
-		return nil, errors.New("OIDC requires identity storage, client ID and membership file")
+	if storage == nil || cfg.ClientID == "" {
+		return nil, errors.New("OIDC requires identity storage and client ID")
 	}
 	for _, raw := range []string{cfg.Issuer, cfg.RedirectURL, cfg.WebURL} {
 		if !safeURL(raw) {
@@ -60,10 +60,6 @@ func New(ctx context.Context, cfg Config, storage Store) (*Manager, error) {
 	if cfg.SessionTTL < time.Minute || cfg.SessionTTL > 24*time.Hour {
 		return nil, errors.New("AUTH_SESSION_TTL must be between 1m and 24h")
 	}
-	members, err := loadMembers(cfg.MembershipPath)
-	if err != nil {
-		return nil, err
-	}
 	client := &http.Client{Timeout: 10 * time.Second}
 	ctx = oidc.ClientContext(ctx, client)
 	provider, err := oidc.NewProvider(ctx, cfg.Issuer)
@@ -81,9 +77,6 @@ func New(ctx context.Context, cfg Config, storage Store) (*Manager, error) {
 		return nil, errors.New("OIDC key endpoint must use HTTPS (HTTP allowed only on loopback)")
 	}
 	cfg.WebURL = strings.TrimSuffix(cfg.WebURL, "/")
-	if err := storage.SyncMemberships(ctx, cfg.Issuer, members); err != nil {
-		return nil, errors.New("cannot synchronize Workspace memberships")
-	}
 	return &Manager{
 		config: cfg, store: storage, client: client, secure: redirect.Scheme == "https", origin: web.Scheme + "://" + web.Host,
 		oauth:    oauth2.Config{ClientID: cfg.ClientID, ClientSecret: credential.FromEnvironment("OIDC_CLIENT_SECRET").Reveal(), RedirectURL: cfg.RedirectURL, Endpoint: endpoint, Scopes: []string{oidc.ScopeOpenID, oidc.ScopeProfile}},

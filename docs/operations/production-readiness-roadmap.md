@@ -35,7 +35,7 @@ evaluation, internal use, or a controlled demonstration:
 
 | Dimension | Current scope |
 | --- | --- |
-| Access | Trusted-local mode remains unauthenticated; optional [OIDC identity and membership](identity-membership.md) add login, revocable sessions and request-level membership checks. |
+| Access | Trusted-local mode remains unauthenticated; optional [OIDC identity and membership](identity-membership.md) add themed signup/login, personal Workspace onboarding, revocable sessions and request-level membership checks. |
 | Tenancy | Namespace filtering is mandatory. OIDC mode validates caller selection against persisted membership, but per-object ACLs, shared Agent/Tool administration and complete cross-tenant auditing remain separate work. |
 | Runtime | Run admission, bounded queueing, Conversation single-writer control, interrupted lifecycle repair, Stage checkpoints, and Tool effect idempotency operate within one process. |
 | Tools | Use built-in or operator-reviewed Tools. All calls pass through Agent allowlists, Budget, timeout, result limits, tracing, and conservative concurrency. |

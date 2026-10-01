@@ -13,8 +13,6 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -125,14 +123,7 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 	}))
 	issuer = provider.URL
 	t.Cleanup(provider.Close)
-	membershipPath := filepath.Join(t.TempDir(), "members.json")
-	writeMembers := func(subject string) {
-		data := fmt.Sprintf(`{"members":[{"subject":%q,"workspaces":["workspace-a"]}]}`, subject)
-		if err := os.WriteFile(membershipPath, []byte(data), 0600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	writeMembers("operator")
+	pgfixture.GrantMemberships(t, dbURL, issuer, "operator", "workspace-a")
 	var manager *identity.Manager
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mux := http.NewServeMux()
@@ -141,7 +132,7 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 	}))
 	t.Cleanup(api.Close)
 	callback = api.URL + "/api/auth/callback"
-	cfg := identity.Config{Mode: "oidc", Issuer: issuer, ClientID: "fixture-client", RedirectURL: callback, WebURL: "http://127.0.0.1:3000", MembershipPath: membershipPath, SessionTTL: time.Hour}
+	cfg := identity.Config{Mode: "oidc", Issuer: issuer, ClientID: "fixture-client", RedirectURL: callback, WebURL: "http://127.0.0.1:3000", SessionTTL: time.Hour}
 	manager, err = identity.New(context.Background(), cfg, db)
 	if err != nil {
 		t.Fatal(err)
@@ -199,7 +190,7 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = probe.Body.Close()
-	if !info.Authenticated || len(info.Workspaces) != 1 || info.User.ID != user.ID {
+	if !info.Authenticated || len(info.Workspaces) != 2 || info.User.ID != user.ID || info.PersonalWorkspace != identity.PersonalWorkspaceID(user.ID) {
 		t.Fatalf("session info: %+v", info)
 	}
 	sqlDB, err := sql.Open("pgx", dbURL)
@@ -230,7 +221,12 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 	if _, err := manager.Authenticate(request); err != nil {
 		t.Fatal("restart lost session", err)
 	}
-	writeMembers("different-subject")
+	if allowed, _ := manager.IsMember(context.Background(), user.ID, "workspace-a"); !allowed {
+		t.Fatal("restart replaced database membership")
+	}
+	if _, err := sqlDB.Exec(`DELETE FROM auth_memberships WHERE user_id=$1`, user.ID); err != nil {
+		t.Fatal(err)
+	}
 	manager, err = identity.New(context.Background(), cfg, db)
 	if err != nil {
 		t.Fatal(err)
@@ -264,6 +260,10 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 			if got := login(); got != want {
 				t.Fatalf("bad token accepted: %d want %d", got, want)
 			}
+			var count int
+			if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM auth_personal_workspaces`).Scan(&count); err != nil || count != 1 {
+				t.Fatalf("invalid identity provisioned Workspace: %d %v", count, err)
+			}
 		})
 	}
 	failure = ""
@@ -275,36 +275,13 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatal("forged state accepted")
 	}
-	// Invalid files/config never degrade to trusted-local mode.
-	for _, contents := range []string{`null`, `{"unknown":[]}`, `{}`, `{"members":[{"subject":"","workspaces":[]}]}`, `{"members":[{"subject":"x","workspaces":[""]}]}`, `{"members":[{"subject":"x","workspaces":["a","a"]}]}`, `{"members":[{"subject":"x"},{"subject":"x"}]}`, `{"members":[]} {"members":[]}`} {
-		if err := os.WriteFile(membershipPath, []byte(contents), 0600); err != nil {
-			t.Fatal(err)
-		}
-		_, err := identity.New(context.Background(), cfg, db)
-		// An empty object is a deliberate deny-all configuration, not an error.
-		if contents == `{}` {
-			if err != nil {
-				t.Fatal(err)
-			}
-		} else if err == nil {
-			t.Fatalf("invalid membership accepted: %s", contents)
-		}
-	}
-	writeMembers("operator")
-	if err := os.WriteFile(membershipPath, []byte(strings.Repeat(" ", 65537)), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := identity.New(context.Background(), cfg, db); err == nil {
-		t.Fatal("oversized grant file accepted")
-	}
-	writeMembers("operator")
+	// Invalid configuration never degrades to trusted-local mode.
 	for _, edit := range []func(*identity.Config){
 		func(c *identity.Config) { c.Issuer = "http://untrusted.invalid" },
 		func(c *identity.Config) { c.RedirectURL = "http://127.0.0.1:8080/wrong" },
 		func(c *identity.Config) { c.WebURL = "http://localhost:3000" },
 		func(c *identity.Config) { c.SessionTTL = -1 },
 		func(c *identity.Config) { c.WebURL = "://invalid" },
-		func(c *identity.Config) { c.MembershipPath = filepath.Join(t.TempDir(), "missing") },
 	} {
 		invalid := cfg
 		edit(&invalid)
@@ -317,9 +294,6 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 		t.Fatal("discovery failure ignored")
 	}
 	discoveryFailure = false
-	if _, err := identity.New(context.Background(), cfg, &identityFaultStore{Store: db, operation: "sync"}); err == nil {
-		t.Fatal("sync failure ignored")
-	}
 	// Exercise transport handlers against real persistence with narrow faults,
 	// retaining actual protocol verification and session management underneath.
 	if got := login(); got != 303 {
@@ -438,7 +412,7 @@ func TestAuthenticationConfigFailsClosed(t *testing.T) {
 	}
 	mux := http.NewServeMux()
 	manager.RegisterRoutes(mux)
-	for _, path := range []string{"/api/auth/login", "/api/auth/callback", "/api/auth/logout", "/api/auth/session"} {
+	for _, path := range []string{"/api/auth/login", "/api/auth/register", "/api/auth/callback", "/api/auth/logout", "/api/auth/session"} {
 		method := "GET"
 		want := 404
 		if path == "/api/auth/logout" {
@@ -460,12 +434,6 @@ type identityFaultStore struct {
 	operation string
 }
 
-func (s *identityFaultStore) SyncMemberships(ctx context.Context, issuer string, members []identity.Member) error {
-	if s.operation == "sync" {
-		return fmt.Errorf("fixture store unavailable")
-	}
-	return s.Store.SyncMemberships(ctx, issuer, members)
-}
 func (s *identityFaultStore) UpsertIdentity(ctx context.Context, u identity.User) error {
 	if s.operation == "upsert" {
 		return fmt.Errorf("fixture store unavailable")
