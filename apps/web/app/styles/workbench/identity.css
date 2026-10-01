@@ -1,0 +1,38 @@
+.identity-gate {
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 16vh 32px 32px;
+}
+.identity-gate section { width: min(440px, 100%); }
+.identity-brand { color: var(--text-primary, #171b22); font-size: 20px; font-weight: 600; text-decoration: none; }
+.identity-gate h1 { margin: 32px 0 16px; font-size: 24px; }
+.identity-gate p { margin-bottom: 24px; color: var(--text-secondary, #5d6776); }
+.identity-gate code { display: block; overflow-wrap: anywhere; margin-bottom: 20px; }
+.identity-gate button, .identity-signin, .identity-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid var(--border, #dce1e8);
+  border-radius: 4px;
+  background: white;
+  color: var(--text-primary, #171b22);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.identity-signin { background: #171b22; color: white; border-color: #171b22; }
+.identity-gate [role="status"] { display: inline-flex; gap: 8px; align-items: center; }
+.identity-workspace { height: 100dvh; display: flex; flex-direction: column; }
+.identity-toolbar { min-height: 44px; display: flex; align-items: center; gap: 20px; padding: 6px 20px; border-bottom: 1px solid var(--border, #dce1e8); font-size: 13px; }
+.identity-toolbar > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity-toolbar label { display: flex; align-items: center; gap: 8px; }
+.identity-toolbar select { max-width: 360px; padding: 4px 24px 4px 8px; border: 1px solid var(--border, #dce1e8); border-radius: 4px; font: inherit; }
+.identity-toolbar button { padding: 5px 10px; }
+.identity-content { flex: 1; min-height: 0; overflow: auto; }
+.identity-content .shell { height: 100%; min-height: 0; }
+.identity-content .replay-page { min-height: 100%; }
+.identity-error { margin: 0; padding: 8px 20px; color: var(--text-primary, #171b22); border-bottom: 1px solid var(--border, #dce1e8); }

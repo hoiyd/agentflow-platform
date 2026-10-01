@@ -156,7 +156,8 @@ deterministic regression evidence, not as live-model quality.
 
 ### 4:35-5:00 - Summarize Boundaries
 
-The current boundary is explicit: authentication/Membership/ACL are not implemented;
+The current boundary is explicit: OIDC identity/Membership are optional and local
+mode remains unauthenticated; object ACLs are not complete;
 process-local concurrency is not a multi-instance scheduler; uncertain external
 side effects require reconciliation rather than an exactly-once claim; and the
 small frozen datasets measure known cases, not general model intelligence.

@@ -13,6 +13,12 @@ type postgresColumnRequirement struct {
 }
 
 var postgresRequiredColumns = []postgresColumnRequirement{
+	{Table: "auth_users", Column: "issuer", UDTName: "text", NotNull: true},
+	{Table: "auth_users", Column: "subject", UDTName: "text", NotNull: true},
+	{Table: "auth_memberships", Column: "workspace_id", UDTName: "text", NotNull: true},
+	{Table: "auth_sessions", Column: "token_hash", UDTName: "text", NotNull: true},
+	{Table: "auth_sessions", Column: "expires_at", UDTName: "timestamptz", NotNull: true},
+	{Table: "auth_login_attempts", Column: "verifier", UDTName: "text", NotNull: true},
 	{Table: "conversations", Column: "workspace_id", UDTName: "text", NotNull: true},
 	{Table: "messages", Column: "workspace_id", UDTName: "text", NotNull: true},
 	{Table: "messages", Column: "citations", UDTName: "jsonb", NotNull: true},

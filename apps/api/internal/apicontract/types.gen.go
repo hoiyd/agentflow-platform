@@ -75,6 +75,24 @@ func (e HealthResponseStatus) Valid() bool {
 	}
 }
 
+// Defines values for IdentitySessionMode.
+const (
+	Local IdentitySessionMode = "local"
+	Oidc  IdentitySessionMode = "oidc"
+)
+
+// Valid indicates whether the value is a known member of the IdentitySessionMode enum.
+func (e IdentitySessionMode) Valid() bool {
+	switch e {
+	case Local:
+		return true
+	case Oidc:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MessageRole.
 const (
 	Assistant MessageRole = "assistant"
@@ -487,6 +505,24 @@ type HealthResponse struct {
 // HealthResponseStatus defines model for HealthResponse.Status.
 type HealthResponseStatus string
 
+// IdentitySession defines model for IdentitySession.
+type IdentitySession struct {
+	Authenticated bool                `json:"authenticated"`
+	Mode          IdentitySessionMode `json:"mode"`
+	User          *IdentityUser       `json:"user"`
+	Workspaces    []string            `json:"workspaces"`
+}
+
+// IdentitySessionMode defines model for IdentitySession.Mode.
+type IdentitySessionMode string
+
+// IdentityUser defines model for IdentityUser.
+type IdentityUser struct {
+	Id      string `json:"id"`
+	Name    string `json:"name"`
+	Subject string `json:"subject"`
+}
+
 // Message defines model for Message.
 type Message struct {
 	Citations      *[]RAGCitation `json:"citations,omitempty"`
@@ -864,6 +900,12 @@ type NotFound = ErrorResponse
 
 // TooManyRequests defines model for TooManyRequests.
 type TooManyRequests = ErrorResponse
+
+// CompleteLoginParams defines parameters for CompleteLogin.
+type CompleteLoginParams struct {
+	Code  *string `form:"code,omitempty" json:"code,omitempty"`
+	State *string `form:"state,omitempty" json:"state,omitempty"`
+}
 
 // ObserveRunEventsParams defines parameters for ObserveRunEvents.
 type ObserveRunEventsParams struct {

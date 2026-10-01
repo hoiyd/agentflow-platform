@@ -7,20 +7,30 @@ Chat/Continue/Resume use SSE; inspection and resource endpoints use JSON.
 
 ## Access and Workspace Scope
 
-The API has no authentication or authorization. Keep it on loopback or behind
-a trusted access boundary. `ALLOWED_ORIGINS` is CORS policy, not access control.
+Default `AUTH_MODE=local` is unauthenticated trusted development. Enabled
+`AUTH_MODE=oidc` verifies revocable sessions and Workspace membership before
+business requests (401/403), with Origin checks for cookie-authenticated mutations.
+See [identity setup and limitations](../operations/identity-membership.md).
+Object ACLs remain a separate boundary; `ALLOWED_ORIGINS` alone is not access control.
 
-All `/api/*` operations resolve `X-Workspace-ID`, `workspace_id` query, or
+Business `/api/*` operations resolve `X-Workspace-ID`, `workspace_id` query, or
 supported payload scope. Multiple explicit selectors must agree or return 400.
 Omission and legacy `default` select `default_workspace`, never a global search.
 Conversation, Run, Messages, Memory, Knowledge, Replay, Usage, and Verification
 remain scoped; another namespace's resource ID is treated as not found.
-Workspace selection is not proof of identity or Membership.
+Workspace selection is not proof of identity or Membership. In OIDC mode the
+server checks the selected namespace against persisted memberships and forbids
+payload-only override. Authentication endpoints are not Workspace-scoped.
 
 ## Endpoint Map
 
 ```txt
 GET    /health
+
+GET    /api/auth/session
+GET    /api/auth/login
+GET    /api/auth/callback
+POST   /api/auth/logout
 
 GET    /api/conversations
 POST   /api/conversations

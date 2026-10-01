@@ -4,8 +4,8 @@ AgentFlow treats retrieval as a staged, observable pipeline. Recall, fusion,
 reranking, relevance policy, context expansion, and context transformation have
 different contracts so each stage can be evaluated independently.
 
-Current retrieval enforces Workspace namespace isolation end to end. It does
-not yet derive Workspace membership from an authenticated identity or enforce
+Current retrieval enforces Workspace namespace isolation end to end. OIDC mode
+checks authenticated Workspace membership before requests but does not enforce
 document/chunk ACL policy; those remain explicit multi-tenant limitations.
 
 ## Ingestion and Inspection

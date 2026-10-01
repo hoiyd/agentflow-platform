@@ -50,6 +50,8 @@ can replace the value with a non-secret placeholder.
 
 This boundary is defense in depth, not authentication, authorization, a Secret
 Manager, data-loss prevention, or a complete privacy classification system.
-Workspace IDs are still caller-selected. Run AgentFlow only in a trusted
-environment or behind an authenticated gateway until identity and membership
-policy are implemented.
+Trusted-local mode still trusts Workspace selection. Enabled [OIDC identity and
+membership](identity-membership.md) validate selections server-side but do not
+complete object ACLs or public multi-tenant isolation. The OAuth client secret
+remains transport-only; temporary login transactions and hashed browser sessions
+have a separate restricted persistence boundary, never model Context or traces.

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/config"
+	"agentflow-platform/apps/api/internal/testsupport/oidcfixture"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
@@ -67,6 +68,18 @@ func TestBrowserServer(t *testing.T) {
 	cfg.ModelRequestsPerMinute, cfg.ModelTokensPerMinute = 0, 0
 	cfg.RouterMode, cfg.AutonomousMaxIterations = "query", 1
 	cfg.AllowedOrigins = "http://127.0.0.1:13000"
+	cfg.AuthMode = "local"
+	var oidcProvider *oidcfixture.Provider
+	if os.Getenv("AGENTFLOW_IDENTITY_TEST") == "1" {
+		t.Setenv("OIDC_CLIENT_SECRET", "fixture-only")
+		oidcProvider = oidcfixture.New(t, "http://127.0.0.1:18080/api/auth/callback")
+		memberPath := filepath.Join(root, "memberships.json")
+		if err := os.WriteFile(memberPath, []byte(`{"members":[{"subject":"fixture-operator","workspaces":["default_workspace","workspace-test"]}]}`), 0600); err != nil {
+			t.Fatal(err)
+		}
+		cfg.AuthMode, cfg.OIDCIssuer, cfg.OIDCClientID = "oidc", oidcProvider.Server.URL, "fixture-client"
+		cfg.OIDCRedirectURL, cfg.AuthWebURL, cfg.AuthMembershipPath = "http://127.0.0.1:18080/api/auth/callback", "http://127.0.0.1:13000", memberPath
+	}
 	cfg.VerificationAllowedCommands, cfg.VerificationAllowedHTTPHosts = "", ""
 	cfg.VerificationWorkspaceRoot = root
 	application, err := New(cfg)
@@ -75,6 +88,19 @@ func TestBrowserServer(t *testing.T) {
 	}
 	production := application.server.Handler
 	controls := http.NewServeMux()
+	if oidcProvider != nil {
+		controls.HandleFunc("POST /__fixture/identity/subject", func(w http.ResponseWriter, r *http.Request) {
+			var input struct {
+				Subject string `json:"subject"`
+			}
+			if json.NewDecoder(r.Body).Decode(&input) != nil {
+				w.WriteHeader(400)
+				return
+			}
+			oidcProvider.SetSubject(input.Subject)
+			w.WriteHeader(204)
+		})
+	}
 	controls.HandleFunc("GET /__fixture/contracts", fixture.contracts)
 	controls.HandleFunc("POST /__fixture/release", fixture.release)
 	controls.Handle("/", production)
