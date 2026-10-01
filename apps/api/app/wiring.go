@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/httpapi"
+	"agentflow-platform/apps/api/internal/identity"
 	"agentflow-platform/apps/api/internal/inference/capture"
 	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/inference/routing"
@@ -53,6 +55,21 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			_ = closeStore(appStore)
 		}
 	}()
+
+	identityStore, _ := baseStore.(identity.Store)
+	if cfg.AuthMode == "oidc" && !slices.Contains(splitOrigins(cfg.AllowedOrigins), strings.TrimSuffix(cfg.AuthWebURL, "/")) {
+		return applicationDependencies{}, errors.New("ALLOWED_ORIGINS must include AUTH_WEB_URL for OIDC browser sessions")
+	}
+	identityCtx, cancelIdentity := context.WithTimeout(context.Background(), 15*time.Second)
+	identityManager, err := identity.New(identityCtx, identity.Config{
+		Mode: cfg.AuthMode, Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID,
+		RedirectURL: cfg.OIDCRedirectURL, WebURL: cfg.AuthWebURL,
+		MembershipPath: cfg.AuthMembershipPath, SessionTTL: cfg.AuthSessionTTL,
+	}, identityStore)
+	cancelIdentity()
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("initialize identity: %w", err)
+	}
 
 	if recovered, recoveryErr := recovery.MarkStaleRunningRuns(appStore, cfg.RecoveryStaleRunTimeout); recoveryErr != nil {
 		return applicationDependencies{}, fmt.Errorf("repair interrupted runs: %w", recoveryErr)
@@ -196,6 +213,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		RunEvents:      eventHub,
 		Verification:   verificationEngine,
 		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
+		Identity:       identityManager,
 	})
 	if err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -26,6 +26,7 @@ Write or update this inventory before adding isolated fixtures.
 | Two command callbacks fire before a React render | Only one command is admitted and one optimistic message pair is created |
 | A stream fails before or after accepting events | Before acceptance, drafts roll back; after acceptance, partial output stays and durable observation resumes |
 | A frozen Skill is mistaken for an observed model input | Replay joins Manifest with the physical request record; missing evidence remains not observed |
+| Login or Workspace selection is mistaken for permission | The signed OIDC/Postgres browser gate proves membership, nonmember rejection, scoped reload and server-side logout revocation |
 | A late Cancel response follows a terminal stream event | It cannot regress the Run to `canceling` or revive cancellation UI |
 | Navigation occurs during execution, cancellation, or observation | Local requests detach; their late events, errors and snapshots cannot change the new conversation |
 | Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |
@@ -34,9 +35,15 @@ Write or update this inventory before adding isolated fixtures.
 
 Browser E2E uses the real Next.js workspace, browser API client, Go production
 composition (`app.New`), runtime, registered Bindings, guards, and a disposable
-Postgres database. Only the external model/embedding endpoint is deterministic.
+Postgres database. External model/embedding and, in the identity gate, OIDC
+provider endpoints are deterministic transport fixtures.
 There is no `page.route` API interception or fake business Store. Fixture control
 endpoints exist only in the opt-in Go test, never in `cmd/server`.
+
+The [identity gate](identity-membership.md#repeatable-validation) runs separately
+with `AGENTFLOW_IDENTITY_TEST=1` so the ordinary trusted-local runtime suite remains
+unchanged. CI retains its protocol/boundary attachments separately from runtime
+evidence. This gate does not claim live-provider or complete object-ACL validation.
 
 Focused unit/component tests remain valuable for races, parsers, schema rejection,
 privacy, and uncertain-write settlement. A mocked success response is not evidence

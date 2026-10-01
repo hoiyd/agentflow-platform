@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/identity"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -20,7 +21,7 @@ type requestWorkspace struct {
 
 func (h *Handler) withWorkspace(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
+		if r.URL.Path == "/health" || isIdentityRoute(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -37,6 +38,24 @@ func (h *Handler) withWorkspace(next http.Handler) http.Handler {
 			explicit = workspaceID != ""
 		}
 		workspaceID = domain.NormalizeWorkspaceID(workspaceID)
+		if h.identity != nil {
+			user, ok := r.Context().Value(identityContextKey{}).(identity.User)
+			if !ok {
+				writeError(w, http.StatusUnauthorized, "Authentication required")
+				return
+			}
+			allowed, err := h.identity.IsMember(r.Context(), user.ID, workspaceID)
+			if err != nil {
+				writeError(w, http.StatusServiceUnavailable, "Membership storage is unavailable")
+				return
+			}
+			if !allowed {
+				writeError(w, http.StatusForbidden, "Workspace membership required")
+				return
+			}
+			// Authenticated scope must also bind payload-only Workspace fields.
+			explicit = true
+		}
 		ctx := context.WithValue(r.Context(), workspaceContextKey{}, requestWorkspace{ID: workspaceID, Explicit: explicit})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

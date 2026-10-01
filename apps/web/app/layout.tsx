@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { IdentityBoundary } from "../components/identity/IdentityBoundary";
 import "@fontsource-variable/manrope/wght.css";
 import "@fontsource-variable/ibm-plex-sans/wght.css";
 import "@fontsource/ibm-plex-mono/400.css";
@@ -37,6 +38,7 @@ import "./styles/knowledge/documents.css";
 import "./styles/knowledge/retrieval.css";
 import "./styles/knowledge/evaluation.css";
 import "./styles/workbench/responsive.css";
+import "./styles/workbench/identity.css";
 
 export const metadata: Metadata = {
   title: "AgentFlow Platform",
@@ -47,7 +49,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><IdentityBoundary>{children}</IdentityBoundary></body>
     </html>
   );
 }

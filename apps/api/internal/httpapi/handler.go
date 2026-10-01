@@ -16,6 +16,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/identity"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/skill"
@@ -89,6 +90,7 @@ type Dependencies struct {
 	RunEvents      *event.Hub
 	Verification   VerificationOperations
 	AllowedOrigins []string
+	Identity       *identity.Manager
 }
 
 type Handler struct {
@@ -102,6 +104,7 @@ type Handler struct {
 	runEvents      *event.Hub
 	verification   VerificationOperations
 	allowedOrigins []string
+	identity       *identity.Manager
 }
 
 func NewHandler(dependencies Dependencies) (*Handler, error) {
@@ -140,13 +143,15 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		runEvents:      dependencies.RunEvents,
 		verification:   dependencies.Verification,
 		allowedOrigins: append([]string(nil), dependencies.AllowedOrigins...),
+		identity:       dependencies.Identity,
 	}, nil
 }
 
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	h.registerRoutes(mux)
-	return h.withCORS(withRequestID(h.withWorkspace(mux)))
+	h.identity.RegisterRoutes(mux)
+	return h.withCORS(withRequestID(h.withIdentity(h.withWorkspace(mux))))
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -159,6 +164,9 @@ func (h *Handler) withCORS(next http.Handler) http.Handler {
 		if h.isAllowedOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
+			// The shared browser transport includes cookies even for its initial
+			// mode probe. Exact-origin credentialed CORS is needed in local mode too.
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Last-Event-ID, X-Workspace-ID")
 		w.Header().Set("Access-Control-Expose-Headers", "Retry-After, X-Request-ID")

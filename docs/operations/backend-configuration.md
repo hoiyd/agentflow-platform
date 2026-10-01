@@ -15,6 +15,7 @@ For startup commands, use [Local setup](../guides/local-setup.md).
 | Credential variables named by routes | Required separately in process environment or ignored `.env`; never JSON/Snapshot values |
 | `BIND_ADDRESS` / `PORT` | Loopback / 8080 by default; widen binding only behind an access boundary |
 | `ALLOWED_ORIGINS` | Browser CORS origins, not authentication |
+| `AUTH_MODE` / `OIDC_*` / `AUTH_*` | Trusted-local default or enabled OIDC identity, revocable sessions and operator-managed Workspace membership; see [identity setup](identity-membership.md) |
 | `EMBEDDING_*` | Independent embedding endpoint/model/dimensions/timeout; dimensions must match stored vectors |
 | `TOOL_CONFIG_PATH` | Operator enablement/security policy file, not application persistence |
 | `TRUSTED_SKILL_DIRS` | Reviewed installation roots; relative to API process cwd |
@@ -31,9 +32,10 @@ All resource operations resolve a non-empty namespace. Omitted scope and legacy
 Header/query/payload selectors must agree. Existing empty/default records are
 normalized by startup migration.
 
-The web client uses `NEXT_PUBLIC_WORKSPACE_ID` or `default_workspace`.
-Selecting a namespace grants no identity, Membership, or ACL rights; a trusted
-boundary must validate user-controlled selectors before an untrusted deployment.
+In trusted-local mode the web client uses `NEXT_PUBLIC_WORKSPACE_ID` or
+`default_workspace`. OIDC mode selects only a Workspace returned by the current
+session and verifies membership server-side; payload selectors cannot override
+the admitted scope. Selecting a namespace grants no identity or ACL rights.
 Namespace isolation cannot be disabled. See [API access](../reference/api-reference.md#access-and-workspace-scope).
 
 Route/embedding credentials are resolved at composition and passed directly to

@@ -5,6 +5,12 @@ info:
   description: |
     Authoritative HTTP contract shared by generated Go DTOs and the typed
     TypeScript client. Business handlers remain implemented with net/http.
+    With AUTH_MODE=oidc, every business operation requires a revocable session
+    cookie and current Workspace membership (401/403 on failure). Mutations also
+    require the configured frontend Origin. Health/authentication and preflight
+    are exempt. Local mode is unauthenticated trusted development, not an
+    alternate authentication mechanism. HTTPS uses __Host-agentflow_session;
+    loopback HTTP uses agentflow_session. See the identity/membership guide.
 servers:
   - url: http://localhost:8080
 tags:
@@ -16,6 +22,72 @@ tags:
   - name: Tools
 
 paths:
+  /api/auth/session:
+    get:
+      operationId: getIdentitySession
+      tags: [System]
+      description: |
+        Public session probe. OIDC identity is verified from a revocable cookie;
+        local mode is explicitly unauthenticated trusted development. Memberships
+        are operator-managed, not supplied by the browser or inferred from email.
+      responses:
+        '200':
+          description: Current authentication mode, identity and Workspace memberships.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentitySession'
+        '503':
+          description: Identity persistence unavailable; no local-mode fallback.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/auth/login:
+    get:
+      operationId: startLogin
+      tags: [System]
+      responses:
+        '302':
+          description: OIDC authorization redirect with state, nonce, S256 PKCE and prompt=login to require fresh authentication.
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/auth/callback:
+    get:
+      operationId: completeLogin
+      tags: [System]
+      parameters:
+        - in: query
+          name: code
+          schema: { type: string }
+        - in: query
+          name: state
+          schema: { type: string }
+      responses:
+        '303':
+          description: Verified login creates a host-only HttpOnly session and redirects to the workbench.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid identity token or nonce.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/auth/logout:
+    post:
+      operationId: signOut
+      tags: [System]
+      description: Revoke the local session and clear its cookie regardless of remaining TTL; requires configured frontend Origin. The next explicit sign-in requests provider reauthentication. Does not end provider SSO or sessions on other devices. Closing a tab does not call this endpoint.
+      responses:
+        '204':
+          description: Local session revoked.
+        '403':
+          description: Mutation Origin rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /health:
     get:
       operationId: getHealth
@@ -622,6 +694,28 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    IdentityUser:
+      type: object
+      required: [id, subject, name]
+      properties:
+        id: { type: string }
+        subject: { type: string }
+        name: { type: string }
+    IdentitySession:
+      type: object
+      required: [mode, authenticated, user, workspaces]
+      properties:
+        mode:
+          type: string
+          enum: [local, oidc]
+        authenticated: { type: boolean }
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/IdentityUser'
+            - type: 'null'
+        workspaces:
+          type: array
+          items: { type: string }
     ErrorResponse:
       type: object
       required: [error]

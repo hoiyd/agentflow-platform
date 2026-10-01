@@ -10,8 +10,19 @@ import (
 )
 
 type Config struct {
-	BindAddress string
-	Port        string
+	// AuthMode is local (trusted development only) or oidc. Unknown modes fail startup.
+	AuthMode string
+	// OIDCIssuer and OIDCClientID configure the sole trusted identity provider.
+	// OIDC_CLIENT_SECRET remains a transport credential, never serializable Config.
+	OIDCIssuer, OIDCClientID string
+	// OIDCRedirectURL is the exact registered API callback; AuthWebURL is the frontend origin.
+	OIDCRedirectURL, AuthWebURL string
+	// AuthMembershipPath is an operator-controlled JSON grant file synchronized at startup.
+	AuthMembershipPath string
+	// AuthSessionTTL bounds absolute browser session lifetime, also capped by ID-token expiry.
+	AuthSessionTTL time.Duration
+	BindAddress    string
+	Port           string
 	// ModelRouteConfigPath points to the complete secret-free Chat LLM route catalog.
 	ModelRouteConfigPath string
 	// TrustedSkillDirectories lists operator-trusted installation roots (CSV).
@@ -152,6 +163,13 @@ func Load() Config {
 	loadDotEnv(".env")
 
 	return Config{
+		AuthMode:                          getEnv("AUTH_MODE", "local"),
+		OIDCIssuer:                        getEnv("OIDC_ISSUER", ""),
+		OIDCClientID:                      getEnv("OIDC_CLIENT_ID", ""),
+		OIDCRedirectURL:                   getEnv("OIDC_REDIRECT_URL", ""),
+		AuthWebURL:                        getEnv("AUTH_WEB_URL", "http://localhost:3000"),
+		AuthMembershipPath:                getEnv("AUTH_MEMBERSHIP_PATH", ""),
+		AuthSessionTTL:                    authSessionTTL(),
 		BindAddress:                       getEnv("BIND_ADDRESS", "127.0.0.1"),
 		Port:                              getEnv("PORT", "8080"),
 		ModelRouteConfigPath:              getEnv("MODEL_ROUTE_CONFIG_PATH", ""),
@@ -226,6 +244,14 @@ func Load() Config {
 		VerificationMaxArtifactBytes:      getIntEnv("VERIFICATION_MAX_ARTIFACT_BYTES", 65536),
 		AllowedOrigins:                    getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 	}
+}
+
+func authSessionTTL() time.Duration {
+	value, err := time.ParseDuration(getEnv("AUTH_SESSION_TTL", "8h"))
+	if err != nil || value <= 0 {
+		return -1
+	}
+	return value
 }
 
 func normalizeRouterMode(value string) string {

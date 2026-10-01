@@ -35,8 +35,8 @@ evaluation, internal use, or a controlled demonstration:
 
 | Dimension | Current scope |
 | --- | --- |
-| Access | Deploy behind a trusted network or external access boundary; the API does not yet provide built-in authentication or authorization. |
-| Tenancy | Namespace filtering is mandatory and supports isolated Workspace IDs, but the API trusts the caller-selected ID. Operate as a single tenant or with trusted clients until identity, Membership, and ACL enforcement are complete. |
+| Access | Trusted-local mode remains unauthenticated; optional [OIDC identity and membership](identity-membership.md) add login, revocable sessions and request-level membership checks. |
+| Tenancy | Namespace filtering is mandatory. OIDC mode validates caller selection against persisted membership, but per-object ACLs, shared Agent/Tool administration and complete cross-tenant auditing remain separate work. |
 | Runtime | Run admission, bounded queueing, Conversation single-writer control, interrupted lifecycle repair, Stage checkpoints, and Tool effect idempotency operate within one process. |
 | Tools | Use built-in or operator-reviewed Tools. All calls pass through Agent allowlists, Budget, timeout, result limits, tracing, and conservative concurrency. |
 | Data | Postgres provides durable storage, including local operation. The single-instance [release and recovery drill](release-recovery-drill.md) exercises startup migration, restart, repair, and Resume; backup/restore and version rollback remain deployment responsibilities. |
@@ -50,7 +50,7 @@ claims, arbitrary code execution, and distributed Worker ownership.
 | Milestone | Additional boundary required |
 | --- | --- |
 | **Controlled single-tenant pilot** | External identity boundary, Postgres, backup/restore drill, retention and redaction policy, baseline telemetry, Runbooks, and measured capacity. |
-| **Multi-workspace beta** | Bind built-in identity and Membership to the existing mandatory Store/retrieval namespace scope; add ACL, scoped Credentials, Tool network/resource policy, and cross-tenant security tests. |
+| **Multi-workspace beta** | Enable built-in OIDC identity/Membership, then complete object ACLs, shared configuration authorization, scoped Credentials, Tool network/resource policy, and cross-tenant security tests. |
 | **Distributed deployment** | Durable dispatch, independent Workers, reconnectable event delivery, Lease/Heartbeat/Fencing, distributed checkpoint ownership, and takeover drills. |
 | **Enterprise or regional scale** | SSO/SCIM, fine-grained RBAC, audited write-capable Sandboxes, online evaluation, Provider failover, regional recovery, and contractual compliance controls. |
 
@@ -62,8 +62,8 @@ model or workload requires them.
 
 ### 1. Secure Access and Data Boundaries
 
-- Derive authenticated User, Workspace, and Membership scope at the request
-  boundary; do not trust a client-selected `workspace_id`.
+- Keep the implemented OIDC identity/Membership boundary enabled for authenticated
+  access; complete object-level authorization rather than trusting a selected ID.
 - Extend Workspace scope to Agent, Artifact, Evaluation, cleanup, and background
   operations, and bind it to authenticated Membership without a global fallback.
 - Keep the implemented process-level Provider credential boundary and shared

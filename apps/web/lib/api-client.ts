@@ -2,9 +2,14 @@ import type { components } from "./api-contract.gen";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
 const configuredWorkspaceId = process.env.NEXT_PUBLIC_WORKSPACE_ID?.trim();
-const workspaceId = !configuredWorkspaceId || configuredWorkspaceId === "default"
+let workspaceId = !configuredWorkspaceId || configuredWorkspaceId === "default"
   ? "default_workspace"
   : configuredWorkspaceId;
+
+// The authenticated boundary sets this before mounting business consumers.
+// A Workspace switch reloads the page so no old scoped state/cache is retained.
+export function setWorkspaceID(value: string): void { workspaceId = value; }
+export function apiURL(path: string): string { return `${API_BASE}${path}`; }
 
 type APIRequestPolicy = {
   errorMessage: string;
@@ -53,13 +58,16 @@ export async function apiRequest(
 ): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set("X-Workspace-ID", workspaceId);
-  const response = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const response = await fetch(apiURL(path), { ...init, headers, credentials: "include" });
   if (response.ok && (!policy.requireBody || response.body)) {
     return response;
   }
 
   const body = await response.text();
   const envelope = parseErrorEnvelope(body);
+  if (response.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("agentflow-auth-required"));
+  }
   // Structured API errors are already redacted at the server boundary. Raw
   // response bodies remain opt-in because they may come from an upstream.
   const detail = envelope.error ?? (policy.includeErrorBody ? body.trim() : "");
