@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw, Save, Trash2, X } from "lucide-react";
 import { APIError } from "../../lib/api-client";
+import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 import { getMemory, mutateMemory, type MemoryDetail, type MemoryInfo, type MemoryMutation } from "../../lib/memory-api";
 
 export type MemoryDialogMode = "replace" | "delete" | "history";
@@ -13,6 +14,7 @@ export function MemoryMutationDialog({ memory, initialMode, onClose, onUpdated }
   onClose: () => void;
   onUpdated: (memory: MemoryInfo) => void;
 }) {
+  const readOnly = useWorkspaceReadOnly();
   const dialog = useRef<HTMLDialogElement>(null);
   const [detail, setDetail] = useState<MemoryDetail | null>(null);
   const [mode, setMode] = useState(initialMode);
@@ -51,7 +53,7 @@ export function MemoryMutationDialog({ memory, initialMode, onClose, onUpdated }
   }
 
   async function submit() {
-    if (!detail || mode === "history" || conflict || inFlight.current || detail.memory.deleted_at) return;
+    if (readOnly || !detail || mode === "history" || conflict || inFlight.current || detail.memory.deleted_at) return;
     const draft: MemoryMutation = {
       operation_id: previous.current?.operation_id ?? crypto.randomUUID(),
       expected_version: detail.memory.version, action: mode,
@@ -107,7 +109,7 @@ export function MemoryMutationDialog({ memory, initialMode, onClose, onUpdated }
         <label className="memory-field"><span>Reason</span><textarea value={reason} required maxLength={512} disabled={busy} onChange={(e) => setReason(e.target.value)} /></label>
         <div className="memory-dialog-actions">
           <button className="secondary-action" type="button" disabled={busy} onClick={onClose}>Cancel</button>
-          <button className={mode === "delete" ? "danger-primary" : "send memory-primary-action"} type="submit" disabled={busy || conflict || !actor.trim() || !reason.trim() || (mode === "replace" && !content.trim())}>
+          <button className={mode === "delete" ? "danger-primary" : "send memory-primary-action"} type="submit" disabled={readOnly || busy || conflict || !actor.trim() || !reason.trim() || (mode === "replace" && !content.trim())}>
             {mode === "delete" ? <Trash2 size={15} /> : <Save size={15} />}{busy ? "Saving..." : mode === "delete" ? "Delete memory" : "Save correction"}
           </button>
         </div>

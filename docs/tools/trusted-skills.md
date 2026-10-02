@@ -49,7 +49,9 @@ packages, set `TRUSTED_SKILL_DIRS=../../examples/skills`. This trusts that paren
 root, not a list of its individual packages.
 
 `GET /api/skills` exposes only name, description, package hash and required Tool
-names. In Single mode, **Configure > Skills** binds these names to an Agent.
+names. In Single mode, the trusted-local operator uses **Configure > Skills** to
+bind these names to a shared Agent profile. OIDC users can invoke already-bound
+Skills but cannot change service-wide profiles or trusted packages.
 The compact **Invoke skill** selector adds `/skill:name` to the task. An explicit
 invocation such as `/skill:<skill-name> Explain the release procedure`
 loads the bound method on the first model request. Without that prefix, the

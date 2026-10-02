@@ -33,6 +33,9 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	if err := db.InitializeWorkspaceLifecycle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +126,7 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 	}))
 	issuer = provider.URL
 	t.Cleanup(provider.Close)
-	pgfixture.GrantMemberships(t, dbURL, issuer, "operator", "workspace-a")
+	workspaceID := pgfixture.GrantMemberships(t, dbURL, issuer, "operator", "workspace-a")[0]
 	var manager *identity.Manager
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mux := http.NewServeMux()
@@ -174,7 +177,7 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 	if err != nil || user.ID == "" {
 		t.Fatalf("authenticate: %+v %v", user, err)
 	}
-	allowed, err := manager.IsMember(context.Background(), user.ID, "workspace-a")
+	allowed, err := manager.IsMember(context.Background(), user.ID, workspaceID)
 	if err != nil || !allowed {
 		t.Fatalf("membership: %t %v", allowed, err)
 	}
@@ -190,7 +193,8 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = probe.Body.Close()
-	if !info.Authenticated || len(info.Workspaces) != 2 || info.User.ID != user.ID || info.PersonalWorkspace != identity.PersonalWorkspaceID(user.ID) {
+	defaultID, defaultErr := db.DefaultWorkspace(context.Background(), user.ID)
+	if defaultErr != nil || !info.Authenticated || len(info.Workspaces) != 2 || info.User.ID != user.ID || info.PersonalWorkspace != defaultID {
 		t.Fatalf("session info: %+v", info)
 	}
 	sqlDB, err := sql.Open("pgx", dbURL)
@@ -221,7 +225,7 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 	if _, err := manager.Authenticate(request); err != nil {
 		t.Fatal("restart lost session", err)
 	}
-	if allowed, _ := manager.IsMember(context.Background(), user.ID, "workspace-a"); !allowed {
+	if allowed, _ := manager.IsMember(context.Background(), user.ID, workspaceID); !allowed {
 		t.Fatal("restart replaced database membership")
 	}
 	if _, err := sqlDB.Exec(`DELETE FROM auth_memberships WHERE user_id=$1`, user.ID); err != nil {
@@ -231,7 +235,7 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if allowed, _ := manager.IsMember(context.Background(), user.ID, "workspace-a"); allowed {
+	if allowed, _ := manager.IsMember(context.Background(), user.ID, workspaceID); allowed {
 		t.Fatal("removed membership remained valid")
 	}
 	logout, _ := http.NewRequest(http.MethodPost, api.URL+"/api/auth/logout", nil)
@@ -261,7 +265,9 @@ func TestOIDCLoginMembershipLifecycle(t *testing.T) {
 				t.Fatalf("bad token accepted: %d want %d", got, want)
 			}
 			var count int
-			if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM auth_personal_workspaces`).Scan(&count); err != nil || count != 1 {
+			// Production bootstrap owns one local default in addition to the
+			// verified operator's default; invalid callbacks cannot add a third.
+			if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM auth_personal_workspaces`).Scan(&count); err != nil || count != 2 {
 				t.Fatalf("invalid identity provisioned Workspace: %d %v", count, err)
 			}
 		})

@@ -9,6 +9,7 @@ import type {
 	ToolEffectReconciliationAction
 } from "../../lib/api";
 import { listToolEffects, reconcileToolEffect } from "../../lib/api";
+import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 
 export function RecoverySummaryPanel({
 	summary,
@@ -17,6 +18,7 @@ export function RecoverySummaryPanel({
 	summary?: RecoverySummary;
 	onAction: (action: RecoveryAction) => void;
 }) {
+	const readOnly = useWorkspaceReadOnly();
 	if (!summary) return null;
 	return (
 		<section className="recovery-summary" id="recovery-summary" aria-labelledby="recovery-summary-title">
@@ -57,7 +59,7 @@ export function RecoverySummaryPanel({
 				<div className="recovery-actions">
 					{summary.actions.map((action, index) => (
 						<div key={`${action.kind}-${action.target_id ?? index}`}>
-							<button disabled={!action.enabled} onClick={() => onAction(action)} type="button">
+							<button disabled={readOnly || !action.enabled} onClick={() => onAction(action)} type="button">
 								{action.label}
 							</button>
 							{!action.enabled && action.unavailable_reason ? <span>{action.unavailable_reason}</span> : null}
@@ -129,6 +131,7 @@ export function ToolEffectReconciliationPanel({ runId, onChanged }: { runId: str
 }
 
 function ToolEffectForm({ effect, runId, onApplied }: { effect: ToolEffect; runId: string; onApplied: () => Promise<void> }) {
+	const readOnly = useWorkspaceReadOnly();
 	const availableActions = Array.isArray(effect.available_actions) ? effect.available_actions : [];
 	const [action, setAction] = useState<ToolEffectReconciliationAction | "">(availableActions[0] ?? "");
 	const [actor, setActor] = useState("");
@@ -139,7 +142,7 @@ function ToolEffectForm({ effect, runId, onApplied }: { effect: ToolEffect; runI
 
 	async function submit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		if (!action || !actor.trim() || !reason.trim()) return;
+		if (readOnly || !action || !actor.trim() || !reason.trim()) return;
 		let parsedResult: unknown;
 		if (action === "confirm_committed") {
 			try {
@@ -191,7 +194,7 @@ function ToolEffectForm({ effect, runId, onApplied }: { effect: ToolEffect; runI
 					) : null}
 					<div className="tool-effect-submit">
 						{error ? <span className="error">{error}</span> : null}
-						<button disabled={submitting || !action || !actor.trim() || !reason.trim() || (action === "confirm_committed" && !result.trim())} type="submit">
+						<button disabled={readOnly || submitting || !action || !actor.trim() || !reason.trim() || (action === "confirm_committed" && !result.trim())} type="submit">
 							{submitting ? "Applying..." : "Apply reconciliation"}
 						</button>
 					</div>

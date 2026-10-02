@@ -37,7 +37,7 @@ test("themed OIDC registration provisions a personal Workspace without sending p
   await expect(page.getByRole("option", { name: "Personal workspace", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Escape");
   const foreign = await page.request.get(`${api}/api/conversations?workspace_id=default_workspace`);
-  expect(foreign.status()).toBe(403);
+  expect(foreign.status()).toBe(404);
   const created = await page.request.post(`${api}/api/conversations`, { headers: { Origin: web, "X-Workspace-ID": identity.personal_workspace }, data: { title: "Personal Workspace onboarding evidence" } });
   expect(created.status()).toBe(201);
   await page.reload();
@@ -62,6 +62,6 @@ test("themed OIDC registration provisions a personal Workspace without sending p
   expect(relogin.workspaces).toEqual(identity.workspaces);
   expect(apiBodies.every(body => !body.includes(password) && !body.includes("Wrong-fixture-password"))).toBe(true);
   await testInfo.attach("onboarding-evidence.json", {
-    body: JSON.stringify({ schema: "oidc-onboarding-evidence-v1", provider: "Keycloak 26.7.5", theme: "agentflow", store: "disposable-postgres", user_id: identity.user.id, workspace: identity.personal_workspace, checks: { native_registration: true, password_policy: true, wrong_password_rejected: true, personal_only: true, foreign_workspace: 403, conversation_created: 201, reload: true, logout_revocation: 401, repeat_login_same_workspace: true, no_password_sent_to_api: true }, limitations: ["disposable realm, no operator accounts modified", "not PROD-002 full object authorization or MFA coverage"] }, null, 2), contentType: "application/json"
+    body: JSON.stringify({ schema: "oidc-onboarding-evidence-v1", provider: "Keycloak 26.7.5", theme: "agentflow", store: "disposable-postgres", user_id: identity.user.id, workspace: identity.personal_workspace, checks: { native_registration: true, password_policy: true, wrong_password_rejected: true, personal_only: true, foreign_workspace: 404, conversation_created: 201, reload: true, logout_revocation: 401, repeat_login_same_workspace: true, no_password_sent_to_api: true }, limitations: ["disposable realm, no operator accounts modified", "not PROD-002 full object authorization or MFA coverage"] }, null, 2), contentType: "application/json"
   });
 });

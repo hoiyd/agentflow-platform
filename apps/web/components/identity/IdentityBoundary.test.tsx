@@ -10,7 +10,7 @@ beforeEach(() => { redirect.mockReset(); vi.stubGlobal("location", { replace: re
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); sessionStorage.clear(); });
 
 function session(body: unknown, status = 200) {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status })));
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("/api/workspaces") ? [{ id: "11", name: "First workspace", status: "active", is_default: true }] : body), { status })));
 }
 
 it("does not mount business consumers before authentication resolves", async () => {
@@ -27,7 +27,7 @@ it("does not mount business consumers before authentication resolves", async () 
   expect(screen.queryByText("Business content")).toBeNull();
 });
 
-it("preserves trusted-local use without an identity toolbar", async () => {
+it("preserves trusted-local use without sign-out", async () => {
   session({ mode: "local", authenticated: false, user: null, workspaces: [] });
   render(<IdentityBoundary><p>Business content</p></IdentityBoundary>);
   expect(await screen.findByText("Business content")).toBeTruthy();
@@ -36,7 +36,7 @@ it("preserves trusted-local use without an identity toolbar", async () => {
 });
 
 it("keeps authenticated nonmembers outside the workbench", async () => {
-  session({ mode: "oidc", authenticated: true, user: { id: "u", subject: "s", name: "Operator" }, workspaces: [] });
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith("/api/workspaces") ? [] : { mode: "oidc", authenticated: true, user: { id: "u", subject: "s", name: "Operator" }, workspaces: [] }))));
   render(<IdentityBoundary><p>Business content</p></IdentityBoundary>);
   expect(await screen.findByRole("heading", { name: "Workspace access required" })).toBeTruthy();
   expect(screen.queryByText("Business content")).toBeNull();
@@ -55,7 +55,7 @@ it("invalidates mounted content on authentication expiry", async () => {
   session({ mode: "oidc", authenticated: true, user: { id: "u", subject: "s", name: "Operator" }, workspaces: ["a", "b"] });
   render(<IdentityBoundary><p>Business content</p></IdentityBoundary>);
   expect(await screen.findByText("Business content")).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Workspace: a" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Workspace: First workspace" })).toBeTruthy();
   fireEvent(window, new Event("agentflow-auth-required"));
   await waitFor(() => expect(screen.queryByText("Business content")).toBeNull());
   await waitFor(() => expect(redirect).toHaveBeenCalledTimes(1));

@@ -56,7 +56,16 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		}
 	}()
 
-	identityStore, _ := baseStore.(identity.Store)
+	workspaceStore, ok := baseStore.(*store.PostgresStore)
+	if !ok {
+		return applicationDependencies{}, errors.New("Workspace lifecycle requires PostgreSQL")
+	}
+	workspaceCtx, cancelWorkspace := context.WithTimeout(context.Background(), 30*time.Second)
+	err = workspaceStore.InitializeWorkspaceLifecycle(workspaceCtx)
+	cancelWorkspace()
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("initialize Workspaces: %w", err)
+	}
 	if cfg.AuthMode == "oidc" && !slices.Contains(splitOrigins(cfg.AllowedOrigins), strings.TrimSuffix(cfg.AuthWebURL, "/")) {
 		return applicationDependencies{}, errors.New("ALLOWED_ORIGINS must include AUTH_WEB_URL for OIDC browser sessions")
 	}
@@ -65,7 +74,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		Mode: cfg.AuthMode, Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID,
 		RedirectURL: cfg.OIDCRedirectURL, WebURL: cfg.AuthWebURL,
 		SessionTTL: cfg.AuthSessionTTL,
-	}, identityStore)
+	}, workspaceStore)
 	cancelIdentity()
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("initialize identity: %w", err)
@@ -214,6 +223,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		Verification:   verificationEngine,
 		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
 		Identity:       identityManager,
+		Workspaces:     workspaceStore,
 	})
 	if err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

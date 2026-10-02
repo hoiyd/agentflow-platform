@@ -2,6 +2,7 @@ import type { FormEvent } from "react";
 import { ChevronDown, ChevronUp, Send, Settings2, ShieldCheck, UserRoundPlus } from "lucide-react";
 
 import type { AgentInfo, ChatMode } from "../../lib/api";
+import { useWorkspaceReadOnly, useServiceConfigurationReadOnly } from "../identity/WorkspaceContext";
 
 type ChatComposerProps = {
   activeAgent?: AgentInfo;
@@ -29,6 +30,8 @@ type ChatComposerProps = {
 };
 
 export function ChatComposer(props: ChatComposerProps) {
+  const readOnly = useWorkspaceReadOnly();
+  const serviceReadOnly = useServiceConfigurationReadOnly();
   const {
     activeAgent,
     activeAgentId,
@@ -112,17 +115,17 @@ export function ChatComposer(props: ChatComposerProps) {
                 {activeAgent.skills.map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
             ) : null}
-            {showAgentActions ? (
+            {showAgentActions && !serviceReadOnly ? (
               <>
                 <button
                   className={`agent-create-button ${isNewAgentFormOpen ? "active" : ""}`}
-                  disabled={isCreatingAgent || isStreaming}
+                  disabled={readOnly || isCreatingAgent || isStreaming}
                   onClick={onNewAgent}
                   type="button"
                 >
                   <UserRoundPlus size={15} /> New agent
                 </button>
-                <button className="agent-config-toggle" onClick={onConfigureAgent} type="button">
+                <button className="agent-config-toggle" disabled={readOnly} onClick={onConfigureAgent} type="button">
                   <Settings2 size={15} /> Configure
                 </button>
               </>
@@ -134,9 +137,9 @@ export function ChatComposer(props: ChatComposerProps) {
       {chatMode !== "single" ? <div className="composer-run-options">{verificationButton}</div> : null}
       {chatMode === "single" && agentsError ? <div className="error">{agentsError}</div> : null}
       {error ? <div className="error">{error}</div> : null}
-      <form className="composer-inner" onSubmit={onSubmit}>
+      <form className="composer-inner" onSubmit={event => { if (readOnly) event.preventDefault(); else onSubmit(event); }}>
         <textarea
-          disabled={isAwaitingPlanApproval || isAwaitingHumanInput}
+          disabled={readOnly || isAwaitingPlanApproval || isAwaitingHumanInput}
           value={input}
           onChange={(event) => onInputChange(event.target.value)}
           onKeyDown={(event) => {
@@ -157,7 +160,7 @@ export function ChatComposer(props: ChatComposerProps) {
           aria-label="Send message"
           title="Send message"
           className="send"
-          disabled={isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput || input.trim().length === 0}
+          disabled={readOnly || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput || input.trim().length === 0}
         >
           <Send size={18} />
         </button>

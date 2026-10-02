@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { APIError, apiRequest } from "./api-client.ts";
+import { APIError, apiRequest, setWorkspaceID } from "./api-client.ts";
 import { continueRun, getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listAgents, listRunAttention, listToolEffects, observeRunEvents, patchTaskState, reconcileToolEffect } from "./api.ts";
 import {
   createDocument,
@@ -28,6 +28,7 @@ function replayPayload(overrides = {}) {
 }
 
 function mockFetch(t, body, onRequest = () => {}, status = 200) {
+  setWorkspaceID("11");
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
     onRequest(url, options);
@@ -425,7 +426,7 @@ test("run usage client calls the dedicated endpoint", async (t) => {
   const ledger = await getRunUsage("run-2");
 
   assert.match(requestedURL, /\/api\/runs\/run-2\/usage$/);
-  assert.equal(workspaceID, "default_workspace");
+  assert.equal(workspaceID, "11");
   assert.equal(ledger.budget.max_tool_calls, 4);
   assert.equal(ledger.totals.tool_calls, 1);
   assert.equal(ledger.totals.open_reservations, 0);
@@ -551,7 +552,7 @@ test("document creation sends the complete JSON contract", async (t) => {
   assert.match(request.url, /\/api\/documents$/);
   assert.equal(request.options.method, "POST");
   assert.equal(new Headers(request.options.headers).get("Content-Type"), "application/json");
-  assert.equal(new Headers(request.options.headers).get("X-Workspace-ID"), "default_workspace");
+  assert.equal(new Headers(request.options.headers).get("X-Workspace-ID"), "11");
   assert.deepEqual(request.body, {
     title: "Runbook",
     source_key: "incident-runbook",

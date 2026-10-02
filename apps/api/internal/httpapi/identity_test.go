@@ -23,13 +23,16 @@ func TestAuthenticatedWorkspaceBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	if err := db.InitializeWorkspaceLifecycle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	var issuer string
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"issuer": issuer, "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token", "jwks_uri": issuer + "/keys", "id_token_signing_alg_values_supported": []string{"RS256"}})
 	}))
 	issuer = provider.URL
 	t.Cleanup(provider.Close)
-	pgfixture.GrantMemberships(t, dbURL, issuer, "operator", "workspace-a")
+	workspaceID := pgfixture.GrantMemberships(t, dbURL, issuer, "operator", "workspace-a")[0]
 	manager, err := identity.New(context.Background(), identity.Config{Mode: "oidc", Issuer: issuer, ClientID: "client", RedirectURL: "http://localhost:8080/api/auth/callback", WebURL: "http://localhost:3000"}, db)
 	if err != nil {
 		t.Fatal(err)
@@ -62,6 +65,9 @@ func TestAuthenticatedWorkspaceBoundary(t *testing.T) {
 		{"preflight", "OPTIONS", "/api/conversations", "workspace-b", "", "http://localhost:3000", "", 204},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			if test.workspace == "workspace-a" {
+				test.workspace = workspaceID
+			}
 			r := httptest.NewRequest(test.method, test.path, strings.NewReader(test.body))
 			r.Header.Set(WorkspaceHeader, test.workspace)
 			r.Header.Set("Origin", test.origin)
@@ -82,7 +88,7 @@ func TestAuthenticatedWorkspaceBoundary(t *testing.T) {
 	// Authenticated scope is explicit even without a header, so payload cannot
 	// select a different Workspace after the membership decision.
 	r := httptest.NewRequest("POST", "/api/rag/search", nil)
-	r.Header.Set(WorkspaceHeader, "workspace-a")
+	r.Header.Set(WorkspaceHeader, workspaceID)
 	r.AddCookie(&http.Cookie{Name: "agentflow_session", Value: token})
 	r.Header.Set("Origin", "http://localhost:3000")
 	w := httptest.NewRecorder()
@@ -92,7 +98,7 @@ func TestAuthenticatedWorkspaceBoundary(t *testing.T) {
 		}
 		w.WriteHeader(204)
 	}))).ServeHTTP(w, r)
-	items, err := db.ListConversationsByWorkspace("workspace-a")
+	items, err := db.ListConversationsByWorkspace(workspaceID)
 	if err != nil || len(items) != 1 || items[0].Title != "allowed" {
 		t.Fatalf("rejected writes persisted: %v %v", items, err)
 	}

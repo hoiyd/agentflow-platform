@@ -1,10 +1,7 @@
 import type { components } from "./api-contract.gen";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
-const configuredWorkspaceId = process.env.NEXT_PUBLIC_WORKSPACE_ID?.trim();
-let workspaceId = !configuredWorkspaceId || configuredWorkspaceId === "default"
-  ? "default_workspace"
-  : configuredWorkspaceId;
+let workspaceId = "";
 
 // The authenticated boundary sets this before mounting business consumers.
 // A Workspace switch reloads the page so no old scoped state/cache is retained.
@@ -57,7 +54,7 @@ export async function apiRequest(
   policy: APIRequestPolicy
 ): Promise<Response> {
   const headers = new Headers(init.headers);
-  headers.set("X-Workspace-ID", workspaceId);
+  if (workspaceId) headers.set("X-Workspace-ID", workspaceId);
   const response = await fetch(apiURL(path), { ...init, headers, credentials: "include" });
   if (response.ok && (!policy.requireBody || response.body)) {
     return response;

@@ -14,14 +14,20 @@ Turn -> Retrieval / logical Model Calls / Tool Calls
 
 An Iteration groups Loop Stages; it is not another independently persisted entity.
 
-## Workspace Namespace
+## Workspace
 
-Non-empty isolation key for Conversations, Messages, Runs, Documents, Memory,
-and their scoped operations. Empty/omitted and legacy `default` normalize to
-`default_workspace`, never "all data." It is not an identity, Membership, or ACL.
+Persisted resource boundary with one owner User, a database-generated numeric ID,
+mutable human-readable name, description and active/archived lifecycle. Soft deletion
+uses `deleted_at`; neither renaming nor archiving changes the ID. A User can own
+multiple Workspaces and selects one owned active default. Missing HTTP scope uses
+that default, never a shared global namespace. Archived spaces are read-only;
+deleted or foreign spaces are inaccessible. Membership is an owner-constrained
+revocation gate, not independent ownership. See [lifecycle](../operations/workspace-lifecycle.md).
+
 HTTP receives a mandatory scoped Store view; trusted Runtime/Recovery ID-based
-capabilities are not the HTTP persistence interface. User-selected namespaces
-need validation at an authenticated boundary before tenant authorization can be claimed.
+capabilities are not the HTTP persistence interface. Legacy `default_workspace`
+normalization remains only in internal legacy fixtures/data-upgrade helpers, not
+production HTTP admission. Full object authorization is still a separate audit.
 
 ## Conversation
 

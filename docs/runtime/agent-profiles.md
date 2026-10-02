@@ -20,7 +20,10 @@ participates in a Run.
 | `memory_enabled` | Enables scoped semantic Memory retrieval before a Turn. |
 | `retrieval_enabled` | Enables Knowledge/RAG retrieval before a Turn. |
 
-The workbench can create, edit, select, and archive custom profiles. The four
+Profiles are currently service-wide: the trusted-local operator can create, edit
+and archive them; OIDC users can select/use profiles, not mutate shared configuration.
+Private per-Workspace profiles remain outside the [lifecycle scope](../operations/workspace-lifecycle.md).
+The four
 built-in profiles remain available as stable defaults and cannot be archived.
 
 ## Behavior by Execution Mode

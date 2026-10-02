@@ -393,6 +393,42 @@ func (e VerifierType) Valid() bool {
 	}
 }
 
+// Defines values for WorkspaceStatus.
+const (
+	WorkspaceStatusActive   WorkspaceStatus = "active"
+	WorkspaceStatusArchived WorkspaceStatus = "archived"
+)
+
+// Valid indicates whether the value is a known member of the WorkspaceStatus enum.
+func (e WorkspaceStatus) Valid() bool {
+	switch e {
+	case WorkspaceStatusActive:
+		return true
+	case WorkspaceStatusArchived:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkspaceUpdateRequestStatus.
+const (
+	WorkspaceUpdateRequestStatusActive   WorkspaceUpdateRequestStatus = "active"
+	WorkspaceUpdateRequestStatusArchived WorkspaceUpdateRequestStatus = "archived"
+)
+
+// Valid indicates whether the value is a known member of the WorkspaceUpdateRequestStatus enum.
+func (e WorkspaceUpdateRequestStatus) Valid() bool {
+	switch e {
+	case WorkspaceUpdateRequestStatusActive:
+		return true
+	case WorkspaceUpdateRequestStatusArchived:
+		return true
+	default:
+		return false
+	}
+}
+
 // Agent defines model for Agent.
 type Agent struct {
 	Archived         *bool              `json:"archived,omitempty"`
@@ -540,7 +576,7 @@ type IdentitySession struct {
 	Authenticated bool                `json:"authenticated"`
 	Mode          IdentitySessionMode `json:"mode"`
 
-	// PersonalWorkspace Personal Workspace ID, present only while its Membership is granted.
+	// PersonalWorkspace Current owned active default Workspace ID; selection may change, absent when access is revoked. Retained field name for session contract compatibility.
 	PersonalWorkspace *string       `json:"personal_workspace,omitempty"`
 	User              *IdentityUser `json:"user"`
 	Workspaces        []string      `json:"workspaces"`
@@ -930,6 +966,42 @@ type WebCitation struct {
 	Url         string `json:"url"`
 }
 
+// Workspace defines model for Workspace.
+type Workspace struct {
+	CreatedAt   time.Time  `json:"created_at"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+	Description string     `json:"description"`
+
+	// Id Decimal BIGINT identity encoded as a string to preserve precision.
+	Id          string          `json:"id"`
+	IsDefault   bool            `json:"is_default"`
+	Name        string          `json:"name"`
+	OwnerUserId string          `json:"owner_user_id"`
+	Status      WorkspaceStatus `json:"status"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+}
+
+// WorkspaceStatus defines model for Workspace.Status.
+type WorkspaceStatus string
+
+// WorkspaceCreateRequest defines model for WorkspaceCreateRequest.
+type WorkspaceCreateRequest struct {
+	Description *string `json:"description,omitempty"`
+	Name        string  `json:"name"`
+}
+
+// WorkspaceUpdateRequest defines model for WorkspaceUpdateRequest.
+type WorkspaceUpdateRequest struct {
+	Description            *string                       `json:"description,omitempty"`
+	MakeDefault            *bool                         `json:"make_default,omitempty"`
+	Name                   *string                       `json:"name,omitempty"`
+	ReplacementWorkspaceId *string                       `json:"replacement_workspace_id,omitempty"`
+	Status                 *WorkspaceUpdateRequestStatus `json:"status,omitempty"`
+}
+
+// WorkspaceUpdateRequestStatus defines model for WorkspaceUpdateRequest.Status.
+type WorkspaceUpdateRequestStatus string
+
 // AgentId defines model for AgentId.
 type AgentId = string
 
@@ -972,6 +1044,11 @@ type ObserveRunEventsParams struct {
 	LastEventID *int64 `json:"Last-Event-ID,omitempty"`
 }
 
+// DeleteWorkspaceParams defines parameters for DeleteWorkspace.
+type DeleteWorkspaceParams struct {
+	ReplacementWorkspaceId *string `form:"replacement_workspace_id,omitempty" json:"replacement_workspace_id,omitempty"`
+}
+
 // CreateAgentJSONRequestBody defines body for CreateAgent for application/json ContentType.
 type CreateAgentJSONRequestBody = AgentConfigRequest
 
@@ -992,6 +1069,12 @@ type ContinueRunJSONRequestBody = ContinueRunRequest
 
 // ResumeRunJSONRequestBody defines body for ResumeRun for application/json ContentType.
 type ResumeRunJSONRequestBody = ResumeRunRequest
+
+// CreateWorkspaceJSONRequestBody defines body for CreateWorkspace for application/json ContentType.
+type CreateWorkspaceJSONRequestBody = WorkspaceCreateRequest
+
+// UpdateWorkspaceJSONRequestBody defines body for UpdateWorkspace for application/json ContentType.
+type UpdateWorkspaceJSONRequestBody = WorkspaceUpdateRequest
 
 // Getter for additional properties for RunReplay_Projection. Returns the specified
 // element and whether it was found

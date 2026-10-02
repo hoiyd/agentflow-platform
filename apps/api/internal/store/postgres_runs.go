@@ -238,7 +238,7 @@ func (s *PostgresStore) UpdateRunHeartbeat(id string) (domain.Run, error) {
 
 func (s *PostgresStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error) {
 	rows, err := s.db.Query(`
-		SELECT id, COALESCE(workspace_id, 'default_workspace'), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, workspace_id::text, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
 		WHERE status = 'running'
 			AND (heartbeat_at IS NULL OR heartbeat_at < $1)
@@ -261,7 +261,7 @@ func (s *PostgresStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, er
 
 func (s *PostgresStore) GetRun(id string) (domain.Run, bool, error) {
 	run, err := scanRun(s.db.QueryRow(`
-		SELECT id, COALESCE(workspace_id, 'default_workspace'), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, workspace_id::text, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
 		WHERE id = $1`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -275,7 +275,7 @@ func (s *PostgresStore) GetRun(id string) (domain.Run, bool, error) {
 
 func (s *PostgresStore) GetRunInWorkspace(workspaceID string, id string) (domain.Run, bool, error) {
 	run, err := scanRun(s.db.QueryRow(`
-		SELECT id, COALESCE(workspace_id, 'default_workspace'), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, workspace_id::text, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs WHERE id = $1 AND workspace_id = $2`, id, NormalizeWorkspaceID(workspaceID)))
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Run{}, false, nil
@@ -288,7 +288,7 @@ func (s *PostgresStore) GetRunInWorkspace(workspaceID string, id string) (domain
 
 func (s *PostgresStore) ListRuns() ([]domain.Run, error) {
 	rows, err := s.db.Query(`
-		SELECT id, COALESCE(workspace_id, 'default_workspace'), agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
+		SELECT id, workspace_id::text, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
 		ORDER BY created_at DESC`)
 	if err != nil {

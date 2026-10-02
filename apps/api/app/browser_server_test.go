@@ -97,7 +97,7 @@ func TestBrowserServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	if oidcProvider != nil {
-		pgfixture.GrantMemberships(t, cfg.DatabaseURL, cfg.OIDCIssuer, "fixture-operator", "default_workspace", "workspace-test")
+		pgfixture.GrantMemberships(t, cfg.DatabaseURL, cfg.OIDCIssuer, "fixture-operator", "Default workspace", "Workspace test")
 		// An already-onboarded identity with revoked access must stay a nonmember.
 		// A fresh identity would now receive a personal Workspace on first login.
 		pgfixture.GrantMemberships(t, cfg.DatabaseURL, cfg.OIDCIssuer, "fixture-nonmember")
@@ -107,7 +107,7 @@ func TestBrowserServer(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer db.Close()
-		if _, err := db.ExecContext(t.Context(), `INSERT INTO auth_personal_workspaces (user_id,workspace_id) VALUES ($1,$2)`, id, identity.PersonalWorkspaceID(id)); err != nil {
+		if _, err := db.ExecContext(t.Context(), `INSERT INTO auth_personal_workspaces (user_id,workspace_id) VALUES ($1,NULL)`, id); err != nil {
 			t.Fatal(err)
 		}
 	}

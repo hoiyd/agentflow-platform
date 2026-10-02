@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"agentflow-platform/apps/api/internal/failure"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
@@ -59,11 +60,10 @@ func (m *Manager) session(w http.ResponseWriter, r *http.Request) {
 				authError(w, 503, "identity_unavailable", "Identity storage is unavailable")
 				return
 			}
-			// Label only an authorized namespace, never advertise a revoked grant.
-			for _, workspace := range info.Workspaces {
-				if workspace == PersonalWorkspaceID(user.ID) {
-					info.PersonalWorkspace = workspace
-				}
+			info.PersonalWorkspace, err = m.store.DefaultWorkspace(r.Context(), user.ID)
+			if err != nil && failure.Describe(err).Category != failure.CategoryNotFound {
+				authError(w, 503, "identity_unavailable", "Default Workspace is unavailable")
+				return
 			}
 		}
 	}

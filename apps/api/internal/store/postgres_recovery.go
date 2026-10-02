@@ -21,7 +21,7 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 		return domain.InterruptedRunRepairResult{}, err
 	}
 	run, err := scanRun(tx.QueryRow(`
-		SELECT id, COALESCE(workspace_id, 'default_workspace'), agent_id, conversation_id, status, error,
+		SELECT id, workspace_id::text, agent_id, conversation_id, status, error,
 			runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at,
 			active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs WHERE id = $1 FOR UPDATE`, request.RunID))
