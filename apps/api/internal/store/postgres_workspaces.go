@@ -10,7 +10,6 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
-	"agentflow-platform/apps/api/internal/identity"
 )
 
 type WorkspaceError struct {
@@ -251,21 +250,4 @@ func (s *PostgresStore) UpdateWorkspace(ctx context.Context, owner, id string, c
 		return item, err
 	}
 	return item, tx.Commit()
-}
-
-func (s *PostgresStore) InitializeWorkspaceLifecycle(ctx context.Context) error {
-	plan, err := s.PreviewWorkspaceMigration(ctx, nil)
-	if err != nil {
-		return err
-	}
-	if len(plan) > 0 {
-		return errors.New("Workspace ownership migration required; run scripts/workspace-migrate.sh to preview and apply explicit owner mappings before starting the API")
-	}
-	if err = s.ApplyWorkspaceMigration(ctx, nil); err != nil {
-		return err
-	}
-	if err = s.UpsertIdentity(ctx, identity.User{ID: identity.LocalUserID, Issuer: "agentflow:local", Subject: "local", Name: "Local user"}); err != nil {
-		return err
-	}
-	return s.ProvisionPersonalWorkspace(ctx, identity.LocalUserID)
 }

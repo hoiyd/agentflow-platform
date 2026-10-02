@@ -2,7 +2,6 @@ package store
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/inference/routing"
+	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
 func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
@@ -114,16 +114,13 @@ func TestPostgresMigrationsAddStructuredTaskState(t *testing.T) {
 }
 
 func TestPostgresStructuredTaskStateRoundTrip(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	postgresStore, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatalf("new postgres store: %v", err)
 	}
 	defer postgresStore.Close()
-	conversation, err := postgresStore.CreateConversationInWorkspace("workspace-task-state", "Postgres task state")
+	conversation, err := postgresStore.CreateConversation("Postgres task state")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +133,7 @@ func TestPostgresStructuredTaskStateRoundTrip(t *testing.T) {
 		{Type: domain.TaskStateSetGoal, Goal: "Persist exact task facts"},
 		{Type: domain.TaskStateUpsertConstraint, Constraint: &domain.TaskConstraint{ID: "scope", Statement: "Stay workspace scoped"}},
 	}}, domain.TaskStateSource{ActorType: "model", RunID: run.ID})
-	if err != nil || first.Version != 1 || first.State.WorkspaceID != "workspace-task-state" {
+	if err != nil || first.Version != 1 || first.State.WorkspaceID != conversation.WorkspaceID {
 		t.Fatalf("first postgres revision: revision=%#v err=%v", first, err)
 	}
 	if _, err := postgresStore.ApplyTaskStatePatch(conversation.ID, domain.TaskStatePatch{ExpectedVersion: 0, Operations: []domain.TaskStateOperation{{Type: domain.TaskStateClearGoal}}}, domain.TaskStateSource{ActorType: "user"}); !IsTaskStateVersionConflict(err) {
@@ -163,10 +160,7 @@ func TestPostgresStructuredTaskStateRoundTrip(t *testing.T) {
 }
 
 func TestPostgresDurableRecoveryRoundTrip(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	postgresStore, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatalf("new postgres store: %v", err)
@@ -271,10 +265,7 @@ func TestPostgresDurableRecoveryRoundTrip(t *testing.T) {
 }
 
 func TestPostgresInterruptedRunRepairIsAtomicAndIdempotent(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	postgresStore, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatal(err)
@@ -497,31 +488,8 @@ func TestPostgresMigrationsIndexConversationEventHistory(t *testing.T) {
 	}
 }
 
-func TestPostgresMigrationsBackfillAndRequireWorkspaceScope(t *testing.T) {
-	joined := strings.Join(postgresMigrations, "\n")
-	for _, expected := range []string{
-		"UPDATE conversations SET workspace_id = 'default_workspace'",
-		"UPDATE messages m SET workspace_id",
-		"UPDATE runs r SET workspace_id",
-		"UPDATE memories SET workspace_id = 'default_workspace'",
-		"UPDATE documents SET workspace_id = 'default_workspace'",
-		"conversations ALTER COLUMN workspace_id SET NOT NULL",
-		"messages ALTER COLUMN workspace_id SET NOT NULL",
-		"runs ALTER COLUMN workspace_id SET NOT NULL",
-		"memories ALTER COLUMN workspace_id SET NOT NULL",
-		"documents ALTER COLUMN workspace_id SET NOT NULL",
-	} {
-		if !strings.Contains(joined, expected) {
-			t.Fatalf("missing workspace migration step %q", expected)
-		}
-	}
-}
-
 func TestPostgresRunUsageReservationIsAtomic(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	store, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatalf("new postgres store: %v", err)
@@ -578,10 +546,7 @@ func TestPostgresRunUsageReservationIsAtomic(t *testing.T) {
 }
 
 func TestPostgresActiveRuntimeExcludesWaitingForUser(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	store, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatalf("new postgres store: %v", err)
@@ -620,10 +585,7 @@ func TestPostgresActiveRuntimeExcludesWaitingForUser(t *testing.T) {
 }
 
 func TestPostgresReplayKeepsHistoricalRuntimeSnapshotReadable(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	postgresStore, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatalf("new postgres store: %v", err)
@@ -656,10 +618,7 @@ func TestPostgresReplayKeepsHistoricalRuntimeSnapshotReadable(t *testing.T) {
 }
 
 func TestPostgresStoreTraceReplay(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 
 	store, err := NewPostgresStore(databaseURL)
 	if err != nil {
@@ -728,7 +687,8 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 		t.Fatalf("mark running: %v", err)
 	}
 	candidate, created, err := store.CreateMemoryCandidate(domain.MemoryCandidate{
-		ID: "memcand_" + message.ID, ConversationID: conversation.ID, RunID: run.ID,
+		WorkspaceID: conversation.WorkspaceID,
+		ID:          "memcand_" + message.ID, ConversationID: conversation.ID, RunID: run.ID,
 		SourceMessageID: message.ID, SourceRole: "user", Kind: "fact", Content: "hello",
 		Status: domain.MemoryCandidateAccepted, ExtractionReason: "adaptive_model", PolicyReason: "accepted", Confidence: 0.92,
 	})
@@ -913,10 +873,7 @@ func TestPostgresStoreTraceReplay(t *testing.T) {
 }
 
 func TestPostgresContextCompactionFailurePaths(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	postgresStore, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatal(err)
@@ -983,10 +940,7 @@ func TestPostgresContextCompactionFailurePaths(t *testing.T) {
 }
 
 func TestPostgresListConversationRunEventsReturnsQueryErrorAfterClose(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	store, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatalf("new postgres store: %v", err)
@@ -1000,17 +954,14 @@ func TestPostgresListConversationRunEventsReturnsQueryErrorAfterClose(t *testing
 }
 
 func TestPostgresStoreLexicalRecall(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	store, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatalf("new postgres store: %v", err)
 	}
 	defer store.Close()
 
-	workspaceID := "test-lexical-" + time.Now().UTC().Format("20060102150405.000000000")
+	workspaceID := testOwnedWorkspace(t, store)
 	content := "AUTH-7F31 means the refresh token has expired."
 	embedding := make([]float64, 1536)
 	embedding[0] = 1
@@ -1040,16 +991,13 @@ func TestPostgresStoreLexicalRecall(t *testing.T) {
 }
 
 func TestPostgresConcurrentIdenticalDocumentIngestKeepsOneActiveIndex(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	store, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatalf("new postgres store: %v", err)
 	}
 	defer store.Close()
-	workspaceID := "test-index-concurrency-" + time.Now().UTC().Format("20060102150405.000000000")
+	workspaceID := testOwnedWorkspace(t, store)
 	embedding := make([]float64, 1536)
 	embedding[0] = 1
 	var wait sync.WaitGroup

@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
-	"os"
 
 	"strings"
 	"sync"
@@ -40,7 +38,7 @@ func mutationFixture(t *testing.T) (Store, func() Store, domain.Memory, domain.M
 	vector := make([]float64, 1536)
 	vector[0] = 1
 	embedding := domain.MemoryEmbedding{Provider: "test", Model: "unit", Dimensions: len(vector), Embedding: vector}
-	m, err := s.CreateMemory(domain.Memory{Kind: "fact", Content: "release day is Monday", SourceMessageID: message.ID, ConversationID: conv.ID, Metadata: map[string]any{"source": "test"}}, embedding)
+	m, err := s.CreateMemory(domain.Memory{WorkspaceID: conv.WorkspaceID, Kind: "fact", Content: "release day is Monday", SourceMessageID: message.ID, ConversationID: conv.ID, Metadata: map[string]any{"source": "test"}}, embedding)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,10 +60,10 @@ func TestMemoryMutationStoreContract(t *testing.T) {
 	if _, err := s.CreateMemory(altered, embedding); !errors.Is(err, ErrMemoryConflict) {
 		t.Fatalf("create overwrite: %v", err)
 	}
-	if _, err := s.CreateMemory(domain.Memory{Kind: "fact", Content: "unrelated memory"}, embedding); err != nil {
+	if _, err := s.CreateMemory(domain.Memory{WorkspaceID: m.WorkspaceID, Kind: "fact", Content: "unrelated memory"}, embedding); err != nil {
 		t.Fatal(err)
 	}
-	candidate := domain.MemoryCandidate{ID: "candidate-" + m.ID, SourceMessageID: m.SourceMessageID, SourceRole: "user", Kind: m.Kind, Content: m.Content, Status: domain.MemoryCandidateAccepted}
+	candidate := domain.MemoryCandidate{WorkspaceID: m.WorkspaceID, ID: "candidate-" + m.ID, SourceMessageID: m.SourceMessageID, SourceRole: "user", Kind: m.Kind, Content: m.Content, Status: domain.MemoryCandidateAccepted}
 	if _, _, err := s.CreateMemoryCandidate(candidate); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +84,7 @@ func TestMemoryMutationStoreContract(t *testing.T) {
 	if change, err := s.FindMemoryChange(m.WorkspaceID, cmd.OperationID); err != nil || change == nil || change.Version != 2 {
 		t.Fatalf("find change: %+v %v", change, err)
 	}
-	items, err := s.SearchMemories(domain.MemorySearch{Embedding: embedding.Embedding, Metadata: map[string]string{"source": "test"}, Limit: 20})
+	items, err := s.SearchMemories(domain.MemorySearch{WorkspaceID: m.WorkspaceID, Embedding: embedding.Embedding, Metadata: map[string]string{"source": "test"}, Limit: 20})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,13 +114,14 @@ func TestMemoryMutationStoreContract(t *testing.T) {
 	if _, err := s.MutateMemory(m.WorkspaceID, m.ID, changed, embedding); !errors.Is(err, ErrMemoryConflict) {
 		t.Fatalf("stale version: %v", err)
 	}
-	if _, err := s.GetMemoryDetail("another-workspace", m.ID); !errors.Is(err, ErrMemoryMissing) {
+	otherWorkspace := testOwnedWorkspace(t, s.(*PostgresStore))
+	if _, err := s.GetMemoryDetail(otherWorkspace, m.ID); !errors.Is(err, ErrMemoryMissing) {
 		t.Fatalf("detail scope: %v", err)
 	}
-	if _, err := s.MutateMemory("another-workspace", m.ID, cmd, embedding); !errors.Is(err, ErrMemoryMissing) {
+	if _, err := s.MutateMemory(otherWorkspace, m.ID, cmd, embedding); !errors.Is(err, ErrMemoryMissing) {
 		t.Fatalf("mutation scope: %v", err)
 	}
-	if change, err := s.FindMemoryChange("another-workspace", cmd.OperationID); err != nil || change != nil {
+	if change, err := s.FindMemoryChange(otherWorkspace, cmd.OperationID); err != nil || change != nil {
 		t.Fatal("audit leaked workspace")
 	}
 	deleted := domain.MemoryMutation{OperationID: "delete-" + m.ID, ExpectedVersion: 2, Action: "delete", Actor: "operator", Reason: "outdated"}
@@ -166,7 +165,7 @@ func TestMemoryMutationStoreContract(t *testing.T) {
 			t.Fatal("old candidate not withdrawn")
 		}
 	}
-	items, err = s.SearchMemories(domain.MemorySearch{Embedding: embedding.Embedding, Limit: 20})
+	items, err = s.SearchMemories(domain.MemorySearch{WorkspaceID: m.WorkspaceID, Embedding: embedding.Embedding, Limit: 20})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +273,7 @@ func TestMemoryMutationValidation(t *testing.T) {
 
 func TestMemoryMutationSchemaMigration(t *testing.T) {
 	all := strings.Join(postgresMigrations, "\n")
-	for _, fragment := range []string{"ALTER TABLE memories ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 1", "ALTER TABLE memories ADD COLUMN IF NOT EXISTS deleted_at timestamptz", "CREATE TABLE IF NOT EXISTS memory_changes", "PRIMARY KEY (workspace_id, operation_id)", "ALTER TABLE memory_candidates ADD COLUMN IF NOT EXISTS workspace_id text"} {
+	for _, fragment := range []string{"ALTER TABLE memories ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 1", "ALTER TABLE memories ADD COLUMN IF NOT EXISTS deleted_at timestamptz", "CREATE TABLE IF NOT EXISTS memory_changes", "PRIMARY KEY (workspace_id, operation_id)"} {
 		if !strings.Contains(all, fragment) {
 			t.Fatalf("missing %s", fragment)
 		}
@@ -284,7 +283,7 @@ func TestMemoryMutationSchemaMigration(t *testing.T) {
 func TestMemorySourceFenceIsWorkspaceScoped(t *testing.T) {
 
 	s, _, m, embedding := mutationFixture(t)
-	otherWorkspace := "other-" + m.ID
+	otherWorkspace := testOwnedWorkspace(t, s.(*PostgresStore))
 	candidate := domain.MemoryCandidate{ID: "foreign-" + m.ID, WorkspaceID: otherWorkspace, SourceMessageID: m.SourceMessageID, SourceRole: "user", Kind: "fact", Content: "foreign fact", Status: domain.MemoryCandidateAccepted}
 	if _, _, err := s.CreateMemoryCandidate(candidate); err != nil {
 		t.Fatal(err)
@@ -320,63 +319,6 @@ func TestMemorySourceFenceIsWorkspaceScoped(t *testing.T) {
 		t.Fatalf("operation ID scope: %v", err)
 	}
 
-}
-
-func TestMemoryCandidateWorkspaceUpgrade(t *testing.T) {
-
-	t.Run("postgres", func(t *testing.T) {
-		base := openPostgresTestStore(t)
-		schema := NewID("h17_upgrade")
-		if _, err := base.db.Exec(`CREATE SCHEMA ` + schema); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() {
-			if _, err := base.db.Exec(`DROP SCHEMA ` + schema + ` CASCADE`); err != nil {
-				t.Error(err)
-			}
-		})
-		u, err := url.Parse(os.Getenv("TEST_DATABASE_URL"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		q := u.Query()
-		q.Set("search_path", schema+",public")
-		u.RawQuery = q.Encode()
-		pg, err := NewPostgresStore(u.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = pg.Close() })
-		conv, err := pg.CreateConversationInWorkspace("team", "legacy")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := pg.db.Exec(`ALTER TABLE memory_candidates DROP COLUMN workspace_id`); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := pg.db.Exec(`ALTER TABLE memories DROP COLUMN version, DROP COLUMN deleted_at`); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := pg.db.Exec(`INSERT INTO memory_candidates(id,conversation_id,source_message_id,source_role,kind,content,status,extraction_reason,policy_reason,created_at) VALUES ('legacy',$1,'source','user','fact','legacy fact','accepted','','',now())`, conv.ID); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := pg.db.Exec(`INSERT INTO memories(id,workspace_id,kind,content,created_at,updated_at) VALUES ('legacy','team','fact','legacy fact',now(),now())`); err != nil {
-			t.Fatal(err)
-		}
-		upgraded, err := NewPostgresStore(u.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = upgraded.Close() })
-		candidates, err := upgraded.ListMemoryCandidates(conv.ID)
-		if err != nil || len(candidates) != 1 || candidates[0].WorkspaceID != "team" {
-			t.Fatalf("backfill: %+v %v", candidates, err)
-		}
-		detail, err := upgraded.GetMemoryDetail("team", "legacy")
-		if err != nil || detail.Memory.Version != 1 || detail.Memory.DeletedAt != nil {
-			t.Fatalf("memory upgrade: %+v %v", detail, err)
-		}
-	})
 }
 
 func TestPostgresMemoryMutationRollback(t *testing.T) {
@@ -426,7 +368,7 @@ func TestPostgresMemoryMutationWriteFailuresAreAtomic(t *testing.T) {
 		t.Run(tc.table, func(t *testing.T) {
 			s, _, m, embedding := mutationFixture(t)
 			pg := s.(*PostgresStore)
-			candidate := domain.MemoryCandidate{ID: "candidate-" + m.ID, SourceMessageID: m.SourceMessageID, SourceRole: "user", Kind: "fact", Content: "original proposal", Status: domain.MemoryCandidateAccepted}
+			candidate := domain.MemoryCandidate{WorkspaceID: m.WorkspaceID, ID: "candidate-" + m.ID, SourceMessageID: m.SourceMessageID, SourceRole: "user", Kind: "fact", Content: "original proposal", Status: domain.MemoryCandidateAccepted}
 			if _, _, err := pg.CreateMemoryCandidate(candidate); err != nil {
 				t.Fatal(err)
 			}

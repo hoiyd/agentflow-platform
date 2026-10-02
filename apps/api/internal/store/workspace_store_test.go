@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/identity"
 )
 
 func TestWorkspaceStoreRejectsCrossScopeOwnedResources(t *testing.T) {
@@ -15,7 +16,8 @@ func TestWorkspaceStoreRejectsCrossScopeOwnedResources(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 	t.Cleanup(func() { _ = pgStore.Close() })
-	conversation, err := pgStore.CreateConversationInWorkspace("workspace-b", "private conversation")
+	workspaceAID, workspaceBID := testOwnedWorkspace(t, pgStore), testOwnedWorkspace(t, pgStore)
+	conversation, err := pgStore.CreateConversationInWorkspace(workspaceBID, "private conversation")
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)
 	}
@@ -27,7 +29,7 @@ func TestWorkspaceStoreRejectsCrossScopeOwnedResources(t *testing.T) {
 		t.Fatalf("create run event: %v", err)
 	}
 
-	workspaceA := pgStore.ForWorkspace(domain.NewWorkspaceScope("workspace-a"))
+	workspaceA := pgStore.ForWorkspace(domain.NewWorkspaceScope(workspaceAID))
 	if _, ok, err := workspaceA.GetRun(run.ID); err != nil || ok {
 		t.Fatalf("cross-scope run lookup must be hidden: ok=%v err=%v", ok, err)
 	}
@@ -47,7 +49,7 @@ func TestWorkspaceStoreRejectsCrossScopeOwnedResources(t *testing.T) {
 		t.Fatalf("cross-scope message mutation must be rejected, got %v", err)
 	}
 
-	workspaceB := pgStore.ForWorkspace(domain.NewWorkspaceScope("workspace-b"))
+	workspaceB := pgStore.ForWorkspace(domain.NewWorkspaceScope(workspaceBID))
 	events, err := workspaceB.ListRunEvents(run.ID)
 	if err != nil || len(events) != 1 {
 		t.Fatalf("owner Workspace should read run events: events=%d err=%v", len(events), err)
@@ -69,7 +71,7 @@ func TestWorkspaceStoreCoversRunOwnedMissingAndSuccessfulOperations(t *testing.T
 		t.Fatalf("new store: %v", err)
 	}
 	t.Cleanup(func() { _ = pgStore.Close() })
-	scoped := pgStore.ForWorkspace(domain.NewWorkspaceScope("workspace-a"))
+	scoped := pgStore.ForWorkspace(domain.NewWorkspaceScope(testOwnedWorkspace(t, pgStore)))
 
 	if _, err := scoped.ListCollaborationSteps("missing"); !IsNotFound(err) {
 		t.Fatalf("missing collaboration run: %v", err)
@@ -102,6 +104,15 @@ func TestWorkspaceStoreCoversRunOwnedMissingAndSuccessfulOperations(t *testing.T
 	if err != nil || updated.VerificationStatus != domain.VerificationPassed {
 		t.Fatalf("update scoped verification: run=%#v err=%v", updated, err)
 	}
+}
+
+func testOwnedWorkspace(t *testing.T, s *PostgresStore) string {
+	t.Helper()
+	w, err := s.CreateWorkspace(t.Context(), identity.SuperUserID, "Test workspace", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return w.ID
 }
 
 func TestWorkspaceStorePropagatesRunLookupFailures(t *testing.T) {

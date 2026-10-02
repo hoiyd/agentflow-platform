@@ -2,12 +2,11 @@ package store
 
 import (
 	"fmt"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
 func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
@@ -92,7 +91,7 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 	vector[0] = 1
 	memoryID := "mem_coverage_" + fmt.Sprint(suffix)
 	memory, err := postgresStore.CreateMemory(domain.Memory{
-		ID: memoryID, WorkspaceID: "workspace-coverage", UserID: "user-coverage",
+		ID: memoryID, WorkspaceID: conversation.WorkspaceID, UserID: "user-coverage",
 		ProjectID: "project-coverage", ConversationID: conversation.ID,
 		Kind: "fact", Content: "Postgres stores durable semantic memory.",
 		Metadata: map[string]any{"topic": "database"},
@@ -103,7 +102,7 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 	t.Cleanup(func() { _, _ = postgresStore.db.Exec(`DELETE FROM memories WHERE id=$1`, memoryID) })
 	memories, err := postgresStore.SearchMemories(domain.MemorySearch{
 		Embedding: vector, EmbeddingProvider: "test", EmbeddingModel: "embedding-1536",
-		WorkspaceID: "workspace-coverage", UserID: "user-coverage", ProjectID: "project-coverage",
+		WorkspaceID: conversation.WorkspaceID, UserID: "user-coverage", ProjectID: "project-coverage",
 		Metadata: map[string]string{"topic": "database"}, Limit: 50,
 	})
 	if err != nil || len(memories) != 1 || memories[0].Memory.ID != memoryID || memories[0].Similarity <= 0 {
@@ -117,7 +116,7 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 	}
 
 	candidate := domain.MemoryCandidate{
-		ID: "memcand_coverage_" + fmt.Sprint(suffix), ConversationID: conversation.ID,
+		WorkspaceID: conversation.WorkspaceID, ID: "memcand_coverage_" + fmt.Sprint(suffix), ConversationID: conversation.ID,
 		SourceMessageID: messages[0].ID, SourceRole: "user", Kind: "fact", Content: "durable fact",
 		Status: domain.MemoryCandidateAccepted, ExtractionReason: "explicit", PolicyReason: "accepted", Confidence: 0.95,
 	}
@@ -277,10 +276,7 @@ func TestPostgresStoreAdministrativeLifecycle(t *testing.T) {
 
 func openPostgresTestStore(t *testing.T) *PostgresStore {
 	t.Helper()
-	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	postgresStore, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatalf("new postgres store: %v", err)

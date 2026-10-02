@@ -2,12 +2,6 @@ package store
 
 import "context"
 
-// Legacy namespace backfills apply only before the owner/primary-key migration.
-// Never reinstall string defaults or run text predicates on BIGINT foreign keys.
-func legacyWorkspaceMigration(table, statement string) string {
-	return `DO $$ BEGIN IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='` + table + `' AND column_name='workspace_id' AND udt_name='text') THEN ` + statement + `; END IF; END $$`
-}
-
 func (s *PostgresStore) migrate(ctx context.Context) error {
 	for _, statement := range postgresMigrations {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -27,23 +21,16 @@ var postgresMigrations = []string{
 		UNIQUE (issuer,subject)
 	)`,
 	workspaceEntitySchema,
-	`CREATE TABLE IF NOT EXISTS workspace_migrations (
-		legacy_id text PRIMARY KEY,
-		workspace_id bigint NOT NULL REFERENCES workspaces(id),
-		owner_user_id text NOT NULL REFERENCES auth_users(id),
-		migrated_at timestamptz NOT NULL DEFAULT NOW()
-	)`,
 	`CREATE TABLE IF NOT EXISTS auth_memberships (
 		user_id text NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
-		workspace_id text NOT NULL,
+		workspace_id bigint NOT NULL,
 		PRIMARY KEY (user_id,workspace_id)
 	)`,
 	`CREATE TABLE IF NOT EXISTS auth_personal_workspaces (
 		user_id text PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE,
-		workspace_id text NOT NULL UNIQUE,
+		workspace_id bigint UNIQUE,
 		created_at timestamptz NOT NULL DEFAULT NOW()
 	)`,
-	`ALTER TABLE auth_personal_workspaces ALTER COLUMN workspace_id DROP NOT NULL`,
 	`CREATE TABLE IF NOT EXISTS auth_sessions (
 		token_hash text PRIMARY KEY,
 		user_id text NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
@@ -59,21 +46,17 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS auth_login_attempts_expiry_idx ON auth_login_attempts(expires_at)`,
 	`CREATE TABLE IF NOT EXISTS conversations (
 		id text PRIMARY KEY,
-		workspace_id text NOT NULL DEFAULT 'default_workspace',
+		workspace_id bigint NOT NULL,
 		user_id text,
 		project_id text,
 		title text NOT NULL,
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
-	`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS workspace_id text`,
-	legacyWorkspaceMigration("conversations", `UPDATE conversations SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`),
-	legacyWorkspaceMigration("conversations", `ALTER TABLE conversations ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`),
-	`ALTER TABLE conversations ALTER COLUMN workspace_id SET NOT NULL`,
 	`CREATE INDEX IF NOT EXISTS conversations_workspace_updated_idx ON conversations(workspace_id, updated_at DESC)`,
 	`CREATE TABLE IF NOT EXISTS agents (
 		id text PRIMARY KEY,
-		workspace_id text,
+		workspace_id bigint,
 		user_id text,
 		project_id text,
 		name text NOT NULL,
@@ -109,7 +92,7 @@ var postgresMigrations = []string{
 	`CREATE TABLE IF NOT EXISTS messages (
 		id text PRIMARY KEY,
 		conversation_id text NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-		workspace_id text NOT NULL DEFAULT 'default_workspace',
+		workspace_id bigint NOT NULL,
 		user_id text,
 		project_id text,
 		role text NOT NULL,
@@ -118,18 +101,13 @@ var postgresMigrations = []string{
 		web_citations jsonb NOT NULL DEFAULT '[]'::jsonb,
 		created_at timestamptz NOT NULL
 	)`,
-	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS workspace_id text`,
-	legacyWorkspaceMigration("messages", `UPDATE messages m SET workspace_id = c.workspace_id FROM conversations c WHERE c.id = m.conversation_id AND (m.workspace_id IS NULL OR BTRIM(m.workspace_id) = '' OR m.workspace_id = 'default')`),
-	legacyWorkspaceMigration("messages", `UPDATE messages SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`),
-	legacyWorkspaceMigration("messages", `ALTER TABLE messages ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`),
-	`ALTER TABLE messages ALTER COLUMN workspace_id SET NOT NULL`,
 	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS citations jsonb NOT NULL DEFAULT '[]'::jsonb`,
 	`ALTER TABLE messages ADD COLUMN IF NOT EXISTS web_citations jsonb NOT NULL DEFAULT '[]'::jsonb`,
 	`CREATE TABLE IF NOT EXISTS runs (
 		id text PRIMARY KEY,
 		agent_id text NOT NULL REFERENCES agents(id),
 		conversation_id text NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-		workspace_id text NOT NULL DEFAULT 'default_workspace',
+		workspace_id bigint NOT NULL,
 		user_id text,
 		project_id text,
 		status text NOT NULL,
@@ -140,11 +118,6 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
-	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS workspace_id text`,
-	legacyWorkspaceMigration("runs", `UPDATE runs r SET workspace_id = c.workspace_id FROM conversations c WHERE c.id = r.conversation_id AND (r.workspace_id IS NULL OR BTRIM(r.workspace_id) = '' OR r.workspace_id = 'default')`),
-	legacyWorkspaceMigration("runs", `UPDATE runs SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`),
-	legacyWorkspaceMigration("runs", `ALTER TABLE runs ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`),
-	`ALTER TABLE runs ALTER COLUMN workspace_id SET NOT NULL`,
 	`CREATE INDEX IF NOT EXISTS runs_workspace_created_idx ON runs(workspace_id, created_at DESC)`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS heartbeat_at timestamptz`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS runtime_snapshot jsonb`,
@@ -156,7 +129,7 @@ var postgresMigrations = []string{
 		id text PRIMARY KEY,
 		run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
 		conversation_id text NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-		workspace_id text,
+		workspace_id bigint,
 		user_id text,
 		project_id text,
 		role text NOT NULL,
@@ -385,7 +358,7 @@ var postgresMigrations = []string{
 		id text PRIMARY KEY,
 		version bigint NOT NULL DEFAULT 1,
 		deleted_at timestamptz,
-		workspace_id text NOT NULL DEFAULT 'default_workspace',
+		workspace_id bigint NOT NULL,
 		user_id text,
 		project_id text,
 		conversation_id text REFERENCES conversations(id) ON DELETE SET NULL,
@@ -397,11 +370,10 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
-	`ALTER TABLE memories ADD COLUMN IF NOT EXISTS workspace_id text`,
 	`ALTER TABLE memories ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 1`,
 	`ALTER TABLE memories ADD COLUMN IF NOT EXISTS deleted_at timestamptz`,
 	`CREATE TABLE IF NOT EXISTS memory_changes (
-		workspace_id text NOT NULL,
+		workspace_id bigint NOT NULL,
 		memory_id text NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
 		operation_id text NOT NULL,
 		command_hash text NOT NULL,
@@ -416,13 +388,9 @@ var postgresMigrations = []string{
 	)`,
 	`CREATE INDEX IF NOT EXISTS memory_changes_history_idx ON memory_changes(memory_id, version DESC)`,
 	`CREATE INDEX IF NOT EXISTS memory_changes_source_idx ON memory_changes(source_message_id)`,
-	legacyWorkspaceMigration("memories", `UPDATE memories m SET workspace_id = c.workspace_id FROM conversations c WHERE c.id = m.conversation_id AND (m.workspace_id IS NULL OR BTRIM(m.workspace_id) = '' OR m.workspace_id = 'default')`),
-	legacyWorkspaceMigration("memories", `UPDATE memories SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`),
-	legacyWorkspaceMigration("memories", `ALTER TABLE memories ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`),
-	`ALTER TABLE memories ALTER COLUMN workspace_id SET NOT NULL`,
 	`CREATE TABLE IF NOT EXISTS memory_candidates (
 		id text PRIMARY KEY,
-		workspace_id text NOT NULL DEFAULT 'default_workspace',
+		workspace_id bigint NOT NULL,
 		conversation_id text REFERENCES conversations(id) ON DELETE CASCADE,
 		run_id text REFERENCES runs(id) ON DELETE SET NULL,
 		source_message_id text NOT NULL,
@@ -436,11 +404,6 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE memory_candidates ADD COLUMN IF NOT EXISTS confidence double precision NOT NULL DEFAULT 1`,
-	`ALTER TABLE memory_candidates ADD COLUMN IF NOT EXISTS workspace_id text`,
-	legacyWorkspaceMigration("memory_candidates", `UPDATE memory_candidates m SET workspace_id=c.workspace_id FROM conversations c WHERE c.id=m.conversation_id AND (m.workspace_id IS NULL OR BTRIM(m.workspace_id)='' OR m.workspace_id='default')`),
-	legacyWorkspaceMigration("memory_candidates", `UPDATE memory_candidates SET workspace_id='default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id)='' OR workspace_id='default'`),
-	legacyWorkspaceMigration("memory_candidates", `ALTER TABLE memory_candidates ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`),
-	`ALTER TABLE memory_candidates ALTER COLUMN workspace_id SET NOT NULL`,
 	`CREATE TABLE IF NOT EXISTS memory_embeddings (
 		memory_id text PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
 		provider text NOT NULL,
@@ -465,7 +428,7 @@ var postgresMigrations = []string{
 	END $$`,
 	`CREATE TABLE IF NOT EXISTS documents (
 		id text PRIMARY KEY,
-		workspace_id text NOT NULL DEFAULT 'default_workspace',
+		workspace_id bigint NOT NULL,
 		source_key text NOT NULL DEFAULT '',
 		title text NOT NULL,
 		version text NOT NULL DEFAULT '',
@@ -482,10 +445,6 @@ var postgresMigrations = []string{
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
-	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS workspace_id text`,
-	legacyWorkspaceMigration("documents", `UPDATE documents SET workspace_id = 'default_workspace' WHERE workspace_id IS NULL OR BTRIM(workspace_id) = '' OR workspace_id = 'default'`),
-	legacyWorkspaceMigration("documents", `ALTER TABLE documents ALTER COLUMN workspace_id SET DEFAULT 'default_workspace'`),
-	`ALTER TABLE documents ALTER COLUMN workspace_id SET NOT NULL`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS version text NOT NULL DEFAULT ''`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_hash text NOT NULL DEFAULT ''`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_key text NOT NULL DEFAULT ''`,
@@ -609,7 +568,7 @@ var postgresMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_context_compactions_conversation_created ON context_compactions(conversation_id, created_at ASC)`,
 	`CREATE TABLE IF NOT EXISTS task_state_revisions (
 		id text PRIMARY KEY,
-		workspace_id text NOT NULL,
+		workspace_id bigint NOT NULL,
 		conversation_id text NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
 		version bigint NOT NULL,
 		previous_version bigint NOT NULL,

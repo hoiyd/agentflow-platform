@@ -97,7 +97,7 @@ export function IdentityBoundary({ children }: { children: ReactNode }) {
   return (
     <div className="identity-workspace">
       <header className="identity-toolbar">
-        <span>{session?.mode === "local" ? "Local workspace" : session?.user?.name || session?.user?.id}</span>
+        <span>{session?.mode === "local" ? "Super (local)" : session?.user?.name || session?.user?.id}</span>
         <WorkspaceSwitcher workspaces={workspaces} selected={workspace}
           onChange={id => { sessionStorage.setItem(workspaceKey, id); window.location.assign("/workspace"); }} />
         <button type="button" title="Workspace settings" aria-label="Workspace settings" onClick={() => setSettingsOpen(true)}><Settings size={15} /></button>

@@ -60,12 +60,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	if !ok {
 		return applicationDependencies{}, errors.New("Workspace lifecycle requires PostgreSQL")
 	}
-	workspaceCtx, cancelWorkspace := context.WithTimeout(context.Background(), 30*time.Second)
-	err = workspaceStore.InitializeWorkspaceLifecycle(workspaceCtx)
-	cancelWorkspace()
-	if err != nil {
-		return applicationDependencies{}, fmt.Errorf("initialize Workspaces: %w", err)
-	}
+
 	if cfg.AuthMode == "oidc" && !slices.Contains(splitOrigins(cfg.AllowedOrigins), strings.TrimSuffix(cfg.AuthWebURL, "/")) {
 		return applicationDependencies{}, errors.New("ALLOWED_ORIGINS must include AUTH_WEB_URL for OIDC browser sessions")
 	}

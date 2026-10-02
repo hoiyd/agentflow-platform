@@ -10,8 +10,8 @@ before accepting the implementation:
 
 | Failure | Required outcome |
 | --- | --- |
-| Legacy namespace has no owner or multiple owners | Preview reports the conflict; apply requires an explicit owner mapping and makes no partial data changes |
-| Migration is interrupted or repeated | Transaction rollback or idempotent completion; existing resource IDs and content remain intact |
+| Database still uses retired string scopes | Startup rejects the incompatible schema; no automatic rewriting or guessed ownership |
+| API restarts | Existing IDs, defaults, owner grants and revocations remain unchanged |
 | Another user submits a Workspace ID | No read, mutation, default selection or ownership change |
 | Name is empty/too long or status invalid | Reject without modifying the entity |
 | Default/last active Workspace is archived or deleted | Require an owned active replacement; never leave an invalid default |
@@ -44,9 +44,8 @@ Revoking access or deleting a space does not delete that marker, so repeat OIDC
 login cannot implicitly restore access or recreate an old space.
 
 New verified OIDC users receive one owned Personal workspace transactionally.
-Local mode uses reserved `user_local` with a separate owned Personal workspace:
+Local mode uses reserved `super` (display name **Super**) with a separate owned Personal workspace:
 it is a database owner, **not** a login credential or browser-supplied identity.
-The old `default_workspace` also needs an explicit owner; it has no exemptions.
 Clients cannot supply an owner or generated ID through create/update requests.
 
 ## Lifecycle and UI
@@ -102,54 +101,23 @@ operators manage it; private per-Workspace Agent configurations are not added he
 PROD-002 still owns the comprehensive object-authorization audit. Owner entity
 checks do not prove a complete public multi-tenant security boundary.
 
-## Legacy Migration
+## Initialization and Recovery
 
-For old databases, run from the repository root:
+New databases create the current Workspace entity, BIGINT references, ownership
+constraints, write guards and the reserved Super default directly. Startup never
+rewrites old namespaces, removes identity aliases or renames users. The one-off
+Workspace/identity migration commands have been retired after the deployed data
+was converted. String Workspace IDs are not accepted as runtime aliases.
 
-```bash
-bash scripts/workspace-migrate.sh
-bash scripts/workspace-migrate.sh --owner '<legacy-space>=<existing-user-id>'
-# Stop API traffic and take a FULL database backup before apply.
-bash scripts/workspace-migrate.sh --owner '<legacy-space>=<existing-user-id>' --apply
-```
+Existing migrated databases retain their IDs, owners, defaults, revocations and
+resource records across restarts. Historical migration audit rows, when present,
+are retained data; new databases do not create migration bookkeeping tables.
+Pre-migration full database backups remain outside version control.
 
-The wrapper loads `apps/api/.env` and passes all flags to the Go command.
-`--owner` is repeatable, `--timeout` defaults to `2m`, and no `--apply` means a
-genuinely read-only preview (no startup DDL, seeds or assignments). A namespace
-with exactly one existing owner is inferred. Missing/multiple ownership requires
-an explicit existing User mapping; `user_local` can be selected deliberately.
-Unknown users, conflicting rerun mappings and ambiguity reject the whole apply.
-An explicit reassignment establishes the chosen owner's grant; an existing
-owner's revoked grant is not restored just by repeating its mapping.
-
-Apply takes table/advisory locks and rewrites all affected namespaces in one
-transaction, so numeric old namespaces cannot collide through sequential string
-replacement. Conversations, Messages, Runs, collaboration rows, Memory records,
-Documents, Task State and authorization references receive the new IDs. Resource
-IDs/content remain intact. Task State's current root scope is updated; immutable
-event payloads, captured prompts and runtime protocol snapshots stay historical
-evidence, never arbitrarily searched/replaced. `workspace_migrations` records the
-mapping for auditing/repeatability, not runtime alias lookup. Cross-owner old grants
-are removed, revocation markers retained, and ownership/reference FKs installed.
-
-Databases created by the earlier generated-alias layout are upgraded by the same
-transaction: reference columns become BIGINT, FKs point directly to `id`, and the
-entity's redundant `workspace_id` column is dropped without `CASCADE`. Numeric
-IDs, names, defaults and resource contents stay unchanged. Startup backfills skip
-the upgraded integer columns. Stop the old API and back up before applying this
-layout change; the old binary still depends on the removed alias.
-
-Executing/queued/canceling Runs block apply; finish/cancel them **before** stopping
-the old API. All legacy spaces must have an owner before applying; there is no
-partial migration that mixes numeric entities and legacy aliases. Deferring one
-ambiguous space also defers live apply, but does not prevent testing in disposable
-databases. The upgraded API refuses startup with outstanding old references.
-
-After apply, restart the API and verify names, defaults, resource counts and owner
-access. Repeated apply with the same mapping is idempotent. New databases bootstrap
-the entity/constraints and local default automatically. A pre-lifecycle binary is
-not a safe rollback on the upgraded DB: restore the matching full backup and
-binary with traffic stopped. Do not drop new tables or guess a reverse mapping.
+To recover a pre-migration backup, stop traffic and restore both its matching
+schema and application version. The current API does not upgrade those old
+schemas automatically; do not use an old binary against the current database or
+guess a reverse mapping.
 
 ## Repeatable Evidence
 
@@ -157,14 +125,15 @@ Use a dedicated `TEST_DATABASE_URL` with CREATEDB privileges:
 
 ```bash
 go -C apps/api test ./internal/store ./internal/identity ./internal/httpapi \
-  -run 'TestWorkspace|TestPersonalWorkspace|TestOIDC|TestAuthenticatedWorkspace' -count=1
+  -run 'TestWorkspace|TestPersonalWorkspace|TestDatabaseMembership|TestOIDC|TestAuthenticatedWorkspace' -count=1
+bash scripts/test-browser.sh super-local.spec.ts
 AGENTFLOW_IDENTITY_TEST=1 bash scripts/test-browser.sh workspace-lifecycle.spec.ts identity.spec.ts
 ```
 
 The browser gate uses real Next.js, production Go composition, disposable
 Postgres and signed OIDC identities, not mocked business endpoints. It retains
 `workspace-lifecycle-evidence.json` and `workspace-owner-boundary-evidence.json`
-under ignored Playwright results. Backend cases cover migration rollback/rerun,
-numeric collision, persistent references, owner/default FKs, revoked-login behavior,
+under ignored Playwright results. Backend cases cover direct current-schema
+initialization, exact BIGINT serialization, restart persistence, owner/default FKs, revoked-login behavior,
 late writes and unfinished/uncertain execution. These are deterministic functional
 boundaries, not live IdP configuration, performance or a complete PROD-002 audit.

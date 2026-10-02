@@ -1,12 +1,14 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/identity"
 )
 
 func (s *PostgresStore) ListConversations() ([]domain.Conversation, error) {
@@ -48,7 +50,11 @@ func (s *PostgresStore) ListConversationsByWorkspace(workspaceID string) ([]doma
 }
 
 func (s *PostgresStore) CreateConversation(title string) (domain.Conversation, error) {
-	return s.CreateConversationInWorkspace(domain.DefaultWorkspaceID, title)
+	workspaceID, err := s.DefaultWorkspace(context.Background(), identity.SuperUserID)
+	if err != nil {
+		return domain.Conversation{}, err
+	}
+	return s.CreateConversationInWorkspace(workspaceID, title)
 }
 
 func (s *PostgresStore) CreateConversationInWorkspace(workspaceID string, title string) (domain.Conversation, error) {

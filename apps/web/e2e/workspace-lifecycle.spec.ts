@@ -68,7 +68,7 @@ test("different OIDC owners cannot access or close each other's spaces; defaults
   const created = await page.request.post(`${api}/api/workspaces`, { headers: { Origin: web }, data: { name: "Owner boundary evidence" } });
   expect(created.status()).toBe(201);
   const space = await created.json();
-  expect((await page.request.post(`${api}/api/workspaces`, { headers: { Origin: web }, data: { name: "Forged owner", owner_user_id: "user_local" } })).status()).toBe(400);
+  expect((await page.request.post(`${api}/api/workspaces`, { headers: { Origin: web }, data: { name: "Forged owner", owner_user_id: "super" } })).status()).toBe(400);
   expect((await page.request.post(`${api}/api/workspaces`, { headers: { Origin: web }, data: { name: "   " } })).status()).toBe(400);
   const selected = { Origin: web, "X-Workspace-ID": space.id };
   const conversation = await (await page.request.post(`${api}/api/conversations`, { headers: selected, data: { title: "Only this owner" } })).json();

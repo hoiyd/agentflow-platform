@@ -35,44 +35,29 @@ func TestIdentitySchemaDoesNotCreateImportBookkeeping(t *testing.T) {
 	}
 }
 
-func TestDatabaseMembershipsSurviveSchemaUpgradeAndRestart(t *testing.T) {
-	ctx := context.Background()
+func TestDatabaseMembershipsSurviveRestart(t *testing.T) {
+	ctx := t.Context()
 	dbURL := pgfixture.DatabaseURL(t)
-	legacy, err := sql.Open("pgx", dbURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = legacy.Close() })
-	issuer := "https://existing.example/realm"
-	user := identity.User{ID: identity.UserID(issuer, "revoked"), Issuer: issuer, Subject: "revoked"}
-	// Upgrading an existing identity database must preserve shared grants.
-	for _, statement := range []string{
-		`CREATE TABLE auth_users (id text PRIMARY KEY, issuer text NOT NULL, subject text NOT NULL, name text NOT NULL DEFAULT '', UNIQUE(issuer,subject))`,
-		`CREATE TABLE auth_memberships (user_id text NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, workspace_id text NOT NULL, PRIMARY KEY(user_id,workspace_id))`,
-	} {
-		if _, err := legacy.Exec(statement); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := legacy.Exec(`INSERT INTO auth_users(id,issuer,subject) VALUES($1,$2,$3)`, user.ID, issuer, user.Subject); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := legacy.Exec(`INSERT INTO auth_memberships(user_id,workspace_id) VALUES($1,'retained-grant')`, user.ID); err != nil {
-		t.Fatal(err)
-	}
 	db, err := store.NewPostgresStore(dbURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	if err := db.ApplyWorkspaceMigration(ctx, nil); err != nil {
+	sqlDB, err := sql.Open("pgx", dbURL)
+	if err != nil {
 		t.Fatal(err)
 	}
-	items, err := db.ListMemberships(ctx, user.ID)
-	if err != nil || len(items) != 1 || items[0] == "retained-grant" {
-		t.Fatalf("upgrade changed database membership: %v %v", items, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	issuer := "https://existing.example/realm"
+	user := identity.User{ID: identity.UserID(issuer, "revoked"), Issuer: issuer, Subject: "revoked"}
+	if err = db.UpsertIdentity(ctx, user); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := legacy.Exec(`DELETE FROM auth_memberships WHERE user_id=$1`, user.ID); err != nil {
+	if err = db.ProvisionPersonalWorkspace(ctx, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	original, err := db.DefaultWorkspace(ctx, user.ID)
+	if err != nil {
 		t.Fatal(err)
 	}
 	restarted, err := store.NewPostgresStore(dbURL)
@@ -80,6 +65,16 @@ func TestDatabaseMembershipsSurviveSchemaUpgradeAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = restarted.Close() })
+	items, err := restarted.ListMemberships(ctx, user.ID)
+	if err != nil || len(items) != 1 || items[0] != original {
+		t.Fatalf("restart changed membership: %v %v", items, err)
+	}
+	if _, err = sqlDB.Exec(`DELETE FROM auth_memberships WHERE user_id=$1`, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = restarted.ProvisionPersonalWorkspace(ctx, user.ID); err != nil {
+		t.Fatal(err)
+	}
 	items, err = restarted.ListMemberships(ctx, user.ID)
 	if err != nil || len(items) != 0 {
 		t.Fatalf("restart restored revoked membership: %v %v", items, err)

@@ -43,6 +43,10 @@ func NewPostgresStore(databaseURL string) (*PostgresStore, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := store.InitializeWorkspaceLifecycle(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if err := store.purgeExpiredToolArtifactContent(ctx); err != nil {
 		_ = db.Close()
 		return nil, err
