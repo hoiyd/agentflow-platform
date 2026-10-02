@@ -84,8 +84,11 @@ RPM/TPM reservations are not refunded if cancellation occurs after consumption.
 Each physical retry reacquires capacity; provider backoff holds no slots.
 
 Identity comes from the authenticated Session (`super` only in trusted-local
-mode) or the persisted Run's immutable Workspace ownership. Run attempts check
-current Membership and active Workspace both before waiting and before transport;
+mode) or the persisted Run's immutable Workspace ownership.
+Trusted-local HTTP requests bind `super` before dispatch, including Knowledge
+ingestion/search and explicit Memory writes/recall that have no Run or Session.
+Run attempts check current Membership and active Workspace both before waiting
+and before transport;
 missing/deleted/archived/revoked ownership fails closed. Resume passes existing
 resource authorization first. Header/query/body/Tool values cannot choose a quota
 owner. Single, Multi-Agent, Autonomous, compaction, title generation, Memory

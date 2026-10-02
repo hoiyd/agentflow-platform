@@ -8,8 +8,25 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/identity"
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 )
+
+func TestTrustedLocalRequestBindsModelOwner(t *testing.T) {
+	h := &Handler{} // A nil OIDC manager denotes trusted-local mode.
+	r := httptest.NewRequest(http.MethodPost, "/api/documents", nil)
+	r.Header.Set("X-Owner-ID", "forged-owner")
+	w := httptest.NewRecorder()
+	h.withIdentity(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if owner := requestcontrol.OwnerFromContext(r.Context()); owner != identity.SuperUserID {
+			t.Fatalf("trusted-local model owner = %q, want %q", owner, identity.SuperUserID)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})).ServeHTTP(w, r)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("local request status = %d", w.Code)
+	}
+}
 
 // Both JSON dependency failures and already-open SSE must expose local overload,
 // not a generic 500/provider fault. SSE cannot change its committed HTTP status.
