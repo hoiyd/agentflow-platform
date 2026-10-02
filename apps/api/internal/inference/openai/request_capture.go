@@ -71,6 +71,7 @@ func (c *Client) finishModelAttempt(ctx context.Context, ref requestcontrol.Atte
 		Status: "completed", DurationMS: finished.Sub(started).Milliseconds(),
 		PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens, TotalTokens: usage.TotalTokens,
 		UsageEstimated: usage.Estimated, UsageAvailable: usage.Valid(),
+		Breakdown:    usage.Breakdown,
 		FinishReason: finishReason,
 	}
 	if timing := requestcontrol.AttemptTimingFromContext(ctx); timing != nil {

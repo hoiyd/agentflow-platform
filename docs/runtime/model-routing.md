@@ -107,8 +107,11 @@ Resume rebuilds a Catalog only from those frozen routes:
 
 ## Current Boundary
 
+Route pricing now feeds [cache-aware Run Budget settlement](run-budget.md#usage-breakdown-and-cache-aware-cost).
+Optional cached-input quotes and source are frozen with the route; metadata-only
+zero-rate routes retain the frozen global budget fallback.
 H-10A does not implement health scoring, retries across routes, failover,
-load-aware selection, per-route cost settlement, or cost/quality optimization.
+load-aware selection, or cost/quality optimization.
 Provider retry remains inside the selected adapter, while concurrency limits
 and Run Budget retain their existing owners. Bounded failover belongs to a
 later feature backed by two real targets and evaluation evidence.

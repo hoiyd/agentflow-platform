@@ -291,6 +291,45 @@ func (e SkillEvidenceInstructions) Valid() bool {
 	}
 }
 
+// Defines values for UsageBreakdownSource.
+const (
+	DeepseekCache  UsageBreakdownSource = "deepseek_cache"
+	InvalidDetails UsageBreakdownSource = "invalid_details"
+	OpenaiDetails  UsageBreakdownSource = "openai_details"
+)
+
+// Valid indicates whether the value is a known member of the UsageBreakdownSource enum.
+func (e UsageBreakdownSource) Valid() bool {
+	switch e {
+	case DeepseekCache:
+		return true
+	case InvalidDetails:
+		return true
+	case OpenaiDetails:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UsageCostDetailsStatus.
+const (
+	Estimated UsageCostDetailsStatus = "estimated"
+	Unknown   UsageCostDetailsStatus = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the UsageCostDetailsStatus enum.
+func (e UsageCostDetailsStatus) Valid() bool {
+	switch e {
+	case Estimated:
+		return true
+	case Unknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VerificationPolicyInputMode.
 const (
 	AllMustPass VerificationPolicyInputMode = "all_must_pass"
@@ -766,7 +805,12 @@ type RunTraceSummary struct {
 
 // RunUsageEntry defines model for RunUsageEntry.
 type RunUsageEntry struct {
-	CompletionTokens    *int                 `json:"completion_tokens,omitempty"`
+	// Breakdown Optional provider-reported subsets, already included in prompt/completion totals. Absent is unknown, not zero.
+	Breakdown        *UsageBreakdown `json:"breakdown,omitempty"`
+	CompletionTokens *int            `json:"completion_tokens,omitempty"`
+
+	// CostDetails Frozen quote and settlement assumptions; an estimate, not a provider invoice.
+	CostDetails         *UsageCostDetails    `json:"cost_details,omitempty"`
 	Estimated           *bool                `json:"estimated,omitempty"`
 	EstimatedCostMicros *int64               `json:"estimated_cost_micros,omitempty"`
 	Id                  string               `json:"id"`
@@ -803,6 +847,7 @@ type RunUsageLedger struct {
 // RunUsageTotals defines model for RunUsageTotals.
 type RunUsageTotals struct {
 	CompletionTokens    int   `json:"completion_tokens"`
+	CostUnknownEntries  *int  `json:"cost_unknown_entries,omitempty"`
 	EstimatedCostMicros int64 `json:"estimated_cost_micros"`
 	ModelCalls          int   `json:"model_calls"`
 	OpenReservations    int   `json:"open_reservations"`
@@ -891,6 +936,35 @@ type ToolInfo struct {
 // UpdateConversationRequest defines model for UpdateConversationRequest.
 type UpdateConversationRequest struct {
 	Title string `json:"title"`
+}
+
+// UsageBreakdown Optional provider-reported subsets, already included in prompt/completion totals. Absent is unknown, not zero.
+type UsageBreakdown struct {
+	CachedInputTokens *int                 `json:"cached_input_tokens,omitempty"`
+	ReasoningTokens   *int                 `json:"reasoning_tokens,omitempty"`
+	Source            UsageBreakdownSource `json:"source"`
+}
+
+// UsageBreakdownSource defines model for UsageBreakdown.Source.
+type UsageBreakdownSource string
+
+// UsageCostDetails Frozen quote and settlement assumptions; an estimate, not a provider invoice.
+type UsageCostDetails struct {
+	CacheDiscountApplied bool                   `json:"cache_discount_applied"`
+	Pricing              UsagePricing           `json:"pricing"`
+	Reason               string                 `json:"reason"`
+	Status               UsageCostDetailsStatus `json:"status"`
+}
+
+// UsageCostDetailsStatus defines model for UsageCostDetails.Status.
+type UsageCostDetailsStatus string
+
+// UsagePricing defines model for UsagePricing.
+type UsagePricing struct {
+	CachedInputPerMillionTokensMicros *int64 `json:"cached_input_per_million_tokens_micros,omitempty"`
+	InputPerMillionTokensMicros       int64  `json:"input_per_million_tokens_micros"`
+	OutputPerMillionTokensMicros      int64  `json:"output_per_million_tokens_micros"`
+	Source                            string `json:"source"`
 }
 
 // VerificationArtifact defines model for VerificationArtifact.

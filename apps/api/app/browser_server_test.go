@@ -45,12 +45,18 @@ func TestBrowserServer(t *testing.T) {
 	if os.Getenv("AGENTFLOW_REASONING_TEST") == "1" {
 		capabilities["reasoning_display_format"] = "deepseek_reasoning_content"
 	}
+	pricing := map[string]any{"source": "fixture"}
+	if os.Getenv("AGENTFLOW_USAGE_TEST") == "1" {
+		pricing["input_per_million_tokens_micros"] = 2000000
+		pricing["output_per_million_tokens_micros"] = 1000000
+		pricing["cached_input_per_million_tokens_micros"] = 500000
+	}
 	routes, err := json.Marshal(map[string]any{"routes": []any{map[string]any{
 		"id": "browser-fixture", "model": "fixture-model", "base_url": providerServer.URL,
 		"credential_environment": "BROWSER_FIXTURE_KEY", "request_timeout_seconds": 45,
 		"capabilities":          capabilities,
 		"context_window_tokens": 128000, "max_output_tokens": 8192, "priority": 100,
-		"pricing": map[string]string{"source": "fixture"},
+		"pricing": pricing,
 	}}})
 	if err != nil {
 		t.Fatal(err)

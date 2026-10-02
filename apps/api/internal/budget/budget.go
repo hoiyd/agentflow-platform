@@ -66,6 +66,7 @@ type EventSink interface {
 }
 
 type ModelCallEstimate struct {
+	RouteID               string
 	OperationID           string
 	Purpose               domain.RunUsagePurpose
 	Model                 string
@@ -73,6 +74,7 @@ type ModelCallEstimate struct {
 }
 
 type ModelReservation struct {
+	Pricing               domain.ModelRoutePricing
 	OperationID           string
 	Purpose               domain.RunUsagePurpose
 	Model                 string
@@ -86,6 +88,7 @@ type ModelUsage struct {
 	CompletionTokens int
 	TotalTokens      int
 	Estimated        bool
+	Breakdown        *domain.UsageBreakdown `json:"breakdown,omitempty"`
 }
 
 type ToolCall struct {
@@ -126,14 +129,17 @@ func (t *Tracker) BeginModelCall(ctx context.Context, estimate ModelCallEstimate
 	}
 	purpose := normalizePurpose(estimate.Purpose)
 	promptTokens := max(0, estimate.EstimatedPromptTokens)
+	pricing, err := t.modelPricing(estimate)
+	if err != nil {
+		return ModelReservation{}, err
+	}
 	entry := t.entry(ctx, domain.UsageModelReservation, operationID, purpose)
 	entry.Model = strings.TrimSpace(estimate.Model)
 	entry.ModelCalls = 1
 	entry.PromptTokens = promptTokens
 	entry.CompletionTokens = 1
 	entry.TotalTokens = promptTokens + 1
-	entry.EstimatedCostMicros = tokenCostMicros(promptTokens, t.budget.InputCostPerMillionTokensMicros) +
-		tokenCostMicros(1, t.budget.OutputCostPerMillionTokensMicros)
+	entry.EstimatedCostMicros, entry.CostDetails = usageCost(pricing, promptTokens, 1, nil, true)
 	entry.Estimated = true
 	ledger, applied, err := t.store.ApplyRunUsage(entry)
 	if err != nil {
@@ -144,13 +150,17 @@ func (t *Tracker) BeginModelCall(ctx context.Context, estimate ModelCallEstimate
 		t.publishUsage(ctx, entry, ledger)
 	}
 	return ModelReservation{
+		Pricing:     pricing.Clone(),
 		OperationID: operationID, Purpose: purpose, Model: entry.Model,
 		EstimatedPromptTokens: promptTokens, EstimatedCostMicros: entry.EstimatedCostMicros,
-		MaxCompletionTokens: maxCompletionTokens(t.budget, ledger.Totals, entry),
+		MaxCompletionTokens: maxCompletionTokens(pricedLimits(t.budget, pricing), ledger.Totals, entry),
 	}, nil
 }
 
 func (t *Tracker) SettleModelCall(ctx context.Context, reservation ModelReservation, usage ModelUsage) error {
+	if err := usage.Breakdown.Validate(usage.PromptTokens, usage.CompletionTokens); err != nil {
+		return err
+	}
 	promptTokens := max(0, usage.PromptTokens)
 	completionTokens := max(0, usage.CompletionTokens)
 	totalTokens := usage.TotalTokens
@@ -163,8 +173,8 @@ func (t *Tracker) SettleModelCall(ctx context.Context, reservation ModelReservat
 	entry.PromptTokens = promptTokens
 	entry.CompletionTokens = completionTokens
 	entry.TotalTokens = max(totalTokens, promptTokens+completionTokens)
-	entry.EstimatedCostMicros = tokenCostMicros(promptTokens, t.budget.InputCostPerMillionTokensMicros) +
-		tokenCostMicros(completionTokens, t.budget.OutputCostPerMillionTokensMicros)
+	entry.Breakdown = usage.Breakdown
+	entry.EstimatedCostMicros, entry.CostDetails = usageCost(reservation.Pricing, promptTokens, completionTokens, usage.Breakdown, usage.Estimated)
 	entry.Estimated = usage.Estimated
 	ledger, applied, err := t.store.ApplyRunUsage(entry)
 	if applied {
@@ -248,6 +258,8 @@ func (t *Tracker) publishUsage(ctx context.Context, entry domain.RunUsageEntry, 
 			"prompt_tokens": ledger.Totals.PromptTokens, "completion_tokens": ledger.Totals.CompletionTokens,
 			"total_tokens": ledger.Totals.TotalTokens, "estimated_cost_micros": ledger.Totals.EstimatedCostMicros,
 			"open_reservations": ledger.Totals.OpenReservations, "usage_estimated": entry.Estimated,
+			"breakdown": entry.Breakdown, "cost_details": entry.CostDetails,
+			"cost_unknown_entries": ledger.Totals.CostUnknownEntries,
 		},
 	})
 }

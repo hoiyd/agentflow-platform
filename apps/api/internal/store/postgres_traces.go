@@ -244,16 +244,24 @@ func (s *PostgresStore) ApplyRunUsage(entry domain.RunUsageEntry) (domain.RunUsa
 			return current, false, err
 		}
 	}
+	breakdown, err := json.Marshal(entry.Breakdown)
+	if err != nil {
+		return domain.RunUsageLedger{}, false, err
+	}
+	costDetails, err := json.Marshal(entry.CostDetails)
+	if err != nil {
+		return domain.RunUsageLedger{}, false, err
+	}
 	_, err = tx.Exec(`
 		INSERT INTO run_usage_entries (
 			id, run_id, operation_id, stage_id, turn_id, kind, purpose, model, tool_name,
 			model_calls, tool_calls, prompt_tokens, completion_tokens, total_tokens,
-			estimated_cost_micros, estimated, timestamp
-		) VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+			estimated_cost_micros, estimated, timestamp, breakdown, cost_details
+		) VALUES ($1,$2,$3,NULLIF($4,''),NULLIF($5,''),$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
 		entry.ID, entry.RunID, entry.OperationID, entry.StageID, entry.TurnID, string(entry.Kind),
 		string(entry.Purpose), entry.Model, entry.ToolName, entry.ModelCalls, entry.ToolCalls,
 		entry.PromptTokens, entry.CompletionTokens, entry.TotalTokens, entry.EstimatedCostMicros,
-		entry.Estimated, entry.Timestamp)
+		entry.Estimated, entry.Timestamp, breakdown, costDetails)
 	if err != nil {
 		return domain.RunUsageLedger{}, false, err
 	}
@@ -290,7 +298,7 @@ func listRunUsageEntries(queryer usageQueryer, runID string) ([]domain.RunUsageE
 	rows, err := queryer.Query(`
 		SELECT id, run_id, operation_id, COALESCE(stage_id,''), COALESCE(turn_id,''),
 			kind, purpose, model, tool_name, model_calls, tool_calls, prompt_tokens,
-			completion_tokens, total_tokens, estimated_cost_micros, estimated, timestamp
+			completion_tokens, total_tokens, estimated_cost_micros, estimated, timestamp, breakdown, cost_details
 		FROM run_usage_entries WHERE run_id = $1 ORDER BY timestamp, id`, runID)
 	if err != nil {
 		return nil, err
@@ -300,15 +308,22 @@ func listRunUsageEntries(queryer usageQueryer, runID string) ([]domain.RunUsageE
 	for rows.Next() {
 		var entry domain.RunUsageEntry
 		var kind, purpose string
+		var breakdown, costDetails []byte
 		if err := rows.Scan(
 			&entry.ID, &entry.RunID, &entry.OperationID, &entry.StageID, &entry.TurnID,
 			&kind, &purpose, &entry.Model, &entry.ToolName, &entry.ModelCalls, &entry.ToolCalls,
 			&entry.PromptTokens, &entry.CompletionTokens, &entry.TotalTokens,
-			&entry.EstimatedCostMicros, &entry.Estimated, &entry.Timestamp,
+			&entry.EstimatedCostMicros, &entry.Estimated, &entry.Timestamp, &breakdown, &costDetails,
 		); err != nil {
 			return nil, err
 		}
 		entry.Kind = domain.RunUsageEntryKind(kind)
+		if err := json.Unmarshal(breakdown, &entry.Breakdown); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(costDetails, &entry.CostDetails); err != nil {
+			return nil, err
+		}
 		entry.Purpose = domain.RunUsagePurpose(purpose)
 		entries = append(entries, entry)
 	}

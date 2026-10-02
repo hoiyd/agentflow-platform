@@ -38,6 +38,8 @@ export function RunUsagePanel({ ledger, activeRuntimeMS, events }: RunUsagePanel
   ];
   const hasLedger = ledger.entries.length > 0 || Boolean(ledger.updated_at) || rows.some((row) => row.limit > 0);
   const exceededEvent = [...events].reverse().find((event) => event.type === "budget.exceeded");
+  const unknownCosts = ledger.totals.cost_unknown_entries ?? 0;
+  const settlements = ledger.entries.filter((entry) => entry.kind === "model.settlement");
 
   return (
     <section className="usage-ledger" aria-labelledby="resource-usage-title">
@@ -49,6 +51,7 @@ export function RunUsagePanel({ ledger, activeRuntimeMS, events }: RunUsagePanel
           <div className="usage-ledger-meta">
             <span>{hasLedger ? "Frozen budget" : "Legacy run"}</span>
             <span>{ledger.entries.length} ledger entries</span>
+            {unknownCosts > 0 ? <span>{unknownCosts} call{unknownCosts === 1 ? "" : "s"} unpriced</span> : null}
             <span className={ledger.totals.open_reservations > 0 ? "active" : ""}>
               {ledger.totals.open_reservations} open reservations
             </span>
@@ -75,23 +78,43 @@ export function RunUsagePanel({ ledger, activeRuntimeMS, events }: RunUsagePanel
           </thead>
           <tbody>
             {rows.map((row) => (
-              <ResourceUsageTableRow key={row.key} row={row} />
+              <ResourceUsageTableRow key={row.key} row={row} unknownCost={row.key === "estimated_cost_micros" && unknownCosts > 0} />
             ))}
           </tbody>
         </table>
       )}
+      {settlements.length > 0 ? (
+        <details className="usage-model-details">
+          <summary>Model usage details</summary>
+          <table className="usage-ledger-table">
+            <thead><tr><th scope="col">Model / purpose</th><th scope="col">Cached / input</th><th scope="col">Reasoning / output</th><th scope="col">Usage source</th><th scope="col">Cost estimate / quote</th></tr></thead>
+            <tbody>{settlements.map((entry) => (
+              <tr key={entry.id}>
+                <th scope="row">{entry.model ?? "Unknown"}<br />{entry.purpose}</th>
+                <td>{entry.breakdown?.cached_input_tokens != null ? `${formatCount(entry.breakdown.cached_input_tokens)} / ${formatCount(entry.prompt_tokens ?? 0)}` : "Unknown"}</td>
+                <td>{entry.breakdown?.reasoning_tokens != null ? `${formatCount(entry.breakdown.reasoning_tokens)} / ${formatCount(entry.completion_tokens ?? 0)}` : "Unknown"}</td>
+                <td>{entry.estimated ? "Estimated" : entry.breakdown?.source ?? "Details not reported"}</td>
+                <td>
+                  <strong>{entry.cost_details?.status === "unknown" || (!entry.cost_details && !entry.estimated_cost_micros) ? "Unknown" : formatMicrodollars(entry.estimated_cost_micros ?? 0)}</strong>
+                  {entry.cost_details ? <><br /><span title={`Input: ${entry.cost_details.pricing.input_per_million_tokens_micros}; output: ${entry.cost_details.pricing.output_per_million_tokens_micros}; cached: ${entry.cost_details.pricing.cached_input_per_million_tokens_micros ?? "unknown"} microdollars / million tokens`}>{entry.cost_details.pricing.source}</span><br /><span>{entry.cost_details.reason.replaceAll("_", " ")}</span></> : null}
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </details>
+      ) : null}
     </section>
   );
 }
 
-function ResourceUsageTableRow({ row }: { row: ResourceUsageRow }) {
+function ResourceUsageTableRow({ row, unknownCost }: { row: ResourceUsageRow; unknownCost?: boolean }) {
   const percent = row.limit > 0 ? Math.min(100, (row.used / row.limit) * 100) : 0;
   const tone = row.limit > 0 && row.used > row.limit ? "exceeded" : row.limit > 0 && percent >= 80 ? "near-limit" : "";
   return (
     <tr className={tone}>
       <th scope="row">{row.label}</th>
       <td>
-        <strong>{row.format(row.used)}</strong>
+        <strong>{unknownCost ? (row.used > 0 ? `${row.format(row.used)} + unknown` : "Unknown") : row.format(row.used)}</strong>
         {row.limit > 0 ? (
           <span className="usage-meter" aria-label={`${Math.round((row.used / row.limit) * 100)} percent used`}>
             <span style={{ width: `${percent}%` }} />
@@ -99,7 +122,7 @@ function ResourceUsageTableRow({ row }: { row: ResourceUsageRow }) {
         ) : null}
       </td>
       <td>{row.limit > 0 ? row.format(row.limit) : "No limit"}</td>
-      <td>{row.limit > 0 ? row.format(Math.max(0, row.limit - row.used)) : "No limit"}</td>
+      <td>{unknownCost && row.limit > 0 ? "Unknown" : row.limit > 0 ? row.format(Math.max(0, row.limit - row.used)) : "No limit"}</td>
     </tr>
   );
 }

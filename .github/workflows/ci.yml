@@ -191,6 +191,21 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+      - name: Run usage breakdown and cache cost gate
+        env:
+          AGENTFLOW_USAGE_TEST: '1'
+        run: npm run test:e2e -- usage-breakdown.spec.ts
+      - name: Retain usage breakdown evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: usage-breakdown-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
+
       - name: Run provider reasoning privacy gate
         env:
           AGENTFLOW_REASONING_TEST: '1'

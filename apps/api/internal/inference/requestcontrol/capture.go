@@ -1,6 +1,10 @@
 package requestcontrol
 
-import "context"
+import (
+	"context"
+
+	"agentflow-platform/apps/api/internal/domain"
+)
 
 // Observation contains canonical model-request bytes from a physical transport
 // attempt or a deterministic offline reconstruction. Recorder implementations
@@ -47,6 +51,7 @@ type AttemptOutcome struct {
 	TotalTokens            int
 	UsageEstimated         bool
 	UsageAvailable         bool
+	Breakdown              *domain.UsageBreakdown
 	FinishReason           string
 	ErrorKind              string
 	HTTPStatus             int

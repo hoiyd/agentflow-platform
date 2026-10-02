@@ -31,7 +31,7 @@ func (c *Client) streamChat(ctx context.Context, messages []Message, definitions
 		}
 		estimated = estimatedRequestTokens(payload)
 	}
-	reservation, err := beginBudgetedModelCall(ctx, c.model, estimated)
+	reservation, err := beginBudgetedModelCall(ctx, c.model, estimated, c.routeID)
 	if err != nil {
 		return streamAttemptResult{}, err
 	}

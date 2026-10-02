@@ -149,7 +149,7 @@ func (c *Client) streamSimulatedAnswer(ctx context.Context, prepared provider.Pr
 	output := fallbackEventResponse(prepared.Latest)
 	callCtx := budget.WithOperation(ctx, prepared.Manifest.ModelCallID)
 	callCtx = withRequestManifest(callCtx, prepared.Manifest)
-	reservation, err := beginBudgetedModelCall(callCtx, "local_fallback", estimateTokens(messagesToText(prepared.Messages)))
+	reservation, err := beginBudgetedModelCall(callCtx, "local_fallback", estimateTokens(messagesToText(prepared.Messages)), c.routeID)
 	if err != nil {
 		return false, err
 	}

@@ -78,6 +78,78 @@ title generation, and embeddings are auxiliary platform work. They continue to
 use global concurrency/RPM/TPM controls but do not retroactively fail a completed
 Run or use chat-model token pricing in its ledger.
 
+## Usage Breakdown and Cache-aware Cost
+
+Optional `breakdown` values are **subsets**, not extra tokens:
+`cached_input_tokens` is included in prompt tokens and `reasoning_tokens` in
+completion tokens. Context-window, TPM, and hard token limits still count the
+full input/output. Absent counters mean unknown; a reported `0` means zero.
+
+The Chat Completions adapter recognizes OpenAI's
+`prompt_tokens_details.cached_tokens` / `completion_tokens_details.reasoning_tokens`
+and DeepSeek's `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` aliases.
+Conflicting aliases, malformed types, negative values, or subsets outside their
+parent total yield `source: invalid_details` with no usable subsets. Totals are
+preserved; unrecognized formats cannot authorize a discount. See the
+[DeepSeek usage contract](https://api-docs.deepseek.com/api/create-chat-completion/).
+
+Each logical call selects exactly one frozen quote:
+
+- Use the selected Snapshot route's pricing when an input/output rate is
+  positive or an explicit cached-input rate is supplied.
+- Older metadata-only routes (both rates zero, cached rate absent) use the
+  frozen Run Budget input/output rates, with source `run_budget`.
+- If neither supplies a quote, cost is `unknown`, not proof of free usage.
+  Token/call limits still apply; an unpriced request has no reliable monetary
+  cap. `cost_unknown_entries` makes this visible in ledger totals and Replay.
+
+Rates are integer **microdollars per million tokens**, supplied by the operator,
+not fetched from the provider. Optional
+`cached_input_per_million_tokens_micros` must be nonnegative and no greater than
+the ordinary input rate; an explicit zero is a known free cached-input quote.
+The source and rates are frozen into the route revision and saved with each
+ledger entry. Changing current route/global prices does not reprice old Runs
+or their resumed calls.
+
+Reservation and output admission use the full-input rate, with **no anticipated
+cache hit**. Settlement applies the cached-input quote only for valid,
+provider-reported cache usage and a known cached-input price:
+
+```text
+cost = ceil((prompt - cached) * input_rate / 1,000,000)
+     + ceil(cached * cached_input_rate / 1,000,000)
+     + ceil(completion * output_rate / 1,000,000)
+```
+
+Without usable cache usage/pricing, `cached = 0` for the cost estimate, not for
+the reported counter. Estimated usage never receives a cache discount.
+Reasoning is already priced inside completion; it is not added a second time.
+`cost_details` retains the quote, discount flag and reason (`provider_usage`,
+`estimated_usage`, `cache_usage_unknown`, `cache_price_unknown`, or
+`pricing_unknown`). Arithmetic saturates rather than overflowing a hard cap.
+
+Physical attempt usage and breakdown are retained in `model.attempt_finished`
+events, linked by `record_id` and logical `model_call_id` to Request Capture.
+They do not increment the logical ledger. Retry and stream-usage fallback reuse
+one reservation; only the final terminal result settles it. A failed attempt
+without usage is unknown, and an incomplete stream leaves the reservation open
+even if some usage arrived. The logical estimate cannot guarantee coverage of
+all provider-billed failed attempts; it is **not an invoice**.
+
+Replay's Resource usage panel has a collapsed **Model usage details** table with
+per-call subsets, source and frozen quote. An unknown-priced call is shown as
+Unknown; mixed totals show the priced subtotal plus unknown, not a zero bill.
+New JSONB columns in `run_usage_entries` are added idempotently at Store startup;
+existing rows retain unknown details. No new dashboard or billing store exists.
+
+The CI usage gate runs `e2e/usage-breakdown.spec.ts` with
+`AGENTFLOW_USAGE_TEST=1` and a dedicated `TEST_DATABASE_URL`. It retains JSON
+evidence for all three modes, cache hit/zero/unknown/invalid details and reload.
+Adapter integration tests separately cover non-streaming, retry, usage-option
+fallback, incomplete streams and unknown failed-attempt billing. Resume tests
+change live prices and check settlement still uses the saved quote; Postgres
+round-trip tests check duplicate settlement and serialized explicit zero.
+
 ## Hard and Observed Enforcement
 
 Model-call, prompt-estimate, tool-call, and active-runtime limits are checked

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
+	"agentflow-platform/apps/api/internal/budget"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/inference/openai"
@@ -57,18 +58,19 @@ func TestRestoredRunUsesFrozenSamplingAfterRouteConfigChanges(t *testing.T) {
 		if err := json.NewDecoder(request.Body).Decode(&sent); err != nil {
 			t.Error(err)
 		}
-		_, _ = response.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+		_, _ = response.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14,"prompt_tokens_details":{"cached_tokens":6}}}`))
 	}))
 	t.Cleanup(server.Close)
 	client := openai.NewClient("test-key", server.URL+"/v1", "test-model")
 	identity := client.RuntimeIdentity()
 	policy := domain.DefaultGenerationPolicy()
 	oldTemp, oldTopP := 0.1, 0.8
+	cachedPrice := int64(500000)
 	policy.Completion.Temperature, policy.Completion.TopP = &oldTemp, &oldTopP
 	binding := routing.Binding{Descriptor: routing.Descriptor{
 		ID: "primary", Provider: identity.Provider, Model: identity.Model, Endpoint: identity.BaseURL,
 		Capabilities: routing.Capabilities{Streaming: true}, ContextWindowTokens: 1000, MaxOutputTokens: 100,
-		Pricing: routing.Pricing{Source: "test_fixture"}, GenerationPolicy: &policy,
+		Pricing: routing.Pricing{Source: "frozen_fixture", InputPerMillionTokensMicros: 2000000, OutputPerMillionTokensMicros: 1000000, CachedInputPerMillionTokensMicros: &cachedPrice}, GenerationPolicy: &policy,
 	}, Client: client}
 	original, err := routing.NewCatalog(binding)
 	if err != nil {
@@ -97,6 +99,8 @@ func TestRestoredRunUsesFrozenSamplingAfterRouteConfigChanges(t *testing.T) {
 	newTemp := 0.9
 	policy.Completion.Temperature = &newTemp
 	binding.Descriptor.GenerationPolicy = &policy
+	livePrice := int64(9000000)
+	binding.Descriptor.Pricing = routing.Pricing{Source: "changed_live_quote", InputPerMillionTokensMicros: 9000000, OutputPerMillionTokensMicros: 9000000, CachedInputPerMillionTokensMicros: &livePrice}
 	runtime.modelRoutes, err = routing.NewCatalog(binding)
 	if err != nil {
 		t.Fatal(err)
@@ -119,11 +123,28 @@ func TestRestoredRunUsesFrozenSamplingAfterRouteConfigChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	selected, _ := restored.Resolve("primary")
-	if _, err := selected.Client.CompleteTextDetailed(context.Background(), "system", "hello"); err != nil {
+	persistence := fixturestore.New()
+	conversation, err := persistence.CreateConversation("frozen price resume")
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := persistence.CreateRunWithContract("agent_planner", conversation.ID, stored, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := budget.WithController(context.Background(), budget.NewTracker(persistence, nil, run))
+	if _, err := selected.Client.CompleteTextDetailed(ctx, "system", "hello"); err != nil {
 		t.Fatal(err)
 	}
 	if sent["temperature"] != 0.1 || sent["top_p"] != 0.8 {
 		t.Fatalf("resume used current sampling defaults instead of frozen values: %#v", sent)
+	}
+	ledger, ok, err := persistence.GetRunUsageLedger(run.ID)
+	if err != nil || !ok || ledger.Totals.EstimatedCostMicros != 15 || ledger.Totals.TotalTokens != 14 {
+		t.Fatalf("resumed call repriced: %+v err=%v", ledger, err)
+	}
+	if ledger.Entries[1].CostDetails.Pricing.Source != "frozen_fixture" {
+		t.Fatal("live quote replaced frozen price")
 	}
 }
 

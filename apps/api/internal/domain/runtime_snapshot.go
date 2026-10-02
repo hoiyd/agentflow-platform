@@ -175,6 +175,16 @@ type ModelRoutePricing struct {
 	Source                       string `json:"source"`
 	InputPerMillionTokensMicros  int64  `json:"input_per_million_tokens_micros"`
 	OutputPerMillionTokensMicros int64  `json:"output_per_million_tokens_micros"`
+	// Optional quote; nil is unknown, zero is an explicitly free cached input.
+	CachedInputPerMillionTokensMicros *int64 `json:"cached_input_per_million_tokens_micros,omitempty"`
+}
+
+func (p ModelRoutePricing) Clone() ModelRoutePricing {
+	if p.CachedInputPerMillionTokensMicros != nil {
+		value := *p.CachedInputPerMillionTokensMicros
+		p.CachedInputPerMillionTokensMicros = &value
+	}
+	return p
 }
 
 type ModelRouteRequirements struct {

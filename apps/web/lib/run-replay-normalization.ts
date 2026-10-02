@@ -127,7 +127,8 @@ const EMPTY_RUN_USAGE_TOTALS: RunUsageTotals = {
   completion_tokens: 0,
   total_tokens: 0,
   estimated_cost_micros: 0,
-  open_reservations: 0
+  open_reservations: 0,
+  cost_unknown_entries: 0
 };
 
 export function normalizeRunUsageLedger(value: unknown, runId: string): RunUsageLedger {

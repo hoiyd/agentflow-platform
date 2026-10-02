@@ -2,6 +2,7 @@ package budget
 
 import (
 	"math"
+	"math/big"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
@@ -50,7 +51,7 @@ func Check(limits domain.RuntimeRunBudget, current domain.RunUsageTotals, reques
 		{ResourceEstimatedCost, limits.MaxEstimatedCostMicros, current.EstimatedCostMicros, requested.EstimatedCostMicros},
 	}
 	for _, check := range checks {
-		if check.limit > 0 && check.used+check.request > check.limit {
+		if check.limit > 0 && (check.used > check.limit || check.request > check.limit-check.used) {
 			return &ExceededError{Resource: check.resource, Limit: check.limit, Used: check.used, Requested: check.request, OperationID: operationID, Purpose: purpose}
 		}
 	}
@@ -73,7 +74,10 @@ func addEntry(total *domain.RunUsageTotals, entry domain.RunUsageEntry) {
 	total.PromptTokens += entry.PromptTokens
 	total.CompletionTokens += entry.CompletionTokens
 	total.TotalTokens += entry.TotalTokens
-	total.EstimatedCostMicros += entry.EstimatedCostMicros
+	total.EstimatedCostMicros = addCost(total.EstimatedCostMicros, entry.EstimatedCostMicros)
+	if entry.ModelCalls > 0 && ((entry.CostDetails != nil && entry.CostDetails.Status == "unknown") || (entry.CostDetails == nil && entry.EstimatedCostMicros == 0)) {
+		total.CostUnknownEntries++
+	}
 }
 
 func maxCompletionTokens(limits domain.RuntimeRunBudget, totals domain.RunUsageTotals, reservation domain.RunUsageEntry) int {
@@ -89,10 +93,15 @@ func maxCompletionTokens(limits domain.RuntimeRunBudget, totals domain.RunUsageT
 	}
 	if limits.MaxEstimatedCostMicros > 0 && limits.OutputCostPerMillionTokensMicros > 0 {
 		limited = true
-		baseCost := totals.EstimatedCostMicros - reservation.EstimatedCostMicros +
-			tokenCostMicros(reservation.PromptTokens, limits.InputCostPerMillionTokensMicros)
+		baseCost := addCost(totals.EstimatedCostMicros-reservation.EstimatedCostMicros,
+			tokenCostMicros(reservation.PromptTokens, limits.InputCostPerMillionTokensMicros))
 		remainingMicros := max(int64(0), limits.MaxEstimatedCostMicros-baseCost)
-		costTokens := int((remainingMicros * 1_000_000) / limits.OutputCostPerMillionTokensMicros)
+		value := new(big.Int).Mul(big.NewInt(remainingMicros), big.NewInt(1_000_000))
+		value.Quo(value, big.NewInt(limits.OutputCostPerMillionTokensMicros))
+		costTokens := math.MaxInt
+		if value.IsInt64() {
+			costTokens = int(value.Int64())
+		}
 		maxTokens = min(maxTokens, costTokens)
 	}
 	if !limited {
@@ -105,7 +114,20 @@ func tokenCostMicros(tokens int, perMillionMicros int64) int64 {
 	if tokens <= 0 || perMillionMicros <= 0 {
 		return 0
 	}
-	return (int64(tokens)*perMillionMicros + 999_999) / 1_000_000
+	value := new(big.Int).Mul(big.NewInt(int64(tokens)), big.NewInt(perMillionMicros))
+	value.Add(value, big.NewInt(999_999)).Quo(value, big.NewInt(1_000_000))
+	if !value.IsInt64() {
+		return math.MaxInt64
+	}
+	return value.Int64()
+}
+
+// Cost estimates saturate rather than wrap and bypass a hard budget.
+func addCost(left, right int64) int64 {
+	if right > math.MaxInt64-left {
+		return math.MaxInt64
+	}
+	return left + right
 }
 
 func normalizePurpose(value domain.RunUsagePurpose) domain.RunUsagePurpose {

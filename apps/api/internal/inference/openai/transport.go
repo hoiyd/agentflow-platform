@@ -22,7 +22,7 @@ func (c *Client) complete(ctx context.Context, body map[string]any) (chatComplet
 	if err != nil {
 		return chatCompletionResponse{}, err
 	}
-	reservation, err := beginBudgetedModelCall(ctx, c.model, estimatedRequestTokens(payload))
+	reservation, err := beginBudgetedModelCall(ctx, c.model, estimatedRequestTokens(payload), c.routeID)
 	if err != nil {
 		return chatCompletionResponse{}, err
 	}
@@ -134,7 +134,7 @@ func generationOutcomeError(operation, label string, hasToolCalls, refused bool)
 	return &ModelError{Kind: ErrorInvalidResponse, Operation: operation, Message: "unrecognized or inconsistent generation finish reason"}
 }
 
-func beginBudgetedModelCall(ctx context.Context, model string, estimatedPromptTokens int) (budget.ModelReservation, error) {
+func beginBudgetedModelCall(ctx context.Context, model string, estimatedPromptTokens int, routeID string) (budget.ModelReservation, error) {
 	controller := budget.FromContext(ctx)
 	if controller == nil {
 		operationID := budget.OperationFromContext(ctx)
@@ -148,6 +148,7 @@ func beginBudgetedModelCall(ctx context.Context, model string, estimatedPromptTo
 		operationID = budget.NewOperationID("model")
 	}
 	return controller.BeginModelCall(ctx, budget.ModelCallEstimate{
+		RouteID:     routeID,
 		OperationID: operationID, Purpose: budget.PurposeFromContext(ctx),
 		Model: model, EstimatedPromptTokens: estimatedPromptTokens,
 	})
@@ -161,6 +162,7 @@ func settleBudgetedModelCall(ctx context.Context, reservation budget.ModelReserv
 	return controller.SettleModelCall(ctx, reservation, budget.ModelUsage{
 		PromptTokens: usage.PromptTokens, CompletionTokens: usage.CompletionTokens,
 		TotalTokens: usage.TotalTokens, Estimated: usage.Estimated,
+		Breakdown: usage.Breakdown,
 	})
 }
 
