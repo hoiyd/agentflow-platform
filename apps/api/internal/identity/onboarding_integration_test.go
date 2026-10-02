@@ -65,8 +65,11 @@ func TestDatabaseMembershipsSurviveSchemaUpgradeAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	if err := db.ApplyWorkspaceMigration(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
 	items, err := db.ListMemberships(ctx, user.ID)
-	if err != nil || len(items) != 1 || items[0] != "retained-grant" {
+	if err != nil || len(items) != 1 || items[0] == "retained-grant" {
 		t.Fatalf("upgrade changed database membership: %v %v", items, err)
 	}
 	if _, err := legacy.Exec(`DELETE FROM auth_memberships WHERE user_id=$1`, user.ID); err != nil {
@@ -109,6 +112,9 @@ func TestPersonalWorkspaceOnboardingLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	if err := db.InitializeWorkspaceLifecycle(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	sqlDB, err := sql.Open("pgx", dbURL)
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +153,10 @@ func TestPersonalWorkspaceOnboardingLifecycle(t *testing.T) {
 	}
 	login("/api/auth/register", 303)
 	userID := identity.UserID(cfg.Issuer, "fixture-operator")
-	workspace := identity.PersonalWorkspaceID(userID)
+	workspace, err := db.DefaultWorkspace(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	items, err := db.ListMemberships(ctx, userID)
 	if err != nil || len(items) != 1 || items[0] != workspace {
 		t.Fatalf("onboarding: %v %v", items, err)

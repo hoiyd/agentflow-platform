@@ -2,6 +2,7 @@ import type { AgentInfo, ChatMode, ToolInfo, SkillInfo } from "../../lib/api";
 import type { CompletionVerificationSettings } from "../../lib/verification";
 import { CompletionVerificationPanel } from "../verification/CompletionVerificationPanel";
 import { AgentConfigPanel, isDefaultAgent, type AgentConfigDraft } from "./AgentConfigPanel";
+import { useWorkspaceReadOnly, useServiceConfigurationReadOnly } from "../identity/WorkspaceContext";
 
 export type AgentOperationNotice = {
   title: string;
@@ -46,6 +47,8 @@ type ChatDialogsProps = {
 };
 
 export function ChatDialogs(props: ChatDialogsProps) {
+  const readOnly = useWorkspaceReadOnly();
+  const serviceReadOnly = useServiceConfigurationReadOnly();
   const {
     activeAgent,
     agentArchiveCandidate,
@@ -97,7 +100,7 @@ export function ChatDialogs(props: ChatDialogsProps) {
           </section>
         </div>
       ) : null}
-      {chatMode === "single" && isNewAgentFormOpen && newAgentDraft ? (
+      {!readOnly && !serviceReadOnly && chatMode === "single" && isNewAgentFormOpen && newAgentDraft ? (
         <div className="modal-backdrop agent-config-modal-backdrop create-agent-modal-backdrop" role="presentation">
           <section aria-label="Create new agent" aria-modal="true" className="agent-config-dialog" role="dialog">
             <AgentConfigPanel
@@ -118,7 +121,7 @@ export function ChatDialogs(props: ChatDialogsProps) {
           </section>
         </div>
       ) : null}
-      {chatMode === "single" && isAgentConfigOpen && activeAgent && agentConfigDraft ? (
+      {!readOnly && !serviceReadOnly && chatMode === "single" && isAgentConfigOpen && activeAgent && agentConfigDraft ? (
         <div className="modal-backdrop agent-config-modal-backdrop" role="presentation">
           <section aria-label="Edit agent config" aria-modal="true" className="agent-config-dialog" role="dialog">
             <AgentConfigPanel
@@ -142,7 +145,7 @@ export function ChatDialogs(props: ChatDialogsProps) {
           </section>
         </div>
       ) : null}
-      {agentArchiveCandidate ? (
+      {!readOnly && !serviceReadOnly && agentArchiveCandidate ? (
         <div className="modal-backdrop" role="presentation">
           <section aria-labelledby="archive-agent-title" aria-modal="true" className="confirm-dialog" role="dialog">
             <div>

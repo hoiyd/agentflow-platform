@@ -15,20 +15,22 @@ test("OIDC login, member Workspace, persistence, forbidden access and logout", a
   expect(new URL(authorization.url()).searchParams.get("prompt")).toBe("login");
   await expect(page.getByRole("heading", { name: "Fixture sign in", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Workspace: default_workspace", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Workspace: Personal workspace", exact: true })).toBeVisible();
   const identity = await (await page.request.get(`${api}/api/auth/session`)).json();
   expect(identity.mode).toBe("oidc");
   expect(identity.authenticated).toBe(true);
-  expect(identity.personal_workspace).toMatch(/^personal_user_/);
-  expect(identity.workspaces).toEqual(["default_workspace", identity.personal_workspace, "workspace-test"]);
+  expect(identity.personal_workspace).toMatch(/^[1-9]\d*$/);
+  const spaces = await (await page.request.get(`${api}/api/workspaces`)).json();
+  const target = spaces.find((item: { name: string }) => item.name === "Workspace test");
+  expect(identity.workspaces).toEqual(spaces.map((item: { id: string }) => item.id).sort());
   const forbidden = await page.request.get(`${api}/api/runs?workspace_id=foreign-workspace`);
-  expect(forbidden.status()).toBe(403);
-  const csrf = await page.request.post(`${api}/api/conversations`, { headers: { Origin: "https://foreign.invalid", "X-Workspace-ID": "default_workspace" }, data: { title: "must not persist" } });
+  expect(forbidden.status()).toBe(404);
+  const csrf = await page.request.post(`${api}/api/conversations`, { headers: { Origin: "https://foreign.invalid", "X-Workspace-ID": target.id }, data: { title: "must not persist" } });
   expect(csrf.status()).toBe(403);
-  const switcher = page.getByRole("button", { name: "Workspace: default_workspace", exact: true });
+  const switcher = page.getByRole("button", { name: "Workspace: Personal workspace", exact: true });
   await switcher.focus();
   await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("option", { name: "default_workspace", exact: true })).toBeFocused();
+  await expect(page.getByRole("option", { name: "Personal workspace", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(switcher).toBeFocused();
   await expect(page.getByRole("listbox", { name: "Workspace" })).toHaveCount(0);
@@ -41,9 +43,9 @@ test("OIDC login, member Workspace, persistence, forbidden access and logout", a
   expect(menuBounds!.y).toBeGreaterThanOrEqual(triggerBounds!.y + triggerBounds!.height);
   expect(menuBounds!.width).toBeGreaterThanOrEqual(triggerBounds!.width);
   await testInfo.attach("workspace-menu.png", { body: await menu.screenshot(), contentType: "image/png" });
-  await page.getByRole("option", { name: "workspace-test", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Workspace: workspace-test", exact: true })).toBeVisible();
-  const created = await page.request.post(`${api}/api/conversations`, { headers: { Origin: web, "X-Workspace-ID": "workspace-test" }, data: { title: "Authenticated workspace evidence" } });
+  await page.getByRole("option", { name: "Workspace test", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Workspace: Workspace test", exact: true })).toBeVisible();
+  const created = await page.request.post(`${api}/api/conversations`, { headers: { Origin: web, "X-Workspace-ID": target.id }, data: { title: "Authenticated workspace evidence" } });
   expect(created.status()).toBe(201);
   await page.reload();
   await expect(page.getByText("Authenticated workspace evidence", { exact: true }).first()).toBeVisible();
@@ -68,7 +70,7 @@ test("OIDC login, member Workspace, persistence, forbidden access and logout", a
   await reopened.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(reopened.getByRole("button", { name: /^Workspace: / })).toBeVisible();
   expect((await (await reopened.request.get(`${api}/api/auth/session`)).json()).user.id).toBe(identity.user.id);
-  await testInfo.attach("identity-evidence.json", { body: JSON.stringify({ schema: "identity-membership-evidence-v1", provider: "signed-oidc-fixture", store: "disposable-postgres", user_id: identity.user.id, workspace: "workspace-test", checks: { anonymous: 401, foreign_workspace: 403, cross_origin_write: 403, creation: 201, workspace_menu_keyboard: true, workspace_menu_geometry: true, workspace_switch_persisted: true, reload: true, tab_reopen_preserves_session: true, logout_revocation: 401, reauthentication_prompt: "login" }, limitations: ["not a live IdP or proof of its credential UI", "not PROD-002 object authorization audit"] }, null, 2), contentType: "application/json" });
+  await testInfo.attach("identity-evidence.json", { body: JSON.stringify({ schema: "identity-membership-evidence-v1", provider: "signed-oidc-fixture", store: "disposable-postgres", user_id: identity.user.id, workspace: target.id, checks: { anonymous: 401, foreign_workspace: 404, cross_origin_write: 403, creation: 201, workspace_menu_keyboard: true, workspace_menu_geometry: true, workspace_switch_persisted: true, reload: true, tab_reopen_preserves_session: true, logout_revocation: 401, reauthentication_prompt: "login" }, limitations: ["not a live IdP or proof of its credential UI", "not PROD-002 object authorization audit"] }, null, 2), contentType: "application/json" });
 });
 
 test("revoked personal Membership stays revoked after login and cannot mount business consumers", async ({ page }, testInfo) => {
@@ -82,8 +84,8 @@ test("revoked personal Membership stays revoked after login and cannot mount bus
     expect(identity.authenticated).toBe(true);
     expect(identity.workspaces).toEqual([]);
     expect(identity.personal_workspace).toBeUndefined();
-    expect((await page.request.get(`${api}/api/conversations`)).status()).toBe(403);
-    await testInfo.attach("nonmember-evidence.json", { body: JSON.stringify({ provider: "signed-oidc-fixture", subject: "fixture-nonmember", business_access: 403, workbench_mounted: false, revoked_personal_membership_preserved: true, limitation: "Membership boundary, not full object authorization" }), contentType: "application/json" });
+  expect((await page.request.get(`${api}/api/conversations`)).status()).toBe(404);
+    await testInfo.attach("nonmember-evidence.json", { body: JSON.stringify({ provider: "signed-oidc-fixture", subject: "fixture-nonmember", business_access: 404, workbench_mounted: false, revoked_personal_membership_preserved: true, limitation: "Membership boundary, not full object authorization" }), contentType: "application/json" });
   } finally {
     await page.request.post(`${api}/__fixture/identity/subject`, { data: { subject: "fixture-operator" } });
   }

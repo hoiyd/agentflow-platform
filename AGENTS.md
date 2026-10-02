@@ -131,6 +131,13 @@ not infer full provider compatibility from one passing case. See
 
 ## Database Schema Changes
 
+Entity tables use `id` as their single primary identity. Do not add a redundant
+`<entity>_id` column that mirrors `id`. Related tables use `<entity>_id` foreign
+keys directly to that primary key, with matching database types. Serialize BIGINT
+IDs as decimal strings at API boundaries to preserve JavaScript integer precision;
+this does not require another stored column. Keep existing IDs and references
+stable when migrating an already deployed schema.
+
 Any persisted-field change must update and verify the complete path:
 
 1. Domain model and JSON contract.

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import type { Conversation, ToolInfo } from "../../lib/api";
+import { useWorkspaceReadOnly, useServiceConfigurationReadOnly } from "../identity/WorkspaceContext";
 
 export type ChatView = "chat" | "tools" | "knowledge" | "memory" | "attention";
 export type APIConnectionStatus = "checking" | "connected" | "unavailable";
@@ -63,6 +64,7 @@ export function Sidebar({
   onViewRefresh,
   view
 }: SidebarProps) {
+  const readOnly = useWorkspaceReadOnly();
   function selectView(nextView: ChatView) {
     onViewChange(nextView);
     onOpenChange(false);
@@ -90,7 +92,7 @@ export function Sidebar({
             <X size={18} />
           </button>
         </div>
-        <button className="new-chat" title="New conversation" onClick={() => {
+        <button className="new-chat" disabled={readOnly || isBusy} title="New conversation" onClick={() => {
           onOpenChange(false);
           onNewConversation();
         }}>
@@ -132,7 +134,7 @@ export function Sidebar({
               <button
                 aria-label={`Delete conversation ${conversation.title}`}
                 className="conversation-delete"
-                disabled={isBusy}
+                disabled={readOnly || isBusy}
                 onClick={(event) => {
                   event.stopPropagation();
                   onDeleteConversation(conversation.id);
@@ -317,6 +319,8 @@ function RunStatus({ runState }: { runState: VisibleRunState }) {
 }
 
 export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: string; onToggle: (tool: ToolInfo) => void; tools: ToolInfo[]; updatingTool: string }) {
+  const readOnly = useWorkspaceReadOnly();
+  const serviceReadOnly = useServiceConfigurationReadOnly();
   return (
     <section className="tools-panel">
       {error ? <div className="error">{error}</div> : null}
@@ -326,7 +330,7 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: st
             <div className="tool-card-header">
               <h3>{tool.name}</h3>
               <label className="tool-toggle">
-                <input type="checkbox" checked={tool.enabled} disabled={updatingTool === tool.name} onChange={() => onToggle(tool)} />
+                <input type="checkbox" checked={tool.enabled} disabled={readOnly || serviceReadOnly || updatingTool === tool.name} onChange={() => onToggle(tool)} />
                 <span>{tool.enabled ? "Enabled" : "Disabled"}</span>
               </label>
             </div>

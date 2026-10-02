@@ -27,16 +27,16 @@ empty shared root. Do not commit local `.env`, credentials, or operator packages
 
 ## Workspace Scope
 
-All resource operations resolve a non-empty namespace. Omitted scope and legacy
-`default` use `default_workspace`; explicit custom IDs are unchanged.
-Header/query/payload selectors must agree. Existing empty/default records are
-normalized by startup migration.
+All resource operations resolve an existing owned Workspace entity. Missing scope
+selects the owner's active default; local mode uses a reserved persistent local
+User with its own space, never another OIDC owner's data. Header/query/payload
+selectors must agree; legacy string IDs are not runtime aliases.
 
-In trusted-local mode the web client uses `NEXT_PUBLIC_WORKSPACE_ID` or
-`default_workspace`. OIDC mode selects only a Workspace returned by the current
-session and verifies membership server-side; payload selectors cannot override
-the admitted scope. Selecting a namespace grants no identity or ACL rights.
-Namespace isolation cannot be disabled. See [API access](../reference/api-reference.md#access-and-workspace-scope).
+The frontend loads `/api/workspaces` after the session probe and validates its
+remembered selection before mounting consumers. `NEXT_PUBLIC_WORKSPACE_ID` is no
+longer used. Archived spaces are read-only; foreign/deleted spaces return 404.
+See [Workspace lifecycle and required old-data migration](workspace-lifecycle.md)
+and [API access](../reference/api-reference.md#access-and-workspace-scope).
 
 Route/embedding credentials are resolved at composition and passed directly to
 clients, not stored in general Config or frozen records. Endpoints/model identity

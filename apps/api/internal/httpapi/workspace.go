@@ -25,6 +25,12 @@ func (h *Handler) withWorkspace(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// Entity management is scoped by authenticated owner, not by a selected
+		// space. This also permits recovery from an obsolete/deleted selection.
+		if h.workspaces != nil && (r.URL.Path == "/api/workspaces" || strings.HasPrefix(r.URL.Path, "/api/workspaces/")) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		headerWorkspaceID := strings.TrimSpace(r.Header.Get(WorkspaceHeader))
 		queryWorkspaceID := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
 		if headerWorkspaceID != "" && queryWorkspaceID != "" && domain.NormalizeWorkspaceID(headerWorkspaceID) != domain.NormalizeWorkspaceID(queryWorkspaceID) {
@@ -37,8 +43,34 @@ func (h *Handler) withWorkspace(next http.Handler) http.Handler {
 			workspaceID = queryWorkspaceID
 			explicit = workspaceID != ""
 		}
-		workspaceID = domain.NormalizeWorkspaceID(workspaceID)
-		if h.identity != nil {
+		if h.workspaces != nil {
+			// Agent profiles and Tool switches are still service-wide configuration,
+			// not owner-scoped resources. Keep writes operator-local until scoped.
+			if h.identity != nil && r.Method != http.MethodGet && r.Method != http.MethodHead && (r.URL.Path == "/api/agents" || strings.HasPrefix(r.URL.Path, "/api/agents/") || r.URL.Path == "/api/tools" || strings.HasPrefix(r.URL.Path, "/api/tools/")) {
+				writeError(w, http.StatusForbidden, "Shared Agent and Tool configuration is managed by the trusted-local operator")
+				return
+			}
+			owner := workspaceOwner(r)
+			if workspaceID == "" {
+				var err error
+				workspaceID, err = h.workspaces.DefaultWorkspace(r.Context(), owner)
+				if err != nil {
+					h.workspaceFailure(w, r, err)
+					return
+				}
+			}
+			workspace, err := h.workspaces.GetWorkspace(r.Context(), owner, workspaceID)
+			if err != nil {
+				h.workspaceFailure(w, r, err)
+				return
+			}
+			if workspace.Status != "active" && !workspaceReadOnlyRequest(r) {
+				writeFailure(w, r, http.StatusConflict, &store.WorkspaceError{Message: "Workspace is archived; restore it before writing or running tasks", Conflict: true})
+				return
+			}
+			explicit = true
+		} else if h.identity != nil {
+			workspaceID = domain.NormalizeWorkspaceID(workspaceID)
 			user, ok := r.Context().Value(identityContextKey{}).(identity.User)
 			if !ok {
 				writeError(w, http.StatusUnauthorized, "Authentication required")
@@ -56,9 +88,15 @@ func (h *Handler) withWorkspace(next http.Handler) http.Handler {
 			// Authenticated scope must also bind payload-only Workspace fields.
 			explicit = true
 		}
+		workspaceID = domain.NormalizeWorkspaceID(workspaceID)
 		ctx := context.WithValue(r.Context(), workspaceContextKey{}, requestWorkspace{ID: workspaceID, Explicit: explicit})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// Retrieval POSTs are read-only; ingestion, evaluation and Memory mutation are not.
+func workspaceReadOnlyRequest(r *http.Request) bool {
+	return r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodPost && (r.URL.Path == "/api/rag/search" || r.URL.Path == "/api/memories/search")
 }
 
 func workspaceIDFromRequest(r *http.Request) string {

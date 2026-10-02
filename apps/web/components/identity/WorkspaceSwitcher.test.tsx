@@ -1,13 +1,15 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import type { Workspace } from "../../lib/workspaces";
 
 afterEach(cleanup);
 
 function setup() {
   const onChange = vi.fn();
-  render(<><WorkspaceSwitcher workspaces={["default_workspace", "personal-id", "A long workspace name that should wrap without clipping"]} selected="default_workspace" personalWorkspace="personal-id" onChange={onChange} /><button>Outside</button></>);
-  return { onChange, trigger: screen.getByRole("button", { name: "Workspace: default_workspace" }) };
+  const workspaces = ["Default workspace", "Personal workspace", "A long workspace name that should wrap without clipping"].map((name, index) => ({ id: String(index + 1), name, status: "active" } as Workspace));
+  render(<><WorkspaceSwitcher workspaces={workspaces} selected="1" onChange={onChange} /><button>Outside</button></>);
+  return { onChange, trigger: screen.getByRole("button", { name: "Workspace: Default workspace" }) };
 }
 
 it("shows the current selection and switches only when a different option is confirmed", () => {
@@ -15,20 +17,20 @@ it("shows the current selection and switches only when a different option is con
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
   fireEvent.click(trigger);
   expect(screen.getByRole("listbox", { name: "Workspace" })).toBeTruthy();
-  expect(screen.getByRole("option", { name: "default_workspace" }).getAttribute("aria-selected")).toBe("true");
-  fireEvent.click(screen.getByRole("option", { name: "default_workspace" }));
+  expect(screen.getByRole("option", { name: "Default workspace" }).getAttribute("aria-selected")).toBe("true");
+  fireEvent.click(screen.getByRole("option", { name: "Default workspace" }));
   expect(onChange).not.toHaveBeenCalled();
   expect(screen.queryByRole("listbox")).toBeNull();
   fireEvent.click(trigger);
   fireEvent.click(screen.getByRole("option", { name: "Personal workspace" }));
-  expect(onChange).toHaveBeenCalledExactlyOnceWith("personal-id");
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("2");
   expect(screen.queryByRole("listbox")).toBeNull();
 });
 
 it("supports arrow navigation without changing Workspace and Escape restores focus", () => {
   const { onChange, trigger } = setup();
   fireEvent.keyDown(trigger, { key: "ArrowDown" });
-  const current = screen.getByRole("option", { name: "default_workspace" });
+  const current = screen.getByRole("option", { name: "Default workspace" });
   expect(document.activeElement).toBe(current);
   fireEvent.keyDown(current, { key: "ArrowDown" });
   expect(document.activeElement).toBe(screen.getByRole("option", { name: "Personal workspace" }));
@@ -48,6 +50,6 @@ it("dismisses on outside click or focus leaving the selector", () => {
   fireEvent.pointerDown(screen.getByRole("button", { name: "Outside" }));
   expect(screen.queryByRole("listbox")).toBeNull();
   fireEvent.click(trigger);
-  fireEvent.blur(screen.getByRole("option", { name: "default_workspace" }), { relatedTarget: screen.getByRole("button", { name: "Outside" }) });
+  fireEvent.blur(screen.getByRole("option", { name: "Default workspace" }), { relatedTarget: screen.getByRole("button", { name: "Outside" }) });
   expect(screen.queryByRole("listbox")).toBeNull();
 });

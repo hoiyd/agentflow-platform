@@ -91,6 +91,7 @@ type Dependencies struct {
 	Verification   VerificationOperations
 	AllowedOrigins []string
 	Identity       *identity.Manager
+	Workspaces     *store.PostgresStore
 }
 
 type Handler struct {
@@ -105,6 +106,7 @@ type Handler struct {
 	verification   VerificationOperations
 	allowedOrigins []string
 	identity       *identity.Manager
+	workspaces     *store.PostgresStore
 }
 
 func NewHandler(dependencies Dependencies) (*Handler, error) {
@@ -144,6 +146,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		verification:   dependencies.Verification,
 		allowedOrigins: append([]string(nil), dependencies.AllowedOrigins...),
 		identity:       dependencies.Identity,
+		workspaces:     dependencies.Workspaces,
 	}, nil
 }
 
@@ -151,6 +154,13 @@ func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	h.registerRoutes(mux)
 	h.identity.RegisterRoutes(mux)
+	if h.workspaces != nil {
+		mux.HandleFunc("GET /api/workspaces", h.listWorkspaces)
+		mux.HandleFunc("POST /api/workspaces", h.createWorkspace)
+		mux.HandleFunc("GET /api/workspaces/{id}", h.getWorkspace)
+		mux.HandleFunc("PATCH /api/workspaces/{id}", h.updateWorkspace)
+		mux.HandleFunc("DELETE /api/workspaces/{id}", h.deleteWorkspace)
+	}
 	return h.withCORS(withRequestID(h.withIdentity(h.withWorkspace(mux))))
 }
 
@@ -211,6 +221,11 @@ func rejectCredentialContent(w http.ResponseWriter, r *http.Request, value any) 
 }
 
 func writeFailure(w http.ResponseWriter, r *http.Request, status int, err error) {
+	var sqlState interface{ SQLState() string }
+	if errors.As(err, &sqlState) && sqlState.SQLState() == "PWS01" {
+		status = http.StatusConflict
+		err = &store.WorkspaceError{Message: "Workspace is archived or deleted; writes and execution are disabled", Conflict: true}
+	}
 	info := describeHTTPFailure(status, err)
 	requestID := ensureRequestID(w)
 	logHTTPFailure(r, requestID, "json", status, err, info)

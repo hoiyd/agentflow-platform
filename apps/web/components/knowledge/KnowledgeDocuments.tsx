@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 
 import type { DocumentDetail, RetrievedDocumentChunk } from "../../lib/knowledge-api";
 import type { KnowledgeDocumentsModel } from "./useKnowledgeDocuments";
@@ -9,6 +10,7 @@ import { documentFilename, documentFormat, metadataString, shortSourceLabel } fr
 type IngestMode = "file" | "text";
 
 export function KnowledgeDocuments({ model }: { model: KnowledgeDocumentsModel }) {
+  const readOnly = useWorkspaceReadOnly();
   const [ingestMode, setIngestMode] = useState<IngestMode>("file");
 
   return (
@@ -43,7 +45,7 @@ export function KnowledgeDocuments({ model }: { model: KnowledgeDocumentsModel }
             </label>
             <button
               className="send"
-              disabled={model.isUploading || !model.uploadFile}
+              disabled={readOnly || model.isUploading || !model.uploadFile}
               onClick={model.uploadKnowledgeDocument}
               type="button"
             >
@@ -66,7 +68,7 @@ export function KnowledgeDocuments({ model }: { model: KnowledgeDocumentsModel }
             />
             <button
               className="send"
-              disabled={model.isCreating || model.documentTitle.trim().length === 0 || model.documentContent.trim().length === 0}
+              disabled={readOnly || model.isCreating || model.documentTitle.trim().length === 0 || model.documentContent.trim().length === 0}
               onClick={model.createTextDocument}
               type="button"
             >
@@ -106,7 +108,7 @@ export function KnowledgeDocuments({ model }: { model: KnowledgeDocumentsModel }
                       </button>
                       <button
                         className="secondary-action danger-action"
-                        disabled={model.deletingDocumentId === document.id}
+                        disabled={readOnly || model.deletingDocumentId === document.id}
                         onClick={() => model.removeDocument(document)}
                         type="button"
                       >

@@ -2,11 +2,11 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import type { Workspace } from "../../lib/workspaces";
 
-export function WorkspaceSwitcher({ workspaces, selected, personalWorkspace, onChange }: {
-  workspaces: string[];
+export function WorkspaceSwitcher({ workspaces, selected, onChange }: {
+  workspaces: Workspace[];
   selected: string;
-  personalWorkspace?: string;
   onChange: (workspace: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -14,11 +14,11 @@ export function WorkspaceSwitcher({ workspaces, selected, personalWorkspace, onC
   const trigger = useRef<HTMLButtonElement>(null);
   const options = useRef<(HTMLButtonElement | null)[]>([]);
   const listID = useId();
-  const label = (id: string) => id === personalWorkspace ? "Personal workspace" : id;
+  const label = (id: string) => workspaces.find(item => item.id === id)?.name ?? "Select workspace";
 
   useEffect(() => {
     if (!open) return;
-    options.current[Math.max(0, workspaces.indexOf(selected))]?.focus();
+    options.current[Math.max(0, workspaces.findIndex(item => item.id === selected))]?.focus();
     const dismiss = (event: PointerEvent) => {
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -63,15 +63,15 @@ export function WorkspaceSwitcher({ workspaces, selected, personalWorkspace, onC
         <span>{label(selected)}</span><ChevronDown size={14} aria-hidden="true" />
       </button>
       {open ? <div className="workspace-switcher-menu" id={listID} role="listbox" aria-label="Workspace">
-        {workspaces.map((id, index) => <button className="workspace-switcher-option" key={id}
+        {workspaces.map((item, index) => <button className="workspace-switcher-option" key={item.id}
           ref={element => { options.current[index] = element; }} type="button" role="option"
-          aria-selected={id === selected} tabIndex={-1} onKeyDown={event => navigate(event, index)}
+          aria-selected={item.id === selected} tabIndex={-1} onKeyDown={event => navigate(event, index)}
           onClick={() => {
             setOpen(false);
             trigger.current?.focus();
-            if (id !== selected) onChange(id);
+            if (item.id !== selected) onChange(item.id);
           }}>
-          <span>{label(id)}</span><Check size={14} aria-hidden="true" />
+          <span>{item.name}{item.status === "archived" ? <small>Archived</small> : null}</span><Check size={14} aria-hidden="true" />
         </button>)}
       </div> : null}
     </div>

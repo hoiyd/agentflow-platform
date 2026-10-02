@@ -9,18 +9,23 @@ Chat/Continue/Resume use SSE; inspection and resource endpoints use JSON.
 
 Default `AUTH_MODE=local` is unauthenticated trusted development. Enabled
 `AUTH_MODE=oidc` verifies revocable sessions and Workspace membership before
-business requests (401/403), with Origin checks for cookie-authenticated mutations.
+business requests (401/404), with Origin checks for cookie-authenticated mutations.
 See [identity setup and limitations](../operations/identity-membership.md).
 Object ACLs remain a separate boundary; `ALLOWED_ORIGINS` alone is not access control.
 
 Business `/api/*` operations resolve `X-Workspace-ID`, `workspace_id` query, or
 supported payload scope. Multiple explicit selectors must agree or return 400.
-Omission and legacy `default` select `default_workspace`, never a global search.
+Omission selects the authenticated owner's active default Workspace. Legacy
+`default`/`default_workspace` are not valid runtime aliases after migration.
 Conversation, Run, Messages, Memory, Knowledge, Replay, Usage, and Verification
 remain scoped; another namespace's resource ID is treated as not found.
 Workspace selection is not proof of identity or Membership. In OIDC mode the
 server checks the selected namespace against persisted memberships and forbids
-payload-only override. Authentication endpoints are not Workspace-scoped.
+payload-only override. Authentication and owner-scoped Workspace-management
+endpoints do not depend on the currently selected Workspace. Archived mutations
+return 409; deleted or foreign spaces return 404. Shared Agent/Tool configuration
+is read-only for OIDC users and writable only by the trusted-local operator.
+See [lifecycle, closing conflicts and migration](../operations/workspace-lifecycle.md).
 
 ## Endpoint Map
 
@@ -32,6 +37,12 @@ GET    /api/auth/login
 GET    /api/auth/register
 GET    /api/auth/callback
 POST   /api/auth/logout
+
+GET    /api/workspaces
+POST   /api/workspaces
+GET    /api/workspaces/{id}
+PATCH  /api/workspaces/{id}
+DELETE /api/workspaces/{id}
 
 GET    /api/conversations
 POST   /api/conversations

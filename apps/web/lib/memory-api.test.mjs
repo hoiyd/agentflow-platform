@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createMemory, searchMemories, getMemory, mutateMemory } from "./memory-api.ts";
-import { APIError } from "./api-client.ts";
+import { APIError, setWorkspaceID } from "./api-client.ts";
 
 function mockFetch(t, body, onRequest = () => {}) {
+  setWorkspaceID("11");
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
     onRequest(url, options);
@@ -37,7 +38,7 @@ test("memory creation sends the workspace-scoped manual record", async (t) => {
 
   assert.match(request.url, /\/api\/memories$/);
   assert.equal(request.method, "POST");
-  assert.equal(request.headers.get("X-Workspace-ID"), "default_workspace");
+  assert.equal(request.headers.get("X-Workspace-ID"), "11");
   assert.deepEqual(request.body, {
     kind: "preference",
     content: "Use concise release notes.",
@@ -75,7 +76,7 @@ test("memory detail is scoped, uncached, and preserves tombstones and audit", as
   mockFetch(t, detail, (url, options) => {
     assert.match(String(url), /\/api\/memories\/mem%2F1$/);
     assert.equal(options.cache, "no-store");
-    assert.equal(new Headers(options.headers).get("X-Workspace-ID"), "default_workspace");
+    assert.equal(new Headers(options.headers).get("X-Workspace-ID"), "11");
   });
   assert.deepEqual(await getMemory("mem/1"), detail);
 });

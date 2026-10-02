@@ -1,8 +1,10 @@
 import type { RAGEvaluationRunResponse } from "../../lib/knowledge-api";
 import type { KnowledgeEvaluationModel } from "./useKnowledgeEvaluation";
 import { formatPercent, KnowledgeResultCard, RetrievalDiagnostics } from "./KnowledgeRetrieval";
+import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 
 export function KnowledgeEvaluation({ model }: { model: KnowledgeEvaluationModel }) {
+  const readOnly = useWorkspaceReadOnly();
   return (
     <section className="rag-evaluation">
       <div className="evaluation-controls">
@@ -20,7 +22,7 @@ export function KnowledgeEvaluation({ model }: { model: KnowledgeEvaluationModel
         </label>
         <button
           className="send compact-send"
-          disabled={model.isRunningEvaluation || model.evaluationCases.trim().length === 0}
+          disabled={readOnly || model.isRunningEvaluation || model.evaluationCases.trim().length === 0}
           onClick={model.runEvaluation}
           type="button"
         >

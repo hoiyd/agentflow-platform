@@ -18,7 +18,7 @@ a controlled pilot.
 | Execution | [Single, Multi, and Loop](../runtime/execution-modes.md) share one Turn Engine, frozen Runtime Snapshot, bounded lifecycle, and common completion path. |
 | Resource control | [Admission, backpressure, rate limits, retries, context limits, Run Budget, and timeouts](../runtime/execution-controls.md) have distinct scopes and enforcement owners. |
 | Persistence | Postgres stores persist Runs, Messages, durable Run Events, usage, retrieval data, and Verification records behind shared domain contracts. |
-| Workspace scope | Every request resolves a non-empty Workspace namespace. Conversation, Message, Run, Document, Memory, retrieval, Replay, and Verification paths preserve that scope in Postgres stores. |
+| Workspace scope | [Owned Workspace entities](workspace-lifecycle.md) have generated IDs, mutable names, defaults, archive/restore and soft deletion. Request admission and persisted-write guards protect Conversation, Run, Document, Memory, Replay and related scope. |
 | Tool execution | [Platform enablement and Agent allowlists](../runtime/agent-profiles.md#two-tool-control-layers) precede a bounded Executor with typed errors, timeout, result limits, tracing, and conservative concurrency. |
 | RAG | [Hybrid recall, RRF, reranking, relevance gating, scoped context expansion, injection filtering, and citations](../knowledge/knowledge-rag.md) use one observable pipeline. |
 | Evaluation | The [Golden Dataset v1](../evaluation/rag-golden-dataset.md) pairs a versioned schema and canonical corpus with the production retrieval path, reporting Hit@1/3/5, misses, security decisions, and active component versions. |
@@ -36,7 +36,7 @@ evaluation, internal use, or a controlled demonstration:
 | Dimension | Current scope |
 | --- | --- |
 | Access | Trusted-local mode remains unauthenticated; optional [OIDC identity and membership](identity-membership.md) add themed signup/login, personal Workspace onboarding, revocable sessions and request-level membership checks. |
-| Tenancy | Namespace filtering is mandatory. OIDC mode validates caller selection against persisted membership, but per-object ACLs, shared Agent/Tool administration and complete cross-tenant auditing remain separate work. |
+| Tenancy | Each Workspace has one owner, with owner-constrained Membership and lifecycle checks. Shared Agent/Tool writes are trusted-local operator-only. Private per-Workspace profiles, full object ACLs and cross-tenant auditing remain separate work. |
 | Runtime | Run admission, bounded queueing, Conversation single-writer control, interrupted lifecycle repair, Stage checkpoints, and Tool effect idempotency operate within one process. |
 | Tools | Use built-in or operator-reviewed Tools. All calls pass through Agent allowlists, Budget, timeout, result limits, tracing, and conservative concurrency. |
 | Data | Postgres provides durable storage, including local operation. The single-instance [release and recovery drill](release-recovery-drill.md) exercises startup migration, restart, repair, and Resume; backup/restore and version rollback remain deployment responsibilities. |

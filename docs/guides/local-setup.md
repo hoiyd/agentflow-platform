@@ -76,8 +76,11 @@ npm run dev
 ```
 
 Set `NEXT_PUBLIC_API_BASE_URL` only when the API is elsewhere.
-`NEXT_PUBLIC_WORKSPACE_ID` selects a namespace; the default is
-`default_workspace`. It is not an identity or access grant.
+Workspace selection uses the current owner's entities and persisted active
+default; no frontend namespace environment variable is needed. Existing databases
+require the [ownership migration](../operations/workspace-lifecycle.md#legacy-migration)
+before running the upgraded API. New databases create the local owner's space
+automatically.
 
 ## Tests and Offline Evidence
 

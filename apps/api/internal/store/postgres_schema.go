@@ -15,14 +15,17 @@ type postgresColumnRequirement struct {
 var postgresRequiredColumns = []postgresColumnRequirement{
 	{Table: "auth_users", Column: "issuer", UDTName: "text", NotNull: true},
 	{Table: "auth_users", Column: "subject", UDTName: "text", NotNull: true},
-	{Table: "auth_memberships", Column: "workspace_id", UDTName: "text", NotNull: true},
+	{Table: "auth_memberships", Column: "workspace_id", NotNull: true},
 	{Table: "auth_personal_workspaces", Column: "user_id", UDTName: "text", NotNull: true},
-	{Table: "auth_personal_workspaces", Column: "workspace_id", UDTName: "text", NotNull: true},
+	{Table: "auth_personal_workspaces", Column: "workspace_id", NotNull: false},
+	{Table: "workspaces", Column: "id", UDTName: "int8", NotNull: true},
+	{Table: "workspaces", Column: "owner_user_id", UDTName: "text", NotNull: true},
+	{Table: "workspaces", Column: "deleted_at", UDTName: "timestamptz", NotNull: false},
 	{Table: "auth_sessions", Column: "token_hash", UDTName: "text", NotNull: true},
 	{Table: "auth_sessions", Column: "expires_at", UDTName: "timestamptz", NotNull: true},
 	{Table: "auth_login_attempts", Column: "verifier", UDTName: "text", NotNull: true},
-	{Table: "conversations", Column: "workspace_id", UDTName: "text", NotNull: true},
-	{Table: "messages", Column: "workspace_id", UDTName: "text", NotNull: true},
+	{Table: "conversations", Column: "workspace_id", NotNull: true},
+	{Table: "messages", Column: "workspace_id", NotNull: true},
 	{Table: "messages", Column: "citations", UDTName: "jsonb", NotNull: true},
 	{Table: "messages", Column: "web_citations", UDTName: "jsonb", NotNull: true},
 	{Table: "agents", Column: "memory_enabled", NotNull: true},
@@ -30,7 +33,7 @@ var postgresRequiredColumns = []postgresColumnRequirement{
 	{Table: "agents", Column: "executor", NotNull: true},
 	{Table: "agents", Column: "skills", UDTName: "jsonb", NotNull: true},
 	{Table: "agents", Column: "deleted_at"},
-	{Table: "runs", Column: "workspace_id", UDTName: "text", NotNull: true},
+	{Table: "runs", Column: "workspace_id", NotNull: true},
 	{Table: "runs", Column: "heartbeat_at"},
 	{Table: "runs", Column: "runtime_snapshot"},
 	{Table: "runs", Column: "completion_contract"},
@@ -50,14 +53,14 @@ var postgresRequiredColumns = []postgresColumnRequirement{
 	{Table: "tool_artifacts", Column: "content_hash", UDTName: "text", NotNull: true},
 	{Table: "tool_artifacts", Column: "content", UDTName: "bytea", NotNull: true},
 	{Table: "verification_evidence", Column: "details", UDTName: "jsonb", NotNull: true},
-	{Table: "memories", Column: "workspace_id", UDTName: "text", NotNull: true},
+	{Table: "memories", Column: "workspace_id", NotNull: true},
 	{Table: "memories", Column: "version", UDTName: "int8", NotNull: true},
 	{Table: "memories", Column: "deleted_at", UDTName: "timestamptz"},
 	{Table: "memory_changes", Column: "command_hash", UDTName: "text", NotNull: true},
 	{Table: "memory_candidates", Column: "confidence", UDTName: "float8", NotNull: true},
-	{Table: "memory_candidates", Column: "workspace_id", UDTName: "text", NotNull: true},
+	{Table: "memory_candidates", Column: "workspace_id", NotNull: true},
 	{Table: "memory_embeddings", Column: "embedding", UDTName: "vector", NotNull: true},
-	{Table: "documents", Column: "workspace_id", UDTName: "text", NotNull: true},
+	{Table: "documents", Column: "workspace_id", NotNull: true},
 	{Table: "documents", Column: "source_key", UDTName: "text", NotNull: true},
 	{Table: "documents", Column: "version", UDTName: "text", NotNull: true},
 	{Table: "documents", Column: "content_hash", UDTName: "text", NotNull: true},
@@ -80,7 +83,7 @@ var postgresRequiredColumns = []postgresColumnRequirement{
 	{Table: "model_request_records", Column: "source_token_breakdown", UDTName: "jsonb", NotNull: true},
 	{Table: "model_request_records", Column: "capture_content", UDTName: "text", NotNull: true},
 	{Table: "model_request_records", Column: "capture_expired", UDTName: "bool", NotNull: true},
-	{Table: "task_state_revisions", Column: "workspace_id", UDTName: "text", NotNull: true},
+	{Table: "task_state_revisions", Column: "workspace_id", NotNull: true},
 	{Table: "task_state_revisions", Column: "conversation_id", UDTName: "text", NotNull: true},
 	{Table: "task_state_revisions", Column: "version", UDTName: "int8", NotNull: true},
 	{Table: "task_state_revisions", Column: "patch", UDTName: "jsonb", NotNull: true},
@@ -123,6 +126,11 @@ func (s *PostgresStore) validateSchema(ctx context.Context) error {
 		}
 		if requirement.UDTName != "" && state.UDTName != requirement.UDTName {
 			return fmt.Errorf("postgres column %s has type %s, want %s", key, state.UDTName, requirement.UDTName)
+		}
+		// The offline ownership migration reads legacy text scopes before
+		// converting them to BIGINT FKs. Other types are never valid IDs.
+		if requirement.Column == "workspace_id" && state.UDTName != "text" && state.UDTName != "int8" {
+			return fmt.Errorf("postgres column %s has type %s, want legacy text or bigint", key, state.UDTName)
 		}
 		if requirement.NotNull && state.Nullable != "NO" {
 			return fmt.Errorf("postgres column %s must be NOT NULL", key)

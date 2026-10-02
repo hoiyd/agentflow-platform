@@ -9,7 +9,7 @@ complete account-management product or the object-authorization audit in PROD-00
 | Failure | Required outcome |
 | --- | --- |
 | Missing, forged, revoked or expired session | 401 before any business handler executes. |
-| Valid identity without selected Workspace membership | 403; never auto-enroll. |
+| Valid identity without owned/granted selected Workspace | 404 without disclosing another owner's space; never auto-enroll. |
 | Header/query/body select different Workspaces | Reject; body cannot bypass authenticated scope. |
 | Forged identity headers or an unverified email | Cannot establish identity or grant membership. |
 | Invalid state, missing transaction cookie, nonce or PKCE mismatch | Reject login; no session created. |
@@ -21,7 +21,7 @@ complete account-management product or the object-authorization audit in PROD-00
 | Restart or membership removal | Sessions remain verifiable; removed memberships stop granting access. |
 | Explicit sign out, followed by sign in | Old AgentFlow session is revoked; the next authorization request requires provider reauthentication. |
 | Close and reopen a browser tab without signing out | Existing session remains valid until its absolute expiry; no logout on tab close. |
-| Authentication disabled for trusted local use | Existing namespace and API behavior stay unchanged. |
+| Authentication disabled for trusted local use | Reserved persistent local User owns its own entities; no OIDC owner's data is implicitly accessible. |
 | Duplicate or concurrent first login | One personal Workspace and one Membership; existing grants remain unchanged. |
 | Personal Workspace grant fails | Marker and grant roll back together; no new Session; a fresh login retries. |
 | Membership revoked after onboarding | Relogin/restart does not restore it; empty Membership is not a new-account signal. |
@@ -29,8 +29,8 @@ complete account-management product or the object-authorization audit in PROD-00
 
 ## Modes and Scope
 
-`AUTH_MODE=local` is the default for trusted development. It preserves existing
-Workspace namespace selection and establishes **no authenticated identity**.
+`AUTH_MODE=local` is the default for trusted development. A persistent server-owned
+`user_local` owns its Workspaces, but this establishes **no browser-authenticated identity**.
 Do not expose it to untrusted users. `AUTH_MODE=oidc` enables login, revocable
 sessions and server-side membership checks before every business request,
 including SSE, Replay, Artifact, Memory and knowledge endpoints. Only health,
@@ -39,11 +39,13 @@ OIDC login ensures that the user's personal Workspace has been provisioned once.
 
 Registration uses the IdP's native account creation through `prompt=create`.
 The endpoint is always available in OIDC mode, but the IdP alone controls whether
-account creation is permitted. AgentFlow adds only a personal namespace and
-Membership. No local password
-storage, password proxy, invitations, roles, per-user object ACLs, general Workspace
-administration or service-account tokens. Agent/Tool configuration remains shared operator
-configuration; all members currently have the same access. Object ownership and
+account creation is permitted. AgentFlow provisions an owned personal Workspace
+entity and owner-constrained Membership. [Workspace lifecycle](workspace-lifecycle.md)
+adds creation, rename, defaults, archive/restore and soft deletion. There is no local
+password storage, password proxy, invitation, role matrix or service-account token.
+Agent/Tool configuration remains service-wide and is read-only for ordinary OIDC
+users; trusted-local operators maintain it. Workspace-private Agent configuration
+is not implemented. Full object ownership and
 the complete cross-tenant authorization audit remain PROD-002. This boundary alone
 does not make the deployment a public multi-tenant SaaS.
 
@@ -107,11 +109,14 @@ messages are customized; other locales inherit Keycloak's native messages.
 
 ### Database Memberships
 
-Postgres is the sole Membership authority. Startup does not read member files
-or import shared grants. Existing users and grants survive schema upgrades and
-restarts unchanged; automatic onboarding grants only a personal Workspace.
+Postgres stores both entities and grants. `workspaces.owner_user_id` is the single
+ownership authority; composite foreign keys ensure `auth_memberships` cannot grant
+one owner's Workspace to another user. Startup does not read member files or
+import shared grants. Existing databases require the explicit
+[ownership migration](workspace-lifecycle.md#legacy-migration); ambiguous ownership
+is never guessed. Automatic onboarding grants only a new user's own personal space.
 
-Shared Workspace access is managed by operators in `auth_memberships`, referencing
+Operators can revoke/restore an owner's access in `auth_memberships`, referencing
 the internal `auth_users.id`, not email or display name. The user's OIDC `sub`
 is scoped by issuer; an authenticated nonmember sees it on the access-required
 screen but cannot mount the workbench after its access has been revoked.
@@ -137,7 +142,7 @@ delete its onboarding marker to trigger re-enrollment.
    This client accepts only its own audience and rejects a foreign `azp`
    (authorized party); cross-client token sharing is not supported.
 3. Verified `(issuer, subject)` maps to a stable internal `user_id`. Login updates
-   the display name. A transaction creates a personal namespace
+   the display name. A transaction creates a personal Workspace entity
    record and grant only once. The record outlives grant revocation, preventing
    future logins from restoring access. Access/refresh/ID tokens are not
    retained or returned to the frontend.
@@ -162,16 +167,19 @@ password-only reauthentication both inherit the theme.
 
 `GET /api/auth/session` returns mode, authentication state, safe user identity
 and current Workspace IDs, plus an optional authorized
-`personal_workspace`. Anonymous probes return 200 with no user; persistence
+`personal_workspace` (the current authorized active default; retained field name
+for client compatibility). Anonymous probes return 200 with no user; persistence
 failures return 503, never a fallback to local mode. The frontend waits for this
-probe before mounting business consumers, redirects anonymous OIDC users directly
+probe and the authoritative `/api/workspaces` list before mounting business consumers,
+redirects anonymous OIDC users directly
 to `/api/auth/login`, and offers Sign out and a compact
-Workspace menu (personal namespace labeled "Personal workspace"), and fully
+Workspace menu displaying mutable entity names and archived status, and fully
 reloads scoped application state on a switch.
 Expired business requests return 401 and redirect to the same login page.
 Session-probe failures and authenticated users without membership retain a local
 error/access-required screen instead of redirecting repeatedly. The public home
-page and local mode do not trigger this redirect. Nonmembership returns 403.
+page and local mode do not trigger this redirect. Foreign, revoked or deleted
+Workspace requests return 404; invalid Origin or shared configuration writes return 403.
 Selecting a Workspace is not itself a grant.
 
 Cookie-authenticated mutations, including logout, require the exact configured
@@ -187,11 +195,14 @@ resources are not newly converted into owner ACLs by this feature.
 ## Persistence and Privacy
 
 Startup idempotently creates `auth_users`, `auth_memberships`, `auth_sessions`,
-`auth_login_attempts` and `auth_personal_workspaces`.
-The personal Workspace record preserves onboarding history, not passwords or roles.
+`auth_login_attempts`, `auth_personal_workspaces` and `workspaces`.
+The personal Workspace record preserves onboarding history and default selection,
+not passwords or roles. Its nullable reference preserves revocation history even
+when an old grant is removed during explicit ownership migration.
 Old file-import bookkeeping is no longer created, required or accessed; any
 existing unused table is left untouched rather than dropped during startup.
-Existing resource rows are not moved or assigned to new owners.
+Old namespaces become owner-scoped numeric entities only through the explicit
+offline migration; startup refuses ambiguous or unmigrated references.
 Sessions survive restart, logout removes them, and expired session/transaction
 rows are purged opportunistically on the next session/login creation. There is
 no idle refresh, background cleanup scheduler or provider-wide session revocation.
@@ -257,9 +268,10 @@ boundary. Added tables can remain; no destructive database rollback is needed.
 
 To stop new account creation, disable registration at the IdP; existing users
 can still sign in and receive their personal Workspace. There is no separate
-AgentFlow onboarding switch. A binary rollback can retain grants/onboarding records.
-Back up auth tables before a binary downgrade; old file-based Membership behavior
-is no longer supported by the current application.
+AgentFlow onboarding switch. After the Workspace identity migration, a pre-lifecycle
+binary is not a safe standalone rollback: it assumes legacy global defaults and
+does not enforce archive/deletion. Use a matching full database backup and binary
+for a downgrade, with traffic stopped. See [migration rollback](workspace-lifecycle.md#legacy-migration).
 
 - [Go OIDC client](https://github.com/coreos/go-oidc)
 - [Go OAuth2 client and PKCE options](https://pkg.go.dev/golang.org/x/oauth2)

@@ -14,31 +14,8 @@ func (s *PostgresStore) UpsertIdentity(ctx context.Context, user identity.User) 
 	return err
 }
 
-// The unique user row is both the personal Workspace record and the durable
-// onboarding marker. Membership removal never deletes this marker; login cannot
-// recreate revoked access. INSERT conflict handling serializes concurrent logins.
-func (s *PostgresStore) ProvisionPersonalWorkspace(ctx context.Context, userID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var workspace string
-	err = tx.QueryRowContext(ctx, `INSERT INTO auth_personal_workspaces (user_id,workspace_id) VALUES ($1,$2) ON CONFLICT (user_id) DO NOTHING RETURNING workspace_id`, userID, identity.PersonalWorkspaceID(userID)).Scan(&workspace)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO auth_memberships (user_id,workspace_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, userID, workspace); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 func (s *PostgresStore) ListMemberships(ctx context.Context, userID string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT workspace_id FROM auth_memberships WHERE user_id=$1 ORDER BY workspace_id`, userID)
+	rows, err := s.db.QueryContext(ctx, `SELECT m.workspace_id FROM auth_memberships m JOIN workspaces w ON w.id=m.workspace_id AND w.owner_user_id=m.user_id WHERE m.user_id=$1 AND w.deleted_at IS NULL ORDER BY w.id`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -55,8 +32,11 @@ func (s *PostgresStore) ListMemberships(ctx context.Context, userID string) ([]s
 }
 
 func (s *PostgresStore) IsMember(ctx context.Context, userID, workspaceID string) (bool, error) {
+	if !validWorkspaceID(workspaceID) {
+		return false, nil
+	}
 	var found bool
-	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth_memberships WHERE user_id=$1 AND workspace_id=$2)`, userID, workspaceID).Scan(&found)
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth_memberships m JOIN workspaces w ON w.id=m.workspace_id AND w.owner_user_id=m.user_id WHERE m.user_id=$1 AND m.workspace_id=$2 AND w.deleted_at IS NULL)`, userID, workspaceID).Scan(&found)
 	return found, err
 }
 

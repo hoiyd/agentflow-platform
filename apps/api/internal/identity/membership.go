@@ -9,6 +9,9 @@ import (
 	"time"
 )
 
+// LocalUserID is the reserved server-side owner for trusted-local development.
+const LocalUserID = "user_local"
+
 type User struct {
 	ID      string `json:"id"`
 	Issuer  string `json:"-"`
@@ -26,6 +29,7 @@ type Store interface {
 	ProvisionPersonalWorkspace(context.Context, string) error
 	ListMemberships(context.Context, string) ([]string, error)
 	IsMember(context.Context, string, string) (bool, error)
+	DefaultWorkspace(context.Context, string) (string, error)
 	CreateSession(context.Context, string, string, time.Time) error
 	SessionUser(context.Context, string) (User, error)
 	DeleteSession(context.Context, string) error
@@ -39,6 +43,3 @@ func UserID(issuer, subject string) string {
 	hash := sha256.Sum256([]byte(issuer + "\x00" + subject))
 	return "user_" + hex.EncodeToString(hash[:])
 }
-
-// A personal namespace is stable per verified issuer/subject identity, not email.
-func PersonalWorkspaceID(userID string) string { return "personal_" + userID }

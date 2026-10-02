@@ -2,6 +2,7 @@
 
 import { Check, Search, Save, Pencil, Trash2, History } from "lucide-react";
 import { useState } from "react";
+import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 
 import type { MemoryInfo, RetrievedMemory } from "../../lib/memory-api";
 import { MemoryMutationDialog, type MemoryDialogMode } from "./MemoryMutationDialog";
@@ -16,6 +17,7 @@ const MEMORY_KINDS = [
 ];
 
 export function MemoryPanel({ model }: { model: MemoryWorkbenchModel }) {
+  const readOnly = useWorkspaceReadOnly();
   const [selection, setSelection] = useState<{ memory: Pick<MemoryInfo, "id" | "content">; mode: MemoryDialogMode } | null>(null);
   const [lookupID, setLookupID] = useState("");
   const open = (memory: MemoryInfo, mode: MemoryDialogMode) => setSelection({ memory, mode });
@@ -36,21 +38,21 @@ export function MemoryPanel({ model }: { model: MemoryWorkbenchModel }) {
             </header>
             <label className="memory-field">
               <span>Kind</span>
-              <select disabled={model.isSaving} onChange={(event) => model.setKind(event.target.value)} value={model.kind}>
+              <select disabled={readOnly || model.isSaving} onChange={(event) => model.setKind(event.target.value)} value={model.kind}>
                 {MEMORY_KINDS.map((kind) => <option key={kind.value} value={kind.value}>{kind.label}</option>)}
               </select>
             </label>
             <label className="memory-field memory-content-field">
               <span>Content</span>
               <textarea
-                disabled={model.isSaving}
+                disabled={readOnly || model.isSaving}
                 onChange={(event) => model.setContent(event.target.value)}
                 placeholder="A durable fact, preference, correction, or project convention"
                 value={model.content}
               />
             </label>
             <div className="memory-action-row">
-              <button className="send memory-primary-action" disabled={model.isSaving || !model.content.trim()} onClick={model.saveMemory} type="button">
+              <button className="send memory-primary-action" disabled={readOnly || model.isSaving || !model.content.trim()} onClick={model.saveMemory} type="button">
                 <Save size={15} /> {model.isSaving ? "Saving..." : "Save memory"}
               </button>
             </div>
@@ -135,9 +137,10 @@ function MemoryResults({ hasSearched, items, onOpen }: { hasSearched: boolean; i
 }
 
 function MemoryActions({ memory, onOpen }: { memory: MemoryInfo; onOpen: (memory: MemoryInfo, mode: MemoryDialogMode) => void }) {
+  const readOnly = useWorkspaceReadOnly();
   return <div className="memory-item-actions">
-    <button type="button" title="Correct memory" aria-label="Correct memory" onClick={() => onOpen(memory, "replace")}><Pencil size={15} /></button>
-    <button type="button" title="Delete memory" aria-label="Delete memory" onClick={() => onOpen(memory, "delete")}><Trash2 size={15} /></button>
+    <button type="button" disabled={readOnly} title="Correct memory" aria-label="Correct memory" onClick={() => onOpen(memory, "replace")}><Pencil size={15} /></button>
+    <button type="button" disabled={readOnly} title="Delete memory" aria-label="Delete memory" onClick={() => onOpen(memory, "delete")}><Trash2 size={15} /></button>
     <button type="button" title="Memory history" aria-label="Memory history" onClick={() => onOpen(memory, "history")}><History size={15} /></button>
   </div>;
 }
