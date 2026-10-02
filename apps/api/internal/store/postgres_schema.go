@@ -80,6 +80,8 @@ var postgresRequiredColumns = []postgresColumnRequirement{
 	{Table: "run_usage_entries", Column: "purpose", UDTName: "text", NotNull: true},
 	{Table: "run_usage_entries", Column: "model", UDTName: "text", NotNull: true},
 	{Table: "run_usage_entries", Column: "tool_name", UDTName: "text", NotNull: true},
+	{Table: "run_usage_entries", Column: "breakdown", UDTName: "jsonb", NotNull: true},
+	{Table: "run_usage_entries", Column: "cost_details", UDTName: "jsonb", NotNull: true},
 	{Table: "model_request_records", Column: "model_call_id", UDTName: "text", NotNull: true},
 	{Table: "model_request_records", Column: "payload_hash", UDTName: "text", NotNull: true},
 	{Table: "model_request_records", Column: "parameters", UDTName: "jsonb", NotNull: true},

@@ -55,7 +55,7 @@ func (c *Client) CompletePreparedText(ctx context.Context, prepared PreparedText
 	systemPrompt, prompt := textPromptParts(prepared.Messages)
 	if c.simulated {
 		text := fallbackCompletion(systemPrompt, prompt)
-		reservation, err := beginBudgetedModelCall(ctx, "local_fallback", estimateTokens(messagesToText(prepared.Messages)))
+		reservation, err := beginBudgetedModelCall(ctx, "local_fallback", estimateTokens(messagesToText(prepared.Messages)), c.routeID)
 		if err != nil {
 			return TextCompletion{}, err
 		}

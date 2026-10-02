@@ -45,6 +45,34 @@ func TestCatalogSelectsStableCompatibleRoute(t *testing.T) {
 	}
 }
 
+// Failure inventory: input/output copies must not mutate a frozen quote;
+// negative or more-expensive cache quotes must fail registration.
+func TestCatalogFreezesCachePricing(t *testing.T) {
+	binding := testBinding("primary", 1, Capabilities{}, 1000, 100)
+	cache := int64(500000)
+	binding.Descriptor.Pricing.InputPerMillionTokensMicros = 2000000
+	binding.Descriptor.Pricing.CachedInputPerMillionTokensMicros = &cache
+	catalog, err := NewCatalog(binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache = 123
+	if *catalog.Descriptors()[0].Pricing.CachedInputPerMillionTokensMicros != 500000 {
+		t.Fatal("caller mutated frozen pricing")
+	}
+	copy := catalog.Descriptors()[0]
+	*copy.Pricing.CachedInputPerMillionTokensMicros = 456
+	if *catalog.Descriptors()[0].Pricing.CachedInputPerMillionTokensMicros != 500000 {
+		t.Fatal("returned descriptor mutated catalog")
+	}
+	for _, invalid := range []int64{-1, 2000001} {
+		binding.Descriptor.Pricing.CachedInputPerMillionTokensMicros = &invalid
+		if _, err := NewCatalog(binding); err == nil {
+			t.Fatalf("accepted cache price %d", invalid)
+		}
+	}
+}
+
 func TestCatalogFreezesEffectiveSamplingAndRejectsUnsupportedValues(t *testing.T) {
 	binding := testBinding("primary", 1, Capabilities{Streaming: true}, 1000, 100)
 	defaultCatalog, err := NewCatalog(binding)

@@ -57,7 +57,8 @@ test("legacy replay receives an empty usage ledger", async (t) => {
       completion_tokens: 0,
       total_tokens: 0,
       estimated_cost_micros: 0,
-      open_reservations: 0
+      open_reservations: 0,
+      cost_unknown_entries: 0
     },
     entries: []
   });

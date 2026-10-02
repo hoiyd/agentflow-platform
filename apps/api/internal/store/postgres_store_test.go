@@ -26,6 +26,8 @@ func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
 		"ADD COLUMN IF NOT EXISTS model text",
 		"SET model = '' WHERE model IS NULL",
 		"ADD COLUMN IF NOT EXISTS tool_name text",
+		"ALTER TABLE run_usage_entries ADD COLUMN IF NOT EXISTS breakdown jsonb NOT NULL DEFAULT 'null'::jsonb",
+		"ALTER TABLE run_usage_entries ADD COLUMN IF NOT EXISTS cost_details jsonb NOT NULL DEFAULT 'null'::jsonb",
 		"SET tool_name = '' WHERE tool_name IS NULL",
 		"run_usage_entries_run_operation_kind_idx",
 	} {

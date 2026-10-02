@@ -63,6 +63,32 @@
   padding: 18px 15px;
 }
 
+.usage-model-details {
+  border-top: 1px solid var(--border);
+}
+
+.usage-model-details summary {
+  cursor: pointer;
+  padding: 12px 15px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.usage-model-details summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.usage-model-details .usage-ledger-table th:first-child {
+  width: 24%;
+}
+
+.usage-model-details .usage-ledger-table td,
+.usage-model-details .usage-ledger-table th {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
 .usage-ledger-table {
   width: 100%;
   border-collapse: collapse;

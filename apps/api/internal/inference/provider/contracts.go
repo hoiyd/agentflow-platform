@@ -9,6 +9,7 @@ import (
 
 // RuntimeIdentity is the provider-neutral model configuration frozen into a Run.
 type RuntimeIdentity struct {
+	RouteID                string
 	Provider               string
 	BaseURL                string
 	Model                  string
@@ -116,6 +117,7 @@ type Usage struct {
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
 	Estimated        bool
+	Breakdown        *domain.UsageBreakdown `json:"breakdown,omitempty"`
 }
 
 func (u Usage) Valid() bool {

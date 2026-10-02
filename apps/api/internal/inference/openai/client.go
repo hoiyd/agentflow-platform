@@ -18,6 +18,7 @@ const (
 )
 
 type Client struct {
+	routeID                string
 	apiKey                 string
 	simulated              bool
 	baseURL                string
@@ -127,6 +128,7 @@ func (c *Client) SetRetryPolicy(policy RetryPolicy) {
 func (c *Client) RuntimeIdentity() RuntimeIdentity {
 	if c.simulated {
 		return RuntimeIdentity{
+			RouteID:  c.routeID,
 			Provider: "simulated", BaseURL: safeRuntimeURL(c.baseURL), Model: "local_fallback",
 			EmbeddingBaseURL: safeRuntimeURL(c.embeddingBaseURL), EmbeddingModel: "local_hash_embedding",
 			EmbeddingDimensions: c.embeddingDimensions, EmbeddingProvider: "simulated",
@@ -134,6 +136,7 @@ func (c *Client) RuntimeIdentity() RuntimeIdentity {
 		}
 	}
 	return RuntimeIdentity{
+		RouteID:  c.routeID,
 		Provider: providerForURL(c.baseURL), BaseURL: safeRuntimeURL(c.baseURL), Model: c.model,
 		EmbeddingBaseURL: safeRuntimeURL(c.embeddingBaseURL), EmbeddingModel: c.embeddingModel,
 		EmbeddingDimensions: c.embeddingDimensions, EmbeddingProvider: providerForURL(c.embeddingBaseURL),
@@ -145,6 +148,7 @@ func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) provider.Client {
 	client := NewClientWithTimeoutAndEmbeddingModel(c.apiKey, identity.BaseURL, identity.EmbeddingBaseURL,
 		identity.Model, identity.EmbeddingModel, identity.EmbeddingDimensions, c.timeout)
 	client.simulated = c.simulated
+	client.routeID = identity.RouteID
 	client.requestLimiter = c.requestLimiter
 	client.requestRecorder = c.requestRecorder
 	client.retryPolicy = c.retryPolicy

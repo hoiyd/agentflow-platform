@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 
 	"strings"
 	"time"
@@ -63,6 +64,9 @@ func RunBudget(run domain.Run) domain.RuntimeRunBudget {
 }
 
 func ValidateUsageEntry(entry domain.RunUsageEntry) error {
+	if err := entry.Breakdown.Validate(entry.PromptTokens, entry.CompletionTokens); err != nil {
+		return err
+	}
 	if strings.TrimSpace(entry.ID) == "" || strings.TrimSpace(entry.RunID) == "" || strings.TrimSpace(entry.OperationID) == "" {
 		return errors.New("run usage requires id, run_id, and operation_id")
 	}
@@ -102,7 +106,7 @@ func HasUsageReservation(entries []domain.RunUsageEntry, operationID string) boo
 func SameUsageEntry(left, right domain.RunUsageEntry) bool {
 	left.ID, right.ID = "", ""
 	left.Timestamp, right.Timestamp = time.Time{}, time.Time{}
-	return left == right
+	return reflect.DeepEqual(left, right)
 }
 
 func CloneCompletionContract(contract *domain.CompletionContract) *domain.CompletionContract {

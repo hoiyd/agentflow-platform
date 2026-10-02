@@ -867,6 +867,31 @@ export interface components {
             /** Format: int64 */
             estimated_cost_micros: number;
             open_reservations: number;
+            cost_unknown_entries?: number;
+        };
+        /** @description Optional provider-reported subsets, already included in prompt/completion totals. Absent is unknown, not zero. */
+        UsageBreakdown: {
+            cached_input_tokens?: number;
+            reasoning_tokens?: number;
+            /** @enum {string} */
+            source: "openai_details" | "deepseek_cache" | "invalid_details";
+        };
+        UsagePricing: {
+            source: string;
+            /** Format: int64 */
+            input_per_million_tokens_micros: number;
+            /** Format: int64 */
+            output_per_million_tokens_micros: number;
+            /** Format: int64 */
+            cached_input_per_million_tokens_micros?: number;
+        };
+        /** @description Frozen quote and settlement assumptions; an estimate, not a provider invoice. */
+        UsageCostDetails: {
+            /** @enum {string} */
+            status: "estimated" | "unknown";
+            reason: string;
+            pricing: components["schemas"]["UsagePricing"];
+            cache_discount_applied: boolean;
         };
         RunUsageEntry: {
             id: string;
@@ -888,6 +913,8 @@ export interface components {
             /** Format: int64 */
             estimated_cost_micros?: number;
             estimated?: boolean;
+            breakdown?: components["schemas"]["UsageBreakdown"];
+            cost_details?: components["schemas"]["UsageCostDetails"];
             /** Format: date-time */
             timestamp: string;
         };

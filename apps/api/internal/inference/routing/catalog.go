@@ -97,10 +97,11 @@ func NewCatalog(bindings ...Binding) (*Catalog, error) {
 			return nil, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q is duplicated", descriptor.ID))
 		}
 		seen[descriptor.ID] = true
-		binding.Descriptor = descriptor
+		binding.Descriptor = cloneDescriptor(descriptor)
 		identity.GenerationPolicy = descriptor.GenerationPolicy.Clone()
 		identity.SeedSupported = descriptor.Capabilities.Seed
 		identity.ReasoningDisplayFormat = descriptor.Capabilities.ReasoningDisplayFormat
+		identity.RouteID = descriptor.ID
 		binding.Client = binding.Client.WithRuntimeIdentity(identity)
 		normalized = append(normalized, binding)
 	}
@@ -228,6 +229,9 @@ func ValidateDescriptor(descriptor Descriptor) (Descriptor, error) {
 	if descriptor.Pricing.InputPerMillionTokensMicros < 0 || descriptor.Pricing.OutputPerMillionTokensMicros < 0 {
 		return Descriptor{}, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q has invalid pricing", descriptor.ID))
 	}
+	if cached := descriptor.Pricing.CachedInputPerMillionTokensMicros; cached != nil && (*cached < 0 || *cached > descriptor.Pricing.InputPerMillionTokensMicros) {
+		return Descriptor{}, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q has invalid cached input pricing", descriptor.ID))
+	}
 	if descriptor.CredentialEnvironment != "" && !credentialEnvPattern.MatchString(descriptor.CredentialEnvironment) {
 		return Descriptor{}, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q has an invalid credential environment reference", descriptor.ID))
 	}
@@ -258,6 +262,7 @@ func ValidateDescriptor(descriptor Descriptor) (Descriptor, error) {
 }
 
 func cloneDescriptor(descriptor Descriptor) Descriptor {
+	descriptor.Pricing = descriptor.Pricing.Clone()
 	if descriptor.GenerationPolicy != nil {
 		policy := descriptor.GenerationPolicy.Clone()
 		descriptor.GenerationPolicy = &policy

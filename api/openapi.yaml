@@ -1421,6 +1421,32 @@ components:
         total_tokens: { type: integer }
         estimated_cost_micros: { type: integer, format: int64 }
         open_reservations: { type: integer }
+        cost_unknown_entries: { type: integer, minimum: 0 }
+    UsageBreakdown:
+      type: object
+      required: [source]
+      description: Optional provider-reported subsets, already included in prompt/completion totals. Absent is unknown, not zero.
+      properties:
+        cached_input_tokens: { type: integer, minimum: 0 }
+        reasoning_tokens: { type: integer, minimum: 0 }
+        source: { type: string, enum: [openai_details, deepseek_cache, invalid_details] }
+    UsagePricing:
+      type: object
+      required: [source, input_per_million_tokens_micros, output_per_million_tokens_micros]
+      properties:
+        source: { type: string }
+        input_per_million_tokens_micros: { type: integer, format: int64, minimum: 0 }
+        output_per_million_tokens_micros: { type: integer, format: int64, minimum: 0 }
+        cached_input_per_million_tokens_micros: { type: integer, format: int64, minimum: 0 }
+    UsageCostDetails:
+      type: object
+      required: [status, reason, pricing, cache_discount_applied]
+      description: Frozen quote and settlement assumptions; an estimate, not a provider invoice.
+      properties:
+        status: { type: string, enum: [estimated, unknown] }
+        reason: { type: string }
+        pricing: { $ref: '#/components/schemas/UsagePricing' }
+        cache_discount_applied: { type: boolean }
     RunUsageEntry:
       type: object
       required: [id, run_id, operation_id, kind, purpose, timestamp]
@@ -1445,6 +1471,8 @@ components:
         total_tokens: { type: integer }
         estimated_cost_micros: { type: integer, format: int64 }
         estimated: { type: boolean }
+        breakdown: { $ref: '#/components/schemas/UsageBreakdown' }
+        cost_details: { $ref: '#/components/schemas/UsageCostDetails' }
         timestamp: { type: string, format: date-time }
     RunUsageLedger:
       type: object

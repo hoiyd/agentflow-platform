@@ -232,6 +232,21 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		content = `{"decision":"stop","reason":"evidence saved","final_answer":"Evidence saved."}`
 	}
 	response := browserCompletion(content, reason, calls, reasoning)
+	if strings.Contains(task, "usage-breakdown") {
+		usage := map[string]any{"prompt_tokens": 50, "completion_tokens": 10, "total_tokens": 60}
+		if !strings.Contains(task, "usage-unknown") {
+			cached := 30
+			if strings.Contains(task, "usage-zero") {
+				cached = 0
+			}
+			if strings.Contains(task, "usage-invalid") {
+				cached = 51
+			}
+			usage["prompt_tokens_details"] = map[string]any{"cached_tokens": cached}
+			usage["completion_tokens_details"] = map[string]any{"reasoning_tokens": 4}
+		}
+		response["usage"] = usage
+	}
 	if input.Stream {
 		stream, err := modelstream.Completion(response)
 		if err != nil {
