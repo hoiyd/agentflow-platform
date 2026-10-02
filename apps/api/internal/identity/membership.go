@@ -9,8 +9,9 @@ import (
 	"time"
 )
 
-// LocalUserID is the reserved server-side owner for trusted-local development.
-const LocalUserID = "user_local"
+// SuperUserID owns trusted-local Workspaces. It is not an OIDC role or login;
+// AUTH_MODE=local still means a trusted, unauthenticated deployment.
+const SuperUserID = "super"
 
 type User struct {
 	ID      string `json:"id"`

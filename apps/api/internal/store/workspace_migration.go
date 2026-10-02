@@ -155,7 +155,7 @@ func previewWorkspaceMigration(ctx context.Context, q migrationQueryer, owners m
 			if err = q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM auth_users WHERE id=$1)`, item.OwnerUserID).Scan(&exists); err != nil {
 				return nil, err
 			}
-			if !exists && item.OwnerUserID != identity.LocalUserID {
+			if !exists && item.OwnerUserID != identity.SuperUserID {
 				item.Problem = "Owner does not exist in auth_users"
 			}
 		}
@@ -194,6 +194,9 @@ func (s *PostgresStore) ApplyWorkspaceMigration(ctx context.Context, owners map[
 	if _, err = tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext('workspace-entity-migration'))`); err != nil {
 		return err
 	}
+	if _, err = tx.ExecContext(ctx, superIdentityMigration); err != nil {
+		return err
+	}
 	tables, err := workspaceTables(ctx, tx)
 	if err != nil {
 		return err
@@ -227,7 +230,7 @@ func (s *PostgresStore) ApplyWorkspaceMigration(ctx context.Context, owners map[
 	if _, err = tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS workspace_migrations(legacy_id text PRIMARY KEY,workspace_id bigint NOT NULL REFERENCES workspaces(id),owner_user_id text NOT NULL REFERENCES auth_users(id),migrated_at timestamptz NOT NULL DEFAULT NOW())`); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO auth_users(id,issuer,subject,name) VALUES($1,'agentflow:local','local','Local user') ON CONFLICT DO NOTHING`, identity.LocalUserID); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO auth_users(id,issuer,subject,name) VALUES($1,'agentflow:local','local','Super') ON CONFLICT DO NOTHING`, identity.SuperUserID); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `ALTER TABLE auth_personal_workspaces ALTER COLUMN workspace_id DROP NOT NULL`); err != nil {

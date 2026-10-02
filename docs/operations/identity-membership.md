@@ -30,7 +30,9 @@ complete account-management product or the object-authorization audit in PROD-00
 ## Modes and Scope
 
 `AUTH_MODE=local` is the default for trusted development. A persistent server-owned
-`user_local` owns its Workspaces, but this establishes **no browser-authenticated identity**.
+`super` (display name **Super**) owns its Workspaces, but this establishes
+**no browser-authenticated identity** or OIDC administrator role. `local` remains
+the authentication mode; `super` is only its reserved server-side User ID.
 Do not expose it to untrusted users. `AUTH_MODE=oidc` enables login, revocable
 sessions and server-side membership checks before every business request,
 including SSE, Replay, Artifact, Memory and knowledge endpoints. Only health,

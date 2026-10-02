@@ -16,7 +16,7 @@ func workspaceOwner(r *http.Request) string {
 	if user, ok := r.Context().Value(identityContextKey{}).(identity.User); ok {
 		return user.ID
 	}
-	return identity.LocalUserID
+	return identity.SuperUserID
 }
 
 func (h *Handler) workspaceFailure(w http.ResponseWriter, r *http.Request, err error) {

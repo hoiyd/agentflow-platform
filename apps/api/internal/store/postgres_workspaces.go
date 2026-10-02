@@ -264,8 +264,8 @@ func (s *PostgresStore) InitializeWorkspaceLifecycle(ctx context.Context) error 
 	if err = s.ApplyWorkspaceMigration(ctx, nil); err != nil {
 		return err
 	}
-	if err = s.UpsertIdentity(ctx, identity.User{ID: identity.LocalUserID, Issuer: "agentflow:local", Subject: "local", Name: "Local user"}); err != nil {
+	if err = s.UpsertIdentity(ctx, identity.User{ID: identity.SuperUserID, Issuer: "agentflow:local", Subject: "local", Name: "Super"}); err != nil {
 		return err
 	}
-	return s.ProvisionPersonalWorkspace(ctx, identity.LocalUserID)
+	return s.ProvisionPersonalWorkspace(ctx, identity.SuperUserID)
 }

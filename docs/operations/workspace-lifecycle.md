@@ -44,7 +44,7 @@ Revoking access or deleting a space does not delete that marker, so repeat OIDC
 login cannot implicitly restore access or recreate an old space.
 
 New verified OIDC users receive one owned Personal workspace transactionally.
-Local mode uses reserved `user_local` with a separate owned Personal workspace:
+Local mode uses reserved `super` (display name **Super**) with a separate owned Personal workspace:
 it is a database owner, **not** a login credential or browser-supplied identity.
 The old `default_workspace` also needs an explicit owner; it has no exemptions.
 Clients cannot supply an owner or generated ID through create/update requests.
@@ -117,7 +117,7 @@ The wrapper loads `apps/api/.env` and passes all flags to the Go command.
 `--owner` is repeatable, `--timeout` defaults to `2m`, and no `--apply` means a
 genuinely read-only preview (no startup DDL, seeds or assignments). A namespace
 with exactly one existing owner is inferred. Missing/multiple ownership requires
-an explicit existing User mapping; `user_local` can be selected deliberately.
+an explicit existing User mapping; `super` can be selected deliberately.
 Unknown users, conflicting rerun mappings and ambiguity reject the whole apply.
 An explicit reassignment establishes the chosen owner's grant; an existing
 owner's revoked grant is not restored just by repeating its mapping.
@@ -151,13 +151,24 @@ the entity/constraints and local default automatically. A pre-lifecycle binary i
 not a safe rollback on the upgraded DB: restore the matching full backup and
 binary with traffic stopped. Do not drop new tables or guess a reverse mapping.
 
+The former reserved local User ID `user_local` is renamed to `super` in the same
+transaction during apply or the next upgraded API startup. Existing Workspace
+IDs, owner relationships, defaults, Membership revocations, Session references
+and relational User references are retained. Issuer/subject stay
+`agentflow:local`/`local`; immutable JSON evidence is not rewritten. Stop the old
+API and back up before upgrading. A conflicting reserved identity rejects the
+transaction instead of merging users. This rename adds no role, login credential,
+OIDC privilege or cross-owner bypass; `AUTH_MODE=local` retains its existing
+trusted, unauthenticated deployment boundary.
+
 ## Repeatable Evidence
 
 Use a dedicated `TEST_DATABASE_URL` with CREATEDB privileges:
 
 ```bash
 go -C apps/api test ./internal/store ./internal/identity ./internal/httpapi \
-  -run 'TestWorkspace|TestPersonalWorkspace|TestOIDC|TestAuthenticatedWorkspace' -count=1
+  -run 'TestWorkspace|TestSuperIdentity|TestPersonalWorkspace|TestOIDC|TestAuthenticatedWorkspace' -count=1
+bash scripts/test-browser.sh super-local.spec.ts
 AGENTFLOW_IDENTITY_TEST=1 bash scripts/test-browser.sh workspace-lifecycle.spec.ts identity.spec.ts
 ```
 
