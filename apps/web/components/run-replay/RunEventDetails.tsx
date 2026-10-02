@@ -53,6 +53,9 @@ export function EventDetail({ event }: { event: RunEvent }) {
 		  {typeof payload.rate_limit_wait_ms === "number" ? (
 			<div className="detail-kv"><span>Local rate wait</span><strong>{formatDuration(payload.rate_limit_wait_ms)}</strong></div>
 		  ) : null}
+		  {typeof payload.owner_capacity_wait_ms === "number" ? (
+			<div className="detail-kv"><span>Owner capacity wait</span><strong>{formatDuration(payload.owner_capacity_wait_ms)}</strong></div>
+		  ) : null}
 		  {typeof payload.model_permit_wait_ms === "number" ? (
 			<div className="detail-kv"><span>Model permit wait</span><strong>{formatDuration(payload.model_permit_wait_ms)}</strong></div>
 		  ) : null}

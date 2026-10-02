@@ -12,6 +12,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
+	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 	"agentflow-platform/apps/api/internal/redaction"
 )
 
@@ -344,6 +345,10 @@ func (p *BuiltinProvider) retry(ctx context.Context, operation string, call func
 }
 
 func providerRetryable(err error) bool {
+	var ownerAdmission *requestcontrol.OwnerAdmissionError
+	if errors.As(err, &ownerAdmission) {
+		return false
+	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}

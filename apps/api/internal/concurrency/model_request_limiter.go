@@ -16,6 +16,12 @@ type ModelRequestLimits struct {
 	RequestsPerPeriod int
 	TokensPerPeriod   int
 	RatePeriod        time.Duration
+	// Zero disables owner admission for standalone/offline clients. Production
+	// composition always enables it and resolves a trusted owner on every attempt.
+	OwnerMaxConcurrent int
+	OwnerQueueSize     int
+	OwnerWaitTimeout   time.Duration
+	OwnerResolver      func(context.Context) (string, error)
 }
 
 // ModelRequestLimiter applies concurrency and per-key rate limits to each
@@ -26,8 +32,12 @@ type ModelRequestLimiter struct {
 	rpm    int
 	tpm    int
 
-	mu   sync.Mutex
-	keys map[string]*apiKeyLimiter
+	mu          sync.Mutex
+	keys        map[string]*apiKeyLimiter
+	owners      map[string]*ownerLimiter
+	ownerLimits ModelRequestLimits
+	closed      context.Context
+	closeCancel context.CancelFunc
 }
 
 var _ requestcontrol.Limiter = (*ModelRequestLimiter)(nil)
@@ -39,12 +49,16 @@ func NewModelRequestLimiter(limits ModelRequestLimits) *ModelRequestLimiter {
 	if limits.RatePeriod <= 0 {
 		limits.RatePeriod = time.Minute
 	}
+	closed, closeCancel := context.WithCancel(context.Background())
 	return &ModelRequestLimiter{
-		global: make(chan struct{}, limits.MaxConcurrent),
-		period: limits.RatePeriod,
-		rpm:    limits.RequestsPerPeriod,
-		tpm:    limits.TokensPerPeriod,
-		keys:   make(map[string]*apiKeyLimiter),
+		global:      make(chan struct{}, limits.MaxConcurrent),
+		period:      limits.RatePeriod,
+		rpm:         limits.RequestsPerPeriod,
+		tpm:         limits.TokensPerPeriod,
+		keys:        make(map[string]*apiKeyLimiter),
+		owners:      make(map[string]*ownerLimiter),
+		ownerLimits: limits,
+		closed:      closed, closeCancel: closeCancel,
 	}
 }
 
@@ -55,6 +69,27 @@ func (l *ModelRequestLimiter) AcquireRequest(ctx context.Context, apiKey string,
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// Close wakes pending owner/rate/global waiters. An acquired transport keeps
+	// its permits until response cleanup; shutdown never reuses an active permit.
+	waitCtx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(l.closed, cancel)
+	defer func() { stop(); cancel() }()
+	ctx = waitCtx
+	select {
+	case <-l.closed.Done():
+		return nil, &requestcontrol.OwnerAdmissionError{Code: "model_limiter_closed"}
+	default:
+	}
+	ownerRelease, err := l.acquireOwner(ctx)
+	if err != nil {
+		return nil, l.waitError(err)
+	}
+	acquired := false
+	defer func() {
+		if !acquired {
+			ownerRelease()
+		}
+	}()
 	timing := requestcontrol.AttemptTimingFromContext(ctx)
 	if timing != nil {
 		timing.Limited = true
@@ -69,7 +104,7 @@ func (l *ModelRequestLimiter) AcquireRequest(ctx context.Context, apiKey string,
 			timing.RateWait = time.Since(started)
 		}
 		if err != nil {
-			return nil, err
+			return nil, l.waitError(err)
 		}
 	}
 
@@ -80,20 +115,29 @@ func (l *ModelRequestLimiter) AcquireRequest(ctx context.Context, apiKey string,
 		if timing != nil {
 			timing.PermitWait = time.Since(started)
 		}
-		return nil, ctx.Err()
+		return nil, l.waitError(ctx.Err())
 	}
 	if timing != nil {
 		timing.PermitWait = time.Since(started)
 	}
-	if err := ctx.Err(); err != nil {
+	if err := l.waitError(ctx.Err()); err != nil {
 		<-l.global
 		return nil, err
 	}
+	// Recheck durable access after waiting, before any provider transmission.
+	if resolve := l.ownerLimits.OwnerResolver; resolve != nil && l.ownerLimits.OwnerMaxConcurrent > 0 {
+		if _, err := resolve(ctx); err != nil {
+			<-l.global
+			return nil, err
+		}
+	}
 
 	var once sync.Once
+	acquired = true
 	return func() {
 		once.Do(func() {
 			<-l.global
+			ownerRelease()
 		})
 	}, nil
 }

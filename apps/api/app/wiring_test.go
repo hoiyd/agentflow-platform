@@ -186,7 +186,7 @@ func TestNewApplicationWiresHealthRoute(t *testing.T) {
 		MaxConcurrentRuns:          1,
 		RunQueueSize:               1,
 		RunQueueWaitTimeout:        time.Second,
-		MaxConcurrentModelRequests: 1,
+		MaxConcurrentModelRequests: 2,
 		ModelRetryMaxAttempts:      1,
 		ModelRetryBaseDelay:        time.Millisecond,
 		ModelRetryMaxDelay:         time.Millisecond,

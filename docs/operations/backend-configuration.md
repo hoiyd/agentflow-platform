@@ -76,6 +76,8 @@ not partial search results. See [index lifecycle](../knowledge/knowledge-rag.md#
 | --- | --- |
 | `MAX_CONCURRENT_RUNS`, `RUN_QUEUE_SIZE`, `RUN_QUEUE_WAIT_TIMEOUT` | Active tasks plus bounded waiting; same-Conversation single writer; full/expired waits return 429/503 + Retry-After |
 | `MAX_CONCURRENT_MODEL_REQUESTS` | In-flight Chat/Embedding HTTP requests, not model count; streams hold a slot until body close |
+| `MAX_CONCURRENT_OWNER_MODEL_REQUESTS` | One authenticated owner across all Workspaces; admitted attempts include downstream key/global wait; positive and below global (global >= 2) |
+| `OWNER_MODEL_QUEUE_SIZE`, `OWNER_MODEL_QUEUE_WAIT_TIMEOUT` | Additional pending physical attempts per owner and owner-slot wait; 0 queue means reject immediately; route timeout can expire sooner |
 | `MODEL_REQUESTS_PER_MINUTE` / `MODEL_TOKENS_PER_MINUTE` | Per-key request/input-estimate buckets; zero disables that bucket |
 | `MODEL_RETRY_*` | Physical attempts/backoff inside one logical call; retries reacquire permits, backoff holds none |
 

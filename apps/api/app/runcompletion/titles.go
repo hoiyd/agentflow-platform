@@ -8,6 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -55,6 +56,7 @@ func generateConversationTitle(ctx context.Context, runtime Lifecycle, runID str
 
 	titleCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
+	titleCtx = event.WithScope(titleCtx, event.Scope{RunID: runID})
 
 	systemPrompt := "Generate a concise conversation title. Return only the title, no quotes, no punctuation-only wrappers. Use the same language as the user when possible. Keep it under 8 words or 20 Chinese characters."
 	prompt := "User message:\n" + truncateForTitle(userMessage, 900) + "\n\nAssistant response:\n" + truncateForTitle(assistantMessage, 900)

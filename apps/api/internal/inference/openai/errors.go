@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 	"agentflow-platform/apps/api/internal/redaction"
 )
 
@@ -88,6 +89,16 @@ func (e *ModelError) FailureInfo() failure.Info {
 	if e == nil {
 		return failure.Info{Code: "model_request_failed", Source: "model_provider", Category: failure.CategoryInternal}
 	}
+	var local *requestcontrol.OwnerAdmissionError
+	if errors.As(e.Cause, &local) {
+		info := local.FailureInfo()
+		info.Operation = e.Operation
+		if info.Details == nil {
+			info.Details = map[string]any{}
+		}
+		info.Details["attempts"] = e.Attempts
+		return info
+	}
 	details := map[string]any{"attempts": e.Attempts}
 	if e.ProviderType != "" {
 		details["provider_type"] = e.ProviderType
@@ -153,6 +164,10 @@ func classifyModelError(operation string, err error) *ModelError {
 			copy.Operation = operation
 		}
 		return &copy
+	}
+	var local *requestcontrol.OwnerAdmissionError
+	if errors.As(err, &local) {
+		return &ModelError{Kind: ErrorKind(local.Code), Operation: operation, Message: local.Error(), Cause: err}
 	}
 	if errors.Is(err, context.Canceled) {
 		return &ModelError{Kind: ErrorCanceled, Operation: operation, Message: "request canceled", Cause: err}

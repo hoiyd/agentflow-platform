@@ -72,6 +72,22 @@ func validWorkspaceID(id string) bool {
 	return err == nil && value > 0 && strconv.FormatInt(value, 10) == id
 }
 
+// WorkspaceModelOwner resolves durable ownership for background model work.
+// Revoked Memberships and archived/deleted Workspaces cannot acquire capacity.
+func (s *PostgresStore) WorkspaceModelOwner(ctx context.Context, id string) (string, error) {
+	if !validWorkspaceID(id) {
+		return "", ErrNotFound("workspace")
+	}
+	var owner string
+	err := s.db.QueryRowContext(ctx, `SELECT w.owner_user_id FROM workspaces w
+	 JOIN auth_memberships m ON m.user_id=w.owner_user_id AND m.workspace_id=w.id
+	 WHERE w.id=$1 AND w.deleted_at IS NULL AND w.status='active'`, id).Scan(&owner)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound("workspace")
+	}
+	return owner, err
+}
+
 func (s *PostgresStore) DefaultWorkspace(ctx context.Context, owner string) (string, error) {
 	var id string
 	err := s.db.QueryRowContext(ctx, `SELECT w.id FROM auth_personal_workspaces p

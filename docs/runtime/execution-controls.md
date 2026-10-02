@@ -12,6 +12,7 @@ upload limits, and Memory confidence belong to their subsystem contracts.
 | --- | --- | --- |
 | Too many tasks active / waiting | Run admission | Calls inside a Run |
 | In-flight requests or provider 429 pressure | Model limiter / provider retry | Run Budget |
+| One user's Workspaces consume shared request capacity | Owner model admission | Workspace quota or monthly token budget |
 | No model meets required capabilities | Route catalog | Transient retry |
 | One Run consumes too much | Run Budget | RPM/TPM |
 | One input does not fit | Context Assembly | Cumulative Run tokens |
@@ -25,7 +26,7 @@ upload limits, and Memory confidence belong to their subsystem contracts.
 | Control | Scope and unit | Enforcement owner | Persistence |
 | --- | --- | --- | --- |
 | Run admission | Process + Conversation; active/queued Runs | `concurrency.RunController` | Live process policy |
-| Model limiter | Process + API key; physical requests and estimated input tokens/minute | `concurrency.ModelRequestLimiter` | Live buckets/permits |
+| Model limiter | Process + owner + API key; physical requests, pending attempts, estimated input tokens/minute | `concurrency.ModelRequestLimiter` | Live buckets/permits; owner resolved from Session/Run and Workspace |
 | Model routing | Run; eligible target for one logical call | `routing.Catalog` | Frozen contracts and affinity |
 | Retry | Logical Model Call; physical attempts | `openai.RetryPolicy` | Live process policy |
 | Run Budget | Run; calls, tokens, Tools, active time, estimated cost | `budget.Tracker` + Usage Store | Frozen budget; durable ledger |
@@ -55,14 +56,62 @@ Multi Workers share that Run's admission slot, budget, and model limits; their
   buckets; TPM estimates serialized input, not streamed output. Zero disables
   that bucket. Keyless requests still use global concurrency, not per-key buckets.
 - Every retry needs a new permit and RPM/TPM reservation. Backoff holds no slot.
-- Each attempt separates RPM/TPM wait, permit wait, and HTTP/stream time. These
+- Each attempt separates owner wait, RPM/TPM wait, global permit wait, and HTTP/stream time. These
   are local measurements, not provider queue/prefill time. Run admission wait
   is measured by RunController.
 - The request timeout includes permit acquisition through body completion.
   Local expiry is `model_admission_timeout`, not retried; caller cancellation
-  stays `canceled`. No second model queue is introduced.
+  stays `canceled`. Owner wait has its own bounded admission inside this same
+  Limiter, not a second Run scheduler.
 - Requests above total TPM capacity fail with `request_token_capacity_exceeded`,
   not a Run Budget error.
+
+### Owner-scoped Admission
+
+`MAX_CONCURRENT_OWNER_MODEL_REQUESTS` (default 2) caps admitted physical attempts
+for one verified user across **all** their Workspaces. The global default is 8;
+startup requires a positive owner cap below the global cap, so global must be at
+least 2. `OWNER_MODEL_QUEUE_SIZE` (default 8) permits additional pending attempts;
+zero rejects excess immediately. `OWNER_MODEL_QUEUE_WAIT_TIMEOUT` (default 30s)
+bounds owner-slot wait; the route/Embedding timeout also includes this phase.
+
+Acquisition order is **owner reservation/slot -> API Key RPM/TPM -> global slot ->
+HTTP body**. Owner-slot waiters never occupy global slots or consume key tokens.
+Owner slots include downstream key/global wait and are held until body cleanup.
+Cancellation, timeout, admission failure, EOF/body close, and limiter shutdown
+release reservations exactly once; unused owner entries are removed. Existing
+RPM/TPM reservations are not refunded if cancellation occurs after consumption.
+Each physical retry reacquires capacity; provider backoff holds no slots.
+
+Identity comes from the authenticated Session (`super` only in trusted-local
+mode) or the persisted Run's immutable Workspace ownership.
+Trusted-local HTTP requests bind `super` before dispatch, including Knowledge
+ingestion/search and explicit Memory writes/recall that have no Run or Session.
+Run attempts check current Membership and active Workspace both before waiting
+and before transport;
+missing/deleted/archived/revoked ownership fails closed. Resume passes existing
+resource authorization first. Header/query/body/Tool values cannot choose a quota
+owner. Single, Multi-Agent, Autonomous, compaction, title generation, Memory
+extraction/sync, and Chat/Embedding requests share the same limiter; detached
+execution retains identity and Memory workers resolve it from the durable Run.
+Already-started provider requests are not retroactively canceled by revocation.
+
+| Failure | JSON response | Retry behavior |
+| --- | --- | --- |
+| `owner_model_queue_full` | 429 + `Retry-After: 1` | New caller operation may retry; no automatic provider/Memory retry |
+| `owner_model_queue_timeout`, `model_limiter_closed`, `model_owner_resolution_failed` | 503 + `Retry-After: 1` | Same local-overload boundary, not a provider fault |
+| `model_owner_required`, `model_owner_unavailable` | 403 | Fix identity/access; no public-owner fallback |
+
+An already-open Chat SSE remains HTTP 200: its typed `error` frame carries
+`code`, `retryable`, and optional `retry_after_ms`; its HTTP status cannot change
+after streaming starts. Attempt events persist `owner_capacity_wait_ms` separately
+from key/global/HTTP timing, and Run Replay displays **Owner capacity wait**.
+
+This is a **single-process capacity bound**, not strict fairness, a per-user
+monthly token budget, a Workspace quota, or multi-instance accounting. Shared
+key buckets and Run admission can still delay other owners; the cap does not
+promise starvation-free scheduling. No Redis, virtual keys, or second scheduler
+is introduced. See the focused [functional gate](../operations/functional-regression-testing.md#owner-model-admission).
 
 The frozen [route catalog](model-routing.md) filters capability, input, and
 output requirements before these permits. No eligible target returns

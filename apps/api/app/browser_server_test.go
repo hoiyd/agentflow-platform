@@ -81,6 +81,10 @@ func TestBrowserServer(t *testing.T) {
 	cfg.RouterMode, cfg.AutonomousMaxIterations = "query", 1
 	cfg.AllowedOrigins = "http://127.0.0.1:13000"
 	cfg.AuthMode = "local"
+	if os.Getenv("AGENTFLOW_OWNER_ADMISSION_TEST") == "1" {
+		cfg.MaxConcurrentModelRequests, cfg.MaxConcurrentOwnerModelRequests = 2, 1
+		cfg.OwnerModelQueueSize, cfg.OwnerModelQueueWaitTimeout = 0, 3*time.Second
+	}
 	var oidcProvider *oidcfixture.Provider
 	if os.Getenv("AGENTFLOW_IDENTITY_TEST") == "1" {
 		t.Setenv("OIDC_CLIENT_SECRET", "fixture-only")

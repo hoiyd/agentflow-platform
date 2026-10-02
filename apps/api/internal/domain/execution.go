@@ -99,6 +99,7 @@ type ChatChunk struct {
 	ErrorSource           string        `json:"source,omitempty"`
 	ErrorCategory         string        `json:"category,omitempty"`
 	Retryable             *bool         `json:"retryable,omitempty"`
+	RetryAfterMS          *int64        `json:"retry_after_ms,omitempty"`
 	RequestID             string        `json:"request_id,omitempty"`
 }
 

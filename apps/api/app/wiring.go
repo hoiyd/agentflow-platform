@@ -39,9 +39,27 @@ type applicationDependencies struct {
 	handler        *httpapi.Handler
 	memoryProvider memorypkg.Provider
 	runController  *concurrency.RunController
+	requestLimiter *concurrency.ModelRequestLimiter
 }
 
 func buildDependencies(cfg config.Config) (applicationDependencies, error) {
+	// Production owner admission is mandatory. Zero-valued Go configurations use
+	// defaults; explicit equal/larger caps would leave no shared process headroom.
+	global := cfg.MaxConcurrentModelRequests
+	if global <= 0 {
+		global = 8
+	}
+	owner := cfg.MaxConcurrentOwnerModelRequests
+	if owner <= 0 {
+		owner = min(2, global-1)
+	}
+	if owner < 1 || owner >= global {
+		return applicationDependencies{}, errors.New("MAX_CONCURRENT_OWNER_MODEL_REQUESTS must be positive and below MAX_CONCURRENT_MODEL_REQUESTS (at least 2)")
+	}
+	ownerWait := cfg.OwnerModelQueueWaitTimeout
+	if ownerWait <= 0 {
+		ownerWait = 30 * time.Second
+	}
 	baseStore, err := newStore(cfg)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create store: %w", err)
@@ -81,7 +99,9 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		log.Printf("native recovery repaired %d stale running run(s) as failed_recoverable", recovered)
 	}
 	requestLimiter := concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{
-		MaxConcurrent:     cfg.MaxConcurrentModelRequests,
+		MaxConcurrent:      global,
+		OwnerMaxConcurrent: owner, OwnerQueueSize: cfg.OwnerModelQueueSize,
+		OwnerWaitTimeout: ownerWait, OwnerResolver: modelOwnerResolver(workspaceStore),
 		RequestsPerPeriod: cfg.ModelRequestsPerMinute,
 		TokensPerPeriod:   cfg.ModelTokensPerMinute,
 	})
@@ -230,7 +250,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	cleanupStore = false
 	return applicationDependencies{
 		store: appStore, handler: handler, memoryProvider: memoryProvider,
-		runController: runController,
+		runController: runController, requestLimiter: requestLimiter,
 	}, nil
 }
 

@@ -23,6 +23,7 @@ type Application struct {
 	store          store.Store
 	memoryProvider memorypkg.Provider
 	runController  *concurrency.RunController
+	requestLimiter *concurrency.ModelRequestLimiter
 	server         *http.Server
 
 	closeOnce sync.Once
@@ -40,6 +41,7 @@ func New(cfg config.Config) (*Application, error) {
 		store:          dependencies.store,
 		memoryProvider: dependencies.memoryProvider,
 		runController:  dependencies.runController,
+		requestLimiter: dependencies.requestLimiter,
 		server: &http.Server{
 			Addr:              serverAddress(cfg),
 			Handler:           dependencies.handler.Routes(),
@@ -100,6 +102,9 @@ func (a *Application) Close(ctx context.Context) error {
 				drained = false
 			}
 		}
+		if a.requestLimiter != nil {
+			a.requestLimiter.Close()
+		}
 		if drained {
 			if err := closeStore(a.store); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("close store: %w", err))
@@ -128,6 +133,7 @@ func (a *Application) logStartup() {
 	log.Printf("AgentFlow native recovery: stale_run_timeout=%s", cfg.RecoveryStaleRunTimeout)
 	log.Printf("AgentFlow run concurrency: max_concurrent=%d queue_size=%d wait_timeout=%s", cfg.MaxConcurrentRuns, cfg.RunQueueSize, cfg.RunQueueWaitTimeout)
 	log.Printf("AgentFlow model concurrency: max_in_flight=%d rpm=%d tpm=%d", cfg.MaxConcurrentModelRequests, cfg.ModelRequestsPerMinute, cfg.ModelTokensPerMinute)
+	log.Printf("AgentFlow owner model capacity: max_in_flight=%d queue_size=%d wait_timeout=%s (shared across Workspaces)", cfg.MaxConcurrentOwnerModelRequests, cfg.OwnerModelQueueSize, cfg.OwnerModelQueueWaitTimeout)
 	log.Printf("AgentFlow model retry: max_attempts=%d base_delay=%s max_delay=%s", cfg.ModelRetryMaxAttempts, cfg.ModelRetryBaseDelay, cfg.ModelRetryMaxDelay)
 	log.Printf("AgentFlow model request capture: mode=%s max_bytes=%d retention=%s", cfg.ModelRequestCaptureMode, cfg.ModelRequestCaptureMaxBytes, cfg.ModelRequestCaptureRetention)
 	log.Printf("AgentFlow memory provider: sync_queue=%d job_timeout=%s max_attempts=%d retry_base_delay=%s", cfg.MemorySyncQueueSize, cfg.MemorySyncJobTimeout, cfg.MemoryProviderMaxAttempts, cfg.MemoryProviderRetryBaseDelay)
