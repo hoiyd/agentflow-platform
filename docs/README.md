@@ -30,7 +30,7 @@ related pages link to its contract rather than copying configuration or algorith
 - **Events:** [generated catalog](runtime/event-catalog.md), [projections/invariants](runtime/event-projections-runtime-invariants.md), and [failure contracts](runtime/failure-handling.md).
 - **Configuration:** [backend settings](operations/backend-configuration.md), [credential/redaction boundary](operations/credential-boundary.md), and [production readiness](operations/production-readiness-roadmap.md).
 - **Access:** [OIDC identity and Workspace membership](operations/identity-membership.md): AgentFlow authentication theme, personal Workspace onboarding, database grants, revocable sessions and remaining authorization boundaries.
-- **Workspaces:** [owner-scoped lifecycle](operations/workspace-lifecycle.md): generated IDs, default selection, archive/soft deletion and legacy ownership migration.
+- **Workspaces:** [owner-scoped lifecycle](operations/workspace-lifecycle.md): generated IDs, default selection, archive/soft deletion and current-schema initialization.
 - **Interfaces:** [HTTP API reference](reference/api-reference.md) maps routes and operational semantics; [OpenAPI](../api/openapi.yaml) owns DTO shapes.
 
 ## Context and Knowledge

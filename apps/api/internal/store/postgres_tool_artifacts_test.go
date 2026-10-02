@@ -2,19 +2,15 @@ package store
 
 import (
 	"errors"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
 func TestPostgresToolArtifactRoundTrip(t *testing.T) {
-	databaseURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	postgresStore, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatal(err)

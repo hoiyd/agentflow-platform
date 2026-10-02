@@ -2,32 +2,28 @@ package store
 
 import (
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
 func TestPostgresStoreDocumentStoreContract(t *testing.T) {
-	databaseURL := os.Getenv("TEST_DATABASE_URL")
-	if databaseURL == "" {
-		t.Skip("TEST_DATABASE_URL is not set")
-	}
+	databaseURL := pgfixture.DatabaseURL(t)
 	postgresStore, err := NewPostgresStore(databaseURL)
 	if err != nil {
 		t.Fatalf("new postgres store: %v", err)
 	}
 	defer postgresStore.Close()
-	runDocumentStoreContract(t, postgresStore)
+	runDocumentStoreContract(t, postgresStore, testOwnedWorkspace(t, postgresStore), testOwnedWorkspace(t, postgresStore))
 }
 
-func runDocumentStoreContract(t *testing.T, documentStore DocumentStore) {
+func runDocumentStoreContract(t *testing.T, documentStore DocumentStore, workspaceID, otherWorkspaceID string) {
 	t.Helper()
 	suffix := time.Now().UTC().UnixNano()
 	documentID := fmt.Sprintf("doc_contract_%d", suffix)
 	chunkID := fmt.Sprintf("chunk_contract_%d", suffix)
-	workspaceID := fmt.Sprintf("workspace_contract_%d", suffix)
 	embedding := make([]float64, 1536)
 	embedding[0] = 1
 
@@ -163,7 +159,7 @@ func runDocumentStoreContract(t *testing.T, documentStore DocumentStore) {
 	}
 	crossWorkspaceResults, err := documentStore.ListDocumentContextChunks(domain.DocumentContextSearch{
 		DocumentID:     documentID,
-		WorkspaceID:    "another-workspace",
+		WorkspaceID:    otherWorkspaceID,
 		ParentID:       "section_authentication",
 		ChunkIndex:     0,
 		NeighborWindow: 1,

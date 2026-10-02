@@ -2,7 +2,6 @@ package store_test
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"strconv"
 	"strings"
@@ -220,125 +219,6 @@ func TestWorkspaceAdmissionAndUncertainEffectBoundary(t *testing.T) {
 	}
 	if _, err = s.CreateRunWithContract(agent.ID, c.ID, domain.RuntimeSnapshot{SchemaVersion: domain.CurrentRuntimeSnapshotVersion, RunBudget: &domain.RuntimeRunBudget{}}, nil); err == nil {
 		t.Fatal("Run accepted after archive")
-	}
-}
-
-func TestWorkspaceMigrationAtomicityAndReferenceIntegrity(t *testing.T) {
-	s, db, _ := workspaceDatabase(t)
-	ctx := t.Context()
-	a, b := workspaceUser(t, s, "migration-a"), workspaceUser(t, s, "migration-b")
-	if _, err := db.Exec(`INSERT INTO auth_memberships VALUES($1,'default_workspace')`, a); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO auth_personal_workspaces(user_id,workspace_id) VALUES($1,'default_workspace')`, a); err != nil {
-		t.Fatal(err)
-	}
-	old, err := s.CreateConversationInWorkspace("default_workspace", "Preserve default_workspace in text")
-	if err != nil {
-		t.Fatal(err)
-	}
-	message, err := s.AddMessage(old.ID, "user", "Do not replace default_workspace in content")
-	if err != nil {
-		t.Fatal(err)
-	}
-	orphan, err := s.CreateConversationInWorkspace("2", "Unknown numeric legacy namespace")
-	if err != nil {
-		t.Fatal(err)
-	}
-	stateJSON, _ := json.Marshal(domain.EmptyTaskState("default_workspace", old.ID))
-	if _, err = db.Exec(`INSERT INTO task_state_revisions(id,workspace_id,conversation_id,version,previous_version,patch,state,source,created_at) VALUES('migration-state','default_workspace',$1,1,0,'{}',$2,'{}',NOW())`, old.ID, stateJSON); err != nil {
-		t.Fatal(err)
-	}
-	preview, err := s.PreviewWorkspaceMigration(ctx, nil)
-	if err != nil || len(preview) != 2 {
-		t.Fatalf("preview: %+v %v", preview, err)
-	}
-	if err = s.ApplyWorkspaceMigration(ctx, nil); err == nil {
-		t.Fatal("unowned legacy data guessed an owner")
-	}
-	var count int
-	if err = db.QueryRow(`SELECT count(*) FROM workspaces`).Scan(&count); err != nil || count != 0 {
-		t.Fatalf("partial migration: %d %v", count, err)
-	}
-	if err = s.ApplyWorkspaceMigration(ctx, map[string]string{"2": b}); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.ApplyWorkspaceMigration(ctx, map[string]string{"2": b}); err != nil {
-		t.Fatalf("same mapping rerun: %v", err)
-	}
-	if err = s.ApplyWorkspaceMigration(ctx, map[string]string{"2": a}); err == nil {
-		t.Fatal("rerun changed immutable migrated owner")
-	}
-	converted, ok, err := s.GetConversation(old.ID)
-	if err != nil || !ok || converted.WorkspaceID == "default_workspace" || converted.Title != old.Title {
-		t.Fatalf("conversion: %+v %v", converted, err)
-	}
-	other, ok, err := s.GetConversation(orphan.ID)
-	if err != nil || !ok || other.WorkspaceID == converted.WorkspaceID {
-		t.Fatalf("namespace collision: %+v %v", other, err)
-	}
-	if _, err = s.GetWorkspace(ctx, a, converted.WorkspaceID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = s.GetWorkspace(ctx, b, other.WorkspaceID); err != nil {
-		t.Fatal(err)
-	}
-	messages, err := s.ListMessages(old.ID)
-	if err != nil || len(messages) != 1 || messages[0].ID != message.ID || messages[0].WorkspaceID != converted.WorkspaceID || messages[0].Content != message.Content {
-		t.Fatalf("message integrity: %+v %v", messages, err)
-	}
-	state, ok, err := s.GetTaskState(old.ID)
-	if err != nil || !ok || state.WorkspaceID != converted.WorkspaceID {
-		t.Fatalf("state integrity: %+v %v", state, err)
-	}
-	if err = s.ApplyWorkspaceMigration(ctx, nil); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = db.Exec(`INSERT INTO auth_memberships VALUES($1,$2)`, b, converted.WorkspaceID); err == nil {
-		t.Fatal("migrated database permits shared ownership")
-	}
-	if _, err = db.Exec(`DELETE FROM auth_memberships WHERE user_id=$1`, a); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.ProvisionPersonalWorkspace(ctx, a); err != nil {
-		t.Fatal(err)
-	}
-	if items, err := s.ListWorkspaces(ctx, a); err != nil || len(items) != 0 {
-		t.Fatalf("revoked legacy grant restored: %+v %v", items, err)
-	}
-}
-
-func TestWorkspaceMigrationRejectsSharedOrInvalidOwner(t *testing.T) {
-	s, db, _ := workspaceDatabase(t)
-	ctx := t.Context()
-	a, b := workspaceUser(t, s, "shared-a"), workspaceUser(t, s, "shared-b")
-	if _, err := db.Exec(`INSERT INTO auth_memberships VALUES($1,'shared'),($2,'shared')`, a, b); err != nil {
-		t.Fatal(err)
-	}
-	plan, err := s.PreviewWorkspaceMigration(ctx, nil)
-	if err != nil || len(plan) != 1 || plan[0].Problem == "" {
-		t.Fatalf("shared preview: %+v %v", plan, err)
-	}
-	if err = s.ApplyWorkspaceMigration(ctx, nil); err == nil {
-		t.Fatal("shared scope silently chose first owner")
-	}
-	if err = s.ApplyWorkspaceMigration(ctx, map[string]string{"shared": "missing-user"}); err == nil {
-		t.Fatal("unknown owner accepted")
-	}
-	if err = s.ApplyWorkspaceMigration(ctx, map[string]string{"shared": a}); err != nil {
-		t.Fatal(err)
-	}
-	items, err := s.ListWorkspaces(ctx, a)
-	if err != nil || len(items) != 1 {
-		t.Fatalf("explicit owner: %+v %v", items, err)
-	}
-	if items, err = s.ListWorkspaces(ctx, b); err != nil || len(items) != 0 {
-		t.Fatalf("foreign grant retained: %+v %v", items, err)
-	}
-	var invalid *store.WorkspaceError
-	_, err = s.UpdateWorkspace(ctx, a, "missing", domain.WorkspaceUpdate{}, true)
-	if errors.As(err, &invalid) || !store.IsNotFound(err) {
-		t.Fatalf("not-found classification: %v", err)
 	}
 }
 
