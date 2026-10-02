@@ -225,6 +225,7 @@ type ModelAttemptFinishedPayload struct {
 	DurationMS             int64                  `json:"duration_ms"`
 	RateLimitWaitMS        *int64                 `json:"rate_limit_wait_ms,omitempty"`
 	ModelPermitWaitMS      *int64                 `json:"model_permit_wait_ms,omitempty"`
+	OwnerCapacityWaitMS    *int64                 `json:"owner_capacity_wait_ms,omitempty"`
 	HTTPDurationMS         *int64                 `json:"http_duration_ms,omitempty"`
 	HTTPTimeToFirstTokenMS *int64                 `json:"http_time_to_first_token_ms,omitempty"`
 	TimeToFirstTokenMS     *int64                 `json:"time_to_first_token_ms,omitempty"`

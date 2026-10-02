@@ -42,6 +42,7 @@ type AttemptOutcome struct {
 	DurationMS             int64
 	RateLimitWaitMS        *int64
 	ModelPermitWaitMS      *int64
+	OwnerCapacityWaitMS    *int64
 	HTTPDurationMS         *int64
 	HTTPTimeToFirstTokenMS *int64
 	TimeToFirstTokenMS     *int64

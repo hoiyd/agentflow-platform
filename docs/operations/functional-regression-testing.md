@@ -38,6 +38,31 @@ Write or update this inventory before adding isolated fixtures.
 | Navigation occurs during execution, cancellation, or observation | Local requests detach; their late events, errors and snapshots cannot change the new conversation |
 | Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |
 
+## Owner Model Admission
+
+The focused gate uses two signed OIDC identities, the production composition,
+and disposable Postgres. One identity holds a gated streaming response, then
+attempts another Run in a second owned Workspace. The second identity must still
+complete; spoofing `X-Owner-ID` cannot bypass the first identity's capacity.
+Stop releases the physical connection; a subsequent Run and background Memory
+sync succeed, and owner-wait diagnostics survive Replay/reload.
+Separate Single, Multi-Agent, and Bounded Loop cases each complete four real
+Tool rounds with owner capacity one, verifying permit reuse and persisted
+owner-wait diagnostics for every physical model attempt.
+
+```bash
+AGENTFLOW_OWNER_ADMISSION_TEST=1 AGENTFLOW_IDENTITY_TEST=1 \
+  TEST_DATABASE_URL='postgres://user:password@127.0.0.1:5432/agentflow_test?sslmode=disable' \
+  npm --prefix apps/web run test:e2e -- owner-admission.spec.ts
+```
+
+The fixture fixes global=2, owner=1, owner queue=0, owner wait=3s. Its JSON
+attachment records identities, Workspace IDs, limits, Runs, persisted events,
+checks, and limitations. Deterministic Go tests additionally cover nonzero
+waiting queues, cancellation/timeout/close in owner/key/global phases, retries,
+and durable ownership after revoked access. This proves process-local control
+semantics, not provider throughput or strict fairness.
+
 ## Test Boundaries
 
 Browser E2E uses the real Next.js workspace, browser API client, Go production

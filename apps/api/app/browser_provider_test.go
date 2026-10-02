@@ -133,6 +133,18 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	content, reason := "Evidence saved.", "stop"
 	var calls []any
 	var reasoning *string
+	if input.Stream && strings.Contains(task, "owner-tools") && observations < 4 {
+		for _, definition := range input.Tools {
+			if definition.Function.Name != "get_current_time" {
+				continue
+			}
+			zones := []string{"UTC", "Asia/Shanghai", "Europe/London", "America/New_York"}
+			args, _ := json.Marshal(map[string]string{"timezone": zones[observations]})
+			content, reason = "Checking time zones.", "tool_calls"
+			calls = []any{map[string]any{"id": fmt.Sprintf("owner-call-%d", observations), "type": "function", "function": map[string]string{"name": "get_current_time", "arguments": string(args)}}}
+			break
+		}
+	}
 	if len(input.Tools) > 0 && strings.Contains(task, "state-protocol") {
 		worker := strings.Contains(input.Messages[0].Content, "Worker collaboration role")
 		if !input.Stream {

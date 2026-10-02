@@ -358,9 +358,11 @@ func TestAttemptTelemetryLinksPreparedRequestAndDoesNotPersistErrorText(t *testi
 	}
 	firstToken := int64(12)
 	rateWait, permitWait, httpDuration, httpFirstToken := int64(4), int64(9), int64(17), int64(3)
+	ownerWait := int64(6)
 	if err := recorder.Finish(ctx, ref, requestcontrol.AttemptOutcome{
 		Status: "failed", DurationMS: 30, TimeToFirstTokenMS: &firstToken, ErrorKind: "invalid_response", HTTPStatus: 502,
 		RateLimitWaitMS: &rateWait, ModelPermitWaitMS: &permitWait, HTTPDurationMS: &httpDuration, HTTPTimeToFirstTokenMS: &httpFirstToken,
+		OwnerCapacityWaitMS: &ownerWait,
 	}); err != nil {
 		t.Fatalf("finish attempt: %v", err)
 	}
@@ -371,6 +373,7 @@ func TestAttemptTelemetryLinksPreparedRequestAndDoesNotPersistErrorText(t *testi
 	if payload["record_id"] != ref.RecordID || payload["model_call_id"] != ref.ModelCallID || payload["attempt"] != float64(1) ||
 		payload["status"] != "failed" || payload["time_to_first_token_ms"] != float64(12) || payload["error_kind"] != "invalid_response" ||
 		payload["rate_limit_wait_ms"] != float64(4) || payload["model_permit_wait_ms"] != float64(9) ||
+		payload["owner_capacity_wait_ms"] != float64(6) ||
 		payload["http_duration_ms"] != float64(17) || payload["http_time_to_first_token_ms"] != float64(3) {
 		t.Fatalf("unexpected attempt payload: %#v", payload)
 	}

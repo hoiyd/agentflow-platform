@@ -39,6 +39,14 @@ type Config struct {
 	RunQueueWaitTimeout time.Duration
 	// MaxConcurrentModelRequests caps in-flight Chat and Embedding HTTP requests.
 	MaxConcurrentModelRequests int
+	// MaxConcurrentOwnerModelRequests shares physical Chat/Embedding capacity
+	// across all Workspaces of one verified owner, below the process-wide cap.
+	MaxConcurrentOwnerModelRequests int
+	// OwnerModelQueueSize bounds additional accepted attempts for one owner,
+	// including requests waiting for key/global capacity; zero permits no queue.
+	OwnerModelQueueSize int
+	// OwnerModelQueueWaitTimeout bounds owner-slot wait, inside the route timeout.
+	OwnerModelQueueWaitTimeout time.Duration
 	// ModelRequestsPerMinute configures the per-API-key request token bucket; zero disables it.
 	ModelRequestsPerMinute int
 	// ModelTokensPerMinute configures the approximate input-token bucket; zero disables it.
@@ -180,6 +188,9 @@ func Load() Config {
 		RunQueueSize:                      getNonNegativeIntEnv("RUN_QUEUE_SIZE", 32),
 		RunQueueWaitTimeout:               getDurationEnv("RUN_QUEUE_WAIT_TIMEOUT", 30*time.Second),
 		MaxConcurrentModelRequests:        getIntEnv("MAX_CONCURRENT_MODEL_REQUESTS", 8),
+		MaxConcurrentOwnerModelRequests:   getIntEnv("MAX_CONCURRENT_OWNER_MODEL_REQUESTS", 2),
+		OwnerModelQueueSize:               getNonNegativeIntEnv("OWNER_MODEL_QUEUE_SIZE", 8),
+		OwnerModelQueueWaitTimeout:        getDurationEnv("OWNER_MODEL_QUEUE_WAIT_TIMEOUT", 30*time.Second),
 		ModelRequestsPerMinute:            getNonNegativeIntEnv("MODEL_REQUESTS_PER_MINUTE", 60),
 		ModelTokensPerMinute:              getNonNegativeIntEnv("MODEL_TOKENS_PER_MINUTE", 120000),
 		ModelRetryMaxAttempts:             getIntEnv("MODEL_RETRY_MAX_ATTEMPTS", 3),

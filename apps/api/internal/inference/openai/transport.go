@@ -211,8 +211,14 @@ func (c *Client) doPathRequest(ctx context.Context, baseURL string, path string,
 			phase := "model permit"
 			if timing := requestcontrol.AttemptTimingFromContext(ctx); timing != nil && timing.PermitWait == 0 {
 				phase = "rate limit"
+				if timing.OwnerLimited && timing.RateWait == 0 {
+					phase = "owner capacity"
+				}
 			}
 			err = &ModelError{Kind: ErrorLocalAdmissionTimeout, Message: "local " + phase + " wait exceeded route timeout", Cause: err}
+			if phase == "owner capacity" {
+				err = &requestcontrol.OwnerAdmissionError{Code: "owner_model_queue_timeout"}
+			}
 		}
 		cancel()
 		return nil, err

@@ -75,6 +75,10 @@ func (c *Client) finishModelAttempt(ctx context.Context, ref requestcontrol.Atte
 		FinishReason: finishReason,
 	}
 	if timing := requestcontrol.AttemptTimingFromContext(ctx); timing != nil {
+		if timing.OwnerLimited {
+			ownerWaitMS := timing.OwnerWait.Milliseconds()
+			outcome.OwnerCapacityWaitMS = &ownerWaitMS
+		}
 		if timing.Limited {
 			rateWaitMS, permitWaitMS := timing.RateWait.Milliseconds(), timing.PermitWait.Milliseconds()
 			outcome.RateLimitWaitMS, outcome.ModelPermitWaitMS = &rateWaitMS, &permitWaitMS

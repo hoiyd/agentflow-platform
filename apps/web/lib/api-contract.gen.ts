@@ -1128,6 +1128,8 @@ export interface components {
             source?: string;
             category?: string;
             retryable?: boolean;
+            /** Format: int64 */
+            retry_after_ms?: number;
             request_id?: string;
         };
         ChatStreamEvent: components["schemas"]["ConversationChunk"] | components["schemas"]["RunStateChunk"] | components["schemas"]["RunProgressChunk"] | components["schemas"]["ModelDeltaChunk"] | components["schemas"]["ModelReasoningChunk"] | components["schemas"]["StageStateChunk"] | components["schemas"]["DoneChunk"] | components["schemas"]["ErrorChunk"] | components["schemas"]["RunEvent"];

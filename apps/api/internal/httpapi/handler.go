@@ -221,6 +221,7 @@ func rejectCredentialContent(w http.ResponseWriter, r *http.Request, value any) 
 }
 
 func writeFailure(w http.ResponseWriter, r *http.Request, status int, err error) {
+	status = modelAdmissionFailureStatus(w, status, err)
 	var sqlState interface{ SQLState() string }
 	if errors.As(err, &sqlState) && sqlState.SQLState() == "PWS01" {
 		status = http.StatusConflict
@@ -253,14 +254,19 @@ func publicFailureMessage(status int, err error) string {
 }
 
 func failureChatChunk(w http.ResponseWriter, r *http.Request, status int, err error) domain.ChatChunk {
+	status = modelAdmissionFailureStatus(w, status, err)
 	info := describeHTTPFailure(status, err)
 	retryable := info.Retryable
 	requestID := ensureRequestID(w)
 	logHTTPFailure(r, requestID, "sse", status, err, info)
-	return domain.ChatChunk{
+	chunk := domain.ChatChunk{
 		Type: "error", Error: publicFailureMessage(status, err), ErrorCode: info.Code,
 		ErrorSource: info.Source, ErrorCategory: string(info.Category), Retryable: &retryable, RequestID: requestID,
 	}
+	if retryAfter, ok := info.Details["retry_after_ms"].(int64); ok {
+		chunk.RetryAfterMS = &retryAfter
+	}
+	return chunk
 }
 
 func writeAPIError(w http.ResponseWriter, status int, message string, info failure.Info) {

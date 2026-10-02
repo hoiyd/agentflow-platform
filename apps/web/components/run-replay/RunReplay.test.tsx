@@ -58,11 +58,12 @@ it("separates local admission waits from HTTP and stream timing", () => {
     id: "attempt-2", schema_version: 1, sequence: 2, run_id: "run-1",
     type: "model.attempt_finished", timestamp: "2026-09-10T00:00:00Z",
     payload: { attempt: 1, status: "completed", duration_ms: 80, rate_limit_wait_ms: 12,
-      model_permit_wait_ms: 25, http_duration_ms: 42, http_time_to_first_token_ms: 10 }
+      model_permit_wait_ms: 25, owner_capacity_wait_ms: 18, http_duration_ms: 42, http_time_to_first_token_ms: 10 }
   };
   render(<EventDetail event={event} />);
   expect(screen.getByText("Local rate wait")).toBeTruthy();
   expect(screen.getByText("Model permit wait")).toBeTruthy();
+  expect(screen.getByText("Owner capacity wait")).toBeTruthy();
   expect(screen.getByText("HTTP + stream")).toBeTruthy();
   expect(screen.getByText("HTTP first token")).toBeTruthy();
 });

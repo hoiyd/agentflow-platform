@@ -168,6 +168,7 @@ func (p *BuiltinProvider) runSyncWorker() {
 func (p *BuiltinProvider) syncTurn(request TurnSyncRequest) {
 	ctx, cancel := context.WithTimeout(p.ctx, p.options.JobTimeout)
 	defer cancel()
+	ctx = eventpkg.WithScope(ctx, eventpkg.Scope{RunID: request.RunID, ConversationID: request.Message.ConversationID})
 	proposal, err := p.propose(ctx, ProposalRequest{
 		RunID: request.RunID, IdempotencyKey: request.IdempotencyKey, Message: request.Message,
 	}, true)

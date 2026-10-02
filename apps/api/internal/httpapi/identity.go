@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"agentflow-platform/apps/api/internal/identity"
+	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 )
 
 type identityContextKey struct{}
@@ -31,6 +32,7 @@ func (h *Handler) withIdentity(next http.Handler) http.Handler {
 		}
 		// Identity is server-owned, never copied from headers, query or body.
 		ctx := context.WithValue(r.Context(), identityContextKey{}, user)
+		ctx = requestcontrol.WithOwner(ctx, user.ID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
