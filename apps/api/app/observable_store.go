@@ -35,7 +35,9 @@ func (s *observableStore) CommitToolEffectReconciliation(mutation domain.ToolEff
 }
 
 func (s *observableStore) ForWorkspace(scope domain.WorkspaceScope) store.WorkspaceStore {
-	return observableWorkspaceStore{WorkspaceStore: s.Store.ForWorkspace(scope), hub: s.hub}
+	// Scope the observable backend itself: optional read capabilities (Artifacts)
+	// remain available, and event writes still publish only after commit.
+	return store.ScopeWorkspace(s, scope)
 }
 
 func (s *observableStore) Close() error {
@@ -43,25 +45,4 @@ func (s *observableStore) Close() error {
 		return closer.Close()
 	}
 	return nil
-}
-
-type observableWorkspaceStore struct {
-	store.WorkspaceStore
-	hub *event.Hub
-}
-
-func (s observableWorkspaceStore) CreateRunEvent(item domain.RunEvent) (domain.RunEvent, error) {
-	created, err := s.WorkspaceStore.CreateRunEvent(item)
-	if err == nil {
-		s.hub.PublishCommitted(created)
-	}
-	return created, err
-}
-
-func (s observableWorkspaceStore) CommitToolEffectReconciliation(mutation domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error) {
-	effect, committed, applied, err := s.WorkspaceStore.CommitToolEffectReconciliation(mutation)
-	if err == nil && applied {
-		s.hub.PublishCommitted(committed)
-	}
-	return effect, committed, applied, err
 }

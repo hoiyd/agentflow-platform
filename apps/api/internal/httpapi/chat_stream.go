@@ -2,8 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -65,7 +63,5 @@ func runExecutionContext(r *http.Request) context.Context {
 }
 
 func writeSSE(w http.ResponseWriter, event string, value any) {
-	bytes, _ := json.Marshal(value)
-	_, _ = fmt.Fprintf(w, "event: %s\n", event)
-	_, _ = fmt.Fprintf(w, "data: %s\n\n", string(bytes))
+	_ = writeSSEFrame(w, 0, event, value)
 }

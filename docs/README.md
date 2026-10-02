@@ -31,6 +31,7 @@ related pages link to its contract rather than copying configuration or algorith
 - **Configuration:** [backend settings](operations/backend-configuration.md), [credential/redaction boundary](operations/credential-boundary.md), and [production readiness](operations/production-readiness-roadmap.md).
 - **Access:** [OIDC identity and Workspace membership](operations/identity-membership.md): AgentFlow authentication theme, personal Workspace onboarding, database grants, revocable sessions and remaining authorization boundaries.
 - **Workspaces:** [owner-scoped lifecycle](operations/workspace-lifecycle.md): generated IDs, default selection, archive/soft deletion and current-schema initialization.
+- **Authorization:** [resource boundaries](operations/resource-authorization.md): object ownership, linked evidence, nested resources, live-stream revocation and repeatable cross-owner tests.
 - **Interfaces:** [HTTP API reference](reference/api-reference.md) maps routes and operational semantics; [OpenAPI](../api/openapi.yaml) owns DTO shapes.
 
 ## Context and Knowledge

@@ -27,6 +27,9 @@ Write or update this inventory before adding isolated fixtures.
 | A stream fails before or after accepting events | Before acceptance, drafts roll back; after acceptance, partial output stays and durable observation resumes |
 | A frozen Skill is mistaken for an observed model input | Replay joins Manifest with the physical request record; missing evidence remains not observed |
 | Login or Workspace selection is mistaken for permission | The signed OIDC/Postgres browser gate proves membership, nonmember rejection, scoped reload and server-side logout revocation |
+| A valid identity guesses another owner's object ID or supplies linked evidence | The resource authorization gate rejects reads, mutation and Memory provenance; owned resources and persisted revisions remain unchanged |
+| Production wrapping discards scoped Artifact reads | Artifact list/read/search retain capability and authorization in the real application composition |
+| Access is revoked after a stream was admitted | Further delivery stops, the browser reauthenticates, and the durable Run still completes independently |
 | Signup styling bypasses IdP security or creates shared access | The disposable Keycloak theme gate proves native password validation, direct IdP form submission, personal-only access, reload and repeat-login stability |
 | A late Cancel response follows a terminal stream event | It cannot regress the Run to `canceling` or revive cancellation UI |
 | Stop cancels an in-flight model request | Single, Multi-Agent Continue and Loop return `done:canceled`, not SSE `error`; the canceled Run survives reload, partial reasoning remains withheld, and the composer accepts another task |
@@ -48,6 +51,13 @@ The [identity gate](identity-membership.md#repeatable-validation) runs separatel
 with `AGENTFLOW_IDENTITY_TEST=1` so the ordinary trusted-local runtime suite remains
 unchanged. CI retains its protocol/boundary attachments separately from runtime
 evidence. This gate does not claim live-provider or complete object-ACL validation.
+
+`AGENTFLOW_IDENTITY_TEST=1 bash scripts/test-browser.sh resource-authorization.spec.ts`
+adds real signed identities and Workspace/object isolation, retrieval content,
+rejected writes, reload and active Chat logout/continuity. Its JSON attachments
+record resource identities and limitations. Populated Artifact/effect/Capture
+and additional revocation/storage failures have focused Postgres integration tests;
+see the [authorization matrix](resource-authorization.md). No screenshots are used.
 
 `bash scripts/test-keycloak-auth.sh` additionally checks real themed authentication
 with a disposable Keycloak realm and independent Postgres. It is a separate narrow

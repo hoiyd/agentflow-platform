@@ -11,7 +11,9 @@ type RunObservationOptions = {
 export async function readChatEventStream(response: Response, onEvent: (event: ChatEvent) => void) {
   await readSSE(response, ({ data }) => {
     const decoded = JSON.parse(data) as ChatEvent | RunEvent;
-    onEvent(projectRunEvent(decoded));
+    const projected = projectRunEvent(decoded);
+    assertStreamAccess(projected);
+    onEvent(projected);
   });
 }
 
@@ -40,6 +42,7 @@ export async function observeRunEvents(runId: string, options: RunObservationOpt
         if (id > cursor) cursor = id;
         const decoded = JSON.parse(data) as ChatEvent | RunEvent;
         const projected = projectRunEvent(decoded);
+        assertStreamAccess(projected);
         if (projected.type === "error") {
           streamError = formatChatError(projected);
           return;
@@ -65,6 +68,19 @@ export function formatChatError(event: Extract<ChatEvent, { type: "error" }>): s
   return `${event.error}${identity}${request}`;
 }
 
+function assertStreamAccess(event: ChatEvent) {
+  if (event.type !== "error" || event.source !== "http_api") return;
+  const status = event.code === "unauthenticated" ? 401 : event.code === "forbidden" ? 403 : event.code === "not_found" ? 404 : 0;
+  if (!status) return;
+  if (status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("agentflow-auth-required"));
+  }
+  // SSE has already returned HTTP 200. Preserve the later authorization failure
+  // as a non-retryable API error instead of retrying a revoked observer.
+  throw new APIError(formatChatError(event), { status, code: event.code, source: event.source,
+    category: event.category, retryable: false, requestId: event.request_id });
+}
+
 type SSEFrame = { event: string; id: number; data: string };
 
 async function readSSE(response: Response, onFrame: (frame: SSEFrame) => void) {
@@ -75,26 +91,31 @@ async function readSSE(response: Response, onFrame: (frame: SSEFrame) => void) {
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) {
-      break;
-    }
-    buffer = (buffer + decoder.decode(value, { stream: true })).replaceAll("\r\n", "\n");
-    const events = buffer.split("\n\n");
-    buffer = events.pop() ?? "";
-
-    for (const rawEvent of events) {
-      const lines = rawEvent.split("\n");
-      const dataLine = lines.find((line) => line.startsWith("data: "));
-      if (!dataLine) {
-        continue;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
       }
-	  const event = lines.find((line) => line.startsWith("event: "))?.slice(7) ?? "message";
-	  const rawID = lines.find((line) => line.startsWith("id: "))?.slice(4) ?? "";
-	  const id = /^\d+$/.test(rawID) ? Number(rawID) : 0;
-	  onFrame({ event, id, data: dataLine.slice(6) });
+      buffer = (buffer + decoder.decode(value, { stream: true })).replaceAll("\r\n", "\n");
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+
+      for (const rawEvent of events) {
+        const lines = rawEvent.split("\n");
+        const dataLine = lines.find((line) => line.startsWith("data: "));
+        if (!dataLine) {
+          continue;
+        }
+        const event = lines.find((line) => line.startsWith("event: "))?.slice(7) ?? "message";
+        const rawID = lines.find((line) => line.startsWith("id: "))?.slice(4) ?? "";
+        const id = /^\d+$/.test(rawID) ? Number(rawID) : 0;
+        onFrame({ event, id, data: dataLine.slice(6) });
+      }
     }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
 }
 
