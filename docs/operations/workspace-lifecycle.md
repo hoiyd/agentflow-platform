@@ -98,7 +98,7 @@ Shared Agent profiles, Tool switches/security configuration, provider credential
 and trusted Skill packages remain service-wide. OIDC owners may read/use available
 profiles and Tools but cannot mutate shared Agent/Tool configuration. Trusted-local
 operators manage it; private per-Workspace Agent configurations are not added here.
-PROD-002 still owns the comprehensive object-authorization audit. Owner entity
+[Resource authorization](resource-authorization.md) covers the current object-authorization audit. Owner entity
 checks do not prove a complete public multi-tenant security boundary.
 
 ## Initialization and Recovery

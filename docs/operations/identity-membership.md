@@ -2,7 +2,8 @@
 
 OIDC identity, AgentFlow-owned login/registration presentation and personal
 Workspace onboarding. Passwords stay at the identity provider; this is not a
-complete account-management product or the object-authorization audit in PROD-002.
+complete account-management product. The companion [resource authorization](resource-authorization.md)
+guide covers object ownership and live-stream access checks.
 
 ## Failure Inventory
 
@@ -47,8 +48,8 @@ adds creation, rename, defaults, archive/restore and soft deletion. There is no 
 password storage, password proxy, invitation, role matrix or service-account token.
 Agent/Tool configuration remains service-wide and is read-only for ordinary OIDC
 users; trusted-local operators maintain it. Workspace-private Agent configuration
-is not implemented. Full object ownership and
-the complete cross-tenant authorization audit remain PROD-002. This boundary alone
+is not implemented. [Resource authorization](resource-authorization.md) audits
+the current object surface and its cross-owner failure paths. This boundary alone
 does not make the deployment a public multi-tenant SaaS.
 
 ## Configure an OIDC Provider
@@ -114,9 +115,8 @@ messages are customized; other locales inherit Keycloak's native messages.
 Postgres stores both entities and grants. `workspaces.owner_user_id` is the single
 ownership authority; composite foreign keys ensure `auth_memberships` cannot grant
 one owner's Workspace to another user. Startup does not read member files or
-import shared grants. Existing databases require the explicit
-[ownership migration](workspace-lifecycle.md#legacy-migration); ambiguous ownership
-is never guessed. Automatic onboarding grants only a new user's own personal space.
+import shared grants. It requires the [current Workspace schema](workspace-lifecycle.md);
+ambiguous ownership is never guessed. Automatic onboarding grants only a new user's own personal space.
 
 Operators can revoke/restore an owner's access in `auth_memberships`, referencing
 the internal `auth_users.id`, not email or display name. The user's OIDC `sub`
@@ -189,10 +189,13 @@ frontend `Origin`; missing or foreign Origin is rejected. Credentialed browser
 CORS uses only configured origins. CLI callers using browser cookies must send
 that Origin too; there is no bearer/service-account authentication in this scope.
 
-Membership is checked at **request admission**. Existing streams and detached
-Runs are not retroactively stopped by logout or membership removal; subsequent
-requests/reconnects are checked again. User-related data fields in existing
-resources are not newly converted into owner ACLs by this feature.
+Membership is checked at **request admission and before each SSE write**. Logout,
+expiry, revocation or Workspace deletion denies further delivery with a safe
+error frame; observer endpoints close and the browser stops automatic retries.
+Identity expiry uses the same sign-in redirect as an HTTP 401. Detached Runs are
+not canceled by losing observer access: they continue under their admitted,
+frozen Workspace scope. Reconnects and execution commands require fresh access.
+User-related metadata fields and operator-supplied audit labels are not grants.
 
 ## Persistence and Privacy
 
@@ -200,11 +203,11 @@ Startup idempotently creates `auth_users`, `auth_memberships`, `auth_sessions`,
 `auth_login_attempts`, `auth_personal_workspaces` and `workspaces`.
 The personal Workspace record preserves onboarding history and default selection,
 not passwords or roles. Its nullable reference preserves revocation history even
-when an old grant is removed during explicit ownership migration.
+when access to its personal Workspace is removed.
 Old file-import bookkeeping is no longer created, required or accessed; any
 existing unused table is left untouched rather than dropped during startup.
-Old namespaces become owner-scoped numeric entities only through the explicit
-offline migration; startup refuses ambiguous or unmigrated references.
+Startup refuses ambiguous or unmigrated references; one-time legacy migration
+commands are not part of the current runtime.
 Sessions survive restart, logout removes them, and expired session/transaction
 rows are purged opportunistically on the next session/login creation. There is
 no idle refresh, background cleanup scheduler or provider-wide session revocation.
@@ -273,7 +276,7 @@ can still sign in and receive their personal Workspace. There is no separate
 AgentFlow onboarding switch. After the Workspace identity migration, a pre-lifecycle
 binary is not a safe standalone rollback: it assumes legacy global defaults and
 does not enforce archive/deletion. Use a matching full database backup and binary
-for a downgrade, with traffic stopped. See [migration rollback](workspace-lifecycle.md#legacy-migration).
+for a downgrade, with traffic stopped. See [Workspace lifecycle](workspace-lifecycle.md).
 
 - [Go OIDC client](https://github.com/coreos/go-oidc)
 - [Go OAuth2 client and PKCE options](https://pkg.go.dev/golang.org/x/oauth2)

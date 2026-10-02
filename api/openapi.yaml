@@ -14,7 +14,11 @@ info:
     missing scope resolves to the owner's active default. Workspace management
     is owner-scoped independently of the selected header. Agent/Tool configuration
     writes remain trusted-local operator operations (OIDC users receive 403).
-    See the identity/membership and Workspace lifecycle guides.
+    Resource IDs are resolved inside that authorized Workspace; foreign IDs return
+    404. SSE delivery rechecks the session and Workspace on each write, including
+    Chat/Continue/Resume. A later access failure emits an error frame using the
+    existing ChatStreamEvent error contract and stops delivery, without canceling
+    the admitted durable Run. See the resource authorization guide.
 servers:
   - url: http://localhost:8080
 tags:

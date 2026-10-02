@@ -176,10 +176,10 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-      - name: Run OIDC identity and membership gate
+      - name: Run OIDC identity and resource authorization gate
         env:
           AGENTFLOW_IDENTITY_TEST: '1'
-        run: npm run test:e2e -- identity.spec.ts
+        run: npm run test:e2e -- identity.spec.ts resource-authorization.spec.ts
       - name: Retain identity boundary evidence
         if: always()
         uses: actions/upload-artifact@v7

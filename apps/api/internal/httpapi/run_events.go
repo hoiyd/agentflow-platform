@@ -140,12 +140,13 @@ func writeSSEFrame(w http.ResponseWriter, sequence int64, event string, value an
 	if err != nil {
 		return err
 	}
+	id := ""
 	if sequence > 0 {
-		if _, err = fmt.Fprintf(w, "id: %d\n", sequence); err != nil {
-			return err
-		}
+		id = fmt.Sprintf("id: %d\n", sequence)
 	}
-	_, err = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, payload)
+	// One write per frame: an authorization failure cannot split the frame and
+	// splice an error into the middle of its payload.
+	_, err = fmt.Fprintf(w, "%sevent: %s\ndata: %s\n\n", id, event, payload)
 	return err
 }
 
