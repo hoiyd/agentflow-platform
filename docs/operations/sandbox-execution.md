@@ -124,12 +124,19 @@ and add the following entry to `security_policy.rules`, preserving other rules:
       "resources": [{"kind": "filesystem", "name": "sbx:scratch", "access": "write"}],
       "network": {"mode": "none"}
     },
-    "side_effect": "internal_write",
+    "side_effect_class": "internal_write",
+    "rate": "run_budgeted",
+    "reversibility": "reversible",
     "visibility": "user",
+    "approval_mode": "none",
     "audit_level": "full"
   }
 }
 ```
+
+The capability field is `side_effect_class`, not `side_effect`. Keep the explicit
+attributes above aligned with the Binding's declaration rather than inheriting
+attributes from default rules.
 
 The rule is an operator grant, not an approval supplied by a model or Skill.
 Bind the Tool in an Agent's existing Configure dialog. Single, Multi-Agent and
