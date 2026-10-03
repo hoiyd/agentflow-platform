@@ -15,17 +15,22 @@ import (
 // cannot modify host files or external services, and unknown attempts are never
 // automatically retried. Skill instructions do not grant this capability.
 func SandboxCommandTool(runner *sandbox.Runner) Binding {
+	arguments := map[string]any{
+		"type": "array", "minItems": 1, "maxItems": 64,
+		"items":       map[string]any{"type": "string", "maxLength": 4096},
+		"description": "Structured argv; first entry is an operator-allowlisted absolute executable inside the guest. No host files or network are available.",
+	}
 	parameters := ObjectSchema(map[string]any{
-		"args": map[string]any{
-			"type": "array", "minItems": 1, "maxItems": 64,
-			"items":       map[string]any{"type": "string", "maxLength": 4096},
-			"description": "Structured argv; first entry is an operator-allowlisted absolute executable inside the guest. No host files or network are available.",
-		},
+		"args": arguments,
 	}, []string{"args"})
 	unavailable := "sandbox_disabled"
 	timeout := 2 * time.Minute
 	if runner != nil {
 		unavailable = ""
+		commands := runner.AllowedCommands()
+		arguments["prefixItems"] = []any{map[string]any{"type": "string", "maxLength": 4096, "enum": commands}}
+		encoded, _ := json.Marshal(commands)
+		arguments["description"] = "Structured argv; args[0] must exactly match one of " + string(encoded) + ". Do not use executable aliases or PATH lookup. No host files or network are available."
 		// The shared definition digest includes this schema annotation. Changing
 		// the runner profile therefore invalidates frozen Tool definitions without
 		// adding a second Snapshot format or exposing host paths to the model.

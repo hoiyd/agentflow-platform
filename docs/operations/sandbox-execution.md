@@ -150,6 +150,19 @@ Example structured arguments:
 {"args": ["/usr/bin/python3", "-c", "print(sum(range(10)))"]}
 ```
 
+The model-visible schema lists the configured `SANDBOX_ALLOWED_COMMANDS` and
+validates `args[0]` against that exact list before policy evaluation, Effect
+Journal reservation or VM creation. The defaults are `/bin/sh` and
+`/usr/bin/python3`; aliases such as `python` and other absolute paths are not
+automatically translated or permitted. An invalid executable returns
+`invalid_arguments` at `/args/0`, allowing the bounded Tool loop to request a
+corrected call. Missing operator grants and uncertain post-execution failures
+still fail closed. The runner independently rechecks the same allowlist.
+
+After upgrading this schema, restart the API and create a new Run. Failed Runs
+retain their original evidence; Resume does not silently replace an older frozen
+Tool definition with the new contract.
+
 `exit_code != 0` is unsuccessful guest execution, even when the CLI transport
 returned normally. The Tool result is an observation, not a Completion Gate;
 enabling this Tool does not automatically verify an Agent's answer. Host Command
@@ -211,7 +224,8 @@ real isolation has **not** been verified, regardless of unit-test coverage.
 
 The separate browser gate uses a **controlled CLI fixture**, production app
 composition and disposable Postgres. It validates the Agent UI binding, actual
-model Tool continuation, persistent receipt, frozen definition, and Replay reload:
+model Tool continuation (including rejection of `python` and correction to
+`/usr/bin/python3`), one persistent receipt, frozen definition, and Replay reload:
 
 ```bash
 cd apps/web

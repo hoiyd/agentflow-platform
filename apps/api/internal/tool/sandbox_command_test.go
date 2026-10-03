@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,39 @@ func TestSandboxBindingDefaultsAndSchema(t *testing.T) {
 	}
 	if _, err := binding.Handler(t.Context(), json.RawMessage(`{"args":["/bin/sh"]}`)); err == nil {
 		t.Fatal("disabled runner executed")
+	}
+}
+
+func TestSandboxBindingPublishesConfiguredExecutables(t *testing.T) {
+	runner, err := sandbox.New(sandbox.Options{Executable: "/usr/bin/true", StateDirectory: filepath.Join(t.TempDir(), "state"), AllowedCommands: []string{"/usr/bin/python3", "/bin/sh"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = runner.Close(context.Background()) })
+	commands := runner.AllowedCommands()
+	commands[0] = "/not-allowed"
+	binding := SandboxCommandTool(runner)
+	data, err := json.Marshal(binding.Descriptor.Parameters)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema struct {
+		Properties map[string]struct {
+			Description string `json:"description"`
+			PrefixItems []struct {
+				Enum []string `json:"enum"`
+			} `json:"prefixItems"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+	args := schema.Properties["args"]
+	if len(args.PrefixItems) != 1 || !reflect.DeepEqual(args.PrefixItems[0].Enum, []string{"/bin/sh", "/usr/bin/python3"}) {
+		t.Fatalf("executable whitelist is missing from the model contract: %s", data)
+	}
+	if !strings.Contains(args.Description, "/usr/bin/python3") || !strings.Contains(args.Description, "/bin/sh") {
+		t.Fatalf("model instructions omit configured executable paths: %s", args.Description)
 	}
 }
 
@@ -212,12 +246,18 @@ func TestSandboxBindingUsesRealExecutorAndDurableReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	executor = NewExecutor(catalog, ExecutorOptions{EffectJournal: journal})
-	for _, args := range []string{`{}`, `{"args":[]}`, `{"args":["/bin/sh"],"workspace":"/host"}`, `{"args":[1]}`} {
+	for _, args := range []string{`{}`, `{"args":[]}`, `{"args":["/bin/sh"],"workspace":"/host"}`, `{"args":[1]}`, `{"args":["python","-c","print(45)"]}`, `{"args":["/not-allowed"]}`, `{"args":["/bin/bash"]}`} {
 		bad := request
 		bad.Arguments = json.RawMessage(args)
 		if result := executor.Execute(t.Context(), bad); result.Error == nil || result.Error.Code != ErrorInvalidArgs {
 			t.Fatalf("schema bypass: %+v", result)
 		}
+	}
+	if len(journal.records) != 0 {
+		t.Fatal("invalid arguments reserved a side-effect record before execution")
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("invalid arguments reached the sandbox CLI")
 	}
 	for _, owner := range []string{"turn", "stage"} {
 		request.CallID = owner

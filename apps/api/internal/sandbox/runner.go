@@ -134,6 +134,9 @@ func (r *Runner) Revision() string {
 
 func (r *Runner) Timeout() time.Duration { return r.options.Timeout }
 
+// AllowedCommands returns guest executable paths, never host executable paths.
+func (r *Runner) AllowedCommands() []string { return slices.Clone(r.options.AllowedCommands) }
+
 func (r *Runner) Run(ctx context.Context, args []string) (result Result, err error) {
 	if r.closed.Load() {
 		return result, &Error{Kind: Unavailable, Message: "sandbox runner is closed"}

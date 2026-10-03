@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,10 +28,11 @@ func TestSandboxCommandHTTPTraceAndReceiptsAcrossModes(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
 			cli := filepath.Join(root, "sbx-fixture")
-			if err := os.WriteFile(cli, []byte("#!/bin/sh\ncase \"$1\" in exec) printf 'scratch fixture receipt';; esac\n"), 0700); err != nil {
+			createdPath := filepath.Join(root, "created")
+			if err := os.WriteFile(cli, []byte("#!/bin/sh\ncase \"$1\" in create) printf x >> '"+createdPath+"';; exec) printf 'scratch fixture receipt';; esac\n"), 0700); err != nil {
 				t.Fatal(err)
 			}
-			runner, err := sandbox.New(sandbox.Options{Executable: cli, StateDirectory: filepath.Join(root, "state"), AllowedCommands: []string{"/bin/sh"}})
+			runner, err := sandbox.New(sandbox.Options{Executable: cli, StateDirectory: filepath.Join(root, "state"), AllowedCommands: []string{"/bin/sh", "/usr/bin/python3"}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -47,11 +49,17 @@ func TestSandboxCommandHTTPTraceAndReceiptsAcrossModes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			var corrections atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				var request struct {
 					Messages []provider.Message `json:"messages"`
-					Tools    []any              `json:"tools"`
-					Stream   bool               `json:"stream"`
+					Tools    []struct {
+						Function struct {
+							Name       string          `json:"name"`
+							Parameters json.RawMessage `json:"parameters"`
+						} `json:"function"`
+					} `json:"tools"`
+					Stream bool `json:"stream"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 					t.Error(err)
@@ -61,19 +69,32 @@ func TestSandboxCommandHTTPTraceAndReceiptsAcrossModes(t *testing.T) {
 				content, reason := "Run the scratch-fixture script.", "stop"
 				var calls []provider.ToolCall
 				if len(request.Tools) > 0 {
-					found := false
-					for _, message := range request.Messages {
-						if message.Role == "tool" {
-							found = true
-							if !strings.Contains(message.Content, "scratch fixture receipt") || !strings.Contains(message.Content, `"cleanup_confirmed":true`) {
-								t.Errorf("invalid command receipt: %s", message.Content)
-							}
+					for _, definition := range request.Tools {
+						if definition.Function.Name == "sandbox_command" && (!strings.Contains(string(definition.Function.Parameters), "prefixItems") || !strings.Contains(string(definition.Function.Parameters), "/usr/bin/python3")) {
+							t.Error("model request omitted the configured executable contract")
 						}
 					}
-					if !found {
+					lastTool := ""
+					for _, message := range request.Messages {
+						if message.Role == "tool" {
+							lastTool = message.Content
+						}
+					}
+					switch {
+					case lastTool == "":
 						content, reason = "", "tool_calls"
-						calls = []provider.ToolCall{{ID: "sandbox-call", Type: "function", Function: provider.FunctionCall{Name: "sandbox_command", Arguments: `{"args":["/bin/sh","-c","printf scratch"]}`}}}
-					} else {
+						calls = []provider.ToolCall{{ID: "sandbox-call", Type: "function", Function: provider.FunctionCall{Name: "sandbox_command", Arguments: `{"args":["python","-c","print(sum(range(10)))"]}`}}}
+					case strings.Contains(lastTool, `"code":"invalid_arguments"`):
+						if !strings.Contains(lastTool, `"path":"/args/0"`) {
+							t.Errorf("correction has no executable argument location: %s", lastTool)
+						}
+						corrections.Add(1)
+						content, reason = "", "tool_calls"
+						calls = []provider.ToolCall{{ID: "sandbox-corrected", Type: "function", Function: provider.FunctionCall{Name: "sandbox_command", Arguments: `{"args":["/usr/bin/python3","-c","print(sum(range(10)))"]}`}}}
+					default:
+						if !strings.Contains(lastTool, "scratch fixture receipt") || !strings.Contains(lastTool, `"cleanup_confirmed":true`) {
+							t.Errorf("invalid command receipt: %s", lastTool)
+						}
 						content = "Scratch receipt verified."
 					}
 				}
@@ -136,6 +157,23 @@ func TestSandboxCommandHTTPTraceAndReceiptsAcrossModes(t *testing.T) {
 				if effect.ToolName == "sandbox_command" && (effect.Status != domain.ToolEffectCommitted || (effect.TurnID == "" && effect.StageID == "")) {
 					t.Fatalf("invalid command ownership: %+v", effect)
 				}
+			}
+			created, err := os.ReadFile(createdPath)
+			if err != nil || len(created) != len(effects) || corrections.Load() == 0 {
+				t.Fatalf("invalid call must not create a VM or reserve an effect: created=%q effects=%d corrections=%d error=%v", created, len(effects), corrections.Load(), err)
+			}
+			foundInvalid := false
+			for _, item := range replay.RunEvents {
+				payload, err := json.Marshal(item.Payload)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if item.Type == domain.EventToolFailed && strings.Contains(string(payload), "invalid_arguments") && strings.Contains(string(payload), "/args/0") {
+					foundInvalid = true
+				}
+			}
+			if !foundInvalid {
+				t.Fatal("Replay lost the safe pre-execution rejection")
 			}
 			if !strings.Contains(string(response.Body.Bytes()), "scratch fixture receipt") || !strings.Contains(string(response.Body.Bytes()), "sandbox_id") {
 				t.Fatal("receipt not inspectable in persisted Replay")

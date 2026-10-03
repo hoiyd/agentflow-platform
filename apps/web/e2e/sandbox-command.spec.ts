@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test.skip(process.env.AGENTFLOW_SANDBOX_BROWSER_TEST !== "1", "requires the controlled CLI fixture and disposable Postgres");
 
-test("sandbox tool binding, execution, durable receipt and Replay survive reload", async ({ page }, info) => {
+test("sandbox argument correction, execution, durable receipt and Replay survive reload", async ({ page }, info) => {
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.goto("/workspace");
@@ -31,9 +31,16 @@ test("sandbox tool binding, execution, durable receipt and Replay survive reload
   expect(replay.tool_effects[0].status).toBe("committed");
   expect(replay.tool_effects[0].turn_id).toBeTruthy();
   expect(replay.runtime_snapshot.tools.some((tool: { name: string; definition_revision: string }) => tool.name === "sandbox_command" && tool.definition_revision)).toBe(true);
+  const sandboxTool = replay.runtime_snapshot.tools.find((tool: { name: string }) => tool.name === "sandbox_command");
+  expect(sandboxTool.parameters.properties.args.prefixItems[0].enum).toEqual(["/bin/sh", "/usr/bin/python3"]);
+  const rejected = replay.run_events.filter((event: { type: string; payload: { tool_name: string } }) => event.type === "tool.failed" && event.payload.tool_name === "sandbox_command");
+  expect(rejected).toHaveLength(1);
+  expect(rejected[0].payload.error_code).toBe("invalid_arguments");
+  expect(rejected[0].payload.argument_error).toMatchObject({ code: "enum", path: "/args/0" });
   const completed = replay.run_events.find((event: { type: string; payload: { tool_name: string } }) => event.type === "tool.completed" && event.payload.tool_name === "sandbox_command");
   expect(completed).toBeTruthy();
   expect(JSON.stringify(completed)).toContain('"cleanup_confirmed":true');
+  expect(JSON.stringify(completed)).toContain("/usr/bin/python3");
   await page.goto(href);
   await page.getByRole("button", { name: /^tool\.completed / }).click();
   const payload = page.locator(".raw-json-panel pre");
@@ -46,7 +53,7 @@ test("sandbox tool binding, execution, durable receipt and Replay survive reload
   expect(errors).toEqual([]);
   await info.attach("sandbox-command-browser-evidence.json", { body: JSON.stringify({
     schema: "sandbox-command-browser-evidence-v1", run: replay.run, snapshot: replay.runtime_snapshot,
-    effects: replay.tool_effects, command: completed, persistence: "disposable-postgres",
+    effects: replay.tool_effects, rejected, command: completed, persistence: "disposable-postgres",
     limitations: ["controlled CLI and model fixtures; not real microVM isolation", "single-mode UI; all modes covered by backend HTTP integration"]
   }, null, 2), contentType: "application/json" });
 });
