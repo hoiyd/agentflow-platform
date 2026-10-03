@@ -330,14 +330,14 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: st
             <div className="tool-card-header">
               <h3>{tool.name}</h3>
               <label className="tool-toggle">
-                <input type="checkbox" checked={tool.enabled} disabled={readOnly || serviceReadOnly || updatingTool === tool.name} onChange={() => onToggle(tool)} />
+                <input type="checkbox" checked={tool.enabled} disabled={readOnly || serviceReadOnly || tool.unavailable_reason === "sandbox_disabled" || updatingTool === tool.name} onChange={() => onToggle(tool)} />
                 <span>{tool.enabled ? "Enabled" : "Disabled"}</span>
               </label>
             </div>
             <p>{tool.description}</p>
-            {tool.enabled && tool.unavailable_reason ? (
+            {tool.unavailable_reason && (tool.enabled || tool.unavailable_reason === "sandbox_disabled") ? (
               <p className="tool-availability">
-                {tool.unavailable_reason === "credential_unavailable" ? "Credential unavailable" : "Unavailable"}
+                {tool.unavailable_reason === "sandbox_disabled" ? "Sandbox disabled by operator" : tool.unavailable_reason === "credential_unavailable" ? "Credential unavailable" : "Unavailable"}
               </p>
             ) : null}
             <details className="tool-card-schema">

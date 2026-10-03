@@ -163,7 +163,25 @@ type Config struct {
 	VerificationAllowedHTTPHosts string
 	// VerificationMaxArtifactBytes caps retained output. HTTP consumption is separately capped at 1 MiB; hashes cover observed bytes.
 	VerificationMaxArtifactBytes int
-	AllowedOrigins               string
+	// SandboxEnabled opts into local Docker sbx. Tool enablement and an explicit
+	// security rule are still required; it never grants trusted host execution.
+	SandboxEnabled    bool
+	SandboxExecutable string
+	// SandboxStateDirectory holds owned names for restart cleanup, never guest data.
+	// It must be private and shared only with this single API installation.
+	SandboxStateDirectory  string
+	SandboxTemplate        string
+	SandboxAllowedCommands string
+	// Sandbox CPUs/RAM apply per disposable VM; concurrency is process-wide,
+	// separate from model request admission and the aggregate Run Budget.
+	SandboxCPUs          int
+	SandboxMemoryMiB     int
+	SandboxMaxConcurrent int
+	// SandboxTimeout covers creation and command execution; cleanup has its own
+	// bounded context. MaxOutputBytes caps retained text, not a VM disk quota.
+	SandboxTimeout        time.Duration
+	SandboxMaxOutputBytes int
+	AllowedOrigins        string
 }
 
 func Load() Config {
@@ -251,6 +269,16 @@ func Load() Config {
 		VerificationAllowedCommands:       getEnv("VERIFICATION_ALLOWED_COMMANDS", ""),
 		VerificationAllowedHTTPHosts:      getEnv("VERIFICATION_ALLOWED_HTTP_HOSTS", ""),
 		VerificationMaxArtifactBytes:      getIntEnv("VERIFICATION_MAX_ARTIFACT_BYTES", 65536),
+		SandboxEnabled:                    getBoolEnv("SANDBOX_ENABLED", false),
+		SandboxExecutable:                 getEnv("SANDBOX_EXECUTABLE", "sbx"),
+		SandboxStateDirectory:             getEnv("SANDBOX_STATE_DIRECTORY", ".data/sandboxes"),
+		SandboxTemplate:                   getEnv("SANDBOX_TEMPLATE", "docker.io/docker/sandbox-templates:shell"),
+		SandboxAllowedCommands:            getEnv("SANDBOX_ALLOWED_COMMANDS", "/bin/sh,/usr/bin/python3"),
+		SandboxCPUs:                       getIntEnv("SANDBOX_CPUS", 1),
+		SandboxMemoryMiB:                  getIntEnv("SANDBOX_MEMORY_MIB", 1024),
+		SandboxMaxConcurrent:              getIntEnv("SANDBOX_MAX_CONCURRENT", 1),
+		SandboxTimeout:                    getDurationEnv("SANDBOX_TIMEOUT", 2*time.Minute),
+		SandboxMaxOutputBytes:             getIntEnv("SANDBOX_MAX_OUTPUT_BYTES", 65536),
 		AllowedOrigins:                    getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 	}
 }

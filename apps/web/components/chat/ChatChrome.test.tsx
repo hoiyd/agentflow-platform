@@ -19,6 +19,14 @@ describe("Sidebar API status", () => {
 });
 
 describe("ToolsPanel availability", () => {
+	 it("shows a disabled sandbox boundary without offering a misleading toggle", () => {
+	   render(<ToolsPanel error="" onToggle={vi.fn()} updatingTool="" tools={[{
+	     name: "sandbox_command", description: "Isolated scratch commands", parameters: {}, enabled: false,
+	     unavailable_reason: "sandbox_disabled"
+	   }]} />);
+	   expect(screen.getByText("Sandbox disabled by operator")).toBeTruthy();
+	   expect(screen.getByRole("checkbox")).toHaveProperty("disabled", true);
+	 });
   it("distinguishes enabled search from missing credentials", () => {
     render(<ToolsPanel error="" onToggle={vi.fn()} updatingTool="" tools={[{
       name: "web_search", description: "Search the web", parameters: {}, enabled: true,

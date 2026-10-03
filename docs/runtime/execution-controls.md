@@ -211,6 +211,18 @@ external reconciliation. Committed results replay; uncertain writes require
 [reconciliation](../tools/tool-side-effect-reconciliation.md), not blind retry.
 One Handler timeout and cumulative Run runtime protect different resources.
 
+`sandbox_command` has an additional opt-in execution boundary: fresh mountless
+sbx microVMs, deny-all network and unprivileged guest processes. Defaults are one
+VM at a time, one CPU / 1 GiB per VM, a two-minute create-and-execute deadline,
+and 64 KiB retained output. Independent cleanup gets up to 30 seconds after a
+timeout/cancellation; its time is not additional command runtime. These limits
+are separate from model admission, inference RPM/TPM and cumulative Run Budget.
+CPU/RAM bound each guest, not the API process. Output retention is not a disk
+quota; uncertain cleanup closes admission until recovery. The profile revision
+is included in the frozen Tool definition. See
+[Sandbox execution](../operations/sandbox-execution.md) for enabling, explicit
+authorization, failure evidence and deployment limits.
+
 ## 8. Verification
 
 Only an initial `completion_contract` enables Verification. Defaults/ranges:

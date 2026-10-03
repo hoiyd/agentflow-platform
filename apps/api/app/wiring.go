@@ -25,6 +25,7 @@ import (
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/recovery"
+	"agentflow-platform/apps/api/internal/sandbox"
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/taskstate"
@@ -40,6 +41,7 @@ type applicationDependencies struct {
 	memoryProvider memorypkg.Provider
 	runController  *concurrency.RunController
 	requestLimiter *concurrency.ModelRequestLimiter
+	sandboxRunner  *sandbox.Runner
 }
 
 func buildDependencies(cfg config.Config) (applicationDependencies, error) {
@@ -143,7 +145,18 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		}
 		toolCredentialScopes = []string{tool.TavilyCredentialScope}
 	}
-	toolManager, err := tool.NewManager(cfg.ToolConfigPath, tool.WebSearchTool(tavilyClient))
+	sandboxRunner, err := newSandboxRunner(cfg)
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("initialize sandbox runner: %w", err)
+	}
+	defer func() {
+		if cleanupStore && sandboxRunner != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+			defer cancel()
+			_ = sandboxRunner.Close(ctx)
+		}
+	}()
+	toolManager, err := tool.NewManager(cfg.ToolConfigPath, tool.WebSearchTool(tavilyClient), tool.SandboxCommandTool(sandboxRunner))
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
 	}
@@ -251,6 +264,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	cleanupStore = false
 	return applicationDependencies{
 		store: appStore, handler: handler, memoryProvider: memoryProvider,
+		sandboxRunner: sandboxRunner,
 		runController: runController, requestLimiter: requestLimiter,
 	}, nil
 }

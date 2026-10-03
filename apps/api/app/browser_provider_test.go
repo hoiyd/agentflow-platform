@@ -133,6 +133,29 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	content, reason := "Evidence saved.", "stop"
 	var calls []any
 	var reasoning *string
+	if input.Stream && strings.Contains(task, "sandbox-gate") {
+		if observations == 0 {
+			available := false
+			for _, definition := range input.Tools {
+				if definition.Function.Name == "sandbox_command" {
+					available = true
+				}
+			}
+			if !available {
+				f.reject(w, "sandbox tool missing from frozen model definitions")
+				return
+			}
+			content, reason = "Running scratch command.", "tool_calls"
+			calls = []any{map[string]any{"id": "sandbox-browser-call", "type": "function", "function": map[string]string{"name": "sandbox_command", "arguments": `{"args":["/bin/sh","-c","printf scratch"]}`}}}
+		} else {
+			last := input.Messages[len(input.Messages)-1].Content
+			if !strings.Contains(last, "sandbox browser receipt") || !strings.Contains(last, `"cleanup_confirmed":true`) {
+				f.reject(w, "sandbox receipt lost before answer continuation")
+				return
+			}
+			content = "Sandbox receipt saved."
+		}
+	}
 	if input.Stream && strings.Contains(task, "owner-tools") && observations < 4 {
 		for _, definition := range input.Tools {
 			if definition.Function.Name != "get_current_time" {

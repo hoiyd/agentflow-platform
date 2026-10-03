@@ -16,12 +16,17 @@ import (
 func main() {
 	log.SetOutput(redaction.Writer{Writer: os.Stdout})
 
-	application, err := app.New(config.Load())
+	cfg := config.Load()
+	application, err := app.New(cfg)
 	if err != nil {
 		log.Fatalf("create AgentFlow application: %v", err)
 	}
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownTimeout := 5 * time.Second
+		if cfg.SandboxEnabled {
+			shutdownTimeout = 35 * time.Second // Allow independent VM cleanup and receipt settlement.
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		if err := application.Close(ctx); err != nil {
 			log.Printf("close AgentFlow application: %v", err)

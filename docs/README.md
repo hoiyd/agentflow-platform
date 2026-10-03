@@ -33,6 +33,7 @@ related pages link to its contract rather than copying configuration or algorith
 - **Workspaces:** [owner-scoped lifecycle](operations/workspace-lifecycle.md): generated IDs, default selection, archive/soft deletion and current-schema initialization.
 - **Authorization:** [resource boundaries](operations/resource-authorization.md): object ownership, linked evidence, nested resources, live-stream revocation and repeatable cross-owner tests.
 - **Execution boundary:** [governed egress and host execution](operations/execution-boundaries.md): destination enforcement, trusted-local command limits, filesystem ownership and failure evidence; distinct from an OS sandbox.
+- **Isolated commands:** [sbx execution](operations/sandbox-execution.md): disposable mountless VMs, deny-all network, resource limits, command receipts and restart cleanup.
 - **Interfaces:** [HTTP API reference](reference/api-reference.md) maps routes and operational semantics; [OpenAPI](../api/openapi.yaml) owns DTO shapes.
 
 ## Context and Knowledge
