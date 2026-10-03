@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,12 +39,16 @@ func TestLiveSBXIsolationAndCleanup(t *testing.T) {
 	if err := r.CheckAvailability(t.Context()); err != nil {
 		t.Fatal(err)
 	}
+	version := newOutputBuffer(4096)
+	if err := r.invoke(t.Context(), []string{"version"}, version); err != nil || version.Truncated() || strings.TrimSpace(version.Text()) == "" {
+		t.Fatalf("cannot record sbx version: %v", err)
+	}
 	t.Setenv("OPENAI_API_KEY", "fixture-host-canary-not-a-real-secret")
 	hostPath := filepath.Join(t.TempDir(), "host-canary")
 	if err := os.WriteFile(hostPath, []byte("host canary"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	program := `import os, pathlib, socket, json, resource, mmap
+	program := `import os, pathlib, socket, ssl, json, resource, mmap
 assert os.getuid() == 65534
 assert os.getenv("OPENAI_API_KEY") is None
 assert os.getenv("SSH_AUTH_SOCK") is None
@@ -78,17 +83,62 @@ else: raise AssertionError("host path was writable")
 denied = []
 for address in [("1.1.1.1", 443), ("169.254.169.254", 80)]:
  try:
-  with socket.create_connection(address, timeout=3): pass
+  with socket.create_connection(address, timeout=3) as connection:
+   if address[1] == 443:
+    with ssl.create_default_context().wrap_socket(connection, server_hostname=address[0]):
+     raise AssertionError("TLS reached denied destination")
+   else:
+    connection.sendall(b"GET / HTTP/1.1\r\nHost: 169.254.169.254\r\nConnection: close\r\n\r\n")
+    if connection.recv(1024): raise AssertionError("metadata returned data")
  except OSError: denied.append(address[0])
- else: raise AssertionError("network escaped")
+ else: denied.append(address[0])
 print(json.dumps({"scratch_write": True, "host_read_denied": True, "host_write_denied": True, "credentials_absent": True, "no_new_privileges": True, "resource_limits_enforced": True, "network_denied": denied}))`
+	// A transparent proxy may accept TCP before denying upstream access. Prove
+	// both the failed guest request and an explicit local-rule denial, not merely
+	// a socket error (which could also mean the destination was unavailable).
+	actual := r.invoke
+	var networkAudit json.RawMessage
+	var auditErr error
+	r.invoke = func(ctx context.Context, args []string, output *outputBuffer) error {
+		err := actual(ctx, args, output)
+		if args[0] == "exec" && err == nil {
+			audit := newOutputBuffer(64 * 1024)
+			auditErr = actual(ctx, []string{"policy", "log", args[3], "--json", "--limit", "100"}, audit)
+			if audit.Truncated() {
+				auditErr = fmt.Errorf("network audit exceeded retention limit")
+			}
+			networkAudit = json.RawMessage(audit.Text())
+		}
+		return err
+	}
 	result, err := r.Run(t.Context(), []string{"/usr/bin/python3", "-c", program, hostPath})
+	r.invoke = actual
 	if err != nil || result.ExitCode != 0 || !result.CleanupConfirmed {
 		t.Fatalf("live isolation: %+v error=%v", result, err)
 	}
 	var proof map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(result.Output)), &proof); err != nil {
 		t.Fatalf("invalid guest evidence: %+v %v", result, err)
+	}
+	var audit struct {
+		BlockedHosts []struct {
+			Host   string `json:"host"`
+			VMName string `json:"vm_name"`
+			Reason string `json:"reason"`
+		} `json:"blocked_hosts"`
+		AllowedHosts []json.RawMessage `json:"allowed_hosts"`
+	}
+	if err := json.Unmarshal(networkAudit, &audit); err != nil || auditErr != nil || len(audit.AllowedHosts) != 0 {
+		t.Fatalf("invalid network denial audit: %s error=%v audit_error=%v", networkAudit, err, auditErr)
+	}
+	publicDenied := false
+	for _, entry := range audit.BlockedHosts {
+		if entry.Host == "1.1.1.1:443" && entry.VMName == result.SandboxID && entry.Reason == "Denied by local rule" {
+			publicDenied = true
+		}
+	}
+	if !publicDenied {
+		t.Fatalf("no explicit sandbox network denial: %s", networkAudit)
 	}
 	bytes, err := os.ReadFile(hostPath)
 	if err != nil || string(bytes) != "host canary" {
@@ -106,7 +156,6 @@ print(json.dumps({"scratch_write": True, "host_read_denied": True, "host_write_d
 	// that could merely time out during image download or VM creation.
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	actual := r.invoke
 	r.invoke = func(ctx context.Context, args []string, output *outputBuffer) error {
 		if args[0] != "exec" {
 			return actual(ctx, args, output)
@@ -142,7 +191,9 @@ print(json.dumps({"scratch_write": True, "host_read_denied": True, "host_write_d
 		t.Fatalf("guest cancellation: %+v %v", canceled, err)
 	}
 	r.invoke = actual
-	evidence, err := json.MarshalIndent(map[string]any{"schema": "sbx-execution-evidence-v1", "policy_revision": r.Revision(), "isolation": result, "proof": proof, "large_output": map[string]any{"sandbox_id": large.SandboxID, "observed_bytes": large.ObservedBytes, "hash": large.OutputHash, "truncated": large.Truncated, "cleanup_confirmed": large.CleanupConfirmed}, "nonzero": failed, "canceled": canceled, "limitations": []string{"single API owner", "no host mounts or exported files", "no Skill script lifecycle or live model quality"}}, "", "  ")
+	profile := r.options
+	profile.Executable, profile.StateDirectory = "", ""
+	evidence, err := json.MarshalIndent(map[string]any{"schema": "sbx-execution-evidence-v1", "sbx_version": strings.TrimSpace(version.Text()), "execution_profile": profile, "policy_revision": r.Revision(), "isolation": result, "proof": proof, "network_audit": networkAudit, "large_output": map[string]any{"sandbox_id": large.SandboxID, "observed_bytes": large.ObservedBytes, "hash": large.OutputHash, "truncated": large.Truncated, "cleanup_confirmed": large.CleanupConfirmed}, "nonzero": failed, "canceled": canceled, "limitations": []string{"single API owner", "no host mounts or exported files", "no Skill script lifecycle or live model quality"}}, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}

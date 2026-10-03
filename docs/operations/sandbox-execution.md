@@ -80,13 +80,26 @@ sbx create shell --help
 sbx ls --json
 ```
 
+Before the first sandbox, the operator must initialize the machine-wide network
+policy. Docker recommends Balanced for normal development:
+
+```bash
+sbx policy init balanced
+```
+
+Do this only when no global policy has been initialized; do not reset an existing
+policy automatically. This affects other sbx sandboxes, but AgentFlow still applies
+its own explicit `--deny-network '**'` rule to every VM. AgentFlow never initializes
+or relaxes global policy itself. See [Docker's local access controls](https://docs.docker.com/ai/sandboxes/governance/access-controls/local/).
+
 `sbx login` opens Docker OAuth in a browser. This authenticates the operator's
 local sandbox service; it is separate from an AgentFlow model API key and from
 logging in to a container registry with `docker login`. Do not put Docker login
 tokens into the API `.env` or guest environment. See
 [Docker installation and sign-in](https://docs.docker.com/ai/sandboxes/install/).
 An empty sandbox inventory is fine; an authentication/daemon error is not. A
-successful listing only proves readiness: run the live gate below to verify
+successful listing only proves inventory access, not global policy initialization
+or VM execution readiness: run the live gate below to verify
 actual scratch execution, isolation and cleanup before enabling the Tool.
 
 Set `SANDBOX_ENABLED=true` in the API configuration and restart it. Defaults and
@@ -181,9 +194,12 @@ AGENTFLOW_SANDBOX_TEST=1 SANDBOX_TEST_EVIDENCE_PATH=/tmp/sandbox-execution-evide
 
 The live gate checks scratch writes, inaccessible/unchanged host canaries, absent
 host credentials/SSH forwarding, `no_new_privs`, inherited process limits and
-actual address-space/file-size/descriptor rejection, denied public/metadata network,
+actual address-space/file-size/descriptor rejection, denied public TLS/metadata requests,
 nonzero exit, large output and cancellation only after guest output arrives.
-It retains `sandbox-execution-evidence.json`. An unsuccessful live gate means
+The public request must also have an explicit local-rule denial in sbx's policy
+audit, with no allowed hosts for that VM. TCP handshake success alone is not an
+egress test: sbx's transparent proxy may accept TCP before rejecting upstream
+access. The audit is retained in `sandbox-execution-evidence.json`. An unsuccessful live gate means
 real isolation has **not** been verified, regardless of unit-test coverage.
 
 The separate browser gate uses a **controlled CLI fixture**, production app
