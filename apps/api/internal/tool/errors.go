@@ -10,6 +10,8 @@ const (
 	ErrorExecutionFailed      ErrorCode = "execution_failed"
 	ErrorExecutionTimeout     ErrorCode = "execution_timeout"
 	ErrorExecutionCanceled    ErrorCode = "execution_canceled"
+	ErrorExecutionCapacity    ErrorCode = "execution_capacity_exceeded"
+	ErrorExecutionUnavailable ErrorCode = "execution_unavailable"
 	ErrorProviderRateLimited  ErrorCode = "provider_rate_limited"
 	ErrorProviderUnavailable  ErrorCode = "provider_unavailable"
 	ErrorNoResults            ErrorCode = "no_results"
@@ -65,6 +67,10 @@ func (e *ExecutionError) FailureInfo() failure.Info {
 		info.Category, info.Retryable = failure.CategoryTimeout, true
 	case ErrorExecutionCanceled:
 		info.Category = failure.CategoryCanceled
+	case ErrorExecutionCapacity:
+		info.Category, info.Retryable = failure.CategoryCapacity, true
+	case ErrorExecutionUnavailable:
+		info.Category = failure.CategoryAvailability
 	case ErrorProviderRateLimited:
 		info.Category, info.Retryable = failure.CategoryCapacity, true
 	case ErrorProviderUnavailable:

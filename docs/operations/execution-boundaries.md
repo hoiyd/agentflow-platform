@@ -68,7 +68,9 @@ sandbox or a race-proof capability for hostile scripts. Local mode trusts the
 operator and must not be exposed to untrusted callers. Programs can still read
 host files (including configuration), write outside cwd, use the network and
 deliberately escape process groups. OIDC mode denies host commands before exec;
-PROD-101 must supply genuine isolation before exposing third-party code.
+[The sbx command runner](sandbox-execution.md) supplies a separate, opt-in
+mountless execution boundary. It does not make this host Command Verifier
+sandboxed or authorize Skill scripts, mounts or third-party integrations.
 Skill resources already use `os.Root`, regular-file and symlink checks, text
 limits and frozen content; they do not inherit command permissions.
 

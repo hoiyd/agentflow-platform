@@ -61,7 +61,8 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		} `json:"messages"`
 		Tools []struct {
 			Function struct {
-				Name string `json:"name"`
+				Name       string          `json:"name"`
+				Parameters json.RawMessage `json:"parameters"`
 			} `json:"function"`
 		} `json:"tools"`
 		Stream bool `json:"stream"`
@@ -133,6 +134,41 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	content, reason := "Evidence saved.", "stop"
 	var calls []any
 	var reasoning *string
+	if input.Stream && strings.Contains(task, "sandbox-gate") {
+		if observations == 0 {
+			available := false
+			for _, definition := range input.Tools {
+				if definition.Function.Name == "sandbox_command" {
+					available = true
+					if !strings.Contains(string(definition.Function.Parameters), "prefixItems") || !strings.Contains(string(definition.Function.Parameters), "/usr/bin/python3") {
+						f.reject(w, "sandbox executable contract missing from model request")
+						return
+					}
+				}
+			}
+			if !available {
+				f.reject(w, "sandbox tool missing from frozen model definitions")
+				return
+			}
+			content, reason = "Running scratch command.", "tool_calls"
+			calls = []any{map[string]any{"id": "sandbox-browser-call", "type": "function", "function": map[string]string{"name": "sandbox_command", "arguments": `{"args":["python","-c","print(sum(range(10)))"]}`}}}
+		} else if observations == 1 {
+			last := input.Messages[len(input.Messages)-1].Content
+			if !strings.Contains(last, `"code":"invalid_arguments"`) || !strings.Contains(last, `"path":"/args/0"`) {
+				f.reject(w, "invalid executable did not reach safe model correction")
+				return
+			}
+			content, reason = "Correcting the executable path.", "tool_calls"
+			calls = []any{map[string]any{"id": "sandbox-browser-corrected", "type": "function", "function": map[string]string{"name": "sandbox_command", "arguments": `{"args":["/usr/bin/python3","-c","print(sum(range(10)))"]}`}}}
+		} else {
+			last := input.Messages[len(input.Messages)-1].Content
+			if !strings.Contains(last, "sandbox browser receipt") || !strings.Contains(last, `"cleanup_confirmed":true`) {
+				f.reject(w, "sandbox receipt lost before answer continuation")
+				return
+			}
+			content = "Sandbox receipt saved."
+		}
+	}
 	if input.Stream && strings.Contains(task, "owner-tools") && observations < 4 {
 		for _, definition := range input.Tools {
 			if definition.Function.Name != "get_current_time" {

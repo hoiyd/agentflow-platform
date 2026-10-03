@@ -14,6 +14,7 @@ import (
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/config"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
+	"agentflow-platform/apps/api/internal/sandbox"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -24,6 +25,7 @@ type Application struct {
 	memoryProvider memorypkg.Provider
 	runController  *concurrency.RunController
 	requestLimiter *concurrency.ModelRequestLimiter
+	sandboxRunner  *sandbox.Runner
 	server         *http.Server
 
 	closeOnce sync.Once
@@ -42,6 +44,7 @@ func New(cfg config.Config) (*Application, error) {
 		memoryProvider: dependencies.memoryProvider,
 		runController:  dependencies.runController,
 		requestLimiter: dependencies.requestLimiter,
+		sandboxRunner:  dependencies.sandboxRunner,
 		server: &http.Server{
 			Addr:              serverAddress(cfg),
 			Handler:           dependencies.handler.Routes(),
@@ -90,6 +93,14 @@ func (a *Application) Close(ctx context.Context) error {
 	a.closeOnce.Do(func() {
 		var closeErrors []error
 		drained := true
+		// Cancel guest commands before waiting on Runs that may be blocked on
+		// them. Keep persistence open until their Tool receipts have settled.
+		if a.sandboxRunner != nil {
+			if err := a.sandboxRunner.Close(ctx); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("close sandbox runner: %w", err))
+				drained = false
+			}
+		}
 		if a.runController != nil {
 			if err := a.runController.CloseAndWait(ctx); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("drain accepted runs: %w", err))

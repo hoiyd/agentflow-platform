@@ -81,6 +81,10 @@ func TestBrowserServer(t *testing.T) {
 	cfg.RouterMode, cfg.AutonomousMaxIterations = "query", 1
 	cfg.AllowedOrigins = "http://127.0.0.1:13000"
 	cfg.AuthMode = "local"
+	cfg.SandboxEnabled = false
+	if os.Getenv("AGENTFLOW_SANDBOX_BROWSER_TEST") == "1" {
+		browserSandboxConfig(t, &cfg, root)
+	}
 	if os.Getenv("AGENTFLOW_OWNER_ADMISSION_TEST") == "1" {
 		cfg.MaxConcurrentModelRequests, cfg.MaxConcurrentOwnerModelRequests = 2, 1
 		cfg.OwnerModelQueueSize, cfg.OwnerModelQueueWaitTimeout = 0, 3*time.Second

@@ -165,6 +165,16 @@ immutable spills, previews, and persisted expiry; [Artifacts](../tools/tool-resu
 own details. `TOOL_PROGRESS_*` thresholds are frozen per Run; guard rejection
 precedes Budget/Handler execution. See [Progress Guard](../tools/tool-progress-guard.md).
 
+## Sandbox Commands
+
+For isolated scratch commands, `SANDBOX_ENABLED` is an operator opt-in; it does
+not enable a Tool or grant its capability. Startup checks compatible sbx safety
+flags and authentication, and reclaims recorded orphan sandboxes before accepting
+work. CPU/RAM are per VM; `SANDBOX_MAX_CONCURRENT` is a separate process-wide VM
+cap. Profile changes affect the frozen Tool revision. See
+[Sandbox execution](sandbox-execution.md) for the exact authorization rule,
+retained-output semantics, supported local deployment and remaining limits.
+
 ## Trusted Skill Packages
 
 `TRUSTED_SKILL_DIRS` is a CSV of installation roots, not individual packages.
