@@ -48,8 +48,10 @@ The chat composer exposes this opt-in under **Verification** and
 supports all seven built-in verifier types. The request behavior is identical
 for `single`, `multi_agent`, and `autonomous` Runs.
 
-HTTP checks follow the backend host allowlist. Command checks also require
-`VERIFICATION_WORKSPACE_ROOT` and an allowlisted executable. The terminal SSE
+HTTP checks require an explicit backend origin grant, including loopback.
+Command checks require trusted `AUTH_MODE=local`, `VERIFICATION_WORKSPACE_ROOT`
+and an absolute allowlisted executable; OIDC sessions cannot run host commands.
+The terminal SSE
 `done` event reports `verification_status` separately from Run status.
 Disabling the control omits `completion_contract`.
 
@@ -261,12 +263,35 @@ For subjective outputs such as articles and research reports, combine determinis
 
 ## Security Boundaries
 
-The command verifier is disabled unless `VERIFICATION_WORKSPACE_ROOT` and
-`VERIFICATION_ALLOWED_COMMANDS` are both configured. Working directories must
-be relative and remain below the root. The HTTP verifier permits loopback
-targets by default; other exact hosts require
-`VERIFICATION_ALLOWED_HTTP_HOSTS`. Redirects follow the same policy. HTTP
-verifiers cannot send mutation methods or persisted authorization headers.
+Actual enforcement and reproducible failure cases are documented in
+[Execution boundaries](../operations/execution-boundaries.md).
+
+Host command verification is available only to the trusted local operator on
+Linux/macOS, with a configured root and absolute executable allowlist. Canonical
+working directories must remain under that root; processes receive a fixed,
+credential-free environment and cancellation terminates their process group.
+These measures are **not an OS sandbox**: a trusted executable can still read,
+write, or use the network as the server OS user, and descendants can deliberately
+escape a process group. OIDC mode blocks host commands even when allowlisted.
+Untrusted scripts require a future isolated runner, never a bare-exec fallback.
+
+`VERIFICATION_ALLOWED_HTTP_HOSTS` now defaults to deny, including localhost.
+Grant exact origins such as `https://example.com` or `http://127.0.0.1:8080`.
+A bare public hostname means HTTPS on port 443, not arbitrary schemes or ports.
+All DNS answers must be public and the validated IP is dialed directly; explicit
+localhost or literal private origins authorize those specific targets only.
+Link-local metadata, unspecified and reserved addresses remain blocked.
+Redirects and environment proxies are disabled. HTTP checks cannot send mutation
+methods or authorization headers. Only grant trusted read-only services: GET
+alone does not guarantee that a destination has no side effects. The contract
+example above requires an explicit `http://localhost:8080` operator grant.
+
+HTTP execution has a 10-second total ceiling and consumes at most 1 MiB plus
+one overflow-detection byte. Exceeding the body limit is `blocked`, not passed
+merely because the status matched. Byte count/hash then cover observed bytes,
+not the unread remainder. Existing contracts and stored Evidence remain intact;
+re-verification/Resume use the current operator execution policy, so formerly
+implicit loopback grants must be made explicit before retrying.
 
 Each verifier Artifact and the structured Evidence details are capped by `VERIFICATION_MAX_ARTIFACT_BYTES` (64 KiB by default). At most eight Artifacts are retained per Evidence record. Artifacts record the observed byte count, content hash, media type, and whether stored content was truncated.
 

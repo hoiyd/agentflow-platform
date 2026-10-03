@@ -12,11 +12,11 @@ import (
 )
 
 func TestCommandVerifierRunsWithoutShellAndEnforcesBoundaries(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("test uses standard Unix executables")
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("host supervision requires Linux or macOS")
 	}
 	root := t.TempDir()
-	registry := NewRegistry(Options{WorkspaceRoot: root, AllowedCommands: []string{"/usr/bin/printf", "/usr/bin/false"}, MaxArtifactBytes: 4})
+	registry := NewRegistry(Options{AllowHostCommands: true, WorkspaceRoot: root, AllowedCommands: []string{"/usr/bin/printf", "/usr/bin/false"}, MaxArtifactBytes: 4})
 	verifier, _ := registry.Resolve(domain.VerifierCommand)
 
 	passed := verifier.Verify(context.Background(), domain.VerifierSpec{Config: map[string]any{"args": []string{"/usr/bin/printf", "abcdef"}}}, Subject{})
@@ -42,7 +42,7 @@ func TestHTTPVerifierChecksStatusCapsOutputAndRestrictsHosts(t *testing.T) {
 		_, _ = w.Write([]byte("abcdef"))
 	}))
 	defer server.Close()
-	registry := NewRegistry(Options{MaxArtifactBytes: 4})
+	registry := NewRegistry(Options{AllowedHTTPHosts: []string{server.URL}, MaxArtifactBytes: 4})
 	verifier, _ := registry.Resolve(domain.VerifierHTTP)
 
 	passed := verifier.Verify(context.Background(), domain.VerifierSpec{Config: map[string]any{

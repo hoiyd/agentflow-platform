@@ -182,11 +182,14 @@ rereading disk. See [installation](../tools/skill-installation.md) and
 ## Verification
 
 Only `completion_contract` opts a new Run in; `VERIFICATION_*` settings bound
-safe execution, not activation. Commands require both workspace root and exact
-executable allowlist, run without a shell, and cannot escape the root through
-relative cwd. HTTP permits loopback by default; configured exact hosts/host:port
-and redirects follow the same allowlist. Artifact bytes are capped with hash,
-observed size, and truncation metadata. See [Verification](../runtime/verification.md).
+execution, not activation. Host commands require trusted local mode, a workspace
+root and absolute executable allowlist; OIDC blocks them pending an isolated
+runner. Canonical cwd checks and a clean environment do not constitute an OS
+sandbox. HTTP requires an exact origin grant, including loopback, with dial-time
+DNS checks, no redirects/proxies, a 10s total ceiling and 1 MiB response limit.
+Artifact bytes are capped independently with observed-size/hash metadata.
+See [Verification](../runtime/verification.md) and
+[Execution boundaries](execution-boundaries.md).
 
 ## Operational Checklist
 

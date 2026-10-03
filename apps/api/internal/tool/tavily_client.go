@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/credential"
+	"agentflow-platform/apps/api/internal/egress"
 	"agentflow-platform/apps/api/internal/redaction"
 )
 
@@ -20,8 +21,6 @@ const (
 	tavilyMaxRequestBytes  = 8192
 	tavilyMaxResponseBytes = 1 << 20
 )
-
-var errTavilyRedirect = errors.New("Tavily redirect blocked")
 
 // TavilyClient is the trusted egress boundary for the future web_search Binding.
 // Neither its credential nor its transport belongs in Tool descriptors or snapshots.
@@ -40,9 +39,9 @@ func NewTavilyClient(key credential.Value) (*TavilyClient, error) {
 		endpoint:   tavilySearchURL,
 		http: &http.Client{
 			Timeout:   10 * time.Second,
-			Transport: &http.Transport{TLSHandshakeTimeout: 10 * time.Second},
+			Transport: egress.NewTransport([]string{"https://api.tavily.com"}),
 			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return errTavilyRedirect
+				return egress.ErrDenied
 			},
 		},
 	}, nil
@@ -77,8 +76,8 @@ func (c *TavilyClient) Search(ctx context.Context, payload json.RawMessage) (jso
 	request.Header.Set("Content-Type", "application/json")
 	response, err := c.http.Do(request)
 	if err != nil {
-		if errors.Is(err, errTavilyRedirect) {
-			return nil, executionError(ErrorSecurityScopeInvalid, "Tavily redirect blocked", nil)
+		if errors.Is(err, egress.ErrDenied) {
+			return nil, executionError(ErrorSecurityScopeInvalid, "Tavily destination or redirect blocked", nil)
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			return nil, executionError(ErrorExecutionTimeout, "Tavily request timed out", context.DeadlineExceeded)

@@ -5,18 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/egress"
 )
 
 type httpVerifier struct {
-	client       *http.Client
-	allowedHosts map[string]bool
-	outputLimit  int64
+	client      *http.Client
+	outputLimit int64
 }
 
 type HTTPConfig struct {
@@ -25,17 +25,11 @@ type HTTPConfig struct {
 	ExpectedStatus int    `json:"expected_status"`
 }
 
-func newHTTPVerifier(client *http.Client, allowedHosts []string, outputLimit int) httpVerifier {
-	if client == nil {
-		client = &http.Client{}
-	}
-	allowed := make(map[string]bool, len(allowedHosts))
-	for _, host := range allowedHosts {
-		if host = strings.ToLower(strings.TrimSpace(host)); host != "" {
-			allowed[host] = true
-		}
-	}
-	return httpVerifier{client: client, allowedHosts: allowed, outputLimit: int64(outputLimit)}
+func newHTTPVerifier(allowedHosts []string, outputLimit int) httpVerifier {
+	return httpVerifier{client: &http.Client{
+		Transport: egress.NewTransport(allowedHosts), Timeout: 10 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return egress.ErrDenied },
+	}, outputLimit: int64(outputLimit)}
 }
 
 func (httpVerifier) Type() domain.VerifierType { return domain.VerifierHTTP }
@@ -76,38 +70,39 @@ func (v httpVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _ Su
 		return blocked(BlockedConfigInvalid, "http config is missing")
 	}
 	parsed, err := url.Parse(config.URL)
-	if err != nil || !v.hostAllowed(parsed) {
-		return blocked(BlockedPolicyDenied, "http host is not allowlisted: "+parsedHost(parsed))
+	if err != nil || parsed.User != nil || (config.Method != http.MethodGet && config.Method != http.MethodHead) {
+		return blocked(BlockedPolicyDenied, "http check requires GET/HEAD and a credential-free allowed origin")
 	}
 	request, err := http.NewRequestWithContext(ctx, config.Method, parsed.String(), nil)
 	if err != nil {
 		return blocked(BlockedExecutionFailed, "create http request: "+err.Error())
 	}
-	client := *v.client
-	configuredRedirect := client.CheckRedirect
-	client.CheckRedirect = func(request *http.Request, via []*http.Request) error {
-		if !v.hostAllowed(request.URL) {
-			return fmt.Errorf("redirect host is not allowlisted: %s", request.URL.Host)
-		}
-		if configuredRedirect != nil {
-			return configuredRedirect(request, via)
-		}
-		if len(via) >= 10 {
-			return errors.New("stopped after 10 redirects")
-		}
-		return nil
-	}
-	response, err := client.Do(request)
+	response, err := v.client.Do(request)
 	if err != nil {
+		if errors.Is(err, egress.ErrDenied) {
+			return blocked(BlockedPolicyDenied, "http destination or redirect is not permitted")
+		}
 		if ctx.Err() != nil {
 			return blockedForContext(ctx, "http request timed out or was canceled")
 		}
-		return blocked(BlockedExecutionFailed, "http request failed: "+err.Error())
+		if errors.Is(err, context.DeadlineExceeded) {
+			return blocked(BlockedTimedOut, "http request timed out")
+		}
+		return blocked(BlockedExecutionFailed, "http request failed")
 	}
 	defer response.Body.Close()
 	output := newCappedBuffer(int(v.outputLimit))
-	if _, readErr := io.Copy(output, response.Body); readErr != nil {
-		return blocked(BlockedExecutionFailed, "read http response: "+readErr.Error())
+	// Artifact retention and network consumption are separate limits. Never drain
+	// an unlimited response just to calculate a full-content hash.
+	const maxResponseBytes = 1 << 20
+	if _, readErr := io.Copy(output, io.LimitReader(response.Body, maxResponseBytes+1)); readErr != nil {
+		if ctx.Err() != nil {
+			return blockedForContext(ctx, "http response timed out or was canceled")
+		}
+		if errors.Is(readErr, context.DeadlineExceeded) {
+			return blocked(BlockedTimedOut, "http response timed out")
+		}
+		return blocked(BlockedExecutionFailed, "read http response failed")
 	}
 	result := Result{
 		Status: domain.VerificationPassed, Summary: fmt.Sprintf("http status %d matched", response.StatusCode),
@@ -117,32 +112,14 @@ func (v httpVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _ Su
 			Content: output.String(), ContentHash: output.Hash(), ByteSize: output.Total(), Truncated: output.Truncated(),
 		}},
 	}
+	if output.Total() > maxResponseBytes {
+		result.Status, result.Summary = domain.VerificationBlocked, "http response exceeds 1 MiB limit; hash and byte count cover observed bytes only"
+		result.Artifacts[0].Truncated = true
+		return withBlockedReason(result, BlockedExecutionFailed)
+	}
 	if response.StatusCode != config.ExpectedStatus {
 		result.Status = domain.VerificationFailed
 		result.Summary = fmt.Sprintf("expected http status %d, got %d", config.ExpectedStatus, response.StatusCode)
 	}
 	return result
-}
-
-func (v httpVerifier) hostAllowed(parsed *url.URL) bool {
-	if parsed == nil {
-		return false
-	}
-	hostname := strings.ToLower(parsed.Hostname())
-	host := strings.ToLower(parsed.Host)
-	if v.allowedHosts[hostname] || v.allowedHosts[host] {
-		return true
-	}
-	if hostname == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(hostname)
-	return ip != nil && ip.IsLoopback()
-}
-
-func parsedHost(parsed *url.URL) string {
-	if parsed == nil {
-		return ""
-	}
-	return parsed.Host
 }

@@ -1,4 +1,6 @@
 import type { CompletionVerificationSettings, VerifierTypeInput } from "../../lib/verification";
+import { useContext } from "react";
+import { TrustedHostCommands } from "../identity/WorkspaceContext";
 
 type VerifierConfigEditorProps = {
   disabled: boolean;
@@ -8,6 +10,7 @@ type VerifierConfigEditorProps = {
 };
 
 export function VerifierConfigEditor({ disabled, draft, onChange, type }: VerifierConfigEditorProps) {
+  const allowHostCommands = useContext(TrustedHostCommands);
   if (type === "answer_relevance") {
     const settings = draft.answerRelevance;
     const update = (next: Partial<typeof settings>) =>
@@ -125,12 +128,13 @@ export function VerifierConfigEditor({ disabled, draft, onChange, type }: Verifi
           </label>
           <NumberField disabled={disabled || !settings.enabled} label="Expected status" min={100} max={599} value={settings.expectedStatus} onChange={(expectedStatus) => update({ expectedStatus })} />
         </div>
-        <small className="verifier-requirement">Loopback URLs work by default. External hosts must be configured in the backend allowlist.</small>
+        <small className="verifier-requirement">The exact origin must be allowed by the operator, including loopback ports. Redirects are blocked.</small>
       </VerifierSection>
     );
   }
 
   const settings = draft.command;
+  disabled = disabled || !allowHostCommands;
   const update = (next: Partial<typeof settings>) => onChange({ command: { ...settings, ...next } });
   return (
     <VerifierSection checked={settings.enabled} disabled={disabled} label="Use command check" onToggle={(enabled) => update({ enabled })}>
@@ -145,7 +149,9 @@ export function VerifierConfigEditor({ disabled, draft, onChange, type }: Verifi
         </label>
       </div>
       <TextAreaField disabled={disabled || !settings.enabled} label="Arguments" placeholder="One argument per line" value={settings.arguments} onChange={(argumentsValue) => update({ arguments: argumentsValue })} />
-      <small className="verifier-requirement">The executable must be allowlisted and the working directory is relative to the backend verification workspace.</small>
+      <small className="verifier-requirement">{allowHostCommands
+        ? "Trusted local execution only, not a sandbox. An absolute allowlisted executable and a directory within the configured workspace are required."
+        : "Unavailable in remote sessions: command verification requires an isolated runner."}</small>
     </VerifierSection>
   );
 }

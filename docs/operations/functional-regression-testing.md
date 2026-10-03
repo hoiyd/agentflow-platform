@@ -38,6 +38,15 @@ Write or update this inventory before adding isolated fixtures.
 | Navigation occurs during execution, cancellation, or observation | Local requests detach; their late events, errors and snapshots cannot change the new conversation |
 | Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |
 
+## Execution Boundary
+
+The opt-in browser gate exercises real HTTP destination enforcement and OIDC
+command denial through production composition and disposable Postgres. It
+retains contract, Evidence and destination hit counters, and verifies Replay
+reload. DNS and process failure checks run separately without external services.
+See [Execution boundaries](execution-boundaries.md#repeatable-evidence) for the
+failure inventory, command and evidence limitations.
+
 ## Owner Model Admission
 
 The focused gate uses two signed OIDC identities, the production composition,

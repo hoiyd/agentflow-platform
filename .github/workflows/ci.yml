@@ -191,6 +191,21 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+      - name: Run execution boundary gate
+        env:
+          AGENTFLOW_EXECUTION_BOUNDARY_TEST: '1'
+        run: npm run test:e2e -- execution-boundaries.spec.ts
+      - name: Retain execution boundary evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: execution-boundary-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
+
       - name: Run owner-scoped model admission gate
         env:
           AGENTFLOW_OWNER_ADMISSION_TEST: '1'

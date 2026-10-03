@@ -221,6 +221,9 @@ These attempts are not provider retries. Built-in checks do not generate LLM
 answers; `answer_relevance` does make two embedding requests per attempt under
 shared request controls, not generation-token Ledger accounting.
 See [Verification](verification.md) for config, blocking, and gate semantics.
+Actual HTTP destination/response bounds and trusted-local-only process execution
+are owned by [Execution boundaries](../operations/execution-boundaries.md), not
+logical Tool policy or inference concurrency controls.
 
 ## 9. Recovery Stale Threshold
 

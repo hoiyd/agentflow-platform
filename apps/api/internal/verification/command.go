@@ -6,11 +6,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 )
 
 type commandVerifier struct {
+	allowHost     bool
 	workspaceRoot string
 	allowed       map[string]bool
 	outputLimit   int
@@ -21,7 +23,7 @@ type CommandConfig struct {
 	WorkingDirectory string   `json:"working_directory,omitempty"`
 }
 
-func newCommandVerifier(workspaceRoot string, allowedCommands []string, outputLimit int) commandVerifier {
+func newCommandVerifier(allowHost bool, workspaceRoot string, allowedCommands []string, outputLimit int) commandVerifier {
 	root := ""
 	if configured := strings.TrimSpace(workspaceRoot); configured != "" {
 		root, _ = filepath.Abs(configured)
@@ -32,7 +34,7 @@ func newCommandVerifier(workspaceRoot string, allowedCommands []string, outputLi
 			allowed[name] = true
 		}
 	}
-	return commandVerifier{workspaceRoot: root, allowed: allowed, outputLimit: outputLimit}
+	return commandVerifier{allowHost: allowHost, workspaceRoot: root, allowed: allowed, outputLimit: outputLimit}
 }
 
 func (commandVerifier) Type() domain.VerifierType { return domain.VerifierCommand }
@@ -58,29 +60,51 @@ func (commandVerifier) NormalizeConfig(spec *domain.VerifierSpec) error {
 // Verify executes only the frozen, allowlisted command. It does not discover or
 // select repository tests on its own.
 func (v commandVerifier) Verify(ctx context.Context, spec domain.VerifierSpec, _ Subject) Result {
+	if !v.allowHost {
+		return blocked(BlockedPolicyDenied, "host commands are restricted to trusted local mode; remote execution requires an isolated runner")
+	}
 	config, err := decodeConfig[CommandConfig](&spec)
 	if err != nil || len(config.Args) == 0 {
 		return blocked(BlockedConfigInvalid, "command config is missing")
 	}
 	executable := strings.TrimSpace(config.Args[0])
-	if !v.allowed[executable] {
+	if !filepath.IsAbs(executable) || !v.allowed[executable] {
 		return blocked(BlockedPolicyDenied, "command is not allowlisted: "+executable)
 	}
 	if v.workspaceRoot == "" {
 		return blocked(BlockedConfigInvalid, "verification workspace root is not configured")
 	}
 	workingDirectory := filepath.Join(v.workspaceRoot, filepath.Clean(config.WorkingDirectory))
-	relative, err := filepath.Rel(v.workspaceRoot, workingDirectory)
+	if filepath.IsAbs(config.WorkingDirectory) {
+		return blocked(BlockedPolicyDenied, "working directory must be relative")
+	}
+	root, err := filepath.EvalSymlinks(v.workspaceRoot)
+	if err != nil {
+		return blocked(BlockedConfigInvalid, "verification workspace root is unavailable")
+	}
+	workingDirectory, err = filepath.EvalSymlinks(workingDirectory)
+	if err != nil {
+		return blocked(BlockedPolicyDenied, "working directory is unavailable")
+	}
+	relative, err := filepath.Rel(root, workingDirectory)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return blocked(BlockedPolicyDenied, "working directory escapes verification workspace")
 	}
 
 	command := exec.CommandContext(ctx, executable, config.Args[1:]...)
 	command.Dir = workingDirectory
+	// Never inherit the API worker environment. This is credential minimization,
+	// not filesystem/network isolation: trusted programs can still access the host.
+	command.Env = []string{"PATH=/usr/bin:/bin", "LANG=C", "LC_ALL=C"}
+	command.WaitDelay = 500 * time.Millisecond
+	if !configureProcessGroup(command) {
+		return blocked(BlockedUnavailable, "host command supervision is unavailable on this platform")
+	}
 	output := newCappedBuffer(v.outputLimit)
 	command.Stdout = output
 	command.Stderr = output
 	err = command.Run()
+	terminateProcessGroup(command)
 	result := Result{
 		Status: domain.VerificationPassed, Summary: "command completed successfully",
 		Artifacts: []Artifact{{

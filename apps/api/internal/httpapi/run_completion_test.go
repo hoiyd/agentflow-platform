@@ -263,7 +263,7 @@ func TestVerifyRunRetriesRecoverableEvidenceAndCompletes(t *testing.T) {
 	fixtureStore := fixturestore.New()
 
 	conversation, _ := fixtureStore.CreateConversation("reverify")
-	registry := verification.NewRegistry(verification.Options{})
+	registry := verification.NewRegistry(verification.Options{AllowedHTTPHosts: []string{server.URL}})
 	contract, err := registry.FreezeContract(&domain.CompletionContract{
 		ID: "contract_http", Verifiers: []domain.VerifierSpec{{
 			ID: "health", Type: domain.VerifierHTTP, Required: true,

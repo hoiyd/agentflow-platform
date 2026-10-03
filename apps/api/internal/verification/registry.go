@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"sort"
 	"strings"
 
@@ -19,10 +18,12 @@ import (
 const defaultArtifactBytes = 64 * 1024
 
 type Options struct {
+	// AllowHostCommands is for the trusted local operator only. It is not a sandbox.
+	// Production OIDC composition must leave it false until an isolated runner exists.
+	AllowHostCommands       bool
 	WorkspaceRoot           string
 	AllowedCommands         []string
 	AllowedHTTPHosts        []string
-	HTTPClient              *http.Client
 	MaxArtifactBytes        int
 	AnswerRelevanceEmbedder AnswerRelevanceEmbedder
 }
@@ -83,8 +84,8 @@ func NewRegistry(options Options) *Registry {
 		options.MaxArtifactBytes = defaultArtifactBytes
 	}
 	items := []Verifier{
-		newCommandVerifier(options.WorkspaceRoot, options.AllowedCommands, options.MaxArtifactBytes),
-		newHTTPVerifier(options.HTTPClient, options.AllowedHTTPHosts, options.MaxArtifactBytes),
+		newCommandVerifier(options.AllowHostCommands, options.WorkspaceRoot, options.AllowedCommands, options.MaxArtifactBytes),
+		newHTTPVerifier(options.AllowedHTTPHosts, options.MaxArtifactBytes),
 		jsonSchemaVerifier{},
 		textConstraintsVerifier{},
 		citationVerifier{},
