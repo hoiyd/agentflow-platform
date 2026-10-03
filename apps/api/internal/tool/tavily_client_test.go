@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"agentflow-platform/apps/api/internal/credential"
+	"agentflow-platform/apps/api/internal/egress"
 	"agentflow-platform/apps/api/internal/tool/policy"
 )
 
@@ -56,6 +57,18 @@ func TestTavilyRejectsWrongHostBeforeNetwork(t *testing.T) {
 	_, err := client.Search(context.Background(), json.RawMessage(`{"query":"test"}`))
 	if !tavilyErrorCode(err, ErrorSecurityScopeInvalid) {
 		t.Fatalf("wrong-host denial: %v", err)
+	}
+}
+
+func TestTavilyProductionTransportAndDialDenial(t *testing.T) {
+	client := tavilyTestClient(t)
+	request, _ := http.NewRequest("GET", "http://127.0.0.1:1/credentials", nil)
+	if _, err := client.http.Transport.RoundTrip(request); !errors.Is(err, egress.ErrDenied) {
+		t.Fatalf("production transport did not enforce destination: %v", err)
+	}
+	client.http.Transport = tavilyRoundTripFunc(func(*http.Request) (*http.Response, error) { return nil, egress.ErrDenied })
+	if _, err := client.Search(t.Context(), json.RawMessage(`{"query":"test"}`)); !tavilyErrorCode(err, ErrorSecurityScopeInvalid) || strings.Contains(err.Error(), fakeTavilyKey) {
+		t.Fatalf("unsafe egress failure contract: %v", err)
 	}
 }
 

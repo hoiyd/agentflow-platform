@@ -44,10 +44,15 @@ When unset, the runtime does not grant the logical `tavily_search` scope. The
 value is never placed in Tool configuration, a Descriptor, a Snapshot, or a
 Tool execution request. The trusted `TavilyClient` accepts the credential only
 at construction and sends it in the Authorization header to the fixed
-`https://api.tavily.com/search` endpoint. It uses a direct HTTPS transport,
-rejects all redirects, bounds requests and responses, and returns only safe
+`https://api.tavily.com/search` endpoint. It uses the shared governed egress
+transport: all DNS answers must be public, the connection uses a validated IP
+while TLS verifies the original hostname, and environment proxies are disabled.
+It rejects all redirects, bounds requests and responses, and returns only safe
 typed errors and redacted JSON. The endpoint and Bearer-header format follow
 the [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search).
+
+These are application-level [execution boundaries](../operations/execution-boundaries.md),
+not an OS sandbox or protection for arbitrary third-party network code.
 
 The built-in `web_search` Binding uses this client through the existing Catalog
 and Executor. It is enabled by default and must also appear in an Agent's Tool

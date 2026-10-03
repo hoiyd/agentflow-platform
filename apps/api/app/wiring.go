@@ -148,6 +148,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
 	}
 	verifierRegistry := verification.NewRegistry(verification.Options{
+		AllowHostCommands:       cfg.AuthMode == "local",
 		WorkspaceRoot:           cfg.VerificationWorkspaceRoot,
 		AllowedCommands:         splitCSV(cfg.VerificationAllowedCommands),
 		AllowedHTTPHosts:        splitCSV(cfg.VerificationAllowedHTTPHosts),

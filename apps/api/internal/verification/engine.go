@@ -248,6 +248,8 @@ func boundedArtifactContent(content string, limit int) (string, bool) {
 	if !utf8.ValidString(content) {
 		content = strings.ToValidUTF8(content, "\uFFFD")
 	}
+	// HTTP/command output can be binary; Postgres TEXT cannot contain NUL.
+	content = strings.ReplaceAll(content, "\x00", "\uFFFD")
 	if limit > 0 && len(content) > limit {
 		content = content[:limit]
 		for !utf8.ValidString(content) {

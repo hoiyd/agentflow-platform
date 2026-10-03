@@ -155,13 +155,13 @@ type Config struct {
 	ToolProgressBlockAfter int
 	// ToolProgressHaltAfter terminates the Turn when blocked attempts continue.
 	ToolProgressHaltAfter int
-	// VerificationWorkspaceRoot bounds command verifier working directories. Empty disables command execution.
+	// VerificationWorkspaceRoot checks canonical cwd for trusted-local host commands, not an OS sandbox. Empty disables them.
 	VerificationWorkspaceRoot string
-	// VerificationAllowedCommands is a comma-separated executable allowlist for command verifiers.
+	// VerificationAllowedCommands grants absolute executables only in local auth mode; OIDC cannot execute host commands.
 	VerificationAllowedCommands string
-	// VerificationAllowedHTTPHosts extends HTTP verification beyond loopback hosts.
+	// VerificationAllowedHTTPHosts grants exact origins (bare public names mean HTTPS:443); no implicit loopback access.
 	VerificationAllowedHTTPHosts string
-	// VerificationMaxArtifactBytes caps persisted raw output per verifier while retaining its full byte count and hash.
+	// VerificationMaxArtifactBytes caps retained output. HTTP consumption is separately capped at 1 MiB; hashes cover observed bytes.
 	VerificationMaxArtifactBytes int
 	AllowedOrigins               string
 }

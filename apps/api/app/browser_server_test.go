@@ -86,7 +86,7 @@ func TestBrowserServer(t *testing.T) {
 		cfg.OwnerModelQueueSize, cfg.OwnerModelQueueWaitTimeout = 0, 3*time.Second
 	}
 	var oidcProvider *oidcfixture.Provider
-	if os.Getenv("AGENTFLOW_IDENTITY_TEST") == "1" {
+	if os.Getenv("AGENTFLOW_IDENTITY_TEST") == "1" || os.Getenv("AGENTFLOW_EXECUTION_BOUNDARY_TEST") == "1" {
 		t.Setenv("OIDC_CLIENT_SECRET", "fixture-only")
 		oidcProvider = oidcfixture.New(t, "http://127.0.0.1:18080/api/auth/callback")
 		oidcProvider.RequireSignIn()
@@ -102,6 +102,10 @@ func TestBrowserServer(t *testing.T) {
 	}
 	cfg.VerificationAllowedCommands, cfg.VerificationAllowedHTTPHosts = "", ""
 	cfg.VerificationWorkspaceRoot = root
+	var boundary http.HandlerFunc
+	if os.Getenv("AGENTFLOW_EXECUTION_BOUNDARY_TEST") == "1" {
+		boundary = browserExecutionBoundary(t, &cfg, root)
+	}
 	application, err := New(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -123,6 +127,9 @@ func TestBrowserServer(t *testing.T) {
 	}
 	production := application.server.Handler
 	controls := http.NewServeMux()
+	if boundary != nil {
+		controls.HandleFunc("GET /__fixture/execution-boundary", boundary)
+	}
 	if oidcProvider != nil {
 		controls.HandleFunc("POST /__fixture/identity/subject", func(w http.ResponseWriter, r *http.Request) {
 			var input struct {
