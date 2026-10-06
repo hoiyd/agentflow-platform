@@ -167,6 +167,14 @@ is accepted only when exactly one of Top-K, threshold, chunker, retrieval mode,
 Embedding, Fusion, Reranker, Relevance Gate, or security policy differs; the
 changed field is recorded.
 
+[Optional TEI Cross-Encoder evaluation](../knowledge/cross-encoder-reranking.md#single-variable-evidence)
+adds `--reranker tei --live-reranking` and declared deployment settings. A
+reranker-only ablation also requires identical per-Case `candidate_set_hash`
+values; regenerate older baselines without this evidence. Reports retain
+`rerank_latency_ms` separately from complete query latency; priced TEI usage
+is unavailable, not zero. Keep recall, embedding, thresholds, and the relevance
+gate unchanged when measuring the ranking variable.
+
 ### Semantic retrieval profile
 
 `eval rag` can explicitly replace the deterministic hash embedder with one real

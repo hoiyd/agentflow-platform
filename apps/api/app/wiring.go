@@ -169,7 +169,15 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		AnswerRelevanceEmbedder: newAnswerRelevanceEmbedder(embeddingClient),
 	})
 	verificationEngine := verification.NewEngine(appStore, verifierRegistry)
-	retrievalPipeline := rag.NewRetrievalPipeline(appStore)
+	reranker, err := rag.NewReranker(rag.RerankerConfig{
+		Mode: cfg.RerankerMode, BaseURL: cfg.RerankerBaseURL, Model: cfg.RerankerModel, Revision: cfg.RerankerRevision,
+		Timeout: cfg.RerankerTimeout, MaxConcurrent: cfg.RerankerMaxConcurrentRequests,
+		APIKey: credential.FromEnvironment("RERANKER_API_KEY"),
+	})
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("configure reranker: %w", err)
+	}
+	retrievalPipeline := rag.NewRetrievalPipelineWithReranker(appStore, reranker)
 	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, embeddingClient, retrievalPipeline)
 	skills, err := skill.LoadRoots(splitCSV(cfg.TrustedSkillDirectories))
 	if err != nil {

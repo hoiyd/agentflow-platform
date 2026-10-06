@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/knowledge"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/store"
@@ -203,6 +204,16 @@ func writeKnowledgeError(w http.ResponseWriter, r *http.Request, err error) {
 		status = http.StatusConflict
 	} else if knowledge.IsEmbeddingError(err) {
 		status = http.StatusBadGateway
+	} else if info := failure.Describe(err); info.Source == "reranker" && info.Code != "reranker_invalid_input" {
+		// Operator credentials and upstream response failures are not errors in
+		// the user's search request. Preserve the safe code, not provider bodies.
+		status = http.StatusBadGateway
+		if info.Category == failure.CategoryCapacity {
+			status = http.StatusServiceUnavailable
+		}
+		if info.Category == failure.CategoryTimeout {
+			status = http.StatusGatewayTimeout
+		}
 	}
 	writeFailure(w, r, status, err)
 }

@@ -31,6 +31,16 @@ type Config struct {
 	EmbeddingModel          string
 	EmbeddingDimensions     int
 	EmbeddingRequestTimeout time.Duration
+	// RerankerMode is heuristic by default; tei explicitly sends scoped candidates
+	// to the operator-configured inference service, not to a model-selected Tool.
+	RerankerMode    string
+	RerankerBaseURL string
+	// Model/Revision declare the pinned TEI deployment; TEI responses do not attest them.
+	RerankerModel, RerankerRevision string
+	RerankerTimeout                 time.Duration
+	// RerankerMaxConcurrentRequests bounds physical rerank calls independently of
+	// Chat/Embedding admission. Full slots reject immediately; no waiting queue.
+	RerankerMaxConcurrentRequests int
 	// MaxConcurrentRuns caps active Agent runs across all conversations.
 	MaxConcurrentRuns int
 	// RunQueueSize is the additional bounded waiting capacity beyond active runs.
@@ -202,6 +212,12 @@ func Load() Config {
 		EmbeddingModel:                    getEnv("EMBEDDING_MODEL", "embeddinggemma"),
 		EmbeddingDimensions:               getIntEnv("EMBEDDING_DIMENSIONS", 1536),
 		EmbeddingRequestTimeout:           getDurationEnv("EMBEDDING_REQUEST_TIMEOUT", 5*time.Minute),
+		RerankerMode:                      getEnv("RERANKER_MODE", "heuristic"),
+		RerankerBaseURL:                   getEnv("RERANKER_BASE_URL", ""),
+		RerankerModel:                     getEnv("RERANKER_MODEL", ""),
+		RerankerRevision:                  getEnv("RERANKER_REVISION", ""),
+		RerankerTimeout:                   getDurationEnv("RERANKER_TIMEOUT", 3*time.Second),
+		RerankerMaxConcurrentRequests:     getIntEnv("RERANKER_MAX_CONCURRENT_REQUESTS", 2),
 		MaxConcurrentRuns:                 getIntEnv("MAX_CONCURRENT_RUNS", 8),
 		RunQueueSize:                      getNonNegativeIntEnv("RUN_QUEUE_SIZE", 32),
 		RunQueueWaitTimeout:               getDurationEnv("RUN_QUEUE_WAIT_TIMEOUT", 30*time.Second),

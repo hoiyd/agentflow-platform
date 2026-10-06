@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { searchRAG, type DocumentSearchResponse } from "../../lib/knowledge-api";
+import { APIError } from "../../lib/api-client";
 import { createLatestRequestController } from "../../lib/latest-request";
 
 export function useKnowledgeSearch(minSimilarity: string, setMinSimilarity: Dispatch<SetStateAction<string>>) {
@@ -51,7 +52,10 @@ export function useKnowledgeSearch(minSimilarity: string, setMinSimilarity: Disp
       }, request.signal);
       if (request.isCurrent()) setResponse(next);
     } catch (searchError) {
-      if (request.isCurrent()) setError(searchError instanceof Error ? searchError.message : "Failed to search knowledge");
+      if (request.isCurrent()) {
+        const message = searchError instanceof Error ? searchError.message : "Failed to search knowledge";
+        setError(searchError instanceof APIError ? `${message} [${searchError.source}:${searchError.code}]` : message);
+      }
     } finally {
       if (request.isCurrent()) setIsSearching(false);
     }

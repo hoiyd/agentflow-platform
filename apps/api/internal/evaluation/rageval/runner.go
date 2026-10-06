@@ -33,6 +33,8 @@ type Options struct {
 	Revision                string
 	RetrievalMode           string
 	EmbeddingProfile        EmbeddingProfileOptions
+	Reranker                rag.RerankerConfig
+	LiveReranking           bool
 }
 
 type Config struct {
@@ -94,6 +96,8 @@ type Sample struct {
 	LeakCount         int            `json:"leak_count"`
 	BlockedCandidates int            `json:"blocked_candidates"`
 	LatencyMS         int64          `json:"latency_ms"`
+	CandidateSetHash  string         `json:"candidate_set_hash,omitempty"`
+	RerankLatencyMS   int64          `json:"rerank_latency_ms"`
 	FailureReason     string         `json:"failure_reason,omitempty"`
 	ErrorCode         string         `json:"error_code,omitempty"`
 	Error             string         `json:"error,omitempty"`
@@ -181,6 +185,18 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	if opts.RetrievalMode != rag.RetrievalModeHybrid && opts.RetrievalMode != rag.RetrievalModeDenseOnly && opts.RetrievalMode != rag.RetrievalModeLexicalOnly {
 		return Report{}, errors.New("retrieval mode must be hybrid, dense_only, or lexical_only")
 	}
+	mode := strings.ToLower(strings.TrimSpace(opts.Reranker.Mode))
+	if mode == "tei" && !opts.LiveReranking {
+		return Report{}, errors.New("TEI evaluation requires explicit live-reranking authorization")
+	}
+	reranker, err := rag.NewReranker(opts.Reranker)
+	if err != nil {
+		return Report{}, err
+	}
+	identity, err := reranker.Rerank(ctx, rag.RerankRequest{})
+	if err != nil {
+		return Report{}, err
+	}
 	embedder, err := newEvaluationEmbedder(opts.EmbeddingProfile)
 	if err != nil {
 		return Report{}, err
@@ -208,11 +224,15 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		gateConfig.ConfigVersion = fmt.Sprintf("eval-evidence-coverage-%.2f", gateConfig.MinimumEvidenceCoverage)
 	}
 	relevanceGate := rag.NewHeuristicRelevanceGate(gateConfig)
-	retriever := rag.NewRetrievalPipelineWithMode(fixtureStore, nil, relevanceGate, opts.RetrievalMode)
+	evidence := &rerankerEvidence{Reranker: reranker}
+	retriever := rag.NewRetrievalPipelineWithMode(fixtureStore, evidence, relevanceGate, opts.RetrievalMode)
 	base := knowledge.NewKnowledgeBaseWithRetriever(fixtureStore, embedder, retriever)
 	costSource := "not_applicable: deterministic local embedding"
 	if embedder.options.Name != EmbeddingProfileHash {
 		costSource = "unavailable: embedding API usage and pricing were not reported"
+	}
+	if mode == "tei" {
+		costSource = "unavailable: reranker usage and pricing were not reported; embedding profile recorded separately"
 	}
 	evaluationKind := "offline_rag"
 	if embedder.options.Name != EmbeddingProfileHash {
@@ -224,7 +244,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		Corpus: CorpusIdentity{DatasetID: manifest.DatasetID, Version: manifest.Version, Hash: corpusHash, Documents: len(documents)},
 		Config: Config{TopK: opts.TopK, MinSimilarity: opts.MinSimilarity,
 			MinimumEvidenceCoverage: opts.MinimumEvidenceCoverage, Chunker: rag.DocumentChunkerVersion, RetrievalMode: opts.RetrievalMode},
-		Pipeline: PipelineIdentity{Fusion: rag.RRFInfo(), Reranker: rag.NewHeuristicReranker(rag.DefaultHeuristicRerankerConfig()).Info(),
+		Pipeline: PipelineIdentity{Fusion: rag.RRFInfo(), Reranker: identity.Info,
 			RelevanceGate: relevanceGate.Info(), SecurityPolicy: rag.PromptInjectionPolicyVersion},
 		EmbeddingProfile: EmbeddingProfileReport{Name: embedder.options.Name, Live: embedder.options.Live,
 			ConfiguredModel: embedder.options.Model, ConfiguredDimensions: embedder.options.Dimensions,
@@ -260,7 +280,9 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 	report.Pipeline.Embedding, _ = embedder.report()
 	queryStarted := time.Now()
 	for _, evaluationCase := range dataset.Cases {
+		evidence.hash, evidence.latencyMS = "", 0
 		sample := runSample(withEmbeddingPhase(ctx, phaseQuery), base, evaluationCase, opts.TopK, opts.MinSimilarity, &report.Pipeline)
+		sample.CandidateSetHash, sample.RerankLatencyMS = evidence.hash, evidence.latencyMS
 		report.Samples = append(report.Samples, sample)
 	}
 	report.QueryDurationMS = time.Since(queryStarted).Milliseconds()
@@ -475,6 +497,9 @@ func Compare(current, baseline Report, singleVariableAblation bool) Comparison {
 		comparison.Reasons = append(comparison.Reasons, "corpus identity differs")
 	}
 	comparison.ChangedVariables = changedVariables(current, baseline)
+	if len(comparison.ChangedVariables) == 1 && comparison.ChangedVariables[0] == "reranker" && !sameCandidateInputs(current.Samples, baseline.Samples) {
+		comparison.Reasons = append(comparison.Reasons, "reranker ablation requires identical recorded candidate inputs; regenerate missing baseline evidence")
+	}
 	if len(comparison.ChangedVariables) > 0 && (!singleVariableAblation || len(comparison.ChangedVariables) != 1) {
 		comparison.Reasons = append(comparison.Reasons, "pipeline comparison requires identical inputs or exactly one explicit ablation variable")
 	}
