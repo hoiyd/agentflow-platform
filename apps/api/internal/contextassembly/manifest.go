@@ -79,8 +79,8 @@ func prefixHash(messages []Message, tools []Tool) string {
 	hasher := sha256.New()
 	for _, message := range messages {
 		if message.Source == SourceSystem || message.Role == "system" {
-			_, _ = hasher.Write([]byte(message.Content))
-			break
+			encoded, _ := json.Marshal(message)
+			_, _ = hasher.Write(encoded)
 		}
 	}
 	for _, tool := range tools {

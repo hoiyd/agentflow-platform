@@ -47,6 +47,7 @@ related pages link to its contract rather than copying configuration or algorith
 ## Tools and Skills
 
 - [Security policy](tools/tool-security-policy.md): capabilities, derived journal boundary, scope, credentials, and new-Tool registration.
+- [Agent instruction/data boundaries](operations/agent-security.md): fixed platform guidance, private-data Tool egress, approval semantics and attack regressions.
 - [Bounded Tool loop](tools/bounded-tool-loop.md): model/Tool rounds, complete continuation protocol, streaming, and recovery limits.
 - [Result Artifacts](tools/tool-result-artifacts.md), [Progress Guard](tools/tool-progress-guard.md), and [side-effect reconciliation](tools/tool-side-effect-reconciliation.md).
 - [Scoped Knowledge bindings](tools/scoped-knowledge-tools.md) and [Web citations](tools/web-source-citations.md).

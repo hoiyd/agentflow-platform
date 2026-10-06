@@ -66,6 +66,11 @@ func TestBrowserServer(t *testing.T) {
 	}
 	t.Setenv("BROWSER_FIXTURE_KEY", "fixture-not-a-secret")
 	t.Setenv("TAVILY_API_KEY", "")
+	if os.Getenv("AGENTFLOW_PROMPT_SECURITY_TEST") == "1" {
+		// Only makes the real Binding available. The gate must deny before HTTP;
+		// its query is public and this fixture credential cannot authenticate.
+		t.Setenv("TAVILY_API_KEY", "fixture-only")
+	}
 	t.Setenv("EMBEDDING_API_KEY", "fixture-not-a-secret")
 	// Load defaults from the empty temporary directory (never an operator .env), then
 	// explicitly bind every external resource to fixtures, never operator data.

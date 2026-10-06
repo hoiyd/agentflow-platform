@@ -19,7 +19,7 @@ type candidate struct {
 func Assemble(ctx context.Context, request Request) (Pack, error) {
 	session, active := sessionFromContext(ctx)
 	if !active {
-		return Pack{Messages: cloneMessages(request.Messages)}, nil
+		return Pack{Messages: withPlatformPolicy(request.Messages)}, nil
 	}
 	config := NormalizeConfig(session.Config)
 	inputBudget := config.ContextWindowTokens - config.OutputReserveTokens - config.SafetyMarginTokens
@@ -33,12 +33,22 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 			taskState = &loaded
 		}
 	}
-	messages := normalizeMessages(mergeSessionHistory(request.Messages, session))
+	// Remove previously assembled platform guidance before adding Skill/retrieval
+	// policies, so a follow-up cannot mutate or duplicate the fixed message.
+	raw := cloneMessages(request.Messages)
+	filtered := raw[:0]
+	for _, message := range raw {
+		if message.Source != SourcePlatformPolicy {
+			filtered = append(filtered, message)
+		}
+	}
+	messages := normalizeMessages(mergeSessionHistory(filtered, session))
 	messages, err := appendSkillContext(messages, session)
 	if err != nil {
 		return Pack{}, fmt.Errorf("load frozen Skill context: %w", err)
 	}
 	messages = applyRetrievedContextTrustPolicy(messages)
+	messages = withPlatformPolicy(messages)
 	entries := make([]domain.ContextManifestEntry, 0, len(messages)+len(request.Tools)+len(session.Memories)+len(session.Knowledge)+1)
 	messageCandidates := make([]candidate, 0, len(messages))
 	requiredTokens := 0
@@ -67,6 +77,9 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 			Selected:         required, Reason: reasonForMessage(message.Source, required),
 			Transformation: transformation, EstimatedTokens: tokens, OriginalBytes: originalBytes,
 			ArtifactIDs: artifactIDs,
+		}
+		if message.Source == SourcePlatformPolicy {
+			entry.PolicyVersion = PlatformSecurityPolicyVersion
 		}
 		if message.Source == SourceSkillInstructions {
 			fields := strings.Fields(session.CurrentInput)
@@ -292,7 +305,7 @@ func excludeCompactedHistory(messages []Message, compaction *domain.ContextCompa
 
 func isRequiredSource(source string) bool {
 	switch source {
-	case SourceSystem, SourceCurrentInput, SourceToolCall, SourceToolResult, SourceSkillMetadata, SourceSkillInstructions:
+	case SourceSystem, SourcePlatformPolicy, SourceCurrentInput, SourceToolCall, SourceToolResult, SourceSkillMetadata, SourceSkillInstructions:
 		return true
 	default:
 		return false

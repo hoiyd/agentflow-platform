@@ -135,6 +135,7 @@ func (t *ToolExecutionTracer) ToolFinished(ctx context.Context, result tool.Exec
 		"error":               result.ErrorMessage(),
 		"truncated":           result.Truncated,
 		"replayed":            result.Replayed,
+		"private_data":        result.PrivateData,
 	}
 	if result.Error != nil {
 		payload["error_code"] = string(result.Error.Code)
