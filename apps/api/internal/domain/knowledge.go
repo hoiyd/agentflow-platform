@@ -165,8 +165,8 @@ type FusionInfo struct {
 }
 
 // RerankerInfo identifies the active ranking implementation and its immutable
-// configuration. Provider and Model are reserved for future model-backed
-// implementations such as a Cross-Encoder.
+// configuration. Provider and Model describe model-backed implementations.
+// TEI identity is operator-declared: its score response has no model attestation.
 type RerankerInfo struct {
 	Algorithm     string `json:"algorithm"`
 	Version       string `json:"version"`

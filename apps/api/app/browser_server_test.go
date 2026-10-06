@@ -87,6 +87,15 @@ func TestBrowserServer(t *testing.T) {
 	cfg.AllowedOrigins = "http://127.0.0.1:13000"
 	cfg.AuthMode = "local"
 	cfg.SandboxEnabled = false
+	// Always override operator reranker variables: only this opt-in gate calls
+	// the controlled provider, and ordinary browser suites remain heuristic.
+	cfg.RerankerMode = "heuristic"
+	t.Setenv("RERANKER_API_KEY", "")
+	if os.Getenv("AGENTFLOW_RERANKER_TEST") == "1" {
+		cfg.RerankerMode, cfg.RerankerBaseURL = "tei", providerServer.URL
+		cfg.RerankerModel, cfg.RerankerRevision = "fixture-cross-encoder", "fixture-revision"
+		cfg.RerankerTimeout, cfg.RerankerMaxConcurrentRequests = time.Second, 2
+	}
 	if os.Getenv("AGENTFLOW_SANDBOX_BROWSER_TEST") == "1" {
 		browserSandboxConfig(t, &cfg, root)
 	}

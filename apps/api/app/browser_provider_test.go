@@ -41,6 +41,33 @@ func (f *browserProvider) reject(w http.ResponseWriter, message string) {
 }
 
 func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/rerank" {
+		var input struct {
+			Query      string   `json:"query"`
+			Texts      []string `json:"texts"`
+			RawScores  *bool    `json:"raw_scores"`
+			ReturnText *bool    `json:"return_text"`
+			Truncate   *bool    `json:"truncate"`
+		}
+		if r.Method != http.MethodPost || json.NewDecoder(r.Body).Decode(&input) != nil || input.Query == "" || len(input.Texts) == 0 || input.RawScores == nil || *input.RawScores || input.ReturnText == nil || *input.ReturnText || input.Truncate == nil || *input.Truncate {
+			f.reject(w, "invalid cross-encoder wire contract")
+			return
+		}
+		if strings.Contains(input.Query, "reranker-failure") {
+			http.Error(w, "PRIVATE_RERANKER_RESPONSE", http.StatusServiceUnavailable)
+			return
+		}
+		if strings.Contains(input.Query, "reranker-timeout") {
+			<-r.Context().Done()
+			return
+		}
+		scores := []map[string]any{}
+		for index := range input.Texts {
+			scores = append(scores, map[string]any{"index": index, "score": 0.9})
+		}
+		_ = json.NewEncoder(w).Encode(scores)
+		return
+	}
 	if r.URL.Path == "/embeddings" {
 		vector := make([]float64, 1536)
 		vector[0] = 1

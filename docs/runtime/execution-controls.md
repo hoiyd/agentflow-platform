@@ -18,6 +18,7 @@ upload limits, and Memory confidence belong to their subsystem contracts.
 | One input does not fit | Context Assembly | Cumulative Run tokens |
 | Agent repeats work | Loop / Tool Progress Guard | Model Retry |
 | Tool hangs, spills, or is unsafe in parallel | Tool Executor | Run concurrency |
+| Optional reranker saturates or times out | Reranker batch slots/deadline | Chat model limiter or Run token budget |
 | Verification cannot pass / artifacts grow | Completion Contract | Model Retry |
 | Crashed Run remains open | Recovery | Active-runtime cap |
 
@@ -27,6 +28,7 @@ upload limits, and Memory confidence belong to their subsystem contracts.
 | --- | --- | --- | --- |
 | Run admission | Process + Conversation; active/queued Runs | `concurrency.RunController` | Live process policy |
 | Model limiter | Process + owner + API key; physical requests, pending attempts, estimated input tokens/minute | `concurrency.ModelRequestLimiter` | Live buckets/permits; owner resolved from Session/Run and Workspace |
+| Reranker | Process; physical TEI batches, bytes, candidate count, deadline | `rag` Cross-Encoder adapter | Live operator config; declared identity in retrieval events |
 | Model routing | Run; eligible target for one logical call | `routing.Catalog` | Frozen contracts and affinity |
 | Retry | Logical Model Call; physical attempts | `openai.RetryPolicy` | Live process policy |
 | Run Budget | Run; calls, tokens, Tools, active time, estimated cost | `budget.Tracker` + Usage Store | Frozen budget; durable ledger |
@@ -49,6 +51,13 @@ Multi Workers share that Run's admission slot, budget, and model limits; their
 [isolation](execution-modes.md#isolated-worker-stage) is a Stage policy.
 
 ## 2. Model Request Limiter
+
+Optional [Cross-Encoder reranking](../knowledge/cross-encoder-reranking.md) uses
+separate `RERANKER_MAX_CONCURRENT_REQUESTS` and `RERANKER_TIMEOUT` limits. It is
+not a Chat/Embedding call: no shared RPM/TPM, owner fairness queue, Run token/cost
+budget, or Usage Ledger settlement applies. Its process cap rejects excess
+immediately; price/usage remains unknown. The scoped retrieval policy and
+resource authorization still apply before candidate text is sent.
 
 - `MAX_CONCURRENT_MODEL_REQUESTS` counts physical Chat/Embedding HTTP requests,
   not models or pool connections. Streams hold a slot until the body closes.

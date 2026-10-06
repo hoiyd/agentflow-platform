@@ -174,9 +174,12 @@ interface. The default `HeuristicReranker` preserves the existing lexical,
 metadata, evidence, and document-diversity scoring policy. It reports
 `heuristic-reranker-v1` with configuration `heuristic-default-v1` in search,
 evaluation, and retrieval-trace metadata. The interface accepts a request
-context and returns `RerankResult` with the actual per-request implementation
-metadata, so a future Cross-Encoder can support cancellation, provider failure
-handling, model routing, and fallback without changing the pipeline contract.
+context and returns `RerankResult` with per-request implementation metadata.
+An optional [TEI Cross-Encoder](cross-encoder-reranking.md) uses the same Pipeline
+for HTTP, Knowledge Tools, and all Run modes. It provides bounded HTTP calls,
+cancellation, safe failures, and declared model/configuration identity without
+changing API shapes. It does not route models or silently fall back; the default
+remains heuristic until representative evaluation justifies switching.
 Rerankers must return the complete requested Top-K in score order and may only
 change ranking-owned fields; source content and recall evidence remain owned by
 the upstream pipeline.

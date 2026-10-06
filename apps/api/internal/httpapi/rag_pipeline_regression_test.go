@@ -139,6 +139,14 @@ func newPipelineRegressionFixture(t *testing.T) *pipelineRegressionFixture {
 }
 
 func newPipelineRegressionFixtureWithSearchStore(t *testing.T, searchStore rag.SearchStore) *pipelineRegressionFixture {
+	return newPipelineRegressionFixtureWithDependencies(t, searchStore, nil)
+}
+
+func newPipelineRegressionFixtureWithReranker(t *testing.T, reranker rag.Reranker) *pipelineRegressionFixture {
+	return newPipelineRegressionFixtureWithDependencies(t, nil, reranker)
+}
+
+func newPipelineRegressionFixtureWithDependencies(t *testing.T, searchStore rag.SearchStore, reranker rag.Reranker) *pipelineRegressionFixture {
 	t.Helper()
 	fixture := &pipelineRegressionFixture{}
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +208,7 @@ func newPipelineRegressionFixtureWithSearchStore(t *testing.T, searchStore rag.S
 	if searchStore == nil {
 		searchStore = fullStore
 	}
-	pipeline := rag.NewRetrievalPipeline(searchStore)
+	pipeline := rag.NewRetrievalPipelineWithReranker(searchStore, reranker)
 	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(fullStore, client, pipeline)
 	dependencies.Knowledge = knowledgeBase
 	dependencies.AgentRuntime = newRuntimeForTest(agentpkg.RuntimeOptions{Store: fullStore, KnowledgeRetriever: pipeline, Autonomous: agentpkg.AutonomousLimits{MaxIterations: 1}}, client)

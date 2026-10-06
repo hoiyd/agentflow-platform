@@ -22,6 +22,7 @@ import (
 	"agentflow-platform/apps/api/internal/evaluation/tooleval"
 	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/inference/routing"
+	"agentflow-platform/apps/api/internal/rag"
 )
 
 func main() {
@@ -244,6 +245,12 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 	minSimilarity := flags.Float64("min-similarity", 0.15, "minimum dense similarity (0-1)")
 	minimumEvidenceCoverage := flags.Float64("min-evidence-coverage", 0.25, "minimum query-term coverage required by the relevance gate (0.05-1)")
 	retrievalMode := flags.String("retrieval-mode", "hybrid", "retrieval mode: dense_only, lexical_only, or hybrid")
+	rerankerMode := flags.String("reranker", "heuristic", "reranker: heuristic or tei")
+	liveReranking := flags.Bool("live-reranking", false, "explicitly authorize sending evaluation candidates to the reranker")
+	rerankerBaseURL := flags.String("reranker-base-url", "", "TEI HTTP(S) origin")
+	rerankerModel := flags.String("reranker-model", "", "declared pinned TEI model ID")
+	rerankerRevision := flags.String("reranker-revision", "", "declared pinned model revision")
+	rerankerTimeout := flags.Duration("reranker-timeout", 3*time.Second, "per rerank request deadline")
 	embeddingProfile := flags.String("embedding-profile", "hash", "embedding profile: hash, openai_compatible, or ollama")
 	liveEmbeddings := flags.Bool("live-embeddings", false, "explicitly authorize embedding model requests")
 	embeddingBaseURL := flags.String("embedding-base-url", "https://api.openai.com/v1", "OpenAI-compatible base URL or Ollama /api/embed URL")
@@ -271,6 +278,7 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 	}
 	report, err := rageval.Run(ctx, rageval.Options{DatasetPath: *dataset, CorpusManifestPath: *manifest,
 		TopK: *topK, MinSimilarity: *minSimilarity, MinimumEvidenceCoverage: *minimumEvidenceCoverage, RetrievalMode: *retrievalMode,
+		Reranker: rag.RerankerConfig{Mode: *rerankerMode, BaseURL: *rerankerBaseURL, Model: *rerankerModel, Revision: *rerankerRevision, Timeout: *rerankerTimeout, APIKey: credential.FromEnvironment("RERANKER_API_KEY")}, LiveReranking: *liveReranking,
 		EmbeddingProfile: rageval.EmbeddingProfileOptions{Name: *embeddingProfile, Live: *liveEmbeddings, APIKey: credential.FromEnvironment("OPENAI_API_KEY").Reveal(),
 			BaseURL: *embeddingBaseURL, Model: *embeddingModel, Dimensions: *embeddingDimensions, MaxCalls: *maxEmbeddingCalls,
 			MaxInputTokens: *maxEmbeddingInputTokens, RetryMaxAttempts: *embeddingRetryAttempts, Timeout: *embeddingTimeout},
