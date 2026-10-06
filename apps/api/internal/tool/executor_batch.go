@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+
+	"agentflow-platform/apps/api/internal/tool/policy"
 )
 
 // ExecuteBatch preserves input order. A serial or unresolved tool makes the whole
@@ -13,6 +15,15 @@ import (
 func (e *Executor) ExecuteBatch(ctx context.Context, requests []ExecutionRequest) []ExecutionResult {
 	if len(requests) == 0 {
 		return nil
+	}
+	// A mixed batch must not race a private read against network egress. Even a
+	// subsequently rejected read keeps this batch conservative; split public
+	// lookups into an earlier round instead of relying on input order.
+	for _, request := range requests {
+		if binding, ok := e.catalog.Resolve(request.Tool); ok && policy.UsesPrivateResources(binding.Descriptor.Security) {
+			e.ProtectPrivateData()
+			break
+		}
 	}
 	groups, parallel := e.concurrentGroups(requests)
 	if !parallel || len(groups) == 1 {

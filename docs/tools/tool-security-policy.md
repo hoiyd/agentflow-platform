@@ -13,6 +13,12 @@ An Agent allowlist can remove authority but cannot grant it. User messages,
 retrieved knowledge, Memory, web content, Tool results, and remote Tool metadata
 are untrusted data and cannot mutate these controls.
 
+The Executor additionally denies data-transmission Tools after private Run data
+has been exposed, and rejects common credential-shaped outbound arguments before
+execution. These restrictions cannot be overridden by a claimed approval in an
+Agent prompt. See [Agent instruction/data boundaries](../operations/agent-security.md)
+for the conservative Run-scoped behavior, restoration and limitations.
+
 ## Capability Contract
 
 Every local Binding owns a trusted `security` declaration. Its capability

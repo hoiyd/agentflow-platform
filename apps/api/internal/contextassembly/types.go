@@ -23,6 +23,7 @@ const (
 
 const (
 	SourceSystem            = "system"
+	SourcePlatformPolicy    = "platform_policy"
 	SourceToolDefinition    = "tool_definition"
 	SourceHistory           = "history"
 	SourceCurrentInput      = "current_input"

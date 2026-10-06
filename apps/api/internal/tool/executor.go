@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -54,6 +55,7 @@ type ExecutionResult struct {
 	PolicyDecision      *policy.Decision              `json:"-"`
 	ProgressDecision    *progress.Decision            `json:"-"`
 	ProgressWarning     string                        `json:"progress_warning,omitempty"`
+	PrivateData         bool                          `json:"private_data,omitempty"`
 	encodedResult       []byte
 }
 
@@ -89,6 +91,8 @@ type ToolEffectJournal interface {
 
 type ExecutorOptions struct {
 	DefaultPolicy ExecutionPolicy
+	// PrivateContext is trusted data-flow state, not an argument or user approval.
+	PrivateContext bool
 	// CredentialScopes are trusted logical grants, never credential values.
 	CredentialScopes     []string `json:"-"`
 	Tracer               ExecutionTracer
@@ -114,6 +118,7 @@ type Executor struct {
 	maxBatchResultBytes int
 	securityPolicy      policy.Policy
 	progressGuard       *progress.Guard
+	privateData         atomic.Bool
 }
 
 func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
@@ -133,7 +138,7 @@ func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
 		maxBatchResultBytes = DefaultMaxBatchResultBytes
 	}
 	securityPolicy := catalog.SecurityPolicy()
-	return &Executor{
+	executor := &Executor{
 		catalog: catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency,
 		credentialScopes: append([]string(nil), options.CredentialScopes...),
 		effectJournal:    options.EffectJournal, maxBatchResultBytes: maxBatchResultBytes,
@@ -141,7 +146,13 @@ func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
 		securityPolicy:   securityPolicy,
 		progressGuard:    options.ProgressGuard,
 	}
+	executor.privateData.Store(options.PrivateContext)
+	return executor
 }
+
+// ProtectPrivateData is monotonic for this Executor. New rounds cannot clear
+// exposure by omitting an excerpt or by claiming that the user approved egress.
+func (e *Executor) ProtectPrivateData() { e.privateData.Store(true) }
 
 func (e *Executor) Execute(ctx context.Context, request ExecutionRequest) ExecutionResult {
 	result := e.execute(ctx, request, true)
@@ -195,6 +206,10 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 	if decision.AuditRequired() && auditErr != nil {
 		result.Error = executionError(ErrorSecurityAudit, "required Tool security audit could not be persisted", auditErr)
 		return result
+	}
+	if policy.UsesPrivateResources(decision.Capability) {
+		e.ProtectPrivateData()
+		result.PrivateData = true
 	}
 	progressCall := e.progressCall(request, binding)
 	if e.applyProgressBefore(ctx, request, progressCall, &result) {

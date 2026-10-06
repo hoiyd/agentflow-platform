@@ -62,6 +62,18 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		return err
 	}
 	definitions := catalog.Definitions()
+	options := request.ExecutorOptions
+	if request.RunEvents != nil && len(definitions) > 0 {
+		items, err := request.RunEvents()
+		if err != nil {
+			return fmt.Errorf("restore Tool data boundary: %w", err)
+		}
+		private, err := privateRunEvidence(items, catalog)
+		if err != nil {
+			return err
+		}
+		options.PrivateContext = options.PrivateContext || private
+	}
 	prepared, err := model.PrepareAgentChat(ctx, provider.ChatRequest{
 		SystemPrompt: request.SystemPrompt, History: request.History, Latest: request.Latest,
 		ToolNames: catalog.EnabledNames(), Definitions: definitions,
@@ -73,7 +85,7 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		_, err = model.StreamAnswer(ctx, prepared, provider.ChatStreamAnswer, request.Trace, events)
 		return err
 	}
-	options := request.ExecutorOptions
+	options.PrivateContext = options.PrivateContext || contextassembly.ContainsPrivateData(prepared.Manifest)
 	options.Tracer = &executionTracer{
 		delegate: eventpkg.NewToolExecutionTracer(request.Trace.Recorder, request.Trace.RunID, request.Trace.StepID),
 		events:   events,
@@ -93,6 +105,9 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 	for round := 1; ; round++ {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		if contextassembly.ContainsPrivateData(prepared.Manifest) {
+			executor.ProtectPrivateData()
 		}
 		choice, err := model.StreamToolRound(ctx, prepared, definitions, request.Trace, events)
 		if err != nil {

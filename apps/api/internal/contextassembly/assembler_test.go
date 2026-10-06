@@ -18,7 +18,8 @@ func TestAssembleSelectsContextAndPublishesManifestWithoutRawContent(t *testing.
 	})
 	ctx = WithSession(ctx, Session{
 		Config: domain.ContextAssemblyConfig{
-			AssemblerVersion: AssemblerVersion, ContextWindowTokens: 320, OutputReserveTokens: 16, SafetyMarginTokens: 8,
+			// Preserve the original selection budget plus the required platform policy.
+			AssemblerVersion: AssemblerVersion, ContextWindowTokens: 400, OutputReserveTokens: 16, SafetyMarginTokens: 8,
 			HistoryMaxTokens: 30, MemoryMaxTokens: 40, KnowledgeMaxTokens: 50,
 		},
 		Sink: eventpkg.SinkFunc(func(_ context.Context, item domain.RunEvent) error {

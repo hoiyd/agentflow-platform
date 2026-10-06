@@ -5,6 +5,12 @@ attached to one prompt. A profile controls the instructions and capabilities
 used by the shared Turn Engine, while orchestration mode controls how that Agent
 participates in a Run.
 
+Editable `system_prompt` is task guidance, not platform authorization. The shared
+Assembler supplies separate fixed platform instructions; deterministic Tool
+checks enforce permissions and private-data egress. See
+[Agent instruction/data boundaries](../operations/agent-security.md) for current
+behavior and limitations.
+
 ## Profile Fields
 
 | Field | Runtime effect |

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/tool/policy"
 )
 
@@ -26,6 +27,12 @@ func (e *Executor) evaluateSecurity(ctx context.Context, request ExecutionReques
 		Tool: request.Tool, Declared: binding.Descriptor.Security, RequestedScope: requestedScope,
 		AvailableCredentialScopes: request.CredentialScopes,
 	})
+	if decision.Allowed && policy.TransmitsData(decision.Capability) && (e.privateData.Load() || policy.UsesPrivateResources(binding.Descriptor.Security)) {
+		decision.Allowed, decision.Action, decision.Reason = false, policy.ActionDeny, "private_context_egress_denied"
+	}
+	if decision.Allowed && policy.TransmitsData(decision.Capability) && redaction.ValidateValue(request.Arguments) != nil {
+		decision.Allowed, decision.Action, decision.Reason = false, policy.ActionDeny, "credential_content_egress_denied"
+	}
 	if decision.Allowed {
 		return decision, nil
 	}

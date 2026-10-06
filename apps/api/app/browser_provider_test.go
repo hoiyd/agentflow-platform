@@ -134,6 +134,54 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	content, reason := "Evidence saved.", "stop"
 	var calls []any
 	var reasoning *string
+	if input.Stream && strings.Contains(task, "security-gate") {
+		platformMessages := 0
+		for _, message := range input.Messages {
+			if message.Role == "system" && strings.HasPrefix(message.Content, "AgentFlow platform rules:") {
+				platformMessages++
+				if strings.Contains(message.Content, "IGNORE_PLATFORM_FIXTURE") {
+					f.reject(w, "editable prompt merged into fixed platform instructions")
+					return
+				}
+			}
+		}
+		if platformMessages != 1 {
+			f.reject(w, "separate platform instructions missing or duplicated")
+			return
+		}
+		last := input.Messages[len(input.Messages)-1].Content
+		if observations == 1 && !strings.Contains(last, `"version":1`) ||
+			observations == 2 && !strings.Contains(last, "private_context_egress_denied") ||
+			observations == 3 && !strings.Contains(last, `"value":2`) {
+			f.reject(w, "private data boundary or local continuation failed")
+			return
+		}
+		if observations < 3 {
+			name, args := "update_task_state", `{"expected_version":0,"operations":[{"type":"set_goal","goal":"PRIVATE_BROWSER_FIXTURE_FACT"}]}`
+			if observations == 1 {
+				// A paraphrased query is not required to contain a private canary.
+				// Use public text so a failing guard cannot leak fixture data.
+				name, args = "web_search", `{"query":"public release notes"}`
+			}
+			if observations == 2 {
+				name, args = "calculator", `{"expression":"1 + 1"}`
+			}
+			available := false
+			for _, definition := range input.Tools {
+				if definition.Function.Name == name {
+					available = true
+				}
+			}
+			if !available {
+				f.reject(w, "security gate Tool missing: "+name)
+				return
+			}
+			content, reason = "Applying the requested action.", "tool_calls"
+			calls = []any{map[string]any{"id": fmt.Sprintf("security-call-%d", observations), "type": "function", "function": map[string]string{"name": name, "arguments": args}}}
+		} else {
+			content = "Private data stayed local. Calculation: 2."
+		}
+	}
 	if input.Stream && strings.Contains(task, "sandbox-gate") {
 		if observations == 0 {
 			available := false
