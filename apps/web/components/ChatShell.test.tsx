@@ -154,19 +154,43 @@ it("accepts only one stream command before React rerenders", async () => {
 
 it("does not roll back partial output or resubmit a consumed prompt on transport failure", async () => {
   setupAPI();
-  api.streamChat.mockImplementation(async (_input, emit) => {
+  let rejectStream!: (error: Error) => void;
+  api.streamChat.mockImplementation((_input, emit) => {
     emit({ type: "run_state", run_id: "r", status: "running" });
     emit({ type: "model_delta", delta: "Partial reply" });
-    throw new Error("transport disconnected");
+    return new Promise<void>((_resolve, reject) => { rejectStream = reject; });
   });
   render(<ChatShell initialConversationId="a" />);
   await screen.findByText("A baseline");
   fireEvent.change(screen.getByRole("textbox", { name: "Prompt" }), { target: { value: "question" } });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await screen.findByText("Partial reply");
+  // Observe both ownership phases explicitly instead of depending on whether
+  // React batches an immediately rejected command into the same render.
+  await waitFor(() => expect(api.observeRunEvents).toHaveBeenCalledWith("r", expect.anything()));
+  const commandObserver = api.observeRunEvents.mock.calls.at(-1)![1];
+  expect(commandObserver.signal.aborted).toBe(false);
+  expect(screen.getByLabelText("Command state").textContent).toBe("busy");
+  await act(async () => rejectStream(new Error("transport disconnected")));
   expect(screen.getByRole("textbox", { name: "Prompt" }).getAttribute("value")).toBe("");
   expect(screen.getByText("question")).toBeTruthy();
-  await waitFor(() => expect(api.observeRunEvents).toHaveBeenCalledTimes(1));
+  await waitFor(() => {
+    expect(commandObserver.signal.aborted).toBe(true);
+    const recoveryObserver = api.observeRunEvents.mock.calls.at(-1)![1];
+    expect(recoveryObserver).not.toBe(commandObserver);
+    expect(recoveryObserver.signal.aborted).toBe(false);
+    expect(api.observeRunEvents).toHaveBeenLastCalledWith("r", expect.anything());
+  });
+  act(() => {
+    commandObserver.onEvent({ type: "model_delta", delta: "Late old reply" }, 99, false);
+    commandObserver.onSnapshot({ run: { run_id: "r", conversation_id: "a", status: "completed" } });
+  });
+  expect(screen.queryByText("Late old reply")).toBeNull();
+  expect(screen.getByText("Partial reply")).toBeTruthy();
+  expect(screen.getByText("running")).toBeTruthy();
+  expect(screen.getByLabelText("Command state").textContent).toBe("idle");
+  expect(screen.getByLabelText("Error").textContent).toBe("transport disconnected");
+  expect(api.streamChat).toHaveBeenCalledTimes(1);
 });
 
 for (const command of ["Continue", "Resume"] as const) {

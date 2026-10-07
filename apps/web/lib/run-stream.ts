@@ -133,6 +133,17 @@ function runObservationStopped(status: string) {
 function projectRunEvent(event: ChatEvent | RunEvent): ChatEvent {
   if (!("schema_version" in event)) return event;
   const payload = event.payload ?? {};
+  if ((event.type === "tool.progress" || event.type === "tool.completed" || event.type === "tool.failed") &&
+    typeof payload.tool_call_id === "string" && event.turn_id) {
+    return { type: "tool_progress", run_id: event.run_id, turn_id: event.turn_id, stage_id: event.stage_id,
+      tool_call_id: payload.tool_call_id, tool_name: String(payload.tool_name ?? "Tool"), sequence: event.sequence ?? 0,
+      status: event.type === "tool.progress" ? "running" : event.type === "tool.completed" ? "completed" :
+        payload.error_code === "execution_canceled" || payload.error_code === "execution_timeout" || payload.synthetic === true ? "interrupted" : "failed",
+      update: event.type === "tool.progress" ? {
+        phase: String(payload.phase ?? ""), message: stringValue(payload.message),
+        completed: numberValue(payload.completed), total: numberValue(payload.total), truncated: payload.truncated === true
+      } : undefined };
+  }
   if (event.type === "model.delta") return { type: "model_delta", delta: String(payload.delta ?? ""), reset: payload.reset === true };
   if (event.type === "model.reasoning" || event.type === "model.reasoning_delta") {
     // Only the dedicated live event may carry a sanitized receiving prefix.

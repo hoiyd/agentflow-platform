@@ -21,6 +21,7 @@ import "./styles/workbench/home.css";
 import "./styles/workbench/home-runtime.css";
 import "./styles/workbench/shell.css";
 import "./styles/workbench/chat.css";
+import "./styles/workbench/tool-progress.css";
 import "./styles/workbench/task-state.css";
 import "./styles/workbench/composer.css";
 import "./styles/workbench/verification.css";

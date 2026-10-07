@@ -96,8 +96,9 @@ func TestBrowserServer(t *testing.T) {
 		cfg.RerankerModel, cfg.RerankerRevision = "fixture-cross-encoder", "fixture-revision"
 		cfg.RerankerTimeout, cfg.RerankerMaxConcurrentRequests = time.Second, 2
 	}
+	var sandboxControls http.Handler
 	if os.Getenv("AGENTFLOW_SANDBOX_BROWSER_TEST") == "1" {
-		browserSandboxConfig(t, &cfg, root)
+		sandboxControls = browserSandboxConfig(t, &cfg, root)
 	}
 	if os.Getenv("AGENTFLOW_OWNER_ADMISSION_TEST") == "1" {
 		cfg.MaxConcurrentModelRequests, cfg.MaxConcurrentOwnerModelRequests = 2, 1
@@ -145,6 +146,9 @@ func TestBrowserServer(t *testing.T) {
 	}
 	production := application.server.Handler
 	controls := http.NewServeMux()
+	if sandboxControls != nil {
+		controls.Handle("/__fixture/tool-progress/", sandboxControls)
+	}
 	if boundary != nil {
 		controls.HandleFunc("GET /__fixture/execution-boundary", boundary)
 	}

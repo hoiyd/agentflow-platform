@@ -13,6 +13,7 @@ import (
 func BuildSnapshot(run domain.Run, events []domain.RunEvent, ledger domain.RunUsageLedger, evidence []domain.VerificationEvidence) domain.RunProjectionSnapshot {
 	watermark := eventWatermark(events)
 	return domain.RunProjectionSnapshot{
+		ToolProgress:      buildToolProgress(run, events),
 		PartialOutputs:    buildPartialOutputs(run, events),
 		Run:               BuildRunProjection(run, events),
 		Usage:             BuildUsageProjection(ledger, watermark),
@@ -70,7 +71,7 @@ func ConsumesRunEvent(eventType domain.RunEventType) bool {
 		domain.EventStageStarted, domain.EventStageCompleted, domain.EventStageFailed, domain.EventStageCanceled,
 		domain.EventTurnStarted, domain.EventTurnCompleted, domain.EventTurnFailed, domain.EventTurnCanceled,
 		domain.EventModelStarted, domain.EventModelCompleted, domain.EventModelFailed,
-		domain.EventToolStarted, domain.EventToolCompleted, domain.EventToolFailed,
+		domain.EventToolStarted, domain.EventToolProgress, domain.EventToolCompleted, domain.EventToolFailed,
 		domain.EventRetrievalFailed, domain.EventHistorySearchFailed, domain.EventCompactionFailed,
 		domain.EventMemoryCandidateFailed, domain.EventMemoryRecallFailed, domain.EventMemorySyncRejected, domain.EventMemorySyncFailed, domain.EventBudgetExceeded:
 		return true

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/sandbox"
 	"agentflow-platform/apps/api/internal/tool/policy"
 )
@@ -62,7 +63,9 @@ func SandboxCommandTool(runner *sandbox.Runner) Binding {
 			if err := json.Unmarshal(arguments, &input); err != nil {
 				return nil, executionError(ErrorInvalidArgs, "sandbox arguments are invalid", nil)
 			}
-			result, err := runner.Run(ctx, input.Args)
+			result, err := runner.RunWithProgress(ctx, input.Args, func(phase string) {
+				ReportProgress(ctx, domain.ToolProgressUpdate{Phase: phase})
+			})
 			if err == nil {
 				return result, nil
 			}

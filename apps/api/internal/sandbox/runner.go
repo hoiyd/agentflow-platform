@@ -138,6 +138,17 @@ func (r *Runner) Timeout() time.Duration { return r.options.Timeout }
 func (r *Runner) AllowedCommands() []string { return slices.Clone(r.options.AllowedCommands) }
 
 func (r *Runner) Run(ctx context.Context, args []string) (result Result, err error) {
+	return r.RunWithProgress(ctx, args, nil)
+}
+
+// RunWithProgress reports only real lifecycle boundaries, never stdout, guessed
+// percentages or heartbeats. The caller supplies a nonblocking display sink.
+func (r *Runner) RunWithProgress(ctx context.Context, args []string, progress func(string)) (result Result, err error) {
+	report := func(phase string) {
+		if progress != nil {
+			progress(phase)
+		}
+	}
 	if r.closed.Load() {
 		return result, &Error{Kind: Unavailable, Message: "sandbox runner is closed"}
 	}
@@ -183,6 +194,7 @@ func (r *Runner) Run(ctx context.Context, args []string) (result Result, err err
 		return result, &Error{Kind: Unavailable, Message: "sandbox ownership could not be persisted", cause: err}
 	}
 	defer func() {
+		report("cleaning_up")
 		cleanupCtx, cancelCleanup := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelCleanup()
 		if cleanupErr := r.remove(cleanupCtx, name); cleanupErr != nil {
@@ -190,13 +202,16 @@ func (r *Runner) Run(ctx context.Context, args []string) (result Result, err err
 			err = &Error{Kind: CleanupFailed, Message: "sandbox " + name + " cleanup could not be confirmed", cause: errors.Join(err, cleanupErr)}
 		} else {
 			result.CleanupConfirmed = true
+			report("cleanup_confirmed")
 		}
 	}()
 	create := []string{"create", "--name", name, "--cpus", fmt.Sprint(r.options.CPUs), "--memory", fmt.Sprintf("%dm", r.options.MemoryMiB), "--deny-network", "**", "--skills", "off", "--template", r.options.Template, "shell"}
+	report("provisioning")
 	if err := r.invoke(executionCtx, create, newOutputBuffer(4096)); err != nil {
 		return result, &Error{Kind: Unavailable, Message: "sbx could not create an isolated sandbox; check CLI support for --skills off, Docker login and daemon", cause: err}
 	}
 	output := newOutputBuffer(r.options.MaxOutputBytes)
+	report("executing")
 	err = r.invoke(executionCtx, r.command(name, args), output)
 	result.Output, result.ObservedBytes, result.OutputHash, result.Truncated = output.Text(), output.total, output.Hash(), output.Truncated()
 	if executionCtx.Err() != nil {

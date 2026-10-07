@@ -194,22 +194,22 @@ func (e PartialOutputChannel) Valid() bool {
 
 // Defines values for PartialOutputStatus.
 const (
-	Final       PartialOutputStatus = "final"
-	Interrupted PartialOutputStatus = "interrupted"
-	Provisional PartialOutputStatus = "provisional"
-	Retracted   PartialOutputStatus = "retracted"
+	PartialOutputStatusFinal       PartialOutputStatus = "final"
+	PartialOutputStatusInterrupted PartialOutputStatus = "interrupted"
+	PartialOutputStatusProvisional PartialOutputStatus = "provisional"
+	PartialOutputStatusRetracted   PartialOutputStatus = "retracted"
 )
 
 // Valid indicates whether the value is a known member of the PartialOutputStatus enum.
 func (e PartialOutputStatus) Valid() bool {
 	switch e {
-	case Final:
+	case PartialOutputStatusFinal:
 		return true
-	case Interrupted:
+	case PartialOutputStatusInterrupted:
 		return true
-	case Provisional:
+	case PartialOutputStatusProvisional:
 		return true
-	case Retracted:
+	case PartialOutputStatusRetracted:
 		return true
 	default:
 		return false
@@ -327,6 +327,30 @@ func (e SkillEvidenceInstructions) Valid() bool {
 	case SkillEvidenceInstructionsIncluded:
 		return true
 	case SkillEvidenceInstructionsNotObserved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolProgressStatus.
+const (
+	ToolProgressStatusCompleted   ToolProgressStatus = "completed"
+	ToolProgressStatusFailed      ToolProgressStatus = "failed"
+	ToolProgressStatusInterrupted ToolProgressStatus = "interrupted"
+	ToolProgressStatusRunning     ToolProgressStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the ToolProgressStatus enum.
+func (e ToolProgressStatus) Valid() bool {
+	switch e {
+	case ToolProgressStatusCompleted:
+		return true
+	case ToolProgressStatusFailed:
+		return true
+	case ToolProgressStatusInterrupted:
+		return true
+	case ToolProgressStatusRunning:
 		return true
 	default:
 		return false
@@ -852,6 +876,7 @@ type RunReplay struct {
 type RunReplay_Projection struct {
 	PartialOutputs       *[]PartialOutput       `json:"partial_outputs,omitempty"`
 	SkillEvidence        *[]SkillEvidence       `json:"skill_evidence,omitempty"`
+	ToolProgress         *[]ToolProgress        `json:"tool_progress,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
@@ -1000,6 +1025,38 @@ type ToolInfo struct {
 
 	// UnavailableReason Runtime prerequisite that prevents an enabled Tool from being offered to the model.
 	UnavailableReason *string `json:"unavailable_reason,omitempty"`
+}
+
+// ToolProgress defines model for ToolProgress.
+type ToolProgress struct {
+	Completed *int64 `json:"completed,omitempty"`
+
+	// Message Backend enforces a 1024 UTF-8 byte cap after redaction.
+	Message    *string            `json:"message,omitempty"`
+	Phase      string             `json:"phase"`
+	RunId      string             `json:"run_id"`
+	Sequence   int64              `json:"sequence"`
+	StageId    *string            `json:"stage_id,omitempty"`
+	Status     ToolProgressStatus `json:"status"`
+	ToolCallId string             `json:"tool_call_id"`
+	ToolName   string             `json:"tool_name"`
+	Total      *int64             `json:"total,omitempty"`
+	Truncated  *bool              `json:"truncated,omitempty"`
+	TurnId     string             `json:"turn_id"`
+}
+
+// ToolProgressStatus defines model for ToolProgress.Status.
+type ToolProgressStatus string
+
+// ToolProgressUpdate Bounded semantic progress only; counts do not imply Tool completion.
+type ToolProgressUpdate struct {
+	Completed *int64 `json:"completed,omitempty"`
+
+	// Message Backend enforces a 1024 UTF-8 byte cap after redaction.
+	Message   *string `json:"message,omitempty"`
+	Phase     string  `json:"phase"`
+	Total     *int64  `json:"total,omitempty"`
+	Truncated *bool   `json:"truncated,omitempty"`
 }
 
 // UpdateConversationRequest defines model for UpdateConversationRequest.
@@ -1260,6 +1317,14 @@ func (a *RunReplay_Projection) UnmarshalJSON(b []byte) error {
 		delete(object, "skill_evidence")
 	}
 
+	if raw, found := object["tool_progress"]; found {
+		err = json.Unmarshal(raw, &a.ToolProgress)
+		if err != nil {
+			return fmt.Errorf("error reading 'tool_progress': %w", err)
+		}
+		delete(object, "tool_progress")
+	}
+
 	if len(object) != 0 {
 		a.AdditionalProperties = make(map[string]interface{})
 		for fieldName, fieldBuf := range object {
@@ -1290,6 +1355,13 @@ func (a RunReplay_Projection) MarshalJSON() ([]byte, error) {
 		object["skill_evidence"], err = json.Marshal(a.SkillEvidence)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'skill_evidence': %w", err)
+		}
+	}
+
+	if a.ToolProgress != nil {
+		object["tool_progress"], err = json.Marshal(a.ToolProgress)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'tool_progress': %w", err)
 		}
 	}
 

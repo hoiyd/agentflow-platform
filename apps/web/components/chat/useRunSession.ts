@@ -10,7 +10,8 @@ import { createRunEventHandler, isTerminalRunStatus, type DraftMessage, type Run
 import type { useConversationWorkspace } from "./useConversationWorkspace";
 import { useRunTrace } from "./useRunTrace";
 import type { ReasoningEntry } from "./ReasoningDisclosure";
-import type { PartialOutput, RunProjectionSnapshot } from "../../lib/api-types";
+import type { PartialOutput, RunProjectionSnapshot, ToolProgress } from "../../lib/api-types";
+import { applyToolProgress, restoreToolProgress } from "../../lib/tool-progress";
 
 type Command =
   | { kind: "submitting"; content: string; mode: ChatMode; agentId: string; completionContract?: CompletionContractInput }
@@ -44,6 +45,7 @@ export function useRunSession(options: SessionOptions) {
   // Pending display updates; completed history is loaded through message.reasoning.
   const [reasoning, setReasoning] = useState<ReasoningEntry[]>([]);
   const [partialOutputs, setPartialOutputs] = useState<PartialOutput[]>([]);
+  const [toolProgress, setToolProgress] = useState<ToolProgress[]>([]);
   const outputCursor = useRef({ runId: "", sequence: -1 });
   const runRef = useRef<RunState | null>(null);
   const [streams] = useState(createLatestRequestController);
@@ -67,6 +69,7 @@ export function useRunSession(options: SessionOptions) {
     if (previous.runId === snapshot.run.run_id && previous.sequence > snapshot.as_of_sequence) return;
     outputCursor.current = { runId: snapshot.run.run_id, sequence: snapshot.as_of_sequence };
     setPartialOutputs(snapshot.run.status === "completed" ? [] : snapshot.partial_outputs ?? []);
+    setToolProgress(items => restoreToolProgress(items, snapshot.tool_progress ?? [], snapshot.run.run_id));
   }, []);
 
   const { setAutonomousProgress, setCollaborationSteps, setPlanDraft } = trace;
@@ -74,6 +77,7 @@ export function useRunSession(options: SessionOptions) {
   const createHandler = useCallback((context: EventOptions) => createRunEventHandler({
     ...context, setAutonomousProgress, setCollaborationSteps, setPlanDraft,
     setMessages, setError, setRunState,
+    onToolProgress: (event) => setToolProgress(items => applyToolProgress(items, event, runRef.current?.id ?? "")),
     onReasoning: (entry) => setReasoning((items) => {
       if (entry.run_id !== runRef.current?.id) return items;
       const index = items.findIndex((item) => item.run_id === entry.run_id && item.turn_id === entry.turn_id && item.model_call_id === entry.model_call_id);
@@ -97,13 +101,13 @@ export function useRunSession(options: SessionOptions) {
   const observing = options.observing;
   useEffect(() => {
     const run = runRef.current;
-    if (!conversationId || !observing || activity !== "idle" || !run ||
+    if (!conversationId || !observing || !run ||
       !["queued", "running", "canceling"].includes(run.status)) return;
 
     const request = observations.begin();
     let refreshed = false;
     const reloadStoppedRun = (status: string) => {
-      if (!request.isCurrent() || !isStoppedRunStatus(status) || refreshed) return;
+      if (activity !== "idle" || !request.isCurrent() || !isStoppedRunStatus(status) || refreshed) return;
       refreshed = true;
       void latest.current.options.onReload(conversationId, "observed");
     };
@@ -116,18 +120,28 @@ export function useRunSession(options: SessionOptions) {
       signal: request.signal,
       onEvent: (event, _sequence, replayed) => {
         if (!request.isCurrent()) return;
+        // Command streams own answers/status. The committed subscription adds
+        // Tool display updates without routing them through the model protocol.
+        if (activity !== "idle") {
+          if (event.type === "tool_progress") handle(event);
+          return;
+        }
         // Historical lifecycle events rebuild details, not current Run status.
         if (!replayed || event.type !== "run_state") handle(event);
       },
       onSnapshot: (snapshot) => {
         if (!request.isCurrent() || snapshot.run.conversation_id !== conversationId || snapshot.run.run_id !== run.id) return;
+        if (activity !== "idle") {
+          setToolProgress(items => restoreToolProgress(items, snapshot.tool_progress ?? [], run.id));
+          return;
+        }
         setRunState({ id: run.id, agentId: run.agentId, status: snapshot.run.status,
           verificationStatus: snapshot.run.verification_status });
         restoreOutputs(snapshot);
         reloadStoppedRun(snapshot.run.status);
       },
       onOutput: (output) => {
-        if (!request.isCurrent() || output.run_id !== runRef.current?.id) return;
+        if (activity !== "idle" || !request.isCurrent() || output.run_id !== runRef.current?.id) return;
         const previous = outputCursor.current;
         if (previous.runId === output.run_id && previous.sequence >= output.sequence) return;
         outputCursor.current = { runId: output.run_id, sequence: output.sequence };
@@ -146,6 +160,7 @@ export function useRunSession(options: SessionOptions) {
     trace.reset();
     setReasoning([]);
     setPartialOutputs([]);
+    setToolProgress([]);
     outputCursor.current = { runId: "", sequence: -1 };
   }
 
@@ -160,6 +175,7 @@ export function useRunSession(options: SessionOptions) {
     setCanceling(false);
     setReasoning([]);
     setPartialOutputs([]);
+    setToolProgress([]);
     outputCursor.current = { runId: "", sequence: -1 };
   }
 
@@ -168,6 +184,7 @@ export function useRunSession(options: SessionOptions) {
     const previousRun = runRef.current;
     const previousReasoning = reasoning;
     const previousPartialOutputs = partialOutputs;
+    const previousToolProgress = toolProgress;
     const previousOutputCursor = outputCursor.current;
     if (command.kind !== "submitting" && !previousRun?.id) return;
     activityRef.current = command.kind;
@@ -236,6 +253,7 @@ export function useRunSession(options: SessionOptions) {
           setRunState(previousRun);
           setReasoning(previousReasoning);
           setPartialOutputs(previousPartialOutputs);
+          setToolProgress(previousToolProgress);
           outputCursor.current = previousOutputCursor;
           trace.restore(previousTrace);
           rollbackLayout?.();
@@ -285,7 +303,7 @@ export function useRunSession(options: SessionOptions) {
   }
 
   return {
-    runState, setRunState, trace, activity, reasoning, partialOutputs, restoreOutputs, isCancelingRun, clearRun, detach, cancel,
+    runState, setRunState, trace, activity, reasoning, partialOutputs, toolProgress, restoreOutputs, isCancelingRun, clearRun, detach, cancel,
     isStreaming: activity !== "idle", isContinuingRun: activity === "continuing", isResumingRun: activity === "resuming",
     submit: (content: string, settings: { mode: ChatMode; agentId: string; completionContract?: CompletionContractInput }) =>
       content.trim() ? execute({ kind: "submitting", content: content.trim(), ...settings }) : Promise.resolve(),

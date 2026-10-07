@@ -51,6 +51,7 @@ related pages link to its contract rather than copying configuration or algorith
 - [Agent instruction/data boundaries](operations/agent-security.md): fixed platform guidance, private-data Tool egress, approval semantics and attack regressions.
 - [Bounded Tool loop](tools/bounded-tool-loop.md): model/Tool rounds, complete continuation protocol, streaming, and recovery limits.
 - [Result Artifacts](tools/tool-result-artifacts.md), [Progress Guard](tools/tool-progress-guard.md), and [side-effect reconciliation](tools/tool-side-effect-reconciliation.md).
+- [Tool execution progress](tools/tool-execution-progress.md): bounded semantic updates, committed recovery, shared Chat/Replay display and Binding integration.
 - [Scoped Knowledge bindings](tools/scoped-knowledge-tools.md) and [Web citations](tools/web-source-citations.md).
 - [Trusted Skills](tools/trusted-skills.md): Loader contract, Agent binding, progressive activation, frozen content, and resource limits.
 - [Skill installation](tools/skill-installation.md): native Vercel workflow, root checks, restricted Go fallback, provenance, and publication safety.

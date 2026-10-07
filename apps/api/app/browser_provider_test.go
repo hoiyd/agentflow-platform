@@ -237,6 +237,12 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if input.Stream && strings.Contains(task, "sandbox-gate") {
+		for _, message := range input.Messages {
+			if strings.Contains(message.Content, `"phase":"executing"`) || strings.Contains(message.Content, `"phase":"provisioning"`) {
+				f.reject(w, "display progress leaked into model context")
+				return
+			}
+		}
 		if observations == 0 {
 			available := false
 			for _, definition := range input.Tools {
@@ -262,6 +268,9 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 			}
 			content, reason = "Correcting the executable path.", "tool_calls"
 			calls = []any{map[string]any{"id": "sandbox-browser-corrected", "type": "function", "function": map[string]string{"name": "sandbox_command", "arguments": `{"args":["/usr/bin/python3","-c","print(sum(range(10)))"]}`}}}
+			if strings.Contains(task, "progress-wait") {
+				calls = []any{map[string]any{"id": "sandbox-browser-corrected", "type": "function", "function": map[string]string{"name": "sandbox_command", "arguments": `{"args":["/usr/bin/python3","-c","print('progress-wait')"]}`}}}
+			}
 		} else {
 			last := input.Messages[len(input.Messages)-1].Content
 			if !strings.Contains(last, "sandbox browser receipt") || !strings.Contains(last, `"cleanup_confirmed":true`) {

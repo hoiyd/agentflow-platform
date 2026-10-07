@@ -22,6 +22,7 @@ import { RuntimeDiagnostics } from "./RuntimeDiagnostics";
 import { SkillEvidencePanel } from "./SkillEvidence";
 import { RecoverySummaryPanel, ToolEffectReconciliationPanel } from "./RecoveryActions";
 import { MessageCitations } from "../chat/MarkdownContent";
+import { ToolProgressPanel } from "../chat/ToolProgressPanel";
 
 type Props = {
   runId: string;
@@ -227,6 +228,7 @@ export function RunReplay({ runId, initialEventId }: Props) {
         onInspectEvent={inspectDiagnosticEvent}
       />
       <SkillEvidencePanel items={replay.projection.skill_evidence ?? []} onInspectEvent={inspectDiagnosticEvent} />
+      <ToolProgressPanel items={replay.projection.tool_progress ?? []} runStatus={replay.run.status} />
 
       <section className="replay-summary">
         <Metric label="Total duration" value={formatDuration(replay.summary.total_duration_ms)} />

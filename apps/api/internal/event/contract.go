@@ -108,6 +108,11 @@ func scanLifecycle(events []domain.RunEvent) (lifecycleState, error) {
 				return state, newProtocolViolation("tool_overlap", item, fmt.Sprintf("overlapping tool call at sequence %d", item.Sequence))
 			}
 			state.tools[id] = item
+		case domain.EventToolProgress:
+			started, ok := state.tools[toolCallID(item)]
+			if !ok || started.TurnID != item.TurnID || started.StageID != item.StageID {
+				return state, newProtocolViolation("tool_progress_orphan", item, "Tool progress has no matching active call scope")
+			}
 		case domain.EventToolCompleted, domain.EventToolFailed:
 			id := toolCallID(item)
 			if _, ok := state.tools[id]; !ok {
