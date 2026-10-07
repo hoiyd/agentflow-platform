@@ -252,10 +252,10 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-      - name: Run provider reasoning privacy gate
+      - name: Run provider reasoning and partial output recovery gate
         env:
           AGENTFLOW_REASONING_TEST: '1'
-        run: npm run test:e2e -- reasoning.spec.ts
+        run: npm run test:e2e -- reasoning.spec.ts partial-output.spec.ts
       - name: Retain provider reasoning evidence
         if: always()
         uses: actions/upload-artifact@v7

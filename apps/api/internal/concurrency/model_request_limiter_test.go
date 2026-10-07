@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
@@ -73,50 +74,58 @@ func TestModelRequestLimiterRejectsRequestAboveTokenCapacity(t *testing.T) {
 }
 
 func TestModelRequestLimiterSeparatesRateAndPermitWait(t *testing.T) {
-	limiter := NewModelRequestLimiter(ModelRequestLimits{MaxConcurrent: 1, RequestsPerPeriod: 1, RatePeriod: 80 * time.Millisecond})
-	first, err := limiter.AcquireRequest(context.Background(), "key", 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer first()
-	timing := &requestcontrol.AttemptTiming{}
-	ctx := requestcontrol.WithAttemptTiming(context.Background(), timing)
-	acquired := make(chan func(), 1)
-	go func() {
-		release, err := limiter.AcquireRequest(ctx, "key", 1)
-		if err == nil {
-			acquired <- release
+	synctest.Test(t, func(t *testing.T) {
+		limiter := NewModelRequestLimiter(ModelRequestLimits{MaxConcurrent: 1, RequestsPerPeriod: 1, RatePeriod: 80 * time.Millisecond})
+		first, err := limiter.AcquireRequest(context.Background(), "key", 1)
+		if err != nil {
+			t.Fatal(err)
 		}
-	}()
-	time.Sleep(105 * time.Millisecond)
-	first()
-	select {
-	case release := <-acquired:
-		release()
-	case <-time.After(time.Second):
-		t.Fatal("waiter did not recover after capacity was released")
-	}
-	if !timing.Limited || timing.RateWait < 60*time.Millisecond || timing.PermitWait < 20*time.Millisecond {
-		t.Fatalf("local waits were not measured independently: %#v", timing)
-	}
+		defer first()
+		timing := &requestcontrol.AttemptTiming{}
+		ctx := requestcontrol.WithAttemptTiming(context.Background(), timing)
+		acquired := make(chan func(), 1)
+		go func() {
+			release, err := limiter.AcquireRequest(ctx, "key", 1)
+			if err == nil {
+				acquired <- release
+			}
+		}()
+		// Start the waiter before advancing virtual time; scheduler load cannot
+		// move rate refill into the permit-wait interval.
+		synctest.Wait()
+		time.Sleep(105 * time.Millisecond)
+		first()
+		select {
+		case release := <-acquired:
+			release()
+		case <-time.After(time.Second):
+			t.Fatal("waiter did not recover after capacity was released")
+		}
+		if !timing.Limited || timing.RateWait != 80*time.Millisecond || timing.PermitWait != 25*time.Millisecond {
+			t.Fatalf("local waits were not measured independently: %#v", timing)
+		}
+	})
 }
 
 func TestModelRequestLimiterMeasuresTPMWait(t *testing.T) {
-	limiter := NewModelRequestLimiter(ModelRequestLimits{MaxConcurrent: 1, TokensPerPeriod: 10, RatePeriod: 100 * time.Millisecond})
-	first, err := limiter.AcquireRequest(context.Background(), "key", 8)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first()
-	timing := &requestcontrol.AttemptTiming{}
-	second, err := limiter.AcquireRequest(requestcontrol.WithAttemptTiming(context.Background(), timing), "key", 8)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second()
-	if timing.RateWait < 40*time.Millisecond || timing.PermitWait > 20*time.Millisecond {
-		t.Fatalf("TPM refill was not separated from the free permit: %#v", timing)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		limiter := NewModelRequestLimiter(ModelRequestLimits{MaxConcurrent: 1, TokensPerPeriod: 10, RatePeriod: 100 * time.Millisecond})
+		first, err := limiter.AcquireRequest(context.Background(), "key", 8)
+		if err != nil {
+			t.Fatal(err)
+		}
+		first()
+		timing := &requestcontrol.AttemptTiming{}
+		second, err := limiter.AcquireRequest(requestcontrol.WithAttemptTiming(context.Background(), timing), "key", 8)
+		if err != nil {
+			t.Fatal(err)
+		}
+		second()
+		// Two tokens remain; refilling the missing six at 100 tokens/s takes 60 ms.
+		if timing.RateWait != 60*time.Millisecond || timing.PermitWait != 0 {
+			t.Fatalf("TPM refill was not separated from the free permit: %#v", timing)
+		}
+	})
 }
 
 func TestCanceledPermitWaitCannotStealReleasedCapacity(t *testing.T) {

@@ -11,7 +11,7 @@ test(`${mode}: committed answer and reasoning survive refresh, reset and cancell
   await page.getByRole("button", { name: "Direct Single agent", exact: true }).click();
   await page.getByRole("button", { name: "New agent", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Create new agent" });
-  const capability = `partial${mode.toLowerCase().replace(/[^a-z]/g, "")}`;
+  const capability = `partial${mode.toLowerCase().replace(/[^a-z]/g, "")}${test.info().repeatEachIndex}`;
   await dialog.getByLabel("Name", { exact: true }).fill(`Partial recovery ${mode}`);
   await dialog.getByRole("textbox", { name: "Description", exact: true }).fill("partial recovery fixture specialist");
   await dialog.getByRole("textbox", { name: "System prompt", exact: true }).fill("Use the clock and explain evidence.");
