@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/testsupport/modelstream"
@@ -16,10 +18,25 @@ type browserProvider struct {
 	requests int
 	failures []string
 	gate     chan struct{}
-	once     sync.Once
 }
 
 func newBrowserProvider() *browserProvider { return &browserProvider{gate: make(chan struct{})} }
+
+func TestBrowserProviderReleaseDoesNotReleaseLaterRequests(t *testing.T) {
+	fixture := newBrowserProvider()
+	first := fixture.gate
+	fixture.release(httptest.NewRecorder(), nil)
+	select {
+	case <-first:
+	default:
+		t.Fatal("pending request not released")
+	}
+	select {
+	case <-fixture.gate:
+		t.Fatal("later request inherited a previous test's release")
+	default:
+	}
+}
 
 func (f *browserProvider) contracts(w http.ResponseWriter, _ *http.Request) {
 	f.mu.Lock()
@@ -28,8 +45,17 @@ func (f *browserProvider) contracts(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (f *browserProvider) release(w http.ResponseWriter, _ *http.Request) {
-	f.once.Do(func() { close(f.gate) })
+	f.mu.Lock()
+	close(f.gate)
+	f.gate = make(chan struct{})
+	f.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (f *browserProvider) currentGate() <-chan struct{} {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.gate
 }
 
 func (f *browserProvider) reject(w http.ResponseWriter, message string) {
@@ -41,6 +67,7 @@ func (f *browserProvider) reject(w http.ResponseWriter, message string) {
 }
 
 func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
+	gate := f.currentGate()
 	if r.URL.Path == "/rerank" {
 		var input struct {
 			Query      string   `json:"query"`
@@ -147,7 +174,7 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"First token\"},\"finish_reason\":null}]}\n\n")
 		w.(http.Flusher).Flush()
 		select {
-		case <-f.gate:
+		case <-gate:
 		case <-r.Context().Done():
 			return
 		case <-time.After(35 * time.Second):

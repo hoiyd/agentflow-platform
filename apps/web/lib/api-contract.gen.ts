@@ -981,10 +981,33 @@ export interface components {
             resources: components["schemas"]["SkillResourceEvidence"][];
             failures: components["schemas"]["SkillFailureEvidence"][];
         };
+        /** @description Bounded display replacement committed at an event sequence; never model continuation or a final Message. */
+        PartialOutput: {
+            run_id: string;
+            stage_id?: string;
+            turn_id: string;
+            model_call_id?: string;
+            attempt?: number;
+            round: number;
+            /** @enum {string} */
+            channel: "answer" | "reasoning";
+            role?: string;
+            /** Format: int64 */
+            revision: number;
+            /** @description UTF-8 byte length of this display replacement */
+            offset: number;
+            text: string;
+            /** @enum {string} */
+            status: "provisional" | "retracted" | "final" | "interrupted";
+            truncated?: boolean;
+            /** Format: int64 */
+            sequence: number;
+        };
         RunReplay: {
             run: components["schemas"]["Run"];
             projection: {
                 skill_evidence?: components["schemas"]["SkillEvidence"][];
+                partial_outputs?: components["schemas"]["PartialOutput"][];
             } & {
                 [key: string]: unknown;
             };

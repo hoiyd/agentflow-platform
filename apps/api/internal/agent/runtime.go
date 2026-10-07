@@ -258,7 +258,6 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 				if event.Reset {
 					live.Payload["reset"] = true
 				}
-				r.publishLive(live)
 				events <- live
 			}
 		})

@@ -165,12 +165,13 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 			switch event.Type {
 			case "reasoning":
 				emit(turn.ModelEvent{Type: turn.EventModelReasoning, Reasoning: event.Reasoning})
-			case "delta":
+			case "delta", "output_display":
 				if event.Reset {
 					output.Reset()
 				}
 				output.WriteString(event.Delta)
-				emit(turn.ModelEvent{Type: turn.EventModelDelta, Delta: event.Delta, Reset: event.Reset})
+				emit(turn.ModelEvent{Type: turn.EventModelDelta, Delta: event.Delta, Reset: event.Reset, ModelCallID: event.ModelCallID, Attempt: event.Attempt,
+					DisplayText: event.DisplayText, DisplayTruncated: event.DisplayTruncated})
 			}
 		case err, ok := <-errs:
 			if !ok {

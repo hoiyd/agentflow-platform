@@ -167,7 +167,7 @@ func TestStreamEventSizeLimitClosesBody(t *testing.T) {
 		response.Body = &closeTracker{ReadCloser: response.Body, closed: &closed}
 		return response, nil
 	})}
-	_, _, _, err := client.streamMessagesWithUsageOption(context.Background(), []Message{{Role: "user", Content: "hi"}}, make(chan StreamEvent, 1), false)
+	_, _, _, err := client.streamMessagesWithUsageOption(context.Background(), []Message{{Role: "user", Content: "hi"}}, make(chan StreamEvent, 8), false)
 	modelErr, ok := AsModelError(err)
 	if !ok || modelErr.Kind != ErrorInvalidResponse || !closed {
 		t.Fatalf("oversized frame not rejected/released: err=%v closed=%t", err, closed)
@@ -186,7 +186,7 @@ func TestStreamDisconnectAfterDeltaReleasesPermitWithoutRetry(t *testing.T) {
 		response.Body = io.NopCloser(io.MultiReader(strings.NewReader("data: {\"choices\":[{\"delta\":{\"content\":\"partial\"}}]}\n\n"), disconnectReader{}))
 		return response, nil
 	})}
-	emitted, output, _, err := client.streamMessagesWithUsageOption(context.Background(), []Message{{Role: "user", Content: "hi"}}, make(chan StreamEvent, 1), false)
+	emitted, output, _, err := client.streamMessagesWithUsageOption(context.Background(), []Message{{Role: "user", Content: "hi"}}, make(chan StreamEvent, 8), false)
 	modelErr, ok := AsModelError(err)
 	if !ok || modelErr.Kind != ErrorInvalidResponse || modelErr.Retryable || !emitted || output != "partial" || calls != 1 || releases != 1 {
 		t.Fatalf("disconnect retried or leaked permit: calls=%d releases=%d emitted=%t output=%q err=%v", calls, releases, emitted, output, err)
@@ -200,7 +200,7 @@ func TestStreamSSEAcrossSingleByteReads(t *testing.T) {
 		response.Body = io.NopCloser(&oneByteReader{reader: strings.NewReader("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")})
 		return response, nil
 	})}
-	emitted, output, _, err := client.streamMessagesWithUsageOption(context.Background(), []Message{{Role: "user", Content: "hi"}}, make(chan StreamEvent, 1), false)
+	emitted, output, _, err := client.streamMessagesWithUsageOption(context.Background(), []Message{{Role: "user", Content: "hi"}}, make(chan StreamEvent, 8), false)
 	if err != nil || !emitted || output != "ok" {
 		t.Fatalf("fragmented stream: emitted=%t output=%q err=%v", emitted, output, err)
 	}

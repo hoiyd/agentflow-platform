@@ -174,6 +174,48 @@ func (e OperatorAttentionItemReason) Valid() bool {
 	}
 }
 
+// Defines values for PartialOutputChannel.
+const (
+	Answer    PartialOutputChannel = "answer"
+	Reasoning PartialOutputChannel = "reasoning"
+)
+
+// Valid indicates whether the value is a known member of the PartialOutputChannel enum.
+func (e PartialOutputChannel) Valid() bool {
+	switch e {
+	case Answer:
+		return true
+	case Reasoning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PartialOutputStatus.
+const (
+	Final       PartialOutputStatus = "final"
+	Interrupted PartialOutputStatus = "interrupted"
+	Provisional PartialOutputStatus = "provisional"
+	Retracted   PartialOutputStatus = "retracted"
+)
+
+// Valid indicates whether the value is a known member of the PartialOutputStatus enum.
+func (e PartialOutputStatus) Valid() bool {
+	switch e {
+	case Final:
+		return true
+	case Interrupted:
+		return true
+	case Provisional:
+		return true
+	case Retracted:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunStatus.
 const (
 	RunStatusCanceled          RunStatus = "canceled"
@@ -705,6 +747,32 @@ type OperatorAttentionItem struct {
 // OperatorAttentionItemReason defines model for OperatorAttentionItem.Reason.
 type OperatorAttentionItemReason string
 
+// PartialOutput Bounded display replacement committed at an event sequence; never model continuation or a final Message.
+type PartialOutput struct {
+	Attempt     *int                 `json:"attempt,omitempty"`
+	Channel     PartialOutputChannel `json:"channel"`
+	ModelCallId *string              `json:"model_call_id,omitempty"`
+
+	// Offset UTF-8 byte length of this display replacement
+	Offset    int                 `json:"offset"`
+	Revision  int64               `json:"revision"`
+	Role      *string             `json:"role,omitempty"`
+	Round     int                 `json:"round"`
+	RunId     string              `json:"run_id"`
+	Sequence  int64               `json:"sequence"`
+	StageId   *string             `json:"stage_id,omitempty"`
+	Status    PartialOutputStatus `json:"status"`
+	Text      string              `json:"text"`
+	Truncated *bool               `json:"truncated,omitempty"`
+	TurnId    string              `json:"turn_id"`
+}
+
+// PartialOutputChannel defines model for PartialOutput.Channel.
+type PartialOutputChannel string
+
+// PartialOutputStatus defines model for PartialOutput.Status.
+type PartialOutputStatus string
+
 // RAGCitation defines model for RAGCitation.
 type RAGCitation struct {
 	ChunkId         string    `json:"chunk_id"`
@@ -782,6 +850,7 @@ type RunReplay struct {
 
 // RunReplay_Projection defines model for RunReplay.Projection.
 type RunReplay_Projection struct {
+	PartialOutputs       *[]PartialOutput       `json:"partial_outputs,omitempty"`
 	SkillEvidence        *[]SkillEvidence       `json:"skill_evidence,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
@@ -1175,6 +1244,14 @@ func (a *RunReplay_Projection) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	if raw, found := object["partial_outputs"]; found {
+		err = json.Unmarshal(raw, &a.PartialOutputs)
+		if err != nil {
+			return fmt.Errorf("error reading 'partial_outputs': %w", err)
+		}
+		delete(object, "partial_outputs")
+	}
+
 	if raw, found := object["skill_evidence"]; found {
 		err = json.Unmarshal(raw, &a.SkillEvidence)
 		if err != nil {
@@ -1201,6 +1278,13 @@ func (a *RunReplay_Projection) UnmarshalJSON(b []byte) error {
 func (a RunReplay_Projection) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
+
+	if a.PartialOutputs != nil {
+		object["partial_outputs"], err = json.Marshal(a.PartialOutputs)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'partial_outputs': %w", err)
+		}
+	}
 
 	if a.SkillEvidence != nil {
 		object["skill_evidence"], err = json.Marshal(a.SkillEvidence)

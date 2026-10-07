@@ -9,6 +9,7 @@ export type Conversation = ContractSchemas["Conversation"];
 type APIMessage = ContractSchemas["Message"];
 export type Message = Omit<APIMessage, "workspace_id"> & { workspace_id?: string };
 export type RunEvent = ContractSchemas["RunEvent"];
+export type PartialOutput = ContractSchemas["PartialOutput"];
 export type ChatEvent = Exclude<ContractSchemas["ChatStreamEvent"], RunEvent>;
 export type AgentInfo = ContractSchemas["Agent"];
 export type AgentRoutingRequirements = ContractSchemas["AgentRoutingRequirements"];
@@ -34,6 +35,7 @@ export type RuntimeInvariantFailure = {
 };
 
 export type RunProjectionSnapshot = {
+  partial_outputs?: PartialOutput[];
   skill_evidence?: SkillEvidence[];
   run: {
     run_id: string;

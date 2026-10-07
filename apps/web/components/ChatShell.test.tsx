@@ -7,6 +7,7 @@ const api = vi.hoisted(() => ({
   listConversations: vi.fn(),
   listMessages: vi.fn(),
   getTaskState: vi.fn(),
+  getRunProjection: vi.fn(),
   listRuns: vi.fn(),
   listCollaborationSteps: vi.fn(),
   listAgents: vi.fn(),
@@ -64,6 +65,18 @@ it("opens Knowledge when returning from retrieval evaluation", async () => {
   expect(screen.getByRole("link", { name: "Evaluate index" })).toBeTruthy();
 });
 
+it("keeps the Run and collaboration trace when partial-output recovery is unavailable", async () => {
+  setupAPI();
+  api.listRuns.mockResolvedValue([{ id: "stopped", conversation_id: "a", status: "failed_recoverable" }]);
+  api.listCollaborationSteps.mockResolvedValue([{ id: "stage", role: "planner", status: "completed", output: "saved plan" }]);
+  api.getRunProjection.mockRejectedValue(new Error("projection unavailable"));
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("Partial output recovery unavailable: projection unavailable");
+  expect(screen.getByText("failed_recoverable")).toBeTruthy();
+  expect(screen.getByText("saved plan")).toBeTruthy();
+  expect(screen.getByText("A baseline")).toBeTruthy();
+});
+
 it("does not apply a previous conversation's stream events after navigation", async () => {
   setupAPI();
   let emit!: (event: { type: string; delta?: string }) => void;
@@ -114,6 +127,7 @@ function setupAPI() {
     created_at: "2026-09-01T00:00:00Z"
   }]));
   api.getTaskState.mockResolvedValue(null);
+  api.getRunProjection.mockResolvedValue({ run: { run_id: "r" }, as_of_sequence: 0, partial_outputs: [] });
   api.listRuns.mockResolvedValue([]);
   api.listCollaborationSteps.mockResolvedValue([]);
   api.listAgents.mockResolvedValue([]);

@@ -47,8 +47,14 @@ type FunctionCall struct {
 }
 
 type StreamEvent struct {
-	Type  string
-	Delta string
+	ModelCallID string
+	Attempt     int
+	Type        string
+	Delta       string
+	// DisplayText is an optional sanitized cumulative copy for durable output,
+	// distinct from the untouched answer/protocol Delta. Never contains credentials.
+	DisplayText      *string
+	DisplayTruncated bool
 	// Reset retracts provisional answer text when a round chooses Tools instead.
 	Reset      bool
 	ToolName   string

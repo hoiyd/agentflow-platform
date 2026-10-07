@@ -336,3 +336,10 @@
 
 .markdown a { color: var(--accent-dark); }
 .markdown th { background: #eef1f5; }
+.partial-output { margin: 20px auto; max-width: 760px; }
+.chat-workspace.expanded-content .partial-output { max-width: 1040px; }
+.partial-output article { padding: 16px 0; border-top: 1px solid var(--border); }
+.partial-output header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.partial-output header span, .partial-output small { color: var(--muted); }
+.partial-output small { display: block; margin-top: 6px; }
+.partial-output pre { margin: 12px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }

@@ -16,7 +16,7 @@ async function submit(page: Page, prompt: string) {
 }
 
 async function createReasoningAgent(page: Page, mode: string) {
-  const capability = `reasoning${mode.toLowerCase().replace(/[^a-z]/g, "")}`;
+  const capability = `reasoning${mode.toLowerCase().replace(/[^a-z]/g, "")}${test.info().repeatEachIndex}`;
   await page.getByRole("button", { name: "New agent", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Create new agent" });
   await dialog.getByLabel("Name", { exact: true }).fill(`Reasoning ${mode}`);
@@ -60,7 +60,7 @@ async function evidence(page: Page, request: APIRequestContext, prompt: string) 
     })),
     limits: { display_bytes_per_call: 16384, retained_browser_calls: 32 },
     privacy: { sanitized_reasoning_persisted: true, metadata_capture_content_absent: true, secret_absent: true },
-    limitations: ["strict local fixture, not live provider evidence", "same-Turn continuation only", "live prefixes are ephemeral; only completed text is durable"]
+    limitations: ["strict local fixture, not live provider evidence", "same-Turn continuation only", "raw live deltas are ephemeral; sanitized partial checkpoints are durable"]
   }, null, 2), contentType: "application/json" });
   return replay;
 }
@@ -194,21 +194,22 @@ test("safe reasoning is visible before completion and browser disconnect does no
   await evidence(page, request, prompt);
 });
 
-test("provider disconnect keeps failure and withholds all partial reasoning", async ({ page, request }) => {
+test("provider disconnect keeps failure and recovers only a sanitized incomplete prefix", async ({ page, request }) => {
   const prompt = "reasoning-disconnect: interrupt after reasoning";
   await submit(page, prompt);
   await expect(page.getByLabel("Task status: failed", { exact: true })).toBeVisible();
-  const disclosure = page.locator(".provider-reasoning");
-  await disclosure.locator("summary").click();
-  await expect(disclosure).toContainText("Interrupted; text withheld");
-  await expect(disclosure.locator("pre")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Recovered output" })).toContainText("Incomplete");
+  await expect(page.getByRole("region", { name: "Recovered output" })).toContainText("DISPLAY_ONLY_REASONING");
+  expect(await page.getByRole("region", { name: "Recovered output" }).innerText()).not.toContain(secret);
   await expect(page.getByText("Working...", { exact: true })).toHaveCount(0);
   await expect(page.locator(".error").filter({ hasText: "Internal Server Error" })).toBeVisible();
   expect((await evidence(page, request, prompt)).run.status).toBe("failed");
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Recovered output" })).toContainText("Incomplete");
 });
 
 for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
-test(`${mode}: explicit cancellation ends normally without publishing private partial text`, async ({ page, request }) => {
+test(`${mode}: explicit cancellation ends normally and preserves only sanitized incomplete reasoning`, async ({ page, request }) => {
   const capability = await createReasoningAgent(page, `${mode} cancellation`);
   await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: new RegExp(mode) }).click();
   const stream = page.waitForResponse((response) => response.request().method() === "POST" &&
@@ -226,19 +227,33 @@ test(`${mode}: explicit cancellation ends normally without publishing private pa
   await expect(disclosure).toContainText("Receiving provider reasoning");
   await expect(disclosure.locator("pre")).toContainText("DISPLAY_ONLY_REASONING");
   expect(await disclosure.locator("pre").innerText()).not.toContain("sk-fixture");
+  const href = await page.getByRole("link", { name: "View trace" }).getAttribute("href");
+  const runId = href!.split("/").at(-1)!;
+  // Synchronize on durable state, not on how quickly the UI can click Stop.
+  await expect.poll(async () => {
+    const projection = await read(request, `/api/runs/${runId}/projection`);
+    return projection.partial_outputs.some((item: { channel: string; text: string }) =>
+      item.channel === "reasoning" && item.text.includes("DISPLAY_ONLY_REASONING"));
+  }).toBe(true);
   await page.locator(".topbar").getByRole("button", { name: "Stop", exact: true }).click();
   await expect(page.getByLabel("Task status: canceled", { exact: true })).toBeVisible();
-  await expect(disclosure).toContainText("Run canceled; text withheld");
-  await expect(disclosure.locator("pre")).toHaveCount(0);
-  const replay = await evidence(page, request, prompt);
-  expect(replay.run.status).toBe("canceled");
-  expect(replay.run_events.filter((event: { type: string }) => event.type === "run.canceled")).toHaveLength(1);
-  expect(replay.run_events.some((event: { type: string }) => event.type === "run.failed")).toBe(false);
   const body = await (await stream).text();
   expect(body).toContain('"type":"model.reasoning_delta"');
   expect(body).not.toContain("event: error\n");
   expect(body).toContain('"type":"done"');
   expect(body).toContain('"status":"canceled"');
+  const recovered = page.getByRole("region", { name: "Recovered output" });
+  await expect(recovered).toContainText("Provider reasoning");
+  await expect(recovered).toContainText("Incomplete");
+  await expect(recovered).toContainText("DISPLAY_ONLY_REASONING");
+  expect(await recovered.innerText()).not.toContain("sk-fixture");
+  const replay = await evidence(page, request, prompt);
+  expect(replay.run.status).toBe("canceled");
+  expect(replay.run_events.filter((event: { type: string }) => event.type === "run.canceled")).toHaveLength(1);
+  expect(replay.run_events.some((event: { type: string }) => event.type === "run.failed")).toBe(false);
+  const saved = replay.projection.partial_outputs;
+  expect(saved.some((item: { channel: string; text: string; status: string }) =>
+    item.channel === "reasoning" && item.status === "interrupted" && item.text.includes("DISPLAY_ONLY_REASONING"))).toBe(true);
   await expect(page.locator(".error").filter({ hasText: "Internal Server Error" })).toHaveCount(0);
   await page.getByPlaceholder("Ask AgentFlow anything...").fill("Next task.");
   await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
@@ -246,10 +261,14 @@ test(`${mode}: explicit cancellation ends normally without publishing private pa
     mode, prompt, run_id: replay.run.id, status: replay.run.status,
     event_types: replay.run_events.map((event: { type: string }) => event.type),
     terminal_stream: "done:canceled", error_frame: false,
+    partial_outputs: saved, checkpoint_observed_before_stop: true,
     limitations: ["local deterministic provider; real browser, Go composition and isolated Postgres"]
   }, null, 2), contentType: "application/json" });
   await page.reload();
   await expect(page.getByLabel("Task status: canceled", { exact: true })).toBeVisible();
+  await expect(recovered).toContainText("Incomplete");
+  await expect(recovered).toContainText("DISPLAY_ONLY_REASONING");
+  expect(await recovered.innerText()).not.toContain("sk-fixture");
   await expect(page.locator(".error").filter({ hasText: "Internal Server Error" })).toHaveCount(0);
 });
 }
@@ -258,9 +277,9 @@ test("budget exhaustion cannot turn received reasoning into a successful answer"
   const prompt = "reasoning-budget: exhaust completion usage";
   await submit(page, prompt);
   await expect(page.getByLabel("Task status: failed", { exact: true })).toBeVisible();
-  const disclosure = page.locator(".provider-reasoning");
-  await disclosure.locator("summary").click();
-  expect(await disclosure.innerText()).not.toContain(secret);
+  const recovered = page.getByRole("region", { name: "Recovered output" });
+  await expect(recovered).toContainText("Incomplete");
+  expect(await recovered.innerText()).not.toContain(secret);
   const replay = await evidence(page, request, prompt);
   expect(replay.run.status).toBe("failed");
   expect(replay.run.error).toContain("budget");

@@ -165,7 +165,10 @@ sequence cursor. The stream hands off replayed Run Events, a `run.snapshot`
 at its projection watermark, and subsequent live events without a read/subscribe
 gap. It closes when execution completes, fails, cancels, or waits for a human.
 Reconnect with the latest SSE ID and reload persisted Messages when stopped.
-`model.delta` is live-only; partial tokens are not durable replay history.
+`model.delta` is live-only. Bounded `model.output_checkpoint` replacements are
+durable; Projection/Replay expose their latest `partial_outputs`. Reconnection
+replaces display text at its event sequence, never appends duplicate prefixes.
+See [Partial output recovery](../runtime/durable-partial-output.md).
 See [event projections](../runtime/event-projections-runtime-invariants.md).
 
 HTTP/SSE errors retain `error` and add stable `code`, `source`, `category`,
