@@ -84,12 +84,13 @@ func TestSandboxBindingFaultClassification(t *testing.T) {
 			root := t.TempDir()
 			cli := filepath.Join(root, "sbx-fixture")
 			namePath := filepath.Join(root, "name")
+			startedPath := filepath.Join(root, "started")
 			script := "#!/bin/sh\ncase \"$1\" in\ncreate) printf '%s' \"$3\" > '" + namePath + "';;\nexec) printf receipt;;\nrm) exit 0;;\nls) exit 0;;\nesac\n"
 			if scenario.name == "create-failed" {
 				script = strings.ReplaceAll(script, "create) printf", "create) exit 2; printf")
 			}
 			if scenario.name == "timeout" || scenario.name == "canceled-cleanup-failed" {
-				script = strings.ReplaceAll(script, "exec) printf receipt", "exec) exec /bin/sleep 60")
+				script = strings.ReplaceAll(script, "exec) printf receipt", "exec) printf started > '"+startedPath+"'; exec /bin/sleep 60")
 			}
 			if strings.Contains(scenario.name, "cleanup-failed") {
 				script = strings.ReplaceAll(script, "rm) exit 0", "rm) exit 2")
@@ -118,12 +119,12 @@ func TestSandboxBindingFaultClassification(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "canceled-cleanup-failed":
-				// Cancellation starts only after creation reaches the process.
+				// Wait for exec, not create's output: create may still be returning.
 				finished := make(chan struct{})
 				go func() {
 					defer close(finished)
 					for {
-						if _, err := os.Stat(namePath); err == nil {
+						if _, err := os.Stat(startedPath); err == nil {
 							cancel()
 							return
 						}

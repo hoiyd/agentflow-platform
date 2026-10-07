@@ -73,13 +73,17 @@ type Result struct {
 }
 
 type ModelEvent struct {
-	Type       EventType
-	Delta      string
-	Reset      bool
-	ToolName   string
-	ToolCallID string
-	Error      string
-	Reasoning  *eventpkg.ModelReasoningPayload
+	ModelCallID      string
+	Attempt          int
+	Type             EventType
+	Delta            string
+	DisplayText      *string
+	DisplayTruncated bool
+	Reset            bool
+	ToolName         string
+	ToolCallID       string
+	Error            string
+	Reasoning        *eventpkg.ModelReasoningPayload
 }
 
 type Model interface {

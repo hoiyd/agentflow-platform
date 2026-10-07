@@ -60,7 +60,7 @@ async function evidence(page: Page, request: APIRequestContext, prompt: string) 
     })),
     limits: { display_bytes_per_call: 16384, retained_browser_calls: 32 },
     privacy: { sanitized_reasoning_persisted: true, metadata_capture_content_absent: true, secret_absent: true },
-    limitations: ["strict local fixture, not live provider evidence", "same-Turn continuation only", "live prefixes are ephemeral; only completed text is durable"]
+    limitations: ["strict local fixture, not live provider evidence", "same-Turn continuation only", "raw live deltas are ephemeral; sanitized partial checkpoints are durable"]
   }, null, 2), contentType: "application/json" });
   return replay;
 }
@@ -194,17 +194,18 @@ test("safe reasoning is visible before completion and browser disconnect does no
   await evidence(page, request, prompt);
 });
 
-test("provider disconnect keeps failure and withholds all partial reasoning", async ({ page, request }) => {
+test("provider disconnect keeps failure and recovers only a sanitized incomplete prefix", async ({ page, request }) => {
   const prompt = "reasoning-disconnect: interrupt after reasoning";
   await submit(page, prompt);
   await expect(page.getByLabel("Task status: failed", { exact: true })).toBeVisible();
-  const disclosure = page.locator(".provider-reasoning");
-  await disclosure.locator("summary").click();
-  await expect(disclosure).toContainText("Interrupted; text withheld");
-  await expect(disclosure.locator("pre")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Recovered output" })).toContainText("Incomplete");
+  await expect(page.getByRole("region", { name: "Recovered output" })).toContainText("DISPLAY_ONLY_REASONING");
+  expect(await page.getByRole("region", { name: "Recovered output" }).innerText()).not.toContain(secret);
   await expect(page.getByText("Working...", { exact: true })).toHaveCount(0);
   await expect(page.locator(".error").filter({ hasText: "Internal Server Error" })).toBeVisible();
   expect((await evidence(page, request, prompt)).run.status).toBe("failed");
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Recovered output" })).toContainText("Incomplete");
 });
 
 for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
@@ -258,9 +259,9 @@ test("budget exhaustion cannot turn received reasoning into a successful answer"
   const prompt = "reasoning-budget: exhaust completion usage";
   await submit(page, prompt);
   await expect(page.getByLabel("Task status: failed", { exact: true })).toBeVisible();
-  const disclosure = page.locator(".provider-reasoning");
-  await disclosure.locator("summary").click();
-  expect(await disclosure.innerText()).not.toContain(secret);
+  const recovered = page.getByRole("region", { name: "Recovered output" });
+  await expect(recovered).toContainText("Incomplete");
+  expect(await recovered.innerText()).not.toContain(secret);
   const replay = await evidence(page, request, prompt);
   expect(replay.run.status).toBe("failed");
   expect(replay.run.error).toContain("budget");

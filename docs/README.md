@@ -26,7 +26,7 @@ related pages link to its contract rather than copying configuration or algorith
 - **Model access:** [route catalog](runtime/model-routing.md), including sampling, affinity, and Resume.
 - **Provider output:** [reasoning display](runtime/provider-reasoning.md), explicit format support, sanitized persistence and historical answer association.
 - **Completion:** [Verification](runtime/verification.md), distinct from development tests and offline evaluation.
-- **Recovery:** [checkpoints and actions](runtime/durable-recovery.md), [operator attention](runtime/operator-attention.md), and [release/recovery drill](operations/release-recovery-drill.md).
+- **Recovery:** [checkpoints and actions](runtime/durable-recovery.md), [partial output recovery](runtime/durable-partial-output.md), [operator attention](runtime/operator-attention.md), and [release/recovery drill](operations/release-recovery-drill.md).
 - **Events:** [generated catalog](runtime/event-catalog.md), [projections/invariants](runtime/event-projections-runtime-invariants.md), and [failure contracts](runtime/failure-handling.md).
 - **Configuration:** [backend settings](operations/backend-configuration.md), [credential/redaction boundary](operations/credential-boundary.md), and [production readiness](operations/production-readiness-roadmap.md).
 - **Access:** [OIDC identity and Workspace membership](operations/identity-membership.md): AgentFlow authentication theme, personal Workspace onboarding, database grants, revocable sessions and remaining authorization boundaries.

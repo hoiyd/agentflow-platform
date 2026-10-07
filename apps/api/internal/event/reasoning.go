@@ -3,10 +3,11 @@ package event
 import "agentflow-platform/apps/api/internal/domain"
 
 // ModelReasoningPayload is a sanitized display copy, never continuation state.
-// Text is a bounded replacement, not an answer delta. Live prefixes are ephemeral;
-// only the completed, sanitized copy is persisted as display content.
+// Text is a bounded replacement, not an answer delta. OutputRecorder commits
+// sanitized partial copies separately; this event retains its terminal contract.
 type ModelReasoningPayload struct {
 	ModelCallID string `json:"model_call_id"`
+	Attempt     int    `json:"attempt,omitempty"`
 	Format      string `json:"format"`
 	Status      string `json:"status"`
 	Text        string `json:"text,omitempty"`

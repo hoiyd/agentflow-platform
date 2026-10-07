@@ -26,6 +26,14 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 	if request.TurnID == "" {
 		request.TurnID = "turn_" + time.Now().UTC().Format("20060102150405.000000000")
 	}
+	modelCtx, cancelModel := context.WithCancel(ctx)
+	defer cancelModel()
+	var output *eventpkg.OutputRecorder
+	if request.Sink != nil {
+		output = eventpkg.NewOutputRecorder(request.Sink, cancelModel)
+		request.Sink = output
+		defer output.Close()
+	}
 	var sinkErr error
 	publish := func(item Event) {
 		item.TurnID, item.ConversationID = request.TurnID, request.ConversationID
@@ -34,6 +42,12 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 			return
 		}
 		payload := map[string]any{}
+		if item.ModelCallID != "" {
+			payload["model_call_id"] = item.ModelCallID
+		}
+		if item.Attempt > 0 {
+			payload["attempt"] = item.Attempt
+		}
 		eventType := unifiedEventType(item.Type)
 		if item.Reasoning != nil {
 			var err error
@@ -44,11 +58,16 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 				return
 			}
 		}
+		payload["role"] = request.Role
 		if item.Type == EventTurnStarted {
 			payload["agent_id"] = request.Agent.ID
 		}
 		if item.Delta != "" {
 			payload["delta"] = item.Delta
+		}
+		if item.DisplayText != nil {
+			payload["display_text"] = *item.DisplayText
+			payload["display_truncated"] = item.DisplayTruncated
 		}
 		if item.Reset {
 			payload["reset"] = true
@@ -86,7 +105,7 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 	if sinkErr != nil {
 		return Result{}, sinkErr
 	}
-	modelCtx := eventpkg.WithScope(ctx, eventpkg.Scope{ConversationID: request.ConversationID, RunID: request.RunID, StageID: request.StepID, TurnID: request.TurnID})
+	modelCtx = eventpkg.WithScope(modelCtx, eventpkg.Scope{ConversationID: request.ConversationID, RunID: request.RunID, StageID: request.StepID, TurnID: request.TurnID})
 	modelCtx = budget.WithScope(modelCtx, budget.Scope{StageID: request.StepID, TurnID: request.TurnID})
 	result, err := e.model.Execute(modelCtx, request, func(item ModelEvent) {
 		t := item.Type
@@ -94,8 +113,19 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 			t = EventModelDelta
 		}
 		publish(Event{Type: t, RunID: request.RunID, StepID: request.StepID, Delta: item.Delta, Reset: item.Reset,
+			DisplayText: item.DisplayText, DisplayTruncated: item.DisplayTruncated,
+			ModelCallID: item.ModelCallID, Attempt: item.Attempt,
 			ToolName: item.ToolName, ToolCallID: item.ToolCallID, Error: item.Error, Reasoning: item.Reasoning})
 	})
+	if output != nil {
+		status := "final"
+		if err != nil {
+			status = "interrupted"
+		}
+		if flushErr := output.Flush(status); flushErr != nil && sinkErr == nil {
+			sinkErr = flushErr
+		}
+	}
 	if sinkErr != nil {
 		return result, sinkErr
 	}
@@ -117,7 +147,7 @@ func (e *Engine) Execute(ctx context.Context, request Request, handler EventHand
 	}
 	emit(handler, Event{Type: EventModelFinished, RunID: request.RunID, StepID: request.StepID, Result: &result})
 	publish(Event{Type: EventTurnCompleted, RunID: request.RunID, StepID: request.StepID, Result: &result})
-	return result, nil
+	return result, sinkErr
 }
 
 func unifiedEventType(value EventType) domain.RunEventType {

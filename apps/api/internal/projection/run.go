@@ -13,6 +13,7 @@ import (
 func BuildSnapshot(run domain.Run, events []domain.RunEvent, ledger domain.RunUsageLedger, evidence []domain.VerificationEvidence) domain.RunProjectionSnapshot {
 	watermark := eventWatermark(events)
 	return domain.RunProjectionSnapshot{
+		PartialOutputs:    buildPartialOutputs(run, events),
 		Run:               BuildRunProjection(run, events),
 		Usage:             BuildUsageProjection(ledger, watermark),
 		Verification:      BuildVerificationProjection(run, evidence, watermark),

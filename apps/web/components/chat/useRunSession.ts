@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SetStateAction } from "react";
 import {
-  cancelRun, continueRun, observeRunEvents, resumeRun, streamChat,
+  cancelRun, continueRun, getRunProjection, observeRunEvents, resumeRun, streamChat,
   type AgentRoutingRequirements, type ChatMode
 } from "../../lib/api";
 import { createLatestRequestController } from "../../lib/latest-request";
@@ -10,6 +10,7 @@ import { createRunEventHandler, isTerminalRunStatus, type DraftMessage, type Run
 import type { useConversationWorkspace } from "./useConversationWorkspace";
 import { useRunTrace } from "./useRunTrace";
 import type { ReasoningEntry } from "./ReasoningDisclosure";
+import type { PartialOutput, RunProjectionSnapshot } from "../../lib/api-types";
 
 type Command =
   | { kind: "submitting"; content: string; mode: ChatMode; agentId: string; completionContract?: CompletionContractInput }
@@ -42,6 +43,8 @@ export function useRunSession(options: SessionOptions) {
   const [runState, setStoredRunState] = useState<RunState | null>(null);
   // Pending display updates; completed history is loaded through message.reasoning.
   const [reasoning, setReasoning] = useState<ReasoningEntry[]>([]);
+  const [partialOutputs, setPartialOutputs] = useState<PartialOutput[]>([]);
+  const outputCursor = useRef({ runId: "", sequence: -1 });
   const runRef = useRef<RunState | null>(null);
   const [streams] = useState(createLatestRequestController);
   const [cancellations] = useState(createLatestRequestController);
@@ -56,6 +59,14 @@ export function useRunSession(options: SessionOptions) {
       cancelInFlight.current = false;
       setCanceling(false);
     }
+  }, []);
+
+  const restoreOutputs = useCallback((snapshot: RunProjectionSnapshot) => {
+    if (snapshot.run.run_id !== runRef.current?.id) return;
+    const previous = outputCursor.current;
+    if (previous.runId === snapshot.run.run_id && previous.sequence > snapshot.as_of_sequence) return;
+    outputCursor.current = { runId: snapshot.run.run_id, sequence: snapshot.as_of_sequence };
+    setPartialOutputs(snapshot.run.status === "completed" ? [] : snapshot.partial_outputs ?? []);
   }, []);
 
   const { setAutonomousProgress, setCollaborationSteps, setPlanDraft } = trace;
@@ -112,19 +123,30 @@ export function useRunSession(options: SessionOptions) {
         if (!request.isCurrent() || snapshot.run.conversation_id !== conversationId || snapshot.run.run_id !== run.id) return;
         setRunState({ id: run.id, agentId: run.agentId, status: snapshot.run.status,
           verificationStatus: snapshot.run.verification_status });
+        restoreOutputs(snapshot);
         reloadStoppedRun(snapshot.run.status);
+      },
+      onOutput: (output) => {
+        if (!request.isCurrent() || output.run_id !== runRef.current?.id) return;
+        const previous = outputCursor.current;
+        if (previous.runId === output.run_id && previous.sequence >= output.sequence) return;
+        outputCursor.current = { runId: output.run_id, sequence: output.sequence };
+        setPartialOutputs(items => [...items.filter(item => !(item.turn_id === output.turn_id && item.channel === output.channel &&
+          (output.channel === "answer" || item.model_call_id === output.model_call_id))), output].slice(-32));
       }
     }).catch((error) => {
       if (request.isCurrent()) setError(error instanceof Error ? `Live run updates unavailable: ${error.message}` : "Live run updates unavailable");
     });
     return () => observations.cancel();
-  }, [conversationId, observing, activity, runState?.id, runState?.status, observations, createHandler, setRunState, setError]);
+  }, [conversationId, observing, activity, runState?.id, runState?.status, observations, createHandler, setRunState, setError, restoreOutputs]);
 
   function clearRun() {
     cancellations.cancel();
     setRunState(null);
     trace.reset();
     setReasoning([]);
+    setPartialOutputs([]);
+    outputCursor.current = { runId: "", sequence: -1 };
   }
 
   // Detaching closes browser-owned requests, never cancels the backend Run.
@@ -137,12 +159,16 @@ export function useRunSession(options: SessionOptions) {
     cancelInFlight.current = false;
     setCanceling(false);
     setReasoning([]);
+    setPartialOutputs([]);
+    outputCursor.current = { runId: "", sequence: -1 };
   }
 
   async function execute(command: Command) {
     if (activityRef.current !== "idle") return;
     const previousRun = runRef.current;
     const previousReasoning = reasoning;
+    const previousPartialOutputs = partialOutputs;
+    const previousOutputCursor = outputCursor.current;
     if (command.kind !== "submitting" && !previousRun?.id) return;
     activityRef.current = command.kind;
     setActivity(command.kind);
@@ -209,6 +235,8 @@ export function useRunSession(options: SessionOptions) {
           workspace.setInput(command.content);
           setRunState(previousRun);
           setReasoning(previousReasoning);
+          setPartialOutputs(previousPartialOutputs);
+          outputCursor.current = previousOutputCursor;
           trace.restore(previousTrace);
           rollbackLayout?.();
         } else if (command.kind === "resuming") {
@@ -216,6 +244,17 @@ export function useRunSession(options: SessionOptions) {
         }
       }
       workspace.setError(error instanceof Error ? error.message : `Unexpected ${command.kind === "submitting" ? "chat" : command.kind === "continuing" ? "continue" : "resume"} error`);
+      if (accepted && runRef.current?.id) {
+        try {
+          const snapshot = await getRunProjection(runRef.current.id, request.signal);
+          if (request.isCurrent()) {
+            restoreOutputs(snapshot);
+            if (snapshot.partial_outputs?.some(item => item.channel === "answer" && item.text)) {
+              workspace.setMessages(items => items.filter(item => item.id !== assistant.id));
+            }
+          }
+        } catch { /* Keep the visible draft and original error if recovery is unavailable. */ }
+      }
     } finally {
       if (request.isCurrent()) {
         activityRef.current = "idle";
@@ -246,7 +285,7 @@ export function useRunSession(options: SessionOptions) {
   }
 
   return {
-    runState, setRunState, trace, activity, reasoning, isCancelingRun, clearRun, detach, cancel,
+    runState, setRunState, trace, activity, reasoning, partialOutputs, restoreOutputs, isCancelingRun, clearRun, detach, cancel,
     isStreaming: activity !== "idle", isContinuingRun: activity === "continuing", isResumingRun: activity === "resuming",
     submit: (content: string, settings: { mode: ChatMode; agentId: string; completionContract?: CompletionContractInput }) =>
       content.trim() ? execute({ kind: "submitting", content: content.trim(), ...settings }) : Promise.resolve(),

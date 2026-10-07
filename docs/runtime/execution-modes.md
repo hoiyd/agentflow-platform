@@ -69,9 +69,11 @@ An explicit `POST /api/runs/{id}/cancel` remains the cancellation boundary.
 The workbench reconnects active Runs through `GET /api/runs/{id}/events`. The
 stream first closes the read/subscribe race with a canonical Run Projection,
 replays durable events after the supplied sequence, and then forwards live
-events. SSE `id` values are durable Run event sequences. `model.delta` remains
-live-only, so after a disconnect the persisted assistant Message, not partial
-token replay, is the authoritative final output.
+events. SSE `id` values are durable Run event sequences. Raw `model.delta` stays
+live-only; bounded `model.output_checkpoint` replacements now restore committed
+answer/reasoning prefixes. The persisted assistant Message remains the sole
+final answer. See [Partial output recovery](durable-partial-output.md) for commit
+cadence, Reset, safe-prefix limits and crash semantics.
 
 This continuity is process-local: an API process crash still uses the durable
 checkpoint and Resume protocol described in [Durable recovery](durable-recovery.md).

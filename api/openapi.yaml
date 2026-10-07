@@ -1553,6 +1553,25 @@ components:
         failures:
           type: array
           items: { $ref: '#/components/schemas/SkillFailureEvidence' }
+    PartialOutput:
+      description: Bounded display replacement committed at an event sequence; never model continuation or a final Message.
+      type: object
+      required: [run_id, turn_id, channel, round, revision, offset, text, status, sequence]
+      properties:
+        run_id: { type: string }
+        stage_id: { type: string }
+        turn_id: { type: string }
+        model_call_id: { type: string }
+        attempt: { type: integer, minimum: 0 }
+        round: { type: integer, minimum: 1 }
+        channel: { type: string, enum: [answer, reasoning] }
+        role: { type: string }
+        revision: { type: integer, format: int64, minimum: 1 }
+        offset: { type: integer, minimum: 0, description: UTF-8 byte length of this display replacement, not provider stream offset. }
+        text: { type: string }
+        status: { type: string, enum: [provisional, retracted, final, interrupted] }
+        truncated: { type: boolean }
+        sequence: { type: integer, format: int64, minimum: 0 }
     RunReplay:
       type: object
       required: [run, projection, conversation, messages, steps, summary, usage_ledger, run_events, stage_checkpoints, tool_effects, tool_artifacts, verification_evidence, verification_artifacts, task_state_revisions]
@@ -1566,6 +1585,9 @@ components:
             skill_evidence:
               type: array
               items: { $ref: '#/components/schemas/SkillEvidence' }
+            partial_outputs:
+              type: array
+              items: { $ref: '#/components/schemas/PartialOutput' }
         runtime_snapshot:
           type: object
           additionalProperties: true

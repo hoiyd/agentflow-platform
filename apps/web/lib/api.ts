@@ -314,10 +314,10 @@ export async function reconcileToolEffect(
 	);
 }
 
-export async function getRunProjection(runId: string): Promise<RunProjectionSnapshot> {
+export async function getRunProjection(runId: string, signal?: AbortSignal): Promise<RunProjectionSnapshot> {
   const data = await apiJSON(
     `/api/runs/${runId}/projection`,
-    { cache: "no-store" },
+    { cache: "no-store", signal },
     { errorMessage: "Failed to load run projection" }
   );
   const projection = expectObject<Record<string, unknown>>(data, "run projection");

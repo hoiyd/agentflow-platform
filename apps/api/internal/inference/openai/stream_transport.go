@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/budget"
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 )
@@ -140,7 +141,7 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 		if !displayStarted {
 			return
 		}
-		display := provider.ReasoningDisplay{ModelCallID: modelCallID, Format: c.reasoningDisplayFormat, Status: "interrupted"}
+		display := provider.ReasoningDisplay{ModelCallID: modelCallID, Attempt: ref.Attempt, Format: c.reasoningDisplayFormat, Status: "interrupted"}
 		if attemptErr == nil {
 			display.Status = "complete"
 			display.Text, display.Truncated = reasoningDisplayText(accumulated.reasoning.String(), c.apiKey)
@@ -148,6 +149,21 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 		sendReasoningDisplay(ctx, events, display)
 	}()
 	answerRetracted := false
+	var answerDisplay string
+	var answerDisplayTruncated bool
+	defer func() {
+		if answerRetracted || accumulated.content.Len() == 0 || ctx.Err() != nil {
+			return
+		}
+		text, truncated := sanitizedDisplayPrefix(accumulated.content.String(), c.apiKey, domain.MaxPartialOutputBytes)
+		if attemptErr == nil {
+			text, truncated = sanitizedDisplayText(accumulated.content.String(), c.apiKey, domain.MaxPartialOutputBytes)
+		}
+		select {
+		case <-ctx.Done():
+		case events <- StreamEvent{Type: "output_display", ModelCallID: modelCallID, Attempt: ref.Attempt, DisplayText: &text, DisplayTruncated: truncated}:
+		}
+	}()
 	var data strings.Builder
 	finishReasonSeen := false
 	refused := false
@@ -229,7 +245,7 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 				return false, err
 			}
 			if !displayStarted && c.reasoningDisplayFormat == provider.ReasoningFormatDeepSeek && modelCallID != "" && choice.Delta.ReasoningContent != nil && strings.TrimSpace(*choice.Delta.ReasoningContent) != "" {
-				if !sendReasoningDisplay(ctx, events, provider.ReasoningDisplay{ModelCallID: modelCallID, Format: c.reasoningDisplayFormat, Status: "receiving"}) {
+				if !sendReasoningDisplay(ctx, events, provider.ReasoningDisplay{ModelCallID: modelCallID, Attempt: ref.Attempt, Format: c.reasoningDisplayFormat, Status: "receiving"}) {
 					return false, ctx.Err()
 				}
 				displayStarted = true
@@ -242,7 +258,7 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 				lastDisplayCheck = time.Now()
 				text, truncated := reasoningDisplayPrefix(accumulated.reasoning.String(), c.apiKey)
 				if text != "" && text != lastDisplayText {
-					if !sendReasoningDisplay(ctx, events, provider.ReasoningDisplay{ModelCallID: modelCallID, Format: c.reasoningDisplayFormat, Status: "receiving", Text: text, Truncated: truncated}) {
+					if !sendReasoningDisplay(ctx, events, provider.ReasoningDisplay{ModelCallID: modelCallID, Attempt: ref.Attempt, Format: c.reasoningDisplayFormat, Status: "receiving", Text: text, Truncated: truncated}) {
 						return false, ctx.Err()
 					}
 					lastDisplayText, displayCapped = text, truncated
@@ -256,7 +272,7 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 					select {
 					case <-ctx.Done():
 						return false, ctx.Err()
-					case events <- StreamEvent{Type: "delta", Reset: true}:
+					case events <- StreamEvent{Type: "delta", Reset: true, ModelCallID: modelCallID, Attempt: ref.Attempt}:
 						answerRetracted = true
 					}
 				}
@@ -265,10 +281,12 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 			if choice.Delta.Content == "" {
 				continue
 			}
+			answerDisplay, answerDisplayTruncated = sanitizedDisplayPrefix(accumulated.content.String(), c.apiKey, domain.MaxPartialOutputBytes)
+			display := answerDisplay
 			select {
 			case <-ctx.Done():
 				return false, ctx.Err()
-			case events <- StreamEvent{Type: "delta", Delta: choice.Delta.Content}:
+			case events <- StreamEvent{Type: "delta", Delta: choice.Delta.Content, ModelCallID: modelCallID, Attempt: ref.Attempt, DisplayText: &display, DisplayTruncated: answerDisplayTruncated}:
 				result.emitted = true
 				result.answerEmitted = true
 			}

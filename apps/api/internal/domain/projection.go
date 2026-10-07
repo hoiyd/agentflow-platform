@@ -49,6 +49,7 @@ type RuntimeInvariantFailure struct {
 // runtime snapshot. SkillEvidence and InvariantFailures are populated at the
 // API boundary because they require model-request records outside RunReplay.
 type RunProjectionSnapshot struct {
+	PartialOutputs    []PartialOutput           `json:"partial_outputs"`
 	SkillEvidence     []SkillEvidence           `json:"skill_evidence,omitempty"`
 	Run               RunProjection             `json:"run"`
 	Usage             UsageProjection           `json:"usage"`

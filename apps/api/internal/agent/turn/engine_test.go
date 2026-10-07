@@ -95,6 +95,43 @@ func TestEngineRejectsEmptyInput(t *testing.T) {
 	}
 }
 
+func TestEngineCheckpointsAnswerBeforeTurnTerminal(t *testing.T) {
+	var durable []domain.RunEvent
+	engine := NewEngine(modelStub{result: Result{Output: "new answer"}, events: []ModelEvent{
+		{Delta: "old commentary "}, {Reset: true}, {Delta: "new "}, {Delta: "answer"},
+	}})
+	_, err := engine.Execute(context.Background(), Request{Input: "work", RunID: "run-1", TurnID: "turn-1",
+		Sink: eventpkg.SinkFunc(func(_ context.Context, item domain.RunEvent) error {
+			durable = append(durable, item)
+			return nil
+		})}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var checkpoints []domain.RunEvent
+	for _, item := range durable {
+		if item.Type == "model.output_checkpoint" {
+			checkpoints = append(checkpoints, item)
+		}
+	}
+	if len(checkpoints) == 0 {
+		t.Fatal("streamed output has no durable checkpoint")
+	}
+	last := checkpoints[len(checkpoints)-1]
+	if last.Payload["text"] != "new answer" || last.Payload["status"] != "final" || last.TurnID != "turn-1" {
+		t.Fatalf("checkpoint did not replace reset text: %#v", last)
+	}
+	foundReset := false
+	for _, item := range checkpoints {
+		if item.Payload["status"] == "retracted" {
+			foundReset = true
+		}
+	}
+	if !foundReset || durable[len(durable)-1].Type != domain.EventTurnCompleted {
+		t.Fatalf("missing durable reset or terminal ordering: %#v", durable)
+	}
+}
+
 func TestEngineStopsWhenDurableEventPublishFails(t *testing.T) {
 	called := false
 	engine := NewEngine(modelStub{result: Result{Output: "should not run"}})

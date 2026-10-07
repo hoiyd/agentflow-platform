@@ -91,6 +91,7 @@ export function normalizeRunProjection(value: unknown, run: RunInfo, summaryValu
       as_of_sequence: numberValue(verification.as_of_sequence) ?? watermark
     },
     as_of_sequence: watermark,
+    partial_outputs: Array.isArray(projection.partial_outputs) ? projection.partial_outputs : [],
     skill_evidence: normalizeSkillEvidence(projection.skill_evidence),
     invariant_failures: Array.isArray(projection.invariant_failures)
       ? projection.invariant_failures.filter((item): item is RuntimeInvariantFailure => isObject(item) && typeof item.code === "string")

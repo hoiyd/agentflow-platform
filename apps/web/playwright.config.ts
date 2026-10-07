@@ -33,7 +33,7 @@ export default defineConfig({
     },
     {
       name: "next-production",
-      command: "npm run build && npm run start -- --hostname 127.0.0.1 --port 13000",
+      command: "npm run build -- --webpack && npm run start -- --hostname 127.0.0.1 --port 13000",
       env: {
         NEXT_PUBLIC_API_BASE_URL: "http://127.0.0.1:18080",
         NEXT_PUBLIC_WORKSPACE_ID: "default_workspace",

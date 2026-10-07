@@ -12,6 +12,7 @@ import {
   listRuns,
   listMessages,
   getTaskState,
+  getRunProjection,
 } from "../lib/api";
 import { buildCompletionContract } from "../lib/verification";
 import { createLatestRequestController, type LatestRequestLease } from "../lib/latest-request";
@@ -279,11 +280,22 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
         status: run.status,
         verificationStatus: run.verification_status ?? "not_required"
       });
-      const steps = await listCollaborationSteps(run.id, request.signal);
+      const [steps, projection] = await Promise.all([
+        listCollaborationSteps(run.id, request.signal),
+        getRunProjection(run.id, request.signal).then(
+          (snapshot) => ({ snapshot }),
+          (error: unknown) => ({ error })
+        )
+      ]);
       if (!request.isCurrent()) {
         return;
       }
       setCollaborationSteps(steps.map(toCollaborationStepView));
+      if ("snapshot" in projection) {
+        session.restoreOutputs(projection.snapshot);
+      } else {
+        setError(projection.error instanceof Error ? `Partial output recovery unavailable: ${projection.error.message}` : "Partial output recovery unavailable");
+      }
       if (steps.some((step) => autonomousRoles.some((role) => role.id === step.role))) {
         handleChatModeChange("autonomous", true);
       } else if (steps.length > 0) {
@@ -483,6 +495,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
             isTaskStatePanelOpen={isTaskStatePanelOpen}
             messages={messages}
             reasoning={session.reasoning}
+            partialOutputs={isStreaming ? [] : session.partialOutputs}
             messagesRef={messagesRef}
             onCancel={() => void handleCancelRun()}
             onContinue={handleContinuePlan}

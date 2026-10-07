@@ -1,6 +1,7 @@
 package eventcatalog
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -91,6 +92,20 @@ func ValidateEnvelope(item domain.RunEvent) error {
 	if definition.Scope.Turn == ScopeRequired && strings.TrimSpace(item.TurnID) == "" {
 		return fmt.Errorf("run event %s requires turn_id", item.Type)
 	}
+	if item.Type == domain.EventModelOutputCheckpoint {
+		var output domain.PartialOutput
+		data, err := json.Marshal(item.Payload)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(data, &output); err != nil {
+			return err
+		}
+		if output.RunID != item.RunID || output.StageID != item.StageID || output.TurnID != item.TurnID {
+			return fmt.Errorf("partial output scope differs from event envelope")
+		}
+		return output.Validate()
+	}
 	return nil
 }
 
@@ -151,6 +166,7 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventModelStarted}, DurableFact, optional, "event.ModelPayload", start("model"), "run_projection", "request_capture", "replay")
 	add([]domain.RunEventType{domain.EventModelCompleted, domain.EventModelFailed}, DurableFact, optional, "event.ModelPayload", terminal("model", domain.EventModelStarted), "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventModelDelta}, LiveOnly, optional, "event.ModelPayload", none, "live_ui")
+	add([]domain.RunEventType{domain.EventModelOutputCheckpoint}, DurableFact, turn, "event.OutputCheckpointPayload", none, "output_projection", "live_ui", "replay")
 	add([]domain.RunEventType{domain.EventModelReasoning}, DurableFact, turn, "event.ModelReasoningPayload", none, "live_ui", "message_projection", "replay")
 	add([]domain.RunEventType{domain.EventModelReasoningDelta}, LiveOnly, turn, "event.ModelReasoningPayload", none, "live_ui")
 	add([]domain.RunEventType{domain.EventModelRouteDecided}, DurableFact, optional, "event.ModelRouteDecisionPayload", transition("model"), "request_capture", "replay")
@@ -206,7 +222,7 @@ func producerFor(eventType domain.RunEventType) string {
 		return "agent/router"
 	case domain.EventStageStarted, domain.EventStageCompleted, domain.EventStageFailed, domain.EventStageCanceled,
 		domain.EventTurnStarted, domain.EventTurnCompleted, domain.EventTurnFailed, domain.EventTurnCanceled,
-		domain.EventModelStarted, domain.EventModelDelta, domain.EventModelReasoning, domain.EventModelReasoningDelta, domain.EventModelCompleted, domain.EventModelFailed:
+		domain.EventModelStarted, domain.EventModelDelta, domain.EventModelOutputCheckpoint, domain.EventModelReasoning, domain.EventModelReasoningDelta, domain.EventModelCompleted, domain.EventModelFailed:
 		return "agent/turn"
 	case domain.EventModelRouteDecided:
 		return "agent/modelrouting"

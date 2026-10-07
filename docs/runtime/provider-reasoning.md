@@ -47,10 +47,11 @@ is no background timer: when the provider stalls, no new batch is emitted.
 Successful completion always replaces the prefix with the sanitized full copy.
 The display copy is capped at 16 KiB after redaction, with an explicit truncation
 marker; capped live displays stop producing updates until finalization.
-Interrupted/invalid calls and canceled Runs remove the unfinished live display
-and persist no partial text. Text already shown cannot be recalled from the
-browser; this boundary prevents unfinished text from becoming durable history,
-not retrospective secrecy. Existing protocol and Run budgets remain authoritative.
+Interrupted/invalid calls and canceled Runs close the live disclosure. Sanitized
+committed prefixes remain available as explicitly incomplete display checkpoints;
+they are not promoted to an assistant Message or provider continuation. See
+[Partial output recovery](durable-partial-output.md). Existing protocol and Run
+budgets remain authoritative.
 The shared stream accumulator bounds answer, reasoning, and Tool fragments to
 1 MiB per model call, regardless of display permission; fallback output-token
 estimates include returned reasoning even when display is disabled. Exact
@@ -58,8 +59,9 @@ provider-reported usage remains authoritative. Display status `Received` means a
 complete transport response, not successful Run budget settlement or verification.
 
 `model.reasoning` is a typed, durable status/completion event; sanitized live
-replacements use `model.reasoning_delta`, a live-only event with no DB writes or
-durable sequence. Both are scoped to Run, Turn, optional Stage, and model-call
+replacements use `model.reasoning_delta`, a live-only event. The Turn Sink coalesces
+these into separate durable `model.output_checkpoint` replacements for observers,
+instead of persisting every incoming batch. Both are scoped to Run, Turn, optional Stage, and model-call
 identity. Chat uses a collapsed plain-text disclosure;
 reasoning never appends to the assistant answer. Non-streaming internal planning
 and routing calls do not produce these display events.
@@ -68,9 +70,9 @@ text). Switching workspace views or execution-mode tabs, or selecting the alread
 active Conversation in Recent runs, keeps the stream connection. Completed
 reasoning is also available beside historical answers after changing Conversation
 or reloading. A remounted disclosure is collapsed; expand it to read saved text.
-Reconnect/reload during generation does not replay prior ephemeral prefixes;
-the next live batch replaces the display, or completion restores the full saved
-copy. Terminal display states cannot be overwritten by late live batches, and a
+Reconnect/reload during generation restores the latest committed safe prefix in
+the recovered-output area; newer checkpoints replace it. Completion restores
+the full saved copy beside the final answer. Terminal display states cannot be overwritten by late live batches, and a
 replayed text-free receiving fact does not erase newer live text.
 The existing header Stop action is available for active Runs in all three modes,
 so waiting for provider reasoning can be explicitly canceled without closing Chat.
@@ -89,7 +91,8 @@ No schema migration is required. Existing Runs remain readable, but previously
 live-only reasoning that was never saved cannot be recovered. Runs without an
 assistant answer (for example, a failed Tool round) retain completed reasoning in
 Run Replay events rather than inventing a Conversation message. Receiving and
-interrupted states contain no reasoning text. The saved display copy has the same
+interrupted `model.reasoning` states contain no reasoning text; separate output
+checkpoints can contain a sanitized incomplete prefix. The saved display copy has the same
 16 KiB cap and truncation flag; full raw continuation is not saved by this feature.
 Deleting the Conversation removes its Runs and these events through the existing
 Store lifecycle. There is no separate reasoning expiry or automatic deletion on
@@ -116,10 +119,10 @@ compatibility.
 | Missing, empty, or unsupported reasoning | No empty disclosure; answer path unchanged |
 | Interleaved answer/reasoning and multiple Tool rounds | Separate model-call entries; answer reset never resets reasoning |
 | Split credentials or multiline private keys | Redact whole safe prefixes/final copy; serialized continuation unchanged |
-| Live batches, split configured keys, or unfinished credential tokens | Publish only sanitized closed prefixes; retain the unsafe tail; never persist live batches |
+| Live batches, split configured keys, or unfinished credential tokens | Commit only sanitized bounded prefix replacements; retain the unsafe tail; never persist raw live deltas |
 | Slow provider, repeated receiving state, or late live batch | Show text before completion without clearing newer text or overwriting a terminal call |
 | Display cap exceeded | Truncated sanitized text; required continuation retained |
-| Missing finish/DONE, malformed SSE, disconnect, refusal, length stop | Interrupted display; real call/Run failure preserved; live prefix cleared, no partial text persisted |
+| Missing finish/DONE, malformed SSE, disconnect, refusal, length stop | Real call/Run failure preserved; last committed safe prefix is explicitly incomplete, never a successful answer |
 | Cancel or budget exhaustion | No reasoning-only success; no retry after a visible receiving event |
 | View/mode changes or reselecting the active Conversation | Retain reasoning and current stream; a remounted disclosure is collapsed |
 | Different Conversation, new Run, reload | Reload reasoning beside its own historical answer; never leak it into a new Run's display |

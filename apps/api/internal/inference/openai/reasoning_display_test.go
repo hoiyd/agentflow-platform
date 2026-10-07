@@ -98,6 +98,45 @@ func TestReasoningDisplayWirePrivacyAndFailureBoundaries(t *testing.T) {
 	}
 }
 
+func TestAnswerCheckpointCopyRedactsConfiguredKeyWithoutChangingProtocol(t *testing.T) {
+	client := retryTestClient()
+	client.apiKey = "custom multi word credential"
+	raw := "Answer with " + client.apiKey + " followed by evidence."
+	client.httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		var wire strings.Builder
+		for _, part := range []string{"Answer with custom multi ", "word credential followed by evidence."} {
+			delta, _ := json.Marshal(map[string]string{"content": part})
+			wire.WriteString(toolStreamFrame(string(delta), ""))
+		}
+		wire.WriteString(toolStreamFrame(`{}`, "stop") + "data: [DONE]\n\n")
+		return modelHTTPResponse(200, wire.String()), nil
+	})}
+	events := make(chan provider.StreamEvent, 16)
+	result, err := client.streamChat(context.Background(), []Message{{Role: "user", Content: "test"}}, nil, events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	close(events)
+	var copies []string
+	for item := range events {
+		data, _ := json.Marshal(item)
+		var fields map[string]any
+		_ = json.Unmarshal(data, &fields)
+		if text, ok := fields["DisplayText"].(string); ok {
+			if strings.Contains(text, "custom") || strings.Contains(text, "credential") {
+				t.Fatalf("unsafe durable copy: %q", text)
+			}
+			copies = append(copies, text)
+		}
+	}
+	if len(copies) == 0 || !strings.Contains(copies[len(copies)-1], "[REDACTED]") {
+		t.Fatal("no sanitized answer checkpoint copy")
+	}
+	if result.output != raw {
+		t.Fatal("display sanitization changed protocol answer")
+	}
+}
+
 func TestReasoningDisplayPrefixWithholdsIncompleteCredentials(t *testing.T) {
 	for _, test := range []struct{ name, raw, key, forbidden string }{
 		{"configured", "Safe words. custom secret with spaces More evidence. ", "custom secret with spaces", "custom"},

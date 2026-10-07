@@ -1,11 +1,12 @@
 import { APIError, apiRequest, stringValue, numberValue } from "./api-client.ts";
-import type { ChatEvent, ContractSchemas, RunEvent, RunProjectionSnapshot } from "./api-types.ts";
+import type { ChatEvent, ContractSchemas, PartialOutput, RunEvent, RunProjectionSnapshot } from "./api-types.ts";
 
 type RunObservationOptions = {
   afterSequence?: number;
   signal?: AbortSignal;
   onEvent: (event: ChatEvent, sequence: number, replayed: boolean) => void;
   onSnapshot: (snapshot: RunProjectionSnapshot) => void;
+  onOutput?: (output: PartialOutput) => void;
 };
 
 export async function readChatEventStream(response: Response, onEvent: (event: ChatEvent) => void) {
@@ -41,6 +42,11 @@ export async function observeRunEvents(runId: string, options: RunObservationOpt
         if (id > 0 && id <= cursor) return;
         if (id > cursor) cursor = id;
         const decoded = JSON.parse(data) as ChatEvent | RunEvent;
+        if ("schema_version" in decoded && decoded.type === "model.output_checkpoint") {
+          options.onOutput?.({ ...decoded.payload, run_id: decoded.run_id, turn_id: decoded.turn_id,
+            stage_id: decoded.stage_id, sequence: id } as PartialOutput);
+          return;
+        }
         const projected = projectRunEvent(decoded);
         assertStreamAccess(projected);
         if (projected.type === "error") {

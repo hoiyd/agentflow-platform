@@ -13,6 +13,8 @@ import { MessageCitations, renderMarkdown } from "./MarkdownContent";
 import { ModeChooser } from "./ModeChooser";
 import { TaskStatePanel } from "./TaskStatePanel";
 import { ReasoningDisclosure, type ReasoningEntry } from "./ReasoningDisclosure";
+import { PartialOutputPanel } from "./PartialOutputPanel";
+import type { PartialOutput } from "../../lib/api-types";
 
 type ChatWorkspaceProps = {
   agents: AgentInfo[];
@@ -28,6 +30,7 @@ type ChatWorkspaceProps = {
   isTaskStatePanelOpen: boolean;
   messages: Message[];
   reasoning?: ReasoningEntry[];
+  partialOutputs?: PartialOutput[];
   messagesRef: RefObject<HTMLElement | null>;
   onCancel: () => void;
   onContinue: (plan?: string, requirements?: AgentRoutingRequirements) => void;
@@ -157,7 +160,8 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
               </Fragment>
             ))
           )}
-          {messages.at(-1)?.role !== "assistant" && props.reasoning?.length ? (
+          <PartialOutputPanel outputs={props.partialOutputs ?? []} runStatus={runStatus} />
+          {messages.at(-1)?.role !== "assistant" && props.reasoning?.length && !props.partialOutputs?.some(item => item.channel === "reasoning" && item.text) ? (
             <ReasoningDisclosure entries={props.reasoning} runStatus={runStatus} />
           ) : null}
         </section>

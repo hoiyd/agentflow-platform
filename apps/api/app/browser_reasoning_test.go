@@ -19,8 +19,33 @@ func browserReasoningFrame(w http.ResponseWriter, delta map[string]any, finish a
 }
 
 func (f *browserProvider) respondReasoning(w http.ResponseWriter, r *http.Request, task string, round int) {
+	gate := f.currentGate()
 	w.Header().Set("Content-Type", "text/event-stream")
 	reasoning := browserDisplayReasoning(round)
+	if strings.Contains(task, "reasoning-partial-gate") {
+		browserReasoningFrame(w, map[string]any{"reasoning_content": reasoning}, nil)
+		if round == 0 {
+			browserReasoningFrame(w, map[string]any{"content": "Discard this draft "}, nil)
+			browserReasoningFrame(w, map[string]any{"tool_calls": []any{map[string]any{
+				"index": 0, "id": "partial-clock", "type": "function",
+				"function": map[string]string{"name": "get_current_time", "arguments": `{}`},
+			}}}, "tool_calls")
+			fmt.Fprint(w, "data: [DONE]\n\n")
+			return
+		}
+		browserReasoningFrame(w, map[string]any{"content": "Recover this answer safely while waiting for provider completion. "}, nil)
+		select {
+		case <-r.Context().Done():
+			return
+		case <-gate:
+		case <-time.After(35 * time.Second):
+			f.reject(w, "partial recovery not observed")
+			return
+		}
+		browserReasoningFrame(w, map[string]any{"content": "finished."}, "stop")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		return
+	}
 	if strings.Contains(task, "reasoning-empty") {
 		reasoning = ""
 	}
@@ -47,7 +72,7 @@ func (f *browserProvider) respondReasoning(w http.ResponseWriter, r *http.Reques
 	}
 	if strings.Contains(task, "reasoning-gate") {
 		select {
-		case <-f.gate:
+		case <-gate:
 		case <-r.Context().Done():
 			return
 		case <-time.After(35 * time.Second):

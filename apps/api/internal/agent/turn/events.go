@@ -22,20 +22,24 @@ const (
 )
 
 type Event struct {
-	Type           EventType
-	RunID          string
-	StepID         string
-	TurnID         string
-	ConversationID string
-	Reasoning      *eventpkg.ModelReasoningPayload
-	Delta          string
-	Reset          bool
-	ToolName       string
-	ToolCallID     string
-	Result         *Result
-	Error          string
-	Cause          error
-	Timestamp      time.Time
+	Type             EventType
+	RunID            string
+	StepID           string
+	TurnID           string
+	ConversationID   string
+	Reasoning        *eventpkg.ModelReasoningPayload
+	Delta            string
+	DisplayText      *string
+	DisplayTruncated bool
+	ModelCallID      string
+	Attempt          int
+	Reset            bool
+	ToolName         string
+	ToolCallID       string
+	Result           *Result
+	Error            string
+	Cause            error
+	Timestamp        time.Time
 }
 
 type EventHandler func(Event)
