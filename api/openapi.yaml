@@ -1572,6 +1572,42 @@ components:
         status: { type: string, enum: [provisional, retracted, final, interrupted] }
         truncated: { type: boolean }
         sequence: { type: integer, format: int64, minimum: 0 }
+    ToolProgressUpdate:
+      description: Bounded semantic progress only; counts do not imply Tool completion.
+      type: object
+      required: [phase]
+      properties:
+        phase: { type: string, pattern: '^[a-z0-9_-]{1,64}$' }
+        message: { type: string, maxLength: 1024, description: Backend enforces a 1024 UTF-8 byte cap after redaction. }
+        completed: { type: integer, format: int64, minimum: 0 }
+        total: { type: integer, format: int64, minimum: 1 }
+        truncated: { type: boolean }
+    ToolProgress:
+      allOf:
+        - $ref: '#/components/schemas/ToolProgressUpdate'
+        - type: object
+          required: [run_id, turn_id, tool_call_id, tool_name, status, sequence]
+          properties:
+            run_id: { type: string }
+            turn_id: { type: string }
+            stage_id: { type: string }
+            tool_call_id: { type: string }
+            tool_name: { type: string }
+            status: { type: string, enum: [running, completed, failed, interrupted] }
+            sequence: { type: integer, format: int64 }
+    ToolProgressChunk:
+      type: object
+      required: [type, run_id, turn_id, tool_call_id, tool_name, status, sequence]
+      properties:
+        type: { type: string, const: tool_progress }
+        run_id: { type: string }
+        turn_id: { type: string }
+        stage_id: { type: string }
+        tool_call_id: { type: string }
+        tool_name: { type: string }
+        status: { type: string, enum: [running, completed, failed, interrupted] }
+        sequence: { type: integer, format: int64 }
+        update: { $ref: '#/components/schemas/ToolProgressUpdate' }
     RunReplay:
       type: object
       required: [run, projection, conversation, messages, steps, summary, usage_ledger, run_events, stage_checkpoints, tool_effects, tool_artifacts, verification_evidence, verification_artifacts, task_state_revisions]
@@ -1588,6 +1624,9 @@ components:
             partial_outputs:
               type: array
               items: { $ref: '#/components/schemas/PartialOutput' }
+            tool_progress:
+              type: array
+              items: { $ref: '#/components/schemas/ToolProgress' }
         runtime_snapshot:
           type: object
           additionalProperties: true
@@ -1806,6 +1845,7 @@ components:
         - $ref: '#/components/schemas/RunProgressChunk'
         - $ref: '#/components/schemas/ModelDeltaChunk'
         - $ref: '#/components/schemas/ModelReasoningChunk'
+        - $ref: '#/components/schemas/ToolProgressChunk'
         - $ref: '#/components/schemas/StageStateChunk'
         - $ref: '#/components/schemas/DoneChunk'
         - $ref: '#/components/schemas/ErrorChunk'

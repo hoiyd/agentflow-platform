@@ -496,6 +496,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
             messages={messages}
             reasoning={session.reasoning}
             partialOutputs={isStreaming ? [] : session.partialOutputs}
+            toolProgress={session.toolProgress}
             messagesRef={messagesRef}
             onCancel={() => void handleCancelRun()}
             onContinue={handleContinuePlan}

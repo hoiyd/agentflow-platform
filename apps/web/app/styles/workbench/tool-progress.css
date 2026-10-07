@@ -1,0 +1,13 @@
+.tool-progress-panel { margin: 16px auto; width: 100%; max-width: 760px; border-block: 1px solid var(--border); }
+.chat-workspace.expanded-content .tool-progress-panel { max-width: 1040px; }
+.replay-page .tool-progress-panel { max-width: none; }
+.tool-progress-panel summary { cursor: pointer; padding: 12px 16px; font-size: 13px; font-weight: 600; }
+.tool-progress-panel summary span { color: var(--muted); margin-left: 12px; font-weight: 400; }
+.tool-progress-items { padding: 0 16px 12px; }
+.tool-progress-items article { padding: 12px 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.tool-progress-items header, .tool-progress-phase { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.tool-progress-items header { font-size: 13px; }
+.tool-progress-items header span, .tool-progress-items small { color: var(--muted); }
+.tool-progress-phase { margin-top: 8px; font-size: 13px; }
+.tool-progress-items p { margin: 8px 0; white-space: pre-wrap; font-size: 13px; }
+.tool-progress-items small { display: block; margin-top: 8px; font-size: 11px; }

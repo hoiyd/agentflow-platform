@@ -18,6 +18,7 @@ Global styles load in ordered feature layers from `app/layout.tsx`:
 - `home.css`: product home page.
 - `shell.css`: workspace navigation, top bar, and task status.
 - `chat.css`: mode chooser, messages, markdown, and empty state.
+- `tool-progress.css`: shared compact Tool execution progress in Chat and Replay.
 - `task-state.css`: Conversation Task State trigger, inspector layout, and fact rows.
 - `composer.css`: composer, agent selector, and agent dialogs.
 - `tools.css`: tools workspace refinements.

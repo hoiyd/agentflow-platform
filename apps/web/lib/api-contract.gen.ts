@@ -1003,11 +1003,48 @@ export interface components {
             /** Format: int64 */
             sequence: number;
         };
+        /** @description Bounded semantic progress only; counts do not imply Tool completion. */
+        ToolProgressUpdate: {
+            phase: string;
+            /** @description Backend enforces a 1024 UTF-8 byte cap after redaction. */
+            message?: string;
+            /** Format: int64 */
+            completed?: number;
+            /** Format: int64 */
+            total?: number;
+            truncated?: boolean;
+        };
+        ToolProgress: components["schemas"]["ToolProgressUpdate"] & {
+            run_id: string;
+            turn_id: string;
+            stage_id?: string;
+            tool_call_id: string;
+            tool_name: string;
+            /** @enum {string} */
+            status: "running" | "completed" | "failed" | "interrupted";
+            /** Format: int64 */
+            sequence: number;
+        };
+        ToolProgressChunk: {
+            /** @constant */
+            type: "tool_progress";
+            run_id: string;
+            turn_id: string;
+            stage_id?: string;
+            tool_call_id: string;
+            tool_name: string;
+            /** @enum {string} */
+            status: "running" | "completed" | "failed" | "interrupted";
+            /** Format: int64 */
+            sequence: number;
+            update?: components["schemas"]["ToolProgressUpdate"];
+        };
         RunReplay: {
             run: components["schemas"]["Run"];
             projection: {
                 skill_evidence?: components["schemas"]["SkillEvidence"][];
                 partial_outputs?: components["schemas"]["PartialOutput"][];
+                tool_progress?: components["schemas"]["ToolProgress"][];
             } & {
                 [key: string]: unknown;
             };
@@ -1155,7 +1192,7 @@ export interface components {
             retry_after_ms?: number;
             request_id?: string;
         };
-        ChatStreamEvent: components["schemas"]["ConversationChunk"] | components["schemas"]["RunStateChunk"] | components["schemas"]["RunProgressChunk"] | components["schemas"]["ModelDeltaChunk"] | components["schemas"]["ModelReasoningChunk"] | components["schemas"]["StageStateChunk"] | components["schemas"]["DoneChunk"] | components["schemas"]["ErrorChunk"] | components["schemas"]["RunEvent"];
+        ChatStreamEvent: components["schemas"]["ConversationChunk"] | components["schemas"]["RunStateChunk"] | components["schemas"]["RunProgressChunk"] | components["schemas"]["ModelDeltaChunk"] | components["schemas"]["ModelReasoningChunk"] | components["schemas"]["ToolProgressChunk"] | components["schemas"]["StageStateChunk"] | components["schemas"]["DoneChunk"] | components["schemas"]["ErrorChunk"] | components["schemas"]["RunEvent"];
     };
     responses: {
         /** @description Invalid request. */

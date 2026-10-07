@@ -238,6 +238,19 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 	policy := effectivePolicy(e.defaultPolicy, binding.Policy)
 	executionCtx, cancel := context.WithTimeout(ctx, policy.Timeout)
 	defer cancel()
+	var updates *executionProgress
+	var wake <-chan struct{}
+	var ticks <-chan time.Time
+	var emitProgress func(domain.ToolProgressUpdate)
+	if tracer, ok := e.tracer.(ExecutionProgressTracer); ok {
+		executionCtx, updates = newExecutionProgress(executionCtx)
+		defer updates.close()
+		wake = updates.wake
+		ticker := time.NewTicker(progressInterval)
+		defer ticker.Stop()
+		ticks = ticker.C
+		emitProgress = func(update domain.ToolProgressUpdate) { tracer.ToolProgressUpdated(executionCtx, request, update) }
+	}
 	type handlerResult struct {
 		value any
 		err   error
@@ -253,65 +266,76 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 		completed <- handlerResult{value: value, err: err}
 	}()
 
-	select {
-	case <-executionCtx.Done():
-		if ctx.Err() != nil {
-			result.Error = executionError(ErrorExecutionCanceled, "tool execution canceled", ctx.Err())
-		} else {
-			result.Error = executionError(ErrorExecutionTimeout, fmt.Sprintf("tool execution exceeded %s", policy.Timeout), executionCtx.Err())
-		}
-		e.markSideEffectUncertain(effectKey, result.ErrorMessage())
-		return result
-	case completed := <-completed:
-		if completed.err != nil {
-			switch {
-			case ctx.Err() != nil:
+	for {
+		select {
+		case <-wake:
+			updates.publish(emitProgress)
+			wake = nil // First update is immediate; subsequent replacements are throttled.
+		case <-ticks:
+			updates.publish(emitProgress)
+		case <-executionCtx.Done():
+			if ctx.Err() != nil {
 				result.Error = executionError(ErrorExecutionCanceled, "tool execution canceled", ctx.Err())
-			case errors.Is(executionCtx.Err(), context.DeadlineExceeded):
+			} else {
 				result.Error = executionError(ErrorExecutionTimeout, fmt.Sprintf("tool execution exceeded %s", policy.Timeout), executionCtx.Err())
-			default:
-				var typed *ExecutionError
-				if errors.As(completed.err, &typed) {
-					result.Error = executionError(typed.Code, typed.Message, typed.Cause)
-				} else {
-					result.Error = executionError(ErrorExecutionFailed, completed.err.Error(), completed.err)
+			}
+			e.markSideEffectUncertain(effectKey, result.ErrorMessage())
+			return result
+		case completed := <-completed:
+			if updates != nil {
+				updates.publish(emitProgress)
+				updates.close()
+			}
+			if completed.err != nil {
+				switch {
+				case ctx.Err() != nil:
+					result.Error = executionError(ErrorExecutionCanceled, "tool execution canceled", ctx.Err())
+				case errors.Is(executionCtx.Err(), context.DeadlineExceeded):
+					result.Error = executionError(ErrorExecutionTimeout, fmt.Sprintf("tool execution exceeded %s", policy.Timeout), executionCtx.Err())
+				default:
+					var typed *ExecutionError
+					if errors.As(completed.err, &typed) {
+						result.Error = executionError(typed.Code, typed.Message, typed.Cause)
+					} else {
+						result.Error = executionError(ErrorExecutionFailed, completed.err.Error(), completed.err)
+					}
+				}
+				e.markSideEffectUncertain(effectKey, result.ErrorMessage())
+				return result
+			}
+			encoded, err := json.Marshal(completed.value)
+			if err != nil {
+				result.Error = executionError(ErrorResultEncoding, "tool result is not JSON-compatible", err)
+				e.markSideEffectUncertain(effectKey, result.ErrorMessage())
+				return result
+			}
+			result.encodedResult = append([]byte(nil), encoded...)
+			if len(encoded) > policy.MaxResultBytes {
+				result = e.artifactGovernor.govern(ctx, request, result, encoded, policy.MaxResultBytes)
+			} else {
+				result.Result = completed.value
+			}
+			if effectKey != "" {
+				persisted, err := json.Marshal(result)
+				if err != nil {
+					result.Error = executionError(ErrorEffectJournal, "encode side-effect result", err)
+					e.markSideEffectUncertain(effectKey, result.ErrorMessage())
+					return result
+				}
+				persisted, _, err = redaction.JSON(persisted)
+				if err != nil {
+					result.Error = executionError(ErrorEffectJournal, "redact side-effect result", err)
+					e.markSideEffectUncertain(effectKey, result.ErrorMessage())
+					return result
+				}
+				if _, err := e.effectJournal.CompleteToolEffect(effectKey, persisted); err != nil {
+					result.Error = executionError(ErrorEffectJournal, "commit side-effect journal: "+err.Error(), err)
+					e.markSideEffectUncertain(effectKey, result.ErrorMessage())
+					return result
 				}
 			}
-			e.markSideEffectUncertain(effectKey, result.ErrorMessage())
 			return result
 		}
-		encoded, err := json.Marshal(completed.value)
-		if err != nil {
-			result.Error = executionError(ErrorResultEncoding, "tool result is not JSON-compatible", err)
-			e.markSideEffectUncertain(effectKey, result.ErrorMessage())
-			return result
-		}
-		result.encodedResult = append([]byte(nil), encoded...)
-		if len(encoded) > policy.MaxResultBytes {
-			result = e.artifactGovernor.govern(ctx, request, result, encoded, policy.MaxResultBytes)
-		} else {
-			result.Result = completed.value
-		}
-		if effectKey != "" {
-			persisted, err := json.Marshal(result)
-			if err != nil {
-				result.Error = executionError(ErrorEffectJournal, "encode side-effect result", err)
-				e.markSideEffectUncertain(effectKey, result.ErrorMessage())
-				return result
-			}
-			persisted, _, err = redaction.JSON(persisted)
-			if err != nil {
-				result.Error = executionError(ErrorEffectJournal, "redact side-effect result", err)
-				e.markSideEffectUncertain(effectKey, result.ErrorMessage())
-				return result
-			}
-			if _, err := e.effectJournal.CompleteToolEffect(effectKey, persisted); err != nil {
-				result.Error = executionError(ErrorEffectJournal, "commit side-effect journal: "+err.Error(), err)
-				e.markSideEffectUncertain(effectKey, result.ErrorMessage())
-				return result
-			}
-		}
-		return result
 	}
 }
 

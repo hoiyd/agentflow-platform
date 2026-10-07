@@ -14,7 +14,8 @@ import { ModeChooser } from "./ModeChooser";
 import { TaskStatePanel } from "./TaskStatePanel";
 import { ReasoningDisclosure, type ReasoningEntry } from "./ReasoningDisclosure";
 import { PartialOutputPanel } from "./PartialOutputPanel";
-import type { PartialOutput } from "../../lib/api-types";
+import { ToolProgressPanel } from "./ToolProgressPanel";
+import type { PartialOutput, ToolProgress } from "../../lib/api-types";
 
 type ChatWorkspaceProps = {
   agents: AgentInfo[];
@@ -31,6 +32,7 @@ type ChatWorkspaceProps = {
   messages: Message[];
   reasoning?: ReasoningEntry[];
   partialOutputs?: PartialOutput[];
+  toolProgress?: ToolProgress[];
   messagesRef: RefObject<HTMLElement | null>;
   onCancel: () => void;
   onContinue: (plan?: string, requirements?: AgentRoutingRequirements) => void;
@@ -161,6 +163,7 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
             ))
           )}
           <PartialOutputPanel outputs={props.partialOutputs ?? []} runStatus={runStatus} />
+          <ToolProgressPanel items={props.toolProgress ?? []} runStatus={runStatus} />
           {messages.at(-1)?.role !== "assistant" && props.reasoning?.length && !props.partialOutputs?.some(item => item.channel === "reasoning" && item.text) ? (
             <ReasoningDisclosure entries={props.reasoning} runStatus={runStatus} />
           ) : null}

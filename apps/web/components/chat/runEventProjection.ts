@@ -31,6 +31,7 @@ type RunEventProjectionOptions = {
   onEvent?: () => void;
   onRunState?: (event: Extract<ChatEvent, { type: "run_state" }>) => void;
   onReasoning?: (event: Extract<ChatEvent, { type: "model_reasoning" }>) => void;
+  onToolProgress?: (event: Extract<ChatEvent, { type: "tool_progress" }>) => void;
   setAutonomousProgress: Dispatch<SetStateAction<AutonomousProgress | null>>;
   setCollaborationSteps: Dispatch<SetStateAction<CollaborationStepView[]>>;
   setError: Dispatch<SetStateAction<string>>;
@@ -71,6 +72,7 @@ export function createRunEventHandler(options: RunEventProjectionOptions) {
       );
     }
     if (event.type === "model_reasoning") options.onReasoning?.(event);
+    if (event.type === "tool_progress") options.onToolProgress?.(event);
     if (event.type === "error") {
       options.setError(formatChatError(event));
     }

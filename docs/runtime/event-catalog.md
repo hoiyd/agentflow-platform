@@ -67,6 +67,7 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 | `tool.guard.blocked` | durable | 1 | run | tools | `event.ToolProgressPayload` | none | `` | tool_progress_guard, replay |
 | `tool.guard.warned` | durable | 1 | run | tools | `event.ToolProgressPayload` | none | `` | tool_progress_guard, replay |
 | `tool.policy_evaluated` | durable | 1 | run | tools | `event.ToolPolicyPayload` | none | `` | tool_policy, replay |
+| `tool.progress` | durable | 1 | run+turn | tools | `event.ToolExecutionProgressPayload` | none | `` | run_projection, replay |
 | `tool.result.persisted` | durable | 1 | run | tools | `event.ToolArtifactPayload` | none | `` | artifact_governance, replay |
 | `tool.started` | durable | 1 | run | tools | `event.ToolPayload` | tool:start | `` | run_projection, replay |
 | `turn.canceled` | durable | 1 | run+turn | agent/turn | `event.TracePayload` | turn:terminal | `turn.started` | run_projection, replay |

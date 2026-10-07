@@ -281,3 +281,9 @@ func (t *executionTracer) ToolProgressEvaluated(ctx context.Context, request too
 		delegate.ToolProgressEvaluated(ctx, request, decision)
 	}
 }
+
+func (t *executionTracer) ToolProgressUpdated(ctx context.Context, request tool.ExecutionRequest, update domain.ToolProgressUpdate) {
+	if delegate, ok := t.delegate.(tool.ExecutionProgressTracer); ok {
+		delegate.ToolProgressUpdated(ctx, request, update)
+	}
+}

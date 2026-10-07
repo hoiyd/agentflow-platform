@@ -92,6 +92,22 @@ func ValidateEnvelope(item domain.RunEvent) error {
 	if definition.Scope.Turn == ScopeRequired && strings.TrimSpace(item.TurnID) == "" {
 		return fmt.Errorf("run event %s requires turn_id", item.Type)
 	}
+	if item.Type == domain.EventToolProgress {
+		var update domain.ToolProgressUpdate
+		data, err := json.Marshal(item.Payload)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(data, &update); err != nil {
+			return err
+		}
+		call, _ := item.Payload["tool_call_id"].(string)
+		name, _ := item.Payload["tool_name"].(string)
+		if strings.TrimSpace(call) == "" || strings.TrimSpace(name) == "" {
+			return fmt.Errorf("Tool progress requires call identity")
+		}
+		return update.Validate()
+	}
 	if item.Type == domain.EventModelOutputCheckpoint {
 		var output domain.PartialOutput
 		data, err := json.Marshal(item.Payload)
@@ -179,6 +195,7 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventCompactionFailed}, DurableFact, optional, "event.ContextCompactionPayload", terminal("compaction", domain.EventCompactionStarted), "run_projection", "replay")
 
 	add([]domain.RunEventType{domain.EventToolStarted}, DurableFact, optional, "event.ToolPayload", start("tool"), "run_projection", "replay")
+	add([]domain.RunEventType{domain.EventToolProgress}, DurableFact, turn, "event.ToolExecutionProgressPayload", none, "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventToolCompleted, domain.EventToolFailed}, DurableFact, optional, "event.ToolPayload", terminal("tool", domain.EventToolStarted), "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventToolPolicyEvaluated}, DurableFact, optional, "event.ToolPolicyPayload", none, "tool_policy", "replay")
 	add([]domain.RunEventType{domain.EventToolGuardWarned, domain.EventToolGuardBlocked}, DurableFact, optional, "event.ToolProgressPayload", none, "tool_progress_guard", "replay")
@@ -230,7 +247,7 @@ func producerFor(eventType domain.RunEventType) string {
 		return "requestcapture/contextassembly"
 	case domain.EventCompactionStarted, domain.EventCompactionCompleted, domain.EventCompactionFailed:
 		return "contextcompaction"
-	case domain.EventToolStarted, domain.EventToolCompleted, domain.EventToolFailed, domain.EventToolPolicyEvaluated,
+	case domain.EventToolStarted, domain.EventToolProgress, domain.EventToolCompleted, domain.EventToolFailed, domain.EventToolPolicyEvaluated,
 		domain.EventToolGuardWarned, domain.EventToolGuardBlocked, domain.EventTurnNoProgress,
 		domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired,
 		domain.EventToolEffectReconciliationStarted, domain.EventToolEffectReconciled, domain.EventToolEffectReconciliationFailed:

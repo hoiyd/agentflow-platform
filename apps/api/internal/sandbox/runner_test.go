@@ -63,6 +63,21 @@ func TestRunnerUsesMountlessDeniedNetworkAndAlwaysRemoves(t *testing.T) {
 	}
 }
 
+func TestRunnerReportsRealPhasesWithoutOutput(t *testing.T) {
+	r := testRunner(t)
+	var phases []string
+	r.invoke = func(_ context.Context, args []string, output *outputBuffer) error {
+		if args[0] == "exec" {
+			_, _ = output.Write([]byte("private stdout"))
+		}
+		return nil
+	}
+	result, err := r.RunWithProgress(context.Background(), []string{"/bin/sh"}, func(phase string) { phases = append(phases, phase) })
+	if err != nil || !result.CleanupConfirmed || !reflect.DeepEqual(phases, []string{"provisioning", "executing", "cleaning_up", "cleanup_confirmed"}) {
+		t.Fatalf("phases=%v result=%#v err=%v", phases, result, err)
+	}
+}
+
 func TestRunnerRejectsUnsafeArgumentsWithoutStartingCLI(t *testing.T) {
 	r := testRunner(t)
 	r.invoke = func(context.Context, []string, *outputBuffer) error { t.Fatal("rejected command ran"); return nil }
