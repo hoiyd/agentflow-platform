@@ -1,0 +1,55 @@
+/* Capability inventory and architecture; no floating section cards. */
+.home-platform { background: var(--bg); border-block: 1px solid var(--border); }
+.home-platform-inner { display: grid; grid-template-columns: minmax(250px, 0.7fr) minmax(0, 1.3fr); gap: 72px; }
+.home-platform-inner .home-section-header { position: sticky; top: 32px; align-self: start; margin: 0; }
+.home-capability-list { border-top: 1px solid var(--border-strong); }
+
+.home-capability {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 18px;
+  border-bottom: 1px solid var(--border);
+  padding: 26px 0;
+}
+
+.home-capability > svg { color: var(--muted-strong); margin-top: 3px; }
+.home-capability h3 { font-size: 20px; line-height: 1.4; }
+.home-capability h3 a { display: inline-flex; align-items: baseline; gap: 10px; }
+.home-capability h3 svg { color: var(--muted); }
+.home-capability h3 a:hover { color: var(--accent); }
+.home-capability p { font-size: 15px; margin: 10px 0 0; }
+.home-capability .home-capability-detail { color: var(--muted-strong); font-size: 13px; margin-top: 12px; }
+
+.home-architecture { background: var(--ink); color: var(--surface); }
+.home-architecture-inner { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 40px 80px; }
+.home-architecture .home-section-header { margin: 0; }
+.home-architecture .home-kicker { color: #a8bce9; }
+.home-architecture h2 { color: var(--surface); }
+.home-architecture .home-section-header > p:not(.home-kicker) { color: #b7bec7; }
+.home-architecture-list { margin: 0; border-top: 1px solid #41474f; }
+.home-architecture-list > div { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 20px; padding: 20px 0; border-bottom: 1px solid #41474f; }
+.home-architecture-list dt { font-size: 13px; color: #b7bec7; }
+.home-architecture-list dd { display: grid; gap: 5px; margin: 0; }
+.home-architecture-list strong { font-family: var(--font-display); font-size: 16px; font-weight: 550; }
+.home-architecture-list dd span { color: #b7bec7; font-size: 13px; }
+
+.home-boundaries {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 24px;
+  border-top: 1px solid #41474f;
+  padding-top: 24px;
+}
+
+.home-boundaries strong { font-size: 13px; font-weight: 550; }
+.home-boundaries p { color: #b7bec7; font-size: 13px; margin: 0; }
+.home-boundaries a { display: inline-flex; align-items: center; gap: 6px; color: #a8bce9; font-size: 13px; }
+.home-boundaries a:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+@media (max-width: 1100px) {
+  .home-platform-inner, .home-architecture-inner { gap: 36px; }
+  .home-boundaries { grid-template-columns: 140px minmax(0, 1fr); }
+  .home-boundaries a { grid-column: 2; }
+}

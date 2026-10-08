@@ -19,6 +19,7 @@ import "./styles/responsive.css";
 import "./styles/workbench/foundation.css";
 import "./styles/workbench/home.css";
 import "./styles/workbench/home-runtime.css";
+import "./styles/workbench/home-platform.css";
 import "./styles/workbench/shell.css";
 import "./styles/workbench/chat.css";
 import "./styles/workbench/tool-progress.css";
@@ -44,7 +45,7 @@ import "./styles/workbench/identity.css";
 export const metadata: Metadata = {
   title: "AgentFlow Platform",
   description:
-    "Go-native AI agent workflow platform with multi-agent orchestration, hybrid RAG, tools, verification, budgets, traces, and replay"
+    "Go-native AI Agent runtime with durable execution, Tools and Skills, grounded context, model controls, verification evidence, and Replay"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
