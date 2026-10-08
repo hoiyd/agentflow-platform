@@ -19,6 +19,12 @@ func (h *Handler) registerRoutes(mux *http.ServeMux) {
 }
 
 func (h *Handler) registerConversationRoutes(mux *http.ServeMux) {
+	if h.inbox != nil {
+		mux.HandleFunc("GET /api/conversations/{id}/inputs", h.listInputs)
+		mux.HandleFunc("POST /api/conversations/{id}/inputs", h.enqueueInput)
+		mux.HandleFunc("DELETE /api/conversations/{id}/inputs/{inputID}", h.withdrawInput)
+		mux.HandleFunc("POST /api/conversations/{id}/inputs/start", h.startFollowup)
+	}
 	mux.HandleFunc("GET /api/conversations", h.listConversations)
 	mux.HandleFunc("POST /api/conversations", h.createConversation)
 	mux.HandleFunc("PATCH /api/conversations/{id}", h.updateConversation)

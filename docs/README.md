@@ -39,6 +39,7 @@ related pages link to its contract rather than copying configuration or algorith
 ## Context and Knowledge
 
 - [Context management](context/context-management.md): selection, exact compaction algorithm, ratios, and failure behavior.
+- [Durable inputs](runtime/durable-inputs.md): safe steering boundaries, queued follow-up Runs, withdrawal, and recovery semantics.
 - [Model request reconstruction](context/model-request-reconstruction.md): actual attempt payloads, opt-in capture, inference telemetry, and inspection.
 - [Memory management](context/memory-management.md): recall, proposal, sync, trust, corrections, and deletion.
 - [Structured Task State](runtime/task-state.md): versioned facts across Runs, independent of summaries.

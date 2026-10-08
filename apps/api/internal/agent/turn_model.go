@@ -101,6 +101,11 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 		HistorySearch: historySearch,
 		Compaction:    compaction,
 	}
+	if !isolatedContext && m.runtime.inbox != nil {
+		session.LoadSteering = func() ([]domain.RunInput, error) {
+			return m.runtime.inbox.ConsumeSteering(ctx, request.RunID, request.StepID, request.TurnID)
+		}
+	}
 	if len(request.Agent.Skills) > 0 || strings.HasPrefix(strings.TrimSpace(request.Input), "/skill:") {
 		if bound, err := skill.Bound(snapshot, request.Agent.ID); err == nil {
 			for _, item := range bound {
@@ -142,7 +147,8 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 		systemPrompt = request.Agent.SystemPrompt
 	}
 	events, errs := toolloop.Stream(ctx, client, toolloop.Request{
-		SystemPrompt: systemPrompt, History: request.History, Latest: request.Input,
+		CheckSteering: m.checkSteering(ctx, request),
+		SystemPrompt:  systemPrompt, History: request.History, Latest: request.Input,
 		Catalog: request.Catalog,
 		Trace: provider.ChatTrace{
 			Recorder: m.runtime.trace, RunID: request.RunID, StepID: request.StepID,
@@ -185,6 +191,25 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 	}
 
 	return turn.Result{Output: output.String()}, nil
+}
+
+func (m runtimeTurnModel) checkSteering(ctx context.Context, request turn.Request) func() (bool, error) {
+	if request.Context.Isolated || m.runtime.inbox == nil {
+		return nil
+	}
+	return func() (bool, error) {
+		items, err := m.runtime.inbox.ConsumeSteering(ctx, request.RunID, request.StepID, request.TurnID)
+		if err != nil {
+			return false, err
+		}
+		// Assembly records which receipts this Turn already exposed to a request.
+		for _, item := range items {
+			if !contextassembly.HasSteering(ctx, item.ID) {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
 }
 
 func (m runtimeTurnModel) executeText(ctx context.Context, request turn.Request, client provider.Client) (turn.Result, error) {

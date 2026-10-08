@@ -29,6 +29,7 @@ import (
 )
 
 type Runtime struct {
+	inbox                 RuntimeInbox
 	store                 RuntimeStore
 	embeddingClient       provider.Client
 	modelRoutes           *routing.Catalog
@@ -98,6 +99,7 @@ type PreparedRun struct {
 // RuntimeOptions captures the complete runtime policy at construction time so
 // new Runs can freeze one coherent snapshot without post-construction setters.
 type RuntimeOptions struct {
+	Inbox              RuntimeInbox
 	Store              RuntimeStore
 	EmbeddingClient    provider.Client
 	ModelRoutes        *routing.Catalog
@@ -142,6 +144,7 @@ func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 		progressConfig = progress.NormalizeConfig(progressConfig)
 	}
 	runtime := &Runtime{
+		inbox:                 options.Inbox,
 		store:                 options.Store,
 		embeddingClient:       options.EmbeddingClient,
 		modelRoutes:           options.ModelRoutes,
@@ -189,7 +192,7 @@ func (r *Runtime) PrepareChatRunWithContract(ctx context.Context, agentID string
 		return PreparedRun{}, err
 	}
 	agent = restoreAgent(snapshot.Agent)
-	run, err := r.store.CreateRunWithContract(agent.ID, conversationID, snapshot, contract)
+	run, err := r.createRun(ctx, agent.ID, conversationID, snapshot, contract)
 	if err != nil {
 		return PreparedRun{}, err
 	}

@@ -30,6 +30,7 @@ type Request struct {
 	Trace           provider.ChatTrace
 	ExecutorOptions tool.ExecutorOptions
 	RunEvents       func() ([]domain.RunEvent, error)
+	CheckSteering   func() (bool, error)
 }
 
 // Stream owns the bounded model -> Tools -> observations -> model protocol.
@@ -81,7 +82,7 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 	if err != nil {
 		return err
 	}
-	if !model.HasAPIKey() || len(definitions) == 0 {
+	if !model.HasAPIKey() || len(definitions) == 0 && request.CheckSteering == nil {
 		_, err = model.StreamAnswer(ctx, prepared, provider.ChatStreamAnswer, request.Trace, events)
 		return err
 	}
@@ -114,10 +115,33 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 			return err
 		}
 		if len(choice.ToolCalls) == 0 {
-			return nil
+			pending := false
+			if request.CheckSteering != nil {
+				pending, err = request.CheckSteering()
+				if err != nil {
+					return err
+				}
+			}
+			if !pending {
+				return nil
+			}
+			if err := requireContinuationBound(ctx); err != nil {
+				return err
+			}
+			rawMessages = append(rawMessages, provider.Message{Role: "assistant", Content: choice.Content, ReasoningContent: choice.ReasoningContent})
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case events <- provider.StreamEvent{Type: "delta", Reset: true}:
+			}
+			prepared, err = model.PrepareFollowup(ctx, rawMessages, definitions)
+			if err != nil {
+				return err
+			}
+			continue
 		}
-		if _, deadline := ctx.Deadline(); !deadline && !budget.HasModelCallLimit(ctx) {
-			return failure.New(failure.Definition{Message: "Tool loop requires a finite model-call/token budget or an active deadline", Info: failure.Info{Code: "tool_loop_unbounded", Source: "toolloop", Category: failure.CategoryValidation}})
+		if err := requireContinuationBound(ctx); err != nil {
+			return err
 		}
 		if err := validateCalls(choice.ToolCalls); err != nil {
 			return err
@@ -159,6 +183,13 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 			return err
 		}
 	}
+}
+
+func requireContinuationBound(ctx context.Context) error {
+	if _, deadline := ctx.Deadline(); !deadline && !budget.HasModelCallLimit(ctx) {
+		return failure.New(failure.Definition{Message: "Tool or steering continuation requires a finite model-call/token budget or an active deadline", Info: failure.Info{Code: "tool_loop_unbounded", Source: "toolloop", Category: failure.CategoryValidation}})
+	}
+	return nil
 }
 
 func validateCalls(calls []provider.ToolCall) error {

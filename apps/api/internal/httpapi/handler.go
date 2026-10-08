@@ -80,6 +80,7 @@ type VerificationOperations = runcompletion.Verifier
 // Dependencies is the complete production dependency set for the HTTP adapter.
 // Construction and lifecycle ownership remain in the app composition root.
 type Dependencies struct {
+	Inbox          *store.PostgresStore
 	Store          HTTPStore
 	Tools          ToolOperations
 	AgentRuntime   AgentRuntimeOperations
@@ -95,6 +96,7 @@ type Dependencies struct {
 }
 
 type Handler struct {
+	inbox          *store.PostgresStore
 	store          HTTPStore
 	tools          ToolOperations
 	agentRuntime   AgentRuntimeOperations
@@ -135,6 +137,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		return nil, errors.New("http api verification engine is required")
 	}
 	return &Handler{
+		inbox:          dependencies.Inbox,
 		store:          dependencies.Store,
 		tools:          dependencies.Tools,
 		agentRuntime:   dependencies.AgentRuntime,

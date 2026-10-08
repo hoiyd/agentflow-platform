@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -81,6 +82,12 @@ func TestBrowserServer(t *testing.T) {
 	cfg.TrustedSkillDirectories = filepath.Dir(skillDir)
 	cfg.EmbeddingBaseURL, cfg.EmbeddingModel, cfg.EmbeddingDimensions = providerServer.URL, "fixture-embedding", 1536
 	cfg.MemoryAdaptiveExtractionMode, cfg.ContextCompactionMode = "off", "off"
+	if os.Getenv("AGENTFLOW_INBOX_EDGE_TEST") == "1" {
+		cfg.ContextCompactionMode = "auto"
+		cfg.ContextCompactionSoftThreshold, cfg.ContextCompactionHardThreshold = 0.001, 0.002
+		cfg.ContextCompactionRecentTokens, cfg.ContextCompactionSummaryMaxTokens = 100, 200
+		cfg.RunMaxModelCalls = 3
+	}
 	cfg.ModelRequestCaptureMode, cfg.ModelRetryMaxAttempts = "metadata_only", 1
 	cfg.ModelRequestsPerMinute, cfg.ModelTokensPerMinute = 0, 0
 	cfg.RouterMode, cfg.AutonomousMaxIterations = "query", 1
@@ -146,6 +153,22 @@ func TestBrowserServer(t *testing.T) {
 	}
 	production := application.server.Handler
 	controls := http.NewServeMux()
+	if os.Getenv("AGENTFLOW_INBOX_EDGE_TEST") == "1" {
+		// Test-only history setup through the real Store, never an operator database.
+		controls.HandleFunc("POST /__fixture/inbox/history/{id}", func(w http.ResponseWriter, r *http.Request) {
+			for index := 0; index < 8; index++ {
+				role := "user"
+				if index%2 == 1 {
+					role = "assistant"
+				}
+				if _, err := application.store.AddMessage(r.PathValue("id"), role, strings.Repeat("Historical fixture fact. ", 100)); err != nil {
+					http.Error(w, err.Error(), 500)
+					return
+				}
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
 	if sandboxControls != nil {
 		controls.Handle("/__fixture/tool-progress/", sandboxControls)
 	}

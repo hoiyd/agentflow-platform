@@ -4,6 +4,65 @@
  */
 
 export interface paths {
+    "/api/conversations/{id}/inputs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description Owner-scoped durable input receipts. Queued inputs expire after 24 hours; receipts are retained for seven days, longer for recoverable Runs. */
+        get: operations["listRunInputs"];
+        put?: never;
+        /** @description Explicit steer or follow_up. Owner derives from authentication. Reusing an idempotency key with changed content returns 409. Steer never modifies frozen policy; follow-up uses a fresh Run. Limits are 8 KiB per input, 16 pending inputs, 64 KiB pending bytes, 64 KiB steering per Run and 256 retained receipts per Conversation. */
+        post: operations["enqueueRunInput"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{id}/inputs/{inputID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                inputID: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Withdraw a queued input; applied inputs return 409. Repeated withdrawal is idempotent. */
+        delete: operations["withdrawRunInput"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/conversations/{id}/inputs/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Explicitly retry the oldest pending follow-up after completed, failed or canceled execution. Active, waiting and recoverable Runs must be resolved first. Admission is bounded; execution can still fail preparation and leave the receipt queued. */
+        post: operations["startFollowup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces": {
         parameters: {
             query?: never;
@@ -525,6 +584,36 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        RunInputRequest: {
+            /** @enum {string} */
+            kind: "steer" | "follow_up";
+            run_id: string;
+            content: string;
+            mode?: components["schemas"]["ChatMode"];
+            agent_id?: string;
+            idempotency_key: string;
+        };
+        RunInput: {
+            id: string;
+            conversation_id: string;
+            run_id: string;
+            /** @enum {string} */
+            kind: "steer" | "follow_up";
+            content: string;
+            mode: components["schemas"]["ChatMode"];
+            agent_id: string;
+            /** @enum {string} */
+            status: "queued" | "applied" | "withdrawn" | "expired";
+            applied_run_id: string;
+            stage_id: string;
+            turn_id: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: date-time */
+            applied_at?: string;
+        };
         Workspace: {
             /** @description Decimal BIGINT identity encoded as a string to preserve precision. */
             id: string;
@@ -1254,6 +1343,111 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listRunInputs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Input receipts in submission order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunInput"][];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    enqueueRunInput: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunInputRequest"];
+            };
+        };
+        responses: {
+            /** @description Durable receipt; applied does not mean model compliance. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunInput"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["BadRequest"];
+            429: components["responses"]["BadRequest"];
+        };
+    };
+    withdrawRunInput: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                inputID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Withdrawn receipt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunInput"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["BadRequest"];
+        };
+    };
+    startFollowup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dispatcher admitted; consult the durable receipt for Run creation. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        status: string;
+                    };
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["BadRequest"];
+            429: components["responses"]["BadRequest"];
+        };
+    };
     listWorkspaces: {
         parameters: {
             query?: never;

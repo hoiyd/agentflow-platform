@@ -37,6 +37,17 @@ Write or update this inventory before adding isolated fixtures.
 | Earlier cases leave Workers with the same routing capability | Each scenario declares and requests its own capability; exercise the real Router without weakening score-margin gates to bypass fixture collisions |
 | Navigation occurs during execution, cancellation, or observation | Local requests detach; their late events, errors and snapshots cannot change the new conversation |
 | Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |
+| Steering interrupts a Tool batch, disappears on refresh, or resets budget | The durable inbox gates preserve paired observations, receipts and first-request Manifest references across Single/Multi/Loop, compaction and budget failure |
+
+## Durable Inputs
+
+The [durable inbox gates](../runtime/durable-inputs.md#verification) run through
+the real composer, Go runtime and Postgres. The sandbox composition profile
+also runs `run-inbox.spec.ts`; a separate `AGENTFLOW_INBOX_EDGE_TEST=1` profile
+runs `run-inbox-boundaries.spec.ts` with real compaction and a three-call budget.
+CI retains both evidence reports. A backend production-composition integration
+test additionally exercises HTTP errors, final-response steering and fresh
+follow-up dispatch during ordinary `go test ./...`.
 
 ## Execution Boundary
 

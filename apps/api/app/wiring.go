@@ -195,6 +195,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	})
 
 	agentRuntime, err = agent.NewRuntime(agent.RuntimeOptions{
+		Inbox:           workspaceStore,
 		Store:           appStore,
 		EmbeddingClient: embeddingClient,
 		ModelRoutes:     modelRoutes,
@@ -249,6 +250,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		WaitTimeout:   cfg.RunQueueWaitTimeout,
 	})
 	handler, err := httpapi.NewHandler(httpapi.Dependencies{
+		Inbox:          workspaceStore,
 		Store:          appStore,
 		Tools:          toolManager,
 		AgentRuntime:   agentRuntime,

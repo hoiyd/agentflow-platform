@@ -50,7 +50,7 @@ func (r *Runtime) PrepareAutonomousRunWithContract(ctx context.Context, agentID 
 		return PreparedCollaborationRun{}, err
 	}
 	agent = restoreAgent(snapshot.Agent)
-	run, err := r.store.CreateRunWithContract(agent.ID, conversationID, snapshot, contract)
+	run, err := r.createRun(ctx, agent.ID, conversationID, snapshot, contract)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}

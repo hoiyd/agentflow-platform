@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,14 @@ import (
 )
 
 func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
+	return s.createRun(context.Background(), "", "", false, agentID, conversationID, snapshot, contract)
+}
+
+func (s *PostgresStore) CreateInputRun(ctx context.Context, inputID, owner string, allowStopped bool, agentID, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
+	return s.createRun(ctx, inputID, owner, allowStopped, agentID, conversationID, snapshot, contract)
+}
+
+func (s *PostgresStore) createRun(ctx context.Context, inputID, owner string, allowStopped bool, agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
 	if _, ok, err := s.GetAgent(agentID); err != nil {
 		return domain.Run{}, err
 	} else if !ok {
@@ -61,11 +70,33 @@ func (s *PostgresStore) CreateRunWithContract(agentID string, conversationID str
 	if contract != nil {
 		run.VerificationStatus = domain.VerificationPending
 	}
-	_, err = s.db.Exec(`
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.Run{}, err
+	}
+	defer tx.Rollback()
+	if inputID != "" {
+		if err = s.applyFollowup(ctx, tx, inputID, owner, allowStopped, run); err != nil {
+			return domain.Run{}, err
+		}
+		// A crash between durable creation and runtime startup is discoverable by
+		// the existing stale-running repair, not an invisible consumed queued job.
+		run.Status = domain.RunRunning
+		run.StartedAt, run.ExecutionStartedAt, run.HeartbeatAt = &now, &now, &now
+	}
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO runs (id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
 		run.ID, run.WorkspaceID, run.AgentID, run.ConversationID, string(run.Status), run.Error, snapshotJSON, contractJSON, string(run.VerificationStatus), run.StartedAt, run.ExecutionStartedAt, run.ActiveRuntimeMS, run.HeartbeatAt, run.CompletedAt, run.CreatedAt, run.UpdatedAt)
-	return run, err
+	if err != nil {
+		return domain.Run{}, err
+	}
+	if inputID != "" {
+		if _, err = tx.ExecContext(ctx, `UPDATE conversation_inputs SET status='applied',applied_run_id=$1,applied_at=NOW() WHERE id=$2`, run.ID, inputID); err != nil {
+			return domain.Run{}, err
+		}
+	}
+	return run, tx.Commit()
 }
 
 func (s *PostgresStore) UpdateRunAgent(id string, agentID string) (domain.Run, error) {

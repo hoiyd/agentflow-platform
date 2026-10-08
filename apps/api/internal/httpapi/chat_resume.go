@@ -49,7 +49,7 @@ func (h *Handler) continueRun(w http.ResponseWriter, r *http.Request) {
 	if !admitted {
 		return
 	}
-	defer releaseRun()
+	defer func() { releaseRun(); h.scheduleFollowup(r, run.ConversationID, false) }()
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -144,7 +144,7 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 	if !admitted {
 		return
 	}
-	defer releaseRun()
+	defer func() { releaseRun(); h.scheduleFollowup(r, run.ConversationID, false) }()
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {

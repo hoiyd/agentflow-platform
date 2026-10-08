@@ -6,6 +6,13 @@ import { ChatComposer } from "./ChatComposer";
 
 afterEach(cleanup);
 
+it("does not submit ordinary Chat while a durable Run is busy, including keyboard submission", () => {
+  const onSubmit = vi.fn();
+  const view = renderComposer("single", [], "Next instruction", vi.fn(), true, onSubmit);
+  fireEvent.submit(view.container.querySelector("form")!);
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
 it("keeps single-agent controls in one compact action group", () => {
   const { container } = renderComposer("single");
   const actions = container.querySelector(".agent-actions");
@@ -36,7 +43,7 @@ it("invokes only bound skills and preserves the task text", () => {
   expect(screen.queryByRole("combobox", { name: "Invoke skill" })).toBeNull();
 });
 
-function renderComposer(chatMode: ChatMode, skills: string[] = [], input = "", onInputChange = vi.fn()) {
+function renderComposer(chatMode: ChatMode, skills: string[] = [], input = "", onInputChange = vi.fn(), isStreaming = false, onSubmit = vi.fn()) {
   const noop = vi.fn();
   return render(
     <ChatComposer
@@ -53,14 +60,14 @@ function renderComposer(chatMode: ChatMode, skills: string[] = [], input = "", o
       isAwaitingPlanApproval={false}
       isCreatingAgent={false}
       isNewAgentFormOpen={false}
-      isStreaming={false}
+      isStreaming={isStreaming}
       onAgentChange={noop}
       onConfigureAgent={noop}
       onDescriptionExpandedChange={noop}
       onInputChange={onInputChange}
       onNewAgent={noop}
       onOpenVerification={noop}
-      onSubmit={noop}
+      onSubmit={onSubmit}
       showAgentActions
     />
   );
