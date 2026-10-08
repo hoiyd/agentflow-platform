@@ -39,8 +39,9 @@ remain stable across normal laptop and wide-monitor viewports.
 
 ## Layout Rules
 
-- The landing first viewport is one composition: brand, literal product offer,
-  concise supporting copy, primary actions, and a representative runtime view.
+- The landing first viewport establishes the brand, literal product offer,
+  concise supporting copy, primary actions, and execution modes. Product recordings
+  live in a separate, content-aligned demo section rather than a cropped hero backdrop.
 - Operational pages use full-height workbench geometry with predictable
   navigation, conversation, trace, and composer regions.
 - The sidebar may collapse to release horizontal space.
@@ -88,6 +89,14 @@ remain stable across normal laptop and wide-monitor viewports.
   does not use generic AI transformation language.
 - The runtime visual shows real platform concepts such as stages, retrieval,
   tools, usage, and Verification.
+- Label recorded workbench media as examples, not live telemetry. Link capability
+  descriptions to their owning documents and state important opt-in/provider or
+  deployment limits instead of publishing invented metrics or fixed feature counts.
+- Keep product recordings at their native aspect ratio and no wider than their
+  source resolution. The landing walkthroughs use native 2880 x 1800 browser
+  captures displayed within a 960 CSS pixel content width. Use GIFs without video-player chrome; provide a
+  compact pause control and a static image for reduced motion. Do not re-encode
+  from compressed videos or upscale a source to claim higher recording quality.
 - No badges, metric strips, floating callouts, testimonial blocks, or feature
   card grids belong in the hero.
 - A hint of the next section remains visible to establish page continuation.

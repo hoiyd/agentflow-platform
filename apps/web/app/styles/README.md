@@ -15,7 +15,9 @@ Global styles load in ordered feature layers from `app/layout.tsx`:
 ## Workbench Modules
 
 - `foundation.css`: design tokens, typography, focus, and shared primitives.
-- `home.css`: product home page.
+- `home.css`: product home geometry, typography, actions, and execution modes.
+- `home-runtime.css`: bounded product GIFs, recording selector, captions, and pause control.
+- `home-platform.css`: landing capability inventory and architecture boundaries.
 - `shell.css`: workspace navigation, top bar, and task status.
 - `chat.css`: mode chooser, messages, markdown, and empty state.
 - `tool-progress.css`: shared compact Tool execution progress in Chat and Replay.
