@@ -31,6 +31,71 @@ tags:
   - name: Workspaces
 
 paths:
+  /api/conversations/{id}/inputs:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    get:
+      operationId: listRunInputs
+      tags: [Conversations]
+      description: Owner-scoped durable input receipts. Queued inputs expire after 24 hours; receipts are retained for seven days, longer for recoverable Runs.
+      responses:
+        '200':
+          description: Input receipts in submission order.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/RunInput' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: enqueueRunInput
+      tags: [Conversations]
+      description: Explicit steer or follow_up. Owner derives from authentication. Reusing an idempotency key with changed content returns 409. Steer never modifies frozen policy; follow-up uses a fresh Run. Limits are 8 KiB per input, 16 pending inputs, 64 KiB pending bytes, 64 KiB steering per Run and 256 retained receipts per Conversation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RunInputRequest' }
+      responses:
+        '202':
+          description: Durable receipt; applied does not mean model compliance.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunInput' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/BadRequest' }
+  /api/conversations/{id}/inputs/{inputID}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+      - { in: path, name: inputID, required: true, schema: { type: string } }
+    delete:
+      operationId: withdrawRunInput
+      tags: [Conversations]
+      description: Withdraw a queued input; applied inputs return 409. Repeated withdrawal is idempotent.
+      responses:
+        '200':
+          description: Withdrawn receipt.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunInput' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/BadRequest' }
+  /api/conversations/{id}/inputs/start:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    post:
+      operationId: startFollowup
+      tags: [Conversations]
+      description: Explicitly retry the oldest pending follow-up after completed, failed or canceled execution. Active, waiting and recoverable Runs must be resolved first. Admission is bounded; execution can still fail preparation and leave the receipt queued.
+      responses:
+        '202':
+          description: Dispatcher admitted; consult the durable receipt for Run creation.
+          content:
+            application/json:
+              schema: { type: object, required: [status], properties: { status: { type: string } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/BadRequest' }
+        '429': { $ref: '#/components/responses/BadRequest' }
   /api/workspaces:
     get:
       operationId: listWorkspaces
@@ -813,6 +878,35 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    RunInputRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, run_id, content, idempotency_key]
+      properties:
+        kind: { type: string, enum: [steer, follow_up] }
+        run_id: { type: string, minLength: 1 }
+        content: { type: string, minLength: 1, maxLength: 8192 }
+        mode: { $ref: '#/components/schemas/ChatMode' }
+        agent_id: { type: string }
+        idempotency_key: { type: string, minLength: 1, maxLength: 128 }
+    RunInput:
+      type: object
+      required: [id, conversation_id, run_id, kind, content, mode, agent_id, status, applied_run_id, stage_id, turn_id, created_at, expires_at]
+      properties:
+        id: { type: string }
+        conversation_id: { type: string }
+        run_id: { type: string }
+        kind: { type: string, enum: [steer, follow_up] }
+        content: { type: string }
+        mode: { $ref: '#/components/schemas/ChatMode' }
+        agent_id: { type: string }
+        status: { type: string, enum: [queued, applied, withdrawn, expired] }
+        applied_run_id: { type: string }
+        stage_id: { type: string }
+        turn_id: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        applied_at: { type: string, format: date-time }
     Workspace:
       type: object
       required: [id, owner_user_id, name, description, status, is_default, created_at, updated_at]

@@ -1,5 +1,18 @@
 /* Composer and agent config */
 
+.run-inbox { max-width: 1100px; margin: 0 auto 8px; font-size: 12px; }
+.run-inbox-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.run-inbox button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface, #fff); color: var(--text, #171b21); font: inherit; cursor: pointer; }
+.run-inbox button:disabled { opacity: .5; cursor: default; }
+.run-inbox button:focus-visible { outline: 2px solid var(--accent, #315be8); outline-offset: 2px; }
+.run-inbox-receipts { margin-top: 6px; }
+.run-inbox-receipts summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+.run-inbox-receipts ul { list-style: none; padding: 0; margin: 4px 0; }
+.run-inbox-receipts li { display: flex; align-items: center; gap: 12px; padding: 7px 0; border-top: 1px solid var(--border); }
+.run-inbox-content { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.run-inbox-receipts li > span:first-child { width: 64px; flex-shrink: 0; color: var(--muted); }
+.run-inbox-receipts li > button { flex-shrink: 0; padding: 5px; width: 30px; }
+
 .composer {
   min-height: 0;
   align-self: end;

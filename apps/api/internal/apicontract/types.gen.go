@@ -216,6 +216,66 @@ func (e PartialOutputStatus) Valid() bool {
 	}
 }
 
+// Defines values for RunInputKind.
+const (
+	RunInputKindFollowUp RunInputKind = "follow_up"
+	RunInputKindSteer    RunInputKind = "steer"
+)
+
+// Valid indicates whether the value is a known member of the RunInputKind enum.
+func (e RunInputKind) Valid() bool {
+	switch e {
+	case RunInputKindFollowUp:
+		return true
+	case RunInputKindSteer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunInputStatus.
+const (
+	RunInputStatusApplied   RunInputStatus = "applied"
+	RunInputStatusExpired   RunInputStatus = "expired"
+	RunInputStatusQueued    RunInputStatus = "queued"
+	RunInputStatusWithdrawn RunInputStatus = "withdrawn"
+)
+
+// Valid indicates whether the value is a known member of the RunInputStatus enum.
+func (e RunInputStatus) Valid() bool {
+	switch e {
+	case RunInputStatusApplied:
+		return true
+	case RunInputStatusExpired:
+		return true
+	case RunInputStatusQueued:
+		return true
+	case RunInputStatusWithdrawn:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunInputRequestKind.
+const (
+	RunInputRequestKindFollowUp RunInputRequestKind = "follow_up"
+	RunInputRequestKindSteer    RunInputRequestKind = "steer"
+)
+
+// Valid indicates whether the value is a known member of the RunInputRequestKind enum.
+func (e RunInputRequestKind) Valid() bool {
+	switch e {
+	case RunInputRequestKindFollowUp:
+		return true
+	case RunInputRequestKindSteer:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunStatus.
 const (
 	RunStatusCanceled          RunStatus = "canceled"
@@ -852,6 +912,43 @@ type RunEvent struct {
 	Type           string                 `json:"type"`
 }
 
+// RunInput defines model for RunInput.
+type RunInput struct {
+	AgentId        string         `json:"agent_id"`
+	AppliedAt      *time.Time     `json:"applied_at,omitempty"`
+	AppliedRunId   string         `json:"applied_run_id"`
+	Content        string         `json:"content"`
+	ConversationId string         `json:"conversation_id"`
+	CreatedAt      time.Time      `json:"created_at"`
+	ExpiresAt      time.Time      `json:"expires_at"`
+	Id             string         `json:"id"`
+	Kind           RunInputKind   `json:"kind"`
+	Mode           ChatMode       `json:"mode"`
+	RunId          string         `json:"run_id"`
+	StageId        string         `json:"stage_id"`
+	Status         RunInputStatus `json:"status"`
+	TurnId         string         `json:"turn_id"`
+}
+
+// RunInputKind defines model for RunInput.Kind.
+type RunInputKind string
+
+// RunInputStatus defines model for RunInput.Status.
+type RunInputStatus string
+
+// RunInputRequest defines model for RunInputRequest.
+type RunInputRequest struct {
+	AgentId        *string             `json:"agent_id,omitempty"`
+	Content        string              `json:"content"`
+	IdempotencyKey string              `json:"idempotency_key"`
+	Kind           RunInputRequestKind `json:"kind"`
+	Mode           *ChatMode           `json:"mode,omitempty"`
+	RunId          string              `json:"run_id"`
+}
+
+// RunInputRequestKind defines model for RunInputRequest.Kind.
+type RunInputRequestKind string
+
 // RunReplay defines model for RunReplay.
 type RunReplay struct {
 	Conversation          Conversation             `json:"conversation"`
@@ -1263,6 +1360,9 @@ type CreateConversationJSONRequestBody = CreateConversationRequest
 
 // UpdateConversationJSONRequestBody defines body for UpdateConversation for application/json ContentType.
 type UpdateConversationJSONRequestBody = UpdateConversationRequest
+
+// EnqueueRunInputJSONRequestBody defines body for EnqueueRunInput for application/json ContentType.
+type EnqueueRunInputJSONRequestBody = RunInputRequest
 
 // ContinueRunJSONRequestBody defines body for ContinueRun for application/json ContentType.
 type ContinueRunJSONRequestBody = ContinueRunRequest

@@ -119,6 +119,10 @@ var postgresMigrations = []string{
 		updated_at timestamptz NOT NULL
 	)`,
 	`CREATE INDEX IF NOT EXISTS runs_workspace_created_idx ON runs(workspace_id, created_at DESC)`,
+	inboxSchema,
+	`CREATE UNIQUE INDEX IF NOT EXISTS conversation_inputs_key_idx ON conversation_inputs(owner_user_id,conversation_id,(request->>'idempotency_key'))`,
+	`CREATE INDEX IF NOT EXISTS conversation_inputs_conversation_idx ON conversation_inputs(conversation_id,created_at,id)`,
+	`CREATE INDEX IF NOT EXISTS conversation_inputs_run_idx ON conversation_inputs(run_id,created_at)`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS heartbeat_at timestamptz`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS runtime_snapshot jsonb`,
 	`ALTER TABLE runs ADD COLUMN IF NOT EXISTS completion_contract jsonb`,

@@ -18,6 +18,7 @@ import { buildCompletionContract } from "../lib/verification";
 import { createLatestRequestController, type LatestRequestLease } from "../lib/latest-request";
 import { Sidebar, ToolsPanel, Topbar, type APIConnectionStatus, type ChatView } from "./chat/ChatChrome";
 import { ChatComposer } from "./chat/ChatComposer";
+import { RunInbox } from "./chat/RunInbox";
 import { ChatDialogs } from "./chat/ChatDialogs";
 import { ChatWorkspace } from "./chat/ChatWorkspace";
 import { isTerminalRunStatus } from "./chat/runEventProjection";
@@ -526,6 +527,10 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
 
         {view === "chat" ? (
           <ChatComposer
+            inbox={activeId && runState ? <RunInbox key={activeId} conversationId={activeId} runId={runState.id} mode={chatMode} agentId={activeAgentId}
+              input={input} busy={isStreaming || ["running","queued","canceling"].includes(runState.status)}
+              canStartFollowup={["completed","failed","canceled"].includes(runState.status)}
+              onSubmitted={()=>setInput("")} onRunAvailable={()=>{if(!isStreaming)void loadConversation(activeId);}} /> : null}
             activeAgent={activeAgent}
             activeAgentId={activeAgentId}
             agents={agents}
@@ -539,7 +544,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
             isAwaitingPlanApproval={isAwaitingPlanApproval}
             isCreatingAgent={isCreatingAgent}
             isNewAgentFormOpen={isNewAgentFormOpen}
-            isStreaming={isStreaming}
+            isStreaming={isStreaming || Boolean(runState && ["running","queued","canceling"].includes(runState.status))}
             onAgentChange={selectAgent}
             onConfigureAgent={openAgentConfig}
             onDescriptionExpandedChange={toggleDescription}

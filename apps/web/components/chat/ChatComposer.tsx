@@ -1,10 +1,11 @@
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { ChevronDown, ChevronUp, Send, Settings2, ShieldCheck, UserRoundPlus } from "lucide-react";
 
 import type { AgentInfo, ChatMode } from "../../lib/api";
 import { useWorkspaceReadOnly, useServiceConfigurationReadOnly } from "../identity/WorkspaceContext";
 
 type ChatComposerProps = {
+  inbox?: ReactNode;
   activeAgent?: AgentInfo;
   activeAgentId: string;
   agents: AgentInfo[];
@@ -137,7 +138,11 @@ export function ChatComposer(props: ChatComposerProps) {
       {chatMode !== "single" ? <div className="composer-run-options">{verificationButton}</div> : null}
       {chatMode === "single" && agentsError ? <div className="error">{agentsError}</div> : null}
       {error ? <div className="error">{error}</div> : null}
-      <form className="composer-inner" onSubmit={event => { if (readOnly) event.preventDefault(); else onSubmit(event); }}>
+      {props.inbox}
+      <form className="composer-inner" onSubmit={event => {
+        if (readOnly || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput) event.preventDefault();
+        else onSubmit(event);
+      }}>
         <textarea
           disabled={readOnly || isAwaitingPlanApproval || isAwaitingHumanInput}
           value={input}

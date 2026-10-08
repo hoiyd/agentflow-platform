@@ -209,12 +209,27 @@ jobs:
       - name: Run sandbox command composition and receipt gate
         env:
           AGENTFLOW_SANDBOX_BROWSER_TEST: '1'
-        run: npm run test:e2e -- sandbox-command.spec.ts tool-progress.spec.ts
+        run: npm run test:e2e -- sandbox-command.spec.ts tool-progress.spec.ts run-inbox.spec.ts
       - name: Retain sandbox command evidence (controlled CLI, not VM isolation)
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: sandbox-command-composition-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Run inbox compaction and budget boundary gate
+        env:
+          AGENTFLOW_INBOX_EDGE_TEST: '1'
+        run: npm run test:e2e -- run-inbox-boundaries.spec.ts
+      - name: Retain durable inbox boundary evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: durable-inbox-boundary-evidence
           path: |
             apps/web/test-results
             apps/web/playwright-report

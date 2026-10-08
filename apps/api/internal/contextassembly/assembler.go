@@ -43,6 +43,28 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 		}
 	}
 	messages := normalizeMessages(mergeSessionHistory(filtered, session))
+	if session.LoadSteering != nil {
+		inputs, loadErr := session.LoadSteering()
+		if loadErr != nil {
+			return Pack{}, fmt.Errorf("load durable steering: %w", loadErr)
+		}
+		// Applied inputs are authoritative original user messages, even after
+		// compaction. Remove history/replay copies before appending them once.
+		ids := make(map[string]bool, len(inputs))
+		for _, input := range inputs {
+			ids[input.ID] = true
+		}
+		kept := messages[:0]
+		for _, message := range messages {
+			if !ids[message.ReferenceID] {
+				kept = append(kept, message)
+			}
+		}
+		messages = kept
+		for _, input := range inputs {
+			messages = append(messages, Message{Role: "user", Content: input.Content, Source: SourceSteering, ReferenceID: input.ID})
+		}
+	}
 	messages, err := appendSkillContext(messages, session)
 	if err != nil {
 		return Pack{}, fmt.Errorf("load frozen Skill context: %w", err)
@@ -166,6 +188,11 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	}
 	if requiredTokens > inputBudget {
 		return Pack{Messages: packedMessages, Manifest: manifest}, &InputBudgetError{RequiredTokens: requiredTokens, AvailableTokens: inputBudget}
+	}
+	for _, message := range packedMessages {
+		if message.Source == SourceSteering {
+			session.seenSteering[message.ReferenceID] = true
+		}
 	}
 	return Pack{Messages: packedMessages, Manifest: manifest}, nil
 }
@@ -305,7 +332,7 @@ func excludeCompactedHistory(messages []Message, compaction *domain.ContextCompa
 
 func isRequiredSource(source string) bool {
 	switch source {
-	case SourceSystem, SourcePlatformPolicy, SourceCurrentInput, SourceToolCall, SourceToolResult, SourceSkillMetadata, SourceSkillInstructions:
+	case SourceSystem, SourcePlatformPolicy, SourceCurrentInput, SourceSteering, SourceToolCall, SourceToolResult, SourceSkillMetadata, SourceSkillInstructions:
 		return true
 	default:
 		return false

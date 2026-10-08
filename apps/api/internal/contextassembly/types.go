@@ -27,6 +27,7 @@ const (
 	SourceToolDefinition    = "tool_definition"
 	SourceHistory           = "history"
 	SourceCurrentInput      = "current_input"
+	SourceSteering          = "steering"
 	SourceMemory            = "memory"
 	SourceKnowledge         = "knowledge"
 	SourceCompaction        = "compaction_summary"
@@ -98,16 +99,27 @@ type Session struct {
 	HistorySearch []domain.RetrievedSessionHistory
 	Compaction    *domain.ContextCompaction
 	LoadTaskState func() (domain.TaskState, bool, error)
+	// Called only when assembling a complete next request, never mid-Tool batch.
+	LoadSteering func() ([]domain.RunInput, error)
 	// Prior-stage read pages share the existing Knowledge budget, not Tool authority.
 	LoadKnowledgeReads func() ([]domain.KnowledgeToolReadResult, error)
 	Skills             []domain.SkillMetadata
 	LoadSkills         func() ([]domain.SkillSnapshot, error)
+	seenSteering       map[string]bool
 }
 
 type sessionKey struct{}
 
 func WithSession(ctx context.Context, session Session) context.Context {
+	session.seenSteering = make(map[string]bool)
 	return context.WithValue(ctx, sessionKey{}, session)
+}
+
+// HasSteering is consulted by the same sequential Turn loop that assembles
+// requests. It tracks exposure in this Turn, not model compliance.
+func HasSteering(ctx context.Context, id string) bool {
+	session, _ := sessionFromContext(ctx)
+	return session.seenSteering[id]
 }
 
 func sessionFromContext(ctx context.Context) (Session, bool) {

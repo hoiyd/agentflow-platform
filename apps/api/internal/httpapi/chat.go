@@ -8,6 +8,7 @@ import (
 	"agentflow-platform/apps/api/app/runcompletion"
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/apicontract"
+	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -19,6 +20,10 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := chatRequestFromContract(input)
+	h.startChat(w, r, req, nil, nil)
+}
+
+func (h *Handler) startChat(w http.ResponseWriter, r *http.Request, req domain.ChatRequest, reservation *concurrency.Reservation, followup *followupDispatch) {
 	workspaceID, matches := resolvePayloadWorkspace(r, req.WorkspaceID)
 	if !matches {
 		writeError(w, http.StatusBadRequest, "workspace_id does not match request scope")
@@ -40,9 +45,12 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.CompletionContract = contract
-	reservation, ok := h.reserveRunCapacity(w, r)
-	if !ok {
-		return
+	if reservation == nil {
+		var ok bool
+		reservation, ok = h.reserveRunCapacity(w, r)
+		if !ok {
+			return
+		}
 	}
 	defer reservation.Cancel()
 
@@ -65,9 +73,21 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	defer releaseRun()
+	defer func() {
+		releaseRun()
+		if followup == nil || followup.started {
+			h.scheduleFollowup(r, conversationID, false)
+		}
+	}()
 
-	userMessage, err := scoped.AddMessage(conversationID, "user", req.Message)
+	var userMessage domain.Message
+	if followup == nil {
+		userMessage, err = scoped.AddMessage(conversationID, "user", req.Message)
+	} else {
+		// The runtime commits this deterministic message with the receipt and Run.
+		userMessage = domain.Message{ID: followup.input.ID, WorkspaceID: workspaceID, ConversationID: conversationID, Role: "user", Content: req.Message, CreatedAt: followup.input.CreatedAt}
+		r = r.WithContext(agentpkg.WithFollowupInput(r.Context(), followup.input.ID, workspaceOwner(r), followup.allowStopped))
+	}
 	if err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
@@ -94,11 +114,11 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 
 	mode := agentpkg.NormalizeChatMode(req.Mode)
 	if mode == agentpkg.ChatModeAutonomous {
-		h.chatAutonomous(w, flusher, r, req, conversationID, userMessage)
+		h.chatAutonomous(w, flusher, r, req, conversationID, userMessage, followup)
 		return
 	}
 	if mode == agentpkg.ChatModeMultiAgent {
-		h.chatMultiAgent(w, flusher, r, req, conversationID, userMessage)
+		h.chatMultiAgent(w, flusher, r, req, conversationID, userMessage, followup)
 		return
 	}
 
@@ -114,6 +134,9 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeRunStateSSE(w, flusher, conversationID, prepared.Run.ID, prepared.Agent.ID, prepared.Run.Status)
+	if followup != nil {
+		followup.started = true
+	}
 
 	events, errs := h.agentRuntime.StreamChat(runCtx, prepared, history, req.Message)
 	var assistant strings.Builder
@@ -144,7 +167,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
+func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message, followup *followupDispatch) {
 	scoped := h.scopedStoreForID(req.WorkspaceID)
 	runCtx := runExecutionContext(r)
 	prepared, err := h.agentRuntime.PrepareCollaborationRunWithContract(runCtx, req.AgentID, conversationID, req.CompletionContract)
@@ -159,6 +182,9 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 	}
 
 	writeRunStateSSE(w, flusher, conversationID, prepared.Run.ID, prepared.WorkerAgent.ID, prepared.Run.Status)
+	if followup != nil {
+		followup.started = true
+	}
 
 	events, errs := h.agentRuntime.RunCollaboration(runCtx, prepared, req.Message)
 	var assistant strings.Builder
@@ -195,7 +221,7 @@ func (h *Handler) chatMultiAgent(w http.ResponseWriter, flusher http.Flusher, r 
 	})
 }
 
-func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message) {
+func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r *http.Request, req domain.ChatRequest, conversationID string, userMessage domain.Message, followup *followupDispatch) {
 	scoped := h.scopedStoreForID(req.WorkspaceID)
 	runCtx := runExecutionContext(r)
 	prepared, err := h.agentRuntime.PrepareAutonomousRunWithContract(runCtx, req.AgentID, conversationID, req.CompletionContract)
@@ -210,6 +236,9 @@ func (h *Handler) chatAutonomous(w http.ResponseWriter, flusher http.Flusher, r 
 	}
 
 	writeRunStateSSE(w, flusher, conversationID, prepared.Run.ID, prepared.WorkerAgent.ID, prepared.Run.Status)
+	if followup != nil {
+		followup.started = true
+	}
 
 	events, errs := h.agentRuntime.RunAutonomous(runCtx, prepared, req.Message)
 	var assistant strings.Builder

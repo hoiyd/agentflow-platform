@@ -132,10 +132,20 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(browserCompletion("Fixture conversation", "stop", nil, nil))
 		return
 	}
-	task, observations := "", 0
+	if strings.HasPrefix(input.Messages[0].Content, "You maintain loss-aware context") {
+		select {
+		case <-gate:
+		case <-r.Context().Done():
+			return
+		}
+		_ = json.NewEncoder(w).Encode(browserCompletion("## Established Facts\nHistorical fixture fact.\n## Pending Work\nAnswer the current question.", "stop", nil, nil))
+		return
+	}
+	task, latestTask, observations := "", "", 0
 	for _, message := range input.Messages {
 		if message.Role == "user" {
 			task += message.Content
+			latestTask = message.Content
 		}
 		if message.Role == "tool" {
 			observations++
@@ -165,7 +175,13 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		f.respondReasoning(w, r, task, observations)
 		return
 	}
-	if strings.Contains(task, "stream-gate") {
+	// Assembler can prefix the latest request with recalled historical evidence.
+	// A gate mentioned in that evidence must not block an unrelated new task.
+	latestRequest := latestTask
+	if index := strings.LastIndex(latestRequest, "\n\nUser request:\n"); index >= 0 {
+		latestRequest = latestRequest[index+len("\n\nUser request:\n"):]
+	}
+	if strings.Contains(latestRequest, "stream-gate") {
 		if !input.Stream {
 			f.reject(w, "answer must use streaming")
 			return
@@ -188,6 +204,10 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	content, reason := "Evidence saved.", "stop"
 	var calls []any
 	var reasoning *string
+	if input.Stream && strings.Contains(task, "inbox-budget") {
+		content, reason = "One more calculation.", "tool_calls"
+		calls = []any{map[string]any{"id": fmt.Sprintf("budget-call-%d", observations), "type": "function", "function": map[string]string{"name": "calculator", "arguments": fmt.Sprintf(`{"expression":"%d + 1"}`, observations)}}}
+	}
 	if input.Stream && strings.Contains(task, "security-gate") {
 		platformMessages := 0
 		for _, message := range input.Messages {
@@ -236,7 +256,30 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 			content = "Private data stayed local. Calculation: 2."
 		}
 	}
-	if input.Stream && strings.Contains(task, "sandbox-gate") {
+	if strings.Contains(task, "inbox-steer") {
+		for index, message := range input.Messages {
+			if message.Role == "system" && strings.Contains(message.Content, "Worker collaboration role") && strings.Contains(task, "STEERING_CANARY") {
+				f.reject(w, "orchestration steering leaked into isolated Worker")
+				return
+			}
+			if len(message.ToolCalls) > 0 {
+				for offset, call := range message.ToolCalls {
+					position := index + offset + 1
+					if position >= len(input.Messages) || input.Messages[position].Role != "tool" || input.Messages[position].ToolCallID != call.ID {
+						f.reject(w, "steering interrupted assistant/Tool observation pairing")
+						return
+					}
+				}
+			}
+		}
+	}
+	if input.Stream && strings.Contains(task, "sandbox-gate") && (strings.Contains(latestRequest, "sandbox-gate") || observations > 0) {
+		lastObservation := ""
+		for _, message := range input.Messages {
+			if message.Role == "tool" {
+				lastObservation = message.Content
+			}
+		}
 		for _, message := range input.Messages {
 			if strings.Contains(message.Content, `"phase":"executing"`) || strings.Contains(message.Content, `"phase":"provisioning"`) {
 				f.reject(w, "display progress leaked into model context")
@@ -261,7 +304,7 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 			content, reason = "Running scratch command.", "tool_calls"
 			calls = []any{map[string]any{"id": "sandbox-browser-call", "type": "function", "function": map[string]string{"name": "sandbox_command", "arguments": `{"args":["python","-c","print(sum(range(10)))"]}`}}}
 		} else if observations == 1 {
-			last := input.Messages[len(input.Messages)-1].Content
+			last := lastObservation
 			if !strings.Contains(last, `"code":"invalid_arguments"`) || !strings.Contains(last, `"path":"/args/0"`) {
 				f.reject(w, "invalid executable did not reach safe model correction")
 				return
@@ -272,7 +315,7 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 				calls = []any{map[string]any{"id": "sandbox-browser-corrected", "type": "function", "function": map[string]string{"name": "sandbox_command", "arguments": `{"args":["/usr/bin/python3","-c","print('progress-wait')"]}`}}}
 			}
 		} else {
-			last := input.Messages[len(input.Messages)-1].Content
+			last := lastObservation
 			if !strings.Contains(last, "sandbox browser receipt") || !strings.Contains(last, `"cleanup_confirmed":true`) {
 				f.reject(w, "sandbox receipt lost before answer continuation")
 				return

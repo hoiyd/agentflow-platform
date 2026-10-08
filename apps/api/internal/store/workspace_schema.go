@@ -101,7 +101,7 @@ func installWorkspaceWriteGuards(ctx context.Context, tx *sql.Tx, tables []strin
 	if err != nil {
 		return err
 	}
-	guarded := append(slices.Clone(tables), "tool_effects", "tool_artifacts", "stage_checkpoints", "context_compactions", "verification_evidence", "verification_artifacts", "run_usage_entries", "run_events", "model_request_records")
+	guarded := append(slices.Clone(tables), "conversation_inputs", "tool_effects", "tool_artifacts", "stage_checkpoints", "context_compactions", "verification_evidence", "verification_artifacts", "run_usage_entries", "run_events", "model_request_records")
 	for _, table := range guarded {
 		if table == "auth_memberships" || table == "auth_personal_workspaces" {
 			continue
