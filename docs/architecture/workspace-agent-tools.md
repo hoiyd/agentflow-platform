@@ -1,18 +1,18 @@
 # Workspace Agent Configuration and Tool Availability
 
-## Boundary
+## Ownership
 
 Agents belong to a Workspace, not directly to a login name. Workspace ownership
 authorizes their configuration. Built-in templates are shared and read-only;
 creating an Agent from a template makes an independent Workspace-owned copy.
 Service Tool bindings, credentials and execution policy remain operator-owned.
 
-The Chat Agent picker contains only Workspace-owned profiles. Templates appear
-in the optional **New agent → Copy from** picker, not as selectable runtime
-Agents. Copying changes only the draft until **Create Agent** succeeds. It does
-not enable Workspace Tools or bypass service policy. This is a UI workflow change:
-the API still exposes read-only templates, and orchestration's existing fallback
-for modes without an explicit Agent is unchanged.
+The runtime picker lists only created Workspace Agents; see
+[creation and selection](../runtime/agent-profiles.md#creation-and-selection).
+Templates remain available through the API and as Multi-Agent routing fallback
+when no owned profiles exist. Copying a template does not grant Tool access.
+
+## Tool Authorization
 
 Effective Tools are the intersection of service availability, the Workspace
 allowlist, the frozen Agent Tool selection, the current Agent selection, and the
@@ -35,17 +35,6 @@ Operator recovery callbacks (Retry/Compensate) also honor current service and
 Workspace availability. Manual effect confirmations do not execute a Tool and
 remain available to settle an uncertain prior result.
 
-## Regression Inventory
-
-| Boundary | Success | Failure |
-| --- | --- | --- |
-| Agent storage | Owner create/read/update/archive round-trip | Other Workspace cannot list/read/mutate; template mutation rejected |
-| Tool configuration | Independent toggles survive reload | Empty allowlist, missing Tool and service disable fail closed; new Tool does not inherit permission |
-| Runtime | Single, Multi-Agent and Autonomous use the same scoped configuration | Foreign/archived Agent rejected before Chat writes; revoked Tool and Resume cannot bypass current grants |
-| Execution | Authorized call reaches Binding | Revoked call emits typed denial without entering Binding |
-| Browser | Owner can edit Agent and Workspace Tool settings | Workspace switch discards previous drafts and requests; archived Workspace is read-only |
-| Migration | Explicit source/target mapping preserves contents and historical references | No owner guessing; no automatic startup assignment; transaction and backup before apply |
-
 ## Legacy Data
 
 Unassigned, non-template Agents are not public templates and are not exposed by
@@ -61,26 +50,15 @@ go -C apps/api run ./cmd/migrate-workspace-agents --workspace <primary-id> --cop
 go -C apps/api run ./cmd/migrate-workspace-agents --workspace <primary-id> --copy-workspace <optional-copy-id> --apply
 ```
 
-The command initializes the current schema and read-only templates but changes
-legacy ownership only with `--apply`. The assignment is transactional, refuses
-inactive/missing targets or active Runs, and is a no-op when repeated. Unassigned
-Agents are retained but hidden until assigned. Historical Runs in other Workspaces
+Omit `--copy-workspace` if no additional copy is needed. The command initializes
+the schema and templates but assigns ownership only with `--apply`. Assignment is
+transactional and idempotent, and refuses inactive/missing targets or active Runs.
+Historical Runs in other Workspaces
 remain readable; they cannot resume using a now-foreign Agent. Reverting to an
 older globally scoped API would reopen access and is not a safe authorization rollback.
 
 ## Verification
 
-The backend suite uses disposable PostgreSQL databases when `TEST_DATABASE_URL`
-is configured. Focused browser gates exercise production Next.js/Go composition
-with a signed OIDC fixture and isolated Postgres:
-
-```sh
-AGENTFLOW_IDENTITY_TEST=1 bash scripts/test-browser.sh workspace-agent-config.spec.ts resource-authorization.spec.ts
-bash scripts/test-browser.sh runtime.spec.ts
-```
-
-The first gate attaches `workspace-agent-config-evidence.json`, recording both
-authenticated owners, their four Workspace IDs, the owned Agent and the checks.
-The runtime gate covers Single, Multi-Agent and Autonomous Tool continuations,
-durable streaming and failure propagation. These are deterministic provider/IdP
-fixtures, not live-model quality measurements or a production security audit.
+Backend persistence tests use disposable PostgreSQL when `TEST_DATABASE_URL` is
+configured. Browser commands, retained evidence and fixture limitations live in
+[Workspace configuration gates](../operations/functional-regression-testing.md#workspace-configuration).

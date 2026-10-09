@@ -26,6 +26,8 @@ behavior and limitations.
 | `memory_enabled` | Enables scoped semantic Memory retrieval before a Turn. |
 | `retrieval_enabled` | Enables Knowledge/RAG retrieval before a Turn. |
 
+## Creation and Selection
+
 Profiles belong to the selected Workspace. Its owner can create, edit and archive
 them. The runtime Agent picker contains only created Workspace-owned profiles.
 In **New agent**, the optional **Copy from** picker appears before Name; it defaults
@@ -66,10 +68,10 @@ together with the native execution protocol, model identity, tool schemas,
 context policy, Router mode, and Run Budget. Agent selection semantics belong to
 the Runtime Snapshot schema rather than a separate algorithm version.
 
-Editing or archiving a profile later does not rewrite an existing Run. Resume
-restores the frozen Agent configuration and verifies that every required tool is
-still installed with the same captured schema. Credentials and live tool
-handlers are deployment policy and are not persisted in the Snapshot.
+Editing or archiving a profile does not rewrite an existing Run. Resume restores
+its frozen protocol but requires current Agent authorization and matching installed
+Tool schemas; a frozen allowlist cannot undo revocation. Credentials and live
+handlers are not persisted. See [current Tool authorization](../architecture/workspace-agent-tools.md#tool-authorization).
 
 Bound Skill identities, instructions and bounded text resources are also frozen.
 See [Trusted Skills](../tools/trusted-skills.md) for package setup, invocation,
@@ -126,15 +128,8 @@ for previous Runs.
 
 ## Tool-Control Layers
 
-AgentFlow intersects service availability, Workspace and Agent permission:
-
-1. The Tool Manager enables or disables installed tools globally and persists
-   that operator configuration.
-2. The Workspace owner maintains a persisted allowlist in the Tools page. New
-   Tools do not inherit authorization after that list has been initialized.
-3. Each Agent profile selects from effective Workspace Tools. The Executor
-   rechecks current grants, owner Membership and execution policy for every call,
-   including calls made after Resume. Frozen definitions cannot undo revocation.
+Agent Tool selections are bounded by service availability, Workspace grants and
+current execution policy; see the [authorization contract](../architecture/workspace-agent-tools.md#tool-authorization).
 
 The Tool Catalog compiles one normalized JSON Schema contract for each Binding.
 The Tool Executor validates and canonicalizes model arguments against that
@@ -148,8 +143,6 @@ deployment limits stay live.
 
 - Agent prompts cannot grant authorization. Workspace ownership, current grants
   and server execution policy enforce authority independently of their text.
-- Agent profiles and Tool selections are Workspace-owned. The installed Tool
-  Catalog, bindings, credentials and security ceilings remain service-owned.
 - Profiles select from installed in-process tools; remote tool discovery and
   tenant-specific tool registries are not implemented.
 - The Router can use deterministic declarative matching or an LLM-backed
