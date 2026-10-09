@@ -20,6 +20,8 @@ func TestObservableStorePublishesCommittedEventWithAssignedSequence(t *testing.T
 
 	hub := event.NewHub(4)
 	observed := newObservableStore(base, hub)
+	var exported []domain.RunEvent
+	observed.observe = func(item domain.RunEvent) { exported = append(exported, item) }
 	conversation, err := observed.CreateConversation("observable store")
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +104,9 @@ func TestObservableStorePublishesCommittedEventWithAssignedSequence(t *testing.T
 			t.Fatal("reconciliation event was not published")
 		}
 	}
+	if len(exported) != 4 || exported[0].ID != created.ID || exported[0].Sequence != 1 || exported[3].Sequence != 4 {
+		t.Fatalf("telemetry must receive committed identities for ordinary/scoped/atomic writes: %+v", exported)
+	}
 }
 
 func TestObservableStoreDoesNotPublishFailedCommit(t *testing.T) {
@@ -109,6 +114,7 @@ func TestObservableStoreDoesNotPublishFailedCommit(t *testing.T) {
 
 	hub := event.NewHub(1)
 	observed := newObservableStore(base, hub)
+	observed.observe = func(domain.RunEvent) { t.Fatal("failed commit reached telemetry") }
 	_, err := observed.CreateRunEvent(domain.RunEvent{Type: domain.RunEventType("unknown.event"), RunID: "run-1"})
 	if err == nil {
 		t.Fatal("invalid event commit should fail")

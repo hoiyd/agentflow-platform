@@ -29,6 +29,7 @@ import (
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/taskstate"
+	"agentflow-platform/apps/api/internal/telemetry"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/artifact"
 	"agentflow-platform/apps/api/internal/tool/progress"
@@ -42,6 +43,7 @@ type applicationDependencies struct {
 	runController  *concurrency.RunController
 	requestLimiter *concurrency.ModelRequestLimiter
 	sandboxRunner  *sandbox.Runner
+	telemetry      *telemetry.Observer
 }
 
 func buildDependencies(cfg config.Config) (applicationDependencies, error) {
@@ -73,6 +75,23 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	defer func() {
 		if cleanupStore {
 			_ = closeStore(appStore)
+		}
+	}()
+	traceObserver, err := telemetry.New(telemetry.Config{
+		Exporter: cfg.OTelTracesExporter, Endpoint: cfg.OTelEndpoint,
+		ServiceName: cfg.OTelServiceName, SampleRatio: cfg.OTelSampleRatio,
+	})
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("initialize telemetry: %w", err)
+	}
+	if traceObserver != nil {
+		appStore.observe = traceObserver.Observe
+	}
+	defer func() {
+		if cleanupStore {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			_ = traceObserver.Shutdown(ctx)
 		}
 	}()
 
@@ -275,6 +294,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	return applicationDependencies{
 		store: appStore, handler: handler, memoryProvider: memoryProvider,
 		sandboxRunner: sandboxRunner,
+		telemetry:     traceObserver,
 		runController: runController, requestLimiter: requestLimiter,
 	}, nil
 }

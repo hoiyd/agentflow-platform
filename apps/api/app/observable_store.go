@@ -11,7 +11,8 @@ import (
 // layer per persistence method.
 type observableStore struct {
 	store.Store
-	hub *event.Hub
+	hub     *event.Hub
+	observe func(domain.RunEvent)
 }
 
 func newObservableStore(backend store.Store, hub *event.Hub) *observableStore {
@@ -22,6 +23,9 @@ func (s *observableStore) CreateRunEvent(item domain.RunEvent) (domain.RunEvent,
 	created, err := s.Store.CreateRunEvent(item)
 	if err == nil {
 		s.hub.PublishCommitted(created)
+		if s.observe != nil {
+			s.observe(created)
+		}
 	}
 	return created, err
 }
@@ -30,6 +34,9 @@ func (s *observableStore) CommitToolEffectReconciliation(mutation domain.ToolEff
 	effect, committed, applied, err := s.Store.CommitToolEffectReconciliation(mutation)
 	if err == nil && applied {
 		s.hub.PublishCommitted(committed)
+		if s.observe != nil {
+			s.observe(committed)
+		}
 	}
 	return effect, committed, applied, err
 }
