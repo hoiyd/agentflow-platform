@@ -45,6 +45,9 @@ func (s *Store) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 	agent.Description = strings.TrimSpace(agent.Description)
 	agent.SystemPrompt = strings.TrimSpace(agent.SystemPrompt)
 	agent.Tools = store.NormalizeTools(agent.Tools)
+	if agent.WorkspaceID == "" && !agent.IsTemplate {
+		agent.WorkspaceID = domain.DefaultWorkspaceID
+	}
 	agent = domain.NormalizeAgentConfig(agent)
 	agent.Archived = false
 	agent.CreatedAt = now
@@ -126,4 +129,7 @@ func (s *Store) GetDefaultAgent() (domain.Agent, bool, error) {
 
 func (s *Store) seedDefaultAgentsLocked() {
 	s.data.Agents = store.DefaultAgents(time.Now().UTC())
+	for i := range s.data.Agents {
+		s.data.Agents[i].IsTemplate = true
+	}
 }

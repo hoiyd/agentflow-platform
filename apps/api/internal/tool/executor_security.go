@@ -34,6 +34,21 @@ func (e *Executor) evaluateSecurity(ctx context.Context, request ExecutionReques
 		decision.Allowed, decision.Action, decision.Reason = false, policy.ActionDeny, "credential_content_egress_denied"
 	}
 	if decision.Allowed {
+		if e.authorize != nil {
+			if err := e.authorize(ctx, request, requestedScope); err != nil {
+				decision.Allowed, decision.Action, decision.Reason = false, policy.ActionDeny, "workspace_authorization_denied"
+				message := "Tool call denied by current Workspace authorization"
+				var availability interface {
+					error
+					AvailabilityReason() string
+				}
+				if errors.As(err, &availability) {
+					decision.Reason = availability.AvailabilityReason()
+					message += ": " + availability.Error()
+				}
+				return decision, executionError(ErrorSecurityPolicyDenied, message, err)
+			}
+		}
 		return decision, nil
 	}
 	code := ErrorSecurityPolicyDenied

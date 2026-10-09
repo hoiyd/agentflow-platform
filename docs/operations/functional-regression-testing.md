@@ -21,6 +21,10 @@ Write or update this inventory before adding isolated fixtures.
 | Multi/Loop execution loses Tool continuation or stage identity | Real staged runs finish with paired calls and a valid projection; Loop writes have durable receipts; isolated Multi Worker has no Task State write authority |
 | Reload loses accepted results or persisted Task State | Reload reads the same messages, run, and Task State from PostgreSQL |
 | Tool toggles only update local UI state | Catalog API and reloaded page agree on the persisted enabled flag |
+| Agent names overflow, duplicate names select the wrong ID, or controls misalign | Picker geometry, keyboard selection and persisted Agent ID agree at 1280/1920px; disabled Skills do not resize the Agent control |
+| Foreign/archived Agents or mutable templates bypass scope | Reject before Chat writes in all modes; owned CRUD still works and templates remain read-only |
+| Empty grants, new Tools or Resume restore revoked access | Explicit deny-all persists; new Tools receive no grant; denied calls never enter the Binding |
+| Workspace switching retains a prior draft or request | Discard stale state; archived Workspaces remain read-only |
 | Knowledge ingestion/search/deletion disagree | Real index detail and retrieval show the inserted document; deletion returns 404 |
 | Memory corrections/deletions lose version or remain recalled | History records the correction; version increases; deletion clears content and recall |
 | Two command callbacks fire before a React render | Only one command is admitted and one optimistic message pair is created |
@@ -35,9 +39,14 @@ Write or update this inventory before adding isolated fixtures.
 | Stop cancels an in-flight model request | Single, Multi-Agent Continue and Loop return `done:canceled`, not SSE `error`; the canceled Run survives reload, partial reasoning remains withheld, and the composer accepts another task |
 | Earlier cases leave conversation titles containing mode labels | Mode selection is scoped to the named Chat mode region, never the sidebar's conversation or delete buttons; run the affected gate in CI order, not only the new case |
 | Earlier cases leave Workers with the same routing capability | Each scenario declares and requests its own capability; exercise the real Router without weakening score-margin gates to bypass fixture collisions |
+| A Chat gate assumes global Agents or relies on earlier test data | Create and select an owned Workspace Agent through the real API/UI; assert its ID in the persisted Run and run the gate independently |
 | Navigation occurs during execution, cancellation, or observation | Local requests detach; their late events, errors and snapshots cannot change the new conversation |
 | Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |
 | Steering interrupts a Tool batch, disappears on refresh, or resets budget | The durable inbox gates preserve paired observations, receipts and first-request Manifest references across Single/Multi/Loop, compaction and budget failure |
+
+Each CI composition profile starts with a fresh disposable database. Cases must
+declare their owned Agent and required Tools explicitly; neither a preceding
+profile nor another case supplies those prerequisites.
 
 ## Durable Inputs
 
@@ -82,6 +91,27 @@ checks, and limitations. Deterministic Go tests additionally cover nonzero
 waiting queues, cancellation/timeout/close in owner/key/global phases, retries,
 and durable ownership after revoked access. This proves process-local control
 semantics, not provider throughput or strict fairness.
+
+## Workspace Configuration
+
+```bash
+AGENTFLOW_IDENTITY_TEST=1 bash scripts/test-browser.sh agent-selection.spec.ts workspace-agent-config.spec.ts
+```
+
+- `workspace-agent-config.spec.ts`: blank/template creation, draft-only copying,
+  copied bindings, immutable templates, scoped CRUD/Chat, persisted Tool toggles,
+  Workspace switching and empty-Workspace behavior.
+- `agent-selection.spec.ts`: 12 Agents with long/duplicate names, description
+  search, keyboard selection, bounded menus and aligned 40px controls at
+  1280/1920px; Skill invocation/Automatic reset, disabled notes and persisted Run ID.
+- Backend integration tests cover revoked execution/Resume, deny-all and new-Tool
+  grants, plus transactional migration and repeat-apply behavior.
+
+The browser gates retain `workspace-agent-config-evidence.json` and
+`agent-selection-evidence.json` with owner/Workspace/Agent/Run identities, checks
+and geometry; synthetic screenshots support visual review. Component tests cover
+empty search, dismissal, lock/reset and input-method composition. CI runs these
+with the identity/resource gate; fixture limitations are listed below.
 
 ## Test Boundaries
 

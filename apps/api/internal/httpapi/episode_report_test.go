@@ -12,6 +12,36 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
+func TestEpisodeReportDoesNotExposeAnAgentMovedToAnotherWorkspace(t *testing.T) {
+	storage := fixturestore.New()
+	agent, err := storage.CreateAgent(domain.Agent{Name: "Original", SystemPrompt: "Original Run guidance"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := storage.CreateConversation("Retained history")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := testRuntimeSnapshot()
+	snapshot.Agent.ID = agent.ID
+	snapshot.Agent.Name = agent.Name
+	snapshot.Agent.SystemPrompt = agent.SystemPrompt
+	run, err := storage.CreateRunWithContract(agent.ID, conversation.ID, snapshot, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent.WorkspaceID = "foreign"
+	agent.SystemPrompt = "Foreign private instructions"
+	if _, err = storage.UpdateAgent(agent); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	(&Handler{store: storage}).getEpisodeReport(response, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/episode", nil))
+	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "Foreign private instructions") || !strings.Contains(response.Body.String(), "Original Run guidance") {
+		t.Fatalf("historical Agent privacy: %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestEvidenceComparisonReadsEnforceWorkspaceScope(t *testing.T) {
 	fixtureStore := fixturestore.New()
 	conversation, err := fixtureStore.CreateConversationInWorkspace("workspace-a", "private comparison")

@@ -15,6 +15,8 @@ Global styles load in ordered feature layers from `app/layout.tsx`:
 ## Workbench Modules
 
 - `foundation.css`: design tokens, typography, focus, and shared primitives.
+- `selection-menu.css`: shared pickers, optional search and bounded option lists.
+- `disabled-control-note.css`: disabled-control hover/focus notes.
 - `home.css`: product home geometry, typography, actions, and execution modes.
 - `home-runtime.css`: bounded product GIFs, recording selector, captions, and pause control.
 - `home-platform.css`: landing capability inventory and architecture boundaries.
@@ -22,7 +24,8 @@ Global styles load in ordered feature layers from `app/layout.tsx`:
 - `chat.css`: mode chooser, messages, markdown, and empty state.
 - `tool-progress.css`: shared compact Tool execution progress in Chat and Replay.
 - `task-state.css`: Conversation Task State trigger, inspector layout, and fact rows.
-- `composer.css`: composer, agent selector, and agent dialogs.
+- `composer.css`: message composer and Agent dialogs.
+- `agent-toolbar.css`: Single-agent toolbar, description disclosure and Skill selection.
 - `tools.css`: tools workspace refinements.
 - `memory.css`: manual semantic-memory write and recall workspace.
 - `collaboration.css`: multi-agent DAG, Loop Trace, and trace controls.

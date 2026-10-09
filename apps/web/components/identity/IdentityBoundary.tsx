@@ -8,7 +8,7 @@ import { apiURL, setWorkspaceID } from "../../lib/api-client";
 import { getIdentitySession, signOut, type IdentitySession } from "../../lib/identity";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { WorkspaceSettings } from "./WorkspaceSettings";
-import { WorkspaceReadOnly, ServiceConfigurationReadOnly, TrustedHostCommands } from "./WorkspaceContext";
+import { WorkspaceReadOnly, TrustedHostCommands } from "./WorkspaceContext";
 import { listWorkspaces, type Workspace } from "../../lib/workspaces";
 
 const workspaceKey = "agentflow-workspace";
@@ -105,7 +105,7 @@ export function IdentityBoundary({ children }: { children: ReactNode }) {
       </header>
       {error ? <p className="identity-error" role="alert">{error}</p> : null}
       {workspaces.find(item => item.id === workspace)?.status === "archived" ? <div className="workspace-readonly" role="status">Archived Workspace · Read-only<button type="button" onClick={() => setSettingsOpen(true)}>Workspace settings</button></div> : null}
-      <TrustedHostCommands.Provider value={session?.mode === "local"}><ServiceConfigurationReadOnly.Provider value={session?.mode === "oidc"}><WorkspaceReadOnly.Provider value={workspaces.find(item => item.id === workspace)?.status === "archived"}><div className="identity-content" key={workspace}>{children}</div></WorkspaceReadOnly.Provider></ServiceConfigurationReadOnly.Provider></TrustedHostCommands.Provider>
+      <TrustedHostCommands.Provider value={session?.mode === "local"}><WorkspaceReadOnly.Provider value={workspaces.find(item => item.id === workspace)?.status === "archived"}><div className="identity-content" key={workspace}>{children}</div></WorkspaceReadOnly.Provider></TrustedHostCommands.Provider>
       {settings}
     </div>
   );

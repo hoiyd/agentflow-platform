@@ -62,10 +62,11 @@ type activeRunCancellation struct {
 }
 
 type RuntimeStore interface {
-	ListAgents() ([]domain.Agent, error)
+	store.WorkspaceToolStore
+	ListAgentsByWorkspace(string) ([]domain.Agent, error)
+	GetAgentInWorkspace(string, string) (domain.Agent, bool, error)
+	GetConversation(string) (domain.Conversation, bool, error)
 	ListMessages(string) ([]domain.Message, error)
-	GetAgent(string) (domain.Agent, bool, error)
-	GetDefaultAgent() (domain.Agent, bool, error)
 	CreateRunWithContract(string, string, domain.RuntimeSnapshot, *domain.CompletionContract) (domain.Run, error)
 	UpdateRunAgent(string, string) (domain.Run, error)
 	UpdateRunStatus(string, domain.RunStatus, string) (domain.Run, error)
@@ -182,7 +183,7 @@ func DefaultAutonomousLimits() AutonomousLimits {
 }
 
 func (r *Runtime) PrepareChatRunWithContract(ctx context.Context, agentID string, conversationID string, contract *domain.CompletionContract) (PreparedRun, error) {
-	agent, err := r.resolveAgent(strings.TrimSpace(agentID))
+	agent, err := r.resolveAgent(strings.TrimSpace(agentID), conversationID)
 	if err != nil {
 		return PreparedRun{}, err
 	}
@@ -399,29 +400,50 @@ func (r *Runtime) CancelRun(id string) (domain.Run, error) {
 	}
 }
 
-func (r *Runtime) resolveAgent(agentID string) (domain.Agent, error) {
-	if agentID == "" {
-		agent, ok, err := r.store.GetDefaultAgent()
-		if err != nil {
-			return domain.Agent{}, err
-		}
-		if ok {
-			return agent, nil
-		}
-		return domain.Agent{}, store.ErrNotFound("agent")
-	}
-
-	agent, ok, err := r.store.GetAgent(agentID)
+func (r *Runtime) resolveAgent(agentID, conversationID string) (domain.Agent, error) {
+	conversation, ok, err := r.store.GetConversation(conversationID)
 	if err != nil {
 		return domain.Agent{}, err
 	}
 	if !ok {
+		return domain.Agent{}, store.ErrNotFound("conversation")
+	}
+	if err := r.store.CheckWorkspaceExecution(conversation.WorkspaceID); err != nil {
+		return domain.Agent{}, err
+	}
+	if strings.TrimSpace(agentID) == "" {
+		agents, err := r.store.ListAgentsByWorkspace(conversation.WorkspaceID)
+		if err != nil {
+			return domain.Agent{}, err
+		}
+		for _, item := range agents {
+			if !item.IsTemplate {
+				agentID = item.ID
+				break
+			}
+		}
+		if agentID == "" {
+			for _, item := range agents {
+				if item.ID == "agent_planner" || item.ID == "template_planner" {
+					agentID = item.ID
+					break
+				}
+			}
+		}
+		if agentID == "" && len(agents) > 0 {
+			agentID = agents[0].ID
+		}
+	}
+	item, ok, err := r.store.GetAgentInWorkspace(conversation.WorkspaceID, agentID)
+	if err != nil {
+		return domain.Agent{}, err
+	}
+	if !ok || item.Archived {
 		return domain.Agent{}, store.ErrNotFound("agent")
 	}
-	if agent.Archived {
-		return domain.Agent{}, store.ErrNotFound("agent")
-	}
-	return agent, nil
+	// Shared templates execute within the requesting Conversation's scope.
+	item.WorkspaceID = conversation.WorkspaceID
+	return item, nil
 }
 
 func normalizeAutonomousLimits(limits AutonomousLimits) AutonomousLimits {

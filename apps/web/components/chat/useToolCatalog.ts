@@ -28,7 +28,7 @@ export function useToolCatalog() {
     setUpdatingTool(tool.name);
     setError("");
     try {
-      const items = await setToolEnabled(tool.name, !tool.enabled);
+      const items = await setToolEnabled(tool.name, !(tool.workspace_enabled ?? tool.enabled));
       if (request.isCurrent()) setTools(items);
     } catch (err) {
       if (request.isCurrent()) setError(err instanceof Error ? err.message : "Failed to update tool");

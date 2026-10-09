@@ -36,7 +36,8 @@ func TestPostgresSkillsRoundTripAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, err := storage.CreateAgent(domain.Agent{Name: "Skill holder", Skills: []string{"persisted-method"}})
+	workspace := testOwnedWorkspace(t, storage)
+	agent, err := storage.CreateAgent(domain.Agent{WorkspaceID: workspace, Name: "Skill holder", Skills: []string{"persisted-method"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func TestPostgresSkillsRoundTripAcrossRestart(t *testing.T) {
 	if _, err := storage.UpdateAgent(agent); err != nil {
 		t.Fatal(err)
 	}
-	conversation, err := storage.CreateConversation("frozen skill")
+	conversation, err := storage.CreateConversationInWorkspace(workspace, "frozen skill")
 	if err != nil {
 		t.Fatal(err)
 	}

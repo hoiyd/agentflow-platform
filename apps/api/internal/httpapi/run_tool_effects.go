@@ -9,6 +9,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/tool/availability"
 	"agentflow-platform/apps/api/internal/tool/reconciliation"
 )
 
@@ -54,6 +55,11 @@ func (h *Handler) listToolEffects(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	catalog, _, err = availability.Resolve(h.store, workspaceIDFromRequest(r), catalog)
+	if err != nil {
+		writeFailure(w, r, http.StatusInternalServerError, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"run_id": runID, "effects": reconciliation.NewToolEffectViews(catalog, filtered)})
 }
 
@@ -87,6 +93,13 @@ func (h *Handler) reconcileToolEffect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	catalog, err := h.tools.Catalog()
+	if err != nil {
+		writeFailure(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	// Recovery callbacks execute Tools too. Manual confirmations remain possible,
+	// but retry/compensation cannot bypass current Workspace or service grants.
+	catalog, _, err = availability.Resolve(h.store, run.WorkspaceID, catalog)
 	if err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return

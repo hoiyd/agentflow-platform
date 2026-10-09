@@ -38,10 +38,9 @@ type KnowledgeOperations interface {
 	Evaluate(context.Context, domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error)
 }
 
-// HTTPStore deliberately exposes only global Agent configuration and a
-// mandatory Workspace-scoped view for user-owned persistence.
+// User-owned resources are accessed only through the Workspace-scoped view.
 type HTTPStore interface {
-	store.AgentStore
+	store.WorkspaceToolStore
 	store.WorkspaceStoreProvider
 }
 
@@ -67,8 +66,6 @@ type AgentRuntimeOperations interface {
 
 type ToolOperations interface {
 	Catalog() (*tool.Catalog, error)
-	List() ([]tool.ToolInfo, error)
-	SetEnabled(string, bool) ([]tool.ToolInfo, error)
 }
 
 type RunCapacity interface {

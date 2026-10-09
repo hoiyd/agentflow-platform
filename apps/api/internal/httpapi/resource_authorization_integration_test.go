@@ -234,13 +234,17 @@ func TestMemoryProvenanceStorageFailure(t *testing.T) {
 	}
 }
 
-func TestMembershipOnlyAdapterStillProtectsStreamsAndSharedConfiguration(t *testing.T) {
+func TestMembershipOnlyAdapterProtectsStreamsAndScopesConfiguration(t *testing.T) {
 	handler, _, db, spaces, tokens := authorizationFixture(t)
 	handler.workspaces = nil
-	for _, path := range []string{"/api/agents", "/api/agents/agent_planner", "/api/tools/get_current_time/disable"} {
-		if response := authorizedRequest(handler.Routes(), "POST", path, spaces[0], tokens[0], `{}`); response.Code != 403 {
-			t.Fatalf("configuration adapter bypass: %d %s", response.Code, response.Body.String())
-		}
+	if response := authorizedRequest(handler.Routes(), "POST", "/api/agents", spaces[0], tokens[0], `{"name":"Owned Agent"}`); response.Code != 201 {
+		t.Fatalf("owned configuration: %d %s", response.Code, response.Body.String())
+	}
+	if response := authorizedRequest(handler.Routes(), "PATCH", "/api/agents/agent_planner", spaces[0], tokens[0], `{"name":"Forbidden template mutation"}`); response.Code != 403 {
+		t.Fatalf("template protection: %d %s", response.Code, response.Body.String())
+	}
+	if response := authorizedRequest(handler.Routes(), "POST", "/api/tools/get_current_time/disable", spaces[0], tokens[0], `{}`); response.Code != 200 {
+		t.Fatalf("Workspace Tool toggle: %d %s", response.Code, response.Body.String())
 	}
 	for _, cause := range []string{"membership", "storage"} {
 		response := authorizedRequest(handler.withIdentity(handler.withWorkspace(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import type { ReactNode } from "react";
 
 import type { AgentInfo, ToolInfo, SkillInfo } from "../../lib/api";
 
@@ -18,7 +19,7 @@ export type AgentConfigDraft = {
 };
 
 export function isDefaultAgent(agent: AgentInfo) {
-  return ["agent_research", "agent_coding", "agent_data", "agent_planner"].includes(agent.id);
+  return agent.is_template === true;
 }
 
 type AgentConfigPanelProps = {
@@ -38,6 +39,7 @@ type AgentConfigPanelProps = {
   onToggleTool: (toolName: string) => void;
   status: string;
   title: string;
+  creationSource?: ReactNode;
 };
 
 export function AgentConfigPanel({
@@ -56,13 +58,15 @@ export function AgentConfigPanel({
   onSave,
   onToggleTool,
   status,
-  title
+  title,
+  creationSource
 }: AgentConfigPanelProps) {
   return (
     <section className="agent-config-panel">
       <div className="agent-config-header">
         <strong>{title}</strong>
       </div>
+      {creationSource}
       <label>
         <span>Name</span>
         <input
@@ -152,7 +156,8 @@ export function AgentConfigPanel({
               <label key={tool.name}>
                 <input
                   checked={draft.tools.includes(tool.name)}
-                  disabled={disabled}
+                  disabled={disabled || (!tool.enabled && !draft.tools.includes(tool.name))}
+                  title={tool.excluded_reason ?? ""}
                   onChange={() => onToggleTool(tool.name)}
                   type="checkbox"
                 />

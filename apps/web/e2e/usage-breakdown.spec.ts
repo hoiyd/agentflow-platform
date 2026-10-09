@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { createWorkspaceChatAgent, defaultWorkspaceID } from "./fixtures/workspace-agent";
 
 test.skip(process.env.AGENTFLOW_USAGE_TEST !== "1", "requires a frozen fixture quote");
 
@@ -15,6 +16,8 @@ for (const scenario of [
     await expect(page.getByText("API connected", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "New conversation", exact: true }).click();
     await page.getByRole("button", { name: "Direct Single agent", exact: true }).click();
+    const workspace = await defaultWorkspaceID(page);
+    const agent = await createWorkspaceChatAgent(page, workspace, `Usage ${scenario.suffix || "cache hit"}`);
     await page.getByPlaceholder("Ask AgentFlow anything...").fill(`usage-breakdown ${scenario.suffix}: explain usage briefly`);
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
@@ -23,6 +26,8 @@ for (const scenario of [
     const response = await request.get(`http://127.0.0.1:18080/api/runs/${id}/replay`);
     expect(response.ok()).toBe(true);
     const replay = await response.json();
+    expect(replay.run.agent_id).toBe(agent.id);
+    expect(replay.run.workspace_id).toBe(workspace);
     const ledger = replay.usage_ledger;
     const entries = ledger.entries.filter((entry: { kind: string }) => entry.kind === "model.settlement");
     expect(entries.length).toBeGreaterThan(0);
@@ -68,6 +73,8 @@ for (const mode of ["Multi-agent", "Bounded loop"]) {
       await dialog.getByLabel("Knowledge retrieval", { exact: true }).uncheck();
       await dialog.getByRole("button", { name: "Create Agent", exact: true }).click();
       await page.getByRole("button", { name: "OK", exact: true }).click();
+    } else {
+      await createWorkspaceChatAgent(page, await defaultWorkspaceID(page), "Loop usage fixture");
     }
     await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: new RegExp(mode) }).click();
     await page.getByPlaceholder("Ask AgentFlow anything...").fill("usage-breakdown: explain usage briefly");

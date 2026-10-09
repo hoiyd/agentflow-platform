@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -24,9 +25,25 @@ type runtimeTurnModel struct {
 }
 
 func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emit func(turn.ModelEvent)) (result turn.Result, err error) {
+	run, ok, err := m.runtime.store.GetRun(request.RunID)
+	if err != nil {
+		return turn.Result{}, err
+	}
+	if !ok {
+		return turn.Result{}, fmt.Errorf("run not found")
+	}
 	ctx = skill.WithAgent(ctx, request.Agent.ID, request.Input)
 	snapshot, err := m.runtime.snapshotForRun(request.RunID)
 	if err != nil {
+		return turn.Result{}, err
+	}
+	// Planner/reviewer/finalizer prompts are synthetic internal stages, not
+	// independent persisted Agents. They inherit the Run's authorized owner.
+	authorityAgentID := request.Agent.ID
+	if authorityAgentID == "" && request.ModelMode == turn.ModelModeText {
+		authorityAgentID = snapshot.Agent.ID
+	}
+	if _, err := m.runtime.currentRunAgent(run, authorityAgentID); err != nil {
 		return turn.Result{}, err
 	}
 	ctx, cancel, err := m.runtime.contextWithRunBudget(ctx, request.RunID)
@@ -142,6 +159,8 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 }
 
 func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client provider.Client, emit func(turn.ModelEvent)) (turn.Result, error) {
+	options := m.runtime.toolExecutionOptions
+	options.Authorize = m.runtime.authorizeTool(request.RunID, request.Agent)
 	systemPrompt := request.SystemPrompt
 	if systemPrompt == "" {
 		systemPrompt = request.Agent.SystemPrompt
@@ -154,7 +173,7 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 			Recorder: m.runtime.trace, RunID: request.RunID, StepID: request.StepID,
 			Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
 		},
-		ExecutorOptions: m.runtime.toolExecutionOptions,
+		ExecutorOptions: options,
 		RunEvents:       func() ([]domain.RunEvent, error) { return m.runtime.store.ListRunEvents(request.RunID) },
 	})
 

@@ -33,10 +33,23 @@ func (h *Handler) getEpisodeReport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
-	agent, ok, err := h.store.GetAgent(replay.Run.AgentID)
+	agent, ok, err := scoped.GetAgent(replay.Run.AgentID)
 	if err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
+	}
+	if !ok && replay.RuntimeSnapshot != nil {
+		// Migration can assign an old global Agent to a different owner. Historical
+		// reports may use their own frozen configuration, never that owner's edits.
+		candidates := append([]domain.RuntimeAgentSnapshot{replay.RuntimeSnapshot.Agent}, replay.RuntimeSnapshot.CandidateAgents...)
+		for _, frozen := range candidates {
+			if frozen.ID == replay.Run.AgentID {
+				agent = domain.Agent{ID: frozen.ID, WorkspaceID: replay.Run.WorkspaceID, Name: frozen.Name, Description: frozen.Description, SystemPrompt: frozen.SystemPrompt,
+					RoutingHints: frozen.RoutingHints, Tools: frozen.Tools, Skills: frozen.Skills, MemoryEnabled: frozen.MemoryEnabled, RetrievalEnabled: frozen.RetrievalEnabled, Executor: frozen.Executor}
+				ok = true
+				break
+			}
+		}
 	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "agent not found")

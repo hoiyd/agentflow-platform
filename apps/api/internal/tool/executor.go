@@ -90,6 +90,11 @@ type ToolEffectJournal interface {
 }
 
 type ExecutorOptions struct {
+	// Authorize checks current Workspace grants immediately before each call.
+	// It is supplied by the trusted Runtime, never by model arguments.
+	// Scope is the already validated/resolved scope; do not invoke a Binding's
+	// resolver a second time when checking current policy.
+	Authorize     func(context.Context, ExecutionRequest, policy.Scope) error
 	DefaultPolicy ExecutionPolicy
 	// PrivateContext is trusted data-flow state, not an argument or user approval.
 	PrivateContext bool
@@ -108,6 +113,7 @@ type ExecutorOptions struct {
 }
 
 type Executor struct {
+	authorize           func(context.Context, ExecutionRequest, policy.Scope) error
 	catalog             *Catalog
 	defaultPolicy       ExecutionPolicy
 	credentialScopes    []string
@@ -139,7 +145,8 @@ func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
 	}
 	securityPolicy := catalog.SecurityPolicy()
 	executor := &Executor{
-		catalog: catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency,
+		authorize: options.Authorize,
+		catalog:   catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency,
 		credentialScopes: append([]string(nil), options.CredentialScopes...),
 		effectJournal:    options.EffectJournal, maxBatchResultBytes: maxBatchResultBytes,
 		artifactGovernor: newResultArtifactGovernor(options),

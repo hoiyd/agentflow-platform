@@ -758,9 +758,10 @@ paths:
     get:
       operationId: listTools
       tags: [Tools]
+      description: Service-owned Tool catalog with the selected Workspace's persisted grants and effective availability.
       responses:
         '200':
-          description: Tool catalog and current enabled state.
+          description: Tool catalog, Workspace configuration revision and exclusion reasons.
           content:
             application/json:
               schema:
@@ -776,6 +777,7 @@ paths:
     post:
       operationId: enableTool
       tags: [Tools]
+      description: Allow an installed, service-ready Tool in the selected Workspace. Does not modify operator configuration or Agent selection.
       responses:
         '200':
           description: Updated tool catalog.
@@ -796,6 +798,7 @@ paths:
     post:
       operationId: disableTool
       tags: [Tools]
+      description: Revoke the selected Workspace's Tool grant. Subsequent execution and recovery callbacks recheck the grant.
       responses:
         '200':
           description: Updated tool catalog.
@@ -1240,6 +1243,12 @@ components:
       type: object
       required: [id, name, description, system_prompt, tools, memory_enabled, retrieval_enabled, created_at, updated_at]
       properties:
+        workspace_id:
+          type: string
+          description: Owning Workspace; absent for shared read-only templates.
+        is_template:
+          type: boolean
+          description: Shared read-only profile; POST a copy to configure it in a Workspace.
         id:
           type: string
         name:
@@ -1304,6 +1313,18 @@ components:
       type: object
       required: [name, description, parameters, enabled]
       properties:
+        service_enabled:
+          type: boolean
+          description: Operator-owned service switch. Workspace owners cannot override it.
+        workspace_enabled:
+          type: boolean
+          description: Persisted Workspace allowlist entry, independent of service readiness.
+        config_revision:
+          type: integer
+          format: int64
+        excluded_reason:
+          type: string
+          description: Service, prerequisite, Workspace or static-policy exclusion reason; argument-dependent decisions remain in Run events.
         name:
           type: string
         description:

@@ -19,6 +19,9 @@ import (
 
 func TestAgentAndRunHandlersProjectStoreFailures(t *testing.T) {
 	httpStore, workspace, fixtureStore := newBoundaryHTTPStore(t)
+	if _, err := fixtureStore.CreateAgent(domain.Agent{ID: "custom", Name: "Owned configuration"}); err != nil {
+		t.Fatal(err)
+	}
 	handler := &Handler{store: httpStore}
 	want := errors.New("persistence unavailable")
 
@@ -41,9 +44,9 @@ func TestAgentAndRunHandlersProjectStoreFailures(t *testing.T) {
 	httpStore.getAgentErr = want
 	assertHandlerFailure(t, handler.updateAgent, httptest.NewRequest(http.MethodPatch, "/api/agents/agent_planner", bytes.NewBufferString(`{}`)), http.StatusInternalServerError)
 	httpStore.getAgentErr = nil
-	assertHandlerFailure(t, handler.updateAgent, httptest.NewRequest(http.MethodPatch, "/api/agents/agent_planner", bytes.NewBufferString(`{"tools":["not-installed"]}`)), http.StatusBadRequest)
+	assertHandlerFailure(t, handler.updateAgent, httptest.NewRequest(http.MethodPatch, "/api/agents/custom", bytes.NewBufferString(`{"tools":["not-installed"]}`)), http.StatusBadRequest)
 	httpStore.updateAgentErr = want
-	assertHandlerFailure(t, handler.updateAgent, httptest.NewRequest(http.MethodPatch, "/api/agents/agent_planner", bytes.NewBufferString(`{}`)), http.StatusBadRequest)
+	assertHandlerFailure(t, handler.updateAgent, httptest.NewRequest(http.MethodPatch, "/api/agents/custom", bytes.NewBufferString(`{}`)), http.StatusBadRequest)
 	httpStore.updateAgentErr = nil
 
 	conversation, err := fixtureStore.CreateConversation("run failures")
@@ -285,7 +288,9 @@ func newBoundaryHTTPStore(t *testing.T) (*boundaryHTTPStore, *boundaryWorkspaceS
 	workspace := &boundaryWorkspaceStore{
 		WorkspaceStore: fixtureStore.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID)),
 	}
-	return &boundaryHTTPStore{Store: fixtureStore, workspace: workspace}, workspace, fixtureStore
+	backend := &boundaryHTTPStore{Store: fixtureStore, workspace: workspace}
+	workspace.WorkspaceStore = store.ScopeWorkspace(backend, domain.NewWorkspaceScope(domain.DefaultWorkspaceID))
+	return backend, workspace, fixtureStore
 }
 
 func newBoundaryRunningRun(t *testing.T, contract *domain.CompletionContract) (*Handler, *boundaryWorkspaceStore, domain.Run, domain.Conversation) {
@@ -324,6 +329,18 @@ func (s *boundaryHTTPStore) ListAgents() ([]domain.Agent, error) {
 		return nil, s.listAgentsErr
 	}
 	return s.Store.ListAgents()
+}
+func (s *boundaryHTTPStore) ListAgentsByWorkspace(id string) ([]domain.Agent, error) {
+	if s.listAgentsErr != nil {
+		return nil, s.listAgentsErr
+	}
+	return s.Store.ListAgentsByWorkspace(id)
+}
+func (s *boundaryHTTPStore) GetAgentInWorkspace(workspaceID, id string) (domain.Agent, bool, error) {
+	if s.getAgentErr != nil {
+		return domain.Agent{}, false, s.getAgentErr
+	}
+	return s.Store.GetAgentInWorkspace(workspaceID, id)
 }
 func (s *boundaryHTTPStore) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 	if s.createAgentErr != nil {

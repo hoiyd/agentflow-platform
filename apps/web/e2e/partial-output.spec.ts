@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { createWorkspaceChatAgent, defaultWorkspaceID } from "./fixtures/workspace-agent";
 
 test.skip(process.env.AGENTFLOW_REASONING_TEST !== "1", "requires isolated reasoning fixture");
 const api = "http://127.0.0.1:18080";
@@ -20,6 +21,7 @@ test(`${mode}: committed answer and reasoning survive refresh, reset and cancell
   await dialog.getByRole("textbox", { name: "Example tasks", exact: true }).fill("reasoning-partial-gate checkpoint recovery");
   await dialog.getByLabel("Memory retrieval", { exact: true }).uncheck();
   await dialog.getByLabel("Knowledge retrieval", { exact: true }).uncheck();
+  await dialog.getByRole("checkbox", { name: "get_current_time", exact: true }).check();
   await dialog.getByRole("button", { name: "Create Agent", exact: true }).click();
   await page.getByRole("button", { name: "OK", exact: true }).click();
   await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: new RegExp(mode) }).click();
@@ -65,6 +67,7 @@ test("successful completion replaces recovered output with one canonical answer"
   await expect(page.getByText("API connected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "New conversation", exact: true }).click();
   await page.getByRole("button", { name: "Direct Single agent", exact: true }).click();
+  await createWorkspaceChatAgent(page, await defaultWorkspaceID(page), "Partial output finalization", { tools: ["get_current_time"] });
   await page.getByPlaceholder("Ask AgentFlow anything...").fill("reasoning-partial-gate: finish recovery");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect(page.locator(".message.assistant").last()).toContainText("Recover this answer");

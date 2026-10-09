@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createWorkspaceChatAgent } from "./fixtures/workspace-agent";
 
 const api = "http://127.0.0.1:18080";
 const web = "http://127.0.0.1:13000";
@@ -13,11 +14,13 @@ test("two signed identities cannot read, mutate or link another Workspace's reso
   const session = await (await page.request.get(`${api}/api/auth/session`)).json();
   const workspace = session.personal_workspace;
   const headers = { Origin: web, "X-Workspace-ID": workspace };
+  const agent = await createWorkspaceChatAgent(page, workspace, "Resource authorization Agent");
   await page.getByPlaceholder("Ask AgentFlow anything...").fill("Private authorization evidence");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect(page.getByText("Evidence saved.", { exact: true })).toBeVisible();
   const runs = await (await page.request.get(`${api}/api/runs`, { headers })).json();
-  const run = runs[0];
+  const run = runs.find((item: { agent_id: string }) => item.agent_id === agent.id);
+  expect(run).toBeDefined();
   await expect.poll(async () => (await (await page.request.get(`${api}/api/runs/${run.id}`, { headers })).json()).status).toBe("completed");
   const conversation = run.conversation_id;
   const saved = await page.request.post(`${api}/api/memories`, { headers, data: { kind: "note", content: "Private authorization memory", run_id: run.id } });
@@ -72,8 +75,12 @@ test("two signed identities cannot read, mutate or link another Workspace's reso
     expect((await other.request.post(`${api}/api/runs/${run.id}/cancel`, { headers: foreignScope })).status()).toBe(404);
     expect((await other.request.post(`${api}/api/memories`, { headers: foreignScope, data: { kind: "note", content: "Rejected link", run_id: run.id } })).status()).toBe(404);
     expect((await other.request.post(`${api}/api/memories`, { headers: foreignScope, data: { kind: "note", content: "Rejected scope", workspace_id: workspace } })).status()).toBe(400);
-    expect((await other.request.post(`${api}/api/agents`, { headers: foreignScope, data: { name: "Unauthorized global config" } })).status()).toBe(403);
-    expect((await other.request.post(`${api}/api/tools/get_current_time/disable`, { headers: foreignScope })).status()).toBe(403);
+    const ownedAgent = await other.request.post(`${api}/api/agents`, { headers: foreignScope, data: { name: "Stranger's private config" } });
+    expect(ownedAgent.status()).toBe(201);
+    expect((await ownedAgent.json()).workspace_id).toBe(otherSession.personal_workspace);
+    expect((await other.request.post(`${api}/api/tools/get_current_time/disable`, { headers: foreignScope })).status()).toBe(200);
+    const ownerTools = await (await page.request.get(`${api}/api/tools`, { headers })).json();
+    expect(ownerTools.find((tool: { name: string }) => tool.name === "get_current_time").workspace_enabled).toBe(true);
     for (const [path, data] of [["/api/memories/search", { query: "Private authorization memory" }], ["/api/rag/search", { query: "Private retrieval evidence", min_similarity: 0 }]] as const) {
       const search = await other.request.post(`${api}${path}`, { headers: foreignScope, data });
       expect(search.status()).toBe(200);
@@ -92,7 +99,7 @@ test("two signed identities cannot read, mutate or link another Workspace's reso
     expect(state.version).toBe(1);
     expect(state.goal).toBe("Private authorization goal");
     expect((await page.request.get(`${api}/api/documents/${document.id}`, { headers })).status()).toBe(200);
-    await testInfo.attach("resource-authorization-evidence.json", { body: JSON.stringify({ schema: "resource-authorization-v1", provider: "signed-oidc-fixture", store: "disposable-postgres", owners: [session.user.id, otherSession.user.id], workspaces: [workspace, sameOwner.id, otherSession.personal_workspace], resources: { run: run.id, conversation, memory: memory.id, document: document.id }, checks: ["real Chat UI to Go to Postgres", "foreign object IDs", "same-owner different Workspace", "selectors cannot grant access", "provenance before commit", "scoped retrieval and chunk content", "shared configuration forbidden", "denied writes preserve state", "reload"], limitations: ["fixed embeddings do not measure retrieval quality", "populated nested artifacts/effects/full captures covered by backend Postgres integration", "no live IdP or private Agent configuration"] }, null, 2), contentType: "application/json" });
+    await testInfo.attach("resource-authorization-evidence.json", { body: JSON.stringify({ schema: "resource-authorization-v1", provider: "signed-oidc-fixture", store: "disposable-postgres", owners: [session.user.id, otherSession.user.id], workspaces: [workspace, sameOwner.id, otherSession.personal_workspace], resources: { run: run.id, conversation, memory: memory.id, document: document.id }, checks: ["real Chat UI to Go to Postgres", "foreign object IDs", "same-owner different Workspace", "selectors cannot grant access", "provenance before commit", "scoped retrieval and chunk content", "owner-scoped Agent and Tool configuration", "denied writes preserve state", "reload"], limitations: ["fixed embeddings do not measure retrieval quality", "populated nested artifacts/effects/full captures covered by backend Postgres integration", "no live IdP"] }, null, 2), contentType: "application/json" });
   } finally {
     await stranger.close();
     await page.request.post(`${api}/__fixture/identity/subject`, { data: { subject: "fixture-operator" } });
@@ -107,11 +114,12 @@ test("logout denies active Chat delivery while admitted execution remains durabl
   await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: "Direct Single agent", exact: true }).click();
   const session = await (await page.request.get(`${api}/api/auth/session`)).json();
   const headers = { Origin: web, "X-Workspace-ID": session.personal_workspace };
+  const agent = await createWorkspaceChatAgent(page, session.personal_workspace, "Stream authorization Agent");
   await page.getByPlaceholder("Ask AgentFlow anything...").fill("stream-gate authorization continuity");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect(page.getByText("First token", { exact: true })).toBeVisible();
   const runs = await (await page.request.get(`${api}/api/runs`, { headers })).json();
-  const run = runs.find((item: { status: string }) => item.status === "running");
+  const run = runs.find((item: { status: string; agent_id: string }) => item.status === "running" && item.agent_id === agent.id);
   expect(run).toBeDefined();
   try {
     expect((await page.request.post(`${api}/api/auth/logout`, { headers: { Origin: web } })).status()).toBe(204);

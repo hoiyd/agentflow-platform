@@ -40,7 +40,7 @@ type humanInputNeed struct {
 }
 
 func (r *Runtime) PrepareAutonomousRunWithContract(ctx context.Context, agentID string, conversationID string, contract *domain.CompletionContract) (PreparedCollaborationRun, error) {
-	agent, err := r.resolveAgent(agentID)
+	agent, err := r.resolveAgent(agentID, conversationID)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}

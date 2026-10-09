@@ -1,4 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
+import { createWorkspaceChatAgent, defaultWorkspaceID } from "./fixtures/workspace-agent";
 
 const api = "http://127.0.0.1:18080";
 const secret = "sk-fixtureDisplayCredential123456";
@@ -70,6 +71,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByText("API connected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "New conversation", exact: true }).click();
   await page.getByRole("button", { name: "Direct Single agent", exact: true }).click();
+  await createWorkspaceChatAgent(page, await defaultWorkspaceID(page), `Reasoning fixture ${test.info().title}`, { tools: ["calculator"] });
 });
 
 test.afterEach(async ({ request }) => {

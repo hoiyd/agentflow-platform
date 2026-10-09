@@ -36,7 +36,7 @@ evaluation, internal use, or a controlled demonstration:
 | Dimension | Current scope |
 | --- | --- |
 | Access | Trusted-local mode remains unauthenticated; optional [OIDC identity and membership](identity-membership.md) add themed signup/login, personal Workspace onboarding, revocable sessions and request-level membership checks. |
-| Tenancy | Each Workspace has one owner, with owner-constrained Membership and lifecycle checks. Shared Agent/Tool writes are trusted-local operator-only. Private per-Workspace profiles, full object ACLs and cross-tenant auditing remain separate work. |
+| Tenancy | Each Workspace has one owner, with owner-constrained Membership, lifecycle checks and scoped object authorization. Agents and Tool grants are Workspace-owned; shared templates are read-only and service bindings, credentials and execution policy remain operator-owned. Cross-tenant audit and retention remain separate work. |
 | Runtime | Run admission, bounded queueing, Conversation single-writer control, interrupted lifecycle repair, Stage checkpoints, and Tool effect idempotency operate within one process. |
 | Tools | Use built-in or operator-reviewed Tools. All calls pass through Agent allowlists, Budget, timeout, result limits, tracing, and conservative concurrency. |
 | Data | Postgres provides durable storage, including local operation. The single-instance [release and recovery drill](release-recovery-drill.md) exercises startup migration, restart, repair, and Resume; backup/restore and version rollback remain deployment responsibilities. |
@@ -50,7 +50,7 @@ claims, arbitrary code execution, and distributed Worker ownership.
 | Milestone | Additional boundary required |
 | --- | --- |
 | **Controlled single-tenant pilot** | External identity boundary, Postgres, backup/restore drill, retention and redaction policy, baseline telemetry, Runbooks, and measured capacity. |
-| **Multi-workspace beta** | Enable built-in OIDC identity/Membership, then complete object ACLs, shared configuration authorization, scoped Credentials, Tool network/resource policy, and cross-tenant security tests. |
+| **Multi-workspace beta** | Enable built-in OIDC identity/Membership and verify scoped resources, Workspace Agent/Tool configuration, current-revocation enforcement and cross-owner tests. Review credential scope, audit and retention against the actual deployment boundary. |
 | **Distributed deployment** | Durable dispatch, independent Workers, reconnectable event delivery, Lease/Heartbeat/Fencing, distributed checkpoint ownership, and takeover drills. |
 | **Enterprise or regional scale** | SSO/SCIM, fine-grained RBAC, audited write-capable Sandboxes, online evaluation, Provider failover, regional recovery, and contractual compliance controls. |
 

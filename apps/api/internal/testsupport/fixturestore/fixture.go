@@ -13,6 +13,7 @@ import (
 // ponytail: a single mutex is sufficient for small fixtures; use PostgreSQL for
 // concurrency, transaction and restart durability acceptance.
 type Store struct {
+	toolConfigs     map[string]domain.WorkspaceToolConfig
 	mu              sync.RWMutex
 	data            state
 	artifactContent map[string][]byte

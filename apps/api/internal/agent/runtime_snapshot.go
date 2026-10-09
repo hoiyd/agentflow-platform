@@ -16,6 +16,7 @@ import (
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/availability"
 	"agentflow-platform/apps/api/internal/tool/policy"
 	"agentflow-platform/apps/api/internal/tool/progress"
 )
@@ -59,6 +60,12 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		return domain.RuntimeSnapshot{}, err
 	}
 	agent = domain.NormalizeAgentConfig(agent)
+	if agent.WorkspaceID != "" {
+		catalog, _, err = availability.Resolve(r.store, agent.WorkspaceID, catalog)
+		if err != nil {
+			return domain.RuntimeSnapshot{}, err
+		}
+	}
 	toolCallingAvailable := false
 	if r.modelRoutes != nil {
 		for _, route := range r.modelRoutes.Descriptors() {
@@ -92,6 +99,7 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 	if err := freezeSkills(&agent); err != nil {
 		return domain.RuntimeSnapshot{}, err
 	}
+	agent = availability.FilterAgent(agent, catalog)
 	candidateSnapshots := make([]domain.RuntimeAgentSnapshot, 0, len(candidates))
 	toolNames := append([]string(nil), agent.Tools...)
 	for _, candidate := range candidates {
@@ -102,6 +110,7 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		if err := freezeSkills(&candidate); err != nil {
 			return domain.RuntimeSnapshot{}, err
 		}
+		candidate = availability.FilterAgent(candidate, catalog)
 		candidateSnapshots = append(candidateSnapshots, snapshotAgent(candidate))
 		toolNames = append(toolNames, candidate.Tools...)
 	}
@@ -179,6 +188,12 @@ func (r *Runtime) ValidateAgentSkills(agent domain.Agent) error {
 	catalog, err := r.currentCatalog()
 	if err != nil {
 		return err
+	}
+	if agent.WorkspaceID != "" {
+		catalog, _, err = availability.Resolve(r.store, agent.WorkspaceID, catalog)
+		if err != nil {
+			return err
+		}
 	}
 	agent.Tools = r.withHarnessTools(agent.Tools)
 	_, err = r.freezeAgentSkills(agent, catalog)
@@ -286,8 +301,20 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 		return restoredRuntime{}, fmt.Errorf("run %s cannot be resumed safely: %w", run.ID, err)
 	}
 	snapshot := run.RuntimeSnapshot
+	if _, err := r.currentRunAgent(run, snapshot.Agent.ID); err != nil {
+		return restoredRuntime{}, err
+	}
+	for _, candidate := range snapshot.CandidateAgents {
+		if _, err := r.currentRunAgent(run, candidate.ID); err != nil {
+			return restoredRuntime{}, err
+		}
+	}
 	snapshot.ContextAssembly = contextassembly.NormalizeConfig(snapshot.ContextAssembly)
 	current, err := r.currentCatalog()
+	if err != nil {
+		return restoredRuntime{}, err
+	}
+	current, _, err = availability.Resolve(r.store, run.WorkspaceID, current)
 	if err != nil {
 		return restoredRuntime{}, err
 	}
@@ -308,6 +335,12 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 	catalog, err := tool.NewCatalogWithPolicy(snapshot.ToolSecurityPolicy, restoredBindings...)
 	if err != nil {
 		return restoredRuntime{}, err
+	}
+	for _, frozen := range snapshot.Tools {
+		_, ready := current.ResolveReady(frozen.Name)
+		if err := catalog.SetEnabled(frozen.Name, ready); err != nil {
+			return restoredRuntime{}, err
+		}
 	}
 	modelRoutes, err := r.restoreModelRouteCatalog(snapshot.ModelRouting)
 	if err != nil {

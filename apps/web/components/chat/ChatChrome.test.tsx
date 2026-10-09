@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar, ToolsPanel, type APIConnectionStatus } from "./ChatChrome";
@@ -19,6 +19,23 @@ describe("Sidebar API status", () => {
 });
 
 describe("ToolsPanel availability", () => {
+  it("keeps a persisted Workspace grant distinct from an operator-disabled Tool", () => {
+    render(<ToolsPanel error="" onToggle={vi.fn()} updatingTool="" tools={[{
+      name: "calculator", description: "Calculate", parameters: {}, enabled: false,
+      workspace_enabled: true, service_enabled: false, excluded_reason: "service_disabled", config_revision: 3
+    }]} />);
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
+    expect(screen.getByRole("checkbox")).toHaveProperty("disabled", true);
+    expect(screen.getByText("Disabled by operator")).toBeTruthy();
+  });
+  it("allows the owner to turn on a Workspace-disabled service Tool", () => {
+    const toggle = vi.fn();
+    const tool = {name: "calculator", description: "Calculate", parameters: {}, enabled: false, workspace_enabled: false, service_enabled: true, excluded_reason: "workspace_disabled"};
+    render(<ToolsPanel error="" onToggle={toggle} updatingTool="" tools={[tool]} />);
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(toggle).toHaveBeenCalledWith(tool);
+    expect(screen.getByText("Disabled in this Workspace")).toBeTruthy();
+  });
 	 it("shows a disabled sandbox boundary without offering a misleading toggle", () => {
 	   render(<ToolsPanel error="" onToggle={vi.fn()} updatingTool="" tools={[{
 	     name: "sandbox_command", description: "Isolated scratch commands", parameters: {}, enabled: false,

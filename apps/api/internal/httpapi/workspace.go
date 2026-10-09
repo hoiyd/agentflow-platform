@@ -25,12 +25,6 @@ func (h *Handler) withWorkspace(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		// Shared configuration is operator-only even in adapters without the
-		// Workspace lifecycle dependency; it is not a resource ownership grant.
-		if h.identity != nil && r.Method != http.MethodGet && r.Method != http.MethodHead && (r.URL.Path == "/api/agents" || strings.HasPrefix(r.URL.Path, "/api/agents/") || r.URL.Path == "/api/tools" || strings.HasPrefix(r.URL.Path, "/api/tools/")) {
-			writeError(w, http.StatusForbidden, "Shared Agent and Tool configuration is managed by the trusted-local operator")
-			return
-		}
 		// Entity management is scoped by authenticated owner, not by a selected
 		// space. This also permits recovery from an obsolete/deleted selection.
 		if h.workspaces != nil && (r.URL.Path == "/api/workspaces" || strings.HasPrefix(r.URL.Path, "/api/workspaces/")) {

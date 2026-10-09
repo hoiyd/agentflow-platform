@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -10,10 +9,11 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tool"
+	"agentflow-platform/apps/api/internal/tool/availability"
 )
 
 func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
-	agents, err := h.store.ListAgents()
+	agents, err := h.scopedStore(r).ListAgents()
 	if err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
@@ -32,18 +32,16 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agent := domain.Agent{
+		WorkspaceID:      workspaceIDFromRequest(r),
 		MemoryEnabled:    true,
 		RetrievalEnabled: true,
 		Executor:         domain.DefaultAgentExecutor,
-	}
-	if req.Id != nil {
-		agent.ID = strings.TrimSpace(*req.Id)
 	}
 	applyAgentConfigRequest(&agent, req)
 	if rejectCredentialContent(w, r, req) {
 		return
 	}
-	if err := h.validateAgentTools(agent.Tools); err != nil {
+	if err := h.validateWorkspaceAgentTools(r, agent.Tools); err != nil {
 		writeFailure(w, r, http.StatusBadRequest, err)
 		return
 	}
@@ -54,7 +52,7 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	created, err := h.store.CreateAgent(agent)
+	created, err := h.scopedStore(r).CreateAgent(agent)
 	if err != nil {
 		writeFailure(w, r, http.StatusBadRequest, err)
 		return
@@ -69,7 +67,7 @@ func (h *Handler) getAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agent, ok, err := h.store.GetAgent(id)
+	agent, ok, err := h.scopedStore(r).GetAgent(id)
 	if err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
@@ -91,11 +89,20 @@ func (h *Handler) archiveAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "agent id is required")
 		return
 	}
-	if domain.IsDefaultAgentID(id) {
-		writeError(w, http.StatusBadRequest, "default agents cannot be archived")
+	existing, ok, err := h.scopedStore(r).GetAgent(id)
+	if err != nil {
+		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	if err := h.store.ArchiveAgent(id); err != nil {
+	if !ok {
+		writeError(w, http.StatusNotFound, "agent not found")
+		return
+	}
+	if existing.IsTemplate {
+		writeError(w, http.StatusForbidden, "Built-in templates are read-only; create a Workspace copy")
+		return
+	}
+	if err := h.scopedStore(r).ArchiveAgent(id); err != nil {
 		status := http.StatusBadRequest
 		if store.IsNotFound(err) {
 			status = http.StatusNotFound
@@ -112,7 +119,7 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "agent id is required")
 		return
 	}
-	existing, ok, err := h.store.GetAgent(id)
+	existing, ok, err := h.scopedStore(r).GetAgent(id)
 	if err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
@@ -131,11 +138,15 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	agent := domain.NormalizeAgentConfig(existing)
+	if existing.IsTemplate {
+		writeError(w, http.StatusForbidden, "Built-in templates are read-only; create a Workspace copy")
+		return
+	}
 	applyAgentConfigRequest(&agent, req)
 	if rejectCredentialContent(w, r, req) {
 		return
 	}
-	if err := h.validateAgentTools(agent.Tools); err != nil {
+	if err := h.validateWorkspaceAgentTools(r, agent.Tools); err != nil {
 		writeFailure(w, r, http.StatusBadRequest, err)
 		return
 	}
@@ -145,7 +156,7 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	updated, err := h.store.UpdateAgent(agent)
+	updated, err := h.scopedStore(r).UpdateAgent(agent)
 	if err != nil {
 		writeFailure(w, r, http.StatusBadRequest, err)
 		return
@@ -153,14 +164,18 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, updated)
 }
 
-func (h *Handler) validateAgentTools(names []string) error {
-	catalog, err := h.currentToolCatalog()
+func (h *Handler) validateWorkspaceAgentTools(r *http.Request, names []string) error {
+	service, err := h.currentToolCatalog()
+	if err != nil {
+		return err
+	}
+	catalog, _, err := availability.Resolve(h.store, workspaceIDFromRequest(r), service)
 	if err != nil {
 		return err
 	}
 	for _, name := range names {
-		if _, ok := catalog.Installed(strings.TrimSpace(name)); !ok {
-			return fmt.Errorf("tool %q is not installed", name)
+		if err := availability.RequireTool(catalog, strings.TrimSpace(name)); err != nil {
+			return err
 		}
 	}
 	return nil

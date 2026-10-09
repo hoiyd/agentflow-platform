@@ -21,16 +21,16 @@ func (s *PostgresStore) CreateInputRun(ctx context.Context, inputID, owner strin
 }
 
 func (s *PostgresStore) createRun(ctx context.Context, inputID, owner string, allowStopped bool, agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
-	if _, ok, err := s.GetAgent(agentID); err != nil {
-		return domain.Run{}, err
-	} else if !ok {
-		return domain.Run{}, errors.New("agent not found")
-	}
 	conversation, ok, err := s.GetConversation(conversationID)
 	if err != nil {
 		return domain.Run{}, err
 	} else if !ok {
 		return domain.Run{}, errors.New("conversation not found")
+	}
+	if agent, ok, err := s.GetAgentInWorkspace(conversation.WorkspaceID, agentID); err != nil {
+		return domain.Run{}, err
+	} else if !ok || agent.Archived {
+		return domain.Run{}, ErrNotFound("agent")
 	}
 	if snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion || snapshot.RunBudget == nil {
 		return domain.Run{}, errors.New("runtime snapshot is required")
@@ -100,10 +100,17 @@ func (s *PostgresStore) createRun(ctx context.Context, inputID, owner string, al
 }
 
 func (s *PostgresStore) UpdateRunAgent(id string, agentID string) (domain.Run, error) {
-	if _, ok, err := s.GetAgent(agentID); err != nil {
+	run, ok, err := s.GetRun(id)
+	if err != nil {
 		return domain.Run{}, err
-	} else if !ok {
-		return domain.Run{}, errors.New("agent not found")
+	}
+	if !ok {
+		return domain.Run{}, ErrNotFound("run")
+	}
+	if agent, ok, err := s.GetAgentInWorkspace(run.WorkspaceID, agentID); err != nil {
+		return domain.Run{}, err
+	} else if !ok || agent.Archived {
+		return domain.Run{}, ErrNotFound("agent")
 	}
 	return s.scanRunQuery(`
 		UPDATE runs

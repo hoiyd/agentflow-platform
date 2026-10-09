@@ -36,6 +36,10 @@ func TestSkillCatalogAndAgentBindingAPI(t *testing.T) {
 	}
 	dependencies := completeHandlerDependencies(t)
 	storage := fullStoreForTest(t, dependencies)
+	owned, err := storage.CreateAgent(domain.Agent{ID: "owned-skill-agent", Name: "Owned Skill Agent"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	dependencies.Skills = catalog
 	dependencies.AgentRuntime = newRuntimeForTest(agentpkg.RuntimeOptions{Store: storage, Skills: catalog}, nil)
 	handler, err := NewHandler(dependencies)
@@ -65,7 +69,7 @@ func TestSkillCatalogAndAgentBindingAPI(t *testing.T) {
 		t.Fatalf("catalog=%s", response.Body.String())
 	}
 	response = httptest.NewRecorder()
-	routes.ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/api/agents/agent_planner", bytes.NewBufferString(`{"skills":["api-method","api-method"]}`)))
+	routes.ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/api/agents/"+owned.ID, bytes.NewBufferString(`{"skills":["api-method","api-method"]}`)))
 	if response.Code != 200 {
 		t.Fatalf("binding=%d %s", response.Code, response.Body.String())
 	}
@@ -74,21 +78,21 @@ func TestSkillCatalogAndAgentBindingAPI(t *testing.T) {
 		t.Fatalf("agent=%#v err=%v", item, err)
 	}
 	response = httptest.NewRecorder()
-	routes.ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/api/agents/agent_planner", bytes.NewBufferString(`{"name":"Still bound"}`)))
+	routes.ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/api/agents/"+owned.ID, bytes.NewBufferString(`{"name":"Still bound"}`)))
 	if response.Code != 200 || !strings.Contains(response.Body.String(), `"skills":["api-method"]`) {
 		t.Fatal("omitting Skills cleared bindings")
 	}
 	response = httptest.NewRecorder()
-	routes.ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/api/agents/agent_planner", bytes.NewBufferString(`{"skills":["untrusted"]}`)))
+	routes.ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/api/agents/"+owned.ID, bytes.NewBufferString(`{"skills":["untrusted"]}`)))
 	if response.Code != 400 || !strings.Contains(response.Body.String(), "skill_unavailable") {
 		t.Fatalf("unknown accepted: %d %s", response.Code, response.Body.String())
 	}
 	response = httptest.NewRecorder()
-	routes.ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/api/agents/agent_planner", bytes.NewBufferString(`{"skills":[]}`)))
+	routes.ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/api/agents/"+owned.ID, bytes.NewBufferString(`{"skills":[]}`)))
 	if response.Code != 200 {
 		t.Fatal("clear failed")
 	}
-	loaded, ok, err := storage.GetAgent("agent_planner")
+	loaded, ok, err := storage.GetAgent(owned.ID)
 	if err != nil || !ok || len(loaded.Skills) != 0 {
 		t.Fatal("bindings not cleared")
 	}

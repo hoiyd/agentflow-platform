@@ -535,6 +535,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Service-owned Tool catalog with the selected Workspace's persisted grants and effective availability. */
         get: operations["listTools"];
         put?: never;
         post?: never;
@@ -555,6 +556,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Allow an installed, service-ready Tool in the selected Workspace. Does not modify operator configuration or Agent selection. */
         post: operations["enableTool"];
         delete?: never;
         options?: never;
@@ -573,6 +575,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Revoke the selected Workspace's Tool grant. Subsequent execution and recovery callbacks recheck the grant. */
         post: operations["disableTool"];
         delete?: never;
         options?: never;
@@ -795,6 +798,10 @@ export interface components {
             retrieval_enabled?: boolean;
         };
         Agent: {
+            /** @description Owning Workspace; absent for shared read-only templates. */
+            workspace_id?: string;
+            /** @description Shared read-only profile; POST a copy to configure it in a Workspace. */
+            is_template?: boolean;
             id: string;
             name: string;
             description: string;
@@ -823,6 +830,14 @@ export interface components {
             exclusions: string[];
         };
         ToolInfo: {
+            /** @description Operator-owned service switch. Workspace owners cannot override it. */
+            service_enabled?: boolean;
+            /** @description Persisted Workspace allowlist entry, independent of service readiness. */
+            workspace_enabled?: boolean;
+            /** Format: int64 */
+            config_revision?: number;
+            /** @description Service, prerequisite, Workspace or static-policy exclusion reason; argument-dependent decisions remain in Run events. */
+            excluded_reason?: string;
             name: string;
             description: string;
             parameters: {
@@ -2336,7 +2351,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Tool catalog and current enabled state. */
+            /** @description Tool catalog, Workspace configuration revision and exclusion reasons. */
             200: {
                 headers: {
                     [name: string]: unknown;

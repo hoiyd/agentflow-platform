@@ -112,7 +112,8 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   const verification = useCompletionVerification();
   const toolCatalog = useToolCatalog();
   const {
-    agents, activeAgent, activeAgentId, isAgentDescriptionExpanded, agentsError, skills, skillsError, refreshSkills,
+    agents, workspaceAgents, agentTemplates, newAgentTemplateId, selectNewAgentTemplate,
+    activeAgent, activeAgentId, isAgentDescriptionExpanded, agentsError, skills, skillsError, refreshSkills,
     isAgentConfigOpen, agentConfigDraft, newAgentDraft, isNewAgentFormOpen,
     isSavingAgentConfig, isCreatingAgent, archivingAgentId, agentArchiveCandidate,
     agentOperationNotice, agentConfigStatus, refreshAgents, closeAgentForms,
@@ -415,7 +416,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput) return;
+    if (!content || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput || (chatMode === "single" && !activeAgent)) return;
     let completionContract;
     try {
       completionContract = buildCompletionContract(verification.settings);
@@ -529,11 +530,11 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
           <ChatComposer
             inbox={activeId && runState ? <RunInbox key={activeId} conversationId={activeId} runId={runState.id} mode={chatMode} agentId={activeAgentId}
               input={input} busy={isStreaming || ["running","queued","canceling"].includes(runState.status)}
-              canStartFollowup={["completed","failed","canceled"].includes(runState.status)}
+              canStartFollowup={["completed","failed","canceled"].includes(runState.status) && (chatMode !== "single" || Boolean(activeAgent))}
               onSubmitted={()=>setInput("")} onRunAvailable={()=>{if(!isStreaming)void loadConversation(activeId);}} /> : null}
             activeAgent={activeAgent}
             activeAgentId={activeAgentId}
-            agents={agents}
+            agents={workspaceAgents}
             agentsError={agentsError}
             chatMode={chatMode}
             completionVerificationEnabled={verification.settings.enabled}
@@ -552,11 +553,14 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
             onNewAgent={handleOpenNewAgentForm}
             onOpenVerification={handleOpenCompletionVerification}
             onSubmit={handleSubmit}
-            showAgentActions={Boolean(activeAgent && agentConfigDraft)}
+            showAgentActions
           />
         ) : null}
       </main>
       <ChatDialogs
+        agentTemplates={agentTemplates}
+        newAgentTemplateId={newAgentTemplateId}
+        onNewAgentTemplateChange={selectNewAgentTemplate}
         activeAgent={activeAgent}
         agentArchiveCandidate={agentArchiveCandidate}
         agentConfigDraft={agentConfigDraft}

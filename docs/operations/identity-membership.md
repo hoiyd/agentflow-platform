@@ -46,9 +46,9 @@ account creation is permitted. AgentFlow provisions an owned personal Workspace
 entity and owner-constrained Membership. [Workspace lifecycle](workspace-lifecycle.md)
 adds creation, rename, defaults, archive/restore and soft deletion. There is no local
 password storage, password proxy, invitation, role matrix or service-account token.
-Agent/Tool configuration remains service-wide and is read-only for ordinary OIDC
-users; trusted-local operators maintain it. Workspace-private Agent configuration
-is not implemented. [Resource authorization](resource-authorization.md) audits
+Owners manage [Workspace-private Agent profiles and Tool allowlists](../architecture/workspace-agent-tools.md).
+Tool implementations, credentials, service switches and security limits remain
+operator-owned. [Resource authorization](resource-authorization.md) audits
 the current object surface and its cross-owner failure paths. This boundary alone
 does not make the deployment a public multi-tenant SaaS.
 
@@ -181,7 +181,7 @@ Expired business requests return 401 and redirect to the same login page.
 Session-probe failures and authenticated users without membership retain a local
 error/access-required screen instead of redirecting repeatedly. The public home
 page and local mode do not trigger this redirect. Foreign, revoked or deleted
-Workspace requests return 404; invalid Origin or shared configuration writes return 403.
+Workspace requests return 404; invalid Origin or shared template mutations return 403.
 Selecting a Workspace is not itself a grant.
 
 Cookie-authenticated mutations, including logout, require the exact configured

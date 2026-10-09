@@ -1,4 +1,5 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
+import { createWorkspaceChatAgent, defaultWorkspaceID } from "./fixtures/workspace-agent";
 
 const api = "http://127.0.0.1:18080";
 let priorFailures = 0;
@@ -42,7 +43,7 @@ async function configureAgent(page: Page, name: string) {
   await dialog.getByRole("checkbox", { name: "calculator", exact: true }).check();
   await dialog.getByRole("button", { name: "Create Agent", exact: true }).click();
   await page.getByRole("button", { name: "OK", exact: true }).click();
-  await expect(page.getByRole("combobox", { name: "Agent", exact: true })).toHaveValue(/agent_/);
+  await expect(page.getByRole("button", { name: `Agent: ${name}`, exact: true })).toBeVisible();
 }
 
 async function submit(page: Page, prompt: string) {
@@ -150,6 +151,7 @@ for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
 }
 
 test("Tool-enabled answer is visible before provider completion and survives browser disconnect", async ({ page, request }) => {
+  await createWorkspaceChatAgent(page, await defaultWorkspaceID(page), "Streaming fixture", { tools: ["get_current_time"] });
   const prompt = "stream-gate: show the answer as soon as it arrives";
   await submit(page, prompt);
   await expect(page.locator(".message.assistant").last()).toHaveText(/First token/);
@@ -168,6 +170,7 @@ test("Tool-enabled answer is visible before provider completion and survives bro
 });
 
 test("Provider failure is visible, persisted, and never mistaken for completion", async ({ page, request }) => {
+  await createWorkspaceChatAgent(page, await defaultWorkspaceID(page), "Provider failure fixture");
   const prompt = "provider-failure: reject this request";
   await submit(page, prompt);
   await expect(page.getByLabel("Task status: failed", { exact: true })).toBeVisible();
@@ -183,6 +186,7 @@ test("Provider failure is visible, persisted, and never mistaken for completion"
 });
 
 test("Verification UI sends a real contract and a failed verifier blocks completion", async ({ page, request }) => {
+  await createWorkspaceChatAgent(page, await defaultWorkspaceID(page), "Verification fixture");
   await page.getByRole("button", { name: /^Verification/ }).click();
   const dialog = page.getByRole("dialog", { name: "Verification" });
   await dialog.getByLabel("Disabled", { exact: true }).check();

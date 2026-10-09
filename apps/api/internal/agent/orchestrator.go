@@ -111,14 +111,25 @@ func liveDeltaEvent(runID, delta string) domain.RunEvent {
 }
 
 func (r *Runtime) PrepareCollaborationRunWithContract(ctx context.Context, agentID string, conversationID string, contract *domain.CompletionContract) (PreparedCollaborationRun, error) {
-	agent, err := r.resolveAgent(agentID)
+	agent, err := r.resolveAgent(agentID, conversationID)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
 
-	agents, err := r.store.ListAgents()
+	agents, err := r.store.ListAgentsByWorkspace(agent.WorkspaceID)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
+	}
+	// Templates are a fallback, not duplicate candidates competing with the
+	// Workspace's configured copies under identical routing hints.
+	owned := []domain.Agent{}
+	for _, candidate := range agents {
+		if !candidate.IsTemplate {
+			owned = append(owned, candidate)
+		}
+	}
+	if len(owned) > 0 {
+		agents = owned
 	}
 	snapshot, err := r.captureRuntimeSnapshot(ChatModeMultiAgent, agent, agents)
 	if err != nil {

@@ -61,6 +61,19 @@ remain stable across normal laptop and wide-monitor viewports.
   actions such as Save and Cancel use consistent dimensions.
 - Agent creation and configuration belong in dialogs rather than consuming the
   conversation's vertical workspace.
+- Single mode uses one 40px toolbar row: Agent/Skill selection on the left,
+  profile actions and separated Verification on the right. Show the Agent name
+  once; expand its description below on request. New agent is the quieter action.
+- Agent, Workspace and template pickers share searchable, wrapping options and
+  stable IDs. Agent menus open above the composer with one bounded scroll owner;
+  closed names use at most two lines with full-name hover. Arrow keys browse,
+  Enter selects, Escape dismisses.
+- The non-searchable Skill picker keeps a fixed-width slot in Single mode.
+  Disabled **No skills** explains missing bindings or no selected Agent through
+  a custom hover/focus note, not a native tooltip; Escape dismisses it without
+  layout shift. **Automatic** removes only the explicit Skill command.
+- Keep template creation separate from runtime selection; see the
+  [Agent creation flow](../runtime/agent-profiles.md#creation-and-selection).
 - Dialogs are horizontally centered and positioned above the visual midpoint so
   their primary fields remain easy to scan.
 - Trace show/hide controls use the same style, side, and placement in Multi-Agent

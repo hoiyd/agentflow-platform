@@ -20,16 +20,20 @@ multi-user authentication mechanism.
 | Production Store decorator loses scoped Artifact capabilities | Owned reads still work; inaccessible objects return 404, not an availability fallback |
 | Logout, session expiry, Membership removal or Workspace deletion during SSE | Stop resource delivery on the next write, with a safe error frame |
 | Identity/authorization storage fails | Fail closed; no fallback to local identity |
-| OIDC user changes shared Agent profiles or Tool switches | 403, regardless of selected Workspace |
+| Owner changes an Agent or Tool allowlist in the selected Workspace | Allowed; foreign Agent IDs return 404 |
+| Owner changes a shared Agent template or overrides a disabled service Tool | 403; templates must be copied, service switches remain operator-owned |
 | Archived Workspace receives a mutation or execution command | 409; read-only retrieval remains available |
 
 Authorization does not revoke an already-admitted durable Run. Closing or denying
 its observer prevents further delivery, not execution; explicit Cancel remains a
 separate authorized operation. Access checks cannot retract data already sent.
 
-The scope does not include private Agent profiles, per-Workspace Tool allowlists,
-team roles, service accounts, OS sandboxing or per-document sharing. Agent, Tool
-and trusted Skill configuration remain shared service configuration.
+Workspace-owned Agent profiles and Tool allowlists are described in
+[Workspace configuration](../architecture/workspace-agent-tools.md). Team roles,
+service accounts and per-document sharing remain outside this scope. Tool
+implementations, provider credentials, execution policy and trusted Skill
+installation remain operator-owned. Membership revocation also blocks the next
+Tool call of a durable Run; it does not rewind a handler already executing.
 
 ## Resource Matrix
 
@@ -41,7 +45,8 @@ and trusted Skill configuration remain shared service configuration.
 | Artifact list/read/search and effect reconciliation | Scoped Run, then exact Run/artifact or Run/effect association |
 | Memory create/recall/detail/mutation | Bound Workspace; optional Run derives its Conversation, source Message must belong to that Conversation |
 | Knowledge ingest/upload/detail/delete, retrieval/evaluation/chunk expansion | Bound Workspace and scoped Document/chunk queries; Knowledge tools derive scope from the persisted Run, never model arguments |
-| Agent/Tool/Skill configuration | Shared read surface; Agent/Tool mutation is trusted-local only |
+| Agent configuration | Scoped owner CRUD; shared built-in templates are read-only and must be copied before editing |
+| Tool/Skill configuration | Workspace Tool allowlist is owner-managed; service switches, credentials, policy and trusted Skill installation remain operator-owned |
 
 Memory `user_id`/`project_id`, Memory/effect `actor` labels and Task State artifact
 references are metadata, not authenticated principals or permission grants.

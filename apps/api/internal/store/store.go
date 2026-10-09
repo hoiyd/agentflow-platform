@@ -45,6 +45,8 @@ type ConversationStore interface {
 }
 
 type AgentStore interface {
+	ListAgentsByWorkspace(workspaceID string) ([]domain.Agent, error)
+	GetAgentInWorkspace(workspaceID, id string) (domain.Agent, bool, error)
 	ListAgents() ([]domain.Agent, error)
 	CreateAgent(agent domain.Agent) (domain.Agent, error)
 	GetAgent(id string) (domain.Agent, bool, error)
@@ -173,6 +175,11 @@ type DocumentStore interface {
 // Workspace-owned resources. Run-owned child records are authorized through
 // the parent Run before the backend operation is executed.
 type WorkspaceStore interface {
+	ListAgents() ([]domain.Agent, error)
+	GetAgent(id string) (domain.Agent, bool, error)
+	CreateAgent(domain.Agent) (domain.Agent, error)
+	UpdateAgent(domain.Agent) (domain.Agent, error)
+	ArchiveAgent(id string) error
 	ListConversations() ([]domain.Conversation, error)
 	CreateConversation(title string) (domain.Conversation, error)
 	GetConversation(id string) (domain.Conversation, bool, error)
@@ -210,6 +217,7 @@ type WorkspaceStoreProvider interface {
 // Store is the application-level persistence contract. Consumers should depend
 // on the smallest capability interface above that satisfies their use case.
 type Store interface {
+	WorkspaceToolStore
 	WorkspaceStoreProvider
 	ConversationStore
 	AgentStore
