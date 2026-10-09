@@ -13,6 +13,7 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
   const [isAgentConfigOpen, setIsAgentConfigOpen] = useState(false);
   const [agentConfigDraft, setAgentConfigDraft] = useState<AgentConfigDraft | null>(null);
   const [newAgentDraft, setNewAgentDraft] = useState<AgentConfigDraft | null>(null);
+  const [newAgentTemplateId, setNewAgentTemplateId] = useState("");
   const [isNewAgentFormOpen, setIsNewAgentFormOpen] = useState(false);
   const [isSavingAgentConfig, setIsSavingAgentConfig] = useState(false);
   const [isCreatingAgent, setIsCreatingAgent] = useState(false);
@@ -20,17 +21,18 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
   const [agentArchiveCandidate, setAgentArchiveCandidate] = useState<AgentInfo | null>(null);
   const [agentOperationNotice, setAgentOperationNotice] = useState<AgentOperationNotice | null>(null);
   const [agentConfigStatus, setAgentConfigStatus] = useState("");
-  const activeAgent = useMemo(() => agents.find((item) => item.id === activeAgentId), [agents, activeAgentId]);
+  // Keep the full catalog for historical Trace names, not runtime selection.
+  const workspaceAgents = useMemo(() => agents.filter((item) => !item.is_template), [agents]);
+  const agentTemplates = useMemo(() => agents.filter((item) => item.is_template), [agents]);
+  const activeAgent = workspaceAgents.find((item) => item.id === activeAgentId);
 
   async function refreshAgents() {
     try {
       setAgentsError("");
       const items = await listAgents();
       setAgents(items);
-      const nextAgent =
-        items.find((agent) => agent.id === activeAgentId) ??
-        items.find((agent) => agent.id === "agent_planner") ??
-        items[0];
+      const owned = items.filter((agent) => !agent.is_template);
+      const nextAgent = owned.find((agent) => agent.id === activeAgentId) ?? owned[0];
       setActiveAgentId(nextAgent?.id ?? "");
       setAgentConfigDraft(nextAgent ? agentToConfigDraft(nextAgent) : null);
     } catch (err) {
@@ -121,24 +123,20 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
     if (isCreatingAgent || isStreaming) {
       return;
     }
-    const base = activeAgent ?? agents[0];
-    setNewAgentDraft({
-      name: base ? `Copy of ${base.name}` : "New Agent",
-      description: base?.description ?? "",
-      system_prompt: base?.system_prompt ?? "You are a helpful AgentFlow agent.",
-      routing_hints: {
-        capabilities: base?.routing_hints?.capabilities ?? [],
-        task_examples: base?.routing_hints?.task_examples ?? [],
-        exclusions: base?.routing_hints?.exclusions ?? []
-      },
-      tools: base?.tools ?? [],
-      skills: base?.skills ?? [],
-      memory_enabled: base?.memory_enabled ?? true,
-      retrieval_enabled: base?.retrieval_enabled ?? true
-    });
+    setNewAgentDraft(blankAgentDraft());
+    setNewAgentTemplateId("");
     setIsNewAgentFormOpen(true);
     setIsAgentConfigOpen(false);
-    setAgentConfigStatus("Fill out the form, then click Create Agent.");
+    setAgentConfigStatus("");
+  }
+
+  function selectNewAgentTemplate(templateId: string) {
+    if (!newAgentDraft || isCreatingAgent || isStreaming) return;
+    const template = agentTemplates.find((agent) => agent.id === templateId);
+    if (templateId && !template) return;
+    setNewAgentTemplateId(templateId);
+    setNewAgentDraft(template ? { ...agentToConfigDraft(template), name: `Copy of ${template.name}` } : blankAgentDraft());
+    setAgentConfigStatus("");
   }
 
   function handleCancelNewAgent() {
@@ -210,7 +208,7 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
       await archiveAgent(candidate.id);
       const remaining = agents.filter((agent) => agent.id !== candidate.id);
       setAgents(remaining);
-      const next = remaining.find((agent) => agent.id === "agent_planner") ?? remaining[0];
+      const next = remaining.find((agent) => !agent.is_template);
       setActiveAgentId(next?.id ?? "");
       setAgentConfigDraft(next ? agentToConfigDraft(next) : null);
       setIsAgentDescriptionExpanded(false);
@@ -254,7 +252,8 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
   }
 
   function selectAgent(agentId: string) {
-    const nextAgent = agents.find((item) => item.id === agentId);
+    const nextAgent = workspaceAgents.find((item) => item.id === agentId);
+    if (!nextAgent) return;
     setActiveAgentId(agentId);
     setAgentConfigDraft(nextAgent ? agentToConfigDraft(nextAgent) : null);
     setIsAgentDescriptionExpanded(false);
@@ -262,6 +261,7 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
   }
 
   function openAgentConfig() {
+    if (!activeAgent) return;
     setIsNewAgentFormOpen(false);
     setNewAgentDraft(null);
     setAgentConfigStatus("");
@@ -269,16 +269,24 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
   }
 
   return {
-    agents, activeAgent, activeAgentId, isAgentDescriptionExpanded, agentsError, skills, skillsError, refreshSkills,
+    agents, workspaceAgents, agentTemplates, activeAgent, activeAgentId, isAgentDescriptionExpanded, agentsError, skills, skillsError, refreshSkills,
     isAgentConfigOpen, agentConfigDraft, newAgentDraft, isNewAgentFormOpen,
     isSavingAgentConfig, isCreatingAgent, archivingAgentId, agentArchiveCandidate,
     agentOperationNotice, agentConfigStatus, refreshAgents, closeAgentForms,
-    selectAgent, openAgentConfig,
+    selectAgent, openAgentConfig, newAgentTemplateId, selectNewAgentTemplate,
     toggleDescription: () => setIsAgentDescriptionExpanded((current) => !current),
     dismissNotice: () => setAgentOperationNotice(null),
     updateAgentConfigDraft, updateNewAgentDraft, toggleAgentConfigTool, toggleNewAgentTool,
     handleSaveAgentConfig, handleOpenNewAgentForm, handleCancelNewAgent, handleCancelAgentConfig,
     handleCreateAgent, handleArchiveAgent, confirmArchiveAgent, cancelArchiveAgent
+  };
+}
+
+function blankAgentDraft(): AgentConfigDraft {
+  return {
+    name: "", description: "", system_prompt: "You are a helpful AgentFlow agent.",
+    routing_hints: { capabilities: [], task_examples: [], exclusions: [] },
+    tools: [], skills: [], memory_enabled: true, retrieval_enabled: true
   };
 }
 

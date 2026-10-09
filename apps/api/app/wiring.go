@@ -252,7 +252,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	handler, err := httpapi.NewHandler(httpapi.Dependencies{
 		Inbox:          workspaceStore,
 		Store:          appStore,
-		Tools:          toolManager,
+		Tools:          agentRuntime,
 		AgentRuntime:   agentRuntime,
 		Memory:         memoryProvider,
 		Knowledge:      knowledgeBase,

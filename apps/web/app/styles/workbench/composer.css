@@ -21,26 +21,11 @@
   padding: 18px 22px 18px;
 }
 
-.agent-bar,
 .composer-inner,
 .error {
   max-width: 1100px;
 }
 
-.agent-bar {
-  margin-bottom: 10px;
-  gap: 10px;
-}
-
-.agent-bar.single {
-  grid-template-columns: minmax(260px, 25%) minmax(0, 1fr) auto;
-}
-
-.agent-select {
-  min-width: 0;
-}
-
-.agent-select span,
 .agent-config-panel label > span,
 .agent-config-tools > span {
   color: var(--muted);
@@ -48,91 +33,6 @@
   font-size: 8px;
   font-weight: 500;
   letter-spacing: 0;
-}
-
-.agent-select select {
-  height: 36px;
-  border-radius: 4px;
-  background: #ffffff;
-  font-size: 12px;
-  overflow: hidden;
-  padding-left: 12px;
-  padding-right: 38px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-summary strong { font-size: 12px; }
-.agent-description { font-size: 11px; }
-
-.agent-description-toggle {
-  width: 26px;
-  min-width: 26px;
-  height: 24px;
-  border-radius: 4px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-}
-
-.agent-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.composer-skill-select {
-  width: 170px;
-  min-width: 0;
-  height: 36px;
-  padding: 0 8px;
-  font: inherit;
-  font-size: 11px;
-}
-
-.agent-actions:has(.composer-skill-select) {
-  width: auto;
-  max-width: 100%;
-}
-
-.agent-config-toggle,
-.agent-create-button {
-  min-height: 36px;
-  min-width: 104px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  font-size: 11px;
-  font-weight: 560;
-  padding: 0 9px;
-}
-
-.agent-config-toggle {
-  border-color: var(--border);
-  background: #ffffff;
-  box-shadow: none;
-  color: var(--ink);
-}
-
-.agent-config-toggle:hover,
-.agent-config-toggle.active {
-  border-color: var(--border-strong);
-  background: var(--surface-soft);
-  color: var(--ink);
-}
-
-.agent-create-button {
-  background: #ffffff;
-}
-
-.agent-create-button:hover,
-.agent-create-button.active {
-  border-color: var(--border-strong);
-  background: var(--surface-soft);
-  color: var(--ink);
 }
 
 .agent-config-panel {
@@ -182,6 +82,15 @@
   font-size: 18px;
   font-weight: 620;
 }
+
+.agent-template-select {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-template-select > .selection-label { font-size: 11px; }
+.agent-template-select .selection-trigger { min-height: 38px; font-size: 13px; }
+.agent-config-panel .selection-search input { border: 0; background: transparent; padding: 2px; }
 
 .agent-routing-hints {
   border-top: 1px solid var(--border);

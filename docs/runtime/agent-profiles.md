@@ -26,17 +26,24 @@ behavior and limitations.
 | `memory_enabled` | Enables scoped semantic Memory retrieval before a Turn. |
 | `retrieval_enabled` | Enables Knowledge/RAG retrieval before a Turn. |
 
-Profiles are currently service-wide: the trusted-local operator can create, edit
-and archive them; OIDC users can select/use profiles, not mutate shared configuration.
-Private per-Workspace profiles remain outside the [lifecycle scope](../operations/workspace-lifecycle.md).
-The four
-built-in profiles remain available as stable defaults and cannot be archived.
+Profiles belong to the selected Workspace. Its owner can create, edit and archive
+them. The runtime Agent picker contains only created Workspace-owned profiles.
+In **New agent**, the optional **Copy from** picker appears before Name; it defaults
+to **Blank agent** and offers shared read-only templates. Selecting a template
+replaces the creation draft with its prompt, description, routing hints, Tools,
+Skills and retrieval switches; it does not create or modify any persisted Agent.
+**Create Agent** saves an independent Workspace-owned profile and selects it.
+Cancel discards the draft; a failed save keeps it editable. An empty Workspace
+can create its first Agent but cannot submit Single-agent Chat until one exists.
+See [configuration ownership and Tool
+availability](../architecture/workspace-agent-tools.md).
 
 ## Behavior by Execution Mode
 
 - **Single:** the selected Agent executes one direct Turn with its prompt,
   tools, and retrieval policies.
-- **Multi:** all active profiles are frozen as Router candidates. After plan
+- **Multi:** active Workspace-owned profiles are frozen as Router candidates;
+  shared templates are the fallback only when there are no owned profiles. After plan
   approval, the Router first excludes candidates with invalid identity or
   unavailable frozen Tools, then ranks only eligible Workers using the task,
   approved plan, declarative routing hints, Agent description, Tool names, and
@@ -117,13 +124,17 @@ Archive is intentionally different from deleting historical execution data.
 Replay and Episode Reports continue to resolve the Agent configuration captured
 for previous Runs.
 
-## Two Tool-Control Layers
+## Tool-Control Layers
 
-AgentFlow separates platform availability from Agent permission:
+AgentFlow intersects service availability, Workspace and Agent permission:
 
 1. The Tool Manager enables or disables installed tools globally and persists
    that operator configuration.
-2. Each Agent profile selects an allowlist from the currently installed tools.
+2. The Workspace owner maintains a persisted allowlist in the Tools page. New
+   Tools do not inherit authorization after that list has been initialized.
+3. Each Agent profile selects from effective Workspace Tools. The Executor
+   rechecks current grants, owner Membership and execution policy for every call,
+   including calls made after Resume. Frozen definitions cannot undo revocation.
 
 The Tool Catalog compiles one normalized JSON Schema contract for each Binding.
 The Tool Executor validates and canonicalizes model arguments against that
@@ -135,11 +146,10 @@ deployment limits stay live.
 
 ## Current Boundaries
 
-- Agent profiles are not an authorization boundary. The HTTP API still requires
-  a trusted deployment boundary.
-- Agent profiles and the installed Tool catalog are currently global platform
-  resources. `X-Workspace-ID` scopes Runs and data access, but it does not yet
-  create a per-Workspace Agent registry.
+- Agent prompts cannot grant authorization. Workspace ownership, current grants
+  and server execution policy enforce authority independently of their text.
+- Agent profiles and Tool selections are Workspace-owned. The installed Tool
+  Catalog, bindings, credentials and security ceilings remain service-owned.
 - Profiles select from installed in-process tools; remote tool discovery and
   tenant-specific tool registries are not implemented.
 - The Router can use deterministic declarative matching or an LLM-backed

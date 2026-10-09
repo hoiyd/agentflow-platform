@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 
 import type { Conversation, ToolInfo } from "../../lib/api";
-import { useWorkspaceReadOnly, useServiceConfigurationReadOnly } from "../identity/WorkspaceContext";
+import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 
 export type ChatView = "chat" | "tools" | "knowledge" | "memory" | "attention";
 export type APIConnectionStatus = "checking" | "connected" | "unavailable";
@@ -320,7 +320,6 @@ function RunStatus({ runState }: { runState: VisibleRunState }) {
 
 export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: string; onToggle: (tool: ToolInfo) => void; tools: ToolInfo[]; updatingTool: string }) {
   const readOnly = useWorkspaceReadOnly();
-  const serviceReadOnly = useServiceConfigurationReadOnly();
   return (
     <section className="tools-panel">
       {error ? <div className="error">{error}</div> : null}
@@ -330,14 +329,14 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: st
             <div className="tool-card-header">
               <h3>{tool.name}</h3>
               <label className="tool-toggle">
-                <input type="checkbox" checked={tool.enabled} disabled={readOnly || serviceReadOnly || tool.unavailable_reason === "sandbox_disabled" || updatingTool === tool.name} onChange={() => onToggle(tool)} />
-                <span>{tool.enabled ? "Enabled" : "Disabled"}</span>
+                <input type="checkbox" aria-label={`Allow ${tool.name} in this Workspace`} checked={tool.workspace_enabled ?? tool.enabled} disabled={readOnly || tool.service_enabled === false || tool.unavailable_reason === "sandbox_disabled" || updatingTool === tool.name} onChange={() => onToggle(tool)} />
+                <span>{(tool.workspace_enabled ?? tool.enabled) ? "Allowed" : "Not allowed"}</span>
               </label>
             </div>
             <p>{tool.description}</p>
-            {tool.unavailable_reason && (tool.enabled || tool.unavailable_reason === "sandbox_disabled") ? (
+            {tool.excluded_reason || tool.unavailable_reason ? (
               <p className="tool-availability">
-                {tool.unavailable_reason === "sandbox_disabled" ? "Sandbox disabled by operator" : tool.unavailable_reason === "credential_unavailable" ? "Credential unavailable" : "Unavailable"}
+                {tool.excluded_reason === "service_disabled" ? "Disabled by operator" : tool.excluded_reason === "workspace_disabled" ? "Disabled in this Workspace" : tool.excluded_reason === "policy_denied" ? "Denied by execution policy" : tool.unavailable_reason === "sandbox_disabled" ? "Sandbox disabled by operator" : tool.unavailable_reason === "credential_unavailable" ? "Credential unavailable" : "Unavailable"}
               </p>
             ) : null}
             <details className="tool-card-schema">

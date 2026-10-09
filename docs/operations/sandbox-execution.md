@@ -140,9 +140,10 @@ attributes from default rules.
 
 The rule is an operator grant, not an approval supplied by a model or Skill.
 Bind the Tool in an Agent's existing Configure dialog. Single, Multi-Agent and
-Autonomous use the same Binding. Only the trusted local operator currently
-edits global Tool/Agent configuration; OIDC consumers can use a preconfigured
-Agent without acquiring configuration privileges.
+Autonomous use the same Binding. The operator controls the service grant and
+execution policy. Workspace owners, including OIDC users, can allow an already
+authorized Tool and bind it to their own Agent; they cannot raise the service
+security ceiling. See [Workspace configuration](../architecture/workspace-agent-tools.md).
 
 Example structured arguments:
 

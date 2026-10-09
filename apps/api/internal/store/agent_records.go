@@ -73,62 +73,6 @@ func DefaultAgents(now time.Time) []domain.Agent {
 	return agents
 }
 
-func updateDefaultAgentText(agent *domain.Agent, next domain.Agent) bool {
-	changed := false
-	old := oldDefaultAgentText(agent.ID)
-	if agent.Name == "" || agent.Name == old.Name {
-		agent.Name = next.Name
-		changed = true
-	}
-	if agent.Description == "" || agent.Description == old.Description {
-		agent.Description = next.Description
-		changed = true
-	}
-	if agent.SystemPrompt == "" || agent.SystemPrompt == old.SystemPrompt {
-		agent.SystemPrompt = next.SystemPrompt
-		changed = true
-	}
-	if domain.IsDefaultAgentID(agent.ID) &&
-		len(agent.RoutingHints.Capabilities) == 0 &&
-		len(agent.RoutingHints.TaskExamples) == 0 &&
-		len(agent.RoutingHints.Exclusions) == 0 {
-		agent.RoutingHints = next.RoutingHints
-		changed = true
-	}
-	return changed
-}
-
-func oldDefaultAgentText(id string) domain.Agent {
-	switch id {
-	case "agent_research":
-		return domain.Agent{
-			Name:         "Research Agent",
-			Description:  "Finds, compares, and summarizes information using available search and remote data tools.",
-			SystemPrompt: "You are AgentFlow's Research Agent. Be precise, cite tool-derived facts when available, compare options carefully, and say when evidence is missing.",
-		}
-	case "agent_coding":
-		return domain.Agent{
-			Name:         "Coding Assistant Agent",
-			Description:  "Helps reason about implementation details, debugging steps, and code changes.",
-			SystemPrompt: "You are AgentFlow's Coding Assistant Agent. Give direct engineering guidance, identify risks, and prefer concrete implementation steps.",
-		}
-	case "agent_data":
-		return domain.Agent{
-			Name:         "Data Analyst Agent",
-			Description:  "Analyzes structured information, calculations, and data-oriented questions.",
-			SystemPrompt: "You are AgentFlow's Data Analyst Agent. Work carefully with numbers, show assumptions, and use tools for calculations when useful.",
-		}
-	case "agent_planner":
-		return domain.Agent{
-			Name:         "Planner Agent",
-			Description:  "Breaks ambiguous requests into ordered plans and tracks next actions.",
-			SystemPrompt: "You are AgentFlow's Planner Agent. Convert goals into clear, ordered plans with dependencies, risks, and next actions.",
-		}
-	default:
-		return domain.Agent{}
-	}
-}
-
 func NormalizeTools(items []string) []string {
 	seen := map[string]bool{}
 	tools := make([]string, 0, len(items))

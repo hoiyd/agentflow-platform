@@ -1,8 +1,9 @@
-import type { FormEvent, ReactNode } from "react";
-import { ChevronDown, ChevronUp, Send, Settings2, ShieldCheck, UserRoundPlus } from "lucide-react";
+import { useId, type FormEvent, type ReactNode } from "react";
+import { Info, Send, Settings2, ShieldCheck, UserRoundPlus } from "lucide-react";
 
 import type { AgentInfo, ChatMode } from "../../lib/api";
-import { useWorkspaceReadOnly, useServiceConfigurationReadOnly } from "../identity/WorkspaceContext";
+import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
+import { SelectionMenu } from "../ui/SelectionMenu";
 
 type ChatComposerProps = {
   inbox?: ReactNode;
@@ -32,7 +33,6 @@ type ChatComposerProps = {
 
 export function ChatComposer(props: ChatComposerProps) {
   const readOnly = useWorkspaceReadOnly();
-  const serviceReadOnly = useServiceConfigurationReadOnly();
   const {
     activeAgent,
     activeAgentId,
@@ -57,6 +57,9 @@ export function ChatComposer(props: ChatComposerProps) {
     onSubmit,
     showAgentActions
   } = props;
+  const needsAgent = chatMode === "single" && !activeAgent;
+  const descriptionId = useId();
+  const boundSkills = activeAgent?.skills ?? [];
 
   const verificationButton = (
     <button
@@ -75,48 +78,35 @@ export function ChatComposer(props: ChatComposerProps) {
     <section className="composer">
       {chatMode === "single" ? (
         <div className="agent-bar single">
-          <label className="agent-select">
-            <span>Agent</span>
-            <select
-              title={activeAgent?.name ?? "Select an agent"}
-              value={activeAgentId}
-              disabled={isStreaming || agents.length === 0}
-              onChange={(event) => onAgentChange(event.target.value)}
-            >
-              {agents.map((agent) => <option key={agent.id} title={agent.name} value={agent.id}>{agent.name}</option>)}
-            </select>
-          </label>
-          <div className="agent-summary">
-            <strong>{activeAgent?.name ?? "No agent loaded"}</strong>
-            <div className={`agent-description ${isAgentDescriptionExpanded ? "expanded" : ""}`}>
-              <span>{activeAgent?.description ?? agentsError}</span>
-              {activeAgent?.description ? (
-                <button
-                  aria-expanded={isAgentDescriptionExpanded}
-                  aria-label={isAgentDescriptionExpanded ? "Collapse agent description" : "Expand agent description"}
-                  className="agent-description-toggle"
-                  onClick={onDescriptionExpandedChange}
-                  type="button"
-                >
-                  {isAgentDescriptionExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
-              ) : null}
-            </div>
-          </div>
-          <div className="agent-actions">
-            {activeAgent?.skills?.length ? (
-              <select aria-label="Invoke skill" className="composer-skill-select" title="Invoke a bound skill"
-                disabled={isStreaming || isAwaitingHumanInput || isAwaitingPlanApproval}
-                value={input.match(/^\/skill:([^\s]+)/)?.[1] ?? ""}
-                onChange={(event) => {
-                  const task = input.replace(/^\/skill:[^\s]+\s*/, "");
-                  onInputChange(event.target.value ? `/skill:${event.target.value} ${task}` : task);
-                }}>
-                <option value="">Skill: automatic</option>
-                {activeAgent.skills.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
+          <div className="agent-context">
+            <SelectionMenu label="Agent" className="agent-select" value={activeAgentId} onChange={onAgentChange}
+              disabled={isStreaming} placement="above"
+              options={agents.map(agent => ({value: agent.id, label: agent.name, description: agent.description}))} />
+            {activeAgent?.description ? (
+              <button aria-expanded={isAgentDescriptionExpanded} aria-controls={descriptionId}
+                aria-label={isAgentDescriptionExpanded ? "Hide agent description" : "Show agent description"}
+                title={isAgentDescriptionExpanded ? "Hide agent description" : "Show agent description"}
+                className="agent-description-toggle" onClick={onDescriptionExpandedChange} type="button">
+                <Info size={16} />
+              </button>
             ) : null}
-            {showAgentActions && !serviceReadOnly ? (
+            <SelectionMenu label="Skill" className="composer-skill-select" searchable={false} placement="above"
+              disabledNote={boundSkills.length ? undefined : activeAgent
+                ? "No skills are assigned to this agent. Skills are configured individually for each agent."
+                : "No agent is selected. Skill availability depends on the selected agent's configuration."}
+              disabled={readOnly || boundSkills.length === 0 || isStreaming || isAwaitingHumanInput || isAwaitingPlanApproval}
+              value={boundSkills.length ? input.match(/^\/skill:([^\s]+)/)?.[1] ?? "" : ""}
+              options={[
+                {value: "", label: boundSkills.length ? "Automatic" : "No skills"},
+                ...boundSkills.map(name => ({value: name, label: name}))
+              ]}
+              onChange={name => {
+                const task = input.replace(/^\/skill:[^\s]+\s*/, "");
+                onInputChange(name ? `/skill:${name} ${task}` : task);
+              }} />
+          </div>
+          <div className="agent-actions" role="group" aria-label="Agent and run settings">
+            {showAgentActions ? (
               <>
                 <button
                   className={`agent-create-button ${isNewAgentFormOpen ? "active" : ""}`}
@@ -126,13 +116,18 @@ export function ChatComposer(props: ChatComposerProps) {
                 >
                   <UserRoundPlus size={15} /> New agent
                 </button>
-                <button className="agent-config-toggle" disabled={readOnly} onClick={onConfigureAgent} type="button">
+                <button className="agent-config-toggle" disabled={readOnly || !activeAgent} onClick={onConfigureAgent} type="button">
                   <Settings2 size={15} /> Configure
                 </button>
               </>
             ) : null}
-            {verificationButton}
+            <div className="agent-run-policy">{verificationButton}</div>
           </div>
+          {isAgentDescriptionExpanded && activeAgent?.description ? (
+            <div className="agent-description" role="region" aria-label="Agent description" id={descriptionId}>
+              {activeAgent.description}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {chatMode !== "single" ? <div className="composer-run-options">{verificationButton}</div> : null}
@@ -140,7 +135,7 @@ export function ChatComposer(props: ChatComposerProps) {
       {error ? <div className="error">{error}</div> : null}
       {props.inbox}
       <form className="composer-inner" onSubmit={event => {
-        if (readOnly || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput) event.preventDefault();
+        if (readOnly || needsAgent || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput) event.preventDefault();
         else onSubmit(event);
       }}>
         <textarea
@@ -154,7 +149,7 @@ export function ChatComposer(props: ChatComposerProps) {
             }
           }}
           placeholder={
-            isAwaitingPlanApproval
+            needsAgent ? "Create an agent to start a conversation..." : isAwaitingPlanApproval
               ? "Review and edit the plan in Collaboration Trace, then continue."
               : isAwaitingHumanInput
                 ? "Answer the question in Autonomous Trace, then continue."
@@ -165,7 +160,7 @@ export function ChatComposer(props: ChatComposerProps) {
           aria-label="Send message"
           title="Send message"
           className="send"
-          disabled={readOnly || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput || input.trim().length === 0}
+          disabled={readOnly || needsAgent || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput || input.trim().length === 0}
         >
           <Send size={18} />
         </button>

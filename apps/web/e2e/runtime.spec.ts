@@ -42,7 +42,7 @@ async function configureAgent(page: Page, name: string) {
   await dialog.getByRole("checkbox", { name: "calculator", exact: true }).check();
   await dialog.getByRole("button", { name: "Create Agent", exact: true }).click();
   await page.getByRole("button", { name: "OK", exact: true }).click();
-  await expect(page.getByRole("combobox", { name: "Agent", exact: true })).toHaveValue(/agent_/);
+  await expect(page.getByRole("button", { name: `Agent: ${name}`, exact: true })).toBeVisible();
 }
 
 async function submit(page: Page, prompt: string) {

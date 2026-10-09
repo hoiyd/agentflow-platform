@@ -118,7 +118,7 @@ func TestSandboxCommandHTTPTraceAndReceiptsAcrossModes(t *testing.T) {
 			t.Cleanup(server.Close)
 			dependencies := completeHandlerDependencies(t)
 			storage := fullStoreForTest(t, dependencies)
-			selected, err := storage.CreateAgent(domain.Agent{Name: "Scratch runner", Description: "Run scratch-fixture scripts", SystemPrompt: "Use sandbox_command for scratch-fixture tasks.", Tools: []string{"sandbox_command"}, RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"scratch-fixture", "script", "run"}}})
+			selected, err := storage.CreateAgent(domain.Agent{WorkspaceID: pipelineRegressionWorkspace, Name: "Scratch runner", Description: "Run scratch-fixture scripts", SystemPrompt: "Use sandbox_command for scratch-fixture tasks.", Tools: []string{"sandbox_command"}, RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"scratch-fixture", "script", "run"}}})
 			if err != nil {
 				t.Fatal(err)
 			}

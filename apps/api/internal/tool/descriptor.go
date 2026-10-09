@@ -106,6 +106,10 @@ type Binding struct {
 }
 
 type ToolInfo struct {
+	ServiceEnabled    bool           `json:"service_enabled"`
+	WorkspaceEnabled  bool           `json:"workspace_enabled"`
+	ConfigRevision    int64          `json:"config_revision"`
+	ExcludedReason    string         `json:"excluded_reason,omitempty"`
 	Name              string         `json:"name"`
 	Description       string         `json:"description"`
 	Parameters        map[string]any `json:"parameters"`

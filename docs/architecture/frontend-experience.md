@@ -61,6 +61,30 @@ remain stable across normal laptop and wide-monitor viewports.
   actions such as Save and Cancel use consistent dimensions.
 - Agent creation and configuration belong in dialogs rather than consuming the
   conversation's vertical workspace.
+- The Single-agent composer uses one 40px toolbar row: inline Agent label and
+  selection, an optional description disclosure and bound Skill picker on the
+  left; profile management and separated Run Verification on the right. Do not
+  repeat the selected name beside the picker. Description text expands below the
+  row only on request, without nested scrolling. New agent is the quieter action;
+  Configure and Verification retain explicit control boundaries.
+- Skill selection reuses the shared picker without search. Its fixed-width slot
+  remains visible in Single mode even when the Agent has no bound Skills (disabled,
+  **No skills**); selecting **Automatic** removes only the explicit Skill command.
+  This prevents the Agent picker from resizing when Skill bindings differ. Agent,
+  Workspace and template selection retain search.
+- Disabled **No skills** explains the actual cause in a custom hover/focus note,
+  distinguishing missing bindings from no selected Agent. It uses a focusable
+  wrapper around the disabled control, no native title tooltip, and supports
+  Escape dismissal without changing toolbar geometry.
+- Runtime Agent selection lists only created Workspace Agents. Optional templates
+  belong in **New agent → Copy from**, above the profile fields, with a blank
+  default. Empty Workspaces keep creation available and disable Single-agent send
+  and Configure rather than implicitly running a template.
+- Agent and Workspace selection share a searchable picker. Search matches names
+  and descriptions; option names wrap fully and selection uses stable IDs.
+  The Agent menu opens above the composer with one bounded scroll owner. Closed
+  triggers use at most two lines and expose the full name on hover, keeping the
+  composer compact; arrow keys browse, Enter confirms, Escape dismisses.
 - Dialogs are horizontally centered and positioned above the visual midpoint so
   their primary fields remain easy to scan.
 - Trace show/hide controls use the same style, side, and placement in Multi-Agent

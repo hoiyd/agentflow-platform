@@ -596,11 +596,14 @@ func (e WorkspaceUpdateRequestStatus) Valid() bool {
 
 // Agent defines model for Agent.
 type Agent struct {
-	Archived         *bool              `json:"archived,omitempty"`
-	CreatedAt        time.Time          `json:"created_at"`
-	Description      string             `json:"description"`
-	Executor         *string            `json:"executor,omitempty"`
-	Id               string             `json:"id"`
+	Archived    *bool     `json:"archived,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	Description string    `json:"description"`
+	Executor    *string   `json:"executor,omitempty"`
+	Id          string    `json:"id"`
+
+	// IsTemplate Shared read-only profile; POST a copy to configure it in a Workspace.
+	IsTemplate       *bool              `json:"is_template,omitempty"`
 	MemoryEnabled    bool               `json:"memory_enabled"`
 	Name             string             `json:"name"`
 	RetrievalEnabled bool               `json:"retrieval_enabled"`
@@ -609,6 +612,9 @@ type Agent struct {
 	SystemPrompt     string             `json:"system_prompt"`
 	Tools            []string           `json:"tools"`
 	UpdatedAt        time.Time          `json:"updated_at"`
+
+	// WorkspaceId Owning Workspace; absent for shared read-only templates.
+	WorkspaceId *string `json:"workspace_id,omitempty"`
 }
 
 // AgentConfigRequest defines model for AgentConfigRequest.
@@ -1115,13 +1121,23 @@ type SkillResourceEvidence struct {
 
 // ToolInfo defines model for ToolInfo.
 type ToolInfo struct {
-	Description string                 `json:"description"`
-	Enabled     bool                   `json:"enabled"`
-	Name        string                 `json:"name"`
-	Parameters  map[string]interface{} `json:"parameters"`
+	ConfigRevision *int64 `json:"config_revision,omitempty"`
+	Description    string `json:"description"`
+	Enabled        bool   `json:"enabled"`
+
+	// ExcludedReason Service, prerequisite, Workspace or static-policy exclusion reason; argument-dependent decisions remain in Run events.
+	ExcludedReason *string                `json:"excluded_reason,omitempty"`
+	Name           string                 `json:"name"`
+	Parameters     map[string]interface{} `json:"parameters"`
+
+	// ServiceEnabled Operator-owned service switch. Workspace owners cannot override it.
+	ServiceEnabled *bool `json:"service_enabled,omitempty"`
 
 	// UnavailableReason Runtime prerequisite that prevents an enabled Tool from being offered to the model.
 	UnavailableReason *string `json:"unavailable_reason,omitempty"`
+
+	// WorkspaceEnabled Persisted Workspace allowlist entry, independent of service readiness.
+	WorkspaceEnabled *bool `json:"workspace_enabled,omitempty"`
 }
 
 // ToolProgress defines model for ToolProgress.

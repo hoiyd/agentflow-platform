@@ -94,10 +94,10 @@ disclosing another owner's entity. Old string IDs are **not** runtime aliases.
 `personal_workspace` in the session response now means the current authorized
 active default; its existing field name is retained for compatibility.
 
-Shared Agent profiles, Tool switches/security configuration, provider credentials
-and trusted Skill packages remain service-wide. OIDC owners may read/use available
-profiles and Tools but cannot mutate shared Agent/Tool configuration. Trusted-local
-operators manage it; private per-Workspace Agent configurations are not added here.
+Owners manage Workspace-private Agent profiles and Tool allowlists. Shared Agent
+templates are read-only and can be copied. Service Tool switches/security policy,
+provider credentials and trusted Skill installations remain operator-owned;
+see [Workspace configuration](../architecture/workspace-agent-tools.md).
 [Resource authorization](resource-authorization.md) covers the current object-authorization audit. Owner entity
 checks do not prove a complete public multi-tenant security boundary.
 

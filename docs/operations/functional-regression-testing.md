@@ -21,6 +21,7 @@ Write or update this inventory before adding isolated fixtures.
 | Multi/Loop execution loses Tool continuation or stage identity | Real staged runs finish with paired calls and a valid projection; Loop writes have durable receipts; isolated Multi Worker has no Task State write authority |
 | Reload loses accepted results or persisted Task State | Reload reads the same messages, run, and Task State from PostgreSQL |
 | Tool toggles only update local UI state | Catalog API and reloaded page agree on the persisted enabled flag |
+| Agent names overflow, duplicate names select the wrong ID, or controls misalign | The signed-identity picker gate checks 12 Agents at desktop widths 1280/1920, search, wrapping, bounded popup geometry, keyboard selection, 40px aligned controls, non-search Skill invocation/Automatic reset, stable Agent width with disabled Skill, description disclosure and the selected ID in persisted Replay |
 | Knowledge ingestion/search/deletion disagree | Real index detail and retrieval show the inserted document; deletion returns 404 |
 | Memory corrections/deletions lose version or remain recalled | History records the correction; version increases; deletion clears content and recall |
 | Two command callbacks fire before a React render | Only one command is admitted and one optimistic message pair is created |
@@ -108,6 +109,16 @@ see the [authorization matrix](resource-authorization.md). No screenshots are us
 with a disposable Keycloak realm and independent Postgres. It is a separate narrow
 gate, not part of the trusted-local runtime suite, and retains `onboarding-evidence.json`.
 It never configures an operator's IdP and does not cover every MFA/reset flow.
+
+`AGENTFLOW_IDENTITY_TEST=1 bash scripts/test-browser.sh agent-selection.spec.ts workspace-agent-config.spec.ts`
+checks the shared Agent/Workspace picker and scoped configuration. The picker
+attachment records owner, Workspace, selected Agent, Run and desktop geometry;
+the configuration gate also checks blank creation, explicit template copying
+without a write, complete copied bindings, immutable templates, runtime selection
+excluding templates, and cancellation/disabled send in an empty Workspace.
+one synthetic screenshot supports visual review. Component tests additionally
+cover empty search, dismissal, lock/reset and input-method composition. CI runs
+these with the identity/resource gate; no real application data is modified.
 
 Focused unit/component tests remain valuable for races, parsers, schema rejection,
 privacy, and uncertain-write settlement. A mocked success response is not evidence

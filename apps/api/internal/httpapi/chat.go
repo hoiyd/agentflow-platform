@@ -39,6 +39,20 @@ func (h *Handler) startChat(w http.ResponseWriter, r *http.Request, req domain.C
 		writeError(w, http.StatusBadRequest, "message is required")
 		return
 	}
+	// Reject foreign or archived Agents before creating a Conversation or message.
+	// Runtime checks again at preparation/execution to honor later revocations.
+	req.AgentID = strings.TrimSpace(req.AgentID)
+	if req.AgentID != "" {
+		agent, found, err := scoped.GetAgent(req.AgentID)
+		if err != nil {
+			writeFailure(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		if !found || agent.Archived {
+			writeError(w, http.StatusNotFound, "agent not found")
+			return
+		}
+	}
 	contract, err := h.freezeCompletionContract(req.CompletionContract)
 	if err != nil {
 		writeFailure(w, r, http.StatusBadRequest, err)

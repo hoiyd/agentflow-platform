@@ -108,7 +108,7 @@ func TestBoundedToolLoopAcrossExecutionModes(t *testing.T) {
 				}))
 				t.Cleanup(server.Close)
 				storage := fixturestore.New()
-				persona, err := storage.CreateAgent(domain.Agent{Name: "Calculator", Description: "calculator arithmetic", SystemPrompt: "Use calculator for arithmetic.", Tools: []string{"calculator"}})
+				persona, err := storage.CreateAgent(domain.Agent{Name: "Calculator", Description: "calculator arithmetic", SystemPrompt: "Use calculator for arithmetic.", Tools: []string{"calculator"}, RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"calculator", "calculate", "arithmetic"}}})
 				if err != nil {
 					t.Fatal(err)
 				}

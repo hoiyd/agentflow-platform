@@ -21,6 +21,12 @@ var postgresMigrations = []string{
 		UNIQUE (issuer,subject)
 	)`,
 	workspaceEntitySchema,
+	`CREATE TABLE IF NOT EXISTS workspace_tool_config (
+		workspace_id bigint PRIMARY KEY REFERENCES workspaces(id),
+		allowed_tools jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(allowed_tools)='array'),
+		revision bigint NOT NULL DEFAULT 1,
+		updated_at timestamptz NOT NULL DEFAULT NOW()
+	)`,
 	`CREATE TABLE IF NOT EXISTS auth_memberships (
 		user_id text NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
 		workspace_id bigint NOT NULL,
@@ -57,6 +63,7 @@ var postgresMigrations = []string{
 	`CREATE TABLE IF NOT EXISTS agents (
 		id text PRIMARY KEY,
 		workspace_id bigint,
+		is_template boolean NOT NULL DEFAULT false,
 		user_id text,
 		project_id text,
 		name text NOT NULL,
@@ -73,6 +80,8 @@ var postgresMigrations = []string{
 		updated_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS memory_enabled boolean NOT NULL DEFAULT true`,
+	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_template boolean NOT NULL DEFAULT false`,
+	`CREATE INDEX IF NOT EXISTS agents_workspace_active_idx ON agents(workspace_id) WHERE deleted_at IS NULL`,
 	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS routing_hints jsonb NOT NULL DEFAULT '{}'::jsonb`,
 	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS skills jsonb NOT NULL DEFAULT '[]'::jsonb`,
 	`ALTER TABLE agents ADD COLUMN IF NOT EXISTS retrieval_enabled boolean NOT NULL DEFAULT true`,

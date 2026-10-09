@@ -26,7 +26,7 @@ func TestFrozenModelCatalogIgnoresLaterRoutesAndRetainsIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	runtime := newRuntimeForTest(RuntimeOptions{EmbeddingClient: original.Client, ModelRoutes: originalCatalog, ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}}, nil)
-	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeSingle, domain.Agent{ID: "agent"}, nil)
+	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeSingle, domain.Agent{ID: "agent_planner"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestRestoredRunUsesFrozenSamplingAfterRouteConfigChanges(t *testing.T) {
 		t.Fatalf("initial route ignored configured sampling: %#v", sent)
 	}
 	runtime := newRuntimeForTest(RuntimeOptions{EmbeddingClient: client, ModelRoutes: original, ContextAssembly: domain.ContextAssemblyConfig{ContextWindowTokens: 1000, OutputReserveTokens: 100}}, nil)
-	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeSingle, domain.Agent{ID: "agent"}, nil)
+	snapshot, err := runtime.captureRuntimeSnapshot(ChatModeSingle, domain.Agent{ID: "agent_planner"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestRestoredRunUsesFrozenSamplingAfterRouteConfigChanges(t *testing.T) {
 	if sent["temperature"] != 0.9 || sent["top_p"] != 0.8 {
 		t.Fatalf("same-prompt contrast did not change the actual request: %#v", sent)
 	}
-	if _, err := runtime.restoreRuntime(domain.Run{ID: "run-1", RuntimeSnapshot: &stored}); err != nil {
+	if _, err := runtime.restoreRuntime(domain.Run{ID: "run-1", WorkspaceID: domain.DefaultWorkspaceID, RuntimeSnapshot: &stored}); err != nil {
 		t.Fatalf("old policy prevented safe resume: %v", err)
 	}
 	restored, err := runtime.restoreModelRouteCatalog(stored.ModelRouting)

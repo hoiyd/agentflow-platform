@@ -15,6 +15,10 @@ import (
 
 func TestUpdateAgentConfigAPI(t *testing.T) {
 	fixtureStore := fixturestore.New()
+	owned, err := fixtureStore.CreateAgent(domain.Agent{Name: "Owned agent"})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	handler := &Handler{store: fixtureStore}
 
@@ -32,7 +36,7 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 		"retrieval_enabled": true,
 			"executor": "retired-framework"
 	}`)
-	req := httptest.NewRequest(http.MethodPatch, "/api/agents/agent_planner", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPatch, "/api/agents/"+owned.ID, bytes.NewReader(body))
 	recorder := httptest.NewRecorder()
 	handler.updateAgent(recorder, req)
 	if recorder.Code != http.StatusOK {
@@ -55,7 +59,7 @@ func TestUpdateAgentConfigAPI(t *testing.T) {
 		t.Fatalf("expected normalized routing hints, got %#v", agent.RoutingHints)
 	}
 
-	persisted, ok, err := fixtureStore.GetAgent("agent_planner")
+	persisted, ok, err := fixtureStore.GetAgent(owned.ID)
 	if err != nil {
 		t.Fatalf("get agent: %v", err)
 	}
@@ -201,8 +205,8 @@ func TestArchiveDefaultAgentAPIRejects(t *testing.T) {
 	req := httptest.NewRequest(http.MethodDelete, "/api/agents/agent_planner", nil)
 	recorder := httptest.NewRecorder()
 	handler.archiveAgent(recorder, req)
-	if recorder.Code != http.StatusBadRequest {
-		t.Fatalf("expected default archive status 400, got %d body=%s", recorder.Code, recorder.Body.String())
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("expected template archive status 403, got %d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 

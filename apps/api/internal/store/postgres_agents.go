@@ -13,7 +13,7 @@ import (
 
 func (s *PostgresStore) ListAgents() ([]domain.Agent, error) {
 	rows, err := s.db.Query(`
-		SELECT id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
+		SELECT id, COALESCE(workspace_id::text,''), is_template, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
 		FROM agents
 		WHERE deleted_at IS NULL
 		ORDER BY created_at ASC`)
@@ -63,15 +63,15 @@ func (s *PostgresStore) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 		return domain.Agent{}, err
 	}
 	_, err = s.db.Exec(`
-		INSERT INTO agents (id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12)`,
-		agent.ID, agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, skillsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.CreatedAt, agent.UpdatedAt)
+		INSERT INTO agents (id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at, workspace_id, is_template)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12, $13, $14)`,
+		agent.ID, agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, skillsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.CreatedAt, agent.UpdatedAt, nullString(agent.WorkspaceID), agent.IsTemplate)
 	return agent, err
 }
 
 func (s *PostgresStore) GetAgent(id string) (domain.Agent, bool, error) {
 	row := s.db.QueryRow(`
-		SELECT id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
+		SELECT id, COALESCE(workspace_id::text,''), is_template, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
 		FROM agents
 		WHERE id = $1`, id)
 	agent, err := scanAgent(row)
@@ -92,6 +92,11 @@ func (s *PostgresStore) UpdateAgent(agent domain.Agent) (domain.Agent, error) {
 	if !ok {
 		return domain.Agent{}, errors.New("agent not found")
 	}
+	if existing.IsTemplate {
+		return domain.Agent{}, errors.New("built-in templates are read-only; create a Workspace copy")
+	}
+	agent.WorkspaceID = existing.WorkspaceID
+	agent.IsTemplate = false
 
 	agent.Name = strings.TrimSpace(agent.Name)
 	if agent.Name == "" {
@@ -126,7 +131,14 @@ func (s *PostgresStore) UpdateAgent(agent domain.Agent) (domain.Agent, error) {
 
 func (s *PostgresStore) ArchiveAgent(id string) error {
 	id = strings.TrimSpace(id)
-	if domain.IsDefaultAgentID(id) {
+	agent, ok, err := s.GetAgent(id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotFound("agent")
+	}
+	if agent.IsTemplate {
 		return errors.New("default agents cannot be archived")
 	}
 	now := time.Now().UTC()
@@ -153,7 +165,7 @@ func (s *PostgresStore) GetDefaultAgent() (domain.Agent, bool, error) {
 		return agent, ok, err
 	}
 	row := s.db.QueryRow(`
-		SELECT id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
+		SELECT id, COALESCE(workspace_id::text,''), is_template, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
 		FROM agents
 		WHERE deleted_at IS NULL
 		ORDER BY created_at ASC
@@ -169,46 +181,21 @@ func (s *PostgresStore) GetDefaultAgent() (domain.Agent, bool, error) {
 }
 
 func (s *PostgresStore) seedDefaultAgents(ctx context.Context) error {
-	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM agents`).Scan(&count); err != nil {
-		return err
-	}
-	now := time.Now().UTC()
-	if count == 0 {
-		for _, agent := range DefaultAgents(now) {
-			routingHintsJSON, err := json.Marshal(agent.RoutingHints)
-			if err != nil {
-				return err
-			}
-			toolsJSON, err := json.Marshal(agent.Tools)
-			if err != nil {
-				return err
-			}
-			skillsJSON, err := json.Marshal(domain.NormalizeAgentConfig(agent).Skills)
-			if err != nil {
-				return err
-			}
-			if _, err := s.db.ExecContext(ctx, `
-				INSERT INTO agents (id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12)`,
-				agent.ID, agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, skillsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.CreatedAt, agent.UpdatedAt); err != nil {
-				return err
-			}
+	for _, agent := range DefaultAgents(time.Now().UTC()) {
+		existing, ok, err := s.GetAgent(agent.ID)
+		if err != nil {
+			return err
 		}
-		return nil
-	}
-
-	agents, err := s.ListAgents()
-	if err != nil {
-		return err
-	}
-	for _, agent := range agents {
-		next := agent
-		if !updateDefaultAgentText(&next, defaultAgentByID(agent.ID)) {
-			continue
+		// Existing global profiles may contain private edits. Never turn them into
+		// shared templates or overwrite them while bootstrapping the new schema.
+		if ok && !existing.IsTemplate {
+			agent.ID = "template_" + strings.TrimPrefix(agent.ID, "agent_")
 		}
-		next.UpdatedAt = now
-		if _, err := s.UpdateAgent(next); err != nil {
+		hints, _ := json.Marshal(agent.RoutingHints)
+		tools, _ := json.Marshal(agent.Tools)
+		_, err = s.db.ExecContext(ctx, `INSERT INTO agents(id,name,description,system_prompt,routing_hints,tools,skills,memory_enabled,retrieval_enabled,executor,is_template,created_at,updated_at)
+  VALUES($1,$2,$3,$4,$5,$6,'[]', $7,$8,$9,true,$10,$10) ON CONFLICT(id) DO NOTHING`, agent.ID, agent.Name, agent.Description, agent.SystemPrompt, hints, tools, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.CreatedAt)
+		if err != nil {
 			return err
 		}
 	}
@@ -221,7 +208,7 @@ func scanAgent(row scanner) (domain.Agent, error) {
 	var toolsJSON []byte
 	var skillsJSON []byte
 	var deletedAt sql.NullTime
-	if err := row.Scan(&agent.ID, &agent.Name, &agent.Description, &agent.SystemPrompt, &routingHintsJSON, &toolsJSON, &skillsJSON, &agent.MemoryEnabled, &agent.RetrievalEnabled, &agent.Executor, &deletedAt, &agent.CreatedAt, &agent.UpdatedAt); err != nil {
+	if err := row.Scan(&agent.ID, &agent.WorkspaceID, &agent.IsTemplate, &agent.Name, &agent.Description, &agent.SystemPrompt, &routingHintsJSON, &toolsJSON, &skillsJSON, &agent.MemoryEnabled, &agent.RetrievalEnabled, &agent.Executor, &deletedAt, &agent.CreatedAt, &agent.UpdatedAt); err != nil {
 		return domain.Agent{}, err
 	}
 	agent.Archived = deletedAt.Valid
@@ -241,13 +228,4 @@ func scanAgent(row scanner) (domain.Agent, error) {
 		}
 	}
 	return domain.NormalizeAgentConfig(agent), nil
-}
-
-func defaultAgentByID(id string) domain.Agent {
-	for _, agent := range DefaultAgents(time.Now().UTC()) {
-		if agent.ID == id {
-			return agent
-		}
-	}
-	return domain.Agent{}
 }

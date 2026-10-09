@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
 	toolpkg "agentflow-platform/apps/api/internal/tool"
 )
 
@@ -22,7 +23,7 @@ func TestToolHandlersListAndToggleTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new tool manager: %v", err)
 	}
-	handler := &Handler{tools: manager}
+	handler := &Handler{tools: manager, store: fixturestore.New()}
 
 	listRecorder := httptest.NewRecorder()
 	handler.listTools(listRecorder, httptest.NewRequest(http.MethodGet, "/api/tools", nil))

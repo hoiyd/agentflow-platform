@@ -135,8 +135,8 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if len(restored.agent.RoutingHints.Capabilities) != 1 || restored.agent.RoutingHints.Capabilities[0] != "original capability" {
 		t.Fatalf("expected frozen routing hints, got %#v", restored.agent.RoutingHints)
 	}
-	if _, ok := restored.catalog.Resolve("calculator"); !ok {
-		t.Fatal("expected frozen tool to remain available after current config disabled it")
+	if _, ok := restored.catalog.Resolve("calculator"); ok {
+		t.Fatal("frozen definitions must not override current operator revocation")
 	}
 	if _, ok := restored.catalog.Resolve(taskstate.UpdateToolName); !ok {
 		t.Fatal("expected frozen task state tool to remain available")

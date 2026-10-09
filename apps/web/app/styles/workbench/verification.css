@@ -21,10 +21,6 @@
   padding: 0 9px;
 }
 
-.agent-actions .verification-config-toggle {
-  min-height: 36px;
-}
-
 .verification-config-toggle strong {
   min-width: 24px;
   color: var(--muted);

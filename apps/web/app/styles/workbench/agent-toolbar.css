@@ -1,0 +1,86 @@
+/* Single-agent context on the left; profile actions and Run policy on the right. */
+.agent-bar.single {
+  max-width: 1100px;
+  margin: 0 auto 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.agent-context, .agent-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-select, .composer-skill-select {
+  flex: 1;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.agent-select > .selection-label, .composer-skill-select > .selection-label {
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
+.agent-select .selection-trigger, .composer-skill-select .selection-trigger {
+  height: 40px;
+  padding: 3px 12px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.agent-select .selection-popup { left: 42px; }
+
+.agent-description-toggle, .agent-config-toggle, .agent-create-button,
+.agent-actions .verification-config-toggle {
+  height: 40px;
+  min-height: 40px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.agent-description-toggle { width: 36px; padding: 0; }
+.agent-description-toggle, .agent-create-button { border-color: transparent; background: transparent; color: var(--muted-strong); }
+.agent-description-toggle:hover, .agent-create-button:hover, .agent-config-toggle:hover { background: var(--surface-soft); color: var(--ink); }
+.agent-description-toggle[aria-expanded="true"], .agent-create-button.active { background: var(--accent-soft); color: var(--accent); }
+.agent-config-toggle:hover { border-color: var(--border-strong); }
+
+.agent-bar button:disabled { cursor: not-allowed; opacity: .5; }
+
+.composer-skill-select {
+  flex: 0 0 196px;
+}
+
+.composer-skill-select .selection-popup { width: 320px; left: auto; right: 0; }
+
+.agent-run-policy { border-left: 1px solid var(--border); padding-left: 12px; margin-left: 4px; }
+.agent-actions .verification-config-toggle { color: var(--muted-strong); }
+.agent-actions .verification-config-toggle.active { border-color: var(--accent); color: var(--accent); }
+
+.agent-description {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}

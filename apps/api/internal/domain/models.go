@@ -63,6 +63,8 @@ type MessageReasoning struct {
 
 type Agent struct {
 	ID           string            `json:"id"`
+	WorkspaceID  string            `json:"workspace_id,omitempty"`
+	IsTemplate   bool              `json:"is_template"`
 	Name         string            `json:"name"`
 	Description  string            `json:"description"`
 	SystemPrompt string            `json:"system_prompt"`

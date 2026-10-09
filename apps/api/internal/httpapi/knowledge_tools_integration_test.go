@@ -146,7 +146,7 @@ func TestScopedKnowledgeToolsSearchReadCitedAnswerAcrossModes(t *testing.T) {
 			if _, err := storage.UpdateAgent(primary); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := storage.CreateAgent(domain.Agent{Name: "Knowledge reader", Description: "Inspect release manuals and recovery procedures.", SystemPrompt: primary.SystemPrompt, Tools: primary.Tools, RetrievalEnabled: true, RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"alpha-4242", "release", "manual", "inspect", "recovery", "procedure"}}}); err != nil {
+			if _, err := storage.CreateAgent(domain.Agent{WorkspaceID: pipelineRegressionWorkspace, Name: "Knowledge reader", Description: "Inspect release manuals and recovery procedures.", SystemPrompt: primary.SystemPrompt, Tools: primary.Tools, RetrievalEnabled: true, RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"alpha-4242", "release", "manual", "inspect", "recovery", "procedure"}}}); err != nil {
 				t.Fatal(err)
 			}
 			client := openai.NewClientWithTimeoutAndEmbeddingModel("fixture-not-a-secret", server.URL, server.URL, "knowledge-fixture-model", "knowledge-fixture-embedding", 2, 2*time.Second)

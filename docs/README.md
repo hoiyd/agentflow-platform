@@ -16,6 +16,7 @@ related pages link to its contract rather than copying configuration or algorith
 - [Engineering decisions](architecture/engineering-decisions.md): rationale, trade-offs, and retired approaches.
 - [Storage boundary](architecture/storage-boundary.md): Postgres-only persistence versus non-durable test fixtures.
 - [API contract](architecture/api-contract.md): shared OpenAPI generation and change workflow.
+- [Workspace Agent and Tool configuration](architecture/workspace-agent-tools.md): ownership, read-only templates, current revocation and explicit legacy migration.
 - [Frontend principles](architecture/frontend-experience.md): desktop workbench constraints and Run Session ownership.
 - [Stylesheet organization](../apps/web/app/styles/README.md): CSS ownership.
 

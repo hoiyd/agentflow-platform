@@ -30,7 +30,9 @@ test("OIDC login, member Workspace, persistence, forbidden access and logout", a
   const switcher = page.getByRole("button", { name: "Workspace: Personal workspace", exact: true });
   await switcher.focus();
   await page.keyboard.press("ArrowDown");
-  await expect(page.getByRole("option", { name: "Personal workspace", exact: true })).toBeFocused();
+  const search = page.getByRole("combobox", { name: "Search workspaces", exact: true });
+  await expect(search).toBeFocused();
+  await expect(search).toHaveAttribute("aria-activedescendant", (await page.getByRole("option", { name: "Personal workspace", exact: true }).getAttribute("id"))!);
   await page.keyboard.press("Escape");
   await expect(switcher).toBeFocused();
   await expect(page.getByRole("listbox", { name: "Workspace" })).toHaveCount(0);

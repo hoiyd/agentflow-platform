@@ -25,7 +25,7 @@ const workspaceEntitySchema = `CREATE TABLE IF NOT EXISTS workspaces (
 
 // Scoped tables reference the Workspace primary key. Run-owned records inherit
 // scope through their Run foreign key.
-var workspaceReferenceTables = []string{"agents", "conversations", "messages", "runs", "collaboration_steps", "memories", "memory_changes", "memory_candidates", "documents", "task_state_revisions", "auth_memberships", "auth_personal_workspaces"}
+var workspaceReferenceTables = []string{"agents", "workspace_tool_config", "conversations", "messages", "runs", "collaboration_steps", "memories", "memory_changes", "memory_candidates", "documents", "task_state_revisions", "auth_memberships", "auth_personal_workspaces"}
 
 func (s *PostgresStore) InitializeWorkspaceLifecycle(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)

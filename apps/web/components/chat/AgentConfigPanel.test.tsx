@@ -59,3 +59,21 @@ it("binds trusted methods without enabling their tool dependencies", () => {
   fireEvent.click(screen.getByRole("checkbox", { name: /missing-method/ }));
   expect(onChange).toHaveBeenCalledWith({ skills: [] });
 });
+
+it("cannot select a Tool denied by Workspace or service configuration", () => {
+  render(<AgentConfigPanel actionLabel="Save" availableTools={[
+    {name: "calculator", description: "Calculate", parameters: {}, enabled: false, excluded_reason: "workspace_disabled"}
+  ]} disabled={false} draft={draft} isSaving={false} onChange={vi.fn()} onSave={vi.fn()} onToggleTool={vi.fn()} status="" title="Configure agent" />);
+  expect(screen.getByRole("checkbox", {name: "calculator"})).toHaveProperty("disabled", true);
+});
+
+it("allows removing an already selected Tool after its Workspace grant is revoked", () => {
+  const onToggleTool = vi.fn();
+  render(<AgentConfigPanel actionLabel="Save" availableTools={[
+    {name: "calculator", description: "Calculate", parameters: {}, enabled: false, excluded_reason: "workspace_disabled"}
+  ]} disabled={false} draft={{...draft, tools: ["calculator"]}} isSaving={false} onChange={vi.fn()} onSave={vi.fn()} onToggleTool={onToggleTool} status="" title="Configure agent" />);
+  const checkbox = screen.getByRole("checkbox", {name: "calculator"});
+  expect(checkbox).toHaveProperty("disabled", false);
+  fireEvent.click(checkbox);
+  expect(onToggleTool).toHaveBeenCalledWith("calculator");
+});

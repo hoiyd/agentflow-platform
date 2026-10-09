@@ -69,15 +69,6 @@
     padding: 12px 14px 16px;
   }
 
-  .agent-bar {
-    grid-template-columns: 1fr;
-  }
-
-  .agent-bar.multi_agent,
-  .agent-bar.autonomous {
-    grid-template-columns: 1fr;
-  }
-
   .mode-chooser {
     grid-template-columns: 1fr;
   }

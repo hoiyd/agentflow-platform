@@ -179,7 +179,7 @@ jobs:
       - name: Run OIDC identity and resource authorization gate
         env:
           AGENTFLOW_IDENTITY_TEST: '1'
-        run: npm run test:e2e -- identity.spec.ts resource-authorization.spec.ts
+        run: npm run test:e2e -- identity.spec.ts resource-authorization.spec.ts workspace-agent-config.spec.ts agent-selection.spec.ts
       - name: Retain identity boundary evidence
         if: always()
         uses: actions/upload-artifact@v7
