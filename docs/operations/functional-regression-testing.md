@@ -44,6 +44,10 @@ Write or update this inventory before adding isolated fixtures.
 | Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |
 | Steering interrupts a Tool batch, disappears on refresh, or resets budget | The durable inbox gates preserve paired observations, receipts and first-request Manifest references across Single/Multi/Loop, compaction and budget failure |
 
+Each CI composition profile starts with a fresh disposable database. Cases must
+declare their owned Agent and required Tools explicitly; neither a preceding
+profile nor another case supplies those prerequisites.
+
 ## Durable Inputs
 
 The [durable inbox gates](../runtime/durable-inputs.md#verification) run through

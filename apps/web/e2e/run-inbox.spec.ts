@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createWorkspaceChatAgent, defaultWorkspaceID } from "./fixtures/workspace-agent";
 
 test.skip(process.env.AGENTFLOW_SANDBOX_BROWSER_TEST !== "1", "requires the controlled Tool batch and disposable Postgres");
 const api="http://127.0.0.1:18080";
@@ -91,6 +92,7 @@ for(const outcome of ["steer","cancel"]) {
   await expect(page.getByText("API connected",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:"New conversation",exact:true}).click();
   await page.getByRole("button",{name:"Direct Single agent",exact:true}).click();
+  await createWorkspaceChatAgent(page,await defaultWorkspaceID(page),`Inbox final ${outcome}`);
   await page.getByPlaceholder("Ask AgentFlow anything...").fill("stream-gate: wait for another instruction");
   await page.getByRole("button",{name:"Send message",exact:true}).click();
   await expect(page.locator(".message.assistant").last()).toContainText("First token");

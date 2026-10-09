@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createWorkspaceChatAgent } from "./fixtures/workspace-agent";
 
 const api = "http://127.0.0.1:18080";
 const web = "http://127.0.0.1:13000";
@@ -26,6 +27,7 @@ async function runId(page: Page) {
 
 test("two authenticated owners: shared Workspace capacity, spoof rejection, cancellation and persisted diagnostics", async ({ page, browser }, testInfo) => {
   const a = await signIn(page);
+  await createWorkspaceChatAgent(page, a.personal_workspace, "Owner A chat");
   const sameOwner = await page.request.post(`${api}/api/workspaces`, { headers: { Origin: web }, data: { name: "Owner quota second space" } });
   expect(sameOwner.status()).toBe(201);
   const secondSpace = await sameOwner.json();
@@ -38,6 +40,7 @@ test("two authenticated owners: shared Workspace capacity, spoof rejection, canc
     await second.goto(`${web}/workspace`);
     await second.getByRole("button", { name: /^Workspace: / }).click();
     await second.getByRole("option", { name: secondSpace.name, exact: true }).click();
+    await createWorkspaceChatAgent(second, secondSpace.id, "Owner A second space", { memory_enabled: true });
     await send(second, "owner queue should not be bypassed by a second Workspace");
     await expect(second.getByLabel("Task status: failed", { exact: true })).toBeVisible();
     await expect(second.locator(".composer .error")).toContainText("owner_model_queue_full");
@@ -46,6 +49,7 @@ test("two authenticated owners: shared Workspace capacity, spoof rejection, canc
     const other = await stranger.newPage();
     const b = await signIn(other);
     expect(b.user.id).not.toBe(a.user.id);
+    await createWorkspaceChatAgent(other, b.personal_workspace, "Owner B chat");
     const spoofed = await page.request.post(`${api}/api/memories/search`, {
       headers: { Origin: web, "X-Workspace-ID": secondSpace.id, "X-Owner-ID": b.user.id }, data: { query: "owner scope test" }
     });
@@ -89,18 +93,24 @@ test("two authenticated owners: shared Workspace capacity, spoof rejection, canc
 for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
   test(`${mode}: owner capacity survives a multi-round Tool loop and staged continuation`, async ({ page }, testInfo) => {
     const session = await signIn(page);
+    const capability = `ownertools${mode.toLowerCase().replace(/[^a-z]/g, "")}`;
+    const agent = await createWorkspaceChatAgent(page, session.personal_workspace, `Owner Tools ${mode}`, {
+      tools: ["get_current_time"], routing_hints: { capabilities: [capability], task_examples: ["owner-tools: implement and test a Go backend API with time zone evidence."], exclusions: [] }
+    });
     await page.getByRole("button", { name: "New conversation", exact: true }).click();
     await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: new RegExp(mode) }).click();
     await page.getByPlaceholder("Ask AgentFlow anything...").fill("owner-tools: implement and test a Go backend API with time zone evidence.");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     if (mode === "Multi-agent") {
       await page.getByText("Routing requirements", { exact: true }).click();
-      await page.getByRole("textbox", { name: "Preferred capabilities", exact: true }).fill("software");
+      await page.getByRole("textbox", { name: "Preferred capabilities", exact: true }).fill(capability);
       await page.getByRole("button", { name: "Approve & Continue", exact: true }).click();
     }
     await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
     const id = await runId(page);
     const replay = await (await page.request.get(`${api}/api/runs/${id}/replay`)).json();
+    expect(replay.run.workspace_id).toBe(session.personal_workspace);
+    if (mode === "Single agent") expect(replay.run.agent_id).toBe(agent.id);
     const attempts = replay.run_events.filter((event: { type: string }) => event.type === "model.attempt_finished");
     expect(attempts.length).toBeGreaterThanOrEqual(5);
     expect(attempts.every((event: { payload: { owner_capacity_wait_ms?: number; status: string } }) => typeof event.payload.owner_capacity_wait_ms === "number" && event.payload.status === "completed")).toBe(true);

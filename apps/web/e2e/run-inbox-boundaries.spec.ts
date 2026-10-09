@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { createWorkspaceChatAgent, defaultWorkspaceID } from "./fixtures/workspace-agent";
 
 test.skip(process.env.AGENTFLOW_INBOX_EDGE_TEST !== "1", "requires bounded-budget and compaction fixtures");
 const api = "http://127.0.0.1:18080";
@@ -14,12 +15,16 @@ for (const boundary of ["compaction", "budget"]) {
     await expect(page.getByText("API connected", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "New conversation", exact: true }).click();
     await page.getByRole("button", { name: "Direct Single agent", exact: true }).click();
+    const workspace = await defaultWorkspaceID(page);
+    const agent = await createWorkspaceChatAgent(page, workspace, `Inbox ${boundary}`, { tools: ["calculator"] });
     // Create a real Conversation through ordinary Chat before adding old history.
     await page.getByPlaceholder("Ask AgentFlow anything...").fill("Initialize boundary test");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
     const firstID = (await page.getByRole("link", { name: "View trace" }).getAttribute("href"))!.split("/").at(-1)!;
     const first = await read(`/api/runs/${firstID}`);
+    expect(first.agent_id).toBe(agent.id);
+    expect(first.workspace_id).toBe(workspace);
     if (boundary === "compaction") {
       expect((await request.post(`${api}/__fixture/inbox/history/${first.conversation_id}`)).status()).toBe(204);
     }
