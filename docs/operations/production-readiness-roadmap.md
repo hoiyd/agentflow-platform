@@ -98,8 +98,9 @@ model or workload requires them.
   injection cases as representative production queries become available.
 - Bind evaluation results to corpus, embedding, fusion, reranker, relevance
   policy, Prompt, and model versions. Security leakage remains a hard failure.
-- Project typed Run Events into OpenTelemetry without making telemetry a second
-  business source of truth; bound sampling, cardinality, retention, and content.
+- [OpenTelemetry traces](opentelemetry.md) now project committed Run Events into
+  bounded metadata-only OTLP/HTTP export. Production Collector authentication,
+  durable trace storage/retention and alerting remain deployment responsibilities.
 - Define SLOs and actionable alerts for admission, queueing, execution,
   Provider, database, recovery, and quality failures.
 - Use canary rollout, compatible migrations, rehearsed rollback, and load/soak

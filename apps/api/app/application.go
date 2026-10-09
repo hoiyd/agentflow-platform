@@ -16,6 +16,7 @@ import (
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/sandbox"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/telemetry"
 )
 
 // Application owns the API process lifecycle and its composed dependencies.
@@ -27,6 +28,7 @@ type Application struct {
 	requestLimiter *concurrency.ModelRequestLimiter
 	sandboxRunner  *sandbox.Runner
 	server         *http.Server
+	telemetry      *telemetry.Observer
 
 	closeOnce sync.Once
 	closeErr  error
@@ -45,6 +47,7 @@ func New(cfg config.Config) (*Application, error) {
 		runController:  dependencies.runController,
 		requestLimiter: dependencies.requestLimiter,
 		sandboxRunner:  dependencies.sandboxRunner,
+		telemetry:      dependencies.telemetry,
 		server: &http.Server{
 			Addr:              serverAddress(cfg),
 			Handler:           dependencies.handler.Routes(),
@@ -116,6 +119,11 @@ func (a *Application) Close(ctx context.Context) error {
 		if a.requestLimiter != nil {
 			a.requestLimiter.Close()
 		}
+		// Export failure cannot turn a successful application drain into a
+		// business failure. The observer has its own bounded flush deadline.
+		if err := a.telemetry.Shutdown(ctx); err != nil {
+			log.Print("OpenTelemetry shutdown incomplete; execution is unaffected")
+		}
 		if drained {
 			if err := closeStore(a.store); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("close store: %w", err))
@@ -138,6 +146,7 @@ func (a *Application) logStartup() {
 	cfg := a.config
 	log.Printf("AgentFlow API listening on http://%s", serverAddress(cfg))
 	log.Printf("AgentFlow persistence: PostgreSQL")
+	log.Printf("AgentFlow OpenTelemetry traces: enabled=%t (metadata only)", a.telemetry != nil)
 	log.Printf("AgentFlow authentication mode: %s (local mode is trusted development only)", cfg.AuthMode)
 	log.Printf("AgentFlow router mode: %s", cfg.RouterMode)
 	log.Printf("AgentFlow autonomous profile: max_iterations=%d max_output_chars=%d run_budget_runtime_cap=%s run_budget_tool_cap=%d", cfg.AutonomousMaxIterations, cfg.AutonomousMaxOutputCharacters, cfg.AutonomousMaxRuntime, cfg.AutonomousMaxToolCalls)

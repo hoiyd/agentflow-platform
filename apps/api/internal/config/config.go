@@ -10,6 +10,12 @@ import (
 )
 
 type Config struct {
+	// OTel exports sampled metadata-only traces. Empty/none disables the entire
+	// observer; endpoint is an operator-trusted OTLP/HTTP origin, not a file path.
+	OTelTracesExporter, OTelEndpoint, OTelServiceName string
+	// OTelSampleRatio is validated at startup; preserve invalid input rather than
+	// silently replacing an operator's sampling/privacy choice with a default.
+	OTelSampleRatio string
 	// AuthMode is local (trusted development only) or oidc. Unknown modes fail startup.
 	// OIDC always provisions a personal Workspace; the IdP controls account registration.
 	AuthMode string
@@ -198,6 +204,10 @@ func Load() Config {
 	loadDotEnv(".env")
 
 	return Config{
+		OTelTracesExporter:                getEnv("OTEL_TRACES_EXPORTER", "none"),
+		OTelEndpoint:                      getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:4318"),
+		OTelServiceName:                   getEnv("OTEL_SERVICE_NAME", "agentflow-api"),
+		OTelSampleRatio:                   getEnv("OTEL_TRACES_SAMPLER_ARG", "1"),
 		AuthMode:                          getEnv("AUTH_MODE", "local"),
 		OIDCIssuer:                        getEnv("OIDC_ISSUER", ""),
 		OIDCClientID:                      getEnv("OIDC_CLIENT_ID", ""),

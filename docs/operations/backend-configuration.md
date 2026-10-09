@@ -114,6 +114,13 @@ content on Postgres reads, not Envelopes/redaction metadata. Capture policy is
 live observability, not frozen model-input semantics. See
 [request reconstruction](../context/model-request-reconstruction.md).
 
+## OpenTelemetry Traces
+
+`OTEL_TRACES_EXPORTER=none` disables external tracing by default. The opt-in
+`otlp` path exports metadata-only traces asynchronously; Request Capture settings
+never enable telemetry body capture. See [OpenTelemetry traces](opentelemetry.md)
+for supported settings, local Collector/Jaeger, bounds and verification.
+
 ## Runtime Invariants
 
 Invariants report stable codes in `projection.invariant_failures` and log
