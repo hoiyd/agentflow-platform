@@ -1,0 +1,228 @@
+.agent-config-panel {
+  grid-column: 1 / -1;
+  border: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+}
+
+.agent-config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.agent-config-header strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.agent-config-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 180px;
+  gap: 10px;
+}
+
+.agent-config-panel label,
+.agent-config-tools {
+  display: grid;
+  gap: 5px;
+}
+
+.agent-config-panel label > span,
+.agent-config-tools > span {
+  text-transform: uppercase;
+}
+
+.agent-config-panel input[type="text"],
+.agent-config-panel input:not([type]),
+.agent-config-panel select,
+.agent-config-panel textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  color: var(--ink);
+  outline: none;
+  padding: 9px 10px;
+}
+
+.agent-config-panel textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.agent-config-switches,
+.agent-config-tools > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-config-switches label,
+.agent-config-tools label {
+  border: 1px solid var(--border);
+  color: var(--muted-strong);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.agent-config-switches input,
+.agent-config-tools input {
+  accent-color: var(--accent);
+}
+
+.agent-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.agent-config-status {
+  color: var(--teal);
+  font-size: 13px;
+}
+
+.agent-config-status.error-text {
+  color: var(--danger);
+}
+
+.agent-config-panel label > span,
+.agent-config-tools > span {
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.agent-config-panel {
+  border-radius: 5px;
+  background: #ffffff;
+  box-shadow: 0 -8px 30px rgba(25, 34, 46, 0.06);
+  padding: 14px;
+}
+
+.agent-config-modal-backdrop {
+  align-items: start;
+  padding-top: clamp(40px, 7vh, 64px);
+}
+
+.create-agent-modal-backdrop {
+  align-items: start;
+  padding-top: clamp(40px, 7vh, 64px);
+}
+
+.agent-config-dialog {
+  width: min(860px, 100%);
+  max-height: calc(100vh - 48px);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 22, 31, 0.08), 0 12px 28px -14px rgba(15, 22, 31, 0.24);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.agent-config-dialog .agent-config-panel {
+  grid-column: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.agent-config-dialog .agent-config-header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.agent-config-dialog .agent-config-header strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 620;
+}
+
+.agent-template-select {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-template-select > .selection-label { font-size: 11px; }
+
+.agent-template-select .selection-trigger { min-height: 38px; font-size: 13px; }
+
+.agent-config-panel .selection-search input { border: 0; background: transparent; padding: 2px; }
+
+.agent-routing-hints {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.agent-routing-hints summary {
+  color: var(--muted-strong);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.agent-routing-hints-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.agent-config-panel input[type="text"],
+.agent-config-panel input:not([type]),
+.agent-config-panel select,
+.agent-config-panel textarea {
+  border-radius: 4px;
+  background: #fbfcfd;
+}
+
+.agent-config-switches label,
+.agent-config-tools label {
+  border-radius: 4px;
+  background: #fbfcfd;
+  padding: 6px 8px;
+}
+
+.agent-config-cancel {
+  border-color: #8894a1;
+  background: #ffffff;
+  color: #273342;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 620;
+  padding: 0 14px;
+}
+
+.agent-config-cancel:hover:not(:disabled) {
+  border-color: #273342;
+  background: #edf1f5;
+  color: #171a1f;
+}
+
+.agent-config-actions .agent-config-status {
+  margin-right: auto;
+}
+
+.agent-config-actions .agent-config-cancel {
+  width: 132px;
+  min-width: 132px;
+  min-height: 42px;
+  justify-content: center;
+}
+
+.agent-config-actions .compact-send {
+  width: 132px;
+  min-width: 132px;
+  min-height: 42px;
+  justify-content: center;
+}

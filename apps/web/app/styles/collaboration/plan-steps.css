@@ -164,17 +164,12 @@
 .collaboration-steps {
   min-height: 0;
   overflow: auto;
-  padding: 14px;
   display: grid;
   align-content: start;
-  gap: 12px;
 }
 
 .collaboration-step {
   min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #fffaf2;
   padding: 13px;
 }
 
@@ -183,18 +178,8 @@
   box-shadow: 0 0 0 3px rgba(63, 95, 143, 0.08);
 }
 
-.collaboration-step.completed {
-  border-color: rgba(47, 116, 104, 0.28);
-}
-
 .collaboration-step.selected {
   border-color: rgba(180, 95, 60, 0.5);
-  box-shadow: 0 0 0 3px rgba(180, 95, 60, 0.1);
-}
-
-.collaboration-step.queued,
-.collaboration-step.idle {
-  background: #f6f2ea;
 }
 
 .collaboration-step.failed {
@@ -262,4 +247,71 @@
 .collaboration-output p {
   margin: 0;
   color: var(--muted-strong);
+}
+
+.upload-file-action {
+  background: #eef1f5;
+}
+
+.upload-file-name {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.collaboration-scroll-area .plan-review,
+.collaboration-scroll-area .plan-rich-editor,
+.collaboration-scroll-area .collaboration-steps,
+.collaboration-scroll-area .collaboration-output {
+  max-height: none;
+  overflow: visible;
+}
+
+.collaboration-scroll-area .collaboration-steps {
+  min-height: auto;
+  height: auto;
+}
+
+.collaboration-step,
+.plan-review {
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.collaboration-steps {
+  gap: 0;
+  padding: 0;
+}
+
+.collaboration-step {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.collaboration-step.selected {
+  box-shadow: inset 3px 0 0 var(--accent);
+  background: var(--accent-soft);
+}
+
+.collaboration-step.queued,
+.collaboration-step.idle {
+  border-color: var(--border);
+  background: #f7f9fb;
+}
+
+.collaboration-step.completed {
+  border-color: rgba(23, 128, 95, 0.35);
+}
+
+.step-status {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  padding: 0;
 }
