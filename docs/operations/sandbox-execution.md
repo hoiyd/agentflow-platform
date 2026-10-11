@@ -237,4 +237,10 @@ TEST_DATABASE_URL='<dedicated-test-postgres-url>' AGENTFLOW_SANDBOX_BROWSER_TEST
 It attaches `sandbox-command-browser-evidence.json`, but proves protocol and
 persistence, **not** a microVM's isolation. Backend HTTP integration covers all
 three modes; the CLI process fault harness covers creation/deletion failure,
-timeout, output bounds, environment and restart ownership.
+timeout, output bounds, environment and restart ownership. Fault tests wait for
+markers written by the real create/exec process before expiring a test-controlled
+deadline or canceling execution; every wait is bounded. They separately assert
+startup transport failure (`execution_unavailable`), execution deadline
+(`execution_timeout`), cancellation and cleanup failure. Unconfirmed cleanup
+dominates cancellation/deadline and remains a reconciliation error. These tests
+verify phase/classification, not elapsed timer precision or real VM isolation.

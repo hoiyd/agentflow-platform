@@ -58,6 +58,7 @@ for the distinction between Run Events, Trace, Replay, and Episode Report.
 apps/api/
   cmd/server/       process entry point: config, signals, exit reporting
   app/              application composition root and process lifecycle
+    runcommands/    admitted Start/Continue/Resume commands, independent of HTTP
     runcompletion/  answer persistence, citations, verification, terminal state and titles
   internal/
     domain/         persisted entities and shared contracts
@@ -94,6 +95,13 @@ apps/api/
     config/         environment configuration
     evaluation/     isolated quality, compatibility, load, and recovery evidence
 ```
+
+Within `agent`, Runtime Snapshot capture, restore and validation have separate
+`runtime_snapshot_*.go` owners; `runtime_snapshot.go` resolves frozen services and
+limits. Store document CRUD, search, adjacent-context reads and row scanning live
+in separate `postgres_document*.go` files. Domain DDL lives in
+`postgres_schema_*.go`; `postgres_migrations.go` preserves upgrade order, including
+historical data-preserving steps. Moving SQL must not reorder or rewrite it.
 
 ## Dependency Direction
 

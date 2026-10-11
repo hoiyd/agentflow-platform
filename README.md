@@ -134,8 +134,10 @@ are separate: evaluation measures regressions; Verification gates one opted-in R
 - Trusted, single-instance deployment only. Optional [OIDC identity and Workspace
   membership](docs/operations/identity-membership.md) provide themed OIDC
   login/registration, automatic personal Workspace onboarding and revocable sessions;
-  the default local mode is unauthenticated. Object ACLs and general Workspace
-  administration remain incomplete. CORS is not authorization.
+  the default local mode is unauthenticated. Owner-scoped Workspace lifecycle,
+  resource authorization, Agent configuration and Tool grants are implemented;
+  team sharing, role-based/object-sharing ACLs and cross-owner credential management
+  are not. CORS is not authorization.
 - Browser disconnects do not cancel admitted Runs. Process crashes still need
   durable checkpoint repair and explicit Resume; this is not distributed scheduling.
 - Orchestration shapes are fixed, not arbitrary DAGs. Tools/Skills cannot grant

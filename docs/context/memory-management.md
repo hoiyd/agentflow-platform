@@ -126,10 +126,11 @@ a page reload. Implicit message copying has been replaced with conservative cura
 
 Memory writes and recall always carry a normalized Workspace namespace. The
 provider inherits it from the source Message/Run; explicit HTTP requests resolve
-it from the request, and omitted scope becomes `default_workspace`. File and
-Postgres search apply that predicate before similarity ranking, so omission is
-never an unfiltered recall. User/Project scope, Membership, and Memory-specific
-ACL/content-trust policy remain future authorization work.
+it from the authorized request, and omitted scope selects the owner's active
+default Workspace. PostgreSQL filters by that Workspace before similarity ranking.
+Current owner/Membership checks and linked-source validation are enforced; arbitrary
+User/Project metadata is not an authenticated principal or a sharing grant. See
+[resource authorization](../operations/resource-authorization.md).
 
 ## Versioned Corrections and Deletions (H-17)
 
@@ -141,7 +142,7 @@ historical content snapshots.
 
 ```http
 POST /api/memories/{id}/mutations
-X-Workspace-ID: default_workspace
+X-Workspace-ID: <owned-numeric-workspace-id>
 Content-Type: application/json
 
 {
@@ -186,8 +187,9 @@ do not put sensitive original text in audit reasons.
   scrubbed. The source fence lives in the audit, so deleting a source conversation
   does not erase it. A worker already holding an accepted Candidate fails its
   commit and emits `memory.sync.failed`; the original Run is not retroactively failed.
-- **Scope:** detail, audit and mutation use the same Workspace namespace as Recall.
-  Other Workspaces receive `404`. Namespace filtering is not authentication/ACL.
+- **Scope:** detail, audit and mutation use the same authorized Workspace as Recall.
+  Other Workspaces receive `404`; request identity and current Membership are
+  checked separately from the storage predicate.
 
 This source-level fence deliberately does not semantically blacklist future user
 messages or merge independent Memory records. Correcting one ID cannot find every
@@ -198,9 +200,9 @@ New Recall sees only the current stored revision.
 
 Postgres startup adds `version`, `deleted_at`, and `memory_changes` idempotently.
 Existing rows default to version 1.
-Candidates also persist Workspace scope. Existing candidates inherit their source
-Conversation's Workspace at migration, or `default_workspace` when no Conversation
-remains. Source-based suppression is always Workspace-scoped.
+Candidates persist the source Conversation's Workspace. Legacy numeric Workspace
+conversion is a completed operator migration, not a runtime string-ID fallback.
+Source-based suppression is always Workspace-scoped.
 Postgres persists Memory vectors for restart-safe Recall. HTTP Memory responses do not contain vectors.
 The built-in Postgres adapter currently serializes Memory writes with one
 transaction advisory lock to coordinate late proposals and mutations. Embedding

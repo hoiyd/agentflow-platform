@@ -13,6 +13,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/sandbox"
+	"agentflow-platform/apps/api/internal/testsupport/processfixture"
 	"agentflow-platform/apps/api/internal/tool/policy"
 )
 
@@ -68,29 +69,35 @@ func TestSandboxBindingPublishesConfiguredExecutables(t *testing.T) {
 	}
 }
 
-// Real CLI fault injection checks the Binding's public error contract. A
-// cleanup failure must dominate cancellation so operators see an uncertain VM.
+// Real CLI fault injection checks phase and public error metadata. A cleanup
+// failure must dominate cancellation/deadline so operators see an uncertain VM.
 func TestSandboxBindingFaultClassification(t *testing.T) {
 	for _, scenario := range []struct {
 		name string
 		code ErrorCode
 	}{
-		{"invalid-json", ErrorInvalidArgs}, {"denied", ErrorSecurityPolicyDenied},
-		{"canceled", ErrorExecutionCanceled}, {"timeout", ErrorExecutionTimeout},
+		{"success", ""}, {"invalid-json", ErrorInvalidArgs}, {"denied", ErrorSecurityPolicyDenied},
+		{"canceled", ErrorExecutionCanceled}, {"canceled-exec", ErrorExecutionCanceled},
+		{"timeout", ErrorExecutionTimeout}, {"startup-timeout", ErrorExecutionUnavailable},
 		{"closed", ErrorExecutionUnavailable}, {"create-failed", ErrorExecutionUnavailable},
 		{"cleanup-failed", ErrorEffectReconciliation}, {"canceled-cleanup-failed", ErrorEffectReconciliation},
+		{"timeout-cleanup-failed", ErrorEffectReconciliation},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
 			root := t.TempDir()
-			cli := filepath.Join(root, "sbx-fixture")
-			namePath := filepath.Join(root, "name")
-			startedPath := filepath.Join(root, "started")
-			script := "#!/bin/sh\ncase \"$1\" in\ncreate) printf '%s' \"$3\" > '" + namePath + "';;\nexec) printf receipt;;\nrm) exit 0;;\nls) exit 0;;\nesac\n"
+			cli, namePath := filepath.Join(root, "sbx-fixture"), filepath.Join(root, "name")
+			startedPath, provisioningPath := filepath.Join(root, "started"), filepath.Join(root, "provisioning")
+			script := "#!/bin/sh\ncase \"$1\" in\ncreate) printf '%s' \"$3\" > '" + namePath + "';;\nexec) printf started > '" + startedPath + "'; printf receipt;;\nrm) exit 0;;\nls) exit 0;;\nesac\n"
 			if scenario.name == "create-failed" {
 				script = strings.ReplaceAll(script, "create) printf", "create) exit 2; printf")
 			}
-			if scenario.name == "timeout" || scenario.name == "canceled-cleanup-failed" {
-				script = strings.ReplaceAll(script, "exec) printf receipt", "exec) printf started > '"+startedPath+"'; exec /bin/sleep 60")
+			if scenario.name == "startup-timeout" {
+				script = strings.ReplaceAll(script, "';;\nexec)", "'; printf provisioning > '"+provisioningPath+"'; exec /bin/sleep 60;;\nexec)")
+			}
+			faultDuringExec := scenario.name == "timeout" || scenario.name == "canceled-exec" || scenario.name == "canceled-cleanup-failed" || scenario.name == "timeout-cleanup-failed"
+			if faultDuringExec {
+				script = strings.ReplaceAll(script, "printf receipt", "exec /bin/sleep 60")
 			}
 			if strings.Contains(scenario.name, "cleanup-failed") {
 				script = strings.ReplaceAll(script, "rm) exit 0", "rm) exit 2")
@@ -99,13 +106,18 @@ func TestSandboxBindingFaultClassification(t *testing.T) {
 			if err := os.WriteFile(cli, []byte(script), 0700); err != nil {
 				t.Fatal(err)
 			}
-			runner, err := sandbox.New(sandbox.Options{Executable: cli, StateDirectory: filepath.Join(root, "state"), AllowedCommands: []string{"/bin/sh"}, Timeout: time.Second})
+			runner, err := sandbox.New(sandbox.Options{Executable: cli, StateDirectory: filepath.Join(root, "state"), AllowedCommands: []string{"/bin/sh"}, Timeout: 30 * time.Second})
 			if err != nil {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = runner.Close(context.Background()) })
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
+			trigger := cancel
+			if strings.Contains(scenario.name, "timeout") {
+				ctx, trigger = processfixture.Deadline()
+			}
+			defer trigger()
 			args := json.RawMessage(`{"args":["/bin/sh"]}`)
 			switch scenario.name {
 			case "invalid-json":
@@ -118,26 +130,55 @@ func TestSandboxBindingFaultClassification(t *testing.T) {
 				if err := runner.Close(t.Context()); err != nil {
 					t.Fatal(err)
 				}
-			case "canceled-cleanup-failed":
-				// Wait for exec, not create's output: create may still be returning.
+			}
+			binding := SandboxCommandTool(runner)
+			var result any
+			if faultDuringExec || scenario.name == "startup-timeout" {
 				finished := make(chan struct{})
-				go func() {
-					defer close(finished)
-					for {
-						if _, err := os.Stat(startedPath); err == nil {
-							cancel()
-							return
-						}
-						select {
-						case <-ctx.Done():
-							return
-						case <-time.After(time.Millisecond):
-						}
+				go func() { defer close(finished); result, err = binding.Handler(ctx, args) }()
+				guard, stop := context.WithTimeout(t.Context(), 10*time.Second)
+				defer stop()
+				defer func() {
+					trigger()
+					select {
+					case <-finished:
+					case <-time.After(10 * time.Second):
+						t.Error("CLI did not stop after injected fault")
 					}
 				}()
-				defer func() { cancel(); <-finished }()
+				marker := startedPath
+				if scenario.name == "startup-timeout" {
+					marker = provisioningPath
+				}
+				if waitErr := processfixture.WaitForFile(guard, marker); waitErr != nil {
+					t.Fatal(waitErr)
+				}
+				trigger()
+				select {
+				case <-finished:
+				case <-guard.Done():
+					t.Fatal("CLI did not finish within the fault-test bound")
+				}
+			} else {
+				result, err = binding.Handler(ctx, args)
 			}
-			_, err = SandboxCommandTool(runner).Handler(ctx, args)
+			if scenario.name == "cleanup-failed" {
+				if _, startErr := os.Stat(startedPath); startErr != nil {
+					t.Fatal("cleanup failure was classified without reaching exec")
+				}
+			}
+			if scenario.name == "startup-timeout" || scenario.name == "create-failed" || scenario.name == "canceled" {
+				if _, startErr := os.Stat(startedPath); !os.IsNotExist(startErr) {
+					t.Fatal("exec ran before startup/rejection failure was settled")
+				}
+			}
+			if scenario.code == "" {
+				receipt, ok := result.(sandbox.Result)
+				if err != nil || !ok || !receipt.CleanupConfirmed || receipt.Output != "receipt" {
+					t.Fatalf("successful receipt: %+v %v", result, err)
+				}
+				return
+			}
 			var failure *ExecutionError
 			if !errors.As(err, &failure) || failure.Code != scenario.code {
 				t.Fatalf("wrong classification: %v", err)

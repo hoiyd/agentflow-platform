@@ -1,7 +1,7 @@
 # Storage Boundary
 
-PostgreSQL is the application persistence backend. The File Store retirement
-separates durable storage from the state fixtures used by tests and evaluations.
+PostgreSQL is the only application persistence backend. In-memory fixtures serve
+tests and offline evaluations; they are not a supported deployment backend.
 
 ## Consumer Inventory
 
@@ -11,8 +11,6 @@ separates durable storage from the state fixtures used by tests and evaluations.
 | Agent, HTTP, memory, context and tool behavior tests | In-memory fixture containing only consumed capabilities |
 | RAG and Tool evaluation runners | In-memory fixture; preserve offline retrieval and report semantics |
 | Restart, transaction, mutation and reconciliation persistence tests | PostgreSQL integration tests |
-| File/Postgres contract parity tests | Keep PostgreSQL assertions, remove the File arm |
-| JSON loading, saving, legacy normalization and file failure tests | Remove with the file persistence implementation |
 
 The fixture is not a supported backend and must not be imported by the server.
 It does not claim durability, multi-process safety or PostgreSQL query parity.
@@ -42,15 +40,14 @@ TEST_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/agentflow_test?ss
 go vet ./...
 ```
 
-The migrated request-capture, mutation, reconciliation and Workspace suites
-create randomly named disposable databases and drop them at cleanup. Existing
-Postgres suites use the dedicated test database directly. CI supplies pgvector
-and runs both groups; do not mistake a no-database test pass for durable acceptance.
+The PostgreSQL fixture creates randomly named disposable databases and drops
+them at cleanup. CI supplies pgvector; do not mistake a no-database test pass
+for durable acceptance.
 
 The offline RAG baseline retains the same gate result and quality metrics;
 fixture lexical scoring is intentionally not a substitute for PostgreSQL query
 or transaction tests. API DTOs and frontend behavior are unchanged.
 
-Existing user JSON files are not deleted. Importing historical data is outside
-this change. Offline evaluation still means no model/network dependency; tests
-that prove durable behavior explicitly require a local PostgreSQL service.
+Historical JSON files are not a runtime storage source or automatically imported.
+Network-free evaluation profiles use fixtures; explicitly authorized live profiles
+have their own budgets. Durable tests require PostgreSQL.

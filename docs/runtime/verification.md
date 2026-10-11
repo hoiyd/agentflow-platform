@@ -56,9 +56,9 @@ The terminal SSE
 Disabling the control omits `completion_contract`.
 
 Run Verification, Evidence, Artifacts, Replay, and Episode access are guarded by
-the resolved Run Workspace. An omitted request scope selects
-`default_workspace`; a Run ID from another namespace is treated as not found.
-This namespace check does not authenticate the caller.
+the authorized Run Workspace. Omitted scope selects the current owner's active
+default Workspace; a foreign Run ID returns `404`. Identity, current Membership
+and owner checks precede scoped reads; see [resource authorization](../operations/resource-authorization.md).
 
 ## Execution Model
 

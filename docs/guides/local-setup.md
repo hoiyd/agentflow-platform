@@ -77,10 +77,11 @@ npm run dev
 
 Set `NEXT_PUBLIC_API_BASE_URL` only when the API is elsewhere.
 Workspace selection uses the current owner's entities and persisted active
-default; no frontend namespace environment variable is needed. Existing databases
-require the [ownership migration](../operations/workspace-lifecycle.md#legacy-migration)
-before running the upgraded API. New databases create the local owner's space
-automatically.
+default; no frontend namespace environment variable is needed. New databases
+create the local owner's space automatically; migrated databases retain their
+owned entities. The one-off ownership migration commands are retired. For old
+backups, follow [initialization and recovery](../operations/workspace-lifecycle.md#initialization-and-recovery)
+instead of expecting startup to convert legacy schemas.
 
 ## Tests and Offline Evidence
 
