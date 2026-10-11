@@ -95,6 +95,13 @@ apps/api/
     evaluation/     isolated quality, compatibility, load, and recovery evidence
 ```
 
+Within `agent`, Runtime Snapshot capture, restore and validation have separate
+`runtime_snapshot_*.go` owners; `runtime_snapshot.go` resolves frozen services and
+limits. Store document CRUD, search, adjacent-context reads and row scanning live
+in separate `postgres_document*.go` files. Domain DDL lives in
+`postgres_schema_*.go`; `postgres_migrations.go` preserves upgrade order, including
+historical data-preserving steps. Moving SQL must not reorder or rewrite it.
+
 ## Dependency Direction
 
 ```text
