@@ -25,6 +25,12 @@ gate. Domain payload schemas remain separate (`context-quality-eval-v1`,
 `rag-eval-v1`, `agent-routing-eval-v1`, and `task-eval-v1`) so Context selection,
 retrieval ranks, routing outcomes, model tokens, and Tool calls are not confused.
 
+Within `internal/evaluation/{contexteval,rageval,routeeval}`, `runner.go` owns
+suite execution and budgets; `dataset.go`, `report.go`, `sample.go` and
+`metrics.go` own input validation, JSON contracts, per-case execution and scoring.
+Comparison and routing calibration remain separate files with domain-specific
+semantics. These packages reuse `evalreport`; there is no second evaluation engine.
+
 ## Context Quality Gate
 
 The Context runner calls the production Context Assembler against a versioned,
