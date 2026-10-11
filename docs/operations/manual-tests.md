@@ -85,21 +85,22 @@ Manual Tests and require a person to inspect the documented outcomes.
 6. Set a small `knowledge_context_max_tokens` and confirm `context_selection.tokens_used` never exceeds `max_tokens` after transformation.
 7. Run the same query through an Agent and confirm Replay displays the transformation summary and merged source details.
 
-### Workspace Namespace Isolation
+### Workspace Resource Isolation
 
-1. Create one Conversation and one Knowledge document with a unique phrase in
-   `workspace-a`, using `X-Workspace-ID: workspace-a`.
-2. Repeat with different content in `workspace-b`.
-3. List Conversations, search Knowledge, and request Run/Replay endpoints with
-   each header. Confirm neither namespace exposes the other's IDs or content.
-4. Omit the header and confirm only `default_workspace` records are visible;
-   omission must not produce a global result set.
-5. Send conflicting header and `workspace_id` query or payload values and
-   confirm the API returns `400`.
-6. Send the legacy value `default` and confirm it resolves to the same records
-   as `default_workspace`.
-7. Treat this as namespace-isolation evidence only. It does not validate
-   identity, Membership, or ACL behavior.
+1. Enable OIDC and sign in as two distinct owners. Create two Workspaces for
+   the first owner and one for the second; use the numeric IDs from the UI/API.
+2. Store a Conversation and Knowledge document with different unique phrases
+   in each Workspace, using its authorized `X-Workspace-ID`.
+3. In each owned space, list Conversations, search Knowledge and open Run/Replay.
+   Confirm another space's object IDs return `404`, even for the same owner.
+4. Request another owner's Workspace, or one with revoked Membership; expect
+   `404` with no provider calls or data changes. Anonymous requests return `401`.
+5. Omit the selector and confirm only the owner's active default is selected,
+   never a global result set. Conflicting header/query/payload selectors return `400`.
+6. Confirm legacy `default`/`default_workspace` strings are rejected, not aliases
+   for an owned numeric Workspace.
+7. For automated assertions and live-stream revocation, follow
+   [resource authorization](resource-authorization.md#repeatable-evidence).
 
 ### Postgres Lexical Integration
 

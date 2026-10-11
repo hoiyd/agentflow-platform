@@ -58,6 +58,7 @@ for the distinction between Run Events, Trace, Replay, and Episode Report.
 apps/api/
   cmd/server/       process entry point: config, signals, exit reporting
   app/              application composition root and process lifecycle
+    runcommands/    admitted Start/Continue/Resume commands, independent of HTTP
     runcompletion/  answer persistence, citations, verification, terminal state and titles
   internal/
     domain/         persisted entities and shared contracts

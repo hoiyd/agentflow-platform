@@ -19,7 +19,7 @@ a controlled pilot.
 | Resource control | [Admission, backpressure, rate limits, retries, context limits, Run Budget, and timeouts](../runtime/execution-controls.md) have distinct scopes and enforcement owners. |
 | Persistence | Postgres stores persist Runs, Messages, durable Run Events, usage, retrieval data, and Verification records behind shared domain contracts. |
 | Workspace scope | [Owned Workspace entities](workspace-lifecycle.md) have generated IDs, mutable names, defaults, archive/restore and soft deletion. Request admission and persisted-write guards protect Conversation, Run, Document, Memory, Replay and related scope. |
-| Tool execution | [Platform enablement and Agent allowlists](../runtime/agent-profiles.md#two-tool-control-layers) precede a bounded Executor with typed errors, timeout, result limits, tracing, and conservative concurrency. |
+| Tool execution | [Service availability, Workspace grants and Agent selection](../architecture/workspace-agent-tools.md#tool-authorization) precede a bounded Executor with typed errors, timeout, result limits, tracing, and conservative concurrency. |
 | RAG | [Hybrid recall, RRF, reranking, relevance gating, scoped context expansion, injection filtering, and citations](../knowledge/knowledge-rag.md) use one observable pipeline. |
 | Evaluation | The [Golden Dataset v1](../evaluation/rag-golden-dataset.md) pairs a versioned schema and canonical corpus with the production retrieval path, reporting Hit@1/3/5, misses, security decisions, and active component versions. |
 | Evidence | [Run Events, Replay, Episode Reports](../architecture/terms.md#observability-records-and-views), Usage Ledger, and [Verification Evidence](../runtime/verification.md) explain execution and configured outcome checks. |
@@ -62,22 +62,25 @@ model or workload requires them.
 
 ### 1. Secure Access and Data Boundaries
 
-- Keep the implemented OIDC identity/Membership boundary enabled for authenticated
-  access; complete object-level authorization rather than trusting a selected ID.
-- Extend Workspace scope to Agent, Artifact, Evaluation, cleanup, and background
-  operations, and bind it to authenticated Membership without a global fallback.
+- Enable the implemented [OIDC](identity-membership.md), [Workspace lifecycle](workspace-lifecycle.md)
+  and [resource authorization](resource-authorization.md) boundaries for authenticated
+  access. Extend their cross-owner gates whenever adding a resource or background
+  consumer; existing object and Agent/Tool configuration authorization is not pending work.
 - Keep the implemented process-level Provider credential boundary and shared
   redaction sink policy; add scoped Provider and Tool credential references
   when authenticated identities and multiple credential owners exist.
-- Add Resource, Credential, Network, Side-effect, and Approval policy ahead of
-  Tool execution. Agent allowlists may narrow platform policy, never widen it.
+- Preserve the implemented [Tool security policy](../tools/tool-security-policy.md)
+  and [execution boundaries](execution-boundaries.md) when adding capabilities.
+  Durable human approval, scoped filesystem access and reviewed Skill scripts
+  remain separate extensions; Agent allowlists never widen operator authority.
 - Define retention, deletion, and append-only security audit behavior without
   placing sensitive Prompt or Tool payloads in audit records.
 
 ### 2. Durable Execution and Recovery
 
-- Make Postgres the production state source and adopt versioned,
-  backward-compatible migrations with exercised backup and restore.
+- Keep Postgres as the sole production state source; rehearse backup/restore
+  and version rollback for schema changes. Current startup DDL and the
+  single-instance restart/Resume drill do not prove those deployment procedures.
 - Persist Run dispatch atomically with Run creation; bounded Workers claim work
   with stable operation IDs and idempotent usage accounting.
 - Promote the current process-local Run continuity contract to durable Worker
@@ -117,9 +120,10 @@ for a controlled single-tenant pilot:
   definitions, Resume checks, and failure harnesses. MCP would remain a Tool source;
   it does not bypass the existing Catalog, policy, Budget, Executor, or Events.
 - **Sandbox and side effects:** code, Shell, filesystem, and external writes
-  require isolation, idempotency keys, approval, Outbox/reconciliation, and
-  bounded compensation. A timeout alone does not prove that a remote write
-  failed.
+  require capability-specific isolation, idempotency and reconciliation. The
+  implemented [scratch sandbox](sandbox-execution.md) grants no host mounts,
+  file sync or Skill-script execution. Durable approvals and external-write
+  recovery remain additional scope; a timeout does not prove a remote write failed.
 - **Skills:** govern Skills as versioned content with provenance. A Skill cannot
   widen Tool, Credential, network, or budget scope, or inject arbitrary trusted
   instructions.

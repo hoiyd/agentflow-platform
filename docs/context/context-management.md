@@ -22,8 +22,8 @@ Context compaction is non-destructive. It creates a persisted structured summary
 The summarizer always uses the Chat LLM selected for the originating Run. It
 does not use the independent embedding service or a default Chat model.
 
-Source-aware session history retrieval closes the remaining recovery gap. Before
-each model call, the Runtime searches the durable conversation Messages and
+Source-aware session history retrieval recovers exact older evidence. At each
+non-isolated Turn entry, the Runtime searches the durable conversation Messages and
 execution Events using terms from the current input. It can reintroduce exact
 older IDs, commands, errors, and nearby sources even when those Messages were
 covered by compaction. Retrieved sources are a temporary context projection;
@@ -59,7 +59,8 @@ retained and counted in the input budget; absent and explicitly empty reasoning
 remain distinct. Ordinary tracing removes reasoning from a copy, never from the
 outgoing request. Content retention remains governed by Request Capture, not
 by the Manifest. This preserves existing provider contracts; it does not add
-support for arbitrary provider extensions or expose reasoning in Chat.
+support for arbitrary provider extensions. Chat display and sanitized reasoning
+persistence follow the separate [provider reasoning policy](../runtime/provider-reasoning.md).
 
 Selected recalled Memory is JSON-encoded inside
 `<untrusted_memory_context policy="recalled-memory-trust-v1">`. The system
@@ -116,7 +117,7 @@ are Replay-only under the [shared compatibility rule](../architecture/terms.md#r
 ## When Compaction Runs
 
 - **Soft compaction** runs asynchronously after a completed Run when context usage reaches 70% of the available model input budget. It prefers the highest real `prompt_tokens` value observed in the Run and falls back to local token estimation.
-- **Hard compaction** runs as a best-effort preflight before each model call when estimated conversation context reaches 85% of the available input budget.
+- **Hard compaction** runs as a best-effort check at non-isolated Turn entry when estimated conversation context reaches 85% of the available input budget. A Tool loop's later `PrepareFollowup` rounds reassemble and enforce the input budget, but do not rerun this check or session-history search for every physical provider attempt. Isolated Worker Turns skip conversation compaction and history retrieval.
 - **Provider-overflow compaction** is forced after a text-only Model Call returns `context_length_exceeded`. AgentFlow retries that logical input once, and only when the persisted compaction generation advanced. Agent streams that may have executed Tools are not replayed automatically.
 - Compaction is skipped when fewer than two new source messages can be summarized or when `CONTEXT_COMPACTION_MODE=off`.
 - A failed or timed-out compaction does not block the main model call. AgentFlow records `context.compaction_failed` and falls back to normal recent-history selection.

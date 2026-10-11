@@ -118,7 +118,7 @@ settlement.
 ## Freeze Protocol, Keep Deployment Policy Live
 
 A Run stores a Runtime Snapshot containing the protocol required for Resume and
-Replay: mode, agent configuration, model identity, tool schemas, context policy,
+Replay: mode, agent configuration, model identity, tool schemas, Context Assembly configuration,
 and Run Budget. Credentials, process concurrency, rate-limit buckets, current
 tool handlers, and recovery thresholds stay live.
 
@@ -177,9 +177,10 @@ an accidental source of truth.
 
 ## What Remains Deliberately Unfinished
 
-- Identity-derived Workspace lifecycle, Membership/ACL authorization, and
-  multi-tenant release validation. Mandatory namespace filtering is already
-  implemented, but it is not an authorization boundary by itself.
+- Team sharing, role-based/object-sharing ACLs, scoped credentials and untrusted
+  multi-tenant release validation. Owner-scoped Workspace lifecycle, current
+  Membership/resource authorization and Workspace Agent/Tool configuration are
+  implemented; namespace filtering alone is still not authentication.
 - A persisted Evaluation Registry and broader live-domain calibration. Versioned
   fixtures, hashes, Git/CI history, and deterministic calibration/holdout gates
   already exist; they do not establish general semantic quality.

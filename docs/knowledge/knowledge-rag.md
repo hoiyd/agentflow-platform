@@ -137,10 +137,11 @@ Run, which in turn inherits it from the Conversation. Memory and both Semantic
 and Keyword recall receive that same value. Postgres stores apply an
 exact workspace predicate before ranking candidates.
 
-The Retrieval Pipeline always normalizes an empty scope to the reserved
-`default_workspace` namespace before Semantic or Keyword recall. A new internal
-caller therefore cannot accidentally turn an unscoped request into a global
-search.
+Production callers pass an authorized numeric Workspace ID. Request omission
+selects the owner's active default; the persisted Run supplies scope for Agent
+retrieval. Internal legacy fixtures still normalize an empty scope to
+`default_workspace`, never to an unfiltered query; that string is not a valid
+runtime Workspace alias. See [resource authorization](../operations/resource-authorization.md).
 
 Dense recall uses cosine similarity against document chunk embeddings. Lexical
 recall can introduce a chunk that is absent from the dense candidate set, which
