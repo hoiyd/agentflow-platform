@@ -6,8 +6,8 @@ export type ReplayPageData = {
   reportError: string;
 };
 
-export async function getReplayPageData(runId: string): Promise<ReplayPageData> {
-  const [replayResult, reportResult] = await Promise.allSettled([getRunReplay(runId), getEpisodeReport(runId)]);
+export async function getReplayPageData(runId: string, signal?: AbortSignal): Promise<ReplayPageData> {
+  const [replayResult, reportResult] = await Promise.allSettled([getRunReplay(runId, signal), getEpisodeReport(runId, signal)]);
   if (replayResult.status === "rejected") throw replayResult.reason;
   return {
     data: replayResult.value,

@@ -59,16 +59,17 @@ func (s *legacyRecallStore) SearchMemories(domain.MemorySearch) ([]domain.Retrie
 	return s.items, nil
 }
 
-type retryEmbeddingStub struct {
+type retryMemoryStore struct {
+	*recordingStore
 	attempts int
 }
 
-func (e *retryEmbeddingStub) EmbedText(context.Context, string) (openai.Embedding, error) {
-	e.attempts++
-	if e.attempts == 1 {
-		return openai.Embedding{}, errors.New("temporary embedding failure")
+func (s *retryMemoryStore) CreateMemory(item domain.Memory, embedding domain.MemoryEmbedding) (domain.Memory, error) {
+	s.attempts++
+	if s.attempts == 1 {
+		return domain.Memory{}, errors.New("temporary storage failure")
 	}
-	return openai.Embedding{Vector: []float64{1}, Provider: "test", Model: "retry"}, nil
+	return s.recordingStore.CreateMemory(item, embedding)
 }
 
 func (e embeddingStub) EmbedText(context.Context, string) (openai.Embedding, error) {
@@ -123,17 +124,22 @@ func TestBuiltinProviderRequiresInitialization(t *testing.T) {
 	}
 }
 
-func TestBuiltinProviderRetriesTransientOperationsWithinBound(t *testing.T) {
-	embedder := &retryEmbeddingStub{}
-	provider := newTestProvider(t, &recordingStore{}, embedder, ProviderOptions{
+func TestBuiltinProviderRetriesStorageWithoutRepeatingEmbedding(t *testing.T) {
+	store := &retryMemoryStore{recordingStore: &recordingStore{}}
+	embeddings := 0
+	embedder := mutationEmbedderFunc(func(context.Context, string) (openai.Embedding, error) {
+		embeddings++
+		return immediateEmbedder{}.EmbedText(context.Background(), "fact")
+	})
+	provider := newTestProvider(t, store, embedder, ProviderOptions{
 		MaxAttempts: 2, RetryBaseDelay: time.Millisecond,
 	})
 	defer closeProvider(t, provider)
 	if _, err := provider.Commit(context.Background(), domain.Memory{Kind: "fact", Content: "retry safely"}); err != nil {
 		t.Fatalf("commit after retry: %v", err)
 	}
-	if embedder.attempts != 2 {
-		t.Fatalf("embedding attempts=%d want=2", embedder.attempts)
+	if store.attempts != 2 || embeddings != 1 {
+		t.Fatalf("storage attempts=%d embeddings=%d want=2/1", store.attempts, embeddings)
 	}
 }
 

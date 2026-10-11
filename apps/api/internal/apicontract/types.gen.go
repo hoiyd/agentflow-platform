@@ -144,6 +144,45 @@ func (e MessageReasoningStatus) Valid() bool {
 	}
 }
 
+// Defines values for ModelRequestCaptureMode.
+const (
+	Full         ModelRequestCaptureMode = "full"
+	MetadataOnly ModelRequestCaptureMode = "metadata_only"
+	Redacted     ModelRequestCaptureMode = "redacted"
+)
+
+// Valid indicates whether the value is a known member of the ModelRequestCaptureMode enum.
+func (e ModelRequestCaptureMode) Valid() bool {
+	switch e {
+	case Full:
+		return true
+	case MetadataOnly:
+		return true
+	case Redacted:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ModelRequestDebugResponseReconstructabilityStatus.
+const (
+	Invalid ModelRequestDebugResponseReconstructabilityStatus = "invalid"
+	Valid   ModelRequestDebugResponseReconstructabilityStatus = "valid"
+)
+
+// Valid indicates whether the value is a known member of the ModelRequestDebugResponseReconstructabilityStatus enum.
+func (e ModelRequestDebugResponseReconstructabilityStatus) Valid() bool {
+	switch e {
+	case Invalid:
+		return true
+	case Valid:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OperatorAttentionItemReason.
 const (
 	OperatorAttentionItemReasonBudgetExhausted        OperatorAttentionItemReason = "budget_exhausted"
@@ -387,6 +426,123 @@ func (e SkillEvidenceInstructions) Valid() bool {
 	case SkillEvidenceInstructionsIncluded:
 		return true
 	case SkillEvidenceInstructionsNotObserved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskBlockerStatus.
+const (
+	Open     TaskBlockerStatus = "open"
+	Resolved TaskBlockerStatus = "resolved"
+)
+
+// Valid indicates whether the value is a known member of the TaskBlockerStatus enum.
+func (e TaskBlockerStatus) Valid() bool {
+	switch e {
+	case Open:
+		return true
+	case Resolved:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskItemStatus.
+const (
+	TaskItemStatusCanceled   TaskItemStatus = "canceled"
+	TaskItemStatusCompleted  TaskItemStatus = "completed"
+	TaskItemStatusInProgress TaskItemStatus = "in_progress"
+	TaskItemStatusPending    TaskItemStatus = "pending"
+)
+
+// Valid indicates whether the value is a known member of the TaskItemStatus enum.
+func (e TaskItemStatus) Valid() bool {
+	switch e {
+	case TaskItemStatusCanceled:
+		return true
+	case TaskItemStatusCompleted:
+		return true
+	case TaskItemStatusInProgress:
+		return true
+	case TaskItemStatusPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TaskStateOperationType.
+const (
+	AddArtifactRef    TaskStateOperationType = "add_artifact_ref"
+	AddDecision       TaskStateOperationType = "add_decision"
+	ClearGoal         TaskStateOperationType = "clear_goal"
+	RemoveArtifactRef TaskStateOperationType = "remove_artifact_ref"
+	RemoveBlocker     TaskStateOperationType = "remove_blocker"
+	RemoveConstraint  TaskStateOperationType = "remove_constraint"
+	RemoveTask        TaskStateOperationType = "remove_task"
+	ResolveBlocker    TaskStateOperationType = "resolve_blocker"
+	SetGoal           TaskStateOperationType = "set_goal"
+	SetTaskStatus     TaskStateOperationType = "set_task_status"
+	UpsertBlocker     TaskStateOperationType = "upsert_blocker"
+	UpsertConstraint  TaskStateOperationType = "upsert_constraint"
+	UpsertTask        TaskStateOperationType = "upsert_task"
+)
+
+// Valid indicates whether the value is a known member of the TaskStateOperationType enum.
+func (e TaskStateOperationType) Valid() bool {
+	switch e {
+	case AddArtifactRef:
+		return true
+	case AddDecision:
+		return true
+	case ClearGoal:
+		return true
+	case RemoveArtifactRef:
+		return true
+	case RemoveBlocker:
+		return true
+	case RemoveConstraint:
+		return true
+	case RemoveTask:
+		return true
+	case ResolveBlocker:
+		return true
+	case SetGoal:
+		return true
+	case SetTaskStatus:
+		return true
+	case UpsertBlocker:
+		return true
+	case UpsertConstraint:
+		return true
+	case UpsertTask:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolEffectReconciliationAction.
+const (
+	Compensate       ToolEffectReconciliationAction = "compensate"
+	ConfirmCommitted ToolEffectReconciliationAction = "confirm_committed"
+	ConfirmFailed    ToolEffectReconciliationAction = "confirm_failed"
+	RetryWithSameKey ToolEffectReconciliationAction = "retry_with_same_key"
+)
+
+// Valid indicates whether the value is a known member of the ToolEffectReconciliationAction enum.
+func (e ToolEffectReconciliationAction) Valid() bool {
+	switch e {
+	case Compensate:
+		return true
+	case ConfirmCommitted:
+		return true
+	case ConfirmFailed:
+		return true
+	case RetryWithSameKey:
 		return true
 	default:
 		return false
@@ -723,6 +879,78 @@ type DeleteConversationResponse struct {
 	Deleted bool `json:"deleted"`
 }
 
+// EpisodeError defines model for EpisodeError.
+type EpisodeError struct {
+	Category  *string `json:"category,omitempty"`
+	EventId   *string `json:"event_id,omitempty"`
+	Kind      *string `json:"kind,omitempty"`
+	Message   string  `json:"message"`
+	Retryable *bool   `json:"retryable,omitempty"`
+	Source    string  `json:"source"`
+	StepId    *string `json:"step_id,omitempty"`
+}
+
+// EpisodeLLMCall defines model for EpisodeLLMCall.
+type EpisodeLLMCall struct {
+	AgentId             *string `json:"agent_id,omitempty"`
+	CompletionTokens    *int    `json:"completion_tokens,omitempty"`
+	DurationMs          *int64  `json:"duration_ms,omitempty"`
+	EventId             string  `json:"event_id"`
+	Framework           *string `json:"framework,omitempty"`
+	Model               *string `json:"model,omitempty"`
+	OutputChars         *int    `json:"output_chars,omitempty"`
+	PromptTokens        *int    `json:"prompt_tokens,omitempty"`
+	Role                *string `json:"role,omitempty"`
+	StepId              *string `json:"step_id,omitempty"`
+	TokenUsageEstimated *bool   `json:"token_usage_estimated,omitempty"`
+	TotalTokens         *int    `json:"total_tokens,omitempty"`
+}
+
+// EpisodeReport defines model for EpisodeReport.
+type EpisodeReport struct {
+	Agent        Agent                `json:"agent"`
+	Conversation Conversation         `json:"conversation"`
+	Errors       *[]EpisodeError      `json:"errors"`
+	FinalOutput  string               `json:"final_output"`
+	LlmCalls     *[]EpisodeLLMCall    `json:"llm_calls"`
+	Messages     *[]Message           `json:"messages"`
+	Retrievals   EpisodeRetrievals    `json:"retrievals"`
+	Run          Run                  `json:"run"`
+	Steps        *[]CollaborationStep `json:"steps"`
+	Task         string               `json:"task"`
+	ToolCalls    *[]EpisodeToolCall   `json:"tool_calls"`
+	TraceSummary RunTraceSummary      `json:"trace_summary"`
+	Verification EpisodeVerification  `json:"verification"`
+}
+
+// EpisodeRetrievals defines model for EpisodeRetrievals.
+type EpisodeRetrievals struct {
+	Chunks     *[]map[string]interface{} `json:"chunks"`
+	EventCount int                       `json:"event_count"`
+	Memories   *[]map[string]interface{} `json:"memories"`
+}
+
+// EpisodeToolCall defines model for EpisodeToolCall.
+type EpisodeToolCall struct {
+	DurationMs *int64  `json:"duration_ms,omitempty"`
+	Error      *string `json:"error,omitempty"`
+	EventId    string  `json:"event_id"`
+	StepId     *string `json:"step_id,omitempty"`
+	ToolCallId *string `json:"tool_call_id,omitempty"`
+	ToolName   *string `json:"tool_name,omitempty"`
+}
+
+// EpisodeVerification defines model for EpisodeVerification.
+type EpisodeVerification struct {
+	Artifacts   *[]VerificationArtifact `json:"artifacts"`
+	Contract    *map[string]interface{} `json:"contract,omitempty"`
+	Evidence    *[]string               `json:"evidence"`
+	Records     *[]VerificationEvidence `json:"records"`
+	Status      string                  `json:"status"`
+	SubjectHash *string                 `json:"subject_hash,omitempty"`
+	Warnings    *[]string               `json:"warnings"`
+}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Category  *string `json:"category,omitempty"`
@@ -800,6 +1028,77 @@ type MessageReasoningFormat string
 
 // MessageReasoningStatus defines model for MessageReasoning.Status.
 type MessageReasoningStatus string
+
+// ModelRequestCapture defines model for ModelRequestCapture.
+type ModelRequestCapture struct {
+	Content           *string                 `json:"content,omitempty"`
+	ContentHash       *string                 `json:"content_hash,omitempty"`
+	Expired           bool                    `json:"expired"`
+	ExpiresAt         *time.Time              `json:"expires_at,omitempty"`
+	Mode              ModelRequestCaptureMode `json:"mode"`
+	OriginalBytes     int                     `json:"original_bytes"`
+	Reconstructable   bool                    `json:"reconstructable"`
+	Redacted          bool                    `json:"redacted"`
+	RedactionCount    int                     `json:"redaction_count"`
+	RedactionStrategy *string                 `json:"redaction_strategy,omitempty"`
+	StoredBytes       int                     `json:"stored_bytes"`
+	Truncated         bool                    `json:"truncated"`
+}
+
+// ModelRequestCaptureMode defines model for ModelRequestCapture.Mode.
+type ModelRequestCaptureMode string
+
+// ModelRequestDebugRecord defines model for ModelRequestDebugRecord.
+type ModelRequestDebugRecord struct {
+	Capture  ModelRequestCapture  `json:"capture"`
+	Envelope ModelRequestEnvelope `json:"envelope"`
+
+	// Manifest Context Manifest metadata
+	Manifest   *map[string]interface{} `json:"manifest,omitempty"`
+	SourceDiff ModelRequestSourceDiff  `json:"source_diff"`
+}
+
+// ModelRequestDebugResponse defines model for ModelRequestDebugResponse.
+type ModelRequestDebugResponse struct {
+	InvariantError           *string                                           `json:"invariant_error,omitempty"`
+	ReconstructabilityStatus ModelRequestDebugResponseReconstructabilityStatus `json:"reconstructability_status"`
+	Records                  []ModelRequestDebugRecord                         `json:"records"`
+	RunId                    string                                            `json:"run_id"`
+}
+
+// ModelRequestDebugResponseReconstructabilityStatus defines model for ModelRequestDebugResponse.ReconstructabilityStatus.
+type ModelRequestDebugResponseReconstructabilityStatus string
+
+// ModelRequestEnvelope defines model for ModelRequestEnvelope.
+type ModelRequestEnvelope struct {
+	Attempt              int                     `json:"attempt"`
+	ContextManifestId    *string                 `json:"context_manifest_id,omitempty"`
+	ConversationId       string                  `json:"conversation_id"`
+	CreatedAt            time.Time               `json:"created_at"`
+	Id                   string                  `json:"id"`
+	MessageCount         int                     `json:"message_count"`
+	Model                string                  `json:"model"`
+	ModelCallId          string                  `json:"model_call_id"`
+	Operation            string                  `json:"operation"`
+	Parameters           *map[string]interface{} `json:"parameters"`
+	PayloadBytes         int                     `json:"payload_bytes"`
+	PayloadHash          string                  `json:"payload_hash"`
+	Provider             string                  `json:"provider"`
+	RunId                string                  `json:"run_id"`
+	RuntimeSnapshotHash  string                  `json:"runtime_snapshot_hash"`
+	SourceTokenBreakdown *map[string]int         `json:"source_token_breakdown"`
+	StageId              *string                 `json:"stage_id,omitempty"`
+	ToolCount            int                     `json:"tool_count"`
+	TurnId               *string                 `json:"turn_id,omitempty"`
+}
+
+// ModelRequestSourceDiff defines model for ModelRequestSourceDiff.
+type ModelRequestSourceDiff struct {
+	EnvelopeSelectedTokens map[string]int `json:"envelope_selected_tokens"`
+	ManifestExcludedTokens map[string]int `json:"manifest_excluded_tokens"`
+	ManifestSelectedTokens map[string]int `json:"manifest_selected_tokens"`
+	MatchesEnvelope        bool           `json:"matches_envelope"`
+}
 
 // OperatorAttentionAction defines model for OperatorAttentionAction.
 type OperatorAttentionAction struct {
@@ -879,6 +1178,34 @@ type RAGCitation struct {
 	ToolEventId     *string   `json:"tool_event_id,omitempty"`
 }
 
+// RecoveryAction defines model for RecoveryAction.
+type RecoveryAction struct {
+	Enabled           bool    `json:"enabled"`
+	Kind              string  `json:"kind"`
+	Label             string  `json:"label"`
+	TargetId          *string `json:"target_id,omitempty"`
+	UnavailableReason *string `json:"unavailable_reason,omitempty"`
+}
+
+// RecoveryEvidence defines model for RecoveryEvidence.
+type RecoveryEvidence struct {
+	ArtifactRefs *[]string `json:"artifact_refs,omitempty"`
+	Id           *string   `json:"id,omitempty"`
+	Kind         string    `json:"kind"`
+	Status       *string   `json:"status,omitempty"`
+	Summary      string    `json:"summary"`
+}
+
+// RecoverySummary defines model for RecoverySummary.
+type RecoverySummary struct {
+	Actions      *[]RecoveryAction   `json:"actions"`
+	ArtifactRefs *[]string           `json:"artifact_refs"`
+	Evidence     *[]RecoveryEvidence `json:"evidence"`
+	Message      string              `json:"message"`
+	Reason       string              `json:"reason"`
+	Title        string              `json:"title"`
+}
+
 // ResumeRunRequest defines model for ResumeRunRequest.
 type ResumeRunRequest struct {
 	UserInput string `json:"user_input"`
@@ -955,32 +1282,52 @@ type RunInputRequest struct {
 // RunInputRequestKind defines model for RunInputRequest.Kind.
 type RunInputRequestKind string
 
-// RunReplay defines model for RunReplay.
-type RunReplay struct {
-	Conversation          Conversation             `json:"conversation"`
-	Messages              []Message                `json:"messages"`
-	Projection            RunReplay_Projection     `json:"projection"`
-	RecoverySummary       *map[string]interface{}  `json:"recovery_summary,omitempty"`
-	Run                   Run                      `json:"run"`
-	RunEvents             []RunEvent               `json:"run_events"`
-	RuntimeSnapshot       *map[string]interface{}  `json:"runtime_snapshot,omitempty"`
-	StageCheckpoints      []map[string]interface{} `json:"stage_checkpoints"`
-	Steps                 []CollaborationStep      `json:"steps"`
-	Summary               RunTraceSummary          `json:"summary"`
-	TaskStateRevisions    []map[string]interface{} `json:"task_state_revisions"`
-	ToolArtifacts         []map[string]interface{} `json:"tool_artifacts"`
-	ToolEffects           []map[string]interface{} `json:"tool_effects"`
-	UsageLedger           RunUsageLedger           `json:"usage_ledger"`
-	VerificationArtifacts []VerificationArtifact   `json:"verification_artifacts"`
-	VerificationEvidence  []VerificationEvidence   `json:"verification_evidence"`
+// RunProjection defines model for RunProjection.
+type RunProjection struct {
+	ActiveModelCallIds *[]string `json:"active_model_call_ids"`
+	ActiveStageIds     *[]string `json:"active_stage_ids"`
+	ActiveToolCallIds  *[]string `json:"active_tool_call_ids"`
+	ActiveTurnIds      *[]string `json:"active_turn_ids"`
+	AsOfSequence       int64     `json:"as_of_sequence"`
+	ConversationId     string    `json:"conversation_id"`
+	RunId              string    `json:"run_id"`
+
+	// Status Durable status; read views tolerate historical values.
+	Status             string          `json:"status"`
+	Summary            RunTraceSummary `json:"summary"`
+	VerificationStatus string          `json:"verification_status"`
 }
 
-// RunReplay_Projection defines model for RunReplay.Projection.
-type RunReplay_Projection struct {
-	PartialOutputs       *[]PartialOutput       `json:"partial_outputs,omitempty"`
-	SkillEvidence        *[]SkillEvidence       `json:"skill_evidence,omitempty"`
-	ToolProgress         *[]ToolProgress        `json:"tool_progress,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+// RunProjectionSnapshot defines model for RunProjectionSnapshot.
+type RunProjectionSnapshot struct {
+	AsOfSequence      int64                      `json:"as_of_sequence"`
+	InvariantFailures *[]RuntimeInvariantFailure `json:"invariant_failures"`
+	PartialOutputs    *[]PartialOutput           `json:"partial_outputs"`
+	Run               RunProjection              `json:"run"`
+	SkillEvidence     *[]SkillEvidence           `json:"skill_evidence,omitempty"`
+	ToolProgress      *[]ToolProgress            `json:"tool_progress"`
+	Usage             UsageProjection            `json:"usage"`
+	Verification      VerificationProjection     `json:"verification"`
+}
+
+// RunReplay defines model for RunReplay.
+type RunReplay struct {
+	Conversation          Conversation            `json:"conversation"`
+	Messages              *[]Message              `json:"messages"`
+	Projection            RunProjectionSnapshot   `json:"projection"`
+	RecoverySummary       *RecoverySummary        `json:"recovery_summary,omitempty"`
+	Run                   Run                     `json:"run"`
+	RunEvents             *[]RunEvent             `json:"run_events"`
+	RuntimeSnapshot       *map[string]interface{} `json:"runtime_snapshot,omitempty"`
+	StageCheckpoints      *[]StageCheckpoint      `json:"stage_checkpoints"`
+	Steps                 *[]CollaborationStep    `json:"steps"`
+	Summary               RunTraceSummary         `json:"summary"`
+	TaskStateRevisions    *[]TaskStateRevision    `json:"task_state_revisions"`
+	ToolArtifacts         *[]ToolArtifact         `json:"tool_artifacts"`
+	ToolEffects           *[]ToolEffect           `json:"tool_effects"`
+	UsageLedger           RunUsageLedger          `json:"usage_ledger"`
+	VerificationArtifacts *[]VerificationArtifact `json:"verification_artifacts"`
+	VerificationEvidence  *[]VerificationEvidence `json:"verification_evidence"`
 }
 
 // RunStatus defines model for RunStatus.
@@ -1035,7 +1382,7 @@ type RunUsageEntryPurpose string
 // RunUsageLedger defines model for RunUsageLedger.
 type RunUsageLedger struct {
 	Budget    RuntimeRunBudget `json:"budget"`
-	Entries   []RunUsageEntry  `json:"entries"`
+	Entries   *[]RunUsageEntry `json:"entries"`
 	RunId     string           `json:"run_id"`
 	Totals    RunUsageTotals   `json:"totals"`
 	UpdatedAt *time.Time       `json:"updated_at,omitempty"`
@@ -1051,6 +1398,16 @@ type RunUsageTotals struct {
 	PromptTokens        int   `json:"prompt_tokens"`
 	ToolCalls           int   `json:"tool_calls"`
 	TotalTokens         int   `json:"total_tokens"`
+}
+
+// RuntimeInvariantFailure defines model for RuntimeInvariantFailure.
+type RuntimeInvariantFailure struct {
+	Code     string  `json:"code"`
+	EventId  *string `json:"event_id,omitempty"`
+	Message  string  `json:"message"`
+	Owner    string  `json:"owner"`
+	RunId    string  `json:"run_id"`
+	Sequence *int64  `json:"sequence,omitempty"`
 }
 
 // RuntimeRunBudget defines model for RuntimeRunBudget.
@@ -1117,6 +1474,190 @@ type SkillResourceEvidence struct {
 	Path       string `json:"path"`
 	Sequence   int64  `json:"sequence"`
 	TotalBytes int    `json:"total_bytes"`
+}
+
+// StageCheckpoint defines model for StageCheckpoint.
+type StageCheckpoint struct {
+	ConversationId      string    `json:"conversation_id"`
+	CreatedAt           time.Time `json:"created_at"`
+	Error               *string   `json:"error,omitempty"`
+	EventCursor         int64     `json:"event_cursor"`
+	Id                  string    `json:"id"`
+	InputHash           string    `json:"input_hash"`
+	OutputHash          *string   `json:"output_hash,omitempty"`
+	Provider            string    `json:"provider"`
+	RunId               string    `json:"run_id"`
+	RuntimeSnapshotHash string    `json:"runtime_snapshot_hash"`
+	StageId             string    `json:"stage_id"`
+	Status              string    `json:"status"`
+	ToolDefinitionsHash string    `json:"tool_definitions_hash"`
+	UpdatedAt           time.Time `json:"updated_at"`
+}
+
+// TaskBlocker defines model for TaskBlocker.
+type TaskBlocker struct {
+	Description string            `json:"description"`
+	Id          string            `json:"id"`
+	Status      TaskBlockerStatus `json:"status"`
+}
+
+// TaskBlockerStatus defines model for TaskBlockerStatus.
+type TaskBlockerStatus string
+
+// TaskConstraint defines model for TaskConstraint.
+type TaskConstraint struct {
+	Id        string `json:"id"`
+	Statement string `json:"statement"`
+}
+
+// TaskDecision defines model for TaskDecision.
+type TaskDecision struct {
+	Id           string  `json:"id"`
+	Rationale    *string `json:"rationale,omitempty"`
+	Statement    string  `json:"statement"`
+	SupersedesId *string `json:"supersedes_id,omitempty"`
+}
+
+// TaskItem defines model for TaskItem.
+type TaskItem struct {
+	ArtifactRefs *[]string      `json:"artifact_refs,omitempty"`
+	Details      *string        `json:"details,omitempty"`
+	Id           string         `json:"id"`
+	Status       TaskItemStatus `json:"status"`
+	Title        string         `json:"title"`
+}
+
+// TaskItemStatus defines model for TaskItemStatus.
+type TaskItemStatus string
+
+// TaskState defines model for TaskState.
+type TaskState struct {
+	ArtifactRefs   []string         `json:"artifact_refs"`
+	Blockers       []TaskBlocker    `json:"blockers"`
+	Constraints    []TaskConstraint `json:"constraints"`
+	ConversationId string           `json:"conversation_id"`
+	Decisions      []TaskDecision   `json:"decisions"`
+	Goal           *string          `json:"goal,omitempty"`
+	SchemaVersion  int              `json:"schema_version"`
+	Tasks          []TaskItem       `json:"tasks"`
+	UpdatedAt      time.Time        `json:"updated_at"`
+	Version        int64            `json:"version"`
+	WorkspaceId    string           `json:"workspace_id"`
+}
+
+// TaskStateOperation Closed command names; operation-specific required fields are validated by the domain patch executor.
+type TaskStateOperation struct {
+	ArtifactRef  *string                `json:"artifact_ref,omitempty"`
+	Blocker      *TaskBlocker           `json:"blocker,omitempty"`
+	BlockerId    *string                `json:"blocker_id,omitempty"`
+	Constraint   *TaskConstraint        `json:"constraint,omitempty"`
+	ConstraintId *string                `json:"constraint_id,omitempty"`
+	Decision     *TaskDecision          `json:"decision,omitempty"`
+	Goal         *string                `json:"goal,omitempty"`
+	Task         *TaskItem              `json:"task,omitempty"`
+	TaskId       *string                `json:"task_id,omitempty"`
+	TaskStatus   *TaskItemStatus        `json:"task_status,omitempty"`
+	Type         TaskStateOperationType `json:"type"`
+}
+
+// TaskStateOperationType defines model for TaskStateOperation.Type.
+type TaskStateOperationType string
+
+// TaskStatePatch defines model for TaskStatePatch.
+type TaskStatePatch struct {
+	ExpectedVersion int64                `json:"expected_version"`
+	Operations      []TaskStateOperation `json:"operations"`
+}
+
+// TaskStateRevision defines model for TaskStateRevision.
+type TaskStateRevision struct {
+	ConversationId  string          `json:"conversation_id"`
+	CreatedAt       time.Time       `json:"created_at"`
+	Id              string          `json:"id"`
+	Patch           TaskStatePatch  `json:"patch"`
+	PreviousVersion int64           `json:"previous_version"`
+	Source          TaskStateSource `json:"source"`
+	State           TaskState       `json:"state"`
+	Version         int64           `json:"version"`
+	WorkspaceId     string          `json:"workspace_id"`
+}
+
+// TaskStateSource defines model for TaskStateSource.
+type TaskStateSource struct {
+	ActorId         *string `json:"actor_id,omitempty"`
+	ActorType       string  `json:"actor_type"`
+	RunId           *string `json:"run_id,omitempty"`
+	SourceMessageId *string `json:"source_message_id,omitempty"`
+	StageId         *string `json:"stage_id,omitempty"`
+	TurnId          *string `json:"turn_id,omitempty"`
+}
+
+// ToolArtifact defines model for ToolArtifact.
+type ToolArtifact struct {
+	ContentHash        string     `json:"content_hash"`
+	CreatedAt          time.Time  `json:"created_at"`
+	DefinitionRevision *string    `json:"definition_revision,omitempty"`
+	Expired            *bool      `json:"expired,omitempty"`
+	ExpiresAt          *time.Time `json:"expires_at,omitempty"`
+	Id                 string     `json:"id"`
+	MediaType          string     `json:"media_type"`
+	OriginalByteSize   int        `json:"original_byte_size"`
+	Redacted           bool       `json:"redacted"`
+	RedactionCount     int        `json:"redaction_count"`
+	RedactionStrategy  *string    `json:"redaction_strategy,omitempty"`
+	RunId              string     `json:"run_id"`
+	SchemaVersion      int        `json:"schema_version"`
+	StageId            *string    `json:"stage_id,omitempty"`
+	StoredByteSize     int        `json:"stored_byte_size"`
+	ToolCallId         string     `json:"tool_call_id"`
+	ToolName           string     `json:"tool_name"`
+	TurnId             *string    `json:"turn_id,omitempty"`
+}
+
+// ToolEffect defines model for ToolEffect.
+type ToolEffect struct {
+	AvailableActions   *[]ToolEffectReconciliationAction `json:"available_actions,omitempty"`
+	CreatedAt          time.Time                         `json:"created_at"`
+	DefinitionRevision *string                           `json:"definition_revision,omitempty"`
+	Error              *string                           `json:"error,omitempty"`
+	HasResult          bool                              `json:"has_result"`
+	IdempotencyKey     string                            `json:"idempotency_key"`
+	RequestHash        string                            `json:"request_hash"`
+	RunId              string                            `json:"run_id"`
+	StageId            string                            `json:"stage_id"`
+	Status             string                            `json:"status"`
+	ToolCallId         string                            `json:"tool_call_id"`
+	ToolName           string                            `json:"tool_name"`
+	TurnId             *string                           `json:"turn_id,omitempty"`
+	UpdatedAt          time.Time                         `json:"updated_at"`
+	Version            int64                             `json:"version"`
+}
+
+// ToolEffectList defines model for ToolEffectList.
+type ToolEffectList struct {
+	Effects []ToolEffect `json:"effects"`
+	RunId   string       `json:"run_id"`
+}
+
+// ToolEffectReconciliationAction defines model for ToolEffectReconciliationAction.
+type ToolEffectReconciliationAction string
+
+// ToolEffectReconciliationCommand defines model for ToolEffectReconciliationCommand.
+type ToolEffectReconciliationCommand struct {
+	Action          ToolEffectReconciliationAction `json:"action"`
+	Actor           string                         `json:"actor"`
+	CommandId       string                         `json:"command_id"`
+	ExpectedVersion int64                          `json:"expected_version"`
+	Reason          string                         `json:"reason"`
+	Result          interface{}                    `json:"result,omitempty"`
+}
+
+// ToolEffectReconciliationOutcome defines model for ToolEffectReconciliationOutcome.
+type ToolEffectReconciliationOutcome struct {
+	Applied   bool       `json:"applied"`
+	CommandId string     `json:"command_id"`
+	Effect    ToolEffect `json:"effect"`
+	Outcome   string     `json:"outcome"`
 }
 
 // ToolInfo defines model for ToolInfo.
@@ -1206,6 +1747,12 @@ type UsagePricing struct {
 	Source                            string `json:"source"`
 }
 
+// UsageProjection defines model for UsageProjection.
+type UsageProjection struct {
+	AsOfSequence int64          `json:"as_of_sequence"`
+	Ledger       RunUsageLedger `json:"ledger"`
+}
+
 // VerificationArtifact defines model for VerificationArtifact.
 type VerificationArtifact struct {
 	EvidenceId           string                 `json:"evidence_id"`
@@ -1246,6 +1793,16 @@ type VerificationPolicyInputMode string
 
 // VerificationPolicyInputOnExhausted defines model for VerificationPolicyInput.OnExhausted.
 type VerificationPolicyInputOnExhausted string
+
+// VerificationProjection defines model for VerificationProjection.
+type VerificationProjection struct {
+	AsOfSequence       int64   `json:"as_of_sequence"`
+	CurrentSubjectHash *string `json:"current_subject_hash,omitempty"`
+	EvidenceCount      int     `json:"evidence_count"`
+	FreshEvidenceCount int     `json:"fresh_evidence_count"`
+	LatestAttempt      int     `json:"latest_attempt"`
+	Status             string  `json:"status"`
+}
 
 // VerificationStatus defines model for VerificationStatus.
 type VerificationStatus string
@@ -1357,6 +1914,18 @@ type ObserveRunEventsParams struct {
 	LastEventID *int64 `json:"Last-Event-ID,omitempty"`
 }
 
+// GetRunModelRequestsParams defines parameters for GetRunModelRequests.
+type GetRunModelRequestsParams struct {
+	// IncludeContent Return captured content only when retained by the configured capture policy.
+	IncludeContent *bool `form:"include_content,omitempty" json:"include_content,omitempty"`
+}
+
+// ListToolEffectsParams defines parameters for ListToolEffects.
+type ListToolEffectsParams struct {
+	Status *string `form:"status,omitempty" json:"status,omitempty"`
+	Tool   *string `form:"tool,omitempty" json:"tool,omitempty"`
+}
+
 // DeleteWorkspaceParams defines parameters for DeleteWorkspace.
 type DeleteWorkspaceParams struct {
 	ReplacementWorkspaceId *string `form:"replacement_workspace_id,omitempty" json:"replacement_workspace_id,omitempty"`
@@ -1380,115 +1949,23 @@ type UpdateConversationJSONRequestBody = UpdateConversationRequest
 // EnqueueRunInputJSONRequestBody defines body for EnqueueRunInput for application/json ContentType.
 type EnqueueRunInputJSONRequestBody = RunInputRequest
 
+// PatchTaskStateJSONRequestBody defines body for PatchTaskState for application/json ContentType.
+type PatchTaskStateJSONRequestBody = TaskStatePatch
+
 // ContinueRunJSONRequestBody defines body for ContinueRun for application/json ContentType.
 type ContinueRunJSONRequestBody = ContinueRunRequest
 
 // ResumeRunJSONRequestBody defines body for ResumeRun for application/json ContentType.
 type ResumeRunJSONRequestBody = ResumeRunRequest
 
+// ReconcileToolEffectJSONRequestBody defines body for ReconcileToolEffect for application/json ContentType.
+type ReconcileToolEffectJSONRequestBody = ToolEffectReconciliationCommand
+
 // CreateWorkspaceJSONRequestBody defines body for CreateWorkspace for application/json ContentType.
 type CreateWorkspaceJSONRequestBody = WorkspaceCreateRequest
 
 // UpdateWorkspaceJSONRequestBody defines body for UpdateWorkspace for application/json ContentType.
 type UpdateWorkspaceJSONRequestBody = WorkspaceUpdateRequest
-
-// Getter for additional properties for RunReplay_Projection. Returns the specified
-// element and whether it was found
-func (a RunReplay_Projection) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for RunReplay_Projection
-func (a *RunReplay_Projection) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for RunReplay_Projection to handle AdditionalProperties
-func (a *RunReplay_Projection) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["partial_outputs"]; found {
-		err = json.Unmarshal(raw, &a.PartialOutputs)
-		if err != nil {
-			return fmt.Errorf("error reading 'partial_outputs': %w", err)
-		}
-		delete(object, "partial_outputs")
-	}
-
-	if raw, found := object["skill_evidence"]; found {
-		err = json.Unmarshal(raw, &a.SkillEvidence)
-		if err != nil {
-			return fmt.Errorf("error reading 'skill_evidence': %w", err)
-		}
-		delete(object, "skill_evidence")
-	}
-
-	if raw, found := object["tool_progress"]; found {
-		err = json.Unmarshal(raw, &a.ToolProgress)
-		if err != nil {
-			return fmt.Errorf("error reading 'tool_progress': %w", err)
-		}
-		delete(object, "tool_progress")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for RunReplay_Projection to handle AdditionalProperties
-func (a RunReplay_Projection) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	if a.PartialOutputs != nil {
-		object["partial_outputs"], err = json.Marshal(a.PartialOutputs)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'partial_outputs': %w", err)
-		}
-	}
-
-	if a.SkillEvidence != nil {
-		object["skill_evidence"], err = json.Marshal(a.SkillEvidence)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'skill_evidence': %w", err)
-		}
-	}
-
-	if a.ToolProgress != nil {
-		object["tool_progress"], err = json.Marshal(a.ToolProgress)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'tool_progress': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
 
 // Getter for additional properties for VerificationArtifact. Returns the specified
 // element and whether it was found

@@ -130,8 +130,16 @@ remain stable across normal laptop and wide-monitor viewports.
 `components/chat/useRunSession.ts` owns submission, Continue, Resume, Cancel,
 optimistic drafts, and durable event observation. It reuses the existing event
 projection and request-lease helpers, not a second Run engine. `ChatShell` keeps
-page layout and conversation loading; Agent, Knowledge, Memory, and Verification
+page layout; `useConversationHistory` owns Messages/Task State/Run trace recovery
+and accepts completed reads only for the current navigation. Task State refresh
+has its own lease: it cannot cancel history loading or overwrite a newer refresh.
+URL and sidebar navigation share activation cleanup, so pending reads cannot
+leave the previous conversation visible. A failed trace refresh keeps the current
+conversation's accepted Run status; switching conversations clears it first.
+Partial trace failures preserve messages and the known Run status. Agent, Knowledge, Memory, and Verification
 settings retain their separate owners.
+Successful history recovery does not dismiss execution errors; a new command
+or conversation switch clears them.
 
 Three dimensions must remain separate:
 
@@ -156,3 +164,17 @@ persisted messages once when the Run stops or waits for input. Late cancellation
 responses cannot overwrite a terminal Run or another conversation. See
 [functional regression gates](../operations/functional-regression-testing.md)
 for the affected race and browser-to-backend checks.
+
+## Replay Read and Action Errors
+
+`useReplayData` owns Replay/Episode reads; `RunReplay` keeps recovery commands
+separate. Only initial Replay failure replaces the page. Refresh failures are
+local warnings and command failures retain the last readable evidence and event
+selection. Episode report failure remains a secondary warning.
+
+Resume changes status only on accepted server events, not on click. Before
+acceptance, rejection leaves the original status intact; after acceptance,
+transport failure cannot roll it back. Repeated clicks are guarded, and accepted
+status disables stale Resume actions. Read leases reject obsolete results;
+changing Run identity aborts browser requests, not server execution. See
+[durable recovery](../runtime/durable-recovery.md) for backend recovery rules.

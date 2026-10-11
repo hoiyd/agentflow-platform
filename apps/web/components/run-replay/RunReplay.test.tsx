@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import type { RunReplay as RunReplayData } from "../../lib/api";
@@ -6,13 +6,202 @@ import { EventDetail, stepDuration } from "./RunEventDetails";
 import { RunReplay } from "./RunReplay";
 
 const getReplayPageData = vi.hoisted(() => vi.fn());
+const resumeRun = vi.hoisted(() => vi.fn());
+const reconciliation = vi.hoisted(() => ({ refresh: null as null | (() => Promise<void>) }));
+vi.mock("../../lib/api", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../lib/api")>(), resumeRun
+}));
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("../../lib/replay-page-data", () => ({ getReplayPageData }));
+vi.mock("./RecoveryActions", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./RecoveryActions")>(),
+  ToolEffectReconciliationPanel: ({ onChanged }: { onChanged: () => Promise<void> }) => {
+    reconciliation.refresh = onChanged;
+    return <button onClick={() => void onChanged()}>Refresh reconciled replay</button>;
+  }
+}));
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  resumeRun.mockReset();
+});
+
+function recoverableFixture() {
+  const data = replayFixture();
+  data.run.status = "failed_recoverable";
+  data.recovery_summary = {
+    reason: "worker_lost",
+    title: "Run can be resumed", message: "Saved evidence remains available.",
+    evidence: [{ kind: "checkpoint", summary: "Durable checkpoint" }], artifact_refs: [],
+    actions: [{ kind: "resume_run", label: "Resume saved run", enabled: true }]
+  };
+  return data;
+}
+
+it("keeps replay evidence and original status when Resume is rejected before acceptance", async () => {
+  getReplayPageData.mockResolvedValue({ data: recoverableFixture(), report: null, reportError: "" });
+  resumeRun.mockRejectedValue(new Error("Resume denied"));
+  render(<RunReplay runId="run-1" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Resume saved run" }));
+  await screen.findByText("Resume denied");
+  expect(screen.getByRole("heading", { name: "Run replay" })).toBeTruthy();
+  expect(screen.getByText("Durable checkpoint")).toBeTruthy();
+  expect(screen.getByText("failed_recoverable")).toBeTruthy();
+});
+
+it("keeps accepted server status and evidence after a Resume transport failure", async () => {
+  getReplayPageData.mockResolvedValue({ data: recoverableFixture(), report: null, reportError: "" });
+  resumeRun.mockImplementation(async (_input, emit) => {
+    emit({ type: "run_state", run_id: "run-1", conversation_id: "conversation-1", status: "running" });
+    throw new Error("Resume connection lost");
+  });
+  render(<RunReplay runId="run-1" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Resume saved run" }));
+  await screen.findByText("Resume connection lost");
+  expect(screen.getByText("running")).toBeTruthy();
+  expect(screen.getByText("Durable checkpoint")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Resume saved run" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("preserves accepted evidence if the post-Resume refresh fails", async () => {
+  getReplayPageData.mockResolvedValueOnce({ data: recoverableFixture(), report: null, reportError: "" })
+    .mockRejectedValueOnce(new Error("refresh unavailable"));
+  resumeRun.mockImplementation(async (_input, emit) => emit({ type: "done", run_id: "run-1", status: "completed" }));
+  render(<RunReplay runId="run-1" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Resume saved run" }));
+  await screen.findByText(/refresh unavailable/);
+  expect(screen.getByRole("heading", { name: "Run replay" })).toBeTruthy();
+  expect(screen.getByText("completed")).toBeTruthy();
+  expect(screen.getByText("Durable checkpoint")).toBeTruthy();
+});
+
+it("ignores old Resume events and refreshes after navigating to a different Run", async () => {
+  let emit!: (event: unknown) => void;
+  let finish!: () => void;
+  resumeRun.mockImplementation((_input, onEvent) => new Promise<void>(resolve => { emit = onEvent; finish = resolve; }));
+  const next = replayFixture();
+  next.run = { ...next.run, id: "run-2" };
+  next.conversation = { ...next.conversation, title: "Second run" };
+  getReplayPageData.mockImplementation(async (id) => ({ data: id === "run-1" ? recoverableFixture() : next, report: null, reportError: "" }));
+  const view = render(<RunReplay runId="run-1" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Resume saved run" }));
+  await waitFor(() => expect(resumeRun).toHaveBeenCalledTimes(1));
+  view.rerender(<RunReplay runId="run-2" />);
+  await screen.findByText("Second run");
+  await act(async () => { emit({ type: "done", run_id: "run-1", status: "failed" }); finish(); });
+  expect(screen.getByText("Second run")).toBeTruthy();
+  expect(screen.getByText("completed")).toBeTruthy();
+  expect(getReplayPageData.mock.calls.map(call => call[0])).toEqual(["run-1", "run-2"]);
+});
+
+it("admits only one Resume before React flushes repeated clicks", async () => {
+  getReplayPageData.mockResolvedValue({ data: recoverableFixture(), report: null, reportError: "" });
+  resumeRun.mockImplementation(() => new Promise(() => {}));
+  render(<RunReplay runId="run-1" />);
+  const button = await screen.findByRole("button", { name: "Resume saved run" });
+  act(() => { button.click(); button.click(); });
+  expect(resumeRun).toHaveBeenCalledTimes(1);
+  expect((screen.getByRole("button", { name: "Resuming..." }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+function reconciliationFixture() {
+  const data = recoverableFixture();
+  data.recovery_summary!.actions.push({ kind: "reconcile_tool_effect", label: "Review effects", enabled: true });
+  return data;
+}
+
+it("keeps the current event selection and evidence when reconciliation refresh fails", async () => {
+  const data = reconciliationFixture();
+  data.run_events = [1, 2].map(sequence => ({
+    id: `event-${sequence}`, sequence, schema_version: 1, run_id: "run-1",
+    type: sequence === 1 ? "run.started" : "run.failed", timestamp: "2026-09-10T00:00:00Z", payload: {}
+  }));
+  getReplayPageData.mockResolvedValueOnce({ data, report: null, reportError: "" })
+    .mockRejectedValueOnce(new Error("read after reconciliation failed"));
+  render(<RunReplay runId="run-1" />);
+  const selected = await screen.findByRole("button", { name: /run.failed/ });
+  fireEvent.click(selected);
+  fireEvent.click(screen.getByRole("button", { name: "Refresh reconciled replay" }));
+  await screen.findByText(/Replay refresh unavailable: read after reconciliation failed/);
+  expect(selected.className).toContain("active");
+  expect(screen.getByText("Durable checkpoint")).toBeTruthy();
+});
+
+it("accepts only the latest refresh even when the earlier read ignores abort", async () => {
+  getReplayPageData.mockResolvedValueOnce({ data: reconciliationFixture(), report: null, reportError: "" });
+  render(<RunReplay runId="run-1" />);
+  await screen.findByRole("button", { name: "Refresh reconciled replay" });
+  let finishOld!: (page: unknown) => void;
+  const newer = reconciliationFixture();
+  newer.conversation.title = "Latest evidence";
+  getReplayPageData.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }))
+    .mockResolvedValueOnce({ data: newer, report: null, reportError: "" });
+  const refresh = reconciliation.refresh!;
+  await act(async () => { void refresh(); await refresh(); });
+  await screen.findByText("Latest evidence");
+  expect((getReplayPageData.mock.calls[1][1] as AbortSignal).aborted).toBe(true);
+  await act(async () => finishOld({ data: reconciliationFixture(), report: null, reportError: "old warning" }));
+  expect(screen.getByText("Latest evidence")).toBeTruthy();
+  expect(screen.queryByText(/old warning/)).toBeNull();
+});
+
+it("does not let an older read roll back a newly accepted Resume event", async () => {
+  getReplayPageData.mockResolvedValueOnce({ data: reconciliationFixture(), report: null, reportError: "" });
+  render(<RunReplay runId="run-1" />);
+  await screen.findByRole("button", { name: "Refresh reconciled replay" });
+  let finishOld!: (page: unknown) => void;
+  getReplayPageData.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }));
+  fireEvent.click(screen.getByRole("button", { name: "Refresh reconciled replay" }));
+  resumeRun.mockImplementation(async (_input, emit) => {
+    emit({ type: "done", run_id: "run-1", status: "completed" });
+    throw new Error("late transport failure");
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Resume saved run" }));
+  await screen.findByText("late transport failure");
+  await act(async () => finishOld({ data: reconciliationFixture(), report: null, reportError: "" }));
+  expect(screen.getByText("completed")).toBeTruthy();
+});
+
+it("shows a fatal error only when no Replay has been loaded", async () => {
+  getReplayPageData.mockRejectedValueOnce(new Error("initial replay unavailable"));
+  render(<RunReplay runId="run-1" />);
+  await screen.findByText("initial replay unavailable");
+  expect(screen.queryByRole("heading", { name: "Run replay" })).toBeNull();
+});
+
+it("rejects a mismatched read without displaying another Run's evidence", async () => {
+  getReplayPageData.mockResolvedValueOnce({ data: replayFixture(), report: null, reportError: "" });
+  render(<RunReplay runId="run-other" />);
+  await screen.findByText("Replay response belongs to another Run");
+  expect(screen.queryByRole("heading", { name: "Run replay" })).toBeNull();
+});
+
+it("ignores an old initial-load rejection after switching Run identity", async () => {
+  let failOld!: (error: Error) => void;
+  const next = replayFixture();
+  next.run.id = "run-2";
+  next.conversation.title = "Second run";
+  getReplayPageData.mockImplementationOnce(() => new Promise((_resolve, reject) => { failOld = reject; }))
+    .mockResolvedValueOnce({ data: next, report: null, reportError: "" });
+  const view = render(<RunReplay runId="run-1" />);
+  await waitFor(() => expect(getReplayPageData).toHaveBeenCalledTimes(1));
+  view.rerender(<RunReplay runId="run-2" />);
+  await screen.findByText("Second run");
+  await act(async () => failOld(new Error("old initial read failed")));
+  expect(screen.queryByText("old initial read failed")).toBeNull();
+  expect((getReplayPageData.mock.calls[0][1] as AbortSignal).aborted).toBe(true);
+});
+
+it("does not start a new read from a reconciliation callback after unmount", async () => {
+  getReplayPageData.mockResolvedValue({ data: reconciliationFixture(), report: null, reportError: "" });
+  const view = render(<RunReplay runId="run-1" />);
+  await screen.findByRole("button", { name: "Refresh reconciled replay" });
+  const oldRefresh = reconciliation.refresh!;
+  view.unmount();
+  await act(async () => oldRefresh());
+  expect(getReplayPageData).toHaveBeenCalledTimes(1);
 });
 
 it("shows frozen skill identity and resource read details in tool events", () => {
@@ -225,6 +414,8 @@ function replayFixture(): RunReplayData {
       updated_at: timestamp
     },
     projection: {
+      partial_outputs: [],
+      tool_progress: [],
       run: {
         run_id: "run-1",
         conversation_id: "conversation-1",

@@ -139,9 +139,10 @@ type Config struct {
 	MemorySyncQueueSize int
 	// MemorySyncJobTimeout bounds proposal and commit work for one accepted turn.
 	MemorySyncJobTimeout time.Duration
-	// MemoryProviderMaxAttempts includes the initial provider operation attempt.
+	// MemoryProviderMaxAttempts bounds storage attempts, including the first;
+	// embedding and adaptive extraction use the model client's retry policy only.
 	MemoryProviderMaxAttempts int
-	// MemoryProviderRetryBaseDelay is the first exponential retry delay.
+	// MemoryProviderRetryBaseDelay is the first exponential storage retry delay.
 	MemoryProviderRetryBaseDelay time.Duration
 	RouterMode                   string
 	// AutonomousMaxIterations is a mode-owned loop bound, independent of model-call count.

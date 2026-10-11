@@ -13,10 +13,14 @@ import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 
 export function RecoverySummaryPanel({
 	summary,
-	onAction
+	onAction,
+	isResuming = false,
+	canResume = true
 }: {
 	summary?: RecoverySummary;
 	onAction: (action: RecoveryAction) => void;
+	isResuming?: boolean;
+	canResume?: boolean;
 }) {
 	const readOnly = useWorkspaceReadOnly();
 	if (!summary) return null;
@@ -59,8 +63,8 @@ export function RecoverySummaryPanel({
 				<div className="recovery-actions">
 					{summary.actions.map((action, index) => (
 						<div key={`${action.kind}-${action.target_id ?? index}`}>
-							<button disabled={readOnly || !action.enabled} onClick={() => onAction(action)} type="button">
-								{action.label}
+							<button disabled={readOnly || !action.enabled || (action.kind === "resume_run" && (isResuming || !canResume))} onClick={() => onAction(action)} type="button">
+								{isResuming && action.kind === "resume_run" ? "Resuming..." : action.label}
 							</button>
 							{!action.enabled && action.unavailable_reason ? <span>{action.unavailable_reason}</span> : null}
 						</div>

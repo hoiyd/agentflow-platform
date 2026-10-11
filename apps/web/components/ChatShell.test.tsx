@@ -31,16 +31,22 @@ vi.mock("./chat/ChatChrome", () => ({
   ToolsPanel: () => null
 }));
 vi.mock("./chat/ChatWorkspace", () => ({
-  ChatWorkspace: ({ messages, planDraft, runStatus, isStreaming, isCanceling, onContinue, onResume, onCancel }: {
+  ChatWorkspace: ({ messages, planDraft, runStatus, isStreaming, isCanceling, onContinue, onResume, onCancel, onTaskStateRefresh, taskState, taskStateError, taskStateLoading }: {
     planDraft: string;
     messages: Array<{ content: string }>; runStatus: string; isStreaming: boolean; isCanceling: boolean;
     onContinue: () => void; onResume: (input?: string) => void; onCancel: () => void;
+    onTaskStateRefresh: () => void; taskState: { version: number } | null; taskStateError: string;
+    taskStateLoading: boolean;
   }) => (
     <div>{messages.map((message, index) => <p data-testid="message" key={index}>{message.content}</p>)}<output>{runStatus}</output><output>{planDraft}</output>
       <output aria-label="Command state">{isStreaming ? "busy" : "idle"}</output>
       <output aria-label="Cancel state">{isCanceling ? "canceling" : "idle"}</output>
       <button onClick={() => onContinue()}>Continue</button><button onClick={() => onResume()}>Resume</button><button onClick={onCancel}>Cancel run</button>
       <button onClick={() => onResume("answer")}>Resume with input</button>
+      <button onClick={onTaskStateRefresh}>Refresh task state</button>
+      <output aria-label="Task version">{taskState?.version}</output>
+      <output aria-label="Task error">{taskStateError}</output>
+      <output aria-label="Task loading">{taskStateLoading ? "loading" : "idle"}</output>
     </div>
   )
 }));
@@ -56,6 +62,179 @@ vi.mock("./chat/ChatComposer", () => ({
 vi.mock("./chat/ChatDialogs", () => ({ ChatDialogs: () => null }));
 
 afterEach(cleanup);
+
+it("refreshes task state without canceling pending conversation trace recovery", async () => {
+  setupAPI();
+  let finishSteps!: (steps: unknown[]) => void;
+  api.listRuns.mockResolvedValue([{ id: "saved", conversation_id: "a", status: "completed" }]);
+  api.listCollaborationSteps.mockImplementation(() => new Promise(resolve => { finishSteps = resolve; }));
+  api.getTaskState.mockResolvedValueOnce({ version: 1 }).mockResolvedValueOnce({ version: 2 });
+  render(<ChatShell initialConversationId="a" />);
+  await waitFor(() => expect(api.listCollaborationSteps).toHaveBeenCalledTimes(1));
+  const traceSignal = api.listCollaborationSteps.mock.calls[0][1] as AbortSignal;
+  await waitFor(() => expect(screen.getByLabelText("Task loading").textContent).toBe("idle"));
+  fireEvent.click(screen.getByRole("button", { name: "Refresh task state" }));
+  await waitFor(() => expect(screen.getByLabelText("Task version").textContent).toBe("2"));
+  await act(async () => finishSteps([{ id: "planner", role: "planner", status: "completed", output: "recovered plan" }]));
+  expect(traceSignal.aborted).toBe(false);
+  expect(screen.getByText("recovered plan")).toBeTruthy();
+  expect(screen.getByText("A baseline")).toBeTruthy();
+});
+
+it("does not let initial task hydration overwrite a newer explicit refresh", async () => {
+  setupAPI();
+  let finishInitial!: (state: unknown) => void;
+  api.getTaskState.mockImplementationOnce(() => new Promise(resolve => { finishInitial = resolve; }))
+    .mockResolvedValueOnce({ version: 2 });
+  render(<ChatShell initialConversationId="a" />);
+  await waitFor(() => expect(api.getTaskState).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: "Refresh task state" }));
+  await waitFor(() => expect(screen.getByLabelText("Task version").textContent).toBe("2"));
+  await act(async () => finishInitial({ version: 1 }));
+  expect(await screen.findByText("A baseline")).toBeTruthy();
+  expect(screen.getByLabelText("Task version").textContent).toBe("2");
+});
+
+it("ignores task refresh results and errors from a previous conversation", async () => {
+  setupAPI();
+  let failTask!: (error: Error) => void;
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("A baseline");
+  api.getTaskState.mockImplementationOnce(() => new Promise((_resolve, reject) => { failTask = reject; }))
+    .mockResolvedValueOnce({ version: 3 });
+  fireEvent.click(screen.getByRole("button", { name: "Refresh task state" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open B" }));
+  await screen.findByText("B baseline");
+  await act(async () => failTask(new Error("late task failure")));
+  expect(screen.getByLabelText("Task version").textContent).toBe("3");
+  expect(screen.getByLabelText("Task error").textContent).toBe("");
+});
+
+it("accepts conversation messages and trace together after recovery reads finish", async () => {
+  setupAPI();
+  let finishSteps!: (steps: unknown[]) => void;
+  api.listRuns.mockResolvedValue([{ id: "saved", conversation_id: "a", status: "completed" }]);
+  api.listCollaborationSteps.mockImplementation(() => new Promise(resolve => { finishSteps = resolve; }));
+  render(<ChatShell initialConversationId="a" />);
+  await waitFor(() => expect(api.listCollaborationSteps).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText("A baseline")).toBeNull();
+  await act(async () => finishSteps([{ id: "planner", role: "planner", status: "completed", output: "complete history" }]));
+  expect(screen.getByText("A baseline")).toBeTruthy();
+  expect(screen.getByText("complete history")).toBeTruthy();
+});
+
+it("keeps authoritative run status and messages when stage recovery fails", async () => {
+  setupAPI();
+  api.listRuns.mockResolvedValue([{ id: "saved", conversation_id: "a", status: "failed_recoverable" }]);
+  api.listCollaborationSteps.mockRejectedValue(new Error("stages unavailable"));
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("Failed to load run trace: stages unavailable");
+  expect(screen.getByText("failed_recoverable")).toBeTruthy();
+  expect(screen.getByText("A baseline")).toBeTruthy();
+});
+
+it("discards late history reads after selecting another conversation", async () => {
+  setupAPI();
+  let finishMessages!: (messages: unknown[]) => void;
+  api.listMessages.mockImplementationOnce(() => new Promise(resolve => { finishMessages = resolve; }))
+    .mockResolvedValueOnce([{ content: "B baseline" }]);
+  render(<ChatShell initialConversationId="a" />);
+  await waitFor(() => expect(api.listMessages).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("button", { name: "Open B" }));
+  await screen.findByText("B baseline");
+  await act(async () => finishMessages([{ content: "late A" }]));
+  expect(screen.queryByText("late A")).toBeNull();
+});
+
+it("keeps messages when task state is unavailable and clears stale errors on navigation", async () => {
+  setupAPI();
+  api.getTaskState.mockRejectedValueOnce(new Error("task state unavailable"));
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("A baseline");
+  expect(screen.getByLabelText("Task error").textContent).toBe("Failed to load task state: task state unavailable");
+  fireEvent.click(screen.getByRole("button", { name: "Open B" }));
+  await screen.findByText("B baseline");
+  expect(screen.getByLabelText("Task error").textContent).toBe("");
+});
+
+it("clears obsolete task loading when a new Run is accepted", async () => {
+  setupAPI();
+  api.getTaskState.mockImplementation(() => new Promise(() => {}));
+  api.streamChat.mockImplementation((_input, emit) => {
+    emit({ type: "conversation", conversation_id: "a" });
+    emit({ type: "run_state", run_id: "accepted", conversation_id: "a", status: "running" });
+    return new Promise(() => {});
+  });
+  render(<ChatShell initialConversationId="a" />);
+  await waitFor(() => expect(api.getTaskState).toHaveBeenCalledTimes(1));
+  expect(screen.getByLabelText("Task loading").textContent).toBe("loading");
+  fireEvent.change(screen.getByRole("textbox", { name: "Prompt" }), { target: { value: "new task" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await screen.findByText("running");
+  expect(screen.getByLabelText("Task loading").textContent).toBe("idle");
+});
+
+it("clears old conversation data while URL navigation hydrates the next conversation", async () => {
+  setupAPI();
+  api.listRuns.mockResolvedValue([{ id: "saved", conversation_id: "a", status: "completed" }]);
+  let failMessages!: (error: Error) => void;
+  const view = render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("A baseline");
+  api.listMessages.mockImplementationOnce(() => new Promise((_resolve, reject) => { failMessages = reject; }));
+  view.rerender(<ChatShell initialConversationId="b" />);
+  await waitFor(() => expect(api.listMessages).toHaveBeenCalledWith("b", expect.anything()));
+  expect(screen.queryByText("A baseline")).toBeNull();
+  expect(screen.queryByText("completed")).toBeNull();
+  await act(async () => failMessages(new Error("B history unavailable")));
+  await screen.findByText("B history unavailable");
+  expect(screen.queryByText("A baseline")).toBeNull();
+});
+
+it("preserves accepted Run status if refreshing the same conversation's Run list fails", async () => {
+  setupAPI();
+  api.streamChat.mockImplementation(async (_input, emit) => {
+    emit({ type: "conversation", conversation_id: "a" });
+    emit({ type: "run_state", run_id: "accepted", status: "completed" });
+    emit({ type: "done", run_id: "accepted", conversation_id: "a", status: "completed" });
+  });
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("A baseline");
+  api.listRuns.mockRejectedValue(new Error("run list unavailable"));
+  fireEvent.change(screen.getByRole("textbox", { name: "Prompt" }), { target: { value: "new task" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await screen.findByText("Failed to load run trace: run list unavailable");
+  expect(screen.getByText("completed")).toBeTruthy();
+  expect(screen.getByText("A baseline")).toBeTruthy();
+});
+
+it("keeps a provider failure after successful history recovery and clears it for the next command", async () => {
+  setupAPI();
+  api.streamChat.mockImplementationOnce(async (_input, emit) => {
+    api.listRuns.mockResolvedValue([{ id: "rejected", conversation_id: "a", status: "failed" }]);
+    emit({ type: "conversation", conversation_id: "a" });
+    emit({ type: "run_state", run_id: "rejected", status: "failed" });
+    emit({ type: "error", error: "Internal Server Error", code: "invalid_request", source: "model_provider", request_id: "req-fixture" });
+    emit({ type: "done", run_id: "rejected", conversation_id: "a", status: "failed" });
+  }).mockImplementationOnce(async (_input, emit) => {
+    api.listRuns.mockResolvedValue([{ id: "accepted", conversation_id: "a", status: "completed" }]);
+    emit({ type: "run_state", run_id: "accepted", status: "completed" });
+    emit({ type: "done", run_id: "accepted", conversation_id: "a", status: "completed" });
+  });
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("A baseline");
+  const reads = api.listMessages.mock.calls.length;
+  fireEvent.change(screen.getByRole("textbox", { name: "Prompt" }), { target: { value: "rejected question" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(api.listMessages).toHaveBeenCalledTimes(reads + 1));
+  await waitFor(() => expect(screen.getByLabelText("Command state").textContent).toBe("idle"));
+  expect(screen.getByText("failed")).toBeTruthy();
+  expect(screen.getByLabelText("Error").textContent).toBe("Internal Server Error [model_provider:invalid_request] (request req-fixture)");
+  fireEvent.change(screen.getByRole("textbox", { name: "Prompt" }), { target: { value: "next question" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await screen.findByText("completed");
+  await waitFor(() => expect(screen.getByLabelText("Command state").textContent).toBe("idle"));
+  expect(screen.getByLabelText("Error").textContent).toBe("");
+});
 
 it("opens Knowledge when returning from retrieval evaluation", async () => {
   setupAPI();
