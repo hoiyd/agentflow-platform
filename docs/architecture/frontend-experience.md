@@ -130,7 +130,13 @@ remain stable across normal laptop and wide-monitor viewports.
 `components/chat/useRunSession.ts` owns submission, Continue, Resume, Cancel,
 optimistic drafts, and durable event observation. It reuses the existing event
 projection and request-lease helpers, not a second Run engine. `ChatShell` keeps
-page layout and conversation loading; Agent, Knowledge, Memory, and Verification
+page layout; `useConversationHistory` owns Messages/Task State/Run trace recovery
+and accepts completed reads only for the current navigation. Task State refresh
+has its own lease: it cannot cancel history loading or overwrite a newer refresh.
+URL and sidebar navigation share activation cleanup, so pending reads cannot
+leave the previous conversation visible. A failed trace refresh keeps the current
+conversation's accepted Run status; switching conversations clears it first.
+Partial trace failures preserve messages and the known Run status. Agent, Knowledge, Memory, and Verification
 settings retain their separate owners.
 
 Three dimensions must remain separate:

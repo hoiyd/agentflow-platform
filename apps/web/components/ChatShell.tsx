@@ -3,19 +3,12 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   ChatMode,
-  TaskState,
   createConversation,
   deleteConversation as deleteConversationApi,
   getAPIHealth,
-  listCollaborationSteps,
   listConversations,
-  listRuns,
-  listMessages,
-  getTaskState,
-  getRunProjection,
 } from "../lib/api";
 import { buildCompletionContract } from "../lib/verification";
-import { createLatestRequestController, type LatestRequestLease } from "../lib/latest-request";
 import { Sidebar, ToolsPanel, Topbar, type APIConnectionStatus, type ChatView } from "./chat/ChatChrome";
 import { ChatComposer } from "./chat/ChatComposer";
 import { RunInbox } from "./chat/RunInbox";
@@ -25,9 +18,8 @@ import { isTerminalRunStatus } from "./chat/runEventProjection";
 import { useAgentManagement } from "./chat/useAgentManagement";
 import { useCompletionVerification } from "./chat/useCompletionVerification";
 import { useConversationWorkspace } from "./chat/useConversationWorkspace";
+import { useConversationHistory } from "./chat/useConversationHistory";
 import { useToolCatalog } from "./chat/useToolCatalog";
-import { autonomousRoles } from "./chat/AutonomousPanel";
-import { toCollaborationStepView } from "./chat/CollaborationPanels";
 import { useRunSession } from "./chat/useRunSession";
 import { KnowledgePanel } from "./knowledge/KnowledgePanel";
 import { useKnowledgeWorkbench } from "./knowledge/useKnowledgeWorkbench";
@@ -52,40 +44,13 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   } = workspace;
   const [chatMode, setChatMode] = useState<ChatMode>("multi_agent");
   const [sidePanel, setSidePanel] = useState<ChatSidePanel>("trace");
-  const [taskState, setTaskState] = useState<TaskState | null>(null);
-  const [taskStateError, setTaskStateError] = useState("");
-  const [isTaskStateLoading, setIsTaskStateLoading] = useState(false);
   const [view, setView] = useState<ChatView>(initialView);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [apiConnectionStatus, setAPIConnectionStatus] = useState<APIConnectionStatus>("checking");
   const messagesRef = useRef<HTMLElement | null>(null);
-  const [conversationRequests] = useState(createLatestRequestController);
   const knowledge = useKnowledgeWorkbench();
   const memory = useMemoryWorkbench();
-  async function refreshConversations(nextActiveId?: string) {
-    const request = conversationRequests.begin();
-    try {
-      const items = await listConversations(request.signal);
-      if (!request.isCurrent()) {
-        return;
-      }
-      setConversations(items);
-      if (nextActiveId) {
-        setActiveId(nextActiveId);
-        await loadConversation(nextActiveId, request);
-        return;
-      }
-      if (!activeId && items[0]) {
-        setActiveId(items[0].id);
-        await loadConversation(items[0].id, request);
-      }
-    } catch (err) {
-      if (request.isCurrent()) {
-        setError(err instanceof Error ? err.message : "Failed to load conversations");
-      }
-    }
-  }
 
   const session = useRunSession({
     workspace,
@@ -105,7 +70,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     continuePlan: handleContinuePlan, resume: handleResumeAutonomous, cancel: handleCancelRun
   } = session;
   const {
-    collaborationSteps, setCollaborationSteps, autonomousProgress,
+    collaborationSteps, autonomousProgress,
     humanInputDraft, setHumanInputDraft, selectedCollaborationRole, setSelectedCollaborationRole,
     planDraft, setPlanDraft, routingRequirements, setRoutingRequirements
   } = session.trace;
@@ -122,6 +87,11 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     handleSaveAgentConfig, handleOpenNewAgentForm, handleCancelNewAgent, handleCancelAgentConfig,
     handleCreateAgent, handleArchiveAgent, confirmArchiveAgent, cancelArchiveAgent
   } = useAgentManagement(isStreaming, () => setRunState(null));
+
+  const { conversationRequests, activateConversation, refreshConversations, loadConversation, refreshTaskState,
+    taskState, taskStateError, isTaskStateLoading, clearTaskState } = useConversationHistory({
+    workspace, session, onModeRestored: handleChatModeChange
+  });
 
   const showCollaborationPanel = chatMode === "multi_agent" || chatMode === "autonomous";
   const showCollaborationDag = chatMode === "multi_agent";
@@ -181,10 +151,6 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => () => {
-    conversationRequests.cancel();
-  }, [conversationRequests]);
-
   function handleChatModeChange(mode: ChatMode, preserveTaskState = false) {
     setChatMode(mode);
     setSidePanel((current) =>
@@ -199,122 +165,6 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     }
   }
 
-  async function loadConversation(
-    conversationId: string,
-    request: LatestRequestLease = conversationRequests.begin()
-  ) {
-    setIsTaskStateLoading(true);
-    try {
-      const [messagesResult, taskStateResult] = await Promise.allSettled([
-        listMessages(conversationId, request.signal),
-        getTaskState(conversationId, request.signal)
-      ]);
-      if (!request.isCurrent()) {
-        return;
-      }
-      if (messagesResult.status === "rejected") {
-        throw messagesResult.reason;
-      }
-      setMessages(messagesResult.value);
-      if (taskStateResult.status === "fulfilled") {
-        setTaskState(taskStateResult.value);
-        setTaskStateError("");
-      } else {
-        setTaskState(null);
-        setTaskStateError(taskStateResult.reason instanceof Error ? taskStateResult.reason.message : "Failed to load task state");
-      }
-      await refreshCollaborationSteps(conversationId, request);
-    } catch (err) {
-      if (!request.isCurrent()) {
-        return;
-      }
-      setMessages([]);
-      resetConversationRuntimeState();
-      setError(err instanceof Error ? err.message : "Failed to load conversation");
-    } finally {
-      if (request.isCurrent()) {
-        setIsTaskStateLoading(false);
-      }
-    }
-  }
-
-  async function refreshTaskState(
-    conversationId = activeId,
-    request: LatestRequestLease = conversationRequests.begin()
-  ) {
-    if (!conversationId) {
-      setTaskState(null);
-      setTaskStateError("");
-      return;
-    }
-    setIsTaskStateLoading(true);
-    setTaskStateError("");
-    try {
-      const loaded = await getTaskState(conversationId, request.signal);
-      if (request.isCurrent()) {
-        setTaskState(loaded);
-      }
-    } catch (err) {
-      if (request.isCurrent()) {
-        setTaskStateError(err instanceof Error ? err.message : "Failed to load task state");
-      }
-    } finally {
-      if (request.isCurrent()) {
-        setIsTaskStateLoading(false);
-      }
-    }
-  }
-
-  async function refreshCollaborationSteps(conversationId: string, request: LatestRequestLease) {
-    try {
-      const runs = await listRuns(request.signal);
-      if (!request.isCurrent()) {
-        return;
-      }
-      const run = runs.find((item) => item.conversation_id === conversationId);
-      if (!run) {
-        resetConversationRuntimeState();
-        return;
-      }
-      setRunState({
-        id: run.id,
-        agentId: run.agent_id,
-        status: run.status,
-        verificationStatus: run.verification_status ?? "not_required"
-      });
-      const [steps, projection] = await Promise.all([
-        listCollaborationSteps(run.id, request.signal),
-        getRunProjection(run.id, request.signal).then(
-          (snapshot) => ({ snapshot }),
-          (error: unknown) => ({ error })
-        )
-      ]);
-      if (!request.isCurrent()) {
-        return;
-      }
-      setCollaborationSteps(steps.map(toCollaborationStepView));
-      if ("snapshot" in projection) {
-        session.restoreOutputs(projection.snapshot);
-      } else {
-        setError(projection.error instanceof Error ? `Partial output recovery unavailable: ${projection.error.message}` : "Partial output recovery unavailable");
-      }
-      if (steps.some((step) => autonomousRoles.some((role) => role.id === step.role))) {
-        handleChatModeChange("autonomous", true);
-      } else if (steps.length > 0) {
-        handleChatModeChange("multi_agent", true);
-      }
-      const planner = steps.find((step) => step.role === "planner");
-      setPlanDraft(planner?.output ?? "");
-      const humanInput = steps.find((step) => step.role === "human_input" && step.status === "running");
-      setHumanInputDraft((current) => (humanInput ? current : ""));
-    } catch (err) {
-      if (request.isCurrent()) {
-        resetConversationRuntimeState();
-        setError(err instanceof Error ? `Failed to load run trace: ${err.message}` : "Failed to load run trace");
-      }
-    }
-  }
-
   function resetConversationRuntimeState() {
     session.clearRun();
   }
@@ -325,14 +175,8 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
       setView("chat");
       return;
     }
-    session.detach();
-    setError("");
-    resetConversationRuntimeState();
-    setMessages([]);
-    setTaskState(null);
-    setTaskStateError("");
+    activateConversation(id);
     setView("chat");
-    setActiveId(id);
     await loadConversation(id);
   }
 
@@ -388,8 +232,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
         const nextConversation = items[0];
         resetConversationRuntimeState();
         setMessages([]);
-        setTaskState(null);
-        setTaskStateError("");
+        clearTaskState();
 
         if (nextConversation) {
           setActiveId(nextConversation.id);

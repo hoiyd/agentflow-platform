@@ -126,9 +126,41 @@ for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
       expect((await read(request, `/api/conversations/${conversationId}/task-state`)).goal).toBe("Preserve evidence");
       expect(await read(request, `/api/conversations/${conversationId}/task-state/revisions`)).toHaveLength(1);
     }
-    await page.reload();
+    // Delay only the real Stage HTTP response; the backend still reads Postgres.
+    // Task State refresh must not invalidate the in-flight history/Trace lease.
+    let releaseTrace!: () => void;
+    let tracePending = false;
+    const traceGate = new Promise<void>(resolve => { releaseTrace = resolve; });
+    const traceURL = `${api}/api/runs/${runId}/collaboration_steps`;
+    await page.route(traceURL, async route => {
+      const response = await route.fetch();
+      tracePending = true;
+      await traceGate;
+      await route.fulfill({ response });
+    });
+    try {
+      await page.reload();
+      await expect.poll(() => tracePending).toBe(true);
+      await page.getByRole("button", { name: /^Task state/ }).click();
+      const refreshed = page.waitForResponse(response => response.url() === `${api}/api/conversations/${conversationId}/task-state`);
+      await page.getByRole("button", { name: "Refresh task state", exact: true }).click();
+      expect((await refreshed).ok()).toBe(true);
+      releaseTrace();
+      await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
+      await expect(page.locator(".message.assistant").last()).toContainText("Evidence saved.");
+      await test.info().attach("history-refresh-evidence", { body: JSON.stringify({
+        mode, run_id: runId, conversation_id: conversationId, task_version: state.version,
+        checks: ["real Stage response delayed", "independent Task State refresh", "complete history restored"],
+        limitations: ["deterministic provider fixture, real API/Postgres responses; browser transport timing controlled"]
+      }), contentType: "application/json" });
+    } finally {
+      releaseTrace();
+      await page.unroute(traceURL);
+    }
+    await page.getByRole("button", { name: "Hide task state", exact: true }).click();
     await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
     if (mode === "Multi-agent") {
+      await page.getByRole("button", { name: "Show Collaboration Trace", exact: true }).click();
       await expect(page.locator(".dag-node-status")).toHaveText(["completed", "completed", "completed", "completed", "completed"]);
     }
     await page.getByRole("button", { name: /^Task state/ }).click();
