@@ -185,7 +185,8 @@ export function useConversationHistory({ workspace, session, onModeRestored: han
       stepsResult.status === "rejected" ? errorMessage(stepsResult.reason, "Failed to load run trace") : "",
       projection.status === "rejected" ? errorMessage(projection.reason, "Partial output recovery unavailable") : ""
     ].filter(Boolean);
-    setError(errors.join("; "));
+    // Successful history reads do not acknowledge or dismiss execution errors.
+    if (errors.length > 0) setError(errors.join("; "));
     if (steps.some((step) => autonomousRoles.some((role) => role.id === step.role))) {
       handleChatModeChange("autonomous", true);
     } else if (steps.length > 0) {

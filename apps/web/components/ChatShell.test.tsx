@@ -207,6 +207,35 @@ it("preserves accepted Run status if refreshing the same conversation's Run list
   expect(screen.getByText("A baseline")).toBeTruthy();
 });
 
+it("keeps a provider failure after successful history recovery and clears it for the next command", async () => {
+  setupAPI();
+  api.streamChat.mockImplementationOnce(async (_input, emit) => {
+    api.listRuns.mockResolvedValue([{ id: "rejected", conversation_id: "a", status: "failed" }]);
+    emit({ type: "conversation", conversation_id: "a" });
+    emit({ type: "run_state", run_id: "rejected", status: "failed" });
+    emit({ type: "error", error: "Internal Server Error", code: "invalid_request", source: "model_provider", request_id: "req-fixture" });
+    emit({ type: "done", run_id: "rejected", conversation_id: "a", status: "failed" });
+  }).mockImplementationOnce(async (_input, emit) => {
+    api.listRuns.mockResolvedValue([{ id: "accepted", conversation_id: "a", status: "completed" }]);
+    emit({ type: "run_state", run_id: "accepted", status: "completed" });
+    emit({ type: "done", run_id: "accepted", conversation_id: "a", status: "completed" });
+  });
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("A baseline");
+  const reads = api.listMessages.mock.calls.length;
+  fireEvent.change(screen.getByRole("textbox", { name: "Prompt" }), { target: { value: "rejected question" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(api.listMessages).toHaveBeenCalledTimes(reads + 1));
+  await waitFor(() => expect(screen.getByLabelText("Command state").textContent).toBe("idle"));
+  expect(screen.getByText("failed")).toBeTruthy();
+  expect(screen.getByLabelText("Error").textContent).toBe("Internal Server Error [model_provider:invalid_request] (request req-fixture)");
+  fireEvent.change(screen.getByRole("textbox", { name: "Prompt" }), { target: { value: "next question" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await screen.findByText("completed");
+  await waitFor(() => expect(screen.getByLabelText("Command state").textContent).toBe("idle"));
+  expect(screen.getByLabelText("Error").textContent).toBe("");
+});
+
 it("opens Knowledge when returning from retrieval evaluation", async () => {
   setupAPI();
   render(<ChatShell initialView="knowledge" />);

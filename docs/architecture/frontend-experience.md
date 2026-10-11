@@ -138,6 +138,8 @@ leave the previous conversation visible. A failed trace refresh keeps the curren
 conversation's accepted Run status; switching conversations clears it first.
 Partial trace failures preserve messages and the known Run status. Agent, Knowledge, Memory, and Verification
 settings retain their separate owners.
+Successful history recovery does not dismiss execution errors; a new command
+or conversation switch clears them.
 
 Three dimensions must remain separate:
 
