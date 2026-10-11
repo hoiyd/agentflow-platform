@@ -1,9 +1,7 @@
 package tool
 
 import (
-	"errors"
 	"os"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -40,41 +38,6 @@ func (m *Manager) Catalog() (*Catalog, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.catalog, nil
-}
-
-func (m *Manager) List() ([]ToolInfo, error) {
-	if err := m.ReloadIfChanged(); err != nil {
-		return nil, err
-	}
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.catalog.List(), nil
-}
-
-func (m *Manager) SetEnabled(name string, enabled bool) ([]ToolInfo, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, errors.New("tool name is required")
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if err := m.reloadIfChangedLocked(); err != nil {
-		return nil, err
-	}
-	nextConfig := m.config
-	nextConfig.EnabledTools = nextEnabledNames(m.catalog.List(), name, enabled)
-	if nextConfig.EnabledTools == nil {
-		return nil, errors.New("tool " + name + " not found")
-	}
-	if err := SaveConfig(m.configPath, nextConfig); err != nil {
-		return nil, err
-	}
-	if err := m.catalog.SetEnabled(name, enabled); err != nil {
-		return nil, err
-	}
-	m.config = nextConfig
-	m.modTime = configModTime(m.configPath)
-	return m.catalog.List(), nil
 }
 
 func (m *Manager) ReloadIfChanged() error {
@@ -117,23 +80,4 @@ func configModTime(path string) time.Time {
 		return time.Time{}
 	}
 	return info.ModTime()
-}
-
-func nextEnabledNames(items []ToolInfo, target string, enabled bool) []string {
-	found := false
-	names := make([]string, 0, len(items))
-	for _, item := range items {
-		itemEnabled := item.Enabled
-		if item.Name == target {
-			found, itemEnabled = true, enabled
-		}
-		if itemEnabled {
-			names = append(names, item.Name)
-		}
-	}
-	if !found {
-		return nil
-	}
-	sort.Strings(names)
-	return names
 }

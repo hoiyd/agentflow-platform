@@ -108,11 +108,13 @@ func TestWorkspaceRuntimeAuthorizationPostgres(t *testing.T) {
 	if err = storage.SetWorkspaceToolEnabled(spaces[0], "calculator", true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = manager.SetEnabled("calculator", false); err != nil {
+	operatorConfig := tool.DefaultConfig()
+	operatorConfig.EnabledTools = []string{"get_current_time"}
+	if err = tool.SaveConfig(path, operatorConfig); err != nil {
 		t.Fatal(err)
 	}
 	assertDenied("service_disabled")
-	if _, err = manager.SetEnabled("calculator", true); err != nil {
+	if err = tool.SaveConfig(path, tool.DefaultConfig()); err != nil {
 		t.Fatal(err)
 	}
 	forged := call

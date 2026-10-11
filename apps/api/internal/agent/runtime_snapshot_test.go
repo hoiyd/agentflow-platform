@@ -109,13 +109,11 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	if _, err := fixtureStore.UpdateAgent(agent); err != nil {
 		t.Fatalf("update agent: %v", err)
 	}
-	if _, err := manager.SetEnabled("calculator", false); err != nil {
-		t.Fatalf("disable calculator: %v", err)
-	}
 	changedConfig, err := tool.LoadConfig(toolPath)
 	if err != nil {
 		t.Fatal(err)
 	}
+	changedConfig.EnabledTools = []string{"get_current_time"}
 	changedConfig.SecurityPolicy = policy.Policy{Version: "operator-v2", DefaultAction: policy.ActionDeny}
 	time.Sleep(2 * time.Millisecond)
 	if err := tool.SaveConfig(toolPath, changedConfig); err != nil {

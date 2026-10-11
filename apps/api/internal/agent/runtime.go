@@ -48,6 +48,7 @@ type Runtime struct {
 	toolProgressGuards    map[string]*progress.Guard
 	knowledgeRetriever    rag.Retriever
 	knowledgeTools        []tool.Binding
+	harnessBindings       []tool.Binding
 	skills                *skill.Catalog
 	skillService          *skill.Service
 	checkpoints           checkpoint.Provider
@@ -167,7 +168,7 @@ func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 		toolExecutionOptions:  options.ToolExecution,
 		toolProgressGuards:    map[string]*progress.Guard{},
 		knowledgeRetriever:    options.KnowledgeRetriever,
-		knowledgeTools:        options.KnowledgeTools,
+		knowledgeTools:        append([]tool.Binding(nil), options.KnowledgeTools...),
 		skills:                options.Skills,
 		skillService:          skill.NewService(options.Store),
 		checkpoints:           options.CheckpointProvider,
@@ -175,6 +176,12 @@ func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 		toolArtifacts:         options.ToolArtifacts,
 		liveEvents:            options.LiveEvents,
 		memoryRecall:          options.MemoryRecall,
+	}
+	if err := runtime.compileHarnessBindings(); err != nil {
+		return nil, fmt.Errorf("compile harness Tools: %w", err)
+	}
+	if _, err := runtime.currentCatalog(); err != nil {
+		return nil, fmt.Errorf("assemble runtime Tools: %w", err)
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})
 	return runtime, nil

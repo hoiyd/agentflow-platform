@@ -92,7 +92,7 @@ func (c *Catalog) Register(binding Binding) error {
 	default:
 		return fmt.Errorf("tool %q has unsupported concurrency mode %q", name, concurrency.Mode)
 	}
-	contract, err := compileArgumentContract(&binding.Descriptor)
+	contract, err := registeredArgumentContract(&binding)
 	if err != nil {
 		return fmt.Errorf("tool %q has invalid parameters: %w", name, err)
 	}
@@ -112,7 +112,7 @@ func (c *Catalog) Resolve(name string) (Binding, bool) {
 		return Binding{}, false
 	}
 	binding, ok := c.bindings[name]
-	return binding, ok
+	return copyBinding(binding), ok
 }
 
 // ResolveReady excludes disabled Bindings and Bindings missing runtime prerequisites.
@@ -126,7 +126,7 @@ func (c *Catalog) Installed(name string) (Binding, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	binding, ok := c.bindings[name]
-	return binding, ok
+	return copyBinding(binding), ok
 }
 
 func (c *Catalog) SetEnabled(name string, enabled bool) error {
@@ -148,7 +148,7 @@ func (c *Catalog) List() []ToolInfo {
 		descriptor := c.bindings[name].Descriptor
 		items = append(items, ToolInfo{
 			Name: descriptor.Name, Description: descriptor.Description,
-			Parameters: descriptor.Parameters, Enabled: c.enabled[name],
+			Parameters: copySchema(descriptor.Parameters), Enabled: c.enabled[name],
 			UnavailableReason: c.bindings[name].UnavailableReason,
 		})
 	}
@@ -168,9 +168,8 @@ func (c *Catalog) SecurityPolicy() policy.Policy {
 	return policy.NormalizePolicy(c.securityPolicy)
 }
 
-// CloneWith creates an isolated catalog while preserving installed bindings
-// and enablement. Runtime-owned harness tools can be added without mutating the
-// user-configurable Manager catalog.
+// CloneWith shares immutable validators, not mutable descriptors or enablement.
+// New Bindings still pass registration; validated harness Bindings reuse contracts.
 func (c *Catalog) CloneWith(bindings ...Binding) (*Catalog, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -178,13 +177,9 @@ func (c *Catalog) CloneWith(bindings ...Binding) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, name := range c.sortedNamesLocked(false) {
-		if err := cloned.Register(c.bindings[name]); err != nil {
-			return nil, err
-		}
-		if err := cloned.SetEnabled(name, c.enabled[name]); err != nil {
-			return nil, err
-		}
+	for name, binding := range c.bindings {
+		cloned.bindings[name] = copyBinding(binding)
+		cloned.enabled[name] = c.enabled[name]
 	}
 	for _, binding := range bindings {
 		if err := cloned.Register(binding); err != nil {
@@ -208,7 +203,7 @@ func (c *Catalog) Definitions() []map[string]any {
 
 func (d Descriptor) Definition() map[string]any {
 	return map[string]any{"type": "function", "function": map[string]any{
-		"name": d.Name, "description": d.Description, "parameters": d.Parameters,
+		"name": d.Name, "description": d.Description, "parameters": copySchema(d.Parameters),
 	}}
 }
 
