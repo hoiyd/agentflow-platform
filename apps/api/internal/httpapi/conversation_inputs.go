@@ -67,7 +67,7 @@ func (h *Handler) enqueueInput(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusAccepted, item)
 	if item.Kind == "follow_up" && item.Status == "queued" {
-		h.scheduleFollowup(r, item.ConversationID, false)
+		h.scheduleFollowup(r.Context(), commandScope(r, workspaceIDFromRequest(r)), item.ConversationID, false)
 	}
 }
 
@@ -81,7 +81,7 @@ func (h *Handler) withdrawInput(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) startFollowup(w http.ResponseWriter, r *http.Request) {
-	if err := h.dispatchFollowup(r, r.PathValue("id"), true); err != nil {
+	if err := h.dispatchFollowup(r.Context(), commandScope(r, workspaceIDFromRequest(r)), r.PathValue("id"), true); err != nil {
 		inputFailure(w, r, err)
 		return
 	}

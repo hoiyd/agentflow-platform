@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentflow-platform/apps/api/app/runcommands"
 	agentpkg "agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/failure"
 )
@@ -170,4 +171,9 @@ func decodeAPIErrorResponse(t *testing.T, recorder *httptest.ResponseRecorder) a
 		t.Fatalf("decode API error response: %v body=%s", err, recorder.Body.String())
 	}
 	return response
+}
+
+func continuationFailurePolicy(err error) (int, bool) {
+	reason, fail := runcommands.ContinuationFailurePolicy(err)
+	return commandStatus(reason), fail
 }

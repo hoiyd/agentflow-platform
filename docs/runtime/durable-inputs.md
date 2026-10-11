@@ -76,8 +76,10 @@ the provider accepted it or obeyed it.
 Successful completion dispatches follow-ups FIFO, one input per new Run. Each
 uses current configuration and a fresh Snapshot, budget and verification state;
 it does not inherit the predecessor's completion contract. This adapter reuses
-normal Chat preparation, execution, completion, admission and single-writer
-ownership. Workspace activity and current Membership are checked again inside
+`app/runcommands.Start`, with the same preparation, execution, completion,
+admission and single-writer ownership as Chat. It passes authorized scope and
+no output callbacks, never a synthetic HTTP request or SSE writer. Workspace
+activity and current Membership are checked again inside
 consumption transactions. Background work is capacity-bounded and participates
 in graceful shutdown; browser disconnect does not own its execution lifetime.
 

@@ -4,10 +4,12 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"agentflow-platform/apps/api/internal/concurrency"
+	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
 )
 
 func TestReserveRunReturnsRetryAfterWhenFull(t *testing.T) {
@@ -19,11 +21,9 @@ func TestReserveRunReturnsRetryAfterWhenFull(t *testing.T) {
 	}
 	defer release()
 
-	handler := &Handler{runController: controller}
+	handler := &Handler{store: fixturestore.New(), runController: controller}
 	recorder := httptest.NewRecorder()
-	if _, ok := handler.reserveRunCapacity(recorder, nil); ok {
-		t.Fatal("expected overloaded request to be rejected")
-	}
+	handler.chat(recorder, httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"queued task"}`)))
 	if recorder.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429, got %d", recorder.Code)
 	}
@@ -41,16 +41,10 @@ func TestStartRunReturnsServiceUnavailableAfterQueueTimeout(t *testing.T) {
 	}
 	defer release()
 
-	queued, err := controller.Reserve()
-	if err != nil {
-		t.Fatalf("reserve queued run: %v", err)
-	}
-	handler := &Handler{runController: controller}
+	handler := &Handler{store: fixturestore.New(), runController: controller}
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/chat", nil)
-	if _, ok := handler.acquireRunSlot(recorder, request, queued, "conversation-2"); ok {
-		t.Fatal("expected queued request to time out")
-	}
+	request := httptest.NewRequest(http.MethodPost, "/api/chat", strings.NewReader(`{"message":"queued task"}`))
+	handler.chat(recorder, request)
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503, got %d", recorder.Code)
 	}

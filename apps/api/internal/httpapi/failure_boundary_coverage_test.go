@@ -10,8 +10,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"agentflow-platform/apps/api/app/runcommands"
 	"agentflow-platform/apps/api/app/runcompletion"
 	agentpkg "agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/verification"
@@ -199,7 +201,7 @@ func TestKnowledgeAndEpisodeHandlersProjectDependencyFailures(t *testing.T) {
 	assertHandlerFailure(t, episodeHandler.getEpisodeReport, request(), http.StatusInternalServerError)
 }
 
-func TestCompleteStreamingRunProjectsPersistenceAndResolutionFailures(t *testing.T) {
+func TestChatCommandProjectsCompletionFailures(t *testing.T) {
 	tests := []struct {
 		name      string
 		configure func(*boundaryWorkspaceStore, error)
@@ -211,19 +213,33 @@ func TestCompleteStreamingRunProjectsPersistenceAndResolutionFailures(t *testing
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			handler, workspace, run, conversation := newBoundaryRunningRun(t, nil)
-			test.configure(workspace, errors.New("completion dependency failed"))
+			handler, workspace, _, conversation := newBoundaryRunningRun(t, nil)
+			handler.runController = concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 1})
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodPost, "/api/chat", nil)
+			injected := false
 
-			if handler.completeStreamingRun(response, response, request, request.Context(), runCompletionRequest{
-				WorkspaceID: domain.DefaultWorkspaceID, RunID: run.ID,
-				ConversationID: conversation.ID, UserInput: "question", Assistant: "answer",
-			}) {
-				t.Fatalf("completion should fail: %s", response.Body.String())
+			handler.executeRunCommand(response, request, func(observer runcommands.Observer) error {
+				writeEvent := observer.Event
+				observer.Event = func(event domain.RunEvent) {
+					writeEvent(event)
+					if event.Type == domain.EventModelDelta && !injected {
+						test.configure(workspace, errors.New("completion dependency failed"))
+						injected = true
+					}
+				}
+				return handler.runCommands().Start(request.Context(), commandScope(request, domain.DefaultWorkspaceID), domain.ChatRequest{
+					WorkspaceID: domain.DefaultWorkspaceID, ConversationID: conversation.ID, Message: "question",
+				}, nil, nil, observer)
+			})
+			if !injected {
+				t.Fatal("fault boundary was never reached")
 			}
 			if !bytes.Contains(response.Body.Bytes(), []byte(`"type":"error"`)) {
 				t.Fatalf("expected SSE failure chunk: %s", response.Body.String())
+			}
+			if bytes.Contains(response.Body.Bytes(), []byte("event: done")) {
+				t.Fatalf("failed completion reported success: %s", response.Body.String())
 			}
 		})
 	}

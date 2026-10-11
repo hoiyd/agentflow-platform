@@ -166,6 +166,14 @@ Empty `api`, `core`, and `services` directories do not create useful boundaries.
 
 `httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.Provider` separates Recall, proposal, explicit commit, asynchronous Turn sync, and lifecycle ownership behind narrow consumer interfaces; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and RAG evaluation. Agent execution remains in `agent`, including its `turn` subpackage.
 
+`app/runcommands` coordinates Start, Continue and Resume using an authorized
+owner/Workspace scope and optional output callbacks, not HTTP objects. It reuses
+the existing RunController, Runtime and `app/runcompletion`. HTTP supplies SSE
+callbacks; queued follow-ups use the same command without a subscriber. Admission
+still honors caller cancellation; admitted execution detaches from the browser,
+while explicit Stop remains Runtime-owned. Writer/capacity release precedes
+follow-up dispatch. No second queue or execution engine is introduced.
+
 The HTTP package defines the small service interfaces it consumes. Concrete implementations are selected only by `app`, so adding caching, another embedding implementation, or a different service adapter does not change transport code.
 
 ### Preserve Private Implementation Packages
@@ -189,13 +197,13 @@ Moving packages out of `internal` only to make the tree appear balanced would we
 ```text
 HTTP chat request
   -> Workspace scope resolution
-  -> run admission
+  -> app/runcommands (admission, single-writer, mode preparation)
   -> Agent Runtime
   -> Turn Engine
   -> Context Assembly loads current Structured Task State
   -> typed Run Events
   -> app/runcompletion (citations, message persistence, Verification, terminal state, title)
-  -> HTTP terminal SSE flush
+  -> terminal callback (HTTP SSE or headless)
   -> non-blocking Memory Turn sync
 
 HTTP RAG search or Agent context retrieval
