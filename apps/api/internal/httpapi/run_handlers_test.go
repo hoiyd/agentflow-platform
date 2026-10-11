@@ -166,9 +166,9 @@ func TestGetRunProjectionHandlesInvalidMissingAndStoreFailures(t *testing.T) {
 		}
 	})
 
-	t.Run("replay failure", func(t *testing.T) {
+	t.Run("projection input failure", func(t *testing.T) {
 		httpStore, workspace, _ := newBoundaryHTTPStore(t)
-		workspace.getRunReplayErr = errors.New("replay unavailable")
+		workspace.getRunErr = errors.New("run unavailable")
 		recorder := httptest.NewRecorder()
 		(&Handler{store: httpStore}).getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/run-1/projection", nil))
 		if recorder.Code != http.StatusInternalServerError {

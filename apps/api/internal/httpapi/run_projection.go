@@ -36,7 +36,7 @@ func (h *Handler) getRunProjection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	scoped := h.scopedStore(r)
-	replay, ok, err := scoped.GetRunReplay(id)
+	read, ok, err := h.loadRunProjection(scoped, id)
 	if err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
@@ -45,9 +45,5 @@ func (h *Handler) getRunProjection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
-	if err := h.enrichRunProjection(scoped, &replay); err != nil {
-		writeFailure(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, replay.Projection)
+	writeJSON(w, http.StatusOK, read.Snapshot)
 }

@@ -205,6 +205,7 @@ type WorkspaceStore interface {
 	ApplyTaskStatePatch(conversationID string, patch domain.TaskStatePatch, source domain.TaskStateSource) (domain.TaskStateRevision, error)
 	ListModelRequestRecords(runID string) ([]domain.ModelRequestRecord, error)
 	UpdateRunVerificationStatus(runID string, status domain.VerificationStatus) (domain.Run, error)
+	ListVerificationEvidence(runID string) ([]domain.VerificationEvidence, error)
 	ListDocuments() ([]domain.Document, error)
 	GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error)
 	DeleteDocument(id string) error
