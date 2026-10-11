@@ -145,7 +145,11 @@ func TestWebSearchManagerKeepsBindingOnReload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, err := manager.List()
+	catalog, err := manager.Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := catalog.List()
 	if err != nil || !enabledFor(items, "web_search") {
 		t.Fatalf("web search must be enabled by default: items=%#v err=%v", items, err)
 	}
@@ -154,11 +158,23 @@ func TestWebSearchManagerKeepsBindingOnReload(t *testing.T) {
 	if err := SaveConfig(path, config); err != nil {
 		t.Fatal(err)
 	}
-	items, err = manager.List()
+	catalog, err = manager.Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	items = catalog.List()
 	if err != nil || enabledFor(items, "web_search") {
 		t.Fatalf("explicitly disabled web search must stay off: items=%#v err=%v", items, err)
 	}
-	items, err = manager.SetEnabled("web_search", true)
+	config.EnabledTools = append(config.EnabledTools, "web_search")
+	if err := SaveConfig(path, config); err != nil {
+		t.Fatal(err)
+	}
+	catalog, err = manager.Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	items = catalog.List()
 	if err != nil || !enabledFor(items, "web_search") {
 		t.Fatalf("web search binding must remain available after reload: items=%#v err=%v", items, err)
 	}
@@ -169,7 +185,11 @@ func TestWebSearchReportsMissingCredential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items, err := manager.List()
+	catalog, err := manager.Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := catalog.List()
 	if err != nil {
 		t.Fatal(err)
 	}

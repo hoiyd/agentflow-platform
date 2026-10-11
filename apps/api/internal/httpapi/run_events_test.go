@@ -90,9 +90,9 @@ func TestObserveRunEventsValidatesCursorAndRun(t *testing.T) {
 	}
 }
 
-func TestObserveRunEventsReportsReplayFailureBeforeStreaming(t *testing.T) {
+func TestObserveRunEventsReportsProjectionFailureBeforeStreaming(t *testing.T) {
 	httpStore, workspace, _ := newBoundaryHTTPStore(t)
-	workspace.getRunReplayErr = errors.New("replay unavailable")
+	workspace.getRunErr = errors.New("run unavailable")
 	handler := &Handler{store: httpStore, runEvents: event.NewHub(2)}
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/runs/run-1/events", nil)

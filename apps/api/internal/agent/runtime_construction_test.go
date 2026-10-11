@@ -44,4 +44,8 @@ func TestRuntimeDoesNotInferOptionalCapabilitiesFromStore(t *testing.T) {
 	if runtime.taskStates != nil || runtime.toolArtifacts != nil || runtime.knowledgeRetriever != nil || len(runtime.knowledgeTools) != 0 {
 		t.Fatal("Store implementation silently enabled optional runtime capabilities")
 	}
+	options.KnowledgeTools = []tool.Binding{{Descriptor: tool.Descriptor{Name: "invalid", Parameters: tool.ObjectSchema(nil, nil)}}}
+	if _, err := NewRuntime(options); err == nil {
+		t.Fatal("invalid harness Binding accepted at startup")
+	}
 }

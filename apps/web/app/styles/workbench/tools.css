@@ -1,7 +1,63 @@
+.tools-panel {
+  overflow: auto;
+}
+
+.tools-list {
+  display: grid;
+}
+
+.tool-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tool-card h3 {
+  color: var(--ink);
+	margin: 0;
+}
+
+.tool-source {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tool-card p {
+  color: var(--muted-strong);
+  line-height: 1.55;
+  margin: 0 0 12px;
+}
+
+.tool-card .tool-availability {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tool-card pre {
+  margin: 0;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.tool-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
 /* Tools */
 
-.tools-panel,
-.replay-page {
+.tools-panel {
   background: var(--bg);
 }
 
@@ -101,4 +157,11 @@
 
 .tool-toggle input {
   margin: 0;
+}
+
+.tool-source {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

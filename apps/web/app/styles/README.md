@@ -1,69 +1,41 @@
 # Stylesheet Organization
 
-The frontend currently uses transitional ordered stylesheet layers. Legacy
-feature files preserve component geometry; the Precision Workbench layer owns
-the current visual system and focused UX corrections. Features that have
-finished the migration, such as Knowledge, use a single authoritative module
-set instead of adding another global override.
+Global styles load from `app/layout.tsx`. Each feature has one authoritative
+module set: component geometry and Workbench styling live together, without a
+legacy stylesheet underneath a second override file.
 
-Global styles load in ordered feature layers from `app/layout.tsx`:
+## Owners
 
-1. The top-level files (`shell.css`, `chat.css`, and related files) contain original component geometry that has not yet moved. Collaboration components are grouped under `collaboration/`.
-2. `workbench/` contains the Precision Workbench theme and UX refinements. Its files must remain in the import order declared in `layout.tsx` because later modules include responsive overrides.
-3. `knowledge/` is authoritative for the Knowledge workspace and is split by task boundary instead of using a legacy-plus-override pair.
-
-## Workbench Modules
-
-- `foundation.css`: design tokens, typography, focus, and shared primitives.
-- `selection-menu.css`: shared pickers, optional search and bounded option lists.
-- `disabled-control-note.css`: disabled-control hover/focus notes.
-- `home.css`: product home geometry, typography, actions, and execution modes.
-- `home-runtime.css`: bounded product GIFs, recording selector, captions, and pause control.
-- `home-platform.css`: landing capability inventory and architecture boundaries.
-- `shell.css`: workspace navigation, top bar, and task status.
-- `chat.css`: mode chooser, messages, markdown, and empty state.
-- `tool-progress.css`: shared compact Tool execution progress in Chat and Replay.
-- `task-state.css`: Conversation Task State trigger, inspector layout, and fact rows.
-- `composer.css`: message composer and Agent dialogs.
-- `agent-toolbar.css`: Single-agent toolbar, description disclosure and Skill selection.
-- `tools.css`: tools workspace refinements.
-- `memory.css`: manual semantic-memory write and recall workspace.
-- `collaboration.css`: multi-agent DAG, Loop Trace, and trace controls.
-- `replay-overlays.css`: run replay, event details, and shared overlays.
-- `evidence-comparison.css`: dedicated controlled Run comparison page.
-- `runtime-diagnostics.css`: event-derived protocol diagnostics shown on Run Replay.
-- `recovery-summary.css`: stopped-run evidence, recovery actions, and Tool effect reconciliation.
-- `task-state-replay.css`: bounded Task State Revision projection on Run Replay.
-- `responsive.css`: breakpoint-specific overrides; keep this last.
-
-Add new rules to the narrowest matching module. Shared tokens belong in `foundation.css`; avoid creating another cross-feature override file.
-
-## Knowledge Modules
-
-- `layout.css`: page shell, section navigation, shared headings, fields, errors, and empty states.
-- `documents.css`: ingestion, document library, document detail, and chunks.
-- `retrieval.css`: search controls, retrieval diagnostics, evidence, and model context.
-- `evaluation.css`: golden-dataset input, evaluation metrics, and case results.
-
-## Collaboration Modules
-
-- `panel.css`: shared trace panel shell and header controls.
-- `autonomous.css`: bounded-loop iterations and human input.
-- `dag.css`: multi-agent execution graph.
-- `plan-steps.css`: plan approval editor and collaboration step output.
+| Module | Responsibility |
+| --- | --- |
+| `workbench/foundation.css` | Tokens, typography, focus, shared form and dialog primitives |
+| `workbench/selection-menu.css`, `disabled-control-note.css` | Shared pickers and disabled-control notes |
+| `workbench/home*.css` | Product home, recordings and capability inventory |
+| `workbench/navigation.css`, `shell.css` | Sidebar navigation, top bar and task status |
+| `workbench/chat.css`, `markdown.css`, `generation-evidence.css` | Chat layout, rendered content, reasoning and partial output |
+| `workbench/composer.css`, `agent-toolbar.css`, `agent-dialog.css` | Composer, Agent/Skill selection, Agent creation/configuration |
+| `workbench/verification.css` | Completion-policy dialog |
+| `workbench/tools.css`, `memory.css` | Tool availability and curated memory workspace |
+| `workbench/replay.css`, `run-report.css`, `trace-detail.css` | Replay layout, report, timeline and event detail |
+| `workbench/tool-progress.css`, `task-state*.css` | Shared Tool progress and Task State consumers |
+| `workbench/evidence-comparison.css`, `runtime-diagnostics.css`, `recovery-summary.css`, `operator-attention.css` | Focused evaluation and diagnostic surfaces |
+| `collaboration/panel.css` | Shared trace shell and controls |
+| `collaboration/autonomous.css` | Loop metrics, iterations and human input |
+| `collaboration/dag.css` | Multi-Agent execution graph |
+| `collaboration/plan-steps.css` | Plan approval, step output and attachments |
+| `knowledge/layout.css`, `documents.css`, `retrieval.css`, `evaluation.css` | Knowledge shell and task-specific sections |
+| `run-usage.css` | Usage ledger and Budget detail |
+| `workbench/identity.css` | Authentication and Workspace selection |
+| `workbench/responsive.css` | Cross-feature breakpoint overrides and reduced motion |
 
 ## Change Rules
 
-1. Search both layers before adding a selector so an existing rule can be moved
-   or narrowed instead of overridden again.
-2. Keep feature selectors in their owning module; do not create catch-all fix
-   files.
-3. Preserve the import order in `app/layout.tsx`.
-4. Avoid nested cards and nested vertical scroll regions.
-5. Put shared color, spacing, typography, and focus tokens in
-   `workbench/foundation.css`.
-6. When a legacy rule is fully superseded, remove it and its override together.
-
-The long-term direction is to make the Workbench modules authoritative and
-retire duplicated legacy rules incrementally, with layout tests after each
-ownership move.
+- Search the owning module before adding a rule; amend it instead of creating
+  another override layer. Shared primitives belong in `foundation.css`.
+- Preserve import and conditional-rule order. Some inherited breakpoint rules
+  precede their feature's base rules intentionally to preserve the existing
+  cascade; do not move them to the end without checking computed styles.
+- Keep one vertical scroll owner for each work surface; trace content expands
+  inside its shared scroll area.
+- Desktop is the supported surface. Preserve existing breakpoint behavior, but
+  do not add a mobile redesign unless requested.

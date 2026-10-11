@@ -1,17 +1,7 @@
 /* Autonomous loop */
 
-.autonomous-panel {
-  grid-template-rows: auto auto minmax(0, 1fr);
-}
-
 .autonomous-limit-strip {
-  border-bottom: 1px solid rgba(86, 76, 66, 0.12);
-  background: rgba(246, 242, 234, 0.74);
   color: var(--muted-strong);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 14px;
 }
 
 .autonomous-limit-strip span {
@@ -83,10 +73,6 @@
 }
 
 .autonomous-iterations {
-  min-height: 0;
-  overflow: auto;
-  padding: 14px;
-  display: grid;
   align-content: start;
   gap: 14px;
 }
@@ -98,29 +84,18 @@
   padding: 18px;
 }
 
-.autonomous-iteration {
-  border: 1px solid rgba(86, 76, 66, 0.14);
-  border-radius: 12px;
-  background: #fffaf2;
-  overflow: hidden;
-}
-
 .autonomous-iteration-header {
-  border-bottom: 1px solid rgba(86, 76, 66, 0.1);
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 11px 12px;
 }
 
 .autonomous-iteration-header strong {
   color: var(--ink);
-  font-size: 14px;
 }
 
 .autonomous-iteration-header span {
   color: var(--muted);
-  font-size: 12px;
 }
 
 .autonomous-step {
@@ -158,12 +133,189 @@
 }
 
 .autonomous-step-header span {
-  border: 1px solid var(--border);
-  border-radius: 999px;
   color: var(--muted-strong);
-  font-size: 11px;
   font-weight: 760;
-  padding: 4px 8px;
   text-transform: uppercase;
+}
+
+.autonomous-panel {
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: #f7f9fb;
+  box-shadow: none;
+}
+
+.autonomous-panel {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.collaboration-panel:not(.autonomous-panel) {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.autonomous-scroll-area {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.autonomous-limit-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 1px;
+  border-bottom: 1px solid var(--border);
+  background: var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  padding: 0;
+  scrollbar-width: thin;
+}
+
+.trace-metric {
+  min-width: max-content;
+  flex: 1 0 max-content;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  color: var(--muted-strong);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px;
+  padding: 5px 7px;
+}
+
+.trace-metric span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.trace-metric strong {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.trace-stop-reason {
+  background: #eef3fb;
+}
+
+.autonomous-iterations {
+  min-height: auto;
+  height: auto;
+  position: relative;
+  display: block;
+  padding: 12px 14px;
+  overflow: visible;
+}
+
+.autonomous-iterations::before {
+  content: "";
+  position: absolute;
+  top: 28px;
+  bottom: 28px;
+  left: 22px;
+  width: 1px;
+  background: var(--border-strong);
+}
+
+.autonomous-iteration {
+  height: auto;
+  position: relative;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  margin: 0;
+  overflow: visible;
+  padding-left: 18px;
+}
+
+.autonomous-iteration::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: 18px;
+  left: 4px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid #f7f9fb;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 0 1px var(--teal);
+}
+
+.autonomous-iteration-header {
+  min-height: 48px;
+  align-items: center;
+  border-bottom: 0;
+  padding: 9px 4px;
+}
+
+.autonomous-iteration-header strong {
+  font-size: 12px;
+  font-weight: 590;
+}
+
+.autonomous-iteration-header span {
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
+
+.human-input-panel {
+  max-height: none;
+  overflow: visible;
+}
+
+.autonomous-panel .collaboration-output {
+  max-height: none;
+  overflow: visible;
+}
+
+.autonomous-iteration,
+.autonomous-step,
+.human-input-panel {
+  border-radius: 4px;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.autonomous-iterations .autonomous-iteration {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.autonomous-step {
+  border-bottom-color: var(--border);
+  background: transparent;
+}
+
+.autonomous-step.completed,
+.autonomous-step.running {
+  background: transparent;
+}
+
+.autonomous-step-header span {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  padding: 0;
+}
+
+.autonomous-step.completed {
+  border-color: rgba(23, 128, 95, 0.35);
 }
 

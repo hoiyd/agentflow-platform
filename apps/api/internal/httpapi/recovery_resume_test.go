@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"agentflow-platform/apps/api/app/runcommands"
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/concurrency"
@@ -66,8 +67,9 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 		MaxOutputChars: 60000,
 		MaxToolCalls:   20,
 	}}, client)
+	probe := &resumeEntryProbe{AgentRuntimeOperations: runtime}
 	handler := &Handler{
-		store: fixtureStore, agentRuntime: runtime,
+		store: fixtureStore, agentRuntime: probe,
 		runController: concurrency.NewRunController(concurrency.RunOptions{
 			MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second,
 		}),
@@ -76,6 +78,9 @@ func TestResumeRecoverableRunThroughAPIStreamsAndCompletes(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/runs/"+run.ID+"/resume", bytes.NewReader([]byte(`{"user_input":"Resume from test"}`)))
 	recorder := httptest.NewRecorder()
 	handler.resumeRun(recorder, req)
+	if probe.ordinary != 0 || probe.autonomous != 1 || probe.collaboration != 0 {
+		t.Fatalf("Resume must invoke exactly one matching entry: %+v", probe)
+	}
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -179,12 +184,16 @@ func TestResumeRecoverableCollaborationThroughAPIUsesDurableStages(t *testing.T)
 		t.Fatal(err)
 	}
 
+	probe := &resumeEntryProbe{AgentRuntimeOperations: runtime}
 	handler := &Handler{
-		store: fixtureStore, agentRuntime: runtime,
+		store: fixtureStore, agentRuntime: probe,
 		runController: concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 1, QueueSize: 1, WaitTimeout: time.Second}),
 	}
 	recorder := httptest.NewRecorder()
 	handler.resumeRun(recorder, httptest.NewRequest(http.MethodPost, "/api/runs/"+prepared.Run.ID+"/resume", bytes.NewReader([]byte(`{}`))))
+	if probe.ordinary != 0 || probe.autonomous != 0 || probe.collaboration != 1 {
+		t.Fatalf("Resume must invoke exactly one matching entry: %+v", probe)
+	}
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "event: done") {
 		t.Fatalf("resume response: status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
@@ -205,22 +214,6 @@ func hasStepRole(steps []domain.CollaborationStep, role string) bool {
 		}
 	}
 	return false
-}
-
-func TestRunExecutionContextIgnoresCancellationAndKeepsValues(t *testing.T) {
-	type contextKey string
-	ctx := context.WithValue(context.Background(), contextKey("request-id"), "req_test")
-	ctx, cancel := context.WithCancel(ctx)
-	cancel()
-
-	req := httptest.NewRequest(http.MethodPost, "/api/runs/run_test/resume", bytes.NewReader([]byte(`{}`))).WithContext(ctx)
-	detached := runExecutionContext(req)
-	if err := detached.Err(); err != nil {
-		t.Fatalf("expected detached context to ignore request cancellation, got %v", err)
-	}
-	if value := detached.Value(contextKey("request-id")); value != "req_test" {
-		t.Fatalf("expected detached context to keep request values, got %#v", value)
-	}
 }
 
 func TestResumeFailurePolicyKeepsReplayOnlyRunRecoverable(t *testing.T) {
@@ -346,4 +339,29 @@ func hasChunk(events []sseChunk, event string, match func(domain.ChatChunk) bool
 		}
 	}
 	return false
+}
+
+func resumeFailurePolicy(err error) (int, bool) {
+	reason, fail := runcommands.ResumeFailurePolicy(err)
+	return commandStatus(reason), fail
+}
+
+type resumeEntryProbe struct {
+	AgentRuntimeOperations
+	ordinary, autonomous, collaboration int
+}
+
+func (p *resumeEntryProbe) ResumeAutonomous(ctx context.Context, id, input string) (<-chan domain.RunEvent, <-chan error) {
+	p.ordinary++
+	return p.AgentRuntimeOperations.ResumeAutonomous(ctx, id, input)
+}
+
+func (p *resumeEntryProbe) ResumeRecoverableAutonomous(ctx context.Context, id, input string) (<-chan domain.RunEvent, <-chan error) {
+	p.autonomous++
+	return p.AgentRuntimeOperations.ResumeRecoverableAutonomous(ctx, id, input)
+}
+
+func (p *resumeEntryProbe) ResumeRecoverableCollaboration(ctx context.Context, id string) (<-chan domain.RunEvent, <-chan error) {
+	p.collaboration++
+	return p.AgentRuntimeOperations.ResumeRecoverableCollaboration(ctx, id)
 }

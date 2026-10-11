@@ -1,0 +1,119 @@
+.episode-report {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(47, 116, 104, 0.2);
+  border-radius: 8px;
+  background: rgba(248, 252, 250, 0.86);
+  padding: 14px;
+}
+
+.episode-report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.episode-report-header .panel-title.inline {
+  border: 0;
+  padding: 0 0 5px;
+}
+
+.episode-report-header p,
+.episode-sections p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.episode-report-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.episode-card {
+  border: 1px solid rgba(47, 116, 104, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.74);
+  padding: 12px;
+}
+
+.episode-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.episode-card strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 720;
+}
+
+.episode-verification.passed {
+  color: var(--teal);
+}
+
+.episode-verification.failed {
+  color: var(--danger);
+}
+
+.episode-verification.needs-review {
+  color: var(--accent-dark);
+}
+
+.episode-sections {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.episode-sections > div {
+  min-width: 0;
+  border-top: 1px solid rgba(47, 116, 104, 0.12);
+  padding-top: 10px;
+}
+
+.episode-section-title {
+  margin-bottom: 7px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.episode-sections ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.episode-sections li {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.episode-report,
+.episode-card {
+  border-radius: 5px;
+  box-shadow: none;
+}
+
+.episode-report {
+  background: #ffffff;
+}
+
+.episode-card {
+  background: #f8fafc;
+}
+
+.episode-card strong {
+  font-family: var(--font-mono);
+}

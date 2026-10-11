@@ -20,6 +20,14 @@ This prevents an evaluation-only validator from drifting away from production
 argument handling. Validation returns canonical arguments, definition revision,
 and arguments hash, but cannot execute a Binding or consume Run Budget.
 
+Schemas compile at registration or operator configuration reload. Runtime harness
+Bindings compile at startup; Catalog views reuse those validators while copying
+descriptors, enablement and security policy. An altered definition retaining its
+old revision is rejected. Clearing the revision explicitly registers a new
+definition and recompiles its validator. Workspace grants and current
+operator revocations are still checked for every call; a view is not an
+authorization cache.
+
 ## Binding contract
 
 `internal/testsupport/tooltest.RunBindingContract` is the reusable conformance

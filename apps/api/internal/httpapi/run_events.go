@@ -32,25 +32,22 @@ func (h *Handler) observeRunEvents(w http.ResponseWriter, r *http.Request) {
 	scoped := h.scopedStore(r)
 	var replayEvents []domain.RunEvent
 	subscription, err := h.runEvents.SnapshotAndSubscribe(r.Context(), runID, func() (domain.RunProjectionSnapshot, error) {
-		replay, ok, loadErr := scoped.GetRunReplay(runID)
+		read, ok, loadErr := h.loadRunProjection(scoped, runID)
 		if loadErr != nil {
 			return domain.RunProjectionSnapshot{}, loadErr
 		}
 		if !ok {
 			return domain.RunProjectionSnapshot{}, store.ErrNotFound("run")
 		}
-		if loadErr = h.enrichRunProjection(scoped, &replay); loadErr != nil {
-			return domain.RunProjectionSnapshot{}, loadErr
-		}
-		if after > replay.Projection.AsOfSequence {
+		if after > read.Snapshot.AsOfSequence {
 			return domain.RunProjectionSnapshot{}, errRunEventCursorAhead
 		}
-		for _, item := range replay.RunEvents {
+		for _, item := range read.Events {
 			if item.Sequence > after {
 				replayEvents = append(replayEvents, item)
 			}
 		}
-		return replay.Projection, nil
+		return read.Snapshot, nil
 	})
 	if err != nil {
 		if errors.Is(err, errRunEventCursorAhead) {

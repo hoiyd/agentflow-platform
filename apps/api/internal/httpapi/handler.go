@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
+	"agentflow-platform/apps/api/app/runcommands"
 	"agentflow-platform/apps/api/app/runcompletion"
-	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
@@ -44,23 +44,10 @@ type HTTPStore interface {
 	store.WorkspaceStoreProvider
 }
 
-// AgentRuntimeOperations is the transport-facing execution capability. HTTP
-// handlers do not depend on Runtime construction or its internal collaborators.
+// AgentRuntimeOperations shares the application command execution capability.
 type AgentRuntimeOperations interface {
+	runcommands.Runtime
 	ValidateAgentSkills(domain.Agent) error
-	PrepareChatRunWithContract(context.Context, string, string, *domain.CompletionContract) (agent.PreparedRun, error)
-	PrepareCollaborationRunWithContract(context.Context, string, string, *domain.CompletionContract) (agent.PreparedCollaborationRun, error)
-	PrepareAutonomousRunWithContract(context.Context, string, string, *domain.CompletionContract) (agent.PreparedCollaborationRun, error)
-	StreamChat(context.Context, agent.PreparedRun, []domain.Message, string) (<-chan domain.RunEvent, <-chan error)
-	RunCollaboration(context.Context, agent.PreparedCollaborationRun, string) (<-chan domain.RunEvent, <-chan error)
-	ContinueCollaboration(context.Context, string, string, domain.AgentRoutingRequirements) (<-chan domain.RunEvent, <-chan error)
-	RunAutonomous(context.Context, agent.PreparedCollaborationRun, string) (<-chan domain.RunEvent, <-chan error)
-	ResumeAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)
-	ResumeRecoverableAutonomous(context.Context, string, string) (<-chan domain.RunEvent, <-chan error)
-	ResumeRecoverableCollaboration(context.Context, string) (<-chan domain.RunEvent, <-chan error)
-	CompleteRun(string) (domain.Run, error)
-	FailRun(string, error) (domain.Run, error)
-	RejectRunCompletion(string, domain.RunStatus, string) (domain.Run, error)
 	CancelRun(string) (domain.Run, error)
 }
 

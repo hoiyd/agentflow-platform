@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestManagerSetEnabledPersistsAndTakesEffectImmediately(t *testing.T) {
+func TestManagerOperatorConfigControlsServiceEnablement(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tools.json")
 	if err := SaveConfig(path, DefaultConfig()); err != nil {
 		t.Fatalf("save config: %v", err)
@@ -17,14 +17,11 @@ func TestManagerSetEnabledPersistsAndTakesEffectImmediately(t *testing.T) {
 		t.Fatalf("new manager: %v", err)
 	}
 
-	items, err := manager.SetEnabled("calculator", false)
-	if err != nil {
-		t.Fatalf("disable calculator: %v", err)
+	config := DefaultConfig()
+	config.EnabledTools = []string{"get_current_time"}
+	if err := SaveConfig(path, config); err != nil {
+		t.Fatal(err)
 	}
-	if enabledFor(items, "calculator") {
-		t.Fatal("expected calculator to be disabled in list response")
-	}
-
 	catalog, err := manager.Catalog()
 	if err != nil {
 		t.Fatalf("catalog: %v", err)

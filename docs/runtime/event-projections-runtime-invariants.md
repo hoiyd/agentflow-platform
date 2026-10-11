@@ -55,6 +55,14 @@ Each projection and the combined snapshot expose `as_of_sequence`. Postgres, Rep
 There is no persisted projection cache; rebuild cost and real profiling data
 must justify one later.
 
+Projection reads and the SSE snapshot/live handoff load only the Run, durable
+events, Usage Ledger, Verification Evidence and Model Request records. These
+are the complete inputs to the current reducers, Skill evidence and invariant
+checks; messages, checkpoints, effects, artifacts and Task State revisions are
+reserved for full Replay. Both paths use the same reducers and diagnostics.
+Adding an invariant that needs another source must extend this dependency list
+and its equivalence tests, not silently omit that check from recovery.
+
 Replay keeps the older top-level `summary` and `usage_ledger` fields for API
 compatibility, but both are now populated from the canonical projection.
 

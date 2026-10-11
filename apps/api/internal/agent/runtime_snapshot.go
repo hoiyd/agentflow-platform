@@ -14,7 +14,6 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/skill"
-	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/availability"
 	"agentflow-platform/apps/api/internal/tool/policy"
@@ -157,32 +156,6 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 	return snapshot, nil
 }
 
-func (r *Runtime) currentCatalog() (*tool.Catalog, error) {
-	var catalog *tool.Catalog
-	var err error
-	if r.tools == nil {
-		catalog = tool.DefaultCatalog()
-	} else {
-		catalog, err = r.tools.Catalog()
-		if err != nil {
-			return nil, err
-		}
-	}
-	bindings := make([]tool.Binding, 0, 3)
-	if r.taskStates != nil {
-		bindings = append(bindings, r.taskStates.ToolBinding())
-	}
-	if r.toolArtifacts != nil {
-		bindings = append(bindings, r.toolArtifacts.ToolBindings()...)
-	}
-	bindings = append(bindings, r.knowledgeTools...)
-	bindings = append(bindings, r.skillService.ToolBindings()...)
-	if len(bindings) == 0 {
-		return catalog, nil
-	}
-	return catalog.CloneWith(bindings...)
-}
-
 // ValidateAgentSkills checks dependencies without installing or granting Tools.
 // The actual Run captures the same packages after harness Tool availability is known.
 func (r *Runtime) ValidateAgentSkills(agent domain.Agent) error {
@@ -210,33 +183,6 @@ func (r *Runtime) freezeAgentSkills(agent domain.Agent, catalog *tool.Catalog) (
 		}
 	}
 	return r.skills.Freeze(agent.Skills, ready)
-}
-
-func (r *Runtime) withHarnessTools(names []string) []string {
-	result := append([]string(nil), names...)
-	harnessNames := make([]string, 0, 3)
-	if r.taskStates != nil {
-		harnessNames = append(harnessNames, taskstate.UpdateToolName)
-	}
-	if r.toolArtifacts != nil {
-		harnessNames = append(harnessNames, r.toolArtifacts.ToolNames()...)
-	}
-	for _, binding := range r.knowledgeTools {
-		harnessNames = append(harnessNames, binding.Descriptor.Name)
-	}
-	for _, harnessName := range harnessNames {
-		found := false
-		for _, name := range result {
-			if name == harnessName {
-				found = true
-				break
-			}
-		}
-		if !found {
-			result = append(result, harnessName)
-		}
-	}
-	return result
 }
 
 func snapshotAgent(agent domain.Agent) domain.RuntimeAgentSnapshot {

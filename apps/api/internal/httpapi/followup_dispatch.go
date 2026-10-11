@@ -4,30 +4,25 @@ import (
 	"context"
 	"errors"
 	"log"
-	"net/http"
 
+	"agentflow-platform/apps/api/app/runcommands"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
 )
 
-type followupDispatch struct {
-	input                 domain.RunInput
-	allowStopped, started bool
-}
-
-func (h *Handler) scheduleFollowup(r *http.Request, conversation string, allowStopped bool) {
+func (h *Handler) scheduleFollowup(ctx context.Context, scope runcommands.Scope, conversation string, allowStopped bool) {
 	if h.inbox == nil {
 		return
 	}
-	if err := h.dispatchFollowup(r, conversation, allowStopped); err != nil && !errors.Is(err, store.ErrInputConflict) {
+	if err := h.dispatchFollowup(ctx, scope, conversation, allowStopped); err != nil && !errors.Is(err, store.ErrInputConflict) {
 		// No retry loop: retained receipts are visible and can be explicitly retried.
 		log.Printf("follow-up dispatch deferred: %v", err)
 	}
 }
 
-func (h *Handler) dispatchFollowup(r *http.Request, conversation string, allowStopped bool) error {
-	r = r.Clone(context.WithoutCancel(r.Context()))
-	items, err := h.inbox.ListRunInputs(r.Context(), workspaceOwner(r), workspaceIDFromRequest(r), conversation)
+func (h *Handler) dispatchFollowup(ctx context.Context, scope runcommands.Scope, conversation string, allowStopped bool) error {
+	ctx = context.WithoutCancel(ctx)
+	items, err := h.inbox.ListRunInputs(ctx, scope.Owner, scope.Workspace.ID(), conversation)
 	if err != nil {
 		return err
 	}
@@ -41,7 +36,7 @@ func (h *Handler) dispatchFollowup(r *http.Request, conversation string, allowSt
 	if input == nil {
 		return store.ErrInputConflict
 	}
-	runs, err := h.scopedStore(r).ListRuns()
+	runs, err := h.store.ForWorkspace(scope.Workspace).ListRuns()
 	if err != nil {
 		return err
 	}
@@ -56,22 +51,17 @@ func (h *Handler) dispatchFollowup(r *http.Request, conversation string, allowSt
 		return store.ErrInputConflict
 	}
 	// Reserve before spawning: pending workers are bounded by existing admission
-	// and participate in application shutdown. StartChat reacquires the same writer.
+	// and participate in application shutdown. The command reacquires the same writer.
 	reservation, err := h.runController.Reserve()
 	if err != nil {
 		return err
 	}
 	go func() {
 		defer reservation.Cancel()
-		h.startChat(&discardStream{header: make(http.Header)}, r, domain.ChatRequest{ConversationID: conversation, WorkspaceID: workspaceIDFromRequest(r), AgentID: input.AgentID, Mode: input.Mode, Message: input.Content}, reservation, &followupDispatch{input: *input, allowStopped: allowStopped})
+		err := h.runCommands().Start(ctx, scope, domain.ChatRequest{ConversationID: conversation, WorkspaceID: scope.Workspace.ID(), AgentID: input.AgentID, Mode: input.Mode, Message: input.Content}, reservation, &runcommands.Followup{Input: *input, AllowStopped: allowStopped}, runcommands.Observer{})
+		if err != nil {
+			log.Printf("follow-up execution deferred: %v", err)
+		}
 	}()
 	return nil
 }
-
-// Background execution has no browser subscriber; durable events are the output.
-type discardStream struct{ header http.Header }
-
-func (w *discardStream) Header() http.Header          { return w.header }
-func (*discardStream) Write(data []byte) (int, error) { return len(data), nil }
-func (*discardStream) WriteHeader(int)                {}
-func (*discardStream) Flush()                         {}

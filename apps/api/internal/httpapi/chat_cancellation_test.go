@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	agentpkg "agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/openai"
 )
@@ -21,15 +22,14 @@ func TestRunStreamFailureUsesDurableCancellationState(t *testing.T) {
 		name       string
 		status     domain.RunStatus
 		err        error
-		failRun    bool
 		wantStatus domain.RunStatus
 		wantDone   bool
 	}{
-		{"requested cancellation", domain.RunCanceling, canceled, true, domain.RunCanceled, true},
-		{"already canceled autonomous", domain.RunCanceled, errors.New("run canceled"), true, domain.RunCanceled, true},
-		{"unrequested cancellation", domain.RunRunning, canceled, true, domain.RunFailed, false},
-		{"provider failure during stop", domain.RunCanceling, &openai.ModelError{Kind: openai.ErrorTransport}, true, domain.RunFailed, false},
-		{"rejected continuation", domain.RunWaitingForUser, errors.New("not waiting for user input"), false, domain.RunWaitingForUser, false},
+		{"requested cancellation", domain.RunCanceling, canceled, domain.RunCanceled, true},
+		{"already canceled autonomous", domain.RunCanceled, errors.New("run canceled"), domain.RunCanceled, true},
+		{"unrequested cancellation", domain.RunRunning, canceled, domain.RunFailed, false},
+		{"provider failure during stop", domain.RunCanceling, &openai.ModelError{Kind: openai.ErrorTransport}, domain.RunFailed, false},
+		{"rejected continuation", domain.RunWaitingForUser, errors.New("not waiting for user input"), domain.RunWaitingForUser, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			storage, run := createHTTPTestRun(t)
@@ -37,21 +37,21 @@ func TestRunStreamFailureUsesDurableCancellationState(t *testing.T) {
 				t.Fatal(err)
 			}
 			runtime := newRuntimeForTest(agentpkg.RuntimeOptions{Store: storage}, newLocalFallbackOpenAIClientForTest())
-			handler := &Handler{store: storage, agentRuntime: runtime}
+			handler := &Handler{store: storage, agentRuntime: canceledContinuation{AgentRuntimeOperations: runtime, err: tc.err}, runController: concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 1})}
 			recorder := httptest.NewRecorder()
-			request := httptest.NewRequest(http.MethodPost, "/api/runs/"+run.ID+"/resume", nil)
-			handler.finishRunStreamFailure(recorder, recorder, request, run.ID, http.StatusInternalServerError, tc.err, tc.failRun)
+			request := httptest.NewRequest(http.MethodPost, "/api/runs/"+run.ID+"/continue", strings.NewReader(`{"plan":"test"}`))
+			handler.continueRun(recorder, request)
 			current, ok, err := storage.GetRun(run.ID)
 			if err != nil || !ok || current.Status != tc.wantStatus {
 				t.Fatalf("run status=%s ok=%t err=%v", current.Status, ok, err)
 			}
 			body := recorder.Body.String()
 			if tc.wantDone {
-				if strings.Contains(body, "event: error") || !strings.HasPrefix(body, "event: done\ndata: ") {
+				if strings.Contains(body, "event: error") || !strings.Contains(body, "event: done\ndata: ") {
 					t.Fatalf("unexpected canceled stream: %s", body)
 				}
 				var chunk domain.ChatChunk
-				if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(body, "event: done\ndata: "))), &chunk); err != nil {
+				if err := json.Unmarshal([]byte(strings.TrimSpace(strings.Split(body, "event: done\ndata: ")[1])), &chunk); err != nil {
 					t.Fatal(err)
 				}
 				if chunk.Status != "canceled" || chunk.RunID != run.ID || chunk.ConversationID != run.ConversationID || chunk.AgentID != run.AgentID || chunk.VerificationStatus != string(current.VerificationStatus) {
@@ -62,4 +62,18 @@ func TestRunStreamFailureUsesDurableCancellationState(t *testing.T) {
 			}
 		})
 	}
+}
+
+type canceledContinuation struct {
+	AgentRuntimeOperations
+	err error
+}
+
+func (r canceledContinuation) ContinueCollaboration(context.Context, string, string, domain.AgentRoutingRequirements) (<-chan domain.RunEvent, <-chan error) {
+	events := make(chan domain.RunEvent)
+	close(events)
+	errs := make(chan error, 1)
+	errs <- r.err
+	close(errs)
+	return events, errs
 }
