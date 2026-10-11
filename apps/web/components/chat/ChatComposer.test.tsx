@@ -66,10 +66,10 @@ it("invokes only bound skills and preserves the task text", () => {
   fireEvent.click(screen.getByRole("button", {name: "Skill: evidence-research"}));
   expect(screen.queryByRole("combobox", {name: "Search skills"})).toBeNull();
   expect(screen.getAllByRole("option").map(option => option.textContent)).toEqual(["Automatic", "evidence-research", "knowledge-answer"]);
-  fireEvent.click(screen.getByRole("option", {name: "knowledge-answer", exact: true}));
+  fireEvent.click(screen.getByRole("option", {name: "knowledge-answer"}));
   expect(onInputChange).toHaveBeenLastCalledWith("/skill:knowledge-answer Find evidence");
   fireEvent.click(screen.getByRole("button", {name: "Skill: evidence-research"}));
-  fireEvent.click(screen.getByRole("option", {name: "Automatic", exact: true}));
+  fireEvent.click(screen.getByRole("option", {name: "Automatic"}));
   expect(onInputChange).toHaveBeenLastCalledWith("Find evidence");
   view.unmount();
   renderComposer("multi_agent", ["knowledge-answer"]);

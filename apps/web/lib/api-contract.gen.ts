@@ -468,6 +468,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{id}/task-state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ConversationId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getTaskState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["patchTaskState"];
+        trace?: never;
+    };
+    "/api/runs/{id}/projection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getRunProjection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/model_requests": {
+        parameters: {
+            query?: {
+                /** @description Return captured content only when retained by the configured capture policy. */
+                include_content?: boolean;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getRunModelRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/episode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getEpisodeReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/tool-effects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listToolEffects"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/tool-effects/{idempotency_key}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                idempotency_key: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["reconcileToolEffect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{id}/events": {
         parameters: {
             query?: {
@@ -1026,7 +1138,7 @@ export interface components {
             run_id: string;
             budget: components["schemas"]["RuntimeRunBudget"];
             totals: components["schemas"]["RunUsageTotals"];
-            entries: components["schemas"]["RunUsageEntry"][];
+            entries: components["schemas"]["RunUsageEntry"][] | null;
             /** Format: date-time */
             updated_at?: string;
         };
@@ -1143,41 +1255,398 @@ export interface components {
             sequence: number;
             update?: components["schemas"]["ToolProgressUpdate"];
         };
-        RunReplay: {
-            run: components["schemas"]["Run"];
-            projection: {
-                skill_evidence?: components["schemas"]["SkillEvidence"][];
-                partial_outputs?: components["schemas"]["PartialOutput"][];
-                tool_progress?: components["schemas"]["ToolProgress"][];
-            } & {
+        RuntimeInvariantFailure: {
+            code: string;
+            owner: string;
+            run_id: string;
+            event_id?: string;
+            /** Format: int64 */
+            sequence?: number;
+            message: string;
+        };
+        RunProjection: {
+            run_id: string;
+            conversation_id: string;
+            /** @description Durable status; read views tolerate historical values. */
+            status: string;
+            verification_status: string;
+            active_stage_ids: string[] | null;
+            active_turn_ids: string[] | null;
+            active_model_call_ids: string[] | null;
+            active_tool_call_ids: string[] | null;
+            summary: components["schemas"]["RunTraceSummary"];
+            /** Format: int64 */
+            as_of_sequence: number;
+        };
+        UsageProjection: {
+            ledger: components["schemas"]["RunUsageLedger"];
+            /** Format: int64 */
+            as_of_sequence: number;
+        };
+        VerificationProjection: {
+            status: string;
+            latest_attempt: number;
+            current_subject_hash?: string;
+            evidence_count: number;
+            fresh_evidence_count: number;
+            /** Format: int64 */
+            as_of_sequence: number;
+        };
+        RunProjectionSnapshot: {
+            run: components["schemas"]["RunProjection"];
+            usage: components["schemas"]["UsageProjection"];
+            verification: components["schemas"]["VerificationProjection"];
+            /** Format: int64 */
+            as_of_sequence: number;
+            invariant_failures: components["schemas"]["RuntimeInvariantFailure"][] | null;
+            skill_evidence?: components["schemas"]["SkillEvidence"][];
+            partial_outputs: components["schemas"]["PartialOutput"][] | null;
+            tool_progress: components["schemas"]["ToolProgress"][] | null;
+        };
+        RecoveryEvidence: {
+            kind: string;
+            id?: string;
+            status?: string;
+            summary: string;
+            artifact_refs?: string[];
+        };
+        RecoveryAction: {
+            kind: string;
+            label: string;
+            enabled: boolean;
+            target_id?: string;
+            unavailable_reason?: string;
+        };
+        RecoverySummary: {
+            reason: string;
+            title: string;
+            message: string;
+            evidence: components["schemas"]["RecoveryEvidence"][] | null;
+            artifact_refs: string[] | null;
+            actions: components["schemas"]["RecoveryAction"][] | null;
+        };
+        /** @enum {string} */
+        TaskItemStatus: "pending" | "in_progress" | "completed" | "canceled";
+        /** @enum {string} */
+        TaskBlockerStatus: "open" | "resolved";
+        TaskItem: {
+            id: string;
+            title: string;
+            details?: string;
+            status: components["schemas"]["TaskItemStatus"];
+            artifact_refs?: string[];
+        };
+        TaskDecision: {
+            id: string;
+            statement: string;
+            rationale?: string;
+            supersedes_id?: string;
+        };
+        TaskConstraint: {
+            id: string;
+            statement: string;
+        };
+        TaskBlocker: {
+            id: string;
+            description: string;
+            status: components["schemas"]["TaskBlockerStatus"];
+        };
+        TaskState: {
+            schema_version: number;
+            workspace_id: string;
+            conversation_id: string;
+            /** Format: int64 */
+            version: number;
+            goal?: string;
+            tasks: components["schemas"]["TaskItem"][];
+            decisions: components["schemas"]["TaskDecision"][];
+            constraints: components["schemas"]["TaskConstraint"][];
+            blockers: components["schemas"]["TaskBlocker"][];
+            artifact_refs: string[];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description Closed command names; operation-specific required fields are validated by the domain patch executor. */
+        TaskStateOperation: {
+            /** @enum {string} */
+            type: "set_goal" | "clear_goal" | "upsert_task" | "set_task_status" | "remove_task" | "add_decision" | "upsert_constraint" | "remove_constraint" | "upsert_blocker" | "resolve_blocker" | "remove_blocker" | "add_artifact_ref" | "remove_artifact_ref";
+            goal?: string;
+            task?: components["schemas"]["TaskItem"];
+            task_id?: string;
+            task_status?: components["schemas"]["TaskItemStatus"];
+            decision?: components["schemas"]["TaskDecision"];
+            constraint?: components["schemas"]["TaskConstraint"];
+            constraint_id?: string;
+            blocker?: components["schemas"]["TaskBlocker"];
+            blocker_id?: string;
+            artifact_ref?: string;
+        };
+        TaskStatePatch: {
+            /** Format: int64 */
+            expected_version: number;
+            operations: components["schemas"]["TaskStateOperation"][];
+        };
+        TaskStateSource: {
+            actor_type: string;
+            actor_id?: string;
+            run_id?: string;
+            stage_id?: string;
+            turn_id?: string;
+            source_message_id?: string;
+        };
+        TaskStateRevision: {
+            id: string;
+            workspace_id: string;
+            conversation_id: string;
+            /** Format: int64 */
+            version: number;
+            /** Format: int64 */
+            previous_version: number;
+            patch: components["schemas"]["TaskStatePatch"];
+            state: components["schemas"]["TaskState"];
+            source: components["schemas"]["TaskStateSource"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        ToolArtifact: {
+            id: string;
+            schema_version: number;
+            run_id: string;
+            stage_id?: string;
+            turn_id?: string;
+            tool_call_id: string;
+            tool_name: string;
+            definition_revision?: string;
+            media_type: string;
+            content_hash: string;
+            original_byte_size: number;
+            stored_byte_size: number;
+            redacted: boolean;
+            redaction_strategy?: string;
+            redaction_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at?: string;
+            expired?: boolean;
+        };
+        /** @enum {string} */
+        ToolEffectReconciliationAction: "confirm_committed" | "confirm_failed" | "retry_with_same_key" | "compensate";
+        ToolEffect: {
+            idempotency_key: string;
+            /** Format: int64 */
+            version: number;
+            run_id: string;
+            stage_id: string;
+            turn_id?: string;
+            tool_call_id: string;
+            tool_name: string;
+            definition_revision?: string;
+            request_hash: string;
+            status: string;
+            has_result: boolean;
+            error?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            available_actions?: components["schemas"]["ToolEffectReconciliationAction"][] | null;
+        };
+        ToolEffectList: {
+            run_id: string;
+            effects: components["schemas"]["ToolEffect"][];
+        };
+        ToolEffectReconciliationCommand: {
+            command_id: string;
+            action: components["schemas"]["ToolEffectReconciliationAction"];
+            /** Format: int64 */
+            expected_version: number;
+            actor: string;
+            reason: string;
+            result?: unknown;
+        };
+        ToolEffectReconciliationOutcome: {
+            command_id: string;
+            applied: boolean;
+            outcome: string;
+            effect: components["schemas"]["ToolEffect"];
+        };
+        StageCheckpoint: {
+            id: string;
+            provider: string;
+            run_id: string;
+            conversation_id: string;
+            stage_id: string;
+            status: string;
+            input_hash: string;
+            output_hash?: string;
+            runtime_snapshot_hash: string;
+            tool_definitions_hash: string;
+            /** Format: int64 */
+            event_cursor: number;
+            error?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ModelRequestEnvelope: {
+            id: string;
+            run_id: string;
+            conversation_id: string;
+            stage_id?: string;
+            turn_id?: string;
+            model_call_id: string;
+            attempt: number;
+            operation: string;
+            provider: string;
+            model: string;
+            context_manifest_id?: string;
+            runtime_snapshot_hash: string;
+            payload_hash: string;
+            payload_bytes: number;
+            parameters: {
+                [key: string]: unknown;
+            } | null;
+            source_token_breakdown: {
+                [key: string]: number;
+            } | null;
+            message_count: number;
+            tool_count: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ModelRequestCapture: {
+            /** @enum {string} */
+            mode: "metadata_only" | "redacted" | "full";
+            content?: string;
+            content_hash?: string;
+            original_bytes: number;
+            stored_bytes: number;
+            redacted: boolean;
+            redaction_strategy?: string;
+            redaction_count: number;
+            truncated: boolean;
+            reconstructable: boolean;
+            /** Format: date-time */
+            expires_at?: string;
+            expired: boolean;
+        };
+        ModelRequestSourceDiff: {
+            envelope_selected_tokens: {
+                [key: string]: number;
+            };
+            manifest_selected_tokens: {
+                [key: string]: number;
+            };
+            manifest_excluded_tokens: {
+                [key: string]: number;
+            };
+            matches_envelope: boolean;
+        };
+        ModelRequestDebugRecord: {
+            envelope: components["schemas"]["ModelRequestEnvelope"];
+            capture: components["schemas"]["ModelRequestCapture"];
+            /** @description Context Manifest metadata */
+            manifest?: {
                 [key: string]: unknown;
             };
+            source_diff: components["schemas"]["ModelRequestSourceDiff"];
+        };
+        ModelRequestDebugResponse: {
+            run_id: string;
+            /** @enum {string} */
+            reconstructability_status: "valid" | "invalid";
+            invariant_error?: string;
+            records: components["schemas"]["ModelRequestDebugRecord"][];
+        };
+        EpisodeRetrievals: {
+            event_count: number;
+            memories: {
+                [key: string]: unknown;
+            }[] | null;
+            chunks: {
+                [key: string]: unknown;
+            }[] | null;
+        };
+        EpisodeLLMCall: {
+            event_id: string;
+            step_id?: string;
+            role?: string;
+            agent_id?: string;
+            model?: string;
+            framework?: string;
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            total_tokens?: number;
+            token_usage_estimated?: boolean;
+            output_chars?: number;
+            /** Format: int64 */
+            duration_ms?: number;
+        };
+        EpisodeToolCall: {
+            event_id: string;
+            step_id?: string;
+            tool_name?: string;
+            tool_call_id?: string;
+            error?: string;
+            /** Format: int64 */
+            duration_ms?: number;
+        };
+        EpisodeError: {
+            source: string;
+            event_id?: string;
+            step_id?: string;
+            kind?: string;
+            category?: string;
+            retryable?: boolean;
+            message: string;
+        };
+        EpisodeVerification: {
+            status: string;
+            subject_hash?: string;
+            contract?: {
+                [key: string]: unknown;
+            };
+            evidence: string[] | null;
+            warnings: string[] | null;
+            records: components["schemas"]["VerificationEvidence"][] | null;
+            artifacts: components["schemas"]["VerificationArtifact"][] | null;
+        };
+        EpisodeReport: {
+            run: components["schemas"]["Run"];
+            conversation: components["schemas"]["Conversation"];
+            agent: components["schemas"]["Agent"];
+            task: string;
+            final_output: string;
+            messages: components["schemas"]["Message"][] | null;
+            steps: components["schemas"]["CollaborationStep"][] | null;
+            trace_summary: components["schemas"]["RunTraceSummary"];
+            retrievals: components["schemas"]["EpisodeRetrievals"];
+            llm_calls: components["schemas"]["EpisodeLLMCall"][] | null;
+            tool_calls: components["schemas"]["EpisodeToolCall"][] | null;
+            errors: components["schemas"]["EpisodeError"][] | null;
+            verification: components["schemas"]["EpisodeVerification"];
+        };
+        RunReplay: {
+            run: components["schemas"]["Run"];
+            projection: components["schemas"]["RunProjectionSnapshot"];
             runtime_snapshot?: {
                 [key: string]: unknown;
             };
             conversation: components["schemas"]["Conversation"];
-            messages: components["schemas"]["Message"][];
-            steps: components["schemas"]["CollaborationStep"][];
+            messages: components["schemas"]["Message"][] | null;
+            steps: components["schemas"]["CollaborationStep"][] | null;
             summary: components["schemas"]["RunTraceSummary"];
             usage_ledger: components["schemas"]["RunUsageLedger"];
-            run_events: components["schemas"]["RunEvent"][];
-            stage_checkpoints: {
-                [key: string]: unknown;
-            }[];
-            tool_effects: {
-                [key: string]: unknown;
-            }[];
-            tool_artifacts: {
-                [key: string]: unknown;
-            }[];
-            verification_evidence: components["schemas"]["VerificationEvidence"][];
-            verification_artifacts: components["schemas"]["VerificationArtifact"][];
-            task_state_revisions: {
-                [key: string]: unknown;
-            }[];
-            recovery_summary?: {
-                [key: string]: unknown;
-            };
+            run_events: components["schemas"]["RunEvent"][] | null;
+            stage_checkpoints: components["schemas"]["StageCheckpoint"][] | null;
+            tool_effects: components["schemas"]["ToolEffect"][] | null;
+            tool_artifacts: components["schemas"]["ToolArtifact"][] | null;
+            verification_evidence: components["schemas"]["VerificationEvidence"][] | null;
+            verification_artifacts: components["schemas"]["VerificationArtifact"][] | null;
+            task_state_revisions: components["schemas"]["TaskStateRevision"][] | null;
+            recovery_summary?: components["schemas"]["RecoverySummary"];
         };
         VerificationDecision: {
             status: components["schemas"]["VerificationStatus"];
@@ -2259,6 +2728,194 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getTaskState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ConversationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current structured state; empty collections when no revision exists. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskState"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    patchTaskState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ConversationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskStatePatch"];
+            };
+        };
+        responses: {
+            /** @description Immutable applied revision. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskStateRevision"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getRunProjection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Event-derived read models and runtime diagnostics at an event watermark. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunProjectionSnapshot"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getRunModelRequests: {
+        parameters: {
+            query?: {
+                /** @description Return captured content only when retained by the configured capture policy. */
+                include_content?: boolean;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Physical request metadata, policy-controlled capture and source accounting. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelRequestDebugResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getEpisodeReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Derived episode report; not an independent source of Run state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodeReport"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listToolEffects: {
+        parameters: {
+            query?: {
+                status?: string;
+                tool?: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effect summaries without raw result content. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolEffectList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    reconcileToolEffect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                idempotency_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolEffectReconciliationCommand"];
+            };
+        };
+        responses: {
+            /** @description Idempotent reconciliation outcome. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolEffectReconciliationOutcome"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
         };
     };

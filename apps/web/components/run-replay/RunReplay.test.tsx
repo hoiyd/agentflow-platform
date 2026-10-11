@@ -225,6 +225,8 @@ function replayFixture(): RunReplayData {
       updated_at: timestamp
     },
     projection: {
+      partial_outputs: [],
+      tool_progress: [],
       run: {
         run_id: "run-1",
         conversation_id: "conversation-1",

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { APIError, apiRequest, setWorkspaceID } from "./api-client.ts";
-import { continueRun, getAPIHealth, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listAgents, listRunAttention, listToolEffects, observeRunEvents, patchTaskState, reconcileToolEffect } from "./api.ts";
+import { continueRun, getAPIHealth, getEpisodeReport, getRunModelRequests, getRunProjection, getRunReplay, getRunUsage, getTaskState, listAgents, listRunAttention, listToolEffects, observeRunEvents, patchTaskState, reconcileToolEffect } from "./api.ts";
 import {
   createDocument,
   deleteDocument,
@@ -149,6 +149,23 @@ test("replay normalizes nullable recovery collections", async (t) => {
   assert.deepEqual(replay.recovery_summary.evidence, []);
   assert.deepEqual(replay.recovery_summary.artifact_refs, []);
   assert.deepEqual(replay.recovery_summary.actions, []);
+});
+
+test("episode report normalizes wire-level null collections without discarding evidence", async (t) => {
+  mockFetch(t, {
+    ...replayPayload(), task: "task", final_output: "answer",
+    messages: null, steps: null, llm_calls: null, tool_calls: null, errors: null,
+    retrievals: { event_count: 2, memories: null, chunks: [{ source_id: "source" }] },
+    verification: { status: "failed", evidence: null, warnings: ["unsupported claim"], records: null, artifacts: null }
+  });
+  const report = await getEpisodeReport("run-1");
+  for (const key of ["messages", "steps", "llm_calls", "tool_calls", "errors"]) assert.deepEqual(report[key], []);
+  assert.deepEqual(report.retrievals.memories, []);
+  assert.equal(report.retrievals.chunks[0].source_id, "source");
+  assert.deepEqual(report.verification.records, []);
+  assert.deepEqual(report.verification.evidence, []);
+  assert.equal(report.verification.status, "failed");
+  assert.deepEqual(report.verification.warnings, ["unsupported claim"]);
 });
 
 test("tool effect clients preserve conflict versions and commands", async (t) => {

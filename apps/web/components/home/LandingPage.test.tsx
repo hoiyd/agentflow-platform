@@ -16,7 +16,7 @@ it("keeps the public product entry actionable with valid section links and recor
     if (href.startsWith("#")) expect(document.getElementById(href.slice(1))).not.toBeNull();
     else expect(href === "/" || href === "/workspace" || href.startsWith("https://github.com/hoiyd/agentflow-platform")).toBe(true);
   }
-  for (const link of screen.getAllByRole("link", { name: "Open workspace", exact: true })) {
+  for (const link of screen.getAllByRole("link", { name: "Open workspace" })) {
     expect(link.getAttribute("href")).toBe("/workspace");
   }
   const image = screen.getByRole("img", { name: "Multi-agent execution recording" });
@@ -73,7 +73,7 @@ it("exposes the original recording on failure and clears the error only on a dif
 it("separates runtime capabilities from deployment and evidence limitations", () => {
   render(<Page />);
   for (const name of ["Keep work moving", "Tools and trusted Skills", "Model controls and visibility", "Owner-scoped Workspaces"]) {
-    expect(screen.getByRole("heading", { name, exact: true })).toBeTruthy();
+    expect(screen.getByRole("heading", { name })).toBeTruthy();
   }
   expect(screen.getByText(/Single-instance execution/)).toBeTruthy();
   expect(screen.getByText(/not proof of factual accuracy/)).toBeTruthy();

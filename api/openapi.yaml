@@ -12,8 +12,9 @@ info:
     alternate authentication mechanism. HTTPS uses __Host-agentflow_session;
     loopback HTTP uses agentflow_session. Archived business writes return 409;
     missing scope resolves to the owner's active default. Workspace management
-    is owner-scoped independently of the selected header. Agent/Tool configuration
-    writes remain trusted-local operator operations (OIDC users receive 403).
+    is owner-scoped independently of the selected header. Workspace Agent
+    configuration and Tool availability writes are owner-scoped; catalog reload
+    and global Tool security policy remain trusted-local operator operations.
     Resource IDs are resolved inside that authorized Workspace; foreign IDs return
     404. SSE delivery rechecks the session and Workspace on each write, including
     Chat/Continue/Resume. A later access failure emits an error frame using the
@@ -679,6 +680,133 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+
+  /api/conversations/{id}/task-state:
+    parameters:
+      - $ref: '#/components/parameters/ConversationId'
+    get:
+      operationId: getTaskState
+      tags: [Conversations]
+      responses:
+        '200':
+          description: Current structured state; empty collections when no revision exists.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskState' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      operationId: patchTaskState
+      tags: [Conversations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TaskStatePatch' }
+      responses:
+        '200':
+          description: Immutable applied revision.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TaskStateRevision' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/runs/{id}/projection:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      operationId: getRunProjection
+      tags: [Runs]
+      responses:
+        '200':
+          description: Event-derived read models and runtime diagnostics at an event watermark.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunProjectionSnapshot' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/runs/{id}/model_requests:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - name: include_content
+        in: query
+        schema: { type: boolean, default: false }
+        description: Return captured content only when retained by the configured capture policy.
+    get:
+      operationId: getRunModelRequests
+      tags: [Runs]
+      responses:
+        '200':
+          description: Physical request metadata, policy-controlled capture and source accounting.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModelRequestDebugResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/runs/{id}/episode:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      operationId: getEpisodeReport
+      tags: [Runs]
+      responses:
+        '200':
+          description: Derived episode report; not an independent source of Run state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EpisodeReport' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/runs/{id}/tool-effects:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      operationId: listToolEffects
+      tags: [Runs]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: tool, in: query, schema: { type: string, maxLength: 128 } }
+      responses:
+        '200':
+          description: Effect summaries without raw result content.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ToolEffectList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /api/runs/{id}/tool-effects/{idempotency_key}/reconcile:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - name: idempotency_key
+        in: path
+        required: true
+        schema: { type: string, maxLength: 256 }
+    post:
+      operationId: reconcileToolEffect
+      tags: [Runs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ToolEffectReconciliationCommand' }
+      responses:
+        '200':
+          description: Idempotent reconciliation outcome.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ToolEffectReconciliationOutcome' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
 
   /api/runs/{id}/events:
     parameters:
@@ -1599,7 +1727,7 @@ components:
         totals:
           $ref: '#/components/schemas/RunUsageTotals'
         entries:
-          type: array
+          type: [array, 'null']
           items:
             $ref: '#/components/schemas/RunUsageEntry'
         updated_at:
@@ -1723,6 +1851,400 @@ components:
         status: { type: string, enum: [running, completed, failed, interrupted] }
         sequence: { type: integer, format: int64 }
         update: { $ref: '#/components/schemas/ToolProgressUpdate' }
+    RuntimeInvariantFailure:
+      type: object
+      required: [code, owner, run_id, message]
+      properties:
+        code: { type: string }
+        owner: { type: string }
+        run_id: { type: string }
+        event_id: { type: string }
+        sequence: { type: integer, format: int64 }
+        message: { type: string }
+    RunProjection:
+      type: object
+      required: [run_id, conversation_id, status, verification_status, active_stage_ids, active_turn_ids, active_model_call_ids, active_tool_call_ids, summary, as_of_sequence]
+      properties:
+        run_id: { type: string }
+        conversation_id: { type: string }
+        status: { type: string, description: Durable status; read views tolerate historical values. }
+        verification_status: { type: string }
+        active_stage_ids: { type: [array, 'null'], items: { type: string } }
+        active_turn_ids: { type: [array, 'null'], items: { type: string } }
+        active_model_call_ids: { type: [array, 'null'], items: { type: string } }
+        active_tool_call_ids: { type: [array, 'null'], items: { type: string } }
+        summary: { $ref: '#/components/schemas/RunTraceSummary' }
+        as_of_sequence: { type: integer, format: int64 }
+    UsageProjection:
+      type: object
+      required: [ledger, as_of_sequence]
+      properties:
+        ledger: { $ref: '#/components/schemas/RunUsageLedger' }
+        as_of_sequence: { type: integer, format: int64 }
+    VerificationProjection:
+      type: object
+      required: [status, latest_attempt, evidence_count, fresh_evidence_count, as_of_sequence]
+      properties:
+        status: { type: string }
+        latest_attempt: { type: integer }
+        current_subject_hash: { type: string }
+        evidence_count: { type: integer }
+        fresh_evidence_count: { type: integer }
+        as_of_sequence: { type: integer, format: int64 }
+    RunProjectionSnapshot:
+      type: object
+      required: [run, usage, verification, as_of_sequence, invariant_failures, tool_progress, partial_outputs]
+      properties:
+        run: { $ref: '#/components/schemas/RunProjection' }
+        usage: { $ref: '#/components/schemas/UsageProjection' }
+        verification: { $ref: '#/components/schemas/VerificationProjection' }
+        as_of_sequence: { type: integer, format: int64 }
+        invariant_failures: { type: [array, 'null'], items: { $ref: '#/components/schemas/RuntimeInvariantFailure' } }
+        skill_evidence: { type: array, items: { $ref: '#/components/schemas/SkillEvidence' } }
+        partial_outputs: { type: [array, 'null'], items: { $ref: '#/components/schemas/PartialOutput' } }
+        tool_progress: { type: [array, 'null'], items: { $ref: '#/components/schemas/ToolProgress' } }
+    RecoveryEvidence:
+      type: object
+      required: [kind, summary]
+      properties:
+        kind: { type: string }
+        id: { type: string }
+        status: { type: string }
+        summary: { type: string }
+        artifact_refs: { type: array, items: { type: string } }
+    RecoveryAction:
+      type: object
+      required: [kind, label, enabled]
+      properties:
+        kind: { type: string }
+        label: { type: string }
+        enabled: { type: boolean }
+        target_id: { type: string }
+        unavailable_reason: { type: string }
+    RecoverySummary:
+      type: object
+      required: [reason, title, message, evidence, artifact_refs, actions]
+      properties:
+        reason: { type: string }
+        title: { type: string }
+        message: { type: string }
+        evidence: { type: [array, 'null'], items: { $ref: '#/components/schemas/RecoveryEvidence' } }
+        artifact_refs: { type: [array, 'null'], items: { type: string } }
+        actions: { type: [array, 'null'], items: { $ref: '#/components/schemas/RecoveryAction' } }
+    TaskItemStatus: { type: string, enum: [pending, in_progress, completed, canceled] }
+    TaskBlockerStatus: { type: string, enum: [open, resolved] }
+    TaskItem:
+      type: object
+      required: [id, title, status]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        details: { type: string }
+        status: { $ref: '#/components/schemas/TaskItemStatus' }
+        artifact_refs: { type: array, items: { type: string } }
+    TaskDecision:
+      type: object
+      required: [id, statement]
+      properties:
+        id: { type: string }
+        statement: { type: string }
+        rationale: { type: string }
+        supersedes_id: { type: string }
+    TaskConstraint:
+      type: object
+      required: [id, statement]
+      properties:
+        id: { type: string }
+        statement: { type: string }
+    TaskBlocker:
+      type: object
+      required: [id, description, status]
+      properties:
+        id: { type: string }
+        description: { type: string }
+        status: { $ref: '#/components/schemas/TaskBlockerStatus' }
+    TaskState:
+      type: object
+      required: [schema_version, workspace_id, conversation_id, version, tasks, decisions, constraints, blockers, artifact_refs, updated_at]
+      properties:
+        schema_version: { type: integer }
+        workspace_id: { type: string }
+        conversation_id: { type: string }
+        version: { type: integer, format: int64 }
+        goal: { type: string }
+        tasks: { type: array, items: { $ref: '#/components/schemas/TaskItem' } }
+        decisions: { type: array, items: { $ref: '#/components/schemas/TaskDecision' } }
+        constraints: { type: array, items: { $ref: '#/components/schemas/TaskConstraint' } }
+        blockers: { type: array, items: { $ref: '#/components/schemas/TaskBlocker' } }
+        artifact_refs: { type: array, items: { type: string } }
+        updated_at: { type: string, format: date-time }
+    TaskStateOperation:
+      description: Closed command names; operation-specific required fields are validated by the domain patch executor.
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: { type: string, enum: [set_goal, clear_goal, upsert_task, set_task_status, remove_task, add_decision, upsert_constraint, remove_constraint, upsert_blocker, resolve_blocker, remove_blocker, add_artifact_ref, remove_artifact_ref] }
+        goal: { type: string }
+        task: { $ref: '#/components/schemas/TaskItem' }
+        task_id: { type: string }
+        task_status: { $ref: '#/components/schemas/TaskItemStatus' }
+        decision: { $ref: '#/components/schemas/TaskDecision' }
+        constraint: { $ref: '#/components/schemas/TaskConstraint' }
+        constraint_id: { type: string }
+        blocker: { $ref: '#/components/schemas/TaskBlocker' }
+        blocker_id: { type: string }
+        artifact_ref: { type: string }
+    TaskStatePatch:
+      type: object
+      additionalProperties: false
+      required: [expected_version, operations]
+      properties:
+        expected_version: { type: integer, format: int64, minimum: 0 }
+        operations: { type: array, minItems: 1, maxItems: 50, items: { $ref: '#/components/schemas/TaskStateOperation' } }
+    TaskStateSource:
+      type: object
+      required: [actor_type]
+      properties:
+        actor_type: { type: string }
+        actor_id: { type: string }
+        run_id: { type: string }
+        stage_id: { type: string }
+        turn_id: { type: string }
+        source_message_id: { type: string }
+    TaskStateRevision:
+      type: object
+      required: [id, workspace_id, conversation_id, version, previous_version, patch, state, source, created_at]
+      properties:
+        id: { type: string }
+        workspace_id: { type: string }
+        conversation_id: { type: string }
+        version: { type: integer, format: int64 }
+        previous_version: { type: integer, format: int64 }
+        patch: { $ref: '#/components/schemas/TaskStatePatch' }
+        state: { $ref: '#/components/schemas/TaskState' }
+        source: { $ref: '#/components/schemas/TaskStateSource' }
+        created_at: { type: string, format: date-time }
+    ToolArtifact:
+      type: object
+      required: [id, schema_version, run_id, tool_call_id, tool_name, media_type, content_hash, original_byte_size, stored_byte_size, redacted, redaction_count, created_at]
+      properties:
+        id: { type: string }
+        schema_version: { type: integer }
+        run_id: { type: string }
+        stage_id: { type: string }
+        turn_id: { type: string }
+        tool_call_id: { type: string }
+        tool_name: { type: string }
+        definition_revision: { type: string }
+        media_type: { type: string }
+        content_hash: { type: string }
+        original_byte_size: { type: integer }
+        stored_byte_size: { type: integer }
+        redacted: { type: boolean }
+        redaction_strategy: { type: string }
+        redaction_count: { type: integer }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        expired: { type: boolean }
+    ToolEffectReconciliationAction: { type: string, enum: [confirm_committed, confirm_failed, retry_with_same_key, compensate] }
+    ToolEffect:
+      type: object
+      required: [idempotency_key, version, run_id, stage_id, tool_call_id, tool_name, request_hash, status, has_result, created_at, updated_at]
+      properties:
+        idempotency_key: { type: string }
+        version: { type: integer, format: int64 }
+        run_id: { type: string }
+        stage_id: { type: string }
+        turn_id: { type: string }
+        tool_call_id: { type: string }
+        tool_name: { type: string }
+        definition_revision: { type: string }
+        request_hash: { type: string }
+        status: { type: string }
+        has_result: { type: boolean }
+        error: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        available_actions: { type: [array, 'null'], items: { $ref: '#/components/schemas/ToolEffectReconciliationAction' } }
+    ToolEffectList:
+      type: object
+      required: [run_id, effects]
+      properties:
+        run_id: { type: string }
+        effects: { type: array, items: { $ref: '#/components/schemas/ToolEffect' } }
+    ToolEffectReconciliationCommand:
+      type: object
+      additionalProperties: false
+      required: [command_id, action, expected_version, actor, reason]
+      properties:
+        command_id: { type: string }
+        action: { $ref: '#/components/schemas/ToolEffectReconciliationAction' }
+        expected_version: { type: integer, format: int64 }
+        actor: { type: string }
+        reason: { type: string }
+        result: {}
+    ToolEffectReconciliationOutcome:
+      type: object
+      required: [command_id, applied, outcome, effect]
+      properties:
+        command_id: { type: string }
+        applied: { type: boolean }
+        outcome: { type: string }
+        effect: { $ref: '#/components/schemas/ToolEffect' }
+    StageCheckpoint:
+      type: object
+      required: [id, provider, run_id, conversation_id, stage_id, status, input_hash, runtime_snapshot_hash, tool_definitions_hash, event_cursor, created_at, updated_at]
+      properties:
+        id: { type: string }
+        provider: { type: string }
+        run_id: { type: string }
+        conversation_id: { type: string }
+        stage_id: { type: string }
+        status: { type: string }
+        input_hash: { type: string }
+        output_hash: { type: string }
+        runtime_snapshot_hash: { type: string }
+        tool_definitions_hash: { type: string }
+        event_cursor: { type: integer, format: int64 }
+        error: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ModelRequestEnvelope:
+      type: object
+      required: [id, run_id, conversation_id, model_call_id, attempt, operation, provider, model, runtime_snapshot_hash, payload_hash, payload_bytes, parameters, source_token_breakdown, message_count, tool_count, created_at]
+      properties:
+        id: { type: string }
+        run_id: { type: string }
+        conversation_id: { type: string }
+        stage_id: { type: string }
+        turn_id: { type: string }
+        model_call_id: { type: string }
+        attempt: { type: integer }
+        operation: { type: string }
+        provider: { type: string }
+        model: { type: string }
+        context_manifest_id: { type: string }
+        runtime_snapshot_hash: { type: string }
+        payload_hash: { type: string }
+        payload_bytes: { type: integer }
+        parameters: { type: [object, 'null'], additionalProperties: true }
+        source_token_breakdown: { type: [object, 'null'], additionalProperties: { type: integer } }
+        message_count: { type: integer }
+        tool_count: { type: integer }
+        created_at: { type: string, format: date-time }
+    ModelRequestCapture:
+      type: object
+      required: [mode, original_bytes, stored_bytes, redacted, redaction_count, truncated, reconstructable, expired]
+      properties:
+        mode: { type: string, enum: [metadata_only, redacted, full] }
+        content: { type: string }
+        content_hash: { type: string }
+        original_bytes: { type: integer }
+        stored_bytes: { type: integer }
+        redacted: { type: boolean }
+        redaction_strategy: { type: string }
+        redaction_count: { type: integer }
+        truncated: { type: boolean }
+        reconstructable: { type: boolean }
+        expires_at: { type: string, format: date-time }
+        expired: { type: boolean }
+    ModelRequestSourceDiff:
+      type: object
+      required: [envelope_selected_tokens, manifest_selected_tokens, manifest_excluded_tokens, matches_envelope]
+      properties:
+        envelope_selected_tokens: { type: object, additionalProperties: { type: integer } }
+        manifest_selected_tokens: { type: object, additionalProperties: { type: integer } }
+        manifest_excluded_tokens: { type: object, additionalProperties: { type: integer } }
+        matches_envelope: { type: boolean }
+    ModelRequestDebugRecord:
+      type: object
+      required: [envelope, capture, source_diff]
+      properties:
+        envelope: { $ref: '#/components/schemas/ModelRequestEnvelope' }
+        capture: { $ref: '#/components/schemas/ModelRequestCapture' }
+        manifest: { type: object, additionalProperties: true, description: Context Manifest metadata, not raw model input. }
+        source_diff: { $ref: '#/components/schemas/ModelRequestSourceDiff' }
+    ModelRequestDebugResponse:
+      type: object
+      required: [run_id, reconstructability_status, records]
+      properties:
+        run_id: { type: string }
+        reconstructability_status: { type: string, enum: [valid, invalid] }
+        invariant_error: { type: string }
+        records: { type: array, items: { $ref: '#/components/schemas/ModelRequestDebugRecord' } }
+    EpisodeRetrievals:
+      type: object
+      required: [event_count, memories, chunks]
+      properties:
+        event_count: { type: integer }
+        memories: { type: [array, 'null'], items: { type: object, additionalProperties: true } }
+        chunks: { type: [array, 'null'], items: { type: object, additionalProperties: true } }
+    EpisodeLLMCall:
+      type: object
+      required: [event_id]
+      properties:
+        event_id: { type: string }
+        step_id: { type: string }
+        role: { type: string }
+        agent_id: { type: string }
+        model: { type: string }
+        framework: { type: string }
+        prompt_tokens: { type: integer }
+        completion_tokens: { type: integer }
+        total_tokens: { type: integer }
+        token_usage_estimated: { type: boolean }
+        output_chars: { type: integer }
+        duration_ms: { type: integer, format: int64 }
+    EpisodeToolCall:
+      type: object
+      required: [event_id]
+      properties:
+        event_id: { type: string }
+        step_id: { type: string }
+        tool_name: { type: string }
+        tool_call_id: { type: string }
+        error: { type: string }
+        duration_ms: { type: integer, format: int64 }
+    EpisodeError:
+      type: object
+      required: [source, message]
+      properties:
+        source: { type: string }
+        event_id: { type: string }
+        step_id: { type: string }
+        kind: { type: string }
+        category: { type: string }
+        retryable: { type: boolean }
+        message: { type: string }
+    EpisodeVerification:
+      type: object
+      required: [status, evidence, warnings, records, artifacts]
+      properties:
+        status: { type: string }
+        subject_hash: { type: string }
+        contract: { type: object, additionalProperties: true }
+        evidence: { type: [array, 'null'], items: { type: string } }
+        warnings: { type: [array, 'null'], items: { type: string } }
+        records: { type: [array, 'null'], items: { $ref: '#/components/schemas/VerificationEvidence' } }
+        artifacts: { type: [array, 'null'], items: { $ref: '#/components/schemas/VerificationArtifact' } }
+    EpisodeReport:
+      type: object
+      required: [run, conversation, agent, task, final_output, messages, steps, trace_summary, retrievals, llm_calls, tool_calls, errors, verification]
+      properties:
+        run: { $ref: '#/components/schemas/Run' }
+        conversation: { $ref: '#/components/schemas/Conversation' }
+        agent: { $ref: '#/components/schemas/Agent' }
+        task: { type: string }
+        final_output: { type: string }
+        messages: { type: [array, 'null'], items: { $ref: '#/components/schemas/Message' } }
+        steps: { type: [array, 'null'], items: { $ref: '#/components/schemas/CollaborationStep' } }
+        trace_summary: { $ref: '#/components/schemas/RunTraceSummary' }
+        retrievals: { $ref: '#/components/schemas/EpisodeRetrievals' }
+        llm_calls: { type: [array, 'null'], items: { $ref: '#/components/schemas/EpisodeLLMCall' } }
+        tool_calls: { type: [array, 'null'], items: { $ref: '#/components/schemas/EpisodeToolCall' } }
+        errors: { type: [array, 'null'], items: { $ref: '#/components/schemas/EpisodeError' } }
+        verification: { $ref: '#/components/schemas/EpisodeVerification' }
     RunReplay:
       type: object
       required: [run, projection, conversation, messages, steps, summary, usage_ledger, run_events, stage_checkpoints, tool_effects, tool_artifacts, verification_evidence, verification_artifacts, task_state_revisions]
@@ -1730,29 +2252,18 @@ components:
         run:
           $ref: '#/components/schemas/Run'
         projection:
-          type: object
-          additionalProperties: true
-          properties:
-            skill_evidence:
-              type: array
-              items: { $ref: '#/components/schemas/SkillEvidence' }
-            partial_outputs:
-              type: array
-              items: { $ref: '#/components/schemas/PartialOutput' }
-            tool_progress:
-              type: array
-              items: { $ref: '#/components/schemas/ToolProgress' }
+          $ref: '#/components/schemas/RunProjectionSnapshot'
         runtime_snapshot:
           type: object
           additionalProperties: true
         conversation:
           $ref: '#/components/schemas/Conversation'
         messages:
-          type: array
+          type: [array, 'null']
           items:
             $ref: '#/components/schemas/Message'
         steps:
-          type: array
+          type: [array, 'null']
           items:
             $ref: '#/components/schemas/CollaborationStep'
         summary:
@@ -1760,40 +2271,35 @@ components:
         usage_ledger:
           $ref: '#/components/schemas/RunUsageLedger'
         run_events:
-          type: array
+          type: [array, 'null']
           items:
             $ref: '#/components/schemas/RunEvent'
         stage_checkpoints:
-          type: array
+          type: [array, 'null']
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/StageCheckpoint'
         tool_effects:
-          type: array
+          type: [array, 'null']
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/ToolEffect'
         tool_artifacts:
-          type: array
+          type: [array, 'null']
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/ToolArtifact'
         verification_evidence:
-          type: array
+          type: [array, 'null']
           items:
             $ref: '#/components/schemas/VerificationEvidence'
         verification_artifacts:
-          type: array
+          type: [array, 'null']
           items:
             $ref: '#/components/schemas/VerificationArtifact'
         task_state_revisions:
-          type: array
+          type: [array, 'null']
           items:
-            type: object
-            additionalProperties: true
+            $ref: '#/components/schemas/TaskStateRevision'
         recovery_summary:
-          type: object
-          additionalProperties: true
+          $ref: '#/components/schemas/RecoverySummary'
     VerificationDecision:
       type: object
       required: [status, allow_completion, attempt, subject_hash, run_status, summary]

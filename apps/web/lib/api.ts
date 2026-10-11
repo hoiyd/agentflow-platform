@@ -3,13 +3,13 @@ import {
   apiArray, apiJSON, apiObject, apiRequest, apiVoid, expectObject, isObject, stringValue
 } from "./api-client.ts";
 import { readChatEventStream, runStatusValue } from "./run-stream.ts";
-import { normalizeRunProjection, normalizeRunReplay, normalizeRunUsageLedger } from "./run-replay-normalization.ts";
+import { normalizeEpisodeReport, normalizeRunProjection, normalizeRunReplay, normalizeRunUsageLedger } from "./run-replay-normalization.ts";
 import type {
   AgentConfigInput, AgentInfo, AgentRoutingRequirements, APIHealth, ChatEvent, ChatRequest,
   CollaborationStepInfo, ContractSchemas, Conversation, EpisodeReport, Message,
   ModelRequestDebugResponse, OperatorAttentionItem, RunInfo, RunProjectionSnapshot,
   RunReplay, RunUsageLedger, TaskState, TaskStatePatch, TaskStateRevision, ToolEffect,
-  ToolEffectReconciliationAction, ToolInfo, SkillInfo
+  ToolInfo, SkillInfo
 } from "./api-types.ts";
 
 export type {
@@ -285,7 +285,7 @@ export async function getRunReplay(runId: string): Promise<RunReplay> {
 }
 
 export async function listToolEffects(runId: string): Promise<ToolEffect[]> {
-	const response = await apiObject<{ effects?: ToolEffect[] }>(
+	const response = await apiObject<ContractSchemas["ToolEffectList"]>(
 		`/api/runs/${encodeURIComponent(runId)}/tool-effects`,
 		{ cache: "no-store" },
 		{ errorMessage: "Failed to load tool effects", includeErrorBody: true },
@@ -297,16 +297,9 @@ export async function listToolEffects(runId: string): Promise<ToolEffect[]> {
 export async function reconcileToolEffect(
 	runId: string,
 	idempotencyKey: string,
-	command: {
-		command_id: string;
-		action: ToolEffectReconciliationAction;
-		expected_version: number;
-		actor: string;
-		reason: string;
-		result?: unknown;
-	}
-): Promise<{ applied: boolean; outcome: string; effect: ToolEffect }> {
-	return apiObject<{ applied: boolean; outcome: string; effect: ToolEffect }>(
+	command: ContractSchemas["ToolEffectReconciliationCommand"]
+): Promise<ContractSchemas["ToolEffectReconciliationOutcome"]> {
+	return apiObject<ContractSchemas["ToolEffectReconciliationOutcome"]>(
 		`/api/runs/${encodeURIComponent(runId)}/tool-effects/${encodeURIComponent(idempotencyKey)}/reconcile`,
 		{ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(command) },
 		{ errorMessage: "Failed to reconcile tool effect", includeErrorBody: true },
@@ -357,12 +350,12 @@ export async function getRunModelRequests(runId: string, includeContent = false)
 }
 
 export async function getEpisodeReport(runId: string): Promise<EpisodeReport> {
-  return apiObject<EpisodeReport>(
+  const data = await apiJSON(
     `/api/runs/${runId}/episode`,
     { cache: "no-store" },
-    { errorMessage: "Failed to load episode report" },
-    "episode report"
+    { errorMessage: "Failed to load episode report" }
   );
+  return normalizeEpisodeReport(data);
 }
 
 export async function setToolEnabled(name: string, enabled: boolean): Promise<ToolInfo[]> {

@@ -16,7 +16,7 @@ for (const mode of ["Single agent", "Multi-agent", "Bounded loop", "Single agent
     const agent = await createWorkspaceChatAgent(page, workspace, `Discovery ${mode}`, {
       system_prompt: "Discover and use calculator for arithmetic.", tools: ["calculator"],
       description: "tool-discovery calculator calculate arithmetic specialist",
-      routing_hints: { capabilities: [capability, "calculator", "calculate"], task_examples: ["tool-discovery calculator arithmetic"] }
+      routing_hints: { capabilities: [capability, "calculator", "calculate"], task_examples: ["tool-discovery calculator arithmetic"], exclusions: [] }
     });
     const selectedMode = mode === "Single agent unloaded call" ? "Single agent" : mode;
     await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: new RegExp(selectedMode) }).click();
