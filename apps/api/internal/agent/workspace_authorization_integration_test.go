@@ -59,6 +59,11 @@ func TestWorkspaceRuntimeAuthorizationPostgres(t *testing.T) {
 	if result := executor.Execute(t.Context(), call); result.Error != nil {
 		t.Fatal(result.Error)
 	}
+	drifted := call
+	drifted.DefinitionRevision = "different-definition"
+	if err := runtime.authorizeTool(prepared.Run.ID, frozen.agent)(t.Context(), drifted, policy.Scope{}); err == nil || !strings.Contains(err.Error(), "definition_changed") {
+		t.Fatalf("definition drift accepted: %v", err)
+	}
 	for _, space := range append(spaces[1:], others...) {
 		foreign, err := storage.CreateConversationInWorkspace(space, "Foreign Agent")
 		if err != nil {

@@ -29,7 +29,7 @@ export async function createWorkspaceChatAgent(page: Page, workspaceID: string, 
   await expect(page.getByRole("link", { name: "View trace", exact: true })).toHaveCount(0);
   await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: "Direct Single agent", exact: true }).click();
   await page.getByRole("button", { name: /^Agent: / }).click();
-  await page.getByRole("option", { name, exact: true }).click();
+  await page.getByRole("option", { name: agent.description ? `${name} ${agent.description}` : name, exact: true }).click();
   await expect(page.getByRole("button", { name: `Agent: ${name}`, exact: true })).toBeVisible();
   return agent;
 }

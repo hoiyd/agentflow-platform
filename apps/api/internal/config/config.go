@@ -155,6 +155,10 @@ type Config struct {
 	RecoveryStaleRunTimeout time.Duration
 	DatabaseURL             string
 	ToolConfigPath          string
+	// ToolSchemaMode controls new Runs: eager, lazy, or auto by estimated Schema cost.
+	ToolSchemaMode string
+	// ToolSchemaTokenThreshold selects lazy in auto mode; it is not a Context or usage limit.
+	ToolSchemaTokenThreshold int
 	// ToolResultMaxBatchBytes caps aggregate raw Tool results returned by one model Tool-call batch.
 	ToolResultMaxBatchBytes int
 	// ToolArtifactMaxBytes rejects persistence beyond this hard per-artifact bound.
@@ -283,6 +287,8 @@ func Load() Config {
 		RecoveryStaleRunTimeout:           getDurationEnv("RECOVERY_STALE_RUN_TIMEOUT", 60*time.Second),
 		DatabaseURL:                       getEnv("DATABASE_URL", ""),
 		ToolConfigPath:                    getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
+		ToolSchemaMode:                    getEnv("TOOL_SCHEMA_MODE", "eager"),
+		ToolSchemaTokenThreshold:          getIntEnv("TOOL_SCHEMA_TOKEN_THRESHOLD", 2048),
 		ToolResultMaxBatchBytes:           getIntEnv("TOOL_RESULT_MAX_BATCH_BYTES", 8000),
 		ToolArtifactMaxBytes:              getIntEnv("TOOL_ARTIFACT_MAX_BYTES", 5*1024*1024),
 		ToolArtifactPreviewBytes:          getIntEnv("TOOL_ARTIFACT_PREVIEW_BYTES", 1000),

@@ -176,6 +176,21 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+      - name: Run lazy Tool Schema and discovery gate
+        env:
+          AGENTFLOW_TOOL_DISCOVERY_TEST: '1'
+        run: npm run test:e2e -- tool-discovery.spec.ts
+      - name: Retain Tool discovery evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tool-discovery-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
+
       - name: Run OIDC identity and resource authorization gate
         env:
           AGENTFLOW_IDENTITY_TEST: '1'

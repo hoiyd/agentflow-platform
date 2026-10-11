@@ -204,6 +204,38 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	content, reason := "Evidence saved.", "stop"
 	var calls []any
 	var reasoning *string
+	if input.Stream && strings.Contains(task, "tool-discovery") {
+		hasCalculator, hasSearch := false, false
+		for _, definition := range input.Tools {
+			hasCalculator = hasCalculator || definition.Function.Name == "calculator"
+			hasSearch = hasSearch || definition.Function.Name == "tool_search"
+		}
+		if !hasSearch {
+			f.reject(w, "bounded discovery definition missing")
+			return
+		}
+		last := input.Messages[len(input.Messages)-1].Content
+		name, args := "tool_search", `{"query":"calculator expression"}`
+		if strings.Contains(task, "tool-discovery-unloaded") && observations == 0 {
+			if hasCalculator {
+				f.reject(w, "deferred calculator loaded eagerly")
+				return
+			}
+			name, args = "calculator", `{"expression":"1 + 1"}`
+		} else if hasCalculator {
+			name, args = "calculator", `{"expression":"1 + 1"}`
+			if strings.Contains(last, `"value":2`) {
+				name = ""
+			}
+		} else if observations > 0 && !strings.Contains(last, "tool_not_loaded") {
+			f.reject(w, "search observation did not load calculator Schema")
+			return
+		}
+		if name != "" {
+			content, reason = "Loading the required tool.", "tool_calls"
+			calls = []any{map[string]any{"id": fmt.Sprintf("discovery-%d", observations), "type": "function", "function": map[string]string{"name": name, "arguments": args}}}
+		}
+	}
 	if input.Stream && strings.Contains(task, "inbox-budget") {
 		content, reason = "One more calculation.", "tool_calls"
 		calls = []any{map[string]any{"id": fmt.Sprintf("budget-call-%d", observations), "type": "function", "function": map[string]string{"name": "calculator", "arguments": fmt.Sprintf(`{"expression":"%d + 1"}`, observations)}}}

@@ -167,6 +167,10 @@ allowlists, not requirements; only explicit `required_tools` makes a missing
 capability disqualify a Multi candidate. Losing a frozen prerequisite blocks
 Resume. See [Tool security](../tools/tool-security-policy.md).
 
+`TOOL_SCHEMA_MODE` and `TOOL_SCHEMA_TOKEN_THRESHOLD` configure frozen model
+visibility, not authorization or a token budget. Eager remains the default;
+see [Tool discovery](../tools/tool-discovery.md) for activation and Resume.
+
 `TOOL_RESULT_MAX_BATCH_BYTES` and `TOOL_ARTIFACT_*` bound aggregate results,
 immutable spills, previews, and persisted expiry; [Artifacts](../tools/tool-result-artifacts.md)
 own details. `TOOL_PROGRESS_*` thresholds are frozen per Run; guard rejection

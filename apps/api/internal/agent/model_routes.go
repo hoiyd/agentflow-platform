@@ -2,11 +2,11 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
+	"agentflow-platform/apps/api/internal/agent/toolloop"
 	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
@@ -195,10 +195,11 @@ func modelRequirements(request turnpkg.Request, snapshot *domain.RuntimeSnapshot
 		streaming = true
 	}
 	if toolCalling {
-		if request.Catalog != nil {
-			definitions, _ := json.Marshal(request.Catalog.Definitions())
-			estimated += contextassembly.EstimateTokens(string(definitions))
+		schema := domain.ToolSchemaConfig{Mode: "eager"}
+		if snapshot.ToolSchema != nil {
+			schema = *snapshot.ToolSchema
 		}
+		estimated += toolloop.InitialSchemaTokens(request.Catalog, schema)
 	}
 	maxInput := snapshot.ContextAssembly.ContextWindowTokens - snapshot.ContextAssembly.OutputReserveTokens - snapshot.ContextAssembly.SafetyMarginTokens
 	if maxInput > 0 && estimated > maxInput {

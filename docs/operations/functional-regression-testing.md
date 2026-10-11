@@ -48,6 +48,23 @@ Each CI composition profile starts with a fresh disposable database. Cases must
 declare their owned Agent and required Tools explicitly; neither a preceding
 profile nor another case supplies those prerequisites.
 
+## Tool Discovery
+
+```bash
+AGENTFLOW_TOOL_DISCOVERY_TEST=1 \
+  TEST_DATABASE_URL='postgres://user:password@127.0.0.1:5432/agentflow_test?sslmode=disable' \
+  bash scripts/test-browser.sh tool-discovery.spec.ts
+```
+
+The lazy composition gate runs Single, Multi and Bounded Loop plus an unloaded
+call rejection through the browser, real Calculator Binding and disposable
+Postgres. It checks next-request Schema loading, typed activation events,
+frozen settings, invariants, failure correction and Chat/Replay reload. JSON
+attachments retain inputs, Agent/Run identities, state and provider contracts.
+The provider is deterministic; this is not live selection-quality evidence.
+Backend integration tests separately close/reopen Postgres before continuing
+with restored visibility. See [Tool discovery](../tools/tool-discovery.md).
+
 ## Durable Inputs
 
 The [durable inbox gates](../runtime/durable-inputs.md#verification) run through

@@ -42,6 +42,7 @@ type Runtime struct {
 	autonomousLimits      AutonomousLimits
 	runBudget             domain.RuntimeRunBudget
 	toolProgressConfig    progress.Config
+	toolSchemaConfig      domain.ToolSchemaConfig
 	toolExecutionOptions  tool.ExecutorOptions
 	toolProgressMu        sync.Mutex
 	toolProgressGuards    map[string]*progress.Guard
@@ -110,6 +111,7 @@ type RuntimeOptions struct {
 	Autonomous         AutonomousLimits
 	RunBudget          domain.RuntimeRunBudget
 	ToolProgressGuard  progress.Config
+	ToolSchema         domain.ToolSchemaConfig
 	ToolExecution      tool.ExecutorOptions
 	KnowledgeRetriever rag.Retriever
 	// Optional capabilities are injected explicitly; nil disables their surface.
@@ -139,6 +141,10 @@ func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 		return nil, errors.New("runtime checkpoint provider is required")
 	}
 	progressConfig := options.ToolProgressGuard
+	schemaConfig := options.ToolSchema.Normalize()
+	if err := schemaConfig.Validate(); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(progressConfig.Version) == "" {
 		progressConfig = progress.DefaultConfig()
 	} else {
@@ -157,6 +163,7 @@ func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 		autonomousLimits:      normalizeAutonomousLimits(options.Autonomous),
 		runBudget:             options.RunBudget,
 		toolProgressConfig:    progressConfig,
+		toolSchemaConfig:      schemaConfig,
 		toolExecutionOptions:  options.ToolExecution,
 		toolProgressGuards:    map[string]*progress.Guard{},
 		knowledgeRetriever:    options.KnowledgeRetriever,

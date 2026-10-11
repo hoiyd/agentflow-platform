@@ -12,13 +12,17 @@ assemble context -> model response
 
 Single, the isolated Multi Worker Stage, and Autonomous Act use the same loop.
 The Autonomous iteration count is not a Tool-loop limit. Each request uses the
-frozen Tool definitions and existing Context Assembler, Manifest, Request
+frozen authorized Tool candidates and existing Context Assembler, Manifest, Request
 Capture, Run Budget, Usage Ledger, and Progress Guard.
 
-Tool-enabled rounds use native streaming completion (`stream: true`, frozen
+Tool-enabled rounds use native streaming completion (`stream: true`, currently visible
 `tools`, `tool_choice: auto`). Answer chunks are forwarded immediately, even
 when enabled Tools are not used. No extra answer-generation request or typing
 animation is added. Tool-free and explicitly simulated Chat keep their paths.
+
+[Lazy discovery](tool-discovery.md) can add authorized schemas between rounds;
+the default eager mode exposes all ready definitions. Neither mode changes
+the frozen candidate set or execution authority.
 
 Until a round finishes, streamed answer text is provisional: a provider may
 emit commentary before choosing a Tool. On the first Tool-call fragment, any
@@ -136,6 +140,11 @@ the existing journal validates the original arguments before replaying a
 committed result. Changed arguments cannot silently repeat a write. An unscoped
 standalone caller receives invocation-local identities, not a durable recovery
 guarantee.
+
+Lazy discovery uses per-Tool occurrence slots within that scope: restoring
+loaded schemas can skip a search round, but must not move a committed target
+call into a different journal slot or collide with the old search. Eager Runs
+retain round/batch slots. Both forms keep argument-drift rejection.
 
 Single's runtime-owned `update_task_state` is a journaled internal write, not
 an external effect. It uses the real Turn identity without inventing a Stage;

@@ -82,6 +82,11 @@ func TestBrowserServer(t *testing.T) {
 	cfg.TrustedSkillDirectories = filepath.Dir(skillDir)
 	cfg.EmbeddingBaseURL, cfg.EmbeddingModel, cfg.EmbeddingDimensions = providerServer.URL, "fixture-embedding", 1536
 	cfg.MemoryAdaptiveExtractionMode, cfg.ContextCompactionMode = "off", "off"
+	// Discovery has its own opt-in gate; ordinary fixtures keep eager contracts.
+	cfg.ToolSchemaMode = "eager"
+	if os.Getenv("AGENTFLOW_TOOL_DISCOVERY_TEST") == "1" {
+		cfg.ToolSchemaMode = "lazy"
+	}
 	if os.Getenv("AGENTFLOW_INBOX_EDGE_TEST") == "1" {
 		cfg.ContextCompactionMode = "auto"
 		cfg.ContextCompactionSoftThreshold, cfg.ContextCompactionHardThreshold = 0.001, 0.002

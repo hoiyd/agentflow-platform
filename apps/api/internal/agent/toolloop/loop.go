@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/budget"
@@ -23,6 +24,9 @@ import (
 )
 
 type Request struct {
+	AgentID         string
+	SchemaConfig    domain.ToolSchemaConfig
+	Sink            eventpkg.Sink
 	SystemPrompt    string
 	History         []domain.Message
 	Latest          string
@@ -62,8 +66,14 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 	if err != nil {
 		return err
 	}
-	definitions := catalog.Definitions()
+	visibility, err := prepareToolVisibility(ctx, catalog, request)
+	if err != nil {
+		return err
+	}
+	catalog = visibility.catalog
+	definitions := visibility.definitions()
 	options := request.ExecutorOptions
+	options.Authorize = visibility.authorize
 	if request.RunEvents != nil && len(definitions) > 0 {
 		items, err := request.RunEvents()
 		if err != nil {
@@ -77,7 +87,7 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 	}
 	prepared, err := model.PrepareAgentChat(ctx, provider.ChatRequest{
 		SystemPrompt: request.SystemPrompt, History: request.History, Latest: request.Latest,
-		ToolNames: catalog.EnabledNames(), Definitions: definitions,
+		ToolNames: definitionNames(definitions), Definitions: definitions,
 	})
 	if err != nil {
 		return err
@@ -103,12 +113,16 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		identity = fmt.Sprintf("call_%x", sum[:16])
 	}
 	rawMessages := append([]provider.Message(nil), prepared.RawMessages...)
+	toolSlots := map[string]int{}
 	for round := 1; ; round++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if contextassembly.ContainsPrivateData(prepared.Manifest) {
 			executor.ProtectPrivateData()
+		}
+		if err := visibility.validateActive(ctx); err != nil {
+			return err
 		}
 		choice, err := model.StreamToolRound(ctx, prepared, definitions, request.Trace, events)
 		if err != nil {
@@ -150,6 +164,17 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		requests := make([]tool.ExecutionRequest, len(calls))
 		for index := range calls {
 			calls[index].ID = fmt.Sprintf("%s_%d_%d", identity, round, index+1)
+			if visibility.state.Mode == "lazy" {
+				// Restored schemas skip searches. Per-Tool slots keep committed
+				// effects stable without colliding with old discovery round slots.
+				name := calls[index].Function.Name
+				if name != discoveryToolName && !slices.ContainsFunc(visibility.state.Active, func(item domain.ToolSchemaIdentity) bool { return item.Name == name }) {
+					name += "\x00unloaded"
+				}
+				toolSlots[name]++
+				sum := sha256.Sum256([]byte(identity + "\x00" + name))
+				calls[index].ID = fmt.Sprintf("call_%x_%d", sum[:16], toolSlots[name])
+			}
 			requests[index] = tool.ExecutionRequest{
 				CallID: calls[index].ID, RunID: request.Trace.RunID, StageID: request.Trace.StepID, TurnID: scope.TurnID,
 				Tool: calls[index].Function.Name, Arguments: json.RawMessage(calls[index].Function.Arguments),
@@ -169,6 +194,10 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 				return err
 			}
 		}
+		if err := visibility.activate(ctx, results); err != nil {
+			return err
+		}
+		definitions = visibility.definitions()
 		if err := labelWebSources(request.RunEvents, results); err != nil {
 			return err
 		}

@@ -124,6 +124,7 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 	}
 	identity := r.embeddingClient.RuntimeIdentity()
 	runBudget := r.runBudget
+	toolSchema := r.toolSchemaConfig
 	snapshot := domain.RuntimeSnapshot{
 		SchemaVersion:   domain.CurrentRuntimeSnapshotVersion,
 		Mode:            mode,
@@ -138,6 +139,7 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		Skills:             skillSnapshots,
 		ToolSecurityPolicy: catalog.SecurityPolicy(),
 		ToolProgressGuard:  progress.NormalizeConfig(r.toolProgressConfig),
+		ToolSchema:         &toolSchema,
 		ContextAssembly:    contextassembly.NormalizeConfig(r.contextAssemblyConfig),
 		RouterMode:         r.routerMode,
 		RunBudget:          cloneRunBudget(runBudget),
@@ -428,6 +430,11 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	}
 	if !progress.ValidateConfig(snapshot.ToolProgressGuard) {
 		return errors.New("runtime snapshot has invalid Tool Progress Guard config")
+	}
+	if snapshot.ToolSchema != nil {
+		if err := snapshot.ToolSchema.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

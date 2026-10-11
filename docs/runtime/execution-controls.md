@@ -188,6 +188,11 @@ independently detects repeated work before Tool Budget is consumed.
 
 ## 7. Tool Execution Policy
 
+[Discovery settings](../tools/tool-discovery.md) select model-visible schemas,
+not execution grants or Context budgets. The auto threshold measures estimated
+Schema tokens; the Assembler still enforces each request's actual input limit.
+Search uses the existing Tool budgets/guards, plus its per-scope search bound.
+
 Before a multi-round Tool batch, the caller needs an enforced logical-model-call,
 prompt-token, or total-token limit, or an enclosing context deadline. A Tool-only
 cap is insufficient because invalid arguments are not charged; a configured

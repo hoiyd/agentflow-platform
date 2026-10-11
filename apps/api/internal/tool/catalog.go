@@ -201,15 +201,15 @@ func (c *Catalog) Definitions() []map[string]any {
 	definitions := make([]map[string]any, 0, len(names))
 	for _, name := range names {
 		descriptor := c.bindings[name].Descriptor
-		definitions = append(definitions, map[string]any{
-			"type": "function",
-			"function": map[string]any{
-				"name": descriptor.Name, "description": descriptor.Description,
-				"parameters": descriptor.Parameters,
-			},
-		})
+		definitions = append(definitions, descriptor.Definition())
 	}
 	return definitions
+}
+
+func (d Descriptor) Definition() map[string]any {
+	return map[string]any{"type": "function", "function": map[string]any{
+		"name": d.Name, "description": d.Description, "parameters": d.Parameters,
+	}}
 }
 
 func (c *Catalog) sortedNamesLocked(readyOnly bool) []string {

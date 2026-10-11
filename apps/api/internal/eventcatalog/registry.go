@@ -198,6 +198,7 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventToolProgress}, DurableFact, turn, "event.ToolExecutionProgressPayload", none, "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventToolCompleted, domain.EventToolFailed}, DurableFact, optional, "event.ToolPayload", terminal("tool", domain.EventToolStarted), "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventToolPolicyEvaluated}, DurableFact, optional, "event.ToolPolicyPayload", none, "tool_policy", "replay")
+	add([]domain.RunEventType{domain.EventToolDiscoveryUpdated}, DurableFact, turn, "event.ToolDiscoveryPayload", none, "tool_discovery", "replay")
 	add([]domain.RunEventType{domain.EventToolGuardWarned, domain.EventToolGuardBlocked}, DurableFact, optional, "event.ToolProgressPayload", none, "tool_progress_guard", "replay")
 	add([]domain.RunEventType{domain.EventTurnNoProgress}, DurableFact, turn, "event.ToolProgressPayload", transition("turn"), "tool_progress_guard", "replay")
 	add([]domain.RunEventType{domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired}, DurableFact, optional, "event.ToolArtifactPayload", none, "artifact_governance", "replay")
@@ -235,6 +236,8 @@ func buildRegistry() map[domain.RunEventType]Definition {
 
 func producerFor(eventType domain.RunEventType) string {
 	switch eventType {
+	case domain.EventToolDiscoveryUpdated:
+		return "agent/toolloop"
 	case domain.EventAgentSelectionDecided:
 		return "agent/router"
 	case domain.EventStageStarted, domain.EventStageCompleted, domain.EventStageFailed, domain.EventStageCanceled,
