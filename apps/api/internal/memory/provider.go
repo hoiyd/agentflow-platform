@@ -48,6 +48,7 @@ var (
 )
 
 type Embedder interface {
+	// The model client owns request retries; Memory never restarts this operation.
 	EmbedText(context.Context, string) (provider.Embedding, error)
 }
 
@@ -88,7 +89,7 @@ type Provider interface {
 type ProviderOptions struct {
 	QueueSize      int
 	JobTimeout     time.Duration
-	MaxAttempts    int
+	MaxAttempts    int // Storage attempts only; model clients own their retry policy.
 	RetryBaseDelay time.Duration
 	Extractor      CandidateExtractor
 	Policy         CandidatePolicy
@@ -196,12 +197,8 @@ func (p *BuiltinProvider) Recall(ctx context.Context, search domain.MemorySearch
 		return nil, err
 	}
 	if len(search.Embedding) == 0 {
-		var embedding provider.Embedding
-		if err := p.retry(ctx, "recall.embed", func() error {
-			var err error
-			embedding, err = p.embedder.EmbedText(ctx, search.Query)
-			return err
-		}); err != nil {
+		embedding, err := p.embedder.EmbedText(ctx, search.Query)
+		if err != nil {
 			return nil, EmbeddingError{Err: err}
 		}
 		search.Embedding = embedding.Vector
@@ -209,7 +206,7 @@ func (p *BuiltinProvider) Recall(ctx context.Context, search domain.MemorySearch
 		search.EmbeddingModel = embedding.Model
 	}
 	var items []domain.RetrievedMemory
-	if err := p.retry(ctx, "recall.search", func() error {
+	if err := p.retryStore(ctx, "recall.search", func() error {
 		var err error
 		items, err = p.store.SearchMemories(search)
 		return err
@@ -255,16 +252,12 @@ func (p *BuiltinProvider) commit(ctx context.Context, item domain.Memory, allowC
 		}
 		item.ID = id
 	}
-	var embedding provider.Embedding
-	if err := p.retry(ctx, "commit.embed", func() error {
-		var err error
-		embedding, err = p.embedder.EmbedText(ctx, item.Content)
-		return err
-	}); err != nil {
+	embedding, err := p.embedder.EmbedText(ctx, item.Content)
+	if err != nil {
 		return domain.Memory{}, EmbeddingError{Err: err}
 	}
 	var created domain.Memory
-	if err := p.retry(ctx, "commit.store", func() error {
+	if err := p.retryStore(ctx, "commit.store", func() error {
 		var err error
 		created, err = p.store.CreateMemory(item, domain.MemoryEmbedding{
 			Provider: embedding.Provider, Model: embedding.Model,
@@ -322,7 +315,7 @@ func (p *BuiltinProvider) requireRunning(allowClosing bool) error {
 	return ErrProviderClosed
 }
 
-func (p *BuiltinProvider) retry(ctx context.Context, operation string, call func() error) error {
+func (p *BuiltinProvider) retryStore(ctx context.Context, operation string, call func() error) error {
 	maxAttempts := p.options.MaxAttempts
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		err := call()

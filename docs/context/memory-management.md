@@ -87,8 +87,12 @@ memory.recall.failed
 The provider uses a bounded, ordered background queue and drains accepted work
 during shutdown. A stable Turn sync key and Candidate ID make duplicate
 delivery idempotent across queue attempts and process retries. Transient
-provider operations use bounded exponential retries. Adaptive model requests
-share the normal model concurrency, rate-limit, retry, and timeout controls.
+storage operations use bounded exponential retries (`MEMORY_PROVIDER_*`).
+Embedding and adaptive extraction call the model client once; only that client
+applies `MODEL_RETRY_*`. A failed model operation is not restarted by Memory,
+so attempt limits do not multiply. These requests share normal model concurrency,
+rate-limit, retry, and timeout controls; model failure evidence retains physical
+attempt counts, distinct from storage attempts.
 Extraction, embedding, queue, Candidate, or Memory failures are observable,
 but they do not change a successfully completed Run. Recall failure degrades
 to an empty Memory set and emits `memory.recall.failed`; ordinary Chat can

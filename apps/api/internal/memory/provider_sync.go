@@ -91,13 +91,8 @@ func (p *BuiltinProvider) propose(ctx context.Context, request ProposalRequest, 
 		RunID: request.RunID, SourceMessageID: request.Message.ID, SourceRole: strings.TrimSpace(request.Message.Role),
 	}
 
-	var draft CandidateDraft
-	var proposed bool
-	if err := p.retry(ctx, "propose.extract", func() error {
-		var err error
-		draft, proposed, err = p.extractor.Extract(ctx, request.RunID, request.Message)
-		return err
-	}); err != nil {
+	draft, proposed, err := p.extractor.Extract(ctx, request.RunID, request.Message)
+	if err != nil {
 		p.publish(request.RunID, request.Message, domain.EventMemoryCandidateFailed, candidatePayload(candidate, request.IdempotencyKey, "failed", err))
 		return ProposalResult{}, err
 	}
@@ -127,7 +122,7 @@ func (p *BuiltinProvider) propose(ctx context.Context, request ProposalRequest, 
 
 	var stored domain.MemoryCandidate
 	var created bool
-	if err := p.retry(ctx, "propose.store", func() error {
+	if err := p.retryStore(ctx, "propose.store", func() error {
 		var err error
 		stored, created, err = p.store.CreateMemoryCandidate(candidate)
 		return err
