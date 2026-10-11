@@ -162,3 +162,17 @@ persisted messages once when the Run stops or waits for input. Late cancellation
 responses cannot overwrite a terminal Run or another conversation. See
 [functional regression gates](../operations/functional-regression-testing.md)
 for the affected race and browser-to-backend checks.
+
+## Replay Read and Action Errors
+
+`useReplayData` owns Replay/Episode reads; `RunReplay` keeps recovery commands
+separate. Only initial Replay failure replaces the page. Refresh failures are
+local warnings and command failures retain the last readable evidence and event
+selection. Episode report failure remains a secondary warning.
+
+Resume changes status only on accepted server events, not on click. Before
+acceptance, rejection leaves the original status intact; after acceptance,
+transport failure cannot roll it back. Repeated clicks are guarded, and accepted
+status disables stale Resume actions. Read leases reject obsolete results;
+changing Run identity aborts browser requests, not server execution. See
+[durable recovery](../runtime/durable-recovery.md) for backend recovery rules.

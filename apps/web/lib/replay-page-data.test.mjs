@@ -50,3 +50,17 @@ test("core replay failure remains fatal", async (t) => {
 
   await assert.rejects(() => getReplayPageData("run-1"), /replay unavailable/);
 });
+
+test("Replay and Episode reads share the caller's cancellation signal", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const controller = new AbortController();
+  const signals = [];
+  globalThis.fetch = async (url, options) => {
+    signals.push(options.signal);
+    return new Response(JSON.stringify(String(url).endsWith("/episode")
+      ? { retrievals: {}, verification: {} } : replay), { status: 200 });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  await getReplayPageData("run-1", controller.signal);
+  assert.deepEqual(signals, [controller.signal, controller.signal]);
+});

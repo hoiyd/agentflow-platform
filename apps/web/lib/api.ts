@@ -275,10 +275,10 @@ export async function listCollaborationSteps(runId: string, signal?: AbortSignal
   );
 }
 
-export async function getRunReplay(runId: string): Promise<RunReplay> {
+export async function getRunReplay(runId: string, signal?: AbortSignal): Promise<RunReplay> {
   const data = await apiJSON(
     `/api/runs/${runId}/replay`,
-    { cache: "no-store" },
+    { cache: "no-store", signal },
     { errorMessage: "Failed to load run replay" }
   );
   return normalizeRunReplay(data);
@@ -349,10 +349,10 @@ export async function getRunModelRequests(runId: string, includeContent = false)
   return { ...result, records: Array.isArray(result.records) ? result.records : [] };
 }
 
-export async function getEpisodeReport(runId: string): Promise<EpisodeReport> {
+export async function getEpisodeReport(runId: string, signal?: AbortSignal): Promise<EpisodeReport> {
   const data = await apiJSON(
     `/api/runs/${runId}/episode`,
-    { cache: "no-store" },
+    { cache: "no-store", signal },
     { errorMessage: "Failed to load episode report" }
   );
   return normalizeEpisodeReport(data);

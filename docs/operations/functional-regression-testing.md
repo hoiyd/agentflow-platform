@@ -20,6 +20,9 @@ Write or update this inventory before adding isolated fixtures.
 | Verification UI never sends a contract or completion bypasses the gate | Browser-submitted policy is persisted; a failing verifier prevents `completed` |
 | Multi/Loop execution loses Tool continuation or stage identity | Real staged runs finish with paired calls and a valid projection; Loop writes have durable receipts; isolated Multi Worker has no Task State write authority |
 | Reload loses accepted results or persisted Task State | Reload reads the same messages, run, and Task State from PostgreSQL |
+| Task State refresh invalidates pending history/Trace recovery | Delay the real Stage response in all three runtime modes; an independent Task State refresh still permits complete history restoration |
+| Replay Resume rejection or refresh failure hides existing evidence | Keep the readable Replay and selection; only accepted server events change status, and read warnings stay separate from command errors |
+| Old Replay reads or Resume callbacks arrive after navigation | Read/command leases reject the old Run; repeated Resume clicks admit one command |
 | Tool toggles only update local UI state | Catalog API and reloaded page agree on the persisted enabled flag |
 | Agent names overflow, duplicate names select the wrong ID, or controls misalign | Picker geometry, keyboard selection and persisted Agent ID agree at 1280/1920px; disabled Skills do not resize the Agent control |
 | Foreign/archived Agents or mutable templates bypass scope | Reject before Chat writes in all modes; owned CRUD still works and templates remain read-only |
@@ -136,8 +139,10 @@ Browser E2E uses the real Next.js workspace, browser API client, Go production
 composition (`app.New`), runtime, registered Bindings, guards, and a disposable
 Postgres database. External model/embedding and, in the identity gate, OIDC
 provider endpoints are deterministic transport fixtures.
-There is no `page.route` API interception or fake business Store. Fixture control
-endpoints exist only in the opt-in Go test, never in `cmd/server`.
+There is no fake business Store or fabricated API success. The history-refresh
+race gate uses `page.route` only to delay a real Stage HTTP response fetched from
+the backend. Fixture control endpoints exist only in the opt-in Go test, never
+in `cmd/server`.
 
 The [identity gate](identity-membership.md#repeatable-validation) runs separately
 with `AGENTFLOW_IDENTITY_TEST=1` so the ordinary trusted-local runtime suite remains
@@ -167,6 +172,12 @@ Tool uncertain-write tests remain; they cover different failure mechanisms.
 The existing Task State executor integration now uses the real Single boundary
 (no Stage ID) and asserts that a stale patch leaves both state and revisions
 unchanged. Browser scenarios also fail on unhandled page exceptions.
+
+Replay command rejection, post-acceptance transport failure, refresh races and
+unmount callbacks have focused component regressions. The runtime browser gate
+checks history/Task State refresh against real Stage HTTP and Postgres responses;
+`history-refresh-evidence` records each mode's identities and assertions. These
+checks do not simulate a provider crash or claim live-model quality.
 
 The gates were checked against two temporary regression canaries, then the
 production code was restored: dropping Tool continuation `reasoning_content`
