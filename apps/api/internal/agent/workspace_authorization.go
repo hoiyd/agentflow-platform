@@ -70,6 +70,9 @@ func (r *Runtime) authorizeTool(runID string, agent domain.Agent) func(context.C
 			return err
 		}
 		binding, _ := catalog.ResolveReady(call.Tool)
+		if call.DefinitionRevision != "" && call.DefinitionRevision != binding.Descriptor.DefinitionRevision {
+			return &availability.DeniedError{Reason: "definition_changed"}
+		}
 		decision := policy.Evaluate(catalog.SecurityPolicy(), policy.Request{Tool: call.Tool, Declared: binding.Descriptor.Security, RequestedScope: scope, AvailableCredentialScopes: call.CredentialScopes})
 		if !decision.Allowed {
 			return &availability.DeniedError{Reason: "policy_denied"}

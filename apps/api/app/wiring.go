@@ -235,6 +235,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			InputCostPerMillionTokensMicros:  cfg.ModelInputCostPerMillionMicros,
 			OutputCostPerMillionTokensMicros: cfg.ModelOutputCostPerMillionMicros,
 		},
+		ToolSchema: domain.ToolSchemaConfig{Mode: cfg.ToolSchemaMode, SchemaTokenThreshold: cfg.ToolSchemaTokenThreshold},
 		ToolExecution: tool.ExecutorOptions{
 			EffectJournal: appStore, ArtifactStore: appStore,
 			CredentialScopes:     toolCredentialScopes,

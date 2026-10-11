@@ -48,7 +48,7 @@ const experimentDimensions = [
   { key: "agent", label: "Agent definition", fields: ["agent", "candidate_agents"] },
   { key: "model", label: "Model routing", fields: ["model_routing"] },
   { key: "embedding", label: "Embedding", fields: ["embedding"] },
-  { key: "tools", label: "Tool set", fields: ["tools"] },
+  { key: "tools", label: "Tool set", fields: ["tools", "tool_schema"] },
   { key: "context_assembly", label: "Context assembly", fields: ["context_assembly"] },
   { key: "run_budget", label: "Run budget", fields: ["run_budget"] },
   { key: "tool_governance", label: "Tool governance", fields: ["tool_security_policy", "tool_progress_guard"] },

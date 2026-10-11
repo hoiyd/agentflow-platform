@@ -92,7 +92,11 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		retryCtx, _ := m.withContextSession(modelCtx, request, snapshot, isolatedContext)
 		return m.executeText(retryCtx, request, route.Client)
 	}
-	return m.executeStream(ctx, request, route.Client, emit)
+	schema := domain.ToolSchemaConfig{Mode: "eager"}
+	if snapshot.ToolSchema != nil {
+		schema = *snapshot.ToolSchema
+	}
+	return m.executeStream(ctx, request, route.Client, schema, emit)
 }
 
 func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.Request, snapshot *domain.RuntimeSnapshot, isolatedContext bool) (context.Context, *domain.ContextCompaction) {
@@ -158,7 +162,7 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 	return contextassembly.WithSession(ctx, session), compaction
 }
 
-func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client provider.Client, emit func(turn.ModelEvent)) (turn.Result, error) {
+func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client provider.Client, schema domain.ToolSchemaConfig, emit func(turn.ModelEvent)) (turn.Result, error) {
 	options := m.runtime.toolExecutionOptions
 	options.Authorize = m.runtime.authorizeTool(request.RunID, request.Agent)
 	systemPrompt := request.SystemPrompt
@@ -166,6 +170,7 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 		systemPrompt = request.Agent.SystemPrompt
 	}
 	events, errs := toolloop.Stream(ctx, client, toolloop.Request{
+		AgentID: request.Agent.ID, SchemaConfig: schema, Sink: request.Sink,
 		CheckSteering: m.checkSteering(ctx, request),
 		SystemPrompt:  systemPrompt, History: request.History, Latest: request.Input,
 		Catalog: request.Catalog,

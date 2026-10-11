@@ -40,6 +40,7 @@ const (
 	EventCompactionFailed               RunEventType = "context.compaction_failed"
 	EventToolStarted                    RunEventType = "tool.started"
 	EventToolProgress                   RunEventType = "tool.progress"
+	EventToolDiscoveryUpdated           RunEventType = "tool.discovery.updated"
 	EventToolCompleted                  RunEventType = "tool.completed"
 	EventToolFailed                     RunEventType = "tool.failed"
 	EventToolPolicyEvaluated            RunEventType = "tool.policy_evaluated"

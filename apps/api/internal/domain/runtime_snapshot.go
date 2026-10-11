@@ -36,6 +36,7 @@ type RuntimeSnapshot struct {
 	Skills             []SkillSnapshot           `json:"skills,omitempty"`
 	ToolSecurityPolicy ToolSecurityPolicy        `json:"tool_security_policy"`
 	ToolProgressGuard  ToolProgressGuardConfig   `json:"tool_progress_guard"`
+	ToolSchema         *ToolSchemaConfig         `json:"tool_schema,omitempty"`
 	ContextAssembly    ContextAssemblyConfig     `json:"context_assembly"`
 	RouterMode         string                    `json:"router_mode,omitempty"`
 	AutonomousLimits   *RuntimeLimitsSnapshot    `json:"autonomous_limits,omitempty"`
