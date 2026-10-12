@@ -45,6 +45,7 @@ Write or update this inventory before adding isolated fixtures.
 | A Chat gate assumes global Agents or relies on earlier test data | Create and select an owned Workspace Agent through the real API/UI; assert its ID in the persisted Run and run the gate independently |
 | Navigation occurs during execution, cancellation, or observation | Local requests detach; their late events, errors and snapshots cannot change the new conversation |
 | Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |
+| Clarification vanishes on reload, enters the wrong Stage, or resets the Run | Three-mode question gates retain questions/answers, reject oversized replies without losing the question, preserve Snapshot and verify Replay receipts |
 | Steering interrupts a Tool batch, disappears on refresh, or resets budget | The durable inbox gates preserve paired observations, receipts and first-request Manifest references across Single/Multi/Loop, compaction and budget failure |
 
 Each CI composition profile starts with a fresh disposable database. Cases must
@@ -67,6 +68,14 @@ attachments retain inputs, Agent/Run identities, state and provider contracts.
 The provider is deterministic; this is not live selection-quality evidence.
 Backend integration tests separately close/reopen Postgres before continuing
 with restored visibility. See [Tool discovery](../tools/tool-discovery.md).
+
+## Structured Clarification
+
+Run `bash scripts/test-browser.sh clarification.spec.ts runtime.spec.ts` with the
+dedicated `TEST_DATABASE_URL` above. New cases archive their owned Agents after
+recording evidence so they cannot change later Router rankings. See the
+[clarification contract](../runtime/structured-clarification.md) for persistence,
+mode boundaries and the backend crash/failure matrix.
 
 ## Durable Inputs
 

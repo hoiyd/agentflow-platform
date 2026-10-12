@@ -12,6 +12,8 @@ import { buildCompletionContract } from "../lib/verification";
 import { Sidebar, ToolsPanel, Topbar, type APIConnectionStatus, type ChatView } from "./chat/ChatChrome";
 import { ChatComposer } from "./chat/ChatComposer";
 import { RunInbox } from "./chat/RunInbox";
+import { useClarifications } from "./chat/useClarifications";
+import type { Clarification } from "../lib/clarification-api";
 import { ChatDialogs } from "./chat/ChatDialogs";
 import { ChatWorkspace } from "./chat/ChatWorkspace";
 import { isTerminalRunStatus } from "./chat/runEventProjection";
@@ -94,13 +96,22 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   });
 
   const showCollaborationPanel = chatMode === "multi_agent" || chatMode === "autonomous";
+  const clarification=useClarifications(runState?.id??"",runState?.status??"");
+  const answerKey=useRef<{body:string;key:string}|null>(null);
+  async function answerQuestion(question:Clarification,answers:Record<string,string>){
+    const body=JSON.stringify({id:question.id,answers});
+    if(answerKey.current?.body!==body)answerKey.current={body,key:crypto.randomUUID()};
+    await session.resumeClarification(question.id,question.status==="pending"?{version:question.version,answers,idempotency_key:answerKey.current.key}:undefined);
+    clarification.refresh();
+  }
   const showCollaborationDag = chatMode === "multi_agent";
   const showAutonomousTrace = chatMode === "autonomous";
   const isCollaborationPanelOpen = showCollaborationPanel && sidePanel === "trace";
   const isTaskStatePanelOpen = sidePanel === "task_state";
   const useExpandedConversationWidth =
     !isTaskStatePanelOpen && (chatMode === "single" || (showCollaborationPanel && !isCollaborationPanelOpen));
-  const isAwaitingPlanApproval = chatMode === "multi_agent" && runState?.status === "waiting_for_user";
+  const isAwaitingPlanApproval = chatMode === "multi_agent" && runState?.status === "waiting_for_user" && !clarification.blocking && !clarification.loading;
+  const isAwaitingClarification = runState?.status === "waiting_for_user" && (clarification.blocking || clarification.loading || Boolean(clarification.error));
   const isAwaitingHumanInput =
     chatMode === "autonomous" &&
     runState?.status === "waiting_for_user" &&
@@ -259,7 +270,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput || (chatMode === "single" && !activeAgent)) return;
+    if (!content || isStreaming || isAwaitingClarification || isAwaitingPlanApproval || isAwaitingHumanInput || (chatMode === "single" && !activeAgent)) return;
     let completionContract;
     try {
       completionContract = buildCompletionContract(verification.settings);
@@ -327,6 +338,10 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
           <OperatorAttentionPanel />
         ) : (
           <ChatWorkspace
+            clarifications={clarification.items}
+            clarificationLoading={clarification.loading}
+            clarificationError={clarification.error}
+            onClarificationResume={answerQuestion}
             agents={agents}
             autonomousProgress={autonomousProgress}
             chatMode={chatMode}
@@ -384,6 +399,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
             error={error}
             input={input}
             isAgentDescriptionExpanded={isAgentDescriptionExpanded}
+            isAwaitingClarification={isAwaitingClarification}
             isAwaitingHumanInput={isAwaitingHumanInput}
             isAwaitingPlanApproval={isAwaitingPlanApproval}
             isCreatingAgent={isCreatingAgent}

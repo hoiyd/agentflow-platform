@@ -7,6 +7,8 @@ import { RunReplay } from "./RunReplay";
 
 const getReplayPageData = vi.hoisted(() => vi.fn());
 const resumeRun = vi.hoisted(() => vi.fn());
+const questions = vi.hoisted(() => ({list:vi.fn<(...args:unknown[]) => Promise<unknown[]>>(async () => []), resume:vi.fn<(...args:unknown[]) => Promise<void>>(async () => {})}));
+vi.mock("../../lib/clarification-api", () => ({listClarifications:questions.list,resumeClarification:questions.resume}));
 const reconciliation = vi.hoisted(() => ({ refresh: null as null | (() => Promise<void>) }));
 vi.mock("../../lib/api", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../lib/api")>(), resumeRun
@@ -26,6 +28,8 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   resumeRun.mockReset();
+  questions.list.mockReset().mockResolvedValue([]);
+  questions.resume.mockReset();
 });
 
 function recoverableFixture() {
@@ -459,3 +463,15 @@ function replayFixture(): RunReplayData {
     task_state_revisions: [],
   };
 }
+
+it("uses the bound clarification receipt instead of generic recovery", async () => {
+  getReplayPageData.mockResolvedValue({data:recoverableFixture(),report:null,reportError:""});
+  questions.list.mockResolvedValue([{id:"question-saved",status:"applied",version:1,run_id:"run-1",conversation_id:"conversation-1",turn_id:"turn-1",questions:[],answers:{}}]);
+  render(<RunReplay runId="run-1"/>);
+  const button=await screen.findByRole("button",{name:"Resume saved run"});
+  await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(button);
+  await waitFor(() => expect(questions.resume).toHaveBeenCalled());
+  expect(questions.resume.mock.calls[0]?.slice(0,2)).toEqual(["run-1","question-saved"]);
+  expect(resumeRun).not.toHaveBeenCalled();
+});

@@ -378,6 +378,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{id}/clarifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        get: operations["listClarifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/clarifications/{question_id}/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                question_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["answerClarification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/clarifications/{question_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                question_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Admit and resume the original Run using the durable answer and frozen protocol. Does not create a Run or reset its budget. */
+        post: operations["resumeClarification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/clarifications/{question_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                question_id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["withdrawClarification"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs/{id}/continue": {
         parameters: {
             query?: never;
@@ -839,6 +915,47 @@ export interface components {
             require_memory?: boolean;
             require_retrieval?: boolean;
             preferred_capabilities?: string[];
+        };
+        ClarificationQuestion: {
+            id: string;
+            question: string;
+            options?: string[];
+        };
+        Clarification: {
+            id: string;
+            run_id: string;
+            conversation_id: string;
+            stage_id?: string;
+            turn_id: string;
+            tool_call_id?: string;
+            /** Format: int64 */
+            version: number;
+            /** @enum {string} */
+            status: "pending" | "answered" | "applied" | "withdrawn" | "expired" | "canceled";
+            questions: components["schemas"]["ClarificationQuestion"][];
+            answers?: {
+                [key: string]: string;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: date-time */
+            answered_at?: string;
+            /** Format: date-time */
+            applied_at?: string;
+        };
+        ClarificationAnswerRequest: {
+            /** Format: int64 */
+            version: number;
+            idempotency_key: string;
+            answers: {
+                [key: string]: string;
+            };
+        };
+        ClarificationVersionRequest: {
+            /** Format: int64 */
+            version: number;
         };
         ResumeRunRequest: {
             user_input: string;
@@ -2592,6 +2709,132 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listClarifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Questions and durable answer/application receipts for this authorized Run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Clarification"][];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    answerClarification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                question_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClarificationAnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description Durable clarification receipt. Internal protocol checkpoints are never exposed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Clarification"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    resumeClarification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                question_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unified Run SSE stream. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+            /** @description Run execution capacity temporarily unavailable. Retry after the indicated delay. */
+            503: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    withdrawClarification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+                question_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClarificationVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description Durable clarification receipt. Internal protocol checkpoints are never exposed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Clarification"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
         };
     };

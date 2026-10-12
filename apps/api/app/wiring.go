@@ -213,8 +213,10 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		return agentRuntime.ModelClientForRun(runID)
 	})
 
+	clarifications := observableClarifications{Store: workspaceStore, publish: appStore.publishCommitted}
 	agentRuntime, err = agent.NewRuntime(agent.RuntimeOptions{
 		Inbox:           workspaceStore,
+		Clarifications:  clarifications,
 		Store:           appStore,
 		EmbeddingClient: embeddingClient,
 		ModelRoutes:     modelRoutes,
@@ -271,6 +273,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	})
 	handler, err := httpapi.NewHandler(httpapi.Dependencies{
 		Inbox:          workspaceStore,
+		Clarifications: clarifications,
 		Store:          appStore,
 		Tools:          agentRuntime,
 		AgentRuntime:   agentRuntime,

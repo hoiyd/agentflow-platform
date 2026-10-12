@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/skill"
@@ -8,6 +9,7 @@ import (
 	"agentflow-platform/apps/api/internal/tool/availability"
 	"agentflow-platform/apps/api/internal/tool/progress"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -65,6 +67,8 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 		candidate = domain.NormalizeAgentConfig(candidate)
 		if toolCallingAvailable {
 			candidate.Tools = r.withHarnessTools(candidate.Tools)
+			// Clarification is a parent boundary, never an isolated Worker capability.
+			candidate.Tools = slices.DeleteFunc(candidate.Tools, func(name string) bool { return name == clarification.ToolName })
 		}
 		if err := freezeSkills(&candidate); err != nil {
 			return domain.RuntimeSnapshot{}, err

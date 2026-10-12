@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"agentflow-platform/apps/api/internal/agent/toolloop"
 	"agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/budget"
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
@@ -96,6 +98,9 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	if snapshot.ToolSchema != nil {
 		schema = *snapshot.ToolSchema
 	}
+	if request.Role == "planner" {
+		schema = domain.ToolSchemaConfig{Mode: "eager"}
+	}
 	return m.executeStream(ctx, request, route.Client, schema, emit)
 }
 
@@ -164,13 +169,19 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 
 func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client provider.Client, schema domain.ToolSchemaConfig, emit func(turn.ModelEvent)) (turn.Result, error) {
 	options := m.runtime.toolExecutionOptions
+	continuation, err := decodeContinuation(request.Continuation)
+	if err != nil {
+		return turn.Result{}, err
+	}
 	options.Authorize = m.runtime.authorizeTool(request.RunID, request.Agent)
 	systemPrompt := request.SystemPrompt
 	if systemPrompt == "" {
 		systemPrompt = request.Agent.SystemPrompt
 	}
 	events, errs := toolloop.Stream(ctx, client, toolloop.Request{
-		AgentID: request.Agent.ID, SchemaConfig: schema, Sink: request.Sink,
+		Continuation:         continuation,
+		SuspendClarification: m.runtime.clarificationBoundary(request),
+		AgentID:              request.Agent.ID, SchemaConfig: schema, Sink: request.Sink,
 		CheckSteering: m.checkSteering(ctx, request),
 		SystemPrompt:  systemPrompt, History: request.History, Latest: request.Input,
 		Catalog: request.Catalog,
@@ -209,6 +220,9 @@ func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Reques
 				continue
 			}
 			if err != nil {
+				if errors.Is(err, clarification.Pending) {
+					return turn.Result{StopReason: turn.StopWaiting}, err
+				}
 				return turn.Result{Output: output.String()}, err
 			}
 		}

@@ -10,6 +10,7 @@ import (
 
 	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
 	"agentflow-platform/apps/api/internal/checkpoint"
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/contextcompaction"
 	"agentflow-platform/apps/api/internal/domain"
@@ -30,6 +31,7 @@ import (
 
 type Runtime struct {
 	inbox                 RuntimeInbox
+	clarifications        clarification.Store
 	store                 RuntimeStore
 	embeddingClient       provider.Client
 	modelRoutes           *routing.Catalog
@@ -103,6 +105,7 @@ type PreparedRun struct {
 // new Runs can freeze one coherent snapshot without post-construction setters.
 type RuntimeOptions struct {
 	Inbox              RuntimeInbox
+	Clarifications     clarification.Store
 	Store              RuntimeStore
 	EmbeddingClient    provider.Client
 	ModelRoutes        *routing.Catalog
@@ -153,6 +156,7 @@ func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 	}
 	runtime := &Runtime{
 		inbox:                 options.Inbox,
+		clarifications:        options.Clarifications,
 		store:                 options.Store,
 		embeddingClient:       options.EmbeddingClient,
 		modelRoutes:           options.ModelRoutes,
@@ -392,6 +396,11 @@ func (r *Runtime) CancelRun(id string) (domain.Run, error) {
 	}
 	switch run.Status {
 	case domain.RunCompleted, domain.RunFailed, domain.RunCanceled:
+		if run.Status == domain.RunCanceled {
+			if err := r.closeCanceledClarification(run); err != nil {
+				return run, err
+			}
+		}
 		r.forgetProgressGuard(run.ID)
 		return run, nil
 	case domain.RunRunning:
@@ -407,8 +416,10 @@ func (r *Runtime) CancelRun(id string) (domain.Run, error) {
 	default:
 		updated, err := r.store.UpdateRunStatus(run.ID, domain.RunCanceled, "canceled by user")
 		if err == nil {
+			r.cancelActiveRun(run.ID)
 			r.publishRunLifecycle(context.Background(), updated, domain.EventRunCanceled, map[string]any{"status": updated.Status})
 			r.forgetProgressGuard(updated.ID)
+			err = r.closeCanceledClarification(updated)
 		}
 		return updated, err
 	}

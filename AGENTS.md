@@ -19,6 +19,9 @@ file into a second handbook.
    replacement or retirement reason.
 8. Trace cross-layer changes through backend behavior, API contracts, generated
    clients, and frontend consumers before treating the work as complete.
+9. Apply manual edits directly to repository files with patches and show the
+   actual project diff. Do not wrap those edits in temporary intermediary scripts;
+   legitimate project generators and formatting commands remain appropriate.
 
 For commands with unknown output size:
 
@@ -172,6 +175,13 @@ Frontend rules:
   [Stylesheet organization](apps/web/app/styles/README.md).
 - Preserve one vertical scroll owner; avoid nested cards and nested scrolling.
 - Use existing component and Lucide icon patterns.
+- For non-trivial visible frontend changes, capture and inspect representative
+  desktop screenshots, then embed them or link accessible image evidence in the
+  PR's Changes section with a short explanation of the changed UI. Trivial edits
+  are exempt. Use synthetic or redacted data; never expose credentials or private
+  conversations. If capture is blocked, report the limitation instead of claiming
+  visual validation. Screenshots do not replace functional tests. Use `gh` command
+  to do the upload whenever possible.
 - Next.js may rewrite `next-env.d.ts` during build. Do not leave generated import
   churn in the final diff.
 

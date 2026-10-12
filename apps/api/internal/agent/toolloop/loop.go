@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/budget"
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
@@ -24,17 +25,19 @@ import (
 )
 
 type Request struct {
-	AgentID         string
-	SchemaConfig    domain.ToolSchemaConfig
-	Sink            eventpkg.Sink
-	SystemPrompt    string
-	History         []domain.Message
-	Latest          string
-	Catalog         *tool.Catalog
-	Trace           provider.ChatTrace
-	ExecutorOptions tool.ExecutorOptions
-	RunEvents       func() ([]domain.RunEvent, error)
-	CheckSteering   func() (bool, error)
+	AgentID              string
+	SchemaConfig         domain.ToolSchemaConfig
+	Sink                 eventpkg.Sink
+	SystemPrompt         string
+	History              []domain.Message
+	Latest               string
+	Catalog              *tool.Catalog
+	Trace                provider.ChatTrace
+	ExecutorOptions      tool.ExecutorOptions
+	RunEvents            func() ([]domain.RunEvent, error)
+	CheckSteering        func() (bool, error)
+	Continuation         *Continuation
+	SuspendClarification func(context.Context, []domain.ClarificationQuestion, Continuation) error
 }
 
 // Stream owns the bounded model -> Tools -> observations -> model protocol.
@@ -85,10 +88,15 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		}
 		options.PrivateContext = options.PrivateContext || private
 	}
-	prepared, err := model.PrepareAgentChat(ctx, provider.ChatRequest{
-		SystemPrompt: request.SystemPrompt, History: request.History, Latest: request.Latest,
-		ToolNames: definitionNames(definitions), Definitions: definitions,
-	})
+	var prepared provider.PreparedChat
+	if request.Continuation != nil {
+		prepared, err = model.PrepareFollowup(ctx, request.Continuation.Messages, definitions)
+	} else {
+		prepared, err = model.PrepareAgentChat(ctx, provider.ChatRequest{
+			SystemPrompt: request.SystemPrompt, History: request.History, Latest: request.Latest,
+			ToolNames: definitionNames(definitions), Definitions: definitions,
+		})
+	}
 	if err != nil {
 		return err
 	}
@@ -114,7 +122,17 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 	}
 	rawMessages := append([]provider.Message(nil), prepared.RawMessages...)
 	toolSlots := map[string]int{}
-	for round := 1; ; round++ {
+	firstRound := 1
+	if request.Continuation != nil {
+		identity = request.Continuation.Identity
+		firstRound = request.Continuation.NextRound
+		toolSlots = request.Continuation.ToolSlots
+		if toolSlots == nil {
+			toolSlots = map[string]int{}
+		}
+		rawMessages = append([]provider.Message(nil), request.Continuation.Messages...)
+	}
+	for round := firstRound; ; round++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -160,6 +178,9 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 		if err := validateCalls(choice.ToolCalls); err != nil {
 			return err
 		}
+		if err := validateClarificationBatch(choice.ToolCalls, request); err != nil {
+			return err
+		}
 		calls := append([]provider.ToolCall(nil), choice.ToolCalls...)
 		requests := make([]tool.ExecutionRequest, len(calls))
 		for index := range calls {
@@ -193,6 +214,9 @@ func run(ctx context.Context, model provider.ChatModel, request Request, events 
 			if err := terminalToolError(catalog, result); err != nil {
 				return err
 			}
+		}
+		if calls[0].Function.Name == clarification.ToolName && results[0].Error == nil && !results[0].Truncated {
+			return suspend(ctx, request, calls[0].Function.Arguments, Continuation{Messages: rawMessages, Identity: identity, NextRound: round + 1, ToolSlots: toolSlots, PendingCallID: calls[0].ID})
 		}
 		if err := visibility.activate(ctx, results); err != nil {
 			return err

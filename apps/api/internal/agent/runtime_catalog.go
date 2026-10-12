@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/tool"
 )
@@ -9,6 +10,9 @@ import (
 // configuration and applies the current Workspace grants.
 func (r *Runtime) compileHarnessBindings() error {
 	bindings := make([]tool.Binding, 0, 3)
+	if r.clarifications != nil {
+		bindings = append(bindings, clarification.Binding())
+	}
 	if r.taskStates != nil {
 		bindings = append(bindings, r.taskStates.ToolBinding())
 	}
@@ -39,6 +43,9 @@ func (r *Runtime) currentCatalog() (*tool.Catalog, error) {
 func (r *Runtime) withHarnessTools(names []string) []string {
 	result := append([]string(nil), names...)
 	harnessNames := make([]string, 0, 3)
+	if r.clarifications != nil {
+		harnessNames = append(harnessNames, clarification.ToolName)
+	}
 	if r.taskStates != nil {
 		harnessNames = append(harnessNames, taskstate.UpdateToolName)
 	}

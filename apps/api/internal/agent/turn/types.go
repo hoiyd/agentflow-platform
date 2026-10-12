@@ -2,6 +2,7 @@ package turn
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -16,6 +17,7 @@ type ModelMode string
 
 const (
 	StopCompleted StopReason = "completed"
+	StopWaiting   StopReason = "waiting_for_user"
 	StopCanceled  StopReason = "canceled"
 	StopFailed    StopReason = "failed"
 )
@@ -48,6 +50,8 @@ type Request struct {
 	Context        Context
 	Metadata       map[string]any
 	Sink           eventpkg.Sink
+	// Opaque durable Tool continuation, decoded only by the runtime model adapter.
+	Continuation json.RawMessage
 }
 
 type Context struct {

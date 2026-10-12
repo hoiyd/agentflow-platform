@@ -18,7 +18,7 @@ or persistence.
 | API `mode` | `single` | `multi_agent` | `autonomous` |
 | UI label | Direct / Single agent | Coordinate / Multi-agent | Autonomous / Bounded loop |
 | Topology | One direct Turn | Fixed collaboration Stages | Repeated Iterations of fixed Stages |
-| Human checkpoint | None by default | Required after Planner, before routing/execution | Optional when Decide identifies missing input |
+| Human checkpoint | Optional structured clarification | Required plan approval; optional Planner clarification | Optional Act clarification or Decide missing-input question |
 | Agent selection | One requested/default Agent | Candidate Agents are frozen; Router selects the Worker | One requested/default Agent performs the loop Stages |
 | Completion | Direct candidate output | Finalizer candidate output | Decide final answer or bounded fallback output |
 | Main strength | Low orchestration overhead | Explicit responsibility and independent review | Iterative correction with hard stopping conditions |
@@ -27,7 +27,8 @@ or persistence.
 ## Single Mode
 
 Single mode handles one request with one selected Agent and one direct Turn.
-There are normally no orchestration Stages.
+There are normally no orchestration Stages. A [structured clarification](structured-clarification.md)
+closes the paused Turn and resumes the same Run in a new Turn with its saved model/Tool protocol.
 
 ```text
 Run
@@ -40,7 +41,7 @@ Run
 ```
 
 The Turn Engine may perform more than one Model Call when the model selects
-Tools, but the whole model/tool exchange is still one Turn. Tool-enabled requests
+Tools, and uninterrupted model/tool exchanges stay within one Turn. Tool-enabled requests
 repeat native streaming completion with paired observations until there are no
 more calls. Single forwards answer chunks immediately; if a round subsequently
 chooses Tools, its provisional commentary is retracted with `model.delta.reset`
@@ -119,7 +120,8 @@ Snapshot, and decision-event contracts.
 ### Isolated Worker Stage
 
 The Worker receives only the approved task, Router-selected frozen Agent,
-its frozen Tool allowlist, and explicitly retrieved Memory/Knowledge.
+its frozen Tool allowlist, explicit clarified user input, and retrieved Memory/Knowledge.
+It does not inherit the parent clarification Tool or an independent waiting state.
 Conversation history, Compaction, Task State injection, and the
 `update_task_state` Tool are excluded. It uses the owning Run's routes,
 Budget/Ledger, Tool Effects, Artifacts, events, and checkpoints: no Child Run or

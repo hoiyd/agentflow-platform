@@ -57,6 +57,7 @@ type AutonomousPanelProps = {
   onCollapse: () => void;
   onHumanInputChange: (value: string) => void;
   onResume: (value?: string) => void;
+  hasStructuredClarification?:boolean;
   progress: AutonomousProgress | null;
   runStatus: string;
   steps: CollaborationStepView[];
@@ -70,6 +71,7 @@ export function AutonomousPanel({
   onCollapse,
   onHumanInputChange,
   onResume,
+  hasStructuredClarification=false,
   progress,
   runStatus,
   steps
@@ -125,7 +127,7 @@ export function AutonomousPanel({
         ) : null}
       </div>
       <div className="autonomous-scroll-area">
-        {humanInputStep ? (
+        {humanInputStep && !hasStructuredClarification ? (
           <section className="human-input-panel" aria-label="Human input required">
             <div className="human-input-header">
               <div>

@@ -19,13 +19,17 @@ func newObservableStore(backend store.Store, hub *event.Hub) *observableStore {
 	return &observableStore{Store: backend, hub: hub}
 }
 
+func (s *observableStore) publishCommitted(item domain.RunEvent) {
+	s.hub.PublishCommitted(item)
+	if s.observe != nil {
+		s.observe(item)
+	}
+}
+
 func (s *observableStore) CreateRunEvent(item domain.RunEvent) (domain.RunEvent, error) {
 	created, err := s.Store.CreateRunEvent(item)
 	if err == nil {
-		s.hub.PublishCommitted(created)
-		if s.observe != nil {
-			s.observe(created)
-		}
+		s.publishCommitted(created)
 	}
 	return created, err
 }
@@ -33,10 +37,7 @@ func (s *observableStore) CreateRunEvent(item domain.RunEvent) (domain.RunEvent,
 func (s *observableStore) CommitToolEffectReconciliation(mutation domain.ToolEffectReconciliation) (domain.ToolEffectRecord, domain.RunEvent, bool, error) {
 	effect, committed, applied, err := s.Store.CommitToolEffectReconciliation(mutation)
 	if err == nil && applied {
-		s.hub.PublishCommitted(committed)
-		if s.observe != nil {
-			s.observe(committed)
-		}
+		s.publishCommitted(committed)
 	}
 	return effect, committed, applied, err
 }

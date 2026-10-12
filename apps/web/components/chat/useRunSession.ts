@@ -4,6 +4,7 @@ import {
   type AgentRoutingRequirements, type ChatMode
 } from "../../lib/api";
 import { createLatestRequestController } from "../../lib/latest-request";
+import { answerClarification, resumeClarification, type ClarificationAnswerRequest } from "../../lib/clarification-api";
 import { removePendingMessages } from "../../lib/pending-messages";
 import type { CompletionContractInput } from "../../lib/verification";
 import { createRunEventHandler, isTerminalRunStatus, type DraftMessage, type RunState } from "./runEventProjection";
@@ -16,7 +17,7 @@ import { applyToolProgress, restoreToolProgress } from "../../lib/tool-progress"
 type Command =
   | { kind: "submitting"; content: string; mode: ChatMode; agentId: string; completionContract?: CompletionContractInput }
   | { kind: "continuing"; plan: string; requirements: AgentRoutingRequirements }
-  | { kind: "resuming"; input: string };
+  | { kind: "resuming"; input: string; questionId?:string; answer?:ClarificationAnswerRequest };
 type Activity = "idle" | Command["kind"];
 type Workspace = Pick<ReturnType<typeof useConversationWorkspace>,
   "activeId" | "setActiveId" | "setInput" | "setMessages" | "setError" | "applyTitle">;
@@ -241,7 +242,10 @@ export function useRunSession(options: SessionOptions) {
       } else if (command.kind === "continuing") {
         await continueRun({ run_id: runId, plan: command.plan, routing_requirements: command.requirements }, onEvent, request.signal);
       } else {
-        await resumeRun({ run_id: runId, user_input: command.input }, onEvent, request.signal);
+        if(command.questionId){
+          if(command.answer)await answerClarification(runId,command.questionId,command.answer,request.signal);
+          await resumeClarification(runId,command.questionId,onEvent,request.signal);
+        }else await resumeRun({ run_id: runId, user_input: command.input }, onEvent, request.signal);
       }
       if (request.isCurrent()) await latest.current.options.onReload(conversationId, command.kind);
     } catch (error) {
@@ -315,7 +319,8 @@ export function useRunSession(options: SessionOptions) {
     resume: (input?: string) => {
       const answer = (input ?? latest.current.trace.humanInputDraft).trim();
       return answer ? execute({ kind: "resuming", input: answer }) : Promise.resolve();
-    }
+    },
+    resumeClarification:(questionId:string,answer?:ClarificationAnswerRequest)=>execute({kind:"resuming",input:"",questionId,answer})
   };
 }
 

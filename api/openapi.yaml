@@ -563,6 +563,131 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/runs/{id}/clarifications:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      operationId: listClarifications
+      tags: [Runs]
+      responses:
+        '200':
+          description: Questions and durable answer/application receipts for this authorized Run.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Clarification'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/runs/{id}/clarifications/{question_id}/answers:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - name: question_id
+        in: path
+        required: true
+        schema: {type: string}
+    post:
+      operationId: answerClarification
+      tags: [Runs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClarificationAnswerRequest'
+      responses:
+        '200':
+          description: Durable clarification receipt. Internal protocol checkpoints are never exposed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Clarification'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/runs/{id}/clarifications/{question_id}/resume:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - name: question_id
+        in: path
+        required: true
+        schema: {type: string}
+    post:
+      operationId: resumeClarification
+      tags: [Runs]
+      description: Admit and resume the original Run using the durable answer and frozen protocol. Does not create a Run or reset its budget.
+      responses:
+        '200':
+          description: Unified Run SSE stream.
+          content:
+            text/event-stream:
+              schema: {type: string}
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          description: Run execution capacity temporarily unavailable. Retry after the indicated delay.
+          headers:
+            Retry-After:
+              schema: {type: integer, minimum: 0}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorResponse'}
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/runs/{id}/clarifications/{question_id}:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+      - name: question_id
+        in: path
+        required: true
+        schema: {type: string}
+    delete:
+      operationId: withdrawClarification
+      tags: [Runs]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClarificationVersionRequest'
+      responses:
+        '200':
+          description: Durable clarification receipt. Internal protocol checkpoints are never exposed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Clarification'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+
   /api/runs/{id}/continue:
     parameters:
       - $ref: '#/components/parameters/RunId'
@@ -1236,6 +1361,60 @@ components:
           type: array
           items:
             type: string
+    ClarificationQuestion:
+      type: object
+      additionalProperties: false
+      required: [id, question]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 64, pattern: "^[A-Za-z0-9_-]+$"}
+        question: {type: string, minLength: 1, maxLength: 2000}
+        options:
+          type: array
+          maxItems: 6
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 500}
+    Clarification:
+      type: object
+      required: [id, run_id, conversation_id, turn_id, version, status, questions, created_at, expires_at]
+      properties:
+        id: {type: string}
+        run_id: {type: string}
+        conversation_id: {type: string}
+        stage_id: {type: string}
+        turn_id: {type: string}
+        tool_call_id: {type: string}
+        version: {type: integer, format: int64}
+        status: {type: string, enum: [pending, answered, applied, withdrawn, expired, canceled]}
+        questions:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: {$ref: '#/components/schemas/ClarificationQuestion'}
+        answers:
+          type: object
+          additionalProperties: {type: string}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        answered_at: {type: string, format: date-time}
+        applied_at: {type: string, format: date-time}
+    ClarificationAnswerRequest:
+      type: object
+      additionalProperties: false
+      required: [version, idempotency_key, answers]
+      properties:
+        version: {type: integer, format: int64, minimum: 1}
+        idempotency_key: {type: string, minLength: 1, maxLength: 128}
+        answers:
+          type: object
+          minProperties: 1
+          maxProperties: 3
+          additionalProperties: {type: string, minLength: 1, maxLength: 8192}
+    ClarificationVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version: {type: integer, format: int64, minimum: 1}
     ResumeRunRequest:
       type: object
       required: [user_input]

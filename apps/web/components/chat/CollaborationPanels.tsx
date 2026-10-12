@@ -61,6 +61,7 @@ export function upsertCollaborationStep(items: CollaborationStepView[], event: C
 }
 
 type CollaborationPanelProps = {
+  hasStructuredClarification?:boolean;
   agents: AgentInfo[];
   isContinuing: boolean;
   onCollapse: () => void;
@@ -75,6 +76,7 @@ type CollaborationPanelProps = {
 };
 
 export function CollaborationPanel({
+  hasStructuredClarification=false,
   agents,
   isContinuing,
   onCollapse,
@@ -88,7 +90,7 @@ export function CollaborationPanel({
   steps
 }: CollaborationPanelProps) {
   const hasStarted = steps.length > 0;
-  const isAwaitingPlanApproval = runStatus === "waiting_for_user";
+  const isAwaitingPlanApproval = runStatus === "waiting_for_user" && !hasStructuredClarification;
   const plannerStep = steps.find((step) => step.role === "planner");
   const planEditorRef = useRef<HTMLDivElement | null>(null);
   const agentNames = useMemo(() => new Map(agents.map((agent) => [agent.id, agent.name])), [agents]);

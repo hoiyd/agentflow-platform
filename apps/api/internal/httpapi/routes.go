@@ -63,6 +63,12 @@ func (h *Handler) registerAgentRoutes(mux *http.ServeMux) {
 }
 
 func (h *Handler) registerRunRoutes(mux *http.ServeMux) {
+	if h.clarifications != nil {
+		mux.HandleFunc("GET /api/runs/{id}/clarifications", h.listClarifications)
+		mux.HandleFunc("POST /api/runs/{id}/clarifications/{question_id}/answers", h.answerClarification)
+		mux.HandleFunc("POST /api/runs/{id}/clarifications/{question_id}/resume", h.resumeClarification)
+		mux.HandleFunc("DELETE /api/runs/{id}/clarifications/{question_id}", h.withdrawClarification)
+	}
 	mux.HandleFunc("GET /api/runs", h.listRuns)
 	mux.HandleFunc("GET /api/runs/attention", h.listRunAttention)
 	mux.HandleFunc("GET /api/runs/{id}", h.getRun)

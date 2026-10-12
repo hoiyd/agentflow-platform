@@ -4,6 +4,8 @@ This page maps endpoints and operational semantics. Exact request/response DTOs
 are owned by [OpenAPI](../../api/openapi.yaml), not repeated JSON examples here.
 See [contract generation](../architecture/api-contract.md) before changing them.
 Chat/Continue/Resume use SSE; inspection and resource endpoints use JSON.
+[Structured clarification](../runtime/structured-clarification.md) saves bound answers
+before same-Run Resume; it is separate from plan approval and the durable input inbox.
 
 ## Access and Workspace Scope
 
@@ -82,6 +84,10 @@ GET    /api/runs/{id}/artifacts/{artifact_id}/search
 GET    /api/runs/{id}/tool-effects
 POST   /api/runs/{id}/tool-effects/{idempotency_key}/reconcile
 GET    /api/runs/{id}/episode
+GET    /api/runs/{id}/clarifications
+POST   /api/runs/{id}/clarifications/{question_id}/answers
+POST   /api/runs/{id}/clarifications/{question_id}/resume
+DELETE /api/runs/{id}/clarifications/{question_id}
 
 GET    /api/tools
 POST   /api/tools/{name}/enable
