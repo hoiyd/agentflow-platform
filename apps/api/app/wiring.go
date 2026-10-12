@@ -32,6 +32,7 @@ import (
 	"agentflow-platform/apps/api/internal/telemetry"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/artifact"
+	"agentflow-platform/apps/api/internal/tool/filesystem"
 	"agentflow-platform/apps/api/internal/tool/progress"
 	"agentflow-platform/apps/api/internal/verification"
 )
@@ -175,7 +176,12 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			_ = sandboxRunner.Close(ctx)
 		}
 	}()
-	toolManager, err := tool.NewManager(cfg.ToolConfigPath, tool.WebSearchTool(tavilyClient), tool.SandboxCommandTool(sandboxRunner))
+	filesystemReads, err := filesystem.New(cfg.FilesystemRootsPath, appStore)
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("configure filesystem reads: %w", err)
+	}
+	bindings := append([]tool.Binding{tool.WebSearchTool(tavilyClient), tool.SandboxCommandTool(sandboxRunner)}, filesystemReads.Bindings()...)
+	toolManager, err := tool.NewManager(cfg.ToolConfigPath, bindings...)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
 	}

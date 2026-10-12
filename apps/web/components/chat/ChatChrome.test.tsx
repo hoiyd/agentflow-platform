@@ -19,6 +19,18 @@ describe("Sidebar API status", () => {
 });
 
 describe("ToolsPanel availability", () => {
+  it.each([
+    ["filesystem_unconfigured", "Filesystem roots not configured"],
+    ["filesystem_root_changed", "Filesystem roots changed; operator review required"]
+  ])("explains %s without offering a misleading toggle", (reason, label) => {
+    render(<ToolsPanel error="" onToggle={vi.fn()} updatingTool="" tools={[{
+      name: "file_read", description: "Read scoped files", parameters: {}, enabled: false,
+      workspace_enabled: true, service_enabled: true, excluded_reason: reason, unavailable_reason: reason
+    }]} />);
+    expect(screen.getByText(label)).toBeTruthy();
+    expect(screen.getByRole("checkbox")).toHaveProperty("disabled", true);
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
+  });
   it("keeps a persisted Workspace grant distinct from an operator-disabled Tool", () => {
     render(<ToolsPanel error="" onToggle={vi.fn()} updatingTool="" tools={[{
       name: "calculator", description: "Calculate", parameters: {}, enabled: false,

@@ -135,6 +135,9 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	if f.clarificationResponse(w, input, task) {
 		return
 	}
+	if f.filesystemResponse(w, input, task) {
+		return
+	}
 	// A planner owns only the clarification capability, never a worker fixture task.
 	if input.Stream && len(input.Tools) == 1 && input.Tools[0].Function.Name == "request_user_input" {
 		stream, _ := modelstream.Completion(browserCompletion("Plan: execute the requested task, review the evidence, and report the result.", "stop", nil, nil))

@@ -102,6 +102,10 @@ type Binding struct {
 	ResolveScope      ScopeResolver
 	Reconciliation    SideEffectReconciliation
 	UnavailableReason string
+	// CheckAvailability rechecks mutable runtime prerequisites before exposing
+	// a definition or restoring a frozen Run. It must not grant authority or run
+	// a Tool; execution still checks the resource at its actual access boundary.
+	CheckAvailability func() string
 	contract          *argumentContract
 }
 

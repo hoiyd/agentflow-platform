@@ -99,6 +99,11 @@ func TestBrowserServer(t *testing.T) {
 	cfg.AllowedOrigins = "http://127.0.0.1:13000"
 	cfg.AuthMode = "local"
 	cfg.SandboxEnabled = false
+	cfg.FilesystemRootsPath = ""
+	if os.Getenv("AGENTFLOW_FILESYSTEM_TEST") == "1" {
+		browserFilesystemConfig(t, &cfg, root)
+		cfg.RunMaxModelCalls = 24
+	}
 	// Always override operator reranker variables: only this opt-in gate calls
 	// the controlled provider, and ordinary browser suites remain heuristic.
 	cfg.RerankerMode = "heuristic"

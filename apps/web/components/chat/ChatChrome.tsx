@@ -318,6 +318,16 @@ function RunStatus({ runState }: { runState: VisibleRunState }) {
   );
 }
 
+const toolAvailabilityLabels: Record<string, string> = {
+  service_disabled: "Disabled by operator",
+  workspace_disabled: "Disabled in this Workspace",
+  policy_denied: "Denied by execution policy",
+  sandbox_disabled: "Sandbox disabled by operator",
+  credential_unavailable: "Credential unavailable",
+  filesystem_unconfigured: "Filesystem roots not configured",
+  filesystem_root_changed: "Filesystem roots changed; operator review required"
+};
+
 export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: string; onToggle: (tool: ToolInfo) => void; tools: ToolInfo[]; updatingTool: string }) {
   const readOnly = useWorkspaceReadOnly();
   return (
@@ -329,14 +339,14 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: st
             <div className="tool-card-header">
               <h3>{tool.name}</h3>
               <label className="tool-toggle">
-                <input type="checkbox" aria-label={`Allow ${tool.name} in this Workspace`} checked={tool.workspace_enabled ?? tool.enabled} disabled={readOnly || tool.service_enabled === false || tool.unavailable_reason === "sandbox_disabled" || updatingTool === tool.name} onChange={() => onToggle(tool)} />
+                <input type="checkbox" aria-label={`Allow ${tool.name} in this Workspace`} checked={tool.workspace_enabled ?? tool.enabled} disabled={readOnly || tool.service_enabled === false || ["sandbox_disabled", "filesystem_unconfigured", "filesystem_root_changed"].includes(tool.unavailable_reason ?? "") || updatingTool === tool.name} onChange={() => onToggle(tool)} />
                 <span>{(tool.workspace_enabled ?? tool.enabled) ? "Allowed" : "Not allowed"}</span>
               </label>
             </div>
             <p>{tool.description}</p>
             {tool.excluded_reason || tool.unavailable_reason ? (
               <p className="tool-availability">
-                {tool.excluded_reason === "service_disabled" ? "Disabled by operator" : tool.excluded_reason === "workspace_disabled" ? "Disabled in this Workspace" : tool.excluded_reason === "policy_denied" ? "Denied by execution policy" : tool.unavailable_reason === "sandbox_disabled" ? "Sandbox disabled by operator" : tool.unavailable_reason === "credential_unavailable" ? "Credential unavailable" : "Unavailable"}
+                {toolAvailabilityLabels[tool.excluded_reason ?? ""] ?? toolAvailabilityLabels[tool.unavailable_reason ?? ""] ?? "Unavailable"}
               </p>
             ) : null}
             <details className="tool-card-schema">

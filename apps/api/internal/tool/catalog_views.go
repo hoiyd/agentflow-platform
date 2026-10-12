@@ -23,9 +23,22 @@ func registeredArgumentContract(binding *Binding) (*argumentContract, error) {
 }
 
 func copyBinding(binding Binding) Binding {
+	binding.UnavailableReason = bindingUnavailableReason(binding)
 	binding.Descriptor.Parameters = copySchema(binding.Descriptor.Parameters)
 	binding.Descriptor.Security.Scope = policy.NormalizeScope(binding.Descriptor.Security.Scope)
 	return binding
+}
+
+func bindingUnavailableReason(binding Binding) (reason string) {
+	if binding.UnavailableReason != "" || binding.CheckAvailability == nil {
+		return binding.UnavailableReason
+	}
+	defer func() {
+		if recover() != nil {
+			reason = "availability_check_failed"
+		}
+	}()
+	return binding.CheckAvailability()
 }
 
 // Registered schemas contain only normalized JSON maps, arrays and scalars.

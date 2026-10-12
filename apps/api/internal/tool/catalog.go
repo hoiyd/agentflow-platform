@@ -149,7 +149,7 @@ func (c *Catalog) List() []ToolInfo {
 		items = append(items, ToolInfo{
 			Name: descriptor.Name, Description: descriptor.Description,
 			Parameters: copySchema(descriptor.Parameters), Enabled: c.enabled[name],
-			UnavailableReason: c.bindings[name].UnavailableReason,
+			UnavailableReason: bindingUnavailableReason(c.bindings[name]),
 		})
 	}
 	return items
@@ -210,7 +210,7 @@ func (d Descriptor) Definition() map[string]any {
 func (c *Catalog) sortedNamesLocked(readyOnly bool) []string {
 	names := make([]string, 0, len(c.bindings))
 	for name := range c.bindings {
-		if !readyOnly || (c.enabled[name] && c.bindings[name].UnavailableReason == "") {
+		if !readyOnly || (c.enabled[name] && bindingUnavailableReason(c.bindings[name]) == "") {
 			names = append(names, name)
 		}
 	}
