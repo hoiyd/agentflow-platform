@@ -19,6 +19,9 @@ file into a second handbook.
    replacement or retirement reason.
 8. Trace cross-layer changes through backend behavior, API contracts, generated
    clients, and frontend consumers before treating the work as complete.
+9. Apply manual edits directly to repository files with patches and show the
+   actual project diff. Do not wrap those edits in temporary intermediary scripts;
+   legitimate project generators and formatting commands remain appropriate.
 
 For commands with unknown output size:
 
