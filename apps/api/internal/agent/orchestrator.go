@@ -231,6 +231,11 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			plan = plannerStep.Output
 		}
 		task := plannerStep.Input
+		task, err = r.taskWithClarifications(run.ID, task)
+		if err != nil {
+			errs <- err
+			return
+		}
 		updatedPlan, err := r.store.UpdateCollaborationStepOutput(plannerStep.ID, plan)
 		if err != nil {
 			errs <- err

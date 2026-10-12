@@ -15,6 +15,7 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 | `checkpoint.restored` | durable | 1 | run+stage | checkpoint/recovery | `event.TracePayload` | checkpoint:transition | `` | recovery, replay |
 | `checkpoint.stale` | durable | 1 | run+stage | checkpoint/recovery | `event.TracePayload` | checkpoint:transition | `` | recovery, replay |
 | `citation.resolved` | durable | 1 | run | agent/rag | `event.TracePayload` | none | `` | replay |
+| `clarification.answered` | durable | 1 | run | clarification | `event.TracePayload` | none | `` | replay, live_ui |
 | `context.assembled` | durable | 1 | run | requestcapture/contextassembly | `event.ContextAssembledPayload` | none | `` | request_capture, replay |
 | `context.compaction_completed` | durable | 1 | run | contextcompaction | `event.ContextCompactionPayload` | compaction:terminal | `context.compaction_started` | replay |
 | `context.compaction_failed` | durable | 1 | run | contextcompaction | `event.ContextCompactionPayload` | compaction:terminal | `context.compaction_started` | run_projection, replay |

@@ -55,6 +55,11 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 			return
 		}
 		router, found := latestCompletedCollaborationStep(steps, "router")
+		task, err := r.taskWithClarifications(run.ID, planner.Input)
+		if err != nil {
+			errs <- err
+			return
+		}
 		if !found {
 			errs <- errors.New("completed router step not found; recover from the plan approval boundary")
 			return
@@ -77,8 +82,8 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 		if found {
 			workerOutput = boundedWorkerHandoff(workerStep)
 		} else {
-			workerInput := fmt.Sprintf("User task:\n%s\n\nPlanner output:\n%s\n\nRouter-selected worker:\n%s (%s)", planner.Input, planner.Output, workerAgent.Name, workerAgent.ID)
-			workerOutput, err = r.runWorkerStage(executionCtx, events, prepared, restored.catalog, workerInput, userInputRetrievalQuery(planner.Input))
+			workerInput := fmt.Sprintf("User task:\n%s\n\nPlanner output:\n%s\n\nRouter-selected worker:\n%s (%s)", task, planner.Output, workerAgent.Name, workerAgent.ID)
+			workerOutput, err = r.runWorkerStage(executionCtx, events, prepared, restored.catalog, workerInput, userInputRetrievalQuery(task))
 			if err != nil {
 				errs <- err
 				return
@@ -89,8 +94,8 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 		if found {
 			review = reviewStep.Output
 		} else {
-			reviewInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s", planner.Input, planner.Output, workerOutput)
-			review, err = r.runCollaborationStep(executionCtx, events, prepared, "reviewer", "", reviewerPrompt(), reviewInput, userInputRetrievalQuery(planner.Input))
+			reviewInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s", task, planner.Output, workerOutput)
+			review, err = r.runCollaborationStep(executionCtx, events, prepared, "reviewer", "", reviewerPrompt(), reviewInput, userInputRetrievalQuery(task))
 			if err != nil {
 				errs <- err
 				return
@@ -101,8 +106,8 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 		if found {
 			final = finalStep.Output
 		} else {
-			finalInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s\n\nReview:\n%s", planner.Input, planner.Output, workerOutput, review)
-			final, err = r.runCollaborationStep(executionCtx, events, prepared, "finalizer", "", finalizerPrompt(), finalInput, userInputRetrievalQuery(planner.Input))
+			finalInput := fmt.Sprintf("User task:\n%s\n\nPlan:\n%s\n\nWorker result:\n%s\n\nReview:\n%s", task, planner.Output, workerOutput, review)
+			final, err = r.runCollaborationStep(executionCtx, events, prepared, "finalizer", "", finalizerPrompt(), finalInput, userInputRetrievalQuery(task))
 			if err != nil {
 				errs <- err
 				return

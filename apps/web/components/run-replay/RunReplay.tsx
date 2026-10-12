@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, GitCompareArrows } from "lucide-react";
 import type { RecoveryAction } from "../../lib/api";
 import { resumeRun } from "../../lib/api";
+import { resumeClarification } from "../../lib/clarification-api";
+import type { ChatEvent } from "../../lib/api-types";
 import { createLatestRequestController } from "../../lib/latest-request";
 import { useReplayData } from "./useReplayData";
 import { EpisodeReportPanel } from "./EpisodeReportPanel";
@@ -25,6 +27,8 @@ import { SkillEvidencePanel } from "./SkillEvidence";
 import { RecoverySummaryPanel, ToolEffectReconciliationPanel } from "./RecoveryActions";
 import { MessageCitations } from "../chat/MarkdownContent";
 import { ToolProgressPanel } from "../chat/ToolProgressPanel";
+import { ClarificationPanel } from "../chat/ClarificationPanel";
+import { useClarifications } from "../chat/useClarifications";
 
 type Props = {
   runId: string;
@@ -44,6 +48,7 @@ function RunReplayView({ runId, initialEventId }: Props) {
   const selectedEventId = selection.initialEventId === initialEventId ? selection.id : initialEventId ?? "";
   const setSelectedEventId = (id: string) => setSelection({ initialEventId, id });
   const [operationError, setOperationError] = useState("");
+  const clarification=useClarifications(runId,replay?.run.status??"");
   const [isResuming, setIsResuming] = useState(false);
   const resumeInFlight = useRef(false);
   const [commands] = useState(createLatestRequestController);
@@ -73,7 +78,7 @@ function RunReplayView({ runId, initialEventId }: Props) {
     invalidateReads();
     let navigated = false;
     try {
-      await resumeRun({ run_id: replay.run.id, user_input: "Resume failed recoverable run from replay." }, event => {
+      const onEvent = (event: ChatEvent) => {
         if (!request.isCurrent()) return;
         if (event.type !== "run_state" && event.type !== "done") return;
         if (event.run_id && event.run_id !== runId) return;
@@ -82,7 +87,10 @@ function RunReplayView({ runId, initialEventId }: Props) {
           navigated = true;
           router.push(`/workspace?conversation=${encodeURIComponent(event.conversation_id ?? replay.run.conversation_id)}`);
         }
-      }, request.signal);
+      };
+      const question = clarification.items.at(-1);
+      if (question?.status === "applied") await resumeClarification(runId, question.id, onEvent, request.signal);
+      else await resumeRun({ run_id: replay.run.id, user_input: "Resume failed recoverable run from replay." }, onEvent, request.signal);
       if (request.isCurrent()) await refreshReplay();
     } catch (error) {
       if (request.isCurrent()) setOperationError(error instanceof Error ? error.message : "Failed to resume run");
@@ -177,6 +185,8 @@ function RunReplayView({ runId, initialEventId }: Props) {
       {refreshError ? <div className="replay-secondary-error" role="status">Replay refresh unavailable: {refreshError}</div> : null}
 
 		<RecoverySummaryPanel summary={replay.recovery_summary} onAction={handleRecoveryAction} isResuming={isResuming} canResume={replay.run.status === "failed_recoverable"} />
+        {clarification.error?<div className="error" role="alert">{clarification.error}</div>:null}
+        <ClarificationPanel recoverable={replay.run.status==="failed_recoverable"} items={clarification.items} conversationHref={chatHref}/>
 		{replay.recovery_summary?.actions.some((action) => action.kind === "reconcile_tool_effect") ? (
 			<ToolEffectReconciliationPanel onChanged={refreshReplay} runId={replay.run.id} />
 		) : null}

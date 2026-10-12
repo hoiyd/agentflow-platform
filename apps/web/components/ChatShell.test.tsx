@@ -209,6 +209,7 @@ it("preserves accepted Run status if refreshing the same conversation's Run list
 
 it("keeps a provider failure after successful history recovery and clears it for the next command", async () => {
   setupAPI();
+  api.listAgents.mockResolvedValue([{id:"agent-owned",name:"Owned agent",workspace_id:"default_workspace",system_prompt:"Help the user",tools:[],skills:[],is_template:false}]);
   api.streamChat.mockImplementationOnce(async (_input, emit) => {
     api.listRuns.mockResolvedValue([{ id: "rejected", conversation_id: "a", status: "failed" }]);
     emit({ type: "conversation", conversation_id: "a" });

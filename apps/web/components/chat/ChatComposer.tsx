@@ -16,6 +16,7 @@ type ChatComposerProps = {
   error: string;
   input: string;
   isAgentDescriptionExpanded: boolean;
+  isAwaitingClarification?: boolean;
   isAwaitingHumanInput: boolean;
   isAwaitingPlanApproval: boolean;
   isCreatingAgent: boolean;
@@ -43,6 +44,7 @@ export function ChatComposer(props: ChatComposerProps) {
     error,
     input,
     isAgentDescriptionExpanded,
+    isAwaitingClarification = false,
     isAwaitingHumanInput,
     isAwaitingPlanApproval,
     isCreatingAgent,
@@ -94,7 +96,7 @@ export function ChatComposer(props: ChatComposerProps) {
               disabledNote={boundSkills.length ? undefined : activeAgent
                 ? "No skills are assigned to this agent. Skills are configured individually for each agent."
                 : "No agent is selected. Skill availability depends on the selected agent's configuration."}
-              disabled={readOnly || boundSkills.length === 0 || isStreaming || isAwaitingHumanInput || isAwaitingPlanApproval}
+              disabled={readOnly || boundSkills.length === 0 || isStreaming || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification}
               value={boundSkills.length ? input.match(/^\/skill:([^\s]+)/)?.[1] ?? "" : ""}
               options={[
                 {value: "", label: boundSkills.length ? "Automatic" : "No skills"},
@@ -135,11 +137,11 @@ export function ChatComposer(props: ChatComposerProps) {
       {error ? <div className="error">{error}</div> : null}
       {props.inbox}
       <form className="composer-inner" onSubmit={event => {
-        if (readOnly || needsAgent || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput) event.preventDefault();
+        if (readOnly || needsAgent || isStreaming || isAwaitingClarification || isAwaitingPlanApproval || isAwaitingHumanInput) event.preventDefault();
         else onSubmit(event);
       }}>
         <textarea
-          disabled={readOnly || isAwaitingPlanApproval || isAwaitingHumanInput}
+          disabled={readOnly || isAwaitingClarification || isAwaitingPlanApproval || isAwaitingHumanInput}
           value={input}
           onChange={(event) => onInputChange(event.target.value)}
           onKeyDown={(event) => {
@@ -149,7 +151,8 @@ export function ChatComposer(props: ChatComposerProps) {
             }
           }}
           placeholder={
-            needsAgent ? "Create an agent to start a conversation..." : isAwaitingPlanApproval
+            needsAgent ? "Create an agent to start a conversation..." : isAwaitingClarification
+              ? "Answer the clarification above, then continue." : isAwaitingPlanApproval
               ? "Review and edit the plan in Collaboration Trace, then continue."
               : isAwaitingHumanInput
                 ? "Answer the question in Autonomous Trace, then continue."
@@ -160,7 +163,7 @@ export function ChatComposer(props: ChatComposerProps) {
           aria-label="Send message"
           title="Send message"
           className="send"
-          disabled={readOnly || needsAgent || isStreaming || isAwaitingPlanApproval || isAwaitingHumanInput || input.trim().length === 0}
+          disabled={readOnly || needsAgent || isStreaming || isAwaitingClarification || isAwaitingPlanApproval || isAwaitingHumanInput || input.trim().length === 0}
         >
           <Send size={18} />
         </button>

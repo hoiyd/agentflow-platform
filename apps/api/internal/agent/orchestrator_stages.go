@@ -2,11 +2,13 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 )
 
@@ -75,14 +77,33 @@ func (r *Runtime) runCollaborationStep(ctx context.Context, events chan<- domain
 		"framework":  "agentflow-native",
 		"stage_role": role,
 	})
-	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{
+	request := turnpkg.Request{
 		RunID: prepared.Run.ID, StepID: step.ID, ConversationID: prepared.Run.ConversationID,
 		Agent: domain.Agent{ID: agentID, SystemPrompt: systemPrompt}, Role: role,
 		SystemPrompt: systemPrompt, Input: input, ModelMode: turnpkg.ModelModeText,
 		Context: turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks},
 		Sink:    r.runEventSink(),
-	}, nil)
+	}
+	if role == "planner" && r.clarifications != nil {
+		restored, restoreErr := r.restoreRuntime(prepared.Run)
+		if restoreErr != nil {
+			return "", restoreErr
+		}
+		control, controlErr := r.clarificationCatalog(restored.catalog)
+		if controlErr != nil {
+			return "", controlErr
+		}
+		if restored.modelConfigured && len(control.EnabledNames()) > 0 {
+			request.ModelMode = turnpkg.ModelModeAgentStream
+			request.Catalog = control
+			request.Agent = restored.agent
+		}
+	}
+	result, err := r.turnEngine.Execute(ctx, request, nil)
 	if err != nil {
+		if errors.Is(err, clarification.Pending) {
+			return "", err
+		}
 		failed, updateErr := r.store.UpdateCollaborationStep(step.ID, domain.CollaborationStepFailed, "", err.Error())
 		if updateErr == nil {
 			events <- liveStageEvent(failed)

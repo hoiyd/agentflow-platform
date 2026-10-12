@@ -5,6 +5,9 @@ boundary. Follow-up starts a separate Run after successful completion, with a
 fresh snapshot and budget. Neither changes Stop, ordinary Send, or frozen policy.
 Multi-Agent steering belongs to the orchestration stages, never isolated Workers.
 
+Model-requested questions use [structured clarification](structured-clarification.md),
+not steer/follow-up receipts. Answering does not create a follow-up Run or approve a Tool.
+
 ## Failure Inventory
 
 | Failure | Expected behavior |

@@ -87,6 +87,8 @@ const (
 	EventAgentSelectionDecided          RunEventType = "agent.selection.decided"
 )
 
+const EventClarificationAnswered RunEventType = "clarification.answered"
+
 const CurrentRunEventSchemaVersion = 1
 
 // RunEvent is the typed execution-event contract. Durable sinks persist

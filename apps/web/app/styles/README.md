@@ -17,6 +17,7 @@ legacy stylesheet underneath a second override file.
 | `workbench/verification.css` | Completion-policy dialog |
 | `workbench/tools.css`, `memory.css` | Tool availability and curated memory workspace |
 | `workbench/replay.css`, `run-report.css`, `trace-detail.css` | Replay layout, report, timeline and event detail |
+| `workbench/clarification.css` | Shared Chat/Replay questions and durable answer receipts |
 | `workbench/tool-progress.css`, `task-state*.css` | Shared Tool progress and Task State consumers |
 | `workbench/evidence-comparison.css`, `runtime-diagnostics.css`, `recovery-summary.css`, `operator-attention.css` | Focused evaluation and diagnostic surfaces |
 | `collaboration/panel.css` | Shared trace shell and controls |

@@ -12,6 +12,7 @@ import (
 	"agentflow-platform/apps/api/app/runcommands"
 	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/apicontract"
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
@@ -65,6 +66,7 @@ type VerificationOperations = runcompletion.Verifier
 // Construction and lifecycle ownership remain in the app composition root.
 type Dependencies struct {
 	Inbox          *store.PostgresStore
+	Clarifications clarification.Store
 	Store          HTTPStore
 	Tools          ToolOperations
 	AgentRuntime   AgentRuntimeOperations
@@ -81,6 +83,7 @@ type Dependencies struct {
 
 type Handler struct {
 	inbox          *store.PostgresStore
+	clarifications clarification.Store
 	store          HTTPStore
 	tools          ToolOperations
 	agentRuntime   AgentRuntimeOperations
@@ -122,6 +125,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 	}
 	return &Handler{
 		inbox:          dependencies.Inbox,
+		clarifications: dependencies.Clarifications,
 		store:          dependencies.Store,
 		tools:          dependencies.Tools,
 		agentRuntime:   dependencies.AgentRuntime,

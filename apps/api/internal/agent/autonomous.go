@@ -9,6 +9,7 @@ import (
 	"time"
 
 	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 )
 
@@ -434,7 +435,10 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 					errs <- err
 					return
 				}
-				run, err := r.store.UpdateRunStatus(prepared.Run.ID, domain.RunWaitingForUser, "")
+				run := prepared.Run
+				if r.clarifications == nil {
+					run, err = r.store.UpdateRunStatus(prepared.Run.ID, domain.RunWaitingForUser, "")
+				}
 				if err != nil {
 					errs <- err
 					return
@@ -444,7 +448,15 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 					errs <- err
 					return
 				}
-				r.publishRunLifecycle(executionCtx, run, domain.EventRunWaitingForUser, map[string]any{"status": run.Status, "question": question})
+				if r.clarifications != nil {
+					run, err = r.suspendHumanInputClarification(executionCtx, prepared, step, question, task)
+					if err != nil {
+						errs <- err
+						return
+					}
+				} else {
+					r.publishRunLifecycle(executionCtx, run, domain.EventRunWaitingForUser, map[string]any{"status": run.Status, "question": question})
+				}
 				events <- liveStageEvent(step)
 				events <- liveRunEvent(run)
 				return
@@ -473,6 +485,18 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 }
 
 func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, iteration int, role string, systemPrompt string, input string, query retrievalQuery) (string, error) {
+	if resumed, ok := ctx.Value(resumedIterationKey{}).(int); ok && resumed == iteration {
+		steps, err := r.store.ListCollaborationSteps(prepared.Run.ID)
+		if err != nil {
+			return "", err
+		}
+		for i := len(steps) - 1; i >= 0; i-- {
+			s := steps[i]
+			if s.Iteration == iteration && s.Role == role && s.Status == domain.CollaborationStepCompleted {
+				return s.Output, nil
+			}
+		}
+	}
 	if err := r.heartbeatRun(prepared.Run.ID); err != nil {
 		return "", err
 	}
@@ -534,6 +558,9 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 	}
 	result, err := r.turnEngine.Execute(ctx, request, forwardReasoning(events))
 	if err != nil {
+		if errors.Is(err, clarification.Pending) {
+			return "", err
+		}
 		if ctx.Err() != nil {
 			if stopped, stopErr := r.stopAutonomousStageIfCanceled(ctx, events, step); stopped || stopErr != nil {
 				if stopErr != nil {

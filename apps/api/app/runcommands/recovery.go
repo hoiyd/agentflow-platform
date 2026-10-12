@@ -8,6 +8,7 @@ import (
 	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/agent"
 	"agentflow-platform/apps/api/internal/checkpoint"
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
@@ -86,6 +87,9 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 	}
 	answer, err := consume(events, errs, observer)
 	if err != nil {
+		if errors.Is(err, clarification.Pending) {
+			return c.paused(scoped, id, observer)
+		}
 		reason, failRun := ContinuationFailurePolicy(err)
 		if resume {
 			reason, failRun = ResumeFailurePolicy(err)

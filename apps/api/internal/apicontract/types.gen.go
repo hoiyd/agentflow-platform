@@ -30,6 +30,36 @@ func (e ChatMode) Valid() bool {
 	}
 }
 
+// Defines values for ClarificationStatus.
+const (
+	ClarificationStatusAnswered  ClarificationStatus = "answered"
+	ClarificationStatusApplied   ClarificationStatus = "applied"
+	ClarificationStatusCanceled  ClarificationStatus = "canceled"
+	ClarificationStatusExpired   ClarificationStatus = "expired"
+	ClarificationStatusPending   ClarificationStatus = "pending"
+	ClarificationStatusWithdrawn ClarificationStatus = "withdrawn"
+)
+
+// Valid indicates whether the value is a known member of the ClarificationStatus enum.
+func (e ClarificationStatus) Valid() bool {
+	switch e {
+	case ClarificationStatusAnswered:
+		return true
+	case ClarificationStatusApplied:
+		return true
+	case ClarificationStatusCanceled:
+		return true
+	case ClarificationStatusExpired:
+		return true
+	case ClarificationStatusPending:
+		return true
+	case ClarificationStatusWithdrawn:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CompletionContractSubjectType.
 const (
 	CompletionContractSubjectTypeRunOutput CompletionContractSubjectType = "run_output"
@@ -813,6 +843,46 @@ type ChatRequest struct {
 	Message            string                   `json:"message"`
 	Mode               *ChatMode                `json:"mode,omitempty"`
 	WorkspaceId        *string                  `json:"workspace_id,omitempty"`
+}
+
+// Clarification defines model for Clarification.
+type Clarification struct {
+	AnsweredAt     *time.Time              `json:"answered_at,omitempty"`
+	Answers        *map[string]string      `json:"answers,omitempty"`
+	AppliedAt      *time.Time              `json:"applied_at,omitempty"`
+	ConversationId string                  `json:"conversation_id"`
+	CreatedAt      time.Time               `json:"created_at"`
+	ExpiresAt      time.Time               `json:"expires_at"`
+	Id             string                  `json:"id"`
+	Questions      []ClarificationQuestion `json:"questions"`
+	RunId          string                  `json:"run_id"`
+	StageId        *string                 `json:"stage_id,omitempty"`
+	Status         ClarificationStatus     `json:"status"`
+	ToolCallId     *string                 `json:"tool_call_id,omitempty"`
+	TurnId         string                  `json:"turn_id"`
+	Version        int64                   `json:"version"`
+}
+
+// ClarificationStatus defines model for Clarification.Status.
+type ClarificationStatus string
+
+// ClarificationAnswerRequest defines model for ClarificationAnswerRequest.
+type ClarificationAnswerRequest struct {
+	Answers        map[string]string `json:"answers"`
+	IdempotencyKey string            `json:"idempotency_key"`
+	Version        int64             `json:"version"`
+}
+
+// ClarificationQuestion defines model for ClarificationQuestion.
+type ClarificationQuestion struct {
+	Id       string    `json:"id"`
+	Options  *[]string `json:"options,omitempty"`
+	Question string    `json:"question"`
+}
+
+// ClarificationVersionRequest defines model for ClarificationVersionRequest.
+type ClarificationVersionRequest struct {
+	Version int64 `json:"version"`
 }
 
 // CollaborationStep defines model for CollaborationStep.
@@ -1951,6 +2021,12 @@ type EnqueueRunInputJSONRequestBody = RunInputRequest
 
 // PatchTaskStateJSONRequestBody defines body for PatchTaskState for application/json ContentType.
 type PatchTaskStateJSONRequestBody = TaskStatePatch
+
+// WithdrawClarificationJSONRequestBody defines body for WithdrawClarification for application/json ContentType.
+type WithdrawClarificationJSONRequestBody = ClarificationVersionRequest
+
+// AnswerClarificationJSONRequestBody defines body for AnswerClarification for application/json ContentType.
+type AnswerClarificationJSONRequestBody = ClarificationAnswerRequest
 
 // ContinueRunJSONRequestBody defines body for ContinueRun for application/json ContentType.
 type ContinueRunJSONRequestBody = ContinueRunRequest

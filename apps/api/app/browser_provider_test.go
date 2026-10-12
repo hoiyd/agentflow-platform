@@ -101,26 +101,7 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"model": "fixture-embedding", "data": []any{map[string]any{"embedding": vector}}})
 		return
 	}
-	var input struct {
-		// Independent wire schema: reusing provider.Message here would let an
-		// accidental JSON tag rename change the client and fixture together.
-		Messages []struct {
-			Role             string  `json:"role"`
-			Content          string  `json:"content"`
-			ReasoningContent *string `json:"reasoning_content"`
-			ToolCallID       string  `json:"tool_call_id"`
-			ToolCalls        []struct {
-				ID string `json:"id"`
-			} `json:"tool_calls"`
-		} `json:"messages"`
-		Tools []struct {
-			Function struct {
-				Name       string          `json:"name"`
-				Parameters json.RawMessage `json:"parameters"`
-			} `json:"function"`
-		} `json:"tools"`
-		Stream bool `json:"stream"`
-	}
+	var input browserModelRequest
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || len(input.Messages) == 0 {
 		f.reject(w, "invalid fixture request")
 		return
@@ -150,6 +131,16 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		if message.Role == "tool" {
 			observations++
 		}
+	}
+	if f.clarificationResponse(w, input, task) {
+		return
+	}
+	// A planner owns only the clarification capability, never a worker fixture task.
+	if input.Stream && len(input.Tools) == 1 && input.Tools[0].Function.Name == "request_user_input" {
+		stream, _ := modelstream.Completion(browserCompletion("Plan: execute the requested task, review the evidence, and report the result.", "stop", nil, nil))
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, stream)
+		return
 	}
 	if strings.Contains(task, "provider-failure") {
 		w.WriteHeader(http.StatusBadRequest)

@@ -13,6 +13,10 @@ type postgresColumnRequirement struct {
 }
 
 var postgresRequiredColumns = []postgresColumnRequirement{
+	{Table: "run_clarifications", Column: "checkpoint", UDTName: "jsonb", NotNull: true},
+	{Table: "run_clarifications", Column: "questions", UDTName: "jsonb", NotNull: true},
+	{Table: "run_clarifications", Column: "answers", UDTName: "jsonb", NotNull: true},
+	{Table: "run_clarifications", Column: "version", UDTName: "int8", NotNull: true},
 	{Table: "conversation_inputs", Column: "request", UDTName: "jsonb", NotNull: true},
 	{Table: "conversation_inputs", Column: "workspace_id", UDTName: "int8", NotNull: true},
 	{Table: "conversation_inputs", Column: "status", UDTName: "text", NotNull: true},

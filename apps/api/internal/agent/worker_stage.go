@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	turnpkg "agentflow-platform/apps/api/internal/agent/turn"
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/taskstate"
 	"agentflow-platform/apps/api/internal/tool"
@@ -63,7 +64,7 @@ func catalogForAgent(catalog *tool.Catalog, agent domain.Agent) (*tool.Catalog, 
 	}
 	bindings := make([]tool.Binding, 0, len(agent.Tools))
 	for _, name := range agent.Tools {
-		if name == taskstate.UpdateToolName {
+		if name == taskstate.UpdateToolName || name == clarification.ToolName {
 			continue
 		}
 		if binding, ok := catalog.ResolveReady(name); ok {

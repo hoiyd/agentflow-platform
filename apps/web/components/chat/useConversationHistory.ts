@@ -191,6 +191,8 @@ export function useConversationHistory({ workspace, session, onModeRestored: han
       handleChatModeChange("autonomous", true);
     } else if (steps.length > 0) {
       handleChatModeChange("multi_agent", true);
+    } else if (stepsResult.status === "fulfilled") {
+      handleChatModeChange("single", true);
     }
     setPlanDraft(steps.find((step) => step.role === "planner")?.output ?? "");
     const humanInput = steps.some((step) => step.role === "human_input" && step.status === "running");

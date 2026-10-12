@@ -144,6 +144,8 @@ function projectRunEvent(event: ChatEvent | RunEvent): ChatEvent {
         completed: numberValue(payload.completed), total: numberValue(payload.total), truncated: payload.truncated === true
       } : undefined };
   }
+  // Planner streaming is execution evidence, not the final conversation answer.
+  if (event.type === "model.delta" && payload.role === "planner") return { type: "model_delta", delta: "" };
   if (event.type === "model.delta") return { type: "model_delta", delta: String(payload.delta ?? ""), reset: payload.reset === true };
   if (event.type === "model.reasoning" || event.type === "model.reasoning_delta") {
     // Only the dedicated live event may carry a sanitized receiving prefix.

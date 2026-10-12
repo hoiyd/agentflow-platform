@@ -129,6 +129,28 @@ func terminal(observer Observer, run domain.Run) {
 	}
 }
 
+func (c Commands) paused(scoped store.WorkspaceStore, id string, observer Observer) error {
+	run, found, err := scoped.GetRun(id)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return commandError(Missing, store.ErrNotFound("run"))
+	}
+	if run.Status == domain.RunCanceled {
+		if canceler, ok := c.Runtime.(interface {
+			CancelRun(string) (domain.Run, error)
+		}); ok {
+			run, err = canceler.CancelRun(id)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	terminal(observer, run)
+	return nil
+}
+
 func (c Commands) complete(ctx context.Context, scoped store.WorkspaceStore, request runcompletion.Request, observer Observer) error {
 	chunk, err := runcompletion.Complete(ctx, scoped, runcompletion.Dependencies{Runtime: c.Runtime, Verification: c.Verification}, request)
 	if err != nil {
