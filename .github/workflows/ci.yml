@@ -191,6 +191,21 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+      - name: Run scoped filesystem read gate
+        env:
+          AGENTFLOW_FILESYSTEM_TEST: '1'
+        run: npm run test:e2e -- filesystem-read.spec.ts
+      - name: Retain scoped filesystem evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scoped-filesystem-read-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
+
       - name: Run OIDC identity and resource authorization gate
         env:
           AGENTFLOW_IDENTITY_TEST: '1'

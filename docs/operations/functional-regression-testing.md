@@ -54,6 +54,12 @@ profile nor another case supplies those prerequisites.
 
 ## Tool Discovery
 
+The independent [scoped filesystem gate](../tools/scoped-filesystem.md#validation)
+uses `AGENTFLOW_FILESYSTEM_TEST=1` with `filesystem-read.spec.ts`. It exercises
+real file list/search/read and rejected paths in all three modes, then reloads
+persisted Tool evidence in Replay. Retain `filesystem-read-evidence.json`; this
+does not execute sbx or measure live-model quality.
+
 ```bash
 AGENTFLOW_TOOL_DISCOVERY_TEST=1 \
   TEST_DATABASE_URL='postgres://user:password@127.0.0.1:5432/agentflow_test?sslmode=disable' \

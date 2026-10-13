@@ -156,6 +156,10 @@ type Config struct {
 	RecoveryStaleRunTimeout time.Duration
 	DatabaseURL             string
 	ToolConfigPath          string
+	// FilesystemRootsPath is an operator-owned JSON map of logical roots to
+	// Workspace IDs and host directories. Empty disables filesystem reads;
+	// this neither mounts directories in sbx nor grants Shell/write access.
+	FilesystemRootsPath string
 	// ToolSchemaMode controls new Runs: eager, lazy, or auto by estimated Schema cost.
 	ToolSchemaMode string
 	// ToolSchemaTokenThreshold selects lazy in auto mode; it is not a Context or usage limit.
@@ -288,6 +292,7 @@ func Load() Config {
 		RecoveryStaleRunTimeout:           getDurationEnv("RECOVERY_STALE_RUN_TIMEOUT", 60*time.Second),
 		DatabaseURL:                       getEnv("DATABASE_URL", ""),
 		ToolConfigPath:                    getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
+		FilesystemRootsPath:               getEnv("FILESYSTEM_ROOTS_PATH", ""),
 		ToolSchemaMode:                    getEnv("TOOL_SCHEMA_MODE", "eager"),
 		ToolSchemaTokenThreshold:          getIntEnv("TOOL_SCHEMA_TOKEN_THRESHOLD", 2048),
 		ToolResultMaxBatchBytes:           getIntEnv("TOOL_RESULT_MAX_BATCH_BYTES", 8000),

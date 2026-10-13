@@ -195,6 +195,7 @@ Persisted Snapshot modes and definition-digest JSON retain their existing
 format. Classification changes still change the digest and fail frozen checks;
 this refactor alone does not change existing production Tool revisions.
 
-Policy configuration never contains credential values. Filesystem sandbox,
-path traversal, SSRF, and Secret resolution remain separate adapters behind the
-same scope contract when those Tool types are introduced.
+Policy configuration never contains credential values. [Scoped filesystem reads](scoped-filesystem.md)
+enforce Workspace/root authorization and no-follow file opens behind this same
+scope contract; they do not invoke sbx or authorize writes. SSRF and Secret
+resolution remain separate execution adapters, not permissions implied by a Tool name.

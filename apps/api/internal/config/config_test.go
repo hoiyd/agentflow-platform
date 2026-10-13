@@ -5,6 +5,17 @@ import (
 	"time"
 )
 
+func TestLoadFilesystemRootsPath(t *testing.T) {
+	t.Setenv("FILESYSTEM_ROOTS_PATH", ".data/filesystem-roots.json")
+	if got := Load().FilesystemRootsPath; got != ".data/filesystem-roots.json" {
+		t.Fatalf("filesystem roots path: %q", got)
+	}
+	t.Setenv("FILESYSTEM_ROOTS_PATH", "")
+	if got := Load().FilesystemRootsPath; got != "" {
+		t.Fatalf("filesystem roots must be opt-in: %q", got)
+	}
+}
+
 func TestNormalizeAdaptiveMemoryMode(t *testing.T) {
 	tests := map[string]string{
 		"shadow":  "shadow",
