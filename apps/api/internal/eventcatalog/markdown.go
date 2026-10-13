@@ -19,6 +19,9 @@ func CatalogMarkdown() string {
 		if item.Scope.Turn == ScopeRequired {
 			scope += "+turn"
 		}
+		if item.Scope.Owner == ScopeRequired {
+			scope += "+(stage or turn)"
+		}
 		lifecycle := string(item.Lifecycle.Role)
 		if item.Lifecycle.Family != "" {
 			lifecycle = item.Lifecycle.Family + ":" + lifecycle

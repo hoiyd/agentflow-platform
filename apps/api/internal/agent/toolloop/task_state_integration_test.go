@@ -135,23 +135,39 @@ func TestMultiRoundTaskStateUncertainWriteStopsTurn(t *testing.T) {
 	}
 }
 
-func TestMultiRoundExternalWriteStillRequiresStage(t *testing.T) {
-	var writes atomic.Int32
-	f := newLoopFixture(t, domain.RuntimeRunBudget{MaxModelCalls: 4}, func(int, wireRequest) any { return call("external_write", `{}`) })
-	f.ctx = eventpkg.WithScope(f.ctx, eventpkg.Scope{RunID: f.run.ID, ConversationID: f.run.ConversationID, TurnID: "turn-first"})
-	f.request.Trace.StepID = ""
-	capability := policy.Capability{SideEffect: policy.SideEffectExternalWrite}
-	catalog, err := tool.NewCatalogWithPolicy(policy.Policy{Version: "fixture", DefaultAction: policy.ActionAllow,
-		Rules: []policy.Rule{{ID: "external-test", Tool: "external_write", Action: policy.ActionAllow, Capability: capability}}}, tool.Binding{
-		Descriptor: tool.Descriptor{Name: "external_write", Parameters: tool.ObjectSchema(nil, nil), Security: capability},
-		Handler:    func(context.Context, json.RawMessage) (any, error) { writes.Add(1); return "written", nil },
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.request.Catalog = catalog
-	output, err := f.execute()
-	if failure.Describe(err).Code != string(tool.ErrorIdempotencyRequired) || output != "" || writes.Load() != 0 || f.requests.Load() != 1 {
-		t.Fatalf("unguarded external write: output=%q writes=%d requests=%d err=%v", output, writes.Load(), f.requests.Load(), err)
+func TestMultiRoundExternalWriteRequiresExecutionOwner(t *testing.T) {
+	for _, turnID := range []string{"", "turn-first"} {
+		t.Run("turn="+turnID, func(t *testing.T) {
+			var writes atomic.Int32
+			f := newLoopFixture(t, domain.RuntimeRunBudget{MaxModelCalls: 4}, func(round int, _ wireRequest) any {
+				if round == 1 {
+					return call("external_write", `{}`)
+				}
+				return answer("Saved")
+			})
+			f.ctx = eventpkg.WithScope(f.ctx, eventpkg.Scope{RunID: f.run.ID, ConversationID: f.run.ConversationID, TurnID: turnID})
+			f.request.Trace.StepID = ""
+			capability := policy.Capability{SideEffect: policy.SideEffectExternalWrite}
+			catalog, err := tool.NewCatalogWithPolicy(policy.Policy{Version: "fixture", DefaultAction: policy.ActionAllow,
+				Rules: []policy.Rule{{ID: "external-test", Tool: "external_write", Action: policy.ActionAllow, Capability: capability}}}, tool.Binding{
+				Descriptor: tool.Descriptor{Name: "external_write", Parameters: tool.ObjectSchema(nil, nil), Security: capability},
+				Handler:    func(context.Context, json.RawMessage) (any, error) { writes.Add(1); return "written", nil },
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.request.Catalog = catalog
+			output, err := f.execute()
+			if turnID != "" {
+				effects, e := f.store.ListToolEffects(f.run.ID)
+				if err != nil || e != nil || output != "Saved" || writes.Load() != 1 || f.requests.Load() != 2 || len(effects) != 1 || effects[0].StageID != "" || effects[0].TurnID != turnID || effects[0].Status != domain.ToolEffectCommitted {
+					t.Fatalf("Single external write lost real owner: output=%q effects=%+v err=%v", output, effects, err)
+				}
+				return
+			}
+			if failure.Describe(err).Code != string(tool.ErrorIdempotencyRequired) || output != "" || writes.Load() != 0 || f.requests.Load() != 1 {
+				t.Fatalf("unguarded external write: output=%q writes=%d requests=%d err=%v", output, writes.Load(), f.requests.Load(), err)
+			}
+		})
 	}
 }

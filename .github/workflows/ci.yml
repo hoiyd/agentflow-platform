@@ -195,6 +195,10 @@ jobs:
         env:
           AGENTFLOW_FILESYSTEM_TEST: '1'
         run: npm run test:e2e -- filesystem-read.spec.ts
+      - name: Run scoped filesystem write gate
+        env:
+          AGENTFLOW_FILESYSTEM_WRITE_TEST: '1'
+        run: npm run test:e2e -- filesystem-write.spec.ts
       - name: Retain scoped filesystem evidence
         if: always()
         uses: actions/upload-artifact@v7

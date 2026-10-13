@@ -14,6 +14,9 @@ func validatePath(path string) error {
 	parts := strings.Split(path, "/")
 	for index, part := range parts {
 		name := strings.ToLower(part)
+		if strings.HasPrefix(name, ".agentflow-") {
+			return failure(tool.ErrorSecurityPolicyDenied, "Internal filesystem staging files are not accessible")
+		}
 		if name == "docs" && index+1 < len(parts) && strings.EqualFold(parts[index+1], "private") {
 			return failure(tool.ErrorSecurityPolicyDenied, "Private project notes are not readable")
 		}

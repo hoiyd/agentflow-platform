@@ -1,4 +1,4 @@
-// Package filesystem supplies fixed, Workspace-scoped read operations. It does
+// Package filesystem supplies fixed, Workspace-scoped file operations. It does
 // not execute code and must not be used as a sandbox for arbitrary processes.
 package filesystem
 
@@ -28,6 +28,7 @@ type RootConfig struct {
 	ID          string `json:"id"`
 	WorkspaceID string `json:"workspace_id"`
 	Path        string `json:"path"`
+	WriteAccess string `json:"write_access,omitempty"`
 }
 type rootRecord struct {
 	RootConfig
@@ -45,6 +46,7 @@ type Service struct {
 	roots      []rootRecord
 	revision   string
 	store      Store
+	writes     writeOperations
 }
 
 func New(configPath string, storage Store) (*Service, error) {
@@ -60,7 +62,7 @@ func New(configPath string, storage Store) (*Service, error) {
 		}
 	}
 	data, _ := json.Marshal(roots)
-	return &Service{configPath: configPath, roots: roots, revision: fmt.Sprintf("filesystem-read-v1:%x", sha256.Sum256(data)), store: storage}, nil
+	return &Service{configPath: configPath, roots: roots, revision: fmt.Sprintf("filesystem-read-v1:%x", sha256.Sum256(data)), store: storage, writes: defaultWriteOperations()}, nil
 }
 
 func loadRoots(path string) ([]rootRecord, error) {
@@ -99,11 +101,41 @@ func loadRoots(path string) ([]rootRecord, error) {
 			return nil, errors.New("filesystem roots cannot grant the whole filesystem or sensitive directories")
 		}
 		seen[key] = true
+		if entry.WriteAccess != "" && entry.WriteAccess != "managed_output" {
+			return nil, errors.New("filesystem writes require managed_output; shared project roots are read-only")
+		}
+		if entry.WriteAccess == "managed_output" {
+			if err := validateOutputDirectory(entry.Path); err != nil {
+				return nil, errors.New("filesystem output roots must be private directories owned by the API OS user")
+			}
+		}
 		identity, err := directoryIdentity(entry.Path)
 		if err != nil {
 			return nil, errors.New("filesystem root directory is unavailable or unsafe")
 		}
 		roots = append(roots, rootRecord{RootConfig: entry, Identity: identity})
+	}
+	for _, output := range roots {
+		if output.WriteAccess != "managed_output" {
+			continue
+		}
+		configPath, configErr := filepath.EvalSymlinks(path)
+		if configErr == nil {
+			configPath, configErr = filepath.Abs(configPath)
+		}
+		outputPath, outputErr := filepath.EvalSymlinks(output.Path)
+		if configErr != nil || outputErr != nil || configPath == outputPath || strings.HasPrefix(configPath, outputPath+string(os.PathSeparator)) {
+			return nil, errors.New("filesystem root configuration must remain outside model-writable output directories")
+		}
+		for _, other := range roots {
+			otherPath, pathErr := filepath.EvalSymlinks(other.Path)
+			if pathErr != nil {
+				return nil, errors.New("filesystem root directory changed during validation")
+			}
+			if output.WorkspaceID != other.WorkspaceID && (output.Identity == other.Identity || strings.HasPrefix(outputPath, otherPath+string(os.PathSeparator)) || strings.HasPrefix(otherPath, outputPath+string(os.PathSeparator))) {
+				return nil, errors.New("managed output roots cannot overlap another Workspace's roots")
+			}
+		}
 	}
 	sort.Slice(roots, func(i, j int) bool {
 		return roots[i].WorkspaceID+":"+roots[i].ID < roots[j].WorkspaceID+":"+roots[j].ID
@@ -123,7 +155,7 @@ func (s *Service) workspace(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if !ok || scope.RunID == "" || scope.ConversationID == "" || run.ConversationID != scope.ConversationID || run.WorkspaceID == "" {
-		return "", failure(tool.ErrorSecurityScopeInvalid, "Filesystem reads require a matching persisted Run and Conversation")
+		return "", failure(tool.ErrorSecurityScopeInvalid, "Filesystem access requires a matching persisted Run and Conversation")
 	}
 	if err = s.store.CheckWorkspaceExecution(run.WorkspaceID); err != nil {
 		return "", failure(tool.ErrorSecurityPolicyDenied, "Filesystem Workspace access is unavailable")

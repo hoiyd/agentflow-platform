@@ -100,7 +100,7 @@ func TestBrowserServer(t *testing.T) {
 	cfg.AuthMode = "local"
 	cfg.SandboxEnabled = false
 	cfg.FilesystemRootsPath = ""
-	if os.Getenv("AGENTFLOW_FILESYSTEM_TEST") == "1" {
+	if os.Getenv("AGENTFLOW_FILESYSTEM_TEST") == "1" || os.Getenv("AGENTFLOW_FILESYSTEM_WRITE_TEST") == "1" {
 		browserFilesystemConfig(t, &cfg, root)
 		cfg.RunMaxModelCalls = 24
 	}

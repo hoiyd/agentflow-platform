@@ -31,8 +31,10 @@ endpoints deliberately remain separate: local inference and self-hosted identity
 are supported destinations, not user-selected URLs. Skills retain their existing
 `os.Root` read boundary. [Scoped filesystem reads](../tools/scoped-filesystem.md)
 add Workspace/root grants and no-follow opens for fixed list/search/read operations,
-independently of sbx. Future file writes, MCP execution and third-party scripts
-must establish their own actual boundary; no unrestricted fallback is permitted.
+independently of sbx. [Managed output writes](../tools/scoped-filesystem-writes.md)
+add a separate explicit write grant, private roots and durable publication evidence.
+Future MCP execution and third-party scripts must establish their own actual
+boundary; no unrestricted fallback is permitted.
 
 Destination allowlisting, redirect rejection and dial-time DNS validation follow
 the [OWASP SSRF prevention guidance](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html).

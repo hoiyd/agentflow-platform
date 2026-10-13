@@ -176,11 +176,11 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 			_ = sandboxRunner.Close(ctx)
 		}
 	}()
-	filesystemReads, err := filesystem.New(cfg.FilesystemRootsPath, appStore)
+	filesystemTools, err := filesystem.New(cfg.FilesystemRootsPath, workspaceStore)
 	if err != nil {
-		return applicationDependencies{}, fmt.Errorf("configure filesystem reads: %w", err)
+		return applicationDependencies{}, fmt.Errorf("configure filesystem tools: %w", err)
 	}
-	bindings := append([]tool.Binding{tool.WebSearchTool(tavilyClient), tool.SandboxCommandTool(sandboxRunner)}, filesystemReads.Bindings()...)
+	bindings := append([]tool.Binding{tool.WebSearchTool(tavilyClient), tool.SandboxCommandTool(sandboxRunner)}, filesystemTools.Bindings()...)
 	toolManager, err := tool.NewManager(cfg.ToolConfigPath, bindings...)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)

@@ -21,6 +21,7 @@ describe("Sidebar API status", () => {
 describe("ToolsPanel availability", () => {
   it.each([
     ["filesystem_unconfigured", "Filesystem roots not configured"],
+	["filesystem_write_unconfigured", "Managed output roots not configured"],
     ["filesystem_root_changed", "Filesystem roots changed; operator review required"]
   ])("explains %s without offering a misleading toggle", (reason, label) => {
     render(<ToolsPanel error="" onToggle={vi.fn()} updatingTool="" tools={[{

@@ -62,9 +62,9 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 | `task_state.updated` | durable | 1 | run | taskstate | `event.TaskStatePayload` | none | `` | replay |
 | `tool.completed` | durable | 1 | run | tools | `event.ToolPayload` | tool:terminal | `tool.started` | run_projection, replay |
 | `tool.discovery.updated` | durable | 1 | run+turn | agent/toolloop | `event.ToolDiscoveryPayload` | none | `` | tool_discovery, replay |
-| `tool.effect.reconciled` | durable | 1 | run+stage | tools | `event.ToolEffectReconciliationPayload` | none | `` | tool_reconciliation, replay |
-| `tool.effect.reconciliation_failed` | durable | 1 | run+stage | tools | `event.ToolEffectReconciliationPayload` | none | `` | tool_reconciliation, replay |
-| `tool.effect.reconciliation_started` | durable | 1 | run+stage | tools | `event.ToolEffectReconciliationPayload` | none | `` | tool_reconciliation, replay |
+| `tool.effect.reconciled` | durable | 1 | run+(stage or turn) | tools | `event.ToolEffectReconciliationPayload` | none | `` | tool_reconciliation, replay |
+| `tool.effect.reconciliation_failed` | durable | 1 | run+(stage or turn) | tools | `event.ToolEffectReconciliationPayload` | none | `` | tool_reconciliation, replay |
+| `tool.effect.reconciliation_started` | durable | 1 | run+(stage or turn) | tools | `event.ToolEffectReconciliationPayload` | none | `` | tool_reconciliation, replay |
 | `tool.failed` | durable | 1 | run | tools | `event.ToolPayload` | tool:terminal | `tool.started` | run_projection, replay |
 | `tool.guard.blocked` | durable | 1 | run | tools | `event.ToolProgressPayload` | none | `` | tool_progress_guard, replay |
 | `tool.guard.warned` | durable | 1 | run | tools | `event.ToolProgressPayload` | none | `` | tool_progress_guard, replay |

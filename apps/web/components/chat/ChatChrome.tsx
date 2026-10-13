@@ -325,6 +325,7 @@ const toolAvailabilityLabels: Record<string, string> = {
   sandbox_disabled: "Sandbox disabled by operator",
   credential_unavailable: "Credential unavailable",
   filesystem_unconfigured: "Filesystem roots not configured",
+	filesystem_write_unconfigured: "Managed output roots not configured",
   filesystem_root_changed: "Filesystem roots changed; operator review required"
 };
 
@@ -339,7 +340,7 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: st
             <div className="tool-card-header">
               <h3>{tool.name}</h3>
               <label className="tool-toggle">
-                <input type="checkbox" aria-label={`Allow ${tool.name} in this Workspace`} checked={tool.workspace_enabled ?? tool.enabled} disabled={readOnly || tool.service_enabled === false || ["sandbox_disabled", "filesystem_unconfigured", "filesystem_root_changed"].includes(tool.unavailable_reason ?? "") || updatingTool === tool.name} onChange={() => onToggle(tool)} />
+                <input type="checkbox" aria-label={`Allow ${tool.name} in this Workspace`} checked={tool.workspace_enabled ?? tool.enabled} disabled={readOnly || tool.service_enabled === false || ["sandbox_disabled", "filesystem_unconfigured", "filesystem_write_unconfigured", "filesystem_root_changed"].includes(tool.unavailable_reason ?? "") || updatingTool === tool.name} onChange={() => onToggle(tool)} />
                 <span>{(tool.workspace_enabled ?? tool.enabled) ? "Allowed" : "Not allowed"}</span>
               </label>
             </div>

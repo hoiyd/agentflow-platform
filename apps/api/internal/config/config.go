@@ -157,8 +157,9 @@ type Config struct {
 	DatabaseURL             string
 	ToolConfigPath          string
 	// FilesystemRootsPath is an operator-owned JSON map of logical roots to
-	// Workspace IDs and host directories. Empty disables filesystem reads;
-	// this neither mounts directories in sbx nor grants Shell/write access.
+	// Workspace IDs and host directories. Empty disables file Tools; writes also
+	// require managed_output roots, explicit policy and Workspace/Agent grants.
+	// This neither mounts directories in sbx nor grants Shell access.
 	FilesystemRootsPath string
 	// ToolSchemaMode controls new Runs: eager, lazy, or auto by estimated Schema cost.
 	ToolSchemaMode string

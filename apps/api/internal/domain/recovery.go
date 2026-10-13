@@ -86,10 +86,12 @@ type ToolEffectRecord struct {
 	DefinitionRevision string           `json:"definition_revision,omitempty"`
 	RequestHash        string           `json:"request_hash"`
 	Status             ToolEffectStatus `json:"status"`
-	Result             []byte           `json:"result,omitempty"`
-	Error              string           `json:"error,omitempty"`
-	CreatedAt          time.Time        `json:"created_at"`
-	UpdatedAt          time.Time        `json:"updated_at"`
+	// Executing/uncertain records may contain prepared hash/identity evidence;
+	// committed records contain the Executor replay envelope.
+	Result    []byte    `json:"result,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // ToolEffectSummary exposes recovery state without duplicating a potentially

@@ -26,6 +26,8 @@ const (
 type ScopeContract struct {
 	Stage ScopeRequirement `json:"stage"`
 	Turn  ScopeRequirement `json:"turn"`
+	// Owner requires at least one real execution owner, including Single Turns.
+	Owner ScopeRequirement `json:"owner,omitempty"`
 }
 
 type LifecycleRole string
@@ -92,6 +94,9 @@ func ValidateEnvelope(item domain.RunEvent) error {
 	if definition.Scope.Turn == ScopeRequired && strings.TrimSpace(item.TurnID) == "" {
 		return fmt.Errorf("run event %s requires turn_id", item.Type)
 	}
+	if definition.Scope.Owner == ScopeRequired && strings.TrimSpace(item.StageID) == "" && strings.TrimSpace(item.TurnID) == "" {
+		return fmt.Errorf("run event %s requires stage_id or turn_id", item.Type)
+	}
 	if item.Type == domain.EventToolProgress {
 		var update domain.ToolProgressUpdate
 		data, err := json.Marshal(item.Payload)
@@ -146,6 +151,7 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	optional := ScopeContract{Stage: ScopeOptional, Turn: ScopeOptional}
 	stage := ScopeContract{Stage: ScopeRequired, Turn: ScopeOptional}
 	turn := ScopeContract{Stage: ScopeOptional, Turn: ScopeRequired}
+	owner := ScopeContract{Stage: ScopeOptional, Turn: ScopeOptional, Owner: ScopeRequired}
 	add := func(types []domain.RunEventType, durability Durability, scope ScopeContract, payloadSchema string, lifecycle LifecycleContract, consumers ...string) {
 		for _, eventType := range types {
 			if _, exists := items[eventType]; exists {
@@ -203,7 +209,7 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventToolGuardWarned, domain.EventToolGuardBlocked}, DurableFact, optional, "event.ToolProgressPayload", none, "tool_progress_guard", "replay")
 	add([]domain.RunEventType{domain.EventTurnNoProgress}, DurableFact, turn, "event.ToolProgressPayload", transition("turn"), "tool_progress_guard", "replay")
 	add([]domain.RunEventType{domain.EventToolResultPersisted, domain.EventArtifactRead, domain.EventArtifactExpired}, DurableFact, optional, "event.ToolArtifactPayload", none, "artifact_governance", "replay")
-	add([]domain.RunEventType{domain.EventToolEffectReconciliationStarted, domain.EventToolEffectReconciled, domain.EventToolEffectReconciliationFailed}, DurableFact, stage, "event.ToolEffectReconciliationPayload", none, "tool_reconciliation", "replay")
+	add([]domain.RunEventType{domain.EventToolEffectReconciliationStarted, domain.EventToolEffectReconciled, domain.EventToolEffectReconciliationFailed}, DurableFact, owner, "event.ToolEffectReconciliationPayload", none, "tool_reconciliation", "replay")
 	add([]domain.RunEventType{domain.EventRetrievalStarted}, DurableFact, optional, "event.RetrievalPayload", start("retrieval"), "replay")
 	add([]domain.RunEventType{domain.EventRetrievalCompleted}, DurableFact, optional, "event.RetrievalPayload", terminal("retrieval", domain.EventRetrievalStarted), "replay")
 	add([]domain.RunEventType{domain.EventRetrievalFailed}, DurableFact, optional, "event.RetrievalPayload", terminal("retrieval", domain.EventRetrievalStarted), "run_projection", "replay")
