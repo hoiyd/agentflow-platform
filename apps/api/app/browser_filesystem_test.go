@@ -40,6 +40,13 @@ func browserFilesystemConfig(t *testing.T, cfg *config.Config, root string) {
 	}
 	cfg.FilesystemRootsPath = filepath.Join(root, "filesystem-roots.json")
 	data, _ := json.Marshal(map[string]any{"roots": []filesystem.RootConfig{{ID: "project", WorkspaceID: workspace, Path: project}}})
+	if os.Getenv("AGENTFLOW_FILESYSTEM_WRITE_TEST") == "1" {
+		output := filepath.Join(root, "output")
+		if err = os.Mkdir(output, 0700); err != nil {
+			t.Fatal(err)
+		}
+		data, _ = json.Marshal(map[string]any{"roots": []filesystem.RootConfig{{ID: "project", WorkspaceID: workspace, Path: project}, {ID: "output", WorkspaceID: workspace, Path: output, WriteAccess: "managed_output"}}})
+	}
 	if err = os.WriteFile(cfg.FilesystemRootsPath, data, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +56,9 @@ func browserFilesystemConfig(t *testing.T, cfg *config.Config, root string) {
 	}
 	tools := tool.DefaultConfig()
 	for _, binding := range service.Bindings() {
+		if binding.UnavailableReason != "" {
+			continue
+		}
 		tools.EnabledTools = append(tools.EnabledTools, binding.Descriptor.Name)
 		tools.SecurityPolicy.Rules = append(tools.SecurityPolicy.Rules, policy.Rule{ID: "browser-" + binding.Descriptor.Name, Tool: binding.Descriptor.Name, Action: policy.ActionAllowAndLog, Capability: binding.Descriptor.Security})
 	}

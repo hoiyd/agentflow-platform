@@ -36,7 +36,7 @@ type SideEffectPolicy struct {
 
 // JournalMode is derived from validated Security, never separately declared by
 // a Binding. Empty means no journal and preserves existing read-only snapshots.
-// Internal writes accept a real Turn or Stage; external writes require a Stage.
+// Writes accept a real Turn or Stage; Single never fabricates a Stage identity.
 func (d Descriptor) JournalMode() SideEffectMode {
 	switch d.Security.SideEffect {
 	case policy.SideEffectInternalWrite:

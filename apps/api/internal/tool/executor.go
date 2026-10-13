@@ -56,7 +56,9 @@ type ExecutionResult struct {
 	ProgressDecision    *progress.Decision            `json:"-"`
 	ProgressWarning     string                        `json:"progress_warning,omitempty"`
 	PrivateData         bool                          `json:"private_data,omitempty"`
-	encodedResult       []byte
+	// Set only from durable failed settlement, never from a model/error category.
+	EffectNotApplied bool `json:"-"`
+	encodedResult    []byte
 }
 
 func (r ExecutionResult) ErrorMessage() string {
@@ -240,6 +242,11 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 		if result.Error != nil || !execute {
 			return result
 		}
+		ctx = context.WithValue(ctx, effectIdentityKey{}, EffectIdentity{
+			Key: effectKey, RunID: request.RunID, StageID: request.StageID, TurnID: request.TurnID,
+			CallID: request.CallID, Tool: request.Tool, RequestHash: request.ArgumentsHash,
+			DefinitionRevision: request.DefinitionRevision,
+		})
 	}
 
 	policy := effectivePolicy(e.defaultPolicy, binding.Policy)
@@ -308,6 +315,7 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 					}
 				}
 				e.markSideEffectUncertain(effectKey, result.ErrorMessage())
+				result.EffectNotApplied = e.effectWasRejected(request, effectKey)
 				return result
 			}
 			encoded, err := json.Marshal(completed.value)

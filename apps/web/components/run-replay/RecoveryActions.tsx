@@ -188,7 +188,7 @@ function ToolEffectForm({ effect, runId, onApplied }: { effect: ToolEffect; runI
 				<>
 					<div className="tool-effect-fields">
 						<label>Action<select value={action} onChange={(event) => setAction(event.target.value as ToolEffectReconciliationAction)}>
-							{availableActions.map((item) => <option key={item} value={item}>{actionLabel(item)}</option>)}
+							{availableActions.map((item) => <option key={item} value={item}>{actionLabel(item, effect.tool_name)}</option>)}
 						</select></label>
 						<label>Actor<input value={actor} onChange={(event) => setActor(event.target.value)} placeholder="Operator identity" /></label>
 						<label className="tool-effect-reason">Reason<input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Observed write outcome" /></label>
@@ -212,6 +212,7 @@ function evidenceLabel(kind: string) {
 	return ({ run_error: "Run error", tool_effect: "Tool effect", verification: "Verification", task_blocker: "Task blocker" } as Record<string, string>)[kind] ?? kind;
 }
 
-function actionLabel(action: ToolEffectReconciliationAction) {
+function actionLabel(action: ToolEffectReconciliationAction, toolName: string) {
+	if (action === "retry_with_same_key" && ["file_write", "file_patch"].includes(toolName)) return "Verify saved file";
 	return ({ confirm_committed: "Confirm committed", confirm_failed: "Confirm failed", retry_with_same_key: "Retry with same key", compensate: "Compensate" } as Record<ToolEffectReconciliationAction, string>)[action];
 }

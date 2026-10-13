@@ -172,9 +172,9 @@ calls do not consume Tool Budget and cannot create an external side effect.
    elevated-rate, or irreversible capability.
 4. Declare `Security.SideEffect=internal_write` for local runtime state writes,
    or `external_write`/`destructive` for external effects. `JournalMode()` derives
-   the recovery boundary; Bindings do not separately set a mode. Writes require
-   a durable journal, Run and Tool Call identity. Internal
-   writes accept a real Stage or Turn owner; external writes require a Stage.
+   the recovery boundary; Bindings do not separately set a mode. All writes require
+   a durable journal, Run, a real Stage or Turn owner, and Tool Call identity.
+   Single writes never invent a Stage.
    These recovery declarations do not replace security policy. Retry and
    compensation callbacks remain external-only.
 5. Run the shared Tool Contract and Fault Harness plus allow and deny cases.

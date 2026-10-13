@@ -230,6 +230,11 @@ func (s *PostgresStore) CommitToolEffectReconciliation(mutation domain.ToolEffec
 	if err != nil {
 		return domain.ToolEffectRecord{}, domain.RunEvent{}, false, err
 	}
+	// Claims and failed checks must retain pre-publication evidence for the next
+	// recovery attempt. Terminal settlement alone replaces or clears the result.
+	if len(prepared.Result) == 0 && (prepared.NextStatus == domain.ToolEffectReconciling || prepared.NextStatus == domain.ToolEffectNeedsReconciliation) {
+		prepared.Result = current.Result
+	}
 	now := time.Now().UTC()
 	prepared.Event.Timestamp = now
 	createdEvent, payload, err := preparePostgresRunEvent(prepared.Event, now)

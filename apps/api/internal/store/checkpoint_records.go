@@ -49,7 +49,7 @@ func checkpointTransitionAllowed(current, next domain.StageCheckpointStatus) boo
 
 func ValidateToolEffect(effect domain.ToolEffectRecord) error {
 	// Executor enforces the binding's mode; the journal accepts a real Stage or
-	// Turn owner so Single internal writes do not need fabricated Stage IDs.
+	// Turn owner so Single writes do not need fabricated Stage IDs.
 	missingOwner := strings.TrimSpace(effect.StageID) == "" && strings.TrimSpace(effect.TurnID) == ""
 	if strings.TrimSpace(effect.IdempotencyKey) == "" || strings.TrimSpace(effect.RunID) == "" || missingOwner || strings.TrimSpace(effect.ToolCallID) == "" || strings.TrimSpace(effect.ToolName) == "" || strings.TrimSpace(effect.RequestHash) == "" {
 		return errors.New("tool effect requires idempotency, execution identity, and request hash")

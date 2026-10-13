@@ -77,5 +77,5 @@ func (s *Service) Bindings() []tool.Binding {
 		}
 		bindings = append(bindings, binding)
 	}
-	return bindings
+	return append(bindings, s.writeBindings()...)
 }

@@ -52,6 +52,7 @@ related pages link to its contract rather than copying configuration or algorith
 ## Tools and Skills
 
 - [Scoped filesystem reads](tools/scoped-filesystem.md): Workspace/root grants, bounded file operations, redacted paging and Resume drift checks; separate from sbx.
+- [Scoped filesystem writes](tools/scoped-filesystem-writes.md): managed output roots, hash-checked reports, durable publication evidence and query-only reconciliation.
 
 - [Security policy](tools/tool-security-policy.md): capabilities, derived journal boundary, scope, credentials, and new-Tool registration.
 - [Agent instruction/data boundaries](operations/agent-security.md): fixed platform guidance, private-data Tool egress, approval semantics and attack regressions.

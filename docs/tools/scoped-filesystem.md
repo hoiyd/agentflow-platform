@@ -5,6 +5,9 @@ They use fixed Go operations, not sbx, Shell or model-generated code. sbx remain
 the separate boundary for untrusted commands. Both use the existing Tool
 Catalog, Executor, Workspace grants, Budget, Artifact and Trace mechanisms.
 
+Writes are a separate opt-in grant in [Scoped filesystem writes](scoped-filesystem-writes.md),
+limited to dedicated managed output roots. A read grant never implies write access.
+
 ## Failure Inventory
 
 | Failure | Required outcome |

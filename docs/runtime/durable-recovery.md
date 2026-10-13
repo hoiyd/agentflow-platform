@@ -98,7 +98,7 @@ from silently inheriting current model, Tool, context, or budget behavior.
 Tool security defaults to `SideEffect=none`, with no journal. A Binding declares
 one authoritative security class: `internal_write` derives an internal journal,
 while `external_write` and `destructive` derive an external journal. Internal
-writes accept a real Turn or Stage; external writes require Run, Stage, and
+writes and external writes require Run, a real Turn or Stage, and
 Tool Call identity plus a durable Tool Effect Journal.
 It derives a stable idempotency key when the caller does not provide one.
 
@@ -109,6 +109,12 @@ prepared -> executing -> committed
                       -> needs_reconciliation
 needs_reconciliation -> committed | failed | compensated
 ```
+
+Confirmed pre-publication filesystem failures settle directly as `failed`;
+only that durable settlement permits model argument correction. Timeouts and
+uncertain publication remain fail-closed. [Managed report writes](../tools/scoped-filesystem-writes.md)
+retain hash/identity evidence in the existing result column before publication;
+claims and unsuccessful reconciliation preserve it until terminal settlement.
 
 - A new key enters `executing` before handler invocation.
 - A successful bounded result is stored as `committed`.

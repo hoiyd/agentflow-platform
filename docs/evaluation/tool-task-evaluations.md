@@ -4,6 +4,12 @@ TOOL-013 adds task-level evidence to the existing Tool contract/fault harness.
 It reuses `artifact_search` and `artifact_read`: there is no missing Binding to
 justify another Tool, MCP adapter, runtime service, or frontend page.
 
+The separate [filesystem write task slice](../tools/scoped-filesystem-writes.md#validation-and-rollback)
+retains `filesystem-write-evidence.json` from the production browser/Go gate:
+report creation/read-back, hash patch, conflict rejection and Skill authority
+checks. It complements fault-window integrations; it is deterministic protocol
+evidence, not a live-model success-rate claim or a new external judge.
+
 ## Task Slice
 
 The versioned [dataset](../../apps/api/internal/evaluation/tooleval/testdata/artifact_tasks.json)

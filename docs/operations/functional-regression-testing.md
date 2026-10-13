@@ -60,6 +60,12 @@ real file list/search/read and rejected paths in all three modes, then reloads
 persisted Tool evidence in Replay. Retain `filesystem-read-evidence.json`; this
 does not execute sbx or measure live-model quality.
 
+The [managed output write gate](../tools/scoped-filesystem-writes.md#validation-and-rollback)
+uses `AGENTFLOW_FILESYSTEM_WRITE_TEST=1` with `filesystem-write.spec.ts`: all modes
+save/read/hash-patch reports, reject conflicts/escapes/read-only roots, preserve
+Effect receipts and reload Replay. A loaded Skill cannot grant a reader writes.
+Retain `filesystem-write-evidence.json` and the synthetic desktop screenshot.
+
 ```bash
 AGENTFLOW_TOOL_DISCOVERY_TEST=1 \
   TEST_DATABASE_URL='postgres://user:password@127.0.0.1:5432/agentflow_test?sslmode=disable' \

@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -9,17 +10,26 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 )
 
+type effectIdentityKey struct{}
+
+// EffectIdentity is installed by Executor only after durable preparation. It
+// lets a Binding associate non-sensitive evidence with the same journal record.
+type EffectIdentity struct {
+	Key, RunID, StageID, TurnID, CallID, Tool, RequestHash, DefinitionRevision string
+}
+
+func EffectIdentityFromContext(ctx context.Context) EffectIdentity {
+	identity, _ := ctx.Value(effectIdentityKey{}).(EffectIdentity)
+	return identity
+}
+
 func (e *Executor) beginSideEffect(request ExecutionRequest, mode SideEffectMode, result ExecutionResult) (string, bool, ExecutionResult) {
 	if e.effectJournal == nil {
 		result.Error = executionError(ErrorIdempotencyRequired, "side-effect tool requires a durable effect journal", nil)
 		return "", false, result
 	}
-	missingOwner := strings.TrimSpace(request.StageID) == ""
-	identity := "external side-effect tool requires run, stage, and call identity"
-	if mode == SideEffectInternal {
-		missingOwner = missingOwner && strings.TrimSpace(request.TurnID) == ""
-		identity = "internal side-effect tool requires run, stage or turn, and call identity"
-	}
+	missingOwner := strings.TrimSpace(request.StageID) == "" && strings.TrimSpace(request.TurnID) == ""
+	identity := string(mode) + " side-effect tool requires run, stage or turn, and call identity"
 	if strings.TrimSpace(request.RunID) == "" || missingOwner || strings.TrimSpace(request.CallID) == "" {
 		result.Error = executionError(ErrorIdempotencyRequired, identity, nil)
 		return "", false, result
@@ -69,6 +79,25 @@ func (e *Executor) markSideEffectUncertain(key string, message string) {
 		return
 	}
 	_, _ = e.effectJournal.MarkToolEffectNeedsReconciliation(key, message)
+}
+
+func (e *Executor) effectWasRejected(request ExecutionRequest, key string) bool {
+	journal, ok := e.effectJournal.(interface {
+		ListToolEffects(string) ([]domain.ToolEffectRecord, error)
+	})
+	if !ok || key == "" {
+		return false
+	}
+	records, err := journal.ListToolEffects(request.RunID)
+	if err != nil {
+		return false
+	}
+	for _, record := range records {
+		if record.IdempotencyKey == key {
+			return record.Status == domain.ToolEffectFailed && record.RequestHash == request.ArgumentsHash && record.ToolName == request.Tool && record.StageID == request.StageID && record.TurnID == request.TurnID && record.ToolCallID == request.CallID
+		}
+	}
+	return false
 }
 
 func sideEffectKey(request ExecutionRequest) string {
