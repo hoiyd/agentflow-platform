@@ -41,8 +41,9 @@ func (r *Runtime) runWorkerStage(ctx context.Context, events chan<- domain.RunEv
 	result, err := r.turnEngine.Execute(ctx, turnpkg.Request{
 		RunID: prepared.Run.ID, StepID: step.ID, ConversationID: prepared.Run.ConversationID,
 		Agent: prepared.WorkerAgent, Role: "worker", SystemPrompt: workerPrompt(prepared.WorkerAgent), Input: input,
-		Catalog: workerCatalog,
-		Context: turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks, Isolated: true}, Sink: r.runEventSink(),
+		SkillInput: query.Text,
+		Catalog:    workerCatalog,
+		Context:    turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks, Isolated: true}, Sink: r.runEventSink(),
 	}, forwardReasoning(events))
 	if err != nil {
 		return "", r.failCollaborationStage(ctx, events, step, err)

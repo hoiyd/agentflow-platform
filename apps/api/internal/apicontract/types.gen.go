@@ -462,6 +462,24 @@ func (e SkillEvidenceInstructions) Valid() bool {
 	}
 }
 
+// Defines values for SkillInvocationPolicy.
+const (
+	Automatic    SkillInvocationPolicy = "automatic"
+	ExplicitOnly SkillInvocationPolicy = "explicit_only"
+)
+
+// Valid indicates whether the value is a known member of the SkillInvocationPolicy enum.
+func (e SkillInvocationPolicy) Valid() bool {
+	switch e {
+	case Automatic:
+		return true
+	case ExplicitOnly:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TaskBlockerStatus.
 const (
 	Open     TaskBlockerStatus = "open"
@@ -794,10 +812,13 @@ type Agent struct {
 	Name             string             `json:"name"`
 	RetrievalEnabled bool               `json:"retrieval_enabled"`
 	RoutingHints     *AgentRoutingHints `json:"routing_hints,omitempty"`
-	Skills           *[]string          `json:"skills,omitempty"`
-	SystemPrompt     string             `json:"system_prompt"`
-	Tools            []string           `json:"tools"`
-	UpdatedAt        time.Time          `json:"updated_at"`
+
+	// SkillPolicies Optional per-bound-method restrictions; absence preserves automatic invocation. Package restrictions take precedence.
+	SkillPolicies *SkillPolicies `json:"skill_policies,omitempty"`
+	Skills        *[]string      `json:"skills,omitempty"`
+	SystemPrompt  string         `json:"system_prompt"`
+	Tools         []string       `json:"tools"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 
 	// WorkspaceId Owning Workspace; absent for shared read-only templates.
 	WorkspaceId *string `json:"workspace_id,omitempty"`
@@ -811,9 +832,12 @@ type AgentConfigRequest struct {
 	Name             *string            `json:"name,omitempty"`
 	RetrievalEnabled *bool              `json:"retrieval_enabled,omitempty"`
 	RoutingHints     *AgentRoutingHints `json:"routing_hints,omitempty"`
-	Skills           *[]string          `json:"skills,omitempty"`
-	SystemPrompt     *string            `json:"system_prompt,omitempty"`
-	Tools            *[]string          `json:"tools,omitempty"`
+
+	// SkillPolicies Optional per-bound-method restrictions; absence preserves automatic invocation. Package restrictions take precedence.
+	SkillPolicies *SkillPolicies `json:"skill_policies,omitempty"`
+	Skills        *[]string      `json:"skills,omitempty"`
+	SystemPrompt  *string        `json:"system_prompt,omitempty"`
+	Tools         *[]string      `json:"tools,omitempty"`
 }
 
 // AgentRoutingHints defines model for AgentRoutingHints.
@@ -1527,13 +1551,23 @@ type SkillFailureEvidence struct {
 	Tool     string  `json:"tool"`
 }
 
+// SkillInvocationPolicy defines model for SkillInvocationPolicy.
+type SkillInvocationPolicy string
+
 // SkillMetadata defines model for SkillMetadata.
 type SkillMetadata struct {
-	Description   string    `json:"description"`
-	Hash          string    `json:"hash"`
-	Name          string    `json:"name"`
-	RequiredTools *[]string `json:"required_tools,omitempty"`
+	Description      string                 `json:"description"`
+	Hash             string                 `json:"hash"`
+	InvocationPolicy *SkillInvocationPolicy `json:"invocation_policy,omitempty"`
+	Name             string                 `json:"name"`
+	RequiredTools    *[]string              `json:"required_tools,omitempty"`
+
+	// ToolDependencies Current Workspace readiness only, not per-call execution authorization.
+	ToolDependencies *[]SkillToolDependency `json:"tool_dependencies,omitempty"`
 }
+
+// SkillPolicies Optional per-bound-method restrictions; absence preserves automatic invocation. Package restrictions take precedence.
+type SkillPolicies map[string]SkillInvocationPolicy
 
 // SkillResourceEvidence defines model for SkillResourceEvidence.
 type SkillResourceEvidence struct {
@@ -1544,6 +1578,14 @@ type SkillResourceEvidence struct {
 	Path       string `json:"path"`
 	Sequence   int64  `json:"sequence"`
 	TotalBytes int    `json:"total_bytes"`
+}
+
+// SkillToolDependency defines model for SkillToolDependency.
+type SkillToolDependency struct {
+	AgentBindingRequired bool    `json:"agent_binding_required"`
+	Name                 string  `json:"name"`
+	Ready                bool    `json:"ready"`
+	Reason               *string `json:"reason,omitempty"`
 }
 
 // StageCheckpoint defines model for StageCheckpoint.

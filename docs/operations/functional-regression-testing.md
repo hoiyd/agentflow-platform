@@ -250,3 +250,9 @@ are loaded. Reports are ignored by Git and retained by CI for 14 days.
 See [Playwright webServer](https://playwright.dev/docs/test-webserver) for managed
 process lifecycle and [retrying assertions](https://playwright.dev/docs/test-assertions)
 for condition-based waiting. No fixed sleeps or automatic retries hide failures.
+## Skill Invocation/Readiness Gate
+
+`AGENTFLOW_SKILL_POLICY_TEST=1 bash scripts/test-browser.sh skill-policy.spec.ts`
+uses disposable Postgres and strict model fixtures to verify explicit/model
+invocation, dependencies, frozen policies and all-mode execution. See the
+[owning contract](../tools/skill-invocation.md#evidence) for evidence and scope.

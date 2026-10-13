@@ -44,19 +44,19 @@ fail startup rather than producing a partially trusted catalog. Installing into
 a configured root makes a valid package available after restart, so review its
 content first. No request accepts a local directory or uploaded package.
 
-To use only the repository's two reviewed fixture methods instead of installed
+To use the repository's reviewed example methods instead of installed
 packages, set `TRUSTED_SKILL_DIRS=../../examples/skills`. This trusts that parent
 root, not a list of its individual packages.
 
-`GET /api/skills` exposes only name, description, package hash and required Tool
-names. In Single mode, the Workspace owner uses **Configure > Skills** to bind
+`GET /api/skills` exposes metadata, package invocation policy and current Workspace
+Tool dependency readiness, never instructions or host paths. In Single mode, the Workspace owner uses **Configure > Skills** to bind
 these names to an owned Agent profile. Shared templates must be copied first.
 Owners can bind installed trusted packages, but cannot change trusted roots or
 install arbitrary packages through the API. Skills never expand Workspace Tool grants.
 The compact **Invoke skill** selector adds `/skill:name` to the task. An explicit
 invocation such as `/skill:<skill-name> Explain the release procedure`
 loads the bound method on the first model request. Without that prefix, the
-model sees bound metadata and can select a relevant method with `skill_load`.
+model sees automatically invocable bound metadata and can select a relevant method with `skill_load`.
 Multi Workers and Loop Act stages use the same tools; there is no separate
 Skills dashboard or Agent-editing surface in those modes.
 
@@ -71,6 +71,9 @@ Tool dependencies are checked against ready Agent capabilities on save and Run
 creation. This does not bypass per-call policy or data-scope validation: a
 ready Tool can still be denied by operator policy. No dependency is silently
 enabled, installed or granted.
+
+See [Skill invocation and readiness](skill-invocation.md) for **Automatic / Explicit
+only**, package restrictions, binding configuration and dependency diagnostics.
 
 ## Package Format and Boundaries
 
@@ -178,13 +181,20 @@ means request-backed inclusion cannot be observed. Capture follows the existing 
 **Snapshot content is retained independently of optional full request capture**;
 only operator-reviewed, non-secret methods should be configured.
 
-PostgreSQL persists Agent bindings in `agents.skills JSONB` through an idempotent
+PostgreSQL persists Agent bindings/policies in `agents.skills` / `skill_policies`
+JSONB through an idempotent
 startup migration; immutable package contents use existing Run Snapshot JSON.
 The optional fields do not change the current Snapshot protocol version. Older
 current-version Runs without Skills remain unchanged and do not gain live Skills
 on Resume.
 
 ## Failure Inventory
+
+Invocation policy/readiness changes must reject malformed restrictive declarations,
+model attempts to load an explicit-only method, unbound explicit requests and missing
+effective Tool dependencies. Internal Planner/Worker text is not explicit user intent.
+Frozen policies and prior explicit activation must survive config changes and Resume;
+readiness diagnostics must not remove saved bindings or grant missing Tools.
 
 Activation evidence additionally distinguishes a frozen binding from instructions
 included in a recorded request, and a successful resource read from a failed or

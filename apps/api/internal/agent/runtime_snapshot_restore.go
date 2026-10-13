@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 )
 
@@ -29,6 +30,7 @@ func restoreAgent(snapshot domain.RuntimeAgentSnapshot) domain.Agent {
 		RoutingHints:     cloneAgentRoutingHints(snapshot.RoutingHints),
 		Tools:            append([]string(nil), snapshot.Tools...),
 		Skills:           append([]string(nil), snapshot.Skills...),
+		SkillPolicies:    maps.Clone(snapshot.SkillPolicies),
 		MemoryEnabled:    snapshot.MemoryEnabled,
 		RetrievalEnabled: snapshot.RetrievalEnabled,
 		Executor:         domain.DefaultAgentExecutor,

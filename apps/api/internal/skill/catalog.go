@@ -44,7 +44,11 @@ func (c *Catalog) List() []domain.SkillMetadata {
 }
 
 func Metadata(item domain.SkillSnapshot) domain.SkillMetadata {
-	return domain.SkillMetadata{Name: item.Name, Description: item.Description, Hash: item.Hash, RequiredTools: append([]string(nil), item.RequiredTools...)}
+	invocationPolicy := item.InvocationPolicy
+	if item.BindingPolicy != "" {
+		invocationPolicy = domain.EffectiveSkillPolicy(invocationPolicy, item.BindingPolicy)
+	}
+	return domain.SkillMetadata{Name: item.Name, Description: item.Description, Hash: item.Hash, RequiredTools: append([]string(nil), item.RequiredTools...), InvocationPolicy: invocationPolicy}
 }
 
 func (c *Catalog) Freeze(names, effectiveTools []string) ([]domain.SkillSnapshot, error) {
@@ -80,6 +84,9 @@ func ValidateFrozen(items []domain.SkillSnapshot) error {
 	}
 	seen := map[string]bool{}
 	for _, item := range items {
+		if item.InvocationPolicy != "" && item.InvocationPolicy != domain.SkillAutomatic && item.InvocationPolicy != domain.SkillExplicitOnly {
+			return skillError("skill_invocation_invalid", "Frozen Skill has an invalid invocation policy")
+		}
 		if err := redaction.ValidateValue(item); err != nil {
 			return skillError("skill_sensitive_content", "Skill package contains credential material")
 		}

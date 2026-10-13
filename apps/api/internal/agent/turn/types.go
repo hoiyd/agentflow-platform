@@ -45,11 +45,13 @@ type Request struct {
 	SystemPrompt   string
 	History        []domain.Message
 	Input          string
-	ModelMode      ModelMode
-	Catalog        *tool.Catalog
-	Context        Context
-	Metadata       map[string]any
-	Sink           eventpkg.Sink
+	// Original user task for Skill invocation, never generated Stage instructions.
+	SkillInput string
+	ModelMode  ModelMode
+	Catalog    *tool.Catalog
+	Context    Context
+	Metadata   map[string]any
+	Sink       eventpkg.Sink
 	// Opaque durable Tool continuation, decoded only by the runtime model adapter.
 	Continuation json.RawMessage
 }

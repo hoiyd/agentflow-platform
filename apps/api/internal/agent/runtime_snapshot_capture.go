@@ -39,6 +39,9 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 	skillSnapshots := []domain.SkillSnapshot{}
 	seenSkills := map[string]bool{}
 	freezeSkills := func(agent *domain.Agent) error {
+		if err := domain.ValidateSkillPolicies(agent.Skills, agent.SkillPolicies); err != nil {
+			return &tool.ExecutionError{Code: "skill_invocation_invalid", Message: err.Error()}
+		}
 		if len(agent.Skills) == 0 {
 			return nil
 		}
@@ -124,6 +127,9 @@ func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candid
 // The actual Run captures the same packages after harness Tool availability is known.
 func (r *Runtime) ValidateAgentSkills(agent domain.Agent) error {
 	agent = domain.NormalizeAgentConfig(agent)
+	if err := domain.ValidateSkillPolicies(agent.Skills, agent.SkillPolicies); err != nil {
+		return &tool.ExecutionError{Code: "skill_invocation_invalid", Message: err.Error()}
+	}
 	catalog, err := r.currentCatalog()
 	if err != nil {
 		return err
@@ -149,12 +155,44 @@ func (r *Runtime) freezeAgentSkills(agent domain.Agent, catalog *tool.Catalog) (
 	return r.skills.Freeze(agent.Skills, ready)
 }
 
+// ListSkills explains current Workspace readiness; it does not grant Agent
+// bindings or promise that argument-specific Executor authorization will pass.
+func (r *Runtime) ListSkills(workspaceID string) ([]domain.SkillMetadata, error) {
+	items := r.skills.List()
+	if len(items) == 0 {
+		return items, nil
+	}
+	catalog, err := r.currentCatalog()
+	if err != nil {
+		return nil, err
+	}
+	_, tools, err := availability.Resolve(r.store, workspaceID, catalog)
+	if err != nil {
+		return nil, err
+	}
+	harness := r.withHarnessTools(nil)
+	for i := range items {
+		for _, name := range items[i].RequiredTools {
+			dependency := domain.SkillToolDependency{Name: name, Reason: "not_installed", AgentBindingRequired: !slices.Contains(harness, name)}
+			for _, item := range tools {
+				if item.Name == name {
+					dependency.Ready, dependency.Reason = item.Enabled, item.ExcludedReason
+					break
+				}
+			}
+			items[i].ToolDependencies = append(items[i].ToolDependencies, dependency)
+		}
+	}
+	return items, nil
+}
+
 func snapshotAgent(agent domain.Agent) domain.RuntimeAgentSnapshot {
 	return domain.RuntimeAgentSnapshot{
 		ID: agent.ID, Name: agent.Name, Description: agent.Description, SystemPrompt: agent.SystemPrompt,
 		RoutingHints: cloneAgentRoutingHints(agent.RoutingHints),
 		Tools:        append([]string(nil), agent.Tools...), MemoryEnabled: agent.MemoryEnabled,
 		Skills:           append([]string(nil), agent.Skills...),
+		SkillPolicies:    domain.NormalizeAgentConfig(agent).SkillPolicies,
 		RetrievalEnabled: agent.RetrievalEnabled, Executor: domain.DefaultAgentExecutor,
 	}
 }

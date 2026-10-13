@@ -166,6 +166,9 @@ func testSkillResumeAfterDirectoryRemoved(t *testing.T, activation string) {
 		t.Fatal(err)
 	}
 	agent.Skills = []string{"resume-method"}
+	if activation == "explicit" {
+		agent.SkillPolicies = map[string]domain.SkillInvocationPolicy{"resume-method": domain.SkillExplicitOnly}
+	}
 	if _, err := storage.UpdateAgent(agent); err != nil {
 		t.Fatal(err)
 	}
@@ -195,6 +198,7 @@ func testSkillResumeAfterDirectoryRemoved(t *testing.T, activation string) {
 	} else {
 		// Persist the real assembly, without a fabricated skill_load receipt.
 		session := contextassembly.Session{AgentID: agent.ID, CurrentInput: "/skill:resume-method Recover", Config: prepared.Run.RuntimeSnapshot.ContextAssembly, Sink: eventpkg.StoreSink{Store: storage}, LoadSkills: func() ([]domain.SkillSnapshot, error) { return prepared.Run.RuntimeSnapshot.Skills, nil }}
+		session.SkillInput = session.CurrentInput
 		if _, err := contextassembly.Assemble(contextassembly.WithSession(ctx, session), contextassembly.Request{Model: "resume-fixture", Messages: []contextassembly.Message{{Role: "system", Content: "Use facts."}, {Role: "user", Content: session.CurrentInput}}}); err != nil {
 			t.Fatal(err)
 		}
@@ -209,6 +213,7 @@ func testSkillResumeAfterDirectoryRemoved(t *testing.T, activation string) {
 		t.Fatal(err)
 	}
 	agent.Skills = nil
+	agent.SkillPolicies = nil
 	if _, err := storage.UpdateAgent(agent); err != nil {
 		t.Fatal(err)
 	}

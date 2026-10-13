@@ -127,6 +127,7 @@ function ComposerFixture({chatMode, skills, input, onInputChange, isStreaming, o
   return (
     <ChatComposer
       activeAgent={hasAgent ? { ...agent, skills } : undefined}
+      availableSkills={skills.map(name => ({ name, description: "", hash: "fixture" }))}
       activeAgentId={hasAgent ? agent.id : ""}
       agents={hasAgent ? [agent] : []}
       agentsError=""

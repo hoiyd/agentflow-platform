@@ -20,7 +20,6 @@ import (
 	"agentflow-platform/apps/api/internal/identity"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/redaction"
-	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tool"
 )
@@ -49,6 +48,7 @@ type HTTPStore interface {
 type AgentRuntimeOperations interface {
 	runcommands.Runtime
 	ValidateAgentSkills(domain.Agent) error
+	ListSkills(string) ([]domain.SkillMetadata, error)
 	CancelRun(string) (domain.Run, error)
 }
 
@@ -72,7 +72,6 @@ type Dependencies struct {
 	AgentRuntime   AgentRuntimeOperations
 	Memory         MemoryOperations
 	Knowledge      KnowledgeOperations
-	Skills         *skill.Catalog
 	RunController  RunCapacity
 	RunEvents      *event.Hub
 	Verification   VerificationOperations
@@ -89,7 +88,6 @@ type Handler struct {
 	agentRuntime   AgentRuntimeOperations
 	memories       MemoryOperations
 	knowledge      KnowledgeOperations
-	skills         *skill.Catalog
 	runController  RunCapacity
 	runEvents      *event.Hub
 	verification   VerificationOperations
@@ -131,7 +129,6 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		agentRuntime:   dependencies.AgentRuntime,
 		memories:       dependencies.Memory,
 		knowledge:      dependencies.Knowledge,
-		skills:         dependencies.Skills,
 		runController:  dependencies.RunController,
 		runEvents:      dependencies.RunEvents,
 		verification:   dependencies.Verification,

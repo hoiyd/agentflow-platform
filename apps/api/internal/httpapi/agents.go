@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 
 	"agentflow-platform/apps/api/internal/apicontract"
@@ -22,7 +23,12 @@ func (h *Handler) listAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listSkills(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.skills.List())
+	items, err := h.agentRuntime.ListSkills(workspaceIDFromRequest(r))
+	if err != nil {
+		writeFailure(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +51,7 @@ func (h *Handler) createAgent(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if len(agent.Skills) > 0 {
+	if len(agent.Skills) > 0 || len(agent.SkillPolicies) > 0 {
 		if err := h.agentRuntime.ValidateAgentSkills(agent); err != nil {
 			writeFailure(w, r, http.StatusBadRequest, err)
 			return
@@ -150,7 +156,7 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if len(agent.Skills) > 0 {
+	if len(agent.Skills) > 0 || len(agent.SkillPolicies) > 0 {
 		if err := h.agentRuntime.ValidateAgentSkills(agent); err != nil {
 			writeFailure(w, r, http.StatusBadRequest, err)
 			return
@@ -210,6 +216,18 @@ func applyAgentConfigRequest(agent *domain.Agent, req apicontract.AgentConfigReq
 	}
 	if req.Skills != nil {
 		agent.Skills = append([]string(nil), (*req.Skills)...)
+		// Removing a binding also removes its policy; omission preserves both.
+		for name := range agent.SkillPolicies {
+			if !slices.Contains(agent.Skills, name) {
+				delete(agent.SkillPolicies, name)
+			}
+		}
+	}
+	if req.SkillPolicies != nil {
+		agent.SkillPolicies = make(map[string]domain.SkillInvocationPolicy, len(*req.SkillPolicies))
+		for name, value := range *req.SkillPolicies {
+			agent.SkillPolicies[name] = domain.SkillInvocationPolicy(value)
+		}
 	}
 	if req.MemoryEnabled != nil {
 		agent.MemoryEnabled = *req.MemoryEnabled

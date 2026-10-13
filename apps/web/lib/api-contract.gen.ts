@@ -1023,6 +1023,7 @@ export interface components {
             routing_hints?: components["schemas"]["AgentRoutingHints"];
             tools?: string[];
             skills?: string[];
+            skill_policies?: components["schemas"]["SkillPolicies"];
             memory_enabled?: boolean;
             retrieval_enabled?: boolean;
         };
@@ -1038,6 +1039,7 @@ export interface components {
             routing_hints?: components["schemas"]["AgentRoutingHints"];
             tools: string[];
             skills?: string[];
+            skill_policies?: components["schemas"]["SkillPolicies"];
             memory_enabled: boolean;
             retrieval_enabled: boolean;
             executor?: string;
@@ -1047,11 +1049,26 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @enum {string} */
+        SkillInvocationPolicy: "automatic" | "explicit_only";
+        /** @description Optional per-bound-method restrictions; absence preserves automatic invocation. Package restrictions take precedence. */
+        SkillPolicies: {
+            [key: string]: components["schemas"]["SkillInvocationPolicy"];
+        };
+        SkillToolDependency: {
+            name: string;
+            ready: boolean;
+            reason?: string;
+            agent_binding_required: boolean;
+        };
         SkillMetadata: {
             name: string;
             description: string;
             hash: string;
             required_tools?: string[];
+            invocation_policy?: components["schemas"]["SkillInvocationPolicy"];
+            /** @description Current Workspace readiness only, not per-call execution authorization. */
+            tool_dependencies?: components["schemas"]["SkillToolDependency"][];
         };
         AgentRoutingHints: {
             capabilities: string[];

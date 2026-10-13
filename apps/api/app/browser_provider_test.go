@@ -135,6 +135,9 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	if f.clarificationResponse(w, input, task) {
 		return
 	}
+	if f.skillPolicyResponse(w, input, task) {
+		return
+	}
 	if f.filesystemResponse(w, input, task) {
 		return
 	}

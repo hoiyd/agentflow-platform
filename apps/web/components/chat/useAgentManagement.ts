@@ -262,6 +262,7 @@ export function useAgentManagement(isStreaming: boolean, onActiveAgentChange: ()
 
   function openAgentConfig() {
     if (!activeAgent) return;
+    void refreshSkills();
     setIsNewAgentFormOpen(false);
     setNewAgentDraft(null);
     setAgentConfigStatus("");
@@ -302,6 +303,7 @@ function agentToConfigDraft(agent: AgentInfo): AgentConfigDraft {
     },
     tools: agent.tools ?? [],
     skills: agent.skills ?? [],
+    ...(agent.skill_policies ? { skill_policies: { ...agent.skill_policies } } : {}),
     memory_enabled: agent.memory_enabled ?? true,
     retrieval_enabled: agent.retrieval_enabled ?? true
   };

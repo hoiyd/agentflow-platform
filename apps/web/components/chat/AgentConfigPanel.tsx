@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { AgentInfo, ToolInfo, SkillInfo } from "../../lib/api";
+import { AgentSkillBindings } from "./AgentSkillBindings";
 
 export type AgentConfigDraft = {
   name: string;
@@ -14,6 +15,7 @@ export type AgentConfigDraft = {
   };
   tools: string[];
   skills?: string[];
+  skill_policies?: AgentInfo["skill_policies"];
   memory_enabled: boolean;
   retrieval_enabled: boolean;
 };
@@ -167,24 +169,7 @@ export function AgentConfigPanel({
           )}
         </div>
       </div>
-      <div className="agent-config-tools">
-        <span>Skills</span>
-        {skillsError ? <small className="error-text" role="alert">{skillsError}</small> : null}
-        <div>
-          {availableSkills.length === 0 && !draft.skills?.length ? <small>No trusted skills configured.</small> : null}
-          {[...new Set([...availableSkills.map((item) => item.name), ...(draft.skills ?? [])])].map((name) => {
-            const item = availableSkills.find((candidate) => candidate.name === name);
-            const selected = draft.skills ?? [];
-            return (
-              <label key={name} title={item ? `${item.description}${item.required_tools?.length ? ` · Requires: ${item.required_tools.join(", ")}` : ""}` : "Unavailable in the trusted catalog"}>
-                <input checked={selected.includes(name)} disabled={disabled} type="checkbox"
-                  onChange={() => onChange({ skills: selected.includes(name) ? selected.filter((value) => value !== name) : [...selected, name] })} />
-                <span>{name}{item ? "" : " (unavailable)"}</span>
-              </label>
-            );
-          })}
-        </div>
-      </div>
+      <AgentSkillBindings draft={draft} skills={availableSkills} tools={availableTools} disabled={disabled} error={skillsError} onChange={onChange} />
       <div className="agent-config-actions">
         {status ? (
           <span

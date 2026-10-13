@@ -46,6 +46,7 @@ func TestSkillContextIsProgressiveDeduplicatedAndBudgeted(t *testing.T) {
 		t.Fatal("loaded Skill identity not selected in Manifest")
 	}
 	session.AgentID, session.CurrentInput = "agent", "/skill:evidence-method Continue"
+	session.SkillInput = session.CurrentInput
 	session.Compaction = &domain.ContextCompaction{ID: "compaction", Generation: 2, Summary: "Earlier resource pages were trimmed."}
 	pack, err = Assemble(WithSession(t.Context(), session), request)
 	if err != nil {

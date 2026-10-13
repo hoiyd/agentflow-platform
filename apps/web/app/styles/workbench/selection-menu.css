@@ -94,3 +94,4 @@
 .selection-option[aria-selected="true"] .selection-option-name { font-weight: 600; }
 .selection-option[data-active="true"], .selection-option:hover { background: var(--surface-soft); }
 .selection-empty { padding: 16px 12px; margin: 0; color: var(--muted-strong); }
+.selection-option[aria-disabled="true"] { color: var(--muted); cursor: not-allowed; }

@@ -45,7 +45,7 @@ func (h *Handler) getEpisodeReport(w http.ResponseWriter, r *http.Request) {
 		for _, frozen := range candidates {
 			if frozen.ID == replay.Run.AgentID {
 				agent = domain.Agent{ID: frozen.ID, WorkspaceID: replay.Run.WorkspaceID, Name: frozen.Name, Description: frozen.Description, SystemPrompt: frozen.SystemPrompt,
-					RoutingHints: frozen.RoutingHints, Tools: frozen.Tools, Skills: frozen.Skills, MemoryEnabled: frozen.MemoryEnabled, RetrievalEnabled: frozen.RetrievalEnabled, Executor: frozen.Executor}
+					RoutingHints: frozen.RoutingHints, Tools: frozen.Tools, Skills: frozen.Skills, SkillPolicies: frozen.SkillPolicies, MemoryEnabled: frozen.MemoryEnabled, RetrievalEnabled: frozen.RetrievalEnabled, Executor: frozen.Executor}
 				ok = true
 				break
 			}

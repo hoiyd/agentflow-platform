@@ -118,6 +118,11 @@ func readDocument(root *os.Root, name string) (document, error) {
 
 func loadDocument(root *os.Root, header document) (domain.SkillSnapshot, error) {
 	item := domain.SkillSnapshot{Name: header.Name, Description: header.Description, Instructions: header.Instructions, RequiredTools: strings.Fields(header.Metadata["agentflow-required-tools"])}
+	invocationPolicy, err := packageInvocationPolicy(root, header)
+	if err != nil {
+		return domain.SkillSnapshot{}, err
+	}
+	item.InvocationPolicy = invocationPolicy
 	for _, subdir := range []string{"references", "assets"} {
 		err := fs.WalkDir(root.FS(), subdir, func(path string, entry fs.DirEntry, walkErr error) error {
 			if errors.Is(walkErr, fs.ErrNotExist) && path == subdir {

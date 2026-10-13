@@ -394,6 +394,9 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
             activeAgentId={activeAgentId}
             agents={workspaceAgents}
             agentsError={agentsError}
+            availableSkills={skills}
+            availableTools={toolCatalog.tools}
+            skillsError={skillsError}
             chatMode={chatMode}
             completionVerificationEnabled={verification.settings.enabled}
             error={error}
