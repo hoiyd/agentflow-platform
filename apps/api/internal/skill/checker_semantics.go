@@ -25,10 +25,12 @@ func checkSemantics(root *os.Root, doc document, item domain.SkillSnapshot, resu
 	for _, key := range sortedFields(doc) {
 		var issue Diagnostic
 		switch key {
+		case "disable-model-invocation":
+			continue
 		case "license", "compatibility":
 			issue = diagnostic("skill_metadata_ignored", "semantics", "info", "SKILL.md", "License/compatibility metadata is descriptive, not enforced by the runtime.", "Review licensing and environment requirements manually; no dependency is installed.")
 		default:
-			issue = diagnostic("skill_semantics_unsupported", "semantics", "error", "SKILL.md", "A frontmatter extension has unsupported runtime semantics.", "Remove or adapt behavioral fields such as allowed-tools, disable-model-invocation, context, model or hooks; do not assume they are enforced.")
+			issue = diagnostic("skill_semantics_unsupported", "semantics", "error", "SKILL.md", "A frontmatter extension has unsupported runtime semantics.", "Remove or adapt behavioral fields such as allowed-tools, context, model or hooks; do not assume they are enforced.")
 		}
 		if len(key) <= 64 && namePattern.MatchString(key) {
 			if safe := safeRelativePath(key); safe != "." {

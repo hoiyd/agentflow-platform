@@ -13,7 +13,7 @@ import (
 
 func (s *PostgresStore) ListAgents() ([]domain.Agent, error) {
 	rows, err := s.db.Query(`
-		SELECT id, COALESCE(workspace_id::text,''), is_template, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
+		SELECT id, COALESCE(workspace_id::text,''), is_template, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at, skill_policies
 		FROM agents
 		WHERE deleted_at IS NULL
 		ORDER BY created_at ASC`)
@@ -62,16 +62,17 @@ func (s *PostgresStore) CreateAgent(agent domain.Agent) (domain.Agent, error) {
 	if err != nil {
 		return domain.Agent{}, err
 	}
+	policiesJSON, _ := json.Marshal(agent.SkillPolicies) // String-only map has no fallible JSON values.
 	_, err = s.db.Exec(`
-		INSERT INTO agents (id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at, workspace_id, is_template)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12, $13, $14)`,
-		agent.ID, agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, skillsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.CreatedAt, agent.UpdatedAt, nullString(agent.WorkspaceID), agent.IsTemplate)
+		INSERT INTO agents (id, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at, workspace_id, is_template, skill_policies)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, $11, $12, $13, $14, $15)`,
+		agent.ID, agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, skillsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.CreatedAt, agent.UpdatedAt, nullString(agent.WorkspaceID), agent.IsTemplate, policiesJSON)
 	return agent, err
 }
 
 func (s *PostgresStore) GetAgent(id string) (domain.Agent, bool, error) {
 	row := s.db.QueryRow(`
-		SELECT id, COALESCE(workspace_id::text,''), is_template, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
+		SELECT id, COALESCE(workspace_id::text,''), is_template, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at, skill_policies
 		FROM agents
 		WHERE id = $1`, id)
 	agent, err := scanAgent(row)
@@ -121,11 +122,12 @@ func (s *PostgresStore) UpdateAgent(agent domain.Agent) (domain.Agent, error) {
 	if err != nil {
 		return domain.Agent{}, err
 	}
+	policiesJSON, _ := json.Marshal(agent.SkillPolicies)
 	_, err = s.db.Exec(`
 		UPDATE agents
-		SET name = $1, description = $2, system_prompt = $3, routing_hints = $4, tools = $5, skills = $6, memory_enabled = $7, retrieval_enabled = $8, executor = $9, updated_at = $10
+		SET name = $1, description = $2, system_prompt = $3, routing_hints = $4, tools = $5, skills = $6, memory_enabled = $7, retrieval_enabled = $8, executor = $9, updated_at = $10, skill_policies = $12
 		WHERE id = $11`,
-		agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, skillsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.UpdatedAt, agent.ID)
+		agent.Name, agent.Description, agent.SystemPrompt, routingHintsJSON, toolsJSON, skillsJSON, agent.MemoryEnabled, agent.RetrievalEnabled, agent.Executor, agent.UpdatedAt, agent.ID, policiesJSON)
 	return agent, err
 }
 
@@ -165,7 +167,7 @@ func (s *PostgresStore) GetDefaultAgent() (domain.Agent, bool, error) {
 		return agent, ok, err
 	}
 	row := s.db.QueryRow(`
-		SELECT id, COALESCE(workspace_id::text,''), is_template, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at
+		SELECT id, COALESCE(workspace_id::text,''), is_template, name, description, system_prompt, routing_hints, tools, skills, memory_enabled, retrieval_enabled, executor, deleted_at, created_at, updated_at, skill_policies
 		FROM agents
 		WHERE deleted_at IS NULL
 		ORDER BY created_at ASC
@@ -207,8 +209,9 @@ func scanAgent(row scanner) (domain.Agent, error) {
 	var routingHintsJSON []byte
 	var toolsJSON []byte
 	var skillsJSON []byte
+	var policiesJSON []byte
 	var deletedAt sql.NullTime
-	if err := row.Scan(&agent.ID, &agent.WorkspaceID, &agent.IsTemplate, &agent.Name, &agent.Description, &agent.SystemPrompt, &routingHintsJSON, &toolsJSON, &skillsJSON, &agent.MemoryEnabled, &agent.RetrievalEnabled, &agent.Executor, &deletedAt, &agent.CreatedAt, &agent.UpdatedAt); err != nil {
+	if err := row.Scan(&agent.ID, &agent.WorkspaceID, &agent.IsTemplate, &agent.Name, &agent.Description, &agent.SystemPrompt, &routingHintsJSON, &toolsJSON, &skillsJSON, &agent.MemoryEnabled, &agent.RetrievalEnabled, &agent.Executor, &deletedAt, &agent.CreatedAt, &agent.UpdatedAt, &policiesJSON); err != nil {
 		return domain.Agent{}, err
 	}
 	agent.Archived = deletedAt.Valid
@@ -224,6 +227,11 @@ func scanAgent(row scanner) (domain.Agent, error) {
 	}
 	if len(skillsJSON) > 0 {
 		if err := json.Unmarshal(skillsJSON, &agent.Skills); err != nil {
+			return domain.Agent{}, err
+		}
+	}
+	if len(policiesJSON) > 0 {
+		if err := json.Unmarshal(policiesJSON, &agent.SkillPolicies); err != nil {
 			return domain.Agent{}, err
 		}
 	}

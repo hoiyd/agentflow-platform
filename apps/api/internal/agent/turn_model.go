@@ -34,7 +34,16 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	if !ok {
 		return turn.Result{}, fmt.Errorf("run not found")
 	}
-	ctx = skill.WithAgent(ctx, request.Agent.ID, request.Input)
+	ctx = skill.WithAgent(ctx, request.Agent.ID, request.SkillInput)
+	if request.Catalog != nil {
+		ready := []string{}
+		for _, name := range request.Agent.Tools {
+			if _, ok := request.Catalog.ResolveReady(name); ok {
+				ready = append(ready, name)
+			}
+		}
+		ctx = skill.WithReadyTools(ctx, ready)
+	}
 	snapshot, err := m.runtime.snapshotForRun(request.RunID)
 	if err != nil {
 		return turn.Result{}, err
@@ -123,7 +132,8 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 		AgentID: request.Agent.ID,
 		Config:  snapshot.ContextAssembly, Sink: request.Sink,
 		History: history, CurrentInput: request.Input,
-		Memories: request.Context.Memories, Knowledge: request.Context.Chunks,
+		SkillInput: request.SkillInput,
+		Memories:   request.Context.Memories, Knowledge: request.Context.Chunks,
 		HistorySearch: historySearch,
 		Compaction:    compaction,
 	}
@@ -132,7 +142,7 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 			return m.runtime.inbox.ConsumeSteering(ctx, request.RunID, request.StepID, request.TurnID)
 		}
 	}
-	if len(request.Agent.Skills) > 0 || strings.HasPrefix(strings.TrimSpace(request.Input), "/skill:") {
+	if request.Role != "planner" && (len(request.Agent.Skills) > 0 || strings.HasPrefix(strings.TrimSpace(request.SkillInput), "/skill:")) {
 		if bound, err := skill.Bound(snapshot, request.Agent.ID); err == nil {
 			for _, item := range bound {
 				session.Skills = append(session.Skills, skill.Metadata(item))

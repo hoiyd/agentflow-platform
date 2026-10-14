@@ -56,11 +56,15 @@ func (s *Service) load(ctx context.Context, args json.RawMessage) (any, error) {
 		if item.Name != input.Name {
 			continue
 		}
+		alreadyLoaded := slices.ContainsFunc(active, func(other domain.SkillSnapshot) bool { return other.Name == item.Name })
+		if domain.EffectiveSkillPolicy(item.InvocationPolicy, item.BindingPolicy) == domain.SkillExplicitOnly && !alreadyLoaded {
+			return nil, skillError("skill_invocation_denied", "Skill requires an explicit user /skill:name invocation")
+		}
 		paths := []string{}
 		for _, resource := range item.Resources {
 			paths = append(paths, resource.Path)
 		}
-		return loadResult{SkillMetadata: Metadata(item), AgentID: caller.agentID, Resources: paths, AlreadyLoaded: slices.ContainsFunc(active, func(other domain.SkillSnapshot) bool { return other.Name == item.Name })}, nil
+		return loadResult{SkillMetadata: Metadata(item), AgentID: caller.agentID, Resources: paths, AlreadyLoaded: alreadyLoaded}, nil
 	}
 	return nil, skillError("skill_not_bound", "Skill is not bound to this Agent")
 }

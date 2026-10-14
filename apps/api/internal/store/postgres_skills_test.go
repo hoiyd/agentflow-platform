@@ -41,6 +41,14 @@ func TestPostgresSkillsRoundTripAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	agent.SkillPolicies = map[string]domain.SkillInvocationPolicy{"persisted-method": domain.SkillExplicitOnly}
+	if _, err := storage.UpdateAgent(agent); err != nil {
+		t.Fatal(err)
+	}
+	loadedPolicy, ok, err := storage.GetAgentInWorkspace(workspace, agent.ID)
+	if err != nil || !ok || loadedPolicy.SkillPolicies["persisted-method"] != domain.SkillExplicitOnly {
+		t.Fatalf("policy round trip: %+v %v", loadedPolicy, err)
+	}
 	agent.Skills = nil
 	if _, err := storage.UpdateAgent(agent); err != nil {
 		t.Fatal(err)
@@ -60,6 +68,7 @@ func TestPostgresSkillsRoundTripAcrossRestart(t *testing.T) {
 	snapshot := testRuntimeSnapshot()
 	snapshot.Agent.ID = agent.ID
 	snapshot.Agent.Skills = agent.Skills
+	snapshot.Agent.SkillPolicies = agent.SkillPolicies
 	snapshot.Skills = packages
 	run, err := storage.CreateRunWithContract(agent.ID, conversation.ID, snapshot, nil)
 	if err != nil {
@@ -67,6 +76,7 @@ func TestPostgresSkillsRoundTripAcrossRestart(t *testing.T) {
 	}
 	ctx := skill.WithAgent(eventpkg.WithScope(t.Context(), eventpkg.Scope{RunID: run.ID, ConversationID: conversation.ID, TurnID: "persisted-turn"}), agent.ID, "/skill:persisted-method Begin")
 	session := contextassembly.Session{AgentID: agent.ID, CurrentInput: "/skill:persisted-method Begin", Config: snapshot.ContextAssembly, Sink: eventpkg.StoreSink{Store: storage}, LoadSkills: func() ([]domain.SkillSnapshot, error) { return skill.NewService(storage).Active(ctx, &snapshot) }}
+	session.SkillInput = session.CurrentInput
 	if _, err := contextassembly.Assemble(contextassembly.WithSession(ctx, session), contextassembly.Request{Model: "fixture", Messages: []contextassembly.Message{{Role: "system", Content: "Use facts."}, {Role: "user", Content: session.CurrentInput}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +94,9 @@ func TestPostgresSkillsRoundTripAcrossRestart(t *testing.T) {
 	loaded, ok, err = restarted.GetAgent(agent.ID)
 	if err != nil || !ok || len(loaded.Skills) != 1 {
 		t.Fatalf("agent=%#v err=%v", loaded, err)
+	}
+	if loaded.SkillPolicies["persisted-method"] != domain.SkillExplicitOnly {
+		t.Fatal("restart lost invocation policy")
 	}
 	replay, ok, err := restarted.GetRunReplay(run.ID)
 	if err != nil || !ok || replay.RuntimeSnapshot == nil {

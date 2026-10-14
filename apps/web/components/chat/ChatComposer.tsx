@@ -1,7 +1,8 @@
 import { useId, type FormEvent, type ReactNode } from "react";
 import { Info, Send, Settings2, ShieldCheck, UserRoundPlus } from "lucide-react";
 
-import type { AgentInfo, ChatMode } from "../../lib/api";
+import type { AgentInfo, ChatMode, SkillInfo, ToolInfo } from "../../lib/api";
+import { skillReadiness } from "./skillReadiness";
 import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 import { SelectionMenu } from "../ui/SelectionMenu";
 
@@ -11,6 +12,9 @@ type ChatComposerProps = {
   activeAgentId: string;
   agents: AgentInfo[];
   agentsError: string;
+  availableSkills?: SkillInfo[];
+  availableTools?: ToolInfo[];
+  skillsError?: string;
   chatMode: ChatMode;
   completionVerificationEnabled: boolean;
   error: string;
@@ -62,6 +66,7 @@ export function ChatComposer(props: ChatComposerProps) {
   const needsAgent = chatMode === "single" && !activeAgent;
   const descriptionId = useId();
   const boundSkills = activeAgent?.skills ?? [];
+  const hasAutomaticSkill = boundSkills.some(name => skillReadiness(props.availableSkills?.find(item => item.name === name), activeAgent!, props.availableTools).policy === "automatic");
 
   const verificationButton = (
     <button
@@ -99,8 +104,13 @@ export function ChatComposer(props: ChatComposerProps) {
               disabled={readOnly || boundSkills.length === 0 || isStreaming || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification}
               value={boundSkills.length ? input.match(/^\/skill:([^\s]+)/)?.[1] ?? "" : ""}
               options={[
-                {value: "", label: boundSkills.length ? "Automatic" : "No skills"},
-                ...boundSkills.map(name => ({value: name, label: name}))
+                {value: "", label: boundSkills.length ? hasAutomaticSkill ? "Automatic" : "No explicit skill" : "No skills"},
+                ...boundSkills.map(name => {
+                  const status = skillReadiness(props.availableSkills?.find(item => item.name === name), activeAgent!, props.availableTools);
+                  return { value: name, label: name, disabled: !status.ready || Boolean(props.skillsError),
+                    annotation: status.policy === "explicit_only" ? "Explicit only" : undefined,
+                    description: props.skillsError || status.reason || (status.dependencies.length ? status.dependencies.map(item => item.description).join("; ") : undefined) };
+                })
               ]}
               onChange={name => {
                 const task = input.replace(/^\/skill:[^\s]+\s*/, "");

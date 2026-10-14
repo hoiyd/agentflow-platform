@@ -137,7 +137,6 @@ func TestTrustedSkillProgressiveContextAcrossModes(t *testing.T) {
 			if mode == "single_explicit_only" {
 				client.SetRequestRecorder(capture.NewRecorder(storage, capture.Options{Mode: domain.ModelRequestCaptureMetadata}))
 			}
-			dependencies.Skills = catalog
 			dependencies.AgentRuntime = newRuntimeForTest(agentpkg.RuntimeOptions{Store: storage, Skills: catalog, RouterMode: agentpkg.RouterModeQuery, Autonomous: agentpkg.AutonomousLimits{MaxIterations: 1}, RunBudget: domain.RuntimeRunBudget{MaxModelCalls: 16, MaxToolCalls: 4, MaxRuntimeMS: 20000}}, client)
 			handler, err := NewHandler(dependencies)
 			if err != nil {

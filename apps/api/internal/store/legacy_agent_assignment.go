@@ -77,8 +77,8 @@ func (s *PostgresStore) AssignLegacyAgents(ctx context.Context, workspaceID, cop
 		item := &items[i]
 		if copyWorkspaceID != "" {
 			item.CopyID = NewID("agent")
-			_, err = tx.ExecContext(ctx, `INSERT INTO agents(id,workspace_id,is_template,name,description,system_prompt,routing_hints,tools,skills,memory_enabled,retrieval_enabled,executor,deleted_at,created_at,updated_at)
-   SELECT $2,$3,false,name,description,system_prompt,routing_hints,tools,skills,memory_enabled,retrieval_enabled,executor,deleted_at,created_at,updated_at FROM agents WHERE id=$1`, item.ID, item.CopyID, copyWorkspaceID)
+			_, err = tx.ExecContext(ctx, `INSERT INTO agents(id,workspace_id,is_template,name,description,system_prompt,routing_hints,tools,skills,memory_enabled,retrieval_enabled,executor,deleted_at,created_at,updated_at,skill_policies)
+   SELECT $2,$3,false,name,description,system_prompt,routing_hints,tools,skills,memory_enabled,retrieval_enabled,executor,deleted_at,created_at,updated_at,skill_policies FROM agents WHERE id=$1`, item.ID, item.CopyID, copyWorkspaceID)
 			if err != nil {
 				return nil, err
 			}

@@ -9,6 +9,7 @@ type SelectionOption = {
   label: string;
   description?: string;
   annotation?: string;
+  disabled?: boolean;
 };
 
 type SelectionMenuProps = {
@@ -117,7 +118,7 @@ function SelectionPopup({label, optionsLabel, searchable, value, options, listID
       if (visible.length) setActiveValue(visible[(activeIndex + (event.key === "ArrowDown" ? 1 : visible.length - 1)) % visible.length].value);
     } else if (event.key === "Enter" || (!searchable && event.key === " ")) {
       event.preventDefault();
-      if (visible[activeIndex]) onSelect(visible[activeIndex].value);
+      if (visible[activeIndex] && !visible[activeIndex].disabled) onSelect(visible[activeIndex].value);
     }
   }
 
@@ -133,8 +134,8 @@ function SelectionPopup({label, optionsLabel, searchable, value, options, listID
       <div className="selection-options" id={listID} ref={listbox} role="listbox" aria-label={label}
         tabIndex={searchable ? undefined : 0} aria-activedescendant={searchable ? undefined : activeID}>
         {visible.map((item, index) => <button className="selection-option" id={`${listID}-${index}`} key={item.value}
-          type="button" role="option" aria-selected={item.value === value} tabIndex={-1}
-          data-active={index === activeIndex} onPointerMove={() => setActiveValue(item.value)} onClick={() => onSelect(item.value)}>
+          type="button" role="option" aria-selected={item.value === value} aria-disabled={item.disabled || undefined} tabIndex={-1}
+          data-active={index === activeIndex} onPointerMove={() => setActiveValue(item.value)} onClick={() => { if (!item.disabled) onSelect(item.value); }}>
           <span className="selection-option-copy">
             <span className="selection-option-name">{item.label}</span>
             {item.annotation ? <small>{item.annotation}</small> : null}

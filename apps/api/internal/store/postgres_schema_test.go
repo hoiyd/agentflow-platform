@@ -42,7 +42,7 @@ func TestPostgresMigrationsAddAgentRoutingHints(t *testing.T) {
 
 func TestPostgresMigrationsAddTrustedSkillBindings(t *testing.T) {
 	joined := strings.Join(postgresMigrations, "\n")
-	for _, expected := range []string{"skills jsonb NOT NULL DEFAULT '[]'::jsonb", "ALTER TABLE agents ADD COLUMN IF NOT EXISTS skills"} {
+	for _, expected := range []string{"skills jsonb NOT NULL DEFAULT '[]'::jsonb", "ALTER TABLE agents ADD COLUMN IF NOT EXISTS skills", "skill_policies jsonb NOT NULL DEFAULT '{}'::jsonb", "ALTER TABLE agents ADD COLUMN IF NOT EXISTS skill_policies"} {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("missing Skill binding schema step %q", expected)
 		}

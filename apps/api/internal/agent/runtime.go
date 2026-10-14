@@ -260,6 +260,7 @@ func (r *Runtime) StreamChat(ctx context.Context, prepared PreparedRun, history 
 			SystemPrompt:   prepared.Agent.SystemPrompt,
 			History:        history,
 			Input:          latest,
+			SkillInput:     latest,
 			Catalog:        catalog,
 			Context: turnpkg.Context{
 				Memories: retrievedMemories,

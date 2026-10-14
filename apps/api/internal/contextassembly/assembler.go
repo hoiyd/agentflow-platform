@@ -104,7 +104,7 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 			entry.PolicyVersion = PlatformSecurityPolicyVersion
 		}
 		if message.Source == SourceSkillInstructions {
-			fields := strings.Fields(session.CurrentInput)
+			fields := strings.Fields(session.SkillInput)
 			if len(fields) > 0 && strings.HasPrefix(fields[0], "/skill:") && strings.HasPrefix(message.ReferenceID, "skill:"+strings.TrimPrefix(fields[0], "/skill:")+"@") {
 				entry.Activation = "explicit"
 			}

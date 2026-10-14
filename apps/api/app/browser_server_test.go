@@ -41,6 +41,9 @@ func TestBrowserServer(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: fixture-method\ndescription: Maintain structured evidence\n---\nFIXTURE_SKILL_BODY: update_task_state uses nested task.details and expected_version."), 0600); err != nil {
 		t.Fatal(err)
 	}
+	if os.Getenv("AGENTFLOW_SKILL_POLICY_TEST") == "1" {
+		browserSkillPolicyPackages(t, root)
+	}
 	routePath := filepath.Join(root, "routes.json")
 	capabilities := map[string]any{"tool_calling": true, "structured_output": true, "streaming": true}
 	if os.Getenv("AGENTFLOW_REASONING_TEST") == "1" {

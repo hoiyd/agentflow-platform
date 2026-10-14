@@ -24,6 +24,9 @@ func appendSkillContext(messages []Message, session Session) ([]Message, error) 
 	context := []Message{}
 	seen := map[string]bool{}
 	for _, metadata := range session.Skills {
+		if metadata.InvocationPolicy == domain.SkillExplicitOnly {
+			continue
+		}
 		ref := "skill:" + metadata.Name + "@" + metadata.Hash
 		if seen[ref] {
 			continue

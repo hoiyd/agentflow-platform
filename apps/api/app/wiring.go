@@ -285,7 +285,6 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		AgentRuntime:   agentRuntime,
 		Memory:         memoryProvider,
 		Knowledge:      knowledgeBase,
-		Skills:         skills,
 		RunController:  runController,
 		RunEvents:      eventHub,
 		Verification:   verificationEngine,

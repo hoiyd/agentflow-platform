@@ -33,6 +33,7 @@ func TestExplicitSkillManifestRetainsFrozenMethodAndRereadsPages(t *testing.T) {
 	}
 	ctx := WithAgent(eventpkg.WithScope(t.Context(), eventpkg.Scope{RunID: run.ID, ConversationID: conversation.ID, StageID: "original", TurnID: "original"}), "agent", "/skill:bounded Begin")
 	session := contextassembly.Session{AgentID: "agent", CurrentInput: "/skill:bounded Begin", Config: contextassembly.DefaultConfig(), Sink: eventpkg.StoreSink{Store: storage}, LoadSkills: func() ([]domain.SkillSnapshot, error) { return NewService(storage).Active(ctx, &snapshot) }}
+	session.SkillInput = session.CurrentInput
 	if _, err := contextassembly.Assemble(contextassembly.WithSession(ctx, session), contextassembly.Request{Model: "fixture", Messages: []contextassembly.Message{{Role: "system", Content: "Use facts."}, {Role: "user", Content: "Begin"}}}); err != nil {
 		t.Fatal(err)
 	}

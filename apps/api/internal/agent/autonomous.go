@@ -538,10 +538,11 @@ func (r *Runtime) runAutonomousStep(ctx context.Context, events chan<- domain.Ru
 	request := turnpkg.Request{
 		RunID: prepared.Run.ID, StepID: step.ID, ConversationID: prepared.Run.ConversationID,
 		Agent: prepared.WorkerAgent, Role: role, SystemPrompt: systemPrompt, Input: input,
-		ModelMode: turnpkg.ModelModeText,
-		Context:   turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks},
-		Metadata:  map[string]any{"iteration": iteration},
-		Sink:      r.runEventSink(),
+		SkillInput: query.Text,
+		ModelMode:  turnpkg.ModelModeText,
+		Context:    turnpkg.Context{Memories: retrievedMemories, Chunks: retrievedChunks},
+		Metadata:   map[string]any{"iteration": iteration},
+		Sink:       r.runEventSink(),
 	}
 	if role == "act" {
 		// Only Act has Tool authority. Restore the Run's frozen allowlist rather

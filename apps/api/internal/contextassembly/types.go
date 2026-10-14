@@ -89,11 +89,13 @@ type Pack struct {
 }
 
 type Session struct {
-	AgentID       string
-	Config        domain.ContextAssemblyConfig
-	Sink          eventpkg.Sink
-	History       []domain.Message
-	CurrentInput  string
+	AgentID      string
+	Config       domain.ContextAssemblyConfig
+	Sink         eventpkg.Sink
+	History      []domain.Message
+	CurrentInput string
+	// Kept separate because internal Stage prompts are not explicit user intent.
+	SkillInput    string
 	Memories      []domain.RetrievedMemory
 	Knowledge     []domain.RetrievedDocumentChunk
 	HistorySearch []domain.RetrievedSessionHistory

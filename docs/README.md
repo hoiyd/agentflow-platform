@@ -62,6 +62,7 @@ related pages link to its contract rather than copying configuration or algorith
 - [Tool execution progress](tools/tool-execution-progress.md): bounded semantic updates, committed recovery, shared Chat/Replay display and Binding integration.
 - [Scoped Knowledge bindings](tools/scoped-knowledge-tools.md) and [Web citations](tools/web-source-citations.md).
 - [Trusted Skills](tools/trusted-skills.md): Loader contract, Agent binding, progressive activation, frozen content, and resource limits.
+- [Skill invocation](tools/skill-invocation.md): explicit-only policy, dependency readiness, frozen settings and UI/API boundaries.
 - [Skill installation](tools/skill-installation.md): native Vercel workflow, root checks, restricted Go fallback, provenance, and publication safety.
 - [Skill Checker](tools/skill-checker.md): read-only compatibility diagnostics, resource references, Tool dependency checks, and unsupported semantics.
 - [Tool contract/fault testing](tools/tool-contract-testing.md): shared Binding suite and adding coverage for a new Tool.

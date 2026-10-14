@@ -1542,6 +1542,8 @@ components:
           type: array
           maxItems: 8
           items: { type: string }
+        skill_policies:
+          $ref: '#/components/schemas/SkillPolicies'
         memory_enabled:
           type: boolean
         retrieval_enabled:
@@ -1573,6 +1575,8 @@ components:
         skills:
           type: array
           items: { type: string }
+        skill_policies:
+          $ref: '#/components/schemas/SkillPolicies'
         memory_enabled:
           type: boolean
         retrieval_enabled:
@@ -1588,6 +1592,22 @@ components:
           type: string
           format: date-time
 
+    SkillInvocationPolicy:
+      type: string
+      enum: [automatic, explicit_only]
+    SkillPolicies:
+      type: object
+      description: Optional per-bound-method restrictions; absence preserves automatic invocation. Package restrictions take precedence.
+      additionalProperties:
+        $ref: '#/components/schemas/SkillInvocationPolicy'
+    SkillToolDependency:
+      type: object
+      required: [name, ready, agent_binding_required]
+      properties:
+        name: { type: string }
+        ready: { type: boolean }
+        reason: { type: string }
+        agent_binding_required: { type: boolean }
     SkillMetadata:
       type: object
       required: [name, description, hash]
@@ -1598,6 +1618,13 @@ components:
         required_tools:
           type: array
           items: { type: string }
+        invocation_policy:
+          $ref: '#/components/schemas/SkillInvocationPolicy'
+        tool_dependencies:
+          type: array
+          description: Current Workspace readiness only, not per-call execution authorization.
+          items:
+            $ref: '#/components/schemas/SkillToolDependency'
 
     AgentRoutingHints:
       type: object

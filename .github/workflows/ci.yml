@@ -195,6 +195,20 @@ jobs:
         env:
           AGENTFLOW_FILESYSTEM_TEST: '1'
         run: npm run test:e2e -- filesystem-read.spec.ts
+      - name: Run Skill invocation policy gate
+        env:
+          AGENTFLOW_SKILL_POLICY_TEST: '1'
+        run: npm run test:e2e -- skill-policy.spec.ts
+      - name: Retain Skill policy evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: skill-policy-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
       - name: Run scoped filesystem write gate
         env:
           AGENTFLOW_FILESYSTEM_WRITE_TEST: '1'

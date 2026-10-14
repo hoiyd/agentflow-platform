@@ -61,7 +61,9 @@ compatible catalog, not successful installation.
 | `metadata.agentflow-required-tools` | Runtime Freeze checks effective Tools; check reuses this against optional `--tools` |
 | Other string-valued `metadata`, `license`, `compatibility` | Descriptive only; no grants, installation, license or environment enforcement. License/compatibility produces information |
 | `allowed-tools` | Unsupported; does not pre-approve Tools, constrain runtime permissions or enable dependencies |
-| `disable-model-invocation`, `user-invocable`, `context`, `agent`, `model`, `hooks`, other top-level extensions | Unsupported; check blocks rather than claiming invocation, delegation or lifecycle semantics |
+| `disable-model-invocation` | Literal boolean; `true` restricts invocation to explicit user input. Malformed restrictions fail Loader and Checker |
+| `agents/openai.yaml` `policy.allow_implicit_invocation` | Literal boolean; `false` has the same restriction. Foreign dependencies are not automatically mapped |
+| `user-invocable`, `context`, `agent`, `model`, `hooks`, other top-level extensions | Unsupported; check blocks rather than claiming invocation, delegation or lifecycle semantics |
 | `$ARGUMENTS`, `$ARGUMENTS[n]`, `$n`, `${CLAUDE_*}` | Recognizable substitution syntax is unsupported; never replaced with arguments or host values |
 | Dynamic command injection (`!` followed by a backtick command) | Unsupported; never executes or injects output |
 | `scripts/` | Presence warns; not traversed/executed. Recognizable local links to scripts block because they are not frozen resources |
@@ -84,11 +86,9 @@ Scope or approval by itself; Agent binding and Run creation still perform their
 existing checks, and execution Policy can still deny a Tool.
 
 Skill Checker is not an automatic startup/binding gate. The Loader remains
-fail-closed on core format/content errors; it does not implement foreign
-behavioral frontmatter. Review and adapt incompatible semantics before trusting
-a package. Existing Skills, bindings, snapshots, API DTOs and frontend behavior
-are unchanged, except that direct package loading now rejects package symlinks
-just like immediate discovery. Trusted roots must remain operator-owned and not
+fail-closed on format/content and supported invocation-policy errors; only the
+restrictions in [Skill invocation](skill-invocation.md) are implemented. Review and
+adapt other behavioral declarations before trusting a package. Trusted roots must remain operator-owned and not
 concurrently modified during checking/loading.
 
 Description advice (>512 characters or broad phrases such as "any task") is

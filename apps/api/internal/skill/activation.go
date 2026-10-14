@@ -22,6 +22,12 @@ func NewService(storage Store) *Service { return &Service{store: storage} }
 type invocation struct{ agentID, input string }
 type invocationKey struct{}
 
+type readyToolsKey struct{}
+
+func WithReadyTools(ctx context.Context, names []string) context.Context {
+	return context.WithValue(ctx, readyToolsKey{}, append([]string{}, names...))
+}
+
 // WithAgent carries server-owned Turn identity; Tool arguments cannot supply it.
 func WithAgent(ctx context.Context, agentID, input string) context.Context {
 	return context.WithValue(ctx, invocationKey{}, invocation{agentID: agentID, input: input})
@@ -39,11 +45,15 @@ func Bound(snapshot *domain.RuntimeSnapshot, agentID string) ([]domain.SkillSnap
 		if agent.ID != agentID {
 			continue
 		}
+		if err := domain.ValidateSkillPolicies(agent.Skills, agent.SkillPolicies); err != nil {
+			return nil, skillError("skill_invocation_invalid", err.Error())
+		}
 		items := []domain.SkillSnapshot{}
 		for _, name := range agent.Skills {
 			found := false
 			for _, item := range snapshot.Skills {
 				if item.Name == name {
+					item.BindingPolicy = agent.SkillPolicies[name]
 					items = append(items, item)
 					found = true
 					break
@@ -68,6 +78,15 @@ func (s *Service) Active(ctx context.Context, snapshot *domain.RuntimeSnapshot) 
 	bound, err := Bound(snapshot, caller.agentID)
 	if err != nil {
 		return nil, err
+	}
+	if ready, provided := ctx.Value(readyToolsKey{}).([]string); provided {
+		for _, item := range bound {
+			for _, name := range item.RequiredTools {
+				if !slices.Contains(ready, name) {
+					return nil, skillError("skill_dependency_missing", "Bound Skill requires an effective ready Tool: "+name)
+				}
+			}
+		}
 	}
 	selected := map[string]bool{}
 	fields := strings.Fields(caller.input)
@@ -118,6 +137,9 @@ func (s *Service) Active(ctx context.Context, snapshot *domain.RuntimeSnapshot) 
 			}
 			if item.Hash != result.Hash {
 				return nil, skillError("skill_content_changed", "Activation hash does not match the frozen Skill")
+			}
+			if domain.EffectiveSkillPolicy(item.InvocationPolicy, item.BindingPolicy) == domain.SkillExplicitOnly && !selected[item.Name] {
+				continue
 			}
 			selected[item.Name] = true
 		}

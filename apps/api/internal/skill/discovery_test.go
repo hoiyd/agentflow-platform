@@ -41,7 +41,11 @@ func TestLoadRootsDiscoversImmediatePackages(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(file), 0700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(file, []byte("not runtime content"), 0600); err != nil {
+		content := "not runtime content"
+		if suffix == "agents/openai.yaml" {
+			content = "interface:\n  display_name: Descriptive only"
+		}
+		if err := os.WriteFile(file, []byte(content), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}

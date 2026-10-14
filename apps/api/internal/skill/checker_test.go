@@ -48,7 +48,7 @@ func TestSkillCheckerFailureInventory(t *testing.T) {
 		{"absolute", "", "Read [private](/etc/passwd).", "skill_resource_denied", "incompatible"},
 		{"script-link", "", "Run [script](scripts/run.py).", "skill_resource_not_frozen", "incompatible"},
 		{"allowed", "allowed-tools: Bash", "body", "skill_semantics_unsupported", "incompatible"},
-		{"invocation", "disable-model-invocation: true", "body", "skill_semantics_unsupported", "incompatible"},
+		{"invocation", "disable-model-invocation: invalid", "body", "skill_invocation_invalid", "rejected"},
 		{"unknown", "future-behavior: true", "body", "skill_semantics_unsupported", "incompatible"},
 		{"arguments", "", "Write $ARGUMENTS[0] and $1.", "skill_arguments_unsupported", "incompatible"},
 		{"dynamic", "", "Context: !`echo test`", "skill_command_unsupported", "incompatible"},
