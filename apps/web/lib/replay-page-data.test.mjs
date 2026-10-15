@@ -4,6 +4,12 @@ import test from "node:test";
 import { getReplayPageData } from "./replay-page-data.ts";
 import { normalizeRunReplay } from "./run-replay-normalization.ts";
 
+test("Replay keeps the evidence-backed result and normalizes absent legacy data", () => {
+  const result = { run_id: "run", status: "completed", verification_status: "passed", mode: "strict", verifier_id: "report", value: { summary: "ok" } };
+  assert.deepEqual(normalizeRunReplay({ ...replay, structured_result: result }).structured_result, result);
+  assert.equal(normalizeRunReplay({ ...replay, structured_result: null }).structured_result, undefined);
+});
+
 const replay = {
   run: { id: "run-1", agent_id: "agent-1", conversation_id: "conversation-1", status: "completed" },
   conversation: { id: "conversation-1", title: "Replay" },

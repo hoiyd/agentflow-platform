@@ -11,7 +11,8 @@ import (
 
 // Independent wire types make continuation omissions observable to fixtures.
 type browserModelRequest struct {
-	Messages []struct {
+	ResponseFormat map[string]any `json:"response_format"`
+	Messages       []struct {
 		Role             string  `json:"role"`
 		Content          string  `json:"content"`
 		ReasoningContent *string `json:"reasoning_content"`

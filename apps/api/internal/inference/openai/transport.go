@@ -11,10 +11,18 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/budget"
+	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 )
 
 func (c *Client) complete(ctx context.Context, body map[string]any) (chatCompletionResponse, error) {
+	format, err := c.outputResponseFormat(ctx)
+	if err != nil {
+		return chatCompletionResponse{}, err
+	}
+	if format != nil {
+		body["response_format"] = format
+	}
 	if err := c.applySampling(body, c.generationPolicy.Completion, "chat.completion"); err != nil {
 		return chatCompletionResponse{}, err
 	}
@@ -90,6 +98,9 @@ func (c *Client) completeAttempt(ctx context.Context, modelCallID, operation str
 		decoded.Usage = estimateUsage(string(payload), messageTextForEstimation(decoded.Choices[0].Message))
 	}
 	choice := decoded.Choices[0]
+	if _, constrained := provider.StructuredOutputFromContext(ctx); constrained && choice.FinishReason == nil {
+		return decoded, withoutRetry(invalidResponseError(operation, "structured output requires a confirmed finish reason", nil), operation)
+	}
 	if err := generationOutcomeError(operation, finishReasonLabel(choice.FinishReason), len(choice.Message.ToolCalls) > 0, choice.Message.Refusal != ""); err != nil {
 		return decoded, err
 	}

@@ -12,6 +12,21 @@ test("ordinary chat omits the completion contract", () => {
   assert.equal(buildCompletionContract(DEFAULT_COMPLETION_VERIFICATION), undefined);
 });
 
+test("structured generation explicitly references the existing Schema verifier", () => {
+  for (const mode of ["strict", "local"]) {
+    const settings = structuredClone(DEFAULT_COMPLETION_VERIFICATION);
+    settings.enabled = true;
+    settings.textConstraints.enabled = false;
+    settings.jsonSchema = { enabled: true, schema: '{"type":"object"}', outputMode: mode };
+    const contract = buildCompletionContract(settings);
+    assert.deepEqual(contract.output, { mode, verifier_id: "response-schema" });
+    assert.equal(contract.verifiers.length, 1);
+  }
+  const settings = structuredClone(DEFAULT_COMPLETION_VERIFICATION);
+  settings.enabled = true;
+  assert.equal(buildCompletionContract(settings).output, undefined);
+});
+
 test("all seven backend verifiers have a compatible frontend contract", () => {
   const contract = buildCompletionContract({
     ...structuredClone(DEFAULT_COMPLETION_VERIFICATION),

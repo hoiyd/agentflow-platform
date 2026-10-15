@@ -117,6 +117,15 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	}
 
 	toolCandidates := make([]candidate, 0, len(request.Tools))
+	if request.ResponseFormat != nil {
+		encoded, _ := json.Marshal(request.ResponseFormat)
+		tokens := EstimateTokens(string(encoded))
+		toolCandidates = append(toolCandidates, candidate{entry: domain.ContextManifestEntry{
+			Source: "output_schema", ReferenceID: "response_format", Selected: true, Reason: "required",
+			Transformation: "original", EstimatedTokens: tokens, OriginalBytes: len(encoded), IncludedBytes: len(encoded),
+		}})
+		requiredTokens += tokens
+	}
 	for _, tool := range request.Tools {
 		encoded, _ := json.Marshal(tool.Definition)
 		tokens := EstimateTokens(string(encoded))

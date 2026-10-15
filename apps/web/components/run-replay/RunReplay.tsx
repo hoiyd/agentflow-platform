@@ -29,6 +29,7 @@ import { MessageCitations } from "../chat/MarkdownContent";
 import { ToolProgressPanel } from "../chat/ToolProgressPanel";
 import { ClarificationPanel } from "../chat/ClarificationPanel";
 import { useClarifications } from "../chat/useClarifications";
+import { StructuredResult } from "./StructuredResult";
 
 type Props = {
   runId: string;
@@ -217,6 +218,7 @@ function RunReplayView({ runId, initialEventId }: Props) {
       />
 
       {episodeReport ? <EpisodeReportPanel report={episodeReport} /> : null}
+      <StructuredResult result={replay.structured_result} />
       {episodeReportError ? (
         <div className="replay-secondary-error" role="status">
           Episode report unavailable: {episodeReportError}

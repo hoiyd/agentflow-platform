@@ -209,6 +209,20 @@ jobs:
             apps/web/playwright-report
           retention-days: 14
           if-no-files-found: warn
+      - name: Run structured output contract gate
+        env:
+          AGENTFLOW_STRUCTURED_OUTPUT_TEST: '1'
+        run: npm run test:e2e -- structured-output.spec.ts
+      - name: Retain structured output evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: structured-output-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
       - name: Run scoped filesystem write gate
         env:
           AGENTFLOW_FILESYSTEM_WRITE_TEST: '1'

@@ -67,7 +67,7 @@ func (e *Engine) Verify(ctx context.Context, runID string, subject Subject) (Dec
 	if subject.Type != run.CompletionContract.SubjectType || subject.Hash == "" {
 		return Decision{}, invalidContract("verification subject does not match the frozen contract")
 	}
-	if err := e.validateFrozenContract(run.CompletionContract); err != nil {
+	if err := ValidateFrozenContract(run.CompletionContract); err != nil {
 		return Decision{}, err
 	}
 
@@ -115,9 +115,13 @@ func (e *Engine) Verify(ctx context.Context, runID string, subject Subject) (Dec
 	return decision, nil
 }
 
-func (e *Engine) validateFrozenContract(contract *domain.CompletionContract) error {
+// ValidateFrozenContract checks persisted identity without replacing frozen defaults.
+func ValidateFrozenContract(contract *domain.CompletionContract) error {
 	if contract.Version != domain.CurrentCompletionContractVersion {
 		return invalidContract(fmt.Sprintf("unsupported completion contract version %d", contract.Version))
+	}
+	if output := contract.Output; output != nil && (output.Version != domain.StructuredOutputVersion || (output.Mode != "strict" && output.Mode != "local")) {
+		return invalidContract("unsupported frozen structured output protocol")
 	}
 	hash, err := completionContractHash(*contract)
 	if err != nil {
@@ -166,9 +170,14 @@ func (e *Engine) runVerifier(ctx context.Context, run domain.Run, spec domain.Ve
 	started := time.Now().UTC()
 	result := blocked(BlockedImplementationMissing, "frozen verifier implementation is unavailable")
 	if ok && verifier.Version() == spec.Version {
-		verifyCtx, cancel := context.WithTimeout(ctx, time.Duration(spec.TimeoutMS)*time.Millisecond)
-		result = verifier.Verify(verifyCtx, spec, subject)
-		cancel()
+		if output := run.CompletionContract.Output; output != nil && output.VerifierID == spec.ID && len(subject.Value) > domain.MaxStructuredOutputBytes {
+			result = jsonSchemaResult(domain.VerificationFailed, "structured output exceeds 64 KiB", subject.Value)
+			result.Details = map[string]any{"reason_code": "output_too_large"}
+		} else {
+			verifyCtx, cancel := context.WithTimeout(ctx, time.Duration(spec.TimeoutMS)*time.Millisecond)
+			result = verifier.Verify(verifyCtx, spec, subject)
+			cancel()
+		}
 	}
 	completed := time.Now().UTC()
 	if result.Status != domain.VerificationPassed && result.Status != domain.VerificationFailed && result.Status != domain.VerificationBlocked {

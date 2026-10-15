@@ -18,6 +18,7 @@ type RunReplay struct {
 	VerificationArtifacts []VerificationArtifact `json:"verification_artifacts"`
 	TaskStateRevisions    []TaskStateRevision    `json:"task_state_revisions"`
 	RecoverySummary       *RecoverySummary       `json:"recovery_summary,omitempty"`
+	StructuredResult      *StructuredRunResult   `json:"structured_result,omitempty"`
 }
 
 // EpisodeReport is a compact projection derived from RunReplay for review,

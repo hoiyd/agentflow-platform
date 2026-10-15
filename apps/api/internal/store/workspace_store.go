@@ -194,6 +194,13 @@ func (s workspaceStore) ListVerificationEvidence(runID string) ([]domain.Verific
 	return s.backend.ListVerificationEvidence(runID)
 }
 
+func (s workspaceStore) ListVerificationArtifacts(runID string) ([]domain.VerificationArtifact, error) {
+	if err := s.requireRun(runID); err != nil {
+		return nil, err
+	}
+	return s.backend.ListVerificationArtifacts(runID)
+}
+
 func (s workspaceStore) ListDocuments() ([]domain.Document, error) {
 	return s.backend.ListDocumentsByWorkspace(s.workspaceID)
 }

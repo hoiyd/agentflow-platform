@@ -1,3 +1,5 @@
+import type { components } from "./api-contract.gen";
+
 export type VerificationFailureAction = "fail" | "waiting_for_user";
 export type VerifierTypeInput = "command" | "http" | "json_schema" | "text_constraints" | "citation" | "answer_relevance" | "grounded_answer";
 
@@ -37,6 +39,7 @@ export type CitationSettings = {
 export type JSONSchemaSettings = {
   enabled: boolean;
   schema: string;
+  outputMode?: "verify_only" | "strict" | "local";
 };
 
 export type HTTPVerifierSettings = {
@@ -73,15 +76,7 @@ export type VerifierSpecInput = {
   config: Record<string, unknown>;
 };
 
-export type CompletionContractInput = {
-  subject_type: "run_output";
-  verifiers: VerifierSpecInput[];
-  policy: {
-    mode: "all_must_pass";
-    max_attempts: number;
-    on_exhausted: VerificationFailureAction;
-  };
-};
+export type CompletionContractInput = components["schemas"]["CompletionContractInput"];
 
 export const DEFAULT_COMPLETION_VERIFICATION: CompletionVerificationSettings = {
   enabled: false,
@@ -239,6 +234,8 @@ export function buildCompletionContract(
   return {
     subject_type: "run_output",
     verifiers,
+    ...(normalized.jsonSchema.enabled && normalized.jsonSchema.outputMode && normalized.jsonSchema.outputMode !== "verify_only"
+      ? { output: { mode: normalized.jsonSchema.outputMode, verifier_id: "response-schema" } } : {}),
     policy: {
       mode: "all_must_pass",
       max_attempts: normalized.maxAttempts,

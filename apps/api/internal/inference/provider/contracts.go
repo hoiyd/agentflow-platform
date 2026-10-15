@@ -20,6 +20,7 @@ type RuntimeIdentity struct {
 	GenerationPolicy       domain.GenerationPolicy
 	SeedSupported          bool
 	ReasoningDisplayFormat string
+	StructuredOutputFormat string
 }
 
 type Message struct {

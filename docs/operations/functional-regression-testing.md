@@ -256,3 +256,11 @@ for condition-based waiting. No fixed sleeps or automatic retries hide failures.
 uses disposable Postgres and strict model fixtures to verify explicit/model
 invocation, dependencies, frozen policies and all-mode execution. See the
 [owning contract](../tools/skill-invocation.md#evidence) for evidence and scope.
+
+## Structured Output Gate
+
+`AGENTFLOW_STRUCTURED_OUTPUT_TEST=1 bash scripts/test-browser.sh structured-output.spec.ts`
+(with the dedicated `TEST_DATABASE_URL`) checks real UI/API/Postgres output contracts,
+all three modes, Tool continuation and generation/verification failures. It retains
+desktop screenshots and `structured-output-evidence.json`; see the
+[output contract](../runtime/structured-output.md#verification) for scope and limits.

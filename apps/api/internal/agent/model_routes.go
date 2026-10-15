@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/inference/routing"
+	"agentflow-platform/apps/api/internal/verification"
 )
 
 func (r *Runtime) captureModelRoutingSnapshot() (domain.ModelRouteCatalogSnapshot, error) {
@@ -87,12 +89,28 @@ func validateModelRoutingSnapshot(snapshot domain.ModelRouteCatalogSnapshot) err
 	return nil
 }
 
-func (r *Runtime) selectModelRoute(ctx context.Context, request turnpkg.Request, snapshot *domain.RuntimeSnapshot) (routing.Decision, error) {
+func (r *Runtime) selectModelRoute(ctx context.Context, request turnpkg.Request, snapshot *domain.RuntimeSnapshot, contract *domain.CompletionContract) (routing.Decision, error) {
 	catalog, err := r.restoreModelRouteCatalog(snapshot.ModelRouting)
 	if err != nil {
 		return routing.Decision{}, err
 	}
 	requirements := modelRequirements(request, snapshot)
+	// Pin a route capable of the eventual final output before internal stages run.
+	if contract != nil && contract.Output != nil {
+		schema, err := verification.OutputSchema(contract)
+		if err != nil {
+			return routing.Decision{}, err
+		}
+		output := provider.StructuredOutput{Mode: contract.Output.Mode, Version: contract.Output.Version, ContractHash: contract.Hash, Schema: schema}
+		requirements.EstimatedInputTokens += contextassembly.EstimateTokens(output.Guidance()) + 4 + contextassembly.NormalizeConfig(snapshot.ContextAssembly).SafetyMarginTokens
+		if contract.Output.Mode == "strict" {
+			requirements.StructuredOutput = true
+			requirements.StructuredOutputFormat = provider.OutputFormatOpenAIJSONSchema
+			encoded, _ := json.Marshal(schema)
+			// Include the schema plus its small response_format wrapper in capacity estimates.
+			requirements.EstimatedInputTokens += contextassembly.EstimateTokens(string(encoded)) + 32
+		}
+	}
 	selectedRouteID := snapshot.ModelRouting.PinnedRouteID
 	if selectedRouteID == "" {
 		if selected, ok, selectedErr := r.selectedModelRoute(request.RunID, snapshot); selectedErr != nil {

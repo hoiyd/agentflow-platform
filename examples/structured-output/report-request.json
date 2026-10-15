@@ -1,0 +1,27 @@
+{
+  "mode": "single",
+  "message": "Extract a report from this authorized material only: Project Alpha uses Go. There are five deployments. Preserve uncertainty; do not invent facts.",
+  "completion_contract": {
+    "subject_type": "run_output",
+    "output": { "mode": "local", "verifier_id": "report" },
+    "verifiers": [
+      {
+        "id": "report",
+        "type": "json_schema",
+        "required": true,
+        "config": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "summary": { "type": "string" },
+              "facts": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["summary", "facts"],
+            "additionalProperties": false
+          }
+        }
+      }
+    ],
+    "policy": { "mode": "all_must_pass", "max_attempts": 1, "on_exhausted": "fail" }
+  }
+}

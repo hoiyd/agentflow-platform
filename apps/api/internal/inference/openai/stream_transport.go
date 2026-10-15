@@ -25,8 +25,20 @@ func (c *Client) streamChat(ctx context.Context, messages []Message, definitions
 		return streamAttemptResult{}, err
 	}
 	estimated := estimateTokens(messagesToText(messages))
+	format, formatErr := c.outputResponseFormat(ctx)
+	if formatErr != nil {
+		return streamAttemptResult{}, formatErr
+	}
+	if format != nil {
+		encoded, _ := json.Marshal(format)
+		estimated += estimatedRequestTokens(encoded)
+	}
 	if len(definitions) > 0 {
-		payload, err := json.Marshal(map[string]any{"messages": messages, "tools": definitions})
+		body := map[string]any{"messages": messages, "tools": definitions}
+		if format != nil {
+			body["response_format"] = format
+		}
+		payload, err := json.Marshal(body)
 		if err != nil {
 			return streamAttemptResult{}, err
 		}
@@ -93,6 +105,13 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 		body["tools"], body["tool_choice"] = definitions, "auto"
 		// Changing transport must not change the frozen Tool-round sampling.
 		profile = c.generationPolicy.Completion
+	}
+	format, err := c.outputResponseFormat(ctx)
+	if err != nil {
+		return streamAttemptResult{}, err
+	}
+	if format != nil {
+		body["response_format"] = format
 	}
 	if err := c.applySampling(body, profile, operation); err != nil {
 		return streamAttemptResult{}, err
@@ -189,6 +208,8 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 						generated.WriteString(call.arguments.String())
 					}
 					result.usage = estimateUsage(string(payload), generated.String())
+				} else if _, constrained := provider.StructuredOutputFromContext(ctx); constrained {
+					result.usage = estimateUsage(string(payload), result.output+accumulated.reasoning.String())
 				} else {
 					result.usage = estimateUsage(messagesToText(messages), result.output+accumulated.reasoning.String())
 				}
@@ -197,6 +218,9 @@ func (c *Client) streamChatAttempt(ctx context.Context, messages []Message, defi
 				result.finishReason = "missing"
 				if displayStarted {
 					return true, invalidResponseError(operation, "reasoning stream has no finish reason", nil)
+				}
+				if _, constrained := provider.StructuredOutputFromContext(ctx); constrained {
+					return true, withoutRetry(invalidResponseError(operation, "structured output requires a confirmed finish reason", nil), operation)
 				}
 			}
 			if err := generationOutcomeError(operation, result.finishReason, len(accumulated.calls) > 0, refused); err != nil {

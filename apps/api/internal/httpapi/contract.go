@@ -36,6 +36,9 @@ func completionContractFromInput(input *apicontract.CompletionContractInput) *do
 		},
 		Verifiers: make([]domain.VerifierSpec, 0, len(input.Verifiers)),
 	}
+	if input.Output != nil {
+		contract.Output = &domain.StructuredOutputConfig{Mode: string(input.Output.Mode), VerifierID: input.Output.VerifierId}
+	}
 	for _, item := range input.Verifiers {
 		spec := domain.VerifierSpec{
 			ID: item.Id, Type: domain.VerifierType(item.Type), Required: item.Required, Config: item.Config,

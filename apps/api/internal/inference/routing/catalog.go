@@ -101,6 +101,7 @@ func NewCatalog(bindings ...Binding) (*Catalog, error) {
 		identity.GenerationPolicy = descriptor.GenerationPolicy.Clone()
 		identity.SeedSupported = descriptor.Capabilities.Seed
 		identity.ReasoningDisplayFormat = descriptor.Capabilities.ReasoningDisplayFormat
+		identity.StructuredOutputFormat = descriptor.Capabilities.StructuredOutputFormat
 		identity.RouteID = descriptor.ID
 		binding.Client = binding.Client.WithRuntimeIdentity(identity)
 		normalized = append(normalized, binding)
@@ -236,6 +237,9 @@ func ValidateDescriptor(descriptor Descriptor) (Descriptor, error) {
 		return Descriptor{}, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q has an invalid credential environment reference", descriptor.ID))
 	}
 	policy := domain.DefaultGenerationPolicy()
+	if format := descriptor.Capabilities.StructuredOutputFormat; format != "" && (format != provider.OutputFormatOpenAIJSONSchema || !descriptor.Capabilities.StructuredOutput) {
+		return Descriptor{}, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q has an unsupported structured output format", descriptor.ID))
+	}
 	if !provider.ValidReasoningDisplayFormat(descriptor.Capabilities.ReasoningDisplayFormat) ||
 		(descriptor.Capabilities.ReasoningDisplayFormat != "" && !descriptor.Capabilities.Streaming) {
 		return Descriptor{}, errors.Join(ErrInvalidCatalog, fmt.Errorf("model route %q has an unsupported reasoning display format or no streaming capability", descriptor.ID))
@@ -277,6 +281,9 @@ func exclusionReasons(route Descriptor, requirements Requirements) []string {
 	}
 	if requirements.StructuredOutput && !route.Capabilities.StructuredOutput {
 		reasons = append(reasons, ReasonStructuredOutputUnsupported)
+	}
+	if requirements.StructuredOutputFormat != "" && route.Capabilities.StructuredOutputFormat != requirements.StructuredOutputFormat {
+		reasons = append(reasons, "structured_output_format_unsupported")
 	}
 	if requirements.Streaming && !route.Capabilities.Streaming {
 		reasons = append(reasons, ReasonStreamingUnsupported)

@@ -201,6 +201,18 @@ func summarizePayload(payload []byte) (map[string]any, int, int, error) {
 	tools, _ := body["tools"].([]any)
 	delete(body, "messages")
 	delete(body, "tools")
+	// Schemas can contain private examples/descriptions. Ordinary metadata keeps
+	// identity only; full reconstruction stays behind the existing capture policy.
+	if format, ok := body["response_format"].(map[string]any); ok {
+		if definition, ok := format["json_schema"].(map[string]any); ok {
+			if schema, exists := definition["schema"]; exists {
+				encoded, _ := json.Marshal(schema)
+				hash := sha256.Sum256(encoded)
+				definition["schema_hash"] = "sha256:" + hex.EncodeToString(hash[:])
+				delete(definition, "schema")
+			}
+		}
+	}
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return nil, 0, 0, err

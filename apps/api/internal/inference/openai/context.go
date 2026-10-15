@@ -18,7 +18,11 @@ func (c *Client) prepareModelContext(ctx context.Context, messages []Message, de
 }
 
 func (c *Client) prepareModelContextForModel(ctx context.Context, model string, messages []Message, definitions []map[string]any) (preparedModelContext, error) {
-	request := contextassembly.Request{Model: model, Messages: messages}
+	format, err := c.outputResponseFormat(ctx)
+	if err != nil {
+		return preparedModelContext{}, err
+	}
+	request := contextassembly.Request{Model: model, Messages: outputGuidance(ctx, messages), ResponseFormat: format}
 	for _, definition := range definitions {
 		request.Tools = append(request.Tools, contextassembly.Tool{Name: toolDefinitionName(definition), Definition: definition})
 	}

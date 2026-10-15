@@ -18,6 +18,7 @@ import (
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/tool/progress"
+	"agentflow-platform/apps/api/internal/verification"
 )
 
 // runtimeTurnModel adapts the existing executor implementations to the
@@ -33,6 +34,11 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	}
 	if !ok {
 		return turn.Result{}, fmt.Errorf("run not found")
+	}
+	if run.CompletionContract != nil && run.CompletionContract.Output != nil {
+		if err := verification.ValidateFrozenContract(run.CompletionContract); err != nil {
+			return turn.Result{}, err
+		}
 	}
 	ctx = skill.WithAgent(ctx, request.Agent.ID, request.SkillInput)
 	if request.Catalog != nil {
@@ -78,15 +84,30 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		}
 	}()
 	isolatedContext := request.Context.Isolated
-	route, err := m.runtime.selectModelRoute(ctx, request, snapshot)
+	route, err := m.runtime.selectModelRoute(ctx, request, snapshot, run.CompletionContract)
 	if err != nil {
 		return turn.Result{}, err
 	}
+	assemblySnapshot := *snapshot
+	if run.CompletionContract != nil && run.CompletionContract.Output != nil {
+		assemblySnapshot.ContextAssembly = contextassembly.NormalizeConfig(snapshot.ContextAssembly)
+		assemblySnapshot.ContextAssembly.ContextWindowTokens = min(assemblySnapshot.ContextAssembly.ContextWindowTokens, route.Route.ContextWindowTokens)
+	}
 	if !isolatedContext {
-		m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerHard, request.TurnID, route.Client)
+		m.runtime.compactContextBestEffort(ctx, request.RunID, request.ConversationID, &assemblySnapshot, contextassembly.CompactionTriggerHard, request.TurnID, route.Client)
 	}
 	modelCtx := ctx
-	ctx, compaction := m.withContextSession(modelCtx, request, snapshot, isolatedContext)
+	// Only user-facing output is constrained; router/decide retain their own protocols.
+	if run.CompletionContract != nil && run.CompletionContract.Output != nil &&
+		(snapshot.Mode == ChatModeSingle || request.Role == "finalizer" || request.Role == "final") {
+		schema, schemaErr := verification.OutputSchema(run.CompletionContract)
+		if schemaErr != nil {
+			return turn.Result{}, schemaErr
+		}
+		output := run.CompletionContract.Output
+		ctx = provider.WithStructuredOutput(ctx, provider.StructuredOutput{Mode: output.Mode, Version: output.Version, ContractHash: run.CompletionContract.Hash, Schema: schema})
+	}
+	ctx, compaction := m.withContextSession(ctx, request, &assemblySnapshot, isolatedContext)
 	if request.ModelMode == turn.ModelModeText {
 		result, executeErr := m.executeText(ctx, request, route.Client)
 		if executeErr == nil || isolatedContext || failure.Describe(executeErr).Code != "context_length_exceeded" {
@@ -96,11 +117,11 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		if compaction != nil {
 			beforeGeneration = compaction.Generation
 		}
-		advanced, compactErr := m.runtime.compactContext(modelCtx, request.RunID, request.ConversationID, snapshot, contextassembly.CompactionTriggerOverflow, request.TurnID, route.Client)
+		advanced, compactErr := m.runtime.compactContext(modelCtx, request.RunID, request.ConversationID, &assemblySnapshot, contextassembly.CompactionTriggerOverflow, request.TurnID, route.Client)
 		if compactErr != nil || advanced == nil || advanced.Generation <= beforeGeneration {
 			return result, executeErr
 		}
-		retryCtx, _ := m.withContextSession(modelCtx, request, snapshot, isolatedContext)
+		retryCtx, _ := m.withContextSession(ctx, request, &assemblySnapshot, isolatedContext)
 		return m.executeText(retryCtx, request, route.Client)
 	}
 	schema := domain.ToolSchemaConfig{Mode: "eager"}

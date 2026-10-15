@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 const CurrentCompletionContractVersion = 2
 
@@ -49,12 +52,41 @@ const (
 // CompletionContract opts one Run into evidence-gated completion. It must be
 // supplied when the Run is created and is frozen before execution starts.
 type CompletionContract struct {
-	ID          string             `json:"id"`
-	Version     int                `json:"version"`
-	Hash        string             `json:"hash"`
-	SubjectType string             `json:"subject_type"`
-	Verifiers   []VerifierSpec     `json:"verifiers"`
-	Policy      VerificationPolicy `json:"policy"`
+	ID          string                  `json:"id"`
+	Version     int                     `json:"version"`
+	Hash        string                  `json:"hash"`
+	SubjectType string                  `json:"subject_type"`
+	Verifiers   []VerifierSpec          `json:"verifiers"`
+	Policy      VerificationPolicy      `json:"policy"`
+	Output      *StructuredOutputConfig `json:"output,omitempty"`
+}
+
+// StructuredOutputConfig references one existing required JSON Schema verifier;
+// it does not define a second schema or an independent completion gate.
+type StructuredOutputConfig struct {
+	Mode       string `json:"mode"` // strict: provider constraint; local: guidance + local validation only.
+	VerifierID string `json:"verifier_id"`
+	Version    string `json:"version,omitempty"`
+}
+
+const StructuredOutputVersion = "json-schema-output-v1"
+const MaxStructuredOutputBytes = 64 * 1024
+
+// StructuredRunResult is derived from immutable verification evidence, not a
+// second persisted success state. Value is absent until the entire gate passes.
+type StructuredRunResult struct {
+	RunID              string             `json:"run_id"`
+	Status             RunStatus          `json:"status"`
+	VerificationStatus VerificationStatus `json:"verification_status"`
+	ContractHash       string             `json:"contract_hash"`
+	Version            string             `json:"version"`
+	Mode               string             `json:"mode"`
+	VerifierID         string             `json:"verifier_id"`
+	EvidenceID         string             `json:"evidence_id,omitempty"`
+	ArtifactID         string             `json:"artifact_id,omitempty"`
+	SubjectHash        string             `json:"subject_hash,omitempty"`
+	Value              json.RawMessage    `json:"value,omitempty"`
+	UnavailableReason  string             `json:"unavailable_reason,omitempty"`
 }
 
 type VerificationPolicy struct {

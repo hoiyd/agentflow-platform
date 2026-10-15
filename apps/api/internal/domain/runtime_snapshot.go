@@ -171,6 +171,8 @@ type ModelRouteCapabilities struct {
 	Seed             bool `json:"seed,omitempty"`
 	// Explicitly trusted wire format for live reasoning display; empty disables it.
 	ReasoningDisplayFormat string `json:"reasoning_display_format,omitempty"`
+	// Explicit adapter wire contract; the legacy boolean alone cannot enable strict generation.
+	StructuredOutputFormat string `json:"structured_output_format,omitempty"`
 }
 
 type ModelRoutePricing struct {
@@ -190,12 +192,13 @@ func (p ModelRoutePricing) Clone() ModelRoutePricing {
 }
 
 type ModelRouteRequirements struct {
-	Purpose              string `json:"purpose"`
-	ToolCalling          bool   `json:"tool_calling"`
-	StructuredOutput     bool   `json:"structured_output"`
-	Streaming            bool   `json:"streaming"`
-	EstimatedInputTokens int    `json:"estimated_input_tokens"`
-	MaxOutputTokens      int    `json:"max_output_tokens"`
+	Purpose                string `json:"purpose"`
+	ToolCalling            bool   `json:"tool_calling"`
+	StructuredOutput       bool   `json:"structured_output"`
+	StructuredOutputFormat string `json:"structured_output_format,omitempty"`
+	Streaming              bool   `json:"streaming"`
+	EstimatedInputTokens   int    `json:"estimated_input_tokens"`
+	MaxOutputTokens        int    `json:"max_output_tokens"`
 }
 
 type ModelRouteCandidateDecision struct {

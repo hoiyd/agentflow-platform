@@ -76,8 +76,16 @@ func compileJSONSchema(schemaDefinition map[string]any) (*jsonschema.Schema, err
 }
 
 func jsonSchemaResult(status domain.VerificationStatus, summary, content string) Result {
+	code := "schema_mismatch"
+	if !json.Valid([]byte(content)) {
+		code = "invalid_json"
+	}
+	if status == domain.VerificationPassed {
+		code = "schema_valid"
+	}
 	return Result{
 		Status: status, Summary: summary,
+		Details: map[string]any{"reason_code": code},
 		Artifacts: []Artifact{{
 			Kind: "subject", MediaType: "application/json",
 			Content: content, ByteSize: len(content),

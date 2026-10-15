@@ -65,6 +65,17 @@ func (r *Runtime) finishAutonomous(ctx context.Context, events chan<- domain.Run
 }
 
 func (r *Runtime) emitAutonomousFinal(ctx context.Context, events chan<- domain.RunEvent, prepared PreparedCollaborationRun, iteration int, reason string, finalAnswer string) error {
+	if contract := prepared.Run.CompletionContract; contract != nil && contract.Output != nil {
+		// A decision's final_answer is an internal string, not the contracted object.
+		// Finalization is a normal checkpointed, budgeted, tool-free Stage, not repair.
+		output, err := r.runAutonomousStep(ctx, events, prepared, iteration, "final",
+			"Produce the final report from the supplied candidate. Preserve supported facts and uncertainty; do not invent evidence.", finalAnswer, retrievalQuery{})
+		if err != nil {
+			return err
+		}
+		r.emitFinalDeltas(ctx, prepared.Run.ID, output, events)
+		return nil
+	}
 	output := strings.TrimSpace(finalAnswer)
 	if output == "" {
 		output = "Autonomous run stopped without a final answer."

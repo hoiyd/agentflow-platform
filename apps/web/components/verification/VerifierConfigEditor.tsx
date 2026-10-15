@@ -101,6 +101,14 @@ export function VerifierConfigEditor({ disabled, draft, onChange, type }: Verifi
     const update = (next: Partial<typeof settings>) => onChange({ jsonSchema: { ...settings, ...next } });
     return (
       <VerifierSection checked={settings.enabled} disabled={disabled} label="Use JSON Schema" onToggle={(enabled) => update({ enabled })}>
+        <label className="verifier-field">
+          <span>Output generation</span>
+          <select disabled={disabled || !settings.enabled} value={settings.outputMode ?? "verify_only"} onChange={(event) => update({ outputMode: event.target.value as typeof settings.outputMode })}>
+            <option value="verify_only">Verify only</option>
+            <option value="local">JSON guidance + local validation</option>
+            <option value="strict">Strict provider constraint + local validation</option>
+          </select>
+        </label>
         <label className="verifier-field verifier-schema-field">
           <span>JSON Schema 2020-12</span>
           <textarea className="code-input" disabled={disabled || !settings.enabled} onChange={(event) => update({ schema: event.target.value })} spellCheck={false} value={settings.schema} />
