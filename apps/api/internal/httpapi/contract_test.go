@@ -1,11 +1,23 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"testing"
 
 	"agentflow-platform/apps/api/internal/apicontract"
 	"agentflow-platform/apps/api/internal/domain"
 )
+
+func TestSerializedOutputContractReachesDomain(t *testing.T) {
+	var input apicontract.ChatRequest
+	if err := json.Unmarshal([]byte(`{"message":"extract","completion_contract":{"subject_type":"run_output","output":{"mode":"strict","verifier_id":"report"},"verifiers":[],"policy":{"mode":"all_must_pass","max_attempts":1,"on_exhausted":"fail"}}}`), &input); err != nil {
+		t.Fatal(err)
+	}
+	converted := chatRequestFromContract(input)
+	if converted.CompletionContract.Output == nil || converted.CompletionContract.Output.Mode != "strict" || converted.CompletionContract.Output.VerifierID != "report" {
+		t.Fatalf("output contract was dropped: %+v", converted.CompletionContract)
+	}
+}
 
 func TestChatRequestFromContractPreservesExecutionInputs(t *testing.T) {
 	workspaceID := "workspace-1"

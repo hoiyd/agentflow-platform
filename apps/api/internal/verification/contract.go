@@ -98,6 +98,9 @@ func (r *Registry) FreezeContract(input *domain.CompletionContract) (*domain.Com
 	if contract.Policy.OnExhausted != domain.VerificationFailRun && contract.Policy.OnExhausted != domain.VerificationWaitForUser {
 		return nil, invalidContract("policy.on_exhausted must be fail or waiting_for_user")
 	}
+	if err := normalizeStructuredOutput(&contract); err != nil {
+		return nil, err
+	}
 	contract.Hash = ""
 	contract.Hash, err = completionContractHash(contract)
 	if err != nil {

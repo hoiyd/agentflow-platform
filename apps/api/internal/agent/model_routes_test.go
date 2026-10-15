@@ -192,7 +192,7 @@ func TestModelRouteDecisionRecordsNoCandidateEvidence(t *testing.T) {
 		SystemPrompt: "return JSON", Input: "route this", ModelMode: turnpkg.ModelModeText,
 		Sink: eventpkg.SinkFunc(func(_ context.Context, item domain.RunEvent) error { recorded = item; return nil }),
 	}
-	decision, err := runtime.selectModelRoute(context.Background(), request, &snapshot)
+	decision, err := runtime.selectModelRoute(context.Background(), request, &snapshot, nil)
 	if !errors.Is(err, routing.ErrNoCompatibleRoute) || len(decision.Candidates) != 1 {
 		t.Fatalf("expected typed no-route decision, decision=%#v err=%v", decision, err)
 	}
@@ -316,14 +316,14 @@ func TestRunKeepsFirstSelectedModelRoute(t *testing.T) {
 	first, err := runtime.selectModelRoute(context.Background(), turnpkg.Request{
 		RunID: run.ID, ConversationID: conversation.ID, Role: "answer", ModelMode: turnpkg.ModelModeText,
 		Sink: runtime.runEventSink(),
-	}, &snapshot)
+	}, &snapshot, nil)
 	if err != nil || first.Route.ID != "preferred" {
 		t.Fatalf("first route: decision=%#v err=%v", first, err)
 	}
 	second, err := runtime.selectModelRoute(context.Background(), turnpkg.Request{
 		RunID: run.ID, ConversationID: conversation.ID, Role: "answer", ModelMode: turnpkg.ModelModeAgentStream,
 		Sink: runtime.runEventSink(),
-	}, &snapshot)
+	}, &snapshot, nil)
 	if !errors.Is(err, routing.ErrNoCompatibleRoute) || second.Route.ID != "" {
 		t.Fatalf("run silently switched model routes: decision=%#v err=%v", second, err)
 	}

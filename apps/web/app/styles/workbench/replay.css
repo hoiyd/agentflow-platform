@@ -360,3 +360,12 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
+.structured-result-json {
+  margin: 12px 0 0;
+  padding: 12px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}

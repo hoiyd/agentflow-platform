@@ -99,7 +99,12 @@ func Complete(ctx context.Context, scoped store.WorkspaceStore, dependencies Dep
 	if request.GenerateTitle {
 		title = SummarizeTitle(ctx, scoped, dependencies.Runtime, request.RunID, request.ConversationID, request.UserInput, request.Assistant)
 	}
+	resultURL := ""
+	if completed.CompletionContract != nil && completed.CompletionContract.Output != nil {
+		resultURL = "/api/runs/" + completed.ID + "/result"
+	}
 	return domain.ChatChunk{
+		ResultURL:             resultURL,
 		Type:                  "done",
 		ConversationID:        completed.ConversationID,
 		Title:                 title,
@@ -188,7 +193,32 @@ func Reverify(ctx context.Context, scoped store.WorkspaceStore, dependencies Dep
 	if output == "" {
 		return VerificationResult{}, ErrNoCandidate
 	}
-	return verifyCandidate(ctx, scoped, dependencies, run, latestUserInput(messages), output)
+	question := latestUserInput(messages)
+	if run.CompletionContract.Output != nil {
+		// Conversation history can advance after this Run. Reverify may refresh
+		// checks on the original subject, never adopt another Run's candidate.
+		evidence, err := scoped.ListVerificationEvidence(run.ID)
+		if err != nil {
+			return VerificationResult{}, err
+		}
+		latest := 0
+		for _, item := range evidence {
+			if item.Attempt > latest {
+				latest = item.Attempt
+			}
+		}
+		subject := verificationSubjectForRun(scoped, run, question, output)
+		known := false
+		for _, item := range evidence {
+			if item.Attempt == latest && item.VerifierID == run.CompletionContract.Output.VerifierID && item.Status != domain.VerificationStale && item.SubjectHash == subject.Hash {
+				known = true
+			}
+		}
+		if !known {
+			return VerificationResult{}, ErrNoCandidate
+		}
+	}
+	return verifyCandidate(ctx, scoped, dependencies, run, question, output)
 }
 
 func verifyCandidate(ctx context.Context, scoped store.WorkspaceStore, dependencies Dependencies, run domain.Run, question, output string) (VerificationResult, error) {

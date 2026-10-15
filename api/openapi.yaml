@@ -806,6 +806,29 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/runs/{id}/result:
+    parameters:
+      - $ref: '#/components/parameters/RunId'
+    get:
+      operationId: getRunResult
+      tags: [Runs]
+      description: Return only the intact JSON object linked to passing verification evidence for a completed Run. Never returns provisional or unverified content.
+      responses:
+        '200':
+          description: Verified structured result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StructuredRunResult' }
+        '409':
+          description: Result is not ready, verification failed, or retained evidence is unavailable. No value is returned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StructuredRunResult' }
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/conversations/{id}/task-state:
     parameters:
       - $ref: '#/components/parameters/ConversationId'
@@ -1304,6 +1327,33 @@ components:
             $ref: '#/components/schemas/VerifierSpecInput'
         policy:
           $ref: '#/components/schemas/VerificationPolicyInput'
+        output:
+          $ref: '#/components/schemas/StructuredOutputConfig'
+    StructuredOutputConfig:
+      type: object
+      required: [mode, verifier_id]
+      properties:
+        mode: { type: string, enum: [strict, local] }
+        verifier_id: { type: string }
+        version: { type: string, description: Server-frozen output protocol version. }
+    StructuredRunResult:
+      type: object
+      required: [run_id, status, verification_status, contract_hash, version, mode, verifier_id]
+      properties:
+        run_id: { type: string }
+        status: { $ref: '#/components/schemas/RunStatus' }
+        verification_status: { $ref: '#/components/schemas/VerificationStatus' }
+        contract_hash: { type: string }
+        version: { type: string }
+        mode: { type: string, enum: [strict, local] }
+        verifier_id: { type: string }
+        evidence_id: { type: string }
+        artifact_id: { type: string }
+        subject_hash: { type: string }
+        value: { type: object, additionalProperties: true }
+        unavailable_reason:
+          type: string
+          enum: [contract_invalid, run_not_completed, verification_not_passed, evidence_unavailable, artifact_unavailable, artifact_modified, invalid_json]
     CompletionContract:
       allOf:
         - $ref: '#/components/schemas/CompletionContractInput'
@@ -2506,6 +2556,8 @@ components:
             $ref: '#/components/schemas/TaskStateRevision'
         recovery_summary:
           $ref: '#/components/schemas/RecoverySummary'
+        structured_result:
+          $ref: '#/components/schemas/StructuredRunResult'
     VerificationDecision:
       type: object
       required: [status, allow_completion, attempt, subject_hash, run_status, summary]
@@ -2631,6 +2683,7 @@ components:
         conversation_id: { type: string }
         title: { type: string }
         message_id: { type: string }
+        result_url: { type: string, description: Authorized structured result endpoint; no provisional object is included in SSE. }
         run_id: { type: string }
         agent_id: { type: string }
         status:

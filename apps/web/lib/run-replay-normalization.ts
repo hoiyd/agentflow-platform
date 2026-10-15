@@ -23,6 +23,7 @@ export function normalizeRunReplay(data: unknown): RunReplay {
   const run = expectRunInfo(replay.run);
   return {
     run,
+    structured_result: isObject(replay.structured_result) ? replay.structured_result as ContractSchemas["StructuredRunResult"] : undefined,
     projection: normalizeRunProjection(replay.projection, run, replay.summary, replay.usage_ledger),
     runtime_snapshot: isObject(replay.runtime_snapshot) ? replay.runtime_snapshot : undefined,
     conversation: expectConversation(replay.conversation),

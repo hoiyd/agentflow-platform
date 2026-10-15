@@ -13,6 +13,10 @@ This subsystem answers whether configured outcome invariants passed. It is
 separate from execution success, provider retries, retrieval relevance, and
 subjective factual correctness.
 
+For provider-constrained JSON generation and a machine result backed by passing
+evidence, see [Structured output](structured-output.md). A JSON Schema verifier
+alone still means validation only, not provider-constrained generation.
+
 ## Verification vs. Tests
 
 | Verification | Automated Tests | Manual Tests |

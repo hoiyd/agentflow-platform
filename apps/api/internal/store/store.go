@@ -207,6 +207,7 @@ type WorkspaceStore interface {
 	UpdateRunVerificationStatus(runID string, status domain.VerificationStatus) (domain.Run, error)
 	ListVerificationEvidence(runID string) ([]domain.VerificationEvidence, error)
 	ListDocuments() ([]domain.Document, error)
+	ListVerificationArtifacts(runID string) ([]domain.VerificationArtifact, error)
 	GetDocument(id string) (domain.Document, []domain.DocumentChunk, bool, error)
 	DeleteDocument(id string) error
 }

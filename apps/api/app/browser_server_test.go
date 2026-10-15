@@ -46,6 +46,9 @@ func TestBrowserServer(t *testing.T) {
 	}
 	routePath := filepath.Join(root, "routes.json")
 	capabilities := map[string]any{"tool_calling": true, "structured_output": true, "streaming": true}
+	if os.Getenv("AGENTFLOW_STRUCTURED_OUTPUT_TEST") == "1" {
+		capabilities["structured_output_format"] = "openai_json_schema"
+	}
 	if os.Getenv("AGENTFLOW_REASONING_TEST") == "1" {
 		capabilities["reasoning_display_format"] = "deepseek_reasoning_content"
 	}

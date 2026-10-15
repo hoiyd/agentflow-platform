@@ -89,6 +89,7 @@ type ChatChunk struct {
 	Status                string        `json:"status,omitempty"`
 	VerificationStatus    string        `json:"verification_status,omitempty"`
 	MessageID             string        `json:"message_id,omitempty"`
+	ResultURL             string        `json:"result_url,omitempty"`
 	Citations             []RAGCitation `json:"citations,omitempty"`
 	InvalidCitationIDs    []string      `json:"invalid_citation_ids,omitempty"`
 	WebCitations          []WebCitation `json:"web_citations,omitempty"`

@@ -107,16 +107,16 @@ func (e HealthResponseStatus) Valid() bool {
 
 // Defines values for IdentitySessionMode.
 const (
-	Local IdentitySessionMode = "local"
-	Oidc  IdentitySessionMode = "oidc"
+	IdentitySessionModeLocal IdentitySessionMode = "local"
+	IdentitySessionModeOidc  IdentitySessionMode = "oidc"
 )
 
 // Valid indicates whether the value is a known member of the IdentitySessionMode enum.
 func (e IdentitySessionMode) Valid() bool {
 	switch e {
-	case Local:
+	case IdentitySessionModeLocal:
 		return true
-	case Oidc:
+	case IdentitySessionModeOidc:
 		return true
 	default:
 		return false
@@ -474,6 +474,75 @@ func (e SkillInvocationPolicy) Valid() bool {
 	case Automatic:
 		return true
 	case ExplicitOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StructuredOutputConfigMode.
+const (
+	StructuredOutputConfigModeLocal  StructuredOutputConfigMode = "local"
+	StructuredOutputConfigModeStrict StructuredOutputConfigMode = "strict"
+)
+
+// Valid indicates whether the value is a known member of the StructuredOutputConfigMode enum.
+func (e StructuredOutputConfigMode) Valid() bool {
+	switch e {
+	case StructuredOutputConfigModeLocal:
+		return true
+	case StructuredOutputConfigModeStrict:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StructuredRunResultMode.
+const (
+	StructuredRunResultModeLocal  StructuredRunResultMode = "local"
+	StructuredRunResultModeStrict StructuredRunResultMode = "strict"
+)
+
+// Valid indicates whether the value is a known member of the StructuredRunResultMode enum.
+func (e StructuredRunResultMode) Valid() bool {
+	switch e {
+	case StructuredRunResultModeLocal:
+		return true
+	case StructuredRunResultModeStrict:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StructuredRunResultUnavailableReason.
+const (
+	ArtifactModified      StructuredRunResultUnavailableReason = "artifact_modified"
+	ArtifactUnavailable   StructuredRunResultUnavailableReason = "artifact_unavailable"
+	ContractInvalid       StructuredRunResultUnavailableReason = "contract_invalid"
+	EvidenceUnavailable   StructuredRunResultUnavailableReason = "evidence_unavailable"
+	InvalidJson           StructuredRunResultUnavailableReason = "invalid_json"
+	RunNotCompleted       StructuredRunResultUnavailableReason = "run_not_completed"
+	VerificationNotPassed StructuredRunResultUnavailableReason = "verification_not_passed"
+)
+
+// Valid indicates whether the value is a known member of the StructuredRunResultUnavailableReason enum.
+func (e StructuredRunResultUnavailableReason) Valid() bool {
+	switch e {
+	case ArtifactModified:
+		return true
+	case ArtifactUnavailable:
+		return true
+	case ContractInvalid:
+		return true
+	case EvidenceUnavailable:
+		return true
+	case InvalidJson:
+		return true
+	case RunNotCompleted:
+		return true
+	case VerificationNotPassed:
 		return true
 	default:
 		return false
@@ -929,6 +998,7 @@ type CollaborationStep struct {
 type CompletionContract struct {
 	Hash        string                        `json:"hash"`
 	Id          string                        `json:"id"`
+	Output      *StructuredOutputConfig       `json:"output,omitempty"`
 	Policy      VerificationPolicyInput       `json:"policy"`
 	SubjectType CompletionContractSubjectType `json:"subject_type"`
 	Verifiers   []VerifierSpecInput           `json:"verifiers"`
@@ -940,6 +1010,7 @@ type CompletionContractSubjectType string
 
 // CompletionContractInput defines model for CompletionContractInput.
 type CompletionContractInput struct {
+	Output      *StructuredOutputConfig            `json:"output,omitempty"`
 	Policy      VerificationPolicyInput            `json:"policy"`
 	SubjectType CompletionContractInputSubjectType `json:"subject_type"`
 	Verifiers   []VerifierSpecInput                `json:"verifiers"`
@@ -1415,6 +1486,7 @@ type RunReplay struct {
 	RuntimeSnapshot       *map[string]interface{} `json:"runtime_snapshot,omitempty"`
 	StageCheckpoints      *[]StageCheckpoint      `json:"stage_checkpoints"`
 	Steps                 *[]CollaborationStep    `json:"steps"`
+	StructuredResult      *StructuredRunResult    `json:"structured_result,omitempty"`
 	Summary               RunTraceSummary         `json:"summary"`
 	TaskStateRevisions    *[]TaskStateRevision    `json:"task_state_revisions"`
 	ToolArtifacts         *[]ToolArtifact         `json:"tool_artifacts"`
@@ -1605,6 +1677,40 @@ type StageCheckpoint struct {
 	ToolDefinitionsHash string    `json:"tool_definitions_hash"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
+
+// StructuredOutputConfig defines model for StructuredOutputConfig.
+type StructuredOutputConfig struct {
+	Mode       StructuredOutputConfigMode `json:"mode"`
+	VerifierId string                     `json:"verifier_id"`
+
+	// Version Server-frozen output protocol version.
+	Version *string `json:"version,omitempty"`
+}
+
+// StructuredOutputConfigMode defines model for StructuredOutputConfig.Mode.
+type StructuredOutputConfigMode string
+
+// StructuredRunResult defines model for StructuredRunResult.
+type StructuredRunResult struct {
+	ArtifactId         *string                               `json:"artifact_id,omitempty"`
+	ContractHash       string                                `json:"contract_hash"`
+	EvidenceId         *string                               `json:"evidence_id,omitempty"`
+	Mode               StructuredRunResultMode               `json:"mode"`
+	RunId              string                                `json:"run_id"`
+	Status             RunStatus                             `json:"status"`
+	SubjectHash        *string                               `json:"subject_hash,omitempty"`
+	UnavailableReason  *StructuredRunResultUnavailableReason `json:"unavailable_reason,omitempty"`
+	Value              *map[string]interface{}               `json:"value,omitempty"`
+	VerificationStatus VerificationStatus                    `json:"verification_status"`
+	VerifierId         string                                `json:"verifier_id"`
+	Version            string                                `json:"version"`
+}
+
+// StructuredRunResultMode defines model for StructuredRunResult.Mode.
+type StructuredRunResultMode string
+
+// StructuredRunResultUnavailableReason defines model for StructuredRunResult.UnavailableReason.
+type StructuredRunResultUnavailableReason string
 
 // TaskBlocker defines model for TaskBlocker.
 type TaskBlocker struct {

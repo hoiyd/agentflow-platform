@@ -544,6 +544,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        /** @description Return only the intact JSON object linked to passing verification evidence for a completed Run. Never returns provisional or unverified content. */
+        get: operations["getRunResult"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{id}/task-state": {
         parameters: {
             query?: never;
@@ -891,6 +910,32 @@ export interface components {
             subject_type: "run_output";
             verifiers: components["schemas"]["VerifierSpecInput"][];
             policy: components["schemas"]["VerificationPolicyInput"];
+            output?: components["schemas"]["StructuredOutputConfig"];
+        };
+        StructuredOutputConfig: {
+            /** @enum {string} */
+            mode: "strict" | "local";
+            verifier_id: string;
+            /** @description Server-frozen output protocol version. */
+            version?: string;
+        };
+        StructuredRunResult: {
+            run_id: string;
+            status: components["schemas"]["RunStatus"];
+            verification_status: components["schemas"]["VerificationStatus"];
+            contract_hash: string;
+            version: string;
+            /** @enum {string} */
+            mode: "strict" | "local";
+            verifier_id: string;
+            evidence_id?: string;
+            artifact_id?: string;
+            subject_hash?: string;
+            value?: {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            unavailable_reason?: "contract_invalid" | "run_not_completed" | "verification_not_passed" | "evidence_unavailable" | "artifact_unavailable" | "artifact_modified" | "invalid_json";
         };
         CompletionContract: components["schemas"]["CompletionContractInput"] & {
             id: string;
@@ -1781,6 +1826,7 @@ export interface components {
             verification_artifacts: components["schemas"]["VerificationArtifact"][] | null;
             task_state_revisions: components["schemas"]["TaskStateRevision"][] | null;
             recovery_summary?: components["schemas"]["RecoverySummary"];
+            structured_result?: components["schemas"]["StructuredRunResult"];
         };
         VerificationDecision: {
             status: components["schemas"]["VerificationStatus"];
@@ -1878,6 +1924,8 @@ export interface components {
             conversation_id: string;
             title?: string;
             message_id?: string;
+            /** @description Authorized structured result endpoint; no provisional object is included in SSE. */
+            result_url?: string;
             run_id?: string;
             agent_id?: string;
             status?: components["schemas"]["RunStatus"];
@@ -2988,6 +3036,39 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getRunResult: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verified structured result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StructuredRunResult"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description Result is not ready, verification failed, or retained evidence is unavailable. No value is returned. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StructuredRunResult"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };

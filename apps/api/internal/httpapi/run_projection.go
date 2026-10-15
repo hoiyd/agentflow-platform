@@ -10,10 +10,12 @@ import (
 	"agentflow-platform/apps/api/internal/projection"
 	"agentflow-platform/apps/api/internal/runtimeinvariant"
 	"agentflow-platform/apps/api/internal/store"
+	"agentflow-platform/apps/api/internal/verification"
 )
 
 // enrichRunProjection joins request-backed observations without extra Store reads.
 func (h *Handler) enrichRunProjection(scoped store.WorkspaceStore, replay *domain.RunReplay) error {
+	replay.StructuredResult = verification.StructuredResult(replay.Run, replay.VerificationEvidence, replay.VerificationArtifacts)
 	records, err := scoped.ListModelRequestRecords(replay.Run.ID)
 	if err != nil {
 		return err

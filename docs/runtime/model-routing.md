@@ -27,6 +27,8 @@ Each route has a stable ID and captures:
 
 - provider, model, and secret-free endpoint;
 - Tool calling, structured-output, streaming, and optional `seed` capabilities;
+- Optional `structured_output_format`, required in addition to the boolean for
+  [strict JSON report generation](structured-output.md); omission retains existing routing behavior;
 - Optional `reasoning_display_format` capability, disabled when omitted; see
   [provider reasoning display](provider-reasoning.md) for supported wire formats,
   sanitized persistence, limits, and the distinction from private continuation state;

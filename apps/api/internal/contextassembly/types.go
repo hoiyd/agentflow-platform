@@ -78,9 +78,10 @@ type Tool struct {
 }
 
 type Request struct {
-	Model    string
-	Messages []Message
-	Tools    []Tool
+	Model          string
+	Messages       []Message
+	Tools          []Tool
+	ResponseFormat map[string]any
 }
 
 type Pack struct {

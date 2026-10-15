@@ -34,6 +34,7 @@ type Client struct {
 	generationPolicy       domain.GenerationPolicy
 	seedSupported          bool
 	reasoningDisplayFormat string
+	structuredOutputFormat string
 }
 
 var _ provider.Client = (*Client)(nil)
@@ -140,7 +141,7 @@ func (c *Client) RuntimeIdentity() RuntimeIdentity {
 		Provider: providerForURL(c.baseURL), BaseURL: safeRuntimeURL(c.baseURL), Model: c.model,
 		EmbeddingBaseURL: safeRuntimeURL(c.embeddingBaseURL), EmbeddingModel: c.embeddingModel,
 		EmbeddingDimensions: c.embeddingDimensions, EmbeddingProvider: providerForURL(c.embeddingBaseURL),
-		GenerationPolicy: c.generationPolicy.Clone(), SeedSupported: c.seedSupported, ReasoningDisplayFormat: c.reasoningDisplayFormat,
+		GenerationPolicy: c.generationPolicy.Clone(), SeedSupported: c.seedSupported, ReasoningDisplayFormat: c.reasoningDisplayFormat, StructuredOutputFormat: c.structuredOutputFormat,
 	}
 }
 
@@ -158,6 +159,7 @@ func (c *Client) WithRuntimeIdentity(identity RuntimeIdentity) provider.Client {
 	}
 	client.seedSupported = identity.SeedSupported
 	client.reasoningDisplayFormat = identity.ReasoningDisplayFormat
+	client.structuredOutputFormat = identity.StructuredOutputFormat
 	return client
 }
 
