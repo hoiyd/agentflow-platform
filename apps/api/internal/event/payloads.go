@@ -15,6 +15,10 @@ type PayloadContract interface {
 	supports(domain.RunEventType) bool
 }
 
+type PlanPayload struct{ domain.RunPlan }
+
+func (PlanPayload) supports(t domain.RunEventType) bool { return t == domain.EventPlanRecorded }
+
 type EventMetadata struct {
 	ConversationID string
 	RunID          string

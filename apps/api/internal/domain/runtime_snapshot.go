@@ -24,10 +24,12 @@ const (
 )
 
 type RuntimeSnapshot struct {
-	SchemaVersion   int                    `json:"schema_version"`
-	Mode            string                 `json:"mode"`
-	Agent           RuntimeAgentSnapshot   `json:"agent"`
-	CandidateAgents []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
+	ExecutionConstraint string                 `json:"execution_constraint,omitempty"`
+	PlanOrigin          *PlanOrigin            `json:"plan_origin,omitempty"`
+	SchemaVersion       int                    `json:"schema_version"`
+	Mode                string                 `json:"mode"`
+	Agent               RuntimeAgentSnapshot   `json:"agent"`
+	CandidateAgents     []RuntimeAgentSnapshot `json:"candidate_agents,omitempty"`
 	// LegacyModel is populated only when replaying pre-v17 snapshots.
 	LegacyModel        *RuntimeModelSnapshot     `json:"model,omitempty"`
 	Embedding          RuntimeEmbeddingSnapshot  `json:"embedding"`

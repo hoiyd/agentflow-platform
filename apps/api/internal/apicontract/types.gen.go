@@ -30,6 +30,21 @@ func (e ChatMode) Valid() bool {
 	}
 }
 
+// Defines values for ChatRequestExecutionConstraint.
+const (
+	PlanOnly ChatRequestExecutionConstraint = "plan_only"
+)
+
+// Valid indicates whether the value is a known member of the ChatRequestExecutionConstraint enum.
+func (e ChatRequestExecutionConstraint) Valid() bool {
+	switch e {
+	case PlanOnly:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ClarificationStatus.
 const (
 	ClarificationStatusAnswered  ClarificationStatus = "answered"
@@ -933,10 +948,17 @@ type ChatRequest struct {
 	AgentId            *string                  `json:"agent_id,omitempty"`
 	CompletionContract *CompletionContractInput `json:"completion_contract,omitempty"`
 	ConversationId     *string                  `json:"conversation_id,omitempty"`
-	Message            string                   `json:"message"`
-	Mode               *ChatMode                `json:"mode,omitempty"`
-	WorkspaceId        *string                  `json:"workspace_id,omitempty"`
+
+	// ExecutionConstraint Frozen read-only restriction; omit for ordinary execution.
+	ExecutionConstraint *ChatRequestExecutionConstraint `json:"execution_constraint,omitempty"`
+	Message             string                          `json:"message"`
+	Mode                *ChatMode                       `json:"mode,omitempty"`
+	PlanOrigin          *PlanOrigin                     `json:"plan_origin,omitempty"`
+	WorkspaceId         *string                         `json:"workspace_id,omitempty"`
 }
+
+// ChatRequestExecutionConstraint Frozen read-only restriction; omit for ordinary execution.
+type ChatRequestExecutionConstraint string
 
 // Clarification defines model for Clarification.
 type Clarification struct {
@@ -1129,7 +1151,9 @@ type ErrorResponse struct {
 
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
-	Status HealthResponseStatus `json:"status"`
+	// PlanningContractVersion Supported read-only planning protocol. Absence means the client must not submit planning or plan execution requests.
+	PlanningContractVersion *string              `json:"planning_contract_version,omitempty"`
+	Status                  HealthResponseStatus `json:"status"`
 }
 
 // HealthResponseStatus defines model for HealthResponse.Status.
@@ -1327,6 +1351,21 @@ type PartialOutputChannel string
 // PartialOutputStatus defines model for PartialOutput.Status.
 type PartialOutputStatus string
 
+// PlanOrigin defines model for PlanOrigin.
+type PlanOrigin struct {
+	Hash  string `json:"hash"`
+	RunId string `json:"run_id"`
+}
+
+// PlanSource defines model for PlanSource.
+type PlanSource struct {
+	ContentHash  string `json:"content_hash"`
+	FileId       string `json:"file_id"`
+	Path         string `json:"path"`
+	Root         string `json:"root"`
+	RootRevision string `json:"root_revision"`
+}
+
 // RAGCitation defines model for RAGCitation.
 type RAGCitation struct {
 	ChunkId         string    `json:"chunk_id"`
@@ -1385,14 +1424,17 @@ type Run struct {
 	ConversationId     string              `json:"conversation_id"`
 	CreatedAt          time.Time           `json:"created_at"`
 	Error              *string             `json:"error,omitempty"`
-	ExecutionStartedAt *time.Time          `json:"execution_started_at,omitempty"`
-	HeartbeatAt        *time.Time          `json:"heartbeat_at,omitempty"`
-	Id                 string              `json:"id"`
-	StartedAt          *time.Time          `json:"started_at,omitempty"`
-	Status             RunStatus           `json:"status"`
-	UpdatedAt          time.Time           `json:"updated_at"`
-	VerificationStatus VerificationStatus  `json:"verification_status"`
-	WorkspaceId        string              `json:"workspace_id"`
+
+	// ExecutionConstraint Derived from the frozen Snapshot; omission means ordinary execution.
+	ExecutionConstraint *string            `json:"execution_constraint,omitempty"`
+	ExecutionStartedAt  *time.Time         `json:"execution_started_at,omitempty"`
+	HeartbeatAt         *time.Time         `json:"heartbeat_at,omitempty"`
+	Id                  string             `json:"id"`
+	StartedAt           *time.Time         `json:"started_at,omitempty"`
+	Status              RunStatus          `json:"status"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+	VerificationStatus  VerificationStatus `json:"verification_status"`
+	WorkspaceId         string             `json:"workspace_id"`
 }
 
 // RunEvent defines model for RunEvent.
@@ -1447,6 +1489,17 @@ type RunInputRequest struct {
 // RunInputRequestKind defines model for RunInputRequest.Kind.
 type RunInputRequestKind string
 
+// RunPlan defines model for RunPlan.
+type RunPlan struct {
+	ExpiresAt time.Time    `json:"expires_at"`
+	Hash      string       `json:"hash"`
+	Input     string       `json:"input"`
+	Proposal  string       `json:"proposal"`
+	RunId     string       `json:"run_id"`
+	Sources   []PlanSource `json:"sources"`
+	Version   string       `json:"version"`
+}
+
 // RunProjection defines model for RunProjection.
 type RunProjection struct {
 	ActiveModelCallIds *[]string `json:"active_model_call_ids"`
@@ -1479,6 +1532,7 @@ type RunProjectionSnapshot struct {
 type RunReplay struct {
 	Conversation          Conversation            `json:"conversation"`
 	Messages              *[]Message              `json:"messages"`
+	Plan                  *RunPlan                `json:"plan,omitempty"`
 	Projection            RunProjectionSnapshot   `json:"projection"`
 	RecoverySummary       *RecoverySummary        `json:"recovery_summary,omitempty"`
 	Run                   Run                     `json:"run"`

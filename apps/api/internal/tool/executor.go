@@ -92,6 +92,8 @@ type ToolEffectJournal interface {
 }
 
 type ExecutorOptions struct {
+	// PlanOnly comes from the persisted Run restriction, never Tool arguments.
+	PlanOnly bool
 	// Authorize checks current Workspace grants immediately before each call.
 	// It is supplied by the trusted Runtime, never by model arguments.
 	// Scope is the already validated/resolved scope; do not invoke a Binding's
@@ -115,6 +117,7 @@ type ExecutorOptions struct {
 }
 
 type Executor struct {
+	planOnly            bool
 	authorize           func(context.Context, ExecutionRequest, policy.Scope) error
 	catalog             *Catalog
 	defaultPolicy       ExecutionPolicy
@@ -147,6 +150,7 @@ func NewExecutor(catalog *Catalog, options ExecutorOptions) *Executor {
 	}
 	securityPolicy := catalog.SecurityPolicy()
 	executor := &Executor{
+		planOnly:  options.PlanOnly,
 		authorize: options.Authorize,
 		catalog:   catalog, defaultPolicy: policy, tracer: options.Tracer, maxConcurrency: maxConcurrency,
 		credentialScopes: append([]string(nil), options.CredentialScopes...),
@@ -194,6 +198,13 @@ func (e *Executor) execute(ctx context.Context, request ExecutionRequest, finish
 		}
 	}
 	defer func() { result.DurationMS = time.Since(started).Milliseconds() }()
+	if e.planOnly && (binding.Handler == nil || !policy.AllowsPlanning(binding.Descriptor.Security)) {
+		decision := policy.Decision{Action: policy.ActionDeny, PolicyVersion: e.securityPolicy.Version, Reason: "plan_only_denied", Capability: binding.Descriptor.Security}
+		result.PolicyDecision = &decision
+		_ = e.tracePolicyDecision(ctx, request, decision)
+		result.Error = executionError(ErrorSecurityPolicyDenied, "Read-only planning forbids this Tool; start a separately authorized execution Run", nil)
+		return result
+	}
 
 	if result.Error != nil {
 		if e.progressGuard != nil {

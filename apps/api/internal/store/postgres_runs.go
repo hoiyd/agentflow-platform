@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/planning"
 	"agentflow-platform/apps/api/internal/redaction"
 )
 
@@ -70,6 +72,12 @@ func (s *PostgresStore) createRun(ctx context.Context, inputID, owner string, al
 	if contract != nil {
 		run.VerificationStatus = domain.VerificationPending
 	}
+	if snapshot.PlanOrigin != nil {
+		if snapshot.PlanOrigin.RunID == "" || snapshot.PlanOrigin.Hash == "" || snapshot.ExecutionConstraint != "" {
+			return domain.Run{}, errors.New("invalid plan execution origin")
+		}
+		run.ID = planning.ExecutionRunID(snapshot.PlanOrigin.RunID)
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.Run{}, err
@@ -84,12 +92,20 @@ func (s *PostgresStore) createRun(ctx context.Context, inputID, owner string, al
 		run.Status = domain.RunRunning
 		run.StartedAt, run.ExecutionStartedAt, run.HeartbeatAt = &now, &now, &now
 	}
-	_, err = tx.ExecContext(ctx, `
+	inserted, err := tx.ExecContext(ctx, `
 		INSERT INTO runs (id, workspace_id, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) ON CONFLICT (id) DO NOTHING`,
 		run.ID, run.WorkspaceID, run.AgentID, run.ConversationID, string(run.Status), run.Error, snapshotJSON, contractJSON, string(run.VerificationStatus), run.StartedAt, run.ExecutionStartedAt, run.ActiveRuntimeMS, run.HeartbeatAt, run.CompletedAt, run.CreatedAt, run.UpdatedAt)
 	if err != nil {
 		return domain.Run{}, err
+	}
+	if count, err := inserted.RowsAffected(); err != nil {
+		return domain.Run{}, err
+	} else if count != 1 {
+		if snapshot.PlanOrigin != nil {
+			return domain.Run{}, fmt.Errorf("%w: %s", planning.ErrAlreadyStarted, run.ID)
+		}
+		return domain.Run{}, errors.New("run identity already exists")
 	}
 	if inputID != "" {
 		if _, err = tx.ExecContext(ctx, `UPDATE conversation_inputs SET status='applied',applied_run_id=$1,applied_at=NOW() WHERE id=$2`, run.ID, inputID); err != nil {

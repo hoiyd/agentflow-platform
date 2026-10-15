@@ -177,6 +177,7 @@ export function useConversationHistory({ workspace, session, onModeRestored: han
     }
     const { run, steps: stepsResult, projection } = result;
     setRunState({ id: run.id, agentId: run.agent_id, status: run.status,
+      executionConstraint: run.execution_constraint,
       verificationStatus: run.verification_status ?? "not_required" });
     const steps = stepsResult.status === "fulfilled" ? stepsResult.value : [];
     setCollaborationSteps(steps.map(toCollaborationStepView));

@@ -3,6 +3,9 @@ node_modules/
 .next-functional/
 playwright-report/
 test-results/
+# Local browser screenshots and runtime evidence belong in PR/CI artifacts.
+/output/playwright/
+/output/evidence/
 dist/
 .idea/
 .env

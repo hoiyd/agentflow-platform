@@ -180,6 +180,7 @@ func buildRegistry() map[domain.RunEventType]Definition {
 	add([]domain.RunEventType{domain.EventRunCanceled, domain.EventRunCompleted, domain.EventRunFailed}, DurableFact, optional, "event.RunStatusPayload", terminal("run", domain.EventRunCreated), "run_projection", "replay")
 	add([]domain.RunEventType{domain.EventClarificationAnswered}, DurableFact, optional, "event.TracePayload", none, "replay", "live_ui")
 	add([]domain.RunEventType{domain.EventRunProgress}, LiveOnly, optional, "event.RunProgressPayload", none, "live_ui")
+	add([]domain.RunEventType{domain.EventPlanRecorded}, DurableFact, optional, "event.PlanPayload", none, "planning", "replay")
 	add([]domain.RunEventType{domain.EventAgentSelectionDecided}, DurableFact, stage, "event.AgentSelectionPayload", none, "replay")
 
 	add([]domain.RunEventType{domain.EventStageStarted}, DurableFact, stage, "event.StagePayload", start("stage"), "run_projection", "replay")
@@ -243,6 +244,8 @@ func buildRegistry() map[domain.RunEventType]Definition {
 
 func producerFor(eventType domain.RunEventType) string {
 	switch eventType {
+	case domain.EventPlanRecorded:
+		return "app/runcompletion"
 	case domain.EventClarificationAnswered:
 		return "clarification"
 	case domain.EventToolDiscoveryUpdated:

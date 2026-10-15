@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readChatEventStream } from "./run-stream.ts";
 
+test("recording plan evidence does not masquerade as a Run lifecycle transition", async () => {
+  const events = [];
+  await readChatEventStream(new Response(`data: ${JSON.stringify({type:"run.plan_recorded", schema_version:1, run_id:"run", payload:{hash:"plan"}})}\n\n`), item => events.push(item));
+  assert.deepEqual(events, [{type:"model_delta",delta:""}]);
+});
+
 test("streamed planning stays in Trace, not in the final Chat answer", async () => {
   const events = [];
   for (const role of ["planner", ""]) {

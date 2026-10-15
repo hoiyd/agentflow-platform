@@ -45,6 +45,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
     startEditingTitle, cancelEditingTitle, setConversationTitleDraft, saveTitle
   } = workspace;
   const [chatMode, setChatMode] = useState<ChatMode>("multi_agent");
+	const [planOnly, setPlanOnly] = useState(false);
   const [sidePanel, setSidePanel] = useState<ChatSidePanel>("trace");
   const [view, setView] = useState<ChatView>(initialView);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -278,7 +279,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
       setError(error instanceof Error ? error.message : "Invalid verification policy");
       return;
     }
-    await session.submit(content, { mode: chatMode, agentId: activeAgentId, completionContract });
+    await session.submit(content, { mode: chatMode, agentId: activeAgentId, completionContract, executionConstraint: planOnly ? "plan_only" : undefined });
   }
 
   return (
@@ -386,6 +387,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
 
         {view === "chat" ? (
           <ChatComposer
+			planOnly={planOnly} onPlanOnlyChange={setPlanOnly}
             inbox={activeId && runState ? <RunInbox key={activeId} conversationId={activeId} runId={runState.id} mode={chatMode} agentId={activeAgentId}
               input={input} busy={isStreaming || ["running","queued","canceling"].includes(runState.status)}
               canStartFollowup={["completed","failed","canceled"].includes(runState.status) && (chatMode !== "single" || Boolean(activeAgent))}

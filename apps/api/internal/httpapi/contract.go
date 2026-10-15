@@ -7,6 +7,12 @@ import (
 
 func chatRequestFromContract(input apicontract.ChatRequest) domain.ChatRequest {
 	request := domain.ChatRequest{Message: input.Message}
+	if input.ExecutionConstraint != nil {
+		request.ExecutionConstraint = string(*input.ExecutionConstraint)
+	}
+	if input.PlanOrigin != nil {
+		request.PlanOrigin = &domain.PlanOrigin{RunID: input.PlanOrigin.RunId, Hash: input.PlanOrigin.Hash}
+	}
 	if input.WorkspaceId != nil {
 		request.WorkspaceID = *input.WorkspaceId
 	}

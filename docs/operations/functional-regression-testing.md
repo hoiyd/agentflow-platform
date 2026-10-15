@@ -18,6 +18,7 @@ Write or update this inventory before adding isolated fixtures.
 | Tool-mode answers are buffered until completion | Browser must see a partial answer before it releases the provider's completion gate |
 | A provider failure looks successful or remains loading | Failed status and useful error are visible and survive Replay |
 | Verification UI never sends a contract or completion bypasses the gate | Browser-submitted policy is persisted; a failing verifier prevents `completed` |
+| A read-only plan acquires write authority or executes changed materials | [Planning gate](../runtime/read-only-planning.md#validation-and-rollback) checks hidden schemas, forged-call denial, frozen recovery, source drift and a separately authorized execution Run |
 | Multi/Loop execution loses Tool continuation or stage identity | Real staged runs finish with paired calls and a valid projection; Loop writes have durable receipts; isolated Multi Worker has no Task State write authority |
 | Reload loses accepted results or persisted Task State | Reload reads the same messages, run, and Task State from PostgreSQL |
 | Task State refresh invalidates pending history/Trace recovery | Delay the real Stage response in all three runtime modes; an independent Task State refresh still permits complete history restoration |

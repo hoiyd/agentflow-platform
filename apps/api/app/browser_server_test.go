@@ -106,7 +106,7 @@ func TestBrowserServer(t *testing.T) {
 	cfg.AuthMode = "local"
 	cfg.SandboxEnabled = false
 	cfg.FilesystemRootsPath = ""
-	if os.Getenv("AGENTFLOW_FILESYSTEM_TEST") == "1" || os.Getenv("AGENTFLOW_FILESYSTEM_WRITE_TEST") == "1" {
+	if os.Getenv("AGENTFLOW_FILESYSTEM_TEST") == "1" || os.Getenv("AGENTFLOW_FILESYSTEM_WRITE_TEST") == "1" || os.Getenv("AGENTFLOW_PLANNING_TEST") == "1" {
 		browserFilesystemConfig(t, &cfg, root)
 		cfg.RunMaxModelCalls = 24
 	}
@@ -169,6 +169,22 @@ func TestBrowserServer(t *testing.T) {
 	}
 	production := application.server.Handler
 	controls := http.NewServeMux()
+	if os.Getenv("AGENTFLOW_PLANNING_TEST") == "1" {
+		controls.HandleFunc("POST /__fixture/planning/source", func(w http.ResponseWriter, r *http.Request) {
+			var input struct {
+				Content string `json:"content"`
+			}
+			if json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&input) != nil {
+				w.WriteHeader(400)
+				return
+			}
+			if err := os.WriteFile(filepath.Join(root, "project", "report.md"), []byte(input.Content), 0600); err != nil {
+				http.Error(w, "fixture source unavailable", 500)
+				return
+			}
+			w.WriteHeader(204)
+		})
+	}
 	if os.Getenv("AGENTFLOW_INBOX_EDGE_TEST") == "1" {
 		// Test-only history setup through the real Store, never an operator database.
 		controls.HandleFunc("POST /__fixture/inbox/history/{id}", func(w http.ResponseWriter, r *http.Request) {

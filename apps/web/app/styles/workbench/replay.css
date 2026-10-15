@@ -369,3 +369,13 @@
   font-size: 12px;
   line-height: 1.6;
 }
+.planning-panel { border-block: 1px solid var(--border); padding: 16px 0; margin-block: 20px; font-size: 13px; }
+.planning-panel header { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+.planning-panel h2 { font-size: 16px; margin: 0; }
+.planning-panel header > span, .planning-metadata { color: var(--muted-strong); font-size: 12px; }
+.planning-panel header button { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; font: inherit; }
+.planning-proposal { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.planning-panel li, .planning-metadata { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+.planning-panel code { overflow-wrap: anywhere; font-size: 11px; }
+.planning-panel ul { padding-left: 0; list-style: none; }
+.planning-origin { font-size: 13px; color: var(--muted-strong); }

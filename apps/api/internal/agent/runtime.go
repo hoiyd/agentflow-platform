@@ -30,6 +30,9 @@ import (
 )
 
 type Runtime struct {
+	planningSources interface {
+		ValidatePlanSources(context.Context, []domain.PlanSource) error
+	}
 	inbox                 RuntimeInbox
 	clarifications        clarification.Store
 	store                 RuntimeStore
@@ -104,6 +107,9 @@ type PreparedRun struct {
 // RuntimeOptions captures the complete runtime policy at construction time so
 // new Runs can freeze one coherent snapshot without post-construction setters.
 type RuntimeOptions struct {
+	PlanningSources interface {
+		ValidatePlanSources(context.Context, []domain.PlanSource) error
+	}
 	Inbox              RuntimeInbox
 	Clarifications     clarification.Store
 	Store              RuntimeStore
@@ -155,6 +161,7 @@ func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 		progressConfig = progress.NormalizeConfig(progressConfig)
 	}
 	runtime := &Runtime{
+		planningSources:       options.PlanningSources,
 		inbox:                 options.Inbox,
 		clarifications:        options.Clarifications,
 		store:                 options.Store,
@@ -215,6 +222,7 @@ func (r *Runtime) PrepareChatRunWithContract(ctx context.Context, agentID string
 	if err != nil {
 		return PreparedRun{}, err
 	}
+	agent = restoreAgent(run.RuntimeSnapshot.Agent)
 	run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
 	if err != nil {
 		return PreparedRun{}, err

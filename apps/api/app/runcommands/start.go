@@ -10,6 +10,7 @@ import (
 	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/planning"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -20,6 +21,12 @@ type Followup struct {
 }
 
 func (c Commands) Start(ctx context.Context, scope Scope, req domain.ChatRequest, reservation *concurrency.Reservation, followup *Followup, observer Observer) error {
+	if req.ExecutionConstraint != "" && req.ExecutionConstraint != domain.ExecutionPlanOnly {
+		return commandError(Invalid, errors.New("unsupported execution_constraint"))
+	}
+	if req.PlanOrigin != nil && (req.ConversationID == "" || followup != nil || req.ExecutionConstraint != "") {
+		return commandError(Invalid, errors.New("plan execution requires its existing Conversation and a separate explicit request"))
+	}
 	if scope.Owner == "" || req.WorkspaceID != "" && req.WorkspaceID != scope.Workspace.ID() {
 		return commandError(Invalid, errors.New("workspace_id does not match authorized scope"))
 	}
@@ -76,6 +83,10 @@ func (c Commands) Start(ctx context.Context, scope Scope, req domain.ChatRequest
 		}
 	}()
 	var message domain.Message
+	if err := c.resolvePlan(ctx, scoped, &req, conversation); err != nil {
+		return err
+	}
+	ctx = agent.WithExecutionIntent(ctx, req.ExecutionConstraint, req.PlanOrigin)
 	if followup == nil {
 		message, err = scoped.AddMessage(conversation, "user", req.Message)
 	} else {
@@ -135,6 +146,9 @@ func (c Commands) Start(ctx context.Context, scope Scope, req domain.ChatRequest
 		}
 	}
 	if err != nil {
+		if errors.Is(err, planning.ErrAlreadyStarted) {
+			return commandError(Conflict, err)
+		}
 		if store.IsNotFound(err) {
 			return commandError(Missing, err)
 		}
@@ -159,8 +173,14 @@ func (c Commands) Start(ctx context.Context, scope Scope, req domain.ChatRequest
 	}
 	if found && (current.Status == domain.RunWaitingForUser || mode == agent.ChatModeAutonomous && current.Status == domain.RunCanceled) {
 		terminal(observer, current)
-		runcompletion.SyncMemoryTurn(c.Memory, message, current.ID)
+		if current.RuntimeSnapshot == nil || current.RuntimeSnapshot.ExecutionConstraint != domain.ExecutionPlanOnly {
+			runcompletion.SyncMemoryTurn(c.Memory, message, current.ID)
+		}
 		return nil
 	}
-	return c.complete(ctx, scoped, runcompletion.Request{WorkspaceID: req.WorkspaceID, RunID: run.ID, ConversationID: conversation, UserInput: req.Message, Assistant: answer, UserMessage: &message, GenerateTitle: true}, observer)
+	var syncMessage *domain.Message
+	if req.ExecutionConstraint != domain.ExecutionPlanOnly {
+		syncMessage = &message
+	}
+	return c.complete(ctx, scoped, runcompletion.Request{WorkspaceID: req.WorkspaceID, RunID: run.ID, ConversationID: conversation, UserInput: req.Message, Assistant: answer, UserMessage: syncMessage, GenerateTitle: true}, observer)
 }

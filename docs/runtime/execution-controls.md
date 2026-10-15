@@ -35,6 +35,7 @@ upload limits, and Memory confidence belong to their subsystem contracts.
 | Context | Model Call; input/output capacity | `contextassembly` | Frozen config; Manifest per assembly |
 | Loop guard | Autonomous Run; iterations/output characters | Autonomous runtime | Frozen config |
 | Tool execution | Call/batch; scope, time, bytes, concurrency, idempotency | `tool.Executor` | Frozen definitions/policy; durable receipts/Artifacts |
+| Read-only planning | Run; no mutable Tools, independent of orchestration Mode | Snapshot + `tool.Executor` | Frozen `plan_only`; [plan evidence and separate execution](read-only-planning.md) |
 | Tool progress | Run; repeated failures, unchanged reads, oscillation | `progress.Guard` | Frozen thresholds; durable decisions |
 | Verification | Contracted Run; attempts/time/artifacts | `verification.Engine` | Frozen contract; immutable Evidence |
 | Recovery | Startup/Resume; stale lifecycle and checkpoints | `recovery` + `checkpoint` | Durable state; live stale threshold |

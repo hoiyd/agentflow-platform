@@ -7,14 +7,23 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/invariant"
+	"agentflow-platform/apps/api/internal/planning"
 	"agentflow-platform/apps/api/internal/projection"
 	"agentflow-platform/apps/api/internal/runtimeinvariant"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/verification"
 )
 
+func hideRunSnapshot(run *domain.Run) {
+	if run.RuntimeSnapshot != nil {
+		run.ExecutionConstraint = run.RuntimeSnapshot.ExecutionConstraint
+	}
+	run.RuntimeSnapshot = nil
+}
+
 // enrichRunProjection joins request-backed observations without extra Store reads.
 func (h *Handler) enrichRunProjection(scoped store.WorkspaceStore, replay *domain.RunReplay) error {
+	replay.Plan = planning.Read(replay.RunEvents)
 	replay.StructuredResult = verification.StructuredResult(replay.Run, replay.VerificationEvidence, replay.VerificationArtifacts)
 	records, err := scoped.ListModelRequestRecords(replay.Run.ID)
 	if err != nil {

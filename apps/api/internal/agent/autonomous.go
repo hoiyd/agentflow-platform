@@ -55,6 +55,7 @@ func (r *Runtime) PrepareAutonomousRunWithContract(ctx context.Context, agentID 
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
+	agent = restoreAgent(run.RuntimeSnapshot.Agent)
 	run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
 	if err != nil {
 		return PreparedCollaborationRun{}, err

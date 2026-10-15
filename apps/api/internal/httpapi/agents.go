@@ -246,7 +246,7 @@ func (h *Handler) listRuns(w http.ResponseWriter, r *http.Request) {
 	}
 	for index := range runs {
 		run := &runs[index]
-		run.RuntimeSnapshot = nil
+		hideRunSnapshot(run)
 	}
 	writeJSON(w, http.StatusOK, runs)
 }
@@ -267,7 +267,7 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
-	run.RuntimeSnapshot = nil
+	hideRunSnapshot(&run)
 	writeJSON(w, http.StatusOK, run)
 }
 
@@ -296,7 +296,7 @@ func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	run.RuntimeSnapshot = nil
+	hideRunSnapshot(&run)
 	writeJSON(w, http.StatusOK, run)
 }
 
@@ -354,7 +354,7 @@ func (h *Handler) getRunReplay(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	replay.Run.RuntimeSnapshot = nil
+	hideRunSnapshot(&replay.Run)
 	writeJSON(w, http.StatusOK, replay)
 }
 

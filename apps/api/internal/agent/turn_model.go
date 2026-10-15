@@ -17,6 +17,7 @@ import (
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/skill"
+	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/progress"
 	"agentflow-platform/apps/api/internal/verification"
 )
@@ -53,6 +54,9 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	snapshot, err := m.runtime.snapshotForRun(request.RunID)
 	if err != nil {
 		return turn.Result{}, err
+	}
+	if snapshot.ExecutionConstraint == domain.ExecutionPlanOnly {
+		request.SystemPrompt += planningGuidance
 	}
 	// Planner/reviewer/finalizer prompts are synthetic internal stages, not
 	// independent persisted Agents. They inherit the Run's authorized owner.
@@ -131,7 +135,12 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	if request.Role == "planner" {
 		schema = domain.ToolSchemaConfig{Mode: "eager"}
 	}
-	return m.executeStream(ctx, request, route.Client, schema, emit)
+	options := m.runtime.toolExecutionOptions
+	options.PlanOnly = snapshot.ExecutionConstraint == domain.ExecutionPlanOnly
+	// Reviewed plans contain private file-derived content even if ordinary
+	// Conversation history is trimmed from this new Run's Context.
+	options.PrivateContext = options.PrivateContext || snapshot.PlanOrigin != nil
+	return m.executeStream(ctx, request, route.Client, schema, options, emit)
 }
 
 func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.Request, snapshot *domain.RuntimeSnapshot, isolatedContext bool) (context.Context, *domain.ContextCompaction) {
@@ -198,8 +207,7 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 	return contextassembly.WithSession(ctx, session), compaction
 }
 
-func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client provider.Client, schema domain.ToolSchemaConfig, emit func(turn.ModelEvent)) (turn.Result, error) {
-	options := m.runtime.toolExecutionOptions
+func (m runtimeTurnModel) executeStream(ctx context.Context, request turn.Request, client provider.Client, schema domain.ToolSchemaConfig, options tool.ExecutorOptions, emit func(turn.ModelEvent)) (turn.Result, error) {
 	continuation, err := decodeContinuation(request.Continuation)
 	if err != nil {
 		return turn.Result{}, err

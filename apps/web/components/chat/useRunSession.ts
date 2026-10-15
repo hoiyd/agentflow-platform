@@ -15,7 +15,7 @@ import type { PartialOutput, RunProjectionSnapshot, ToolProgress } from "../../l
 import { applyToolProgress, restoreToolProgress } from "../../lib/tool-progress";
 
 type Command =
-  | { kind: "submitting"; content: string; mode: ChatMode; agentId: string; completionContract?: CompletionContractInput }
+  | { kind: "submitting"; content: string; mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only" }
   | { kind: "continuing"; plan: string; requirements: AgentRoutingRequirements }
   | { kind: "resuming"; input: string; questionId?:string; answer?:ClarificationAnswerRequest };
 type Activity = "idle" | Command["kind"];
@@ -137,6 +137,7 @@ export function useRunSession(options: SessionOptions) {
           return;
         }
         setRunState({ id: run.id, agentId: run.agentId, status: snapshot.run.status,
+          executionConstraint: run.executionConstraint,
           verificationStatus: snapshot.run.verification_status });
         restoreOutputs(snapshot);
         reloadStoppedRun(snapshot.run.status);
@@ -217,6 +218,7 @@ export function useRunSession(options: SessionOptions) {
     workspace.setMessages((items) => [...items, ...drafts]);
     let accepted = false;
     const handle = createHandler({
+      defaultExecutionConstraint: command.kind === "submitting" ? command.executionConstraint : previousRun?.executionConstraint,
       assistantDraftId: assistant.id,
       defaultVerificationStatus: command.kind === "submitting"
         ? command.completionContract ? "pending" : "not_required"
@@ -238,7 +240,7 @@ export function useRunSession(options: SessionOptions) {
     try {
       if (command.kind === "submitting") {
         await streamChat({ conversation_id: conversationId || undefined, agent_id: command.agentId || undefined,
-          mode: command.mode, message: command.content, completion_contract: command.completionContract }, onEvent, request.signal);
+          mode: command.mode, message: command.content, completion_contract: command.completionContract, execution_constraint: command.executionConstraint }, onEvent, request.signal);
       } else if (command.kind === "continuing") {
         await continueRun({ run_id: runId, plan: command.plan, routing_requirements: command.requirements }, onEvent, request.signal);
       } else {
@@ -297,6 +299,7 @@ export function useRunSession(options: SessionOptions) {
       const canceled = await cancelRun(run.id);
       if (!isCurrent()) return;
       setRunState({ id: canceled.id, agentId: canceled.agent_id, status: canceled.status,
+        executionConstraint: canceled.execution_constraint,
         verificationStatus: canceled.verification_status ?? "not_required" });
     } catch (error) {
       if (!isCurrent()) return;
@@ -309,7 +312,7 @@ export function useRunSession(options: SessionOptions) {
   return {
     runState, setRunState, trace, activity, reasoning, partialOutputs, toolProgress, restoreOutputs, isCancelingRun, clearRun, detach, cancel,
     isStreaming: activity !== "idle", isContinuingRun: activity === "continuing", isResumingRun: activity === "resuming",
-    submit: (content: string, settings: { mode: ChatMode; agentId: string; completionContract?: CompletionContractInput }) =>
+    submit: (content: string, settings: { mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only" }) =>
       content.trim() ? execute({ kind: "submitting", content: content.trim(), ...settings }) : Promise.resolve(),
     continuePlan: (plan?: string, requirements?: AgentRoutingRequirements) => {
       const current = latest.current.trace;

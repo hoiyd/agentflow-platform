@@ -30,6 +30,7 @@ import { ToolProgressPanel } from "../chat/ToolProgressPanel";
 import { ClarificationPanel } from "../chat/ClarificationPanel";
 import { useClarifications } from "../chat/useClarifications";
 import { StructuredResult } from "./StructuredResult";
+import { PlanningPanel } from "./PlanningPanel";
 
 type Props = {
   runId: string;
@@ -219,6 +220,7 @@ function RunReplayView({ runId, initialEventId }: Props) {
 
       {episodeReport ? <EpisodeReportPanel report={episodeReport} /> : null}
       <StructuredResult result={replay.structured_result} />
+      <PlanningPanel replay={replay} />
       {episodeReportError ? (
         <div className="replay-secondary-error" role="status">
           Episode report unavailable: {episodeReportError}
