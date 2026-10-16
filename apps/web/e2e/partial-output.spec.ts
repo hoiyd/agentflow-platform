@@ -47,16 +47,19 @@ test(`${mode}: committed answer and reasoning survive refresh, reset and cancell
   const after = await (await request.get(`${api}/__fixture/contracts`)).json();
   expect(after.requests).toBe(contracts.requests);
   await page.locator(".topbar").getByRole("button", { name: "Stop", exact: true }).click();
+  await expect.poll(async () => (await projection()).run.status).toBe("canceled");
   await expect(page.getByLabel("Task status: canceled", { exact: true })).toBeVisible();
   await expect(recovered).toContainText("Incomplete");
   await page.reload();
+  await expect(page.getByLabel("Task status: canceled", { exact: true })).toBeVisible();
   await expect(recovered).toContainText("Recover this answer");
   await expect(recovered).toContainText("Incomplete");
   const saved = await projection();
+  expect(saved.run.status).toBe("canceled");
   expect(saved.partial_outputs.every((item: { status: string }) => item.status === "interrupted")).toBe(true);
   await test.info().attach("durable-partial-output-evidence", { body: JSON.stringify({
     mode, run_id: id, projection: saved, provider_requests_before_reload: contracts.requests,
-    provider_requests_after_reload: after.requests, checks: ["answer reset", "refresh", "reasoning redaction", "cancellation", "durable replacement"],
+    provider_requests_after_reload: after.requests, checks: ["answer reset", "refresh", "reasoning redaction", "cancellation", "durable canceled status before and after reload", "durable replacement"],
     limitations: ["deterministic provider fixture, real browser and disposable Postgres", "no model request resumption"]
   }, null, 2), contentType: "application/json" });
 });

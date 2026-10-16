@@ -14,13 +14,19 @@ type runProjectionRead struct {
 // Keep this dependency list aligned with runtimeinvariant.DefaultRegistry and
 // Skill evidence. Recovery does not need messages, artifacts or checkpoints.
 func (h *Handler) loadRunProjection(scoped store.WorkspaceStore, id string) (runProjectionRead, bool, error) {
+	// ListRunEvents already authorizes the Run. Read its mutable status after
+	// the event watermark, or a stopping event can be acknowledged with an old
+	// status and never delivered again to the newly registered subscriber.
+	events, err := scoped.ListRunEvents(id)
+	if store.IsNotFound(err) {
+		return runProjectionRead{}, false, nil
+	}
+	if err != nil {
+		return runProjectionRead{}, false, err
+	}
 	run, ok, err := scoped.GetRun(id)
 	if err != nil || !ok {
 		return runProjectionRead{}, ok, err
-	}
-	events, err := scoped.ListRunEvents(id)
-	if err != nil {
-		return runProjectionRead{}, false, err
 	}
 	ledger, ok, err := scoped.GetRunUsageLedger(id)
 	if err != nil {

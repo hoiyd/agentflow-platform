@@ -95,6 +95,12 @@ registration per Run. A durable event committed during that handoff is either
 included at the snapshot watermark or buffered after it, never lost between
 the two. Durable events are published only after Store commit succeeds.
 
+The scoped loader reads durable events before the mutable Run record: status
+must not lag a stopping event already included at the watermark, otherwise a
+new subscriber could acknowledge that event while remaining stuck in an active
+state. This ordering is not a transactional snapshot of every input; records
+may be newer than the event watermark.
+
 Subscriber backpressure never blocks execution. A subscriber that exhausts
 its bounded buffer receives typed `event_subscriber_lagged`, disconnects, and
 reconnects from its last durable sequence. Durable notifications are buffered
