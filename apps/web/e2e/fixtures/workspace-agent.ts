@@ -22,7 +22,9 @@ export async function createWorkspaceChatAgent(page: Page, workspaceID: string, 
   const agent: AgentInfo = await response.json();
   expect(agent.workspace_id).toBe(workspaceID);
   expect(agent.is_template).toBe(false);
-  await page.reload();
+  // Reloading a Replay (or an uncommitted back navigation) never mounts Chat.
+  // Select the destination explicitly before waiting for workbench readiness.
+  await page.goto("/workspace");
   await expect(page.getByText("API connected", { exact: true })).toBeVisible();
   // An existing staged Run owns its composer; select only in a fresh Chat.
   await page.getByRole("button", { name: "New conversation", exact: true }).click();
