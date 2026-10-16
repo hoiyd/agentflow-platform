@@ -44,6 +44,7 @@ Write or update this inventory before adding isolated fixtures.
 | Earlier cases leave conversation titles containing mode labels | Mode selection is scoped to the named Chat mode region, never the sidebar's conversation or delete buttons; run the affected gate in CI order, not only the new case |
 | Earlier cases leave Workers with the same routing capability | Each scenario declares and requests its own capability; exercise the real Router without weakening score-margin gates to bypass fixture collisions |
 | A Chat gate assumes global Agents or relies on earlier test data | Create and select an owned Workspace Agent through the real API/UI; assert its ID in the persisted Run and run the gate independently |
+| Agent setup starts on Replay or before back navigation commits | Enter `/workspace` explicitly before waiting for Chat readiness and selecting a fresh Conversation; do not reload an assumed destination |
 | Navigation occurs during execution, cancellation, or observation | Local requests detach; their late events, errors and snapshots cannot change the new conversation |
 | Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |
 | Clarification vanishes on reload, enters the wrong Stage, or resets the Run | Three-mode question gates retain questions/answers, reject oversized replies without losing the question, preserve Snapshot and verify Replay receipts |

@@ -53,10 +53,14 @@ test("scoped writes: save, patch, reject conflicts, persist receipts and reload 
       await page.getByRole("button", { name: /^tool.completed/ }).last().click();
       await page.getByText("Raw event payload", { exact: true }).click();
       await expect(page.locator(".event-detail pre")).toContainText("Verified report evidence");
-      await page.getByRole("link", { name: "Back to chat", exact: true }).click();
+      // Keep the final Replay open: Agent setup must establish its own Chat
+      // boundary, even before a pending back navigation could have committed.
+      if (mode !== "Bounded loop") await page.getByRole("link", { name: "Back to chat", exact: true }).click();
     }
     // A trusted Skill is guidance, not authority: a reader still has no writer schema.
+    await expect(page.getByRole("heading", { name: "Run replay", exact: true })).toBeVisible();
     const reader = await createWorkspaceChatAgent(page, workspace, "Report reader", { tools: ["file_read"], skills: ["fixture-method"] });
+    await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
     try {
       await page.getByPlaceholder("Ask AgentFlow anything...").fill("filesystem-write-denied-gate: use the report skill but do not grant write permissions");
       await page.getByRole("button", { name: "Send message", exact: true }).click();
@@ -72,7 +76,7 @@ test("scoped writes: save, patch, reject conflicts, persist receipts and reload 
       expect((await request.delete(`http://127.0.0.1:18080/api/agents/${reader.id}`, { headers: { "X-Workspace-ID": workspace } })).ok()).toBe(true);
     }
     await test.info().attach("filesystem-write-evidence.json", {
-      body: JSON.stringify({ schema: "scoped-filesystem-write-browser-v1", workspace_id: workspace, fixture: "app/browser_filesystem_write_test.go", roots: ["output", "project"], runs, checks: ["real files / production composition / disposable Postgres", "Skill does not grant authority", "create -> read -> hash patch -> read", "pre-write failures settled", "all modes", "Replay reload"], limitations: ["deterministic model", "managed flat output root only", "recovery fault windows covered separately by Postgres integration"] }, null, 2), contentType: "application/json"
+      body: JSON.stringify({ schema: "scoped-filesystem-write-browser-v1", workspace_id: workspace, fixture: "app/browser_filesystem_write_test.go", roots: ["output", "project"], runs, checks: ["real files / production composition / disposable Postgres", "Skill does not grant authority", "create -> read -> hash patch -> read", "pre-write failures settled", "all modes", "Replay reload", "owned Agent setup from Replay enters a fresh Chat"], limitations: ["deterministic model", "managed flat output root only", "recovery fault windows covered separately by Postgres integration"] }, null, 2), contentType: "application/json"
     });
   } finally {
     expect((await request.delete(`http://127.0.0.1:18080/api/agents/${agent.id}`, { headers: { "X-Workspace-ID": workspace } })).ok()).toBe(true);
