@@ -16,22 +16,25 @@ const (
 )
 
 type Run struct {
-	ID                 string              `json:"id"`
-	WorkspaceID        string              `json:"workspace_id"`
-	AgentID            string              `json:"agent_id"`
-	ConversationID     string              `json:"conversation_id"`
-	Status             RunStatus           `json:"status"`
-	RuntimeSnapshot    *RuntimeSnapshot    `json:"runtime_snapshot,omitempty"`
-	CompletionContract *CompletionContract `json:"completion_contract,omitempty"`
-	VerificationStatus VerificationStatus  `json:"verification_status"`
-	Error              string              `json:"error,omitempty"`
-	StartedAt          *time.Time          `json:"started_at,omitempty"`
-	ExecutionStartedAt *time.Time          `json:"execution_started_at,omitempty"`
-	ActiveRuntimeMS    int64               `json:"active_runtime_ms"`
-	HeartbeatAt        *time.Time          `json:"heartbeat_at,omitempty"`
-	CompletedAt        *time.Time          `json:"completed_at,omitempty"`
-	CreatedAt          time.Time           `json:"created_at"`
-	UpdatedAt          time.Time           `json:"updated_at"`
+	// ExecutionConstraint is public read metadata, derived from RuntimeSnapshot
+	// when HTTP removes the full Snapshot. It is never an authorization source.
+	ExecutionConstraint string              `json:"execution_constraint,omitempty"`
+	ID                  string              `json:"id"`
+	WorkspaceID         string              `json:"workspace_id"`
+	AgentID             string              `json:"agent_id"`
+	ConversationID      string              `json:"conversation_id"`
+	Status              RunStatus           `json:"status"`
+	RuntimeSnapshot     *RuntimeSnapshot    `json:"runtime_snapshot,omitempty"`
+	CompletionContract  *CompletionContract `json:"completion_contract,omitempty"`
+	VerificationStatus  VerificationStatus  `json:"verification_status"`
+	Error               string              `json:"error,omitempty"`
+	StartedAt           *time.Time          `json:"started_at,omitempty"`
+	ExecutionStartedAt  *time.Time          `json:"execution_started_at,omitempty"`
+	ActiveRuntimeMS     int64               `json:"active_runtime_ms"`
+	HeartbeatAt         *time.Time          `json:"heartbeat_at,omitempty"`
+	CompletedAt         *time.Time          `json:"completed_at,omitempty"`
+	CreatedAt           time.Time           `json:"created_at"`
+	UpdatedAt           time.Time           `json:"updated_at"`
 }
 
 type CollaborationStepStatus string
@@ -62,11 +65,13 @@ type CollaborationStep struct {
 }
 
 type ChatRequest struct {
-	WorkspaceID    string `json:"workspace_id,omitempty"`
-	ConversationID string `json:"conversation_id"`
-	AgentID        string `json:"agent_id"`
-	Message        string `json:"message"`
-	Mode           string `json:"mode"`
+	ExecutionConstraint string      `json:"execution_constraint,omitempty"`
+	PlanOrigin          *PlanOrigin `json:"plan_origin,omitempty"`
+	WorkspaceID         string      `json:"workspace_id,omitempty"`
+	ConversationID      string      `json:"conversation_id"`
+	AgentID             string      `json:"agent_id"`
+	Message             string      `json:"message"`
+	Mode                string      `json:"mode"`
 	// CompletionContract explicitly enables Verification for the new Run.
 	// Omitting it leaves verification_status=not_required in every mode.
 	CompletionContract *CompletionContract `json:"completion_contract,omitempty"`

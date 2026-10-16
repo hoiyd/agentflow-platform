@@ -223,6 +223,20 @@ jobs:
             apps/web/playwright-report
           retention-days: 14
           if-no-files-found: warn
+      - name: Run read-only planning gate
+        env:
+          AGENTFLOW_PLANNING_TEST: '1'
+        run: npm run test:e2e -- planning.spec.ts
+      - name: Retain read-only planning evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: read-only-planning-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
       - name: Run scoped filesystem write gate
         env:
           AGENTFLOW_FILESYSTEM_WRITE_TEST: '1'

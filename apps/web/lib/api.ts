@@ -112,6 +112,14 @@ export async function streamChat(
   onEvent: (event: ChatEvent) => void,
   signal?: AbortSignal
 ) {
+  if (input.execution_constraint === "plan_only" || input.plan_origin) {
+    // Older servers ignore unknown JSON fields. Never silently submit a
+    // restricted request to a backend that cannot enforce its protocol.
+    const health = await getAPIHealth(signal);
+    if (health.planning_contract_version !== "read-only-plan-v1") {
+      throw new Error("Backend does not support read-only planning. Update or restart the backend before trying again.");
+    }
+  }
   const response = await apiRequest(
     "/api/chat",
     {

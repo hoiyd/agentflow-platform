@@ -19,6 +19,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/identity"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
+	"agentflow-platform/apps/api/internal/planning"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tool"
@@ -153,7 +154,7 @@ func (h *Handler) Routes() http.Handler {
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "planning_contract_version": planning.Version})
 }
 
 func (h *Handler) withCORS(next http.Handler) http.Handler {

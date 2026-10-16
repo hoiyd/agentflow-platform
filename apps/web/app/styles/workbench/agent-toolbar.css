@@ -71,7 +71,9 @@
 
 .composer-skill-select .selection-popup { width: 320px; left: auto; right: 0; }
 
-.agent-run-policy { border-left: 1px solid var(--border); padding-left: 12px; margin-left: 4px; }
+.agent-run-policy { border-left: 1px solid var(--border); padding-left: 12px; margin-left: 4px; display: flex; align-items: center; gap: 12px; }
+.planning-toggle { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; color: var(--muted-strong); }
+.planning-toggle input { margin: 0; accent-color: var(--accent); }
 .agent-actions .verification-config-toggle { color: var(--muted-strong); }
 .agent-actions .verification-config-toggle.active { border-color: var(--accent); color: var(--accent); }
 

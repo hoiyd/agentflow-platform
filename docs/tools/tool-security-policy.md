@@ -1,5 +1,10 @@
 # Tool Security Policy and Scope
 
+[Read-only planning](../runtime/read-only-planning.md) intersects existing grants
+with local no-side-effect, read-access capabilities. Write schemas are removed
+from the frozen candidates; Executor also rejects forged calls before executing
+them. A Skill, concurrency hint or plan approval cannot expand authority.
+
 AgentFlow authorizes every Tool Call in the shared Executor before Run Budget
 accounting, side-effect intent creation, or handler execution. Effective
 authority is the intersection of three independent controls:

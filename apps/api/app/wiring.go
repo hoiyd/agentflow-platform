@@ -221,6 +221,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 
 	clarifications := observableClarifications{Store: workspaceStore, publish: appStore.publishCommitted}
 	agentRuntime, err = agent.NewRuntime(agent.RuntimeOptions{
+		PlanningSources: filesystemTools,
 		Inbox:           workspaceStore,
 		Clarifications:  clarifications,
 		Store:           appStore,

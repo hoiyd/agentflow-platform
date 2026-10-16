@@ -175,6 +175,7 @@ function projectRunEvent(event: ChatEvent | RunEvent): ChatEvent {
     status: stringValue(payload.status) ?? event.type.slice("stage.".length), iteration: numberValue(payload.iteration),
     input: stringValue(payload.input), output: stringValue(payload.output), error: stringValue(payload.error)
   };
+  if (event.type === "run.plan_recorded") return { type: "model_delta", delta: "" };
   if (event.type.startsWith("run.")) return {
     type: "run_state", conversation_id: event.conversation_id ?? "", run_id: event.run_id,
     agent_id: stringValue(payload.agent_id) ?? "", status: runStatusValue(payload.status) ?? fallbackRunStatus(event.type)

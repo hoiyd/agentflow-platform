@@ -15,6 +15,7 @@ export type DraftMessage = Pick<Message, "role" | "content" | "citations" | "web
 };
 
 export type RunState = {
+  executionConstraint?: string;
   id: string;
   agentId: string;
   status: string;
@@ -22,6 +23,7 @@ export type RunState = {
 };
 
 type RunEventProjectionOptions = {
+  defaultExecutionConstraint?: string;
   assistantDraftId: string;
   defaultVerificationStatus: string;
   fallbackAgentId: string;
@@ -48,6 +50,7 @@ export function createRunEventHandler(options: RunEventProjectionOptions) {
     }
     if (event.type === "run_state") {
       options.setRunState((current) => ({
+        executionConstraint: options.defaultExecutionConstraint ?? (current?.id === event.run_id ? current.executionConstraint : undefined),
         id: event.run_id,
         agentId: event.agent_id || current?.agentId || options.fallbackAgentId,
         status: event.status,
@@ -83,6 +86,7 @@ export function createRunEventHandler(options: RunEventProjectionOptions) {
         )
       );
       options.setRunState((current) => ({
+        executionConstraint: options.defaultExecutionConstraint ?? current?.executionConstraint,
         id: event.run_id ?? current?.id ?? options.fallbackRunId,
         agentId: event.agent_id ?? current?.agentId ?? options.fallbackAgentId,
         status: event.status ?? "completed",

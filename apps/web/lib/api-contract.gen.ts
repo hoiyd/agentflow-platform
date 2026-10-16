@@ -876,6 +876,8 @@ export interface components {
             request_id?: string;
         };
         HealthResponse: {
+            /** @description Supported read-only planning protocol. Absence means the client must not submit planning or plan execution requests. */
+            planning_contract_version?: string;
             /** @enum {string} */
             status: "ok";
         };
@@ -943,6 +945,12 @@ export interface components {
             hash: string;
         };
         ChatRequest: {
+            /**
+             * @description Frozen read-only restriction; omit for ordinary execution.
+             * @enum {string}
+             */
+            execution_constraint?: "plan_only";
+            plan_origin?: components["schemas"]["PlanOrigin"];
             workspace_id?: string;
             conversation_id?: string;
             agent_id?: string;
@@ -953,6 +961,27 @@ export interface components {
         ContinueRunRequest: {
             plan: string;
             routing_requirements?: components["schemas"]["AgentRoutingRequirements"];
+        };
+        PlanOrigin: {
+            run_id: string;
+            hash: string;
+        };
+        PlanSource: {
+            root: string;
+            path: string;
+            root_revision: string;
+            file_id: string;
+            content_hash: string;
+        };
+        RunPlan: {
+            version: string;
+            run_id: string;
+            input: string;
+            proposal: string;
+            sources: components["schemas"]["PlanSource"][];
+            /** Format: date-time */
+            expires_at: string;
+            hash: string;
         };
         AgentRoutingRequirements: {
             required_tools?: string[];
@@ -1139,6 +1168,8 @@ export interface components {
             unavailable_reason?: string;
         };
         Run: {
+            /** @description Derived from the frozen Snapshot; omission means ordinary execution. */
+            readonly execution_constraint?: string;
             id: string;
             workspace_id: string;
             agent_id: string;
@@ -1808,6 +1839,7 @@ export interface components {
             verification: components["schemas"]["EpisodeVerification"];
         };
         RunReplay: {
+            plan?: components["schemas"]["RunPlan"];
             run: components["schemas"]["Run"];
             projection: components["schemas"]["RunProjectionSnapshot"];
             runtime_snapshot?: {

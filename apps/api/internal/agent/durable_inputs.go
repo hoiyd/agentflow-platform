@@ -26,6 +26,9 @@ func WithFollowupInput(ctx context.Context, id, owner string, allowStopped bool)
 }
 
 func (r *Runtime) createRun(ctx context.Context, agentID, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
+	if err := freezeExecutionIntent(ctx, &snapshot); err != nil {
+		return domain.Run{}, err
+	}
 	if input, ok := ctx.Value(followupKey{}).(followupInput); ok && r.inbox != nil {
 		return r.inbox.CreateInputRun(ctx, input.id, input.owner, input.allowStopped, agentID, conversationID, snapshot, contract)
 	}

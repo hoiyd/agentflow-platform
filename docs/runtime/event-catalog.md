@@ -47,6 +47,7 @@ This file is generated from `apps/api/internal/eventcatalog`. Producers must use
 | `run.completed` | durable | 1 | run | agent/httpapi | `event.RunStatusPayload` | run:terminal | `run.created` | run_projection, replay |
 | `run.created` | durable | 1 | run | agent/httpapi | `event.RunStatusPayload` | run:start | `` | run_projection, replay |
 | `run.failed` | durable | 1 | run | agent/httpapi | `event.RunStatusPayload` | run:terminal | `run.created` | run_projection, replay |
+| `run.plan_recorded` | durable | 1 | run | app/runcompletion | `event.PlanPayload` | none | `` | planning, replay |
 | `run.progress` | live | 1 | run | agent/httpapi | `event.RunProgressPayload` | none | `` | live_ui |
 | `run.resumed` | durable | 1 | run | agent/httpapi | `event.RunStatusPayload` | run:transition | `` | run_projection, replay |
 | `run.revision_requested` | durable | 1 | run | verification | `event.TracePayload` | run:transition | `` | run_projection, replay |

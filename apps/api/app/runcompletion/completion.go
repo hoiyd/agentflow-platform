@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/event"
+	"agentflow-platform/apps/api/internal/planning"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/verification"
 )
@@ -128,6 +130,36 @@ func Resolve(ctx context.Context, scoped store.WorkspaceStore, dependencies Depe
 	if !ok {
 		return domain.Run{}, errors.New("run not found")
 	}
+	if run.RuntimeSnapshot != nil && run.RuntimeSnapshot.ExecutionConstraint == domain.ExecutionPlanOnly {
+		if strings.TrimSpace(question) == "" {
+			messages, err := scoped.ListMessages(run.ConversationID)
+			if err != nil {
+				return domain.Run{}, err
+			}
+			for _, message := range messages {
+				if message.Role == "user" && !message.CreatedAt.After(run.CreatedAt) {
+					question = message.Content
+				}
+			}
+		}
+		items, err := scoped.ListRunEvents(run.ID)
+		if err != nil {
+			return domain.Run{}, err
+		}
+		if planning.Read(items) == nil {
+			plan, err := planning.Record(run, question, output, items)
+			if err != nil {
+				return domain.Run{}, err
+			}
+			item, err := event.NewRunEvent(domain.EventPlanRecorded, event.EventMetadata{RunID: run.ID, ConversationID: run.ConversationID}, event.PlanPayload{RunPlan: plan})
+			if err != nil {
+				return domain.Run{}, err
+			}
+			if _, err := scoped.CreateRunEvent(item); err != nil {
+				return domain.Run{}, err
+			}
+		}
+	}
 	// Verification is opt-in per Run. Server verifier configuration only makes
 	// implementations available; it never changes an uncontracted chat Run.
 	if run.CompletionContract == nil {
@@ -194,6 +226,16 @@ func Reverify(ctx context.Context, scoped store.WorkspaceStore, dependencies Dep
 		return VerificationResult{}, ErrNoCandidate
 	}
 	question := latestUserInput(messages)
+	if run.RuntimeSnapshot != nil && run.RuntimeSnapshot.ExecutionConstraint == domain.ExecutionPlanOnly {
+		items, err := scoped.ListRunEvents(run.ID)
+		if err != nil {
+			return VerificationResult{}, err
+		}
+		plan := planning.Read(items)
+		if plan == nil || plan.Input != question || plan.Proposal != output {
+			return VerificationResult{}, ErrNoCandidate
+		}
+	}
 	if run.CompletionContract.Output != nil {
 		// Conversation history can advance after this Run. Reverify may refresh
 		// checks on the original subject, never adopt another Run's candidate.

@@ -1263,6 +1263,9 @@ components:
       type: object
       required: [status]
       properties:
+        planning_contract_version:
+          type: string
+          description: Supported read-only planning protocol. Absence means the client must not submit planning or plan execution requests.
         status:
           type: string
           enum: [ok]
@@ -1371,6 +1374,12 @@ components:
       type: object
       required: [message]
       properties:
+        execution_constraint:
+          type: string
+          enum: [plan_only]
+          description: Frozen read-only restriction; omit for ordinary execution.
+        plan_origin:
+          $ref: '#/components/schemas/PlanOrigin'
         workspace_id:
           type: string
         conversation_id:
@@ -1392,6 +1401,32 @@ components:
           type: string
         routing_requirements:
           $ref: '#/components/schemas/AgentRoutingRequirements'
+    PlanOrigin:
+      type: object
+      required: [run_id, hash]
+      properties:
+        run_id: { type: string }
+        hash: { type: string }
+    PlanSource:
+      type: object
+      required: [root, path, root_revision, file_id, content_hash]
+      properties:
+        root: { type: string }
+        path: { type: string }
+        root_revision: { type: string }
+        file_id: { type: string }
+        content_hash: { type: string }
+    RunPlan:
+      type: object
+      required: [version, run_id, input, proposal, sources, expires_at, hash]
+      properties:
+        version: { type: string }
+        run_id: { type: string }
+        input: { type: string }
+        proposal: { type: string }
+        sources: { type: array, items: { $ref: '#/components/schemas/PlanSource' } }
+        expires_at: { type: string, format: date-time }
+        hash: { type: string }
     AgentRoutingRequirements:
       type: object
       properties:
@@ -1726,6 +1761,10 @@ components:
       type: object
       required: [id, workspace_id, agent_id, conversation_id, status, verification_status, active_runtime_ms, created_at, updated_at]
       properties:
+        execution_constraint:
+          type: string
+          readOnly: true
+          description: Derived from the frozen Snapshot; omission means ordinary execution.
         id:
           type: string
         workspace_id:
@@ -2505,6 +2544,7 @@ components:
       type: object
       required: [run, projection, conversation, messages, steps, summary, usage_ledger, run_events, stage_checkpoints, tool_effects, tool_artifacts, verification_evidence, verification_artifacts, task_state_revisions]
       properties:
+        plan: { $ref: '#/components/schemas/RunPlan' }
         run:
           $ref: '#/components/schemas/Run'
         projection:

@@ -7,6 +7,8 @@ import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 import { SelectionMenu } from "../ui/SelectionMenu";
 
 type ChatComposerProps = {
+  planOnly?: boolean;
+  onPlanOnlyChange?: (value: boolean) => void;
   inbox?: ReactNode;
   activeAgent?: AgentInfo;
   activeAgentId: string;
@@ -69,6 +71,10 @@ export function ChatComposer(props: ChatComposerProps) {
   const hasAutomaticSkill = boundSkills.some(name => skillReadiness(props.availableSkills?.find(item => item.name === name), activeAgent!, props.availableTools).policy === "automatic");
 
   const verificationButton = (
+    <>
+    <label className="planning-toggle"><input type="checkbox" checked={props.planOnly ?? false}
+      disabled={readOnly || isStreaming || isAwaitingClarification || isAwaitingHumanInput || isAwaitingPlanApproval}
+      onChange={event => props.onPlanOnlyChange?.(event.target.checked)} />Read-only planning</label>
     <button
       aria-pressed={completionVerificationEnabled}
       className={`verification-config-toggle ${completionVerificationEnabled ? "active" : ""}`}
@@ -79,6 +85,7 @@ export function ChatComposer(props: ChatComposerProps) {
       <ShieldCheck size={15} /><span>Verification</span>
       <strong>{completionVerificationEnabled ? "On" : "Off"}</strong>
     </button>
+    </>
   );
 
   return (

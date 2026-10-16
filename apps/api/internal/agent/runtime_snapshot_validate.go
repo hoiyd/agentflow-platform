@@ -15,6 +15,19 @@ func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	if snapshot == nil {
 		return ErrRuntimeSnapshotUnavailable
 	}
+	if snapshot.ExecutionConstraint != "" && snapshot.ExecutionConstraint != domain.ExecutionPlanOnly {
+		return errors.New("invalid frozen execution constraint")
+	}
+	if snapshot.ExecutionConstraint == domain.ExecutionPlanOnly {
+		if snapshot.PlanOrigin != nil {
+			return errors.New("planning Snapshot cannot carry execution approval")
+		}
+		for _, item := range snapshot.Tools {
+			if !policy.AllowsPlanning(item.Security) {
+				return errors.New("planning Snapshot contains a mutable Tool")
+			}
+		}
+	}
 	if snapshot.SchemaVersion != domain.CurrentRuntimeSnapshotVersion {
 		return errors.Join(
 			ErrRuntimeSnapshotResumeUnsupported,

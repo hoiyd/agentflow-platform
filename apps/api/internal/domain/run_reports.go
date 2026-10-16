@@ -2,6 +2,7 @@ package domain
 
 // RunReplay is the detailed aggregate assembled from persisted Run records.
 type RunReplay struct {
+	Plan                  *RunPlan               `json:"plan,omitempty"`
 	Run                   Run                    `json:"run"`
 	Projection            RunProjectionSnapshot  `json:"projection"`
 	RuntimeSnapshot       *RuntimeSnapshot       `json:"runtime_snapshot,omitempty"`

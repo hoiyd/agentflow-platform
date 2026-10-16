@@ -40,7 +40,7 @@ func browserFilesystemConfig(t *testing.T, cfg *config.Config, root string) {
 	}
 	cfg.FilesystemRootsPath = filepath.Join(root, "filesystem-roots.json")
 	data, _ := json.Marshal(map[string]any{"roots": []filesystem.RootConfig{{ID: "project", WorkspaceID: workspace, Path: project}}})
-	if os.Getenv("AGENTFLOW_FILESYSTEM_WRITE_TEST") == "1" {
+	if os.Getenv("AGENTFLOW_FILESYSTEM_WRITE_TEST") == "1" || os.Getenv("AGENTFLOW_PLANNING_TEST") == "1" {
 		output := filepath.Join(root, "output")
 		if err = os.Mkdir(output, 0700); err != nil {
 			t.Fatal(err)

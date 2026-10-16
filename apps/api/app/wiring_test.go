@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/inference/openai"
 	"agentflow-platform/apps/api/internal/inference/routing"
+	"agentflow-platform/apps/api/internal/planning"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
 )
 
@@ -214,8 +216,9 @@ func TestNewApplicationWiresHealthRoute(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("health status: got %d body=%s", response.Code, response.Body.String())
 	}
-	if got := response.Body.String(); got != "{\"status\":\"ok\"}\n" {
-		t.Fatalf("health body: got %q", got)
+	var health map[string]string
+	if err := json.Unmarshal(response.Body.Bytes(), &health); err != nil || !reflect.DeepEqual(health, map[string]string{"status": "ok", "planning_contract_version": planning.Version}) {
+		t.Fatalf("health contract: got %s err=%v", response.Body.String(), err)
 	}
 	response = httptest.NewRecorder()
 	application.server.Handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/skills", nil))

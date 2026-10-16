@@ -26,6 +26,7 @@ export type ChatView = "chat" | "tools" | "knowledge" | "memory" | "attention";
 export type APIConnectionStatus = "checking" | "connected" | "unavailable";
 
 export type VisibleRunState = {
+  executionConstraint?: string;
   id: string;
   status: string;
   verificationStatus: string;
@@ -275,6 +276,7 @@ export function Topbar({
           </button>
         ) : null}
         {view === "chat" && runState ? <RunStatus runState={runState} /> : null}
+        {view === "chat" && runState?.executionConstraint === "plan_only" ? <span className="run-status-indicator" aria-label="Execution restriction: read-only planning"><ClipboardList size={14} />Read-only plan</span> : null}
         {view === "chat" && runState && runState.verificationStatus !== "not_required" ? (
           <span
             aria-label={`Verification status: ${runState.verificationStatus.replaceAll("_", " ")}`}

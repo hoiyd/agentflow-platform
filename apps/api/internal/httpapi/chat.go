@@ -14,6 +14,10 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+	if input.ExecutionConstraint != nil && !input.ExecutionConstraint.Valid() {
+		writeError(w, http.StatusBadRequest, "unsupported execution_constraint")
+		return
+	}
 	req := chatRequestFromContract(input)
 	workspace, matches := resolvePayloadWorkspace(r, req.WorkspaceID)
 	if !matches {
