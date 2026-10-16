@@ -47,6 +47,7 @@ Write or update this inventory before adding isolated fixtures.
 | Agent setup starts on Replay or before back navigation commits | Enter `/workspace` explicitly before waiting for Chat readiness and selecting a fresh Conversation; do not reload an assumed destination |
 | Navigation occurs during execution, cancellation, or observation | Local requests detach; their late events, errors and snapshots cannot change the new conversation |
 | Observed historical events precede the canonical snapshot | Stage details rebuild without regressing the snapshot's current Run status; stopped Runs reload persisted messages once |
+| A Run stops while the observer snapshot is loading | A controlled read-boundary regression prevents stale status from acknowledging the stopping event; three-mode browser recovery gates assert durable and visible cancellation before and after reload |
 | Clarification vanishes on reload, enters the wrong Stage, or resets the Run | Three-mode question gates retain questions/answers, reject oversized replies without losing the question, preserve Snapshot and verify Replay receipts |
 | Steering interrupts a Tool batch, disappears on refresh, or resets budget | The durable inbox gates preserve paired observations, receipts and first-request Manifest references across Single/Multi/Loop, compaction and budget failure |
 

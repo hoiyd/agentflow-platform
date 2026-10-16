@@ -91,12 +91,12 @@ func TestObserveRunEventsValidatesCursorAndRun(t *testing.T) {
 }
 
 func TestObserveRunEventsReportsProjectionFailureBeforeStreaming(t *testing.T) {
-	httpStore, workspace, _ := newBoundaryHTTPStore(t)
+	handler, workspace, run, _ := newBoundaryRunningRun(t, nil)
 	workspace.getRunErr = errors.New("run unavailable")
-	handler := &Handler{store: httpStore, runEvents: event.NewHub(2)}
+	handler.runEvents = event.NewHub(2)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/runs/run-1/events", nil)
-	request.SetPathValue("id", "run-1")
+	request := httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/events", nil)
+	request.SetPathValue("id", run.ID)
 
 	handler.observeRunEvents(recorder, request)
 

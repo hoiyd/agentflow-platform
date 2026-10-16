@@ -167,10 +167,10 @@ func TestGetRunProjectionHandlesInvalidMissingAndStoreFailures(t *testing.T) {
 	})
 
 	t.Run("projection input failure", func(t *testing.T) {
-		httpStore, workspace, _ := newBoundaryHTTPStore(t)
+		handler, workspace, run, _ := newBoundaryRunningRun(t, nil)
 		workspace.getRunErr = errors.New("run unavailable")
 		recorder := httptest.NewRecorder()
-		(&Handler{store: httpStore}).getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/run-1/projection", nil))
+		handler.getRunProjection(recorder, httptest.NewRequest(http.MethodGet, "/api/runs/"+run.ID+"/projection", nil))
 		if recorder.Code != http.StatusInternalServerError {
 			t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 		}
