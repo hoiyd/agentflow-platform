@@ -46,6 +46,8 @@ The default `compacted_history` strategy uses fixed, reviewed compaction
 summaries. This proves assembly, shadowing, budget, and constraint-retention
 behavior; it does not claim that a live model can generate summaries of the
 same quality or that the final answer is correct. No model request is sent.
+The separate [live compaction profile](live-compaction.md) measures generated
+summaries and actual task continuation; it does not change this deterministic gate.
 Each successful sample hashes a canonical final-input payload using the same
 provider-neutral `requestcontrol.Observation` contract as production capture,
 but the offline report stores no prompt content.
