@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag/metadatafilter"
 )
 
 const (
@@ -191,16 +192,7 @@ func contextCandidateMatchesScope(candidate domain.RetrievedDocumentChunk, scope
 	if documentID != scope.DocumentID || !contextDocumentMatchesWorkspace(candidate.Document, scope.WorkspaceID) {
 		return false
 	}
-	for key, expected := range scope.Metadata {
-		value, ok := candidate.Chunk.Metadata[key]
-		if !ok {
-			value, ok = candidate.Document.Metadata[key]
-		}
-		if !ok || strings.TrimSpace(fmt.Sprint(value)) != strings.TrimSpace(expected) {
-			return false
-		}
-	}
-	return true
+	return metadatafilter.Matches(candidate.Document.Metadata, candidate.Chunk.Metadata, scope.Metadata)
 }
 
 func contextDocumentMatchesWorkspace(document domain.Document, workspaceID string) bool {

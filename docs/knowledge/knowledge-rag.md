@@ -84,7 +84,7 @@ HTTP search, Single-Agent, Multi-Agent, and Autonomous runs use the same
 
 1. Normalize and embed the query with the configured embedding provider/model.
 2. Recall independent dense and lexical candidate sets. Both paths apply the
-   requested workspace and metadata filters.
+   requested workspace and [metadata equality filters](metadata-filters.md).
 3. Merge candidates by chunk ID while preserving `vector_rank`,
    `lexical_rank`, and `lexical_score` recall details.
 4. Block candidates that match high-confidence prompt-injection patterns and
