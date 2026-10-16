@@ -2,6 +2,7 @@ package store
 
 import (
 	"agentflow-platform/apps/api/internal/domain"
+	"bytes"
 	"database/sql"
 	"encoding/json"
 )
@@ -44,7 +45,7 @@ func scanDocument(row scanner) (domain.Document, error) {
 		document.MimeType = mimeType.String
 	}
 	if len(metadataJSON) > 0 {
-		if err := json.Unmarshal(metadataJSON, &document.Metadata); err != nil {
+		if err := decodeDocumentMetadata(metadataJSON, &document.Metadata); err != nil {
 			return domain.Document{}, err
 		}
 	}
@@ -81,7 +82,7 @@ func scanDocumentChunk(row scanner) (domain.DocumentChunk, error) {
 		}
 	}
 	if len(metadataJSON) > 0 {
-		if err := json.Unmarshal(metadataJSON, &chunk.Metadata); err != nil {
+		if err := decodeDocumentMetadata(metadataJSON, &chunk.Metadata); err != nil {
 			return domain.DocumentChunk{}, err
 		}
 	}
@@ -145,12 +146,12 @@ func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, err
 		item.Document.MimeType = mimeType.String
 	}
 	if len(documentMetadataJSON) > 0 {
-		if err := json.Unmarshal(documentMetadataJSON, &item.Document.Metadata); err != nil {
+		if err := decodeDocumentMetadata(documentMetadataJSON, &item.Document.Metadata); err != nil {
 			return domain.RetrievedDocumentChunk{}, err
 		}
 	}
 	if len(chunkMetadataJSON) > 0 {
-		if err := json.Unmarshal(chunkMetadataJSON, &item.Chunk.Metadata); err != nil {
+		if err := decodeDocumentMetadata(chunkMetadataJSON, &item.Chunk.Metadata); err != nil {
 			return domain.RetrievedDocumentChunk{}, err
 		}
 	}
@@ -167,4 +168,11 @@ func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, err
 	}
 	item.Chunk.Document = item.Document
 	return item, nil
+}
+
+func decodeDocumentMetadata(data []byte, target *map[string]any) error {
+	// float64 loses integer precision and decimal scale used by SQL ->> filters.
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	return decoder.Decode(target)
 }

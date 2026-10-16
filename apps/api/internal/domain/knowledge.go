@@ -75,6 +75,8 @@ type DocumentIngestRequest struct {
 	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
+// DocumentSearch.Metadata uses exact text equality: AND across keys, Chunk OR
+// Document per key. Missing/null never match; whitespace and case are significant.
 type DocumentSearch struct {
 	Query                     string            `json:"query"`
 	Embedding                 []float64         `json:"-"`
