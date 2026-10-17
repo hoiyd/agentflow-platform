@@ -281,8 +281,8 @@ there was no external action or observed mutation of that state. Verbatim
 evidence therefore does not guarantee correct interpretation of task scope.
 The current v4 implementation rejects generated operational sections and gives
 lifecycle/action fields separate definitions. Its offline regressions retain
-the strict cancellation check; this v3 live report is not evidence that v4 has
-passed a real-model experiment.
+the strict cancellation check; this v3 live report does not measure v4. The
+following experiment tests the updated contract.
 
 To reproduce, authorize a new spend and use the command above at this recorded
 revision; its default Dataset is v3. Exit `1` again reflects `--enforce`, not an
@@ -290,3 +290,34 @@ execution or transport failure. Originals and the prior report remain intact.
 
 This small task cannot establish lossless arbitrarily long sessions, independent Task State benefit,
 or justify background/parallel compaction or advanced anti-drift mechanisms.
+
+## Task Lifecycle Live Result
+
+The [v4 live report](evidence/live-compaction-deepseek-flash-2026-10-17-task-lifecycle-v4.json)
+uses Dataset v4, algorithm v4, sensor v3 and `deepseek-flash`.
+**Both arms passed their fidelity probe and continuation: all eight typed values
+and source quotations matched.** The compacted output independently preserves
+`send_notice_status=canceled` and `next_action=draft_only`; its stored summary
+contains no generated operational sections. No raw-history fallback occurred.
+
+| Evidence | Report field / observation |
+| --- | --- |
+| Quality | `gate.passed=true`; `summary.verified=2/2`; one comparable pair, no regression |
+| Execution | 7 physical requests; 33,496 tokens; zero open reservations; 44.031 seconds |
+| Summary | Completed generation 1; estimated surface 5,214 to 524 tokens (89.95% reduction including protected history) |
+| Pair token deltas | Candidate continuation -6,159 tokens; total -1,456 including compaction and probes |
+| State and reads | Both histories unchanged; canceled task preserved; both material reads matched their Artifact hashes |
+
+Authorization remained one trial, at most 8 requests / 90,000 tokens, 120 seconds
+per arm and a five-minute outer deadline. Monetary cost is unknown. An initial
+sandbox attempt failed on DNS/transport before this network-enabled execution;
+its unclosed reservation is retained locally, not reported as measured provider
+usage or folded into this successful report.
+
+The CLI recorded base HEAD because the evaluated changes were uncommitted.
+The [source identity record](evidence/live-compaction-deepseek-flash-2026-10-17-task-lifecycle-v4.source.json)
+maps the unchanged raw report to the subsequently committed, hash-checked source;
+reproduce at its `tested_source_commit`, not the raw report's HEAD alone.
+This is one successful synthetic sample, not statistical evidence of general
+reliability. Field definitions and summary policy changed together, so comparison
+with v3 does not isolate the effect of either change.
