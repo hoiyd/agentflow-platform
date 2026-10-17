@@ -7,6 +7,17 @@ test("read-only planning freezes authority and starts a separate authorized exec
   await expect(page.getByText("API connected", { exact: true })).toBeVisible();
   const workspace = await defaultWorkspaceID(page);
   const headers = { "X-Workspace-ID": workspace };
+  const completedReplay = async (id: string) => {
+    // Streamed proposal text can precede durable plan recording and Run completion.
+    await expect.poll(async () => {
+      const response = await request.get(`http://127.0.0.1:18080/api/runs/${id}`, { headers });
+      expect(response.ok()).toBe(true);
+      return (await response.json()).status;
+    }, { message: `Planning gate Run ${id} must finish before reading its evidence`, timeout: 45_000 }).toBe("completed");
+    const response = await request.get(`http://127.0.0.1:18080/api/runs/${id}/replay`, { headers });
+    expect(response.ok()).toBe(true);
+    return response.json();
+  };
   const agent = await createWorkspaceChatAgent(page, workspace, "Project planner", {
     tools: ["file_read", "file_write", "file_patch"], skills: ["fixture-method"],
     routing_hints: { capabilities: ["planning"], task_examples: ["planning-gate"], exclusions: [] }
@@ -31,11 +42,12 @@ test("read-only planning freezes authority and starts a separate authorized exec
     await expect(page.getByLabel("Execution restriction: read-only planning", { exact: true })).toBeVisible();
     const href = (await page.getByRole("link", { name: "View trace", exact: true }).getAttribute("href"))!;
     const id = href.split("/").at(-1)!;
-    const replay = await (await request.get(`http://127.0.0.1:18080/api/runs/${id}/replay`, { headers })).json();
+    const replay = await completedReplay(id);
     expect(replay.runtime_snapshot.execution_constraint).toBe("plan_only");
     expect(replay.runtime_snapshot.tools.some((t: { name: string }) => ["file_write", "file_patch", "update_task_state", "sandbox_command"].includes(t.name))).toBe(false);
     expect(replay.run_events.some((e: { payload: { policy_reason?: string } }) => e.payload.policy_reason === "plan_only_denied")).toBe(true);
     expect(replay.tool_effects ?? []).toHaveLength(0);
+    expect(replay.plan).toBeDefined();
     expect(replay.plan.sources).toHaveLength(1);
     expect(replay.plan.hash).toMatch(/^sha256:/);
     await page.goto(href);
@@ -50,7 +62,7 @@ test("read-only planning freezes authority and starts a separate authorized exec
       await expect(page.locator(".message.assistant").last()).toContainText("Report executed", { timeout: 45000 });
       const executionID = (await page.getByRole("link", { name: "View trace", exact: true }).getAttribute("href"))!.split("/").at(-1)!;
       expect(executionID).not.toBe(id);
-      const execution = await (await request.get(`http://127.0.0.1:18080/api/runs/${executionID}/replay`, { headers })).json();
+      const execution = await completedReplay(executionID);
       expect(execution.runtime_snapshot.plan_origin.run_id).toBe(id);
       expect(execution.runtime_snapshot.execution_constraint ?? "").not.toBe("plan_only");
       expect(execution.tool_effects.some((e: { status: string }) => e.status === "committed")).toBe(true);

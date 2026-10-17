@@ -119,7 +119,7 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		}
-		_ = json.NewEncoder(w).Encode(browserCompletion("## Established Facts\nHistorical fixture fact.\n## Pending Work\nAnswer the current question.", "stop", nil, nil))
+		_ = json.NewEncoder(w).Encode(browserCompletion("## Source Evidence\n[]\n\n## Established Facts\nHistorical fixture fact.", "stop", nil, nil))
 		return
 	}
 	task, latestTask, observations := "", "", 0
