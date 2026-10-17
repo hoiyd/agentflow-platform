@@ -209,7 +209,7 @@ func (c *overflowRecoveryClient) CompleteTextDetailed(context.Context, string, s
 	if c.summaryErr != nil {
 		return provider.TextCompletion{}, c.summaryErr
 	}
-	return provider.TextCompletion{Text: "## Goal\nPreserve context\n## Superseded Instructions\nNone", Model: "summary-model"}, nil
+	return provider.TextCompletion{Text: "## Source Evidence\n[]\n\n## Established Facts\nContext was discussed\n## Superseded Instructions\nNone", Model: "summary-model"}, nil
 }
 
 func (c *overflowRecoveryClient) PrepareText(context.Context, string, string) (provider.PreparedText, error) {

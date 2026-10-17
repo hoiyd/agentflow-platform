@@ -17,7 +17,7 @@ func runLiveContext(ctx context.Context, args []string, out, stderr io.Writer) i
 	flags := flag.NewFlagSet("eval context-live", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	live := flags.Bool("live", false, "explicitly authorize summary, fact probe and continuation model calls")
-	dataset := flags.String("dataset", "../../examples/context/compaction-continuation.v1.json", "versioned synthetic task dataset")
+	dataset := flags.String("dataset", "../../examples/context/compaction-continuation.v4.json", "versioned synthetic task dataset")
 	model := flags.String("model", "", "required OpenAI-compatible model ID")
 	base := flags.String("base-url", "https://api.openai.com/v1", "OpenAI-compatible base URL (not stored in report)")
 	trials := flags.Int("trials", 3, "trials per task, rotating two arms (1-20)")
@@ -25,19 +25,20 @@ func runLiveContext(ctx context.Context, args []string, out, stderr io.Writer) i
 	tokens := flags.Int("max-total-tokens", 0, "required shared suite-wide summary/probe/continuation token budget")
 	timeout := flags.Duration("timeout", 60*time.Second, "deadline per arm including summary, probes and Tools; at most 5m")
 	window := flags.Int("context-window-tokens", 32768, "same context window for both arms; must match the target deployment")
+	reserve := flags.Int("output-reserve-tokens", 2048, "per-request generation budget including reasoning; shared by summary, probes and both continuation arms")
 	summary := flags.Int("summary-max-tokens", 1024, "production Compactor summary cap")
 	enforce := flags.Bool("enforce", false, "exit 1 if candidate constraints or pair completeness fail")
 	if flags.Parse(args) != nil || flags.NArg() != 0 {
 		return 2
 	}
 	key := credential.FromEnvironment("OPENAI_API_KEY")
-	if !*live || !key.Available() || strings.TrimSpace(*model) == "" || *calls < 1 || *tokens < 1 || *window <= 0 || *summary <= 0 {
-		fmt.Fprintln(stderr, "context-live requires --live, OPENAI_API_KEY, --model, positive --max-model-calls/--max-total-tokens and context/summary limits")
+	if !*live || !key.Available() || strings.TrimSpace(*model) == "" || *calls < 1 || *tokens < 1 || *window <= 0 || *summary <= 0 || *reserve <= 0 {
+		fmt.Fprintln(stderr, "context-live requires --live, OPENAI_API_KEY, --model, positive --max-model-calls/--max-total-tokens and context/summary/output limits")
 		return 2
 	}
 	client := openai.NewClientWithTimeout(key.Reveal(), *base, *model, *timeout)
 	report, err := contexteval.RunLive(ctx, client, contexteval.LiveOptions{DatasetPath: *dataset, Trials: *trials, MaxModelCalls: *calls, MaxTotalTokens: *tokens,
-		Timeout: *timeout, ContextWindowTokens: *window, SummaryMaxTokens: *summary, Revision: gitRevision(ctx), EvidenceMode: "live_model"})
+		Timeout: *timeout, ContextWindowTokens: *window, OutputReserveTokens: *reserve, SummaryMaxTokens: *summary, Revision: gitRevision(ctx), EvidenceMode: "live_model"})
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2

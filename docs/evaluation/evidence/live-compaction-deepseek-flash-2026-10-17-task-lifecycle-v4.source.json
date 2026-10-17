@@ -1,0 +1,23 @@
+{
+  "report": "live-compaction-deepseek-flash-2026-10-17-task-lifecycle-v4.json",
+  "report_sha256": "6024e701944c601d65ec09fda27e96d51c5bd8fcd9bf10493ea3b77645c6b486",
+  "recorded_head": "864e8ea3c0940bbc08fe48fcb78f45d602009fe4",
+  "tested_source_commit": "ce4d087f3dde4e64697d1f22883ae0dc21f1b86f",
+  "worktree_dirty_at_execution": true,
+  "tracked_source_patch_sha256": "b1be2fd0e30e3ae32407bca14d237f53bbc7644b651481bfdcfddf917c7056ca",
+  "untracked_source_sha256": {
+    "apps/api/internal/evaluation/contexteval/live_summary_fixture_test.go": "133f99f42ab8fd27ea3bc881a4af74890757ed30509dc778b05dd1f091a6a1e0",
+    "examples/context/compaction-continuation.v4.json": "15c0acaa0751d30ebc0a941f002fafacde530e588324bf6557eef3f17f8a6593"
+  },
+  "source_identity_note": "The CLI recorded HEAD, not the uncommitted changes. The tracked patch and two untracked files were hashed before execution and rechecked before committing the evaluated source. Reproduce with tested_source_commit; do not treat recorded_head alone as the tested implementation. The original report is unchanged.",
+  "outer_timeout_ms": 300000,
+  "exit_code": 0,
+  "outer_timeout": false,
+  "environment_note": "An initial sandbox execution stopped on transport failure with an open usage reservation. A metadata-only check confirmed sandbox DNS ENOTFOUND and successful provider access outside the sandbox. That environment-failed record remains local, is not included in the successful report's usage, and is not a measured provider settlement. No live quality-failure experiment was rerun.",
+  "limitations": [
+    "One synthetic task and one trial do not establish statistical reliability.",
+    "Dataset field definitions and production compaction prompts changed together; this is not an algorithm-only causal comparison.",
+    "Context reduction is assembler-estimated, not provider-measured token savings.",
+    "Monetary cost is unknown because no evaluation price table is configured."
+  ]
+}

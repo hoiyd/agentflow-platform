@@ -25,13 +25,19 @@ type liveDataset struct {
 }
 
 type liveCase struct {
-	ID            string                `json:"id"`
-	History       []liveMessage         `json:"history"`
-	CurrentInput  string                `json:"current_input"`
-	StateSource   string                `json:"state_source"`
-	StatePatch    domain.TaskStatePatch `json:"state_patch"`
-	Material      liveMaterial          `json:"material"`
-	ExpectedFacts map[string]liveClaim  `json:"expected_facts"`
+	ID              string                        `json:"id"`
+	History         []liveMessage                 `json:"history"`
+	CurrentInput    string                        `json:"current_input"`
+	StateSource     string                        `json:"state_source"`
+	StatePatch      domain.TaskStatePatch         `json:"state_patch"`
+	Material        liveMaterial                  `json:"material"`
+	ExpectedFacts   map[string]liveClaim          `json:"expected_facts"`
+	FactDefinitions map[string]liveFactDefinition `json:"fact_definitions,omitempty"`
+}
+
+type liveFactDefinition struct {
+	Description string `json:"description"`
+	TaskID      string `json:"task_id,omitempty"`
 }
 
 type liveMessage struct {
@@ -105,12 +111,36 @@ func loadLiveDataset(path string) (liveDataset, string, error) {
 		if len(c.History)%2 != 0 || !userSources[c.StateSource] || c.StatePatch.ExpectedVersion != 0 {
 			return data, "", errors.New("state requires an explicit user source and a complete continuation boundary")
 		}
-		if _, err := domain.ApplyTaskStatePatch(domain.EmptyTaskState("1", "validation"), c.StatePatch, timeForState); err != nil {
+		state, err := domain.ApplyTaskStatePatch(domain.EmptyTaskState("1", "validation"), c.StatePatch, timeForState)
+		if err != nil {
 			return data, "", err
 		}
 		for name, fact := range c.ExpectedFacts {
 			if name == "" || !json.Valid(fact.Value) || fact.Quote == "" || !strings.Contains(sources[fact.SourceID], fact.Quote) {
 				return data, "", fmt.Errorf("fact %s lacks exact source evidence", name)
+			}
+		}
+		for name, definition := range c.FactDefinitions {
+			fact, exists := c.ExpectedFacts[name]
+			if !exists || strings.TrimSpace(definition.Description) == "" {
+				return data, "", fmt.Errorf("fact definition %s requires a known field and description", name)
+			}
+			if definition.TaskID == "" {
+				continue
+			}
+			var status domain.TaskItemStatus
+			if err := json.Unmarshal(fact.Value, &status); err != nil {
+				return data, "", fmt.Errorf("task fact %s must be a lifecycle status", name)
+			}
+			found := false
+			for _, task := range state.Tasks {
+				if task.ID == definition.TaskID && task.Status == status {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return data, "", fmt.Errorf("task fact %s does not match its declared Task State task", name)
 			}
 		}
 	}

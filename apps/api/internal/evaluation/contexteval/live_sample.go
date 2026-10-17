@@ -84,7 +84,7 @@ func runLiveSample(ctx context.Context, client *openai.Client, config domain.Con
 			return result.Text, e
 		})
 		s.Phases = append(s.Phases, probe)
-		s.Fidelity = checkClaims(probe.Output, c)
+		s.Fidelity = checkClaims(probe.Output, c, s.SourceMessages)
 		if probe.ErrorCode != "" {
 			s.Fidelity.Passed = false
 			s.Fidelity.Findings = append(s.Fidelity.Findings, probe.ErrorCode)
@@ -102,7 +102,7 @@ func runLiveSample(ctx context.Context, client *openai.Client, config domain.Con
 			return contractHash, e
 		}
 		s.MaterialReads = collectLiveReads(events)
-		s.Outcome = checkContinuation(continued.Output, c, s.MaterialReads, s.Artifact.ID)
+		s.Outcome = checkContinuation(continued.Output, c, s.MaterialReads, s.Artifact.ID, s.SourceMessages)
 		s.Status = "completed"
 		for _, p := range s.Phases {
 			if p.ErrorCode != "" {

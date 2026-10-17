@@ -14,14 +14,17 @@ type LiveOptions struct {
 	MaxTotalTokens      int           `json:"max_total_tokens"`
 	Timeout             time.Duration `json:"sample_timeout_ns"`
 	ContextWindowTokens int           `json:"context_window_tokens"`
+	OutputReserveTokens int           `json:"output_reserve_tokens"`
 	SummaryMaxTokens    int           `json:"summary_max_tokens"`
 	Revision            string        `json:"-"`
 	EvidenceMode        string        `json:"evidence_mode"`
 }
 
 type LiveCheck struct {
-	Passed   bool     `json:"passed"`
-	Findings []string `json:"findings"`
+	Passed           bool     `json:"passed"`
+	ValuesPassed     bool     `json:"fact_values_passed"`
+	ProvenancePassed bool     `json:"fact_provenance_passed"`
+	Findings         []string `json:"findings"`
 }
 
 type LivePhase struct {

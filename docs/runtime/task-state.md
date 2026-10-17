@@ -5,6 +5,12 @@ summaries. It belongs to a Conversation and can therefore survive multiple
 Runs, compaction, process restart, and Resume without being inferred again from
 natural language.
 
+Task lifecycle and allowed next actions are distinct: `canceled` is a task
+status; an instruction such as draft-only describes an action, not a new
+status or automatic reopening. Current Task State is reloaded outside
+compaction. New historical summaries cannot generate their own operational
+sections; see [compaction boundaries](../context/context-management.md#dynamic-summary-budget).
+
 ## Data Model
 
 The current `TaskState` contains:

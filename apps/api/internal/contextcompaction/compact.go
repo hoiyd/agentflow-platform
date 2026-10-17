@@ -22,7 +22,7 @@ var ErrSummaryUnavailable = failure.New(failure.Definition{
 	},
 })
 
-const AlgorithmVersion = "context-compaction-v2"
+const AlgorithmVersion = "context-compaction-v4"
 
 type Store interface {
 	ListMessages(conversationID string) ([]domain.Message, error)
@@ -156,7 +156,18 @@ func (s *Compactor) CompactIfNeeded(ctx context.Context, request Request) (*doma
 		return nil, s.failAttempt(request, startedPayload, err, false)
 	}
 
-	summary := limitSummary(strings.TrimSpace(result.Text), targetTokens)
+	text := strings.TrimSpace(result.Text)
+	startedPayload.SummaryModel = result.Model
+	text, err = validateSourceEvidence(text, messages, plan.sourceIDs, request.ConversationID)
+	if err != nil {
+		return nil, s.failAttempt(request, startedPayload, err, false)
+	}
+	summary := limitSummary(text, targetTokens)
+	// Evidence is first so ordinary clipping can only remove background prose.
+	// If the JSON itself cannot fit, keep the previous surface instead.
+	if _, _, err := parseSourceEvidence(summary); err != nil {
+		return nil, s.failAttempt(request, startedPayload, errEvidenceBudget, false)
+	}
 	afterTokens := contextassembly.EstimateTokens(summary) + plan.protectedTokens
 	reductionRatio := tokenReductionRatio(plan.beforeTokens, afterTokens)
 	outcome := s.evaluateOutcome(request.ConversationID, reductionRatio)

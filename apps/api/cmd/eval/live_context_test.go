@@ -24,7 +24,7 @@ func TestLiveContextCLIRequiresConsentAndRetainsFailures(t *testing.T) {
 		http.Error(w, `{"error":{"message":"fixture failure"}}`, 503)
 	}))
 	defer server.Close()
-	args := []string{"context-live", "--live", "--model", "fixture", "--base-url", server.URL, "--dataset", "../../../../examples/context/compaction-continuation.v1.json", "--trials", "2", "--max-model-calls", "1", "--max-total-tokens", "40000"}
+	args := []string{"context-live", "--live", "--model", "fixture", "--base-url", server.URL, "--dataset", "../../../../examples/context/compaction-continuation.v1.json", "--trials", "2", "--max-model-calls", "1", "--max-total-tokens", "40000", "--output-reserve-tokens", "8192"}
 	for _, enforce := range []bool{false, true} {
 		out.Reset()
 		stderr.Reset()
@@ -41,6 +41,9 @@ func TestLiveContextCLIRequiresConsentAndRetainsFailures(t *testing.T) {
 		if err := json.Unmarshal(out.Bytes(), &report); err != nil || report.Gate.Passed || len(report.Samples) != 4 || report.Config.EvidenceMode != "live_model" {
 			t.Fatalf("missing retained failure report: %v", err)
 		}
+		if report.Assembly.OutputReserveTokens != 8192 || report.Assembly.CompactionSummaryMaxTokens != 1024 {
+			t.Fatal("generation headroom and stored-summary cap were not independently retained")
+		}
 		if strings.Contains(out.String(), "fixture-key") || strings.Contains(out.String(), server.URL) {
 			t.Fatal("credential/endpoint leaked")
 		}
@@ -48,7 +51,7 @@ func TestLiveContextCLIRequiresConsentAndRetainsFailures(t *testing.T) {
 	if code := run(context.Background(), args, failWriter{}, &bytes.Buffer{}); code != 2 {
 		t.Fatal("write failure ignored")
 	}
-	for _, extra := range [][]string{{"--dataset", "missing"}, {"--trials", "0"}, {"--trials", "21"}, {"--timeout", "0s"}, {"--max-model-calls", "0"}, {"--max-total-tokens", "0"}, {"--context-window-tokens", "-1"}, {"unexpected"}} {
+	for _, extra := range [][]string{{"--dataset", "missing"}, {"--trials", "0"}, {"--trials", "21"}, {"--timeout", "0s"}, {"--max-model-calls", "0"}, {"--max-total-tokens", "0"}, {"--context-window-tokens", "-1"}, {"--output-reserve-tokens", "0"}, {"--output-reserve-tokens", "-1"}, {"--output-reserve-tokens", "32768"}, {"unexpected"}} {
 		if code := run(context.Background(), append(append([]string{}, args...), extra...), &bytes.Buffer{}, &bytes.Buffer{}); code != 2 {
 			t.Fatalf("invalid options accepted: %v", extra)
 		}
@@ -84,6 +87,21 @@ func TestLiveContextCLIRejectsInvalidDatasetBeforeNetwork(t *testing.T) {
 		}},
 		{"missing_material", func(d map[string]any) {
 			d["cases"].([]any)[0].(map[string]any)["material"].(map[string]any)["required_quote"] = "not in the material"
+		}},
+		{"unknown_fact_definition", func(d map[string]any) {
+			d["cases"].([]any)[0].(map[string]any)["fact_definitions"] = map[string]any{"absent": map[string]any{"description": "Unknown field"}}
+		}},
+		{"missing_definition_description", func(d map[string]any) {
+			d["cases"].([]any)[0].(map[string]any)["fact_definitions"] = map[string]any{"notice": map[string]any{"task_id": "send-notice"}}
+		}},
+		{"unknown_definition_task", func(d map[string]any) {
+			d["cases"].([]any)[0].(map[string]any)["fact_definitions"] = map[string]any{"notice": map[string]any{"description": "Task lifecycle", "task_id": "absent"}}
+		}},
+		{"inconsistent_definition_task", func(d map[string]any) {
+			d["cases"].([]any)[0].(map[string]any)["fact_definitions"] = map[string]any{"action": map[string]any{"description": "Task lifecycle", "task_id": "send-notice"}}
+		}},
+		{"non_string_task_definition", func(d map[string]any) {
+			d["cases"].([]any)[0].(map[string]any)["fact_definitions"] = map[string]any{"amount_minor": map[string]any{"description": "Task lifecycle", "task_id": "send-notice"}}
 		}},
 	}
 	for _, m := range mutations {
