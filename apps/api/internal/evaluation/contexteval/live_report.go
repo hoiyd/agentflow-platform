@@ -21,8 +21,10 @@ type LiveOptions struct {
 }
 
 type LiveCheck struct {
-	Passed   bool     `json:"passed"`
-	Findings []string `json:"findings"`
+	Passed           bool     `json:"passed"`
+	ValuesPassed     bool     `json:"fact_values_passed"`
+	ProvenancePassed bool     `json:"fact_provenance_passed"`
+	Findings         []string `json:"findings"`
 }
 
 type LivePhase struct {

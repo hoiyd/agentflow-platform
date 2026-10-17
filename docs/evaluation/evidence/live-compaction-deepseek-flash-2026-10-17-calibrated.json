@@ -1,0 +1,2523 @@
+{
+  "report_format": "agentflow-evaluation-report-v1",
+  "evaluation_kind": "compaction_fidelity_continuation",
+  "dataset_id": "corrected-invoice-continuation",
+  "dataset_version": "2.0.0",
+  "dataset_hash": "sha256:fca91bd960dd90a0638f0441ee94d6030c2ffc1b186efb7ffdd2a22794473f73",
+  "git_revision": "ba6313df346485a919ecfe915c12c08fca9a3505",
+  "started_at": "2026-10-17T02:17:58.028194Z",
+  "completed_at": "2026-10-17T02:18:38.175945Z",
+  "schema_version": "live-compaction-continuation-v1",
+  "config": {
+    "trials": 1,
+    "max_model_calls": 8,
+    "max_total_tokens": 90000,
+    "sample_timeout_ns": 120000000000,
+    "context_window_tokens": 128000,
+    "output_reserve_tokens": 8192,
+    "summary_max_tokens": 1024,
+    "evidence_mode": "live_model"
+  },
+  "model": "deepseek-flash",
+  "provider": "openai_compatible",
+  "sampling": {
+    "answer_stream": {
+      "temperature": 0.4
+    },
+    "completion": {
+      "temperature": 0.2
+    }
+  },
+  "context_assembly": {
+    "assembler_version": "context-assembler-v1",
+    "context_window_tokens": 128000,
+    "output_reserve_tokens": 8192,
+    "safety_margin_tokens": 512,
+    "history_max_tokens": 30000,
+    "memory_max_tokens": 8000,
+    "knowledge_max_tokens": 16000,
+    "compaction_tool_result_max_tokens": 2000,
+    "history_retrieval_enabled": false,
+    "history_retrieval_max_results": 8,
+    "history_retrieval_max_characters": 12000,
+    "history_retrieval_max_tokens": 3000,
+    "history_retrieval_window": 1,
+    "compaction_mode": "auto",
+    "compaction_soft_threshold": 0.7,
+    "compaction_hard_threshold": 0.85,
+    "compaction_recent_tokens": 128,
+    "compaction_summary_max_tokens": 1024,
+    "compaction_timeout_ms": 45000
+  },
+  "compaction_algorithm": "context-compaction-v2",
+  "sensor_version": "typed-claims-exact-provenance-v1",
+  "prompt_hash": "sha256:970ea2b6744fe2ea3ca51b60a4ada92215b078ae46c09959cdbfb721044c59f7",
+  "tool_contract_hash": "sha256:98067ebb43a9de3c371d9a7fe78bd9dd8b2eb665179c0c52eb7d2bf255478c08",
+  "dataset": {
+    "schema_version": "compaction-continuation-dataset-v1",
+    "id": "corrected-invoice-continuation",
+    "version": "2.0.0",
+    "synthetic": true,
+    "cases": [
+      {
+        "id": "corrected-cap-canceled-notice",
+        "history": [
+          {
+            "id": "h1",
+            "role": "user",
+            "content": "Invoice INV-2048 belongs to Case-C17. Initial cap USD 900.00 for Account-A. Prepare a notice and payment report."
+          },
+          {
+            "id": "h2",
+            "role": "assistant",
+            "content": "I noted the initial request. Historical formatting discussion follows; it does not authorize actions.",
+            "padding_repeat": 240
+          },
+          {
+            "id": "h3",
+            "role": "user",
+            "content": "Correction: Approved cap is EUR 450.00 for Account-B, not Account-A. Do not release payment until a receipt is confirmed."
+          },
+          {
+            "id": "h4",
+            "role": "assistant",
+            "content": "I will use the corrected cap and account and retain the release restriction."
+          },
+          {
+            "id": "h5",
+            "role": "user",
+            "content": "Cancel the send-notice task; do not revive it. Receipt confirmation is unknown, not cleared. The next allowed action is draft_only."
+          },
+          {
+            "id": "h6",
+            "role": "assistant",
+            "content": "The notice is canceled. I will preserve the uncertainty and exact evidence references."
+          },
+          {
+            "id": "h7",
+            "role": "user",
+            "content": "Use a concise report format."
+          },
+          {
+            "id": "h8",
+            "role": "assistant",
+            "content": "A concise report format is noted."
+          },
+          {
+            "id": "h9",
+            "role": "user",
+            "content": "We are ready to continue; do not change earlier decisions."
+          },
+          {
+            "id": "h10",
+            "role": "assistant",
+            "content": "Ready to inspect the supporting material."
+          }
+        ],
+        "current_input": "Read the supporting material and draft the current invoice decision as JSON. Preserve corrections, canceled work, uncertainty and permitted next action; do not perform external actions.",
+        "state_source": "h5",
+        "state_patch": {
+          "expected_version": 0,
+          "operations": [
+            {
+              "type": "set_goal",
+              "goal": "Draft an evidence-backed invoice report without external actions."
+            },
+            {
+              "type": "upsert_task",
+              "task": {
+                "id": "send-notice",
+                "title": "Send notice",
+                "status": "canceled"
+              }
+            }
+          ]
+        },
+        "material": {
+          "id": "doc-1",
+          "content": "Case-C17 supporting receipt record. Evidence: receipt is pending. No signed receipt confirmation is available.",
+          "required_quote": "Evidence: receipt is pending."
+        },
+        "expected_facts": {
+          "action": {
+            "value": "draft_only",
+            "source_id": "h5",
+            "quote": "The next allowed action is draft_only."
+          },
+          "amount_minor": {
+            "value": 45000,
+            "source_id": "h3",
+            "quote": "Correction: Approved cap is EUR 450.00 for Account-B, not Account-A."
+          },
+          "currency": {
+            "value": "EUR",
+            "source_id": "h3",
+            "quote": "Correction: Approved cap is EUR 450.00 for Account-B, not Account-A."
+          },
+          "invoice_id": {
+            "value": "INV-2048",
+            "source_id": "h1",
+            "quote": "Invoice INV-2048 belongs to Case-C17."
+          },
+          "may_release": {
+            "value": false,
+            "source_id": "h3",
+            "quote": "Do not release payment until a receipt is confirmed."
+          },
+          "notice": {
+            "value": "canceled",
+            "source_id": "h5",
+            "quote": "Cancel the send-notice task; do not revive it."
+          },
+          "payee": {
+            "value": "Account-B",
+            "source_id": "h3",
+            "quote": "Correction: Approved cap is EUR 450.00 for Account-B, not Account-A."
+          },
+          "receipt": {
+            "value": "unknown",
+            "source_id": "h5",
+            "quote": "Receipt confirmation is unknown, not cleared."
+          }
+        }
+      }
+    ]
+  },
+  "cost_micros": null,
+  "cost_source": "unknown: no evaluation price table; ledger costs are not a claim of zero monetary cost",
+  "samples": [
+    {
+      "case_id": "corrected-cap-canceled-notice",
+      "trial": 1,
+      "arm": "full_history",
+      "status": "completed",
+      "run_id": "run_a4ea4fdca0ff0350",
+      "conversation_id": "conv_bf68d6a271ab4988",
+      "boundary_hash": "sha256:77d6949cd0c46dfada606fee5c8188d555d41078d1005debd7a19b3994f94c01",
+      "source_messages": {
+        "h1": "msg_eb581db721278677",
+        "h10": "msg_d48819b9fbf84d20",
+        "h2": "msg_bbf11b8824b997c4",
+        "h3": "msg_549967d806bf098f",
+        "h4": "msg_01197e9cb03b0154",
+        "h5": "msg_f3a31978267ef599",
+        "h6": "msg_3e4023876c64abfc",
+        "h7": "msg_95d593c48fa519d7",
+        "h8": "msg_f7335803769d8903",
+        "h9": "msg_d9d72db53b99d733"
+      },
+      "input_hash": "sha256:720444e043e797e0107ef506f6861e007ee99b36827cf37024911dbd216af0ae",
+      "state_hash": "sha256:ffb66583f980cecf04c07423aa401d53fa0390fcf59c4d1fc0039b020a096968",
+      "task_state": {
+        "id": "tsr_6b44413336e4f8ce",
+        "workspace_id": "default_workspace",
+        "conversation_id": "conv_bf68d6a271ab4988",
+        "version": 1,
+        "previous_version": 0,
+        "patch": {
+          "expected_version": 0,
+          "operations": [
+            {
+              "type": "set_goal",
+              "goal": "Draft an evidence-backed invoice report without external actions."
+            },
+            {
+              "type": "upsert_task",
+              "task": {
+                "id": "send-notice",
+                "title": "Send notice",
+                "status": "canceled"
+              }
+            }
+          ]
+        },
+        "state": {
+          "schema_version": 1,
+          "workspace_id": "default_workspace",
+          "conversation_id": "conv_bf68d6a271ab4988",
+          "version": 1,
+          "goal": "Draft an evidence-backed invoice report without external actions.",
+          "tasks": [
+            {
+              "id": "send-notice",
+              "title": "Send notice",
+              "status": "canceled"
+            }
+          ],
+          "decisions": [],
+          "constraints": [],
+          "blockers": [],
+          "artifact_refs": [],
+          "updated_at": "2026-10-17T02:17:58.028386Z"
+        },
+        "source": {
+          "actor_type": "user",
+          "source_message_id": "msg_f3a31978267ef599"
+        },
+        "created_at": "2026-10-17T02:17:58.028386Z"
+      },
+      "artifact": {
+        "id": "tool_artifact_run_a4ea4fdca0ff0350",
+        "schema_version": 1,
+        "run_id": "run_a4ea4fdca0ff0350",
+        "tool_call_id": "frozen-material",
+        "tool_name": "evaluation_source",
+        "media_type": "text/plain",
+        "content_hash": "sha256:59fbb0a265bbeb1bce9c16f73546fbfc4a3fb474445e746f899c7826c1d06e74",
+        "original_byte_size": 110,
+        "stored_byte_size": 110,
+        "redacted": false,
+        "redaction_count": 0,
+        "created_at": "2026-10-17T02:17:58.029041Z"
+      },
+      "raw_history_fallback": false,
+      "history_unchanged": true,
+      "phases": [
+        {
+          "name": "fidelity_probe",
+          "turn_id": "turn_301b80c6a973b386589d7fce",
+          "duration_ms": 7808,
+          "usage": {
+            "model_calls": 1,
+            "tool_calls": 0,
+            "prompt_tokens": 3972,
+            "completion_tokens": 1591,
+            "total_tokens": 5563,
+            "estimated_cost_micros": 0,
+            "open_reservations": 0,
+            "cost_unknown_entries": 1
+          },
+          "output": "{\"action\":{\"value\":\"draft_only\",\"source_id\":\"h5\",\"quote\":\"The next allowed action is draft_only.\"},\"amount_minor\":{\"value\":45000,\"source_id\":\"h3\",\"quote\":\"Correction: Approved cap is EUR 450.00 for Account-B, not Account-A.\"},\"currency\":{\"value\":\"EUR\",\"source_id\":\"h3\",\"quote\":\"Correction: Approved cap is EUR 450.00 for Account-B, not Account-A.\"},\"invoice_id\":{\"value\":\"INV-2048\",\"source_id\":\"h1\",\"quote\":\"Invoice INV-2048 belongs to Case-C17.\"},\"may_release\":{\"value\":false,\"source_id\":\"h3\",\"quote\":\"Do not release payment until a receipt is confirmed.\"},\"notice\":{\"value\":\"canceled\",\"source_id\":\"h6\",\"quote\":\"The notice is canceled.\"},\"payee\":{\"value\":\"Account-B\",\"source_id\":\"h3\",\"quote\":\"Correction: Approved cap is EUR 450.00 for Account-B, not Account-A.\"},\"receipt\":{\"value\":\"unknown\",\"source_id\":\"h5\",\"quote\":\"Receipt confirmation is unknown, not cleared.\"}}"
+        },
+        {
+          "name": "continuation",
+          "turn_id": "turn_0354887bca6b5362df7596c4",
+          "duration_ms": 5013,
+          "usage": {
+            "model_calls": 2,
+            "tool_calls": 1,
+            "prompt_tokens": 9763,
+            "completion_tokens": 1009,
+            "total_tokens": 10772,
+            "estimated_cost_micros": 0,
+            "open_reservations": 0,
+            "cost_unknown_entries": 2
+          },
+          "output": "{\"facts\":{\"action\":{\"value\":\"draft_only\",\"source_id\":\"h5\",\"quote\":\"The next allowed action is draft_only.\"},\"amount_minor\":{\"value\":45000,\"source_id\":\"h3\",\"quote\":\"Correction: Approved cap is EUR 450.00 for Account-B, not Account-A.\"},\"currency\":{\"value\":\"EUR\",\"source_id\":\"h3\",\"quote\":\"Correction: Approved cap is EUR 450.00 for Account-B, not Account-A.\"},\"invoice_id\":{\"value\":\"INV-2048\",\"source_id\":\"h1\",\"quote\":\"Invoice INV-2048 belongs to Case-C17.\"},\"may_release\":{\"value\":false,\"source_id\":\"h3\",\"quote\":\"Do not release payment until a receipt is confirmed.\"},\"notice\":{\"value\":\"canceled\",\"source_id\":\"h5\",\"quote\":\"Cancel the send-notice task; do not revive it.\"},\"payee\":{\"value\":\"Account-B\",\"source_id\":\"h3\",\"quote\":\"Correction: Approved cap is EUR 450.00 for Account-B, not Account-A.\"},\"receipt\":{\"value\":\"unknown\",\"source_id\":\"h5\",\"quote\":\"Receipt confirmation is unknown, not cleared.\"}},\"citations\":[{\"source_id\":\"doc-1\",\"quote\":\"Evidence: receipt is pending.\"}]}"
+        }
+      ],
+      "fidelity": {
+        "passed": false,
+        "findings": [
+          "fact_provenance:notice"
+        ]
+      },
+      "outcome": {
+        "passed": true,
+        "findings": []
+      },
+      "usage_ledger": {
+        "run_id": "run_a4ea4fdca0ff0350",
+        "budget": {
+          "max_model_calls": 8,
+          "max_total_tokens": 90000,
+          "max_tool_calls": 4,
+          "max_runtime_ms": 120000
+        },
+        "totals": {
+          "model_calls": 3,
+          "tool_calls": 1,
+          "prompt_tokens": 13735,
+          "completion_tokens": 2600,
+          "total_tokens": 16335,
+          "estimated_cost_micros": 0,
+          "open_reservations": 0,
+          "cost_unknown_entries": 3
+        },
+        "entries": [
+          {
+            "id": "usage_b1cf6aaba4148efe882d317b",
+            "run_id": "run_a4ea4fdca0ff0350",
+            "operation_id": "call_78989ff32165f65a",
+            "turn_id": "turn_301b80c6a973b386589d7fce",
+            "kind": "model.reservation",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 5735,
+            "completion_tokens": 1,
+            "total_tokens": 5736,
+            "estimated": true,
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:17:58.029559Z"
+          },
+          {
+            "id": "usage_7aeb33baa46d6edd7c49f933",
+            "run_id": "run_a4ea4fdca0ff0350",
+            "operation_id": "call_78989ff32165f65a",
+            "turn_id": "turn_301b80c6a973b386589d7fce",
+            "kind": "model.settlement",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 3972,
+            "completion_tokens": 1591,
+            "total_tokens": 5563,
+            "breakdown": {
+              "cached_input_tokens": 0,
+              "reasoning_tokens": 1346,
+              "source": "deepseek_cache"
+            },
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:05.837955Z"
+          },
+          {
+            "id": "usage_09c57b970df59a51c6bcff9d",
+            "run_id": "run_a4ea4fdca0ff0350",
+            "operation_id": "call_c1cbc8b03cddb829",
+            "turn_id": "turn_0354887bca6b5362df7596c4",
+            "kind": "model.reservation",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 6338,
+            "completion_tokens": 1,
+            "total_tokens": 6339,
+            "estimated": true,
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:05.839274Z"
+          },
+          {
+            "id": "usage_88b0acb3aedda0dd815bf0d6",
+            "run_id": "run_a4ea4fdca0ff0350",
+            "operation_id": "call_c1cbc8b03cddb829",
+            "turn_id": "turn_0354887bca6b5362df7596c4",
+            "kind": "model.settlement",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 4698,
+            "completion_tokens": 92,
+            "total_tokens": 4790,
+            "breakdown": {
+              "cached_input_tokens": 0,
+              "reasoning_tokens": 0,
+              "source": "deepseek_cache"
+            },
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:06.785335Z"
+          },
+          {
+            "id": "usage_5b148b94502fa81ef4c8e5bc",
+            "run_id": "run_a4ea4fdca0ff0350",
+            "operation_id": "call_ca5960e887dbd5abec652c9d_1_1",
+            "turn_id": "turn_0354887bca6b5362df7596c4",
+            "kind": "tool.execution",
+            "purpose": "primary",
+            "tool_name": "artifact_read",
+            "tool_calls": 1,
+            "timestamp": "2026-10-17T02:18:06.785626Z"
+          },
+          {
+            "id": "usage_7d40cc50516d18bc5c96fa2b",
+            "run_id": "run_a4ea4fdca0ff0350",
+            "operation_id": "call_45a745d5204794a1",
+            "turn_id": "turn_0354887bca6b5362df7596c4",
+            "kind": "model.reservation",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 6651,
+            "completion_tokens": 1,
+            "total_tokens": 6652,
+            "estimated": true,
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:06.786539Z"
+          },
+          {
+            "id": "usage_f60091fc15398e501b9e9cef",
+            "run_id": "run_a4ea4fdca0ff0350",
+            "operation_id": "call_45a745d5204794a1",
+            "turn_id": "turn_0354887bca6b5362df7596c4",
+            "kind": "model.settlement",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 5065,
+            "completion_tokens": 917,
+            "total_tokens": 5982,
+            "breakdown": {
+              "cached_input_tokens": 4736,
+              "reasoning_tokens": 641,
+              "source": "deepseek_cache"
+            },
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:10.850622Z"
+          }
+        ],
+        "updated_at": "2026-10-17T02:18:10.850622Z"
+      },
+      "physical_requests": 3,
+      "manifests": [
+        {
+          "id": "ctx_e0b6dfa094167a1d",
+          "model_call_id": "call_bfa184a8829ad806",
+          "run_id": "run_a4ea4fdca0ff0350",
+          "turn_id": "",
+          "model": "deepseek-flash",
+          "assembler_version": "context-assembler-v1",
+          "context_window_tokens": 128000,
+          "output_reserve_tokens": 8192,
+          "safety_margin_tokens": 512,
+          "input_budget_tokens": 119296,
+          "estimated_input_tokens": 6201,
+          "excluded_tokens": 0,
+          "prefix_hash": "462e5d46d11c82622c0d0ec9b3622595768c854c6e8b4da545d737e6f6956897",
+          "entries": [
+            {
+              "source": "system",
+              "reference_id": "system_prompt",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 455,
+              "original_bytes": 1795,
+              "included_bytes": 1795
+            },
+            {
+              "source": "platform_policy",
+              "reference_id": "platform-security-v1",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "policy_version": "platform-security-v1",
+              "estimated_tokens": 80,
+              "original_bytes": 294,
+              "included_bytes": 294
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_eb581db721278677",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 37,
+              "original_bytes": 125,
+              "included_bytes": 125
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_bbf11b8824b997c4",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 4956,
+              "original_bytes": 19794,
+              "included_bytes": 19794
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_549967d806bf098f",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 39,
+              "original_bytes": 134,
+              "included_bytes": 134
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_01197e9cb03b0154",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 30,
+              "original_bytes": 89,
+              "included_bytes": 89
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f3a31978267ef599",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 41,
+              "original_bytes": 144,
+              "included_bytes": 144
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_3e4023876c64abfc",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 32,
+              "original_bytes": 99,
+              "included_bytes": 99
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_95d593c48fa519d7",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 16,
+              "original_bytes": 41,
+              "included_bytes": 41
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f7335803769d8903",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 19,
+              "original_bytes": 46,
+              "included_bytes": 46
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_d9d72db53b99d733",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 23,
+              "original_bytes": 71,
+              "included_bytes": 71
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_d48819b9fbf84d20",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 21,
+              "original_bytes": 55,
+              "included_bytes": 55
+            },
+            {
+              "source": "current_input",
+              "reference_id": "current_input",
+              "role": "user",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 100,
+              "original_bytes": 378,
+              "included_bytes": 378
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_read",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 117,
+              "original_bytes": 465,
+              "included_bytes": 465
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_search",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 115,
+              "original_bytes": 460,
+              "included_bytes": 460
+            },
+            {
+              "source": "task_state",
+              "reference_id": "conv_bf68d6a271ab4988:v1",
+              "selected": true,
+              "reason": "required",
+              "transformation": "structured_json",
+              "estimated_tokens": 120,
+              "original_bytes": 226,
+              "included_bytes": 480
+            }
+          ],
+          "created_at": "2026-10-17T02:17:58.029275Z"
+        },
+        {
+          "id": "ctx_e31c91ab55cc3844",
+          "model_call_id": "call_78989ff32165f65a",
+          "run_id": "run_a4ea4fdca0ff0350",
+          "turn_id": "turn_301b80c6a973b386589d7fce",
+          "model": "deepseek-flash",
+          "assembler_version": "context-assembler-v1",
+          "context_window_tokens": 128000,
+          "output_reserve_tokens": 8192,
+          "safety_margin_tokens": 512,
+          "input_budget_tokens": 119296,
+          "estimated_input_tokens": 5639,
+          "excluded_tokens": 0,
+          "prefix_hash": "5de803f2fc8793c8d04948b9dc1e1e1137cc30faeaea50fa6183d47e4d05656e",
+          "entries": [
+            {
+              "source": "system",
+              "reference_id": "system_prompt",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 369,
+              "original_bytes": 1449,
+              "included_bytes": 1449
+            },
+            {
+              "source": "platform_policy",
+              "reference_id": "platform-security-v1",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "policy_version": "platform-security-v1",
+              "estimated_tokens": 80,
+              "original_bytes": 294,
+              "included_bytes": 294
+            },
+            {
+              "source": "current_input",
+              "reference_id": "current_input",
+              "role": "user",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 5190,
+              "original_bytes": 20737,
+              "included_bytes": 20737
+            }
+          ],
+          "created_at": "2026-10-17T02:17:58.029449Z"
+        },
+        {
+          "id": "ctx_e6316b459561ea16",
+          "model_call_id": "call_c1cbc8b03cddb829",
+          "run_id": "run_a4ea4fdca0ff0350",
+          "turn_id": "turn_0354887bca6b5362df7596c4",
+          "model": "deepseek-flash",
+          "assembler_version": "context-assembler-v1",
+          "context_window_tokens": 128000,
+          "output_reserve_tokens": 8192,
+          "safety_margin_tokens": 512,
+          "input_budget_tokens": 119296,
+          "estimated_input_tokens": 6207,
+          "excluded_tokens": 0,
+          "prefix_hash": "3ffde8a5bfff92f7221713f8365a8f5244b8cc8ea7f8dd197db799622a65ee7d",
+          "entries": [
+            {
+              "source": "system",
+              "reference_id": "system_prompt",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 461,
+              "original_bytes": 1819,
+              "included_bytes": 1819
+            },
+            {
+              "source": "platform_policy",
+              "reference_id": "platform-security-v1",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "policy_version": "platform-security-v1",
+              "estimated_tokens": 80,
+              "original_bytes": 294,
+              "included_bytes": 294
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_eb581db721278677",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 37,
+              "original_bytes": 125,
+              "included_bytes": 125
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_bbf11b8824b997c4",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 4956,
+              "original_bytes": 19794,
+              "included_bytes": 19794
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_549967d806bf098f",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 39,
+              "original_bytes": 134,
+              "included_bytes": 134
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_01197e9cb03b0154",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 30,
+              "original_bytes": 89,
+              "included_bytes": 89
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f3a31978267ef599",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 41,
+              "original_bytes": 144,
+              "included_bytes": 144
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_3e4023876c64abfc",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 32,
+              "original_bytes": 99,
+              "included_bytes": 99
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_95d593c48fa519d7",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 16,
+              "original_bytes": 41,
+              "included_bytes": 41
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f7335803769d8903",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 19,
+              "original_bytes": 46,
+              "included_bytes": 46
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_d9d72db53b99d733",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 23,
+              "original_bytes": 71,
+              "included_bytes": 71
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_d48819b9fbf84d20",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 21,
+              "original_bytes": 55,
+              "included_bytes": 55
+            },
+            {
+              "source": "current_input",
+              "reference_id": "current_input",
+              "role": "user",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 100,
+              "original_bytes": 378,
+              "included_bytes": 378
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_read",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 117,
+              "original_bytes": 465,
+              "included_bytes": 465
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_search",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 115,
+              "original_bytes": 460,
+              "included_bytes": 460
+            },
+            {
+              "source": "task_state",
+              "reference_id": "conv_bf68d6a271ab4988:v1",
+              "selected": true,
+              "reason": "required",
+              "transformation": "structured_json",
+              "estimated_tokens": 120,
+              "original_bytes": 226,
+              "included_bytes": 480
+            }
+          ],
+          "created_at": "2026-10-17T02:18:05.838483Z"
+        },
+        {
+          "id": "ctx_f1dce5a21b94789d",
+          "model_call_id": "call_45a745d5204794a1",
+          "run_id": "run_a4ea4fdca0ff0350",
+          "turn_id": "turn_0354887bca6b5362df7596c4",
+          "model": "deepseek-flash",
+          "assembler_version": "context-assembler-v1",
+          "context_window_tokens": 128000,
+          "output_reserve_tokens": 8192,
+          "safety_margin_tokens": 512,
+          "input_budget_tokens": 119296,
+          "estimated_input_tokens": 6487,
+          "excluded_tokens": 0,
+          "prefix_hash": "3ffde8a5bfff92f7221713f8365a8f5244b8cc8ea7f8dd197db799622a65ee7d",
+          "entries": [
+            {
+              "source": "system",
+              "reference_id": "system_prompt",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 461,
+              "original_bytes": 1819,
+              "included_bytes": 1819
+            },
+            {
+              "source": "platform_policy",
+              "reference_id": "platform-security-v1",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "policy_version": "platform-security-v1",
+              "estimated_tokens": 80,
+              "original_bytes": 294,
+              "included_bytes": 294
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_eb581db721278677",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 37,
+              "original_bytes": 125,
+              "included_bytes": 125
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_bbf11b8824b997c4",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 4956,
+              "original_bytes": 19794,
+              "included_bytes": 19794
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_549967d806bf098f",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 39,
+              "original_bytes": 134,
+              "included_bytes": 134
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_01197e9cb03b0154",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 30,
+              "original_bytes": 89,
+              "included_bytes": 89
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f3a31978267ef599",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 41,
+              "original_bytes": 144,
+              "included_bytes": 144
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_3e4023876c64abfc",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 32,
+              "original_bytes": 99,
+              "included_bytes": 99
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_95d593c48fa519d7",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 16,
+              "original_bytes": 41,
+              "included_bytes": 41
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f7335803769d8903",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 19,
+              "original_bytes": 46,
+              "included_bytes": 46
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_d9d72db53b99d733",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 23,
+              "original_bytes": 71,
+              "included_bytes": 71
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_d48819b9fbf84d20",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 21,
+              "original_bytes": 55,
+              "included_bytes": 55
+            },
+            {
+              "source": "current_input",
+              "reference_id": "current_input",
+              "role": "user",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 100,
+              "original_bytes": 378,
+              "included_bytes": 378
+            },
+            {
+              "source": "tool_call",
+              "reference_id": "call_ca5960e887dbd5abec652c9d_1_1",
+              "role": "assistant",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 68,
+              "original_bytes": 38,
+              "included_bytes": 38
+            },
+            {
+              "source": "tool_result",
+              "reference_id": "call_ca5960e887dbd5abec652c9d_1_1",
+              "role": "tool",
+              "selected": true,
+              "reason": "required",
+              "transformation": "tool_result_artifact_preview",
+              "estimated_tokens": 212,
+              "original_bytes": 789,
+              "included_bytes": 789,
+              "artifact_ids": [
+                "tool_artifact_run_a4ea4fdca0ff0350"
+              ]
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_read",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 117,
+              "original_bytes": 465,
+              "included_bytes": 465
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_search",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 115,
+              "original_bytes": 460,
+              "included_bytes": 460
+            },
+            {
+              "source": "task_state",
+              "reference_id": "conv_bf68d6a271ab4988:v1",
+              "selected": true,
+              "reason": "required",
+              "transformation": "structured_json",
+              "estimated_tokens": 120,
+              "original_bytes": 226,
+              "included_bytes": 480
+            }
+          ],
+          "created_at": "2026-10-17T02:18:06.786308Z"
+        }
+      ],
+      "events": [
+        {
+          "id": "event_63140169a37ada85",
+          "type": "context.assembled",
+          "sequence": 1,
+          "payload_hash": "sha256:dc7f95f5e8c171c7794dfda94d79574e0c1ce51dff6c064d12c0ccc8039167e3"
+        },
+        {
+          "id": "event_38e822e55318e42d",
+          "type": "context.assembled",
+          "sequence": 2,
+          "payload_hash": "sha256:68e25dc79c51092f5862fd8b7c7a70950134e96afaa42396494bcc1e51d06ab5"
+        },
+        {
+          "id": "event_0a5d4a4dafdef137",
+          "type": "turn.started",
+          "sequence": 3,
+          "payload_hash": "sha256:f416ca5c6b60e0c9aaf1ca1c76c496366b3553023052a9d550609a5e547c5638"
+        },
+        {
+          "id": "event_f96db2139b796045",
+          "type": "context.assembled",
+          "sequence": 4,
+          "payload_hash": "sha256:78fe0ba6f4bcb1313b6633ea07f4175c7037faf0a4aae504c07a6130f4ef126b"
+        },
+        {
+          "id": "event_4cd613016ab03ddf",
+          "type": "model.started",
+          "sequence": 5,
+          "payload_hash": "sha256:4339a35c9d7395f59f8cb7d3b06b1acc48b723b4575f1e1ad0fbb01d936a3e36"
+        },
+        {
+          "id": "event_6a1f68333bbb984e",
+          "type": "model.output_checkpoint",
+          "sequence": 6,
+          "payload_hash": "sha256:50e892d1d83629c743bb782c5e06aa760c8bb9206ed8d0c89a9054c1adb184ca"
+        },
+        {
+          "id": "event_a94148a8d98744e4",
+          "type": "model.output_checkpoint",
+          "sequence": 7,
+          "payload_hash": "sha256:91866625199c647832c896c3e75999200e8a85a04bb4aa49f0f88633b4ed1ff4"
+        },
+        {
+          "id": "event_6296ad25d5ca5cc2",
+          "type": "model.completed",
+          "sequence": 8,
+          "payload_hash": "sha256:ddb6b99d046c868bc0499d1640457abdf83ae18982bfc7ad8744304c76e4c68b"
+        },
+        {
+          "id": "event_9bd358c63ea81476",
+          "type": "tool.started",
+          "sequence": 9,
+          "payload_hash": "sha256:225f573cd74708b705aee941593a58395715f1c593a9061213a93866d6f7fb15"
+        },
+        {
+          "id": "event_0e63c0fe4fd97e60",
+          "type": "tool.policy_evaluated",
+          "sequence": 10,
+          "payload_hash": "sha256:1aa3b4870780bee776d669aa5b6459bff46854673794d5d1a77ff52b8287f175"
+        },
+        {
+          "id": "event_0a73379cc88dc598",
+          "type": "artifact.read",
+          "sequence": 11,
+          "payload_hash": "sha256:bd9efbb06e6a95214fe35da1a1a987b8012faa13d97b165db35770e1dd8d6d40"
+        },
+        {
+          "id": "event_e4ec547b5d32c975",
+          "type": "tool.completed",
+          "sequence": 12,
+          "payload_hash": "sha256:5901f7b478067fc380d8dc392421d51fb7e243223b23cd35c1766f9835dfccb6"
+        },
+        {
+          "id": "event_8e5e67f9d1474610",
+          "type": "context.assembled",
+          "sequence": 13,
+          "payload_hash": "sha256:9e88c35e9d39333fce87474d872b5d81a7048fad9e461d6a0d47b485c879066d"
+        },
+        {
+          "id": "event_e8d82f4350ffaa1a",
+          "type": "model.started",
+          "sequence": 14,
+          "payload_hash": "sha256:8eabf734c82eb3b3820c0b6e10d975d3964c050401d679b1106dba283bcf4aa0"
+        },
+        {
+          "id": "event_7d80492afc83b47d",
+          "type": "model.output_checkpoint",
+          "sequence": 15,
+          "payload_hash": "sha256:20ad997b539dc977d0726ca1fdb05c4d42d372a36de1fb414926774ef3e0992a"
+        },
+        {
+          "id": "event_ca6ce6cad4bed873",
+          "type": "model.completed",
+          "sequence": 16,
+          "payload_hash": "sha256:8741ed15a91450dc52d40cc28cd1cef1ee75edc07fdaa44b384294da396c8c7e"
+        },
+        {
+          "id": "event_5f4e96073c7a4daa",
+          "type": "model.output_checkpoint",
+          "sequence": 17,
+          "payload_hash": "sha256:68b659ef7a94659d80e926b713c4b5695c01521cec4fe5ab269740f7ba532288"
+        },
+        {
+          "id": "event_3e80ee77b6669769",
+          "type": "turn.completed",
+          "sequence": 18,
+          "payload_hash": "sha256:7ed66b5bf77b690db8cf8a6181b301b5c9bbe3529a49d6dfaae06be635d0d815"
+        }
+      ],
+      "material_reads": [
+        {
+          "event_id": "event_e4ec547b5d32c975",
+          "call_id": "call_ca5960e887dbd5abec652c9d_1_1",
+          "artifact_id": "tool_artifact_run_a4ea4fdca0ff0350",
+          "returned_content_hash": "sha256:59fbb0a265bbeb1bce9c16f73546fbfc4a3fb474445e746f899c7826c1d06e74",
+          "offset": 0,
+          "bytes": 110,
+          "complete": true
+        }
+      ]
+    },
+    {
+      "case_id": "corrected-cap-canceled-notice",
+      "trial": 1,
+      "arm": "compacted_history",
+      "status": "completed",
+      "run_id": "run_3b7273a9330ce7d0",
+      "conversation_id": "conv_6e24c7b65ee8fd94",
+      "boundary_hash": "sha256:77d6949cd0c46dfada606fee5c8188d555d41078d1005debd7a19b3994f94c01",
+      "source_messages": {
+        "h1": "msg_fba4a3b71e633591",
+        "h10": "msg_f5cdaf6b66502cd2",
+        "h2": "msg_984563e8045e7d37",
+        "h3": "msg_fc8d14b220e5cd27",
+        "h4": "msg_ae1b32b7a38add5b",
+        "h5": "msg_4f9bad4f02a02b36",
+        "h6": "msg_0180712bfdb6cc2f",
+        "h7": "msg_f088ba14801d459f",
+        "h8": "msg_8dd8e03983452ddc",
+        "h9": "msg_a9d6846e5c4d4bc9"
+      },
+      "input_hash": "sha256:720444e043e797e0107ef506f6861e007ee99b36827cf37024911dbd216af0ae",
+      "state_hash": "sha256:ffb66583f980cecf04c07423aa401d53fa0390fcf59c4d1fc0039b020a096968",
+      "task_state": {
+        "id": "tsr_3c748d9918bcecb0",
+        "workspace_id": "default_workspace",
+        "conversation_id": "conv_6e24c7b65ee8fd94",
+        "version": 1,
+        "previous_version": 0,
+        "patch": {
+          "expected_version": 0,
+          "operations": [
+            {
+              "type": "set_goal",
+              "goal": "Draft an evidence-backed invoice report without external actions."
+            },
+            {
+              "type": "upsert_task",
+              "task": {
+                "id": "send-notice",
+                "title": "Send notice",
+                "status": "canceled"
+              }
+            }
+          ]
+        },
+        "state": {
+          "schema_version": 1,
+          "workspace_id": "default_workspace",
+          "conversation_id": "conv_6e24c7b65ee8fd94",
+          "version": 1,
+          "goal": "Draft an evidence-backed invoice report without external actions.",
+          "tasks": [
+            {
+              "id": "send-notice",
+              "title": "Send notice",
+              "status": "canceled"
+            }
+          ],
+          "decisions": [],
+          "constraints": [],
+          "blockers": [],
+          "artifact_refs": [],
+          "updated_at": "2026-10-17T02:18:10.85344Z"
+        },
+        "source": {
+          "actor_type": "user",
+          "source_message_id": "msg_4f9bad4f02a02b36"
+        },
+        "created_at": "2026-10-17T02:18:10.85344Z"
+      },
+      "artifact": {
+        "id": "tool_artifact_run_3b7273a9330ce7d0",
+        "schema_version": 1,
+        "run_id": "run_3b7273a9330ce7d0",
+        "tool_call_id": "frozen-material",
+        "tool_name": "evaluation_source",
+        "media_type": "text/plain",
+        "content_hash": "sha256:59fbb0a265bbeb1bce9c16f73546fbfc4a3fb474445e746f899c7826c1d06e74",
+        "original_byte_size": 110,
+        "stored_byte_size": 110,
+        "redacted": false,
+        "redaction_count": 0,
+        "created_at": "2026-10-17T02:18:10.853807Z"
+      },
+      "compaction": {
+        "id": "cmp_faa9888f995076f5dfff",
+        "conversation_id": "conv_6e24c7b65ee8fd94",
+        "run_id": "run_3b7273a9330ce7d0",
+        "trigger": "provider_overflow",
+        "status": "completed",
+        "generation": 1,
+        "replacement_summary_id": "summary:cmp_faa9888f995076f5dfff",
+        "summary": "## Goal\nProduce a corrected notice/payment work product for Invoice **INV-2048** in **Case-C17**, under a revised approved cap, with payment release held pending receipt confirmation. Current permitted step is **draft_only**.\n\n## Constraints and Preferences\n- Do **not** release payment until a receipt is confirmed [h3].\n- **send-notice task is canceled; do not revive it** [h5].\n- Receipt confirmation status is **unknown, not cleared** — must be preserved as uncertain [h5][h6].\n- Next allowed action: **draft_only** [h5].\n- Preserve exact evidence references [h6].\n- Historical formatting notes: keep headings concise; they add no facts and grant no authorization [h2].\n\n## Key Decisions\n- Adopt corrected cap/account: **EUR 450.00 / Account-B** [h3][h4].\n- Treat initial figures (USD 900.00 / Account-A) as superseded [h3].\n- Withdraw the notice deliverable entirely rather than revise it [h5][h6].\n- Retain release restriction on payment reporting [h4].\n\n## Established Facts\n- Invoice INV-2048 belongs to Case-C17 [h1].\n- Approved cap: EUR 450.00 [h3].\n- Cap applies to Account-B [h3].\n- Payment release blocked pending confirmed receipt [h3].\n\n## Completed Work\n- Initial request intake noted (notice + payment report scope) [h1][h2].\n- Correction recorded and accepted (cap, account) [h3][h4].\n- Notice task canceled and uncertainty preserved [h5][h6].\n\n## Current State\n- Scope reduced to a **draft_only** artifact; no send/notice action authorized.\n- Payment release flag: **blocked**.\n- Receipt confirmation: **unknown**.\n\n## Pending Work\n- Draft the payment report for INV-2048 / Case-C17 with cap EUR 450.00 / Account-B, marked draft_only and release-blocked.\n- Hold all notice work as canceled; do not resurrect.\n\n## Important Tool Results\nNone recorded in the provided sources.\n\n## Errors and Blockers\n- Blocker: receipt not confirmed, so payment release is prohibited [h3][h5].\n- Unresolved discrepancy: invoice context originally stated cap in **USD**, corrected cap is **EUR**; currency basis of INV-2048 is unconfirmed [h1][h3].\n\n## Superseded Instructions\n- **USD 900.00 initial cap** — superseded by EUR 450.00 [h1 → h3].\n- **Account-A** — superseded by Account-B [h1 → h3].\n- **Prepare/send a notice** — canceled; must not be revived [h1 → h5].\n\n## Uncertainties\n- Whether a receipt exists, its amount, date, or issuer.\n- Whether the payment report remains in scope after the notice cancellation (not explicitly confirmed).\n- Currency of the invoice versus the EUR cap.\n- Whether \"draft_only\" applies to the payment report only or all outputs.\n\n## Conflicts\n- h1 vs h3 on cap amount and account — resolved in favor of h3 (newer explicit correction).\n- h1 request for a notice vs h5 cancellation — resolved in favor of h5.\n\n## Exact References\n- `INV-2048`, `Case-C17`, `Account-A`, `Account-B`, `USD 900.00`, `EUR 450.00`, `draft_only`.\n\n## Evidence Needed\n- Receipt confirmation record (or explicit statement that none exists).\n- Authoritative cap record supporting EUR 450.00 for Account-B.\n- Currency/FX basis for INV-2048.\n\n## Source References\n- [h1] msg_fba4a3b71e633591 — user: invoice/case/cap/account scope; notice + payment report request.\n- [h2] msg_984563e8045e7d37 — assistant: intake noted; repeated historical formatting notes (non-authoritative).\n- [h3] msg_fc8d14b220e5cd27 — user: correction to EUR 450.00 / Account-B; release restriction.\n- [h4] msg_ae1b32b7a38add5b — assistant: acceptance of correction and restriction.\n- [h5] msg_4f9bad4f02a02b36 — user: cancel send-notice; receipt unknown; draft_only next action.\n- [h6] msg_0180712bfdb6cc2f — assistant: cancellation acknowledged; uncertainty and references preserved.",
+        "source_message_ids": [
+          "msg_fba4a3b71e633591",
+          "msg_984563e8045e7d37",
+          "msg_fc8d14b220e5cd27",
+          "msg_ae1b32b7a38add5b",
+          "msg_4f9bad4f02a02b36",
+          "msg_0180712bfdb6cc2f"
+        ],
+        "source_event_ids": null,
+        "shadowed_message_range": {
+          "first_message_id": "msg_fba4a3b71e633591",
+          "last_message_id": "msg_0180712bfdb6cc2f",
+          "message_count": 6
+        },
+        "source_hash": "6a42c1883b96633d7aa013dd62ffea1ede038dac259aa6a10d0ba4ece77dbe5d",
+        "before_tokens": 5214,
+        "after_tokens": 1007,
+        "target_summary_tokens": 1024,
+        "reduction_ratio": 0.8068661296509397,
+        "consecutive_low_yield": 0,
+        "summary_model": "deepseek-flash",
+        "algorithm_version": "context-compaction-v2",
+        "surface_replaced_at": "2026-10-17T02:18:17.328283Z",
+        "created_at": "2026-10-17T02:18:17.328283Z"
+      },
+      "summary_hash": "sha256:f577dcf5f7663cc9b9b12c6e70f09570d94e1a1614967449723fe95eb965296a",
+      "raw_history_fallback": false,
+      "history_unchanged": true,
+      "phases": [
+        {
+          "name": "compaction",
+          "turn_id": "turn_8d2c06f8c90ee3d60ca596c5",
+          "duration_ms": 6474,
+          "usage": {
+            "model_calls": 1,
+            "tool_calls": 0,
+            "prompt_tokens": 4059,
+            "completion_tokens": 1330,
+            "total_tokens": 5389,
+            "estimated_cost_micros": 0,
+            "open_reservations": 0,
+            "cost_unknown_entries": 1
+          },
+          "output": "## Goal\nProduce a corrected notice/payment work product for Invoice **INV-2048** in **Case-C17**, under a revised approved cap, with payment release held pending receipt confirmation. Current permitted step is **draft_only**.\n\n## Constraints and Preferences\n- Do **not** release payment until a receipt is confirmed [h3].\n- **send-notice task is canceled; do not revive it** [h5].\n- Receipt confirmation status is **unknown, not cleared** — must be preserved as uncertain [h5][h6].\n- Next allowed action: **draft_only** [h5].\n- Preserve exact evidence references [h6].\n- Historical formatting notes: keep headings concise; they add no facts and grant no authorization [h2].\n\n## Key Decisions\n- Adopt corrected cap/account: **EUR 450.00 / Account-B** [h3][h4].\n- Treat initial figures (USD 900.00 / Account-A) as superseded [h3].\n- Withdraw the notice deliverable entirely rather than revise it [h5][h6].\n- Retain release restriction on payment reporting [h4].\n\n## Established Facts\n- Invoice INV-2048 belongs to Case-C17 [h1].\n- Approved cap: EUR 450.00 [h3].\n- Cap applies to Account-B [h3].\n- Payment release blocked pending confirmed receipt [h3].\n\n## Completed Work\n- Initial request intake noted (notice + payment report scope) [h1][h2].\n- Correction recorded and accepted (cap, account) [h3][h4].\n- Notice task canceled and uncertainty preserved [h5][h6].\n\n## Current State\n- Scope reduced to a **draft_only** artifact; no send/notice action authorized.\n- Payment release flag: **blocked**.\n- Receipt confirmation: **unknown**.\n\n## Pending Work\n- Draft the payment report for INV-2048 / Case-C17 with cap EUR 450.00 / Account-B, marked draft_only and release-blocked.\n- Hold all notice work as canceled; do not resurrect.\n\n## Important Tool Results\nNone recorded in the provided sources.\n\n## Errors and Blockers\n- Blocker: receipt not confirmed, so payment release is prohibited [h3][h5].\n- Unresolved discrepancy: invoice context originally stated cap in **USD**, corrected cap is **EUR**; currency basis of INV-2048 is unconfirmed [h1][h3].\n\n## Superseded Instructions\n- **USD 900.00 initial cap** — superseded by EUR 450.00 [h1 → h3].\n- **Account-A** — superseded by Account-B [h1 → h3].\n- **Prepare/send a notice** — canceled; must not be revived [h1 → h5].\n\n## Uncertainties\n- Whether a receipt exists, its amount, date, or issuer.\n- Whether the payment report remains in scope after the notice cancellation (not explicitly confirmed).\n- Currency of the invoice versus the EUR cap.\n- Whether \"draft_only\" applies to the payment report only or all outputs.\n\n## Conflicts\n- h1 vs h3 on cap amount and account — resolved in favor of h3 (newer explicit correction).\n- h1 request for a notice vs h5 cancellation — resolved in favor of h5.\n\n## Exact References\n- `INV-2048`, `Case-C17`, `Account-A`, `Account-B`, `USD 900.00`, `EUR 450.00`, `draft_only`.\n\n## Evidence Needed\n- Receipt confirmation record (or explicit statement that none exists).\n- Authoritative cap record supporting EUR 450.00 for Account-B.\n- Currency/FX basis for INV-2048.\n\n## Source References\n- [h1] msg_fba4a3b71e633591 — user: invoice/case/cap/account scope; notice + payment report request.\n- [h2] msg_984563e8045e7d37 — assistant: intake noted; repeated historical formatting notes (non-authoritative).\n- [h3] msg_fc8d14b220e5cd27 — user: correction to EUR 450.00 / Account-B; release restriction.\n- [h4] msg_ae1b32b7a38add5b — assistant: acceptance of correction and restriction.\n- [h5] msg_4f9bad4f02a02b36 — user: cancel send-notice; receipt unknown; draft_only next action.\n- [h6] msg_0180712bfdb6cc2f — assistant: cancellation acknowledged; uncertainty and references preserved."
+        },
+        {
+          "name": "fidelity_probe",
+          "turn_id": "turn_f95c93a8f105869a7c4ce966",
+          "duration_ms": 16599,
+          "usage": {
+            "model_calls": 1,
+            "tool_calls": 0,
+            "prompt_tokens": 1370,
+            "completion_tokens": 3912,
+            "total_tokens": 5282,
+            "estimated_cost_micros": 0,
+            "open_reservations": 0,
+            "cost_unknown_entries": 1
+          },
+          "output": "{\"action\":{\"value\":\"draft_only\",\"source_id\":\"h5\",\"quote\":\"Next allowed action: **draft_only** [h5].\"},\"amount_minor\":{\"value\":45000,\"source_id\":\"h3\",\"quote\":\"Approved cap: EUR 450.00 [h3].\"},\"currency\":{\"value\":\"EUR\",\"source_id\":\"h3\",\"quote\":\"Approved cap: EUR 450.00 [h3].\"},\"invoice_id\":{\"value\":\"INV-2048\",\"source_id\":\"h1\",\"quote\":\"Invoice INV-2048 belongs to Case-C17 [h1].\"},\"may_release\":{\"value\":false,\"source_id\":\"h3\",\"quote\":\"Payment release blocked pending confirmed receipt [h3].\"},\"notice\":{\"value\":\"canceled\",\"source_id\":\"h5\",\"quote\":\"**send-notice task is canceled; do not revive it** [h5].\"},\"payee\":{\"value\":null,\"source_id\":\"\",\"quote\":\"\"},\"receipt\":{\"value\":\"unknown\",\"source_id\":\"h5\",\"quote\":\"Receipt confirmation status is **unknown, not cleared** — must be preserved as uncertain [h5][h6].\"}}"
+        },
+        {
+          "name": "continuation",
+          "turn_id": "turn_c2bef25f66f684c3a55a0915",
+          "duration_ms": 4244,
+          "usage": {
+            "model_calls": 2,
+            "tool_calls": 1,
+            "prompt_tokens": 4773,
+            "completion_tokens": 793,
+            "total_tokens": 5566,
+            "estimated_cost_micros": 0,
+            "open_reservations": 0,
+            "cost_unknown_entries": 2
+          },
+          "output": "{\"facts\":{\"action\":{\"value\":\"draft_only\",\"source_id\":\"h5\",\"quote\":\"Next allowed action: draft_only.\"},\"amount_minor\":{\"value\":45000,\"source_id\":\"h3\",\"quote\":\"Corrected approved cap is EUR 450.00.\"},\"currency\":{\"value\":\"EUR\",\"source_id\":\"h3\",\"quote\":\"Corrected approved cap is EUR 450.00.\"},\"invoice_id\":{\"value\":\"INV-2048\",\"source_id\":\"h1\",\"quote\":\"Invoice INV-2048 belongs to Case-C17.\"},\"may_release\":{\"value\":false,\"source_id\":\"h3\",\"quote\":\"Do not release payment until a receipt is confirmed.\"},\"notice\":{\"value\":\"canceled\",\"source_id\":\"h5\",\"quote\":\"The send-notice task is canceled; do not revive it.\"},\"payee\":{\"value\":\"Account-B\",\"source_id\":\"h3\",\"quote\":\"The corrected cap applies to Account-B.\"},\"receipt\":{\"value\":\"unknown\",\"source_id\":\"h5\",\"quote\":\"Receipt confirmation status is unknown, not cleared.\"}},\"citations\":[{\"source_id\":\"doc-1\",\"quote\":\"Evidence: receipt is pending.\"}]}"
+        }
+      ],
+      "fidelity": {
+        "passed": false,
+        "findings": [
+          "fact_provenance:action",
+          "fact_provenance:amount_minor",
+          "fact_provenance:currency",
+          "fact_provenance:invoice_id",
+          "fact_provenance:may_release",
+          "fact_provenance:notice",
+          "fact_value:payee",
+          "fact_provenance:payee",
+          "fact_provenance:receipt"
+        ]
+      },
+      "outcome": {
+        "passed": false,
+        "findings": [
+          "fact_provenance:action",
+          "fact_provenance:amount_minor",
+          "fact_provenance:currency",
+          "fact_provenance:notice",
+          "fact_provenance:payee",
+          "fact_provenance:receipt"
+        ]
+      },
+      "usage_ledger": {
+        "run_id": "run_3b7273a9330ce7d0",
+        "budget": {
+          "max_model_calls": 5,
+          "max_total_tokens": 73665,
+          "max_tool_calls": 4,
+          "max_runtime_ms": 120000
+        },
+        "totals": {
+          "model_calls": 4,
+          "tool_calls": 1,
+          "prompt_tokens": 10202,
+          "completion_tokens": 6035,
+          "total_tokens": 16237,
+          "estimated_cost_micros": 0,
+          "open_reservations": 0,
+          "cost_unknown_entries": 4
+        },
+        "entries": [
+          {
+            "id": "usage_8c441bf697dbc6b14b4e65c9",
+            "run_id": "run_3b7273a9330ce7d0",
+            "operation_id": "call_51fe2d4313cf363c",
+            "turn_id": "turn_8d2c06f8c90ee3d60ca596c5",
+            "kind": "model.reservation",
+            "purpose": "compaction",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 5780,
+            "completion_tokens": 1,
+            "total_tokens": 5781,
+            "estimated": true,
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:10.854214Z"
+          },
+          {
+            "id": "usage_38f35c0cee296711031dafb1",
+            "run_id": "run_3b7273a9330ce7d0",
+            "operation_id": "call_51fe2d4313cf363c",
+            "turn_id": "turn_8d2c06f8c90ee3d60ca596c5",
+            "kind": "model.settlement",
+            "purpose": "compaction",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 4059,
+            "completion_tokens": 1330,
+            "total_tokens": 5389,
+            "breakdown": {
+              "cached_input_tokens": 256,
+              "reasoning_tokens": 356,
+              "source": "deepseek_cache"
+            },
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:17.328241Z"
+          },
+          {
+            "id": "usage_955c452d365c754d111ce19f",
+            "run_id": "run_3b7273a9330ce7d0",
+            "operation_id": "call_55af4f168badda23",
+            "turn_id": "turn_f95c93a8f105869a7c4ce966",
+            "kind": "model.reservation",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 1461,
+            "completion_tokens": 1,
+            "total_tokens": 1462,
+            "estimated": true,
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:17.328545Z"
+          },
+          {
+            "id": "usage_d2138cb9db773f1521a48b41",
+            "run_id": "run_3b7273a9330ce7d0",
+            "operation_id": "call_55af4f168badda23",
+            "turn_id": "turn_f95c93a8f105869a7c4ce966",
+            "kind": "model.settlement",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 1370,
+            "completion_tokens": 3912,
+            "total_tokens": 5282,
+            "breakdown": {
+              "cached_input_tokens": 256,
+              "reasoning_tokens": 3658,
+              "source": "deepseek_cache"
+            },
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:33.928112Z"
+          },
+          {
+            "id": "usage_c8ef85961de4ab53b3079989",
+            "run_id": "run_3b7273a9330ce7d0",
+            "operation_id": "call_46c247a495f49131",
+            "turn_id": "turn_c2bef25f66f684c3a55a0915",
+            "kind": "model.reservation",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 2150,
+            "completion_tokens": 1,
+            "total_tokens": 2151,
+            "estimated": true,
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:33.928885Z"
+          },
+          {
+            "id": "usage_cd15c3121d18743258fe69eb",
+            "run_id": "run_3b7273a9330ce7d0",
+            "operation_id": "call_46c247a495f49131",
+            "turn_id": "turn_c2bef25f66f684c3a55a0915",
+            "kind": "model.settlement",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 2198,
+            "completion_tokens": 94,
+            "total_tokens": 2292,
+            "breakdown": {
+              "cached_input_tokens": 768,
+              "reasoning_tokens": 0,
+              "source": "deepseek_cache"
+            },
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:34.866449Z"
+          },
+          {
+            "id": "usage_6b98f31b139382482e0baeb1",
+            "run_id": "run_3b7273a9330ce7d0",
+            "operation_id": "call_d8db932a8f0f3a24edc968d3_1_1",
+            "turn_id": "turn_c2bef25f66f684c3a55a0915",
+            "kind": "tool.execution",
+            "purpose": "primary",
+            "tool_name": "artifact_read",
+            "tool_calls": 1,
+            "timestamp": "2026-10-17T02:18:34.868169Z"
+          },
+          {
+            "id": "usage_6f37ba612594ea00752b99ee",
+            "run_id": "run_3b7273a9330ce7d0",
+            "operation_id": "call_152182368892b9ab",
+            "turn_id": "turn_c2bef25f66f684c3a55a0915",
+            "kind": "model.reservation",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 2464,
+            "completion_tokens": 1,
+            "total_tokens": 2465,
+            "estimated": true,
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:34.870535Z"
+          },
+          {
+            "id": "usage_68798d5fe8e5ba67d10d4a69",
+            "run_id": "run_3b7273a9330ce7d0",
+            "operation_id": "call_152182368892b9ab",
+            "turn_id": "turn_c2bef25f66f684c3a55a0915",
+            "kind": "model.settlement",
+            "purpose": "primary",
+            "model": "deepseek-flash",
+            "model_calls": 1,
+            "prompt_tokens": 2575,
+            "completion_tokens": 699,
+            "total_tokens": 3274,
+            "breakdown": {
+              "cached_input_tokens": 2176,
+              "reasoning_tokens": 449,
+              "source": "deepseek_cache"
+            },
+            "cost_details": {
+              "status": "unknown",
+              "reason": "pricing_unknown",
+              "pricing": {
+                "source": "run_budget",
+                "input_per_million_tokens_micros": 0,
+                "output_per_million_tokens_micros": 0
+              },
+              "cache_discount_applied": false
+            },
+            "timestamp": "2026-10-17T02:18:38.172649Z"
+          }
+        ],
+        "updated_at": "2026-10-17T02:18:38.172649Z"
+      },
+      "physical_requests": 4,
+      "manifests": [
+        {
+          "id": "ctx_915553deab2eb56e",
+          "model_call_id": "call_a1f8c18f63a75b17",
+          "run_id": "run_3b7273a9330ce7d0",
+          "turn_id": "",
+          "model": "deepseek-flash",
+          "assembler_version": "context-assembler-v1",
+          "context_window_tokens": 128000,
+          "output_reserve_tokens": 8192,
+          "safety_margin_tokens": 512,
+          "input_budget_tokens": 119296,
+          "estimated_input_tokens": 6201,
+          "excluded_tokens": 0,
+          "prefix_hash": "462e5d46d11c82622c0d0ec9b3622595768c854c6e8b4da545d737e6f6956897",
+          "entries": [
+            {
+              "source": "system",
+              "reference_id": "system_prompt",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 455,
+              "original_bytes": 1795,
+              "included_bytes": 1795
+            },
+            {
+              "source": "platform_policy",
+              "reference_id": "platform-security-v1",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "policy_version": "platform-security-v1",
+              "estimated_tokens": 80,
+              "original_bytes": 294,
+              "included_bytes": 294
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_fba4a3b71e633591",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 37,
+              "original_bytes": 125,
+              "included_bytes": 125
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_984563e8045e7d37",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 4956,
+              "original_bytes": 19794,
+              "included_bytes": 19794
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_fc8d14b220e5cd27",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 39,
+              "original_bytes": 134,
+              "included_bytes": 134
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_ae1b32b7a38add5b",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 30,
+              "original_bytes": 89,
+              "included_bytes": 89
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_4f9bad4f02a02b36",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 41,
+              "original_bytes": 144,
+              "included_bytes": 144
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_0180712bfdb6cc2f",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 32,
+              "original_bytes": 99,
+              "included_bytes": 99
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f088ba14801d459f",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 16,
+              "original_bytes": 41,
+              "included_bytes": 41
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_8dd8e03983452ddc",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 19,
+              "original_bytes": 46,
+              "included_bytes": 46
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_a9d6846e5c4d4bc9",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 23,
+              "original_bytes": 71,
+              "included_bytes": 71
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f5cdaf6b66502cd2",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 21,
+              "original_bytes": 55,
+              "included_bytes": 55
+            },
+            {
+              "source": "current_input",
+              "reference_id": "current_input",
+              "role": "user",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 100,
+              "original_bytes": 378,
+              "included_bytes": 378
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_read",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 117,
+              "original_bytes": 465,
+              "included_bytes": 465
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_search",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 115,
+              "original_bytes": 460,
+              "included_bytes": 460
+            },
+            {
+              "source": "task_state",
+              "reference_id": "conv_6e24c7b65ee8fd94:v1",
+              "selected": true,
+              "reason": "required",
+              "transformation": "structured_json",
+              "estimated_tokens": 120,
+              "original_bytes": 226,
+              "included_bytes": 480
+            }
+          ],
+          "created_at": "2026-10-17T02:18:10.853939Z"
+        },
+        {
+          "id": "ctx_cfd1eb32cf266d28",
+          "model_call_id": "call_51fe2d4313cf363c",
+          "run_id": "run_3b7273a9330ce7d0",
+          "turn_id": "turn_8d2c06f8c90ee3d60ca596c5",
+          "model": "deepseek-flash",
+          "assembler_version": "context-assembler-v1",
+          "context_window_tokens": 128000,
+          "output_reserve_tokens": 8192,
+          "safety_margin_tokens": 512,
+          "input_budget_tokens": 119296,
+          "estimated_input_tokens": 5683,
+          "excluded_tokens": 0,
+          "prefix_hash": "910af733ebd3a71eaeb0ff9bcae4a50c51deed95e9305f1d9f5c55b36d505d4f",
+          "entries": [
+            {
+              "source": "system",
+              "reference_id": "system_prompt",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 314,
+              "original_bytes": 1232,
+              "included_bytes": 1232
+            },
+            {
+              "source": "platform_policy",
+              "reference_id": "platform-security-v1",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "policy_version": "platform-security-v1",
+              "estimated_tokens": 80,
+              "original_bytes": 294,
+              "included_bytes": 294
+            },
+            {
+              "source": "current_input",
+              "reference_id": "current_input",
+              "role": "user",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 5289,
+              "original_bytes": 21133,
+              "included_bytes": 21133
+            }
+          ],
+          "created_at": "2026-10-17T02:18:10.854165Z"
+        },
+        {
+          "id": "ctx_39e4f26f16f7777f",
+          "model_call_id": "call_55af4f168badda23",
+          "run_id": "run_3b7273a9330ce7d0",
+          "turn_id": "turn_f95c93a8f105869a7c4ce966",
+          "model": "deepseek-flash",
+          "assembler_version": "context-assembler-v1",
+          "context_window_tokens": 128000,
+          "output_reserve_tokens": 8192,
+          "safety_margin_tokens": 512,
+          "input_budget_tokens": 119296,
+          "estimated_input_tokens": 1415,
+          "excluded_tokens": 0,
+          "prefix_hash": "5de803f2fc8793c8d04948b9dc1e1e1137cc30faeaea50fa6183d47e4d05656e",
+          "entries": [
+            {
+              "source": "system",
+              "reference_id": "system_prompt",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 369,
+              "original_bytes": 1449,
+              "included_bytes": 1449
+            },
+            {
+              "source": "platform_policy",
+              "reference_id": "platform-security-v1",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "policy_version": "platform-security-v1",
+              "estimated_tokens": 80,
+              "original_bytes": 294,
+              "included_bytes": 294
+            },
+            {
+              "source": "current_input",
+              "reference_id": "current_input",
+              "role": "user",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 966,
+              "original_bytes": 3826,
+              "included_bytes": 3826
+            }
+          ],
+          "created_at": "2026-10-17T02:18:17.328445Z"
+        },
+        {
+          "id": "ctx_a04b8400624ea0e0",
+          "model_call_id": "call_46c247a495f49131",
+          "run_id": "run_3b7273a9330ce7d0",
+          "turn_id": "turn_c2bef25f66f684c3a55a0915",
+          "model": "deepseek-flash",
+          "assembler_version": "context-assembler-v1",
+          "context_window_tokens": 128000,
+          "output_reserve_tokens": 8192,
+          "safety_margin_tokens": 512,
+          "input_budget_tokens": 119296,
+          "estimated_input_tokens": 2066,
+          "excluded_tokens": 0,
+          "prefix_hash": "3ffde8a5bfff92f7221713f8365a8f5244b8cc8ea7f8dd197db799622a65ee7d",
+          "compaction_id": "cmp_faa9888f995076f5dfff",
+          "compaction_generation": 1,
+          "entries": [
+            {
+              "source": "system",
+              "reference_id": "system_prompt",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 461,
+              "original_bytes": 1819,
+              "included_bytes": 1819
+            },
+            {
+              "source": "platform_policy",
+              "reference_id": "platform-security-v1",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "policy_version": "platform-security-v1",
+              "estimated_tokens": 80,
+              "original_bytes": 294,
+              "included_bytes": 294
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f088ba14801d459f",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 16,
+              "original_bytes": 41,
+              "included_bytes": 41
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_8dd8e03983452ddc",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 19,
+              "original_bytes": 46,
+              "included_bytes": 46
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_a9d6846e5c4d4bc9",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 23,
+              "original_bytes": 71,
+              "included_bytes": 71
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f5cdaf6b66502cd2",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 21,
+              "original_bytes": 55,
+              "included_bytes": 55
+            },
+            {
+              "source": "current_input",
+              "reference_id": "current_input",
+              "role": "user",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 100,
+              "original_bytes": 378,
+              "included_bytes": 378
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_read",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 117,
+              "original_bytes": 465,
+              "included_bytes": 465
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_search",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 115,
+              "original_bytes": 460,
+              "included_bytes": 460
+            },
+            {
+              "source": "compaction_summary",
+              "reference_id": "cmp_faa9888f995076f5dfff",
+              "selected": true,
+              "reason": "required",
+              "transformation": "compacted",
+              "estimated_tokens": 994,
+              "original_bytes": 3696,
+              "included_bytes": 3961
+            },
+            {
+              "source": "task_state",
+              "reference_id": "conv_6e24c7b65ee8fd94:v1",
+              "selected": true,
+              "reason": "required",
+              "transformation": "structured_json",
+              "estimated_tokens": 120,
+              "original_bytes": 226,
+              "included_bytes": 480
+            }
+          ],
+          "created_at": "2026-10-17T02:18:33.928526Z"
+        },
+        {
+          "id": "ctx_21026a64fe37f79c",
+          "model_call_id": "call_152182368892b9ab",
+          "run_id": "run_3b7273a9330ce7d0",
+          "turn_id": "turn_c2bef25f66f684c3a55a0915",
+          "model": "deepseek-flash",
+          "assembler_version": "context-assembler-v1",
+          "context_window_tokens": 128000,
+          "output_reserve_tokens": 8192,
+          "safety_margin_tokens": 512,
+          "input_budget_tokens": 119296,
+          "estimated_input_tokens": 2346,
+          "excluded_tokens": 0,
+          "prefix_hash": "3ffde8a5bfff92f7221713f8365a8f5244b8cc8ea7f8dd197db799622a65ee7d",
+          "compaction_id": "cmp_faa9888f995076f5dfff",
+          "compaction_generation": 1,
+          "entries": [
+            {
+              "source": "system",
+              "reference_id": "system_prompt",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 461,
+              "original_bytes": 1819,
+              "included_bytes": 1819
+            },
+            {
+              "source": "platform_policy",
+              "reference_id": "platform-security-v1",
+              "role": "system",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "policy_version": "platform-security-v1",
+              "estimated_tokens": 80,
+              "original_bytes": 294,
+              "included_bytes": 294
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f088ba14801d459f",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 16,
+              "original_bytes": 41,
+              "included_bytes": 41
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_8dd8e03983452ddc",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 19,
+              "original_bytes": 46,
+              "included_bytes": 46
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_a9d6846e5c4d4bc9",
+              "role": "user",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 23,
+              "original_bytes": 71,
+              "included_bytes": 71
+            },
+            {
+              "source": "history",
+              "reference_id": "msg_f5cdaf6b66502cd2",
+              "role": "assistant",
+              "selected": true,
+              "reason": "recent",
+              "transformation": "original",
+              "estimated_tokens": 21,
+              "original_bytes": 55,
+              "included_bytes": 55
+            },
+            {
+              "source": "current_input",
+              "reference_id": "current_input",
+              "role": "user",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 100,
+              "original_bytes": 378,
+              "included_bytes": 378
+            },
+            {
+              "source": "tool_call",
+              "reference_id": "call_d8db932a8f0f3a24edc968d3_1_1",
+              "role": "assistant",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 68,
+              "original_bytes": 40,
+              "included_bytes": 40
+            },
+            {
+              "source": "tool_result",
+              "reference_id": "call_d8db932a8f0f3a24edc968d3_1_1",
+              "role": "tool",
+              "selected": true,
+              "reason": "required",
+              "transformation": "tool_result_artifact_preview",
+              "estimated_tokens": 212,
+              "original_bytes": 789,
+              "included_bytes": 789,
+              "artifact_ids": [
+                "tool_artifact_run_3b7273a9330ce7d0"
+              ]
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_read",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 117,
+              "original_bytes": 465,
+              "included_bytes": 465
+            },
+            {
+              "source": "tool_definition",
+              "reference_id": "artifact_search",
+              "selected": true,
+              "reason": "required",
+              "transformation": "original",
+              "estimated_tokens": 115,
+              "original_bytes": 460,
+              "included_bytes": 460
+            },
+            {
+              "source": "compaction_summary",
+              "reference_id": "cmp_faa9888f995076f5dfff",
+              "selected": true,
+              "reason": "required",
+              "transformation": "compacted",
+              "estimated_tokens": 994,
+              "original_bytes": 3696,
+              "included_bytes": 3961
+            },
+            {
+              "source": "task_state",
+              "reference_id": "conv_6e24c7b65ee8fd94:v1",
+              "selected": true,
+              "reason": "required",
+              "transformation": "structured_json",
+              "estimated_tokens": 120,
+              "original_bytes": 226,
+              "included_bytes": 480
+            }
+          ],
+          "created_at": "2026-10-17T02:18:34.869782Z"
+        }
+      ],
+      "events": [
+        {
+          "id": "event_4e18bca2f19c85b8",
+          "type": "context.assembled",
+          "sequence": 1,
+          "payload_hash": "sha256:a0552e3d9fca27a640ad80c56ae311b44f1bb2dbe6e3bf97ed647dce639306e8"
+        },
+        {
+          "id": "event_a7eb555432bf8b80",
+          "type": "context.compaction_started",
+          "sequence": 2,
+          "payload_hash": "sha256:7b13dd2afef520e4ba29b23990c49876935cd2db0b2bf58cb3bd1b13eaa1793e"
+        },
+        {
+          "id": "event_8f81d0fb3546b2f0",
+          "type": "context.assembled",
+          "sequence": 3,
+          "payload_hash": "sha256:143a22d95a3250335d1b52e3c69eb20528641544803a844bc452b4b601029040"
+        },
+        {
+          "id": "event_35d385b44dd10ce9",
+          "type": "context.compaction_completed",
+          "sequence": 4,
+          "payload_hash": "sha256:20835d08399818ec518a04874a44b4cbfabbb345905c240f15a1ff11e0fa24c0"
+        },
+        {
+          "id": "event_4eaee7c544e4f904",
+          "type": "context.assembled",
+          "sequence": 5,
+          "payload_hash": "sha256:b6d6ceba9ac310662819819b1f72b75ac804a4dc1678be3fce8774604dba3aa0"
+        },
+        {
+          "id": "event_c337676ffefae12e",
+          "type": "turn.started",
+          "sequence": 6,
+          "payload_hash": "sha256:f416ca5c6b60e0c9aaf1ca1c76c496366b3553023052a9d550609a5e547c5638"
+        },
+        {
+          "id": "event_0b2a10233ee1f701",
+          "type": "context.assembled",
+          "sequence": 7,
+          "payload_hash": "sha256:84d624053b91c498051a6c28faadb1a9291ab651d23b6d8a1125599e6510f8d3"
+        },
+        {
+          "id": "event_ac0ee128e5da2c36",
+          "type": "model.started",
+          "sequence": 8,
+          "payload_hash": "sha256:ef03c712bf7f5a842c3617384e6f9bdfeb2b6f3afff077093bc9c7bcff80c2f4"
+        },
+        {
+          "id": "event_8959e03c98d48f52",
+          "type": "model.output_checkpoint",
+          "sequence": 9,
+          "payload_hash": "sha256:dc8c391f00acf60eaf659e26ce78f7da9db648ec499511ee4a76476891c3601a"
+        },
+        {
+          "id": "event_c91d3da138fa6a01",
+          "type": "model.output_checkpoint",
+          "sequence": 10,
+          "payload_hash": "sha256:ddede1686bd4068d4f445f6213721f8a08835bb41ed736e8e5127b531961e5b4"
+        },
+        {
+          "id": "event_52f43c801e059ef1",
+          "type": "model.completed",
+          "sequence": 11,
+          "payload_hash": "sha256:6abbe7d56564860ea60123c6402b63a652480c492ae835ca8169a51e925ffb75"
+        },
+        {
+          "id": "event_ae4ae32b042e80c5",
+          "type": "tool.started",
+          "sequence": 12,
+          "payload_hash": "sha256:1b7b1af7d2ebc4d8063c65b896e38a691234d9918449a43d564101ab3c1144b2"
+        },
+        {
+          "id": "event_756780eaecc8b188",
+          "type": "tool.policy_evaluated",
+          "sequence": 13,
+          "payload_hash": "sha256:6c751f0bbc7202472f819742df37366c3799c40d2f1c0882e41cec0473088fc1"
+        },
+        {
+          "id": "event_fc8b9156ccb6afa2",
+          "type": "artifact.read",
+          "sequence": 14,
+          "payload_hash": "sha256:1fff69a0bb253fe3e399aded6ae571f1844b503a44773ee1950e96e7a007a742"
+        },
+        {
+          "id": "event_028f1c2df0ac53cd",
+          "type": "tool.completed",
+          "sequence": 15,
+          "payload_hash": "sha256:6ca0bb8ae5be116b5008569ee10a9e264e8da51fcd3cb910b37c40031197dd80"
+        },
+        {
+          "id": "event_aba11a94adbedf54",
+          "type": "context.assembled",
+          "sequence": 16,
+          "payload_hash": "sha256:3eaba1bd0e55936241680f545a20d1f1c7c856a054cf9d842ce808f55eac700d"
+        },
+        {
+          "id": "event_df6a8e2fce965694",
+          "type": "model.started",
+          "sequence": 17,
+          "payload_hash": "sha256:cfc7abe2ed7c5ce6ed16c21967f432f1d341f4713bec87c974960e2e3f4df44d"
+        },
+        {
+          "id": "event_3033c7b798b4c204",
+          "type": "model.output_checkpoint",
+          "sequence": 18,
+          "payload_hash": "sha256:528003ebe7ccbd36682cb485e7cecd3063756daaa66d1aa8d3842c0704db60ea"
+        },
+        {
+          "id": "event_67b6c05ca42940d3",
+          "type": "model.completed",
+          "sequence": 19,
+          "payload_hash": "sha256:5540a849f20e4977cbeeac467726a3750ff1db4b88f33d95b95016bd74a885aa"
+        },
+        {
+          "id": "event_b567e0144daacd4c",
+          "type": "model.output_checkpoint",
+          "sequence": 20,
+          "payload_hash": "sha256:67014cbe4bc1a4fea92ea55932dcba5ce2061860abaf31ceec0e918e8fc7025b"
+        },
+        {
+          "id": "event_901e4c9f732a72f4",
+          "type": "turn.completed",
+          "sequence": 21,
+          "payload_hash": "sha256:28a3ee57f1ed2351c077ad486f25a1960fd95e7e75fac3c7740149911e340ece"
+        }
+      ],
+      "material_reads": [
+        {
+          "event_id": "event_028f1c2df0ac53cd",
+          "call_id": "call_d8db932a8f0f3a24edc968d3_1_1",
+          "artifact_id": "tool_artifact_run_3b7273a9330ce7d0",
+          "returned_content_hash": "sha256:59fbb0a265bbeb1bce9c16f73546fbfc4a3fb474445e746f899c7826c1d06e74",
+          "offset": 0,
+          "bytes": 110,
+          "complete": true
+        }
+      ]
+    }
+  ],
+  "pairs": [
+    {
+      "case_id": "corrected-cap-canceled-notice",
+      "trial": 1,
+      "baseline_run_id": "run_a4ea4fdca0ff0350",
+      "candidate_run_id": "run_3b7273a9330ce7d0",
+      "fidelity_regressed": false,
+      "outcome_regressed": true,
+      "compaction_calls": 1,
+      "compaction_tokens": 5389,
+      "compaction_ms": 6474,
+      "continuation_token_delta": -5206,
+      "total_token_delta": -98,
+      "continuation_ms_delta": -769
+    }
+  ],
+  "summary": {
+    "samples": 2,
+    "verified": 0,
+    "not_evaluated": 0,
+    "pairs": 1,
+    "comparable_pairs": 1,
+    "improved": 0,
+    "regressed": 0,
+    "unchanged": 1
+  },
+  "usage": {
+    "model_calls": 7,
+    "tool_calls": 2,
+    "prompt_tokens": 23937,
+    "completion_tokens": 8635,
+    "total_tokens": 32572,
+    "estimated_cost_micros": 0,
+    "open_reservations": 0,
+    "cost_unknown_entries": 7
+  },
+  "physical_requests": 7,
+  "gate": {
+    "passed": false,
+    "blocking_samples": 1,
+    "blocking_failures": 1,
+    "reasons": [
+      "corrected-cap-canceled-notice: candidate fidelity/continuation not verified"
+    ]
+  }
+}

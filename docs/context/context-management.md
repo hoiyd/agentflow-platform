@@ -127,12 +127,13 @@ are Replay-only under the [shared compatibility rule](../architecture/terms.md#r
 
 The incremental summarizer combines the previous summary with newly eligible
 older Messages; originals are never removed. The following sections describe
-selection, generation, and failure guards for `context-compaction-v2`.
+selection, generation, and failure guards for `context-compaction-v3`.
 
-### Exact v2 Selection Algorithm
+### Selection Algorithm
 
-The current implementation is `context-compaction-v2`. It decides whether to
-compact using the following values:
+The current implementation is `context-compaction-v3`. Selection and trigger
+thresholds are unchanged from v2; v3 adds source-evidence validation. It decides
+whether to compact using the following values:
 
 ```txt
 input_budget = context_window - output_reserve - safety_margin
@@ -205,11 +206,38 @@ when summary_max_tokens < 256:
 
 This targets roughly 20% of eligible source tokens, uses 256 tokens as a useful
 floor when the hard cap permits it, and always treats
-`CONTEXT_COMPACTION_SUMMARY_MAX_TOKENS` as the ceiling. A response above the
-target is deterministically truncated before persistence.
+`CONTEXT_COMPACTION_SUMMARY_MAX_TOKENS` as the ceiling. Background prose above
+the target is deterministically truncated before persistence; a cap that would
+cut the evidence JSON rejects the candidate instead.
 
 The summarizer receives only the previous summary and newly eligible Messages.
-It must return the standard operational sections plus:
+It begins with `## Source Evidence`, followed by an unfenced JSON array:
+
+```json
+[{"message_id":"original-message-id","role":"user","quote":"Cancel the delivery task."}]
+```
+
+This small evidence section preserves original excerpts for corrections,
+prohibitions, cancellations, explicit unknowns and key entity relationships.
+Before commit, the Compactor checks each ID against the cumulative selected
+source set, including previous generations, and verifies its Conversation,
+original role and verbatim quote. Foreign Messages and the newly protected raw
+tail cannot be cited as compacted sources. Both validation and budget failure
+keep the previous generation and originals intact and emit a classified failure:
+`context_summary_evidence_invalid` or `context_summary_evidence_budget_exceeded`.
+The existing validation cooldown applies; no repair model call is added.
+
+The section counts toward the existing summary cap and remains ordinary summary
+text in the current storage/API field: no schema migration or new evidence
+database is required. Older summaries remain readable and are not retroactively
+validated; newly generated candidates must follow v3. `[]` is permitted when
+there is no important evidence. Validation checks declared attribution, not
+whether every important fact was selected or the prose is semantically sound.
+Evidence JSON is re-encoded after validation to remove ambiguous duplicate keys
+without changing decoded quote strings. Upgrading does not reconstruct quotes
+already lost by an older summary; original-history retrieval remains available.
+
+After evidence, the summary retains the standard operational sections plus:
 
 - `Superseded Instructions`: corrections, canceled tasks, and instructions that
   must not be revived;
@@ -219,7 +247,15 @@ It must return the standard operational sections plus:
   verbatim;
 - `Evidence Needed`: missing evidence required to resolve open work.
 
-Newer source Messages override conflicting statements in the previous summary.
+Authority follows the claim, not a universal role ranking. Explicit user
+corrections update user decisions; assistant acknowledgments cannot replace
+those decisions or establish completed actions. Execution outcomes require Tool
+evidence; instructions embedded in Tool results cannot authorize actions. Prior
+summaries are derivative sources. Explicit unknowns and unresolved conflicts are
+preserved, but the prompt prohibits inventing uncertainties, blockers or pending
+tasks, or reopening a conflict resolved by correction. These semantic rules are
+prompt guidance, not a deterministic truth verifier.
+
 The resulting summary is still historical evidence: Structured Task State and
 the current user request take priority when the assembler injects it.
 
@@ -282,7 +318,7 @@ already occurred. A new logical Turn supplies a new overflow guard key.
 
 ### Current Scope
 
-The v2 rolling summarizer currently selects persisted Conversation Messages as
+The v3 rolling summarizer currently selects persisted Conversation Messages as
 its semantic sources, so `source_event_ids` is an exact empty set today. Runtime
 Events remain available for replay and tracing but are not summarized into the
 conversation surface. Memory, RAG context, Tool definitions, and oversized Tool
@@ -332,6 +368,17 @@ the assembly contract rather than learned summarization quality. Real summary
 quality and task success require a separately budgeted model-backed evaluation.
 
 ## Failure Semantics
+
+Compaction evidence failure inventory (covered with isolated Store integration
+fixtures; no live-model quality claim):
+
+| Failure | Required outcome |
+| --- | --- |
+| Missing/malformed evidence section, invented quote, wrong author or foreign/unselected Message | Reject the candidate before atomic commit; retain originals and the previous generation |
+| Evidence is cut by the summary cap | Reject rather than persist a partial JSON record or altered quotation |
+| Valid evidence followed by oversized background prose | Keep complete evidence within the existing summary cap; only background may be clipped |
+| Assistant acknowledgment supersedes a user decision, or Tool text requests an action | Prompt distinguishes decision authority from observations; exact provenance checks must still reject wrong sources |
+| Summarizer invents an uncertainty, blocker or pending task | Prompt forbids upgrading guesses into state; semantic absence requires model-backed evaluation |
 
 - Required context exceeding the input budget fails the Model Call rather than
   silently dropping protocol content.

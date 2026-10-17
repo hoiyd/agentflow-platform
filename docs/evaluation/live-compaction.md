@@ -66,22 +66,27 @@ configuration are retained in the report. No production defaults are changed.
 
 ## Experiment and Sensors
 
-[`compaction-continuation.v2.json`](../../examples/context/compaction-continuation.v2.json)
-freezes one synthetic invoice task: correct amount/currency/payee, forbid release,
+[`compaction-continuation.v3.json`](../../examples/context/compaction-continuation.v3.json)
+freezes one synthetic invoice task: correct amount/currency/cap account, forbid release,
 cancel a notice, preserve an unknown receipt and exact identifiers. Expected
 claims and their source quotations are manually authored. Neutral historical
 padding creates pressure without adding facts. Only complete user/assistant
 exchanges are admitted; arbitrary Tool histories are rejected, not flattened.
 
-Dataset v2 keeps v1's history, task, materials, state patch and typed truth values.
-It corrects three expected quotations to include the source sentence's
-`Correction:` prefix. The extraction prompt now requires complete source
-sentences, distinguishes an explicitly unknown confirmation status from a
-missing value, and declares exactly one material citation, separate from fact
-provenance. Exact-value/source/quote checks and real read receipts remain strict.
-The [v1 Dataset](../../examples/context/compaction-continuation.v1.json) is retained;
-old reports must not be rescored. Prompt hashes and Dataset versions distinguish
-the profiles; comparing them does not isolate a compression-algorithm change.
+Dataset v2 corrected three quotation boundaries to include `Correction:`.
+V3 changes the ambiguous `payee` field to `cap_account`: the source identifies
+the account to which the cap applies, not necessarily a payment recipient.
+History, materials, Task State and truth values are otherwise unchanged.
+The extraction prompt distinguishes user decisions from assistant
+acknowledgments and uses retained original quotes rather than summary paraphrases.
+It requires complete source sentences, preserves explicit unknowns and declares
+exactly one material citation, separate from fact provenance. Exact-value,
+source/quote checks and real read receipts remain strict.
+The [v1](../../examples/context/compaction-continuation.v1.json) and
+[v2](../../examples/context/compaction-continuation.v2.json) Datasets are retained;
+old reports must not be rescored. Prompt hashes, Dataset/sensor versions and the
+compaction algorithm distinguish profiles; comparing revisions does not isolate
+an algorithm-only effect.
 
 Each arm gets its own Conversation, Run, material Artifact and legal Task State
 Revision. State is built from the same explicit user-source patch; content/hash
@@ -105,6 +110,14 @@ Two checks answer different questions:
   is a task-specific extraction probe, not an LLM Judge or proof of arbitrary
   semantic completeness. Exact quotation requirements can reject paraphrases.
   This first dataset puts the probed facts in the compacted older sources.
+  `fact_values_passed` and `fact_provenance_passed` distinguish lost values from
+  wrong attribution/quotes; both remain necessary for `passed`. A summary-only
+  probe has no original-history read Tool: lost quotes cannot be reconstructed
+  by treating a paraphrase as an original. V3's retained Source Evidence is
+  included in the tested summary, not injected from the answer key.
+  Sensor v3 accepts either the logical Dataset source ID or its recorded
+  physical Message ID in the same arm. This is identity normalization only:
+  a different user/assistant source, foreign ID or altered quote still fails.
 - **Continuation:** the production Turn Engine/Tool loop receives the arm's
   history/summary and required Task State. A real scoped `artifact_read` Binding
   must supply the immutable supporting material before the final structured
@@ -150,7 +163,66 @@ the report envelope. They cover the failure inventory; the timeout fixture is a 
 measurement of real provider latency. Ordinary CI makes no public model calls.
 No UI/API/database migration is needed; this profile uses an isolated in-memory
 Store and does not test deployment recovery or all orchestration modes.
+The source-boundary integration also covers foreign/protected Messages, wrong
+authors, invented quotes, malformed/over-budget evidence and preservation of
+the previous generation; these deterministic checks do not prove that a real
+model follows the authority or no-speculation prompt rules.
 
-No live result is claimed until that report is generated. This small task cannot
-establish lossless arbitrarily long sessions, independent Task State benefit,
+## Calibrated Live Sample
+
+The [2026-10-17 calibrated report](evidence/live-compaction-deepseek-flash-2026-10-17-calibrated.json)
+uses clean revision `ba6313df346485a919ecfe915c12c08fca9a3505`, Dataset v2 and
+`deepseek-flash`. **A complete summary was generated, stored and used for
+continuation, without truncation or raw-history fallback. The quality gate
+still failed; successful summary generation is not verified fidelity.**
+This report predates the v3 evidence protocol and split sensors; it is not a
+live validation of those changes. No additional live experiment has been run.
+
+| Evidence | Report field / observation |
+| --- | --- |
+| Authorization | One trial / two arms; at most 8 requests, 90,000 tokens, 120 seconds per arm and a five-minute outer deadline; no automatic rerun |
+| Generation / stored cap | `config.output_reserve_tokens=8192`; `config.summary_max_tokens=1024` |
+| Actual use | `physical_requests=7`; `usage.total_tokens=32572`; no open reservations; approximately 40.148 seconds in the report |
+| Summary | Candidate `compaction.status=completed`, generation 1; full text in `samples[].compaction.summary` |
+| Estimated context reduction | `before_tokens=5214`, `after_tokens=1007`, `reduction_ratio=0.8068661296509397`; assembler estimates including the protected recent history, not provider-measured token savings |
+| Summary generation expense | Candidate compaction phase: 5,389 tokens, 6,474 ms |
+| Evidence integrity | Both histories unchanged; two complete material reads, each matching its frozen Artifact hash |
+| Quality | One execution-comparable pair; `summary.verified=0/2`; `gate.passed=false` |
+| Monetary cost | `cost_micros=null`; all seven model settlements have unknown prices |
+
+The full-history continuation passed. Its fidelity probe preserved all typed
+values but cited the assistant acknowledgment `h6` for the canceled notice,
+instead of the authored user-source `h5`. The compacted continuation also
+preserved all eight typed values and passed material-read/citation checks, but
+six fact quotations differed from the frozen originals. The summary-only probe
+additionally returned a null payee, although Account-B appears in the stored
+summary. This distinguishes extraction failure from a demonstrably absent fact;
+neither is silently accepted by the gate. Manual inspection also finds added
+questions about invoice currency and report scope, not explicit source claims.
+
+Pair-level `outcome_regressed=true` records the baseline continuation pass and
+candidate provenance failure. The aggregate `regressed=0` instead compares full
+verification, which neither arm achieved; it is **not** evidence of no regression.
+The measured total-token delta is -98, including the summary and probes; one
+failed-quality pair cannot establish useful savings or justify a policy change.
+Multiple settings changed, so this sample does not isolate a causal budget effect.
+
+Reproduce only after authorizing another spend, using the recorded revision:
+
+```bash
+OPENAI_API_KEY="$DEEPSEEK_API_KEY" go -C apps/api run ./cmd/eval context-live --live \
+  --model deepseek-flash --base-url https://api.deepseek.com \
+  --trials 1 --max-model-calls 8 --max-total-tokens 90000 --timeout 120s \
+  --context-window-tokens 128000 --output-reserve-tokens 8192 \
+  --summary-max-tokens 1024 --enforce > /tmp/compaction-calibrated-report.json
+```
+
+The operator enforced the five-minute outer deadline separately. Exit `1` is the
+expected `--enforce` gate result, not a transport or report-generation failure.
+No production policy changed. Before another experiment, address authoritative
+user-source selection and how original evidence survives a paraphrased summary;
+do not remove provenance checks to turn this report green. This single synthetic
+sample is not a calibrated quality score or evidence for long-session stability.
+
+This small task cannot establish lossless arbitrarily long sessions, independent Task State benefit,
 or justify background/parallel compaction or advanced anti-drift mechanisms.

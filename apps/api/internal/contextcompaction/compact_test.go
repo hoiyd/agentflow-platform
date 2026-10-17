@@ -4,6 +4,7 @@ import "agentflow-platform/apps/api/internal/testsupport/fixturestore"
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"strings"
@@ -32,7 +33,7 @@ func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
 	var prompts []string
 	summarizer := SummarizerFunc(func(_ context.Context, request SummaryRequest) (SummaryResult, error) {
 		prompts = append(prompts, request.Prompt)
-		return SummaryResult{Text: "## Goal\nPreserve important context.\n## Source References\nmessage ids retained", Model: "summary-model"}, nil
+		return SummaryResult{Text: "## Source Evidence\n[]\n\n## Goal\nPreserve important context.\n## Source References\nmessage ids retained", Model: "summary-model"}, nil
 	})
 	config := compactionTestConfig()
 	first, err := compactor.CompactIfNeeded(context.Background(), Request{
@@ -138,7 +139,7 @@ func TestCompactIfNeededPrefersObservedPromptTokensForSoftTrigger(t *testing.T) 
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerSoft,
 		ObservedPromptTokens: 200, Config: config,
 		Summarizer: SummarizerFunc(func(context.Context, SummaryRequest) (SummaryResult, error) {
-			return SummaryResult{Text: "## Goal\nKeep context", Model: "summary-model"}, nil
+			return SummaryResult{Text: "## Source Evidence\n[]\n\n## Goal\nKeep context", Model: "summary-model"}, nil
 		}),
 	})
 	if err != nil || compaction == nil {
@@ -447,18 +448,28 @@ func TestLongSessionSemanticFidelityFixturePreservesCorrectionsAndCancellation(t
 		{"user", "Cancel the legacy deployment task."}, {"assistant", "The deployment task is canceled."},
 		{"user", "Keep exact reference ticket-4821."}, {"assistant", "Reference preserved."},
 		{"user", "What remains?"}, {"assistant", "Review the current state."},
+		{"user", "Continue with the same constraints."}, {"assistant", "Ready."},
 	}
+	var sourceMessages []domain.Message
 	for _, source := range newSources {
-		_, _ = fixtureStore.AddMessage(conversation.ID, source.role, source.content)
+		message, _ := fixtureStore.AddMessage(conversation.ID, source.role, source.content)
+		sourceMessages = append(sourceMessages, message)
 	}
+	config := compactionTestConfig()
+	config.CompactionSummaryMaxTokens = 512
 	compaction, err := NewCompactor(fixtureStore).CompactIfNeeded(context.Background(), Request{
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerHard,
-		ObservedPromptTokens: 1000, Config: compactionTestConfig(),
+		ObservedPromptTokens: 1000, Config: config,
 		Summarizer: SummarizerFunc(func(_ context.Context, request SummaryRequest) (SummaryResult, error) {
 			if !strings.Contains(request.Prompt, "Use model A") || !strings.Contains(request.Prompt, "Correction: use model B") || !strings.Contains(request.Prompt, "Cancel the legacy deployment") {
 				t.Fatalf("fixture omitted correction history: %s", request.Prompt)
 			}
-			return SummaryResult{Text: "## Key Decisions\nUse model B.\n## Superseded Instructions\nModel A and legacy deployment are canceled.\n## Exact References\nticket-4821", Model: "fixture-model"}, nil
+			evidence, _ := json.Marshal([]map[string]string{
+				{"message_id": sourceMessages[0].ID, "role": "user", "quote": newSources[0].content},
+				{"message_id": sourceMessages[2].ID, "role": "user", "quote": newSources[2].content},
+				{"message_id": sourceMessages[4].ID, "role": "user", "quote": newSources[4].content},
+			})
+			return SummaryResult{Text: "## Source Evidence\n" + string(evidence) + "\n\n## Key Decisions\nUse model B.\n## Superseded Instructions\nModel A and legacy deployment are canceled.\n## Exact References\nticket-4821", Model: "fixture-model"}, nil
 		}),
 	})
 	if err != nil || compaction == nil || compaction.Generation != 2 ||
@@ -469,7 +480,7 @@ func TestLongSessionSemanticFidelityFixturePreservesCorrectionsAndCancellation(t
 
 func fixedSummarizer(summary string) Summarizer {
 	return SummarizerFunc(func(context.Context, SummaryRequest) (SummaryResult, error) {
-		return SummaryResult{Text: summary, Model: "summary-model"}, nil
+		return SummaryResult{Text: "## Source Evidence\n[]\n\n## Goal\n" + summary, Model: "summary-model"}, nil
 	})
 }
 

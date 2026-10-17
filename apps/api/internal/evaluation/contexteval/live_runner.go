@@ -54,7 +54,7 @@ func RunLive(ctx context.Context, client *openai.Client, opts LiveOptions) (Live
 	report := LiveReport{Identity: evalreport.Identity{ReportFormat: evalreport.Format, EvaluationKind: "compaction_fidelity_continuation",
 		DatasetID: data.ID, DatasetVersion: data.Version, DatasetHash: hash, GitRevision: normalizeRevision(opts.Revision), StartedAt: time.Now().UTC()},
 		SchemaVersion: liveReportSchema, Config: opts, Model: identity.Model, Provider: identity.Provider, Sampling: identity.GenerationPolicy,
-		Assembly: config, Algorithm: contextcompaction.AlgorithmVersion, SensorVersion: "typed-claims-exact-provenance-v1",
+		Assembly: config, Algorithm: contextcompaction.AlgorithmVersion, SensorVersion: "typed-claims-exact-provenance-v3",
 		PromptHash: liveDigest(probeSystem + continuationSystem + responseInstructions), Dataset: data,
 		CostSource: "unknown: no evaluation price table; ledger costs are not a claim of zero monetary cost", Samples: []LiveSample{}}
 	remainingCalls, remainingTokens, stop := opts.MaxModelCalls, opts.MaxTotalTokens, ""
