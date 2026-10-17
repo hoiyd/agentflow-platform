@@ -127,12 +127,13 @@ are Replay-only under the [shared compatibility rule](../architecture/terms.md#r
 
 The incremental summarizer combines the previous summary with newly eligible
 older Messages; originals are never removed. The following sections describe
-selection, generation, and failure guards for `context-compaction-v3`.
+selection, generation, and failure guards for `context-compaction-v4`.
 
 ### Selection Algorithm
 
-The current implementation is `context-compaction-v3`. Selection and trigger
-thresholds are unchanged from v2; v3 adds source-evidence validation. It decides
+The current implementation is `context-compaction-v4`. Selection and trigger
+thresholds are unchanged from v2. V3 added source-evidence validation; v4 restricts
+new summaries to historical context rather than a generated execution plan. It decides
 whether to compact using the following values:
 
 ```txt
@@ -230,22 +231,30 @@ The existing validation cooldown applies; no repair model call is added.
 The section counts toward the existing summary cap and remains ordinary summary
 text in the current storage/API field: no schema migration or new evidence
 database is required. Older summaries remain readable and are not retroactively
-validated; newly generated candidates must follow v3. `[]` is permitted when
+validated; newly generated candidates must follow v4. `[]` is permitted when
 there is no important evidence. Validation checks declared attribution, not
 whether every important fact was selected or the prose is semantically sound.
 Evidence JSON is re-encoded after validation to remove ambiguous duplicate keys
 without changing decoded quote strings. Upgrading does not reconstruct quotes
 already lost by an older summary; original-history retrieval remains available.
 
-After evidence, the summary retains the standard operational sections plus:
+After evidence, only four optional sections are allowed: `Established Facts`,
+`Superseded Instructions`, `Exact References`, and `Source References`.
+Unknown sections and subheadings fail with `context_summary_operational_content`
+before clipping or commit. In particular, a new summary cannot contain `Goal`,
+`Current State`, `Pending Work`, `Completed Work` or `Evidence Needed` sections.
+Existing lifecycle events, validation cooldown and previous-surface fallback
+apply. Legacy summaries remain readable until superseded by a valid generation.
 
-- `Superseded Instructions`: corrections, canceled tasks, and instructions that
-  must not be revived;
-- `Uncertainties`: facts that remain uncertain;
-- `Conflicts`: incompatible claims that cannot be resolved from the sources;
-- `Exact References`: identifiers, commands, paths, and values that must remain
-  verbatim;
-- `Evidence Needed`: missing evidence required to resolve open work.
+The summary must not create another source of current task lifecycle or pending
+work: those belong to separately loaded [Task State](../runtime/task-state.md).
+An explicitly permitted next action does not change a canceled task's status or
+establish a replacement task. Historical unknowns, conflicts and observations
+may be retained as attributed facts or exact evidence, not inferred new tasks.
+This structural guard blocks operational **sections**, not every possible
+misinterpretation in factual prose; it does not claim semantic truth verification.
+Without existing Task State, compaction does not infer or create it; explicit
+user requests remain historical evidence rather than a generated replacement plan.
 
 Authority follows the claim, not a universal role ranking. Explicit user
 corrections update user decisions; assistant acknowledgments cannot replace
@@ -318,7 +327,7 @@ already occurred. A new logical Turn supplies a new overflow guard key.
 
 ### Current Scope
 
-The v3 rolling summarizer currently selects persisted Conversation Messages as
+The v4 rolling summarizer currently selects persisted Conversation Messages as
 its semantic sources, so `source_event_ids` is an exact empty set today. Runtime
 Events remain available for replay and tracing but are not summarized into the
 conversation surface. Memory, RAG context, Tool definitions, and oversized Tool
@@ -376,6 +385,7 @@ fixtures; no live-model quality claim):
 | --- | --- |
 | Missing/malformed evidence section, invented quote, wrong author or foreign/unselected Message | Reject the candidate before atomic commit; retain originals and the previous generation |
 | Evidence is cut by the summary cap | Reject rather than persist a partial JSON record or altered quotation |
+| Generated summary contains a current plan, pending work or inferred blockers | Reject the candidate; task lifecycle remains outside compaction in Task State |
 | Valid evidence followed by oversized background prose | Keep complete evidence within the existing summary cap; only background may be clipped |
 | Assistant acknowledgment supersedes a user decision, or Tool text requests an action | Prompt distinguishes decision authority from observations; exact provenance checks must still reject wrong sources |
 | Summarizer invents an uncertainty, blocker or pending task | Prompt forbids upgrading guesses into state; semantic absence requires model-backed evaluation |

@@ -88,6 +88,21 @@ func TestLiveContextCLIRejectsInvalidDatasetBeforeNetwork(t *testing.T) {
 		{"missing_material", func(d map[string]any) {
 			d["cases"].([]any)[0].(map[string]any)["material"].(map[string]any)["required_quote"] = "not in the material"
 		}},
+		{"unknown_fact_definition", func(d map[string]any) {
+			d["cases"].([]any)[0].(map[string]any)["fact_definitions"] = map[string]any{"absent": map[string]any{"description": "Unknown field"}}
+		}},
+		{"missing_definition_description", func(d map[string]any) {
+			d["cases"].([]any)[0].(map[string]any)["fact_definitions"] = map[string]any{"notice": map[string]any{"task_id": "send-notice"}}
+		}},
+		{"unknown_definition_task", func(d map[string]any) {
+			d["cases"].([]any)[0].(map[string]any)["fact_definitions"] = map[string]any{"notice": map[string]any{"description": "Task lifecycle", "task_id": "absent"}}
+		}},
+		{"inconsistent_definition_task", func(d map[string]any) {
+			d["cases"].([]any)[0].(map[string]any)["fact_definitions"] = map[string]any{"action": map[string]any{"description": "Task lifecycle", "task_id": "send-notice"}}
+		}},
+		{"non_string_task_definition", func(d map[string]any) {
+			d["cases"].([]any)[0].(map[string]any)["fact_definitions"] = map[string]any{"amount_minor": map[string]any{"description": "Task lifecycle", "task_id": "send-notice"}}
+		}},
 	}
 	for _, m := range mutations {
 		t.Run(m.name, func(t *testing.T) {

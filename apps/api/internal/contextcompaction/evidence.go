@@ -20,6 +20,11 @@ var errEvidenceBudget = failure.New(failure.Definition{
 	Info:    failure.Info{Code: "context_summary_evidence_budget_exceeded", Source: "context_compaction", Category: failure.CategoryValidation},
 })
 
+var errSummaryOperational = failure.New(failure.Definition{
+	Message: "context summary contains unsupported or operational sections; task lifecycle belongs to Task State",
+	Info:    failure.Info{Code: "context_summary_operational_content", Source: "context_compaction", Category: failure.CategoryValidation},
+})
+
 type sourceEvidence struct {
 	MessageID string `json:"message_id"`
 	Role      string `json:"role"`
@@ -65,6 +70,19 @@ func validateSourceEvidence(summary string, messages []domain.Message, sourceIDs
 		source, ok := sources[item.MessageID]
 		if !ok || item.Role != source.Role || strings.TrimSpace(item.Quote) == "" || !strings.Contains(source.Content, item.Quote) {
 			return "", errEvidenceInvalid
+		}
+	}
+	// A summary is historical context, not a second plan or mutable Task State.
+	// Check before clipping, so an oversized tail cannot hide a rejected section.
+	for line := range strings.Lines(body) {
+		heading := strings.TrimSpace(line)
+		if !strings.HasPrefix(heading, "#") {
+			continue
+		}
+		switch heading {
+		case "## Established Facts", "## Superseded Instructions", "## Exact References", "## Source References":
+		default:
+			return "", errSummaryOperational
 		}
 	}
 	// Persist the decoded, validated meaning once, not ambiguous duplicate keys

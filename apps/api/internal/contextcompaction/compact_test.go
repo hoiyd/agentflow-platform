@@ -33,7 +33,7 @@ func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
 	var prompts []string
 	summarizer := SummarizerFunc(func(_ context.Context, request SummaryRequest) (SummaryResult, error) {
 		prompts = append(prompts, request.Prompt)
-		return SummaryResult{Text: "## Source Evidence\n[]\n\n## Goal\nPreserve important context.\n## Source References\nmessage ids retained", Model: "summary-model"}, nil
+		return SummaryResult{Text: "## Source Evidence\n[]\n\n## Established Facts\nImportant context was discussed.\n## Source References\nmessage ids retained", Model: "summary-model"}, nil
 	})
 	config := compactionTestConfig()
 	first, err := compactor.CompactIfNeeded(context.Background(), Request{
@@ -80,7 +80,7 @@ func TestCompactIfNeededPersistsNonDestructiveIterativeSummary(t *testing.T) {
 	if len(prompts) != 2 || !strings.Contains(prompts[1], "PREVIOUS COMPACTION SUMMARY") {
 		t.Fatalf("previous summary was not carried forward: %#v", prompts)
 	}
-	if !strings.Contains(prompts[1], "newer sources override") || !strings.Contains(compactionSystemPrompt, "## Superseded Instructions") || !strings.Contains(compactionSystemPrompt, "## Evidence Needed") {
+	if !strings.Contains(prompts[1], "newer sources override") || !strings.Contains(compactionSystemPrompt, "## Superseded Instructions") || !strings.Contains(compactionSystemPrompt, "Task lifecycle and permitted actions are different concepts") {
 		t.Fatalf("anti-drift schema or precedence rule missing")
 	}
 	events, _ := fixtureStore.ListRunEvents(run.ID)
@@ -139,7 +139,7 @@ func TestCompactIfNeededPrefersObservedPromptTokensForSoftTrigger(t *testing.T) 
 		RunID: run.ID, ConversationID: conversation.ID, Trigger: contextassembly.CompactionTriggerSoft,
 		ObservedPromptTokens: 200, Config: config,
 		Summarizer: SummarizerFunc(func(context.Context, SummaryRequest) (SummaryResult, error) {
-			return SummaryResult{Text: "## Source Evidence\n[]\n\n## Goal\nKeep context", Model: "summary-model"}, nil
+			return SummaryResult{Text: "## Source Evidence\n[]\n\n## Established Facts\nContext was discussed", Model: "summary-model"}, nil
 		}),
 	})
 	if err != nil || compaction == nil {
@@ -469,18 +469,18 @@ func TestLongSessionSemanticFidelityFixturePreservesCorrectionsAndCancellation(t
 				{"message_id": sourceMessages[2].ID, "role": "user", "quote": newSources[2].content},
 				{"message_id": sourceMessages[4].ID, "role": "user", "quote": newSources[4].content},
 			})
-			return SummaryResult{Text: "## Source Evidence\n" + string(evidence) + "\n\n## Key Decisions\nUse model B.\n## Superseded Instructions\nModel A and legacy deployment are canceled.\n## Exact References\nticket-4821", Model: "fixture-model"}, nil
+			return SummaryResult{Text: "## Source Evidence\n" + string(evidence) + "\n\n## Established Facts\nThe user selected model B.\n## Superseded Instructions\nModel A and legacy deployment are canceled.\n## Exact References\nticket-4821", Model: "fixture-model"}, nil
 		}),
 	})
 	if err != nil || compaction == nil || compaction.Generation != 2 ||
-		!strings.Contains(compaction.Summary, "Use model B") || !strings.Contains(compaction.Summary, "legacy deployment are canceled") {
+		!strings.Contains(compaction.Summary, "selected model B") || !strings.Contains(compaction.Summary, "legacy deployment are canceled") {
 		t.Fatalf("semantic fidelity fixture failed: compaction=%#v err=%v", compaction, err)
 	}
 }
 
 func fixedSummarizer(summary string) Summarizer {
 	return SummarizerFunc(func(context.Context, SummaryRequest) (SummaryResult, error) {
-		return SummaryResult{Text: "## Source Evidence\n[]\n\n## Goal\n" + summary, Model: "summary-model"}, nil
+		return SummaryResult{Text: "## Source Evidence\n[]\n\n## Established Facts\n" + summary, Model: "summary-model"}, nil
 	})
 }
 

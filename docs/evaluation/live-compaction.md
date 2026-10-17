@@ -66,7 +66,7 @@ configuration are retained in the report. No production defaults are changed.
 
 ## Experiment and Sensors
 
-[`compaction-continuation.v3.json`](../../examples/context/compaction-continuation.v3.json)
+[`compaction-continuation.v4.json`](../../examples/context/compaction-continuation.v4.json)
 freezes one synthetic invoice task: correct amount/currency/cap account, forbid release,
 cancel a notice, preserve an unknown receipt and exact identifiers. Expected
 claims and their source quotations are manually authored. Neutral historical
@@ -77,13 +77,21 @@ Dataset v2 corrected three quotation boundaries to include `Correction:`.
 V3 changes the ambiguous `payee` field to `cap_account`: the source identifies
 the account to which the cap applies, not necessarily a payment recipient.
 History, materials, Task State and truth values are otherwise unchanged.
+V4 separates `send_notice_status` from `next_action`. Optional `fact_definitions`
+declare their meanings; a lifecycle field references an existing Task State task.
+The loader rejects unknown fields/tasks and a status answer key inconsistent
+with the authored state patch before any model request. Both arms receive the
+same descriptions, task ID and **complete** lifecycle enum, not the current
+status answer. This is field-contract clarification, not silent answer coercion
+or a forced-decoding guarantee. Mixed values still fail exact-value checks.
 The extraction prompt distinguishes user decisions from assistant
 acknowledgments and uses retained original quotes rather than summary paraphrases.
 It requires complete source sentences, preserves explicit unknowns and declares
 exactly one material citation, separate from fact provenance. Exact-value,
 source/quote checks and real read receipts remain strict.
-The [v1](../../examples/context/compaction-continuation.v1.json) and
-[v2](../../examples/context/compaction-continuation.v2.json) Datasets are retained;
+The [v1](../../examples/context/compaction-continuation.v1.json),
+[v2](../../examples/context/compaction-continuation.v2.json) and
+[v3](../../examples/context/compaction-continuation.v3.json) Datasets are retained;
 old reports must not be rescored. Prompt hashes, Dataset/sensor versions and the
 compaction algorithm distinguish profiles; comparing revisions does not isolate
 an algorithm-only effect.
@@ -167,6 +175,12 @@ The source-boundary integration also covers foreign/protected Messages, wrong
 authors, invented quotes, malformed/over-budget evidence and preservation of
 the previous generation; these deterministic checks do not prove that a real
 model follows the authority or no-speculation prompt rules.
+V4 regression fixtures separately test a correct canceled status plus a draft
+action, and outputs that substitute `draft_only`/combined action text for a
+lifecycle status. Original quotes, source checks and canceled Task State remain
+unchanged in the failure case. Compactor integration rejects generated planning
+sections before they can become a new summary; no new live result is claimed
+for v4 without a separately authorized experiment.
 
 ## Calibrated Live Sample
 
@@ -265,9 +279,10 @@ introduced a draft-notice pending item despite retaining the original
 cancellation quote. Persisted Task State still has `send-notice.status=canceled`;
 there was no external action or observed mutation of that state. Verbatim
 evidence therefore does not guarantee correct interpretation of task scope.
-The next quality work should separate task lifecycle from permitted actions
-and prevent unsupported pending work, not remove the cancellation check or
-silently rerun until it passes.
+The current v4 implementation rejects generated operational sections and gives
+lifecycle/action fields separate definitions. Its offline regressions retain
+the strict cancellation check; this v3 live report is not evidence that v4 has
+passed a real-model experiment.
 
 To reproduce, authorize a new spend and use the command above at this recorded
 revision; its default Dataset is v3. Exit `1` again reflects `--enforce`, not an

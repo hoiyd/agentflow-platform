@@ -8,8 +8,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -21,14 +19,16 @@ import (
 // This exercises real Compactor -> Assembly -> provider wire -> Tool Binding ->
 // Turn continuation -> ledger/report. Only the remote model is deterministic.
 func TestLiveCompactionContinuation(t *testing.T) {
-	for _, fault := range []string{"", "generation_budget", "source_contract", "physical_source_ids", "paraphrased_quote", "assistant_source", "generation_budget_exhausted", "estimated_usage", "changed_fact", "changed_currency", "changed_payee", "negation", "canceled_revived", "uncertainty", "exact_id", "next_action", "omitted_condition", "source_fabricated", "invented_evidence", "summary_failure", "provider_error", "clipped_summary", "provider_timeout", "broken_tool", "stream_usage_fallback", "budget", "token_budget", "infeasible", "canceled", "cancel_inflight"} {
+	for _, fault := range []string{"", "generation_budget", "source_contract", "physical_source_ids", "task_status_contract", "task_status_action_mixed", "paraphrased_quote", "assistant_source", "generation_budget_exhausted", "estimated_usage", "changed_fact", "changed_currency", "changed_payee", "negation", "canceled_revived", "uncertainty", "exact_id", "next_action", "omitted_condition", "source_fabricated", "invented_evidence", "summary_failure", "provider_error", "clipped_summary", "provider_timeout", "broken_tool", "stream_usage_fallback", "budget", "token_budget", "infeasible", "canceled", "cancel_inflight"} {
 		name := fault
 		if name == "" {
 			name = "success"
 		}
 		t.Run(name, func(t *testing.T) {
 			calibrated := fault == "generation_budget"
-			sourceContract := fault == "source_contract" || fault == "physical_source_ids"
+			taskContract := fault == "task_status_contract" || fault == "task_status_action_mixed"
+			sourceContract := fault == "source_contract" || fault == "physical_source_ids" || taskContract
+			expectedGate := fault == "" || fault == "estimated_usage" || calibrated || (sourceContract && fault != "task_status_action_mixed")
 			facts, outcome := liveFixtureFacts(), liveFixtureOutcome()
 			if calibrated {
 				facts = strings.ReplaceAll(facts, "Approved cap is EUR", "Correction: Approved cap is EUR")
@@ -37,6 +37,10 @@ func TestLiveCompactionContinuation(t *testing.T) {
 			if sourceContract {
 				facts = strings.ReplaceAll(strings.ReplaceAll(facts, "Approved cap is EUR", "Correction: Approved cap is EUR"), `"payee":`, `"cap_account":`)
 				outcome = strings.ReplaceAll(strings.ReplaceAll(outcome, "Approved cap is EUR", "Correction: Approved cap is EUR"), `"payee":`, `"cap_account":`)
+			}
+			if taskContract {
+				facts = strings.ReplaceAll(strings.ReplaceAll(facts, `"notice":`, `"send_notice_status":`), `"action":`, `"next_action":`)
+				outcome = strings.ReplaceAll(strings.ReplaceAll(outcome, `"notice":`, `"send_notice_status":`), `"action":`, `"next_action":`)
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -62,6 +66,11 @@ func TestLiveCompactionContinuation(t *testing.T) {
 					text.WriteByte('\n')
 				}
 				all := text.String()
+				if taskContract && (strings.Contains(all, "FIDELITY PROBE") || body.Stream) {
+					if !strings.Contains(all, `"task_id":"send-notice"`) || !strings.Contains(all, `"allowed_statuses":["pending","in_progress","completed","canceled"]`) || !strings.Contains(all, "not a task status") {
+						t.Error("lifecycle/action field contract did not reach the model")
+					}
+				}
 				if calibrated && body.MaxTokens != 8192 {
 					t.Errorf("generation headroom did not reach provider: %d", body.MaxTokens)
 				}
@@ -169,6 +178,9 @@ func TestLiveCompactionContinuation(t *testing.T) {
 					if fault == "physical_source_ids" {
 						answer = liveFixturePhysicalIDs(t, all, answer)
 					}
+					if fault == "task_status_action_mixed" {
+						answer = strings.Replace(answer, `"send_notice_status":{"value":"canceled"`, `"send_notice_status":{"value":"draft_only"`, 1)
+					}
 					if fault == "estimated_usage" {
 						_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"role": "assistant", "content": answer}, "finish_reason": "stop"}}})
 					} else {
@@ -215,6 +227,9 @@ func TestLiveCompactionContinuation(t *testing.T) {
 						t.Error("real material read did not reach continuation")
 					}
 					answer := outcome
+					if fault == "task_status_action_mixed" {
+						answer = strings.Replace(answer, `"send_notice_status":{"value":"canceled"`, `"send_notice_status":{"value":"send_canceled_draft_only"`, 1)
+					}
 					if fault == "physical_source_ids" {
 						answer = strings.Replace(answer, facts, liveFixturePhysicalIDs(t, all, facts), 1)
 					}
@@ -242,6 +257,9 @@ func TestLiveCompactionContinuation(t *testing.T) {
 			}
 			if sourceContract {
 				opts.DatasetPath = "../../../../../examples/context/compaction-continuation.v3.json"
+			}
+			if taskContract {
+				opts.DatasetPath = "../../../../../examples/context/compaction-continuation.v4.json"
 			}
 			if fault == "budget" {
 				opts.MaxModelCalls = 1
@@ -275,13 +293,23 @@ func TestLiveCompactionContinuation(t *testing.T) {
 					Scenario     string `json:"fixture_scenario"`
 					ExpectedGate bool   `json:"expected_gate_passed"`
 					Reproduce    string `json:"reproduce_command"`
-				}{report, name, fault == "" || fault == "estimated_usage" || calibrated || sourceContract, "go test ./internal/evaluation/contexteval -run '^TestLiveCompactionContinuation/" + name + "$' -count=1"}
+				}{report, name, expectedGate, "go test ./internal/evaluation/contexteval -run '^TestLiveCompactionContinuation/" + name + "$' -count=1"}
 				if err := os.WriteFile(filepath.Join(dir, "compaction-fixture-"+name+".json"), []byte(mustLiveJSON(evidence)), 0600); err != nil {
 					t.Fatal(err)
 				}
 			}
-			if len(report.Samples) != 4 || report.Gate.Passed != (fault == "" || fault == "estimated_usage" || calibrated || sourceContract) {
+			if len(report.Samples) != 4 || report.Gate.Passed != expectedGate {
 				t.Fatalf("unexpected gate=%t summary=%+v", report.Gate.Passed, report.Summary)
+			}
+			if taskContract {
+				for _, sample := range report.Samples {
+					if len(sample.TaskState.State.Tasks) != 1 || sample.TaskState.State.Tasks[0].Status != "canceled" {
+						t.Fatal("allowed action rewrote canonical task lifecycle")
+					}
+					if fault == "task_status_action_mixed" && (sample.Fidelity.Passed || sample.Outcome.Passed || sample.Fidelity.ValuesPassed || !sample.Fidelity.ProvenancePassed || !sample.Outcome.ProvenancePassed) {
+						t.Fatal("mixed action/status was accepted or confused with an evidence failure")
+					}
+				}
 			}
 			if fault == "paraphrased_quote" || fault == "assistant_source" || fault == "changed_fact" {
 				var sample map[string]any
@@ -415,76 +443,6 @@ func liveFixtureFacts() string {
 
 func liveFixtureOutcome() string {
 	return `{"facts":` + liveFixtureFacts() + `,"citations":[{"source_id":"doc-1","quote":"Evidence: receipt is pending."}]}`
-}
-
-// Build genuine evidence against the actual selected message IDs on the wire.
-// Truth labels are used only by the model fixture and never enter the request.
-func liveFixtureSummary(t *testing.T, prompt, facts, prose string) string {
-	t.Helper()
-	ids := map[string]string{}
-	for _, match := range regexp.MustCompile(`--- message_id=(\S+) role=user ---\nsource_id=(\S+)`).FindAllStringSubmatch(prompt, -1) {
-		ids[match[2]] = match[1]
-	}
-	var claims map[string]liveClaim
-	if err := json.Unmarshal([]byte(facts), &claims); err != nil {
-		t.Fatal(err)
-	}
-	evidence := []map[string]string{}
-	seen := map[string]bool{}
-	keys := make([]string, 0, len(claims))
-	for key := range claims {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		claim := claims[key]
-		identity := claim.SourceID + claim.Quote
-		if seen[identity] {
-			continue
-		}
-		seen[identity] = true
-		if ids[claim.SourceID] == "" || !strings.Contains(prompt, claim.Quote) {
-			t.Error("fixture evidence absent from actual compaction input")
-		}
-		evidence = append(evidence, map[string]string{"message_id": ids[claim.SourceID], "role": "user", "quote": claim.Quote})
-	}
-	return "## Source Evidence\n" + mustLiveJSON(evidence) + "\n\n## Established Facts\n" + prose
-}
-
-func liveFixturePhysicalIDs(t *testing.T, prompt, facts string) string {
-	t.Helper()
-	_, block, ok := strings.Cut(prompt, "## Source Evidence\n")
-	if !ok {
-		return facts
-	} // The full-history arm uses logical labels in the raw source.
-	var evidence []struct {
-		MessageID string `json:"message_id"`
-		Quote     string `json:"quote"`
-	}
-	if err := json.NewDecoder(strings.NewReader(block)).Decode(&evidence); err != nil {
-		t.Error(err)
-		return facts
-	}
-	var claims map[string]liveClaim
-	if err := json.Unmarshal([]byte(facts), &claims); err != nil {
-		t.Error(err)
-		return facts
-	}
-	for key, claim := range claims {
-		found := false
-		for _, source := range evidence {
-			if source.Quote == claim.Quote {
-				claim.SourceID = source.MessageID
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Error("original quote missing from actual candidate input")
-		}
-		claims[key] = claim
-	}
-	return mustLiveJSON(claims)
 }
 
 func liveArtifactID(text string) string {

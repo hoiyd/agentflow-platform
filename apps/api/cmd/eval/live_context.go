@@ -17,7 +17,7 @@ func runLiveContext(ctx context.Context, args []string, out, stderr io.Writer) i
 	flags := flag.NewFlagSet("eval context-live", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	live := flags.Bool("live", false, "explicitly authorize summary, fact probe and continuation model calls")
-	dataset := flags.String("dataset", "../../examples/context/compaction-continuation.v3.json", "versioned synthetic task dataset")
+	dataset := flags.String("dataset", "../../examples/context/compaction-continuation.v4.json", "versioned synthetic task dataset")
 	model := flags.String("model", "", "required OpenAI-compatible model ID")
 	base := flags.String("base-url", "https://api.openai.com/v1", "OpenAI-compatible base URL (not stored in report)")
 	trials := flags.Int("trials", 3, "trials per task, rotating two arms (1-20)")

@@ -22,7 +22,21 @@ func factFields(c liveCase) string {
 	}
 	sort.Strings(keys)
 	b, _ := json.Marshal(keys)
-	return string(b)
+	if len(c.FactDefinitions) == 0 {
+		return string(b)
+	}
+	definitions := map[string]any{}
+	for name, definition := range c.FactDefinitions {
+		field := map[string]any{"description": definition.Description}
+		if definition.TaskID != "" {
+			field["task_id"] = definition.TaskID
+			// Declare the complete domain, not the current state's answer value.
+			field["allowed_statuses"] = []domain.TaskItemStatus{domain.TaskItemPending, domain.TaskItemInProgress, domain.TaskItemCompleted, domain.TaskItemCanceled}
+		}
+		definitions[name] = field
+	}
+	metadata, _ := json.Marshal(definitions)
+	return string(b) + "\nField definitions:\n" + string(metadata)
 }
 
 func checkClaims(text string, c liveCase, sourceMessages map[string]string) LiveCheck {

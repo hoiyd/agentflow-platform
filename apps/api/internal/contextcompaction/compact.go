@@ -22,7 +22,7 @@ var ErrSummaryUnavailable = failure.New(failure.Definition{
 	},
 })
 
-const AlgorithmVersion = "context-compaction-v3"
+const AlgorithmVersion = "context-compaction-v4"
 
 type Store interface {
 	ListMessages(conversationID string) ([]domain.Message, error)

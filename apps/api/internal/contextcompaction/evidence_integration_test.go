@@ -14,7 +14,7 @@ import (
 
 // The model is a fixture; planning, validation, durable commit and assembly are real.
 func TestCompactionSourceEvidenceBoundary(t *testing.T) {
-	for _, scenario := range []string{"valid", "prior_source", "duplicate_keys", "background_clipped", "missing", "malformed", "null", "object", "extra_json", "duplicate_section", "unknown_field", "empty_quote", "wrong_role", "invented_quote", "foreign_message", "protected_message", "evidence_clipped"} {
+	for _, scenario := range []string{"valid", "prior_source", "duplicate_keys", "background_clipped", "pending_work", "hidden_pending_work", "current_state", "completed_work", "evidence_needed", "unknown_heading", "nested_heading", "missing", "malformed", "null", "object", "extra_json", "duplicate_section", "unknown_field", "empty_quote", "wrong_role", "invented_quote", "foreign_message", "protected_message", "evidence_clipped"} {
 		t.Run(scenario, func(t *testing.T) {
 			store, conv, run := newCompactionTestStore(t)
 			inputs := []struct{ role, text string }{
@@ -36,6 +36,10 @@ func TestCompactionSourceEvidenceBoundary(t *testing.T) {
 					t.Fatal(err)
 				}
 				messages = append(messages, m)
+			}
+			revision, err := store.ApplyTaskStatePatch(conv.ID, domain.TaskStatePatch{ExpectedVersion: 0, Operations: []domain.TaskStateOperation{{Type: domain.TaskStateUpsertTask, Task: &domain.TaskItem{ID: "notice", Title: "Deliver notice", Status: domain.TaskItemCanceled}}}}, domain.TaskStateSource{ActorType: "user", SourceMessageID: messages[2].ID})
+			if err != nil {
+				t.Fatal(err)
 			}
 			foreign, _ := store.CreateConversation("unrelated evidence")
 			foreignMessage, _ := store.AddMessage(foreign.ID, "user", inputs[4].text)
@@ -74,8 +78,22 @@ func TestCompactionSourceEvidenceBoundary(t *testing.T) {
 				evidence[0]["quote"] = inputs[0].text
 			}
 			encoded, _ := json.Marshal(evidence)
-			summary := "## Source Evidence\n" + string(encoded) + "\n\n## Current State\nAccount-C; notice canceled; receipt unknown. Draft only."
+			summary := "## Source Evidence\n" + string(encoded) + "\n\n## Established Facts\nThe user corrected the account to Account-C, canceled notice delivery and left receipt confirmation unknown."
 			switch scenario {
+			case "pending_work":
+				summary += "\n## Pending Work\nDraft the canceled notice."
+			case "hidden_pending_work":
+				summary += strings.Repeat("\nHistorical formatting discussion.", 300) + "\n## Pending Work\nDraft the canceled notice."
+			case "current_state":
+				summary += "\n## Current State\nNotice is draft_only."
+			case "completed_work":
+				summary += "\n## Completed Work\nThe notice has been sent."
+			case "evidence_needed":
+				summary += "\n## Evidence Needed\nObtain authorization to send the canceled notice."
+			case "unknown_heading":
+				summary += "\n## Next Steps\nDraft the notice."
+			case "nested_heading":
+				summary += "\n### Pending Work\nDraft the notice."
 			case "duplicate_keys":
 				summary = strings.Replace(summary, `"message_id":`, `"message_id":"untrusted-duplicate","message_id":`, 1)
 			case "missing":
@@ -112,6 +130,10 @@ func TestCompactionSourceEvidenceBoundary(t *testing.T) {
 			latest, visible, _ := store.GetLatestContextCompaction(conv.ID)
 			events, _ := store.ListRunEvents(run.ID)
 			after, _ := store.ListMessages(conv.ID)
+			state, found, stateErr := store.GetTaskState(conv.ID)
+			if stateErr != nil || !found || !reflect.DeepEqual(state, revision.State) {
+				t.Fatal("compaction changed canonical Task State")
+			}
 			if !reflect.DeepEqual(after, messages) || calls != 1 || len(events) != 4 {
 				t.Fatalf("unexpected history/call/event changes: %d/%d/%d", len(after), calls, len(events))
 			}
@@ -140,6 +162,9 @@ func TestCompactionSourceEvidenceBoundary(t *testing.T) {
 				want := "context_summary_evidence_invalid"
 				if scenario == "evidence_clipped" {
 					want = "context_summary_evidence_budget_exceeded"
+				}
+				if scenario == "pending_work" || scenario == "hidden_pending_work" || scenario == "current_state" || scenario == "completed_work" || scenario == "evidence_needed" || scenario == "unknown_heading" || scenario == "nested_heading" {
+					want = "context_summary_operational_content"
 				}
 				if got != nil || !visible || latest.ID != previous.ID || failure.Describe(err).Code != want || events[3].Type != domain.EventCompactionFailed {
 					t.Fatalf("invalid evidence was accepted: visible=%t err=%v", visible, err)
