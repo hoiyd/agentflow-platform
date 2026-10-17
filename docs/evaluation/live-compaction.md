@@ -176,7 +176,7 @@ uses clean revision `ba6313df346485a919ecfe915c12c08fca9a3505`, Dataset v2 and
 continuation, without truncation or raw-history fallback. The quality gate
 still failed; successful summary generation is not verified fidelity.**
 This report predates the v3 evidence protocol and split sensors; it is not a
-live validation of those changes. No additional live experiment has been run.
+live validation of those changes.
 
 | Evidence | Report field / observation |
 | --- | --- |
@@ -219,10 +219,59 @@ OPENAI_API_KEY="$DEEPSEEK_API_KEY" go -C apps/api run ./cmd/eval context-live --
 
 The operator enforced the five-minute outer deadline separately. Exit `1` is the
 expected `--enforce` gate result, not a transport or report-generation failure.
-No production policy changed. Before another experiment, address authoritative
-user-source selection and how original evidence survives a paraphrased summary;
-do not remove provenance checks to turn this report green. This single synthetic
-sample is not a calibrated quality score or evidence for long-session stability.
+That calibration experiment did not change production policy. Its provenance
+failures motivated the v3 source-evidence protocol; the following experiment
+tests that protocol without changing or rescoring the calibration report.
+
+## Source Evidence Live Result
+
+The [v3 live report](evidence/live-compaction-deepseek-flash-2026-10-17-source-evidence-v3.json)
+uses clean revision `5abb2cff2fbe3265af307bcd44e0fc823b391736`, Dataset v3,
+sensor v3 and `deepseek-flash`. **Original-quote fidelity improved, but overall
+quality did not pass: the candidate confused a canceled task's status with its
+allowed next action.** The full-history arm passed both checks; the compacted
+arm failed both. `summary.verified=1/2`, `summary.regressed=1`, `gate.passed=false`.
+
+| Candidate check | Prior calibrated sample | V3 sample |
+| --- | --- | --- |
+| Complete stored summary without fallback | Yes | Yes |
+| Probe: correct typed values | 7/8 | 7/8 |
+| Probe: exact original source/quote | 0/8 | 7/8 |
+| Continuation: correct typed values | 8/8 | 7/8 |
+| Continuation: exact original source/quote | 2/8 | 8/8 |
+| Candidate quality gate | Failed | Failed |
+
+Counts derive from each report's expected fact set and `fact_value:` /
+`fact_provenance:` findings, not a new scoring of old output. Historical profiles
+share the same history, materials, Task State, model alias and budgets, but
+prompts, sensors and the account field name changed. This is descriptive
+single-sample evidence, not a statistical or single-variable quality claim.
+
+Actual use was 7 physical requests and 37,865 tokens, with zero open reservations
+and approximately 59.554 seconds of report wall time. The authorization remained
+8 requests / 90,000 tokens, 120 seconds per arm and a five-minute outer deadline;
+no automatic rerun occurred. Monetary cost is unknown, not zero. Both histories
+were unchanged and both material reads completed with matching Artifact hashes.
+
+The summary retained four validated evidence records. Its estimated surface
+fell from 5,214 to 1,103 tokens (78.85% reduction including the protected tail).
+The candidate spent 3,927 more total tokens than its current full-history arm,
+including compaction and probes; its continuation alone used 4,538 fewer tokens.
+Neither number establishes useful savings while the quality gate is failing.
+
+The remaining failure is specific: `notice` became `draft_only` in the probe
+and `send_canceled_draft_only` in continuation instead of `canceled`. The summary
+introduced a draft-notice pending item despite retaining the original
+cancellation quote. Persisted Task State still has `send-notice.status=canceled`;
+there was no external action or observed mutation of that state. Verbatim
+evidence therefore does not guarantee correct interpretation of task scope.
+The next quality work should separate task lifecycle from permitted actions
+and prevent unsupported pending work, not remove the cancellation check or
+silently rerun until it passes.
+
+To reproduce, authorize a new spend and use the command above at this recorded
+revision; its default Dataset is v3. Exit `1` again reflects `--enforce`, not an
+execution or transport failure. Originals and the prior report remain intact.
 
 This small task cannot establish lossless arbitrarily long sessions, independent Task State benefit,
 or justify background/parallel compaction or advanced anti-drift mechanisms.
