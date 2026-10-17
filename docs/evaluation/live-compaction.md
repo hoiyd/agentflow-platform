@@ -128,6 +128,67 @@ measurement of real provider latency. Ordinary CI makes no public model calls.
 No UI/API/database migration is needed; this profile uses an isolated in-memory
 Store and does not test deployment recovery or all orchestration modes.
 
-No live result is claimed until that report is generated. This small task cannot
-establish lossless arbitrarily long sessions, independent Task State benefit,
-or justify background/parallel compaction or advanced anti-drift mechanisms.
+## Recorded Live Evidence
+
+The [2026-10-17 DeepSeek Flash report](evidence/live-compaction-deepseek-flash-2026-10-17.json)
+is the first retained live result, generated from clean revision
+`52966aec31b4c8fc1efdbb633c828a3c38ccedb9` using the unchanged v1 Dataset and sensors.
+**The experiment completed, but its quality gate failed. No compaction benefit
+or compression ratio was established.** All three candidates fell back to raw
+history, making every pair incomparable; the null deltas are not zero savings.
+Candidate probes and continuation therefore used raw history, not a generated
+summary; their findings are not measurements of summary fidelity.
+
+| Evidence | Report field / observation |
+| --- | --- |
+| Trials / arms | `config.trials=3`; `summary.samples=6` |
+| Shared authorized limits | 24 physical requests; 180,000 tokens; 60 seconds per arm; operator outer deadline 10 minutes |
+| Actual usage | `physical_requests=21`; `usage.total_tokens=115543`; no open reservations |
+| Wall time | `completed_at - started_at`: approximately 110.047 seconds |
+| Material access / source integrity | Six complete `material_reads`; all six `history_unchanged=true` |
+| Compaction | All three compaction phases report `incomplete_output`; all candidate `raw_history_fallback=true` |
+| Quality / comparability | `summary.verified=0`; `summary.comparable_pairs=0`; `gate.passed=false` |
+| Summary generation expense | Sum of compaction `phases[].usage`: 3 calls, 18,319 tokens, 33,337 ms |
+| Monetary cost | `cost_micros=null`; all 21 entries have unknown price, not free usage |
+
+The compaction phases each settled exactly 2,048 completion tokens, matching
+`context_assembly.output_reserve_tokens`. Their recorded reasoning-token counts
+were 1,437, 1,927, and 2,048. This is evidence of output-headroom pressure on this
+reasoning-capable target, not proof that a generated summary lost facts: no
+successful summary was produced. Full-history trial 1 also had an incomplete
+fidelity probe. No provider retry or automatic second experiment was performed.
+
+All continuation phases completed and read the material, but failed the strict
+outcome sensor. Findings include exact-quote boundaries (for example, including
+`Correction:` where the authored quote omits it), extra historical citations
+where the sensor requires exactly one material citation, and receipt values
+`pending`/`unconfirmed` instead of the required `unknown`. These are reported
+contract failures, not automatically fabricated evidence or compaction-caused
+drift. Even the completed full-history arms did not pass both checks.
+
+Before a separately authorized rerun, review the shared generation headroom and
+align quotation/citation instructions with the declared sensor contract. Keep
+this report and Dataset identity intact; do not rescore it, weaken the gate, or
+attribute fallback outcomes to compressed history. Fallback pair-level cost
+defaults are not measured zero cost: use the sample phases and ledger above.
+
+To reproduce the profile, explicitly authorize a new spend, use the recorded
+revision, export the provider credential without committing it, and run:
+
+```bash
+OPENAI_API_KEY="$DEEPSEEK_API_KEY" go -C apps/api run ./cmd/eval context-live --live \
+  --model deepseek-flash --base-url https://api.deepseek.com \
+  --trials 3 --max-model-calls 24 --max-total-tokens 180000 \
+  --timeout 60s --context-window-tokens 128000 --summary-max-tokens 1024 \
+  --enforce > /tmp/compaction-live-report.json
+```
+
+The recorded command exited `1` because `--enforce` rejected the gate, not
+because report generation failed. Sampling is retained in `sampling`; the model
+is a mutable provider alias, so a rerun need not reproduce identical outputs.
+Only synthetic source/task data is published; credentials, endpoints and local
+paths are absent from the JSON report. It does not contain production Run data.
+
+This small task cannot establish lossless arbitrarily long sessions, independent
+Task State benefit, or justify background/parallel compaction or advanced
+anti-drift mechanisms. Production compaction policy is unchanged.
