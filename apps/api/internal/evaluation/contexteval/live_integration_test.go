@@ -19,12 +19,18 @@ import (
 // This exercises real Compactor -> Assembly -> provider wire -> Tool Binding ->
 // Turn continuation -> ledger/report. Only the remote model is deterministic.
 func TestLiveCompactionContinuation(t *testing.T) {
-	for _, fault := range []string{"", "estimated_usage", "changed_fact", "changed_currency", "changed_payee", "negation", "canceled_revived", "uncertainty", "exact_id", "next_action", "omitted_condition", "source_fabricated", "invented_evidence", "summary_failure", "provider_error", "clipped_summary", "provider_timeout", "broken_tool", "stream_usage_fallback", "budget", "token_budget", "infeasible", "canceled", "cancel_inflight"} {
+	for _, fault := range []string{"", "generation_budget", "generation_budget_exhausted", "estimated_usage", "changed_fact", "changed_currency", "changed_payee", "negation", "canceled_revived", "uncertainty", "exact_id", "next_action", "omitted_condition", "source_fabricated", "invented_evidence", "summary_failure", "provider_error", "clipped_summary", "provider_timeout", "broken_tool", "stream_usage_fallback", "budget", "token_budget", "infeasible", "canceled", "cancel_inflight"} {
 		name := fault
 		if name == "" {
 			name = "success"
 		}
 		t.Run(name, func(t *testing.T) {
+			calibrated := fault == "generation_budget"
+			facts, outcome := liveFixtureFacts(), liveFixtureOutcome()
+			if calibrated {
+				facts = strings.ReplaceAll(facts, "Approved cap is EUR", "Correction: Approved cap is EUR")
+				outcome = strings.ReplaceAll(outcome, "Approved cap is EUR", "Correction: Approved cap is EUR")
+			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			var mu sync.Mutex
@@ -34,9 +40,10 @@ func TestLiveCompactionContinuation(t *testing.T) {
 				requests++
 				mu.Unlock()
 				var body struct {
-					Messages []openai.Message  `json:"messages"`
-					Stream   bool              `json:"stream"`
-					Tools    []json.RawMessage `json:"tools"`
+					Messages  []openai.Message  `json:"messages"`
+					Stream    bool              `json:"stream"`
+					Tools     []json.RawMessage `json:"tools"`
+					MaxTokens int               `json:"max_tokens"`
 				}
 				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 					t.Error(err)
@@ -48,6 +55,13 @@ func TestLiveCompactionContinuation(t *testing.T) {
 					text.WriteByte('\n')
 				}
 				all := text.String()
+				if calibrated && body.MaxTokens != 8192 {
+					t.Errorf("generation headroom did not reach provider: %d", body.MaxTokens)
+				}
+				if fault == "generation_budget_exhausted" && !body.Stream {
+					_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]string{"role": "assistant", "content": "incomplete"}, "finish_reason": "length"}}, "usage": map[string]int{"prompt_tokens": 100, "completion_tokens": 2048, "total_tokens": 2148}})
+					return
+				}
 				if fault == "cancel_inflight" {
 					cancel()
 					<-r.Context().Done()
@@ -68,7 +82,7 @@ func TestLiveCompactionContinuation(t *testing.T) {
 						http.Error(w, `{"error":{"message":"fixture unavailable"}}`, 503)
 						return
 					}
-					summary := liveFixtureFacts()
+					summary := facts
 					if fault == "changed_fact" {
 						summary = strings.ReplaceAll(summary, "45000", "99000")
 					}
@@ -111,11 +125,14 @@ func TestLiveCompactionContinuation(t *testing.T) {
 					return
 				}
 				if strings.Contains(all, "FIDELITY PROBE") {
+					if calibrated && (!strings.Contains(all, "including introductory prefixes") || !strings.Contains(all, "unknown confirmation status")) {
+						t.Error("probe instructions do not explain exact quotation and uncertainty contracts")
+					}
 					// Never accept a probe carrying required Task State or the truth labels.
 					if strings.Contains(all, "<task_state") || strings.Contains(all, "expected_facts") {
 						t.Error("probe leaked rescue state or answer key")
 					}
-					answer := liveFixtureFacts()
+					answer := facts
 					if _, evidence, ok := strings.Cut(all, "Historical evidence:\n"); ok && json.Valid([]byte(strings.TrimSpace(evidence))) {
 						answer = strings.TrimSpace(evidence)
 					}
@@ -136,6 +153,9 @@ func TestLiveCompactionContinuation(t *testing.T) {
 					t.Error("continuation must use production stream transport")
 					http.Error(w, "bad", 400)
 					return
+				}
+				if calibrated && !strings.Contains(all, "exactly one material citation") {
+					t.Error("continuation instructions do not explain citation cardinality")
 				}
 				if fault == "stream_usage_fallback" {
 					http.Error(w, `{"error":{"message":"stream_options is not supported"}}`, 400)
@@ -167,7 +187,7 @@ func TestLiveCompactionContinuation(t *testing.T) {
 					if !strings.Contains(last.Content, "Evidence: receipt is pending.") {
 						t.Error("real material read did not reach continuation")
 					}
-					answer := liveFixtureOutcome()
+					answer := outcome
 					if fault == "invented_evidence" {
 						answer = strings.ReplaceAll(answer, "Evidence: receipt is pending.", "Receipt has cleared.")
 					}
@@ -186,6 +206,10 @@ func TestLiveCompactionContinuation(t *testing.T) {
 			defer server.Close()
 			opts := LiveOptions{DatasetPath: "../../../../../examples/context/compaction-continuation.v1.json", Trials: 2,
 				MaxModelCalls: 40, MaxTotalTokens: 100000, Timeout: time.Second, Revision: "fixture-revision", EvidenceMode: "deterministic_http_fixture"}
+			if calibrated {
+				opts.DatasetPath = "../../../../../examples/context/compaction-continuation.v2.json"
+				opts.OutputReserveTokens = 8192
+			}
 			if fault == "budget" {
 				opts.MaxModelCalls = 1
 			}
@@ -218,15 +242,15 @@ func TestLiveCompactionContinuation(t *testing.T) {
 					Scenario     string `json:"fixture_scenario"`
 					ExpectedGate bool   `json:"expected_gate_passed"`
 					Reproduce    string `json:"reproduce_command"`
-				}{report, name, fault == "" || fault == "estimated_usage", "go test ./internal/evaluation/contexteval -run '^TestLiveCompactionContinuation/" + name + "$' -count=1"}
+				}{report, name, fault == "" || fault == "estimated_usage" || calibrated, "go test ./internal/evaluation/contexteval -run '^TestLiveCompactionContinuation/" + name + "$' -count=1"}
 				if err := os.WriteFile(filepath.Join(dir, "compaction-fixture-"+name+".json"), []byte(mustLiveJSON(evidence)), 0600); err != nil {
 					t.Fatal(err)
 				}
 			}
-			if len(report.Samples) != 4 || report.Gate.Passed != (fault == "" || fault == "estimated_usage") {
+			if len(report.Samples) != 4 || report.Gate.Passed != (fault == "" || fault == "estimated_usage" || calibrated) {
 				t.Fatalf("unexpected gate=%t summary=%+v", report.Gate.Passed, report.Summary)
 			}
-			if fault == "" {
+			if fault == "" || calibrated {
 				if len(report.Pairs) != 2 || report.Pairs[0].Reason != "" || report.Pairs[0].CompactionCalls != 1 || report.Pairs[0].TotalTokenDelta == nil || *report.Pairs[0].TotalTokenDelta != 200 {
 					t.Fatal("phase costs or controlled pairs missing")
 				}
@@ -246,6 +270,16 @@ func TestLiveCompactionContinuation(t *testing.T) {
 				}
 				if report.Samples[0].StateHash != report.Samples[1].StateHash || report.Samples[0].TaskState.ID == report.Samples[1].TaskState.ID {
 					t.Fatal("state content drift or cross-conversation revision reuse")
+				}
+			}
+			if calibrated && (report.Assembly.OutputReserveTokens != 8192 || report.Assembly.CompactionSummaryMaxTokens != 1024 || report.Dataset.Version != "2.0.0") {
+				t.Fatal("calibration configuration was not retained")
+			}
+			if fault == "generation_budget_exhausted" {
+				for _, s := range report.Samples {
+					if s.Arm == StrategyCompacted && (!s.Fallback || s.Compaction != nil || s.Reason != "incomplete_output") {
+						t.Fatal("incomplete generation was accepted as a successful compaction")
+					}
 				}
 			}
 			if fault == "summary_failure" {

@@ -17,6 +17,8 @@ report; deterministic HTTP fixtures prove protocol and failure handling only.
 | Provider error, timeout, cancellation or exhausted shared budget | Retain failed/unrun samples in the denominator; never retry blindly |
 | Full history does not fit | Mark pair infeasible, not an improvement over a truncated baseline |
 | Compactor failure | Keep original history unchanged; record fallback, not successful compaction |
+| Generation exhausts its output budget | Retain `incomplete_output` and fallback; a larger stored-summary cap is not a generation-budget fix |
+| Output reserve leaves no input space | Reject before contacting the provider; never silently normalize an explicit experiment limit |
 | Unsettled usage | Stop later spending; retain ledger and unknown cost |
 
 ## Run
@@ -29,7 +31,8 @@ umask 077
 go -C apps/api run ./cmd/eval context-live --live \
   --model MODEL --base-url https://api.openai.com/v1 \
   --trials 3 --max-model-calls 24 --max-total-tokens 180000 \
-  --timeout 60s --context-window-tokens 32768 --summary-max-tokens 1024 \
+  --timeout 60s --context-window-tokens 32768 \
+  --output-reserve-tokens 8192 --summary-max-tokens 1024 \
   --enforce > .cache/compaction-evidence/report.json
 ```
 
@@ -51,14 +54,34 @@ the shared request ceiling; ledger `model_calls` counts logical operations.
 Token reservations are estimate-based: a provider-reported overrun is retained
 and stops spending rather than being clipped to pretend the limit held.
 
+`--output-reserve-tokens` controls per-request generation headroom, including
+reasoning where counted by the provider. The default remains 2,048; the 8,192
+example is an explicit calibration candidate, not a measured optimum. It applies
+equally to summary generation, probes and both continuation arms and participates
+in usage reservations. `--summary-max-tokens` independently caps the **stored**
+summary (default 1,024); increasing generation headroom does not enlarge it.
+An explicit reserve plus the 512-token safety margin must leave positive input
+space within the context window. Both requested limits and effective assembly
+configuration are retained in the report. No production defaults are changed.
+
 ## Experiment and Sensors
 
-[`compaction-continuation.v1.json`](../../examples/context/compaction-continuation.v1.json)
+[`compaction-continuation.v2.json`](../../examples/context/compaction-continuation.v2.json)
 freezes one synthetic invoice task: correct amount/currency/payee, forbid release,
 cancel a notice, preserve an unknown receipt and exact identifiers. Expected
 claims and their source quotations are manually authored. Neutral historical
 padding creates pressure without adding facts. Only complete user/assistant
 exchanges are admitted; arbitrary Tool histories are rejected, not flattened.
+
+Dataset v2 keeps v1's history, task, materials, state patch and typed truth values.
+It corrects three expected quotations to include the source sentence's
+`Correction:` prefix. The extraction prompt now requires complete source
+sentences, distinguishes an explicitly unknown confirmation status from a
+missing value, and declares exactly one material citation, separate from fact
+provenance. Exact-value/source/quote checks and real read receipts remain strict.
+The [v1 Dataset](../../examples/context/compaction-continuation.v1.json) is retained;
+old reports must not be rescored. Prompt hashes and Dataset versions distinguish
+the profiles; comparing them does not isolate a compression-algorithm change.
 
 Each arm gets its own Conversation, Run, material Artifact and legal Task State
 Revision. State is built from the same explicit user-source patch; content/hash

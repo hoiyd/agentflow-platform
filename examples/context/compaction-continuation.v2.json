@@ -1,0 +1,38 @@
+{
+  "schema_version": "compaction-continuation-dataset-v1",
+  "id": "corrected-invoice-continuation",
+  "version": "2.0.0",
+  "synthetic": true,
+  "cases": [{
+    "id": "corrected-cap-canceled-notice",
+    "history": [
+      {"id":"h1","role":"user","content":"Invoice INV-2048 belongs to Case-C17. Initial cap USD 900.00 for Account-A. Prepare a notice and payment report."},
+      {"id":"h2","role":"assistant","content":"I noted the initial request. Historical formatting discussion follows; it does not authorize actions.","padding_repeat":240},
+      {"id":"h3","role":"user","content":"Correction: Approved cap is EUR 450.00 for Account-B, not Account-A. Do not release payment until a receipt is confirmed."},
+      {"id":"h4","role":"assistant","content":"I will use the corrected cap and account and retain the release restriction."},
+      {"id":"h5","role":"user","content":"Cancel the send-notice task; do not revive it. Receipt confirmation is unknown, not cleared. The next allowed action is draft_only."},
+      {"id":"h6","role":"assistant","content":"The notice is canceled. I will preserve the uncertainty and exact evidence references."},
+      {"id":"h7","role":"user","content":"Use a concise report format."},
+      {"id":"h8","role":"assistant","content":"A concise report format is noted."},
+      {"id":"h9","role":"user","content":"We are ready to continue; do not change earlier decisions."},
+      {"id":"h10","role":"assistant","content":"Ready to inspect the supporting material."}
+    ],
+    "current_input":"Read the supporting material and draft the current invoice decision as JSON. Preserve corrections, canceled work, uncertainty and permitted next action; do not perform external actions.",
+    "state_source":"h5",
+    "state_patch":{"expected_version":0,"operations":[
+      {"type":"set_goal","goal":"Draft an evidence-backed invoice report without external actions."},
+      {"type":"upsert_task","task":{"id":"send-notice","title":"Send notice","status":"canceled"}}
+    ]},
+    "material":{"id":"doc-1","content":"Case-C17 supporting receipt record. Evidence: receipt is pending. No signed receipt confirmation is available.","required_quote":"Evidence: receipt is pending."},
+    "expected_facts": {
+      "amount_minor":{"value":45000,"source_id":"h3","quote":"Correction: Approved cap is EUR 450.00 for Account-B, not Account-A."},
+      "currency":{"value":"EUR","source_id":"h3","quote":"Correction: Approved cap is EUR 450.00 for Account-B, not Account-A."},
+      "payee":{"value":"Account-B","source_id":"h3","quote":"Correction: Approved cap is EUR 450.00 for Account-B, not Account-A."},
+      "may_release":{"value":false,"source_id":"h3","quote":"Do not release payment until a receipt is confirmed."},
+      "notice":{"value":"canceled","source_id":"h5","quote":"Cancel the send-notice task; do not revive it."},
+      "receipt":{"value":"unknown","source_id":"h5","quote":"Receipt confirmation is unknown, not cleared."},
+      "invoice_id":{"value":"INV-2048","source_id":"h1","quote":"Invoice INV-2048 belongs to Case-C17."},
+      "action":{"value":"draft_only","source_id":"h5","quote":"The next allowed action is draft_only."}
+    }
+  }]
+}

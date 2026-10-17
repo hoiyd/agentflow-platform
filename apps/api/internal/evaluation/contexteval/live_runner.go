@@ -21,7 +21,7 @@ const liveReportSchema = "live-compaction-continuation-v1"
 // A dedicated client is required: physical retries are disabled for suite bounds.
 func RunLive(ctx context.Context, client *openai.Client, opts LiveOptions) (LiveReport, error) {
 	if client == nil || !client.HasAPIKey() || opts.Trials < 1 || opts.Trials > 20 || opts.MaxModelCalls < 1 || opts.MaxTotalTokens < 1 || opts.Timeout <= 0 || opts.Timeout > 5*time.Minute ||
-		(opts.EvidenceMode != "live_model" && opts.EvidenceMode != "deterministic_http_fixture") || opts.ContextWindowTokens < 0 || opts.SummaryMaxTokens < 0 {
+		(opts.EvidenceMode != "live_model" && opts.EvidenceMode != "deterministic_http_fixture") || opts.ContextWindowTokens < 0 || opts.SummaryMaxTokens < 0 || opts.OutputReserveTokens < 0 {
 		return LiveReport{}, errors.New("require dedicated credentialed client, 1-20 trials, positive shared call/token budgets, timeout <=5m and explicit evidence mode")
 	}
 	data, hash, err := loadLiveDataset(opts.DatasetPath)
@@ -38,6 +38,13 @@ func RunLive(ctx context.Context, client *openai.Client, opts LiveOptions) (Live
 	}
 	if opts.SummaryMaxTokens > 0 {
 		config.CompactionSummaryMaxTokens = opts.SummaryMaxTokens
+	}
+	if opts.OutputReserveTokens > 0 {
+		// Generation includes reasoning as well as answer text; it is not the stored summary cap.
+		config.OutputReserveTokens = opts.OutputReserveTokens
+		if config.OutputReserveTokens >= config.ContextWindowTokens-config.SafetyMarginTokens {
+			return LiveReport{}, errors.New("output reserve plus safety margin must leave a positive input budget")
+		}
 	}
 	config = contextassembly.NormalizeConfig(config)
 	identity := client.RuntimeIdentity()

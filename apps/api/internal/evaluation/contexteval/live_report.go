@@ -14,6 +14,7 @@ type LiveOptions struct {
 	MaxTotalTokens      int           `json:"max_total_tokens"`
 	Timeout             time.Duration `json:"sample_timeout_ns"`
 	ContextWindowTokens int           `json:"context_window_tokens"`
+	OutputReserveTokens int           `json:"output_reserve_tokens"`
 	SummaryMaxTokens    int           `json:"summary_max_tokens"`
 	Revision            string        `json:"-"`
 	EvidenceMode        string        `json:"evidence_mode"`
