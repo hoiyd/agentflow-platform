@@ -105,6 +105,93 @@ func (e CompletionContractInputSubjectType) Valid() bool {
 	}
 }
 
+// Defines values for DocumentMetadataFieldOwner.
+const (
+	OwnerDeclared DocumentMetadataFieldOwner = "owner_declared"
+	SystemDerived DocumentMetadataFieldOwner = "system_derived"
+)
+
+// Valid indicates whether the value is a known member of the DocumentMetadataFieldOwner enum.
+func (e DocumentMetadataFieldOwner) Valid() bool {
+	switch e {
+	case OwnerDeclared:
+		return true
+	case SystemDerived:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DocumentMetadataFieldScope.
+const (
+	Both     DocumentMetadataFieldScope = "both"
+	Chunk    DocumentMetadataFieldScope = "chunk"
+	Document DocumentMetadataFieldScope = "document"
+)
+
+// Valid indicates whether the value is a known member of the DocumentMetadataFieldScope enum.
+func (e DocumentMetadataFieldScope) Valid() bool {
+	switch e {
+	case Both:
+		return true
+	case Chunk:
+		return true
+	case Document:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DocumentMetadataFieldType.
+const (
+	Bool        DocumentMetadataFieldType = "bool"
+	DateTime    DocumentMetadataFieldType = "date-time"
+	Derived     DocumentMetadataFieldType = "derived"
+	Enum        DocumentMetadataFieldType = "enum"
+	Number      DocumentMetadataFieldType = "number"
+	String      DocumentMetadataFieldType = "string"
+	StringArray DocumentMetadataFieldType = "string-array"
+)
+
+// Valid indicates whether the value is a known member of the DocumentMetadataFieldType enum.
+func (e DocumentMetadataFieldType) Valid() bool {
+	switch e {
+	case Bool:
+		return true
+	case DateTime:
+		return true
+	case Derived:
+		return true
+	case Enum:
+		return true
+	case Number:
+		return true
+	case String:
+		return true
+	case StringArray:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DocumentMetadataSchemaExtensionPolicy.
+const (
+	PreserveUnverified DocumentMetadataSchemaExtensionPolicy = "preserve_unverified"
+)
+
+// Valid indicates whether the value is a known member of the DocumentMetadataSchemaExtensionPolicy enum.
+func (e DocumentMetadataSchemaExtensionPolicy) Valid() bool {
+	switch e {
+	case PreserveUnverified:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthResponseStatus.
 const (
 	Ok HealthResponseStatus = "ok"
@@ -1071,14 +1158,53 @@ type DocumentIngestRequest struct {
 	Content           string                  `json:"content"`
 	ExpectedUpdatedAt *time.Time              `json:"expected_updated_at,omitempty"`
 	Metadata          *map[string]interface{} `json:"metadata,omitempty"`
-	MimeType          *string                 `json:"mime_type,omitempty"`
-	SourceKey         *string                 `json:"source_key,omitempty"`
-	SourceType        *string                 `json:"source_type,omitempty"`
-	SourceUri         *string                 `json:"source_uri,omitempty"`
-	Title             string                  `json:"title"`
-	Version           *string                 `json:"version,omitempty"`
-	WorkspaceId       *string                 `json:"workspace_id,omitempty"`
+
+	// MetadataSchemaVersion Opt into knowledge-metadata-v1. Omission retains an existing source's version or creates legacy metadata for a new source.
+	MetadataSchemaVersion *string `json:"metadata_schema_version,omitempty"`
+	MimeType              *string `json:"mime_type,omitempty"`
+	SourceKey             *string `json:"source_key,omitempty"`
+	SourceType            *string `json:"source_type,omitempty"`
+	SourceUri             *string `json:"source_uri,omitempty"`
+	Title                 string  `json:"title"`
+	Version               *string `json:"version,omitempty"`
+	WorkspaceId           *string `json:"workspace_id,omitempty"`
 }
+
+// DocumentMetadataField defines model for DocumentMetadataField.
+type DocumentMetadataField struct {
+	Key       string                     `json:"key"`
+	MaxItems  *int                       `json:"max_items,omitempty"`
+	MaxLength *int                       `json:"max_length,omitempty"`
+	Maximum   *float32                   `json:"maximum,omitempty"`
+	Minimum   *float32                   `json:"minimum,omitempty"`
+	Nullable  bool                       `json:"nullable"`
+	Owner     DocumentMetadataFieldOwner `json:"owner"`
+	Scope     DocumentMetadataFieldScope `json:"scope"`
+	Type      DocumentMetadataFieldType  `json:"type"`
+	Values    *[]string                  `json:"values,omitempty"`
+}
+
+// DocumentMetadataFieldOwner defines model for DocumentMetadataField.Owner.
+type DocumentMetadataFieldOwner string
+
+// DocumentMetadataFieldScope defines model for DocumentMetadataField.Scope.
+type DocumentMetadataFieldScope string
+
+// DocumentMetadataFieldType defines model for DocumentMetadataField.Type.
+type DocumentMetadataFieldType string
+
+// DocumentMetadataSchema defines model for DocumentMetadataSchema.
+type DocumentMetadataSchema struct {
+	ExtensionPolicy DocumentMetadataSchemaExtensionPolicy `json:"extension_policy"`
+	Fields          []DocumentMetadataField               `json:"fields"`
+
+	// TypedFiltering False until the separate typed-filter contract is implemented.
+	TypedFiltering bool   `json:"typed_filtering"`
+	Version        string `json:"version"`
+}
+
+// DocumentMetadataSchemaExtensionPolicy defines model for DocumentMetadataSchema.ExtensionPolicy.
+type DocumentMetadataSchemaExtensionPolicy string
 
 // DocumentMetadataUpdate defines model for DocumentMetadataUpdate.
 type DocumentMetadataUpdate struct {
@@ -1087,6 +1213,9 @@ type DocumentMetadataUpdate struct {
 
 	// Metadata Custom field replacement. Derived fields are preserved; conflicting provided values are rejected.
 	Metadata map[string]interface{} `json:"metadata"`
+
+	// MetadataSchemaVersion Explicit knowledge-metadata-v1 adoption; omission retains the stored version. Known fields are validated and dates normalized to UTC.
+	MetadataSchemaVersion *string `json:"metadata_schema_version,omitempty"`
 }
 
 // EpisodeError defines model for EpisodeError.
@@ -1216,15 +1345,43 @@ type KnowledgeDocument struct {
 		EmbeddingModel      string `json:"embedding_model"`
 		EmbeddingProvider   string `json:"embedding_provider"`
 	} `json:"index_identity"`
-	Metadata    map[string]interface{} `json:"metadata"`
-	MimeType    *string                `json:"mime_type,omitempty"`
-	SourceKey   *string                `json:"source_key,omitempty"`
-	SourceType  string                 `json:"source_type"`
-	SourceUri   *string                `json:"source_uri,omitempty"`
-	Title       string                 `json:"title"`
-	UpdatedAt   time.Time              `json:"updated_at"`
-	Version     *string                `json:"version,omitempty"`
-	WorkspaceId *string                `json:"workspace_id,omitempty"`
+	Metadata map[string]interface{} `json:"metadata"`
+
+	// MetadataSchemaVersion Absent for legacy data; migration never fabricates validation.
+	MetadataSchemaVersion *string   `json:"metadata_schema_version,omitempty"`
+	MimeType              *string   `json:"mime_type,omitempty"`
+	SourceKey             *string   `json:"source_key,omitempty"`
+	SourceType            string    `json:"source_type"`
+	SourceUri             *string   `json:"source_uri,omitempty"`
+	Title                 string    `json:"title"`
+	UpdatedAt             time.Time `json:"updated_at"`
+	Version               *string   `json:"version,omitempty"`
+	WorkspaceId           *string   `json:"workspace_id,omitempty"`
+}
+
+// KnowledgeDocumentChunk defines model for KnowledgeDocumentChunk.
+type KnowledgeDocumentChunk struct {
+	ChunkIndex      int                    `json:"chunk_index"`
+	Content         string                 `json:"content"`
+	ContentHash     *string                `json:"content_hash,omitempty"`
+	CreatedAt       time.Time              `json:"created_at"`
+	Document        *KnowledgeDocument     `json:"document,omitempty"`
+	DocumentId      string                 `json:"document_id"`
+	DocumentVersion *string                `json:"document_version,omitempty"`
+	EndOffset       int                    `json:"end_offset"`
+	Id              string                 `json:"id"`
+	Metadata        map[string]interface{} `json:"metadata"`
+	ParentId        *string                `json:"parent_id,omitempty"`
+	SectionPath     []string               `json:"section_path"`
+	StartOffset     int                    `json:"start_offset"`
+	TokenCount      int                    `json:"token_count"`
+}
+
+// KnowledgeDocumentDetail defines model for KnowledgeDocumentDetail.
+type KnowledgeDocumentDetail struct {
+	Chunks         []KnowledgeDocumentChunk `json:"chunks"`
+	Document       KnowledgeDocument        `json:"document"`
+	MetadataSchema DocumentMetadataSchema   `json:"metadata_schema"`
 }
 
 // Message defines model for Message.

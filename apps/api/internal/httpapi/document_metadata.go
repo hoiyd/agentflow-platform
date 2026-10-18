@@ -1,21 +1,24 @@
 package httpapi
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/rag/metadataschema"
 	"agentflow-platform/apps/api/internal/store"
 )
 
 func (h *Handler) updateDocumentMetadata(w http.ResponseWriter, r *http.Request) {
 	var update domain.DocumentMetadataUpdate
 	r.Body = http.MaxBytesReader(w, r.Body, 65536)
-	decoder := json.NewDecoder(r.Body)
-	decoder.UseNumber()
+	decoder, err := documentJSONDecoder(r.Body, 65536)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid or ambiguous metadata JSON")
+		return
+	}
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&update); err != nil {
 		writeError(w, 400, "invalid metadata update")
@@ -40,4 +43,8 @@ func (h *Handler) updateDocumentMetadata(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, document)
+}
+
+func (h *Handler) getDocumentMetadataSchema(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, metadataschema.Describe())
 }

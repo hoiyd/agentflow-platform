@@ -33,6 +33,30 @@ tags:
   - name: Knowledge
 
 paths:
+  /api/documents/metadata-schema:
+    get:
+      operationId: getDocumentMetadataSchema
+      tags: [Knowledge]
+      description: Read the current versioned field contract. Ownership identifies permitted declaration, not verified truth. Unknown extensions have no typed-filter or authorization meaning.
+      responses:
+        '200':
+          description: Current immutable metadata schema; legacy documents remain unversioned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DocumentMetadataSchema' }
+  /api/documents/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    get:
+      operationId: getKnowledgeDocument
+      tags: [Knowledge]
+      responses:
+        '200':
+          description: Scoped document detail, source chunks and the current schema for inspection. Each Chunk uses its owning Document's stored schema version.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KnowledgeDocumentDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /api/documents:
     post:
       operationId: ingestDocument
@@ -1211,6 +1235,7 @@ components:
         source_uri: { type: string }
         mime_type: { type: string }
         metadata: { type: object, additionalProperties: true }
+        metadata_schema_version: { type: string, description: Opt into knowledge-metadata-v1. Omission retains an existing source's version or creates legacy metadata for a new source. }
         expected_updated_at: { type: string, format: date-time }
     DocumentMetadataUpdate:
       type: object
@@ -1219,6 +1244,58 @@ components:
       properties:
         expected_updated_at: { type: string, format: date-time, description: Nonzero microsecond-precision timestamp from Document.updated_at. }
         metadata: { type: object, additionalProperties: true, description: Custom field replacement. Derived fields are preserved; conflicting provided values are rejected. }
+        metadata_schema_version: { type: string, description: Explicit knowledge-metadata-v1 adoption; omission retains the stored version. Known fields are validated and dates normalized to UTC. }
+    DocumentMetadataSchema:
+      type: object
+      required: [version, fields, extension_policy, typed_filtering]
+      properties:
+        version: { type: string }
+        extension_policy: { type: string, enum: [preserve_unverified] }
+        typed_filtering: { type: boolean, description: False until the separate typed-filter contract is implemented. }
+        fields:
+          type: array
+          items: { $ref: '#/components/schemas/DocumentMetadataField' }
+    DocumentMetadataField:
+      type: object
+      required: [key, type, owner, scope, nullable]
+      properties:
+        key: { type: string }
+        type: { type: string, enum: [string, enum, string-array, number, bool, date-time, derived] }
+        owner: { type: string, enum: [owner_declared, system_derived] }
+        scope: { type: string, enum: [document, chunk, both] }
+        nullable: { type: boolean }
+        max_length: { type: integer }
+        max_items: { type: integer }
+        values: { type: array, items: { type: string } }
+        minimum: { type: number }
+        maximum: { type: number }
+    KnowledgeDocumentDetail:
+      type: object
+      required: [document, chunks, metadata_schema]
+      properties:
+        document: { $ref: '#/components/schemas/KnowledgeDocument' }
+        metadata_schema: { $ref: '#/components/schemas/DocumentMetadataSchema' }
+        chunks:
+          type: array
+          items: { $ref: '#/components/schemas/KnowledgeDocumentChunk' }
+    KnowledgeDocumentChunk:
+      type: object
+      required: [id, document_id, chunk_index, content, token_count, metadata, created_at, section_path, start_offset, end_offset]
+      properties:
+        id: { type: string }
+        document_id: { type: string }
+        parent_id: { type: string }
+        section_path: { type: array, items: { type: string } }
+        start_offset: { type: integer }
+        end_offset: { type: integer }
+        document_version: { type: string }
+        content_hash: { type: string }
+        chunk_index: { type: integer }
+        content: { type: string }
+        token_count: { type: integer }
+        metadata: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
+        document: { $ref: '#/components/schemas/KnowledgeDocument' }
     KnowledgeDocument:
       type: object
       required: [id, title, source_type, metadata, index_identity, created_at, updated_at]
@@ -1233,6 +1310,7 @@ components:
         source_uri: { type: string }
         mime_type: { type: string }
         metadata: { type: object, additionalProperties: true }
+        metadata_schema_version: { type: string, description: Absent for legacy data; migration never fabricates validation. }
         chunk_count: { type: integer }
         embedding_count: { type: integer }
         index_identity:

@@ -72,20 +72,32 @@ func (s *KnowledgeBase) Ingest(ctx context.Context, request domain.DocumentInges
 	if err := redaction.ValidateValue(request.Metadata); err != nil {
 		return domain.Document{}, err
 	}
+	source := strings.TrimSpace(request.SourceKey)
+	if source == "" {
+		source = strings.TrimSpace(request.SourceURI)
+	}
+	var existing domain.Document
+	var found bool
+	if source != "" {
+		var err error
+		existing, found, err = s.store.GetDocumentBySource(request.WorkspaceID, source)
+		if err != nil {
+			return domain.Document{}, err
+		}
+		if found && request.MetadataSchemaVersion == "" {
+			request.MetadataSchemaVersion = existing.MetadataSchemaVersion
+		}
+	}
 	document, chunks, err := rag.BuildDocument(request)
 	if err != nil {
 		return domain.Document{}, err
 	}
-	if document.SourceKey != "" {
-		existing, found, err := s.store.GetDocumentBySource(document.WorkspaceID, document.SourceKey)
-		if err != nil {
-			return domain.Document{}, err
-		}
-		if found && store.SameDocumentIndexInputs(existing, document) && (request.ExpectedUpdatedAt != nil || !store.SameDocumentMetadata(existing.Metadata, document.Metadata)) {
+	if found {
+		if store.SameDocumentIndexInputs(existing, document) && (request.ExpectedUpdatedAt != nil || existing.MetadataSchemaVersion != document.MetadataSchemaVersion || !store.SameDocumentMetadata(existing.Metadata, document.Metadata)) {
 			if request.ExpectedUpdatedAt == nil {
 				return domain.Document{}, store.ErrDocumentMetadataConflict
 			}
-			return s.UpdateMetadata(ctx, document.WorkspaceID, existing.ID, domain.DocumentMetadataUpdate{ExpectedUpdatedAt: *request.ExpectedUpdatedAt, Metadata: document.Metadata, ExpectedIndexInputs: &document})
+			return s.UpdateMetadata(ctx, document.WorkspaceID, existing.ID, domain.DocumentMetadataUpdate{ExpectedUpdatedAt: *request.ExpectedUpdatedAt, Metadata: document.Metadata, MetadataSchemaVersion: document.MetadataSchemaVersion, ExpectedIndexInputs: &document})
 		}
 	}
 	if request.ExpectedUpdatedAt != nil {

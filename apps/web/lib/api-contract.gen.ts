@@ -4,6 +4,41 @@
  */
 
 export interface paths {
+    "/api/documents/metadata-schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Read the current versioned field contract. Ownership identifies permitted declaration, not verified truth. Unknown extensions have no typed-filter or authorization meaning. */
+        get: operations["getDocumentMetadataSchema"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getKnowledgeDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents": {
         parameters: {
             query?: never;
@@ -842,6 +877,8 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+            /** @description Opt into knowledge-metadata-v1. Omission retains an existing source's version or creates legacy metadata for a new source. */
+            metadata_schema_version?: string;
             /** Format: date-time */
             expected_updated_at?: string;
         };
@@ -855,6 +892,55 @@ export interface components {
             metadata: {
                 [key: string]: unknown;
             };
+            /** @description Explicit knowledge-metadata-v1 adoption; omission retains the stored version. Known fields are validated and dates normalized to UTC. */
+            metadata_schema_version?: string;
+        };
+        DocumentMetadataSchema: {
+            version: string;
+            /** @enum {string} */
+            extension_policy: "preserve_unverified";
+            /** @description False until the separate typed-filter contract is implemented. */
+            typed_filtering: boolean;
+            fields: components["schemas"]["DocumentMetadataField"][];
+        };
+        DocumentMetadataField: {
+            key: string;
+            /** @enum {string} */
+            type: "string" | "enum" | "string-array" | "number" | "bool" | "date-time" | "derived";
+            /** @enum {string} */
+            owner: "owner_declared" | "system_derived";
+            /** @enum {string} */
+            scope: "document" | "chunk" | "both";
+            nullable: boolean;
+            max_length?: number;
+            max_items?: number;
+            values?: string[];
+            minimum?: number;
+            maximum?: number;
+        };
+        KnowledgeDocumentDetail: {
+            document: components["schemas"]["KnowledgeDocument"];
+            metadata_schema: components["schemas"]["DocumentMetadataSchema"];
+            chunks: components["schemas"]["KnowledgeDocumentChunk"][];
+        };
+        KnowledgeDocumentChunk: {
+            id: string;
+            document_id: string;
+            parent_id?: string;
+            section_path: string[];
+            start_offset: number;
+            end_offset: number;
+            document_version?: string;
+            content_hash?: string;
+            chunk_index: number;
+            content: string;
+            token_count: number;
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            document?: components["schemas"]["KnowledgeDocument"];
         };
         KnowledgeDocument: {
             id: string;
@@ -869,6 +955,8 @@ export interface components {
             metadata: {
                 [key: string]: unknown;
             };
+            /** @description Absent for legacy data; migration never fabricates validation. */
+            metadata_schema_version?: string;
             chunk_count?: number;
             embedding_count?: number;
             index_identity: {
@@ -2129,6 +2217,49 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getDocumentMetadataSchema: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current immutable metadata schema; legacy documents remain unversioned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentMetadataSchema"];
+                };
+            };
+        };
+    };
+    getKnowledgeDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped document detail, source chunks and the current schema for inspection. Each Chunk uses its owning Document's stored schema version. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocumentDetail"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
     ingestDocument: {
         parameters: {
             query?: never;

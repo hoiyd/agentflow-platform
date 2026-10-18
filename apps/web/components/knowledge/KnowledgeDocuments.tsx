@@ -5,6 +5,7 @@ import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 
 import type { DocumentDetail, RetrievedDocumentChunk } from "../../lib/knowledge-api";
 import type { KnowledgeDocumentsModel } from "./useKnowledgeDocuments";
+import { DocumentMetadata } from "./DocumentMetadata";
 import { documentFilename, documentFormat, metadataString, shortSourceLabel } from "./knowledgeFormatters";
 
 type IngestMode = "file" | "text";
@@ -158,6 +159,7 @@ function DocumentDetailBlock({ detail, isLoading }: { detail: DocumentDetail | n
         </div>
       </div>
       <div className="chunk-list">
+        <DocumentMetadata label="Document metadata" metadata={detail.document.metadata} version={detail.document.metadata_schema_version} schema={detail.metadata_schema} />
         {detail.chunks.map((chunk) => (
           <article className="chunk-card" key={chunk.id}>
             <div className="rag-result-header">
@@ -171,6 +173,7 @@ function DocumentDetailBlock({ detail, isLoading }: { detail: DocumentDetail | n
               </div>
             </div>
             <p>{chunk.content}</p>
+            <DocumentMetadata label={`Chunk ${chunk.chunk_index + 1} metadata`} metadata={chunk.metadata} version={detail.document.metadata_schema_version} schema={detail.metadata_schema} />
           </article>
         ))}
       </div>

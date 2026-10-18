@@ -10,6 +10,7 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/rag/metadatafilter"
+	"agentflow-platform/apps/api/internal/rag/metadataschema"
 )
 
 var (
@@ -21,12 +22,7 @@ var (
 // These are existing source/structure fields, not a new business metadata schema.
 // Chunk-local derived values must not be overwritten by Document inheritance.
 func protectedDocumentMetadata(key string) bool {
-	switch key {
-	case "id", "workspace_id", "source_key", "version", "content_hash", "index_identity", "created_at", "updated_at",
-		"title", "format", "filename", "chunk_index", "chunk_type", "source_format", "heading_path", "code_language", "split_reason":
-		return true
-	}
-	return false
+	return metadataschema.IsSystemField(key)
 }
 
 func SameDocumentIndexInputs(a, b domain.Document) bool {
@@ -44,6 +40,7 @@ type DocumentMetadataChange struct {
 	Inherited         map[string]any
 	PreviousInherited map[string]any
 	UpdatedAt         time.Time
+	SchemaVersion     string
 }
 
 func PrepareDocumentMetadataChange(document domain.Document, update domain.DocumentMetadataUpdate) (DocumentMetadataChange, error) {
@@ -53,6 +50,15 @@ func PrepareDocumentMetadataChange(document domain.Document, update domain.Docum
 	if update.ExpectedIndexInputs != nil && !SameDocumentIndexInputs(document, *update.ExpectedIndexInputs) {
 		return DocumentMetadataChange{}, ErrDocumentMetadataConflict
 	}
+	version := update.MetadataSchemaVersion
+	if version == "" {
+		version = document.MetadataSchemaVersion
+	}
+	validated, err := metadataschema.Normalize(version, update.Metadata)
+	if err != nil {
+		return DocumentMetadataChange{}, err
+	}
+	update.Metadata = validated
 	encoded, err := json.Marshal(update.Metadata)
 	if err != nil || len(encoded) > 65536 {
 		return DocumentMetadataChange{}, ErrInvalidDocumentMetadata
@@ -72,6 +78,9 @@ func PrepareDocumentMetadataChange(document domain.Document, update domain.Docum
 		if protectedDocumentMetadata(key) {
 			original, exists := document.Metadata[key]
 			if !exists || !SameDocumentMetadata(value, original) {
+				if version != "" {
+					return DocumentMetadataChange{}, metadataschema.Invalid(key + " is system-derived")
+				}
 				return DocumentMetadataChange{}, fmt.Errorf("%w: %s", ErrDocumentMetadataRequiresReindex, key)
 			}
 		}
@@ -81,8 +90,13 @@ func PrepareDocumentMetadataChange(document domain.Document, update domain.Docum
 			metadata[key] = value
 		}
 	}
-	change := DocumentMetadataChange{Metadata: metadata, Inherited: map[string]any{}, UpdatedAt: document.UpdatedAt}
-	if SameDocumentMetadata(metadata, document.Metadata) {
+	prospective := document
+	prospective.Metadata, prospective.MetadataSchemaVersion = metadata, version
+	if err := metadataschema.ValidateDocumentLabels(prospective); err != nil {
+		return DocumentMetadataChange{}, err
+	}
+	change := DocumentMetadataChange{Metadata: metadata, Inherited: map[string]any{}, UpdatedAt: document.UpdatedAt, SchemaVersion: version}
+	if SameDocumentMetadata(metadata, document.Metadata) && version == document.MetadataSchemaVersion {
 		return change, nil
 	}
 	if !document.UpdatedAt.Equal(update.ExpectedUpdatedAt) {
@@ -104,6 +118,12 @@ func PrepareDocumentMetadataChange(document domain.Document, update domain.Docum
 		change.UpdatedAt = document.UpdatedAt.Add(time.Microsecond)
 	}
 	return change, nil
+}
+
+// Validate the effective Chunk map, not only Document fields: adoption cannot
+// certify an incompatible independent legacy override as versioned metadata.
+func (change DocumentMetadataChange) ValidatedChunkMetadata(original map[string]any) (map[string]any, error) {
+	return metadataschema.Normalize(change.SchemaVersion, change.ChunkMetadata(original))
 }
 
 func (change DocumentMetadataChange) ChunkMetadata(original map[string]any) map[string]any {

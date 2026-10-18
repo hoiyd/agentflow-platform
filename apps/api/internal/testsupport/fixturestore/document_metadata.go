@@ -34,12 +34,18 @@ func (s *Store) UpdateDocumentMetadata(workspaceID, id string, update domain.Doc
 		if change.UpdatedAt.Equal(document.UpdatedAt) {
 			return document, nil
 		}
-		document.Metadata, document.UpdatedAt = change.Metadata, change.UpdatedAt
+		next := append([]domain.DocumentChunk(nil), s.data.DocumentChunks...)
 		for j, chunk := range s.data.DocumentChunks {
 			if chunk.DocumentID == document.ID {
-				s.data.DocumentChunks[j].Metadata = change.ChunkMetadata(chunk.Metadata)
+				metadata, err := change.ValidatedChunkMetadata(chunk.Metadata)
+				if err != nil {
+					return domain.Document{}, err
+				}
+				next[j].Metadata = metadata
 			}
 		}
+		document.Metadata, document.UpdatedAt, document.MetadataSchemaVersion = change.Metadata, change.UpdatedAt, change.SchemaVersion
+		s.data.DocumentChunks = next
 		s.data.Documents[i] = document
 		return document, nil
 	}
