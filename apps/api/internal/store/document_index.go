@@ -8,6 +8,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/rag/metadataschema"
 )
 
 var ErrDocumentVersionConflict = failure.New(failure.Definition{
@@ -56,6 +57,14 @@ func PrepareDocumentWrite(document domain.Document, chunks []domain.DocumentChun
 	if document.Metadata == nil {
 		document.Metadata = map[string]any{}
 	}
+	validated, err := metadataschema.Normalize(document.MetadataSchemaVersion, document.Metadata)
+	if err != nil {
+		return domain.Document{}, nil, nil, err
+	}
+	document.Metadata = validated
+	if err := metadataschema.ValidateDocumentLabels(document); err != nil {
+		return domain.Document{}, nil, nil, err
+	}
 	if document.CreatedAt.IsZero() {
 		document.CreatedAt = now
 	} else {
@@ -77,6 +86,10 @@ func PrepareDocumentWrite(document domain.Document, chunks []domain.DocumentChun
 		}
 		if chunks[i].Metadata == nil {
 			chunks[i].Metadata = map[string]any{}
+		}
+		chunks[i].Metadata, err = metadataschema.Normalize(document.MetadataSchemaVersion, chunks[i].Metadata)
+		if err != nil {
+			return domain.Document{}, nil, nil, err
 		}
 		if chunks[i].SectionPath == nil {
 			chunks[i].SectionPath = []string{}

@@ -12,6 +12,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/knowledge"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/rag/metadataschema"
 	"agentflow-platform/apps/api/internal/store"
 )
 
@@ -42,8 +43,9 @@ func (h *Handler) getDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"document": document,
-		"chunks":   chunks,
+		"document":        document,
+		"chunks":          chunks,
+		"metadata_schema": metadataschema.Describe(),
 	})
 }
 
@@ -66,8 +68,11 @@ func (h *Handler) deleteDocument(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createDocument(w http.ResponseWriter, r *http.Request) {
 	var req domain.DocumentIngestRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.UseNumber()
+	decoder, err := documentJSONDecoder(r.Body, documentUploadMaxBytes)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid or ambiguous document JSON")
+		return
+	}
 	if err := decoder.Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
@@ -130,7 +135,12 @@ func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	if rawMetadata := strings.TrimSpace(r.FormValue("metadata")); rawMetadata != "" {
 		var extra map[string]any
-		if err := json.Unmarshal([]byte(rawMetadata), &extra); err != nil {
+		decoder, err := documentMetadataJSONDecoder(strings.NewReader(rawMetadata))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid or ambiguous metadata JSON")
+			return
+		}
+		if err := decoder.Decode(&extra); err != nil || extra == nil {
 			writeError(w, http.StatusBadRequest, "metadata must be a JSON object")
 			return
 		}
@@ -139,13 +149,14 @@ func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	document, err := h.knowledge.Ingest(r.Context(), domain.DocumentIngestRequest{
-		WorkspaceID: workspaceIDFromRequest(r),
-		Title:       title,
-		Content:     content,
-		SourceType:  "file",
-		SourceURI:   filename,
-		MimeType:    mimeType,
-		Metadata:    metadata,
+		WorkspaceID:           workspaceIDFromRequest(r),
+		Title:                 title,
+		Content:               content,
+		SourceType:            "file",
+		SourceURI:             filename,
+		MimeType:              mimeType,
+		Metadata:              metadata,
+		MetadataSchemaVersion: r.FormValue("metadata_schema_version"),
 	})
 	if err != nil {
 		writeKnowledgeError(w, r, err)

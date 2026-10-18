@@ -186,6 +186,14 @@ func TestPostgresMigrationsAddModelRequestRecords(t *testing.T) {
 	}
 }
 
+func TestPostgresMigrationsAddMetadataSchema(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	if !strings.Contains(joined, "metadata_schema_version text NOT NULL DEFAULT ''") ||
+		!strings.Contains(joined, "documents ADD COLUMN IF NOT EXISTS metadata_schema_version") {
+		t.Fatal("document metadata schema needs both fresh and existing-database definitions")
+	}
+}
+
 func TestPostgresMigrationsAddDocumentSourceTraceability(t *testing.T) {
 	joined := strings.Join(postgresMigrations, "\n")
 	for _, expected := range []string{

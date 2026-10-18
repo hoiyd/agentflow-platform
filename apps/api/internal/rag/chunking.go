@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag/metadataschema"
 )
 
 const (
@@ -35,7 +36,27 @@ func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.
 	if sourceType == "" {
 		sourceType = "text"
 	}
-	metadata := copyMetadata(req.Metadata)
+	metadata, err := metadataschema.Normalize(req.MetadataSchemaVersion, copyMetadata(req.Metadata))
+	if err != nil {
+		return domain.Document{}, nil, err
+	}
+	if req.MetadataSchemaVersion != "" {
+		// Only these existing source hints may be repeated by an ingest client;
+		// all other structure/entity fields are generated, never caller labels.
+		for key := range metadata {
+			if metadataschema.IsSystemField(key) && key != "format" && key != "filename" {
+				return domain.Document{}, nil, metadataschema.Invalid(key + " is system-derived")
+			}
+		}
+		derivedRequest := req
+		derivedRequest.Metadata = nil
+		if value, ok := metadata["format"]; ok && value != documentFormatFromRequest(derivedRequest) {
+			return domain.Document{}, nil, metadataschema.Invalid("format contradicts source")
+		}
+		if value, ok := metadata["filename"]; ok && (sourceType != "file" || value != strings.TrimSpace(req.SourceURI)) {
+			return domain.Document{}, nil, metadataschema.Invalid("filename contradicts source")
+		}
+	}
 	contentHash := sourceHash(content)
 	version := strings.TrimSpace(req.Version)
 	if version == "" {
@@ -43,18 +64,19 @@ func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.
 	}
 	now := time.Now().UTC()
 	document := domain.Document{
-		WorkspaceID: strings.TrimSpace(req.WorkspaceID),
-		SourceKey:   strings.TrimSpace(req.SourceKey),
-		Title:       title,
-		Version:     version,
-		ContentHash: contentHash,
-		SourceType:  sourceType,
-		SourceURI:   strings.TrimSpace(req.SourceURI),
-		MimeType:    strings.TrimSpace(req.MimeType),
-		Content:     content,
-		Metadata:    metadata,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		WorkspaceID:           strings.TrimSpace(req.WorkspaceID),
+		SourceKey:             strings.TrimSpace(req.SourceKey),
+		Title:                 title,
+		Version:               version,
+		ContentHash:           contentHash,
+		SourceType:            sourceType,
+		SourceURI:             strings.TrimSpace(req.SourceURI),
+		MimeType:              strings.TrimSpace(req.MimeType),
+		Content:               content,
+		Metadata:              metadata,
+		MetadataSchemaVersion: req.MetadataSchemaVersion,
+		CreatedAt:             now,
+		UpdatedAt:             now,
 	}
 	if document.SourceKey == "" {
 		document.SourceKey = document.SourceURI
@@ -89,6 +111,20 @@ func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.
 		})
 		for key, value := range part.Metadata {
 			chunks[len(chunks)-1].Metadata[key] = value
+		}
+	}
+	// Include generated fields in effective metadata limits before embeddings.
+	document.Metadata, err = metadataschema.Normalize(document.MetadataSchemaVersion, document.Metadata)
+	if err != nil {
+		return domain.Document{}, nil, err
+	}
+	if err := metadataschema.ValidateDocumentLabels(document); err != nil {
+		return domain.Document{}, nil, err
+	}
+	for i := range chunks {
+		chunks[i].Metadata, err = metadataschema.Normalize(document.MetadataSchemaVersion, chunks[i].Metadata)
+		if err != nil {
+			return domain.Document{}, nil, err
 		}
 	}
 	return document, chunks, nil

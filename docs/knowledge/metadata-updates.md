@@ -38,6 +38,9 @@ the stored index identity against the current route.
 
 This is metadata update correctness, not business validity/expiry enforcement,
 typed filtering, Document ACLs or automatic metadata enrichment.
+For opt-in field types, schema adoption and declaration ownership, see
+[Metadata schema](metadata-schema.md). Versioned updates validate effective
+Chunk overrides inside the same transaction; legacy equality semantics remain unchanged.
 The typed frontend client exposes `updateDocumentMetadata`; this phase does not
 add a metadata editor to the Knowledge page.
 

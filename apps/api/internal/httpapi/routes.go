@@ -45,6 +45,7 @@ func (h *Handler) registerMemoryRoutes(mux *http.ServeMux) {
 
 func (h *Handler) registerDocumentRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/documents", h.listDocuments)
+	mux.HandleFunc("GET /api/documents/metadata-schema", h.getDocumentMetadataSchema)
 	mux.HandleFunc("POST /api/documents", h.createDocument)
 	mux.HandleFunc("POST /api/documents/upload", h.uploadDocument)
 	mux.HandleFunc("GET /api/documents/{id}", h.getDocument)

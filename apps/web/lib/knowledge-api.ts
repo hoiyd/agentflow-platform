@@ -12,6 +12,7 @@ export type DocumentInfo = {
   source_uri?: string;
   mime_type?: string;
   metadata: Record<string, unknown>;
+  metadata_schema_version?: string;
   chunk_count?: number;
   embedding_count?: number;
   index_identity?: {
@@ -267,6 +268,7 @@ export type RAGEvaluationRunResponse = {
 export type DocumentDetail = {
   document: DocumentInfo;
   chunks: RetrievedDocumentChunk["chunk"][];
+  metadata_schema?: components["schemas"]["DocumentMetadataSchema"];
 };
 
 export async function listDocuments(signal?: AbortSignal): Promise<DocumentInfo[]> {
@@ -277,14 +279,7 @@ export async function listDocuments(signal?: AbortSignal): Promise<DocumentInfo[
   );
 }
 
-export async function createDocument(input: {
-  expected_updated_at?: string;
-  title: string;
-  source_key?: string;
-  version?: string;
-  content: string;
-  metadata?: Record<string, unknown>;
-}): Promise<DocumentInfo> {
+export async function createDocument(input: components["schemas"]["DocumentIngestRequest"]): Promise<DocumentInfo> {
   return apiObject<DocumentInfo>(
     "/api/documents",
     {
@@ -309,9 +304,11 @@ export async function updateDocumentMetadata(
   );
 }
 
-export async function uploadDocument(input: { file: File; title?: string }): Promise<DocumentInfo> {
+export async function uploadDocument(input: { file: File; title?: string; metadata_schema_version?: string; metadata?: Record<string, unknown> }): Promise<DocumentInfo> {
   const form = new FormData();
   form.append("file", input.file);
+  if (input.metadata_schema_version) form.append("metadata_schema_version", input.metadata_schema_version);
+  if (input.metadata) form.append("metadata", JSON.stringify(input.metadata));
   if (input.title?.trim()) {
     form.append("title", input.title.trim());
   }
@@ -336,7 +333,8 @@ export async function getDocument(documentId: string, signal?: AbortSignal): Pro
   }
   return {
     document,
-    chunks: Array.isArray(data.chunks) ? data.chunks : []
+    chunks: Array.isArray(data.chunks) ? data.chunks : [],
+    ...(data.metadata_schema ? { metadata_schema: expectObject<NonNullable<DocumentDetail["metadata_schema"]>>(data.metadata_schema, "document metadata schema") } : {})
   };
 }
 

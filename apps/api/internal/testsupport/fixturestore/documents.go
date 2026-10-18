@@ -32,11 +32,14 @@ func (s *Store) CreateDocument(document domain.Document, chunks []domain.Documen
 		}
 	}
 	if existing != nil {
+		if existing.MetadataSchemaVersion != "" && existing.MetadataSchemaVersion != document.MetadataSchemaVersion {
+			return domain.Document{}, store.ErrDocumentMetadataConflict
+		}
 		if existing.Version == document.Version && existing.ContentHash != document.ContentHash {
 			return domain.Document{}, store.DocumentVersionConflict(*existing, document)
 		}
 		if len(replacedDocumentIDs) == 1 && store.SameDocumentIndexInputs(*existing, document) && existing.IndexIdentity == document.IndexIdentity {
-			if !store.SameDocumentMetadata(existing.Metadata, document.Metadata) {
+			if existing.MetadataSchemaVersion != document.MetadataSchemaVersion || !store.SameDocumentMetadata(existing.Metadata, document.Metadata) {
 				return domain.Document{}, store.ErrDocumentMetadataConflict
 			}
 			return *existing, nil

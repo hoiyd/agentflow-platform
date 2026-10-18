@@ -30,6 +30,7 @@ func scanDocument(row scanner) (domain.Document, error) {
 		&metadataJSON,
 		&document.CreatedAt,
 		&document.UpdatedAt,
+		&document.MetadataSchemaVersion,
 		&document.ChunkCount,
 		&document.EmbeddingCount,
 	); err != nil {
@@ -119,6 +120,7 @@ func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, err
 		&documentMetadataJSON,
 		&item.Document.CreatedAt,
 		&item.Document.UpdatedAt,
+		&item.Document.MetadataSchemaVersion,
 		&item.Chunk.ID,
 		&item.Chunk.DocumentID,
 		&item.Chunk.ParentID,
