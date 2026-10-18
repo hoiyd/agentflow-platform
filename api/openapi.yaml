@@ -30,8 +30,49 @@ tags:
   - name: Runs
   - name: Tools
   - name: Workspaces
+  - name: Knowledge
 
 paths:
+  /api/documents:
+    post:
+      operationId: ingestDocument
+      tags: [Knowledge]
+      description: Ingest and index a document. Same-source/body custom metadata changes require expected_updated_at and reuse the conditional metadata update without embedding calls. An explicit token is not accepted for content/index replacement; use normal ingestion for reindexing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentIngestRequest' }
+      responses:
+        '201':
+          description: Created, reindexed, or conditionally metadata-updated Document.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KnowledgeDocument' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/documents/{id}/metadata:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string } }
+    patch:
+      operationId: updateDocumentMetadata
+      tags: [Knowledge]
+      description: Replace custom metadata in the authorized Workspace, atomically updating inherited Chunk fields without re-embedding. expected_updated_at is the existing Document timestamp used as an optimistic concurrency token. Identical payload retries are no-ops even with an older nonzero token; different stale updates return 409. Derived/source/indexing fields cannot be changed here. Does not enforce business expiry or Document ACLs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentMetadataUpdate' }
+      responses:
+        '200':
+          description: Updated Document, or unchanged Document for an identical retry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KnowledgeDocument' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
   /api/conversations/{id}/inputs:
     parameters:
       - { in: path, name: id, required: true, schema: { type: string } }
@@ -1157,6 +1198,53 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    DocumentIngestRequest:
+      type: object
+      required: [title, content]
+      properties:
+        workspace_id: { type: string }
+        source_key: { type: string }
+        title: { type: string }
+        version: { type: string }
+        content: { type: string }
+        source_type: { type: string }
+        source_uri: { type: string }
+        mime_type: { type: string }
+        metadata: { type: object, additionalProperties: true }
+        expected_updated_at: { type: string, format: date-time }
+    DocumentMetadataUpdate:
+      type: object
+      additionalProperties: false
+      required: [expected_updated_at, metadata]
+      properties:
+        expected_updated_at: { type: string, format: date-time, description: Nonzero microsecond-precision timestamp from Document.updated_at. }
+        metadata: { type: object, additionalProperties: true, description: Custom field replacement. Derived fields are preserved; conflicting provided values are rejected. }
+    KnowledgeDocument:
+      type: object
+      required: [id, title, source_type, metadata, index_identity, created_at, updated_at]
+      properties:
+        id: { type: string }
+        workspace_id: { type: string }
+        source_key: { type: string }
+        title: { type: string }
+        version: { type: string }
+        content_hash: { type: string }
+        source_type: { type: string }
+        source_uri: { type: string }
+        mime_type: { type: string }
+        metadata: { type: object, additionalProperties: true }
+        chunk_count: { type: integer }
+        embedding_count: { type: integer }
+        index_identity:
+          type: object
+          required: [chunker_version, embedding_provider, embedding_model, embedding_dimensions]
+          properties:
+            chunker_version: { type: string }
+            embedding_provider: { type: string }
+            embedding_model: { type: string }
+            embedding_dimensions: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
     RunInputRequest:
       type: object
       additionalProperties: false

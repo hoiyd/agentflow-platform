@@ -515,6 +515,10 @@ func (s *boundaryWorkspaceStore) GetDocument(id string) (domain.Document, []doma
 
 type boundaryKnowledgeOperations struct{ err error }
 
+func (s *boundaryKnowledgeOperations) UpdateMetadata(context.Context, string, string, domain.DocumentMetadataUpdate) (domain.Document, error) {
+	return domain.Document{}, s.err
+}
+
 func (s *boundaryKnowledgeOperations) Ingest(context.Context, domain.DocumentIngestRequest) (domain.Document, error) {
 	return domain.Document{}, s.err
 }

@@ -34,6 +34,7 @@ type MemoryOperations interface {
 
 // KnowledgeOperations is the transport-facing subset of knowledge-base behavior.
 type KnowledgeOperations interface {
+	UpdateMetadata(context.Context, string, string, domain.DocumentMetadataUpdate) (domain.Document, error)
 	Ingest(context.Context, domain.DocumentIngestRequest) (domain.Document, error)
 	Search(context.Context, domain.DocumentSearch, int) (domain.DocumentSearchResponse, error)
 	Evaluate(context.Context, domain.RAGEvaluationRunRequest) (domain.RAGEvaluationRunResponse, error)

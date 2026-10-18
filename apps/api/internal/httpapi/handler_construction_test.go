@@ -34,6 +34,10 @@ func (*memoryOperationsStub) SyncTurn(memorypkg.TurnSyncRequest) error { return 
 
 type knowledgeOperationsStub struct{}
 
+func (*knowledgeOperationsStub) UpdateMetadata(context.Context, string, string, domain.DocumentMetadataUpdate) (domain.Document, error) {
+	return domain.Document{}, nil
+}
+
 func (*knowledgeOperationsStub) Ingest(_ context.Context, request domain.DocumentIngestRequest) (domain.Document, error) {
 	return domain.Document{Title: request.Title}, nil
 }

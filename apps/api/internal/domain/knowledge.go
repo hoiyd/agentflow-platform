@@ -64,15 +64,27 @@ type DocumentChunkEmbedding struct {
 }
 
 type DocumentIngestRequest struct {
-	WorkspaceID string         `json:"workspace_id,omitempty"`
-	SourceKey   string         `json:"source_key,omitempty"`
-	Title       string         `json:"title"`
-	Version     string         `json:"version,omitempty"`
-	Content     string         `json:"content"`
-	SourceType  string         `json:"source_type,omitempty"`
-	SourceURI   string         `json:"source_uri,omitempty"`
-	MimeType    string         `json:"mime_type,omitempty"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
+	// ExpectedUpdatedAt opts a same-source/body request into conditional metadata update.
+	ExpectedUpdatedAt *time.Time     `json:"expected_updated_at,omitempty"`
+	WorkspaceID       string         `json:"workspace_id,omitempty"`
+	SourceKey         string         `json:"source_key,omitempty"`
+	Title             string         `json:"title"`
+	Version           string         `json:"version,omitempty"`
+	Content           string         `json:"content"`
+	SourceType        string         `json:"source_type,omitempty"`
+	SourceURI         string         `json:"source_uri,omitempty"`
+	MimeType          string         `json:"mime_type,omitempty"`
+	Metadata          map[string]any `json:"metadata,omitempty"`
+}
+
+// DocumentMetadataUpdate replaces custom labels, not content or index inputs.
+// UpdatedAt is an existing microsecond-precision concurrency token, not a clock TTL.
+type DocumentMetadataUpdate struct {
+	ExpectedUpdatedAt time.Time      `json:"expected_updated_at"`
+	Metadata          map[string]any `json:"metadata"`
+	// Ingest-only precondition, checked under the mutation lock. Never accepted
+	// from HTTP or persisted: a concurrent reindex is not a metadata no-op.
+	ExpectedIndexInputs *Document `json:"-"`
 }
 
 // DocumentSearch.Metadata uses exact text equality: AND across keys, Chunk OR

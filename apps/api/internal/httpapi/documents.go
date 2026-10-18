@@ -66,7 +66,9 @@ func (h *Handler) deleteDocument(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createDocument(w http.ResponseWriter, r *http.Request) {
 	var req domain.DocumentIngestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.UseNumber()
+	if err := decoder.Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
@@ -200,7 +202,7 @@ func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
 
 func writeKnowledgeError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusBadRequest
-	if errors.Is(err, store.ErrDocumentVersionConflict) || rag.IsIndexIncompatible(err) {
+	if errors.Is(err, store.ErrDocumentVersionConflict) || errors.Is(err, store.ErrDocumentMetadataConflict) || errors.Is(err, store.ErrDocumentMetadataRequiresReindex) || rag.IsIndexIncompatible(err) {
 		status = http.StatusConflict
 	} else if knowledge.IsEmbeddingError(err) {
 		status = http.StatusBadGateway

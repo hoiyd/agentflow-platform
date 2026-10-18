@@ -1066,6 +1066,29 @@ type DeleteConversationResponse struct {
 	Deleted bool `json:"deleted"`
 }
 
+// DocumentIngestRequest defines model for DocumentIngestRequest.
+type DocumentIngestRequest struct {
+	Content           string                  `json:"content"`
+	ExpectedUpdatedAt *time.Time              `json:"expected_updated_at,omitempty"`
+	Metadata          *map[string]interface{} `json:"metadata,omitempty"`
+	MimeType          *string                 `json:"mime_type,omitempty"`
+	SourceKey         *string                 `json:"source_key,omitempty"`
+	SourceType        *string                 `json:"source_type,omitempty"`
+	SourceUri         *string                 `json:"source_uri,omitempty"`
+	Title             string                  `json:"title"`
+	Version           *string                 `json:"version,omitempty"`
+	WorkspaceId       *string                 `json:"workspace_id,omitempty"`
+}
+
+// DocumentMetadataUpdate defines model for DocumentMetadataUpdate.
+type DocumentMetadataUpdate struct {
+	// ExpectedUpdatedAt Nonzero microsecond-precision timestamp from Document.updated_at.
+	ExpectedUpdatedAt time.Time `json:"expected_updated_at"`
+
+	// Metadata Custom field replacement. Derived fields are preserved; conflicting provided values are rejected.
+	Metadata map[string]interface{} `json:"metadata"`
+}
+
 // EpisodeError defines model for EpisodeError.
 type EpisodeError struct {
 	Category  *string `json:"category,omitempty"`
@@ -1178,6 +1201,30 @@ type IdentityUser struct {
 	Id      string `json:"id"`
 	Name    string `json:"name"`
 	Subject string `json:"subject"`
+}
+
+// KnowledgeDocument defines model for KnowledgeDocument.
+type KnowledgeDocument struct {
+	ChunkCount     *int      `json:"chunk_count,omitempty"`
+	ContentHash    *string   `json:"content_hash,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	EmbeddingCount *int      `json:"embedding_count,omitempty"`
+	Id             string    `json:"id"`
+	IndexIdentity  struct {
+		ChunkerVersion      string `json:"chunker_version"`
+		EmbeddingDimensions int    `json:"embedding_dimensions"`
+		EmbeddingModel      string `json:"embedding_model"`
+		EmbeddingProvider   string `json:"embedding_provider"`
+	} `json:"index_identity"`
+	Metadata    map[string]interface{} `json:"metadata"`
+	MimeType    *string                `json:"mime_type,omitempty"`
+	SourceKey   *string                `json:"source_key,omitempty"`
+	SourceType  string                 `json:"source_type"`
+	SourceUri   *string                `json:"source_uri,omitempty"`
+	Title       string                 `json:"title"`
+	UpdatedAt   time.Time              `json:"updated_at"`
+	Version     *string                `json:"version,omitempty"`
+	WorkspaceId *string                `json:"workspace_id,omitempty"`
 }
 
 // Message defines model for Message.
@@ -2223,6 +2270,12 @@ type EnqueueRunInputJSONRequestBody = RunInputRequest
 
 // PatchTaskStateJSONRequestBody defines body for PatchTaskState for application/json ContentType.
 type PatchTaskStateJSONRequestBody = TaskStatePatch
+
+// IngestDocumentJSONRequestBody defines body for IngestDocument for application/json ContentType.
+type IngestDocumentJSONRequestBody = DocumentIngestRequest
+
+// UpdateDocumentMetadataJSONRequestBody defines body for UpdateDocumentMetadata for application/json ContentType.
+type UpdateDocumentMetadataJSONRequestBody = DocumentMetadataUpdate
 
 // WithdrawClarificationJSONRequestBody defines body for WithdrawClarification for application/json ContentType.
 type WithdrawClarificationJSONRequestBody = ClarificationVersionRequest

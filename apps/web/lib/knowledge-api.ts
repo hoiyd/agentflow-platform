@@ -1,4 +1,5 @@
 import { apiArray, apiJSON, apiObject, apiVoid, expectObject } from "./api-client.ts";
+import type { components } from "./api-contract.gen.ts";
 
 export type DocumentInfo = {
   id: string;
@@ -277,6 +278,7 @@ export async function listDocuments(signal?: AbortSignal): Promise<DocumentInfo[
 }
 
 export async function createDocument(input: {
+  expected_updated_at?: string;
   title: string;
   source_key?: string;
   version?: string;
@@ -291,6 +293,18 @@ export async function createDocument(input: {
       body: JSON.stringify(input)
     },
     { errorMessage: "Failed to create document" },
+    "document"
+  );
+}
+
+export async function updateDocumentMetadata(
+  documentId: string,
+  input: components["schemas"]["DocumentMetadataUpdate"]
+): Promise<components["schemas"]["KnowledgeDocument"]> {
+  return apiObject<components["schemas"]["KnowledgeDocument"]>(
+    `/api/documents/${encodeURIComponent(documentId)}/metadata`,
+    { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) },
+    { errorMessage: "Failed to update document metadata" },
     "document"
   );
 }
