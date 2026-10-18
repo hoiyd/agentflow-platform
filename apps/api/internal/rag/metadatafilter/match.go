@@ -23,6 +23,33 @@ func Matches(document, chunk map[string]any, filter map[string]string) bool {
 	return true
 }
 
+// EqualJSON compares literal JSONB values, including types and decimal scale.
+// It is not typed-filter equality: the string "1" differs from the number 1.
+// Reuse the same canonical text rules for metadata retry and inheritance checks.
+func EqualJSON(a, b any) bool {
+	left, ok := CanonicalJSON(a)
+	if !ok {
+		return false
+	}
+	right, ok := CanonicalJSON(b)
+	return ok && left == right
+}
+
+// CanonicalJSON retains JSON types while using JSONB's key order and numeric
+// representation. It is shared by metadata writes and exact-value comparison.
+func CanonicalJSON(value any) (string, bool) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "", false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if decoder.Decode(&value) != nil {
+		return "", false
+	}
+	return jsonbText(value)
+}
+
 func matchesValue(value any, expected string) bool {
 	if value == nil {
 		return false

@@ -52,6 +52,7 @@ func scanDocument(row scanner) (domain.Document, error) {
 	if document.Metadata == nil {
 		document.Metadata = map[string]any{}
 	}
+	document.CreatedAt, document.UpdatedAt = document.CreatedAt.UTC(), document.UpdatedAt.UTC()
 	return document, nil
 }
 
@@ -89,6 +90,7 @@ func scanDocumentChunk(row scanner) (domain.DocumentChunk, error) {
 	if chunk.Metadata == nil {
 		chunk.Metadata = map[string]any{}
 	}
+	chunk.CreatedAt = chunk.CreatedAt.UTC()
 	return chunk, nil
 }
 
@@ -166,6 +168,8 @@ func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, err
 	if item.Chunk.Metadata == nil {
 		item.Chunk.Metadata = map[string]any{}
 	}
+	item.Document.CreatedAt, item.Document.UpdatedAt = item.Document.CreatedAt.UTC(), item.Document.UpdatedAt.UTC()
+	item.Chunk.CreatedAt = item.Chunk.CreatedAt.UTC()
 	item.Chunk.Document = item.Document
 	return item, nil
 }

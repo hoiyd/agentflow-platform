@@ -22,6 +22,10 @@ type ragSearchResponseStub struct {
 	response domain.DocumentSearchResponse
 }
 
+func (s *ragSearchResponseStub) UpdateMetadata(context.Context, string, string, domain.DocumentMetadataUpdate) (domain.Document, error) {
+	return domain.Document{}, nil
+}
+
 func (s *ragSearchResponseStub) Ingest(_ context.Context, _ domain.DocumentIngestRequest) (domain.Document, error) {
 	return domain.Document{}, nil
 }

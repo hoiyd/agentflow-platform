@@ -158,6 +158,8 @@ type MemoryCandidateStore interface {
 }
 
 type DocumentStore interface {
+	GetDocumentBySource(workspaceID, sourceKey string) (domain.Document, bool, error)
+	UpdateDocumentMetadata(workspaceID, id string, update domain.DocumentMetadataUpdate) (domain.Document, error)
 	CreateDocument(document domain.Document, chunks []domain.DocumentChunk, embeddings []domain.DocumentChunkEmbedding) (domain.Document, error)
 	ListDocuments() ([]domain.Document, error)
 	ListDocumentsByWorkspace(workspaceID string) ([]domain.Document, error)

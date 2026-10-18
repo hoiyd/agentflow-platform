@@ -10,9 +10,12 @@ import (
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/redaction"
+	"agentflow-platform/apps/api/internal/store"
 )
 
 type Store interface {
+	GetDocumentBySource(string, string) (domain.Document, bool, error)
+	UpdateDocumentMetadata(string, string, domain.DocumentMetadataUpdate) (domain.Document, error)
 	CreateDocument(domain.Document, []domain.DocumentChunk, []domain.DocumentChunkEmbedding) (domain.Document, error)
 	ListDocumentIndexIdentities(string) ([]domain.DocumentIndexIdentity, error)
 	SearchDocumentChunks(domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error)
@@ -73,7 +76,36 @@ func (s *KnowledgeBase) Ingest(ctx context.Context, request domain.DocumentInges
 	if err != nil {
 		return domain.Document{}, err
 	}
+	if document.SourceKey != "" {
+		existing, found, err := s.store.GetDocumentBySource(document.WorkspaceID, document.SourceKey)
+		if err != nil {
+			return domain.Document{}, err
+		}
+		if found && store.SameDocumentIndexInputs(existing, document) && (request.ExpectedUpdatedAt != nil || !store.SameDocumentMetadata(existing.Metadata, document.Metadata)) {
+			if request.ExpectedUpdatedAt == nil {
+				return domain.Document{}, store.ErrDocumentMetadataConflict
+			}
+			return s.UpdateMetadata(ctx, document.WorkspaceID, existing.ID, domain.DocumentMetadataUpdate{ExpectedUpdatedAt: *request.ExpectedUpdatedAt, Metadata: document.Metadata, ExpectedIndexInputs: &document})
+		}
+	}
+	if request.ExpectedUpdatedAt != nil {
+		return domain.Document{}, store.ErrDocumentMetadataRequiresReindex
+	}
 	return s.persist(ctx, document, chunks)
+}
+
+func (s *KnowledgeBase) UpdateMetadata(ctx context.Context, workspaceID, id string, update domain.DocumentMetadataUpdate) (domain.Document, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.Document{}, err
+	}
+	if err := redaction.ValidateValue(update.Metadata); err != nil {
+		if errors.Is(err, redaction.ErrCredentialContent) {
+			return domain.Document{}, err
+		}
+		// JSON representation errors are invalid input, not Store availability.
+		return domain.Document{}, store.ErrInvalidDocumentMetadata
+	}
+	return s.store.UpdateDocumentMetadata(workspaceID, id, update)
 }
 
 func (s *KnowledgeBase) persist(ctx context.Context, document domain.Document, chunks []domain.DocumentChunk) (domain.Document, error) {

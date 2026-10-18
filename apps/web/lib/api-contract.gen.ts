@@ -4,6 +4,42 @@
  */
 
 export interface paths {
+    "/api/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Ingest and index a document. Same-source/body custom metadata changes require expected_updated_at and reuse the conditional metadata update without embedding calls. An explicit token is not accepted for content/index replacement; use normal ingestion for reindexing. */
+        post: operations["ingestDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{id}/metadata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Replace custom metadata in the authorized Workspace, atomically updating inherited Chunk fields without re-embedding. expected_updated_at is the existing Document timestamp used as an optimistic concurrency token. Identical payload retries are no-ops even with an older nonzero token; different stale updates return 409. Derived/source/indexing fields cannot be changed here. Does not enforce business expiry or Document ACLs. */
+        patch: operations["updateDocumentMetadata"];
+        trace?: never;
+    };
     "/api/conversations/{id}/inputs": {
         parameters: {
             query?: never;
@@ -794,6 +830,58 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        DocumentIngestRequest: {
+            workspace_id?: string;
+            source_key?: string;
+            title: string;
+            version?: string;
+            content: string;
+            source_type?: string;
+            source_uri?: string;
+            mime_type?: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            expected_updated_at?: string;
+        };
+        DocumentMetadataUpdate: {
+            /**
+             * Format: date-time
+             * @description Nonzero microsecond-precision timestamp from Document.updated_at.
+             */
+            expected_updated_at: string;
+            /** @description Custom field replacement. Derived fields are preserved; conflicting provided values are rejected. */
+            metadata: {
+                [key: string]: unknown;
+            };
+        };
+        KnowledgeDocument: {
+            id: string;
+            workspace_id?: string;
+            source_key?: string;
+            title: string;
+            version?: string;
+            content_hash?: string;
+            source_type: string;
+            source_uri?: string;
+            mime_type?: string;
+            metadata: {
+                [key: string]: unknown;
+            };
+            chunk_count?: number;
+            embedding_count?: number;
+            index_identity: {
+                chunker_version: string;
+                embedding_provider: string;
+                embedding_model: string;
+                embedding_dimensions: number;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         RunInputRequest: {
             /** @enum {string} */
             kind: "steer" | "follow_up";
@@ -2041,6 +2129,62 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    ingestDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentIngestRequest"];
+            };
+        };
+        responses: {
+            /** @description Created, reindexed, or conditionally metadata-updated Document. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateDocumentMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentMetadataUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated Document, or unchanged Document for an identical retry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeDocument"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
     listRunInputs: {
         parameters: {
             query?: never;

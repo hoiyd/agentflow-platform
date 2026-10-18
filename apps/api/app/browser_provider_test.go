@@ -14,10 +14,11 @@ import (
 )
 
 type browserProvider struct {
-	mu       sync.Mutex
-	requests int
-	failures []string
-	gate     chan struct{}
+	mu                sync.Mutex
+	embeddingRequests int
+	requests          int
+	failures          []string
+	gate              chan struct{}
 }
 
 func newBrowserProvider() *browserProvider { return &browserProvider{gate: make(chan struct{})} }
@@ -41,7 +42,7 @@ func TestBrowserProviderReleaseDoesNotReleaseLaterRequests(t *testing.T) {
 func (f *browserProvider) contracts(w http.ResponseWriter, _ *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	_ = json.NewEncoder(w).Encode(map[string]any{"requests": f.requests, "failures": f.failures})
+	_ = json.NewEncoder(w).Encode(map[string]any{"requests": f.requests, "embedding_requests": f.embeddingRequests, "failures": f.failures})
 }
 
 func (f *browserProvider) release(w http.ResponseWriter, _ *http.Request) {
@@ -96,6 +97,9 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path == "/embeddings" {
+		f.mu.Lock()
+		f.embeddingRequests++
+		f.mu.Unlock()
 		vector := make([]float64, 1536)
 		vector[0] = 1
 		_ = json.NewEncoder(w).Encode(map[string]any{"model": "fixture-embedding", "data": []any{map[string]any{"embedding": vector}}})

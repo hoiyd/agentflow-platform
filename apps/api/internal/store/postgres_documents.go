@@ -37,7 +37,10 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 			if existing.Version == document.Version && existing.ContentHash != document.ContentHash {
 				return domain.Document{}, DocumentVersionConflict(existing, document)
 			}
-			if existing.Version == document.Version && existing.ContentHash == document.ContentHash && existing.IndexIdentity == document.IndexIdentity {
+			if SameDocumentIndexInputs(existing, document) && existing.IndexIdentity == document.IndexIdentity {
+				if !SameDocumentMetadata(existing.Metadata, document.Metadata) {
+					return domain.Document{}, ErrDocumentMetadataConflict
+				}
 				return existing, nil
 			}
 			document.CreatedAt = existing.CreatedAt
@@ -90,7 +93,20 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 }
 
 func getDocumentBySourceTx(tx *sql.Tx, workspaceID, sourceKey string) (domain.Document, bool, error) {
-	row := tx.QueryRow(`
+	var id string
+	if err := tx.QueryRow(`SELECT id FROM documents WHERE workspace_id=$1 AND source_key=$2 FOR UPDATE`, workspaceID, sourceKey).Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Document{}, false, nil
+		}
+		return domain.Document{}, false, err
+	}
+	return getDocumentBySource(tx, workspaceID, sourceKey)
+}
+
+type documentQueryer interface{ QueryRow(string, ...any) *sql.Row }
+
+func getDocumentBySource(db documentQueryer, workspaceID, sourceKey string) (domain.Document, bool, error) {
+	row := db.QueryRow(`
 		SELECT d.id, d.workspace_id, d.source_key, d.title, d.version, d.content_hash,
 			d.chunker_version, d.embedding_provider, d.embedding_model, d.embedding_dimensions,
 			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at,
