@@ -44,11 +44,8 @@ does not lose precision or scale before the Context recheck. HTTP still emits
 JSON numbers, not strings; this does not add arbitrary-precision JavaScript
 numbers or preserve numeric formatting lost earlier by an ingestion client.
 
-This legacy contract does not itself add operators, Agent/Run filter
-configuration or Knowledge Tool filter arguments. For typed constraints shared
-by Workbench, automatic retrieval and Knowledge Tools, see
-[Runtime Knowledge scope](runtime-knowledge-filters.md). Memory's separate
-filtering contract is unchanged.
+Workbench and Run/Tool filtering use [Runtime Knowledge scope](runtime-knowledge-filters.md),
+not this legacy map. Memory filtering is unchanged.
 
 ## Verification
 

@@ -54,11 +54,10 @@ case-sensitive. JSON ingestion is bounded to 2 MiB; PATCH remains 64 KiB.
 The Knowledge detail view shows the stored schema and separate expandable
 Document/Chunk metadata tables with declaration ownership. It is read-only;
 legacy records are labeled **Legacy / unvalidated**, even for familiar field names.
-Existing [equality filters](metadata-filters.md) retain their cross-layer OR
-semantics. Optional [typed filters](typed-metadata-filters.md) explicitly address
-one layer and require a matching stored schema. [Runtime Knowledge scope](runtime-knowledge-filters.md)
-freezes these constraints across Chat, Tools and recovery. The schema endpoint
-advertises `typed_filtering` and `runtime_filtering` support; hard expiry/ACL remains separate.
+For query semantics, see [equality filters](metadata-filters.md) and
+[typed filters](typed-metadata-filters.md); for execution, see
+[Runtime Knowledge scope](runtime-knowledge-filters.md). The schema endpoint
+advertises `typed_filtering` and `runtime_filtering` capabilities.
 
 ## Persistence and Compatibility
 

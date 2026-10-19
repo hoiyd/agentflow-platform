@@ -211,10 +211,11 @@ are complete. Mandatory namespace filtering alone is not authorization.
 - `README.md` and `docs/README.md` are the public entry points.
 - Update the owning document when behavior, API shape, configuration,
   persistence, events, or failure semantics change.
-- Keep project documentation concise, accurate and easy to scan. Give each
-  contract or procedure one owning document; link to it instead of repeating it.
-  Remove stale or redundant prose, not essential boundaries or operating steps;
-  avoid development diaries and update affected references when consolidating.
+- Keep project documentation concise, accurate and focused on core concepts,
+  contracts, essential operating steps and limitations. Explain each fact once
+  in its owning document; link rather than repeat across pages or sections.
+  Cut filler, repeated summaries and tables that merely restate prose. Remove
+  stale text and development diaries; update references when consolidating.
 - PR descriptions serve review and may be detailed: explain intent, changes,
   scope/non-goals, compatibility, migration/rollback and validation evidence.
   Do not apply project-document brevity as a blanket PR length limit; avoid

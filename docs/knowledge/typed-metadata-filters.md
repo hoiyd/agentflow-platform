@@ -79,10 +79,8 @@ truncates selective eligibility. This small corpus does **not** establish a
 production latency percentile or justify new indexes; measure a representative
 corpus before changing plans or adding bounded ANN/iterative scans.
 
-Frozen Run/Tool propagation and the minimal Workbench controls are described
-in [Runtime Knowledge scope](runtime-knowledge-filters.md). No expiry/status
-policy, Document ACL, automatic filter planner or change to relevance/answer
-verification is included.
+For Workbench controls, Run/Tool propagation and execution boundaries, see
+[Runtime Knowledge scope](runtime-knowledge-filters.md).
 
 ## Failure Inventory
 
