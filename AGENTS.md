@@ -180,8 +180,7 @@ Frontend rules:
   PR's Changes section with a short explanation of the changed UI. Trivial edits
   are exempt. Use synthetic or redacted data; never expose credentials or private
   conversations. If capture is blocked, report the limitation instead of claiming
-  visual validation. Screenshots do not replace functional tests. Use `gh` command
-  to do the upload whenever possible.
+  visual validation. Screenshots do not replace functional tests.
 - Next.js may rewrite `next-env.d.ts` during build. Do not leave generated import
   churn in the final diff.
 
@@ -211,10 +210,11 @@ are complete. Mandatory namespace filtering alone is not authorization.
 - `README.md` and `docs/README.md` are the public entry points.
 - Update the owning document when behavior, API shape, configuration,
   persistence, events, or failure semantics change.
-- Keep project documentation concise, accurate and easy to scan. Give each
-  contract or procedure one owning document; link to it instead of repeating it.
-  Remove stale or redundant prose, not essential boundaries or operating steps;
-  avoid development diaries and update affected references when consolidating.
+- Keep project documentation concise, accurate and focused on core concepts,
+  contracts, essential operating steps and limitations. Explain each fact once
+  in its owning document; link rather than repeat across pages or sections.
+  Cut filler, repeated summaries and tables that merely restate prose. Remove
+  stale text and development diaries; update references when consolidating.
 - PR descriptions serve review and may be detailed: explain intent, changes,
   scope/non-goals, compatibility, migration/rollback and validation evidence.
   Do not apply project-document brevity as a blanket PR length limit; avoid
@@ -254,6 +254,11 @@ are complete. Mandatory namespace filtering alone is not authorization.
 
 ## Git and Scope
 
+- Prefer authenticated `gh >= 2.102.0` for supported GitHub operations over
+  connectors or browser UI. Upload PR screenshots with
+  `gh pr edit <PR> --attach <image>`; repeat `--attach` for multiple images.
+  Before declaring a capability unsupported, check `gh --version` and the
+  specific subcommand's `--help`, not just the top-level command list.
 - Do not implement features directly on `main`. Update from `main` and create a
   scoped branch unless instructed otherwise.
 - When branching from `origin/main`, create the feature branch with `--no-track`.

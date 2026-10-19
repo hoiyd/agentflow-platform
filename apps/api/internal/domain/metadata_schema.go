@@ -16,8 +16,9 @@ type DocumentMetadataField struct {
 }
 
 type DocumentMetadataSchema struct {
-	Version         string                  `json:"version"`
-	Fields          []DocumentMetadataField `json:"fields"`
-	ExtensionPolicy string                  `json:"extension_policy"`
-	TypedFiltering  bool                    `json:"typed_filtering"`
+	RuntimeFiltering bool                    `json:"runtime_filtering"`
+	Version          string                  `json:"version"`
+	Fields           []DocumentMetadataField `json:"fields"`
+	ExtensionPolicy  string                  `json:"extension_policy"`
+	TypedFiltering   bool                    `json:"typed_filtering"`
 }

@@ -1,9 +1,11 @@
-import type { KnowledgeSearchModel } from "./useKnowledgeSearch";
+import type { KnowledgeWorkbenchModel } from "./useKnowledgeWorkbench";
 import { KnowledgeResultCard, ModelContextPreview, RetrievalDiagnostics } from "./KnowledgeRetrieval";
+import { KnowledgeScopeFields } from "./KnowledgeScope";
 
-export function KnowledgeSearch({ model }: { model: KnowledgeSearchModel }) {
+export function KnowledgeSearch({ model }: { model: KnowledgeWorkbenchModel["search"] }) {
   return (
     <section className="knowledge-search">
+      <KnowledgeScopeFields values={model.scopeValues} onChange={model.onScopeChange} />
       <div className="knowledge-search-row">
         <input
           aria-label="Search indexed knowledge"

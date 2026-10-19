@@ -4,8 +4,9 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { searchRAG, type DocumentSearchResponse } from "../../lib/knowledge-api";
 import { APIError } from "../../lib/api-client";
 import { createLatestRequestController } from "../../lib/latest-request";
+import type { KnowledgeFilter } from "./useKnowledgeScope";
 
-export function useKnowledgeSearch(minSimilarity: string, setMinSimilarity: Dispatch<SetStateAction<string>>) {
+export function useKnowledgeSearch(minSimilarity: string, setMinSimilarity: Dispatch<SetStateAction<string>>, filter?: KnowledgeFilter) {
   const [query, setQueryValue] = useState("");
   const [knowledgeContextMaxTokens, setContextTokenLimit] = useState("16000");
   const [response, setResponse] = useState<DocumentSearchResponse | null>(null);
@@ -43,6 +44,7 @@ export function useKnowledgeSearch(minSimilarity: string, setMinSimilarity: Disp
       const parsedKnowledgeContextMaxTokens = Number(knowledgeContextMaxTokens);
       const next = await searchRAG({
         query: normalizedQuery,
+        ...(filter ? { metadata_filter: filter } : {}),
         limit: 5,
         min_similarity: Number.isFinite(parsedMinSimilarity) ? parsedMinSimilarity : 0,
         knowledge_context_max_tokens:

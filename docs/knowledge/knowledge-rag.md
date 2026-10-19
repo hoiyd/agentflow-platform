@@ -5,6 +5,8 @@ For conditional label changes without re-embedding, see
 expiry enforcement are separate concerns.
 The optional [metadata schema](metadata-schema.md) validates business fields and
 separates owner declarations, system structure and unverified extensions.
+For Workbench filters and immutable Run/Tool constraints, see
+[Runtime Knowledge scope](runtime-knowledge-filters.md).
 
 AgentFlow treats retrieval as a staged, observable pipeline. Recall, fusion,
 reranking, relevance policy, context expansion, and context transformation have

@@ -8,7 +8,7 @@ for(const mode of ["Single agent","Multi-agent","Bounded loop"]) {
  test(`${mode}: durable steering applies after the Tool batch and follow-up gets a fresh Run`,async({page,request})=>{
   expect((await request.post(`${api}/__fixture/tool-progress/block`)).status()).toBe(204);
   const before=(await (await request.get(`${api}/__fixture/contracts`)).json()).failures?.length??0;
-  let runId="", followupRunId="";
+  let runId="", followupRunId="", agentId="";
   try {
    await page.goto("/workspace");
    await expect(page.getByText("API connected",{exact:true})).toBeVisible();
@@ -16,15 +16,17 @@ for(const mode of ["Single agent","Multi-agent","Bounded loop"]) {
    await page.getByRole("button",{name:"Direct Single agent",exact:true}).click();
    await page.getByRole("button",{name:"New agent",exact:true}).click();
    const dialog=page.getByRole("dialog",{name:"Create new agent"});
-   const capability=`inbox${mode.replace(/[^a-z]/gi,"").toLowerCase()}`;
-   await dialog.getByLabel("Name",{exact:true}).fill(`Inbox ${mode}`);
+   const capability=`inbox${mode.replace(/[^a-z]/gi,"").toLowerCase()}${test.info().repeatEachIndex}`;
+   await dialog.getByLabel("Name",{exact:true}).fill(`Inbox ${mode} ${test.info().repeatEachIndex}`);
    await dialog.getByRole("textbox",{name:"System prompt",exact:true}).fill("Run the sandbox fixture and preserve evidence.");
    await dialog.getByLabel("sandbox_command",{exact:true}).check();
    await dialog.getByText("Routing signals",{exact:true}).click();
    await dialog.getByRole("textbox",{name:"Capabilities",exact:true}).fill(capability);
    await dialog.getByLabel("Memory retrieval",{exact:true}).uncheck();
    await dialog.getByLabel("Knowledge retrieval",{exact:true}).uncheck();
+   const createdAgent=page.waitForResponse(response=>response.request().method()==="POST"&&response.url().endsWith("/api/agents"));
    await dialog.getByRole("button",{name:"Create Agent",exact:true}).click();
+   agentId=(await(await createdAgent).json()).id;
    await page.getByRole("button",{name:"OK",exact:true}).click();
    await page.getByRole("region",{name:"Chat mode",exact:true}).getByRole("button",{name:new RegExp(mode)}).click();
    await page.getByPlaceholder("Ask AgentFlow anything...").fill("sandbox-gate progress-wait inbox-steer");
@@ -82,6 +84,7 @@ for(const mode of ["Single agent","Multi-agent","Bounded loop"]) {
    await request.post(`${api}/__fixture/tool-progress/release`);
    if(runId)await request.post(`${api}/api/runs/${runId}/cancel`);
    if(followupRunId)await request.post(`${api}/api/runs/${followupRunId}/cancel`);
+   if(agentId)expect((await request.delete(`${api}/api/agents/${agentId}`)).status()).toBe(204);
   }
  });
 }
@@ -92,7 +95,7 @@ for(const outcome of ["steer","cancel"]) {
   await expect(page.getByText("API connected",{exact:true})).toBeVisible();
   await page.getByRole("button",{name:"New conversation",exact:true}).click();
   await page.getByRole("button",{name:"Direct Single agent",exact:true}).click();
-  await createWorkspaceChatAgent(page,await defaultWorkspaceID(page),`Inbox final ${outcome}`);
+  await createWorkspaceChatAgent(page,await defaultWorkspaceID(page),`Inbox final ${outcome} ${test.info().repeatEachIndex}`);
   await page.getByPlaceholder("Ask AgentFlow anything...").fill("stream-gate: wait for another instruction");
   await page.getByRole("button",{name:"Send message",exact:true}).click();
   await expect(page.locator(".message.assistant").last()).toContainText("First token");

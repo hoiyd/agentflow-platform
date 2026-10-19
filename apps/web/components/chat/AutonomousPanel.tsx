@@ -51,6 +51,7 @@ export function toAutonomousProgress(event: {
 
 type AutonomousPanelProps = {
   humanInputDraft: string;
+  isBusy: boolean;
   isCanceling: boolean;
   isResuming: boolean;
   onCancel: () => void;
@@ -65,6 +66,7 @@ type AutonomousPanelProps = {
 
 export function AutonomousPanel({
   humanInputDraft,
+  isBusy,
   isCanceling,
   isResuming,
   onCancel,
@@ -135,7 +137,7 @@ export function AutonomousPanel({
                 <strong>{humanInputStep.output || "Please provide the missing information."}</strong>
               </div>
               <button
-                disabled={isResuming || humanInputDraft.trim().length === 0}
+                disabled={isBusy || isResuming || humanInputDraft.trim().length === 0}
                 onClick={() => onResume(humanInputDraft)}
                 type="button"
               >

@@ -12,6 +12,7 @@ it("shows the loop trace and submits required human input", () => {
   render(
     <AutonomousPanel
       humanInputDraft="Proceed with the report"
+      isBusy={false}
       isCanceling={false}
       isResuming={false}
       onCancel={vi.fn()}

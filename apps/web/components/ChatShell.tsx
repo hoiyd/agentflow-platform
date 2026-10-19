@@ -25,6 +25,7 @@ import { useToolCatalog } from "./chat/useToolCatalog";
 import { useRunSession } from "./chat/useRunSession";
 import { KnowledgePanel } from "./knowledge/KnowledgePanel";
 import { useKnowledgeWorkbench } from "./knowledge/useKnowledgeWorkbench";
+import { KnowledgeScopeControl } from "./knowledge/KnowledgeScope";
 import { MemoryPanel } from "./memory/MemoryPanel";
 import { useMemoryWorkbench } from "./memory/useMemoryWorkbench";
 import { OperatorAttentionPanel } from "./attention/OperatorAttentionPanel";
@@ -279,7 +280,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
       setError(error instanceof Error ? error.message : "Invalid verification policy");
       return;
     }
-    await session.submit(content, { mode: chatMode, agentId: activeAgentId, completionContract, executionConstraint: planOnly ? "plan_only" : undefined });
+    await session.submit(content, { mode: chatMode, agentId: activeAgentId, completionContract, executionConstraint: planOnly ? "plan_only" : undefined, knowledgeFilter: knowledge.scope.filter });
   }
 
   return (
@@ -387,6 +388,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
 
         {view === "chat" ? (
           <ChatComposer
+            knowledgeScope={<KnowledgeScopeControl values={knowledge.scope.values} onChange={knowledge.scope.change} disabled={isStreaming || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification} />}
 			planOnly={planOnly} onPlanOnlyChange={setPlanOnly}
             inbox={activeId && runState ? <RunInbox key={activeId} conversationId={activeId} runId={runState.id} mode={chatMode} agentId={activeAgentId}
               input={input} busy={isStreaming || ["running","queued","canceling"].includes(runState.status)}

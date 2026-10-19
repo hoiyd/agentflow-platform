@@ -36,6 +36,7 @@ function modelFixture() {
       uploadKnowledgeDocument: noop
     },
     search: {
+      scopeValues: { product: "", environment: "", language: "" }, onScopeChange: noop,
       contextItems: [], contextSelection: null, knowledgeContextMaxTokens: "16000", error: "",
       hasSearched: false, isSearching: false, minSimilarity: "0.15", noMatchReason: "", query: "",
       results: [], searchEmbedding: null, searchFusion: null, searchReranker: null,

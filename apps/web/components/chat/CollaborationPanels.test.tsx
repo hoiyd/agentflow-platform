@@ -48,6 +48,7 @@ function RoutingRequirementsHarness({ onContinue }: { onContinue: ReturnType<typ
   return (
     <CollaborationPanel
       agents={[agent]}
+      isBusy={false}
       isContinuing={false}
       onCollapse={vi.fn()}
       onContinue={onContinue}

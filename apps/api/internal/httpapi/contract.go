@@ -7,6 +7,9 @@ import (
 
 func chatRequestFromContract(input apicontract.ChatRequest) domain.ChatRequest {
 	request := domain.ChatRequest{Message: input.Message}
+	if input.KnowledgeFilter != nil {
+		request.KnowledgeFilter = &domain.MetadataFilter{SchemaVersion: string(input.KnowledgeFilter.SchemaVersion), Where: metadataConditionFromInput(input.KnowledgeFilter.Where)}
+	}
 	if input.ExecutionConstraint != nil {
 		request.ExecutionConstraint = string(*input.ExecutionConstraint)
 	}
@@ -27,6 +30,29 @@ func chatRequestFromContract(input apicontract.ChatRequest) domain.ChatRequest {
 	}
 	request.CompletionContract = completionContractFromInput(input.CompletionContract)
 	return request
+}
+
+func metadataConditionFromInput(input apicontract.MetadataCondition) domain.MetadataCondition {
+	condition := domain.MetadataCondition{Value: input.Value}
+	if input.Field != nil {
+		condition.Field = string(*input.Field)
+	}
+	if input.Op != nil {
+		condition.Op = string(*input.Op)
+	}
+	if input.All != nil {
+		condition.All = []domain.MetadataCondition{}
+		for _, child := range *input.All {
+			condition.All = append(condition.All, metadataConditionFromInput(child))
+		}
+	}
+	if input.Any != nil {
+		condition.Any = []domain.MetadataCondition{}
+		for _, child := range *input.Any {
+			condition.Any = append(condition.Any, metadataConditionFromInput(child))
+		}
+	}
+	return condition
 }
 
 func completionContractFromInput(input *apicontract.CompletionContractInput) *domain.CompletionContract {

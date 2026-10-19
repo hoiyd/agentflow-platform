@@ -183,6 +183,7 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
           <AutonomousPanel
             hasStructuredClarification={hasClarification||props.clarificationLoading}
             humanInputDraft={humanInputDraft}
+            isBusy={isStreaming || isCanceling}
             isCanceling={isCanceling}
             isResuming={isResuming}
             onCancel={onCancel}
@@ -197,6 +198,7 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
           <CollaborationPanel
             hasStructuredClarification={hasClarification||props.clarificationLoading}
             agents={agents}
+            isBusy={isStreaming || isCanceling}
             isContinuing={isContinuing}
             onCollapse={() => onPanelOpenChange(false)}
             onContinue={onContinue}

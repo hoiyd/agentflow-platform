@@ -29,9 +29,16 @@ type Embedder interface {
 }
 
 type KnowledgeBase struct {
-	store     Store
-	embedder  Embedder
-	retriever rag.Retriever
+	workspaceAccess func(context.Context, string) error
+	store           Store
+	embedder        Embedder
+	retriever       rag.Retriever
+}
+
+func (s *KnowledgeBase) WithWorkspaceAccess(check func(context.Context, string) error) *KnowledgeBase {
+	copy := *s
+	copy.workspaceAccess = check
+	return &copy
 }
 
 func NewKnowledgeBase(store Store, embedder Embedder) *KnowledgeBase {

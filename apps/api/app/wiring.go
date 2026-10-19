@@ -202,8 +202,9 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("configure reranker: %w", err)
 	}
-	retrievalPipeline := rag.NewRetrievalPipelineWithReranker(appStore, reranker)
-	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, embeddingClient, retrievalPipeline)
+	knowledgeAccess := workspaceStore.CheckKnowledgeAccess
+	retrievalPipeline := rag.NewRetrievalPipelineWithReranker(appStore, reranker).WithWorkspaceAccess(knowledgeAccess)
+	knowledgeBase := knowledge.NewKnowledgeBaseWithRetriever(appStore, embeddingClient, retrievalPipeline).WithWorkspaceAccess(knowledgeAccess)
 	skills, err := skill.LoadRoots(splitCSV(cfg.TrustedSkillDirectories))
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("load trusted Skills: %w", err)

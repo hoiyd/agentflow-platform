@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
 
 import type { Message } from "../../lib/api";
 import { ChatWorkspace } from "./ChatWorkspace";
@@ -7,6 +8,27 @@ import type { ReasoningEntry } from "./ReasoningDisclosure";
 import { ReasoningDisclosure } from "./ReasoningDisclosure";
 
 afterEach(cleanup);
+
+for (const mode of ["multi_agent", "autonomous"] as const) {
+  it(`${mode} waits for command settlement before accepting human continuation`, () => {
+    const onContinue = vi.fn();
+    const onResume = vi.fn();
+    const props: Partial<ComponentProps<typeof ChatWorkspace>> = {
+      chatMode: mode, runStatus: "waiting_for_user", isCollaborationPanelOpen: true,
+      showCollaborationPanel: true, showAutonomousTrace: mode === "autonomous",
+      planDraft: "Approved plan", humanInputDraft: "Approved input", onContinue, onResume,
+      collaborationSteps: mode === "multi_agent" ? [{ role: "planner", status: "completed" }]
+        : [{ role: "human_input", status: "running", output: "Confirm" }]
+    };
+    const view = render(workspace([], true, [], props));
+    const name = mode === "multi_agent" ? "Approve & Continue" : "Submit & Continue";
+    expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
+    view.rerender(workspace([], false, [], { ...props, isCanceling: true }));
+    expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
+    view.rerender(workspace([], false, [], props));
+    expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(false);
+  });
+}
 
 it("shows live reasoning separately and drops unfinished text when the Run stops", () => {
   const entry: ReasoningEntry = { run_id: "run-1", turn_id: "turn-1", model_call_id: "call-1", format: "deepseek_reasoning_content", status: "receiving", text: "Safe live prefix" };
@@ -64,7 +86,7 @@ function message(id: string, role: Message["role"], content: string): Message {
   return { id, role, content, conversation_id: "conv-1", created_at: "2026-09-29T00:00:00Z" };
 }
 
-function workspace(messages: Message[], isStreaming: boolean, reasoning: ReasoningEntry[] = []) {
+function workspace(messages: Message[], isStreaming: boolean, reasoning: ReasoningEntry[] = [], overrides: Partial<ComponentProps<typeof ChatWorkspace>> = {}) {
   const noop = vi.fn();
   return <ChatWorkspace
     agents={[]}
@@ -104,5 +126,6 @@ function workspace(messages: Message[], isStreaming: boolean, reasoning: Reasoni
     taskStateError=""
     taskStateLoading={false}
     useExpandedConversationWidth={false}
+    {...overrides}
   />;
 }
