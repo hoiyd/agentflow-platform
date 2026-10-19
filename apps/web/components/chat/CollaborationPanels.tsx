@@ -63,6 +63,7 @@ export function upsertCollaborationStep(items: CollaborationStepView[], event: C
 type CollaborationPanelProps = {
   hasStructuredClarification?:boolean;
   agents: AgentInfo[];
+  isBusy: boolean;
   isContinuing: boolean;
   onCollapse: () => void;
   onContinue: (plan?: string, requirements?: AgentRoutingRequirements) => void;
@@ -78,6 +79,7 @@ type CollaborationPanelProps = {
 export function CollaborationPanel({
   hasStructuredClarification=false,
   agents,
+  isBusy,
   isContinuing,
   onCollapse,
   onContinue,
@@ -126,7 +128,7 @@ export function CollaborationPanel({
             <div className="plan-review-header">
               <div><span>Action required</span><strong>Review the plan before execution</strong></div>
               <button
-                disabled={isContinuing || planDraft.trim().length === 0}
+                disabled={isBusy || isContinuing || planDraft.trim().length === 0}
                 onClick={() => onContinue(planEditorRef.current?.innerText ?? planDraft, routingRequirements)}
                 type="button"
               >
