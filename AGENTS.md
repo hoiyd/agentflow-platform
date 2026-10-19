@@ -180,8 +180,7 @@ Frontend rules:
   PR's Changes section with a short explanation of the changed UI. Trivial edits
   are exempt. Use synthetic or redacted data; never expose credentials or private
   conversations. If capture is blocked, report the limitation instead of claiming
-  visual validation. Screenshots do not replace functional tests. Use `gh` command
-  to do the upload whenever possible.
+  visual validation. Screenshots do not replace functional tests.
 - Next.js may rewrite `next-env.d.ts` during build. Do not leave generated import
   churn in the final diff.
 
@@ -255,6 +254,11 @@ are complete. Mandatory namespace filtering alone is not authorization.
 
 ## Git and Scope
 
+- Prefer authenticated `gh >= 2.102.0` for supported GitHub operations over
+  connectors or browser UI. Upload PR screenshots with
+  `gh pr edit <PR> --attach <image>`; repeat `--attach` for multiple images.
+  Before declaring a capability unsupported, check `gh --version` and the
+  specific subcommand's `--help`, not just the top-level command list.
 - Do not implement features directly on `main`. Update from `main` and create a
   scoped branch unless instructed otherwise.
 - When branching from `origin/main`, create the feature branch with `--no-track`.
