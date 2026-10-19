@@ -6,6 +6,7 @@ let workspaceId = "";
 // The authenticated boundary sets this before mounting business consumers.
 // A Workspace switch reloads the page so no old scoped state/cache is retained.
 export function setWorkspaceID(value: string): void { workspaceId = value; }
+export function getWorkspaceID(): string { return workspaceId; }
 export function apiURL(path: string): string { return `${API_BASE}${path}`; }
 
 type APIRequestPolicy = {

@@ -24,6 +24,7 @@ const (
 )
 
 type RuntimeSnapshot struct {
+	KnowledgeScope      *KnowledgeScope        `json:"knowledge_scope,omitempty"`
 	ExecutionConstraint string                 `json:"execution_constraint,omitempty"`
 	PlanOrigin          *PlanOrigin            `json:"plan_origin,omitempty"`
 	SchemaVersion       int                    `json:"schema_version"`

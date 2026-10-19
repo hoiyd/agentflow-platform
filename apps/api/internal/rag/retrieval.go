@@ -51,10 +51,18 @@ const (
 )
 
 type RetrievalPipeline struct {
-	store         SearchStore
-	reranker      Reranker
-	relevanceGate RelevanceGate
-	retrievalMode string
+	workspaceAccess func(context.Context, string) error
+	store           SearchStore
+	reranker        Reranker
+	relevanceGate   RelevanceGate
+	retrievalMode   string
+}
+
+// Production supplies current Workspace access independently of frozen filters.
+func (p *RetrievalPipeline) WithWorkspaceAccess(check func(context.Context, string) error) *RetrievalPipeline {
+	copy := *p
+	copy.workspaceAccess = check
+	return &copy
 }
 
 func NewRetrievalPipeline(store SearchStore) *RetrievalPipeline {
@@ -120,6 +128,11 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 		return domain.DocumentSearchResponse{}, errors.New("retrieval store is required")
 	}
 	search.WorkspaceID = domain.NormalizeWorkspaceID(search.WorkspaceID)
+	if p.workspaceAccess != nil {
+		if err := p.workspaceAccess(ctx, search.WorkspaceID); err != nil {
+			return domain.DocumentSearchResponse{}, err
+		}
+	}
 	identities, err := p.store.ListDocumentIndexIdentities(search.WorkspaceID)
 	if err != nil {
 		return domain.DocumentSearchResponse{}, fmt.Errorf("inspect knowledge index identity: %w", err)

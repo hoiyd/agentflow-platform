@@ -13,6 +13,7 @@ import (
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/policy"
@@ -42,6 +43,10 @@ func (s *KnowledgeBase) ToolBindings(storage ToolStore) []tool.Binding {
 		if err != nil {
 			return nil, err
 		}
+		filter, err := eligibility.FrozenFilter(run.RuntimeSnapshot)
+		if err != nil {
+			return nil, knowledgeError(err)
+		}
 		var input struct {
 			Query      string `json:"query"`
 			MaxResults int    `json:"max_results"`
@@ -62,7 +67,7 @@ func (s *KnowledgeBase) ToolBindings(storage ToolStore) []tool.Binding {
 			identity.EmbeddingDimensions = frozen.Dimensions
 			base.embedder = client.WithRuntimeIdentity(identity)
 		}
-		response, err := base.Search(ctx, domain.DocumentSearch{Query: input.Query, WorkspaceID: run.WorkspaceID, Limit: input.MaxResults}, input.MaxResults)
+		response, err := base.Search(ctx, domain.DocumentSearch{Query: input.Query, WorkspaceID: run.WorkspaceID, MetadataFilter: filter, Limit: input.MaxResults}, input.MaxResults)
 		if err != nil {
 			return nil, knowledgeError(err)
 		}
@@ -104,6 +109,19 @@ func (s *KnowledgeBase) readTool(ctx context.Context, storage ToolStore, args js
 	run, err := knowledgeRun(ctx, storage)
 	if err != nil {
 		return nil, err
+	}
+	if s.workspaceAccess != nil {
+		if err := s.workspaceAccess(ctx, run.WorkspaceID); err != nil {
+			return nil, &tool.ExecutionError{Code: tool.ErrorSecurityScopeInvalid, Message: "Knowledge Workspace access is unavailable", Cause: err}
+		}
+	}
+	filter, err := eligibility.FrozenFilter(run.RuntimeSnapshot)
+	if err != nil {
+		return nil, knowledgeError(err)
+	}
+	predicate, err := eligibility.Compile(filter)
+	if err != nil {
+		return nil, knowledgeError(err)
 	}
 	var input struct {
 		Reference string `json:"reference"`
@@ -164,6 +182,9 @@ func (s *KnowledgeBase) readTool(ctx context.Context, storage ToolStore, args js
 		}
 		if chunk.DocumentID != document.ID || contentHash(chunk.Content) != match.ContentHash {
 			return nil, &tool.ExecutionError{Code: tool.ErrorNoResults, Message: "Knowledge chunk changed; search again"}
+		}
+		if !predicate.Matches(document, chunk) {
+			return nil, &tool.ExecutionError{Code: tool.ErrorNoResults, Message: "Knowledge source no longer meets this Run's saved scope; search again"}
 		}
 		item := domain.RetrievedDocumentChunk{Document: document, Chunk: chunk}
 		allowed, _ := rag.GuardPromptInjection([]domain.RetrievedDocumentChunk{item})

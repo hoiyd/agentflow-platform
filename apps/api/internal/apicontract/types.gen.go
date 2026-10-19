@@ -225,6 +225,36 @@ func (e IdentitySessionMode) Valid() bool {
 	}
 }
 
+// Defines values for KnowledgeScopePolicyVersion.
+const (
+	KnowledgeFilterV1 KnowledgeScopePolicyVersion = "knowledge-filter-v1"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeScopePolicyVersion enum.
+func (e KnowledgeScopePolicyVersion) Valid() bool {
+	switch e {
+	case KnowledgeFilterV1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for KnowledgeScopeSource.
+const (
+	RunRequest KnowledgeScopeSource = "run_request"
+)
+
+// Valid indicates whether the value is a known member of the KnowledgeScopeSource enum.
+func (e KnowledgeScopeSource) Valid() bool {
+	switch e {
+	case RunRequest:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MessageRole.
 const (
 	Assistant MessageRole = "assistant"
@@ -1140,10 +1170,13 @@ type ChatRequest struct {
 
 	// ExecutionConstraint Frozen read-only restriction; omit for ordinary execution.
 	ExecutionConstraint *ChatRequestExecutionConstraint `json:"execution_constraint,omitempty"`
-	Message             string                          `json:"message"`
-	Mode                *ChatMode                       `json:"mode,omitempty"`
-	PlanOrigin          *PlanOrigin                     `json:"plan_origin,omitempty"`
-	WorkspaceId         *string                         `json:"workspace_id,omitempty"`
+
+	// KnowledgeFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
+	KnowledgeFilter *MetadataFilter `json:"knowledge_filter,omitempty"`
+	Message         string          `json:"message"`
+	Mode            *ChatMode       `json:"mode,omitempty"`
+	PlanOrigin      *PlanOrigin     `json:"plan_origin,omitempty"`
+	WorkspaceId     *string         `json:"workspace_id,omitempty"`
 }
 
 // ChatRequestExecutionConstraint Frozen read-only restriction; omit for ordinary execution.
@@ -1299,6 +1332,9 @@ type DocumentMetadataFieldType string
 type DocumentMetadataSchema struct {
 	ExtensionPolicy DocumentMetadataSchemaExtensionPolicy `json:"extension_policy"`
 	Fields          []DocumentMetadataField               `json:"fields"`
+
+	// RuntimeFiltering Whether Chat freezes knowledge_filter and enforces it in automatic retrieval
+	RuntimeFiltering bool `json:"runtime_filtering"`
 
 	// TypedFiltering Whether the server supports the separate bounded metadata_filter request contract.
 	TypedFiltering bool   `json:"typed_filtering"`
@@ -1485,6 +1521,21 @@ type KnowledgeDocumentDetail struct {
 	Document       KnowledgeDocument        `json:"document"`
 	MetadataSchema DocumentMetadataSchema   `json:"metadata_schema"`
 }
+
+// KnowledgeScope Frozen business restriction, not a permission grant. Identity hashes normalized filter JSON; old Runs without this field remain unfiltered.
+type KnowledgeScope struct {
+	// Filter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
+	Filter        MetadataFilter              `json:"filter"`
+	Id            string                      `json:"id"`
+	PolicyVersion KnowledgeScopePolicyVersion `json:"policy_version"`
+	Source        KnowledgeScopeSource        `json:"source"`
+}
+
+// KnowledgeScopePolicyVersion defines model for KnowledgeScope.PolicyVersion.
+type KnowledgeScopePolicyVersion string
+
+// KnowledgeScopeSource defines model for KnowledgeScope.Source.
+type KnowledgeScopeSource string
 
 // KnowledgeSearchRequest defines model for KnowledgeSearchRequest.
 type KnowledgeSearchRequest struct {
@@ -1775,15 +1826,18 @@ type Run struct {
 	Error              *string             `json:"error,omitempty"`
 
 	// ExecutionConstraint Derived from the frozen Snapshot; omission means ordinary execution.
-	ExecutionConstraint *string            `json:"execution_constraint,omitempty"`
-	ExecutionStartedAt  *time.Time         `json:"execution_started_at,omitempty"`
-	HeartbeatAt         *time.Time         `json:"heartbeat_at,omitempty"`
-	Id                  string             `json:"id"`
-	StartedAt           *time.Time         `json:"started_at,omitempty"`
-	Status              RunStatus          `json:"status"`
-	UpdatedAt           time.Time          `json:"updated_at"`
-	VerificationStatus  VerificationStatus `json:"verification_status"`
-	WorkspaceId         string             `json:"workspace_id"`
+	ExecutionConstraint *string    `json:"execution_constraint,omitempty"`
+	ExecutionStartedAt  *time.Time `json:"execution_started_at,omitempty"`
+	HeartbeatAt         *time.Time `json:"heartbeat_at,omitempty"`
+	Id                  string     `json:"id"`
+
+	// KnowledgeScope Frozen business restriction, not a permission grant. Identity hashes normalized filter JSON; old Runs without this field remain unfiltered.
+	KnowledgeScope     *KnowledgeScope    `json:"knowledge_scope,omitempty"`
+	StartedAt          *time.Time         `json:"started_at,omitempty"`
+	Status             RunStatus          `json:"status"`
+	UpdatedAt          time.Time          `json:"updated_at"`
+	VerificationStatus VerificationStatus `json:"verification_status"`
+	WorkspaceId        string             `json:"workspace_id"`
 }
 
 // RunEvent defines model for RunEvent.
@@ -1879,24 +1933,31 @@ type RunProjectionSnapshot struct {
 
 // RunReplay defines model for RunReplay.
 type RunReplay struct {
-	Conversation          Conversation            `json:"conversation"`
-	Messages              *[]Message              `json:"messages"`
-	Plan                  *RunPlan                `json:"plan,omitempty"`
-	Projection            RunProjectionSnapshot   `json:"projection"`
-	RecoverySummary       *RecoverySummary        `json:"recovery_summary,omitempty"`
-	Run                   Run                     `json:"run"`
-	RunEvents             *[]RunEvent             `json:"run_events"`
-	RuntimeSnapshot       *map[string]interface{} `json:"runtime_snapshot,omitempty"`
-	StageCheckpoints      *[]StageCheckpoint      `json:"stage_checkpoints"`
-	Steps                 *[]CollaborationStep    `json:"steps"`
-	StructuredResult      *StructuredRunResult    `json:"structured_result,omitempty"`
-	Summary               RunTraceSummary         `json:"summary"`
-	TaskStateRevisions    *[]TaskStateRevision    `json:"task_state_revisions"`
-	ToolArtifacts         *[]ToolArtifact         `json:"tool_artifacts"`
-	ToolEffects           *[]ToolEffect           `json:"tool_effects"`
-	UsageLedger           RunUsageLedger          `json:"usage_ledger"`
-	VerificationArtifacts *[]VerificationArtifact `json:"verification_artifacts"`
-	VerificationEvidence  *[]VerificationEvidence `json:"verification_evidence"`
+	Conversation          Conversation               `json:"conversation"`
+	Messages              *[]Message                 `json:"messages"`
+	Plan                  *RunPlan                   `json:"plan,omitempty"`
+	Projection            RunProjectionSnapshot      `json:"projection"`
+	RecoverySummary       *RecoverySummary           `json:"recovery_summary,omitempty"`
+	Run                   Run                        `json:"run"`
+	RunEvents             *[]RunEvent                `json:"run_events"`
+	RuntimeSnapshot       *RunReplay_RuntimeSnapshot `json:"runtime_snapshot,omitempty"`
+	StageCheckpoints      *[]StageCheckpoint         `json:"stage_checkpoints"`
+	Steps                 *[]CollaborationStep       `json:"steps"`
+	StructuredResult      *StructuredRunResult       `json:"structured_result,omitempty"`
+	Summary               RunTraceSummary            `json:"summary"`
+	TaskStateRevisions    *[]TaskStateRevision       `json:"task_state_revisions"`
+	ToolArtifacts         *[]ToolArtifact            `json:"tool_artifacts"`
+	ToolEffects           *[]ToolEffect              `json:"tool_effects"`
+	UsageLedger           RunUsageLedger             `json:"usage_ledger"`
+	VerificationArtifacts *[]VerificationArtifact    `json:"verification_artifacts"`
+	VerificationEvidence  *[]VerificationEvidence    `json:"verification_evidence"`
+}
+
+// RunReplay_RuntimeSnapshot defines model for RunReplay.RuntimeSnapshot.
+type RunReplay_RuntimeSnapshot struct {
+	// KnowledgeScope Frozen business restriction, not a permission grant. Identity hashes normalized filter JSON; old Runs without this field remain unfiltered.
+	KnowledgeScope       *KnowledgeScope        `json:"knowledge_scope,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // RunStatus defines model for RunStatus.
@@ -2602,6 +2663,74 @@ type CreateWorkspaceJSONRequestBody = WorkspaceCreateRequest
 
 // UpdateWorkspaceJSONRequestBody defines body for UpdateWorkspace for application/json ContentType.
 type UpdateWorkspaceJSONRequestBody = WorkspaceUpdateRequest
+
+// Getter for additional properties for RunReplay_RuntimeSnapshot. Returns the specified
+// element and whether it was found
+func (a RunReplay_RuntimeSnapshot) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for RunReplay_RuntimeSnapshot
+func (a *RunReplay_RuntimeSnapshot) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for RunReplay_RuntimeSnapshot to handle AdditionalProperties
+func (a *RunReplay_RuntimeSnapshot) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["knowledge_scope"]; found {
+		err = json.Unmarshal(raw, &a.KnowledgeScope)
+		if err != nil {
+			return fmt.Errorf("error reading 'knowledge_scope': %w", err)
+		}
+		delete(object, "knowledge_scope")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for RunReplay_RuntimeSnapshot to handle AdditionalProperties
+func (a RunReplay_RuntimeSnapshot) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.KnowledgeScope != nil {
+		object["knowledge_scope"], err = json.Marshal(a.KnowledgeScope)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'knowledge_scope': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
 
 // Getter for additional properties for VerificationArtifact. Returns the specified
 // element and whether it was found

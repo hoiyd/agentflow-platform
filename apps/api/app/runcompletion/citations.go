@@ -8,6 +8,7 @@ import (
 	"agentflow-platform/apps/api/internal/contextassembly"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/tool/webcitation"
 	"agentflow-platform/apps/api/internal/verification"
@@ -220,6 +221,50 @@ func knowledgeEvidenceForRun(scoped store.WorkspaceStore, runID string) (knowled
 	for _, sourceID := range selectedSourceIDs {
 		if source, ok := catalog[sourceID]; ok {
 			evidence.sources = append(evidence.sources, source)
+		}
+	}
+	if len(evidence.sources) > 0 {
+		run, ok, err := scoped.GetRun(runID)
+		if err != nil {
+			return knowledgeRunEvidence{}, err
+		}
+		if !ok {
+			return knowledgeRunEvidence{}, store.ErrNotFound("run")
+		}
+		filter, err := eligibility.FrozenFilter(run.RuntimeSnapshot)
+		if err != nil {
+			return knowledgeRunEvidence{}, err
+		}
+		if filter != nil {
+			predicate, err := eligibility.Compile(filter)
+			if err != nil {
+				return knowledgeRunEvidence{}, err
+			}
+			for _, source := range evidence.sources {
+				doc, chunks, ok, err := scoped.GetDocument(source.DocumentID)
+				if err != nil {
+					return knowledgeRunEvidence{}, err
+				}
+				if !ok || doc.WorkspaceID != run.WorkspaceID || doc.Version != source.DocumentVersion {
+					return knowledgeRunEvidence{}, fmt.Errorf("Knowledge citation source is unavailable or changed")
+				}
+				ids := source.SourceChunkIDs
+				if len(ids) == 0 {
+					ids = []string{source.ChunkID}
+				}
+				for _, id := range ids {
+					found := false
+					for _, chunk := range chunks {
+						if chunk.ID == id && chunk.DocumentID == doc.ID && predicate.Matches(doc, chunk) {
+							found = true
+							break
+						}
+					}
+					if !found {
+						return knowledgeRunEvidence{}, fmt.Errorf("Knowledge citation no longer meets this Run's saved scope")
+					}
+				}
+			}
 		}
 	}
 	return evidence, nil

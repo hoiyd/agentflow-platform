@@ -30,6 +30,7 @@ Write or update this inventory before adding isolated fixtures.
 | Empty grants, new Tools or Resume restore revoked access | Explicit deny-all persists; new Tools receive no grant; denied calls never enter the Binding |
 | Workspace switching retains a prior draft or request | Discard stale state; archived Workspaces remain read-only |
 | Knowledge ingestion/search/deletion disagree | Real index detail and retrieval show the inserted document; deletion returns 404 |
+| A Knowledge filter disappears between Workbench, Chat, Tools or recovery | [Runtime scope gate](../knowledge/runtime-knowledge-filters.md#verification) preserves the saved scope across search, reload, follow-ups and Replay; production integration covers three modes, restart/Resume, source drift and revocation |
 | Memory corrections/deletions lose version or remain recalled | History records the correction; version increases; deletion clears content and recall |
 | Two command callbacks fire before a React render | Only one command is admitted and one optimistic message pair is created |
 | A stream fails before or after accepting events | Before acceptance, drafts roll back; after acceptance, partial output stays and durable observation resumes |

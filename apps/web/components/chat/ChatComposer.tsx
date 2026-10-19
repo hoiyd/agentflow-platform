@@ -7,6 +7,7 @@ import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 import { SelectionMenu } from "../ui/SelectionMenu";
 
 type ChatComposerProps = {
+  knowledgeScope?: ReactNode;
   planOnly?: boolean;
   onPlanOnlyChange?: (value: boolean) => void;
   inbox?: ReactNode;
@@ -72,6 +73,7 @@ export function ChatComposer(props: ChatComposerProps) {
 
   const verificationButton = (
     <>
+    {props.knowledgeScope}
     <label className="planning-toggle"><input type="checkbox" checked={props.planOnly ?? false}
       disabled={readOnly || isStreaming || isAwaitingClarification || isAwaitingHumanInput || isAwaitingPlanApproval}
       onChange={event => props.onPlanOnlyChange?.(event.target.checked)} />Read-only planning</label>

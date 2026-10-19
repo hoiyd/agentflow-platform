@@ -45,9 +45,10 @@ JSON numbers, not strings; this does not add arbitrary-precision JavaScript
 numbers or preserve numeric formatting lost earlier by an ingestion client.
 
 This legacy contract does not itself add operators, Agent/Run filter
-configuration, Knowledge Tool filter arguments, or Workbench controls. Automatic
-runtime retrieval and `knowledge_search` do not acquire business filters from
-this contract alone. Memory's separate filtering contract is unchanged.
+configuration or Knowledge Tool filter arguments. For typed constraints shared
+by Workbench, automatic retrieval and Knowledge Tools, see
+[Runtime Knowledge scope](runtime-knowledge-filters.md). Memory's separate
+filtering contract is unchanged.
 
 ## Verification
 

@@ -10,6 +10,7 @@ import (
 	"agentflow-platform/apps/api/internal/checkpoint"
 	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -114,6 +115,9 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 }
 
 func ContinuationFailurePolicy(err error) (Reason, bool) {
+	if errors.Is(err, eligibility.ErrInvalid) {
+		return Conflict, false
+	}
 	if errors.Is(err, agent.ErrNoEligibleAgent) || errors.Is(err, agent.ErrNoSuitableAgent) || errors.Is(err, agent.ErrInvalidRoutingRequirements) {
 		return Routing, true
 	}
@@ -121,7 +125,7 @@ func ContinuationFailurePolicy(err error) (Reason, bool) {
 }
 
 func ResumeFailurePolicy(err error) (Reason, bool) {
-	if errors.Is(err, agent.ErrRuntimeSnapshotResumeUnsupported) || errors.Is(err, agent.ErrRuntimeSnapshotUnavailable) || errors.Is(err, checkpoint.ErrNeedsReconciliation) || errors.Is(err, checkpoint.ErrCheckpointStale) || errors.Is(err, agent.ErrRuntimeExecutorUnsupported) {
+	if errors.Is(err, eligibility.ErrInvalid) || errors.Is(err, agent.ErrRuntimeSnapshotResumeUnsupported) || errors.Is(err, agent.ErrRuntimeSnapshotUnavailable) || errors.Is(err, checkpoint.ErrNeedsReconciliation) || errors.Is(err, checkpoint.ErrCheckpointStale) || errors.Is(err, agent.ErrRuntimeExecutorUnsupported) {
 		return Conflict, false
 	}
 	if strings.Contains(err.Error(), "not waiting for user input") || strings.Contains(err.Error(), "not recoverable") {

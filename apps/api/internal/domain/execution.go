@@ -16,6 +16,9 @@ const (
 )
 
 type Run struct {
+	// KnowledgeScope is read metadata derived from RuntimeSnapshot when HTTP
+	// hides the full Snapshot; it has no separate persisted column.
+	KnowledgeScope *KnowledgeScope `json:"knowledge_scope,omitempty"`
 	// ExecutionConstraint is public read metadata, derived from RuntimeSnapshot
 	// when HTTP removes the full Snapshot. It is never an authorization source.
 	ExecutionConstraint string              `json:"execution_constraint,omitempty"`
@@ -65,13 +68,14 @@ type CollaborationStep struct {
 }
 
 type ChatRequest struct {
-	ExecutionConstraint string      `json:"execution_constraint,omitempty"`
-	PlanOrigin          *PlanOrigin `json:"plan_origin,omitempty"`
-	WorkspaceID         string      `json:"workspace_id,omitempty"`
-	ConversationID      string      `json:"conversation_id"`
-	AgentID             string      `json:"agent_id"`
-	Message             string      `json:"message"`
-	Mode                string      `json:"mode"`
+	KnowledgeFilter     *MetadataFilter `json:"knowledge_filter,omitempty"`
+	ExecutionConstraint string          `json:"execution_constraint,omitempty"`
+	PlanOrigin          *PlanOrigin     `json:"plan_origin,omitempty"`
+	WorkspaceID         string          `json:"workspace_id,omitempty"`
+	ConversationID      string          `json:"conversation_id"`
+	AgentID             string          `json:"agent_id"`
+	Message             string          `json:"message"`
+	Mode                string          `json:"mode"`
 	// CompletionContract explicitly enables Verification for the new Run.
 	// Omitting it leaves verification_status=not_required in every mode.
 	CompletionContract *CompletionContract `json:"completion_contract,omitempty"`

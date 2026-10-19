@@ -79,10 +79,10 @@ truncates selective eligibility. This small corpus does **not** establish a
 production latency percentile or justify new indexes; measure a representative
 corpus before changing plans or adding bounded ANN/iterative scans.
 
-This is an explicit search API contract, not RAG-040's frozen Run/Tool filter
-propagation or Workbench filter editor. No expiry/status policy, Document ACL,
-automatic filter planner or change to relevance/answer verification is included.
-The generated frontend client accepts the new request; no new UI is added.
+Frozen Run/Tool propagation and the minimal Workbench controls are described
+in [Runtime Knowledge scope](runtime-knowledge-filters.md). No expiry/status
+policy, Document ACL, automatic filter planner or change to relevance/answer
+verification is included.
 
 ## Failure Inventory
 

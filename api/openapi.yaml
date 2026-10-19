@@ -1262,6 +1262,15 @@ components:
       properties:
         schema_version: { type: string, enum: [knowledge-metadata-v1] }
         where: { $ref: '#/components/schemas/MetadataCondition' }
+    KnowledgeScope:
+      type: object
+      required: [filter, id, policy_version, source]
+      description: Frozen business restriction, not a permission grant. Identity hashes normalized filter JSON; old Runs without this field remain unfiltered.
+      properties:
+        filter: { $ref: '#/components/schemas/MetadataFilter' }
+        id: { type: string }
+        policy_version: { type: string, enum: [knowledge-filter-v1] }
+        source: { type: string, enum: [run_request] }
     MetadataCondition:
       type: object
       additionalProperties: false
@@ -1308,11 +1317,12 @@ components:
         metadata_schema_version: { type: string, description: Explicit knowledge-metadata-v1 adoption; omission retains the stored version. Known fields are validated and dates normalized to UTC. }
     DocumentMetadataSchema:
       type: object
-      required: [version, fields, extension_policy, typed_filtering]
+      required: [version, fields, extension_policy, typed_filtering, runtime_filtering]
       properties:
         version: { type: string }
         extension_policy: { type: string, enum: [preserve_unverified] }
         typed_filtering: { type: boolean, description: Whether the server supports the separate bounded metadata_filter request contract. }
+        runtime_filtering: { type: boolean, description: Whether Chat freezes knowledge_filter and enforces it in automatic retrieval, Tools and citation rereads. Clients must not send a constrained Run to an older server without this capability. }
         fields:
           type: array
           items: { $ref: '#/components/schemas/DocumentMetadataField' }
@@ -1601,6 +1611,7 @@ components:
       type: object
       required: [message]
       properties:
+        knowledge_filter: { $ref: '#/components/schemas/MetadataFilter' }
         execution_constraint:
           type: string
           enum: [plan_only]
@@ -1988,6 +1999,7 @@ components:
       type: object
       required: [id, workspace_id, agent_id, conversation_id, status, verification_status, active_runtime_ms, created_at, updated_at]
       properties:
+        knowledge_scope: { $ref: '#/components/schemas/KnowledgeScope' }
         execution_constraint:
           type: string
           readOnly: true
@@ -2779,6 +2791,8 @@ components:
         runtime_snapshot:
           type: object
           additionalProperties: true
+          properties:
+            knowledge_scope: { $ref: '#/components/schemas/KnowledgeScope' }
         conversation:
           $ref: '#/components/schemas/Conversation'
         messages:

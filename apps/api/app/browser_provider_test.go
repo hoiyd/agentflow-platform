@@ -148,6 +148,9 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	if f.planningResponse(w, input, task) {
 		return
 	}
+	if f.knowledgeFilterResponse(w, input, task) {
+		return
+	}
 	if f.filesystemResponse(w, input, task) {
 		return
 	}

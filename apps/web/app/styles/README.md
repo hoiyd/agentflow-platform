@@ -25,6 +25,7 @@ legacy stylesheet underneath a second override file.
 | `collaboration/dag.css` | Multi-Agent execution graph |
 | `collaboration/plan-steps.css` | Plan approval, step output and attachments |
 | `knowledge/layout.css`, `documents.css`, `retrieval.css`, `evaluation.css` | Knowledge shell and task-specific sections |
+| `knowledge/scope.css` | Shared Knowledge filter fields, Chat scope dialog and saved Replay scope |
 | `run-usage.css` | Usage ledger and Budget detail |
 | `workbench/identity.css` | Authentication and Workspace selection |
 | `workbench/responsive.css` | Cross-feature breakpoint overrides and reduced motion |

@@ -88,6 +88,22 @@ func (s *PostgresStore) WorkspaceModelOwner(ctx context.Context, id string) (str
 	return owner, err
 }
 
+// Knowledge reads retain the archived/read-only contract, but never survive a
+// revoked owner membership or deleted Workspace. Snapshots carry no grants.
+func (s *PostgresStore) CheckKnowledgeAccess(ctx context.Context, id string) error {
+	if !validWorkspaceID(id) {
+		return ErrNotFound("workspace")
+	}
+	var found bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM workspaces w
+	 JOIN auth_memberships m ON m.user_id=w.owner_user_id AND m.workspace_id=w.id
+	 WHERE w.id=$1 AND w.deleted_at IS NULL)`, id).Scan(&found)
+	if err == nil && !found {
+		return ErrNotFound("workspace")
+	}
+	return err
+}
+
 func (s *PostgresStore) DefaultWorkspace(ctx context.Context, owner string) (string, error) {
 	var id string
 	err := s.db.QueryRowContext(ctx, `SELECT w.id FROM auth_personal_workspaces p

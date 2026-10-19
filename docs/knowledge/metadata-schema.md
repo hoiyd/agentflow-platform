@@ -45,8 +45,8 @@ case-sensitive. JSON ingestion is bounded to 2 MiB; PATCH remains 64 KiB.
 - **Owner-declared:** business fields are validated declarations, not verified
   facts. Document fields inherit into Chunks; a different local value is an
   explicit Chunk override and must pass the same type contract. Qualified
-  addressing is `document.metadata.<key>` versus `chunk.metadata.<key>`; neither
-  gets a new typed-query syntax in this change.
+  addressing is `document.metadata.<key>` versus `chunk.metadata.<key>` in
+  [typed filters](typed-metadata-filters.md).
 - **Unverified extension:** neither a model-generated attribute nor an
   `access_scope`/"reviewed" label grants authorization, freshness or trust.
   There is no automatic model enrichment or per-field author/audit registry.
@@ -56,7 +56,9 @@ Document/Chunk metadata tables with declaration ownership. It is read-only;
 legacy records are labeled **Legacy / unvalidated**, even for familiar field names.
 Existing [equality filters](metadata-filters.md) retain their cross-layer OR
 semantics. Optional [typed filters](typed-metadata-filters.md) explicitly address
-one layer and require a matching stored schema; hard expiry/ACL remains separate.
+one layer and require a matching stored schema. [Runtime Knowledge scope](runtime-knowledge-filters.md)
+freezes these constraints across Chat, Tools and recovery. The schema endpoint
+advertises `typed_filtering` and `runtime_filtering` support; hard expiry/ACL remains separate.
 
 ## Persistence and Compatibility
 

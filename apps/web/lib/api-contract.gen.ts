@@ -900,6 +900,15 @@ export interface components {
             schema_version: "knowledge-metadata-v1";
             where: components["schemas"]["MetadataCondition"];
         };
+        /** @description Frozen business restriction, not a permission grant. Identity hashes normalized filter JSON; old Runs without this field remain unfiltered. */
+        KnowledgeScope: {
+            filter: components["schemas"]["MetadataFilter"];
+            id: string;
+            /** @enum {string} */
+            policy_version: "knowledge-filter-v1";
+            /** @enum {string} */
+            source: "run_request";
+        };
         /** @description Exactly one nonempty all/any group OR a field/op/value leaf. At most 4 levels and 32 nodes, including groups. Missing/null fields never match; no NOT or implicit coercion. eq/in support scalars, contains/in support string-array membership, and ranges support numbers/dates only. in accepts 1-32 typed values; array in means any member overlaps. Both metadata layers are explicitly addressed, never ORed implicitly. */
         MetadataCondition: {
             all?: components["schemas"]["MetadataCondition"][];
@@ -947,6 +956,8 @@ export interface components {
             extension_policy: "preserve_unverified";
             /** @description Whether the server supports the separate bounded metadata_filter request contract. */
             typed_filtering: boolean;
+            /** @description Whether Chat freezes knowledge_filter and enforces it in automatic retrieval */
+            runtime_filtering: boolean;
             fields: components["schemas"]["DocumentMetadataField"][];
         };
         DocumentMetadataField: {
@@ -1167,6 +1178,7 @@ export interface components {
             hash: string;
         };
         ChatRequest: {
+            knowledge_filter?: components["schemas"]["MetadataFilter"];
             /**
              * @description Frozen read-only restriction; omit for ordinary execution.
              * @enum {string}
@@ -1390,6 +1402,7 @@ export interface components {
             unavailable_reason?: string;
         };
         Run: {
+            knowledge_scope?: components["schemas"]["KnowledgeScope"];
             /** @description Derived from the frozen Snapshot; omission means ordinary execution. */
             readonly execution_constraint?: string;
             id: string;
@@ -2065,6 +2078,8 @@ export interface components {
             run: components["schemas"]["Run"];
             projection: components["schemas"]["RunProjectionSnapshot"];
             runtime_snapshot?: {
+                knowledge_scope?: components["schemas"]["KnowledgeScope"];
+            } & {
                 [key: string]: unknown;
             };
             conversation: components["schemas"]["Conversation"];

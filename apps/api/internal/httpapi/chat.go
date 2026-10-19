@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"agentflow-platform/apps/api/app/runcommands"
 	"agentflow-platform/apps/api/internal/apicontract"
@@ -10,7 +11,28 @@ import (
 
 func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	var input apicontract.ChatRequest
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	decoder, err := documentJSONDecoder(r.Body, 2<<20)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid chat json body")
+		return
+	}
+	var envelope map[string]json.RawMessage
+	if decoder.Decode(&envelope) != nil {
+		writeError(w, http.StatusBadRequest, "invalid chat json body")
+		return
+	}
+	for key, value := range envelope {
+		if strings.EqualFold(key, "knowledge_filter") {
+			if err := validateMetadataFilterJSON(value); err != nil {
+				writeKnowledgeError(w, r, err)
+				return
+			}
+		}
+	}
+	data, _ := json.Marshal(envelope)
+	decoder = json.NewDecoder(strings.NewReader(string(data)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}

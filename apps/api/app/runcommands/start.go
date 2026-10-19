@@ -11,6 +11,7 @@ import (
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/planning"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -31,6 +32,28 @@ func (c Commands) Start(ctx context.Context, scope Scope, req domain.ChatRequest
 		return commandError(Invalid, errors.New("workspace_id does not match authorized scope"))
 	}
 	req.WorkspaceID = scope.Workspace.ID()
+	knowledgeScope, err := eligibility.FreezeScope(req.KnowledgeFilter)
+	if err != nil {
+		return commandError(Invalid, err)
+	}
+	if followup != nil {
+		previous, ok, loadErr := c.Store.ForWorkspace(scope.Workspace).GetRun(followup.Input.RunID)
+		if loadErr != nil {
+			return loadErr
+		}
+		if !ok {
+			return commandError(Missing, store.ErrNotFound("run"))
+		}
+		filter, loadErr := eligibility.FrozenFilter(previous.RuntimeSnapshot)
+		if loadErr != nil {
+			return commandError(Invalid, loadErr)
+		}
+		knowledgeScope, err = eligibility.FreezeScope(filter)
+		if err != nil {
+			return commandError(Invalid, err)
+		}
+	}
+	ctx = agent.WithKnowledgeScope(ctx, knowledgeScope)
 	if err := redaction.ValidateValue(req); err != nil {
 		return commandError(Invalid, err)
 	}

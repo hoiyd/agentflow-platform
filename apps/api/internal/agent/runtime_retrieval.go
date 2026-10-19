@@ -9,6 +9,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/sessionhistory"
 )
 
@@ -110,6 +111,21 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query retri
 		payload[key] = value
 	}
 	payload["workspace_id"] = workspaceID
+	var filter *domain.MetadataFilter
+	if retrievalEnabled {
+		snapshot, snapshotErr := r.snapshotForRun(runID)
+		if snapshotErr == nil {
+			filter, snapshotErr = eligibility.FrozenFilter(snapshot)
+			if snapshot.KnowledgeScope != nil {
+				payload["knowledge_scope"] = snapshot.KnowledgeScope
+			}
+		}
+		if snapshotErr != nil {
+			payload["rag_error"] = snapshotErr.Error()
+			r.publishRetrievalEvent(ctx, domain.EventRetrievalFailed, runID, conversationID, query.StageID, failure.Merge(payload, snapshotErr))
+			return nil, nil
+		}
+	}
 	payload["query"] = truncateRuntimeText(query.Text, 1200)
 	payload["query_source"] = string(query.Source)
 	payload["embedding_query_chars"] = len(embeddingQuery)
@@ -200,6 +216,7 @@ func (r *Runtime) retrieveContext(ctx context.Context, runID string, query retri
 			}
 			response, searchErr := r.knowledgeRetriever.Search(ctx, domain.DocumentSearch{
 				WorkspaceID:               workspaceID,
+				MetadataFilter:            filter,
 				Query:                     query.Text,
 				Limit:                     5,
 				KnowledgeContextMaxTokens: knowledgeContextMaxTokens,

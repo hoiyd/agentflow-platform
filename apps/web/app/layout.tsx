@@ -39,6 +39,7 @@ import "./styles/workbench/recovery-summary.css";
 import "./styles/workbench/task-state-replay.css";
 import "./styles/workbench/operator-attention.css";
 import "./styles/knowledge/layout.css";
+import "./styles/knowledge/scope.css";
 import "./styles/knowledge/documents.css";
 import "./styles/knowledge/retrieval.css";
 import "./styles/knowledge/evaluation.css";

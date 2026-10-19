@@ -2,6 +2,7 @@ package agent
 
 import (
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/policy"
@@ -14,6 +15,9 @@ import (
 func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	if snapshot == nil {
 		return ErrRuntimeSnapshotUnavailable
+	}
+	if _, err := eligibility.FrozenFilter(snapshot); err != nil {
+		return err
 	}
 	if snapshot.ExecutionConstraint != "" && snapshot.ExecutionConstraint != domain.ExecutionPlanOnly {
 		return errors.New("invalid frozen execution constraint")
