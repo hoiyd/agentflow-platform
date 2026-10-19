@@ -100,6 +100,7 @@ type DocumentSearch struct {
 	LexicalTerms              []string          `json:"-"`
 	WorkspaceID               string            `json:"workspace_id,omitempty"`
 	Metadata                  map[string]string `json:"metadata,omitempty"`
+	MetadataFilter            *MetadataFilter   `json:"metadata_filter,omitempty"`
 	Limit                     int               `json:"limit,omitempty"`
 	MinSimilarity             float64           `json:"min_similarity,omitempty"`
 	KnowledgeContextMaxTokens int               `json:"knowledge_context_max_tokens,omitempty"`
@@ -112,6 +113,7 @@ type DocumentContextSearch struct {
 	ChunkIndex     int
 	NeighborWindow int
 	Metadata       map[string]string
+	MetadataFilter *MetadataFilter
 }
 
 const (

@@ -276,6 +276,108 @@ func (e MessageReasoningStatus) Valid() bool {
 	}
 }
 
+// Defines values for MetadataConditionField.
+const (
+	ChunkMetadataEnvironment    MetadataConditionField = "chunk.metadata.environment"
+	ChunkMetadataIsReference    MetadataConditionField = "chunk.metadata.is_reference"
+	ChunkMetadataLanguage       MetadataConditionField = "chunk.metadata.language"
+	ChunkMetadataPriority       MetadataConditionField = "chunk.metadata.priority"
+	ChunkMetadataProduct        MetadataConditionField = "chunk.metadata.product"
+	ChunkMetadataPublishedAt    MetadataConditionField = "chunk.metadata.published_at"
+	ChunkMetadataTags           MetadataConditionField = "chunk.metadata.tags"
+	DocumentMetadataEnvironment MetadataConditionField = "document.metadata.environment"
+	DocumentMetadataIsReference MetadataConditionField = "document.metadata.is_reference"
+	DocumentMetadataLanguage    MetadataConditionField = "document.metadata.language"
+	DocumentMetadataPriority    MetadataConditionField = "document.metadata.priority"
+	DocumentMetadataProduct     MetadataConditionField = "document.metadata.product"
+	DocumentMetadataPublishedAt MetadataConditionField = "document.metadata.published_at"
+	DocumentMetadataTags        MetadataConditionField = "document.metadata.tags"
+)
+
+// Valid indicates whether the value is a known member of the MetadataConditionField enum.
+func (e MetadataConditionField) Valid() bool {
+	switch e {
+	case ChunkMetadataEnvironment:
+		return true
+	case ChunkMetadataIsReference:
+		return true
+	case ChunkMetadataLanguage:
+		return true
+	case ChunkMetadataPriority:
+		return true
+	case ChunkMetadataProduct:
+		return true
+	case ChunkMetadataPublishedAt:
+		return true
+	case ChunkMetadataTags:
+		return true
+	case DocumentMetadataEnvironment:
+		return true
+	case DocumentMetadataIsReference:
+		return true
+	case DocumentMetadataLanguage:
+		return true
+	case DocumentMetadataPriority:
+		return true
+	case DocumentMetadataProduct:
+		return true
+	case DocumentMetadataPublishedAt:
+		return true
+	case DocumentMetadataTags:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MetadataConditionOp.
+const (
+	Contains MetadataConditionOp = "contains"
+	Eq       MetadataConditionOp = "eq"
+	Gt       MetadataConditionOp = "gt"
+	Gte      MetadataConditionOp = "gte"
+	In       MetadataConditionOp = "in"
+	Lt       MetadataConditionOp = "lt"
+	Lte      MetadataConditionOp = "lte"
+)
+
+// Valid indicates whether the value is a known member of the MetadataConditionOp enum.
+func (e MetadataConditionOp) Valid() bool {
+	switch e {
+	case Contains:
+		return true
+	case Eq:
+		return true
+	case Gt:
+		return true
+	case Gte:
+		return true
+	case In:
+		return true
+	case Lt:
+		return true
+	case Lte:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MetadataFilterSchemaVersion.
+const (
+	KnowledgeMetadataV1 MetadataFilterSchemaVersion = "knowledge-metadata-v1"
+)
+
+// Valid indicates whether the value is a known member of the MetadataFilterSchemaVersion enum.
+func (e MetadataFilterSchemaVersion) Valid() bool {
+	switch e {
+	case KnowledgeMetadataV1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ModelRequestCaptureMode.
 const (
 	Full         ModelRequestCaptureMode = "full"
@@ -1198,7 +1300,7 @@ type DocumentMetadataSchema struct {
 	ExtensionPolicy DocumentMetadataSchemaExtensionPolicy `json:"extension_policy"`
 	Fields          []DocumentMetadataField               `json:"fields"`
 
-	// TypedFiltering False until the separate typed-filter contract is implemented.
+	// TypedFiltering Whether the server supports the separate bounded metadata_filter request contract.
 	TypedFiltering bool   `json:"typed_filtering"`
 	Version        string `json:"version"`
 }
@@ -1384,6 +1486,21 @@ type KnowledgeDocumentDetail struct {
 	MetadataSchema DocumentMetadataSchema   `json:"metadata_schema"`
 }
 
+// KnowledgeSearchRequest defines model for KnowledgeSearchRequest.
+type KnowledgeSearchRequest struct {
+	KnowledgeContextMaxTokens *int `json:"knowledge_context_max_tokens,omitempty"`
+	Limit                     *int `json:"limit,omitempty"`
+
+	// Metadata Legacy exact-text equality; ANDed with metadata_filter.
+	Metadata *map[string]string `json:"metadata,omitempty"`
+
+	// MetadataFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
+	MetadataFilter *MetadataFilter `json:"metadata_filter,omitempty"`
+	MinSimilarity  *float32        `json:"min_similarity,omitempty"`
+	Query          string          `json:"query"`
+	WorkspaceId    *string         `json:"workspace_id,omitempty"`
+}
+
 // Message defines model for Message.
 type Message struct {
 	Citations      *[]RAGCitation `json:"citations,omitempty"`
@@ -1421,6 +1538,34 @@ type MessageReasoningFormat string
 
 // MessageReasoningStatus defines model for MessageReasoning.Status.
 type MessageReasoningStatus string
+
+// MetadataCondition Exactly one nonempty all/any group OR a field/op/value leaf. At most 4 levels and 32 nodes, including groups. Missing/null fields never match; no NOT or implicit coercion. eq/in support scalars, contains/in support string-array membership, and ranges support numbers/dates only. in accepts 1-32 typed values; array in means any member overlaps. Both metadata layers are explicitly addressed, never ORed implicitly.
+type MetadataCondition struct {
+	All   *[]MetadataCondition    `json:"all,omitempty"`
+	Any   *[]MetadataCondition    `json:"any,omitempty"`
+	Field *MetadataConditionField `json:"field,omitempty"`
+	Op    *MetadataConditionOp    `json:"op,omitempty"`
+
+	// Value A field-typed scalar, or array for in. Date-times require explicit timezone, microsecond precision and UTC years 0001-9999; numbers retain exact decimal semantics. Field bounds are defined by the selected metadata schema.
+	Value interface{} `json:"value,omitempty"`
+}
+
+// MetadataConditionField defines model for MetadataCondition.Field.
+type MetadataConditionField string
+
+// MetadataConditionOp defines model for MetadataCondition.Op.
+type MetadataConditionOp string
+
+// MetadataFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
+type MetadataFilter struct {
+	SchemaVersion MetadataFilterSchemaVersion `json:"schema_version"`
+
+	// Where Exactly one nonempty all/any group OR a field/op/value leaf. At most 4 levels and 32 nodes, including groups. Missing/null fields never match; no NOT or implicit coercion. eq/in support scalars, contains/in support string-array membership, and ranges support numbers/dates only. in accepts 1-32 typed values; array in means any member overlaps. Both metadata layers are explicitly addressed, never ORed implicitly.
+	Where MetadataCondition `json:"where"`
+}
+
+// MetadataFilterSchemaVersion defines model for MetadataFilter.SchemaVersion.
+type MetadataFilterSchemaVersion string
 
 // ModelRequestCapture defines model for ModelRequestCapture.
 type ModelRequestCapture struct {
@@ -2433,6 +2578,9 @@ type IngestDocumentJSONRequestBody = DocumentIngestRequest
 
 // UpdateDocumentMetadataJSONRequestBody defines body for UpdateDocumentMetadata for application/json ContentType.
 type UpdateDocumentMetadataJSONRequestBody = DocumentMetadataUpdate
+
+// SearchKnowledgeJSONRequestBody defines body for SearchKnowledge for application/json ContentType.
+type SearchKnowledgeJSONRequestBody = KnowledgeSearchRequest
 
 // WithdrawClarificationJSONRequestBody defines body for WithdrawClarification for application/json ContentType.
 type WithdrawClarificationJSONRequestBody = ClarificationVersionRequest

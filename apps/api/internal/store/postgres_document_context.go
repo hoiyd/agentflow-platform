@@ -2,12 +2,17 @@ package store
 
 import (
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"errors"
 	"fmt"
 	"strings"
 )
 
 func (s *PostgresStore) ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error) {
+	predicate, err := eligibility.Compile(search.MetadataFilter)
+	if err != nil {
+		return nil, err
+	}
 	search.WorkspaceID = NormalizeWorkspaceID(search.WorkspaceID)
 	documentID := strings.TrimSpace(search.DocumentID)
 	if documentID == "" {
@@ -21,6 +26,9 @@ func (s *PostgresStore) ListDocumentContextChunks(search domain.DocumentContextS
 	for key, value := range search.Metadata {
 		args = append(args, key, value)
 		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))
+	}
+	if search.MetadataFilter != nil {
+		conditions = append(conditions, predicate.SQL(&args))
 	}
 
 	contextConditions := make([]string, 0, 2)

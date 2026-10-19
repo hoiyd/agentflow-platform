@@ -4,6 +4,9 @@
 recall, lexical recall, parent/adjacent lookup, and the Context selector's scope
 recheck use the same eligibility contract. PostgreSQL's existing JSONB `->>`
 predicate is the compatibility baseline; this is not a new typed query language.
+For typed operators, explicit layer addressing and schema eligibility, see
+[Typed metadata filters](typed-metadata-filters.md). The contracts are separate;
+when both are supplied their predicates are ANDed.
 
 ## Contract
 
@@ -41,7 +44,7 @@ does not lose precision or scale before the Context recheck. HTTP still emits
 JSON numbers, not strings; this does not add arbitrary-precision JavaScript
 numbers or preserve numeric formatting lost earlier by an ingestion client.
 
-This change does not add operators, a metadata schema, Agent/Run filter
+This legacy contract does not itself add operators, Agent/Run filter
 configuration, Knowledge Tool filter arguments, or Workbench controls. Automatic
 runtime retrieval and `knowledge_search` do not acquire business filters from
 this contract alone. Memory's separate filtering contract is unchanged.

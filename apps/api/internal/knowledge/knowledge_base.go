@@ -9,6 +9,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -138,6 +139,9 @@ func (s *KnowledgeBase) persist(ctx context.Context, document domain.Document, c
 }
 
 func (s *KnowledgeBase) Search(ctx context.Context, search domain.DocumentSearch, requestedLimit int) (domain.DocumentSearchResponse, error) {
+	if _, err := eligibility.Compile(search.MetadataFilter); err != nil {
+		return domain.DocumentSearchResponse{}, err
+	}
 	search.Query = strings.TrimSpace(search.Query)
 	if search.Query == "" {
 		return domain.DocumentSearchResponse{}, errors.New("query is required")
@@ -146,6 +150,9 @@ func (s *KnowledgeBase) Search(ctx context.Context, search domain.DocumentSearch
 		return domain.DocumentSearchResponse{}, err
 	}
 	if err := redaction.ValidateValue(search.Metadata); err != nil {
+		return domain.DocumentSearchResponse{}, err
+	}
+	if err := redaction.ValidateValue(search.MetadataFilter); err != nil {
 		return domain.DocumentSearchResponse{}, err
 	}
 

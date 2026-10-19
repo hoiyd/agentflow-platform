@@ -52,6 +52,7 @@ related pages link to its contract rather than copying configuration or algorith
 - [Metadata filters](knowledge/metadata-filters.md): legacy equality semantics, Store/Context parity, numeric preservation, and reproducible contract tests.
 - [Metadata updates](knowledge/metadata-updates.md): conditional label replacement, atomic Chunk inheritance, zero-embedding edits and reindex boundaries.
 - [Metadata schema](knowledge/metadata-schema.md): opt-in field types, ownership, legacy-safe adoption and inspectable schema versions.
+- [Typed metadata filters](knowledge/typed-metadata-filters.md): bounded comparisons, explicit layers and pre-limit candidate eligibility.
 - [Cross-Encoder reranking](knowledge/cross-encoder-reranking.md): optional TEI service, bounded requests, privacy boundary, and same-candidate ablation.
 
 ## Tools and Skills
