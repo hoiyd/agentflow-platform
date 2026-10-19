@@ -13,10 +13,10 @@ import (
 // The caller ANDs this with Workspace, legacy filters and source identity.
 func (p Predicate) SQL(args *[]any) string {
 	if p.root == nil {
-		return "TRUE"
+		return p.lifecycleSQL(args)
 	}
 	version := bind(args, metadataschema.Version)
-	return "(d.metadata_schema_version = " + version + " AND " + p.root.sql(args) + ")"
+	return "(" + p.lifecycleSQL(args) + " AND d.metadata_schema_version = " + version + " AND " + p.root.sql(args) + ")"
 }
 
 func bind(args *[]any, value any) string {

@@ -27,11 +27,21 @@ type Document struct {
 	Content               string                `json:"-"`
 	Metadata              map[string]any        `json:"metadata"`
 	MetadataSchemaVersion string                `json:"metadata_schema_version,omitempty"`
+	Lifecycle             DocumentLifecycle     `json:"lifecycle"`
 	ChunkCount            int                   `json:"chunk_count,omitempty"`
 	EmbeddingCount        int                   `json:"embedding_count,omitempty"`
 	IndexIdentity         DocumentIndexIdentity `json:"index_identity"`
 	CreatedAt             time.Time             `json:"created_at"`
 	UpdatedAt             time.Time             `json:"updated_at"`
+}
+
+// DocumentLifecycle is owner-managed eligibility, never inherited from free-form
+// Chunk labels. Validity is a UTC [from, until) interval; publication is informational.
+type DocumentLifecycle struct {
+	Status      string `json:"status,omitempty"`
+	ValidFrom   string `json:"valid_from,omitempty"`
+	ValidUntil  string `json:"valid_until,omitempty"`
+	PublishedAt string `json:"published_at,omitempty"`
 }
 
 type ChunkSource struct {
@@ -66,17 +76,18 @@ type DocumentChunkEmbedding struct {
 
 type DocumentIngestRequest struct {
 	// ExpectedUpdatedAt opts a same-source/body request into conditional metadata update.
-	ExpectedUpdatedAt     *time.Time     `json:"expected_updated_at,omitempty"`
-	WorkspaceID           string         `json:"workspace_id,omitempty"`
-	SourceKey             string         `json:"source_key,omitempty"`
-	Title                 string         `json:"title"`
-	Version               string         `json:"version,omitempty"`
-	Content               string         `json:"content"`
-	SourceType            string         `json:"source_type,omitempty"`
-	SourceURI             string         `json:"source_uri,omitempty"`
-	MimeType              string         `json:"mime_type,omitempty"`
-	Metadata              map[string]any `json:"metadata,omitempty"`
-	MetadataSchemaVersion string         `json:"metadata_schema_version,omitempty"`
+	ExpectedUpdatedAt     *time.Time         `json:"expected_updated_at,omitempty"`
+	WorkspaceID           string             `json:"workspace_id,omitempty"`
+	SourceKey             string             `json:"source_key,omitempty"`
+	Title                 string             `json:"title"`
+	Version               string             `json:"version,omitempty"`
+	Content               string             `json:"content"`
+	SourceType            string             `json:"source_type,omitempty"`
+	SourceURI             string             `json:"source_uri,omitempty"`
+	MimeType              string             `json:"mime_type,omitempty"`
+	Metadata              map[string]any     `json:"metadata,omitempty"`
+	MetadataSchemaVersion string             `json:"metadata_schema_version,omitempty"`
+	Lifecycle             *DocumentLifecycle `json:"lifecycle,omitempty"`
 }
 
 // DocumentMetadataUpdate replaces custom labels, not content or index inputs.
@@ -85,6 +96,8 @@ type DocumentMetadataUpdate struct {
 	ExpectedUpdatedAt     time.Time      `json:"expected_updated_at"`
 	Metadata              map[string]any `json:"metadata"`
 	MetadataSchemaVersion string         `json:"metadata_schema_version,omitempty"`
+	// Omitted preserves lifecycle; an empty object resets active/unbounded.
+	Lifecycle *DocumentLifecycle `json:"lifecycle,omitempty"`
 	// Ingest-only precondition, checked under the mutation lock. Never accepted
 	// from HTTP or persisted: a concurrent reindex is not a metadata no-op.
 	ExpectedIndexInputs *Document `json:"-"`

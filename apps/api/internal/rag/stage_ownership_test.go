@@ -45,7 +45,7 @@ func TestRetrievalStagesCannotRewriteCandidateAuthority(t *testing.T) {
 		}, Similarity: 0.9,
 	}}}
 	pipeline := NewRetrievalPipelineWithStages(store, mutatingReranker{}, mutatingGate{})
-	response, err := pipeline.Search(context.Background(), domain.DocumentSearch{Query: "AUTH-7F31", Limit: 1}, 1, Embedding{Vector: []float64{1}})
+	response, err := pipeline.Search(context.Background(), domain.DocumentSearch{WorkspaceID: "workspace-1", Query: "AUTH-7F31", Limit: 1}, 1, Embedding{Vector: []float64{1}})
 	if err != nil {
 		t.Fatal(err)
 	}

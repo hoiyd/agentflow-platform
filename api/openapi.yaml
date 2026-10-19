@@ -1306,6 +1306,7 @@ components:
         mime_type: { type: string }
         metadata: { type: object, additionalProperties: true }
         metadata_schema_version: { type: string, description: Opt into knowledge-metadata-v1. Omission retains an existing source's version or creates legacy metadata for a new source. }
+        lifecycle: { $ref: '#/components/schemas/DocumentLifecycle' }
         expected_updated_at: { type: string, format: date-time }
     DocumentMetadataUpdate:
       type: object
@@ -1315,6 +1316,16 @@ components:
         expected_updated_at: { type: string, format: date-time, description: Nonzero microsecond-precision timestamp from Document.updated_at. }
         metadata: { type: object, additionalProperties: true, description: Custom field replacement. Derived fields are preserved; conflicting provided values are rejected. }
         metadata_schema_version: { type: string, description: Explicit knowledge-metadata-v1 adoption; omission retains the stored version. Known fields are validated and dates normalized to UTC. }
+        lifecycle: { $ref: '#/components/schemas/DocumentLifecycle', description: Omission preserves lifecycle; an empty object resets active/unbounded. Uses the same optimistic concurrency token as metadata. }
+    DocumentLifecycle:
+      type: object
+      additionalProperties: false
+      description: Document-owned hard eligibility, independent of metadata labels. Missing status means active. UTC validity is [valid_from, valid_until); missing bounds are unlimited. Publication time is informational, not permission or a retrieval gate. Timestamps require explicit timezone, microsecond precision and UTC years 0001-9999.
+      properties:
+        status: { type: string, enum: [active, draft, withdrawn], default: active }
+        valid_from: { type: string, format: date-time, x-go-type: string }
+        valid_until: { type: string, format: date-time, x-go-type: string }
+        published_at: { type: string, format: date-time, x-go-type: string }
     DocumentMetadataSchema:
       type: object
       required: [version, fields, extension_policy, typed_filtering, runtime_filtering]
@@ -1382,6 +1393,7 @@ components:
         mime_type: { type: string }
         metadata: { type: object, additionalProperties: true }
         metadata_schema_version: { type: string, description: Absent for legacy data; migration never fabricates validation. }
+        lifecycle: { $ref: '#/components/schemas/DocumentLifecycle' }
         chunk_count: { type: integer }
         embedding_count: { type: integer }
         index_identity:

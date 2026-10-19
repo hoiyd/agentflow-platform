@@ -45,6 +45,7 @@ func (s *Store) UpdateDocumentMetadata(workspaceID, id string, update domain.Doc
 			}
 		}
 		document.Metadata, document.UpdatedAt, document.MetadataSchemaVersion = change.Metadata, change.UpdatedAt, change.SchemaVersion
+		document.Lifecycle = change.Lifecycle
 		s.data.DocumentChunks = next
 		s.data.Documents[i] = document
 		return document, nil

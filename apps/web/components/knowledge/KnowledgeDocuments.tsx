@@ -6,6 +6,7 @@ import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 import type { DocumentDetail, RetrievedDocumentChunk } from "../../lib/knowledge-api";
 import type { KnowledgeDocumentsModel } from "./useKnowledgeDocuments";
 import { DocumentMetadata } from "./DocumentMetadata";
+import { DocumentLifecycleEditor } from "./DocumentLifecycleEditor";
 import { documentFilename, documentFormat, metadataString, shortSourceLabel } from "./knowledgeFormatters";
 
 type IngestMode = "file" | "text";
@@ -121,6 +122,8 @@ export function KnowledgeDocuments({ model }: { model: KnowledgeDocumentsModel }
                     <DocumentDetailBlock
                       detail={detail}
                       isLoading={model.isLoadingDocumentDetail && model.selectedDocumentId === document.id}
+                      onSaved={model.applyDocumentUpdate}
+                      onReload={() => model.selectDocument(document.id)}
                     />
                   ) : null}
                 </article>
@@ -133,7 +136,10 @@ export function KnowledgeDocuments({ model }: { model: KnowledgeDocumentsModel }
   );
 }
 
-function DocumentDetailBlock({ detail, isLoading }: { detail: DocumentDetail | null; isLoading: boolean }) {
+function DocumentDetailBlock({ detail, isLoading, onSaved, onReload }: {
+  detail: DocumentDetail | null; isLoading: boolean;
+  onSaved: KnowledgeDocumentsModel["applyDocumentUpdate"]; onReload: () => void;
+}) {
   if (isLoading) return <div className="document-detail-inline knowledge-empty">Loading document...</div>;
   if (!detail) return <div className="document-detail-inline knowledge-empty">Document detail unavailable.</div>;
 
@@ -159,6 +165,7 @@ function DocumentDetailBlock({ detail, isLoading }: { detail: DocumentDetail | n
         </div>
       </div>
       <div className="chunk-list">
+        {detail.document.lifecycle ? <DocumentLifecycleEditor key={`${detail.document.id}:${detail.document.updated_at}`} document={detail.document} onSaved={onSaved} onReload={onReload} /> : null}
         <DocumentMetadata label="Document metadata" metadata={detail.document.metadata} version={detail.document.metadata_schema_version} schema={detail.metadata_schema} />
         {detail.chunks.map((chunk) => (
           <article className="chunk-card" key={chunk.id}>

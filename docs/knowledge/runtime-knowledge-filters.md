@@ -49,8 +49,9 @@ includes it in `runtime_snapshot`. Clients check `runtime_filtering` on
 workers or Resume scoped Runs on older binaries.
 
 Current Workspace membership/deletion checks still apply; archived Workspaces
-allow reads, not new Runs. Scope is not Document ACL, expiry, automatic filter
-planning, Memory/history filtering or proof of relevance. Do not store secrets
+allow reads, not new Runs. [Document lifecycle](document-lifecycle.md) independently
+enforces current status/validity, including unfiltered Runs. Scope is not Document
+ACL, automatic filter planning, Memory/history filtering or proof of relevance. Do not store secrets
 in metadata or filters; existing input redaction remains enforced.
 
 ## Verification

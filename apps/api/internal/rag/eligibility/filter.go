@@ -24,7 +24,10 @@ const (
 	MaxBytes   = 16384
 )
 
-type Predicate struct{ root *condition }
+type Predicate struct {
+	root *condition
+	at   time.Time
+}
 type condition struct {
 	children             []condition
 	any                  bool
@@ -35,8 +38,14 @@ type condition struct {
 // Compile rejects invalid input even for direct Store consumers. A nil filter
 // alone means no typed restriction; an empty supplied filter is never ignored.
 func Compile(filter *domain.MetadataFilter) (Predicate, error) {
+	return CompileAt(filter, time.Now().UTC())
+}
+
+// CompileAt fixes one operation's eligibility instant. Only internal callers
+// can supply it; request JSON cannot override the server clock.
+func CompileAt(filter *domain.MetadataFilter, at time.Time) (Predicate, error) {
 	if filter == nil {
-		return Predicate{}, nil
+		return Predicate{at: at}, nil
 	}
 	data, err := json.Marshal(filter)
 	if err != nil || len(data) > MaxBytes {
@@ -50,7 +59,7 @@ func Compile(filter *domain.MetadataFilter) (Predicate, error) {
 	if err != nil {
 		return Predicate{}, err
 	}
-	return Predicate{root: &root}, nil
+	return Predicate{root: &root, at: at}, nil
 }
 
 func invalid(reason string) error { return fmt.Errorf("%w: %s", ErrInvalid, reason) }

@@ -105,6 +105,27 @@ func (e CompletionContractInputSubjectType) Valid() bool {
 	}
 }
 
+// Defines values for DocumentLifecycleStatus.
+const (
+	DocumentLifecycleStatusActive    DocumentLifecycleStatus = "active"
+	DocumentLifecycleStatusDraft     DocumentLifecycleStatus = "draft"
+	DocumentLifecycleStatusWithdrawn DocumentLifecycleStatus = "withdrawn"
+)
+
+// Valid indicates whether the value is a known member of the DocumentLifecycleStatus enum.
+func (e DocumentLifecycleStatus) Valid() bool {
+	switch e {
+	case DocumentLifecycleStatusActive:
+		return true
+	case DocumentLifecycleStatusDraft:
+		return true
+	case DocumentLifecycleStatusWithdrawn:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DocumentMetadataFieldOwner.
 const (
 	OwnerDeclared DocumentMetadataFieldOwner = "owner_declared"
@@ -1290,9 +1311,12 @@ type DeleteConversationResponse struct {
 
 // DocumentIngestRequest defines model for DocumentIngestRequest.
 type DocumentIngestRequest struct {
-	Content           string                  `json:"content"`
-	ExpectedUpdatedAt *time.Time              `json:"expected_updated_at,omitempty"`
-	Metadata          *map[string]interface{} `json:"metadata,omitempty"`
+	Content           string     `json:"content"`
+	ExpectedUpdatedAt *time.Time `json:"expected_updated_at,omitempty"`
+
+	// Lifecycle Document-owned hard eligibility, independent of metadata labels. Missing status means active. UTC validity is [valid_from, valid_until); missing bounds are unlimited. Publication time is informational, not permission or a retrieval gate. Timestamps require explicit timezone, microsecond precision and UTC years 0001-9999.
+	Lifecycle *DocumentLifecycle      `json:"lifecycle,omitempty"`
+	Metadata  *map[string]interface{} `json:"metadata,omitempty"`
 
 	// MetadataSchemaVersion Opt into knowledge-metadata-v1. Omission retains an existing source's version or creates legacy metadata for a new source.
 	MetadataSchemaVersion *string `json:"metadata_schema_version,omitempty"`
@@ -1304,6 +1328,17 @@ type DocumentIngestRequest struct {
 	Version               *string `json:"version,omitempty"`
 	WorkspaceId           *string `json:"workspace_id,omitempty"`
 }
+
+// DocumentLifecycle Document-owned hard eligibility, independent of metadata labels. Missing status means active. UTC validity is [valid_from, valid_until); missing bounds are unlimited. Publication time is informational, not permission or a retrieval gate. Timestamps require explicit timezone, microsecond precision and UTC years 0001-9999.
+type DocumentLifecycle struct {
+	PublishedAt *string                  `json:"published_at,omitempty"`
+	Status      *DocumentLifecycleStatus `json:"status,omitempty"`
+	ValidFrom   *string                  `json:"valid_from,omitempty"`
+	ValidUntil  *string                  `json:"valid_until,omitempty"`
+}
+
+// DocumentLifecycleStatus defines model for DocumentLifecycle.Status.
+type DocumentLifecycleStatus string
 
 // DocumentMetadataField defines model for DocumentMetadataField.
 type DocumentMetadataField struct {
@@ -1348,6 +1383,9 @@ type DocumentMetadataSchemaExtensionPolicy string
 type DocumentMetadataUpdate struct {
 	// ExpectedUpdatedAt Nonzero microsecond-precision timestamp from Document.updated_at.
 	ExpectedUpdatedAt time.Time `json:"expected_updated_at"`
+
+	// Lifecycle Omission preserves lifecycle; an empty object resets active/unbounded. Uses the same optimistic concurrency token as metadata.
+	Lifecycle *DocumentLifecycle `json:"lifecycle,omitempty"`
 
 	// Metadata Custom field replacement. Derived fields are preserved; conflicting provided values are rejected.
 	Metadata map[string]interface{} `json:"metadata"`
@@ -1483,7 +1521,10 @@ type KnowledgeDocument struct {
 		EmbeddingModel      string `json:"embedding_model"`
 		EmbeddingProvider   string `json:"embedding_provider"`
 	} `json:"index_identity"`
-	Metadata map[string]interface{} `json:"metadata"`
+
+	// Lifecycle Document-owned hard eligibility, independent of metadata labels. Missing status means active. UTC validity is [valid_from, valid_until); missing bounds are unlimited. Publication time is informational, not permission or a retrieval gate. Timestamps require explicit timezone, microsecond precision and UTC years 0001-9999.
+	Lifecycle *DocumentLifecycle     `json:"lifecycle,omitempty"`
+	Metadata  map[string]interface{} `json:"metadata"`
 
 	// MetadataSchemaVersion Absent for legacy data; migration never fabricates validation.
 	MetadataSchemaVersion *string   `json:"metadata_schema_version,omitempty"`

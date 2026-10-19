@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -31,11 +32,17 @@ func TestProductionRuntimeKnowledgeFilter(t *testing.T) {
 	t.Chdir(root)
 	fixture := newBrowserProvider()
 	var revokeFinal atomic.Bool
+	var withdrawDuringResume atomic.Bool
+	var withdraw func() error
+	withdrawResult := make(chan error, 1)
 	var revoke func() error
 	revokeResult := make(chan error, 1)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		recorded := httptest.NewRecorder()
 		fixture.respond(recorded, r)
+		if strings.HasSuffix(r.URL.Path, "/chat/completions") && withdrawDuringResume.CompareAndSwap(true, false) {
+			withdrawResult <- withdraw()
+		}
 		if revokeFinal.Load() && strings.Contains(recorded.Body.String(), "Scope evidence is sufficient") && !strings.Contains(recorded.Body.String(), "tool_calls") && revokeFinal.CompareAndSwap(true, false) {
 			revokeResult <- revoke()
 		}
@@ -128,6 +135,22 @@ func TestProductionRuntimeKnowledgeFilter(t *testing.T) {
 		}
 	}
 	var filter domain.MetadataFilter
+	withdraw = func() error {
+		current, _, ok, err := s.GetDocument(eligible.ID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.New("fixture document missing")
+		}
+		_, err = s.UpdateDocumentMetadata(workspace, current.ID, domain.DocumentMetadataUpdate{ExpectedUpdatedAt: current.UpdatedAt, Metadata: current.Metadata, Lifecycle: &domain.DocumentLifecycle{Status: "withdrawn"}})
+		return err
+	}
+	// Lifecycle restrictions sit outside the user expression. Matching labels,
+	// identical query terms and recent ingestion must not admit inactive sources.
+	for _, lifecycle := range []domain.DocumentLifecycle{{Status: "withdrawn"}, {Status: "draft"}, {ValidFrom: "9999-01-01T00:00:00Z"}, {ValidUntil: "2000-01-01T00:00:00Z"}} {
+		call(t, "/api/documents", map[string]any{"title": "Inactive AgentFlow", "content": "ROLLBACK-742 scoped recovery preserves durable state. FORBIDDEN_SCOPE_CONTENT", "metadata_schema_version": "knowledge-metadata-v1", "metadata": map[string]any{"product": "AgentFlow", "priority": 9}, "lifecycle": lifecycle}, 201)
+	}
 	var autonomous domain.Run
 	if err := json.Unmarshal([]byte(`{"schema_version":"knowledge-metadata-v1","where":{"all":[{"any":[{"field":"document.metadata.product","op":"eq","value":"AgentFlow"},{"field":"chunk.metadata.product","op":"eq","value":"Unmatched"}]},{"field":"chunk.metadata.priority","op":"lt","value":9.00000000000000001},{"field":"document.metadata.priority","op":"in","value":[9,9.0]},{"field":"chunk.metadata.priority","op":"gte","value":-0}]}}`), &filter); err != nil {
 		t.Fatal(err)
@@ -221,6 +244,17 @@ func TestProductionRuntimeKnowledgeFilter(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			updated, err = s.UpdateDocumentMetadata(workspace, eligible.ID, domain.DocumentMetadataUpdate{ExpectedUpdatedAt: eligible.UpdatedAt, Metadata: eligible.Metadata, Lifecycle: &domain.DocumentLifecycle{Status: "withdrawn"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, _, err := runcompletion.ResolveCitations(s.ForWorkspace(domain.NewWorkspaceScope(workspace)), run.ID, "Evidence [S1]"); !errors.Is(err, eligibility.ErrSourceUnavailable) {
+				t.Fatalf("withdrawn citation accepted: %v", err)
+			}
+			eligible, err = s.UpdateDocumentMetadata(workspace, eligible.ID, domain.DocumentMetadataUpdate{ExpectedUpdatedAt: updated.UpdatedAt, Metadata: updated.Metadata, Lifecycle: &domain.DocumentLifecycle{}})
+			if err != nil {
+				t.Fatal(err)
+			}
 			t.Logf("runtime-filter-evidence mode=%s workspace=%s run=%s scope=%s retrievals=%d searches=%d reads=%d restart=%v stale_citation_rejected=true", mode, workspace, run.ID, frozenID, retrievals, searches, reads, mode == "multi_agent")
 		})
 	}
@@ -267,7 +301,7 @@ func TestProductionRuntimeKnowledgeFilter(t *testing.T) {
 	// Seed only a durable crash boundary. All Resume validation, model requests,
 	// retrieval, Tools and completion run through the production command path.
 	var resumable domain.Run
-	for _, corruption := range []string{"", "hash", "policy", "filter"} {
+	for _, corruption := range []string{"", "hash", "policy", "filter", "withdrawn", "withdraw_after_start"} {
 		conv, err := s.CreateConversationInWorkspace(workspace, "Scope recovery")
 		if err != nil {
 			t.Fatal(err)
@@ -298,6 +332,22 @@ func TestProductionRuntimeKnowledgeFilter(t *testing.T) {
 		if _, err := s.UpdateRunStatus(run.ID, domain.RunFailedRecoverable, "fixture crash boundary"); err != nil {
 			t.Fatal(err)
 		}
+		if corruption == "withdrawn" || corruption == "withdraw_after_start" {
+			_, chunks, _, err := s.GetDocument(eligible.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.CreateRunEvent(domain.RunEvent{RunID: run.ID, Type: domain.EventRetrievalCompleted, Payload: map[string]any{"citation_sources": []domain.RAGCitation{{SourceID: "S1", DocumentID: eligible.ID, DocumentVersion: eligible.Version, ChunkID: chunks[0].ID}}}}); err != nil {
+				t.Fatal(err)
+			}
+			if corruption == "withdrawn" {
+				if err := withdraw(); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				withdrawDuringResume.Store(true)
+			}
+		}
 		if err := a.Close(t.Context()); err != nil {
 			t.Fatal(err)
 		}
@@ -312,7 +362,23 @@ func TestProductionRuntimeKnowledgeFilter(t *testing.T) {
 			t.Fatalf("Resume persistence: %v %v", loadErr, recordErr)
 		}
 		if corruption != "" {
-			if !strings.Contains(response.Body.String(), `"code":"invalid_metadata_filter"`) || len(requests) != 0 || updated.Status != domain.RunFailedRecoverable {
+			code := "invalid_metadata_filter"
+			if corruption == "withdrawn" || corruption == "withdraw_after_start" {
+				code = "knowledge_source_unavailable"
+			}
+			wantStatus, wantRequests := domain.RunFailedRecoverable, 0
+			if corruption == "withdraw_after_start" {
+				select {
+				case err := <-withdrawResult:
+					if err != nil {
+						t.Fatal(err)
+					}
+				default:
+					t.Fatal("provider did not reach the withdrawal boundary")
+				}
+				wantStatus, wantRequests = domain.RunFailed, 1
+			}
+			if !strings.Contains(response.Body.String(), `"code":"`+code+`"`) || len(requests) != wantRequests || updated.Status != wantStatus {
 				t.Fatalf("corrupt scope reached provider: requests=%d %s", len(requests), response.Body.String())
 			}
 		} else {
@@ -320,6 +386,16 @@ func TestProductionRuntimeKnowledgeFilter(t *testing.T) {
 				t.Fatalf("Resume lost scope: status=%s requests=%d %s", updated.Status, len(requests), response.Body.String())
 			}
 			resumable = updated
+		}
+		if corruption == "withdrawn" || corruption == "withdraw_after_start" {
+			eligible, _, _, err = s.GetDocument(eligible.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			eligible, err = s.UpdateDocumentMetadata(workspace, eligible.ID, domain.DocumentMetadataUpdate{ExpectedUpdatedAt: eligible.UpdatedAt, Metadata: eligible.Metadata, Lifecycle: &domain.DocumentLifecycle{}})
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 		t.Logf("runtime-filter-recovery-evidence run=%s corruption=%q status=%s requests=%d", run.ID, corruption, updated.Status, len(requests))
 	}

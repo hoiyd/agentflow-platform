@@ -5,7 +5,7 @@
 `PATCH /api/documents/{id}/metadata` replaces custom Document metadata inside the
 authorized Workspace. Send `expected_updated_at` from document detail and a
 non-null `metadata` object. The existing microsecond-precision `updated_at` is
-the concurrency token; no additional revision table or schema migration is used.
+the concurrency token; no additional revision table is used.
 The complete PATCH JSON body is limited to 64 KiB.
 
 Custom fields removed from the object are removed from inherited Chunk fields.
@@ -36,13 +36,15 @@ concurrent content/format/title replacement cannot masquerade as a label retry.
 Metadata-only edits do not migrate an old embedding space; retrieval still checks
 the stored index identity against the current route.
 
-This is metadata update correctness, not business validity/expiry enforcement,
-typed filtering, Document ACLs or automatic metadata enrichment.
+The optional `lifecycle` field uses the same conditional transaction; see
+[Document lifecycle](document-lifecycle.md) for status, effective dates and current
+source rechecks. Label updates alone do not establish validity, Document ACLs
+or automatic enrichment.
 For opt-in field types, schema adoption and declaration ownership, see
 [Metadata schema](metadata-schema.md). Versioned updates validate effective
 Chunk overrides inside the same transaction; legacy equality semantics remain unchanged.
-The typed frontend client exposes `updateDocumentMetadata`; this phase does not
-add a metadata editor to the Knowledge page.
+The typed frontend client exposes `updateDocumentMetadata`. Knowledge detail
+edits lifecycle; custom metadata tables remain read-only.
 
 ## Failure Inventory and Regression Evidence
 

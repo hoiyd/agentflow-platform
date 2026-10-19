@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"strings"
+
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 )
 
 // encoding/json accepts duplicate names with last-value-wins semantics. Reject
@@ -32,9 +34,32 @@ func checkedDocumentJSONDecoder(reader io.Reader, maxBytes int64, depth int) (*j
 	if _, err := check.Token(); err != io.EOF {
 		return nil, errors.New("trailing document JSON")
 	}
+	if depth == 0 {
+		if err := checkLifecycleJSON(data); err != nil {
+			return nil, err
+		}
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	return decoder, nil
+}
+
+// Lifecycle is a request contract, not a free-form metadata map. In particular,
+// JSON null and case aliases must not silently become active/unbounded defaults.
+func checkLifecycleJSON(data []byte) error {
+	var envelope map[string]json.RawMessage
+	if json.Unmarshal(data, &envelope) != nil {
+		return nil
+	} // The caller decodes its own envelope shape.
+	for key, raw := range envelope {
+		if !strings.EqualFold(key, "lifecycle") {
+			continue
+		}
+		if _, err := eligibility.DecodeLifecycle(raw); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func uniqueDocumentJSON(decoder *json.Decoder, depth int) error {

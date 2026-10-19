@@ -27,9 +27,7 @@ func (s *PostgresStore) ListDocumentContextChunks(search domain.DocumentContextS
 		args = append(args, key, value)
 		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))
 	}
-	if search.MetadataFilter != nil {
-		conditions = append(conditions, predicate.SQL(&args))
-	}
+	conditions = append(conditions, predicate.SQL(&args))
 
 	contextConditions := make([]string, 0, 2)
 	if parentID := strings.TrimSpace(search.ParentID); parentID != "" {
@@ -51,7 +49,7 @@ func (s *PostgresStore) ListDocumentContextChunks(search domain.DocumentContextS
 		SELECT
 			d.id, d.workspace_id, d.source_key, d.title, d.version, d.content_hash,
 			d.chunker_version, d.embedding_provider, d.embedding_model, d.embedding_dimensions,
-			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version,
+			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version, d.lifecycle,
 			c.id, c.document_id, c.parent_id, c.section_path, c.start_offset, c.end_offset, c.document_version, c.content_hash, c.chunk_index, c.content, c.token_count, c.metadata, c.created_at,
 			0::double precision AS similarity,
 			0::double precision AS recency_boost,

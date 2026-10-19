@@ -41,9 +41,7 @@ func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]do
 		args = append(args, key, value)
 		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))
 	}
-	if search.MetadataFilter != nil {
-		conditions = append(conditions, predicate.SQL(&args))
-	}
+	conditions = append(conditions, predicate.SQL(&args))
 	if search.MinSimilarity > 0 {
 		args = append(args, search.MinSimilarity)
 		conditions = append(conditions, fmt.Sprintf("(1 - (e.embedding <=> $1::vector)) >= $%d", len(args)))
@@ -57,7 +55,7 @@ func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]do
 		SELECT
 			d.id, d.workspace_id, d.source_key, d.title, d.version, d.content_hash,
 			d.chunker_version, d.embedding_provider, d.embedding_model, d.embedding_dimensions,
-			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version,
+			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version, d.lifecycle,
 			c.id, c.document_id, c.parent_id, c.section_path, c.start_offset, c.end_offset, c.document_version, c.content_hash, c.chunk_index, c.content, c.token_count, c.metadata, c.created_at,
 			1 - (e.embedding <=> $1::vector) AS similarity,
 			0.03 / (1 + GREATEST(EXTRACT(EPOCH FROM (now() - c.created_at)) / 86400, 0) / 30) AS recency_boost,
@@ -118,9 +116,7 @@ func (s *PostgresStore) SearchDocumentChunksLexical(search domain.DocumentSearch
 		args = append(args, key, value)
 		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))
 	}
-	if search.MetadataFilter != nil {
-		conditions = append(conditions, predicate.SQL(&args))
-	}
+	conditions = append(conditions, predicate.SQL(&args))
 
 	lexicalScore := `LEAST(1.0, (
 		CASE WHEN POSITION(lower($1) IN lower(c.content)) > 0 OR POSITION(lower($1) IN lower(d.title)) > 0 OR POSITION(lower($1) IN lower(COALESCE(d.source_uri, ''))) > 0 THEN 1.0 ELSE 0.0 END +
@@ -131,7 +127,7 @@ func (s *PostgresStore) SearchDocumentChunksLexical(search domain.DocumentSearch
 		SELECT
 			d.id, d.workspace_id, d.source_key, d.title, d.version, d.content_hash,
 			d.chunker_version, d.embedding_provider, d.embedding_model, d.embedding_dimensions,
-			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version,
+			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version, d.lifecycle,
 			c.id, c.document_id, c.parent_id, c.section_path, c.start_offset, c.end_offset, c.document_version, c.content_hash, c.chunk_index, c.content, c.token_count, c.metadata, c.created_at,
 			0::double precision AS similarity,
 			` + recencyBoost + ` AS recency_boost,

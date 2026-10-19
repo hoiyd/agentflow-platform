@@ -32,7 +32,7 @@ func (s *PostgresStore) UpdateDocumentMetadata(workspaceID, id string, update do
 	}
 	document, err := scanDocument(tx.QueryRow(`SELECT d.id,d.workspace_id,d.source_key,d.title,d.version,d.content_hash,
 		d.chunker_version,d.embedding_provider,d.embedding_model,d.embedding_dimensions,
-		d.source_type,d.source_uri,d.mime_type,d.metadata,d.created_at,d.updated_at,d.metadata_schema_version,
+		d.source_type,d.source_uri,d.mime_type,d.metadata,d.created_at,d.updated_at,d.metadata_schema_version,d.lifecycle,
 		(SELECT COUNT(*) FROM document_chunks c WHERE c.document_id=d.id),
 		(SELECT COUNT(*) FROM document_chunk_embeddings e JOIN document_chunks c ON c.id=e.chunk_id WHERE c.document_id=d.id)
 		FROM documents d WHERE d.id=$1 AND d.workspace_id=$2`, locked, workspaceID))
@@ -47,7 +47,8 @@ func (s *PostgresStore) UpdateDocumentMetadata(workspaceID, id string, update do
 		return document, nil
 	}
 	metadata, _ := json.Marshal(change.Metadata)
-	if _, err = tx.Exec(`UPDATE documents SET metadata=$1,updated_at=$2,metadata_schema_version=$5 WHERE id=$3 AND workspace_id=$4`, metadata, change.UpdatedAt, document.ID, workspaceID, change.SchemaVersion); err != nil {
+	lifecycle, _ := json.Marshal(change.Lifecycle)
+	if _, err = tx.Exec(`UPDATE documents SET metadata=$1,updated_at=$2,metadata_schema_version=$5,lifecycle=$6 WHERE id=$3 AND workspace_id=$4`, metadata, change.UpdatedAt, document.ID, workspaceID, change.SchemaVersion, lifecycle); err != nil {
 		return domain.Document{}, err
 	}
 	if err := updateDocumentChunkMetadata(tx, document.ID, change); err != nil {
@@ -57,6 +58,7 @@ func (s *PostgresStore) UpdateDocumentMetadata(workspaceID, id string, update do
 		return domain.Document{}, err
 	}
 	document.Metadata, document.UpdatedAt, document.MetadataSchemaVersion = change.Metadata, change.UpdatedAt, change.SchemaVersion
+	document.Lifecycle = change.Lifecycle
 	return document, nil
 }
 

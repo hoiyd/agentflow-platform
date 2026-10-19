@@ -13,7 +13,7 @@ import (
 // Matches never interprets legacy metadata as validated data. Workspace and
 // legacy equality remain separate mandatory predicates, outside user OR groups.
 func (p Predicate) Matches(document domain.Document, chunk domain.DocumentChunk) bool {
-	return p.root == nil || document.MetadataSchemaVersion == metadataschema.Version && p.root.matches(document.Metadata, chunk.Metadata)
+	return lifecycleMatches(document.Lifecycle, p.at) && (p.root == nil || document.MetadataSchemaVersion == metadataschema.Version && p.root.matches(document.Metadata, chunk.Metadata))
 }
 
 func (c condition) matches(document, chunk map[string]any) bool {

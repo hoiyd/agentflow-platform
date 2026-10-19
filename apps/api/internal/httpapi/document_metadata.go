@@ -7,6 +7,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/rag/metadataschema"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -16,6 +17,10 @@ func (h *Handler) updateDocumentMetadata(w http.ResponseWriter, r *http.Request)
 	r.Body = http.MaxBytesReader(w, r.Body, 65536)
 	decoder, err := documentJSONDecoder(r.Body, 65536)
 	if err != nil {
+		if errors.Is(err, eligibility.ErrLifecycle) {
+			writeKnowledgeError(w, r, err)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "invalid or ambiguous metadata JSON")
 		return
 	}

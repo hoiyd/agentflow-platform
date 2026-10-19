@@ -13,6 +13,7 @@ export type DocumentInfo = {
   mime_type?: string;
   metadata: Record<string, unknown>;
   metadata_schema_version?: string;
+  lifecycle?: components["schemas"]["DocumentLifecycle"];
   chunk_count?: number;
   embedding_count?: number;
   index_identity?: {
@@ -294,11 +295,12 @@ export async function createDocument(input: components["schemas"]["DocumentInges
 
 export async function updateDocumentMetadata(
   documentId: string,
-  input: components["schemas"]["DocumentMetadataUpdate"]
+  input: components["schemas"]["DocumentMetadataUpdate"],
+  signal?: AbortSignal
 ): Promise<components["schemas"]["KnowledgeDocument"]> {
   return apiObject<components["schemas"]["KnowledgeDocument"]>(
     `/api/documents/${encodeURIComponent(documentId)}/metadata`,
-    { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) },
+    { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal },
     { errorMessage: "Failed to update document metadata" },
     "document"
   );

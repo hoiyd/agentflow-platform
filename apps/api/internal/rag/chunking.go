@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/rag/metadataschema"
 )
 
@@ -37,6 +38,14 @@ func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.
 		sourceType = "text"
 	}
 	metadata, err := metadataschema.Normalize(req.MetadataSchemaVersion, copyMetadata(req.Metadata))
+	if err != nil {
+		return domain.Document{}, nil, err
+	}
+	lifecycle := domain.DocumentLifecycle{}
+	if req.Lifecycle != nil {
+		lifecycle = *req.Lifecycle
+	}
+	lifecycle, err = eligibility.NormalizeLifecycle(lifecycle)
 	if err != nil {
 		return domain.Document{}, nil, err
 	}
@@ -75,6 +84,7 @@ func BuildDocument(req domain.DocumentIngestRequest) (domain.Document, []domain.
 		Content:               content,
 		Metadata:              metadata,
 		MetadataSchemaVersion: req.MetadataSchemaVersion,
+		Lifecycle:             lifecycle,
 		CreatedAt:             now,
 		UpdatedAt:             now,
 	}

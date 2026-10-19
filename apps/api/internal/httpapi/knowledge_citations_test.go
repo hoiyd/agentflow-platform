@@ -11,6 +11,9 @@ import (
 
 func TestKnowledgeReadGroundingUsesOnlyDeliveredPages(t *testing.T) {
 	storage := fixturestore.New()
+	if _, err := storage.CreateDocument(domain.Document{ID: "doc-1", Title: "Pages", Content: "First selected page. Second selected page. NEVER_DELIVERED"}, []domain.DocumentChunk{{ID: "chunk-1", Content: "First selected page. Second selected page. NEVER_DELIVERED"}}, []domain.DocumentChunkEmbedding{{Embedding: []float64{1}}}); err != nil {
+		t.Fatal(err)
+	}
 	conversation, _ := storage.CreateConversation("read evidence")
 	run, err := storage.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)
 	if err != nil {
@@ -32,7 +35,7 @@ func TestKnowledgeReadGroundingUsesOnlyDeliveredPages(t *testing.T) {
 	}}}})
 	scoped := storage.ForWorkspace(domain.NewWorkspaceScope(domain.DefaultWorkspaceID))
 	sources, err := runcompletion.GroundingSources(scoped, run.ID)
-	if err != nil || len(sources) != 1 || !strings.Contains(sources[0].Content, "First selected page.") || !strings.Contains(sources[0].Content, "Second selected page.") {
+	if err != nil || len(sources) != 1 || !strings.Contains(sources[0].Content, "First selected page.") || !strings.Contains(sources[0].Content, "Second selected page.") || strings.Contains(sources[0].Content, "NEVER_DELIVERED") {
 		t.Fatalf("sources=%#v err=%v", sources, err)
 	}
 }

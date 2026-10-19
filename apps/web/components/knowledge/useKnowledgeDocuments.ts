@@ -117,10 +117,19 @@ export function useKnowledgeDocuments(onDeleteDocument: (documentId: string) => 
     }
   }
 
+  function applyDocumentUpdate(document: DocumentInfo, expectedUpdatedAt: string) {
+    listRequests.cancel();
+    // Accept only the revision the editor actually opened. Navigation/reload
+    // may already have selected another document or loaded a newer revision.
+    setDocuments(items => items.map(item => item.id === document.id && item.updated_at === expectedUpdatedAt ? document : item));
+    setSelectedDocument(current => current?.document.id === document.id && current.document.updated_at === expectedUpdatedAt
+      ? { ...current, document } : current);
+  }
+
   return {
     documents, documentTitle, documentContent, isCreating, uploadTitle, uploadFile, isUploading,
     selectedDocument, selectedDocumentId, isLoadingDocumentDetail, deletingDocumentId, error,
-    refreshDocuments, createTextDocument, selectUploadFile, uploadKnowledgeDocument, selectDocument, removeDocument,
+    refreshDocuments, createTextDocument, selectUploadFile, uploadKnowledgeDocument, selectDocument, removeDocument, applyDocumentUpdate,
     setDocumentTitle, setDocumentContent, setUploadTitle
   };
 }
