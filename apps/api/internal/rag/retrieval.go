@@ -8,6 +8,8 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
+	"agentflow-platform/apps/api/internal/rag/metadatafilter"
 )
 
 type SearchStore interface {
@@ -106,6 +108,10 @@ func EmbeddingQuery(query string) string {
 }
 
 func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSearch, requestedLimit int, embedding Embedding) (domain.DocumentSearchResponse, error) {
+	predicate, err := eligibility.Compile(search.MetadataFilter)
+	if err != nil {
+		return domain.DocumentSearchResponse{}, err
+	}
 	search.Query = strings.TrimSpace(search.Query)
 	if search.Query == "" {
 		return domain.DocumentSearchResponse{}, errors.New("query is required")
@@ -140,6 +146,17 @@ func (p *RetrievalPipeline) Search(ctx context.Context, search domain.DocumentSe
 		lexicalItems, err = p.store.SearchDocumentChunksLexical(search)
 		if err != nil {
 			return domain.DocumentSearchResponse{}, err
+		}
+	}
+	// Store predicates must run before LIMIT. A faulty adapter cannot widen
+	// the read model even if one recall path forgets the eligibility contract.
+	if search.MetadataFilter != nil {
+		for _, candidates := range [][]domain.RetrievedDocumentChunk{denseItems, lexicalItems} {
+			for _, item := range candidates {
+				if domain.NormalizeWorkspaceID(item.Document.WorkspaceID) != search.WorkspaceID || !metadatafilter.Matches(item.Document.Metadata, item.Chunk.Metadata, search.Metadata) || !predicate.Matches(item.Document, item.Chunk) {
+					return domain.DocumentSearchResponse{}, fmt.Errorf("%w: recall returned an ineligible candidate", eligibility.ErrInvariant)
+				}
+			}
 		}
 	}
 	items := mergeRecallCandidates(denseItems, lexicalItems, p.retrievalMode == RetrievalModeLexicalOnly || search.MinSimilarity <= 0)

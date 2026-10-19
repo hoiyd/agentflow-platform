@@ -29,7 +29,7 @@ func Describe() domain.DocumentMetadataSchema {
 		}
 		fields = append(fields, domain.DocumentMetadataField{Key: key, Type: "derived", Owner: "system_derived", Scope: scope})
 	}
-	return domain.DocumentMetadataSchema{Version: Version, Fields: fields, ExtensionPolicy: "preserve_unverified", TypedFiltering: false}
+	return domain.DocumentMetadataSchema{Version: Version, Fields: fields, ExtensionPolicy: "preserve_unverified", TypedFiltering: true}
 }
 
 func IsSystemField(key string) bool {

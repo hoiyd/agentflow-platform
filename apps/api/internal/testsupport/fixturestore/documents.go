@@ -2,6 +2,7 @@ package fixturestore
 
 import (
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/store"
 	"errors"
 	"sort"
@@ -248,6 +249,10 @@ func (s *Store) DeleteDocumentInWorkspace(workspaceID string, id string) error {
 }
 
 func (s *Store) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	predicate, err := eligibility.Compile(search.MetadataFilter)
+	if err != nil {
+		return nil, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	search.WorkspaceID = store.NormalizeWorkspaceID(search.WorkspaceID)
@@ -272,7 +277,7 @@ func (s *Store) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.Ret
 	now := time.Now().UTC()
 	for _, chunk := range s.data.DocumentChunks {
 		document, ok := documentByID[chunk.DocumentID]
-		if !ok || !DocumentChunkMatchesSearch(document, chunk, search) {
+		if !ok || !DocumentChunkMatchesSearch(document, chunk, search) || !predicate.Matches(document, chunk) {
 			continue
 		}
 		embedding, ok := embeddingByChunkID[chunk.ID]
@@ -308,6 +313,10 @@ func (s *Store) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.Ret
 }
 
 func (s *Store) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	predicate, err := eligibility.Compile(search.MetadataFilter)
+	if err != nil {
+		return nil, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	search.WorkspaceID = store.NormalizeWorkspaceID(search.WorkspaceID)
@@ -328,7 +337,7 @@ func (s *Store) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]dom
 	now := time.Now().UTC()
 	for _, chunk := range s.data.DocumentChunks {
 		document, ok := documentByID[chunk.DocumentID]
-		if !ok || !DocumentChunkMatchesSearch(document, chunk, search) {
+		if !ok || !DocumentChunkMatchesSearch(document, chunk, search) || !predicate.Matches(document, chunk) {
 			continue
 		}
 		lexicalScore := DocumentChunkLexicalScore(search, document, chunk)
@@ -357,6 +366,10 @@ func (s *Store) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]dom
 }
 
 func (s *Store) ListDocumentContextChunks(search domain.DocumentContextSearch) ([]domain.RetrievedDocumentChunk, error) {
+	predicate, err := eligibility.Compile(search.MetadataFilter)
+	if err != nil {
+		return nil, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	search.WorkspaceID = store.NormalizeWorkspaceID(search.WorkspaceID)
@@ -381,7 +394,7 @@ func (s *Store) ListDocumentContextChunks(search domain.DocumentContextSearch) (
 	filter := domain.DocumentSearch{WorkspaceID: search.WorkspaceID, Metadata: search.Metadata}
 	items := make([]domain.RetrievedDocumentChunk, 0)
 	for _, chunk := range s.data.DocumentChunks {
-		if chunk.DocumentID != documentID || !DocumentChunkMatchesSearch(document, chunk, filter) {
+		if chunk.DocumentID != documentID || !DocumentChunkMatchesSearch(document, chunk, filter) || !predicate.Matches(document, chunk) {
 			continue
 		}
 		sameParent := strings.TrimSpace(search.ParentID) != "" && chunk.ParentID == strings.TrimSpace(search.ParentID)

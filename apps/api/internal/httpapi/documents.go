@@ -12,6 +12,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/knowledge"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/rag/metadataschema"
 	"agentflow-platform/apps/api/internal/store"
 )
@@ -167,7 +168,29 @@ func (h *Handler) uploadDocument(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
 	var search domain.DocumentSearch
-	if err := json.NewDecoder(r.Body).Decode(&search); err != nil {
+	decoder, err := documentJSONDecoder(r.Body, 65536)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid search json body")
+		return
+	}
+	var envelope map[string]json.RawMessage
+	if err := decoder.Decode(&envelope); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+	for key, value := range envelope {
+		if strings.EqualFold(key, "metadata_filter") {
+			if err := validateMetadataFilterJSON(value); err != nil {
+				writeKnowledgeError(w, r, err)
+				return
+			}
+		}
+	}
+	data, _ := json.Marshal(envelope)
+	decoder = json.NewDecoder(strings.NewReader(string(data)))
+	decoder.UseNumber()
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&search); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
@@ -213,7 +236,9 @@ func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
 
 func writeKnowledgeError(w http.ResponseWriter, r *http.Request, err error) {
 	status := http.StatusBadRequest
-	if errors.Is(err, store.ErrDocumentVersionConflict) || errors.Is(err, store.ErrDocumentMetadataConflict) || errors.Is(err, store.ErrDocumentMetadataRequiresReindex) || rag.IsIndexIncompatible(err) {
+	if errors.Is(err, eligibility.ErrInvariant) {
+		status = http.StatusInternalServerError
+	} else if errors.Is(err, store.ErrDocumentVersionConflict) || errors.Is(err, store.ErrDocumentMetadataConflict) || errors.Is(err, store.ErrDocumentMetadataRequiresReindex) || rag.IsIndexIncompatible(err) {
 		status = http.StatusConflict
 	} else if knowledge.IsEmbeddingError(err) {
 		status = http.StatusBadGateway

@@ -55,7 +55,8 @@ The Knowledge detail view shows the stored schema and separate expandable
 Document/Chunk metadata tables with declaration ownership. It is read-only;
 legacy records are labeled **Legacy / unvalidated**, even for familiar field names.
 Existing [equality filters](metadata-filters.md) retain their cross-layer OR
-semantics. Typed operators and hard expiry/ACL checks are separate features.
+semantics. Optional [typed filters](typed-metadata-filters.md) explicitly address
+one layer and require a matching stored schema; hard expiry/ACL remains separate.
 
 ## Persistence and Compatibility
 

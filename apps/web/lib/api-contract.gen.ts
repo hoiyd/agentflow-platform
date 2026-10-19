@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/rag/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Search inside the authorized Workspace. Legacy metadata and typed metadata_filter are ANDed before semantic/keyword limits and context expansion. User OR never encloses Workspace or schema eligibility. Typed filtering does not implement ACL or expiry. */
+        post: operations["searchKnowledge"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/documents/metadata-schema": {
         parameters: {
             query?: never;
@@ -865,6 +882,35 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        KnowledgeSearchRequest: {
+            query: string;
+            workspace_id?: string;
+            /** @description Legacy exact-text equality; ANDed with metadata_filter. */
+            metadata?: {
+                [key: string]: string;
+            };
+            metadata_filter?: components["schemas"]["MetadataFilter"];
+            limit?: number;
+            min_similarity?: number;
+            knowledge_context_max_tokens?: number;
+        };
+        /** @description Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission. */
+        MetadataFilter: {
+            /** @enum {string} */
+            schema_version: "knowledge-metadata-v1";
+            where: components["schemas"]["MetadataCondition"];
+        };
+        /** @description Exactly one nonempty all/any group OR a field/op/value leaf. At most 4 levels and 32 nodes, including groups. Missing/null fields never match; no NOT or implicit coercion. eq/in support scalars, contains/in support string-array membership, and ranges support numbers/dates only. in accepts 1-32 typed values; array in means any member overlaps. Both metadata layers are explicitly addressed, never ORed implicitly. */
+        MetadataCondition: {
+            all?: components["schemas"]["MetadataCondition"][];
+            any?: components["schemas"]["MetadataCondition"][];
+            /** @enum {string} */
+            field?: "document.metadata.product" | "document.metadata.environment" | "document.metadata.language" | "document.metadata.tags" | "document.metadata.priority" | "document.metadata.is_reference" | "document.metadata.published_at" | "chunk.metadata.product" | "chunk.metadata.environment" | "chunk.metadata.language" | "chunk.metadata.tags" | "chunk.metadata.priority" | "chunk.metadata.is_reference" | "chunk.metadata.published_at";
+            /** @enum {string} */
+            op?: "eq" | "in" | "contains" | "lt" | "lte" | "gt" | "gte";
+            /** @description A field-typed scalar, or array for in. Date-times require explicit timezone, microsecond precision and UTC years 0001-9999; numbers retain exact decimal semantics. Field bounds are defined by the selected metadata schema. */
+            value?: unknown;
+        };
         DocumentIngestRequest: {
             workspace_id?: string;
             source_key?: string;
@@ -899,7 +945,7 @@ export interface components {
             version: string;
             /** @enum {string} */
             extension_policy: "preserve_unverified";
-            /** @description False until the separate typed-filter contract is implemented. */
+            /** @description Whether the server supports the separate bounded metadata_filter request contract. */
             typed_filtering: boolean;
             fields: components["schemas"]["DocumentMetadataField"][];
         };
@@ -2217,6 +2263,41 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    searchKnowledge: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing retrieval response with items, context_items, citation_sources and pipeline metadata. A valid filter with no eligible candidates returns an empty items array and no_match. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+            /** @description A recall adapter violated candidate eligibility; no partial sources are returned. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getDocumentMetadataSchema: {
         parameters: {
             query?: never;

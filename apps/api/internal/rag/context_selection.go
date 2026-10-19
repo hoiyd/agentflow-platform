@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/rag/metadatafilter"
 )
 
@@ -25,6 +26,10 @@ func NewContextSelector(store SearchStore) *ContextSelector {
 }
 
 func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.RetrievedDocumentChunk) ([]domain.RetrievedDocumentChunk, domain.ContextSelectionInfo, domain.KnowledgeSecurityInfo, error) {
+	predicate, filterErr := eligibility.Compile(search.MetadataFilter)
+	if filterErr != nil {
+		return nil, domain.ContextSelectionInfo{}, domain.KnowledgeSecurityInfo{}, filterErr
+	}
 	maxTokens := search.KnowledgeContextMaxTokens
 	if maxTokens <= 0 {
 		maxTokens = DefaultKnowledgeContextMaxTokens
@@ -63,6 +68,9 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 		if documentID == "" || !contextDocumentMatchesWorkspace(match.Document, search.WorkspaceID) {
 			continue
 		}
+		if search.MetadataFilter != nil && (!predicate.Matches(match.Document, match.Chunk) || !metadatafilter.Matches(match.Document.Metadata, match.Chunk.Metadata, search.Metadata)) {
+			continue
+		}
 
 		match.ContextRole = domain.ContextRoleMatchedChild
 		match.MatchedChunkID = match.Chunk.ID
@@ -85,6 +93,7 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 			ChunkIndex:     match.Chunk.ChunkIndex,
 			NeighborWindow: DefaultContextNeighborWindow,
 			Metadata:       search.Metadata,
+			MetadataFilter: search.MetadataFilter,
 		}
 		candidates, err := s.store.ListDocumentContextChunks(scope)
 		if err != nil {
@@ -99,7 +108,7 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 			if _, alreadySelected := selectedIDs[candidate.Chunk.ID]; alreadySelected {
 				continue
 			}
-			if !contextCandidateMatchesScope(candidate, scope) {
+			if !contextCandidateMatchesScope(candidate, scope) || !predicate.Matches(candidate.Document, candidate.Chunk) {
 				continue
 			}
 			expansionCandidates = append(expansionCandidates, candidate)

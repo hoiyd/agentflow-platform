@@ -346,13 +346,7 @@ export async function deleteDocument(documentId: string): Promise<void> {
   );
 }
 
-export async function searchRAG(input: {
-  query: string;
-  metadata?: Record<string, string>;
-  limit?: number;
-  min_similarity?: number;
-  knowledge_context_max_tokens?: number;
-}, signal?: AbortSignal): Promise<DocumentSearchResponse> {
+export async function searchRAG(input: components["schemas"]["KnowledgeSearchRequest"], signal?: AbortSignal): Promise<DocumentSearchResponse> {
   const data = await apiJSON(
     "/api/rag/search",
     {

@@ -2,12 +2,17 @@ package store
 
 import (
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"errors"
 	"fmt"
 	"strings"
 )
 
 func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	predicate, err := eligibility.Compile(search.MetadataFilter)
+	if err != nil {
+		return nil, err
+	}
 	search.WorkspaceID = NormalizeWorkspaceID(search.WorkspaceID)
 	if len(search.Embedding) != 1536 {
 		return nil, fmt.Errorf("document search embedding dimensions must be 1536, got %d", len(search.Embedding))
@@ -35,6 +40,9 @@ func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]do
 	for key, value := range search.Metadata {
 		args = append(args, key, value)
 		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))
+	}
+	if search.MetadataFilter != nil {
+		conditions = append(conditions, predicate.SQL(&args))
 	}
 	if search.MinSimilarity > 0 {
 		args = append(args, search.MinSimilarity)
@@ -78,6 +86,10 @@ func (s *PostgresStore) SearchDocumentChunks(search domain.DocumentSearch) ([]do
 }
 
 func (s *PostgresStore) SearchDocumentChunksLexical(search domain.DocumentSearch) ([]domain.RetrievedDocumentChunk, error) {
+	predicate, err := eligibility.Compile(search.MetadataFilter)
+	if err != nil {
+		return nil, err
+	}
 	search.WorkspaceID = NormalizeWorkspaceID(search.WorkspaceID)
 	queryText := strings.TrimSpace(search.Query)
 	if queryText == "" {
@@ -105,6 +117,9 @@ func (s *PostgresStore) SearchDocumentChunksLexical(search domain.DocumentSearch
 	for key, value := range search.Metadata {
 		args = append(args, key, value)
 		conditions = append(conditions, fmt.Sprintf("(c.metadata ->> $%d = $%d OR d.metadata ->> $%d = $%d)", len(args)-1, len(args), len(args)-1, len(args)))
+	}
+	if search.MetadataFilter != nil {
+		conditions = append(conditions, predicate.SQL(&args))
 	}
 
 	lexicalScore := `LEAST(1.0, (
