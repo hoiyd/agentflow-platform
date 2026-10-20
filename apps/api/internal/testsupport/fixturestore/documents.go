@@ -33,6 +33,9 @@ func (s *Store) CreateDocument(document domain.Document, chunks []domain.Documen
 		}
 	}
 	if existing != nil {
+		if existing.Lifecycle != document.Lifecycle {
+			return domain.Document{}, store.ErrDocumentMetadataConflict
+		}
 		if existing.MetadataSchemaVersion != "" && existing.MetadataSchemaVersion != document.MetadataSchemaVersion {
 			return domain.Document{}, store.ErrDocumentMetadataConflict
 		}
@@ -40,7 +43,7 @@ func (s *Store) CreateDocument(document domain.Document, chunks []domain.Documen
 			return domain.Document{}, store.DocumentVersionConflict(*existing, document)
 		}
 		if len(replacedDocumentIDs) == 1 && store.SameDocumentIndexInputs(*existing, document) && existing.IndexIdentity == document.IndexIdentity {
-			if existing.MetadataSchemaVersion != document.MetadataSchemaVersion || !store.SameDocumentMetadata(existing.Metadata, document.Metadata) {
+			if existing.MetadataSchemaVersion != document.MetadataSchemaVersion || !store.SameDocumentMetadata(existing.Metadata, document.Metadata) || existing.Lifecycle != document.Lifecycle {
 				return domain.Document{}, store.ErrDocumentMetadataConflict
 			}
 			return *existing, nil
@@ -94,8 +97,9 @@ func (s *Store) ListDocumentIndexIdentities(workspaceID string) ([]domain.Docume
 	workspaceID = store.NormalizeWorkspaceID(workspaceID)
 	seen := map[domain.DocumentIndexIdentity]bool{}
 	items := []domain.DocumentIndexIdentity{}
+	predicate, _ := eligibility.Compile(nil)
 	for _, document := range s.data.Documents {
-		if document.WorkspaceID == workspaceID && !seen[document.IndexIdentity] {
+		if document.WorkspaceID == workspaceID && !seen[document.IndexIdentity] && predicate.Matches(document, domain.DocumentChunk{}) {
 			seen[document.IndexIdentity] = true
 			items = append(items, document.IndexIdentity)
 		}

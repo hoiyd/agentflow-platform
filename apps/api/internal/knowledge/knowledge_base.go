@@ -95,17 +95,20 @@ func (s *KnowledgeBase) Ingest(ctx context.Context, request domain.DocumentInges
 		if found && request.MetadataSchemaVersion == "" {
 			request.MetadataSchemaVersion = existing.MetadataSchemaVersion
 		}
+		if found && request.Lifecycle == nil {
+			request.Lifecycle = &existing.Lifecycle
+		}
 	}
 	document, chunks, err := rag.BuildDocument(request)
 	if err != nil {
 		return domain.Document{}, err
 	}
 	if found {
-		if store.SameDocumentIndexInputs(existing, document) && (request.ExpectedUpdatedAt != nil || existing.MetadataSchemaVersion != document.MetadataSchemaVersion || !store.SameDocumentMetadata(existing.Metadata, document.Metadata)) {
+		if store.SameDocumentIndexInputs(existing, document) && (request.ExpectedUpdatedAt != nil || existing.MetadataSchemaVersion != document.MetadataSchemaVersion || !store.SameDocumentMetadata(existing.Metadata, document.Metadata) || existing.Lifecycle != document.Lifecycle) {
 			if request.ExpectedUpdatedAt == nil {
 				return domain.Document{}, store.ErrDocumentMetadataConflict
 			}
-			return s.UpdateMetadata(ctx, document.WorkspaceID, existing.ID, domain.DocumentMetadataUpdate{ExpectedUpdatedAt: *request.ExpectedUpdatedAt, Metadata: document.Metadata, MetadataSchemaVersion: document.MetadataSchemaVersion, ExpectedIndexInputs: &document})
+			return s.UpdateMetadata(ctx, document.WorkspaceID, existing.ID, domain.DocumentMetadataUpdate{ExpectedUpdatedAt: *request.ExpectedUpdatedAt, Metadata: document.Metadata, MetadataSchemaVersion: document.MetadataSchemaVersion, Lifecycle: &document.Lifecycle, ExpectedIndexInputs: &document})
 		}
 	}
 	if request.ExpectedUpdatedAt != nil {

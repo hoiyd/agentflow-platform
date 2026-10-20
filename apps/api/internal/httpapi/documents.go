@@ -71,6 +71,10 @@ func (h *Handler) createDocument(w http.ResponseWriter, r *http.Request) {
 	var req domain.DocumentIngestRequest
 	decoder, err := documentJSONDecoder(r.Body, documentUploadMaxBytes)
 	if err != nil {
+		if errors.Is(err, eligibility.ErrLifecycle) {
+			writeKnowledgeError(w, r, err)
+			return
+		}
 		writeError(w, http.StatusBadRequest, "invalid or ambiguous document JSON")
 		return
 	}

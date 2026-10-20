@@ -2,6 +2,7 @@ package store
 
 import (
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"bytes"
 	"database/sql"
 	"encoding/json"
@@ -13,6 +14,7 @@ func scanDocument(row scanner) (domain.Document, error) {
 	var sourceURI sql.NullString
 	var mimeType sql.NullString
 	var metadataJSON []byte
+	var lifecycleJSON []byte
 	if err := row.Scan(
 		&document.ID,
 		&workspaceID,
@@ -31,6 +33,7 @@ func scanDocument(row scanner) (domain.Document, error) {
 		&document.CreatedAt,
 		&document.UpdatedAt,
 		&document.MetadataSchemaVersion,
+		&lifecycleJSON,
 		&document.ChunkCount,
 		&document.EmbeddingCount,
 	); err != nil {
@@ -52,6 +55,10 @@ func scanDocument(row scanner) (domain.Document, error) {
 	}
 	if document.Metadata == nil {
 		document.Metadata = map[string]any{}
+	}
+	var err error
+	if document.Lifecycle, err = eligibility.DecodeLifecycle(lifecycleJSON); err != nil {
+		return domain.Document{}, err
 	}
 	document.CreatedAt, document.UpdatedAt = document.CreatedAt.UTC(), document.UpdatedAt.UTC()
 	return document, nil
@@ -101,6 +108,7 @@ func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, err
 	var sourceURI sql.NullString
 	var mimeType sql.NullString
 	var documentMetadataJSON []byte
+	var lifecycleJSON []byte
 	var chunkMetadataJSON []byte
 	var sectionPathJSON []byte
 	if err := row.Scan(
@@ -121,6 +129,7 @@ func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, err
 		&item.Document.CreatedAt,
 		&item.Document.UpdatedAt,
 		&item.Document.MetadataSchemaVersion,
+		&lifecycleJSON,
 		&item.Chunk.ID,
 		&item.Chunk.DocumentID,
 		&item.Chunk.ParentID,
@@ -166,6 +175,10 @@ func scanRetrievedDocumentChunk(row scanner) (domain.RetrievedDocumentChunk, err
 	}
 	if item.Document.Metadata == nil {
 		item.Document.Metadata = map[string]any{}
+	}
+	var err error
+	if item.Document.Lifecycle, err = eligibility.DecodeLifecycle(lifecycleJSON); err != nil {
+		return domain.RetrievedDocumentChunk{}, err
 	}
 	if item.Chunk.Metadata == nil {
 		item.Chunk.Metadata = map[string]any{}

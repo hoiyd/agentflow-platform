@@ -95,6 +95,16 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 		if resume {
 			reason, failRun = ResumeFailurePolicy(err)
 		}
+		if errors.Is(err, eligibility.ErrSourceUnavailable) {
+			// A pre-admission rejection preserves the recovery point. Once the
+			// Runtime has accepted execution, settle a later revocation failure;
+			// it must not leave an unowned Run permanently marked running.
+			current, found, loadErr := scoped.GetRun(id)
+			if loadErr != nil {
+				return c.fail(scoped, id, loadErr, true, observer)
+			}
+			failRun = found && current.Status == domain.RunRunning
+		}
 		return c.fail(scoped, id, commandError(reason, err), failRun, observer)
 	}
 	if resume {
@@ -115,7 +125,7 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 }
 
 func ContinuationFailurePolicy(err error) (Reason, bool) {
-	if errors.Is(err, eligibility.ErrInvalid) {
+	if errors.Is(err, eligibility.ErrInvalid) || errors.Is(err, eligibility.ErrSourceUnavailable) {
 		return Conflict, false
 	}
 	if errors.Is(err, agent.ErrNoEligibleAgent) || errors.Is(err, agent.ErrNoSuitableAgent) || errors.Is(err, agent.ErrInvalidRoutingRequirements) {
@@ -125,7 +135,7 @@ func ContinuationFailurePolicy(err error) (Reason, bool) {
 }
 
 func ResumeFailurePolicy(err error) (Reason, bool) {
-	if errors.Is(err, eligibility.ErrInvalid) || errors.Is(err, agent.ErrRuntimeSnapshotResumeUnsupported) || errors.Is(err, agent.ErrRuntimeSnapshotUnavailable) || errors.Is(err, checkpoint.ErrNeedsReconciliation) || errors.Is(err, checkpoint.ErrCheckpointStale) || errors.Is(err, agent.ErrRuntimeExecutorUnsupported) {
+	if errors.Is(err, eligibility.ErrInvalid) || errors.Is(err, eligibility.ErrSourceUnavailable) || errors.Is(err, agent.ErrRuntimeSnapshotResumeUnsupported) || errors.Is(err, agent.ErrRuntimeSnapshotUnavailable) || errors.Is(err, checkpoint.ErrNeedsReconciliation) || errors.Is(err, checkpoint.ErrCheckpointStale) || errors.Is(err, agent.ErrRuntimeExecutorUnsupported) {
 		return Conflict, false
 	}
 	if strings.Contains(err.Error(), "not waiting for user input") || strings.Contains(err.Error(), "not recoverable") {

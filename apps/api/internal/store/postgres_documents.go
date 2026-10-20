@@ -2,6 +2,7 @@ package store
 
 import (
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -34,6 +35,11 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 			return domain.Document{}, err
 		}
 		if found {
+			// A content rebuild cannot overwrite a concurrent withdrawal. Change
+			// lifecycle through its conditional update before replacing the index.
+			if existing.Lifecycle != document.Lifecycle {
+				return domain.Document{}, ErrDocumentMetadataConflict
+			}
 			if existing.MetadataSchemaVersion != "" && existing.MetadataSchemaVersion != document.MetadataSchemaVersion {
 				return domain.Document{}, ErrDocumentMetadataConflict
 			}
@@ -41,7 +47,7 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 				return domain.Document{}, DocumentVersionConflict(existing, document)
 			}
 			if SameDocumentIndexInputs(existing, document) && existing.IndexIdentity == document.IndexIdentity {
-				if existing.MetadataSchemaVersion != document.MetadataSchemaVersion || !SameDocumentMetadata(existing.Metadata, document.Metadata) {
+				if existing.MetadataSchemaVersion != document.MetadataSchemaVersion || !SameDocumentMetadata(existing.Metadata, document.Metadata) || existing.Lifecycle != document.Lifecycle {
 					return domain.Document{}, ErrDocumentMetadataConflict
 				}
 				return existing, nil
@@ -54,12 +60,13 @@ func (s *PostgresStore) CreateDocument(document domain.Document, chunks []domain
 		}
 	}
 
+	lifecycleJSON, _ := json.Marshal(document.Lifecycle)
 	if _, err := tx.Exec(`
-		INSERT INTO documents (id, workspace_id, source_key, title, version, content_hash, chunker_version, embedding_provider, embedding_model, embedding_dimensions, source_type, source_uri, mime_type, content, metadata, created_at, updated_at, metadata_schema_version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+		INSERT INTO documents (id, workspace_id, source_key, title, version, content_hash, chunker_version, embedding_provider, embedding_model, embedding_dimensions, source_type, source_uri, mime_type, content, metadata, created_at, updated_at, metadata_schema_version, lifecycle)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
 		document.ID, document.WorkspaceID, document.SourceKey, document.Title, document.Version, document.ContentHash,
 		document.IndexIdentity.ChunkerVersion, document.IndexIdentity.EmbeddingProvider, document.IndexIdentity.EmbeddingModel, document.IndexIdentity.EmbeddingDimensions,
-		document.SourceType, nullString(document.SourceURI), nullString(document.MimeType), document.Content, metadataJSON, document.CreatedAt, document.UpdatedAt, document.MetadataSchemaVersion); err != nil {
+		document.SourceType, nullString(document.SourceURI), nullString(document.MimeType), document.Content, metadataJSON, document.CreatedAt, document.UpdatedAt, document.MetadataSchemaVersion, lifecycleJSON); err != nil {
 		return domain.Document{}, err
 	}
 
@@ -112,7 +119,7 @@ func getDocumentBySource(db documentQueryer, workspaceID, sourceKey string) (dom
 	row := db.QueryRow(`
 		SELECT d.id, d.workspace_id, d.source_key, d.title, d.version, d.content_hash,
 			d.chunker_version, d.embedding_provider, d.embedding_model, d.embedding_dimensions,
-			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version,
+			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version, d.lifecycle,
 			COUNT(DISTINCT c.id), COUNT(e.chunk_id)
 		FROM documents d
 		LEFT JOIN document_chunks c ON c.document_id = d.id
@@ -130,7 +137,7 @@ func (s *PostgresStore) ListDocuments() ([]domain.Document, error) {
 	rows, err := s.db.Query(`
 		SELECT d.id, d.workspace_id, d.source_key, d.title, d.version, d.content_hash,
 			d.chunker_version, d.embedding_provider, d.embedding_model, d.embedding_dimensions,
-			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version,
+			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version, d.lifecycle,
 			COUNT(DISTINCT c.id) AS chunk_count,
 			COUNT(e.chunk_id) AS embedding_count
 		FROM documents d
@@ -158,7 +165,7 @@ func (s *PostgresStore) ListDocumentsByWorkspace(workspaceID string) ([]domain.D
 	rows, err := s.db.Query(`
 		SELECT d.id, d.workspace_id, d.source_key, d.title, d.version, d.content_hash,
 			d.chunker_version, d.embedding_provider, d.embedding_model, d.embedding_dimensions,
-			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version,
+			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version, d.lifecycle,
 			COUNT(DISTINCT c.id), COUNT(e.chunk_id)
 		FROM documents d
 		LEFT JOIN document_chunks c ON c.document_id = d.id
@@ -180,11 +187,13 @@ func (s *PostgresStore) ListDocumentsByWorkspace(workspaceID string) ([]domain.D
 }
 
 func (s *PostgresStore) ListDocumentIndexIdentities(workspaceID string) ([]domain.DocumentIndexIdentity, error) {
+	predicate, _ := eligibility.Compile(nil)
+	args := []any{NormalizeWorkspaceID(workspaceID)}
+	where := predicate.SQL(&args)
 	rows, err := s.db.Query(`
 		SELECT DISTINCT chunker_version, embedding_provider, embedding_model, embedding_dimensions
-		FROM documents
-		WHERE workspace_id = $1`,
-		NormalizeWorkspaceID(workspaceID))
+		FROM documents d
+		WHERE workspace_id = $1 AND `+where, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +213,7 @@ func (s *PostgresStore) GetDocument(id string) (domain.Document, []domain.Docume
 	row := s.db.QueryRow(`
 		SELECT d.id, d.workspace_id, d.source_key, d.title, d.version, d.content_hash,
 			d.chunker_version, d.embedding_provider, d.embedding_model, d.embedding_dimensions,
-			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version,
+			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version, d.lifecycle,
 			COUNT(DISTINCT c.id) AS chunk_count,
 			COUNT(e.chunk_id) AS embedding_count
 		FROM documents d
@@ -246,7 +255,7 @@ func (s *PostgresStore) GetDocumentInWorkspace(workspaceID string, id string) (d
 	row := s.db.QueryRow(`
 		SELECT d.id, d.workspace_id, d.source_key, d.title, d.version, d.content_hash,
 			d.chunker_version, d.embedding_provider, d.embedding_model, d.embedding_dimensions,
-			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version,
+			d.source_type, d.source_uri, d.mime_type, d.metadata, d.created_at, d.updated_at, d.metadata_schema_version, d.lifecycle,
 			COUNT(DISTINCT c.id) AS chunk_count,
 			COUNT(e.chunk_id) AS embedding_count
 		FROM documents d

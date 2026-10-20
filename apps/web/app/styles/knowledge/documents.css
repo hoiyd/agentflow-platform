@@ -186,3 +186,58 @@
 .document-metadata th:last-child { width: 30%; }
 .document-metadata th { font-weight: 600; }
 .document-metadata code { white-space: pre-wrap; font-size: 11px; }
+
+.document-lifecycle {
+  margin-top: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+
+.document-lifecycle-heading,
+.document-lifecycle-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.document-lifecycle-heading {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.document-lifecycle-heading span {
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
+.document-lifecycle-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+}
+
+.document-lifecycle-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
+.document-lifecycle-fields input {
+  min-width: 0;
+  width: 100%;
+  height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.document-lifecycle-fields .selection-menu { width: 100%; }
+.document-lifecycle-fields .selection-trigger { min-height: 40px; }
+.document-lifecycle-actions { justify-content: flex-end; margin-top: 12px; }
+.document-lifecycle-actions button { display: inline-flex; align-items: center; gap: 6px; }

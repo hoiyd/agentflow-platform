@@ -231,40 +231,8 @@ func knowledgeEvidenceForRun(scoped store.WorkspaceStore, runID string) (knowled
 		if !ok {
 			return knowledgeRunEvidence{}, store.ErrNotFound("run")
 		}
-		filter, err := eligibility.FrozenFilter(run.RuntimeSnapshot)
-		if err != nil {
+		if err := eligibility.ValidateSources(run.RuntimeSnapshot, run.WorkspaceID, evidence.sources, scoped.GetDocument); err != nil {
 			return knowledgeRunEvidence{}, err
-		}
-		if filter != nil {
-			predicate, err := eligibility.Compile(filter)
-			if err != nil {
-				return knowledgeRunEvidence{}, err
-			}
-			for _, source := range evidence.sources {
-				doc, chunks, ok, err := scoped.GetDocument(source.DocumentID)
-				if err != nil {
-					return knowledgeRunEvidence{}, err
-				}
-				if !ok || doc.WorkspaceID != run.WorkspaceID || doc.Version != source.DocumentVersion {
-					return knowledgeRunEvidence{}, fmt.Errorf("Knowledge citation source is unavailable or changed")
-				}
-				ids := source.SourceChunkIDs
-				if len(ids) == 0 {
-					ids = []string{source.ChunkID}
-				}
-				for _, id := range ids {
-					found := false
-					for _, chunk := range chunks {
-						if chunk.ID == id && chunk.DocumentID == doc.ID && predicate.Matches(doc, chunk) {
-							found = true
-							break
-						}
-					}
-					if !found {
-						return knowledgeRunEvidence{}, fmt.Errorf("Knowledge citation no longer meets this Run's saved scope")
-					}
-				}
-			}
 		}
 	}
 	return evidence, nil

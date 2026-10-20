@@ -68,7 +68,7 @@ func (s *ContextSelector) Select(search domain.DocumentSearch, matches []domain.
 		if documentID == "" || !contextDocumentMatchesWorkspace(match.Document, search.WorkspaceID) {
 			continue
 		}
-		if search.MetadataFilter != nil && (!predicate.Matches(match.Document, match.Chunk) || !metadatafilter.Matches(match.Document.Metadata, match.Chunk.Metadata, search.Metadata)) {
+		if !predicate.Matches(match.Document, match.Chunk) || !metadatafilter.Matches(match.Document.Metadata, match.Chunk.Metadata, search.Metadata) {
 			continue
 		}
 

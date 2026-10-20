@@ -16,6 +16,7 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/progress"
@@ -35,6 +36,9 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	}
 	if !ok {
 		return turn.Result{}, fmt.Errorf("run not found")
+	}
+	if err := m.runtime.validateKnowledgeEvidence(run); err != nil {
+		return turn.Result{}, err
 	}
 	if run.CompletionContract != nil && run.CompletionContract.Output != nil {
 		if err := verification.ValidateFrozenContract(run.CompletionContract); err != nil {
@@ -187,8 +191,22 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 	}
 	if len(m.runtime.knowledgeTools) > 0 {
 		session.LoadKnowledgeReads = func() ([]domain.KnowledgeToolReadResult, error) {
+			run, ok, err := m.runtime.store.GetRun(request.RunID)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, eligibility.ErrSourceUnavailable
+			}
 			events, err := m.runtime.store.ListRunEvents(request.RunID)
 			if err != nil {
+				return nil, err
+			}
+			// Assembly runs again for every Tool round. Recheck even this Turn's
+			// paired observations before sending a continuation to the provider.
+			if err := eligibility.ValidateSources(run.RuntimeSnapshot, run.WorkspaceID, rag.RunCitationReservations(events), func(id string) (domain.Document, []domain.DocumentChunk, bool, error) {
+				return m.runtime.store.GetDocumentInWorkspace(run.WorkspaceID, id)
+			}); err != nil {
 				return nil, err
 			}
 			reads := []domain.KnowledgeToolReadResult{}

@@ -9,6 +9,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/rag/metadatafilter"
 	"agentflow-platform/apps/api/internal/rag/metadataschema"
 )
@@ -41,6 +42,7 @@ type DocumentMetadataChange struct {
 	PreviousInherited map[string]any
 	UpdatedAt         time.Time
 	SchemaVersion     string
+	Lifecycle         domain.DocumentLifecycle
 }
 
 func PrepareDocumentMetadataChange(document domain.Document, update domain.DocumentMetadataUpdate) (DocumentMetadataChange, error) {
@@ -59,6 +61,14 @@ func PrepareDocumentMetadataChange(document domain.Document, update domain.Docum
 		return DocumentMetadataChange{}, err
 	}
 	update.Metadata = validated
+	lifecycle := document.Lifecycle
+	if update.Lifecycle != nil {
+		lifecycle = *update.Lifecycle
+	}
+	lifecycle, err = eligibility.NormalizeLifecycle(lifecycle)
+	if err != nil {
+		return DocumentMetadataChange{}, err
+	}
 	encoded, err := json.Marshal(update.Metadata)
 	if err != nil || len(encoded) > 65536 {
 		return DocumentMetadataChange{}, ErrInvalidDocumentMetadata
@@ -95,8 +105,9 @@ func PrepareDocumentMetadataChange(document domain.Document, update domain.Docum
 	if err := metadataschema.ValidateDocumentLabels(prospective); err != nil {
 		return DocumentMetadataChange{}, err
 	}
-	change := DocumentMetadataChange{Metadata: metadata, Inherited: map[string]any{}, UpdatedAt: document.UpdatedAt, SchemaVersion: version}
-	if SameDocumentMetadata(metadata, document.Metadata) && version == document.MetadataSchemaVersion {
+	change := DocumentMetadataChange{Metadata: metadata, Inherited: map[string]any{}, UpdatedAt: document.UpdatedAt, SchemaVersion: version, Lifecycle: lifecycle}
+	previousLifecycle, _ := eligibility.NormalizeLifecycle(document.Lifecycle)
+	if SameDocumentMetadata(metadata, document.Metadata) && version == document.MetadataSchemaVersion && lifecycle == previousLifecycle {
 		return change, nil
 	}
 	if !document.UpdatedAt.Equal(update.ExpectedUpdatedAt) {

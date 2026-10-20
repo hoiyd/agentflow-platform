@@ -8,6 +8,7 @@ import (
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/rag/metadataschema"
 )
 
@@ -62,6 +63,10 @@ func PrepareDocumentWrite(document domain.Document, chunks []domain.DocumentChun
 		return domain.Document{}, nil, nil, err
 	}
 	document.Metadata = validated
+	document.Lifecycle, err = eligibility.NormalizeLifecycle(document.Lifecycle)
+	if err != nil {
+		return domain.Document{}, nil, nil, err
+	}
 	if err := metadataschema.ValidateDocumentLabels(document); err != nil {
 		return domain.Document{}, nil, nil, err
 	}

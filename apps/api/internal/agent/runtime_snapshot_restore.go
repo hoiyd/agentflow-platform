@@ -42,6 +42,9 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 		return restoredRuntime{}, fmt.Errorf("run %s cannot be resumed safely: %w", run.ID, err)
 	}
 	snapshot := run.RuntimeSnapshot
+	if err := r.validateKnowledgeEvidence(run); err != nil {
+		return restoredRuntime{}, err
+	}
 	if _, err := r.currentRunAgent(run, snapshot.Agent.ID); err != nil {
 		return restoredRuntime{}, err
 	}

@@ -1,8 +1,8 @@
 # Knowledge / RAG
 
 For conditional label changes without re-embedding, see
-[Metadata updates](metadata-updates.md). Content/index replacement and business
-expiry enforcement are separate concerns.
+[Metadata updates](metadata-updates.md). [Document lifecycle](document-lifecycle.md)
+owns mandatory status/validity checks; content/index replacement remains separate.
 The optional [metadata schema](metadata-schema.md) validates business fields and
 separates owner declarations, system structure and unverified extensions.
 For Workbench filters and immutable Run/Tool constraints, see

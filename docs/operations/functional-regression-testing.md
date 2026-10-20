@@ -31,6 +31,7 @@ Write or update this inventory before adding isolated fixtures.
 | Workspace switching retains a prior draft or request | Discard stale state; archived Workspaces remain read-only |
 | Knowledge ingestion/search/deletion disagree | Real index detail and retrieval show the inserted document; deletion returns 404 |
 | A Knowledge filter disappears between search, execution or recovery | [Runtime scope gate](../knowledge/runtime-knowledge-filters.md#verification) checks frozen scope, source drift and revoked access |
+| Withdrawn/expired Knowledge is reused or an edit overwrites a newer revision | [Lifecycle gate](../knowledge/document-lifecycle.md#verification) checks persisted edits, current-source reads, restart and three runtime modes |
 | Memory corrections/deletions lose version or remain recalled | History records the correction; version increases; deletion clears content and recall |
 | Two command callbacks fire before a React render | Only one command is admitted and one optimistic message pair is created |
 | Continue becomes clickable before the previous command settles | `tool-progress.spec.ts` delays history, then checks disabled approval, successful Continue and persisted completion |

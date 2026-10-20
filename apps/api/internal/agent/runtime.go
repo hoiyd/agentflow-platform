@@ -79,6 +79,7 @@ type RuntimeStore interface {
 	UpdateRunStatus(string, domain.RunStatus, string) (domain.Run, error)
 	UpdateRunHeartbeat(string) (domain.Run, error)
 	GetRun(string) (domain.Run, bool, error)
+	GetDocumentInWorkspace(string, string) (domain.Document, []domain.DocumentChunk, bool, error)
 	CreateCollaborationStep(domain.CollaborationStep) (domain.CollaborationStep, error)
 	UpdateCollaborationStep(string, domain.CollaborationStepStatus, string, string) (domain.CollaborationStep, error)
 	UpdateCollaborationStepOutput(string, string) (domain.CollaborationStep, error)

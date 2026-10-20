@@ -404,6 +404,9 @@ func TestCompleteStreamingRunPersistsMessageAndCompletesRun(t *testing.T) {
 
 func TestCompleteStreamingRunPersistsOnlyCitationsSelectedForModelContext(t *testing.T) {
 	fixtureStore := fixturestore.New()
+	if _, err := fixtureStore.CreateDocument(domain.Document{ID: "doc-1", Title: "Selected", Content: "Supported facts."}, []domain.DocumentChunk{{ID: "chunk-1", Content: "Supported facts."}}, []domain.DocumentChunkEmbedding{{Embedding: []float64{1}}}); err != nil {
+		t.Fatal(err)
+	}
 
 	conversation, _ := fixtureStore.CreateConversation("citation completion")
 	run, _ := fixtureStore.CreateRunWithContract("agent_planner", conversation.ID, testRuntimeSnapshot(), nil)

@@ -18,11 +18,13 @@ var postgresDocumentSchema = []string{
 		content text NOT NULL,
 		metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
 		metadata_schema_version text NOT NULL DEFAULT '',
+		lifecycle jsonb NOT NULL DEFAULT '{"status":"active"}'::jsonb,
 		created_at timestamptz NOT NULL,
 		updated_at timestamptz NOT NULL
 	)`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS version text NOT NULL DEFAULT ''`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS metadata_schema_version text NOT NULL DEFAULT ''`,
+	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS lifecycle jsonb NOT NULL DEFAULT '{"status":"active"}'::jsonb`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS content_hash text NOT NULL DEFAULT ''`,
 	`ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_key text NOT NULL DEFAULT ''`,
 	`UPDATE documents SET source_key = BTRIM(source_uri) WHERE source_key = '' AND OCTET_LENGTH(BTRIM(source_uri)) BETWEEN 1 AND 512`,

@@ -206,6 +206,10 @@ with changed content returns 409/`document_version_conflict`; a new version
 atomically replaces the index and preserves the document ID. Failed replacement
 keeps the old index. Deletion removes chunks and embeddings too.
 
+The typed `lifecycle` field controls current status/validity independently of
+metadata labels. See [Document lifecycle](../knowledge/document-lifecycle.md)
+for conditional updates, mandatory retrieval gates and recovery behavior.
+
 Search fails with 409/`knowledge_index_incompatible` for unknown/mixed active
 chunker or embedding identities. Reindex or delete incompatible sources;
 the server does not search partial or mixed vector spaces.

@@ -184,7 +184,7 @@ func (s *KnowledgeBase) readTool(ctx context.Context, storage ToolStore, args js
 			return nil, &tool.ExecutionError{Code: tool.ErrorNoResults, Message: "Knowledge chunk changed; search again"}
 		}
 		if !predicate.Matches(document, chunk) {
-			return nil, &tool.ExecutionError{Code: tool.ErrorNoResults, Message: "Knowledge source no longer meets this Run's saved scope; search again"}
+			return nil, &tool.ExecutionError{Code: tool.ErrorNoResults, Message: "Knowledge source no longer meets current lifecycle or this Run's saved scope; search again"}
 		}
 		item := domain.RetrievedDocumentChunk{Document: document, Chunk: chunk}
 		allowed, _ := rag.GuardPromptInjection([]domain.RetrievedDocumentChunk{item})

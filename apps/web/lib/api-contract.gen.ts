@@ -934,6 +934,7 @@ export interface components {
             };
             /** @description Opt into knowledge-metadata-v1. Omission retains an existing source's version or creates legacy metadata for a new source. */
             metadata_schema_version?: string;
+            lifecycle?: components["schemas"]["DocumentLifecycle"];
             /** Format: date-time */
             expected_updated_at?: string;
         };
@@ -949,6 +950,22 @@ export interface components {
             };
             /** @description Explicit knowledge-metadata-v1 adoption; omission retains the stored version. Known fields are validated and dates normalized to UTC. */
             metadata_schema_version?: string;
+            /** @description Omission preserves lifecycle; an empty object resets active/unbounded. Uses the same optimistic concurrency token as metadata. */
+            lifecycle?: components["schemas"]["DocumentLifecycle"];
+        };
+        /** @description Document-owned hard eligibility, independent of metadata labels. Missing status means active. UTC validity is [valid_from, valid_until); missing bounds are unlimited. Publication time is informational, not permission or a retrieval gate. Timestamps require explicit timezone, microsecond precision and UTC years 0001-9999. */
+        DocumentLifecycle: {
+            /**
+             * @default active
+             * @enum {string}
+             */
+            status: "active" | "draft" | "withdrawn";
+            /** Format: date-time */
+            valid_from?: string;
+            /** Format: date-time */
+            valid_until?: string;
+            /** Format: date-time */
+            published_at?: string;
         };
         DocumentMetadataSchema: {
             version: string;
@@ -1014,6 +1031,7 @@ export interface components {
             };
             /** @description Absent for legacy data; migration never fabricates validation. */
             metadata_schema_version?: string;
+            lifecycle?: components["schemas"]["DocumentLifecycle"];
             chunk_count?: number;
             embedding_count?: number;
             index_identity: {
