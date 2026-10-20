@@ -3,11 +3,13 @@ package rageval
 import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/rag"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,11 +22,13 @@ type corpusManifest struct {
 }
 
 type corpusDocument struct {
-	File      string         `json:"file"`
-	SourceKey string         `json:"source_key,omitempty"`
-	Version   string         `json:"version,omitempty"`
-	Title     string         `json:"title"`
-	Metadata  map[string]any `json:"metadata"`
+	File                  string                    `json:"file"`
+	SourceKey             string                    `json:"source_key,omitempty"`
+	Version               string                    `json:"version,omitempty"`
+	Title                 string                    `json:"title"`
+	Metadata              map[string]any            `json:"metadata"`
+	MetadataSchemaVersion string                    `json:"metadata_schema_version,omitempty"`
+	Lifecycle             *domain.DocumentLifecycle `json:"lifecycle,omitempty"`
 }
 
 func loadDataset(path string) (domain.RAGGoldenDataset, string, error) {
@@ -33,7 +37,7 @@ func loadDataset(path string) (domain.RAGGoldenDataset, string, error) {
 		return domain.RAGGoldenDataset{}, "", fmt.Errorf("read dataset: %w", err)
 	}
 	var dataset domain.RAGGoldenDataset
-	if err := json.Unmarshal(content, &dataset); err != nil {
+	if err := rag.DecodeEvaluationJSON(content, &dataset); err != nil {
 		return dataset, "", fmt.Errorf("decode dataset: %w", err)
 	}
 	if _, _, err := rag.ResolveEvaluationCases(domain.RAGEvaluationRunRequest{Dataset: &dataset}); err != nil {
@@ -48,8 +52,14 @@ func loadCorpus(manifestPath string, dataset domain.RAGGoldenDataset) (corpusMan
 		return corpusManifest{}, nil, "", fmt.Errorf("read corpus manifest: %w", err)
 	}
 	var manifest corpusManifest
-	if err := json.Unmarshal(content, &manifest); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(content))
+	decoder.UseNumber()
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&manifest); err != nil {
 		return manifest, nil, "", fmt.Errorf("decode corpus manifest: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return manifest, nil, "", errors.New("trailing corpus manifest JSON")
 	}
 	if strings.TrimSpace(manifest.DatasetID) != dataset.ID || strings.TrimSpace(manifest.Version) != dataset.Version || len(manifest.Documents) == 0 {
 		return manifest, nil, "", errors.New("corpus manifest identity must match the non-empty dataset")

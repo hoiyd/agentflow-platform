@@ -31,11 +31,12 @@ type CorpusIdentity struct {
 }
 
 type PipelineIdentity struct {
-	Embedding      domain.EmbeddingInfo     `json:"embedding"`
-	Fusion         domain.FusionInfo        `json:"fusion"`
-	Reranker       domain.RerankerInfo      `json:"reranker"`
-	RelevanceGate  domain.RelevanceGateInfo `json:"relevance_gate"`
-	SecurityPolicy string                   `json:"security_policy"`
+	EligibilityPolicy string                   `json:"eligibility_policy"`
+	Embedding         domain.EmbeddingInfo     `json:"embedding"`
+	Fusion            domain.FusionInfo        `json:"fusion"`
+	Reranker          domain.RerankerInfo      `json:"reranker"`
+	RelevanceGate     domain.RelevanceGateInfo `json:"relevance_gate"`
+	SecurityPolicy    string                   `json:"security_policy"`
 }
 
 type RankedSource struct {
@@ -50,49 +51,52 @@ type RankedSource struct {
 }
 
 type Sample struct {
-	CaseID            string         `json:"case_id"`
-	Split             string         `json:"split"`
-	Classification    string         `json:"classification"`
-	Status            string         `json:"status"`
-	Answerable        bool           `json:"answerable"`
-	Passed            bool           `json:"passed"`
-	HitAt1            bool           `json:"hit_at_1"`
-	HitAt3            bool           `json:"hit_at_3"`
-	HitAt5            bool           `json:"hit_at_5"`
-	BestRank          int            `json:"best_rank,omitempty"`
-	ReciprocalRank    float64        `json:"reciprocal_rank"`
-	NDCG              float64        `json:"ndcg"`
-	PredictedNoAnswer bool           `json:"predicted_no_answer"`
-	LeakCount         int            `json:"leak_count"`
-	BlockedCandidates int            `json:"blocked_candidates"`
-	LatencyMS         int64          `json:"latency_ms"`
-	CandidateSetHash  string         `json:"candidate_set_hash,omitempty"`
-	RerankLatencyMS   int64          `json:"rerank_latency_ms"`
-	FailureReason     string         `json:"failure_reason,omitempty"`
-	ErrorCode         string         `json:"error_code,omitempty"`
-	Error             string         `json:"error,omitempty"`
-	Sources           []RankedSource `json:"sources"`
+	Evidence          *domain.RAGEvaluationEvidence `json:"evidence,omitempty"`
+	CaseID            string                        `json:"case_id"`
+	Split             string                        `json:"split"`
+	Classification    string                        `json:"classification"`
+	Status            string                        `json:"status"`
+	Answerable        bool                          `json:"answerable"`
+	Passed            bool                          `json:"passed"`
+	HitAt1            bool                          `json:"hit_at_1"`
+	HitAt3            bool                          `json:"hit_at_3"`
+	HitAt5            bool                          `json:"hit_at_5"`
+	BestRank          int                           `json:"best_rank,omitempty"`
+	ReciprocalRank    float64                       `json:"reciprocal_rank"`
+	NDCG              float64                       `json:"ndcg"`
+	PredictedNoAnswer bool                          `json:"predicted_no_answer"`
+	LeakCount         int                           `json:"leak_count"`
+	BlockedCandidates int                           `json:"blocked_candidates"`
+	LatencyMS         int64                         `json:"latency_ms"`
+	CandidateSetHash  string                        `json:"candidate_set_hash,omitempty"`
+	RerankLatencyMS   int64                         `json:"rerank_latency_ms"`
+	FailureReason     string                        `json:"failure_reason,omitempty"`
+	ErrorCode         string                        `json:"error_code,omitempty"`
+	Error             string                        `json:"error,omitempty"`
+	Sources           []RankedSource                `json:"sources"`
 }
 
 type Summary struct {
-	Samples           int      `json:"samples"`
-	Evaluated         int      `json:"evaluated"`
-	Passed            int      `json:"passed"`
-	Failed            int      `json:"failed"`
-	NotEvaluated      int      `json:"not_evaluated"`
-	GatingSamples     int      `json:"gating_samples"`
-	GatingFailures    int      `json:"gating_failures"`
-	AnswerableSamples int      `json:"answerable_samples"`
-	HitAt1            float64  `json:"hit_at_1"`
-	HitAt3            float64  `json:"hit_at_3"`
-	HitAt5            float64  `json:"hit_at_5"`
-	MRR               float64  `json:"mrr"`
-	NDCG              float64  `json:"ndcg"`
-	NoAnswerPrecision *float64 `json:"no_answer_precision"`
-	NoAnswerRecall    *float64 `json:"no_answer_recall"`
-	LeakCount         int      `json:"leak_count"`
-	BlockedCandidates int      `json:"blocked_candidates"`
-	MeanLatencyMS     float64  `json:"mean_latency_ms"`
+	EligibleSourceRecall *float64 `json:"eligible_source_recall"`
+	ContextLeakCount     int      `json:"context_leak_count"`
+	Samples              int      `json:"samples"`
+	Evaluated            int      `json:"evaluated"`
+	Passed               int      `json:"passed"`
+	Failed               int      `json:"failed"`
+	NotEvaluated         int      `json:"not_evaluated"`
+	GatingSamples        int      `json:"gating_samples"`
+	GatingFailures       int      `json:"gating_failures"`
+	AnswerableSamples    int      `json:"answerable_samples"`
+	HitAt1               float64  `json:"hit_at_1"`
+	HitAt3               float64  `json:"hit_at_3"`
+	HitAt5               float64  `json:"hit_at_5"`
+	MRR                  float64  `json:"mrr"`
+	NDCG                 float64  `json:"ndcg"`
+	NoAnswerPrecision    *float64 `json:"no_answer_precision"`
+	NoAnswerRecall       *float64 `json:"no_answer_recall"`
+	LeakCount            int      `json:"leak_count"`
+	BlockedCandidates    int      `json:"blocked_candidates"`
+	MeanLatencyMS        float64  `json:"mean_latency_ms"`
 }
 
 type Comparison struct {

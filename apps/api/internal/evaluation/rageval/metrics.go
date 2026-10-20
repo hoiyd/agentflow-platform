@@ -29,6 +29,7 @@ func evaluationSplit(tags []string) string {
 func summarize(samples []Sample) Summary {
 	summary := Summary{Samples: len(samples)}
 	var noAnswerTP, noAnswerFP, noAnswerFN int
+	var expectedSources, matchedSources int
 	for _, sample := range samples {
 		if sample.Classification == "gating" {
 			summary.GatingSamples++
@@ -38,6 +39,12 @@ func summarize(samples []Sample) Summary {
 		}
 		if sample.Answerable {
 			summary.AnswerableSamples++
+		}
+		if sample.Evidence != nil {
+			expectedSources += sample.Evidence.ExpectedSources
+			if sample.Status == "completed" {
+				matchedSources += sample.Evidence.MatchedSources
+			}
 		}
 		if sample.PredictedNoAnswer && !sample.Answerable {
 			noAnswerTP++
@@ -63,6 +70,9 @@ func summarize(samples []Sample) Summary {
 			summary.Failed++
 		}
 		summary.LeakCount += sample.LeakCount
+		if sample.Evidence != nil {
+			summary.ContextLeakCount += sample.Evidence.ContextLeakCount
+		}
 		summary.BlockedCandidates += sample.BlockedCandidates
 		summary.MeanLatencyMS += float64(sample.LatencyMS)
 		if sample.Answerable {
@@ -86,6 +96,10 @@ func summarize(samples []Sample) Summary {
 		summary.HitAt5 /= denominator
 		summary.MRR /= denominator
 		summary.NDCG /= denominator
+	}
+	if expectedSources > 0 {
+		value := float64(matchedSources) / float64(expectedSources)
+		summary.EligibleSourceRecall = &value
 	}
 	if summary.Evaluated > 0 {
 		summary.MeanLatencyMS /= float64(summary.Evaluated)

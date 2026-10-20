@@ -1,0 +1,122 @@
+{
+  "dataset_id": "agentflow-metadata-regression",
+  "version": "1.0.0",
+  "documents": [
+    {
+      "file": "atlas-production.md",
+      "title": "Atlas release",
+      "metadata_schema_version": "knowledge-metadata-v1",
+      "metadata": {
+        "product": "Atlas",
+        "environment": "production",
+        "priority": 80,
+        "is_reference": true,
+        "tags": [
+          "release",
+          "operations"
+        ],
+        "published_at": "2026-01-01T00:00:00Z"
+      }
+    },
+    {
+      "file": "atlas-staging.md",
+      "title": "Atlas staging",
+      "metadata_schema_version": "knowledge-metadata-v1",
+      "metadata": {
+        "product": "Atlas",
+        "environment": "staging",
+        "priority": 20,
+        "is_reference": false,
+        "tags": [
+          "preview"
+        ],
+        "published_at": "2025-01-01T00:00:00Z"
+      }
+    },
+    {
+      "file": "boreal-production.md",
+      "title": "Boreal release",
+      "metadata_schema_version": "knowledge-metadata-v1",
+      "metadata": {
+        "product": "Boreal",
+        "environment": "production",
+        "priority": 60,
+        "is_reference": true,
+        "tags": [
+          "release"
+        ],
+        "published_at": "2026-06-01T00:00:00Z"
+      }
+    },
+    {
+      "file": "missing-field.md",
+      "title": "Unclassified release",
+      "metadata_schema_version": "knowledge-metadata-v1",
+      "metadata": {
+        "product": "Unclassified"
+      }
+    },
+    {
+      "file": "legacy-types.md",
+      "title": "Legacy release",
+      "metadata": {
+        "product": "Legacy",
+        "environment": "production",
+        "priority": "80",
+        "status": "active"
+      }
+    },
+    {
+      "file": "withdrawn.md",
+      "title": "Withdrawn release",
+      "metadata_schema_version": "knowledge-metadata-v1",
+      "metadata": {
+        "product": "Atlas",
+        "environment": "production",
+        "priority": 99
+      },
+      "lifecycle": {
+        "status": "withdrawn"
+      }
+    },
+    {
+      "file": "expired.md",
+      "title": "Expired release",
+      "metadata_schema_version": "knowledge-metadata-v1",
+      "metadata": {
+        "product": "Atlas",
+        "environment": "production",
+        "priority": 99
+      },
+      "lifecycle": {
+        "valid_until": "2000-01-01T00:00:00Z"
+      }
+    },
+    {
+      "file": "future.md",
+      "title": "Future release",
+      "metadata_schema_version": "knowledge-metadata-v1",
+      "metadata": {
+        "product": "Atlas",
+        "environment": "production",
+        "priority": 99
+      },
+      "lifecycle": {
+        "valid_from": "9999-01-01T00:00:00Z"
+      }
+    },
+    {
+      "file": "draft.md",
+      "title": "Draft release",
+      "metadata_schema_version": "knowledge-metadata-v1",
+      "metadata": {
+        "product": "Atlas",
+        "environment": "production",
+        "priority": 99
+      },
+      "lifecycle": {
+        "status": "draft"
+      }
+    }
+  ]
+}

@@ -42,6 +42,7 @@ func Compare(current, baseline Report, singleVariableAblation bool) Comparison {
 	comparison.Deltas["ndcg"] = current.Summary.NDCG - baseline.Summary.NDCG
 	comparison.Deltas["mean_latency_ms"] = current.Summary.MeanLatencyMS - baseline.Summary.MeanLatencyMS
 	comparison.Deltas["leak_count"] = float64(current.Summary.LeakCount - baseline.Summary.LeakCount)
+	comparison.Deltas["context_leak_count"] = float64(current.Summary.ContextLeakCount - baseline.Summary.ContextLeakCount)
 	if current.Summary.GatingFailures > baseline.Summary.GatingFailures {
 		comparison.Regressions = append(comparison.Regressions, "gating failures increased")
 	}
@@ -53,6 +54,9 @@ func Compare(current, baseline Report, singleVariableAblation bool) Comparison {
 	}
 	if current.Summary.LeakCount > baseline.Summary.LeakCount {
 		comparison.Regressions = append(comparison.Regressions, "forbidden-source leaks increased")
+	}
+	if current.Summary.ContextLeakCount > baseline.Summary.ContextLeakCount {
+		comparison.Regressions = append(comparison.Regressions, "out-of-scope Context entries increased")
 	}
 	return comparison
 }
@@ -105,6 +109,9 @@ func changedVariables(current, baseline Report) []string {
 	}
 	if current.Pipeline.SecurityPolicy != baseline.Pipeline.SecurityPolicy {
 		changes = append(changes, "security_policy")
+	}
+	if current.Pipeline.EligibilityPolicy != baseline.Pipeline.EligibilityPolicy {
+		changes = append(changes, "eligibility_policy")
 	}
 	return changes
 }

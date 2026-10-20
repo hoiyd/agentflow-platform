@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import type { DocumentInfo } from "../lib/knowledge-api";
 import { createWorkspaceChatAgent, defaultWorkspaceID } from "./fixtures/workspace-agent";
 
 test("Knowledge scope flows from search and Chat into persisted Replay", async ({ page }, testInfo) => {
@@ -9,7 +10,7 @@ test("Knowledge scope flows from search and Chat into persisted Replay", async (
   const workspace = await defaultWorkspaceID(page);
   const product = `Runtime scope ${testInfo.repeatEachIndex}`;
   const headers = { "X-Workspace-ID": workspace, Origin: "http://127.0.0.1:13000" };
-  const corpus = [];
+  const corpus: DocumentInfo[] = [];
   for (const allowed of [true, false]) {
     const input = { title: allowed ? product : `${product} decoy`,
       content: `ROLLBACK-742 scoped recovery preserves durable state.${allowed ? "" : " FORBIDDEN_SCOPE_CONTENT"}`,

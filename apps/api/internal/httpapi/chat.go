@@ -7,6 +7,7 @@ import (
 
 	"agentflow-platform/apps/api/app/runcommands"
 	"agentflow-platform/apps/api/internal/apicontract"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
 )
 
 func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +24,7 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	}
 	for key, value := range envelope {
 		if strings.EqualFold(key, "knowledge_filter") {
-			if err := validateMetadataFilterJSON(value); err != nil {
+			if err := eligibility.ValidateFilterJSON(value); err != nil {
 				writeKnowledgeError(w, r, err)
 				return
 			}

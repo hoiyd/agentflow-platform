@@ -10,7 +10,7 @@ comparisons across Runs or code revisions.
 | Context, RAG, routing, and Tool quality | [`cmd/eval`](../../apps/api/cmd/eval/main.go), [offline evaluation](offline-evaluation.md) | Versioned datasets, explicit gates, and opt-in budgeted live checks. |
 | Generated summary fidelity and task continuation | [`eval context-live`](live-compaction.md) | Shared-budget full-history/compaction experiment; fixed typed facts, source-backed outcome and separate compaction costs. |
 | Current Knowledge index | `/evaluations/retrieval`, [RAG dataset](rag-golden-dataset.md) | On-demand Golden Dataset check against the indexed corpus and configured retrieval pipeline. |
-| RAG corpus and Tool tasks | [RAG dataset](rag-golden-dataset.md), [Tool tasks](tool-task-evaluations.md) | Reproducible cases and source-backed outcomes. |
+| RAG corpus and Tool tasks | [RAG datasets](rag-golden-dataset.md), [Tool tasks](tool-task-evaluations.md) | Canonical and metadata-scoped regressions, Context leakage and source-backed outcomes. |
 | Local model protocol and token counts | [llama.cpp compatibility](local-inference-compatibility.md), [tokenization calibration](tokenization-calibration.md) | Live target evidence; neither changes production routing or Context limits. |
 | Bounded concurrency | [Load and soak](load-soak-testing.md) | Controlled process-local load, not a model-capacity claim. |
 | Two-Run comparison | [Evidence comparison](evidence-comparison.md) | Read-only UI for controlled pairs; unrelated Runs remain review-only. |

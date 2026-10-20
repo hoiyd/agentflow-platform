@@ -16,7 +16,7 @@ test("typed metadata eligibility survives browser requests, rejected input and r
     return { status: response.status, body: await response.json() };
     function bodyString(value: unknown) { return typeof value === "string" ? value : value === undefined ? undefined : JSON.stringify(value); }
   }, { method, path, body, workspace });
-  const corpus = [];
+  const corpus: Array<{ input: components["schemas"]["DocumentIngestRequest"]; created: Awaited<ReturnType<typeof call>> }> = [];
   for (const product of [productScope, "Other"]) {
     const input: components["schemas"]["DocumentIngestRequest"] = {
       title: `Typed recovery ${product} ${testInfo.repeatEachIndex}`, source_key: `typed-recovery-${product}-${testInfo.repeatEachIndex}`,

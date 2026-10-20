@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/failure"
@@ -204,13 +205,12 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 		} else {
 			summary.UnanswerableCases++
 		}
-		response, err := s.Search(ctx, domain.DocumentSearch{
-			Query:         evaluationCase.Query,
-			WorkspaceID:   request.WorkspaceID,
-			Metadata:      request.Metadata,
-			Limit:         topK,
-			MinSimilarity: request.MinSimilarity,
-		}, topK)
+		search, err := rag.EvaluationSearch(request, evaluationCase)
+		if err != nil {
+			return domain.RAGEvaluationRunResponse{}, err
+		}
+		started := time.Now()
+		response, err := s.Search(ctx, search, topK)
 		if err != nil {
 			return domain.RAGEvaluationRunResponse{}, err
 		}
@@ -220,8 +220,7 @@ func (s *KnowledgeBase) Evaluate(ctx context.Context, request domain.RAGEvaluati
 			reranker = response.Reranker
 			relevanceGate = response.RelevanceGate
 		}
-		caseResult := rag.EvaluateCase(evaluationCase, response.Items)
-		caseResult.Security = response.Security
+		caseResult := rag.EvaluateSearchResult(evaluationCase, search, response, started)
 		results = append(results, caseResult)
 		summary.BlockedCandidates += response.Security.BlockedCandidates
 		if caseResult.HitAt1 {

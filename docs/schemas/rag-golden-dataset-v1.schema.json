@@ -4,7 +4,12 @@
   "title": "AgentFlow RAG Golden Dataset v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id", "version", "cases"],
+  "required": [
+    "schema_version",
+    "id",
+    "version",
+    "cases"
+  ],
   "properties": {
     "schema_version": {
       "const": "rag-golden-dataset-v1"
@@ -33,6 +38,95 @@
     }
   },
   "$defs": {
+    "metadataFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "where"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "knowledge-metadata-v1"
+        },
+        "where": {
+          "$ref": "#/$defs/metadataCondition"
+        }
+      },
+      "$comment": "Runtime also enforces 16 KiB, depth 4, 32 nodes and registered field/value types."
+    },
+    "metadataCondition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "all"
+          ],
+          "properties": {
+            "all": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "items": {
+                "$ref": "#/$defs/metadataCondition"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "any"
+          ],
+          "properties": {
+            "any": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 32,
+              "items": {
+                "$ref": "#/$defs/metadataCondition"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "field",
+            "op",
+            "value"
+          ],
+          "properties": {
+            "field": {
+              "type": "string",
+              "pattern": "^(document|chunk)\\.metadata\\.[a-z_]+$"
+            },
+            "op": {
+              "enum": [
+                "eq",
+                "in",
+                "contains",
+                "lt",
+                "lte",
+                "gt",
+                "gte"
+              ]
+            },
+            "value": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "array"
+              ]
+            }
+          }
+        }
+      ]
+    },
     "tags": {
       "type": "array",
       "uniqueItems": true,
@@ -67,16 +161,36 @@
         }
       },
       "anyOf": [
-        { "required": ["document_id"] },
-        { "required": ["chunk_id"] },
-        { "required": ["source_uri"] },
-        { "required": ["content_contains"] }
+        {
+          "required": [
+            "document_id"
+          ]
+        },
+        {
+          "required": [
+            "chunk_id"
+          ]
+        },
+        {
+          "required": [
+            "source_uri"
+          ]
+        },
+        {
+          "required": [
+            "content_contains"
+          ]
+        }
       ]
     },
     "case": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "query", "answerable"],
+      "required": [
+        "id",
+        "query",
+        "answerable"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -88,6 +202,19 @@
         },
         "answerable": {
           "type": "boolean"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "metadata_filter": {
+          "$ref": "#/$defs/metadataFilter"
+        },
+        "require_filter": {
+          "type": "boolean",
+          "$comment": "Runtime requires a nonempty case OR request restriction when true; old datasets may intentionally omit both."
         },
         "expected_sources": {
           "type": "array",
@@ -118,12 +245,18 @@
         {
           "if": {
             "properties": {
-              "answerable": { "const": true }
+              "answerable": {
+                "const": true
+              }
             },
-            "required": ["answerable"]
+            "required": [
+              "answerable"
+            ]
           },
           "then": {
-            "required": ["expected_sources"],
+            "required": [
+              "expected_sources"
+            ],
             "properties": {
               "expected_sources": {
                 "minItems": 1
