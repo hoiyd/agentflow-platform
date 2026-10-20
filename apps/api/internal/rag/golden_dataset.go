@@ -19,6 +19,11 @@ func ResolveEvaluationCases(request domain.RAGEvaluationRunRequest) ([]domain.RA
 		if len(request.Cases) > 50 {
 			return nil, nil, errors.New("at most 50 evaluation cases are supported")
 		}
+		for _, c := range request.Cases {
+			if _, err := EvaluationSearch(request, c); err != nil {
+				return nil, nil, err
+			}
+		}
 		return request.Cases, nil, nil
 	}
 
@@ -44,6 +49,10 @@ func ResolveEvaluationCases(request domain.RAGEvaluationRunRequest) ([]domain.RA
 
 	seenCaseIDs := make(map[string]struct{}, len(dataset.Cases))
 	for index, evalCase := range dataset.Cases {
+		// Preflight the bounded batch before embedding its first case.
+		if _, err := EvaluationSearch(request, evalCase); err != nil {
+			return nil, nil, err
+		}
 		caseID := strings.TrimSpace(evalCase.ID)
 		if caseID == "" {
 			return nil, nil, fmt.Errorf("dataset case %d requires id", index)

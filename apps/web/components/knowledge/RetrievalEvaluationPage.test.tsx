@@ -38,3 +38,20 @@ it("shows evaluation errors on the dedicated page", async () => {
 
   expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Index unavailable");
 });
+
+it("shows applied case constraints and Context evidence without inventing model usage", async () => {
+  runRAGEvaluation.mockResolvedValue({
+    summary: { total: 1, answerable_cases: 1, hit_at_1: 1, hit_at_3: 1, hit_at_5: 1, misses: 0 },
+    cases: [{ id: "atlas", query: "ROLLBACK-42", answerable: true, hit: true, items: [],
+      evidence: { metadata: { product: "Atlas" }, schema_version: "knowledge-metadata-v1", scope_policy: "knowledge-filter-v1",
+        lifecycle_policy: "active-validity-v1", expected_sources: 1, matched_sources: 1, context_matched_sources: 1,
+        context_leak_count: 0, context_tokens: 23, latency_ms: 4, context_sources: [] } }]
+  });
+  render(<RetrievalEvaluationPage />);
+  fireEvent.click(screen.getByRole("button", { name: "Run evaluation" }));
+  expect(await screen.findByText("Eligible source recall")).toBeTruthy();
+  expect(screen.getByText("Context leaks")).toBeTruthy();
+  expect(screen.getByText("23 estimated Context tokens")).toBeTruthy();
+  fireEvent.click(screen.getByText("Applied constraints and source revisions"));
+  expect(screen.getByText(/"product": "Atlas"/)).toBeTruthy();
+});

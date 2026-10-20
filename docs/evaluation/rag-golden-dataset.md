@@ -21,12 +21,12 @@ domain-wide retrieval quality. The paired corpus lives under
 | `injection-release-signing` | Prompt-injection filtering | Safe guide; hostile note forbidden | Gating |
 
 The ACL case carries the `non-blocking` tag and remains diagnostic until
-identity-derived ownership and ACL enforcement (RAG-004/RAG-016B) are implemented.
+Document access policy (RAG-045) is enforced using distinct authenticated principals.
 The stale-data case is gated because the corpus ingests policy 2.4 and then atomically
 replaces the same `source_key` with policy 3.2. No-answer is gated by one
-calibration case and one untouched holdout case. Workspace namespace filtering
-(RAG-003) is complete, but it cannot decide whether a caller is authorized for
-that namespace. Diagnostic misses must be reported, but must not be represented
+calibration case and one untouched holdout case. Authenticated Workspace access
+is enforced separately; it does not implement per-Document ACLs inside a Workspace.
+Diagnostic misses must be reported, but must not be represented
 as release-gate regressions yet.
 
 The multi-hop case sets `required_source_count: 2`. The evaluator therefore
@@ -64,6 +64,40 @@ source behavior. This avoids maintaining a second corpus whose only difference
 would be the embedder. See [Semantic retrieval profile](offline-evaluation.md#semantic-retrieval-profile)
 for the opt-in command and retrieval-mode comparison procedure.
 
+## Metadata regression
+
+[`agentflow-metadata-regression@1.0.0`](../../examples/knowledge/metadata-golden-v1/dataset.json)
+adds 12 gating cases with a separate corpus: identical queries across products and
+environments, missing fields, inherited Chunk arrays, typed number/date/boolean
+conditions, bounded OR, no match, and draft/withdrawn/expired/future exclusions.
+Existing Store parity tests cover conflicting Document/Chunk labels and exact
+validity boundaries; the Golden profile exercises production retrieval and Context
+expansion, with fixture, PostgreSQL and browser regression gates.
+
+```bash
+# From apps/api; no API key, running server or model calls required.
+go run ./cmd/eval rag \
+  --dataset ../../examples/knowledge/metadata-golden-v1/dataset.json \
+  --corpus-manifest ../../examples/knowledge/metadata-golden-v1/corpus-manifest.json \
+  --enforce > /tmp/rag-metadata.json
+```
+
+Cases may supply `metadata` (legacy text equality), `metadata_filter` (the existing
+[typed contract](../knowledge/typed-metadata-filters.md)), and `require_filter: true`.
+Case and request restrictions are intersected; conflicting legacy keys are rejected.
+Workspace, schema eligibility and lifecycle always remain outside user OR clauses.
+All case constraints are preflighted before the first query; malformed/null/unknown
+constraints or an omitted required filter fail instead of broadening retrieval.
+Old datasets intentionally omitting these optional fields retain unfiltered behavior.
+
+Each case's `evidence` records applied restrictions, policy/schema versions,
+observation time, source revisions, Context selection/merge counts and source Chunk
+IDs. `chunk_hash` hashes the selected content, including merged Context. Inspect
+these in **Retrieval evaluation → Applied constraints and source revisions**.
+The corpus keeps expired/future bounds far from the test date; production still uses
+the current clock, not an evaluation-supplied time. No Document ACL or live-model
+quality improvement is claimed. Semantic embedding profiles remain explicitly opt-in.
+
 ## Interpretation
 
 - Hit@K uses answerable Cases as its denominator. A multi-source Case is a hit
@@ -71,7 +105,15 @@ for the opt-in command and retrieval-mode comparison procedure.
 - A no-answer Case passes only when the Relevance Gate returns no result.
 - Every canonical Case is tagged `calibration` or `holdout`; threshold selection
   uses the former and release acceptance checks gating cases in both splits.
-- A forbidden source anywhere in returned Top-K fails the Case.
+- A forbidden source anywhere in returned Top-K or selected Context fails the Case.
+- `eligible_source_recall` counts distinct expected sources found in accepted
+  retrieval, divided by all declared expected sources (including failed/not-evaluated
+  cases). It is `null` without expected sources. Context matches are recorded
+  separately; `context_leak_count` counts selected entries that violate scope,
+  lifecycle, typed/legacy constraints or forbidden-source expectations.
+- Per-case latency covers retrieval and Context selection; `context_tokens` is a
+  local estimate of selected Context, not billed model usage. CLI embedding usage
+  remains separately attributed to index/query phases; no answer is generated.
 - `blocked_candidates` is supporting evidence that the prompt-injection guard
   removed hostile material; the injection Case also forbids that source from
   the accepted results.
@@ -84,7 +126,7 @@ for the opt-in command and retrieval-mode comparison procedure.
   than being reported as a false zero. Retrieval failures and canceled cases
   remain `failed` or `not_evaluated` in the total and fail gating cases.
 - Reports include Dataset/corpus hashes, Git revision, actual chunker, Embedding,
-  Fusion, Reranker, Relevance Gate and security-policy identity. Ranked evidence
+  Fusion, Reranker, Relevance Gate, security and metadata-eligibility policy identity. Ranked evidence
   includes bounded scores, confidence and Gate reasons plus stable chunk hashes;
   corpus text is not copied.
 - The `0.15` dense threshold and `0.25` evidence-coverage setting are calibrated
@@ -100,3 +142,6 @@ sources, or corpus content require a new Dataset and corpus version. The runner
 hashes both assets and refuses to describe reports as comparable when Dataset,
 corpus, Top-K, threshold, chunker, or pipeline identity differs. Git history and
 CI artifacts are the version record; no Evaluation Registry service is required.
+Regenerate older reports without eligibility identity before comparison. HTTP
+upstream failures abort the batch without success metrics; the offline runner
+retains failed/not-evaluated cases and closes the gate.

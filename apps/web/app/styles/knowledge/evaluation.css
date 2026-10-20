@@ -51,8 +51,28 @@
 
 .evaluation-summary {
   display: grid;
-  grid-template-columns: repeat(6, minmax(90px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   border: 1px solid var(--border);
+}
+
+.evaluation-evidence-metrics {
+  margin-block: 8px;
+}
+
+.evaluation-evidence summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  padding-block: 6px;
+}
+
+.evaluation-evidence pre {
+  margin-block: 8px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .evaluation-metric {

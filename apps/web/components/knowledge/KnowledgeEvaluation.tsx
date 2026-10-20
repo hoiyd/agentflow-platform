@@ -47,6 +47,10 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
 
   const answerableTotal = result.summary.answerable_cases ?? result.summary.total;
   const hitRateDenominator = answerableTotal || 1;
+  const evidence = result.cases.flatMap(item => item.evidence ? [item.evidence] : []);
+  const expectedSources = evidence.reduce((total, item) => total + item.expected_sources, 0);
+  const matchedSources = evidence.reduce((total, item) => total + item.matched_sources, 0);
+  const contextLeaks = evidence.reduce((total, item) => total + item.context_leak_count, 0);
   return (
     <div className="evaluation-result">
       {result.dataset ? (
@@ -59,6 +63,10 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
         <EvaluationMetric label="Hit@5" value={formatPercent(result.summary.hit_at_5 / hitRateDenominator)} />
         <EvaluationMetric danger={result.summary.misses > 0} label="Misses" value={String(result.summary.misses)} />
         <EvaluationMetric danger={(result.summary.blocked_candidates ?? 0) > 0} label="Blocked" value={String(result.summary.blocked_candidates ?? 0)} />
+        {evidence.length > 0 ? <>
+          <EvaluationMetric label="Eligible source recall" value={expectedSources > 0 ? formatPercent(matchedSources / expectedSources) : "Not applicable"} />
+          <EvaluationMetric danger={contextLeaks > 0} label="Context leaks" value={String(contextLeaks)} />
+        </> : null}
       </div>
       <RetrievalDiagnostics
         embedding={result.embedding ?? null}
@@ -81,6 +89,18 @@ function EvaluationResult({ result }: { result: RAGEvaluationRunResponse | null 
               </div>
             </div>
             <div className="evaluation-expected">{evaluationExpectedLabel(item)}</div>
+            {item.evidence ? <>
+              <div className="document-metrics evaluation-evidence-metrics">
+                <span>Sources {item.evidence.matched_sources}/{item.evidence.expected_sources}</span>
+                <span>Context sources {item.evidence.context_matched_sources}/{item.evidence.expected_sources}</span>
+                <span>{item.evidence.context_tokens} estimated Context tokens</span>
+                <span>{item.evidence.latency_ms} ms</span>
+              </div>
+              <details className="evaluation-evidence">
+                <summary>Applied constraints and source revisions</summary>
+                <pre>{JSON.stringify(item.evidence, null, 2)}</pre>
+              </details>
+            </> : null}
             {item.failure_reason ? <div className="evaluation-failure">{item.failure_reason}</div> : null}
             {item.security && item.security.blocked_candidates > 0 ? (
               <div className="evaluation-failure">Knowledge security blocked {item.security.blocked_candidates} of {item.security.checked_candidates} candidates.</div>

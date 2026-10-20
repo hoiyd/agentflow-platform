@@ -1,0 +1,370 @@
+{
+  "schema_version": "rag-golden-dataset-v1",
+  "id": "agentflow-metadata-regression",
+  "version": "1.0.0",
+  "description": "Deterministic metadata eligibility and expanded Context regression; not semantic quality or Document ACL evidence.",
+  "cases": [
+    {
+      "id": "atlas-production",
+      "query": "ROLLBACK-42",
+      "answerable": true,
+      "require_filter": true,
+      "metadata": {
+        "product": "Atlas",
+        "environment": "production"
+      },
+      "expected_sources": [
+        {
+          "source_uri": "atlas-production.md"
+        }
+      ],
+      "forbidden_sources": [
+        {
+          "source_uri": "atlas-staging.md"
+        },
+        {
+          "source_uri": "boreal-production.md"
+        },
+        {
+          "source_uri": "withdrawn.md"
+        },
+        {
+          "source_uri": "expired.md"
+        },
+        {
+          "source_uri": "future.md"
+        },
+        {
+          "source_uri": "draft.md"
+        }
+      ],
+      "tags": [
+        "calibration",
+        "legacy-map",
+        "parent-expansion"
+      ]
+    },
+    {
+      "id": "atlas-staging",
+      "query": "ROLLBACK-42",
+      "answerable": true,
+      "require_filter": true,
+      "metadata": {
+        "product": "Atlas",
+        "environment": "staging"
+      },
+      "expected_sources": [
+        {
+          "source_uri": "atlas-staging.md"
+        }
+      ],
+      "forbidden_sources": [
+        {
+          "source_uri": "atlas-production.md"
+        }
+      ],
+      "tags": [
+        "holdout",
+        "same-query"
+      ]
+    },
+    {
+      "id": "boreal-production",
+      "query": "ROLLBACK-42",
+      "answerable": true,
+      "require_filter": true,
+      "metadata": {
+        "product": "Boreal",
+        "environment": "production"
+      },
+      "expected_sources": [
+        {
+          "source_uri": "boreal-production.md"
+        }
+      ],
+      "forbidden_sources": [
+        {
+          "source_uri": "atlas-production.md"
+        }
+      ],
+      "tags": [
+        "holdout",
+        "same-query"
+      ]
+    },
+    {
+      "id": "no-product",
+      "query": "ROLLBACK-42",
+      "answerable": false,
+      "require_filter": true,
+      "metadata": {
+        "product": "Missing"
+      },
+      "tags": [
+        "holdout",
+        "no-answer"
+      ]
+    },
+    {
+      "id": "missing-environment",
+      "query": "ROLLBACK-42",
+      "answerable": false,
+      "require_filter": true,
+      "metadata": {
+        "product": "Unclassified",
+        "environment": "production"
+      },
+      "forbidden_sources": [
+        {
+          "source_uri": "missing-field.md"
+        }
+      ],
+      "tags": [
+        "holdout",
+        "missing-field"
+      ]
+    },
+    {
+      "id": "typed-number-range",
+      "query": "ROLLBACK-42",
+      "answerable": true,
+      "require_filter": true,
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "field": "document.metadata.priority",
+          "op": "gte",
+          "value": 80
+        }
+      },
+      "expected_sources": [
+        {
+          "source_uri": "atlas-production.md"
+        }
+      ],
+      "forbidden_sources": [
+        {
+          "source_uri": "legacy-types.md"
+        },
+        {
+          "source_uri": "expired.md"
+        },
+        {
+          "source_uri": "withdrawn.md"
+        },
+        {
+          "source_uri": "future.md"
+        },
+        {
+          "source_uri": "draft.md"
+        }
+      ],
+      "tags": [
+        "calibration",
+        "number",
+        "freshness"
+      ]
+    },
+    {
+      "id": "typed-or-remains-bounded",
+      "query": "ROLLBACK-42",
+      "answerable": true,
+      "require_filter": true,
+      "metadata": {
+        "environment": "production"
+      },
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "any": [
+            {
+              "field": "document.metadata.product",
+              "op": "eq",
+              "value": "Atlas"
+            },
+            {
+              "field": "document.metadata.product",
+              "op": "eq",
+              "value": "Boreal"
+            }
+          ]
+        }
+      },
+      "required_source_count": 2,
+      "expected_sources": [
+        {
+          "source_uri": "atlas-production.md"
+        },
+        {
+          "source_uri": "boreal-production.md"
+        }
+      ],
+      "forbidden_sources": [
+        {
+          "source_uri": "atlas-staging.md"
+        },
+        {
+          "source_uri": "expired.md"
+        },
+        {
+          "source_uri": "withdrawn.md"
+        },
+        {
+          "source_uri": "future.md"
+        },
+        {
+          "source_uri": "draft.md"
+        }
+      ],
+      "tags": [
+        "holdout",
+        "or",
+        "freshness"
+      ]
+    },
+    {
+      "id": "chunk-inherited-array",
+      "query": "ROLLBACK-42",
+      "answerable": true,
+      "require_filter": true,
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "field": "chunk.metadata.tags",
+          "op": "contains",
+          "value": "operations"
+        }
+      },
+      "expected_sources": [
+        {
+          "source_uri": "atlas-production.md"
+        }
+      ],
+      "tags": [
+        "holdout",
+        "inheritance",
+        "array"
+      ]
+    },
+    {
+      "id": "boolean-and-product",
+      "query": "ROLLBACK-42",
+      "answerable": true,
+      "require_filter": true,
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "all": [
+            {
+              "field": "document.metadata.product",
+              "op": "eq",
+              "value": "Atlas"
+            },
+            {
+              "field": "document.metadata.is_reference",
+              "op": "eq",
+              "value": true
+            }
+          ]
+        }
+      },
+      "expected_sources": [
+        {
+          "source_uri": "atlas-production.md"
+        }
+      ],
+      "forbidden_sources": [
+        {
+          "source_uri": "atlas-staging.md"
+        }
+      ],
+      "tags": [
+        "holdout",
+        "boolean"
+      ]
+    },
+    {
+      "id": "date-range",
+      "query": "ROLLBACK-42",
+      "answerable": true,
+      "require_filter": true,
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "field": "document.metadata.published_at",
+          "op": "gte",
+          "value": "2026-05-01T00:00:00Z"
+        }
+      },
+      "expected_sources": [
+        {
+          "source_uri": "boreal-production.md"
+        }
+      ],
+      "forbidden_sources": [
+        {
+          "source_uri": "atlas-production.md"
+        },
+        {
+          "source_uri": "atlas-staging.md"
+        }
+      ],
+      "tags": [
+        "holdout",
+        "date"
+      ]
+    },
+    {
+      "id": "typed-no-match",
+      "query": "ROLLBACK-42",
+      "answerable": false,
+      "require_filter": true,
+      "metadata_filter": {
+        "schema_version": "knowledge-metadata-v1",
+        "where": {
+          "field": "document.metadata.priority",
+          "op": "gt",
+          "value": 90
+        }
+      },
+      "forbidden_sources": [
+        {
+          "source_uri": "expired.md"
+        },
+        {
+          "source_uri": "withdrawn.md"
+        },
+        {
+          "source_uri": "future.md"
+        },
+        {
+          "source_uri": "draft.md"
+        }
+      ],
+      "tags": [
+        "holdout",
+        "no-answer",
+        "freshness"
+      ]
+    },
+    {
+      "id": "legacy-string-compatible",
+      "query": "ROLLBACK-42",
+      "answerable": true,
+      "require_filter": true,
+      "metadata": {
+        "product": "Legacy",
+        "priority": "80"
+      },
+      "expected_sources": [
+        {
+          "source_uri": "legacy-types.md"
+        }
+      ],
+      "tags": [
+        "calibration",
+        "legacy-map"
+      ]
+    }
+  ]
+}

@@ -6,6 +6,8 @@ import (
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/knowledge"
 	"agentflow-platform/apps/api/internal/rag"
+	"agentflow-platform/apps/api/internal/rag/eligibility"
+	"agentflow-platform/apps/api/internal/rag/metadataschema"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/testsupport/fixturestore"
 	"context"
@@ -108,7 +110,8 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		Config: Config{TopK: opts.TopK, MinSimilarity: opts.MinSimilarity,
 			MinimumEvidenceCoverage: opts.MinimumEvidenceCoverage, Chunker: rag.DocumentChunkerVersion, RetrievalMode: opts.RetrievalMode},
 		Pipeline: PipelineIdentity{Fusion: rag.RRFInfo(), Reranker: identity.Info,
-			RelevanceGate: relevanceGate.Info(), SecurityPolicy: rag.PromptInjectionPolicyVersion},
+			RelevanceGate: relevanceGate.Info(), SecurityPolicy: rag.PromptInjectionPolicyVersion,
+			EligibilityPolicy: metadataschema.Version + "/" + eligibility.ScopePolicyVersion + "/" + eligibility.LifecyclePolicyVersion},
 		EmbeddingProfile: EmbeddingProfileReport{Name: embedder.options.Name, Live: embedder.options.Live,
 			ConfiguredModel: embedder.options.Model, ConfiguredDimensions: embedder.options.Dimensions,
 			MaxCalls: embedder.options.MaxCalls, MaxInputTokens: embedder.options.MaxInputTokens,
@@ -126,7 +129,7 @@ func Run(ctx context.Context, opts Options) (Report, error) {
 		}
 		if _, err := base.Ingest(withEmbeddingPhase(ctx, phaseIndex), domain.DocumentIngestRequest{Title: descriptor.Title, SourceKey: descriptor.SourceKey, Version: version,
 			Content: document, SourceType: "markdown", SourceURI: descriptor.File,
-			MimeType: "text/markdown", Metadata: manifest.Documents[index].Metadata}); err != nil {
+			MimeType: "text/markdown", Metadata: descriptor.Metadata, MetadataSchemaVersion: descriptor.MetadataSchemaVersion, Lifecycle: descriptor.Lifecycle}); err != nil {
 			report.IndexBuild.DurationMS = time.Since(indexStarted).Milliseconds()
 			finishIndexFailure(&report, dataset, fmt.Errorf("ingest corpus document %q: %w", manifest.Documents[index].File, err))
 			finishReport(&report, embedder)
@@ -165,7 +168,8 @@ func finishIndexFailure(report *Report, dataset domain.RAGGoldenDataset, err err
 		if contains(evaluationCase.Tags, "non-blocking") {
 			classification = "diagnostic"
 		}
-		report.Samples = append(report.Samples, Sample{CaseID: evaluationCase.ID, Split: evaluationSplit(evaluationCase.Tags),
+		search, _ := rag.EvaluationSearch(domain.RAGEvaluationRunRequest{TopK: report.Config.TopK, MinSimilarity: report.Config.MinSimilarity}, evaluationCase) // Dataset already preflighted.
+		report.Samples = append(report.Samples, Sample{CaseID: evaluationCase.ID, Split: evaluationSplit(evaluationCase.Tags), Evidence: rag.EvaluationEvidence(evaluationCase, search, report.StartedAt),
 			Classification: classification, Status: "not_evaluated", Answerable: evaluationCase.Answerable != nil && *evaluationCase.Answerable,
 			ErrorCode: info.Code, Error: message, Sources: []RankedSource{}})
 	}

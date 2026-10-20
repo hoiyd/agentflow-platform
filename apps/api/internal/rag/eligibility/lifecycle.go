@@ -10,6 +10,8 @@ import (
 	"agentflow-platform/apps/api/internal/rag/metadataschema"
 )
 
+const LifecyclePolicyVersion = "active-validity-v1"
+
 var ErrLifecycle = failure.New(failure.Definition{
 	Message: "invalid document lifecycle", Info: failure.Info{Code: "invalid_document_lifecycle", Source: "knowledge", Category: failure.CategoryValidation},
 })

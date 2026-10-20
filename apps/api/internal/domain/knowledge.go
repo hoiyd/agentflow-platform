@@ -312,6 +312,11 @@ type RAGGoldenDatasetInfo struct {
 }
 
 type RAGEvaluationCase struct {
+	// Case restrictions intersect the request scope; require_filter prevents an
+	// accidentally omitted constraint from becoming an unfiltered experiment.
+	Metadata              map[string]string `json:"metadata,omitempty"`
+	MetadataFilter        *MetadataFilter   `json:"metadata_filter,omitempty"`
+	RequireFilter         bool              `json:"require_filter,omitempty"`
 	ID                    string            `json:"id"`
 	Query                 string            `json:"query"`
 	Answerable            *bool             `json:"answerable,omitempty"`
@@ -326,12 +331,13 @@ type RAGEvaluationCase struct {
 }
 
 type RAGEvaluationRunRequest struct {
-	Dataset       *RAGGoldenDataset   `json:"dataset,omitempty"`
-	Cases         []RAGEvaluationCase `json:"cases,omitempty"`
-	WorkspaceID   string              `json:"workspace_id,omitempty"`
-	Metadata      map[string]string   `json:"metadata,omitempty"`
-	TopK          int                 `json:"top_k,omitempty"`
-	MinSimilarity float64             `json:"min_similarity,omitempty"`
+	Dataset        *RAGGoldenDataset   `json:"dataset,omitempty"`
+	Cases          []RAGEvaluationCase `json:"cases,omitempty"`
+	WorkspaceID    string              `json:"workspace_id,omitempty"`
+	Metadata       map[string]string   `json:"metadata,omitempty"`
+	MetadataFilter *MetadataFilter     `json:"metadata_filter,omitempty"`
+	TopK           int                 `json:"top_k,omitempty"`
+	MinSimilarity  float64             `json:"min_similarity,omitempty"`
 }
 
 type RAGEvaluationSummary struct {
@@ -346,6 +352,7 @@ type RAGEvaluationSummary struct {
 }
 
 type RAGEvaluationCaseResult struct {
+	Evidence              *RAGEvaluationEvidence   `json:"evidence,omitempty"`
 	ID                    string                   `json:"id"`
 	Query                 string                   `json:"query"`
 	Answerable            bool                     `json:"answerable"`
@@ -364,6 +371,36 @@ type RAGEvaluationCaseResult struct {
 	FailureReason         string                   `json:"failure_reason,omitempty"`
 	Items                 []RetrievedDocumentChunk `json:"items"`
 	Security              KnowledgeSecurityInfo    `json:"security"`
+}
+
+// RAGEvaluationEvidence measures accepted retrieval separately from selected
+// Context. Token counts describe local Context estimates, not billed LLM usage.
+type RAGEvaluationEvidence struct {
+	Metadata              map[string]string             `json:"metadata,omitempty"`
+	MetadataFilter        *MetadataFilter               `json:"metadata_filter,omitempty"`
+	SchemaVersion         string                        `json:"schema_version"`
+	ScopePolicy           string                        `json:"scope_policy"`
+	LifecyclePolicy       string                        `json:"lifecycle_policy"`
+	WorkspaceID           string                        `json:"workspace_id"`
+	ObservedAt            time.Time                     `json:"observed_at"`
+	ExpectedSources       int                           `json:"expected_sources"`
+	MatchedSources        int                           `json:"matched_sources"`
+	ContextMatchedSources int                           `json:"context_matched_sources"`
+	ContextLeakCount      int                           `json:"context_leak_count"`
+	ContextTokens         int                           `json:"context_tokens"`
+	LatencyMS             int64                         `json:"latency_ms"`
+	ContextSources        []RAGEvaluationSourceRevision `json:"context_sources"`
+	ContextSelection      ContextSelectionInfo          `json:"context_selection"`
+}
+
+type RAGEvaluationSourceRevision struct {
+	DocumentID            string    `json:"document_id"`
+	SourceURI             string    `json:"source_uri,omitempty"`
+	DocumentVersion       string    `json:"document_version,omitempty"`
+	MetadataSchemaVersion string    `json:"metadata_schema_version,omitempty"`
+	UpdatedAt             time.Time `json:"updated_at"`
+	ChunkHash             string    `json:"chunk_hash"`
+	SourceChunkIDs        []string  `json:"source_chunk_ids,omitempty"`
 }
 
 type RAGEvaluationRunResponse struct {

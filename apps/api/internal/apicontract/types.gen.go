@@ -540,6 +540,21 @@ func (e PartialOutputStatus) Valid() bool {
 	}
 }
 
+// Defines values for RAGGoldenDatasetSchemaVersion.
+const (
+	RagGoldenDatasetV1 RAGGoldenDatasetSchemaVersion = "rag-golden-dataset-v1"
+)
+
+// Valid indicates whether the value is a known member of the RAGGoldenDatasetSchemaVersion enum.
+func (e RAGGoldenDatasetSchemaVersion) Valid() bool {
+	switch e {
+	case RagGoldenDatasetV1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunInputKind.
 const (
 	RunInputKindFollowUp RunInputKind = "follow_up"
@@ -1823,6 +1838,97 @@ type RAGCitation struct {
 	ToolEventId     *string   `json:"tool_event_id,omitempty"`
 }
 
+// RAGEvaluationCase defines model for RAGEvaluationCase.
+type RAGEvaluationCase struct {
+	Answerable            *bool              `json:"answerable,omitempty"`
+	ExpectedChunkContains *[]string          `json:"expected_chunk_contains,omitempty"`
+	ExpectedChunkIds      *[]string          `json:"expected_chunk_ids,omitempty"`
+	ExpectedDocumentIds   *[]string          `json:"expected_document_ids,omitempty"`
+	ExpectedSources       *[]RAGGoldenSource `json:"expected_sources,omitempty"`
+	ForbiddenSources      *[]RAGGoldenSource `json:"forbidden_sources,omitempty"`
+	Id                    *string            `json:"id,omitempty"`
+	Metadata              *map[string]string `json:"metadata,omitempty"`
+
+	// MetadataFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
+	MetadataFilter    *MetadataFilter `json:"metadata_filter,omitempty"`
+	MinAcceptableRank *int            `json:"min_acceptable_rank,omitempty"`
+	Query             string          `json:"query"`
+
+	// RequireFilter Require a nonempty effective case or request restriction. Omission keeps legacy unfiltered behavior.
+	RequireFilter       *bool     `json:"require_filter,omitempty"`
+	RequiredSourceCount *int      `json:"required_source_count,omitempty"`
+	Tags                *[]string `json:"tags,omitempty"`
+}
+
+// RAGEvaluationEvidence defines model for RAGEvaluationEvidence.
+type RAGEvaluationEvidence struct {
+	ContextLeakCount      int `json:"context_leak_count"`
+	ContextMatchedSources int `json:"context_matched_sources"`
+
+	// ContextSelection Selection and transformation identity
+	ContextSelection *map[string]interface{} `json:"context_selection,omitempty"`
+	ContextSources   []struct {
+		ChunkHash             string    `json:"chunk_hash"`
+		DocumentId            string    `json:"document_id"`
+		DocumentVersion       *string   `json:"document_version,omitempty"`
+		MetadataSchemaVersion *string   `json:"metadata_schema_version,omitempty"`
+		SourceChunkIds        *[]string `json:"source_chunk_ids,omitempty"`
+		SourceUri             *string   `json:"source_uri,omitempty"`
+		UpdatedAt             time.Time `json:"updated_at"`
+	} `json:"context_sources"`
+
+	// ContextTokens Local selected-Context token estimate
+	ContextTokens   int                `json:"context_tokens"`
+	ExpectedSources int                `json:"expected_sources"`
+	LatencyMs       int64              `json:"latency_ms"`
+	LifecyclePolicy string             `json:"lifecycle_policy"`
+	MatchedSources  int                `json:"matched_sources"`
+	Metadata        *map[string]string `json:"metadata,omitempty"`
+
+	// MetadataFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
+	MetadataFilter *MetadataFilter `json:"metadata_filter,omitempty"`
+	ObservedAt     time.Time       `json:"observed_at"`
+	SchemaVersion  string          `json:"schema_version"`
+	ScopePolicy    string          `json:"scope_policy"`
+	WorkspaceId    string          `json:"workspace_id"`
+}
+
+// RAGEvaluationRunRequest Provide dataset OR cases, not both. Request restrictions are mandatory AND constraints outside case OR expressions; Workspace is resolved by authorization, not by dataset contents.
+type RAGEvaluationRunRequest struct {
+	Cases *[]RAGEvaluationCase `json:"cases,omitempty"`
+
+	// Dataset Golden cases additionally require id, answerable and expected_sources for answerable cases. See the published Golden JSON Schema.
+	Dataset  *RAGGoldenDataset  `json:"dataset,omitempty"`
+	Metadata *map[string]string `json:"metadata,omitempty"`
+
+	// MetadataFilter Opt-in typed eligibility, at most 16 KiB. Only documents validated under this version participate; legacy/unknown versions are excluded. Null is rejected rather than treated as omission.
+	MetadataFilter *MetadataFilter `json:"metadata_filter,omitempty"`
+	MinSimilarity  *float32        `json:"min_similarity,omitempty"`
+	TopK           *int            `json:"top_k,omitempty"`
+	WorkspaceId    *string         `json:"workspace_id,omitempty"`
+}
+
+// RAGGoldenDataset Golden cases additionally require id, answerable and expected_sources for answerable cases. See the published Golden JSON Schema.
+type RAGGoldenDataset struct {
+	Cases         []RAGEvaluationCase           `json:"cases"`
+	Description   *string                       `json:"description,omitempty"`
+	Id            string                        `json:"id"`
+	SchemaVersion RAGGoldenDatasetSchemaVersion `json:"schema_version"`
+	Tags          *[]string                     `json:"tags,omitempty"`
+	Version       string                        `json:"version"`
+}
+
+// RAGGoldenDatasetSchemaVersion defines model for RAGGoldenDataset.SchemaVersion.
+type RAGGoldenDatasetSchemaVersion string
+
+// RAGGoldenSource Source matchers are ANDed; at least one matcher is required.
+type RAGGoldenSource struct {
+	ChunkId         *string   `json:"chunk_id,omitempty"`
+	ContentContains *[]string `json:"content_contains,omitempty"`
+	DocumentId      *string   `json:"document_id,omitempty"`
+	SourceUri       *string   `json:"source_uri,omitempty"`
+}
+
 // RecoveryAction defines model for RecoveryAction.
 type RecoveryAction struct {
 	Enabled           bool    `json:"enabled"`
@@ -2680,6 +2786,9 @@ type IngestDocumentJSONRequestBody = DocumentIngestRequest
 
 // UpdateDocumentMetadataJSONRequestBody defines body for UpdateDocumentMetadata for application/json ContentType.
 type UpdateDocumentMetadataJSONRequestBody = DocumentMetadataUpdate
+
+// RunRAGEvaluationJSONRequestBody defines body for RunRAGEvaluation for application/json ContentType.
+type RunRAGEvaluationJSONRequestBody = RAGEvaluationRunRequest
 
 // SearchKnowledgeJSONRequestBody defines body for SearchKnowledge for application/json ContentType.
 type SearchKnowledgeJSONRequestBody = KnowledgeSearchRequest

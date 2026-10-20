@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/rag/evaluations/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Evaluate a Golden Dataset or legacy cases inside the authorized Workspace. All case constraints are validated before retrieval. Case constraints intersect request constraints; conflicting legacy keys, invalid filters and missing required constraints return 400, never unfiltered results. This is retrieval/Context regression, not answer generation or Document ACL evaluation. */
+        post: operations["runRAGEvaluation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rag/search": {
         parameters: {
             query?: never;
@@ -882,6 +899,88 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Source matchers are ANDed; at least one matcher is required. */
+        RAGGoldenSource: {
+            document_id?: string;
+            chunk_id?: string;
+            source_uri?: string;
+            content_contains?: string[];
+        };
+        RAGEvaluationCase: {
+            id?: string;
+            query: string;
+            answerable?: boolean;
+            expected_sources?: components["schemas"]["RAGGoldenSource"][];
+            forbidden_sources?: components["schemas"]["RAGGoldenSource"][];
+            required_source_count?: number;
+            expected_document_ids?: string[];
+            expected_chunk_ids?: string[];
+            expected_chunk_contains?: string[];
+            min_acceptable_rank?: number;
+            tags?: string[];
+            metadata?: {
+                [key: string]: string;
+            };
+            metadata_filter?: components["schemas"]["MetadataFilter"];
+            /** @description Require a nonempty effective case or request restriction. Omission keeps legacy unfiltered behavior. */
+            require_filter?: boolean;
+        };
+        /** @description Golden cases additionally require id, answerable and expected_sources for answerable cases. See the published Golden JSON Schema. */
+        RAGGoldenDataset: {
+            /** @enum {string} */
+            schema_version: "rag-golden-dataset-v1";
+            id: string;
+            version: string;
+            description?: string;
+            tags?: string[];
+            cases: components["schemas"]["RAGEvaluationCase"][];
+        };
+        /** @description Provide dataset OR cases, not both. Request restrictions are mandatory AND constraints outside case OR expressions; Workspace is resolved by authorization, not by dataset contents. */
+        RAGEvaluationRunRequest: {
+            dataset?: components["schemas"]["RAGGoldenDataset"];
+            cases?: components["schemas"]["RAGEvaluationCase"][];
+            workspace_id?: string;
+            metadata?: {
+                [key: string]: string;
+            };
+            metadata_filter?: components["schemas"]["MetadataFilter"];
+            top_k?: number;
+            min_similarity?: number;
+        };
+        RAGEvaluationEvidence: {
+            metadata?: {
+                [key: string]: string;
+            };
+            metadata_filter?: components["schemas"]["MetadataFilter"];
+            schema_version: string;
+            scope_policy: string;
+            lifecycle_policy: string;
+            workspace_id: string;
+            /** Format: date-time */
+            observed_at: string;
+            expected_sources: number;
+            matched_sources: number;
+            context_matched_sources: number;
+            context_leak_count: number;
+            /** @description Local selected-Context token estimate */
+            context_tokens: number;
+            /** @description Selection and transformation identity */
+            context_selection?: {
+                [key: string]: unknown;
+            };
+            /** Format: int64 */
+            latency_ms: number;
+            context_sources: {
+                document_id: string;
+                source_uri?: string;
+                document_version?: string;
+                metadata_schema_version?: string;
+                /** Format: date-time */
+                updated_at: string;
+                chunk_hash: string;
+                source_chunk_ids?: string[];
+            }[];
+        };
         KnowledgeSearchRequest: {
             query: string;
             workspace_id?: string;
@@ -2296,6 +2395,46 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    runRAGEvaluation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RAGEvaluationRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Case results and pipeline identity. Each case includes evidence of effective constraints, matched sources, selected Context revisions, estimated Context tokens and latency. An upstream failure aborts this HTTP batch; the offline runner retains failed/not-evaluated samples. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        summary: {
+                            [key: string]: unknown;
+                        };
+                        cases: {
+                            evidence?: components["schemas"]["RAGEvaluationEvidence"];
+                        }[];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+            /** @description Embedding or ranking dependency failed; no success metrics returned. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     searchKnowledge: {
         parameters: {
             query?: never;

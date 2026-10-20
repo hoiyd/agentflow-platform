@@ -184,7 +184,7 @@ func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
 	}
 	for key, value := range envelope {
 		if strings.EqualFold(key, "metadata_filter") {
-			if err := validateMetadataFilterJSON(value); err != nil {
+			if err := eligibility.ValidateFilterJSON(value); err != nil {
 				writeKnowledgeError(w, r, err)
 				return
 			}
@@ -214,14 +214,9 @@ func (h *Handler) searchDocumentChunks(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) runRAGEvaluation(w http.ResponseWriter, r *http.Request) {
 	var req domain.RAGEvaluationRunRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
-		return
-	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		writeError(w, http.StatusBadRequest, "invalid json body")
+	data, err := io.ReadAll(io.LimitReader(r.Body, (2<<20)+1))
+	if err != nil || rag.DecodeEvaluationJSON(data, &req) != nil {
+		writeError(w, http.StatusBadRequest, "invalid or ambiguous evaluation JSON")
 		return
 	}
 	workspaceID, matches := resolvePayloadWorkspace(r, req.WorkspaceID)

@@ -181,35 +181,9 @@ export type DocumentSearchResponse = {
   reason?: string;
 };
 
-export type RAGEvaluationCase = {
-  id: string;
-  query: string;
-  answerable?: boolean;
-  expected_sources?: RAGGoldenSource[];
-  forbidden_sources?: RAGGoldenSource[];
-  required_source_count?: number;
-  expected_document_ids?: string[];
-  expected_chunk_ids?: string[];
-  expected_chunk_contains?: string[];
-  min_acceptable_rank?: number;
-  tags?: string[];
-};
-
-export type RAGGoldenSource = {
-  document_id?: string;
-  chunk_id?: string;
-  source_uri?: string;
-  content_contains?: string[];
-};
-
-type RAGGoldenCaseBase = {
-  id: string;
-  query: string;
-  forbidden_sources?: RAGGoldenSource[];
-  required_source_count?: number;
-  min_acceptable_rank?: number;
-  tags?: string[];
-};
+export type RAGEvaluationCase = components["schemas"]["RAGEvaluationCase"];
+export type RAGGoldenSource = components["schemas"]["RAGGoldenSource"];
+type RAGGoldenCaseBase = Omit<RAGEvaluationCase, "answerable" | "expected_sources" | "expected_document_ids" | "expected_chunk_ids" | "expected_chunk_contains"> & { id: string };
 
 export type RAGGoldenCase = RAGGoldenCaseBase &
   (
@@ -241,6 +215,7 @@ export type RAGEvaluationRunResponse = {
     blocked_candidates?: number;
   };
   cases: Array<{
+    evidence?: components["schemas"]["RAGEvaluationEvidence"];
     id: string;
     query: string;
     answerable?: boolean;
@@ -386,6 +361,7 @@ type RAGEvaluationRunInput = (
   top_k?: number;
   min_similarity?: number;
   metadata?: Record<string, string>;
+  metadata_filter?: components["schemas"]["MetadataFilter"];
 };
 
 export async function runRAGEvaluation(input: RAGEvaluationRunInput, signal?: AbortSignal): Promise<RAGEvaluationRunResponse> {
