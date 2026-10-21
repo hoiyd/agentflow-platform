@@ -1,58 +1,29 @@
 # Offline Evaluation Reports and Regression Gates
 
-AgentFlow uses one CLI and one provenance envelope for deterministic Context,
-RAG, and Agent routing checks plus explicitly authorized live checks:
+One CLI shares the `agentflow-evaluation-report-v1` identity envelope; domain
+payloads remain separate. Reports bind Dataset/version/hash, Git revision,
+configuration, timestamps and gate. A passing fixture is not live-model quality.
+
+From the repository root, after installing dependencies:
 
 ```bash
-cd apps/api
-go run ./cmd/eval context --enforce
-go run ./cmd/eval rag --enforce
-go run ./cmd/eval route --enforce
-go run ./cmd/eval tool --live --model MODEL \
-  --max-model-calls 45 --max-total-tokens 250000 --trials 3 --enforce
+make context-eval
+make golden-eval
+make routing-eval
+make benchmark-evidence
 ```
 
-The live [`llama.cpp` compatibility suite](local-inference-compatibility.md)
-uses the same CLI but is a target protocol and Runtime evidence check, not an
-offline quality score.
-The [tokenization calibration](tokenization-calibration.md) uses a fixed corpus
-and live llama.cpp token-count endpoints to measure Context estimate error;
-it does not change production preflight or Budget settlement.
-
-Every report uses `agentflow-evaluation-report-v1` identity fields: evaluation
-kind, Dataset ID/version/hash, Git revision, start/end time, and an explicit
-gate. Domain payload schemas remain separate (`context-quality-eval-v1`,
-`rag-eval-v1`, `agent-routing-eval-v1`, and `task-eval-v1`) so Context selection,
-retrieval ranks, routing outcomes, model tokens, and Tool calls are not confused.
-
-Within `internal/evaluation/{contexteval,rageval,routeeval}`, `runner.go` owns
-suite execution and budgets; `dataset.go`, `report.go`, `sample.go` and
-`metrics.go` own input validation, JSON contracts, per-case execution and scoring.
-Comparison and routing calibration remain separate files with domain-specific
-semantics. These packages reuse `evalreport`; there is no second evaluation engine.
+These commands need no model access or running application. CLI examples below
+run from `apps/api` with the repository Go version active. Live calls are opt-in,
+budgeted and never part of default CI. [Evaluation guide](README.md) maps other
+evidence paths, including compatibility, tokenization, load and recovery.
 
 ## Context Quality Gate
 
-The Context runner calls the production Context Assembler against a versioned,
-network-free dataset. It checks the final model input for required fact
-retention, forbidden stale-content leakage, irrelevant selected-token ratio,
-per-source token share, total estimated input tokens, and stable prefix hashes.
-Cases place evidence early, in the middle, and late in history and cover
-corrections, exact identifiers, unfinished work, history-budget pressure,
-required-input overflow, missing sources, and raw-history fallback after a
-failed compaction.
-
-The default `compacted_history` strategy uses fixed, reviewed compaction
-summaries. This proves assembly, shadowing, budget, and constraint-retention
-behavior; it does not claim that a live model can generate summaries of the
-same quality or that the final answer is correct. No model request is sent.
-The separate [live compaction profile](live-compaction.md) measures generated
-summaries and actual task continuation; it does not change this deterministic gate.
-Each successful sample hashes a canonical final-input payload using the same
-provider-neutral `requestcontrol.Observation` contract as production capture,
-but the offline report stores no prompt content.
-
-Generate a controlled one-variable comparison with:
+The production Assembler processes a frozen corpus with exact required facts,
+forbidden stale content, correction/ID/history-pressure cases and explicit
+calibration/holdout splits. Reports include source shares, irrelevant-token
+ratio, input estimates, stable prefix and canonical payload hashes; no raw prompt.
 
 ```bash
 go run ./cmd/eval context --strategy full_history > /tmp/context-baseline.json
@@ -60,99 +31,47 @@ go run ./cmd/eval context --strategy compacted_history \
   --baseline /tmp/context-baseline.json --ablation --enforce
 ```
 
-Reports are comparable only when Dataset hash, model, Assembler version,
-Compaction algorithm, and Context Assembly configuration match. `--ablation`
-allows only the strategy to differ. Increased gating failures, lower required
-fact retention, higher forbidden-content or irrelevant-context ratios, and
-stable-prefix drift fail the comparison. Input-token change is reported as a
-cost signal rather than treated as quality by itself.
+Fixed reviewed summaries test selection, shadowing, overflow and fallback, not
+the model's ability to generate a good summary. The
+[live compaction experiment](live-compaction.md) measures that separately.
 
-The dataset separates `calibration` and `holdout` cases. Gating cases use exact
-invariants: all required facts retained and zero forbidden facts included.
-The intentionally missing-source case is diagnostic, remains in the denominator,
-and cannot block the canonical gate. No uncalibrated aggregate quality score is
-used as a release threshold.
+Comparison requires identical Dataset/model/Assembler/compaction/configuration;
+`--ablation` permits only strategy to differ. Increased gating failures or
+forbidden/irrelevant content, lost required facts and prefix drift fail the gate.
+Input-token savings alone are not quality. Missing-source diagnostics remain in
+the denominator without blocking; required/forbidden gating invariants are exact.
 
 ## Agent Routing Gate
 
-`eval route` calls the production hard-eligibility, deterministic ranking, LLM
-response parser, fallback, and abstention gate through a narrow offline adapter.
-It does not create runtime Runs, Stages, or Events. The versioned dataset freezes
-the Agent catalog and calibration/holdout split and allows either a set of
-acceptable Agents or an explicit `no_eligible_agent` / `no_suitable_agent`
-outcome. Dataset cases cover clear and multiple specialists, hard capability
-failure, no match, ambiguous requests, and description conflict. Fixture tests
-cover Router failure, invalid response, fallback, and exhausted-budget paths.
+`eval route` uses production eligibility/ranking, response parsing, fallback and
+abstention through an offline adapter, not persisted Runtime Runs. The Dataset
+freezes catalog and acceptable Agent sets or explicit no-route outcomes.
 
-The report records Dataset, Agent catalog, threshold configuration, prompt,
-model, and Git revisions. It reports eligible recall, top-1 acceptable selection, unsafe false
-routes, no-route Precision/Recall, invalid responses, fallback recovery, Router
-tokens, and latency separately. Failed, timed-out, invalid, fallback, and
-budget-skipped trials stay in their metric denominators; undefined ratios are
-JSON `null`. The holdout gate requires every expected outcome to match and no
-unsafe false route. It intentionally does not produce one aggregate score.
+Reports separate eligible recall, acceptable top-1, unsafe routes, no-route
+Precision/Recall, invalid response, fallback, tokens and latency. Failed/timed-out/
+skipped cases remain in denominators; undefined ratios are `null`. Holdout requires
+expected outcomes and zero unsafe routes. Calibration recommendations are advisory,
+not automatic policy updates; historical algorithms are not selectable.
+See [immutable retirement baselines](../../examples/routing/legacy-algorithm-baselines.json).
 
-The evaluator searches observed calibration scores and margins and
-reports a holdout-tested threshold recommendation; live LLM runs additionally
-calibrate confidence from valid LLM decisions. Fallback decisions remain on the
-deterministic threshold path. Recommendations are advisory evidence, not an
-automatic production policy update. Review the dataset and report before
-changing routing behavior; a protocol change must use a new Runtime Snapshot
-schema rather than an Agent selection algorithm switch.
-
-Dataset v1 produced the following retirement baseline at Git revision `426bae7`:
-
-| Historical implementation | Top-1 acceptable | Unsafe false routes | No-route recall | Result |
-| --- | ---: | ---: | ---: | --- |
-| `agent-selection-v1` | 9/10 | 2/16 | 0/6 | diagnostic failure |
-| `agent-selection-v2` | 9/10 | 1/16 | 1/6 | diagnostic failure |
-| `agent-selection-v3` | 10/10 | 0/16 | 6/6 | holdout gate passed |
-
-The old labels describe archived results, not selectable or executable policies.
-The v1/v2 failure counts include typed-requirement cases those implementations
-could not represent. The current algorithm is the accepted v3 behavior and keeps
-the conservative `6/1` threshold despite Dataset v1 recommending `4/1`. The
-complete immutable summary records dataset/configuration hashes and metrics in
-[`legacy-algorithm-baselines.json`](../../examples/routing/legacy-algorithm-baselines.json).
-No live LLM result is claimed without an explicitly authorized, budgeted
-multi-trial run.
+An explicitly authorized live profile disables retries and bounds suite calls,
+tokens and per-sample time:
 
 ```bash
-make routing-eval
+go run ./cmd/eval route --live --model MODEL \
+  --trials 3 --max-model-calls 50 --max-total-tokens 100000 --timeout 60s
 ```
 
-Real LLM ranking is opt-in, disables provider retries, and requires explicit
-suite call/token budgets plus a per-sample deadline. Use multiple trials because
-one model response is not a reliability measurement:
-
-```bash
-OPENAI_API_KEY=... go run ./cmd/eval route --live --model MODEL \
-  --trials 3 --max-model-calls 50 --max-total-tokens 100000 \
-  --timeout 60s
-```
-
-The default command and CI tests never call a public model. No embedding,
-classifier, Router database, or dashboard is introduced by this evaluator.
+Export the required credential before running; the command does not authorize
+spend by itself. One model response is not a reliability measurement.
 
 ## RAG Gate
 
-The RAG runner builds an isolated in-memory fixture from the versioned corpus and
-uses the production chunking, hybrid recall, RRF, reranking, relevance, security,
-and context-selection path. Local hash embeddings make default runs deterministic
-and network-free. The report records actual component identity, Top-K, similarity
-threshold, each Case outcome/error, stable source hashes, MRR, binary-relevance
-NDCG, Hit@K, no-answer Precision/Recall, leak count, blocked candidates, and latency.
-Each sample belongs to an explicit `calibration` or `holdout` split, and the report
-publishes metrics for both. Ranked source diagnostics include confidence,
-similarity, evidence coverage, and the Gate reason without copying document text.
-
-The current `heuristic-relevance-hardened-v2` profile removes common English
-query stop words and requires at least `0.25` query-term evidence coverage before
-weak vector/reranker paths may admit a result. Saturated lexical scores require
-the same coverage or an exact alphanumeric identifier match. The value was selected on the
-calibration split and must also pass the untouched holdout split. It is a baseline
-for this corpus and deterministic embedder, not a universal threshold. Compare a
-candidate as one explicit ablation:
+The runner builds an isolated corpus using production chunking, hybrid recall,
+RRF, reranking, relevance/security and Context selection. Default hash embeddings
+are deterministic, not a semantic-quality baseline. Reports expose component
+identities, ranked source hashes, per-case outcomes, MRR/NDCG/Hit@K, no-answer
+Precision/Recall, leaks, security decisions and latency, separately by split.
 
 ```bash
 go run ./cmd/eval rag --enforce > /tmp/rag-baseline.json
@@ -160,42 +79,30 @@ go run ./cmd/eval rag --min-evidence-coverage 0.30 \
   --baseline /tmp/rag-baseline.json --ablation --enforce
 ```
 
-Cases tagged `non-blocking` remain diagnostic. Every other Case is gating;
-failed, canceled, missed, or not-evaluated gating Cases fail `--enforce` and
-remain in the denominator. Undefined no-answer metrics are JSON `null`. Timing
-and timestamps are observations, not deterministic comparison keys.
+The fixture-calibrated default evidence coverage is `0.25`; saturated lexical
+scores still require that coverage or an exact alphanumeric ID. The example is
+a candidate ablation, not a recommended production threshold.
 
-`--baseline REPORT` compares only reports with identical Dataset/corpus hashes,
-retrieval configuration, and component identity. Incomparable inputs fail the
-gate instead of being called an improvement. Increased gating failures or leaks,
-and decreased MRR/NDCG, are regressions.
+Only `non-blocking` cases are diagnostic. Other failed/canceled/missed/not-evaluated
+cases fail `--enforce`; undefined ratios stay `null`. Baselines must match corpus,
+Dataset and pipeline identity. `--ablation` permits exactly one declared variable:
+Top-K, threshold, chunker, retrieval mode, embedding, fusion, reranker, gate or
+security. Incomparable reports cannot become improvements.
 
-For an intentional single-variable experiment, add `--ablation`. The comparison
-is accepted only when exactly one of Top-K, threshold, chunker, retrieval mode,
-Embedding, Fusion, Reranker, Relevance Gate, or security policy differs; the
-changed field is recorded.
+[TEI reranker-only comparison](../knowledge/cross-encoder-reranking.md#single-variable-evidence)
+also requires equal per-case candidate-set hashes. Older baselines without that
+evidence must be regenerated. Rerank time is separate from query latency; unknown
+TEI pricing is not zero.
 
-[Optional TEI Cross-Encoder evaluation](../knowledge/cross-encoder-reranking.md#single-variable-evidence)
-adds `--reranker tei --live-reranking` and declared deployment settings. A
-reranker-only ablation also requires identical per-Case `candidate_set_hash`
-values; regenerate older baselines without this evidence. Reports retain
-`rerank_latency_ms` separately from complete query latency; priced TEI usage
-is unavailable, not zero. Keep recall, embedding, thresholds, and the relevance
-gate unchanged when measuring the ranking variable.
+### Semantic Retrieval Profile
 
-### Semantic retrieval profile
-
-`eval rag` can explicitly replace the deterministic hash embedder with one real
-OpenAI-compatible or Ollama model. Live access is opt-in and requires a model,
-its expected dimensions, a physical request budget, an estimated input-token
-budget, and a deadline. Indexing, queries, and retries share those limits; every
-retry consumes another physical request. Missing credentials, invalid vectors,
-model or dimension drift, exhausted budgets, and timeouts fail closed and remain
-visible in the report denominator. They never fall back to hash.
+Real embeddings require explicit model/dimensions, physical-request/input-token
+budgets and deadline. Index, queries and retries share the limits; each retry
+costs another physical request. Missing credentials, invalid vectors, identity
+drift, timeout or exhausted budget fail closed, never fall back to hash.
 
 ```bash
-cd apps/api
-OPENAI_API_KEY=... go run ./cmd/eval rag \
+go run ./cmd/eval rag \
   --embedding-profile openai_compatible --live-embeddings \
   --embedding-base-url https://api.openai.com/v1 \
   --embedding-model text-embedding-3-small --embedding-dimensions 1536 \
@@ -204,77 +111,49 @@ OPENAI_API_KEY=... go run ./cmd/eval rag \
   --min-evidence-coverage 0.25 --retrieval-mode hybrid --enforce
 ```
 
-For Ollama, use `--embedding-profile ollama` and an
-`--embedding-base-url` ending in `/api/embed`; no API key is required. Run the
-same profile and corpus with `hybrid`, `dense_only`, and `lexical_only` to
-measure the retrieval contribution. A baseline comparison with `--ablation`
-accepts `retrieval_mode` as the sole changed variable. Fixture lexical recall is
-the existing token-overlap heuristic, not BM25. Real profiles require both
-threshold flags explicitly; the values above are only a runnable starting point,
-not a calibrated semantic profile.
+For Ollama use `--embedding-profile ollama` and an `/api/embed` endpoint; no key
+is required. Freeze the corpus/model and compare `hybrid`, `dense_only` and
+`lexical_only` as single-variable runs. Real profiles require both thresholds
+explicitly; example values are starting points, not calibrated results.
 
-The report records requested and actual model identity, dimensions, input
-transformations, cosine distance, index identity, separate index/query timing,
-and phase-level logical-input and physical-request estimates. Embedding APIs do
-not currently return standardized token usage or price, so cost stays JSON
-`null` and is never reported as zero. Reports contain hashes and ranked source
-metadata, not raw document text or vectors. Real-model runs are manual and are
-not a default CI dependency.
+Reports retain actual/requested identity, dimensions, input transformations,
+distance/index identity, phase times and request/input estimates. Standardized
+embedding usage/pricing is unavailable, so cost stays `null`. Reports omit raw
+documents/vectors; fixture lexical scoring is token overlap, not BM25.
 
 ## Tool Gate and CI
 
-Tool evaluation remains opt-in because it spends model quota. It records trials,
-provider/model, frozen Context configuration, prompt revision/hash, Tool contract
-hash, verified output, failure evidence, input/output tokens, latency and Usage
-Ledger totals. Missing usage stays estimated; unsettled usage stops later samples.
+[Tool evaluation](tool-task-evaluations.md) is live/opt-in and records task/trial,
+model, Context/Prompt/Tool identity, verified outcome, failures, calls, latency and
+Ledger usage. Missing usage stays estimated; unsettled usage stops further samples.
 
-Default CI never calls public models. Fixture-backed Tool protocol checks and the
-canonical Context/RAG plus current deterministic routing run write JSON into
-`EVALUATION_REPORT_DIR`; the backend job uploads the directory as
-`offline-evaluation-reports`. Retired routing comparisons stay in the tracked
-read-only Artifact and are not executed by CI. Reports omit
-credentials/endpoints, redact model errors, and do not copy Context or RAG source
-content.
+Default CI makes no public model calls. Existing deterministic Context/RAG/routing
+and Tool protocol checks write JSON to `EVALUATION_REPORT_DIR`, uploaded as
+`offline-evaluation-reports`. Reports omit credentials/endpoints/private Context;
+errors pass redaction. Retired routing reports remain read-only, not executed policies.
 
 ## CASE-001 Evidence-backed Benchmark Suite
 
-[`benchmark-suite.v1.json`](../../examples/benchmark-suite.v1.json) fixes 12 tasks:
-nine policy/operations retrieval cases and three long settlement-record cases.
-It records calibration/holdout membership and maps normal, no-answer, stale,
-conflicting-source, long-context, dependency, budget, cancellation, and recovery
-coverage to existing evaluators and tests.
+[`benchmark-suite.v1.json`](../../examples/benchmark-suite.v1.json) defines nine
+policy/operations retrieval tasks and three long settlement-record tasks. It maps
+normal/no-answer/stale/conflicting-source/long-context cases and dependency,
+budget, cancellation and recovery failures to existing gates.
 
-Generate the network-free evidence pack with:
-
-```bash
-make benchmark-evidence
-```
-
-By default the command writes to `.cache/benchmark-suite`; set
-`BENCHMARK_REPORT_DIR` to choose another directory. The pack contains the
-manifest, `rag-offline.json`, `tool-task-protocol.json`, failure/recovery JSONL,
-and the before/after recovery Replays
-`benchmark-recovery-before-replay.json` and
-`benchmark-recovery-replay.json`. Every offline item is explicitly marked or
-named as deterministic/simulated evidence. It proves protocol, accounting,
-retrieval, and recovery behavior, not real-model quality.
+`make benchmark-evidence` writes `.cache/benchmark-suite/` (override with an
+absolute `BENCHMARK_REPORT_DIR`): frozen suite, `rag-offline.json`, `tool-task-protocol.json`,
+failure/recovery JSONL and before/after recovery Replays. The
+[demo guide](../guides/demo.md#recovery-evidence) explains what to inspect.
+This is explicitly simulated protocol/retrieval/accounting/recovery evidence.
 
 ## CASE-001A Live Model Benchmark Evidence
 
-`eval benchmark` is a thin orchestration command over the existing RAG, Tool,
-and Router runners. It runs all 12 frozen CASE-001 tasks: nine use a real
-embedding profile and three compare the same chat model across `full_context`
-and `with_tools`. It also compares the deterministic `query_match` Router with
-explicit LLM ranking on the frozen routing dataset. Domain reports remain
-separate; no aggregate intelligence score is calculated.
-
-The command is deliberately opt-in and requires explicit independent budgets.
-The example below permits up to 45 Tool experiment model calls, 50 Router calls,
-and 50 embedding requests. These are suite-wide ceilings, not per-task limits:
+`eval benchmark` orchestrates existing runners: real embeddings for nine retrieval
+tasks, same-model `full_context`/`with_tools` for three Tool tasks, and deterministic
+versus LLM ranking on the Router Dataset. It produces separate reports, not one
+intelligence score. With credentials exported, explicitly authorize the spend:
 
 ```bash
-cd apps/api
-OPENAI_API_KEY=... go run ./cmd/eval benchmark --live \
+go run ./cmd/eval benchmark --live \
   --model CHAT_MODEL --base-url https://api.openai.com/v1 \
   --embedding-profile openai_compatible \
   --embedding-model EMBEDDING_MODEL --embedding-dimensions 1536 \
@@ -287,23 +166,13 @@ OPENAI_API_KEY=... go run ./cmd/eval benchmark --live \
   --output-dir ../../.cache/live-benchmark/MODEL-REVISION --enforce
 ```
 
-The output directory contains the frozen suite plus `rag-semantic.json`,
-`tool-context-vs-tools.json`, `route-query-match.json`,
-`route-llm-ranking.json`, and `manifest.json`. The manifest records model IDs,
-budgets, trials, Dataset hash, Git revision, report hashes, observed skipped or
-failed samples, and binary improved/unchanged/regressed comparisons. Individual
-reports retain task/trial rows, verification or no-answer outcomes, false routes,
-fallbacks, model/Tool calls, latency, and available usage.
+These are independent **suite-wide** ceilings, not per-task allowances. Output
+includes `manifest.json`, `rag-semantic.json`, `tool-context-vs-tools.json`,
+`route-query-match.json` and `route-llm-ranking.json`, with hashes, configuration,
+trials, failures/skips and improved/unchanged/regressed comparisons.
 
-Failures, timeouts, budget-skipped samples and invalid model responses stay in
-their original report denominators. The evidence completeness gate also requires
-a traceable declared failure path and at least one evaluated no-gain or regression
-pair; it does not require every model-quality gate to pass. Unknown pricing stays
-unknown, estimated usage remains marked, credentials and provider endpoints are
-not written, and no public model is called by default tests or CI.
-
-The same prompt, task and chat model are used within the Tool arm comparison;
-the Router comparison changes only selection mode. The suite defines stable
-tasks, while each generated report is a versioned result. Do not quote offline
-fixture percentages as live-model quality or omit failed and unrun trials from
-resume claims.
+The evidence-completeness gate requires a traceable failure path and an evaluated
+no-gain/regression pair; it does not mean every quality gate passed. Failures,
+timeouts, invalid responses and unrun trials stay in their denominators. Unknown
+cost and estimated usage remain explicit. Only controlled, retained live reports
+support quality/cost claims; never quote fixture percentages as live reliability.

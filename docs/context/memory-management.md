@@ -18,8 +18,19 @@ Completing a Run no longer copies every user and assistant message into `memorie
 
 Memory is exposed through one replaceable lifecycle boundary:
 
-```text
-Initialize -> Recall / Propose / Commit / SyncTurn -> Close
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart LR
+    Initialize --> Operations["Recall / Propose / Commit / SyncTurn"]
+    Operations --> Close
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class Operations focus;
 ```
 
 Agent Runtime depends only on `Recall`; explicit Memory APIs depend on
@@ -31,14 +42,27 @@ composition root, so changing the provider does not change the Turn Engine.
 After the response has been flushed, the user message is submitted to the
 built-in provider's background sync worker:
 
-```text
-completed response
-  -> explicit rule extraction
-  -> adaptive model fallback (optional)
-  -> conservative policy evaluation
-  -> persisted accepted/rejected candidate
-  -> accepted candidate embedding
-  -> durable semantic memory
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Response["Completed response"] --> Rules["Explicit rule extraction"]
+    Rules -->|Rule matched| Policy["Conservative policy evaluation"]
+    Rules -->|No match; adaptive enabled| Adaptive["Prefilter and optional model extraction"]
+    Adaptive -->|Proposal| Policy
+    Policy --> Candidate["Persist Candidate decision"]
+    Candidate -->|Accepted| Embed["Embed accepted fact"]
+    Embed --> Memory["Durable semantic Memory"]
+    Candidate -->|Rejected / shadow| Rejected["Retain audit; no Memory write"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Policy focus;
+    class Candidate,Memory durable;
 ```
 
 The rule extractor remains the high-precision fast path. It recognizes explicit English and Chinese signals such as:

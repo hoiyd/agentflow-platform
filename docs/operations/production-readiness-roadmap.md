@@ -1,149 +1,56 @@
-# Production Readiness Roadmap
+# Deployment Scope and Remaining Work
 
-AgentFlow already implements production-oriented controls for bounded
-execution, persistence, observability, and outcome verification. This roadmap
-defines the deployment scope those controls support today and how that scope can
-expand safely from a trusted workspace-scoped environment to authenticated
-multi-workspace and distributed operation.
-
-Production readiness is treated as a deployment-specific claim, not a binary
-label. Each milestone below has a narrower risk envelope than the next; features
-needed only for enterprise or regional scale are not presented as blockers for
-a controlled pilot.
-
-## Production-Oriented Baseline
-
-| Area | Implemented control and evidence |
-| --- | --- |
-| Execution | [Single, Multi, and Loop](../runtime/execution-modes.md) share one Turn Engine, frozen Runtime Snapshot, bounded lifecycle, and common completion path. |
-| Resource control | [Admission, backpressure, rate limits, retries, context limits, Run Budget, and timeouts](../runtime/execution-controls.md) have distinct scopes and enforcement owners. |
-| Persistence | Postgres stores persist Runs, Messages, durable Run Events, usage, retrieval data, and Verification records behind shared domain contracts. |
-| Workspace scope | [Owned Workspace entities](workspace-lifecycle.md) have generated IDs, mutable names, defaults, archive/restore and soft deletion. Request admission and persisted-write guards protect Conversation, Run, Document, Memory, Replay and related scope. |
-| Tool execution | [Service availability, Workspace grants and Agent selection](../architecture/workspace-agent-tools.md#tool-authorization) precede a bounded Executor with typed errors, timeout, result limits, tracing, and conservative concurrency. |
-| RAG | [Hybrid recall, RRF, reranking, relevance gating, scoped context expansion, injection filtering, and citations](../knowledge/knowledge-rag.md) use one observable pipeline. |
-| Evaluation | The [Golden Dataset v1](../evaluation/rag-golden-dataset.md) pairs a versioned schema and canonical corpus with the production retrieval path, reporting Hit@1/3/5, misses, security decisions, and active component versions. |
-| Evidence | [Run Events, Replay, Episode Reports](../architecture/terms.md#observability-records-and-views), Usage Ledger, and [Verification Evidence](../runtime/verification.md) explain execution and configured outcome checks. |
-
-These controls are useful now: they bound work, preserve execution evidence,
-and expose failure behavior. The remaining work expands where and at what scale
-the system can be operated safely; it does not replace the runtime foundation.
+AgentFlow supports a **trusted, single-instance, Workspace-scoped deployment**.
+The controls below are implemented; broader release guarantees require separate
+deployment evidence. This is not a claim of general production readiness.
 
 ## Current Deployment Profile
 
-The current supported profile is a **trusted, workspace-scoped deployment** for
-evaluation, internal use, or a controlled demonstration:
+| Area | Implemented | Remaining boundary |
+| --- | --- | --- |
+| Access | Optional [OIDC/Membership](identity-membership.md), owner Workspaces, scoped resources and current revocation checks | Local mode is unauthenticated; team/object sharing, scoped credentials and broader tenant release validation remain separate |
+| Execution | Shared modes, admission, Conversation writer, request limits, Run Budget | Process-local ownership; no durable distributed dispatch/lease/fencing |
+| Persistence/recovery | Postgres, Stage checkpoints, interrupted lifecycle repair, explicit Resume | Backup/restore, schema rollback and multi-worker takeover are not established by the restart drill |
+| Tools/Skills | Guarded Executor, grants, trusted packages, [scoped reads](../tools/scoped-filesystem.md), [managed writes](../tools/scoped-filesystem-writes.md), opt-in [scratch sandbox](sandbox-execution.md) | No arbitrary host code, automatic Skill-script execution or complete durable high-risk approval workflow |
+| Evidence | Replay, Ledger, optional [Verification](../runtime/verification.md), [OTel](opentelemetry.md), versioned evaluation | Broader domain calibration, retention/SLO operations and asynchronous human/model grading are not complete |
 
-| Dimension | Current scope |
-| --- | --- |
-| Access | Trusted-local mode remains unauthenticated; optional [OIDC identity and membership](identity-membership.md) add themed signup/login, personal Workspace onboarding, revocable sessions and request-level membership checks. |
-| Tenancy | Each Workspace has one owner, with owner-constrained Membership, lifecycle checks and scoped object authorization. Agents and Tool grants are Workspace-owned; shared templates are read-only and service bindings, credentials and execution policy remain operator-owned. Cross-tenant audit and retention remain separate work. |
-| Runtime | Run admission, bounded queueing, Conversation single-writer control, interrupted lifecycle repair, Stage checkpoints, and Tool effect idempotency operate within one process. |
-| Tools | Use built-in or operator-reviewed Tools. All calls pass through Agent allowlists, Budget, timeout, result limits, tracing, and conservative concurrency. |
-| Data | Postgres provides durable storage, including local operation. The single-instance [release and recovery drill](release-recovery-drill.md) exercises startup migration, restart, repair, and Resume; backup/restore and version rollback remain deployment responsibilities. |
-| Quality | Retrieval evaluation is repeatable against the canonical v1 corpus. Persisted Evaluation Runs, broader representative coverage, and calibrated release thresholds are the next quality steps. |
-
-This profile deliberately excludes untrusted public access, hard multi-tenant
-claims, arbitrary code execution, and distributed Worker ownership.
-
-## Deployment Milestones
-
-| Milestone | Additional boundary required |
-| --- | --- |
-| **Controlled single-tenant pilot** | External identity boundary, Postgres, backup/restore drill, retention and redaction policy, baseline telemetry, Runbooks, and measured capacity. |
-| **Multi-workspace beta** | Enable built-in OIDC identity/Membership and verify scoped resources, Workspace Agent/Tool configuration, current-revocation enforcement and cross-owner tests. Review credential scope, audit and retention against the actual deployment boundary. |
-| **Distributed deployment** | Durable dispatch, independent Workers, reconnectable event delivery, Lease/Heartbeat/Fencing, distributed checkpoint ownership, and takeover drills. |
-| **Enterprise or regional scale** | SSO/SCIM, fine-grained RBAC, audited write-capable Sandboxes, online evaluation, Provider failover, regional recovery, and contractual compliance controls. |
-
-The first milestone is intentionally smaller than a general multi-tenant SaaS
-launch. Later milestones should be pulled forward only when the deployment
-model or workload requires them.
+Browser disconnect already leaves admitted work running and reconnects by durable
+sequence. This is not process-crash survival or cross-worker takeover. Committed
+effects have receipts; uncertain external outcomes require reconciliation,
+not an exactly-once guarantee.
 
 ## Next Hardening Priorities
 
-### 1. Secure Access and Data Boundaries
+1. **Protect the actual exposure.** Enable existing OIDC/resource checks for
+   authenticated use; retain operator-owned credentials and Tool ceilings.
+   Add sharing or scoped credentials only with explicit ownership/revocation tests.
+2. **Operate retained data safely.** Define deletion/retention for Messages,
+   reasoning, Capture, Memory, Artifacts and backups. Rehearse backup/restore and
+   version rollback; startup migration alone is not that evidence.
+3. **Measure quality and capacity.** Extend representative Golden holdouts,
+   retain component identity/failures, set actionable SLOs and tune one control
+   at a time. Fixture success is not live quality or inference capacity.
+4. **Add durable Workers only when needed.** Atomic dispatch, claim/lease/fencing,
+   distributed Conversation ownership and takeover drills must precede a
+   multi-instance recovery claim. Do not replace the existing controllers first.
 
-- Enable the implemented [OIDC](identity-membership.md), [Workspace lifecycle](workspace-lifecycle.md)
-  and [resource authorization](resource-authorization.md) boundaries for authenticated
-  access. Extend their cross-owner gates whenever adding a resource or background
-  consumer; existing object and Agent/Tool configuration authorization is not pending work.
-- Keep the implemented process-level Provider credential boundary and shared
-  redaction sink policy; add scoped Provider and Tool credential references
-  when authenticated identities and multiple credential owners exist.
-- Preserve the implemented [Tool security policy](../tools/tool-security-policy.md)
-  and [execution boundaries](execution-boundaries.md) when adding capabilities.
-  Durable human approval, scoped filesystem access and reviewed Skill scripts
-  remain separate extensions; Agent allowlists never widen operator authority.
-- Define retention, deletion, and append-only security audit behavior without
-  placing sensitive Prompt or Tool payloads in audit records.
+## Deployment Milestones
 
-### 2. Durable Execution and Recovery
-
-- Keep Postgres as the sole production state source; rehearse backup/restore
-  and version rollback for schema changes. Current startup DDL and the
-  single-instance restart/Resume drill do not prove those deployment procedures.
-- Persist Run dispatch atomically with Run creation; bounded Workers claim work
-  with stable operation IDs and idempotent usage accounting.
-- Promote the current process-local Run continuity contract to durable Worker
-  dispatch. Browser SSE delivery is already detached from Run execution and
-  reconnects by durable event sequence; the persisted final Message remains
-  authoritative.
-- Use Lease, Heartbeat, and Fencing to prevent stale Workers from committing;
-  promote Conversation single-writer control from a process lock to distributed
-  ownership when multiple Workers are introduced.
-- Extend the internal Stage checkpoint provider with distributed ownership and
-  verify recovery through Worker termination, dependency failure, rolling
-  deployment, and takeover drills.
-
-### 3. Quality and Operational Evidence
-
-- Extend and maintain the canonical Golden Dataset beyond its current facts,
-  paraphrases, exact IDs, multi-source, no-answer, stale-source, ACL, and
-  injection cases as representative production queries become available.
-- Bind evaluation results to corpus, embedding, fusion, reranker, relevance
-  policy, Prompt, and model versions. Security leakage remains a hard failure.
-- [OpenTelemetry traces](opentelemetry.md) now project committed Run Events into
-  bounded metadata-only OTLP/HTTP export. Production Collector authentication,
-  durable trace storage/retention and alerting remain deployment responsibilities.
-- Define SLOs and actionable alerts for admission, queueing, execution,
-  Provider, database, recovery, and quality failures.
-- Use canary rollout, compatible migrations, rehearsed rollback, and load/soak
-  tests. Publish only measured capacity and recovery behavior.
-
-## Scale-Driven Evolution
-
-These capabilities expand the risk or scale envelope and are not prerequisites
-for a controlled single-tenant pilot:
-
-- **External Tool sources:** if MCP support is reintroduced, curated MCP Tools
-  require stable source identity,
-  Secret references, lifecycle management, schema validation, frozen
-  definitions, Resume checks, and failure harnesses. MCP would remain a Tool source;
-  it does not bypass the existing Catalog, policy, Budget, Executor, or Events.
-- **Sandbox and side effects:** code, Shell, filesystem, and external writes
-  require capability-specific isolation, idempotency and reconciliation. The
-  implemented [scratch sandbox](sandbox-execution.md) grants no host mounts,
-  file sync or Skill-script execution. Durable approvals and external-write
-  recovery remain additional scope; a timeout does not prove a remote write failed.
-- **Skills:** govern Skills as versioned content with provenance. A Skill cannot
-  widen Tool, Credential, network, or budget scope, or inject arbitrary trusted
-  instructions.
-- **Online evaluation and Provider resilience:** add calibrated shadow/canary
-  evaluation, capability-aware routing, circuit breakers, fallback, and
-  per-Workspace cost controls after offline baselines are stable.
-- **Enterprise and regional controls:** add SSO/SCIM, SIEM export, legal
-  retention, active-passive regional recovery, tenant-managed keys, and only
-  then evaluate multi-region active-active operation.
+| Exposure | Required evidence |
+| --- | --- |
+| Controlled pilot | Deliberate identity boundary, Postgres, retention, backups, telemetry and measured capacity |
+| Multi-owner deployment | Existing Membership/resource/Agent/Tool checks plus cross-owner gates, scoped secrets and audit/retention review |
+| Distributed Workers | Durable dispatch, stale-owner fencing, checkpoint ownership and termination/takeover tests |
+| Enterprise/regional deployment | Contract-driven identity, audit/compliance, recovery and data-residency controls; not a prerequisite for a demo |
 
 ## Evidence Standard
 
-A roadmap item becomes a platform capability only when its implementation,
-tests, failure behavior, and operational evidence are linked from the main
-engineering evidence table. Plans remain declared direction, not proof.
+Use [functional gates](functional-regression-testing.md),
+[load/soak](../evaluation/load-soak-testing.md) and the
+[release/recovery drill](release-recovery-drill.md) for their declared scope.
+Keep commands, inputs/configuration, revision, failures and retained reports.
+Extend cross-owner tests whenever adding a resource or background consumer.
 
-Run Budget, Verification, Trace, and tests provide complementary evidence:
-
-- Budget limits resource use.
-- Verification checks configured invariants for one Run.
-- Trace and Replay explain what happened.
-- Tests, evaluation, and drills show that system boundaries survive change and
-  failure.
+Planned capabilities are not implemented merely because an interface exists.
+Budget bounds resource use; Verification checks one configured result; Replay
+explains execution; tests/evaluation/drills establish their respective boundaries.

@@ -1,104 +1,109 @@
-# Documentation Guide
+# Documentation
 
-Start with the question you need to answer. Each topic has one owning document;
-related pages link to its contract rather than copying configuration or algorithms.
+Read the short path first; use the reference sections only for the subsystem
+you are changing or investigating.
 
-## Start Here
+## Read First
 
-1. [Project overview](../README.md): capabilities and supported boundaries.
-2. [Local setup](guides/local-setup.md): startup and test prerequisites.
-3. [Five-minute demo](guides/demo.md): one task from execution to evidence.
-4. [Execution modes](runtime/execution-modes.md): Single, Multi, Loop, and disconnect/recovery behavior.
-5. [Backend architecture](architecture/backend-architecture.md) and [internal terms](architecture/terms.md): ownership and execution entities.
+| Goal | Read |
+| --- | --- |
+| Understand the project | [Overview and demo recording](../README.md) |
+| Run and demonstrate it | [Local setup](guides/local-setup.md) -> [Five-minute demo](guides/demo.md) |
+| Review the engineering | [Architecture and code map](architecture/backend-architecture.md) -> [Design decisions](architecture/engineering-decisions.md) |
+| Check the evidence | [Evaluation guide](evaluation/README.md); fixture passes and live measurements are separate |
+| Assess deployment scope | [Status and limits](../README.md#status-and-limits) -> [Production boundaries](operations/production-readiness-roadmap.md) |
 
-## Architecture
+## Technical Reading Paths
 
-- [Engineering decisions](architecture/engineering-decisions.md): rationale, trade-offs, and retired approaches.
-- [Storage boundary](architecture/storage-boundary.md): Postgres-only persistence versus non-durable test fixtures.
-- [API contract](architecture/api-contract.md): shared OpenAPI generation and change workflow.
-- [Workspace Agent and Tool configuration](architecture/workspace-agent-tools.md): ownership, read-only templates, current revocation and explicit legacy migration.
-- [Frontend principles](architecture/frontend-experience.md): desktop workbench constraints and Run Session ownership.
-- [Stylesheet organization](../apps/web/app/styles/README.md): CSS ownership.
+- **Runtime:** [modes](runtime/execution-modes.md) -> [control ownership](runtime/execution-controls.md) -> [recovery](runtime/durable-recovery.md).
+- **RAG:** [pipeline](knowledge/knowledge-rag.md) -> [Golden Dataset](evaluation/rag-golden-dataset.md) -> [reranking experiment](knowledge/cross-encoder-reranking.md).
+- **Tools:** [security contract](tools/tool-security-policy.md) -> [multi-round loop](tools/bounded-tool-loop.md) -> [uncertain effects](tools/tool-side-effect-reconciliation.md).
+- **Context:** [assembly and compaction](context/context-management.md) -> [Task State](runtime/task-state.md) -> [live fidelity experiment](evaluation/live-compaction.md).
+- **Outcome:** [Verification](runtime/verification.md) -> [structured results](runtime/structured-output.md) -> [controlled comparison](evaluation/evidence-comparison.md).
 
-## Runtime and Operations
+## Reference
 
-- **Orchestration:** [Agent profiles](runtime/agent-profiles.md), [Agent selection](runtime/agent-selection.md), and [execution modes](runtime/execution-modes.md).
-- **Limits:** [execution controls](runtime/execution-controls.md) maps scope, units, precedence, and tuning; [Run Budget](runtime/run-budget.md) owns reservation and settlement details.
-- **Model access:** [route catalog](runtime/model-routing.md), including sampling, affinity, and Resume.
-- **Provider output:** [reasoning display](runtime/provider-reasoning.md), explicit format support, sanitized persistence and historical answer association.
-- **Completion:** [Verification](runtime/verification.md), distinct from development tests and offline evaluation.
-- **Machine results:** [Structured output](runtime/structured-output.md), provider constraints and evidence-backed JSON consumption.
-- **Planning:** [Read-only plans](runtime/read-only-planning.md), frozen no-write authority, source drift checks and separate execution Runs.
-- **Recovery:** [checkpoints and actions](runtime/durable-recovery.md), [partial output recovery](runtime/durable-partial-output.md), [operator attention](runtime/operator-attention.md), and [release/recovery drill](operations/release-recovery-drill.md).
-- **Events:** [generated catalog](runtime/event-catalog.md), [projections/invariants](runtime/event-projections-runtime-invariants.md), and [failure contracts](runtime/failure-handling.md).
-- **Configuration:** [backend settings](operations/backend-configuration.md), [credential/redaction boundary](operations/credential-boundary.md), and [production readiness](operations/production-readiness-roadmap.md).
-- **Observability:** [OpenTelemetry traces](operations/opentelemetry.md): metadata-only OTLP/HTTP, local Collector/Jaeger, sampling, loss boundaries and repeatable evidence.
-- **Access:** [OIDC identity and Workspace membership](operations/identity-membership.md): AgentFlow authentication theme, personal Workspace onboarding, database grants, revocable sessions and remaining authorization boundaries.
-- **Workspaces:** [owner-scoped lifecycle](operations/workspace-lifecycle.md): generated IDs, default selection, archive/soft deletion and current-schema initialization.
-- **Authorization:** [resource boundaries](operations/resource-authorization.md): object ownership, linked evidence, nested resources, live-stream revocation and repeatable cross-owner tests.
-- **Execution boundary:** [governed egress and host execution](operations/execution-boundaries.md): destination enforcement, trusted-local command limits, filesystem ownership and failure evidence; distinct from an OS sandbox.
-- **Isolated commands:** [sbx execution](operations/sandbox-execution.md): disposable mountless VMs, deny-all network, resource limits, command receipts and restart cleanup.
-- **Interfaces:** [HTTP API reference](reference/api-reference.md) maps routes and operational semantics; [OpenAPI](../api/openapi.yaml) owns DTO shapes.
+These are implementation and operating contracts, not a required reading list.
 
-## Context and Knowledge
+<details>
+<summary>Architecture, API, and frontend</summary>
 
-- [Context management](context/context-management.md): selection, exact compaction algorithm, ratios, and failure behavior.
-- [Structured clarification](runtime/structured-clarification.md): bounded questions, durable answers and same-Run continuation across three modes.
-- [Durable inputs](runtime/durable-inputs.md): safe steering boundaries, queued follow-up Runs, withdrawal, and recovery semantics.
-- [Model request reconstruction](context/model-request-reconstruction.md): actual attempt payloads, opt-in capture, inference telemetry, and inspection.
-- [Memory management](context/memory-management.md): recall, proposal, sync, trust, corrections, and deletion.
-- [Structured Task State](runtime/task-state.md): versioned facts across Runs, independent of summaries.
-- [Knowledge / RAG](knowledge/knowledge-rag.md): index lifecycle, recall/ranking/Gate, context expansion, injection filtering, and native citations.
-- [Metadata filters](knowledge/metadata-filters.md): legacy equality semantics, Store/Context parity, numeric preservation, and reproducible contract tests.
-- [Metadata updates](knowledge/metadata-updates.md): conditional label replacement, atomic Chunk inheritance, zero-embedding edits and reindex boundaries.
-- [Document lifecycle](knowledge/document-lifecycle.md): owner-managed status/validity, mandatory retrieval gates and current-source recovery checks.
-- [Metadata schema](knowledge/metadata-schema.md): opt-in field types, ownership, legacy-safe adoption and inspectable schema versions.
-- [Typed metadata filters](knowledge/typed-metadata-filters.md): bounded comparisons, explicit layers and pre-limit candidate eligibility.
-- [Runtime Knowledge scope](knowledge/runtime-knowledge-filters.md): Workbench filters and immutable retrieval constraints across Tools and recovery.
-- [Cross-Encoder reranking](knowledge/cross-encoder-reranking.md): optional TEI service, bounded requests, privacy boundary, and same-candidate ablation.
+- [Terms and Runtime Snapshot](architecture/terms.md)
+- [Storage](architecture/storage-boundary.md), [API change workflow](architecture/api-contract.md), [HTTP reference](reference/api-reference.md), [OpenAPI](../api/openapi.yaml)
+- [Workspace Agent/Tool ownership](architecture/workspace-agent-tools.md)
+- [Frontend principles](architecture/frontend-experience.md), [CSS organization](../apps/web/app/styles/README.md)
 
-## Tools and Skills
+</details>
 
-- [Scoped filesystem reads](tools/scoped-filesystem.md): Workspace/root grants, bounded file operations, redacted paging and Resume drift checks; separate from sbx.
-- [Scoped filesystem writes](tools/scoped-filesystem-writes.md): managed output roots, hash-checked reports, durable publication evidence and query-only reconciliation.
+<details>
+<summary>Runtime, context, and recovery</summary>
 
-- [Security policy](tools/tool-security-policy.md): capabilities, derived journal boundary, scope, credentials, and new-Tool registration.
-- [Agent instruction/data boundaries](operations/agent-security.md): fixed platform guidance, private-data Tool egress, approval semantics and attack regressions.
-- [Bounded Tool loop](tools/bounded-tool-loop.md): model/Tool rounds, complete continuation protocol, streaming, and recovery limits.
-- [Toolsets and discovery](tools/tool-discovery.md): eager/lazy visibility, bounded search, frozen candidates and recoverable activation.
-- [Result Artifacts](tools/tool-result-artifacts.md), [Progress Guard](tools/tool-progress-guard.md), and [side-effect reconciliation](tools/tool-side-effect-reconciliation.md).
-- [Tool execution progress](tools/tool-execution-progress.md): bounded semantic updates, committed recovery, shared Chat/Replay display and Binding integration.
-- [Scoped Knowledge bindings](tools/scoped-knowledge-tools.md) and [Web citations](tools/web-source-citations.md).
-- [Trusted Skills](tools/trusted-skills.md): Loader contract, Agent binding, progressive activation, frozen content, and resource limits.
-- [Skill invocation](tools/skill-invocation.md): explicit-only policy, dependency readiness, frozen settings and UI/API boundaries.
-- [Skill installation](tools/skill-installation.md): native Vercel workflow, root checks, restricted Go fallback, provenance, and publication safety.
-- [Skill Checker](tools/skill-checker.md): read-only compatibility diagnostics, resource references, Tool dependency checks, and unsupported semantics.
-- [Tool contract/fault testing](tools/tool-contract-testing.md): shared Binding suite and adding coverage for a new Tool.
+- [Agent profiles](runtime/agent-profiles.md), [selection](runtime/agent-selection.md), [model routes](runtime/model-routing.md), [provider reasoning](runtime/provider-reasoning.md)
+- [Run Budget / Usage Ledger](runtime/run-budget.md), [read-only planning](runtime/read-only-planning.md)
+- [Memory](context/memory-management.md), [request reconstruction / Capture](context/model-request-reconstruction.md)
+- [Clarification](runtime/structured-clarification.md), [durable steering](runtime/durable-inputs.md), [partial output](runtime/durable-partial-output.md)
+- [Event catalog](runtime/event-catalog.md), [projections/invariants](runtime/event-projections-runtime-invariants.md), [failures](runtime/failure-handling.md), [operator attention](runtime/operator-attention.md)
 
-## Validation and Evidence
+</details>
 
-Start with the [evaluation guide](evaluation/README.md) to choose the correct evidence path:
+<details>
+<summary>Knowledge and metadata</summary>
 
-- [Offline regression reports](evaluation/offline-evaluation.md): Context, routing, RAG, Tool, and budgeted live benchmark profiles.
-- [Failure corpus](evaluation/failure-corpus.md): human-reviewed historical failures, versioned promotion and existing regression evidence.
-- [RAG dataset](evaluation/rag-golden-dataset.md) and [JSON Schema](schemas/rag-golden-dataset-v1.schema.json); [Tool task evaluations](evaluation/tool-task-evaluations.md).
-- [llama.cpp compatibility](evaluation/local-inference-compatibility.md) and [tokenization calibration](evaluation/tokenization-calibration.md).
-- [Bounded load/soak](evaluation/load-soak-testing.md) and [controlled Run comparison](evaluation/evidence-comparison.md).
-- [Functional regression gates](operations/functional-regression-testing.md): browser -> Go -> Postgres checks with retained runtime evidence.
-- [Manual tests](operations/manual-tests.md): observable checks performed by an operator.
+- [Equality filters](knowledge/metadata-filters.md), [typed filters](knowledge/typed-metadata-filters.md), [Runtime scope](knowledge/runtime-knowledge-filters.md)
+- [Metadata schema](knowledge/metadata-schema.md), [metadata updates](knowledge/metadata-updates.md), [document lifecycle](knowledge/document-lifecycle.md)
 
-Fixture evidence, live model measurements, runtime Verification, and recovery
-drills answer different questions. Keep configuration, provenance, failures,
-and limitations with each result; a successful trace is not a quality benchmark.
+</details>
 
-## Maintenance Rules
+<details>
+<summary>Tools and Skills</summary>
 
-- Keep this index navigational and the project README introductory.
-- Defaults belong in [`.env.example`](../apps/api/.env.example); API shapes in
-  [OpenAPI](../api/openapi.yaml); event names in the generated catalog. Explain
-  non-obvious semantics in the owning topic rather than maintaining copies.
-- Keep executable setup/demo commands and safety limits, even when trimming prose.
-- Update references when moving or merging a page. Keep backlog/archive and
-  private notes separate from supported product documentation.
-- When code and docs disagree, verify the implementation/tests and update the
-  owner. Distinguish current behavior from historical migrations and planned work.
+- [Discovery](tools/tool-discovery.md), [result Artifacts](tools/tool-result-artifacts.md), [Progress Guard](tools/tool-progress-guard.md), [execution progress](tools/tool-execution-progress.md)
+- [Knowledge bindings](tools/scoped-knowledge-tools.md), [Web citations](tools/web-source-citations.md)
+- [Scoped filesystem reads](tools/scoped-filesystem.md), [managed writes](tools/scoped-filesystem-writes.md)
+- [Trusted Skills](tools/trusted-skills.md), [invocation/readiness](tools/skill-invocation.md), [installation](tools/skill-installation.md), [Checker](tools/skill-checker.md)
+- [Binding contracts and fault tests](tools/tool-contract-testing.md)
+
+</details>
+
+<details>
+<summary>Configuration, security, and operations</summary>
+
+- [Backend configuration](operations/backend-configuration.md), [credentials/redaction](operations/credential-boundary.md), [OpenTelemetry](operations/opentelemetry.md)
+- [Identity/Membership](operations/identity-membership.md), [Workspace lifecycle](operations/workspace-lifecycle.md), [resource authorization](operations/resource-authorization.md)
+- [Instruction/data boundaries](operations/agent-security.md), [network/host execution](operations/execution-boundaries.md), [sandbox commands](operations/sandbox-execution.md)
+- [Browser functional gates](operations/functional-regression-testing.md), [manual tests](operations/manual-tests.md), [release/recovery drill](operations/release-recovery-drill.md)
+
+</details>
+
+<details>
+<summary>Evaluation procedures and retained results</summary>
+
+- [Offline gates and benchmark pack](evaluation/offline-evaluation.md), [failure corpus](evaluation/failure-corpus.md)
+- [Tool tasks](evaluation/tool-task-evaluations.md), [Golden Dataset schema](schemas/rag-golden-dataset-v1.schema.json)
+- [llama.cpp compatibility](evaluation/local-inference-compatibility.md), [tokenization calibration](evaluation/tokenization-calibration.md), [load/soak](evaluation/load-soak-testing.md)
+
+</details>
+
+## Documentation Ownership
+
+Keep the README introductory, this page navigational, and each contract in one
+owning document. Defaults belong in [`.env.example`](../apps/api/.env.example),
+DTOs in OpenAPI, and event names in the generated catalog. Preserve executable
+steps, failure semantics, evidence provenance, and limitations when editing.
+Do not turn implementation notes or private backlogs into the public reading path.
+
+Use [Mermaid](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams)
+for architecture, execution flow and state diagrams. Keep source in Markdown,
+use broadly supported flowchart/state syntax, and preserve decision/loop labels.
+Directory trees, formulas and executable examples stay text; generated diagram
+exports are review artifacts, not a second source to maintain.
+
+Diagrams follow the workbench palette: 18px system sans-serif, white nodes with
+thin neutral borders, blue for the key execution/policy boundary, and light gray
+for retained records. Labels and shapes carry meaning without color. Keep the
+canvas/edge labels reader-themed for light/dark compatibility; use no remote
+fonts, gradients, shadows or Mermaid `themeCSS`. Each fenced graph keeps its
+small config and role classes inline because GitHub does not load a shared
+repository stylesheet. Use [Chat and Completion](architecture/backend-architecture.md#chat-and-completion)
+as the style reference rather than adding a diagram build pipeline.
+Simple state-transition views use flowchart syntax to keep role styling portable.

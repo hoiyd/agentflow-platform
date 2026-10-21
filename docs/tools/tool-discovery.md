@@ -25,11 +25,27 @@ needed: the optional field and typed events use existing JSON persistence.
 
 ## Protocol and Bounds
 
-```text
-authorized frozen Catalog -> bounded naming-group index + allowed core tools
-  -> tool_search(query) -> matched names/revisions/evidence
-  -> persist activation -> next request includes full matched schemas
-  -> ordinary Tool call -> Executor -> paired observation -> answer
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Catalog["Authorized frozen Catalog"] --> Index["Bounded group index + allowed core Tools"]
+    Index --> Search["tool_search(query)"]
+    Search --> Matches["Matched names, revisions and evidence"]
+    Matches --> Activation["Persist activation after the batch"]
+    Activation --> Request["Next model request includes matched schemas"]
+    Request --> Executor["Selected Tool call through normal Executor"]
+    Executor --> Observation["Paired observation"]
+    Observation --> Answer["Subsequent model response"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Catalog focus;
+    class Activation durable;
 ```
 
 Core names are `get_current_time`, `skill_load`, `skill_read`, and

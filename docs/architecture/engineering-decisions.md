@@ -1,194 +1,111 @@
-# Engineering Decisions and Project Evolution
+# Engineering Decisions
 
-This document explains the decisions that are easiest to miss when reading the
-feature list. It focuses on boundaries, trade-offs, and the sequence in which
-the platform learned to handle more realistic agent workloads.
+These are the trade-offs behind the implementation, not a feature history.
+Each decision links to the contract and code path that makes it inspectable.
 
 ## Native Orchestration Owns the Execution Protocol
 
-AgentFlow implements its orchestration primitives directly in Go and uses one
-native Turn Engine across every execution mode.
+The Runtime is implemented directly in Go so Run/Stage ownership, model/Tool
+rounds, cancellation, accounting and Resume share an explicit protocol. This is
+a project scope choice, not a claim that frameworks are unnecessary.
 
-This is not an argument that frameworks are unnecessary. The project uses the
-native path to make the underlying contracts inspectable:
-
-- Run lifecycle and recovery;
-- Stage and Turn ownership;
-- model/tool loops;
-- context assembly;
-- typed events and replay;
-- budget accounting;
-- completion policy.
-
-If a framework owned those concerns, the project could demonstrate framework
-usage but would provide less evidence that its failure modes were understood.
-Provider adapters remain below the Turn Engine and cannot redefine persistence,
-observability, or safety policy.
-
-**Trade-off:** more platform code must be maintained. The countermeasure is a
-small shared Turn Engine, capability-oriented packages, and tests around common
-contracts rather than separate implementations per mode.
+**Cost:** more execution code to maintain. **Constraint:** one shared
+[Turn Engine](../../apps/api/internal/agent/turn), narrow interfaces and common
+contract tests; providers remain adapters below the Runtime.
 
 ## OpenAI-Compatible Does Not Mean Capability-Identical
 
-OpenAI-compatible providers often implement the same endpoint shape but differ
-in optional behavior. AgentFlow handles two known capability boundaries
-explicitly:
+Routes declare supported capabilities; adapters preserve required continuation
+fields rather than treating display text as the entire response. Unsupported
+Tool Calling is a typed terminal error, never executable text parsed from prose.
 
-- if native Tool Calling is rejected as unsupported, the Turn stops with the
-  typed, non-retryable `tool_calling_unsupported` error; ordinary model text is
-  never parsed as an executable Tool Call;
-- if streaming usage metadata is unsupported, the client retries the stream
-  without `stream_options.include_usage` while retaining one logical usage
-  reservation.
-
-Ordinary transport and provider failures still follow typed retry policy.
-Streaming retries stop after the first emitted delta so a failed physical
-request cannot duplicate user-visible output. Each physical attempt reacquires
-request concurrency and rate-limit permits; waits do not hold an in-flight
-slot.
-
-**Trade-off:** capability detection relies on classified provider errors and
-must evolve as adapters expose new variants. The fallback is deliberately
-narrow: authentication, quota, content policy, malformed requests, and other
-terminal errors are never disguised as missing capabilities.
+**Trade-off:** compatibility needs provider-specific evidence. Narrow transport
+fallbacks, such as omitting unsupported streaming usage metadata, cannot disguise
+quota/authentication errors. Retries reacquire physical-request permits and stop
+after visible deltas. See [model routes](../runtime/model-routing.md) and
+[Tool-loop protocol](../tools/bounded-tool-loop.md).
 
 ## One Execution Model for Single, Multi, and Loop
 
-Single, Multi, and Loop modes differ in orchestration:
+Modes own topology: direct Turn, approved staged collaboration, or bounded
+iteration. Retrieval, Tools, Context, Events, Budget and Completion stay shared.
+Copying a loop per mode would let policies drift while traces still look alike.
 
-- Single executes one direct Turn.
-- Multi creates planner, router, worker, reviewer, and finalizer Stages.
-- Loop (`autonomous` in the API) repeats observe, plan, act, review, and decide Stages within
-  explicit limits.
+**Trade-off:** fixed orchestration is less flexible than arbitrary DAGs. It
+makes ownership and recovery tractable; extra stages must earn their cost through
+task evidence. Multi's Worker is an isolated Stage, not a parallel Child Run.
+See [execution modes](../runtime/execution-modes.md).
 
-They do not implement separate Retrieval, Tool, Context, Event, Budget, or
-Completion stacks. Shared behavior prevents a feature from working in one mode
-while silently bypassing policy in another.
+## Retrieval Separates Ranking from Acceptance
 
-The complete lifecycle, human checkpoints, trace shape, limits, and selection
-guidance are documented in [Execution modes](../runtime/execution-modes.md).
+Independent Keyword recall preserves exact identifiers missed by vector Top-K;
+RRF combines ranks without equating raw score scales. A reranker orders evidence;
+an independent relevance gate decides whether any evidence is acceptable.
+Context expansion and merging do not change the child-hit evaluation target.
 
-**Rejected shortcut:** copy a chat loop for each mode and normalize only the UI.
-That makes traces look consistent while runtime semantics drift.
-
-## Retrieval Evolved by Separating Concerns
-
-The RAG path was built as a sequence of narrower contracts:
-
-1. A shared Retrieval Pipeline replaced direct Store calls from runtime code.
-2. Keyword recall became independent from semantic recall so exact identifiers
-   could enter the candidate set even when vector Top-K missed them.
-3. Reciprocal Rank Fusion combined ranks rather than comparing incompatible raw
-   score scales.
-4. Reranking and a relevance gate separated candidate ordering from the policy
-   decision to return no confident match.
-5. Ranked child hits were separated from `context_items`, allowing parent and
-   adjacent expansion without changing evaluation semantics.
-6. Source traceability, deduplication, document grouping, and adjacent merging
-   made the selected context auditable and less repetitive.
-
-Each stage keeps version and ranking metadata in API and trace output. This
-makes parameter changes reproducible, supports the current Golden Dataset v1
-evaluation, and leaves threshold calibration auditable.
-
-**Trade-off:** more metadata crosses the API. The benefit is that retrieval
-quality can be debugged by stage instead of reduced to one opaque final score.
+**Trade-off:** more stage metadata crosses API/Replay, but failures become
+attributable. `no_match` can remove weak context without pretending that the
+corpus has no answer. [RAG](../knowledge/knowledge-rag.md) and the
+[Golden Dataset](../evaluation/rag-golden-dataset.md) expose the limits.
 
 ## Context Capacity Is Not a Run Budget
 
-Agent systems contain several limits that all mention tokens or time. AgentFlow
-keeps their scopes separate:
+Context limits bound one model input. Run Budget bounds cumulative work.
+Process/owner/key limits protect shared capacity; retries count physical attempts
+without charging extra logical calls. Trace is not an atomic accounting source.
 
-- provider RPM/TPM protects a shared API key over time;
-- Run Budget limits cumulative logical work for one persisted Run;
-- Context Assembly makes one model input fit its context window;
-- Autonomous guards stop a repeating loop;
-- operation timeouts bound one provider, tool, or verifier call.
-
-The owner of each control is documented in
-[Execution controls](../runtime/execution-controls.md). When two configuration inputs
-affect one resource, they are resolved into one effective owner instead of
-maintaining competing counters.
-
-**Rejected shortcut:** use trace totals as the budget authority. Traces are an
-observational projection and cannot provide atomic admission or idempotent
-settlement.
+**Trade-off:** controls need distinct units and owners. The
+[control map](../runtime/execution-controls.md) resolves precedence instead of
+adding competing counters; the [Ledger](../runtime/run-budget.md) owns settlement.
 
 ## Freeze Protocol, Keep Deployment Policy Live
 
-A Run stores a Runtime Snapshot containing the protocol required for Resume and
-Replay: mode, agent configuration, model identity, tool schemas, Context Assembly configuration,
-and Run Budget. Credentials, process concurrency, rate-limit buckets, current
-tool handlers, and recovery thresholds stay live.
+Snapshot freezes the protocol required to interpret a Run: configuration,
+routes, Tool definitions, Context and Budget. Credentials, current access grants,
+handlers, process capacity and operator security ceilings remain live.
 
-This split preserves historical behavior without freezing secrets or preventing
-operators from changing deployment capacity.
-
-**Trade-off:** historical read compatibility is retained, but execution supports
-only the current Snapshot schema. Old Runs remain Replay-only; no live config
-is substituted for their protocol. See [Snapshot compatibility](terms.md#runtime-snapshot).
+**Trade-off:** old Runs remain readable, but only supported Snapshot schemas
+are resumable. Resume cannot silently substitute live config or preserve revoked
+authority. See [Snapshot compatibility](terms.md#runtime-snapshot).
 
 ## Durable Memory Requires Curation
 
-Copying every chat message into a vector store is simple but causes temporary
-instructions, model output, errors, and possible secrets to become long-term
-memory. AgentFlow instead treats raw Messages as authoritative history and uses
-Memory Candidates as an auditable proposal layer.
+Original Messages remain history. Memory Candidates provide a proposal layer
+instead of promoting every model output or temporary instruction into long-term
+facts. Accepted facts pass content/secret/confidence checks; optional adaptive
+extraction defaults to shadow mode.
 
-Explicit durability phrases take a deterministic fast path. Optional adaptive
-model extraction defaults to shadow mode, where proposals can be evaluated
-without affecting recall. Accepted facts still pass confidence, content, size,
-and secret checks before embedding.
-
-**Trade-off:** the system may forget facts that were not stated clearly enough.
-That is preferable to silently persisting unsafe or low-quality memory; recall
-can be widened after measuring shadow candidates.
+**Trade-off:** conservative curation can miss useful facts. Shadow measurements
+can justify wider recall without silently widening trust.
+[Task State](../runtime/task-state.md), historical summaries and
+[Memory](../context/memory-management.md) retain different responsibilities.
 
 ## Completion Is a Policy Decision
 
-A model returning text does not necessarily mean the requested outcome is
-valid. AgentFlow therefore supports an optional frozen Completion Contract.
-Deterministic verifiers produce immutable Evidence bound to the candidate output
-hash and Runtime Snapshot. Only fresh evidence can open the Completion Gate.
+Generating text is execution progress, not proof of task success. An optional
+Completion Contract binds immutable Evidence to the exact candidate and gates
+completion. Structural checks, embeddings and lexical support have different
+failure meanings; none is a general truth oracle.
 
-Verification is opt-in because not every conversation needs the latency or
-strictness of a gate. A blocked verifier never becomes an implicit pass.
-
-**Current boundary:** structural checks, read-only HTTP probes, and allowlisted
-commands can prove configured invariants. Subjective correctness still requires
-calibrated model graders or human review.
+**Trade-off:** checks add latency and operational dependencies, so ordinary Chat
+does not enable them by default. A blocked verifier never becomes an implicit pass.
+See [Verification](../runtime/verification.md) and [evaluation](../evaluation/README.md).
 
 ## Observability Is Part of the Domain
 
-Replay is built from durable typed Run Events, persisted Messages,
-Collaboration Steps, Runtime Snapshot, Usage Ledger, and Verification Evidence.
-These records are created at the ownership boundary where the action occurs;
-they are not inferred later from logs.
+Snapshot explains configuration; durable Events/receipts explain execution;
+Usage Ledger explains accounting. Replay projects these records rather than
+reconstructing state from logs. Optional Capture has a separate privacy policy.
 
-This enables three different questions to be answered independently:
+**Trade-off:** durable evidence needs storage and retention. It makes uncertain
+effects and failed recovery visible instead of claiming exactly-once execution.
+See [reconciliation](../tools/tool-side-effect-reconciliation.md) and
+[request reconstruction](../context/model-request-reconstruction.md).
 
-- **What was configured?** Runtime Snapshot and Completion Contract.
-- **What happened?** Run Events, Steps, tool/model traces, and artifacts.
-- **What was charged?** Usage Ledger reservations and settlements.
+## Deliberate Limits
 
-Keeping those views separate prevents a convenient UI projection from becoming
-an accidental source of truth.
-
-## What Remains Deliberately Unfinished
-
-- Team sharing, role-based/object-sharing ACLs, scoped credentials and untrusted
-  multi-tenant release validation. Owner-scoped Workspace lifecycle, current
-  Membership/resource authorization and Workspace Agent/Tool configuration are
-  implemented; namespace filtering alone is still not authentication.
-- A persisted Evaluation Registry and broader live-domain calibration. Versioned
-  fixtures, hashes, Git/CI history, and deterministic calibration/holdout gates
-  already exist; they do not establish general semantic quality.
-- Semantic prompt-injection classification beyond deterministic high-precision
-  patterns and trust boundaries.
-- Semantic goal-progress assessment beyond the implemented Tool signature,
-  unchanged-read, and bounded-oscillation Progress Guard.
-- Asynchronous human evidence ingestion and calibrated model-based graders.
-
-These are represented as explicit boundaries because extending a platform safely
-starts with knowing which guarantees it does not yet provide.
+Single-instance ownership is not distributed scheduling. Owner-scoped access is
+not team/object-sharing ACLs. Deterministic fixtures are not general model-quality
+evidence. Broader graders, durable Worker dispatch and retention/release hardening
+remain separate work; [deployment boundaries](../operations/production-readiness-roadmap.md)
+is the canonical status reference.

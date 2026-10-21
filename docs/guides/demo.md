@@ -1,76 +1,37 @@
 # Five-minute Demo
 
-This walkthrough presents AgentFlow as a verifiable, recoverable, and bounded
-AI Agent Runtime. It follows one evidence task from configuration to evaluation
-instead of touring every screen.
-
-## Demo Contract
-
-- **Online path:** a configured model provider, PostgreSQL with pgvector, and the
-  workbench show a newly executed Run. Model quality claims require a saved
-  CASE-001A live report.
-- **Offline fallback:** deterministic fixtures produce Replay and regression
-  evidence without a model provider. They demonstrate protocol behavior, not
-  live-model quality.
-- **Do not mix the two:** a fixture pass proves wiring and invariants; only a
-  budgeted multi-trial report supports model-quality or cost claims.
+Show one incident task from request to evidence, not every screen. Preparation
+is outside the five minutes; model latency and output quality vary.
 
 ## Preparation
 
-First configure the database, model routes/credentials, and embedding identity
-using [Local setup](local-setup.md). In one terminal, start the application:
-
-```bash
-make quickstart
-```
-
-In a second terminal, generate the network-free backup pack:
+1. Follow [Local setup](local-setup.md), then run `make quickstart`.
+2. In **Knowledge**, upload [`examples/example.md`](../../examples/example.md).
+   Select an Agent with RAG and `get_current_time` enabled; its route must support Tools.
+3. In **Verification**, enable Text constraints with one attempt, **Wait for user**,
+   and required phrases `AUTH-7F31` and `401 invalid_signature`. This checks a
+   response invariant, not the truth of the entire answer.
+4. Prepare the deterministic recovery evidence in another terminal:
 
 ```bash
 make benchmark-evidence
+make demo-check
 ```
 
-Open `http://localhost:3000/workspace`, then upload
-[`examples/example.md`](../../examples/example.md) in **Knowledge**. Configure an
-Agent with RAG enabled and `get_current_time` allowed. In **Verification**, enable
-the Text verifier with one attempt, `Wait for user`, and these required phrases:
-
-```text
-AUTH-7F31
-401 invalid_signature
-```
-
-If a budgeted CASE-001A run is available, keep its `manifest.json`,
-`tool-context-vs-tools.json`, and `route-llm-ranking.json` open. Run the preflight
-after both services are ready:
-
-```bash
-LIVE_BENCHMARK_DIR=.cache/live-benchmark/MODEL-REVISION make demo-check
-```
-
-Without network or provider access, validate only the fallback artifacts:
-
-```bash
-DEMO_MODE=offline make demo-check
-```
+The second command checks services and evidence files. Without an application or
+model, use `DEMO_MODE=offline make demo-check` after generating the pack. It checks
+the pack only; it does not prove that the live application starts. Optional live
+benchmark reports are described in [offline/live evaluation](../evaluation/offline-evaluation.md).
 
 ## Demo Flow
 
-### 0:00-0:30 - State the System Boundary
-
-Open **Chat** and establish the runtime boundary:
-
-> AgentFlow is a Go runtime for bounded Agent execution. Single, Multi, and Loop
-> have different orchestration policies, but share one Turn Engine, Context
-> assembly, Tool executor, Usage Ledger, event protocol, and Completion Gate.
-
-The mode selector exposes three orchestration policies without changing the
-shared execution protocol. Run admission, per-Conversation single-writer
-execution, request limits, and Run Budget bound resource use before work starts.
-
-### 0:30-1:20 - Create One Evidence-backed Run
-
-Select **Multi** and submit:
+| Time | Action | Evidence to inspect |
+| --- | --- | --- |
+| 0:00-0:30 | Open [the workbench](http://localhost:3000/workspace); select Multi | Explain that modes share one Turn Engine, Tool Executor, Context Assembly, and Usage Ledger |
+| 0:30-1:30 | Submit the prompt below and approve the plan | Planner/Router/Worker/Reviewer Stages; frozen configuration and selected Agent |
+| 1:30-3:00 | Open **View trace** | Selected RAG chunks, model/Tool calls, usage, and Verification Evidence; distinguish Run status from verification status |
+| 3:00-4:15 | Inspect the prepared before/after recovery pair | Durable failure, eligible Resume action, resumed Stage and terminal result |
+| 4:15-5:00 | Export the **Episode report** and explain limits | One compact review artifact linking output, calls, sources, usage, and failure evidence |
 
 ```text
 Use the authentication incident runbook to diagnose login failures after a
@@ -79,103 +40,56 @@ and recovery steps. Use get_current_time to include the current UTC time. If the
 runbook is insufficient, say so instead of guessing.
 ```
 
-Approve the plan, then inspect the selected Agent and candidate evidence or
-abstention. The Run freezes effective Agent profiles, model/provider identity,
-Context assembly settings, Tool definitions and policy, budgets, and Verification
-contract. Later configuration edits therefore cannot change Resume semantics.
+A failed verifier is a valid demonstration: inspect why completion was blocked
+rather than weakening the contract to make the recording pass. Plain chat has
+no Verification gate unless explicitly enabled.
 
-### 1:20-2:35 - Connect Execution to Evidence
+## Recovery Evidence
 
-Open **View trace** and inspect four layers:
+`make benchmark-evidence` writes these under `.cache/benchmark-suite/`:
 
-1. Retrieval events identify the selected runbook chunks and final model context.
-2. Model and Tool events show physical calls, duration, errors, and returned
-   evidence without treating streaming deltas as durable history.
-3. Usage shows model calls, Tool calls, input/output tokens, active runtime, and
-   whether provider usage was estimated.
-4. Verification Evidence records the Text result before the Completion Gate
-   permits `run.completed`.
+| Artifact | What to look for |
+| --- | --- |
+| `benchmark-recovery-before-replay.json` | `failed_recoverable`, durable evidence and an enabled Resume action |
+| `benchmark-recovery-replay.json` | `run.resumed`, checkpoints and terminal `completed` |
+| `recovery-paths.jsonl` | HTTP/SSE recovery checks, stale-action and unsafe duplicate rejection |
+| `rag-offline.json` | Deterministic retrieval gate, not live-model quality |
 
-Export the **Episode report**. It is the compact review artifact joining task,
-retrieval, model calls, Tool calls, errors, final output, and Verification; the
-event log remains the detailed execution record.
+These are isolated fixtures, not Runs in your application's database. If a real
+recoverable Run is available, use **Needs attention** and its projected Recovery
+Action instead. Process-level restart/repair is a separate
+[disposable-database drill](../operations/release-recovery-drill.md).
 
-### 2:35-3:35 - Inspect Recovery Evidence
+## What This Demonstrates
 
-The `make benchmark-evidence` command injects the existing recoverable-run test
-scenario. Open these files side by side:
+- **Shared execution:** orchestration changes; Tool, Context, accounting and
+  completion contracts stay shared.
+- **Auditability:** Snapshot explains configuration, Replay explains execution,
+  and Usage Ledger explains accounting. Streaming text is not durable evidence.
+- **Recovery:** committed work can be reused only after checkpoint/definition
+  checks; uncertain external writes require reconciliation.
+- **Measured limits:** fixture passes prove contracts. Quality/cost claims need
+  controlled live reports with failures and skipped trials retained.
 
-- `.cache/benchmark-suite/benchmark-recovery-before-replay.json`
-- `.cache/benchmark-suite/benchmark-recovery-replay.json`
-
-In the first, inspect `failed_recoverable`, the reason execution stopped, durable
-evidence, and the enabled `Resume run` Recovery Action. In the second, find `run.resumed`,
-the recovery Stage, committed `checkpoint.captured` events, and the terminal
-`completed` state. Then point to `recovery-paths.jsonl`: the integration test
-exercises Resume through the HTTP/SSE and persistence contracts, including stale
-or unsafe duplicate-action rejection. No production-only failure switch is added.
-
-If an actual recoverable Run is already present in PostgreSQL, use its **Run
-replay** page instead and click the projected Recovery Action. Open **Needs
-attention** first to show the same reason, Evidence, action, and durable event
-watermark in the cross-Run operator queue. Keep the fixture pair as the
-no-network backup.
-
-For a process-level follow-up outside the timed walkthrough, run PROD-014
-against a disposable PostgreSQL database:
-
-```bash
-RELEASE_DRILL_DATABASE_URL='postgres://...' make release-recovery-drill
-```
-
-Open `.cache/release-drill/latest.json` and follow the drained and crashed Run
-IDs through readiness, abrupt termination, stale repair, checkpoint
-compensation, Resume, and duplicate-Resume rejection. This deterministic drill
-proves single-instance lifecycle recovery; it is separate from live-model
-quality evidence and does not claim backup/restore or rolling-release coverage.
-
-### 3:35-4:35 - Review a Controlled Comparison
-
-Open the CASE-001A `manifest.json`. Inspect the frozen Dataset hash, Git revision,
-model identities, trial count, suite-wide budgets, report hashes, and retained
-failed/skipped samples. Then open:
-
-- `tool-context-vs-tools.json` for the same-model `full_context` versus
-  `with_tools` comparison;
-- `route-llm-ranking.json` beside `route-query-match.json` for deterministic
-  selection versus explicitly enabled LLM ranking;
-- `rag-semantic.json` for retrieval and no-answer evidence.
-
-Report verified success, unsafe false routes, no-route/no-answer behavior,
-input/output tokens, calls, latency, fallback, and failures separately. Mention
-an unchanged or regressed pair before any improvement. Do not collapse the
-reports into one intelligence score.
-
-If no live report exists, use `.cache/benchmark-suite/rag-offline.json` as
-deterministic regression evidence, not as live-model quality.
-
-### 4:35-5:00 - Summarize Boundaries
-
-The current boundary is explicit: OIDC identity/Membership are optional and local
-mode remains unauthenticated; object ACLs are not complete;
-process-local concurrency is not a multi-instance scheduler; uncertain external
-side effects require reconciliation rather than an exactly-once claim; and the
-small frozen datasets measure known cases, not general model intelligence.
-
-The runtime follows this design principle:
-
-> The design goal is not maximum autonomy. It is bounded execution whose result,
-> cost, failure, and recovery path can be inspected and reproduced.
-
-## Optional Follow-ups
-
-- Open **Evaluate > Run comparison** only for two prepared identical or
-  single-variable Runs. Uncontrolled pairs stay review-only and receive no deltas.
-- Inspect a failed Verification and `Wait for user` for the human-review path.
-- Inspect Knowledge rank details for a deeper retrieval view.
+The supported deployment is trusted and single-instance. Local mode is
+unauthenticated; optional OIDC adds identity and owner-scoped access, not complete
+team-sharing ACLs or distributed Worker ownership. See
+[deployment scope](../operations/production-readiness-roadmap.md).
 
 ## Recorded Assets
 
-The [root README's Demo Gallery](../../README.md#demo-gallery) directly displays
-all three recordings and mode screenshots. This guide owns the reproducible
-walkthrough; the gallery provides a visual overview, not benchmark evidence.
+### Multi-Agent Execution and Replay
+
+![Incident task, approval, execution and Replay](../assets/agentflow-demo.gif)
+
+### Knowledge and Retrieval
+
+![Ingestion, hybrid recall, relevance gating and selected Context](../assets/hybrid-rag-demo.gif)
+
+### Completion Verification
+
+![Completion Contract, Verification Evidence and usage](../assets/completion-verification-demo.gif)
+
+Recordings show behavior, not benchmarks. Offline visual references:
+[Single](../assets/single-mode.png), [Multi](../assets/multi-mode.png),
+[Loop](../assets/loop-mode.png).

@@ -1,410 +1,237 @@
 # Knowledge / RAG
 
-For conditional label changes without re-embedding, see
-[Metadata updates](metadata-updates.md). [Document lifecycle](document-lifecycle.md)
-owns mandatory status/validity checks; content/index replacement remains separate.
-The optional [metadata schema](metadata-schema.md) validates business fields and
-separates owner declarations, system structure and unverified extensions.
-For Workbench filters and immutable Run/Tool constraints, see
+HTTP search, Knowledge Tools and all Agent modes share a staged retrieval pipeline.
+The design separates **candidate ranking**, **evidence acceptance**, and **model
+Context** so each can be inspected and tested independently.
+
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    accTitle: Shared RAG retrieval pipeline
+    accDescr: Semantic and Keyword recall feed guarded fusion, ranking and relevance decisions before scoped Context selection and citation assignment.
+    Query["Bounded query"] --> Embed["Embed query"]
+    Embed --> Semantic["Semantic recall"]
+    Embed --> Keyword["Keyword recall"]
+    Semantic --> Guard["Deduplicate IDs and filter injection"]
+    Keyword --> Guard
+    Guard --> RRF["RRF fusion"]
+    RRF --> Rerank["Versioned reranker"]
+    Rerank --> Gate{"Relevance gate"}
+    Gate -->|Accepted child hits| Expand["Scoped parent / adjacent expansion"]
+    Gate -->|No accepted hits| NoMatch["no_match; no RAG evidence"]
+    Expand --> Transform["Deduplicate and merge Context"]
+    Transform --> Budget["Enforce Knowledge Token Budget"]
+    Budget --> Citations["Assign selected-source citation IDs"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class Gate focus;
+```
+
+The recall branches are independent candidate sources, not a promise of parallel execution.
+
+For business fields and selection policy, see [metadata schema](metadata-schema.md),
+[updates](metadata-updates.md), [document lifecycle](document-lifecycle.md), and
 [Runtime Knowledge scope](runtime-knowledge-filters.md).
-
-AgentFlow treats retrieval as a staged, observable pipeline. Recall, fusion,
-reranking, relevance policy, context expansion, and context transformation have
-different contracts so each stage can be evaluated independently.
-
-Current retrieval enforces Workspace namespace isolation end to end. OIDC mode
-checks authenticated Workspace membership before requests but does not enforce
-document/chunk ACL policy; those remain explicit multi-tenant limitations.
 
 ## Ingestion and Inspection
 
-The Knowledge page supports:
-
-- adding a text document from a textarea
-- uploading `.txt`, `.md`, and `.markdown` files
-- listing documents with title, filename, format, chunk count, and embedding count
-- viewing document chunks and Markdown metadata
-- deleting documents and their chunks/embeddings
-- searching indexed chunks with dense and lexical recall
-- seeing embedding provider/model/dimensions used for search
-
-Markdown ingestion is structure-aware:
-
-- headings become `heading_path`
-- paragraphs, lists, and fenced code blocks become chunk types
-- code block language is preserved when available
-- oversized blocks fall back to fixed-size chunk splitting
-- heading context is included in chunk content to improve retrieval
+**Knowledge** accepts text and `.txt`/`.md`/`.markdown` files and exposes documents,
+chunks, embedding identity and search diagnostics. Markdown chunking preserves
+heading paths, paragraphs/lists/code blocks and language; oversized blocks use
+fixed-size splitting. Prepended heading context improves retrieval but is not
+part of the original source range.
 
 ## Index Lifecycle and Compatibility
 
-Each document has a `source_key` that identifies one logical source within a
-Workspace. It defaults to `source_uri`; callers may provide a stable key when a
-physical filename or URI can change. Reingestion follows one contract:
+`source_key` identifies one logical source inside a Workspace; it defaults to
+`source_uri`. Reingestion is idempotent when key/version/content/index identity
+match. Same key/version with different content returns `409`. A new version or
+index identity atomically replaces active chunks/embeddings while preserving the
+Document ID/creation time; failed replacement leaves the old index intact.
+Deletion removes the document and dependent chunks/embeddings.
 
-- the same source key, version, content hash, and index identity is idempotent
-- the same source key and version with different content returns `409 Conflict`
-- a different version or index identity atomically replaces the active document,
-  chunks, and embeddings while preserving the document ID and creation time
-- a failed replacement leaves the previous active index intact
-- deletion removes the document and all of its chunks and embeddings
-
-The active document records the chunker version and embedding
-provider/model/dimensions that produced its index. Retrieval compares every
-active identity in the Workspace with the current query embedding and chunker.
-Unknown or mixed identities fail closed with `knowledge_index_incompatible`
-instead of searching incompatible vector spaces.
-
-Postgres migrations backfill
-`source_key` and infer index identity where existing embeddings agree; duplicate
-logical sources keep the newest record. Identity that cannot be inferred remains
-unknown and therefore cannot silently participate in retrieval.
+Retrieval checks every active index against the query embedding identity and
+chunker version. Unknown/mixed provider/model/dimensions fail with
+`knowledge_index_incompatible`, never silently mix vector spaces. Migration can
+infer identity only from agreeing legacy data; unknown identity stays unusable.
 
 ## Chunk Source Traceability
 
-Newly ingested documents and chunks carry structured source details:
+| Field | Meaning |
+| --- | --- |
+| `version` | Explicit ingest version, otherwise `sha256:<document_content_hash>` |
+| `content_hash` | Lowercase SHA-256 of normalized Document/Chunk content |
+| `section_path` | Structured headings; legacy `heading_path` remains available |
+| `start_offset`, `end_offset` | Half-open UTF-8 byte range in LF-normalized, outer-trimmed source |
+| `parent_id` | Deterministic section identity within a document version; plain text uses the document root |
 
-- `version` is accepted from the ingest request; when omitted it is derived as
-  `sha256:<document_content_hash>`.
-- Document and chunk `content_hash` values are lowercase SHA-256 hex digests.
-- `section_path` is a structured heading path. The existing `heading_path`
-  metadata remains available for compatibility and search features.
-- `start_offset` and `end_offset` form a half-open UTF-8 byte range into the
-  normalized source document. Ingestion normalizes CRLF/CR line endings to LF
-  and trims outer whitespace before calculating offsets and hashes.
-- Markdown heading context prepended for retrieval is not part of the source
-  byte range. Slicing the normalized document by the offsets returns the
-  original source block contained in the stored chunk.
-- `parent_id` is deterministic for a document version and source section.
-  Chunks from the same Markdown section share it; plain-text chunks share the
-  document root parent. This prepares grouping for Parent-Child Retrieval.
-
-The document detail API, RAG search results, Agent retrieval events, and model
-call traces expose the same source fields. Migration does not invent
-unverifiable offsets or hashes for legacy chunks. Postgres persists normalized
-source content so offsets remain resolvable after
-restart; the full source content is still excluded from HTTP document responses.
+Offsets exclude prepended retrieval headings. Postgres retains normalized source
+for later resolution, but HTTP Document responses omit full source content.
+Legacy chunks do not receive invented hashes/offsets. Document detail, search,
+Agent events and model traces expose the same source fields.
 
 ## Retrieval Pipeline
 
-HTTP search, Single-Agent, Multi-Agent, and Autonomous runs use the same
-`KnowledgeBase` and `RetrievalPipeline` path:
+| Stage | Contract |
+| --- | --- |
+| Embed | Normalize the bounded query with the configured provider/model |
+| Recall | Independent Semantic and Keyword candidates, with Workspace, metadata and lifecycle eligibility before Top-K limits |
+| Guard / fuse | Deduplicate IDs, reject high-confidence injection, preserve recall ranks and compute equal-weight RRF |
+| Rerank | Order candidates with versioned implementation/configuration identity |
+| Gate | Recompute trusted evidence, accept/reject independently of incoming confidence, compact final ranks |
+| Context | Expand accepted child hits without widening scope, then deduplicate/merge within Knowledge Token Budget |
 
-1. Normalize and embed the query with the configured embedding provider/model.
-2. Recall independent dense and lexical candidate sets. Both paths apply the
-   requested Workspace, [legacy equality filters](metadata-filters.md) and optional
-   [typed metadata eligibility](typed-metadata-filters.md) before recall limits.
-3. Merge candidates by chunk ID while preserving `vector_rank`,
-   `lexical_rank`, and `lexical_score` recall details.
-4. Block candidates that match high-confidence prompt-injection patterns and
-   record structured filtering decisions.
-5. Fuse the remaining recall rankings with equal-weight Reciprocal Rank Fusion
-   (RRF).
-6. Apply the existing evidence-aware reranker, metadata and recency signals,
-   and document diversity control.
-7. Remove low-confidence results with the relevance gate and return the
-   requested top K.
-8. Use the gated child hits to select model context within a token limit:
-   include each matched child, prefer same-parent section chunks, and fall back
-   to adjacent chunks when no parent expansion can be selected.
-
-## Retrieval Query Boundary
-
-Retrieval evaluates the user's question, not the surrounding Agent prompt.
-Direct HTTP search uses the request's `query`. Runtime retrieval records one of
-two explicit query sources:
-
-- `user_input` is the original input that started the Run. Single-Agent,
-  Multi-Agent, and Autonomous stages keep this query even when their model
-  input also contains plans, prior outputs, reviews, or loop state.
-- `bounded_subquestion` is reserved for an explicit, traceable subquestion.
-  AgentFlow does not currently generate these subquestions or perform Query
-  Rewrite.
-
-Empty queries and queries without a recognized source skip retrieval instead
-of falling back to the complete Stage input. Replay exposes the actual bounded
-`query`, `query_source`, and the owning event `stage_id`.
-Skipped attempts record `query_skipped` and `query_skip_reason`. This boundary
-applies before Memory and Knowledge retrieval, so both receive the same intent.
-
-The API/Runtime regression fixture runs the same query, Store, Workspace, and
-embedding provider through `POST /api/rag/search` and a Single-Agent Run. It
-compares ranked child IDs, selected Context IDs, citations, stage metadata,
-no-match decisions, and embedding failures so the two entry points cannot
-silently diverge.
-
-The RAG-035 regression extends that fixture across HTTP, Single-Agent,
-Multi-Agent, and Autonomous/Loop paths with five saturated lexical candidates.
-Every path must reject all five, select no model Context, emit no citations, and
-persist the same user-query boundary plus candidate-level rejection evidence.
-
-## Workspace Boundary
-
-Document ingestion stores the request workspace on the Document. HTTP search
-uses the request workspace, while Agent retrieval derives it from the persisted
-Run, which in turn inherits it from the Conversation. Memory and both Semantic
-and Keyword recall receive that same value. Postgres stores apply an
-exact workspace predicate before ranking candidates.
-
-Production callers pass an authorized numeric Workspace ID. Request omission
-selects the owner's active default; the persisted Run supplies scope for Agent
-retrieval. Internal legacy fixtures still normalize an empty scope to
-`default_workspace`, never to an unfiltered query; that string is not a valid
-runtime Workspace alias. See [resource authorization](../operations/resource-authorization.md).
-
-Dense recall uses cosine similarity against document chunk embeddings. Lexical
-recall can introduce a chunk that is absent from the dense candidate set, which
-improves retrieval of exact error codes, product IDs, API paths, and domain
-names. The offline in-memory fixture scores exact phrases, identifier-like terms, and
-query-term coverage across content and selected metadata. Postgres uses exact
-substring matching plus `simple`-configuration full-text search over generated
-`tsvector` columns and GIN indexes.
-
-RRF uses the standard rank constant `k = 60` and equal weights:
+Semantic recall uses cosine similarity. Postgres Keyword recall combines exact
+substring matching and `simple` full-text search with generated `tsvector`/GIN
+indexes. The offline fixture instead uses phrases, identifier terms and term
+coverage; it is not BM25 or a measurement of semantic retrieval quality.
 
 ```text
 rrf_score = sum(1 / (60 + rank_in_recall_path))
 ```
 
-A missing recall path contributes zero. Candidates are sorted by `rrf_score` to
-produce `fusion_rank`; deterministic chunk-ID ordering breaks exact ties. Raw
-dense and lexical scores are retained for observability but are not compared
-across recall paths. The downstream `rerank_score` starts from a normalized RRF
-score and then applies the existing lexical, metadata, evidence, and diversity
-signals.
+A missing path contributes zero; chunk ID breaks ties. `fusion` exposes algorithm,
+version, rank constant and weights. Raw scores remain observable but are not
+compared across recall paths. Reranking starts from normalized RRF with additional
+evidence/metadata/diversity signals; RRF does not make `lexical_boost` redundant.
 
-Search and evaluation responses include a top-level `fusion` object containing
-the algorithm, version, rank constant, and source weights. Retrieval trace
-events record the same object. The Knowledge and Replay interfaces display this
-metadata and retain six decimal places for raw RRF scores so adjacent source
-ranks remain distinguishable during manual inspection.
+### Reranker and Relevance Gate
 
-Reranking is injected into the Retrieval Pipeline through the `Reranker`
-interface. The default `HeuristicReranker` preserves the existing lexical,
-metadata, evidence, and document-diversity scoring policy. It reports
-`heuristic-reranker-v1` with configuration `heuristic-default-v1` in search,
-evaluation, and retrieval-trace metadata. The interface accepts a request
-context and returns `RerankResult` with per-request implementation metadata.
-An optional [TEI Cross-Encoder](cross-encoder-reranking.md) uses the same Pipeline
-for HTTP, Knowledge Tools, and all Run modes. It provides bounded HTTP calls,
-cancellation, safe failures, and declared model/configuration identity without
-changing API shapes. It does not route models or silently fall back; the default
-remains heuristic until representative evaluation justifies switching.
-Rerankers must return the complete requested Top-K in score order and may only
-change ranking-owned fields; source content and recall evidence remain owned by
-the upstream pipeline.
+`Reranker` returns candidate IDs, scores/ranks and per-request implementation
+metadata. The default is `heuristic-reranker-v1` / `heuristic-default-v1`; an
+optional [TEI Cross-Encoder](cross-encoder-reranking.md) uses the same pipeline
+without silent fallback or a default-policy change. Model-backed scores must be
+normalized to `[0,1]`; requested Top-K must be complete and ordered.
 
-The versioned `RelevanceGate` is the next independent stage. It ignores any
-incoming `confidence`, `filter_reason`, or derived evidence, recomputes evidence
-from the query and trusted candidate data, then owns filtering and final rank
-compaction. Gate decisions must match the reranked input one-for-one and in
-order; accepted candidates form an ordered subset.
+`RelevanceGate` ignores incoming confidence/filter decisions and recomputes evidence.
+The default `heuristic-relevance-gate-v3` / `heuristic-relevance-hardened-v2`
+requires configured `minimum_evidence_coverage` or an exact alphanumeric identifier
+before a saturated lexical score alone can qualify as `high`. A score of `1.0`
+cannot bypass the evidence policy.
 
-Stages receive detached read inputs. `RerankResult` returns only candidate IDs
-and ranking-owned fields; `RelevanceGateResult` returns only candidate IDs and
-acceptance/evidence fields. The Pipeline validates identity, uniqueness, order
-and finite scores before merging these decisions into retained candidates.
-Document content, Workspace, index identity and recall signals never come back
-from a stage. Public `items` and `relevance_decisions` retain their existing JSON
-shape; the Pipeline adds recall/ranking signals to the audit records. The
-default policy reports `heuristic-relevance-gate-v3` with configuration
-`heuristic-relevance-hardened-v2` and its `minimum_evidence_coverage`.
-It computes all candidate signals before classification. A saturated lexical
-score reaches `high` only when evidence coverage meets the configured minimum
-or the candidate contains an exact alphanumeric identifier from the query.
-This preserves lexical-only error-code and product-ID recall without allowing a
-score of `1.0` to bypass evidence checks.
+Both stages consume detached inputs and return only fields they own. Unknown or
+duplicate IDs, invalid ranks/order, missing metadata and non-finite scores fail
+the pipeline. Candidate content, scope and recall evidence cannot be overwritten.
+Gate decisions match inputs one-for-one; accepted candidates form an ordered subset.
 
-Every candidate produces a content-free `relevance_decisions` audit record with
-its chunk identity, lexical/vector/rerank signals, matched terms, evidence
-coverage, identifier match, final confidence, acceptance state, and decision
-reason. HTTP search returns these records and Agent retrieval persists them in
-Replay beside the versioned gate configuration. Empty candidate sets produce an
-explicit empty decision list; embedding failures remain execution failures and
-never degrade into accepted candidates.
-Model-backed rerankers must return normalized
-scores in `[0,1]`; malformed metadata, unknown/duplicate candidates, invalid
-ranks, or non-finite scores fail the pipeline instead of bypassing the Gate.
+`relevance_decisions` records identity, recall/ranking signals, matched terms,
+coverage, identifier match, confidence and rejection reason without source text.
+API/Replay retain the gate configuration and decisions, including empty lists.
+UI **Semantic**/**Keyword** labels preserve `vector_rank`, `lexical_rank`,
+`dense_weight` and `lexical_weight` wire names.
 
-The UI labels the dense/vector path as **Semantic** and the lexical path as
-**Keyword**. These user-facing names map to the existing `vector_rank`,
-`lexical_rank`, `dense_weight`, and `lexical_weight` API fields; the wire
-contract adds only the `relevance_decisions` audit field.
+## Retrieval Query Boundary
+
+HTTP uses `query`; Runtime uses the original Run `user_input`, not a concatenation
+of plans, reviews and Stage output. `bounded_subquestion` is reserved for explicit,
+traceable subquestions; automatic rewrite is not implemented. Missing/unknown
+query source skips retrieval rather than falling back to the whole Stage prompt.
+
+Replay records `query`, `query_source`, `stage_id`, skips and reasons. Memory and
+Knowledge share this intent boundary. Regression fixtures compare API/Runtime
+ranked hits, selected Context, citations, no-match and embedding failures; saturated
+off-topic lexical candidates must also be rejected across Single/Multi/Loop.
+
+## Workspace Boundary
+
+HTTP resolves authorized numeric scope; Runtime inherits persisted Conversation/Run
+scope. Store recall and expansion retain Workspace and eligibility predicates;
+omission selects the owner's active default, never an unfiltered query.
+Internal legacy fixtures normalize empty scope to `default_workspace`, which is
+not a runtime alias. See [resource authorization](../operations/resource-authorization.md),
+[equality filters](metadata-filters.md) and [typed eligibility](typed-metadata-filters.md).
+
+OIDC Membership and owner checks do not implement per-document/chunk sharing ACLs.
+Namespace isolation alone is not authentication or arbitrary multi-tenant authorization.
 
 ## Parent-Child Context Selection
 
-Retrieval and model context now have separate contracts:
+| Output | Meaning |
+| --- | --- |
+| `items` | Accepted ranked child hits; evaluation scores these |
+| `context_items` | Model-input candidates, with `matched_child`, `parent` or `adjacent` role and causing `matched_chunk_id` |
+| `context_selection` | `parent-child-v1`, token limit/use, role counts, scoped-lookup evidence and transformation summary |
 
-- `items` contains the child chunks that were recalled, fused, reranked, and
-  accepted by the relevance gate. RAG evaluation continues to score these
-  child hits.
-- `context_items` contains the chunks selected for model input. Each item has a
-  `context_role` of `matched_child`, `parent`, or `adjacent`, plus the
-  `matched_chunk_id` that caused the expansion.
-- `context_selection` reports algorithm version `parent-child-v1`, maximum tokens,
-  tokens used, role counts, whether scoped lookup was applied, and a nested
-  `transformation` summary.
+`parent_id` names a logical section, not a separate parent row. Expansion prefers
+nearest chunks in the same Document/section, then tries one adjacent index if no
+parent chunk fits. Chunk IDs are deduplicated. Every read/returned candidate must
+preserve Document, Workspace and metadata scope and pass the injection guard.
 
-`parent_id` identifies a logical source section rather than a separate parent
-row. Parent expansion therefore means selecting other chunks from the same
-document and section. Candidates nearest to the matched child are considered
-first. If no same-parent chunk fits, the selector tries chunks within one
-adjacent chunk index. Chunk IDs are deduplicated across all matched children.
-
-HTTP search accepts optional `knowledge_context_max_tokens`; the default is
-16,000.
-Agent runs use the frozen `ContextAssembly.KnowledgeMaxTokens` value from the
-Run snapshot, so retrieval expansion and final context assembly share the same
-upper bound. Context Assembly still performs its own final packing check.
-
-Every expansion query requires the matched `document_id`, preserves metadata
-filters, and applies the normalized `workspace_id`. The selector validates
-those fields again before accepting Store results. This prevents
-parent/neighbor expansion from widening the original namespace. It does not
-prove that the caller belongs to that Workspace or replace document/chunk ACL;
-those guarantees require authenticated Runtime Scope and authorization policy.
-
-Expanded chunks are untrusted just like direct hits. They pass through the
-prompt-injection guard before limit selection, and their decisions are merged
-into the response and retrieval trace security summary.
+HTTP accepts `knowledge_context_max_tokens` (default 16,000). Runtime uses frozen
+`ContextAssembly.KnowledgeMaxTokens`; the final Assembler independently packs
+input. Expansion does not bypass lifecycle/access checks or prove caller authority.
 
 ## Context Deduplication and Merge
 
-After parent-child selection, `context_items` passes through the versioned
-`context-dedup-merge-v1` transformer:
+`context-dedup-merge-v1` removes same-document source duplicates using content hash,
+then version/range, then Chunk ID. It groups Documents in first-seen order, sorts
+their chunks by index, merges consecutive chunks and removes repeated heading/fixed
+overlap. A final limit uses conservative summed source token counts.
 
-1. Repeated sources in the same document are removed. Source identity uses the
-   content hash when available, then the document version and byte range, and
-   finally the chunk ID.
-2. Remaining chunks are grouped by document in first-seen document order and
-   sorted by `chunk_index` within each document.
-3. Consecutive chunks are merged. Repeated Markdown heading context and fixed
-   chunk overlap are removed from the combined text.
-4. A final knowledge token-limit check is applied. Merged token counts use the
-   conservative sum of their source chunk counts.
-
-A merged item has a stable synthetic `chunk.id`, clears `content_hash` because
-its text is derived, and adds `source_chunk_ids`, `matched_chunk_ids`, and
-`merged_chunk_count`. Ranking and `context_role` come from the highest-priority
-contributing match. The nested `context_selection.transformation` object records
-input/output counts, removed duplicates, adjacent merges, and included document
-groups for API and Replay inspection.
+Derived chunks use stable synthetic IDs, clear `content_hash`, and retain
+`source_chunk_ids`, `matched_chunk_ids`, `merged_chunk_count`. Ranking/role follow
+the highest-priority contributing match. `context_selection.transformation`
+reports input/output counts, deduplication, merges and Document groups.
 
 ## Native Citation Protocol
 
-After context transformation, model-context chunks receive deterministic
-per-response aliases `S1`, `S2`, and so on. The search response exposes those
-aliases on `context_items` and returns their trusted metadata in
-`citation_sources`. Merged chunks keep one alias while their
-`source_chunk_ids` preserve the underlying source set.
+Transformed Context receives aliases `S1`, `S2`, etc. `citation_sources` holds
+trusted source metadata; merged sources retain contributing Chunk IDs. The model
+is instructed to cite `[S1]`, and Manifest selection determines eligibility.
+Completion resolves markers against actual selected Context plus the trusted
+catalog, deduplicates first appearances, and persists structured citations with
+the Message/terminal SSE. Unknown/excluded markers are reported invalid, never
+enriched with source metadata.
 
-Context Assembly wraps selected knowledge with its `source_id` and instructs
-the model to cite supporting evidence with the exact marker, for example
-`[S1]`. The Context Manifest records the alias separately from the chunk
-reference. If the final input budget excludes a chunk, its manifest entry is
-not selected and its alias is not eligible for the answer.
+Standalone search aliases are local to its response. Inside a Run, automatic
+retrieval and Knowledge Tools share aliases keyed by Document/version/Chunk.
+Search locators reserve IDs but are not read evidence. Tool-only grounding uses
+immutable read pages selected into final Context, not unread current Chunk bytes.
+See [Knowledge Tools](../tools/scoped-knowledge-tools.md).
 
-At completion, the server parses markers from the generated text and resolves
-them against the latest actual Context Manifest plus the trusted retrieval
-catalog. Structured citations are persisted with the assistant Message and
-returned by the terminal SSE event. Repeated markers are deduplicated in first
-appearance order. Unknown and excluded markers never receive source metadata;
-they are reported as invalid in SSE and the `citation.resolved` trace event.
-
-Standalone HTTP search aliases are local to one response and may change when
-ordering changes. Within a Run, automatic retrieval and explicit
-`knowledge_search` / `knowledge_read` share stable aliases keyed by Document,
-version and Chunk identity. Search locators reserve IDs but are not citation
-evidence. See [Scoped Knowledge read tools](../tools/scoped-knowledge-tools.md)
-for pagination, scope validation, selected Tool evidence and Source details.
-
-For Runs that opt into the `grounded_answer` Completion Contract, the server
-reconstructs the selected source chunks from trusted citation metadata. Each
-answer claim must cite an available `[S#]` and meet the frozen lexical-support
-threshold; identifiers, numbers, and named anchors must also occur in the cited
-content. Unknown sources, irrelevant existing sources, and contradictory factual
-anchors fail Verification. If the calibrated Relevance Gate selected no source,
-only an explicit insufficient-evidence response passes. A partial answer may mix
-supported cited claims with an explicit statement that the remaining evidence is
-insufficient.
-
-For Tool-only Knowledge evidence, Verification instead uses the immutable read
-pages actually selected into the final Context. It does not load unread bytes
-from the current Chunk. Automatically selected evidence for the same source is
-retained, including its expanded Chunk set. Citation metadata may additionally
-identify the Run, Tool Call and Tool event without changing the `[S#]` protocol.
-
-This is deterministic source-support evidence, not a universal truth oracle.
-Document deletion, version drift, or missing source chunks blocks Verification
-instead of treating unavailable evidence as a pass. See
-[Verification](../runtime/verification.md#grounded-knowledge-answers).
+Opt-in `grounded_answer` verifies cited claims/anchors against available selected
+sources. Source deletion/version drift/missing chunks block verification; no-match
+requires an explicit insufficient-evidence answer. This is deterministic support
+checking, not truth or semantic entailment. Plain Chat is not automatically gated;
+see [grounded answers](../runtime/verification.md#grounded-knowledge-answers).
 
 ## Prompt-Injection Guard
 
-All retrieved knowledge is treated as untrusted external data. The guard uses
-policy version `rag-prompt-guard-v2` and blocks high-confidence patterns before
-RRF, including:
+`rag-prompt-guard-v2` blocks high-confidence instruction overrides, role/prompt
+spoofing, system/developer prompt exfiltration, execution requests, fake boundary
+markers and credential-shaped content. Rejected candidates cannot enter RRF or
+model Context. Audit retains IDs/action/reasons, not the blocked raw payload.
 
-- requests to ignore, override, or bypass prior/system instructions
-- attempts to replace the model role or inject a new system prompt
-- requests to reveal system/developer instructions
-- explicit requests to invoke tools or execute shell commands
-- attempts to spoof AgentFlow's untrusted-knowledge boundary markers
-- credential-shaped content such as Authorization values, private keys, and
-  provider tokens
-
-Blocked chunks do not participate in fusion, reranking, context selection, or
-model calls. Responses and retrieval traces retain only document/chunk IDs, the
-`blocked` action, and reason codes; blocked raw content is not copied into the
-security decision.
-
-Context Assembly adds a system-level policy that retrieved knowledge is data,
-not instructions. Selected chunks are enclosed in
-`<untrusted_knowledge_context>` and `<untrusted_knowledge_document>` markers,
-and the current user request is placed after the retrieved context. This trust
-boundary remains active even when no injection pattern is detected.
-
-The deterministic detector intentionally favors precision over broad semantic
-classification. It is one defense layer, not a claim that every possible
-natural-language attack can be recognized. The system-role trust policy,
-content boundary, filtering, and audit trail provide defense in depth.
+All remaining knowledge is still untrusted. System policy and
+`<untrusted_knowledge_context>` / `<untrusted_knowledge_document>` delimiters keep
+it below system/current-user authority; current input follows the knowledge.
+Rules favor precision and cannot detect every semantic attack.
 
 ## Search Semantics
 
-- Omitting `min_similarity`, or setting it to `0`, allows lexical-only chunks
-  into the merged candidate set.
-- Setting a positive `min_similarity` preserves the original vector-threshold
-  contract: lexical data can enrich a dense hit, but cannot introduce a chunk
-  that did not pass dense recall.
-- `lexical_score` is the lexical recall score. `lexical_boost` is a separate
-  reranker feature calculated after candidate merging.
-- `rrf_score` is the raw reciprocal-rank sum and `fusion_rank` is its ordering
-  before the heuristic reranker assigns `rerank_rank`.
-- A lexical-only result has `similarity: 0` and no `vector_rank`; a dense-only
-  result has no `lexical_rank` or `lexical_score`.
-- `no_match` remains true when all recalled candidates fail the relevance gate.
+- Omitted/zero `min_similarity` permits Keyword-only recall. Positive values
+  require a Semantic hit; Keyword recall can enrich but not introduce other chunks.
+- `lexical_score` is recall evidence; `lexical_boost` is a later reranker feature.
+- `rrf_score`/`fusion_rank` precede `rerank_rank`. Keyword-only hits have
+  `similarity: 0` without `vector_rank`; Semantic-only hits omit lexical rank/score.
+- `no_match` means no candidate passed the current gate, not that no answer exists.
+- Embed/Store errors are failures, not `no_match` or accepted low-confidence evidence.
 
 ## Failure and Quality Boundaries
 
-- An embedding-provider or Store failure is an execution error, not a
-  low-confidence `no_match` result.
-- `no_match` means recalled candidates did not pass the current relevance
-  policy; it does not prove that the corpus contains no answer.
-- A no-match result supplies no RAG evidence. Runs that opt into the
-  `grounded_answer` verifier must return an explicit insufficient-evidence
-  response instead of asserting an unsupported answer.
-- RRF improves rank robustness; relevance thresholds are calibrated separately
-  against explicit calibration and holdout Dataset splits.
-- Parent and adjacent expansion can improve context completeness while adding
-  noise; the token limit and downstream transformation bound that trade-off.
-- Prompt-injection filtering is defense in depth, not a semantic proof that a
-  document is safe.
-- The [`agentflow-rag-baseline@1.2.0`](../evaluation/rag-golden-dataset.md) asset pairs a
-  canonical corpus with fact, paraphrase, exact-ID, multi-source, no-answer,
-  ACL, stale-data, and prompt-injection cases. No-answer cases are gating across
-  calibration and holdout splits. Index lifecycle makes stale-data gating; ACL
-  remains diagnostic until its authorization dependencies are implemented.
+Expansion can add noise; token bounds do not establish relevance. RRF/relevance
+thresholds need separate calibration and untouched holdout checks. The
+[Golden Dataset](../evaluation/rag-golden-dataset.md) covers facts, paraphrases,
+exact IDs, multiple sources, no-answer, stale data and injection; ACL cases remain
+diagnostic until their distinct authorization dependencies are implemented.
+Hash embeddings prove regressions, not general semantic quality.
 
-The [Manual tests](../operations/manual-tests.md) exercise exact
-identifier recall, RRF reproduction, injection filtering, parent expansion,
-and context transformation.
+Run `make golden-eval` for canonical fixture evidence. Metadata/lifecycle regressions
+and live-profile commands are in the dataset guide; UI checks are in
+[Manual tests](../operations/manual-tests.md). Defaults remain in
+[backend configuration](../operations/backend-configuration.md), not duplicated here.

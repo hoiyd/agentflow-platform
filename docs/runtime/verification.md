@@ -1,144 +1,101 @@
 # Verification
 
-AgentFlow can treat an assistant response as a candidate result until a frozen
-Completion Contract is satisfied. Verification is explicitly enabled per Run;
-ordinary chat does not require it and keeps
+An optional **Completion Contract** treats generated output as a candidate until
+configured checks pass. It is frozen when the Run starts and applies to Single,
+Multi and Loop through the same completion path. Ordinary Chat remains
 `verification_status=not_required`.
 
-> **Verification is not test execution.** Verification evaluates one Run's
-> persisted candidate output against its frozen contract before that Run may be
-> reported as completed. Automated and Manual Tests evaluate system behavior.
-
-This subsystem answers whether configured outcome invariants passed. It is
-separate from execution success, provider retries, retrieval relevance, and
-subjective factual correctness.
-
-For provider-constrained JSON generation and a machine result backed by passing
-evidence, see [Structured output](structured-output.md). A JSON Schema verifier
-alone still means validation only, not provider-constrained generation.
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Contract["Freeze Completion Contract"] --> Execute["Execute Run"]
+    Execute --> Candidate["Persist candidate and hash subject"]
+    Candidate --> Verify["Run configured verifiers"]
+    Verify --> Evidence["Append immutable Evidence / Artifacts"]
+    Evidence --> Gate{"Completion policy satisfied?"}
+    Gate -->|Yes| Completed["run.completed"]
+    Gate -->|No| Recovery["Recovery / exhaustion policy<br/>Never an implicit pass"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Gate focus;
+    class Evidence durable;
+```
 
 ## Verification vs. Tests
 
-| Verification | Automated Tests | Manual Tests |
+| Mechanism | Question | Effect |
 | --- | --- | --- |
-| Runs inside the product for one opted-in Run. | Run during development or CI. | Are performed by a developer, operator, or reviewer. |
-| Evaluates one persisted candidate output against a frozen Completion Contract. | Evaluate code against automated assertions. | Exercise a documented workflow and inspect its observable result. |
-| Produces `verification.*` events and Evidence/Artifacts that can gate `run.completed`. | Produce test output and determine build health. | Produce human observations and never gate `run.completed`. |
-| Is enabled by `completion_contract`; ordinary Runs skip it. | Start with commands such as `go test` or `make test`. | Follow [Manual Tests](../operations/manual-tests.md). |
+| Runtime Verification | Does this candidate satisfy this Run's contract? | Can gate `run.completed` |
+| Automated/manual tests | Does the implementation behave as specified? | Development/release evidence |
+| Offline evaluation | How does a versioned task set perform? | Regression/comparison report, not online policy |
 
-A command verifier may invoke an allowlisted external test runner as one source
-of runtime evidence. AgentFlow does not discover or run its own repository test
-suite as part of Verification unless an operator explicitly
-allowlists and configures such a command.
+These are distinct from execution success and subjective truth. A schema-valid
+answer can still be wrong. See [evaluation](../evaluation/README.md) and
+[structured output](structured-output.md) for separate generation constraints
+and evidence-backed machine results.
 
 ## When Verification Runs
 
-Verification is **opt-in**, not inferred from the chat mode or server configuration.
+Only a valid initial `POST /api/chat` `completion_contract` enables Verification.
+Environment allowlists configure execution, not opt-in. The workbench exposes
+the contract under **Verification**; disabling it omits the field.
 
-A Run enters the verification lifecycle only when its initial `POST /api/chat` request includes a valid, non-null `completion_contract`. The server validates and freezes that contract before creating the Run. This rule is identical for `single`, `multi_agent`, and `autonomous` modes.
-
-| Situation | Verification behavior |
-|---|---|
-| `POST /api/chat` omits `completion_contract` | Run starts as `not_required`; it completes through the normal path without verifiers or Evidence. |
-| `POST /api/chat` includes a valid `completion_contract` | Run starts as `pending`; the Completion Gate runs when the Run produces a candidate final output. |
-| Multi-Agent or Autonomous Run pauses at an intermediate `waiting_for_user` boundary | The Gate does not run yet because no completion is being claimed. The frozen contract remains attached to the Run. |
-| A contracted Run is continued or resumed and reaches the completion path | The inherited frozen contract is evaluated; callers cannot replace or weaken it. |
-| `POST /api/runs/{id}/verify` is called | An existing contracted Run consumes another bounded verification attempt against its latest persisted assistant output. |
-| `/verify` is called for an ordinary Run | The API returns `409`; it does not retrofit a contract onto an existing Run. |
-
-`VERIFICATION_WORKSPACE_ROOT`, command allowlists, HTTP host allowlists, and Artifact limits only configure which verifier implementations may run safely. Setting these environment variables does **not** enable verification for any Run by itself.
-
-The chat composer exposes this opt-in under **Verification** and
-supports all seven built-in verifier types. The request behavior is identical
-for `single`, `multi_agent`, and `autonomous` Runs.
-
-HTTP checks require an explicit backend origin grant, including loopback.
-Command checks require trusted `AUTH_MODE=local`, `VERIFICATION_WORKSPACE_ROOT`
-and an absolute allowlisted executable; OIDC sessions cannot run host commands.
-The terminal SSE
-`done` event reports `verification_status` separately from Run status.
-Disabling the control omits `completion_contract`.
-
-Run Verification, Evidence, Artifacts, Replay, and Episode access are guarded by
-the authorized Run Workspace. Omitted scope selects the current owner's active
-default Workspace; a foreign Run ID returns `404`. Identity, current Membership
-and owner checks precede scoped reads; see [resource authorization](../operations/resource-authorization.md).
+- Contracted Runs start `pending`; intermediate human waits do not claim completion.
+- Continue/Resume inherit the frozen contract and cannot replace or weaken it.
+- `POST /api/runs/{id}/verify` uses another bounded attempt on the persisted
+  candidate; ordinary uncontracted Runs return `409`.
+- Terminal SSE reports verification status separately from Run status.
+- Run/Evidence/Artifact access preserves current authorized Workspace scope;
+  foreign IDs return `404`. See [resource authorization](../operations/resource-authorization.md).
 
 ## Execution Model
 
-```text
-create Run + freeze contract
-  -> execute turns/stages
-  -> persist candidate assistant output
-  -> compute subject hash
-  -> run configured verifiers
-  -> persist immutable evidence + bounded raw-output artifacts
-  -> evaluate completion policy
-  -> publish run.completed only when the gate passes
-```
+| Verifier | What it establishes | What it does not establish |
+| --- | --- | --- |
+| `command` | Exit/output of an allowlisted argument vector, no shell | Safe arbitrary host-code execution |
+| `http` | Read-only GET/HEAD status/body checks | Absence of remote side effects |
+| `json_schema` | JSON Schema 2020-12 validation | Provider-constrained generation or factual truth |
+| `text_constraints` | Bounds, phrases and headings | Semantic correctness |
+| `citation` | Explicit external-link/host policy | Source reachability or claim support |
+| `answer_relevance` | Question/answer embedding similarity | Groundedness or correctness |
+| `grounded_answer` | Selected-source markers and deterministic claim support | General entailment or source quality |
 
-The current implementation supports:
-
-- `command`: executes an argument vector directly, without a shell.
-- `http`: performs read-only `GET` or `HEAD` checks.
-- `json_schema`: validates the final Run output with JSON Schema 2020-12.
-- `text_constraints`: checks character/word bounds, required or forbidden phrases, and required Markdown headings.
-- `citation`: checks explicit Markdown citation count, HTTPS use, and allowed or blocked source hosts.
-- `answer_relevance`: embeds the user question and substantive final answer,
-  then checks their cosine similarity against a frozen threshold.
-- `grounded_answer`: checks factual claims and native `[S#]` markers against the
-  knowledge sources selected for the Run.
-
-Each Evidence record binds the contract/version, verifier/version, Runtime Snapshot hash, exact candidate Subject Hash, attempt number, status, duration, exit code, summary, structured details, and Artifact IDs. For question-aware checks, the Subject Hash binds both the user question and candidate answer. One verifier may emit multiple bounded Artifacts, such as a score report and diagnostics. Evidence is append-only. When a later candidate has a different Subject Hash, AgentFlow appends a `stale` marker that references the superseded Evidence rather than rewriting history.
+Evidence is append-only and binds contract/verifier versions, Snapshot hash,
+candidate Subject Hash, attempt, status, duration, diagnostics and Artifacts.
+Question-aware checks also hash the question; grounding binds source content.
+Changed candidates append stale markers rather than rewriting earlier Evidence.
 
 ## Policy Semantics
 
-`required=true` means the verifier participates in the Completion Gate. Optional verifiers still run and produce Evidence, but cannot block completion.
-
-- `all_must_pass`: every required verifier must pass.
-- `any_may_pass`: at least one required verifier must pass.
-- `max_attempts`: bounds verification/revision attempts from 1 to 5.
-- `on_exhausted=fail`: closes the Run as `failed`.
-- `on_exhausted=waiting_for_user`: closes the attempt as `waiting_for_user`.
-
-A failed or blocked check remains `failed_recoverable` while attempt budget remains. `POST /api/runs/{id}/verify` creates a new attempt against the latest persisted assistant output. A verifier that cannot run is `blocked`, never implicitly passed. Every blocked Evidence record includes a stable `details.reason_code`; callers use that code rather than parsing its human-readable summary.
+- `required=true` participates in the gate; optional checks still produce Evidence.
+- `all_must_pass` requires every required check; `any_may_pass` requires at least one.
+- `max_attempts` is 1-5, independent of provider retries.
+- Failed/blocked checks remain recoverable while attempts remain. Exhaustion
+  follows `on_exhausted=fail` or `waiting_for_user`.
+- Unavailable checks are `blocked`, never implicitly passed. Stable
+  `details.reason_code`, not summary parsing, identifies the reason.
 
 ## Contract Example
 
-Opt one new Run into verification by passing the contract with `POST /api/chat`:
+Include this with the selected Agent and authorized scope in `POST /api/chat`:
 
 ```json
 {
-  "message": "Return the service health as JSON.",
+  "message": "Report the incident code AUTH-7F31.",
   "completion_contract": {
     "subject_type": "run_output",
-    "verifiers": [
-      {
-        "id": "response-schema",
-        "type": "json_schema",
-        "required": true,
-        "config": {
-          "schema": {
-            "type": "object",
-            "properties": {
-              "status": { "const": "ok" }
-            },
-            "required": ["status"],
-            "additionalProperties": false
-          }
-        }
-      },
-      {
-        "id": "service-health",
-        "type": "http",
-        "required": true,
-        "config": {
-          "method": "GET",
-          "url": "http://localhost:8080/health",
-          "expected_status": 200
-        }
-      }
-    ],
+    "verifiers": [{
+      "id": "incident-code",
+      "type": "text_constraints",
+      "required": true,
+      "config": {"required_phrases": ["AUTH-7F31"]}
+    }],
     "policy": {
       "mode": "all_must_pass",
       "max_attempts": 2,
@@ -148,76 +105,26 @@ Opt one new Run into verification by passing the contract with `POST /api/chat`:
 }
 ```
 
-The server assigns the contract ID when omitted, freezes verifier implementation versions and defaults, and stores a canonical contract hash before the Run starts. Request-provided `hash` and `version` values are not trusted.
+The server assigns omitted identity, normalizes defaults and freezes implementation
+versions/hash; request-provided hash/version are not trusted. Each verifier owns
+strict config decoding and rejects unknown fields. The example proves only that
+the response contains the required phrase.
 
-All verifier-specific settings live under `config`. Each registered verifier strictly decodes its own config, rejects unknown fields, applies defaults, and freezes the normalized value into the Completion Contract. For example, a research-style response can use deterministic checks without pretending they prove factual correctness:
+### Answer Relevance
 
-```json
-{
-  "subject_type": "run_output",
-  "verifiers": [
-    {
-      "id": "report-shape",
-      "type": "text_constraints",
-      "required": true,
-      "config": {
-        "min_words": 300,
-        "max_words": 1200,
-        "required_headings": ["Findings", "Sources"],
-        "forbidden_phrases": ["private"]
-      }
-    },
-    {
-      "id": "source-policy",
-      "type": "citation",
-      "required": true,
-      "config": {
-        "min_citations": 3,
-        "min_unique_hosts": 2,
-        "require_https": true,
-        "blocked_hosts": ["example.invalid"]
-      }
-    }
-  ],
-  "policy": {
-    "mode": "all_must_pass",
-    "max_attempts": 2,
-    "on_exhausted": "waiting_for_user"
-  }
-}
-```
+`answer-relevance-embedding-v1` uses the configured embedding provider. Config
+includes `minimum_score` and `minimum_answer_characters`; thresholds are
+model-specific and need representative calibration, not a universal default.
+It removes verbatim question repetition before embedding the substantive answer.
 
-The Answer Relevance MVP can be added to any contract as follows:
-
-```json
-{
-  "id": "answer-relevance",
-  "type": "answer_relevance",
-  "required": true,
-  "config": {
-    "minimum_score": 0.65,
-    "minimum_answer_characters": 20
-  }
-}
-```
-
-Version `answer-relevance-embedding-v1` uses the platform's configured
-embedding provider and records cosine similarity, threshold, model, provider,
-dimensions, and question-repetition handling in Evidence. Verbatim question
-repetition is removed before the answer is embedded. Missing embedding service,
-estimated local-hash vectors, mixed models/providers, malformed vectors, and
-timeouts produce `blocked` rather than silently falling back to lexical
-matching. The threshold is embedding-model-specific and must be calibrated on
-representative outputs before it is used as a strict production quality gate.
-The verifier adds two embedding requests per attempt; those calls are not yet
-represented as generation-token usage in the Run Usage Ledger.
-
-`citation` counts unique external URLs from explicit Markdown links and CommonMark autolinks. Relative links, images, and bare URL-like text are not citations. Host rules match the configured host and its subdomains. This verifier does not fetch sources or judge whether a source supports a claim; source reachability and claim groundedness belong in separate verifiers.
+Evidence retains score, threshold, provider/model/dimensions and repetition handling.
+Missing service, local-hash estimates, mixed identities, malformed vectors and
+timeouts block the check; there is no lexical fallback. Two embedding calls per
+attempt use shared request controls but are not generation-token Usage Ledger entries.
 
 ### Grounded Knowledge Answers
 
-Use `grounded_answer` for knowledge-backed Runs rather than the external-link
-`citation` verifier:
+Use `grounded_answer`, not the external-link `citation` verifier, for `[S#]` sources:
 
 ```json
 {
@@ -226,106 +133,61 @@ Use `grounded_answer` for knowledge-backed Runs rather than the external-link
   "required": true,
   "config": {
     "minimum_claim_support": 0.5,
-    "no_answer_phrases": ["insufficient evidence", "证据不足"]
+    "no_answer_phrases": ["insufficient evidence"]
   }
 }
 ```
 
-Version `grounded-answer-lexical-v1` splits the answer into claims, resolves each
-`[S#]` only against the final Context Manifest, and measures claim-term coverage
-in the cited chunks. Numeric, code-like, and named anchors must occur exactly in
-the cited evidence. Evidence records scores, source IDs, unsupported claims, and
-missing anchors, but does not duplicate source text. Source contents participate
-in the Subject Hash, so a later evidence change cannot reuse an earlier result.
+`grounded-answer-lexical-v1` splits claims and checks coverage plus exact numeric,
+code and named anchors in cited selected Context. It records unsupported claims,
+scores, IDs and missing anchors, not duplicate source text. Tool-only evidence is
+the immutable read content actually selected, not unread current source bytes.
 
-When the calibrated Relevance Gate selected no source, an answer passes only if
-it uses one configured insufficient-evidence phrase and makes no factual claim.
-With selected sources, a pure refusal fails; partial answers may combine grounded
-cited claims with an explicit insufficient-evidence statement. Missing documents,
-version drift, and missing chunks produce `blocked` Evidence.
+No selected source permits only a configured insufficient-evidence phrase without
+factual claims. With selected sources, pure refusal fails; partial supported
+answers may explicitly mark missing evidence. Deleted/version-drifted/missing
+sources block the check. The `0.5` fixture baseline is not semantic entailment or
+world truth; calibrate on domain answers before enforcing quality claims.
 
-The default `0.5` support threshold is a deterministic project baseline covered
-by acceptance fixtures. It detects absent, irrelevant, and conflicting anchors;
-it does not prove world truth, semantic entailment, or source quality. Recalibrate
-it on representative domain answers before making it a production gate.
+### External Citations
 
-## Extension Model
-
-The execution interface is intentionally small: a verifier declares a stable type and implementation version, owns config normalization, and returns a status, compact structured details, and zero or more artifacts. `Registry.Register` adds an implementation before the Engine starts serving Runs. A new synchronous verifier does not require changes to `VerifierSpec`, Completion Contract hashing, gate evaluation, persistence, replay, or event schemas.
-
-This supports the common verifier families without forcing them into one scoring method:
-
-- Deterministic outcome checks: allowlisted commands, HTTP probes, JSON Schema,
-  database assertions, and file or state invariants.
-- Deterministic response checks: text constraints, citation/source policy, parsers, static analyzers, and exact-match rules.
-- Model-based graders: rubric scoring, groundedness, completeness, and pairwise comparison can return scores and claim-level diagnostics through `details` and Artifacts.
-- Human review: expert judgment and calibration should enter through a future asynchronous evidence-ingestion path rather than blocking a synchronous verifier process.
-
-The Completion Gate deliberately consumes only `passed`, `failed`, or `blocked`; verifier-specific scores remain evidence details. Thresholds and rubric weighting belong inside the verifier that owns their semantics. The gate policy stays limited to required checks, `all_must_pass`/`any_may_pass`, attempt bounds, and exhaustion behavior.
-
-For subjective outputs such as articles and research reports, combine deterministic checks with an appropriately calibrated model or human grader. Deterministic structure and citation checks are useful evidence, but they are not substitutes for factuality, source quality, argument coherence, or editorial judgment.
+`citation` counts unique explicit Markdown links/CommonMark autolinks; images,
+relative links and bare URL-like text do not count. Host rules include subdomains.
+It does not fetch or validate support. [Web citations](../tools/web-source-citations.md)
+and Knowledge aliases are separate source protocols.
 
 ## Security Boundaries
 
-Actual enforcement and reproducible failure cases are documented in
-[Execution boundaries](../operations/execution-boundaries.md).
+[Execution boundaries](../operations/execution-boundaries.md) owns executable,
+destination and response-limit rules. Host command verification requires trusted
+local mode, a configured root and absolute executable allowlist; OIDC cannot use
+it. Root/environment/process-group controls are **not an OS sandbox**. An
+allowlisted executable still has server-user authority; isolated sandbox Tool
+execution is a different capability.
 
-Host command verification is available only to the trusted local operator on
-Linux/macOS, with a configured root and absolute executable allowlist. Canonical
-working directories must remain under that root; processes receive a fixed,
-credential-free environment and cancellation terminates their process group.
-These measures are **not an OS sandbox**: a trusted executable can still read,
-write, or use the network as the server OS user, and descendants can deliberately
-escape a process group. OIDC mode blocks host commands even when allowlisted.
-Untrusted scripts require a future isolated runner, never a bare-exec fallback.
-
-`VERIFICATION_ALLOWED_HTTP_HOSTS` now defaults to deny, including localhost.
-Grant exact origins such as `https://example.com` or `http://127.0.0.1:8080`.
-A bare public hostname means HTTPS on port 443, not arbitrary schemes or ports.
-All DNS answers must be public and the validated IP is dialed directly; explicit
-localhost or literal private origins authorize those specific targets only.
-Link-local metadata, unspecified and reserved addresses remain blocked.
-Redirects and environment proxies are disabled. HTTP checks cannot send mutation
-methods or authorization headers. Only grant trusted read-only services: GET
-alone does not guarantee that a destination has no side effects. The contract
-example above requires an explicit `http://localhost:8080` operator grant.
-
-HTTP execution has a 10-second total ceiling and consumes at most 1 MiB plus
-one overflow-detection byte. Exceeding the body limit is `blocked`, not passed
-merely because the status matched. Byte count/hash then cover observed bytes,
-not the unread remainder. Existing contracts and stored Evidence remain intact;
-re-verification/Resume use the current operator execution policy, so formerly
-implicit loopback grants must be made explicit before retrying.
-
-Each verifier Artifact and the structured Evidence details are capped by `VERIFICATION_MAX_ARTIFACT_BYTES` (64 KiB by default). At most eight Artifacts are retained per Evidence record. Artifacts record the observed byte count, content hash, media type, and whether stored content was truncated.
+HTTP origins default to deny, including loopback. Grant exact trusted origins;
+DNS validation pins the dialed IP, redirects/proxies are disabled, and metadata
+destinations remain blocked. GET alone does not guarantee harmless remote behavior.
+Timeout/oversize responses block verification even if the status matches.
+Artifact count/byte caps and redaction still apply. Reverify/Resume use current
+operator grants, never an old implicit authorization.
 
 ## Replay and Events
 
-`GET /api/runs/{id}/replay` returns `verification_evidence` and `verification_artifacts`. `GET /api/runs/{id}/episode` adds a verification summary while retaining the raw records.
+Replay returns `verification_evidence` and `verification_artifacts`; Episode adds
+a summary. [Typed events](event-catalog.md) expose requested/started/pass/fail/
+blocked/stale and revision transitions. Durable records use idempotent Postgres
+startup migration, not a separate verification database.
 
-Lifecycle events are:
+## Extension Model
 
-```text
-verification.requested
-verification.started
-verification.passed
-verification.failed
-verification.blocked
-verification.stale
-run.revision_requested
-```
+A registry implementation owns stable type/version, normalized config and status/
+details/Artifacts. Register it before serving; adding a synchronous verifier does
+not change contract hashing, gate policy or persistence. Thresholds belong inside
+the verifier; the gate consumes passed/failed/blocked and required-check policy.
 
-Postgres stores use the same domain contract. Postgres creates the verification tables and Run columns through idempotent startup migration.
-
-## Design Basis and Limits
-
-The implementation follows three practical evaluation principles:
-
-- Make capabilities and invariants mechanically legible to the agent and runtime, as described in [OpenAI Harness Engineering](https://openai.com/index/harness-engineering/).
-- Grade the real outcome separately from the agent transcript, and prefer deterministic code-based graders where possible, as described in [Anthropic's evaluation guide](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents).
-- Give the loop an explicit verification phase, stopping rule, named terminal outcome, and bounded attempt budget, consistent with [recent loop-engineering specification work](https://arxiv.org/abs/2607.00038).
-
-Current boundaries exclude a generic CI runner, asynchronous human evidence
-ingestion, and built-in model graders. Deployments that register model graders
-should retain deterministic or human checks for high-impact completion
-decisions rather than relying on an LLM judge alone.
+Built-in model graders and asynchronous human Evidence ingestion are not
+implemented. Deterministic structure/relevance checks cannot replace calibrated
+human/model assessment of high-impact answers. A command verifier runs a test
+runner only when an operator explicitly configures and allowlists it; it never
+discovers the repository suite automatically.

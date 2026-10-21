@@ -30,14 +30,24 @@ Single mode handles one request with one selected Agent and one direct Turn.
 There are normally no orchestration Stages. A [structured clarification](structured-clarification.md)
 closes the paused Turn and resumes the same Run in a new Turn with its saved model/Tool protocol.
 
-```text
-Run
-`-- Turn
-    |-- retrieve Memory and Knowledge
-    |-- assemble bounded context
-    |-- Model Call
-    |-- zero or more guarded Tool Calls
-    `-- final Model output
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Run["Single Run"] --> Turn["Direct Turn"]
+    Turn --> Retrieve["Retrieve Memory and Knowledge"]
+    Retrieve --> Context["Assemble bounded Context"]
+    Context --> Model["Model Call"]
+    Model -->|Tool calls| Tools["Guarded Tool batch"]
+    Tools -->|Paired observations| Context
+    Model -->|No Tool calls| Output["Final output candidate"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class Turn,Model focus;
 ```
 
 The Turn Engine may perform more than one Model Call when the model selects
@@ -83,9 +93,22 @@ checkpoint and Resume protocol described in [Durable recovery](durable-recovery.
 
 Multi mode implements a fixed, inspectable plan-and-review workflow:
 
-```text
-Planner -> waiting_for_user -> Router -> Worker -> Reviewer -> Finalizer
-             approve/edit
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Planner --> Approval["waiting_for_user<br/>Plan approval"]
+    Approval -->|Approve / edit| Router
+    Router --> Worker["Isolated Worker Stage"]
+    Worker --> Reviewer
+    Reviewer --> Finalizer
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class Approval,Worker focus;
 ```
 
 1. **Planner** creates an explicit plan and success criteria.
@@ -145,10 +168,25 @@ that removed protocol boundary; current Runs recover via Stage checkpoints.
 
 Loop mode is the bounded iterative path. It repeats one five-Stage Iteration:
 
-```text
-Observe -> Plan -> Act -> Review -> Decide
-   ^                                  |
-   +--------- continue ---------------+
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Observe --> Plan
+    Plan --> Act
+    Act --> Review
+    Review --> Decide{"Decide"}
+    Decide -->|continue within limits| Observe
+    Decide -->|stop| Output["Final output candidate"]
+    Decide -->|ask_user| Wait["waiting_for_user"]
+    Wait -->|Input / same-Run continuation| Observe
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class Decide focus;
 ```
 
 - **Observe** summarizes current state, constraints, risks, and missing facts.

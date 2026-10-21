@@ -3,13 +3,23 @@
 AgentFlow places deterministic Model routing between the shared Turn Engine and
 the provider-neutral model client:
 
-```text
-Turn request
-  -> route requirements
-  -> frozen Model Route Catalog
-  -> capability and capacity filter
-  -> stable priority selection
-  -> provider client
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Turn["Turn request"] --> Requirements["Derive route requirements"]
+    Requirements --> Catalog["Frozen Model Route Catalog"]
+    Catalog --> Filter{"Capability and capacity filter"}
+    Filter -->|Eligible routes| Select["Stable priority selection"]
+    Select --> Provider["Provider client"]
+    Filter -->|No eligible route| Unavailable["model_route_unavailable<br/>No provider request"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class Catalog,Filter focus;
 ```
 
 The production composition loads a complete set of peer OpenAI-compatible Chat

@@ -1,408 +1,217 @@
 # Context Assembly and Compaction
 
-Context Assembly owns the input of one logical Model Call. It is a capacity and
-explainability mechanism, not a cumulative cost budget. For the distinction,
-see [Execution controls](../runtime/execution-controls.md) and [Run Budget](../runtime/run-budget.md).
+Context Assembly makes **one logical Model Call** fit its input capacity. It is
+not cumulative cost accounting; [Run Budget](../runtime/run-budget.md) owns that.
 
-Every model call is assembled against an explicit input budget:
-
-```txt
-input budget = model context window - output reserve - safety margin
+```text
+input capacity = model context window - output reserve - safety margin
 ```
 
-The assembler always keeps required protocol content such as the system prompt, current input, tool calls, tool results, and the current non-empty Structured Task State. Optional conversation history, semantic memory, and RAG knowledge are selected within their source budgets. Each call emits a Context Manifest describing what was selected, excluded, or transformed without persisting raw prompt content in the manifest.
-
-Selected RAG knowledge also carries a per-context citation source ID such as
-`S1`. The manifest records that alias on each knowledge entry, allowing final
-response citations to be resolved only against knowledge that survived the
-assembler's last input-budget check.
-
-Context compaction is non-destructive. It creates a persisted structured summary for older conversation messages; it never deletes or overwrites the original messages. On subsequent model calls, the assembler injects that summary, excludes the covered raw messages, and keeps the recent raw tail.
-
-The summarizer always uses the Chat LLM selected for the originating Run. It
-does not use the independent embedding service or a default Chat model.
-
-Source-aware session history retrieval recovers exact older evidence. At each
-non-isolated Turn entry, the Runtime searches the durable conversation Messages and
-execution Events using terms from the current input. It can reintroduce exact
-older IDs, commands, errors, and nearby sources even when those Messages were
-covered by compaction. Retrieved sources are a temporary context projection;
-the original Session Log is never changed.
+The Context Manifest explains selected/excluded sources, transformations and
+estimates without copying raw dynamic content. Compaction creates an immutable
+summary of older Messages; originals remain authoritative and recoverable.
 
 ## Selection Contract
 
 | Source | Treatment |
 | --- | --- |
-| System protocol and current input | required |
-| Tool definitions and active tool results | required, with result compaction when oversized |
-| Structured Task State | required when a Revision exists; reloaded for each logical Model Call assembly |
-| Recent conversation history | selected within the history budget |
-| Curated semantic memory | selected within the memory budget and wrapped as versioned untrusted data |
-| RAG knowledge | selected within the knowledge budget and wrapped as untrusted data |
-| Persisted conversation summary | required when an active compaction exists |
-| Retrieved original session sources | relevant matches within dedicated result, character, token, and input budgets |
+| System protocol, current input, Tool protocol and active results | Required; oversized results use a separate bounded transformation |
+| Task State | Required when a Revision exists; reloaded for every logical assembly |
+| Active persisted summary | Required; covered raw Messages are shadowed, not deleted |
+| Recent history, curated Memory, RAG | Selected within source and total budgets |
+| Retrieved original session sources | Bounded exact evidence, separate from the recent raw tail |
 
-Every assembly emits a Context Manifest containing source IDs, selection
-reasons, transformations, token estimates, and a stable prefix hash without
-copying raw dynamic context into the event.
+Required content that cannot fit fails the call; optional overflow receives an
+exclusion reason. RAG aliases such as `S1` remain eligible for citations only if
+their sources survive this final packing check.
 
 ### Complete Message Protocol
 
-Context Assembly uses the same `provider.Message` contract as the model
-adapter. It selects and budgets complete messages instead of translating a
-second message schema or round-tripping Tool Calls through JSON. `Source` and
-`ReferenceID` are provenance metadata excluded from the model's wire payload.
-Assembly works on isolated copies of Tool Calls and continuation pointers.
+The assembler uses `provider.Message`, including Tool Calls, `reasoning_content`
+and `refusal`. Non-display continuation fields count toward capacity; absent and
+explicitly empty reasoning stay distinct. Assembly copies mutable protocol data;
+trace filtering must never mutate the outgoing request. `Source`/`ReferenceID`
+are provenance metadata, not wire fields. Supported provider boundaries are in
+[Tool-loop protocol](../tools/bounded-tool-loop.md).
 
-Supported non-display fields, including `reasoning_content` and `refusal`, are
-retained and counted in the input budget; absent and explicitly empty reasoning
-remain distinct. Ordinary tracing removes reasoning from a copy, never from the
-outgoing request. Content retention remains governed by Request Capture, not
-by the Manifest. This preserves existing provider contracts; it does not add
-support for arbitrary provider extensions. Chat display and sanitized reasoning
-persistence follow the separate [provider reasoning policy](../runtime/provider-reasoning.md).
+Recalled Memory is JSON-wrapped under the versioned `recalled-memory-trust-v1`
+policy and cannot override system instructions, current input, Task State or Tool
+authority. Task State is bounded JSON referenced by immutable Revision. Historical
+sources are read-only evidence, not new instructions. See [Memory](memory-management.md)
+and [Task State](../runtime/task-state.md).
 
-Selected recalled Memory is JSON-encoded inside
-`<untrusted_memory_context policy="recalled-memory-trust-v1">`. The system
-policy treats it as historical data rather than instructions: it cannot
-override the system protocol, current user request, or Structured Task State,
-and cannot authorize Tool calls. Each Memory Manifest entry records
-`transformation=untrusted_json_wrapped` and the policy version whether the item
-was selected or excluded by budget. The Manifest retains only metadata; Model
-Request Capture continues to follow its independent metadata/redacted/full
-retention policy.
-
-Structured Task State is injected as bounded JSON and recorded in the Manifest
-with a versioned reference such as `conversation_id:v3`. Its raw facts remain in
-the immutable Revision snapshot rather than the Manifest. See
-[Structured Durable Task State](../runtime/task-state.md). This protocol is frozen with the Run; see
-[Snapshot compatibility](../architecture/terms.md#runtime-snapshot).
-
-After assembly and application of effective request limits, the model adapter
-persists a Model Request Envelope for each physical attempt. The Manifest
-explains source selection; the Envelope hashes the exact final transport
-payload; optional Context Capture retains content according to a separate
-process policy. The Envelope also freezes selected token totals by source so
-the debug API can detect drift from the referenced Manifest. See
-[Model request reconstruction](model-request-reconstruction.md).
-
-History entries use stable references such as `message:<message_id>` and
-`event:<event_id>`. The Manifest records the reference, source type, selection
-reason, transformation, and estimated tokens, but not the raw recovered text.
-The injected block labels historical sources as read-only evidence rather than
-instructions and gives the current request and system protocol precedence.
+The Manifest records source references, selection reasons, transformations,
+estimated tokens and a stable prefix hash. The separate
+[Request Envelope / Capture](model-request-reconstruction.md) hashes each final
+physical request and governs optional content retention. The Manifest does not
+authorize retaining prompts or reasoning.
 
 ## Session History Retrieval
 
-The internal retrieval contract supports keyword, Message ID, Event ID, Event
-type, role, and inclusive time-range filters. A direct match may include a
-bounded number of adjacent Messages or Events so exact evidence is not returned
-without its local context. Runtime auto-retrieval currently derives keywords
-from the active Turn and excludes active raw Messages plus all Events from the
-current Run. Explicit filters remain available to internal callers.
+At non-isolated Turn entry, bounded keyword retrieval searches durable Messages
+and evidence-bearing Events for older IDs, errors, commands and nearby context.
+It excludes active raw Messages and Events from the current Run to avoid recursive
+trace matches. Internal callers can also filter by Message/Event ID, type, role
+and inclusive time range.
 
-Only evidence-bearing execution Events are searched automatically, including
-tool failures/results, model failures, completed or failed Stages, failed Runs,
-verification failures, compaction failures, and budget failures. This prevents
-query-bearing retrieval and context trace Events from recursively matching
-themselves. Explicit Event ID/type queries can search any persisted Event type.
-
-Retrieval is best effort. Store or search failures emit
-`session_history.search_failed` and do not block the answer model call.
-Successful calls emit `session_history.search_started` and
-`session_history.search_completed` with references and counts, not raw source
-content. Retrieval limits are frozen with the Run; historical Snapshot schemas
-are Replay-only under the [shared compatibility rule](../architecture/terms.md#runtime-snapshot).
+Recovered sources keep `message:<id>` / `event:<id>` references and do not change
+the Session Log. Search limits are frozen with the Run. Search is best effort:
+`session_history.search_started/completed/failed` records counts/references, not
+raw text; Store failure does not block the answer call. Arbitrary Event types
+are available to explicit queries, not automatically searched by keyword.
 
 ## When Compaction Runs
 
-- **Soft compaction** runs asynchronously after a completed Run when context usage reaches 70% of the available model input budget. It prefers the highest real `prompt_tokens` value observed in the Run and falls back to local token estimation.
-- **Hard compaction** runs as a best-effort check at non-isolated Turn entry when estimated conversation context reaches 85% of the available input budget. A Tool loop's later `PrepareFollowup` rounds reassemble and enforce the input budget, but do not rerun this check or session-history search for every physical provider attempt. Isolated Worker Turns skip conversation compaction and history retrieval.
-- **Provider-overflow compaction** is forced after a text-only Model Call returns `context_length_exceeded`. AgentFlow retries that logical input once, and only when the persisted compaction generation advanced. Agent streams that may have executed Tools are not replayed automatically.
-- Compaction is skipped when fewer than two new source messages can be summarized or when `CONTEXT_COMPACTION_MODE=off`.
-- A failed or timed-out compaction does not block the main model call. AgentFlow records `context.compaction_failed` and falls back to normal recent-history selection.
-- Temporary summarizer failures use a one-minute cooldown; authentication, quota, validation, and missing-model configuration failures use a 15-minute cooldown. Two consecutive compactions below 10% reduction suspend automatic compaction for 30 minutes.
+| Trigger | Behavior |
+| --- | --- |
+| Soft | Asynchronous after a completed Run; uses highest observed prompt usage when available, otherwise local estimates |
+| Hard | Best-effort preflight at non-isolated Turn entry; later Tool follow-ups reassemble input but do not rerun history search/compaction per attempt |
+| Provider overflow | One forced recovery for text-only `context_length_exceeded`, only if the persisted generation advances |
+
+Trigger defaults and configuration are in [`.env.example`](../../apps/api/.env.example).
+Compaction skips when off or fewer than two new Messages are eligible. Isolated
+Worker Turns skip conversation compaction/history retrieval. Agent streams that
+may have executed Tools are never automatically replayed after overflow.
 
 ## Compaction Algorithm
 
-The incremental summarizer combines the previous summary with newly eligible
-older Messages; originals are never removed. The following sections describe
-selection, generation, and failure guards for `context-compaction-v4`.
+`context-compaction-v4` incrementally summarizes previous summary plus eligible
+older Messages. It preserves source evidence while excluding generated current
+plans: task lifecycle belongs to Task State, not a second model-written plan.
 
 ### Selection Algorithm
 
-The current implementation is `context-compaction-v4`. Selection and trigger
-thresholds are unchanged from v2. V3 added source-evidence validation; v4 restricts
-new summaries to historical context rather than a generated execution plan. It decides
-whether to compact using the following values:
-
-```txt
-input_budget = context_window - output_reserve - safety_margin
+```text
 estimated_surface = tokens(previous_summary) + tokens(uncovered_messages)
-trigger_tokens = max(estimated_surface, observed_provider_prompt_tokens)
-
-soft_threshold = input_budget * CONTEXT_COMPACTION_SOFT_THRESHOLD
-hard_threshold = input_budget * CONTEXT_COMPACTION_HARD_THRESHOLD
+trigger_tokens = max(estimated_surface, available_provider_prompt_tokens)
+threshold = input_capacity * configured_soft_or_hard_ratio
 ```
 
-`observed_provider_prompt_tokens` is available to the asynchronous soft trigger
-and can include system prompts, Tools, Memory, and RAG sources. The local
-`estimated_surface` only measures the rolling conversation summary and original
-Conversation Messages. A provider-overflow trigger is forced and does not use a
-percentage threshold.
+Provider usage may include Tools/Memory/RAG; the local surface estimate covers
+only Conversation history/summary. A forced overflow trigger bypasses the ratio.
 
-After loading the latest completed generation, the planner performs these steps:
-
-1. Build `covered_ids` from the previous generation's cumulative
-   `source_message_ids`.
-2. Build `active_messages` from original Messages whose IDs are not covered.
-   Covered Messages remain in storage; they are excluded only from the visible
-   model-input surface.
-3. Form protocol groups. A `user` Message starts a group, and every following
-   assistant or Tool protocol Message remains in that group until the next
-   `user` Message. The compaction boundary can only fall between groups.
-4. Walk groups from newest to oldest to construct the protected raw tail. Keep
-   at least four Messages. After that minimum is satisfied, stop before adding
-   the next group when it would exceed `CONTEXT_COMPACTION_RECENT_TOKENS`.
-   Preserving a complete group may therefore exceed the configured target.
-5. Select everything before the protected tail as `new_source_messages`.
-   Compaction is skipped when fewer than two new Messages are eligible.
-6. Build cumulative source lineage as `previous source IDs + new source IDs`,
-   remove duplicate IDs while preserving order, and hash each selected
-   `(message_id, role, content)` tuple for idempotency.
-
-In simplified pseudocode:
-
-```txt
-active = original_messages - previous.source_message_ids
-groups = group_from_each_user_until_next_user(active)
-protected_tail = take_complete_groups_from_newest(
-  minimum_messages = 4,
-  target_tokens = CONTEXT_COMPACTION_RECENT_TOKENS,
-)
-new_sources = active before protected_tail
-
-if len(new_sources) < 2:
-  skip
-```
+1. Exclude the previous generation's cumulative `source_message_ids` from the
+   active surface, retaining originals in Store.
+2. Group each user Message with following assistant/Tool protocol until the next
+   user Message; never split a protocol group.
+3. Protect complete newest groups: at least four Messages, then the configured
+   recent-token target. A whole group can exceed that target.
+4. Summarize the remaining older Messages only when at least two are newly eligible.
+5. Persist cumulative ordered source IDs and a hash of source ID/role/content
+   tuples for lineage and idempotency.
 
 ### Dynamic Summary Budget
 
-The summary target scales with the newly eligible source surface instead of
-always requesting the configured maximum:
+For a summary cap of at least 256 tokens, target
+`clamp(eligible_source_tokens / 5, 256, summary_max_tokens)`; a smaller cap is
+the target itself. Background prose may be clipped, but evidence JSON may not.
+The summarizer uses the originating Run's Chat model, not the embedding service.
 
-```txt
-eligible_source_tokens = before_tokens - protected_tail_tokens
-
-when summary_max_tokens >= 256:
-  target_summary_tokens = clamp(
-    eligible_source_tokens / 5,
-    256,
-    summary_max_tokens,
-  )
-
-when summary_max_tokens < 256:
-  target_summary_tokens = summary_max_tokens
-```
-
-This targets roughly 20% of eligible source tokens, uses 256 tokens as a useful
-floor when the hard cap permits it, and always treats
-`CONTEXT_COMPACTION_SUMMARY_MAX_TOKENS` as the ceiling. Background prose above
-the target is deterministically truncated before persistence; a cap that would
-cut the evidence JSON rejects the candidate instead.
-
-The summarizer receives only the previous summary and newly eligible Messages.
-It begins with `## Source Evidence`, followed by an unfenced JSON array:
+A new summary starts with `## Source Evidence` and an unfenced JSON array:
 
 ```json
 [{"message_id":"original-message-id","role":"user","quote":"Cancel the delivery task."}]
 ```
 
-This small evidence section preserves original excerpts for corrections,
-prohibitions, cancellations, explicit unknowns and key entity relationships.
-Before commit, the Compactor checks each ID against the cumulative selected
-source set, including previous generations, and verifies its Conversation,
-original role and verbatim quote. Foreign Messages and the newly protected raw
-tail cannot be cited as compacted sources. Both validation and budget failure
-keep the previous generation and originals intact and emit a classified failure:
-`context_summary_evidence_invalid` or `context_summary_evidence_budget_exceeded`.
-The existing validation cooldown applies; no repair model call is added.
+Before commit, each declared source must belong to the Conversation and cumulative
+selected set, with the original role and verbatim quote. Foreign/protected-tail
+Messages, malformed evidence and over-budget evidence reject the candidate;
+JSON is re-encoded to remove ambiguous duplicate keys. `[]` is valid when no
+important evidence is declared. This validates attribution, not completeness.
 
-The section counts toward the existing summary cap and remains ordinary summary
-text in the current storage/API field: no schema migration or new evidence
-database is required. Older summaries remain readable and are not retroactively
-validated; newly generated candidates must follow v4. `[]` is permitted when
-there is no important evidence. Validation checks declared attribution, not
-whether every important fact was selected or the prose is semantically sound.
-Evidence JSON is re-encoded after validation to remove ambiguous duplicate keys
-without changing decoded quote strings. Upgrading does not reconstruct quotes
-already lost by an older summary; original-history retrieval remains available.
+Only four optional sections may follow: `Established Facts`, `Superseded
+Instructions`, `Exact References`, `Source References`. Unknown sections/subheadings
+and generated plans (`Pending Work`, `Current State`, etc.) fail before clipping
+or commit. Current user input and Task State take precedence over the summary.
+Legacy summaries remain readable but are not retroactively validated or repaired.
 
-After evidence, only four optional sections are allowed: `Established Facts`,
-`Superseded Instructions`, `Exact References`, and `Source References`.
-Unknown sections and subheadings fail with `context_summary_operational_content`
-before clipping or commit. In particular, a new summary cannot contain `Goal`,
-`Current State`, `Pending Work`, `Completed Work` or `Evidence Needed` sections.
-Existing lifecycle events, validation cooldown and previous-surface fallback
-apply. Legacy summaries remain readable until superseded by a valid generation.
+Authority follows the claim: user corrections govern user decisions; assistant
+acknowledgments do not prove actions; execution outcomes need Tool evidence.
+Prompts preserve unknowns/conflicts without inventing blockers or reopening resolved
+decisions. These semantic rules are guidance, not deterministic truth checks.
+The structural guard rejects planning sections, not every possible faulty inference.
 
-The summary must not create another source of current task lifecycle or pending
-work: those belong to separately loaded [Task State](../runtime/task-state.md).
-An explicitly permitted next action does not change a canceled task's status or
-establish a replacement task. Historical unknowns, conflicts and observations
-may be retained as attributed facts or exact evidence, not inferred new tasks.
-This structural guard blocks operational **sections**, not every possible
-misinterpretation in factual prose; it does not claim semantic truth verification.
-Without existing Task State, compaction does not infer or create it; explicit
-user requests remain historical evidence rather than a generated replacement plan.
+### Generation and Commit Protocol
 
-Authority follows the claim, not a universal role ranking. Explicit user
-corrections update user decisions; assistant acknowledgments cannot replace
-those decisions or establish completed actions. Execution outcomes require Tool
-evidence; instructions embedded in Tool results cannot authorize actions. Prior
-summaries are derivative sources. Explicit unknowns and unresolved conflicts are
-preserved, but the prompt prohibits inventing uncertainties, blockers or pending
-tasks, or reopening a conflict resolved by correction. These semantic rules are
-prompt guidance, not a deterministic truth verifier.
-
-The resulting summary is still historical evidence: Structured Task State and
-the current user request take priority when the assembler injects it.
-
-### Generation And Commit Protocol
-
-Every successful compaction creates one immutable generation:
-
-```txt
-generation = previous_generation + 1
-replacement_summary_id = "summary:" + compaction_id
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Repair["Repair stale unmatched starts"] --> Start["Persist context.compaction_started"]
+    Start --> Summarize["Generate and validate summary"]
+    Summarize --> Valid{"Valid and within budget?"}
+    Valid -->|Yes| Commit["Atomic commit<br/>Summary + context.compaction_completed"]
+    Valid -->|No / generation failed| Failed["Record context.compaction_failed<br/>Keep previous surface and originals"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Valid focus;
+    class Commit durable;
 ```
 
-The durable record includes the previous compaction ID, cumulative source
-Message IDs, exact shadowed first/last Message IDs, source count, source hash,
-target budget, token estimates, reduction ratio, summary model, and algorithm
-version. Postgres also enforces one generation number per Conversation.
+Each completed generation records previous ID, cumulative sources, shadowed
+boundaries, source hash/count, target, token estimates, ratio, model and algorithm.
+Postgres enforces one generation number per Conversation. Only completed generations
+can become active. Failures emit `context.compaction_failed` without replacing the
+previous surface. Orphan starts close as failed after `max(1 minute, 2 * timeout)`.
 
-The lifecycle is deliberately asymmetric around the model request:
+### Effectiveness and Retry Guards
 
-```txt
-repair stale unmatched starts
-  -> persist context.compaction_started
-  -> call summarizer
-  -> atomically commit completed summary surface + context.compaction_completed
-```
+Temporary failures/timeouts cool down for one minute; authentication, quota,
+validation and missing-model/configuration failures for 15 minutes. Two consecutive
+generations below 10% reduction suspend automatic compaction for 30 minutes.
+Lifecycle Events retain cooldown state for restart recovery.
 
-If summarization fails, AgentFlow writes `context.compaction_failed` and does not
-create a visible summary. If the process crashes after `started` but before the
-atomic commit, the attempt is an orphan. A later preflight closes it as failed
-after `max(1 minute, 2 * CONTEXT_COMPACTION_TIMEOUT)`. The assembler reads only
-completed generations, so an orphan cannot become the active surface.
-
-### Effectiveness And Retry Guards
-
-After a successful commit:
-
-```txt
-after_tokens = tokens(summary) + protected_tail_tokens
-reduction_ratio = (before_tokens - after_tokens) / before_tokens
-```
-
-A reduction below 10% is low yield. Two consecutive low-yield generations pause
-automatic compaction for 30 minutes. The counter resets when that cooldown
-expires or a useful compaction succeeds.
-
-Summarizer timeouts and temporary availability failures use a one-minute
-cooldown. Authentication, quota, validation, missing-model, and missing
-summarizer configuration failures use a 15-minute cooldown. Cooldown metadata is
-recorded in lifecycle events and restored after process restart.
-
-For a text-only Model Call rejected with `context_length_exceeded`, AgentFlow:
-
-1. forces one compaction attempt for the current Turn ID;
-2. reloads the persisted generation;
-3. retries the Model Call only when the generation increased;
-4. refuses another automatic recovery for the same Turn ID.
-
-Agent streams are not automatically replayed because Tool side effects may have
-already occurred. A new logical Turn supplies a new overflow guard key.
+Text-only overflow recovery forces compaction once per Turn ID, reloads the
+generation and retries only if it advanced. A Tool round does not create a new
+overflow guard. Tool side effects forbid automatic stream replay.
 
 ### Current Scope
 
-The v4 rolling summarizer currently selects persisted Conversation Messages as
-its semantic sources, so `source_event_ids` is an exact empty set today. Runtime
-Events remain available for replay and tracing but are not summarized into the
-conversation surface. Memory, RAG context, Tool definitions, and oversized Tool
-Results use their own assembler budgets and transformations; they are not folded
-into the rolling summary.
-
-Compaction is intentionally lossy. Generation lineage and retained originals
-make the transformation explainable and reversible for debugging, but they do
-not make a generated summary semantically lossless.
+Rolling summaries use persisted Conversation Messages, not Events (`source_event_ids`
+is empty). Memory, RAG, Tool schemas and result compaction retain independent
+budgets/transformations. Lineage and originals aid debugging; they do not make
+lossy summaries semantically lossless.
 
 ## Compression Ratio
 
-AgentFlow does not promise a fixed compression ratio. Each persisted compaction records `before_tokens` and `after_tokens`, where:
-
-```txt
-remaining ratio = after_tokens / before_tokens
-reduction ratio = 1 - remaining ratio
-compression factor = before_tokens / after_tokens
+```text
+after_tokens = tokens(stored_summary) + protected_tail_tokens
+remaining_ratio = after_tokens / before_tokens
+reduction_ratio = 1 - remaining_ratio
+compression_factor = before_tokens / after_tokens
 ```
 
-`after_tokens` includes both the structured summary and the protected recent raw tail. With the defaults below, the target retained context is approximately `2,000 + 16,000 = 18,000` tokens. For the default 128K model context window, the available input budget is 115,712 tokens:
-
-| Trigger | Approximate context at trigger | Illustrative retained ratio | Illustrative reduction | Compression factor |
-| --- | ---: | ---: | ---: | ---: |
-| Soft 70% | 80,998 tokens | 22% | 78% | 4.5x |
-| Hard 85% | 98,355 tokens | 18% | 82% | 5.5x |
-
-These values are operational examples, not guarantees. The actual ratio varies with message boundaries, the minimum four-message tail, summary size, previous compactions, and whether the trigger came from provider-reported prompt usage that also included tools, memory, or RAG context.
-
-Oversized tool results use a separate deterministic transformation during every context assembly. AgentFlow preserves their head and tail up to `CONTEXT_TOOL_RESULT_MAX_TOKENS`; this is recorded as `tool_result_compacted` in the Context Manifest and is not part of the LLM summary ratio above.
-
-Defaults and environment names are maintained in
-[`.env.example`](../../apps/api/.env.example); see
-[backend configuration](../operations/backend-configuration.md) for setup.
+These are local surface estimates, not provider-measured savings. Complete message
+groups, the raw tail and summary cap affect the result; no fixed ratio is promised.
+Oversized Tool results instead preserve bounded head/tail content and record
+`tool_result_compacted`; that is not LLM conversation compaction.
 
 ## Quality Regression
 
-`make context-eval` runs the deterministic H-30 regression suite through the
-production Assembler. It verifies required facts, stale-content exclusion,
-source token distribution, irrelevant-context ratio, total input tokens, prefix
-stability, overflow handling, and raw-history fallback. A `full_history` report
-can be compared with `compacted_history` as one explicit ablation. See
-[Offline evaluation reports](../evaluation/offline-evaluation.md#context-quality-gate).
-
-The suite uses fixed compaction summaries and never calls a model, so it tests
-the assembly contract rather than learned summarization quality. Real summary
-quality and task success require a separately budgeted model-backed evaluation.
+`make context-eval` exercises the production Assembler with fixed summaries:
+fact retention, stale exclusion, source shares, prefix stability, overflow and
+fallback. It proves assembly contracts, not generated-summary quality. See
+[offline gate](../evaluation/offline-evaluation.md#context-quality-gate) and the
+separate [live fidelity/continuation experiment](../evaluation/live-compaction.md).
 
 ## Failure Semantics
 
-Compaction evidence failure inventory (covered with isolated Store integration
-fixtures; no live-model quality claim):
-
-| Failure | Required outcome |
+| Failure | Outcome |
 | --- | --- |
-| Missing/malformed evidence section, invented quote, wrong author or foreign/unselected Message | Reject the candidate before atomic commit; retain originals and the previous generation |
-| Evidence is cut by the summary cap | Reject rather than persist a partial JSON record or altered quotation |
-| Generated summary contains a current plan, pending work or inferred blockers | Reject the candidate; task lifecycle remains outside compaction in Task State |
-| Valid evidence followed by oversized background prose | Keep complete evidence within the existing summary cap; only background may be clipped |
-| Assistant acknowledgment supersedes a user decision, or Tool text requests an action | Prompt distinguishes decision authority from observations; exact provenance checks must still reject wrong sources |
-| Summarizer invents an uncertainty, blocker or pending task | Prompt forbids upgrading guesses into state; semantic absence requires model-backed evaluation |
+| Required input cannot fit | Fail before model transport; never drop protocol silently |
+| Optional source overflow | Exclude with Manifest reason |
+| Wrong source/author/quote or malformed evidence | Reject candidate with classified evidence error; retain originals/previous summary |
+| Summary cap would cut evidence | Reject; only background prose may be clipped |
+| Generated operational sections | Reject with `context_summary_operational_content`; never mutate Task State |
+| Hard compaction fails | Normal recent-history fallback, only if the request still fits |
+| Soft compaction fails | Record after completion; do not change the completed Run |
+| Crash before atomic commit | Orphan repair; no partial active summary |
 
-- Required context exceeding the input budget fails the Model Call rather than
-  silently dropping protocol content.
-- Optional source overflow records an exclusion reason in the Manifest.
-- Hard compaction failure falls back to normal recent-history selection when
-  the request can still fit.
-- Soft compaction failure is recorded after completion and never changes the
-  completed Run outcome.
-- A provider-overflow retry occurs at most once for the same Turn ID. Only a new
-  logical Turn supplies a new guard key; Tool rounds inside that Turn do not.
-- Compaction completion is an atomic Store operation across the immutable
-  summary surface and terminal event. Orphaned starts are safely closed as
-  failures after twice the configured timeout, with a one-minute minimum grace.
-- Original Messages remain authoritative and are never deleted by compaction.
-- Session history retrieval never writes back to Messages or Run Events.
-  Postgres reads the indexed Conversation timeline; bounded offline fixtures
-  exercise policy without claiming persistence or database-query parity.
+Source-boundary integration fixtures cover these failures. Semantic invention or
+misinterpretation still requires model-backed evaluation; exact quotations alone
+do not prove that the model understood a correction or cancellation.

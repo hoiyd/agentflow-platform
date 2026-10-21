@@ -4,10 +4,23 @@
 
 One Turn may contain multiple model requests and guarded Tool batches:
 
-```text
-assemble context -> model response
-  -> Tool calls -> execute -> paired observations -> assemble again
-  -> no Tool calls -> final answer
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Context["Assemble bounded Context"] --> Model["Model response"]
+    Model --> Calls{"Tool calls?"}
+    Calls -->|Yes| Executor["Validate and execute guarded Tool batch"]
+    Executor --> Observations["Pair calls with observations"]
+    Observations --> Context
+    Calls -->|No| Answer["Final answer candidate"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class Executor focus;
 ```
 
 Single, the isolated Multi Worker Stage, and Autonomous Act use the same loop.

@@ -4,7 +4,8 @@ Run setup commands from the repository root unless a step explicitly changes
 directory. AgentFlow is intended for a trusted development environment;
 its default local mode is unauthenticated. Optional [OIDC identity and Workspace
 membership](../operations/identity-membership.md) require separate provider
-configuration and do not complete object-level authorization.
+configuration. Owner-scoped resource checks are implemented; team/object-sharing
+ACLs and general untrusted multi-tenant operation are not.
 
 ## Prerequisites
 

@@ -1,276 +1,169 @@
 # Backend Architecture
 
-AgentFlow uses a capability-oriented Go architecture centered on explicit
-ownership, narrow consumer interfaces, and one application composition root.
-Directory depth does not represent architectural importance.
-
-For the reasoning behind the main boundaries, read
-[Engineering decisions](engineering-decisions.md). For domain terminology such
-as Run, Stage, Turn, and Model Call, read [Internal terms](terms.md). For the
-complete Single, Multi, and Loop lifecycles, read
-[Execution modes](../runtime/execution-modes.md).
+The backend is a Go Runtime with one composition root and one shared Turn Engine.
+Modes choose orchestration; they do not implement separate Tool, RAG, accounting,
+or completion stacks. [Design decisions](engineering-decisions.md) explains the
+trade-offs; [terms](terms.md) defines Run, Stage, Turn, and Snapshot.
 
 ## Architectural Invariants
 
-- `cmd/server` performs process startup; it does not construct product logic.
-- `app` is the only production composition root.
-- HTTP handlers translate transport concerns and depend on capability
-  interfaces; they do not recreate Memory, Knowledge, or Runtime services.
-- Single-Agent, Multi-Agent, and Autonomous execution share one Turn-level
-  implementation for retrieval, tools, context, events, and model access.
-- Turn-level model access uses a frozen, deterministic Model Route Catalog;
-  provider retries and process-level request limits remain separate owners.
-- Stores persist domain contracts but do not own retrieval policy, reranking,
-  or orchestration.
-- `domain` owns the durable Tool policy, capability, and progress values frozen
-  in Runtime Snapshots; `tool/policy` and `tool/progress` own their validation
-  and execution behavior.
-- Every `/api/*` operation resolves a non-empty Workspace namespace. HTTP handlers
-  receive only a `WorkspaceStore` view, so unscoped resource access is unavailable
-  at compile time. Store lookups,
-  retrieval expansion, Replay, and Verification preserve it across adapters.
-- Run Events describe execution; the Usage Ledger remains the accounting
-  authority.
-
-## Performance, Concurrency, Tracing, and Verification
-
-These are cross-cutting runtime capabilities, not mode-specific features:
-
-| Capability | Runtime design | Adaptation boundary |
-| --- | --- | --- |
-| **Performance** | Single Chat streams provider answer chunks over SSE, including Tool-enabled rounds; provisional commentary is retracted if a round chooses Tools. Staged modes retain their final-output publication boundaries. Context, output, Tool results, Run usage, and background queues are bounded. Active runtime excludes queue and human-wait time. | Limits and provider policies are configured at composition time and frozen into new Runs where replay stability requires it. No benchmark result is implied. |
-| **Concurrency** | `RunController` combines global admission, bounded queueing, and per-Conversation single-writer execution. The model limiter owns in-flight requests and RPM/TPM; Tool bindings declare serial, read-only, or keyed parallelism. | Single, Multi-Agent, and Loop (`autonomous`) modes use the shared controls. Multi-Agent Worker isolation is a Stage policy inside the parent Run. Provider retries acquire fresh permits without double-counting logical Run usage. |
-| **Workspace scope** | HTTP resolves an owned, granted, non-deleted numeric Workspace; omission selects the owner's active default (`super` in trusted-local mode). Payload cannot override authorized scope. Scoped object lookups, linked Memory evidence and nested Run resources enforce ownership; SSE rechecks access before delivery. Runs inherit Conversation scope. | `identity` owns verified sessions; Workspace lifecycle owns ownership/Membership, and scoped Stores enforce object predicates. Agent configuration and Tool grants belong to the Workspace; templates are read-only and service bindings, credentials and security ceilings stay operator-owned. Tool calls recheck current grants, including after Resume. See [resource authorization](../operations/resource-authorization.md). |
-| **Tracing** | Typed Run Events cover Run, Stage, Turn, Model, Tool, Retrieval, Context, Memory, Usage, Verification, and recovery lifecycles. `ModelRequestEnvelope` records each physical provider attempt against its Runtime Snapshot and Context Manifest. Durable records are persisted for Replay and debug views; streaming `model.delta` events are intentionally omitted. | Event contracts remain stable across Postgres stores and provider adapters add versioned metadata instead of inventing private trace formats. |
-| **Verification** | An opt-in frozen Completion Contract evaluates the persisted candidate output, records immutable Evidence/Artifacts, and gates `run.completed`. | Versioned verifier implementations are registered behind a narrow interface. Verification applies identically to all execution modes and is independent of Automated and Manual Tests. |
-
-Performance controls prevent unbounded work and expose tuning surfaces; tracing
-explains observed execution; Verification judges configured outcome invariants.
-Keeping these responsibilities separate avoids using telemetry as enforcement
-or treating successful execution as proof of a valid result.
-
-See [Observability records and views](terms.md#observability-records-and-views)
-for the distinction between Run Events, Trace, Replay, and Episode Report.
+- `cmd/server` handles process startup; `app` constructs production dependencies.
+- HTTP owns parsing, SSE, and status mapping, not orchestration or retrieval policy.
+- Consumers depend on narrow capability interfaces; Store adapters own persistence.
+- Authorized Workspace scope reaches object reads, retrieval expansion and writes.
+  HTTP receives a scoped `WorkspaceStore`, not an unscoped Store.
+- Frozen protocol defines Resume; current identity, grants and deployment policy
+  still apply. Old Snapshot schemas are Replay-only.
+- Typed Events describe execution. The Usage Ledger, not Trace totals, owns accounting.
 
 ## Package Layout
 
-```text
-apps/api/
-  cmd/server/       process entry point: config, signals, exit reporting
-  app/              application composition root and process lifecycle
-    runcommands/    admitted Start/Continue/Resume commands, independent of HTTP
-    runcompletion/  answer persistence, citations, verification, terminal state and titles
-  internal/
-    domain/         persisted entities and shared contracts
-    httpapi/        HTTP transport and route handlers
-    agent/          run orchestration and execution modes
-      turn/         shared Turn Engine
-      toolloop/     bounded model/Tool/observation rounds within one Turn
-    inference/      model request and provider boundary
-      provider/       provider-neutral contracts
-      routing/        secret-free routes and deterministic selection
-      requestcontrol/ request limiting and observation contracts
-      capture/        reconstructable model request envelopes
-      openai/         OpenAI-compatible provider adapter
-    tool/           Tool execution and governance boundary
-      *.go           catalog, schema, Bindings, and guarded execution
-      policy/        authorization and side-effect policy
-      progress/      repeated failure and result guards
-      artifact/      large-result Artifact governance
-      reconciliation/ uncertain side-effect reconciliation
-    skill/          trusted package loading and explicit operator installation
-    event/          typed execution events and tracing
-    failure/        shared failure classification and event projection
-    contextassembly/
-    contextcompaction/
-    store/          PostgreSQL persistence adapter
-    memory/         semantic memory operations and asynchronous curation
-    knowledge/      ingestion, embedding, search, scoped read bindings, RAG evaluation
-    rag/            chunking and shared recall, reranking, and relevance gating
-    concurrency/    run and model-request limits
-    budget/         per-Run resource accounting and enforcement
-    recovery/       stale-run recovery
-    checkpoint/     Stage checkpoint capture, validation, and internal compensation
-    taskstate/      versioned Conversation task facts and runtime Tool binding
-    config/         environment configuration
-    evaluation/     isolated quality, compatibility, load, and recovery evidence
-```
+| Responsibility | Code entry point |
+| --- | --- |
+| Composition, lifecycle and dependency injection | [`app/`](../../apps/api/app), [`cmd/server/`](../../apps/api/cmd/server) |
+| Start/Continue/Resume and final completion | [`app/runcommands/`](../../apps/api/app/runcommands), [`app/runcompletion/`](../../apps/api/app/runcompletion) |
+| HTTP/SSE and scoped service interfaces | [`internal/httpapi/`](../../apps/api/internal/httpapi) |
+| Mode orchestration, Turn Engine, model/Tool rounds | [`agent/`](../../apps/api/internal/agent), [`agent/turn/`](../../apps/api/internal/agent/turn), [`agent/toolloop/`](../../apps/api/internal/agent/toolloop) |
+| Provider-neutral contracts, routing, request controls, Capture | [`inference/`](../../apps/api/internal/inference) |
+| Catalog, Executor, policy, results, progress, reconciliation | [`tool/`](../../apps/api/internal/tool), [`skill/`](../../apps/api/internal/skill) |
+| Input capacity and non-destructive summaries | [`contextassembly/`](../../apps/api/internal/contextassembly), [`contextcompaction/`](../../apps/api/internal/contextcompaction) |
+| Ingestion, shared retrieval policy and curated Memory | [`knowledge/`](../../apps/api/internal/knowledge), [`rag/`](../../apps/api/internal/rag), [`memory/`](../../apps/api/internal/memory) |
+| Admission, cumulative accounting, durable task facts | [`concurrency/`](../../apps/api/internal/concurrency), [`budget/`](../../apps/api/internal/budget), [`taskstate/`](../../apps/api/internal/taskstate) |
+| Durable contracts, events, failures, SQL | [`domain/`](../../apps/api/internal/domain), [`event/`](../../apps/api/internal/event), [`failure/`](../../apps/api/internal/failure), [`store/`](../../apps/api/internal/store) |
+| Recovery and Stage checkpoint validation | [`recovery/`](../../apps/api/internal/recovery), [`checkpoint/`](../../apps/api/internal/checkpoint) |
+| Isolated evaluation and evidence reports | [`evaluation/`](../../apps/api/internal/evaluation) |
 
-Within `agent`, Runtime Snapshot capture, restore and validation have separate
-`runtime_snapshot_*.go` owners; `runtime_snapshot.go` resolves frozen services and
-limits. Store document CRUD, search, adjacent-context reads and row scanning live
-in separate `postgres_document*.go` files. Domain DDL lives in
-`postgres_schema_*.go`; `postgres_migrations.go` preserves upgrade order, including
-historical data-preserving steps. Moving SQL must not reorder or rewrite it.
+`internal` is Go's module-private boundary, not a generic architectural layer.
+Packages are grouped by responsibility rather than mirrored `core/services` folders.
 
 ## Dependency Direction
 
-```text
-cmd/server
-    |
-    v
-app
-    |
-    +--> internal/httpapi --> consumer-defined service interfaces
-    |             |                    |
-    |             |                    +--> memory, knowledge
-    |             |
-    |             +--> internal/agent --> agent/turn --> agent/toolloop
-    |                                      |                 |
-    |                                      +--> context, events, tool, inference
-    |
-    +--> store, recovery, concurrency, config
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    accTitle: Backend dependency direction
+    accDescr: The composition root wires transport and Run commands to shared execution capabilities.
+    Entry["cmd/server"] --> App["app: composition and lifecycle"]
+    App --> HTTP["HTTP transport"]
+    App --> Commands["Run commands"]
+    HTTP --> Commands
+    Commands --> Runtime["Agent Runtime"]
+    Runtime --> Turn["Shared Turn Engine"]
+    Turn --> Loop["Bounded Tool loop"]
+    Turn --> Context["Context Assembly"]
+    Loop --> Tools["Tool Executor"]
+    Loop --> Inference["Inference contracts"]
+    App -.-> Adapters["Inject Store, identity, limits and workers"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class App,Runtime,Turn focus;
 ```
 
-`cmd/server` is deliberately thin. It reads process configuration, creates the application, binds OS signals, and reports lifecycle errors.
+`agent.NewRuntime(RuntimeOptions)` requires its execution dependencies explicitly,
+including checkpoint provider, routes, embedding client and Tool manager. Missing
+required capabilities are construction errors, not inferred Store methods or
+post-construction setters. `app` installs Task State, Artifact and Knowledge bindings.
 
-`app` is the composition root. It creates every long-lived service and concrete adapter, applies runtime policies, injects a complete dependency set into the HTTP handler, owns the HTTP server, and closes background work before persistence.
-
-`agent.NewRuntime` accepts the same explicit `RuntimeOptions` in production and
-tests and returns a construction error when Store, model routes, embedding
-client, Tool manager, or checkpoint provider is missing. `app` installs Task
-State, Artifact, Knowledge read bindings, and retrieval explicitly; nil optional
-capabilities are not inferred from the Store implementation. Single-model
-shortcuts and fixture wiring live only in test support, never in production options.
-
-`internal` is Go's module-private visibility boundary, not a lower architectural layer. Keeping product implementation under `internal` prevents other modules from accidentally depending on unstable backend packages. Packages inside it should continue to expose the smallest interfaces required by their consumers.
-
-For agent turns, `agent/toolloop` sequences model decisions, guarded
-execution, paired observations, and the final model response. `tool` owns the
-Executor and its safety policies. The provider adapter prepares model context,
-sends individual selection/stream requests, and records model attempts; it does
-not construct a Tool Executor. Single, Multi Worker and Autonomous Act share
-the same multi-round loop, bounded by existing Run Budget and active deadlines;
-Progress Guard blocks repeated work. Every request reassembles context with the
-same frozen Tool definitions. Local evaluations use this path without starting
-the full Agent Runtime. See [Bounded Tool loop](../tools/bounded-tool-loop.md)
-for streamed answer/draft-retraction semantics and the Stage-scoped recovery boundary.
-
-The three execution-facing areas are deliberately visible in the tree. `agent`
-owns orchestration and the Turn protocol, `tool` owns callable capabilities and
-their safety controls, and `inference` owns model contracts, routing, request
-controls, capture, and provider adapters. Context, Memory, Knowledge, and RAG
-remain separate domains because they prepare or persist information rather than
-perform model inference.
-
-`skill` owns the operator-trusted method catalog and frozen resource reads. It
-registers two normal Tool Bindings and supplies required inputs to the existing
-Context Assembler. Agent binding names and package contents live in the same
-Runtime Snapshot; activation is derived from Agent-owned Run Tool events, not a
-second workflow, permission layer or persistence subsystem. See
-[Trusted Skills](../tools/trusted-skills.md).
-
-## Design Decisions
-
-### Use a Real Composition Root
-
-Dependency construction belongs in `app`, not in `cmd/server` and not in HTTP handlers. Handlers do not construct runtimes, queues, or default policies and do not rely on post-construction setters. This keeps process bootstrapping testable and gives all executables one canonical wiring path.
-
-### Do Not Mirror Generic Clean Architecture Folders
-
-Empty `api`, `core`, and `services` directories do not create useful boundaries. AgentFlow groups code by concrete capability and changes package boundaries only when ownership or dependency pressure justifies it.
-
-### Keep Transport and Execution Separate
-
-`httpapi` owns HTTP parsing, SSE encoding, and error-to-status mapping. Cross-resource operations live in named capabilities: `memory.Provider` separates Recall, proposal, explicit commit, asynchronous Turn sync, and lifecycle ownership behind narrow consumer interfaces; `knowledge.KnowledgeBase` owns ingestion, query embedding, shared retrieval, and RAG evaluation. Agent execution remains in `agent`, including its `turn` subpackage.
-
-`app/runcommands` coordinates Start, Continue and Resume using an authorized
-owner/Workspace scope and optional output callbacks, not HTTP objects. It reuses
-the existing RunController, Runtime and `app/runcompletion`. HTTP supplies SSE
-callbacks; queued follow-ups use the same command without a subscriber. Admission
-still honors caller cancellation; admitted execution detaches from the browser,
-while explicit Stop remains Runtime-owned. Writer/capacity release precedes
-follow-up dispatch. No second queue or execution engine is introduced.
-
-The HTTP package defines the small service interfaces it consumes. Concrete implementations are selected only by `app`, so adding caching, another embedding implementation, or a different service adapter does not change transport code.
-
-### Preserve Private Implementation Packages
-
-Moving packages out of `internal` only to make the tree appear balanced would weaken encapsulation without improving behavior. A package should become public only when another Go module has a supported need to import it.
-
-## Application Lifecycle
-
-`app.Application` owns:
-
-1. PostgreSQL construction and stale-run recovery.
-2. Model client limits, retry policy, and frozen Run Budget policy.
-3. Tool Manager and Agent Runtime configuration.
-4. Memory Provider and Knowledge capabilities plus asynchronous Turn synchronization.
-5. Run admission and Context Assembly policy.
-6. HTTP server startup and graceful shutdown.
-7. Accepted Run drain, Memory Provider drain, then Store close. Store remains open if either drain times out.
+The provider adapter sends individual requests; it cannot create a Tool Executor
+or redefine persistence, authorization or completion. Skills enter through the
+existing Context and Tool paths, not a second permission or workflow system.
 
 ## Main Call Paths
 
-```text
-HTTP chat request
-  -> Workspace scope resolution
-  -> app/runcommands (admission, single-writer, mode preparation)
-  -> Agent Runtime
-  -> Turn Engine
-  -> Context Assembly loads current Structured Task State
-  -> typed Run Events
-  -> app/runcompletion (citations, message persistence, Verification, terminal state, title)
-  -> terminal callback (HTTP SSE or headless)
-  -> non-blocking Memory Turn sync
+### Chat and Completion
 
-HTTP RAG search or Agent context retrieval
-  -> request or persisted Run Workspace scope
-  -> Knowledge Base
-  -> query embedding
-  -> Retrieval Pipeline
-       -> Store dense recall
-       -> Store lexical recall
-       -> deduplicate / prompt-injection guard / RRF fusion / rerank / relevance gate
-       -> Context Selector
-            -> scoped same-parent / adjacent chunk lookup
-            -> prompt-injection guard / deduplicate / token-limit selection
-       -> Context Transformer
-            -> source deduplication / document grouping / adjacent merge
-            -> final knowledge token-limit check
-
-HTTP document ingestion
-  -> Workspace scope resolution
-  -> Knowledge Base
-  -> chunking / embedding
-  -> Store
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    accTitle: Chat and completion path
+    accDescr: Authorized admission enters shared model and Tool rounds, then persists the completion outcome independently of browser delivery.
+    HTTP["HTTP request"] --> Scope["Identity and Workspace authorization"]
+    Scope --> Commands["runcommands<br/>Admission and Conversation writer"]
+    Commands --> Mode["Single / Multi / Loop orchestration"]
+    Mode --> Turn["Shared Turn Engine<br/>Context, model and guarded Tool rounds"]
+    Turn -->|Final candidate| Completion["runcompletion<br/>Citations, persistence and Completion Gate"]
+    Completion --> Durable["Durable outcome and Replay evidence"]
+    Durable --> Delivery["SSE callback, if connected"]
+    Durable -.-> Memory["Best-effort Memory sync"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Mode,Turn focus;
+    class Durable durable;
 ```
 
-These paths can be followed directly from:
+Admission observes caller cancellation. Once admitted, execution is detached
+from browser delivery; explicit Stop cancels the Runtime. Writer/capacity release
+precedes queued follow-up dispatch. See [durable inputs](../runtime/durable-inputs.md).
+The Turn node expands into the [shared model/Tool loop](../tools/bounded-tool-loop.md).
 
-- `apps/api/internal/httpapi/chat.go`
-- `apps/api/internal/agent/runtime.go`
-- `apps/api/internal/agent/turn/`
-- `apps/api/internal/knowledge/knowledge_base.go`
-- `apps/api/internal/rag/retrieval.go`
-- `apps/api/internal/contextassembly/assembler.go`
+### Retrieval and Ingestion
 
-The call paths preserve these ownership boundaries:
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    accTitle: Retrieval and ingestion paths
+    accDescr: Ingestion persists a scoped index; query retrieval reads candidates and selects bounded Context through the shared pipeline.
+    Search["HTTP search / Agent retrieval"] --> Knowledge["Scoped Knowledge Base"]
+    Knowledge --> Embed["Embed query"]
+    Embed --> Semantic["Semantic recall"]
+    Embed --> Keyword["Keyword recall"]
+    Semantic --> Guard["Injection guard and RRF fusion"]
+    Keyword --> Guard
+    Guard --> Rank["Rerank and relevance gate"]
+    Rank --> Select["Scoped parent / adjacent selection"]
+    Select --> Transform["Deduplicate, merge and enforce token limit"]
+    Upload["Document upload"] --> Scope["Authorize Workspace"]
+    Scope --> Ingest["Normalize, chunk and embed"]
+    Ingest --> Store[("Postgres + pgvector")]
+    Store -.->|Scoped candidate reads| Semantic
+    Store -.->|Scoped candidate reads| Keyword
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Knowledge,Rank focus;
+    class Store durable;
+```
 
-| Boundary | Responsibility |
-| --- | --- |
-| Workspace scope | Resolves a non-empty request namespace, rejects conflicting explicit sources, persists scope on owned resources, and keeps Store operations scoped. It is an isolation key, not proof of caller identity. |
-| Retrieval Pipeline | Owns dense/lexical recall ordering, prompt-injection filtering, rank-based fusion, reranking, and relevance gating. Stores apply scope filters and expose recall results without defining final ranking policy. |
-| Context Selector | Expands gated child hits within the matched document, Workspace/metadata scope, and token limit. Ranked hits remain separate from the context sent to the model. |
-| Context Transformer | Deduplicates sources, groups chunks by document, merges adjacent chunks, preserves contributing IDs, and reapplies the knowledge token limit. |
-| Document ingestion | Normalizes source text and derives versioned hashes, section parents, and UTF-8 byte offsets before persistence. Store adapters preserve these values. |
-| Run completion | `app/runcompletion` resolves citations, persists the candidate, gates the terminal state with Verification, and generates the title best-effort. HTTP only formats and flushes SSE, then enqueues auxiliary Memory sync. Reverify shares the same gate without resaving the answer. All modes emit the same `domain.RunEvent` contract. |
+The pipeline owns ranking and relevance; Store owns predicates and candidate
+reads. Ranked child hits remain separate from model `context_items`. Expansion
+cannot widen Workspace, document or metadata scope. See [RAG](../knowledge/knowledge-rag.md).
 
-Detailed retrieval algorithms and failure boundaries live in
-[Knowledge / RAG](../knowledge/knowledge-rag.md). New executables should reuse the
-composition root instead of copying dependency construction from `cmd/server`.
+## Application Lifecycle
+
+`app.Application` opens Postgres, repairs stale lifecycles, constructs services
+and starts HTTP. Shutdown drains accepted Runs, then Memory work, then closes
+Store. A timed-out drain leaves Store open rather than closing it underneath work.
+Checkpoints and [recovery](../runtime/durable-recovery.md) preserve explicit failure
+state; they do not provide distributed dispatch or automatic cross-process takeover.
 
 ## Extension Points
 
-| Change | Intended boundary |
+| Change | Boundary and required evidence |
 | --- | --- |
-| Add another model provider | provider adapter behind the existing model client contract |
-| Add a retrieval algorithm | `rag` pipeline stage with versioned response/trace metadata |
-| Add a reranker | implement `rag.Reranker`, report implementation/config identity, and inject it at the composition root |
-| Change relevance policy | implement `rag.RelevanceGate`; keep confidence and filtering outside Reranker implementations |
-| Add storage | implement the capability interfaces consumed by the composition root |
-| Add a verifier | register one versioned verifier implementation with owned config normalization |
-| Add a failure type | retain the subsystem type, implement `failure.Classified`, and expose only non-secret details |
+| Model provider | Adapter below the existing provider contract; serialized continuation/stream tests |
+| Tool | Descriptor + Binding in the existing Catalog/Executor; schema, authority, side-effect and recovery contracts agree |
+| Reranker | `rag.Reranker`; version/config identity and score validation; relevance policy remains in `RelevanceGate` |
+| Verifier | Versioned registry implementation owning config normalization and Evidence |
+| Persistence adapter | Consumer capability interfaces; scoped queries, migration and round-trip evidence |
+| Failure type | Subsystem error implementing `failure.Classified`; safe public details and original cause in logs |
 
-A new abstraction is justified only when it removes real duplication or creates
-a boundary with different ownership, lifecycle, or failure semantics.
+Use the composition root for new executables rather than copying construction.
+Add an abstraction only when it removes real duplication or separates ownership,
+lifecycle or failure behavior. [Control ownership](../runtime/execution-controls.md)
+and [API workflow](api-contract.md) cover cross-layer changes.
