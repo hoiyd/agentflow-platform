@@ -80,6 +80,7 @@ related pages link to its contract rather than copying configuration or algorith
 Start with the [evaluation guide](evaluation/README.md) to choose the correct evidence path:
 
 - [Offline regression reports](evaluation/offline-evaluation.md): Context, routing, RAG, Tool, and budgeted live benchmark profiles.
+- [Failure corpus](evaluation/failure-corpus.md): human-reviewed historical failures, versioned promotion and existing regression evidence.
 - [RAG dataset](evaluation/rag-golden-dataset.md) and [JSON Schema](schemas/rag-golden-dataset-v1.schema.json); [Tool task evaluations](evaluation/tool-task-evaluations.md).
 - [llama.cpp compatibility](evaluation/local-inference-compatibility.md) and [tokenization calibration](evaluation/tokenization-calibration.md).
 - [Bounded load/soak](evaluation/load-soak-testing.md) and [controlled Run comparison](evaluation/evidence-comparison.md).

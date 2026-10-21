@@ -8,6 +8,7 @@ comparisons across Runs or code revisions.
 | Evidence | Entry point | Scope |
 | --- | --- | --- |
 | Context, RAG, routing, and Tool quality | [`cmd/eval`](../../apps/api/cmd/eval/main.go), [offline evaluation](offline-evaluation.md) | Versioned datasets, explicit gates, and opt-in budgeted live checks. |
+| Reviewed historical failures | [`eval failures`](failure-corpus.md) | Metadata-only candidates, human promotion and existing owned Go regressions; missing/skipped evidence cannot pass. |
 | Generated summary fidelity and task continuation | [`eval context-live`](live-compaction.md) | Shared-budget full-history/compaction experiment; fixed typed facts, source-backed outcome and separate compaction costs. |
 | Current Knowledge index | `/evaluations/retrieval`, [RAG dataset](rag-golden-dataset.md) | On-demand Golden Dataset check against the indexed corpus and configured retrieval pipeline. |
 | RAG corpus and Tool tasks | [RAG datasets](rag-golden-dataset.md), [Tool tasks](tool-task-evaluations.md) | Canonical and metadata-scoped regressions, Context leakage and source-backed outcomes. |

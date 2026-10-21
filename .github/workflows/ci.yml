@@ -56,7 +56,22 @@ jobs:
         env:
           EVALUATION_REPORT_DIR: ${{ runner.temp }}/evaluation-reports
         # Fail stuck packages with goroutine stacks before the job-level timeout.
-        run: go test ./... -count=1 -timeout=3m -coverpkg=./... -covermode=atomic -coverprofile=coverage.out
+        run: |
+          set -o pipefail
+          mkdir -p "$EVALUATION_REPORT_DIR"
+          go test -json ./... -count=1 -timeout=3m -coverpkg=./... -covermode=atomic -coverprofile=coverage.out \
+            | tee "$EVALUATION_REPORT_DIR/backend-tests.json"
+
+      - name: Check promoted failure regressions
+        if: success() || failure()
+        env:
+          EVALUATION_REPORT_DIR: ${{ runner.temp }}/evaluation-reports
+        run: |
+          mkdir -p "$EVALUATION_REPORT_DIR"
+          go run ./cmd/eval failures check \
+            --results "$EVALUATION_REPORT_DIR/backend-tests.json" \
+            --results-revision "$(git rev-parse HEAD)" --enforce \
+            > "$EVALUATION_REPORT_DIR/failure-regressions.json"
 
       - name: Retain offline evaluation reports
         if: always()

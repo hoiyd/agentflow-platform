@@ -1,0 +1,91 @@
+{
+  "schema_version": "failure-corpus-v1",
+  "id": "agentflow-historical-failures",
+  "version": "1",
+  "cases": [
+    {
+      "schema_version": "failure-case-v1",
+      "id": "internal-task-state-write",
+      "owner": "tool",
+      "failure_class": "side_effect_misclassification",
+      "source_ref": "https://github.com/hoiyd/agentflow-platform/pull/152",
+      "source_revision": "8066e1a2f91daa0da3c2b38abf060aba53151cb4",
+      "evidence": [
+        {
+          "kind": "code_revision",
+          "ref": "https://github.com/hoiyd/agentflow-platform/blob/8066e1a2f91daa0da3c2b38abf060aba53151cb4/apps/api/internal/taskstate/tool.go",
+          "sha256": "f4a340821480ab06863d72b6803a6eb12254dfa8007f6f7e535e4d75b79fbc68"
+        }
+      ],
+      "input_boundary": "The real update_task_state Binding executes in Single without a Stage, or in a staged Turn. Internal durable writes must not be classified as external writes or require an invented Stage ID.",
+      "expected_outcome": "Schema rejection is correctable before mutation. Valid writes retain actual Turn/Stage identity and refresh the next model context. Duplicate calls replay receipts; stale patches do not append revisions.",
+      "regression": {
+        "package": "./internal/agent/toolloop",
+        "test": "TestMultiRoundTaskStateWriteUsesRealStageOrTurnIdentity"
+      },
+      "review": {
+        "status": "approved",
+        "reviewer": "repository-owner",
+        "reviewed_at": "2026-10-21T02:33:22Z",
+        "redaction": "confirmed",
+        "notes": "Repository owner explicitly approved this historical technical summary, immutable public code evidence and regression mapping for promotion. No raw conversation, prompt or credential is retained."
+      }
+    },
+    {
+      "schema_version": "failure-case-v1",
+      "id": "provider-continuation",
+      "owner": "provider",
+      "failure_class": "protocol_loss",
+      "source_ref": "https://github.com/hoiyd/agentflow-platform/pull/151",
+      "source_revision": "0a2f11a2569baa6b9ced5d43a44022d7a7ae6494",
+      "evidence": [
+        {
+          "kind": "code_revision",
+          "ref": "https://github.com/hoiyd/agentflow-platform/blob/0a2f11a2569baa6b9ced5d43a44022d7a7ae6494/apps/api/internal/agent/toolloop/reasoning_integration_test.go",
+          "sha256": "648d8caec0ca9454e966181216402c15bccc5d73a2ab07718b97f3c22c89bfbb"
+        }
+      ],
+      "input_boundary": "A thinking Provider returns required reasoning_content before a Tool call. The next request in the same Turn must retain distinct per-round continuation state, including absent versus explicitly empty values.",
+      "expected_outcome": "Actual serialized follow-up requests preserve required continuation fields across multiple Tool rounds. Metadata-only capture does not expose their content; required protocol state is included in budget accounting.",
+      "regression": {
+        "package": "./internal/agent/toolloop",
+        "test": "TestMultiRoundPreservesReasoningWithoutExposingIt"
+      },
+      "review": {
+        "status": "approved",
+        "reviewer": "repository-owner",
+        "reviewed_at": "2026-10-21T02:33:22Z",
+        "redaction": "confirmed",
+        "notes": "Repository owner explicitly approved this historical technical summary, immutable public code evidence and regression mapping for promotion. No raw conversation, prompt or credential is retained."
+      }
+    },
+    {
+      "schema_version": "failure-case-v1",
+      "id": "workspace-artifact-capability",
+      "owner": "authorization",
+      "failure_class": "wrapper_capability_loss",
+      "source_ref": "https://github.com/hoiyd/agentflow-platform/pull/167",
+      "source_revision": "7cca9a4047cae0da4b3f020f349620bf0025bea0",
+      "evidence": [
+        {
+          "kind": "code_revision",
+          "ref": "https://github.com/hoiyd/agentflow-platform/blob/7cca9a4047cae0da4b3f020f349620bf0025bea0/apps/api/app/observable_store.go",
+          "sha256": "1bdf76eed67d33bad6409a697f7c418359225615f45bca792fbd1444c3a8e921"
+        }
+      ],
+      "input_boundary": "The production observable Store is scoped to a Workspace. An interface-only wrapper can hide optional Artifact list/read/search capabilities despite the underlying Postgres Store supporting them.",
+      "expected_outcome": "The real observable Workspace view preserves all three Artifact reads before and after reopening Postgres. Foreign Workspace reads remain not-found. A temporary capability-hiding wrapper makes this regression fail.",
+      "regression": {
+        "package": "./app",
+        "test": "TestObservableWorkspacePreservesArtifactReads"
+      },
+      "review": {
+        "status": "approved",
+        "reviewer": "repository-owner",
+        "reviewed_at": "2026-10-21T02:33:22Z",
+        "redaction": "confirmed",
+        "notes": "Repository owner explicitly approved this historical technical summary, immutable public code evidence and regression mapping for promotion. No raw conversation, prompt or credential is retained."
+      }
+    }
+  ]
+}
