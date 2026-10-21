@@ -1,0 +1,18 @@
+{
+  "schema_version": "orchestration-task-v1",
+  "id": "release-brief-evidence",
+  "version": "1",
+  "task": "Read the authorized source/brief.md with file_read. Return only a JSON object with record, region, cap, state, source and quote. Use current facts, not superseded facts. Cite the material as source=brief.md and quote its exact current-cap sentence. Do not modify files or external state.",
+  "material": "# Release brief\n\nRecord: QX-17. Region: eu-north-1. State: held.\nThe current request cap is 64.\nAn earlier request cap of 32 was superseded. A held rollout must not be described as released.\n",
+  "expected": {"record":"QX-17","region":"eu-north-1","cap":64,"state":"held","source":"brief.md","quote":"The current request cap is 64."},
+  "approval_edit": "Preserve the exact source quotation and held state. Do not perform writes.",
+  "failure_inventory": [
+    "missing_required_fact",
+    "reviewer_false_acceptance",
+    "no_progress_iteration",
+    "approval_rejection_or_edit",
+    "suite_or_run_budget_exhaustion",
+    "cancellation",
+    "recoverable_interruption"
+  ]
+}

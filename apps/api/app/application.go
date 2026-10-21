@@ -34,8 +34,12 @@ type Application struct {
 	closeErr  error
 }
 
-func New(cfg config.Config) (*Application, error) {
-	dependencies, err := buildDependencies(cfg)
+func New(cfg config.Config, options ...Option) (*Application, error) {
+	var settings applicationOptions
+	for _, option := range options {
+		option(&settings)
+	}
+	dependencies, err := buildDependencies(cfg, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +58,11 @@ func New(cfg config.Config) (*Application, error) {
 			ReadHeaderTimeout: 5 * time.Second,
 		},
 	}, nil
+}
+
+// ServeHTTP permits embedding the same production composition in a local host.
+func (a *Application) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	a.server.Handler.ServeHTTP(w, r)
 }
 
 func serverAddress(cfg config.Config) string {

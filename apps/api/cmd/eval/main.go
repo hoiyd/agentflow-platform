@@ -33,7 +33,7 @@ func main() {
 
 func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: eval <benchmark|context|context-live|failures|inference|rag|route|tokenization|tool> [options]")
+		fmt.Fprintln(stderr, "usage: eval <benchmark|context|context-live|failures|inference|modes|rag|route|tokenization|tool> [options]")
 		return 2
 	}
 	switch args[0] {
@@ -47,6 +47,8 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 		return runFailures(ctx, args[1:], out, stderr)
 	case "inference":
 		return runInference(ctx, args[1:], out, stderr)
+	case "modes":
+		return runModes(ctx, args[1:], out, stderr)
 	case "rag":
 		return runRAG(ctx, args[1:], out, stderr)
 	case "route":
@@ -56,7 +58,7 @@ func run(ctx context.Context, args []string, out, stderr io.Writer) int {
 	case "tokenization":
 		return runTokenization(ctx, args[1:], out, stderr)
 	default:
-		fmt.Fprintf(stderr, "unknown evaluation suite %q; use benchmark, context, context-live, failures, inference, rag, route, tokenization, or tool\n", args[0])
+		fmt.Fprintf(stderr, "unknown evaluation suite %q; use benchmark, context, context-live, failures, inference, modes, rag, route, tokenization, or tool\n", args[0])
 		return 2
 	}
 }

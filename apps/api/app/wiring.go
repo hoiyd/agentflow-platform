@@ -20,6 +20,7 @@ import (
 	"agentflow-platform/apps/api/internal/identity"
 	"agentflow-platform/apps/api/internal/inference/capture"
 	"agentflow-platform/apps/api/internal/inference/openai"
+	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 	"agentflow-platform/apps/api/internal/inference/routing"
 	"agentflow-platform/apps/api/internal/knowledge"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
@@ -47,7 +48,7 @@ type applicationDependencies struct {
 	telemetry      *telemetry.Observer
 }
 
-func buildDependencies(cfg config.Config) (applicationDependencies, error) {
+func buildDependencies(cfg config.Config, options applicationOptions) (applicationDependencies, error) {
 	// Production owner admission is mandatory. Zero-valued Go configurations use
 	// defaults; explicit equal/larger caps would leave no shared process headroom.
 	global := cfg.MaxConcurrentModelRequests
@@ -138,6 +139,10 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		return applicationDependencies{}, err
 	}
 	configured := make([]routing.Binding, 0, len(routeFile.Routes))
+	var modelLimiter requestcontrol.Limiter = requestLimiter
+	if options.requestGuard != nil {
+		modelLimiter = guardedModelRequests{base: requestLimiter, guard: options.requestGuard}
+	}
 	for _, route := range routeFile.Routes {
 		if strings.TrimSpace(route.CredentialEnvironment) == "" {
 			return applicationDependencies{}, fmt.Errorf("model route %q has no credential environment reference", route.ID)
@@ -146,7 +151,7 @@ func buildDependencies(cfg config.Config) (applicationDependencies, error) {
 		if !routeCredential.Available() {
 			return applicationDependencies{}, fmt.Errorf("model route %q credential environment %q is unset", route.ID, route.CredentialEnvironment)
 		}
-		routeClient := newModelClient(cfg, routeCredential, route, requestLimiter)
+		routeClient := newModelClient(cfg, routeCredential, route, modelLimiter)
 		configureModelClient(routeClient, requestRecorder)
 		configured = append(configured, routing.Binding{
 			Descriptor: route.Descriptor(routeClient.RuntimeIdentity().Provider), Client: routeClient,
@@ -344,7 +349,7 @@ func newMemoryProvider(cfg config.Config, appStore store.Store, embeddingClient 
 	})
 }
 
-func newModelClient(cfg config.Config, providerCredential credential.Value, route routing.RouteConfig, limiter *concurrency.ModelRequestLimiter) *openai.Client {
+func newModelClient(cfg config.Config, providerCredential credential.Value, route routing.RouteConfig, limiter requestcontrol.Limiter) *openai.Client {
 	client := openai.NewClientWithTimeout(providerCredential.Reveal(), route.BaseURL, route.Model, time.Duration(route.RequestTimeoutSeconds)*time.Second)
 	client.SetRequestLimiter(limiter)
 	retryPolicy := openai.DefaultRetryPolicy()
