@@ -137,11 +137,13 @@ TEST_DATABASE_URL=postgres://... go test ./internal/store -run TestPostgresStore
 
 ### Completion Gate
 
-1. Send `POST /api/chat` with the JSON Schema contract from
+1. Send `POST /api/chat` with the Text constraints contract from
    [Verification](../runtime/verification.md).
-2. Return output that does not match the schema and confirm the Run does not become `completed`.
-3. Inspect `GET /api/runs/{id}/replay` and confirm failed Evidence includes contract/verifier versions, Subject Hash, Snapshot Hash, summary, and an Artifact ID.
-4. For an HTTP verifier with remaining attempt budget, restore the target service and call `POST /api/runs/{id}/verify`.
+2. Return output missing the required phrase and confirm the Run does not become `completed`.
+3. Inspect `GET /api/runs/{id}/replay` and confirm failed Evidence includes contract/verifier versions, Subject Hash, Snapshot Hash, summary, and any linked Artifacts.
+4. In a separate Run, configure an HTTP verifier with a granted read-only target
+   and remaining attempts. After its failed check, restore the service and call
+   `POST /api/runs/{id}/verify`.
 5. Confirm fresh passing Evidence is appended and `run.completed` appears only after `verification.passed`.
 6. Change the candidate subject in a resumed Run and confirm a `verification.stale` marker references the superseded Evidence.
 7. Enable **Grounding**, ask a knowledge-backed question, and return one supported

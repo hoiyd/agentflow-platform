@@ -3,170 +3,102 @@
 [![CI](https://github.com/hoiyd/agentflow-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/hoiyd/agentflow-platform/actions/workflows/ci.yml)
 [![Go Coverage](https://codecov.io/gh/hoiyd/agentflow-platform/branch/main/graph/badge.svg?flag=backend)](https://app.codecov.io/gh/hoiyd/agentflow-platform)
 
-AgentFlow is a Go AI Agent Runtime with a Next.js workbench. It makes execution
-inspectable through frozen configuration, guarded Tools, bounded context and
-usage, verification evidence, and durable Replay.
+**A Go Agent Runtime with a Next.js workbench for inspecting execution, cost,
+failures, and recovery.** Single, Multi-Agent, and bounded Loop share one Turn
+Engine rather than separate chat implementations.
 
-Chat uses credentialed OpenAI-compatible routes; embeddings can use local
-Ollama. Simulation is explicit and confined to offline tests and evaluation.
-PostgreSQL with pgvector is the only application persistence backend.
+[Five-minute demo](docs/guides/demo.md) | [Architecture](docs/architecture/backend-architecture.md) | [Design decisions](docs/architecture/engineering-decisions.md) | [Documentation](docs/README.md)
 
 ## Demo Gallery
 
-### Multi-Agent Execution and Replay
+![An incident task: plan approval, Agent execution, and durable Replay](docs/assets/agentflow-demo.gif)
 
-![Multi-Agent execution and Replay](docs/assets/agentflow-demo.gif)
+Follow an incident task through plan approval, specialist routing, execution,
+review, and Replay. [RAG and Verification recordings](docs/guides/demo.md#recorded-assets)
+show the supporting evidence. Recordings demonstrate behavior, not model quality
+or performance benchmarks.
 
-An incident task progresses through plan approval, routing, execution, review,
-and Replay.
+## Engineering Highlights
 
-### Knowledge and Retrieval
-
-![Knowledge ingestion, hybrid retrieval, and Context selection](docs/assets/hybrid-rag-demo.gif)
-
-Document ingestion, hybrid recall, ranking, relevance gating, and source-backed
-Context selection.
-
-### Completion Verification
-
-![Completion Contract, Verification Evidence, Usage, and Replay](docs/assets/completion-verification-demo.gif)
-
-A Completion Contract connects the final output to Verification Evidence,
-Usage, and Replay. Recordings show behavior, not performance or model-quality benchmarks.
-
-### Workbench Modes
-
-| Single | Multi | Loop |
+| Problem | Design | Inspect it |
 | --- | --- | --- |
-| [![Single workbench](docs/assets/single-mode.png)](docs/assets/single-mode.png) | [![Multi-Agent workbench](docs/assets/multi-mode.png)](docs/assets/multi-mode.png) | [![Loop workbench](docs/assets/loop-mode.png)](docs/assets/loop-mode.png) |
+| Modes drift into separate implementations | One Turn Engine, guarded Tool loop, and completion path; modes own orchestration | [Execution modes](docs/runtime/execution-modes.md), [Turn Engine](apps/api/internal/agent/turn) |
+| A retry or Resume repeats work under changed settings | Frozen Runtime Snapshot, Stage checkpoints, committed Tool receipts, explicit reconciliation of uncertain effects | [Recovery](docs/runtime/durable-recovery.md), [Tool reconciliation](docs/tools/tool-side-effect-reconciliation.md) |
+| Agent calls amplify cost and context | Separate Run admission, physical-request limits, cumulative Usage Ledger, and per-call Context capacity | [Control map](docs/runtime/execution-controls.md), [Budget code](apps/api/internal/budget) |
+| Retrieval returns plausible but unrelated sources | Independent Semantic/Keyword recall, RRF, pluggable reranking, relevance gating, bounded expansion, and selected-source citations | [RAG pipeline](docs/knowledge/knowledge-rag.md), [Pipeline code](apps/api/internal/rag/retrieval.go) |
+| Generated text is mistaken for a completed task | Optional Completion Contract, immutable Verification Evidence, and evidence-backed structured results | [Verification](docs/runtime/verification.md), [Structured output](docs/runtime/structured-output.md) |
+| A successful trace is mistaken for quality | Versioned Golden Datasets, controlled comparisons, failure cases, and separately identified live reports | [Evaluation](docs/evaluation/README.md) |
 
-These mode screenshots are offline visual references; select an image for the
-full-size view. The [five-minute demo](docs/guides/demo.md) covers setup, the
-walkthrough, and a deterministic no-network evidence path.
-
-## Execution Modes
-
-All modes share one Turn Engine and the same policy, accounting, and event
-contracts. Use the least orchestration the task needs:
-
-| Mode | Execution shape | Use when |
-| --- | --- | --- |
-| Single (`single`) | One Agent Turn with native model/Tool rounds and streamed answers | One owner can handle the request |
-| Multi (`multi_agent`) | Planner -> plan approval -> Router -> isolated Worker -> Reviewer -> Finalizer | An approved plan, specialist routing, or independent review matters |
-| Loop (`autonomous`) | Bounded Observe -> Plan -> Act -> Review -> Decide iterations | The next action depends on previous results or human input |
-
-Multi's Worker is an isolated Stage inside one Run, not a Child Run. Loop can
-pause for input without discarding progress. See
-[execution modes](docs/runtime/execution-modes.md) for topology, trade-offs,
-streaming, and recovery behavior.
+Tools are callable capabilities; Skills are trusted, versioned instructions
+loaded progressively. Skills cannot grant themselves Tool or credential access.
+See [Tool security](docs/tools/tool-security-policy.md) and [Skills](docs/tools/trusted-skills.md).
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     UI[Next.js workbench] -->|HTTP + SSE| API[Go HTTP adapter]
-    API --> Scope[Workspace scope]
-    Scope --> Runtime[Agent Runtime]
-    Runtime --> Modes[Single / Multi / Loop]
-    Modes --> Turn[Shared Turn Engine]
-    Turn --> Context[Context Assembly]
-    Turn --> Model[Model routing + provider adapter]
-    Turn --> Tools[Guarded Tools]
-    Scope --> Knowledge[Knowledge / RAG]
-    Scope --> Memory[Curated Memory]
-    Runtime --> Events[Typed Run Events]
-    Events --> Store[Postgres + pgvector]
-    Knowledge --> Store
-    Memory --> Store
+    API --> Scope[Identity + Workspace scope]
+    Scope --> Runtime[Single / Multi / Loop]
+    Runtime --> Turn[Shared Turn Engine]
+    Turn --> Context[Context + RAG + Memory]
+    Turn --> Model[Model routes + provider adapter]
+    Turn --> Tools[Guarded Tool Executor]
+    Runtime --> Completion[Verification + completion]
+    Runtime --> Evidence[Run Events + Usage Ledger]
+    Context --> DB[(Postgres + pgvector)]
+    Completion --> DB
+    Evidence --> DB
 ```
 
-| Engineering boundary | What it provides | Details |
-| --- | --- | --- |
-| Agent execution | Configurable profiles, capability-aware Worker selection, one lifecycle and Stage checkpoints | [Profiles](docs/runtime/agent-profiles.md), [selection](docs/runtime/agent-selection.md), [recovery](docs/runtime/durable-recovery.md) |
-| Frozen protocol | Resume reuses captured mode, routes/sampling, Agents, Skills, Tool authority, context config, and budgets | [Runtime Snapshot](docs/architecture/terms.md#runtime-snapshot), [model routing](docs/runtime/model-routing.md) |
-| Context and Memory | Source budgets and Manifests, non-destructive compaction, exact-history recovery, versioned Task State and curated Memory | [Context](docs/context/context-management.md), [Task State](docs/runtime/task-state.md), [Memory](docs/context/memory-management.md) |
-| Knowledge grounding | Semantic + Keyword recall, RRF, separate reranking/Gate, bounded parent/adjacent expansion, and source-backed citations | [Knowledge / RAG](docs/knowledge/knowledge-rag.md) |
-| Tools and Skills | Shared schema validation, scope authorization, bounded multi-round execution, result Artifacts, progress guards, and progressively loaded trusted methods | [Tool security](docs/tools/tool-security-policy.md), [Tool loop](docs/tools/bounded-tool-loop.md), [Skills](docs/tools/trusted-skills.md) |
-| Resource control | Conversation single-writer, bounded Run admission, physical-request permits/RPM/TPM, typed retry, and cumulative Run usage/cost | [Execution controls](docs/runtime/execution-controls.md), [Run Budget](docs/runtime/run-budget.md) |
-| Completion and operations | Opt-in verification gate, immutable Evidence, uncertain-effect reconciliation, Replay/Episode, and Needs attention | [Verification](docs/runtime/verification.md), [reconciliation](docs/tools/tool-side-effect-reconciliation.md), [attention](docs/runtime/operator-attention.md) |
-| Measurable evidence | Context/RAG/routing/Tool regression gates, live benchmark profiles, controlled Run comparison, load and recovery drills | [Evaluation guide](docs/evaluation/README.md) |
-
-Package ownership, source entry points, and call paths are in
-[backend architecture](docs/architecture/backend-architecture.md). Design
-trade-offs and retired approaches are in
-[engineering decisions](docs/architecture/engineering-decisions.md).
+Go owns orchestration and governance; OpenAI-compatible services own inference.
+Postgres + pgvector is the only application persistence backend. The
+[backend guide](docs/architecture/backend-architecture.md) links the code paths
+and explains dependency ownership.
 
 ## Quick Start
 
-Requires Go 1.26.5 through gvm, Node.js 22+, and a running PostgreSQL + pgvector
-instance. From the repository root:
+Requires **Go 1.26.5 through gvm, Node.js 22+, PostgreSQL + pgvector**, and a
+configured OpenAI-compatible Chat route. From the repository root:
 
 ```bash
 test -f apps/api/.env || cp apps/api/.env.example apps/api/.env
 test -f apps/api/config/model-routes.json || cp apps/api/config/model-routes.example.json apps/api/config/model-routes.json
-# Configure DATABASE_URL, reviewed model routes, and their credential variables.
+# Set DATABASE_URL, model routes, and their credential variables before starting.
 make quickstart
 ```
 
-Open [the workbench](http://localhost:3000/workspace). The launcher starts API/web,
-not PostgreSQL. Missing database or route credentials fail startup; there is no
-silent storage or simulated-answer fallback. Press Ctrl+C to stop both processes.
+Open [localhost:3000/workspace](http://localhost:3000/workspace). The launcher
+starts API/web, not Postgres or a model server. Invalid database/routes/credentials
+fail startup; there is no silent simulated-answer fallback. Ctrl+C stops both.
+Use `make dev` next time. [Local setup](docs/guides/local-setup.md) covers ports,
+embeddings, authentication, and manual startup.
 
-Use `make dev` on subsequent starts, or
-`API_PORT=18080 WEB_PORT=13000 make dev` when default ports are occupied.
-See [local setup](docs/guides/local-setup.md) for manual startup, embeddings,
-configuration paths, and test prerequisites.
-
-## Automated Tests
+## Reproduce the Evidence
 
 ```bash
-make test             # Go suite, frontend lint/tests, and production build
-make contract-check   # Regenerate API DTOs and reject drift
+make benchmark-evidence          # Deterministic retrieval, Tool, and recovery pack
+DEMO_MODE=offline make demo-check # Check that pack without an application/model
+make test                        # Go, frontend lint/tests, production build
+make contract-check              # Regenerate shared API types and reject drift
 ```
 
-Postgres tests require a dedicated `TEST_DATABASE_URL`; a pass without it does
-not prove durable behavior. [Functional regression gates](docs/operations/functional-regression-testing.md)
-exercise browser -> Next -> Go -> disposable Postgres. Evaluation and Verification
-are separate: evaluation measures regressions; Verification gates one opted-in Run.
+Offline evidence needs installed dependencies but no model key. It proves
+regression contracts, not live-model quality. Database acceptance needs a dedicated
+`TEST_DATABASE_URL`; skipped Postgres tests are not persistence evidence.
+[Evaluation](docs/evaluation/README.md) separates fixture, live, load, and recovery checks.
 
-## Known Boundaries
+## Status and Limits
 
-- Trusted, single-instance deployment only. Optional [OIDC identity and Workspace
-  membership](docs/operations/identity-membership.md) provide themed OIDC
-  login/registration, automatic personal Workspace onboarding and revocable sessions;
-  the default local mode is unauthenticated. Owner-scoped Workspace lifecycle,
-  resource authorization, Agent configuration and Tool grants are implemented;
-  team sharing, role-based/object-sharing ACLs and cross-owner credential management
-  are not. CORS is not authorization.
-- Browser disconnects do not cancel admitted Runs. Process crashes still need
-  durable checkpoint repair and explicit Resume; this is not distributed scheduling.
-- Orchestration shapes are fixed, not arbitrary DAGs. Tools/Skills cannot grant
-  themselves permissions; the Skill loader does not execute scripts.
-- Injection detection and answer-support checks are deterministic defenses, not
-  proofs of semantic safety or factual truth. RAG `no_match` removes weak context,
-  but only an opted-in grounded-answer contract gates unsupported final answers.
-- Small datasets and deterministic hash embeddings establish regression behavior,
-  not general retrieval/model quality. Live claims need retained, budgeted reports;
-  routing remains conservative rather than adopting diagnostic recommendations.
-- Estimated cost needs configured prices; optional verification proves only its
-  configured invariants. External writes with uncertain outcomes require explicit
-  reconciliation, not an exactly-once claim.
+| Status | Scope |
+| --- | --- |
+| Implemented | Three execution modes; guarded Tools/Skills; hybrid RAG and metadata filtering; Context/Memory/Task State; budgets; typed Replay; checkpoints; optional Verification/structured output; optional OIDC and owner-scoped Workspaces |
+| Partial / bounded | Recovery is single-instance; evaluation covers frozen tasks, not general quality; injection and grounded-answer checks do not prove semantic truth; sandbox commands are opt-in scratch execution, not arbitrary host access |
+| Planned | Durable multi-worker dispatch/lease/fencing, team/object-sharing ACLs, broader retention and release hardening, calibrated model/human graders |
 
-See [production boundaries](docs/operations/production-readiness-roadmap.md) for
-remaining access, retention, scale, and asynchronous-evidence work.
-
-## Repository Map
-
-```text
-api/                  shared OpenAPI contract
-apps/api/app/         Go composition root and lifecycle
-apps/api/internal/    Agent, Tool, inference, context and persistence owners
-apps/web/             Next.js workbench
-docs/                 architecture, runtime contracts, setup, and evidence guides
-examples/             versioned datasets, corpus, and reviewed Skill fixtures
-```
-
-Start with [the demo](docs/guides/demo.md), then
-[execution modes](docs/runtime/execution-modes.md),
-[architecture](docs/architecture/backend-architecture.md), and the
-[documentation guide](docs/README.md) for deeper review.
+Default local mode is **unauthenticated** and intended for trusted use. Browser
+disconnect does not cancel admitted work. Process crashes require lifecycle
+repair and explicit Resume; uncertain external effects require reconciliation,
+not an exactly-once claim. A RAG `no_match` removes evidence, but unsupported
+answers are gated only when the Run opts into the grounded-answer contract.
+See [deployment boundaries](docs/operations/production-readiness-roadmap.md).
