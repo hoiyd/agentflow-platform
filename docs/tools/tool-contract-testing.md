@@ -59,8 +59,23 @@ rather than treating truncation as an execution failure.
 
 `EffectGateFixture` models the durable protocol:
 
-```text
-intent_persisted -> effect_applied -> settlement_pending -> committed
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Intent["intent_persisted"] --> Effect["effect_applied"]
+    Effect --> Settlement["settlement_pending"]
+    Settlement -->|Success| Committed["committed"]
+    Settlement -->|Failure| Reconcile["needs_reconciliation<br/>No blind effect replay"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Settlement focus;
+    class Intent,Committed durable;
 ```
 
 Tests inspect persisted state at each boundary without timing sleeps or an

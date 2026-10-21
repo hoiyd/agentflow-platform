@@ -133,9 +133,24 @@ The structural guard rejects planning sections, not every possible faulty infere
 
 ### Generation and Commit Protocol
 
-```text
-repair stale unmatched starts -> persist context.compaction_started
-  -> summarize / validate -> atomic summary + context.compaction_completed
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Repair["Repair stale unmatched starts"] --> Start["Persist context.compaction_started"]
+    Start --> Summarize["Generate and validate summary"]
+    Summarize --> Valid{"Valid and within budget?"}
+    Valid -->|Yes| Commit["Atomic commit<br/>Summary + context.compaction_completed"]
+    Valid -->|No / generation failed| Failed["Record context.compaction_failed<br/>Keep previous surface and originals"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Valid focus;
+    class Commit durable;
 ```
 
 Each completed generation records previous ID, cumulative sources, shadowed

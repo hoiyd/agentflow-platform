@@ -134,18 +134,49 @@ of identity.
 
 ## State Model
 
-```text
-prepared -> executing -> committed
-                      -> needs_reconciliation
+Execution and operator resolution:
 
-needs_reconciliation -> committed    (confirm_committed)
-                     -> failed       (confirm_failed)
-                     -> reconciling  (durable callback claim)
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart LR
+    prepared --> executing
+    executing -->|Success| committed
+    executing -->|Uncertain| needs_reconciliation
+    needs_reconciliation -->|confirm_committed| committed
+    needs_reconciliation -->|confirm_failed| failed
+    needs_reconciliation -->|Claim callback| reconciling
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class executing,reconciling focus;
+    class committed,failed durable;
+```
 
-reconciling -> committed / compensated  (callback settlement)
-            -> needs_reconciliation    (callback returned an error)
-            -> reconciling             (deadline/cancel; crash keeps the claim)
-            -> committed / failed      (explicit operator confirmation)
+A claimed callback settles through these paths; timeout or crash does not release its claim:
+
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart LR
+    reconciling -->|Success / confirm_committed| committed
+    reconciling -->|Compensation| compensated
+    reconciling -->|confirm_failed| failed
+    reconciling -->|Callback error| needs_reconciliation
+    reconciling -->|Timeout / cancel / crash| reconciling
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class reconciling focus;
+    class committed,failed,compensated durable;
 ```
 
 Committed, failed, and compensated effects cannot be reopened by a late normal

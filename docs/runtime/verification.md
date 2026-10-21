@@ -5,9 +5,26 @@ configured checks pass. It is frozen when the Run starts and applies to Single,
 Multi and Loop through the same completion path. Ordinary Chat remains
 `verification_status=not_required`.
 
-```text
-freeze contract -> execute -> persist candidate -> hash subject
-  -> run verifiers -> append Evidence / Artifacts -> Completion Gate
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Contract["Freeze Completion Contract"] --> Execute["Execute Run"]
+    Execute --> Candidate["Persist candidate and hash subject"]
+    Candidate --> Verify["Run configured verifiers"]
+    Verify --> Evidence["Append immutable Evidence / Artifacts"]
+    Evidence --> Gate{"Completion policy satisfied?"}
+    Gate -->|Yes| Completed["run.completed"]
+    Gate -->|No| Recovery["Recovery / exhaustion policy<br/>Never an implicit pass"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Gate focus;
+    class Evidence durable;
 ```
 
 ## Verification vs. Tests

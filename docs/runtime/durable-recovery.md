@@ -19,8 +19,21 @@ Active Runs owned by the current process are not scanned.
 For each stale Run, the event protocol finds open scopes and appends synthetic
 terminal events in inner-to-outer order:
 
-```text
-tool.failed -> model.failed -> turn.failed -> stage.failed -> run.failed
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Tool["tool.failed"] --> Model["model.failed"]
+    Model --> Turn["turn.failed"]
+    Turn --> Stage["stage.failed"]
+    Stage --> Run["run.failed<br/>failed_recoverable"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class Run focus;
 ```
 
 Every synthetic payload includes:
@@ -104,11 +117,28 @@ It derives a stable idempotency key when the caller does not provide one.
 
 The journal uses these states:
 
-```text
-prepared -> executing -> committed
-                      -> needs_reconciliation
-needs_reconciliation -> committed | failed | compensated
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Prepared["prepared"] --> Executing["executing"]
+    Executing -->|Durable success| Committed["committed"]
+    Executing -->|Uncertain outcome| Uncertain["needs_reconciliation"]
+    Uncertain --> Protocol["Operator reconciliation protocol"]
+    Protocol --> Resolved["committed / failed / compensated"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Protocol focus;
+    class Committed,Resolved durable;
 ```
+
+Callback claims and exact legal transitions are in the
+[reconciliation state model](../tools/tool-side-effect-reconciliation.md#state-model).
 
 Confirmed pre-publication filesystem failures settle directly as `failed`;
 only that durable settlement permits model argument correction. Timeouts and

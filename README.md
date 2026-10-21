@@ -36,19 +36,30 @@ See [Tool security](docs/tools/tool-security-policy.md) and [Skills](docs/tools/
 ## Architecture
 
 ```mermaid
-flowchart LR
-    UI[Next.js workbench] -->|HTTP + SSE| API[Go HTTP adapter]
-    API --> Scope[Identity + Workspace scope]
-    Scope --> Runtime[Single / Multi / Loop]
-    Runtime --> Turn[Shared Turn Engine]
-    Turn --> Context[Context + RAG + Memory]
-    Turn --> Model[Model routes + provider adapter]
-    Turn --> Tools[Guarded Tool Executor]
-    Runtime --> Completion[Verification + completion]
-    Runtime --> Evidence[Run Events + Usage Ledger]
-    Context --> DB[(Postgres + pgvector)]
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    UI["Next.js workbench"] -->|HTTP + SSE| API["Go HTTP adapter"]
+    API --> Scope["Identity and<br/>Workspace scope"]
+    Scope --> Runtime["Single / Multi / Loop"]
+    Runtime --> Turn["Shared Turn Engine"]
+    Turn --> Context["Context / RAG<br/>Memory"]
+    Turn --> Model["Model routes<br/>Provider adapter"]
+    Turn --> Tools["Guarded<br/>Tool Executor"]
+    Runtime --> Completion["Verification<br/>Completion"]
+    Runtime --> Evidence["Typed Events<br/>Usage Ledger"]
+    Context --> DB[("Postgres<br/>pgvector")]
     Completion --> DB
     Evidence --> DB
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Runtime,Turn focus;
+    class Evidence,DB durable;
 ```
 
 Go owns orchestration and governance; OpenAI-compatible services own inference.

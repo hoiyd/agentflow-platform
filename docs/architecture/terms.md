@@ -6,10 +6,23 @@ is in [execution controls](../runtime/execution-controls.md).
 
 ## Core Hierarchy
 
-```text
-Conversation -> Run -> Stage (orchestrated modes) -> Turn
-                   -> Turn (Single)
-Turn -> Retrieval / logical Model Calls / Tool Calls
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    Conversation --> Run
+    Run -->|Single| Direct["Direct Turn"]
+    Run -->|Multi / Loop| Stage
+    Stage --> Staged["Stage-owned Turn"]
+    Direct --> Operations["Retrieval, logical Model Calls and Tool Calls"]
+    Staged --> Operations
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class Run focus;
 ```
 
 An Iteration groups Loop Stages; it is not another independently persisted entity.

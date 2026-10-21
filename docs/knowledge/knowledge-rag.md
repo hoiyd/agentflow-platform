@@ -4,11 +4,35 @@ HTTP search, Knowledge Tools and all Agent modes share a staged retrieval pipeli
 The design separates **candidate ranking**, **evidence acceptance**, and **model
 Context** so each can be inspected and tested independently.
 
-```text
-query -> embed -> Semantic + Keyword recall -> injection guard -> RRF
-  -> rerank -> relevance gate -> scoped expansion -> deduplicate / merge
-  -> knowledge token limit -> selected-source citations
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    accTitle: Shared RAG retrieval pipeline
+    accDescr: Semantic and Keyword recall feed guarded fusion, ranking and relevance decisions before scoped Context selection and citation assignment.
+    Query["Bounded query"] --> Embed["Embed query"]
+    Embed --> Semantic["Semantic recall"]
+    Embed --> Keyword["Keyword recall"]
+    Semantic --> Guard["Deduplicate IDs and filter injection"]
+    Keyword --> Guard
+    Guard --> RRF["RRF fusion"]
+    RRF --> Rerank["Versioned reranker"]
+    Rerank --> Gate{"Relevance gate"}
+    Gate -->|Accepted child hits| Expand["Scoped parent / adjacent expansion"]
+    Gate -->|No accepted hits| NoMatch["no_match; no RAG evidence"]
+    Expand --> Transform["Deduplicate and merge Context"]
+    Transform --> Budget["Enforce Knowledge Token Budget"]
+    Budget --> Citations["Assign selected-source citation IDs"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class Gate focus;
 ```
+
+The recall branches are independent candidate sources, not a promise of parallel execution.
 
 For business fields and selection policy, see [metadata schema](metadata-schema.md),
 [updates](metadata-updates.md), [document lifecycle](document-lifecycle.md), and

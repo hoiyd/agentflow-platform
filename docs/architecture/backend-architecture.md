@@ -38,11 +38,30 @@ Packages are grouped by responsibility rather than mirrored `core/services` fold
 
 ## Dependency Direction
 
-```text
-cmd/server -> app -> HTTP / Run commands -> Agent Runtime
-                                           -> Turn Engine -> Tool loop
-                                                           -> Context / Tools / Inference
-                 -> concrete Store, identity, limits and background workers
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    accTitle: Backend dependency direction
+    accDescr: The composition root wires transport and Run commands to shared execution capabilities.
+    Entry["cmd/server"] --> App["app: composition and lifecycle"]
+    App --> HTTP["HTTP transport"]
+    App --> Commands["Run commands"]
+    HTTP --> Commands
+    Commands --> Runtime["Agent Runtime"]
+    Runtime --> Turn["Shared Turn Engine"]
+    Turn --> Loop["Bounded Tool loop"]
+    Turn --> Context["Context Assembly"]
+    Loop --> Tools["Tool Executor"]
+    Loop --> Inference["Inference contracts"]
+    App -.-> Adapters["Inject Store, identity, limits and workers"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    class App,Runtime,Turn focus;
 ```
 
 `agent.NewRuntime(RuntimeOptions)` requires its execution dependencies explicitly,
@@ -58,27 +77,67 @@ existing Context and Tool paths, not a second permission or workflow system.
 
 ### Chat and Completion
 
-```text
-HTTP -> identity / Workspace -> runcommands (admission + Conversation writer)
-     -> Runtime mode -> Turn Engine -> Context + model / guarded Tool rounds
-     -> runcompletion (citations + persisted candidate + Verification + terminal state)
-     -> SSE callback / durable Replay -> best-effort Memory sync
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    accTitle: Chat and completion path
+    accDescr: Authorized admission enters shared model and Tool rounds, then persists the completion outcome independently of browser delivery.
+    HTTP["HTTP request"] --> Scope["Identity and Workspace authorization"]
+    Scope --> Commands["runcommands<br/>Admission and Conversation writer"]
+    Commands --> Mode["Single / Multi / Loop orchestration"]
+    Mode --> Turn["Shared Turn Engine<br/>Context, model and guarded Tool rounds"]
+    Turn -->|Final candidate| Completion["runcompletion<br/>Citations, persistence and Completion Gate"]
+    Completion --> Durable["Durable outcome and Replay evidence"]
+    Durable --> Delivery["SSE callback, if connected"]
+    Durable -.-> Memory["Best-effort Memory sync"]
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Mode,Turn focus;
+    class Durable durable;
 ```
 
 Admission observes caller cancellation. Once admitted, execution is detached
 from browser delivery; explicit Stop cancels the Runtime. Writer/capacity release
 precedes queued follow-up dispatch. See [durable inputs](../runtime/durable-inputs.md).
+The Turn node expands into the [shared model/Tool loop](../tools/bounded-tool-loop.md).
 
 ### Retrieval and Ingestion
 
-```text
-HTTP search / Agent retrieval -> Knowledge Base -> query embedding
-  -> scoped Semantic + Keyword recall -> injection guard -> RRF
-  -> reranker -> relevance gate -> scoped parent/adjacent selection
-  -> deduplication / merge -> knowledge token-limit check
-
-Document upload -> authorized scope -> normalization / chunking / embedding
-  -> atomic Postgres persistence
+```mermaid
+---
+config:
+  fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif'
+  themeVariables: {fontSize: 18px}
+  flowchart: {curve: linear, nodeSpacing: 28, rankSpacing: 36}
+---
+flowchart TD
+    accTitle: Retrieval and ingestion paths
+    accDescr: Ingestion persists a scoped index; query retrieval reads candidates and selects bounded Context through the shared pipeline.
+    Search["HTTP search / Agent retrieval"] --> Knowledge["Scoped Knowledge Base"]
+    Knowledge --> Embed["Embed query"]
+    Embed --> Semantic["Semantic recall"]
+    Embed --> Keyword["Keyword recall"]
+    Semantic --> Guard["Injection guard and RRF fusion"]
+    Keyword --> Guard
+    Guard --> Rank["Rerank and relevance gate"]
+    Rank --> Select["Scoped parent / adjacent selection"]
+    Select --> Transform["Deduplicate, merge and enforce token limit"]
+    Upload["Document upload"] --> Scope["Authorize Workspace"]
+    Scope --> Ingest["Normalize, chunk and embed"]
+    Ingest --> Store[("Postgres + pgvector")]
+    Store -.->|Scoped candidate reads| Semantic
+    Store -.->|Scoped candidate reads| Keyword
+    classDef default fill:#ffffff,stroke:#77818c,color:#30363d,stroke-width:1px,rx:4px,ry:4px;
+    classDef focus fill:#e9effd,stroke:#2d5fd3,color:#171a1f,stroke-width:1.8px,font-weight:600;
+    classDef durable fill:#f5f7f9,stroke:#59636e,color:#30363d,stroke-width:1.2px;
+    class Knowledge,Rank focus;
+    class Store durable;
 ```
 
 The pipeline owns ranking and relevance; Store owns predicates and candidate

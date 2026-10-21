@@ -91,3 +91,19 @@ owning document. Defaults belong in [`.env.example`](../apps/api/.env.example),
 DTOs in OpenAPI, and event names in the generated catalog. Preserve executable
 steps, failure semantics, evidence provenance, and limitations when editing.
 Do not turn implementation notes or private backlogs into the public reading path.
+
+Use [Mermaid](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams)
+for architecture, execution flow and state diagrams. Keep source in Markdown,
+use broadly supported flowchart/state syntax, and preserve decision/loop labels.
+Directory trees, formulas and executable examples stay text; generated diagram
+exports are review artifacts, not a second source to maintain.
+
+Diagrams follow the workbench palette: 18px system sans-serif, white nodes with
+thin neutral borders, blue for the key execution/policy boundary, and light gray
+for retained records. Labels and shapes carry meaning without color. Keep the
+canvas/edge labels reader-themed for light/dark compatibility; use no remote
+fonts, gradients, shadows or Mermaid `themeCSS`. Each fenced graph keeps its
+small config and role classes inline because GitHub does not load a shared
+repository stylesheet. Use [Chat and Completion](architecture/backend-architecture.md#chat-and-completion)
+as the style reference rather than adding a diagram build pipeline.
+Simple state-transition views use flowchart syntax to keep role styling portable.
