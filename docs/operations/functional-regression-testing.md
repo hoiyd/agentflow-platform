@@ -59,6 +59,22 @@ Each CI composition profile starts with a fresh disposable database. Cases must
 declare their owned Agent and required Tools explicitly; neither a preceding
 profile nor another case supplies those prerequisites.
 
+## Trusted MCP
+
+With a dedicated `TEST_DATABASE_URL`, run:
+
+```bash
+AGENTFLOW_MCP_TEST=1 bash scripts/test-browser.sh mcp.spec.ts
+```
+
+The official SDK server fixture serves reviewed public text and structured JSON.
+The gate checks source/readiness UI, a failed call followed by a successful call,
+Single/Multi/Loop, frozen metadata in Postgres, Replay after reload, and rejection
+of a changed remote definition while a Run is awaiting continuation. It retains
+`mcp-evidence.json` and a desktop screenshot. The provider and MCP data are
+deterministic; this is not external availability or live-model quality evidence.
+See the [adapter contract](../tools/mcp-adapter.md) for the separate live read.
+
 ## Tool Discovery
 
 The independent [scoped filesystem gate](../tools/scoped-filesystem.md#validation)

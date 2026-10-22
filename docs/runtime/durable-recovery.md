@@ -87,6 +87,12 @@ Stage start writes `prepared`, persists `stage.started`, then advances to
 `committed`. A crash between these writes therefore leaves a conservative,
 detectable state; Resume never assumes an uncertain Stage committed.
 
+Missing, changed or unavailable frozen Tool definitions reject Continue/Resume
+with `runtime_snapshot_unavailable` as a conflict, including SSE error payloads.
+The pre-execution rejection preserves the waiting/recovery point. MCP definition
+hashes also bind the negotiated protocol and remote input/output schemas; see
+[trusted MCP recovery](../tools/mcp-adapter.md#execution-and-recovery).
+
 Resume recalculates the Runtime Snapshot and Tool definition hashes. A mismatch
 emits `checkpoint.stale` and fails closed. A committed Stage emits
 `checkpoint.restored` and is not rerun. An interrupted Stage with no uncertain

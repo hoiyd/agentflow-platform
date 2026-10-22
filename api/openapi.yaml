@@ -2090,6 +2090,17 @@ components:
           items:
             type: string
 
+    ToolSource:
+      type: object
+      description: Reviewed remote Tool identity. Contains no endpoint credentials or live connection state.
+      required: [kind, server_id, remote_name, transport]
+      properties:
+        kind: { type: string, enum: [mcp] }
+        server_id: { type: string }
+        remote_name: { type: string }
+        transport: { type: string, enum: [streamable_http] }
+        definition_hash: { type: string }
+
     ToolInfo:
       type: object
       required: [name, description, parameters, enabled]
@@ -2097,6 +2108,7 @@ components:
         service_enabled:
           type: boolean
           description: Operator-owned service switch. Workspace owners cannot override it.
+        source: { $ref: '#/components/schemas/ToolSource' }
         workspace_enabled:
           type: boolean
           description: Persisted Workspace allowlist entry, independent of service readiness.

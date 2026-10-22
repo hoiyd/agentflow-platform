@@ -73,6 +73,13 @@
   accent-color: var(--accent);
 }
 
+.agent-config-tools .agent-tool-source {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .agent-config-actions {
   display: flex;
   align-items: center;

@@ -156,6 +156,12 @@ and database-test safety.
 
 ## Tool Configuration
 
+`MCP_CONFIG_PATH` optionally installs locally reviewed read-only MCP Tools over
+Streamable HTTP. Empty disables MCP. Servers are optional by default; discovery
+runs asynchronously and reports readiness through the Tool catalog. Exact Tool
+policy, Workspace grants and Agent bindings still apply. See the
+[MCP configuration and limits](../tools/mcp-adapter.md).
+
 Missing Tool config defaults to enabled `calculator`, `get_current_time`, and
 `web_search`. Web search also needs `TAVILY_API_KEY`, Agent allowlist membership,
 and an exact egress/credential policy. New defaults include the rule; existing

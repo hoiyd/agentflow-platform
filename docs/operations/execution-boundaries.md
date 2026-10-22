@@ -33,7 +33,9 @@ are supported destinations, not user-selected URLs. Skills retain their existing
 add Workspace/root grants and no-follow opens for fixed list/search/read operations,
 independently of sbx. [Managed output writes](../tools/scoped-filesystem-writes.md)
 add a separate explicit write grant, private roots and durable publication evidence.
-Future MCP execution and third-party scripts must establish their own actual
+The [trusted MCP adapter](../tools/mcp-adapter.md) uses governed egress for exact
+operator-configured endpoints, with redirect denial, scoped Bearer credentials
+and bounded responses. Third-party scripts must establish their own actual
 boundary; no unrestricted fallback is permitted.
 
 Destination allowlisting, redirect rejection and dial-time DNS validation follow

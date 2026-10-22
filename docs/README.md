@@ -59,6 +59,7 @@ These are implementation and operating contracts, not a required reading list.
 
 - [Discovery](tools/tool-discovery.md), [result Artifacts](tools/tool-result-artifacts.md), [Progress Guard](tools/tool-progress-guard.md), [execution progress](tools/tool-execution-progress.md)
 - [Knowledge bindings](tools/scoped-knowledge-tools.md), [Web citations](tools/web-source-citations.md)
+- [Trusted MCP adapter](tools/mcp-adapter.md)
 - [Scoped filesystem reads](tools/scoped-filesystem.md), [managed writes](tools/scoped-filesystem-writes.md)
 - [Trusted Skills](tools/trusted-skills.md), [invocation/readiness](tools/skill-invocation.md), [installation](tools/skill-installation.md), [Checker](tools/skill-checker.md)
 - [Binding contracts and fault tests](tools/tool-contract-testing.md)

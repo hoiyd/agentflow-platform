@@ -40,6 +40,23 @@ func (m *Manager) Catalog() (*Catalog, error) {
 	return m.catalog, nil
 }
 
+// ReplaceBindings publishes a newly discovered catalog atomically. Runs that
+// already captured the previous catalog retain their frozen definitions.
+func (m *Manager) ReplaceBindings(bindings []Binding) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := m.reloadIfChangedLocked(); err != nil {
+		return err
+	}
+	catalog, err := BuildCatalog(m.config, bindings...)
+	if err != nil {
+		return err
+	}
+	m.bindings = append([]Binding(nil), bindings...)
+	m.catalog = catalog
+	return nil
+}
+
 func (m *Manager) ReloadIfChanged() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

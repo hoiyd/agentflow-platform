@@ -19,6 +19,16 @@ describe("Sidebar API status", () => {
 });
 
 describe("ToolsPanel availability", () => {
+  it("shows MCP provenance and discovery failure separately from grants", () => {
+    render(<ToolsPanel error="" onToggle={vi.fn()} updatingTool="" tools={[{
+      name: "mcp_docs__read", description: "Public docs", parameters: {}, enabled: false,
+      service_enabled: true, workspace_enabled: true, unavailable_reason: "mcp_connection_failed",
+      source: { kind: "mcp", server_id: "docs", remote_name: "read", transport: "streamable_http", definition_hash: "sha256:fixture" }
+    }]} />);
+    expect(screen.getByText("MCP · docs / read")).toBeTruthy();
+    expect(screen.getByText("MCP server unavailable")).toBeTruthy();
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
+  });
   it.each([
     ["filesystem_unconfigured", "Filesystem roots not configured"],
 	["filesystem_write_unconfigured", "Managed output roots not configured"],

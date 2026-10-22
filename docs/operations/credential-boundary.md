@@ -28,6 +28,12 @@ Hashes may be retained for equality, idempotency, and reconstruction checks.
 They are one-way identifiers in this system and are not used to recover Secret
 values.
 
+The [trusted MCP adapter](../tools/mcp-adapter.md) resolves optional Bearer
+credentials at composition, sends them only to the exact configured endpoint,
+rejects redirects and redacts reflected values from results and diagnostics.
+Credential environment names are configuration references; only logical grants
+and a definition fingerprint reach Runtime Snapshots.
+
 ## Runtime Content Rule
 
 The policy does not silently rewrite content used for a model decision. New

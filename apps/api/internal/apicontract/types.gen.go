@@ -960,6 +960,36 @@ func (e ToolProgressStatus) Valid() bool {
 	}
 }
 
+// Defines values for ToolSourceKind.
+const (
+	Mcp ToolSourceKind = "mcp"
+)
+
+// Valid indicates whether the value is a known member of the ToolSourceKind enum.
+func (e ToolSourceKind) Valid() bool {
+	switch e {
+	case Mcp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolSourceTransport.
+const (
+	StreamableHttp ToolSourceTransport = "streamable_http"
+)
+
+// Valid indicates whether the value is a known member of the ToolSourceTransport enum.
+func (e ToolSourceTransport) Valid() bool {
+	switch e {
+	case StreamableHttp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UsageBreakdownSource.
 const (
 	DeepseekCache  UsageBreakdownSource = "deepseek_cache"
@@ -2503,6 +2533,9 @@ type ToolInfo struct {
 	// ServiceEnabled Operator-owned service switch. Workspace owners cannot override it.
 	ServiceEnabled *bool `json:"service_enabled,omitempty"`
 
+	// Source Reviewed remote Tool identity. Contains no endpoint credentials or live connection state.
+	Source *ToolSource `json:"source,omitempty"`
+
 	// UnavailableReason Runtime prerequisite that prevents an enabled Tool from being offered to the model.
 	UnavailableReason *string `json:"unavailable_reason,omitempty"`
 
@@ -2541,6 +2574,21 @@ type ToolProgressUpdate struct {
 	Total     *int64  `json:"total,omitempty"`
 	Truncated *bool   `json:"truncated,omitempty"`
 }
+
+// ToolSource Reviewed remote Tool identity. Contains no endpoint credentials or live connection state.
+type ToolSource struct {
+	DefinitionHash *string             `json:"definition_hash,omitempty"`
+	Kind           ToolSourceKind      `json:"kind"`
+	RemoteName     string              `json:"remote_name"`
+	ServerId       string              `json:"server_id"`
+	Transport      ToolSourceTransport `json:"transport"`
+}
+
+// ToolSourceKind defines model for ToolSource.Kind.
+type ToolSourceKind string
+
+// ToolSourceTransport defines model for ToolSource.Transport.
+type ToolSourceTransport string
 
 // UpdateConversationRequest defines model for UpdateConversationRequest.
 type UpdateConversationRequest struct {

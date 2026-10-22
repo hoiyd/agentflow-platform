@@ -1500,9 +1500,20 @@ export interface components {
             task_examples: string[];
             exclusions: string[];
         };
+        /** @description Reviewed remote Tool identity. Contains no endpoint credentials or live connection state. */
+        ToolSource: {
+            /** @enum {string} */
+            kind: "mcp";
+            server_id: string;
+            remote_name: string;
+            /** @enum {string} */
+            transport: "streamable_http";
+            definition_hash?: string;
+        };
         ToolInfo: {
             /** @description Operator-owned service switch. Workspace owners cannot override it. */
             service_enabled?: boolean;
+            source?: components["schemas"]["ToolSource"];
             /** @description Persisted Workspace allowlist entry, independent of service readiness. */
             workspace_enabled?: boolean;
             /** Format: int64 */

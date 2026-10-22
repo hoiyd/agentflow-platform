@@ -225,6 +225,7 @@ func snapshotTools(catalog *tool.Catalog, names []string) []domain.RuntimeToolSn
 			DefinitionRevision: binding.Descriptor.DefinitionRevision,
 			SideEffect:         string(binding.Descriptor.JournalMode()),
 			Security:           binding.Descriptor.Security,
+			Source:             binding.Descriptor.Source,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })

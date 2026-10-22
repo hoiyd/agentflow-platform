@@ -17,6 +17,7 @@ import (
 	"agentflow-platform/apps/api/internal/sandbox"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/telemetry"
+	"agentflow-platform/apps/api/internal/tool"
 )
 
 // Application owns the API process lifecycle and its composed dependencies.
@@ -29,6 +30,7 @@ type Application struct {
 	sandboxRunner  *sandbox.Runner
 	server         *http.Server
 	telemetry      *telemetry.Observer
+	mcpAdapter     *tool.MCPAdapter
 
 	closeOnce sync.Once
 	closeErr  error
@@ -52,6 +54,7 @@ func New(cfg config.Config, options ...Option) (*Application, error) {
 		requestLimiter: dependencies.requestLimiter,
 		sandboxRunner:  dependencies.sandboxRunner,
 		telemetry:      dependencies.telemetry,
+		mcpAdapter:     dependencies.mcpAdapter,
 		server: &http.Server{
 			Addr:              serverAddress(cfg),
 			Handler:           dependencies.handler.Routes(),
@@ -105,6 +108,7 @@ func (a *Application) Close(ctx context.Context) error {
 	a.closeOnce.Do(func() {
 		var closeErrors []error
 		drained := true
+		a.mcpAdapter.Close()
 		// Cancel guest commands before waiting on Runs that may be blocked on
 		// them. Keep persistence open until their Tool receipts have settled.
 		if a.sandboxRunner != nil {

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import type { Conversation, ToolInfo } from "../../lib/api";
+import { toolAvailabilityLabel } from "../../lib/tool-availability";
 import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 
 export type ChatView = "chat" | "tools" | "knowledge" | "memory" | "attention";
@@ -320,17 +321,6 @@ function RunStatus({ runState }: { runState: VisibleRunState }) {
   );
 }
 
-const toolAvailabilityLabels: Record<string, string> = {
-  service_disabled: "Disabled by operator",
-  workspace_disabled: "Disabled in this Workspace",
-  policy_denied: "Denied by execution policy",
-  sandbox_disabled: "Sandbox disabled by operator",
-  credential_unavailable: "Credential unavailable",
-  filesystem_unconfigured: "Filesystem roots not configured",
-	filesystem_write_unconfigured: "Managed output roots not configured",
-  filesystem_root_changed: "Filesystem roots changed; operator review required"
-};
-
 export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: string; onToggle: (tool: ToolInfo) => void; tools: ToolInfo[]; updatingTool: string }) {
   const readOnly = useWorkspaceReadOnly();
   return (
@@ -347,9 +337,10 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: st
               </label>
             </div>
             <p>{tool.description}</p>
+            {tool.source?.kind === "mcp" ? <p className="tool-source">MCP · {tool.source.server_id} / {tool.source.remote_name}</p> : null}
             {tool.excluded_reason || tool.unavailable_reason ? (
               <p className="tool-availability">
-                {toolAvailabilityLabels[tool.excluded_reason ?? ""] ?? toolAvailabilityLabels[tool.unavailable_reason ?? ""] ?? "Unavailable"}
+                {toolAvailabilityLabel(tool)}
               </p>
             ) : null}
             <details className="tool-card-schema">

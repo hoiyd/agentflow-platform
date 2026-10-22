@@ -46,6 +46,7 @@ type applicationDependencies struct {
 	requestLimiter *concurrency.ModelRequestLimiter
 	sandboxRunner  *sandbox.Runner
 	telemetry      *telemetry.Observer
+	mcpAdapter     *tool.MCPAdapter
 }
 
 func buildDependencies(cfg config.Config, options applicationOptions) (applicationDependencies, error) {
@@ -186,7 +187,20 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 		return applicationDependencies{}, fmt.Errorf("configure filesystem tools: %w", err)
 	}
 	bindings := append([]tool.Binding{tool.WebSearchTool(tavilyClient), tool.SandboxCommandTool(sandboxRunner)}, filesystemTools.Bindings()...)
-	toolManager, err := tool.NewManager(cfg.ToolConfigPath, bindings...)
+	mcpAdapter, err := tool.NewMCPAdapter(cfg.MCPConfigPath)
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("configure MCP: %w", err)
+	}
+	defer func() {
+		if cleanupStore {
+			mcpAdapter.Close()
+		}
+	}()
+	if err := mcpAdapter.CheckRequired(context.Background()); err != nil {
+		return applicationDependencies{}, err
+	}
+	toolCredentialScopes = append(toolCredentialScopes, mcpAdapter.CredentialScopes()...)
+	toolManager, err := tool.NewManager(cfg.ToolConfigPath, append(slices.Clone(bindings), mcpAdapter.Bindings()...)...)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
 	}
@@ -306,11 +320,15 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 		return applicationDependencies{}, fmt.Errorf("create http handler: %w", err)
 	}
 
+	mcpAdapter.Start(func(discovered []tool.Binding) error {
+		return toolManager.ReplaceBindings(append(slices.Clone(bindings), discovered...))
+	})
 	cleanupStore = false
 	return applicationDependencies{
 		store: appStore, handler: handler, memoryProvider: memoryProvider,
 		sandboxRunner: sandboxRunner,
 		telemetry:     traceObserver,
+		mcpAdapter:    mcpAdapter,
 		runController: runController, requestLimiter: requestLimiter,
 	}, nil
 }
