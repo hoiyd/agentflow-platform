@@ -1,0 +1,24 @@
+{
+  "schema_version": "file-skill-task-v1",
+  "id": "scoped-release-report",
+  "version": "1.0.0",
+  "skill_name": "release-report",
+  "material": "# Release brief\n\nRecord: QX-17. Region: eu-north-1. State: held.\nThe current request cap is 64.\nAn earlier request cap of 32 was superseded. Do not describe a held rollout as released.\n",
+  "tasks": [
+    {
+      "id": "sourced-report",
+      "input": "Read source/brief.md using file_read. Create output/report.md using file_write, then verify its full content with file_read. Use current facts, not superseded facts. The report must have exactly these lines: # Release check; Record: <record>; Region: <region>; Cap: <current cap>; State: <state>; Source: brief.md; Quote: <exact current-cap sentence>. Put each line on its own line without blank lines. Use a bound release-report method if available. Do not modify source files, use other output names or perform external actions. Reply exactly SAVED after verification.",
+      "expected_file": "# Release check\nRecord: QX-17\nRegion: eu-north-1\nCap: 64\nState: held\nSource: brief.md\nQuote: The current request cap is 64.\n",
+      "expected_reply": "SAVED",
+      "expect_skill": true
+    },
+    {
+      "id": "unrelated-acknowledgment",
+      "input": "Reply exactly READY. This is an acknowledgment, not a release-report task. Do not use Tools, create files or activate a method.",
+      "expected_file": "",
+      "expected_reply": "READY",
+      "expect_skill": false
+    }
+  ],
+  "failure_inventory": ["incorrect_or_missing_fact", "claim_without_file", "missing_readback", "wrong_skill_selection", "missing_dependency_or_policy", "invalid_arguments_and_correction", "unsafe_write_or_secret", "provider_error_timeout_or_cancellation", "shared_budget_exhaustion", "configuration_drift"]
+}

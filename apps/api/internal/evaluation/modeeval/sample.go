@@ -1,11 +1,8 @@
 package modeeval
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,18 +12,18 @@ import (
 )
 
 func (h *host) sample(parent context.Context, data Dataset, opts Options, sample *Sample) error {
-	started, before := time.Now(), h.guard.count()
+	started, before := time.Now(), h.Requests()
 	ctx, cancel := context.WithTimeout(parent, time.Duration(opts.TimeoutMS)*time.Millisecond)
 	defer cancel()
-	conversation, err := h.storage.CreateConversationInWorkspace(h.workspace, "Orchestration evaluation")
+	conversation, err := h.Storage.CreateConversationInWorkspace(h.Workspace, "Orchestration evaluation")
 	if err != nil {
 		return err
 	}
 	sample.ConversationID = conversation.ID
-	commandErr := h.request(ctx, http.MethodPost, "/api/chat", domain.ChatRequest{ConversationID: conversation.ID, AgentID: h.agentID, Message: data.Task, Mode: sample.Mode}, nil)
+	commandErr := h.Request(ctx, http.MethodPost, "/api/chat", domain.ChatRequest{ConversationID: conversation.ID, AgentID: h.AgentID, Message: data.Task, Mode: sample.Mode}, nil)
 	// Read the accepted identity from persistence, not a successful SSE response.
 	// A disconnected or failed observer must not erase an accepted Run.
-	runs, err := h.storage.ListRunsByWorkspace(h.workspace)
+	runs, err := h.Storage.ListRunsByWorkspace(h.Workspace)
 	if err != nil {
 		return err
 	}
@@ -39,16 +36,16 @@ func (h *host) sample(parent context.Context, data Dataset, opts Options, sample
 		sample.Status = "failed"
 		sample.StopReason = "run_not_accepted"
 		sample.Findings = append(sample.Findings, "chat_command_failed")
-		sample.PhysicalRequests = h.guard.count() - before
+		sample.PhysicalRequests = h.Requests() - before
 		sample.WallMS = time.Since(started).Milliseconds()
 		return nil
 	}
-	run, err := h.wait(ctx, sample.RunID)
+	run, err := h.Wait(ctx, sample.RunID)
 	if err != nil {
 		commandErr = err
 	}
 	if err == nil && run.Status == domain.RunWaitingForUser && sample.Mode == "multi_agent" {
-		steps, e := h.storage.ListCollaborationSteps(run.ID)
+		steps, e := h.Storage.ListCollaborationSteps(run.ID)
 		if e != nil {
 			return e
 		}
@@ -66,13 +63,13 @@ func (h *host) sample(parent context.Context, data Dataset, opts Options, sample
 			approval := Approval{Action: opts.ApprovalPolicy, OriginalHash: contentHash(plan), SubmittedHash: contentHash(approved), WaitMS: max(0, time.Since(run.UpdatedAt).Milliseconds())}
 			if opts.ApprovalPolicy == "reject" {
 				approval.SubmittedHash = ""
-				commandErr = h.request(ctx, http.MethodPost, "/api/runs/"+run.ID+"/cancel", nil, nil)
+				commandErr = h.Request(ctx, http.MethodPost, "/api/runs/"+run.ID+"/cancel", nil, nil)
 			} else {
-				commandErr = h.request(ctx, http.MethodPost, "/api/runs/"+run.ID+"/continue", map[string]any{"plan": approved, "routing_requirements": map[string]any{"preferred_capabilities": []string{"evidence_report"}}}, nil)
+				commandErr = h.Request(ctx, http.MethodPost, "/api/runs/"+run.ID+"/continue", map[string]any{"plan": approved, "routing_requirements": map[string]any{"preferred_capabilities": []string{"evidence_report"}}}, nil)
 			}
 			sample.Approvals = append(sample.Approvals, approval)
 			sample.ApprovalWaitMS = approval.WaitMS
-			run, err = h.wait(ctx, run.ID)
+			run, err = h.Wait(ctx, run.ID)
 			if err != nil {
 				commandErr = err
 			}
@@ -83,14 +80,14 @@ func (h *host) sample(parent context.Context, data Dataset, opts Options, sample
 	readCtx, readCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer readCancel()
 	if ctx.Err() != nil {
-		if err = h.request(readCtx, http.MethodPost, "/api/runs/"+sample.RunID+"/cancel", nil, nil); err != nil {
+		if err = h.Request(readCtx, http.MethodPost, "/api/runs/"+sample.RunID+"/cancel", nil, nil); err != nil {
 			return fmt.Errorf("cancel timed-out evaluation Run: %w", err)
 		}
-		if _, err = h.wait(readCtx, sample.RunID); err != nil {
+		if _, err = h.Wait(readCtx, sample.RunID); err != nil {
 			return err
 		}
 	}
-	if err = h.request(readCtx, http.MethodGet, "/api/runs/"+sample.RunID+"/replay", nil, &sample.Replay); err != nil {
+	if err = h.Request(readCtx, http.MethodGet, "/api/runs/"+sample.RunID+"/replay", nil, &sample.Replay); err != nil {
 		return err
 	}
 	run = sample.Replay.Run
@@ -98,7 +95,7 @@ func (h *host) sample(parent context.Context, data Dataset, opts Options, sample
 	sample.Usage = sample.Replay.UsageLedger.Totals
 	sample.ActiveMS = run.ActiveRuntimeMS
 	sample.WallMS = time.Since(started).Milliseconds()
-	sample.PhysicalRequests = h.guard.count() - before
+	sample.PhysicalRequests = h.Requests() - before
 	sample.StopReason = string(run.Status)
 	if commandErr != nil {
 		sample.Findings = append(sample.Findings, "command_or_observer_error")
@@ -121,7 +118,7 @@ func (h *host) sample(parent context.Context, data Dataset, opts Options, sample
 			}
 		}
 	}
-	stored, found, err := h.storage.GetRun(sample.RunID)
+	stored, found, err := h.Storage.GetRun(sample.RunID)
 	if err != nil {
 		return fmt.Errorf("load persisted evaluation snapshot: %w", err)
 	}
@@ -130,12 +127,12 @@ func (h *host) sample(parent context.Context, data Dataset, opts Options, sample
 	}
 	sample.BoundaryHash = commonBoundary(stored.RuntimeSnapshot, data, opts)
 	for _, step := range sample.Replay.Steps {
-		if (step.Role == "worker" || step.Role == "act") && step.AgentID != h.agentID {
+		if (step.Role == "worker" || step.Role == "act") && step.AgentID != h.AgentID {
 			sample.BoundaryHash = ""
 			sample.Findings = append(sample.Findings, "selected_worker_drift")
 		}
 	}
-	current, err := os.ReadFile(filepath.Join(h.directory, "source", "brief.md"))
+	current, err := os.ReadFile(filepath.Join(h.Directory, "source", "brief.md"))
 	if err != nil || string(current) != data.Material {
 		sample.BoundaryHash = ""
 		sample.ConstraintViolations++
@@ -160,55 +157,4 @@ func commonBoundary(snapshot *domain.RuntimeSnapshot, data Dataset, opts Options
 		Snapshot                         domain.RuntimeSnapshot
 		Material, Task, Approval, Sensor string
 	}{common, contentHash(data.Material), data.Task, opts.ApprovalPolicy, "sourced-json-and-durable-read-v1"})
-}
-
-func (h *host) wait(ctx context.Context, id string) (domain.Run, error) {
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		run, found, err := h.storage.GetRun(id)
-		if err != nil {
-			return run, err
-		}
-		if !found {
-			return run, fmt.Errorf("evaluation Run not found")
-		}
-		switch run.Status {
-		case domain.RunCompleted, domain.RunFailed, domain.RunFailedRecoverable, domain.RunCanceled, domain.RunWaitingForUser:
-			// Uncertain provider failures can intentionally retain reservations.
-			// Preserve them and stop suite admission; waiting cannot settle them.
-			return run, nil
-		}
-		select {
-		case <-ctx.Done():
-			return run, ctx.Err()
-		case <-ticker.C:
-		}
-	}
-}
-
-func (h *host) request(ctx context.Context, method, path string, input, output any) error {
-	b, err := json.Marshal(input)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, method, h.api.URL+path, bytes.NewReader(b))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("X-Workspace-ID", h.workspace)
-	req.Header.Set("Content-Type", "application/json")
-	response, err := h.api.Client().Do(req)
-	if err != nil {
-		return fmt.Errorf("evaluation HTTP command interrupted")
-	}
-	defer response.Body.Close()
-	if response.StatusCode >= 300 {
-		return fmt.Errorf("evaluation HTTP %s %s status=%d", method, path, response.StatusCode)
-	}
-	if output != nil {
-		return json.NewDecoder(io.LimitReader(response.Body, 16<<20)).Decode(output)
-	}
-	_, err = io.Copy(io.Discard, response.Body)
-	return err
 }

@@ -4,6 +4,11 @@ TOOL-013 adds task-level evidence to the existing Tool contract/fault harness.
 It reuses `artifact_search` and `artifact_read`: there is no missing Binding to
 justify another Tool, MCP adapter, runtime service, or frontend page.
 
+The default `artifact` profile below is unchanged. The additional
+[`file_skill` profile](file-skill-tasks.md) compares bound-method selection and
+real file outcomes through production Runtime and disposable Postgres, with an
+explicit quality/safety/cost rollout gate.
+
 The separate [filesystem write task slice](../tools/scoped-filesystem-writes.md#validation-and-rollback)
 retains `filesystem-write-evidence.json` from the production browser/Go gate:
 report creation/read-back, hash patch, conflict rejection and Skill authority

@@ -39,7 +39,7 @@ func Run(ctx context.Context, opts Options) (report Report, err error) {
 		return report, err
 	}
 	defer func() {
-		if cleanupErr := h.close(); cleanupErr != nil {
+		if cleanupErr := h.Close(); cleanupErr != nil {
 			report.Gate.Passed = false
 			report.Gate.Reasons = append(report.Gate.Reasons, "evaluation_cleanup_failed")
 			err = errors.Join(err, cleanupErr)
@@ -72,7 +72,7 @@ func Run(ctx context.Context, opts Options) (report Report, err error) {
 			if stop == "" && ctx.Err() != nil {
 				stop = "canceled"
 			}
-			if stop == "" && (h.guard.count() >= opts.MaxRequests || opts.MaxTokens-report.TotalTokens < opts.SampleTokens) {
+			if stop == "" && (h.Requests() >= opts.MaxRequests || opts.MaxTokens-report.TotalTokens < opts.SampleTokens) {
 				stop = "suite_budget_exhausted"
 			}
 			if stop != "" {
@@ -92,7 +92,7 @@ func Run(ctx context.Context, opts Options) (report Report, err error) {
 			report.Samples = append(report.Samples, s)
 		}
 	}
-	report.PhysicalRequests = h.guard.count()
+	report.PhysicalRequests = h.Requests()
 	summarize(&report)
 	report.CompletedAt = time.Now().UTC()
 	return report, err
