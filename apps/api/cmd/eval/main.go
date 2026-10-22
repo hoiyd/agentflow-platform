@@ -318,6 +318,8 @@ func runRAG(ctx context.Context, args []string, out, stderr io.Writer) int {
 func runTool(ctx context.Context, args []string, out, stderr io.Writer) int {
 	flags := flag.NewFlagSet("eval tool", flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	profile := flags.String("profile", "artifact", "task profile: artifact or file_skill")
+	fileOptions := fileSkillFlags(flags)
 	live := flags.Bool("live", false, "explicitly authorize model API requests")
 	model := flags.String("model", "", "required model ID")
 	base := flags.String("base-url", "https://api.openai.com/v1", "OpenAI-compatible base URL")
@@ -327,6 +329,27 @@ func runTool(ctx context.Context, args []string, out, stderr io.Writer) int {
 	timeout := flags.Duration("timeout", 60*time.Second, "deadline per sample, at most 5m")
 	enforce := flags.Bool("enforce", false, "exit 1 if any Tool-arm task fails verification")
 	if flags.Parse(args) != nil {
+		return 2
+	}
+	if *profile == "file_skill" {
+		return runFileSkill(ctx, out, stderr, fileOptions, *live, *model, *base, *trials, *calls, *tokens, *timeout, *enforce, flags.NArg())
+	}
+	if *profile != "artifact" {
+		fmt.Fprintln(stderr, "unknown Tool task profile")
+		return 2
+	}
+	// Reject a mistyped experiment instead of spending its budget on the
+	// default Artifact task while silently ignoring the supplied configuration.
+	misplaced := false
+	flags.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "profile", "live", "model", "base-url", "trials", "max-model-calls", "max-total-tokens", "timeout", "enforce":
+		default:
+			misplaced = true
+		}
+	})
+	if misplaced {
+		fmt.Fprintln(stderr, "file/Skill experiment flags require --profile file_skill")
 		return 2
 	}
 	providerCredential := credential.FromEnvironment("OPENAI_API_KEY")

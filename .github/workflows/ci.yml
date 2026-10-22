@@ -145,7 +145,8 @@ jobs:
   functional-browser:
     name: Browser to Go / Postgres
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Allow cold dependency installs, serial gates and evidence/cleanup to finish.
+    timeout-minutes: 25
     env:
       TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/agentflow_test?sslmode=disable
     services:
