@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -32,8 +33,23 @@ func browserMCPConfig(t *testing.T, cfg *config.Config, root string) http.Handle
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "MCP public documentation evidence."}}, StructuredContent: map[string]any{"title": "Public project guide"}}, nil
 	}
 	server.AddTool(definition, handler)
-	host := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, PropagateRequestCancellation: true}))
+	protocol := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true, PropagateRequestCancellation: true})
+	const workspaceToken = "fixture-workspace-mcp-token"
+	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if os.Getenv("AGENTFLOW_MCP_CONNECTION_TEST") == "1" && r.Header.Get("Authorization") != "Bearer "+workspaceToken {
+			w.WriteHeader(401)
+			return
+		}
+		protocol.ServeHTTP(w, r)
+	}))
 	t.Cleanup(host.Close)
+	if os.Getenv("AGENTFLOW_MCP_CONNECTION_TEST") == "1" {
+		cfg.MCPWorkspaceLocalOrigins = host.URL
+		t.Setenv("MCP_CREDENTIAL_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString([]byte(strings.Repeat("k", 32))))
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(map[string]any{"endpoint": host.URL, "token": workspaceToken, "calls": calls.Load()})
+		})
+	}
 	t.Setenv("MCP_BROWSER_MISSING_TOKEN", "")
 	cfg.MCPConfigPath = filepath.Join(root, "mcp.json")
 	data, _ := json.Marshal(map[string]any{"servers": []tool.MCPServerConfig{
@@ -73,15 +89,17 @@ func (f *browserProvider) mcpResponse(w http.ResponseWriter, input browserModelR
 	}
 	content, reason := "MCP evidence confirmed.", "stop"
 	var calls []any
+	toolName := "mcp_docs__read"
 	available, observations := false, 0
 	for _, definition := range input.Tools {
-		if definition.Function.Name == "mcp_docs__read" {
+		if definition.Function.Name == "mcp_docs__read" || strings.HasPrefix(definition.Function.Name, "mcp_w") && strings.HasSuffix(definition.Function.Name, "__read") {
 			available = true
+			toolName = definition.Function.Name
 		}
 	}
 	for position, message := range input.Messages {
 		for _, call := range message.ToolCalls {
-			if call.Function.Name != "mcp_docs__read" {
+			if call.Function.Name != toolName {
 				continue
 			}
 			next := position + 1
@@ -102,7 +120,7 @@ func (f *browserProvider) mcpResponse(w http.ResponseWriter, input browserModelR
 			id = "guide"
 		}
 		content, reason = "", "tool_calls"
-		calls = []any{map[string]any{"id": fmt.Sprintf("mcp-%d", observations), "type": "function", "function": map[string]string{"name": "mcp_docs__read", "arguments": fmt.Sprintf(`{"id":%q}`, id)}}}
+		calls = []any{map[string]any{"id": fmt.Sprintf("mcp-%d", observations), "type": "function", "function": map[string]string{"name": toolName, "arguments": fmt.Sprintf(`{"id":%q}`, id)}}}
 	} else if input.Stream && !available {
 		content = "Plan: read the public project guide and summarize the documentation."
 	} else if !input.Stream && strings.Contains(input.Messages[0].Content, "Decide stage") {

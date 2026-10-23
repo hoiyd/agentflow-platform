@@ -54,7 +54,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 		}
 	}
 	snapshot.ContextAssembly = contextassembly.NormalizeConfig(snapshot.ContextAssembly)
-	current, err := r.currentCatalog()
+	current, err := r.currentCatalog(run.WorkspaceID)
 	if err != nil {
 		return restoredRuntime{}, err
 	}

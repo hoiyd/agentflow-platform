@@ -50,7 +50,7 @@ func (h *Handler) listToolEffects(w http.ResponseWriter, r *http.Request) {
 			filtered = append(filtered, record)
 		}
 	}
-	catalog, err := h.tools.Catalog()
+	catalog, err := h.tools.CatalogForWorkspace(workspaceIDFromRequest(r))
 	if err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
@@ -92,7 +92,7 @@ func (h *Handler) reconcileToolEffect(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
 	}
-	catalog, err := h.tools.Catalog()
+	catalog, err := h.tools.CatalogForWorkspace(workspaceIDFromRequest(r))
 	if err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return

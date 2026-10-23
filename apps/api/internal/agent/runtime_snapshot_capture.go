@@ -16,7 +16,7 @@ import (
 )
 
 func (r *Runtime) captureRuntimeSnapshot(mode string, agent domain.Agent, candidates []domain.Agent) (domain.RuntimeSnapshot, error) {
-	catalog, err := r.currentCatalog()
+	catalog, err := r.currentCatalog(agent.WorkspaceID)
 	if err != nil {
 		return domain.RuntimeSnapshot{}, err
 	}
@@ -130,7 +130,7 @@ func (r *Runtime) ValidateAgentSkills(agent domain.Agent) error {
 	if err := domain.ValidateSkillPolicies(agent.Skills, agent.SkillPolicies); err != nil {
 		return &tool.ExecutionError{Code: "skill_invocation_invalid", Message: err.Error()}
 	}
-	catalog, err := r.currentCatalog()
+	catalog, err := r.currentCatalog(agent.WorkspaceID)
 	if err != nil {
 		return err
 	}
@@ -162,7 +162,7 @@ func (r *Runtime) ListSkills(workspaceID string) ([]domain.SkillMetadata, error)
 	if len(items) == 0 {
 		return items, nil
 	}
-	catalog, err := r.currentCatalog()
+	catalog, err := r.currentCatalog(workspaceID)
 	if err != nil {
 		return nil, err
 	}

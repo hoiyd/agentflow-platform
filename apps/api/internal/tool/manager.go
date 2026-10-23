@@ -8,12 +8,35 @@ import (
 )
 
 type Manager struct {
-	mu         sync.RWMutex
-	configPath string
-	config     Config
-	catalog    *Catalog
-	bindings   []Binding
-	modTime    time.Time
+	mu                sync.RWMutex
+	configPath        string
+	config            Config
+	catalog           *Catalog
+	bindings          []Binding
+	modTime           time.Time
+	workspaceResolver func(string, *Catalog) (*Catalog, error)
+}
+
+// SetWorkspaceResolver is composition-time wiring. Workspace bindings are never
+// published into the process-global Catalog by discovery or user commands.
+func (m *Manager) SetWorkspaceResolver(resolve func(string, *Catalog) (*Catalog, error)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.workspaceResolver = resolve
+}
+
+func (m *Manager) CatalogForWorkspace(workspace string) (*Catalog, error) {
+	base, err := m.Catalog()
+	if err != nil {
+		return nil, err
+	}
+	m.mu.RLock()
+	resolve := m.workspaceResolver
+	m.mu.RUnlock()
+	if resolve == nil || workspace == "" {
+		return base, nil
+	}
+	return resolve(workspace, base)
 }
 
 func NewManager(configPath string, bindings ...Binding) (*Manager, error) {

@@ -65,6 +65,7 @@ With a dedicated `TEST_DATABASE_URL`, run:
 
 ```bash
 AGENTFLOW_MCP_TEST=1 bash scripts/test-browser.sh mcp.spec.ts
+AGENTFLOW_MCP_CONNECTION_TEST=1 bash scripts/test-browser.sh mcp-connections.spec.ts
 ```
 
 The official SDK server fixture serves reviewed public text and structured JSON.
@@ -74,6 +75,13 @@ of a changed remote definition while a Run is awaiting continuation. It retains
 `mcp-evidence.json` and a desktop screenshot. The provider and MCP data are
 deterministic; this is not external availability or live-model quality evidence.
 See the [adapter contract](../tools/mcp-adapter.md) for the separate live read.
+
+The Workspace gate creates a connection through the browser, corrects an
+authentication failure, discovers/selects tools and binds an Agent. It checks
+all modes, reload persistence, secret-free Replay and disable/delete without
+losing historical evidence, retaining `workspace-mcp-evidence.json` and a desktop
+screenshot. Backend integration additionally checks cross-Workspace access,
+encrypted-token restart, unsafe endpoints, stale edits and frozen-call revocation.
 
 ## Tool Discovery
 

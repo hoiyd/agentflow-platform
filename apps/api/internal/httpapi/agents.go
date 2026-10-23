@@ -171,7 +171,7 @@ func (h *Handler) updateAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) validateWorkspaceAgentTools(r *http.Request, names []string) error {
-	service, err := h.currentToolCatalog()
+	service, err := h.currentToolCatalog(workspaceIDFromRequest(r))
 	if err != nil {
 		return err
 	}
@@ -187,9 +187,9 @@ func (h *Handler) validateWorkspaceAgentTools(r *http.Request, names []string) e
 	return nil
 }
 
-func (h *Handler) currentToolCatalog() (*tool.Catalog, error) {
+func (h *Handler) currentToolCatalog(workspace string) (*tool.Catalog, error) {
 	if h.tools != nil {
-		return h.tools.Catalog()
+		return h.tools.CatalogForWorkspace(workspace)
 	}
 	return tool.DefaultCatalog(), nil
 }

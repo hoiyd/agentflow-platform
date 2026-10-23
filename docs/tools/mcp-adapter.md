@@ -1,11 +1,63 @@
-# Trusted MCP adapter
+# MCP connections
 
-The first adapter targets DeepWiki public repository documentation over
-Streamable HTTP, using the [official MCP Go SDK v1.8.0](https://github.com/modelcontextprotocol/go-sdk/tree/v1.8.0).
-It supplies ordinary Tool Bindings governed by the shared Executor. Operators approve read-only tools locally;
-remote annotations, descriptions and returned links do not grant authority.
+Workspace owners manage remote Streamable HTTP services in **Tools → MCP connections**.
+The [official MCP Go SDK v1.8.0](https://github.com/modelcontextprotocol/go-sdk/tree/v1.8.0)
+adapts discovered tools into ordinary Bindings governed by the shared Executor.
+There is no default MCP service; DeepWiki is an optional smoke-test example.
 
-## Enable and use
+## Workspace connections
+
+1. Add a name, endpoint and authentication (none or Bearer). Save, then **Test**
+   to discover tools. Testing never grants tools or invokes `tools/call`.
+2. Edit the connection, select tools reviewed as read-only, and enable it.
+   An explicitly destructive remote hint rejects selection; other hints cannot
+   prove safety. The owner must review the service's actual behavior.
+3. Allow the resulting tools in **Tool catalog**, then bind them to an owned
+   Agent in Configure. Names are `mcp_w<connection-id>__<remote-name>`; changing
+   a connection's display name does not change tool identity.
+
+Connections belong to the selected Workspace. API reads/writes, discovery,
+Agent choices and effective catalogs remain scoped; operator-managed global
+connections are not editable here. Workspace grants and Agent bindings remain
+separate from enabling a connection. Selected tools receive exact, locally
+generated logged policy rules; an explicit operator rule still takes precedence.
+
+`MCP_CREDENTIAL_ENCRYPTION_KEY` must contain a base64-encoded random 32-byte key
+before saving Bearer tokens (for example, generate one with `openssl rand -base64 32`).
+Keep the key outside the database and back it up separately. AES-GCM binds each
+encrypted token to its Workspace and endpoint. APIs return only
+`credential_configured`; tokens never enter prompts, Snapshots, traces or captures.
+Without the key, unauthenticated connections work; existing encrypted dependencies
+remain unavailable rather than blocking unrelated tools. Key replacement requires
+re-entering stored tokens; this slice does not implement key rotation tooling.
+
+User URLs require public HTTPS. `MCP_WORKSPACE_LOCAL_ORIGINS` is an operator-only,
+comma-separated list of exact origins for approved private/self-hosted services.
+An entered literal IP is not a private-network grant. DNS is checked at dialing,
+proxies and redirects are denied, and credentials only reach the configured endpoint.
+Private-origin exceptions use literal private IPs or `localhost`, following the
+shared egress policy; DNS names resolving into private networks remain denied.
+
+Connection changes take effect without restarting the API; operator key/origin
+configuration requires a restart. URL/authentication/token changes
+invalidate discovery: save disabled, re-test, review and re-enable. Updates use the
+last observed `revision`; stale edits or discovery responses return 409. Schema
+changes require a new Run; old Resume never substitutes newly discovered definitions.
+Current connection/Workspace authorization is checked before each actual tool call,
+including old Bindings. Disabling or soft-deleting blocks subsequent calls; it cannot
+undo an already dispatched request. Delete erases the token and discovered payload,
+but retains historical Run evidence. At most 8 active connection records and
+64 selected tools per connection are allowed; connection tests have 4 shared slots.
+
+The first Workspace slice excludes stdio/commands, OAuth, arbitrary headers,
+query-string credentials, write tools, plugins/installation and MCP Apps. A remote
+connection cannot launch a process on the browser user's computer.
+
+## Optional operator smoke test: DeepWiki
+
+This opt-in example tests a public endpoint without a model key. It is not a
+startup prerequisite, a built-in provider, or a default Workspace connection.
+The owner-facing flow above does not require an operator JSON file.
 
 1. Set `MCP_CONFIG_PATH=config/mcp.deepwiki.json` in the API environment. The
    [example](../../apps/api/config/mcp.deepwiki.json) permits only
@@ -48,19 +100,20 @@ remote annotations, descriptions and returned links do not grant authority.
 An MCP server entry accepts `id`, `url`, `read_only_tools`, optional
 `bearer_token_environment`, and `required` (default false). Server IDs are
 lowercase letters/digits/hyphens, start with a letter, and have at most 20
-characters. Remote names accept letters/digits/underscore/hyphen up to 38
+characters; `w<decimal-id>` is reserved for Workspace connections. Remote names accept letters/digits/underscore/hyphen up to 38
 characters; the combined model name stays within 64 characters. A service file
-or credential change requires restart; remote definitions are rediscovered.
+or credential change in this operator file requires restart; remote definitions are rediscovered.
 Bearer credentials are loaded only from the named environment variable, granted
 as logical `mcp_<server>` scopes, and sent only to the exact configured endpoint.
 Authenticated servers need that same scope in their local policy rule.
 
 ## Execution and recovery
 
-Discovery runs at startup in the background and every 30 seconds. Explicit
+Operator-file discovery runs at startup in the background and every 30 seconds. Explicit
 `required: true` servers are checked before startup succeeds. Optional failures
 leave unavailable placeholders so ordinary Chat starts without a remote wait.
 Connection success alone does not imply an authorized, valid or available Tool.
+Workspace discovery is explicit through **Test**, not this background loop.
 
 Each call opens a bounded session, lists tools, verifies its captured definition,
 calls once, and closes. The fingerprint includes the destination, credential
@@ -70,8 +123,10 @@ atomically publishes a new Catalog; existing Runs keep their prior definitions.
 Resume uses the existing definition comparison and current availability checks.
 Rejected restoration reports the existing Snapshot-unavailable failure as a
 conflict and preserves the waiting/recovery point instead of failing the Run.
-No SQL columns or Snapshot version bump are needed: source metadata is optional
-JSON and omission preserves older built-in definition hashes.
+Tool source metadata still uses existing Snapshot JSON, without a Snapshot
+version bump; omission preserves older built-in definition hashes. Workspace
+connection intent and encrypted credentials live separately in `mcp_connections`,
+created idempotently at startup; existing Run data is not migrated or rewritten.
 
 The shared Executor still owns Schema/Policy/Workspace/Agent checks, Run Budget,
 Progress Guard, result Artifacts and typed events. Successful results contain

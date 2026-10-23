@@ -30,6 +30,7 @@ type MCPServerConfig struct {
 }
 
 var mcpServerID = regexp.MustCompile(`^[a-z][a-z0-9-]{0,19}$`)
+var mcpWorkspaceServerID = regexp.MustCompile(`^w[1-9][0-9]{0,18}$`)
 var mcpRemoteName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,38}$`)
 var mcpEnvironmentName = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 
@@ -62,7 +63,7 @@ func loadMCPConfig(path string) ([]MCPServerConfig, error) {
 	}
 	seen, total := map[string]bool{}, 0
 	for _, server := range cfg.Servers {
-		if !mcpServerID.MatchString(server.ID) || seen[server.ID] {
+		if !mcpServerID.MatchString(server.ID) || mcpWorkspaceServerID.MatchString(server.ID) || seen[server.ID] {
 			return nil, fmt.Errorf("invalid or duplicate MCP server ID")
 		}
 		seen[server.ID] = true

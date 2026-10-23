@@ -19,10 +19,12 @@ import (
 )
 
 type mcpEndpoint struct {
-	config    MCPServerConfig
-	key       credential.Value
-	http      *http.Client
-	transport http.RoundTripper
+	config              MCPServerConfig
+	key                 credential.Value
+	http                *http.Client
+	transport           http.RoundTripper
+	credentialReference string
+	authorize           func(context.Context, string) error
 }
 
 type mcpAuthenticationError struct{ status int }

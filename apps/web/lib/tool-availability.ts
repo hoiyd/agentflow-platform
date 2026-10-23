@@ -16,7 +16,10 @@ const labels: Record<string, string> = {
   mcp_schema_unsupported: "MCP schema unsupported",
   mcp_tool_missing: "Tool no longer offered by MCP server",
   mcp_definition_changed: "MCP definition changed; start a new Run",
-  mcp_adapter_closed: "MCP adapter stopped"
+  mcp_adapter_closed: "MCP adapter stopped",
+  credential_or_endpoint_unavailable: "MCP credential or endpoint unavailable; operator configuration required",
+  mcp_connection_unavailable: "MCP connection disabled, deleted or unavailable",
+  mcp_workspace_unavailable: "MCP Workspace access is unavailable"
 };
 
 export function toolAvailabilityLabel(tool: Pick<ToolInfo, "excluded_reason" | "unavailable_reason">) {

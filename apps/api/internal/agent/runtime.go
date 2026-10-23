@@ -192,7 +192,7 @@ func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 	if err := runtime.compileHarnessBindings(); err != nil {
 		return nil, fmt.Errorf("compile harness Tools: %w", err)
 	}
-	if _, err := runtime.currentCatalog(); err != nil {
+	if _, err := runtime.currentCatalog(""); err != nil {
 		return nil, fmt.Errorf("assemble runtime Tools: %w", err)
 	}
 	runtime.turnEngine = turnpkg.NewEngine(runtimeTurnModel{runtime: runtime})

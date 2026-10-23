@@ -29,6 +29,16 @@ type transport struct {
 // Local/private access requires an explicit URL with a literal IP or localhost.
 // Malformed grants authorize nothing. Proxies and redirects must not bypass it.
 func NewTransport(allowed []string) http.RoundTripper {
+	return newTransport(allowed, true)
+}
+
+// NewPublicTransport never treats a user-entered literal IP as a private-network
+// grant. DNS validation and literal dialing remain identical to operator egress.
+func NewPublicTransport(allowed []string) http.RoundTripper {
+	return newTransport(allowed, false)
+}
+
+func newTransport(allowed []string, allowPrivate bool) http.RoundTripper {
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	t := &transport{
 		origins: make(map[string]bool), local: make(map[string]bool),
@@ -55,7 +65,7 @@ func NewTransport(allowed []string) http.RoundTripper {
 			continue
 		}
 		t.origins[key] = true
-		t.local[strings.TrimPrefix(key, u.Scheme+"://")] = local
+		t.local[strings.TrimPrefix(key, u.Scheme+"://")] = local && allowPrivate
 	}
 	t.http = &http.Transport{
 		DialContext: t.dial, TLSHandshakeTimeout: 10 * time.Second,

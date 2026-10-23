@@ -31,7 +31,7 @@ or performance benchmarks.
 
 Tools are callable capabilities; Skills are trusted, versioned instructions
 loaded progressively. Skills cannot grant themselves Tool or credential access.
-See [Tool security](docs/tools/tool-security-policy.md), [trusted MCP tools](docs/tools/mcp-adapter.md), and [Skills](docs/tools/trusted-skills.md).
+See [Tool security](docs/tools/tool-security-policy.md), [Workspace MCP connections](docs/tools/mcp-adapter.md), and [Skills](docs/tools/trusted-skills.md).
 
 ## Architecture
 

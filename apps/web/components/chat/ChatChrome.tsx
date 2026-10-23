@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Activity,
   BrainCircuit,
@@ -12,6 +12,7 @@ import {
   PanelLeftOpen,
   Pencil,
   Plus,
+  Plug,
   ShieldCheck,
   Square,
   Trash2,
@@ -22,6 +23,7 @@ import {
 import type { Conversation, ToolInfo } from "../../lib/api";
 import { toolAvailabilityLabel } from "../../lib/tool-availability";
 import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
+import { MCPConnectionsPanel } from "../tools/MCPConnectionsPanel";
 
 export type ChatView = "chat" | "tools" | "knowledge" | "memory" | "attention";
 export type APIConnectionStatus = "checking" | "connected" | "unavailable";
@@ -321,10 +323,16 @@ function RunStatus({ runState }: { runState: VisibleRunState }) {
   );
 }
 
-export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: string; onToggle: (tool: ToolInfo) => void; tools: ToolInfo[]; updatingTool: string }) {
+export function ToolsPanel({ error, onToggle, tools, updatingTool, onCatalogChanged }: { error: string; onToggle: (tool: ToolInfo) => void; tools: ToolInfo[]; updatingTool: string; onCatalogChanged: () => void }) {
   const readOnly = useWorkspaceReadOnly();
+  const [view, setView] = useState<"catalog" | "connections">("catalog");
   return (
     <section className="tools-panel">
+      <nav className="tools-tabs" aria-label="Tools views">
+        <button type="button" aria-current={view === "catalog" ? "page" : undefined} onClick={() => setView("catalog")}><Wrench size={16} />Tool catalog</button>
+        <button type="button" aria-current={view === "connections" ? "page" : undefined} onClick={() => setView("connections")}><Plug size={16} />MCP connections</button>
+      </nav>
+      {view === "connections" ? <MCPConnectionsPanel onCatalogChanged={onCatalogChanged} /> : <>
       {error ? <div className="error">{error}</div> : null}
       <div className="tools-list">
         {tools.map((tool) => (
@@ -350,6 +358,7 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool }: { error: st
           </article>
         ))}
       </div>
+      </>}
     </section>
   );
 }

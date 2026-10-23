@@ -895,10 +895,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mcp/connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description List only the selected Workspace's remote MCP connections. Never returns credentials. */
+        get: operations["listMCPConnections"];
+        put?: never;
+        /** @description Save a Workspace-owned Streamable HTTP connection. Discovery and tool authorization are separate commands. */
+        post: operations["createMCPConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mcp/connections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["MCPConnectionId"];
+            };
+            cookie?: never;
+        };
+        get: operations["getMCPConnection"];
+        put?: never;
+        post?: never;
+        /** @description Soft-delete connection and erase its stored credential; preserve historical Run evidence. */
+        delete: operations["deleteMCPConnection"];
+        options?: never;
+        head?: never;
+        /** @description Update with the last observed revision. Omission preserves a Bearer token; switching authentication to none erases it. URL or credential changes invalidate discovery. */
+        patch: operations["updateMCPConnection"];
+        trace?: never;
+    };
+    "/api/mcp/connections/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["MCPConnectionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Bounded connection and schema discovery; returns status, not tool grants. Failed tests withdraw readiness. Concurrent edits reject stale results. */
+        post: operations["testMCPConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        MCPConnectionRequest: {
+            name: string;
+            url: string;
+            /** @enum {string} */
+            auth_mode: "none" | "bearer";
+            /** @description Omit to retain a Bearer token; switching auth_mode to none erases it. Empty is valid only with none. Never returned or captured. */
+            bearer_token?: string;
+            enabled: boolean;
+            read_only_tools: string[];
+            /**
+             * Format: int64
+             * @description Required for updates; optimistic concurrency, not a protocol version.
+             */
+            revision?: number;
+        };
+        MCPConnection: {
+            /** @description BIGINT primary key serialized as a decimal string. */
+            id: string;
+            workspace_id: string;
+            name: string;
+            url: string;
+            /** @enum {string} */
+            auth_mode: "none" | "bearer";
+            enabled: boolean;
+            read_only_tools: string[];
+            /** Format: int64 */
+            revision: number;
+            /** @description configured, discovered, or stable MCP discovery failure reason; enabled is independent. */
+            status: string;
+            credential_configured: boolean;
+            tools: components["schemas"]["MCPDiscoveredTool"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MCPDiscoveredTool: {
+            name: string;
+            binding_name: string;
+            description: string;
+            supported: boolean;
+            reason?: string;
+        };
         /** @description Source matchers are ANDed; at least one matcher is required. */
         RAGGoldenSource: {
             document_id?: string;
@@ -2347,6 +2447,15 @@ export interface components {
         ChatStreamEvent: components["schemas"]["ConversationChunk"] | components["schemas"]["RunStateChunk"] | components["schemas"]["RunProgressChunk"] | components["schemas"]["ModelDeltaChunk"] | components["schemas"]["ModelReasoningChunk"] | components["schemas"]["ToolProgressChunk"] | components["schemas"]["StageStateChunk"] | components["schemas"]["DoneChunk"] | components["schemas"]["ErrorChunk"] | components["schemas"]["RunEvent"];
     };
     responses: {
+        /** @description Required service or credential configuration is unavailable. */
+        ServiceUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Invalid request. */
         BadRequest: {
             headers: {
@@ -2395,6 +2504,7 @@ export interface components {
         };
     };
     parameters: {
+        MCPConnectionId: string;
         ConversationId: string;
         AgentId: string;
         RunId: string;
@@ -3978,6 +4088,152 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listMCPConnections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace connections. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPConnection"][];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createMCPConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved connection; no secret values. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPConnection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getMCPConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["MCPConnectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owned connection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPConnection"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteMCPConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["MCPConnectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateMCPConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["MCPConnectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCPConnectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved connection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPConnection"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    testMCPConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["MCPConnectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discovery result, including stable authentication or connection failure status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPConnection"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
 }

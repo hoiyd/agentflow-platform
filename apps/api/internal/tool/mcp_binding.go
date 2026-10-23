@@ -77,10 +77,11 @@ func (a *MCPAdapter) bindRemote(endpoint *mcpEndpoint, discovered mcpDiscoveredT
 	// Include the local destination and credential reference as well as both
 	// schemas: reconnecting or changing output contracts cannot upgrade old Runs.
 	encoded, err := json.Marshal(struct {
-		Server          MCPServerConfig
-		Tool            *mcp.Tool
-		ProtocolVersion string
-	}{endpoint.config, remote, discovered.ProtocolVersion})
+		Server              MCPServerConfig
+		Tool                *mcp.Tool
+		ProtocolVersion     string
+		CredentialReference string `json:",omitempty"`
+	}{endpoint.config, remote, discovered.ProtocolVersion, endpoint.credentialReference})
 	if err != nil {
 		return Binding{}, err
 	}
@@ -119,6 +120,11 @@ func (a *MCPAdapter) bindRemote(endpoint *mcpEndpoint, discovered mcpDiscoveredT
 			currentBinding, err := a.bindRemote(endpoint, current)
 			if err != nil || currentBinding.Descriptor.Source.DefinitionHash != hash {
 				return nil, executionError(ErrorExecutionUnavailable, "MCP tool definition changed; start a new Run after discovery", nil)
+			}
+			if endpoint.authorize != nil {
+				if err := endpoint.authorize(ctx, remote.Name); err != nil {
+					return nil, err
+				}
 			}
 			result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: remote.Name, Arguments: args})
 			if err != nil {

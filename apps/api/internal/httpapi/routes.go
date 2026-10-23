@@ -12,6 +12,7 @@ func (h *Handler) registerRoutes(mux *http.ServeMux) {
 	h.registerAgentRoutes(mux)
 	h.registerRunRoutes(mux)
 	h.registerToolRoutes(mux)
+	h.registerMCPConnectionRoutes(mux)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusNotFound, "route not found")

@@ -23,6 +23,7 @@ import (
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 	"agentflow-platform/apps/api/internal/inference/routing"
 	"agentflow-platform/apps/api/internal/knowledge"
+	"agentflow-platform/apps/api/internal/mcpconnection"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/recovery"
@@ -47,6 +48,7 @@ type applicationDependencies struct {
 	sandboxRunner  *sandbox.Runner
 	telemetry      *telemetry.Observer
 	mcpAdapter     *tool.MCPAdapter
+	mcpConnections *mcpconnection.Service
 }
 
 func buildDependencies(cfg config.Config, options applicationOptions) (applicationDependencies, error) {
@@ -204,6 +206,17 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
 	}
+	// Keep the encryption key out of serializable application configuration.
+	mcpConnections, err := mcpconnection.New(workspaceStore, mcpconnection.Config{EncryptionKey: credential.FromEnvironment("MCP_CREDENTIAL_ENCRYPTION_KEY").Reveal(), LocalOrigins: splitCSV(cfg.MCPWorkspaceLocalOrigins)})
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("configure Workspace MCP connections: %w", err)
+	}
+	defer func() {
+		if cleanupStore {
+			mcpConnections.Close()
+		}
+	}()
+	toolManager.SetWorkspaceResolver(mcpConnections.Catalog)
 	verifierRegistry := verification.NewRegistry(verification.Options{
 		AllowHostCommands:       cfg.AuthMode == "local",
 		WorkspaceRoot:           cfg.VerificationWorkspaceRoot,
@@ -312,6 +325,7 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
 		Identity:       identityManager,
 		Workspaces:     workspaceStore,
+		MCPConnections: mcpConnections,
 	})
 	if err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -326,10 +340,11 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 	cleanupStore = false
 	return applicationDependencies{
 		store: appStore, handler: handler, memoryProvider: memoryProvider,
-		sandboxRunner: sandboxRunner,
-		telemetry:     traceObserver,
-		mcpAdapter:    mcpAdapter,
-		runController: runController, requestLimiter: requestLimiter,
+		sandboxRunner:  sandboxRunner,
+		telemetry:      traceObserver,
+		mcpAdapter:     mcpAdapter,
+		mcpConnections: mcpConnections,
+		runController:  runController, requestLimiter: requestLimiter,
 	}, nil
 }
 

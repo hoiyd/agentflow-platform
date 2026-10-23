@@ -107,8 +107,10 @@ func TestBrowserServer(t *testing.T) {
 	cfg.SandboxEnabled = false
 	cfg.FilesystemRootsPath = ""
 	cfg.MCPConfigPath = ""
+	cfg.MCPWorkspaceLocalOrigins = ""
+	t.Setenv("MCP_CREDENTIAL_ENCRYPTION_KEY", "")
 	var mcpControls http.Handler
-	if os.Getenv("AGENTFLOW_MCP_TEST") == "1" {
+	if os.Getenv("AGENTFLOW_MCP_TEST") == "1" || os.Getenv("AGENTFLOW_MCP_CONNECTION_TEST") == "1" {
 		mcpControls = browserMCPConfig(t, &cfg, root)
 	}
 	if os.Getenv("AGENTFLOW_FILESYSTEM_TEST") == "1" || os.Getenv("AGENTFLOW_FILESYSTEM_WRITE_TEST") == "1" || os.Getenv("AGENTFLOW_PLANNING_TEST") == "1" {

@@ -215,6 +215,7 @@ func TestMCPAdapterCancellation(t *testing.T) {
 
 func TestMCPAdapterRejectsInvalidConfiguration(t *testing.T) {
 	for _, servers := range [][]MCPServerConfig{
+		{{ID: "w1", URL: "https://example.com/mcp", ReadOnlyTools: []string{"read"}}},
 		{{ID: "docs", URL: "http://example.com/mcp", ReadOnlyTools: []string{"read"}}},
 		{{ID: "docs", URL: "https://example.com/mcp?key=secret", ReadOnlyTools: []string{"read"}}},
 		{{ID: "docs", URL: "https://example.com/mcp", ReadOnlyTools: []string{"read"}}, {ID: "docs", URL: "https://example.com/mcp", ReadOnlyTools: []string{"read"}}},

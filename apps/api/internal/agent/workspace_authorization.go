@@ -14,7 +14,11 @@ import (
 
 // Catalog includes runtime-owned bindings as well as operator-installed ones.
 // HTTP and runtime use this one catalog to explain and enforce availability.
-func (r *Runtime) Catalog() (*tool.Catalog, error) { return r.currentCatalog() }
+func (r *Runtime) Catalog() (*tool.Catalog, error) { return r.currentCatalog("") }
+
+func (r *Runtime) CatalogForWorkspace(workspace string) (*tool.Catalog, error) {
+	return r.currentCatalog(workspace)
+}
 
 func (r *Runtime) currentRunAgent(run domain.Run, id string) (domain.Agent, error) {
 	if err := r.store.CheckWorkspaceExecution(run.WorkspaceID); err != nil {
@@ -53,7 +57,7 @@ func (r *Runtime) authorizeTool(runID string, agent domain.Agent) func(context.C
 		if !slices.Contains(currentTools, call.Tool) {
 			return &availability.DeniedError{Reason: "agent_disabled"}
 		}
-		catalog, err := r.currentCatalog()
+		catalog, err := r.currentCatalog(run.WorkspaceID)
 		if err != nil {
 			return err
 		}
