@@ -59,6 +59,14 @@ Each CI composition profile starts with a fresh disposable database. Cases must
 declare their owned Agent and required Tools explicitly; neither a preceding
 profile nor another case supplies those prerequisites.
 
+## Headless Run Client
+
+The [CLI functional gate](../runtime/headless-run-client.md#verification) operates
+the same production HTTP/SSE API and Postgres without a browser. Its retained
+report covers file/Skill execution, accepted and rejected machine results,
+authorization, approval pause, detached execution, SIGINT, cancellation and
+restart reads. The owning document also lists the controlled wire-fault cases.
+
 ## Trusted MCP
 
 With a dedicated `TEST_DATABASE_URL`, run:

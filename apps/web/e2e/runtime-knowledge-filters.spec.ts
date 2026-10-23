@@ -147,14 +147,25 @@ test("Knowledge drafts stay in their owning Workspace", async ({ page }, testInf
   expect(created.status()).toBe(201);
   await page.reload();
   await page.getByRole("button", { name: /^Workspace: / }).click();
-  await page.getByRole("option", { name, exact: true }).click();
+  // Workspace selection reloads the document. Never open a dialog on the old
+  // page while its replacement is still loading.
+  await Promise.all([
+    page.waitForEvent("domcontentloaded"),
+    page.getByRole("option", { name, exact: true }).click()
+  ]);
   await expect(page.getByRole("button", { name: `Workspace: ${name}`, exact: true })).toBeVisible();
+  await expect(page.getByText("API connected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Knowledge scope for new runs", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Knowledge product", exact: true })).toHaveValue("");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Knowledge scope for new runs", exact: true })).toBeFocused();
   await page.getByRole("button", { name: /^Workspace: / }).click();
-  await page.getByRole("option", { name: original!.replace(/^Workspace: /, ""), exact: true }).click();
+  await Promise.all([
+    page.waitForEvent("domcontentloaded"),
+    page.getByRole("option", { name: original!.replace(/^Workspace: /, ""), exact: true }).click()
+  ]);
+  await expect(page.getByRole("button", { name: original!, exact: true })).toBeVisible();
+  await expect(page.getByText("API connected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Knowledge scope for new runs", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Knowledge product", exact: true })).toHaveValue("Workspace-local product");
   await testInfo.attach("workspace-scope-evidence.json", { body: JSON.stringify({ original_workspace: workspace, isolated_workspace: (await created.json()).id, restored_product: "Workspace-local product" }), contentType: "application/json" });

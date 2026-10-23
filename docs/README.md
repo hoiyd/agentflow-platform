@@ -40,6 +40,7 @@ These are implementation and operating contracts, not a required reading list.
 
 - [Agent profiles](runtime/agent-profiles.md), [selection](runtime/agent-selection.md), [model routes](runtime/model-routing.md), [provider reasoning](runtime/provider-reasoning.md)
 - [Run Budget / Usage Ledger](runtime/run-budget.md), [read-only planning](runtime/read-only-planning.md)
+- [Headless Run CLI](runtime/headless-run-client.md)
 - [Memory](context/memory-management.md), [request reconstruction / Capture](context/model-request-reconstruction.md)
 - [Clarification](runtime/structured-clarification.md), [durable steering](runtime/durable-inputs.md), [partial output](runtime/durable-partial-output.md)
 - [Event catalog](runtime/event-catalog.md), [projections/invariants](runtime/event-projections-runtime-invariants.md), [failures](runtime/failure-handling.md), [operator attention](runtime/operator-attention.md)
