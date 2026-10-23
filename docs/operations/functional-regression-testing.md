@@ -67,6 +67,13 @@ report covers file/Skill execution, accepted and rejected machine results,
 authorization, approval pause, detached execution, SIGINT, cancellation and
 restart reads. The owning document also lists the controlled wire-fault cases.
 
+## Web Fetch
+
+The focused [Web fetch gate](../tools/web-fetch.md#verification) checks owned
+configuration, scoped rejection and Replay reload in all modes. Successful
+search/fetch/Artifact acquisition and HTTP/Dial failures have a separate backend
+integration boundary; neither fixture claims live-model quality.
+
 ## Trusted MCP
 
 With a dedicated `TEST_DATABASE_URL`, run:

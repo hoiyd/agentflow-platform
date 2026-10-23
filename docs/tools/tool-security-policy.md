@@ -107,8 +107,9 @@ the following unless an exact operator-owned Tool rule grants them:
 
 The built-in `update_task_state` Tool has an explicit `allow_and_log` rule for
 its version-checked Conversation write. New default Tool configs also include
-a narrow `allow` rule for `web_search`, which still requires a Tavily credential
-and an Agent allowlist entry. The task-state audit event must be persisted
+narrow `allow` rules for `web_search` and [Run-scoped Web fetch](web-fetch.md).
+Search still requires a Tavily credential; both require Workspace grants and
+Agent allowlist entries. The task-state audit event must be persisted
 before the handler executes. Irreversible calls cannot use plain `allow`; they need at
 least explicit `allow_and_log` authorization. `ask` and `human_only` are
 reserved in the first version and return a typed `approval_required` result

@@ -12,5 +12,6 @@ func builtinTools() []builtinTool {
 		{binding: CalculatorTool(), defaultEnabled: true},
 		{binding: CurrentTimeTool(), defaultEnabled: true},
 		{binding: WebSearchTool(nil), defaultEnabled: true, defaultRuleID: "builtin-web-search-read", runtimeInjectable: true},
+		{binding: WebFetchTool(nil), defaultEnabled: true, defaultRuleID: "builtin-web-fetch-read", runtimeInjectable: true},
 	}
 }

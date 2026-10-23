@@ -59,7 +59,7 @@ These are implementation and operating contracts, not a required reading list.
 <summary>Tools and Skills</summary>
 
 - [Discovery](tools/tool-discovery.md), [result Artifacts](tools/tool-result-artifacts.md), [Progress Guard](tools/tool-progress-guard.md), [execution progress](tools/tool-execution-progress.md)
-- [Knowledge bindings](tools/scoped-knowledge-tools.md), [Web citations](tools/web-source-citations.md)
+- [Knowledge bindings](tools/scoped-knowledge-tools.md), [Web fetch](tools/web-fetch.md), [Web citations](tools/web-source-citations.md)
 - [Workspace MCP connections and operator adapter](tools/mcp-adapter.md)
 - [Scoped filesystem reads](tools/scoped-filesystem.md), [managed writes](tools/scoped-filesystem-writes.md)
 - [Trusted Skills](tools/trusted-skills.md), [invocation/readiness](tools/skill-invocation.md), [installation](tools/skill-installation.md), [Checker](tools/skill-checker.md)

@@ -78,13 +78,13 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	for index := range messages {
 		transformation := "original"
 		originalBytes := messageContentBytes(messages[index])
-		artifactIDs := toolArtifactIDs(messages[index])
-		if len(artifactIDs) > 0 {
+		artifactIDs, artifactPreview := toolArtifactReferences(messages[index])
+		if artifactPreview {
 			transformation = "tool_result_artifact_preview"
 		}
 		if (messages[index].Source == SourceToolResult || messages[index].Role == "tool") && EstimateTokens(messages[index].Content) > config.ToolResultMaxTokens {
 			messages[index].Content = compactText(messages[index].Content, config.ToolResultMaxTokens)
-			if len(artifactIDs) > 0 {
+			if artifactPreview {
 				transformation = "tool_result_artifact_preview_compacted"
 			} else {
 				transformation = "tool_result_compacted"
@@ -206,22 +206,25 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	return Pack{Messages: packedMessages, Manifest: manifest}, nil
 }
 
-func toolArtifactIDs(message Message) []string {
+func toolArtifactReferences(message Message) ([]string, bool) {
 	if message.Source != SourceToolResult && message.Role != "tool" {
-		return nil
+		return nil, false
 	}
 	var envelope struct {
-		Artifact *struct {
+		Truncated bool `json:"truncated"`
+		Artifact  *struct {
 			ID string `json:"id"`
 		} `json:"artifact"`
 		Result struct {
-			Artifact *struct {
+			Preview   *string `json:"preview"`
+			Truncated bool    `json:"truncated"`
+			Artifact  *struct {
 				ID string `json:"id"`
 			} `json:"artifact"`
 		} `json:"result"`
 	}
 	if json.Unmarshal([]byte(message.Content), &envelope) != nil {
-		return nil
+		return nil, false
 	}
 	ids := make([]string, 0, 2)
 	if envelope.Artifact != nil && strings.TrimSpace(envelope.Artifact.ID) != "" {
@@ -231,7 +234,9 @@ func toolArtifactIDs(message Message) []string {
 		(len(ids) == 0 || ids[0] != envelope.Result.Artifact.ID) {
 		ids = append(ids, envelope.Result.Artifact.ID)
 	}
-	return ids
+	// artifact_read also carries Artifact metadata. A reference alone does not
+	// mean that its delivered content was replaced with a preview.
+	return ids, len(ids) > 0 && (envelope.Truncated || envelope.Result.Truncated || envelope.Result.Preview != nil)
 }
 
 func suppressRetrievedHistoryDuplicates(messages []candidate, retrieved []candidate) {
