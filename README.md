@@ -85,6 +85,9 @@ fail startup; there is no silent simulated-answer fallback. Ctrl+C stops both.
 Use `make dev` next time. [Local setup](docs/guides/local-setup.md) covers ports,
 embeddings, authentication, and manual startup.
 
+Without the browser, use the [Headless Run CLI](docs/runtime/headless-run-client.md)
+to submit, observe, cancel and export the same authorized Runs.
+
 ## Reproduce the Evidence
 
 ```bash

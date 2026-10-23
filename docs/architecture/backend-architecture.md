@@ -21,6 +21,7 @@ trade-offs; [terms](terms.md) defines Run, Stage, Turn, and Snapshot.
 | Responsibility | Code entry point |
 | --- | --- |
 | Composition, lifecycle and dependency injection | [`app/`](../../apps/api/app), [`cmd/server/`](../../apps/api/cmd/server) |
+| Headless HTTP/SSE consumer (no Runtime/Store dependency) | [`cmd/agentflow/`](../../apps/api/cmd/agentflow), [`internal/runclient/`](../../apps/api/internal/runclient) |
 | Start/Continue/Resume and final completion | [`app/runcommands/`](../../apps/api/app/runcommands), [`app/runcompletion/`](../../apps/api/app/runcompletion) |
 | HTTP/SSE and scoped service interfaces | [`internal/httpapi/`](../../apps/api/internal/httpapi) |
 | Mode orchestration, Turn Engine, model/Tool rounds | [`agent/`](../../apps/api/internal/agent), [`agent/turn/`](../../apps/api/internal/agent/turn), [`agent/toolloop/`](../../apps/api/internal/agent/toolloop) |

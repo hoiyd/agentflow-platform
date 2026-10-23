@@ -1,0 +1,28 @@
+{
+  "agent_id": "<owned-agent-id>",
+  "mode": "single",
+  "message": "Read report.md in the authorized project root. Write a concise report to the managed output root as headless-report.md without overwriting an existing file. Read it back to verify the saved content. Return a JSON object containing summary and artifact_path. Report uncertainty; do not invent facts or claim a file was saved if a Tool failed.",
+  "completion_contract": {
+    "subject_type": "run_output",
+    "output": { "mode": "local", "verifier_id": "report" },
+    "verifiers": [
+      {
+        "id": "report",
+        "type": "json_schema",
+        "required": true,
+        "config": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "summary": { "type": "string" },
+              "artifact_path": { "type": "string" }
+            },
+            "required": ["summary", "artifact_path"],
+            "additionalProperties": false
+          }
+        }
+      }
+    ],
+    "policy": { "mode": "all_must_pass", "max_attempts": 1, "on_exhausted": "fail" }
+  }
+}
