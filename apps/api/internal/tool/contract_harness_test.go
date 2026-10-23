@@ -62,6 +62,22 @@ func TestDefaultBindingsSatisfyContractHarness(t *testing.T) {
 			},
 			ValidateResult: validateWebSearchResult,
 		},
+		"web_fetch": {
+			ValidArguments: json.RawMessage(`{"source_id":"W1"}`),
+			GoodResult:     map[string]any{"source_id": "W1", "content": "Read body", "content_hash": "sha256:fixture", "status": "read", "trust_boundary": "untrusted_external_content"},
+			InvalidCalls: []tooltest.InvalidCall{
+				{Name: "missing source", Arguments: json.RawMessage(`{}`), WantArgumentCode: "required"},
+				{Name: "arbitrary URL", Arguments: json.RawMessage(`{"source_id":"W1","url":"https://example.com"}`), WantArgumentCode: "additional_properties"},
+			},
+			BadResults: []tooltest.BadResult{{Name: "no body", Value: map[string]any{"source_id": "W1"}}},
+			ValidateResult: func(value any) error {
+				result, ok := value.(map[string]any)
+				if !ok || result["content"] == nil || result["content_hash"] == nil || result["trust_boundary"] != "untrusted_external_content" {
+					return errors.New("fetch requires bounded untrusted body evidence")
+				}
+				return nil
+			},
+		},
 	}
 	for _, item := range catalog.List() {
 		spec, ok := specs[item.Name]

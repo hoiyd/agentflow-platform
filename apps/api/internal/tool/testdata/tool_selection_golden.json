@@ -91,6 +91,17 @@
       }
     },
     {
+      "id": "web-fetch-reject-url-argument",
+      "task": "Read a discovered public article, but the candidate supplied a URL instead of its Run source ID.",
+      "expected": {
+        "decision": "tool",
+        "tool": "web_fetch",
+        "arguments": {"source_id": "https://example.com/article"},
+        "outcome": "invalid_arguments",
+        "recovery_action": "correct_arguments"
+      }
+    },
+    {
       "id": "unsupported-local-file",
       "task": "Read a private local file using only the available built-in tools.",
       "expected": {

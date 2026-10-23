@@ -2,7 +2,9 @@ package domain
 
 const WebCitationProtocolVersion = "web-citation-v1"
 
-// WebCitation links an answer marker to a completed web_search Tool event.
+// WebCitation links an answer marker to model-visible search, fetch or Artifact
+// read evidence. Fetch reuses the search ID; ToolEventID identifies the delivered
+// evidence, not merely the discovery URL.
 // It is separate from RAGCitation so web URLs never masquerade as Knowledge.
 type WebCitation struct {
 	SourceID    string `json:"source_id"`

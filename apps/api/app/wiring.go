@@ -188,7 +188,7 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("configure filesystem tools: %w", err)
 	}
-	bindings := append([]tool.Binding{tool.WebSearchTool(tavilyClient), tool.SandboxCommandTool(sandboxRunner)}, filesystemTools.Bindings()...)
+	bindings := append([]tool.Binding{tool.WebSearchTool(tavilyClient), tool.WebFetchTool(runWebSourceResolver(appStore)), tool.SandboxCommandTool(sandboxRunner)}, filesystemTools.Bindings()...)
 	mcpAdapter, err := tool.NewMCPAdapter(cfg.MCPConfigPath)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("configure MCP: %w", err)

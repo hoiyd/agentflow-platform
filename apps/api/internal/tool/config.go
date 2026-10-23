@@ -33,7 +33,7 @@ func DefaultConfig() Config {
 	}
 	return Config{
 		EnabledTools:   enabled,
-		SecurityPolicy: securityPolicy,
+		SecurityPolicy: policy.NormalizePolicy(securityPolicy),
 	}
 }
 

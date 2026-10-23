@@ -28,3 +28,23 @@ func TestManifestLinksToolPreviewToDurableArtifact(t *testing.T) {
 	}
 	t.Fatal("tool result manifest entry not found")
 }
+
+func TestManifestDistinguishesArtifactReadFromArtifactPreview(t *testing.T) {
+	ctx := WithSession(context.Background(), Session{Config: DefaultConfig()})
+	pack, err := Assemble(ctx, Request{Model: "test", Messages: []Message{
+		{Source: SourceCurrentInput, Role: "user", Content: "continue"},
+		{Source: SourceToolResult, ReferenceID: "read-1", Role: "tool", Content: `{"tool":"artifact_read","result":{"artifact":{"id":"artifact-1"},"offset":0,"content":"actual delivered text","complete":true}}`},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range pack.Manifest.Entries {
+		if entry.ReferenceID == "read-1" {
+			if entry.Transformation != "original" || len(entry.ArtifactIDs) != 1 || entry.ArtifactIDs[0] != "artifact-1" {
+				t.Fatalf("actual body read was classified as an Artifact preview: %#v", entry)
+			}
+			return
+		}
+	}
+	t.Fatal("read manifest missing")
+}

@@ -20,7 +20,7 @@ func DefaultAgents(now time.Time) []domain.Agent {
 				TaskExamples: []string{"Compare competitors and verify recent pricing sources.", "Research a product or market and identify evidence gaps."},
 				Exclusions:   []string{"implement or debug software", "calculate a budget or capacity forecast"},
 			},
-			Tools:     []string{"web_search"},
+			Tools:     []string{"web_search", "web_fetch"},
 			CreatedAt: now,
 			UpdatedAt: now,
 		},

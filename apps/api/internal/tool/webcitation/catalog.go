@@ -72,6 +72,7 @@ func FromEvents(events []domain.RunEvent) Catalog {
 			catalog.ordered = append(catalog.ordered, entry)
 		}
 	}
+	catalog.addFetchEvidence(events)
 	return catalog
 }
 
@@ -145,14 +146,17 @@ func (c Catalog) Resolve(answer string, selectedCalls map[string]bool) ([]domain
 
 func (c Catalog) SelectedSources(selectedCalls map[string]bool) []domain.WebCitation {
 	sources := make([]domain.WebCitation, 0)
-	seen := make(map[string]bool)
+	positions := make(map[string]int)
 	for _, item := range c.ordered {
 		if !selectedCalls[item.citation.ToolCallID] {
 			continue
 		}
-		if !seen[item.citation.SourceID] {
+		if position, exists := positions[item.citation.SourceID]; exists {
+			// Prefer the later delivered body/read over an earlier search snippet.
+			sources[position] = item.citation
+		} else {
+			positions[item.citation.SourceID] = len(sources)
 			sources = append(sources, item.citation)
-			seen[item.citation.SourceID] = true
 		}
 	}
 	return sources

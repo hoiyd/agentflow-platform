@@ -22,7 +22,7 @@ const (
 	tavilyMaxResponseBytes = 1 << 20
 )
 
-// TavilyClient is the trusted egress boundary for the future web_search Binding.
+// TavilyClient is the trusted egress boundary for the web_search Binding.
 // Neither its credential nor its transport belongs in Tool descriptors or snapshots.
 type TavilyClient struct {
 	credential credential.Value

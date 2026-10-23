@@ -166,8 +166,9 @@ runs asynchronously and reports readiness through the Tool catalog. Exact Tool
 policy, Workspace grants and Agent bindings still apply. See the
 [MCP configuration and limits](../tools/mcp-adapter.md).
 
-Missing Tool config defaults to enabled `calculator`, `get_current_time`, and
-`web_search`. Web search also needs `TAVILY_API_KEY`, Agent allowlist membership,
+Missing Tool config defaults to enabled `calculator`, `get_current_time`,
+`web_search`, and `web_fetch`. [Web fetch](../tools/web-fetch.md) reads only current-Run
+search sources and needs no separate credential. Web search needs `TAVILY_API_KEY`, Agent allowlist membership,
 and an exact egress/credential policy. New defaults include the rule; existing
 custom policies and saved Agent choices are never silently widened.
 
