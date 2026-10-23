@@ -14,6 +14,7 @@ test("Web fetch: owned configuration, scoped rejection, all modes and Replay rel
   const card = page.locator(".tool-card").filter({ has: page.getByRole("heading", { name: "web_fetch", exact: true }) });
   await expect(card.getByRole("checkbox")).toBeChecked();
   await expect(card.getByRole("checkbox")).toBeEnabled();
+  const unrelatedAgent = await createWorkspaceChatAgent(page, workspace, "Unrelated Agent without web access");
   const agent = await createWorkspaceChatAgent(page, workspace, "Web source boundary verifier", {
     tools: ["web_fetch"],
     routing_hints: { capabilities: ["web-fetch-boundary"], task_examples: ["Verify public source references"], exclusions: [] }
@@ -25,9 +26,17 @@ test("Web fetch: owned configuration, scoped rejection, all modes and Replay rel
   try {
     for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
       await page.getByRole("button", { name: "New conversation", exact: true }).click();
+      await expect(page.getByRole("link", { name: "View trace", exact: true })).toHaveCount(0);
+      // Replay navigation remounts Chat; select this fixture before hiding the selector in staged modes.
+      await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: "Direct Single agent", exact: true }).click();
+      await page.getByRole("button", { name: /^Agent: / }).click();
+      await page.getByRole("option", { name: agent.name, exact: true }).click();
+      await expect(page.getByRole("button", { name: `Agent: ${agent.name}`, exact: true })).toBeVisible();
       await page.getByRole("region", { name: "Chat mode", exact: true }).getByRole("button", { name: new RegExp(mode) }).click();
       await page.getByPlaceholder("Ask AgentFlow anything...").fill("web-fetch-boundary: verify the article only if its source exists in this Run");
+      const submitted = page.waitForRequest(request => request.url() === `${api}/api/chat` && request.method() === "POST");
       await page.getByRole("button", { name: "Send message", exact: true }).click();
+      expect((await submitted).postDataJSON().agent_id, `${mode}: selected Agent`).toBe(agent.id);
       if (mode === "Multi-agent") {
         await page.getByText("Routing requirements", { exact: true }).click();
         await page.getByRole("textbox", { name: "Preferred capabilities", exact: true }).fill("web-fetch-boundary");
@@ -41,6 +50,8 @@ test("Web fetch: owned configuration, scoped rejection, all modes and Replay rel
       expect(response.ok()).toBe(true);
       const replay = await response.json();
       expect(replay.run.status).toBe("completed");
+      expect(replay.run.agent_id, `${mode}: executed Agent`).toBe(agent.id);
+      expect(replay.runtime_snapshot.mode).toBe(mode === "Single agent" ? "single" : mode === "Multi-agent" ? "multi_agent" : "autonomous");
       expect(replay.runtime_snapshot.tools.some((item: { name: string }) => item.name === "web_fetch")).toBe(true);
       const failures = replay.run_events.filter((event: { type: string; payload: { tool_name?: string } }) => event.type === "tool.failed" && event.payload.tool_name === "web_fetch");
       expect(failures).toHaveLength(1);
@@ -61,9 +72,10 @@ test("Web fetch: owned configuration, scoped rejection, all modes and Replay rel
     expect(browserErrors).toEqual([]);
     await info.attach("web-fetch-browser-evidence.json", {
       contentType: "application/json",
-      body: JSON.stringify({ workspace_id: workspace, agent_id: agent.id, runs, checks: ["default availability", "owned Agent binding", "real scoped rejection in all modes", "no fabricated Stage for Single", "Postgres Replay reload"], limitations: ["deterministic model fixture", "no public HTTP call or live model quality; successful fetch has a separate backend integration gate"] }, null, 2)
+      body: JSON.stringify({ workspace_id: workspace, agent_id: agent.id, unrelated_agent_id: unrelatedAgent.id, runs, checks: ["default availability", "owned Agent binding", "selected Agent retained explicitly across Replay navigation with competing Agents", "real scoped rejection in all modes", "no fabricated Stage for Single", "Postgres Replay reload"], limitations: ["deterministic model fixture", "no public HTTP call or live model quality; successful fetch has a separate backend integration gate"] }, null, 2)
     });
   } finally {
     expect((await request.delete(`${api}/api/agents/${agent.id}`, { headers })).ok()).toBe(true);
+    expect((await request.delete(`${api}/api/agents/${unrelatedAgent.id}`, { headers })).ok()).toBe(true);
   }
 });
