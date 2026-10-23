@@ -17,10 +17,11 @@ func TestWebFetchHTTPBodyFailureIntegration(t *testing.T) {
 	for _, scenario := range []string{"cancel-after-headers", "short-body"} {
 		t.Run(scenario, func(t *testing.T) {
 			headers := make(chan struct{})
+			releaseBody := make(chan struct{})
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "text/plain")
+				w.Header().Set("Content-Length", "1000")
 				if scenario == "short-body" {
-					w.Header().Set("Content-Length", "1000")
 					_, _ = io.WriteString(w, "incomplete body")
 					return
 				}
@@ -28,8 +29,11 @@ func TestWebFetchHTTPBodyFailureIntegration(t *testing.T) {
 				w.(http.Flusher).Flush()
 				close(headers)
 				<-r.Context().Done()
+				// Do not race the client cancellation with a clean server EOF.
+				<-releaseBody
 			}))
 			defer server.Close()
+			defer close(releaseBody)
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			finished := make(chan error, 1)

@@ -63,7 +63,7 @@ The existing Chat/Replay citation contract and source links are unchanged.
 | 403/429/5xx, binary data, empty body or unsupported encoding | Return an explicit typed observation, not a successful page read |
 | Oversized wire/decompressed body | Reject with no body evidence |
 | Oversized extracted text | Mark partial content explicitly; never claim the full page was read |
-| Timeout/cancel/body read failure | Stop the request and retain failure evidence |
+| Timeout/cancel/body read failure | Stop the request and retain failure evidence; cancellation takes precedence over concurrent EOF or decode errors |
 | Scripts, embedded pages or instruction-like body text | Never execute; treat extracted text as untrusted data |
 | Result exceeds Context allowance | Reuse governed Artifact storage and bounded reads |
 | Unselected fetch, incomplete Artifact read or invented citation | Do not promote it to structured evidence |

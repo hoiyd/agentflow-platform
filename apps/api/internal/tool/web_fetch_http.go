@@ -88,6 +88,9 @@ func fetchWebPage(ctx context.Context, source domain.WebCitation, transport func
 	case "gzip":
 		gz, err := gzip.NewReader(wire)
 		if err != nil {
+			if canceled := ctx.Err(); canceled != nil {
+				return page, webFetchError(canceled)
+			}
 			return page, executionError(ErrorResultEncoding, "Web fetch gzip body is invalid", nil)
 		}
 		defer gz.Close()
@@ -96,8 +99,12 @@ func fetchWebPage(ctx context.Context, source domain.WebCitation, transport func
 		return page, executionError(ErrorResultEncoding, "Web fetch content encoding is unsupported", nil)
 	}
 	body, err := io.ReadAll(io.LimitReader(reader, webFetchMaxResponseBytes+1))
+	// Cancellation can race with EOF, which io.ReadAll reports as success.
+	if canceled := ctx.Err(); canceled != nil {
+		return page, webFetchError(canceled)
+	}
 	if err != nil {
-		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return page, webFetchError(err)
 		}
 		return page, executionError(ErrorResultEncoding, "Web fetch body could not be read", nil)
