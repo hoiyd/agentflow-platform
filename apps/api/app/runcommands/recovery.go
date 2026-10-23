@@ -125,7 +125,7 @@ func (c Commands) recover(ctx context.Context, scope Scope, id string, resume bo
 }
 
 func ContinuationFailurePolicy(err error) (Reason, bool) {
-	if errors.Is(err, eligibility.ErrInvalid) || errors.Is(err, eligibility.ErrSourceUnavailable) {
+	if errors.Is(err, eligibility.ErrInvalid) || errors.Is(err, eligibility.ErrSourceUnavailable) || errors.Is(err, agent.ErrRuntimeSnapshotUnavailable) {
 		return Conflict, false
 	}
 	if errors.Is(err, agent.ErrNoEligibleAgent) || errors.Is(err, agent.ErrNoSuitableAgent) || errors.Is(err, agent.ErrInvalidRoutingRequirements) {

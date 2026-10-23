@@ -5,18 +5,20 @@ import (
 	"encoding/json"
 	"time"
 
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/tool/policy"
 )
 
 type Descriptor struct {
-	Name               string            `json:"name"`
-	Description        string            `json:"description"`
-	Parameters         map[string]any    `json:"parameters"`
-	SchemaVersion      string            `json:"schema_version"`
-	DefinitionRevision string            `json:"definition_revision"`
-	Concurrency        ConcurrencyPolicy `json:"concurrency,omitempty"`
-	SideEffect         SideEffectPolicy  `json:"side_effect,omitempty"`
-	Security           policy.Capability `json:"security"`
+	Name               string             `json:"name"`
+	Description        string             `json:"description"`
+	Parameters         map[string]any     `json:"parameters"`
+	SchemaVersion      string             `json:"schema_version"`
+	DefinitionRevision string             `json:"definition_revision"`
+	Concurrency        ConcurrencyPolicy  `json:"concurrency,omitempty"`
+	SideEffect         SideEffectPolicy   `json:"side_effect,omitempty"`
+	Security           policy.Capability  `json:"security"`
+	Source             *domain.ToolSource `json:"source,omitempty"`
 }
 
 type SideEffectMode string
@@ -110,15 +112,16 @@ type Binding struct {
 }
 
 type ToolInfo struct {
-	ServiceEnabled    bool           `json:"service_enabled"`
-	WorkspaceEnabled  bool           `json:"workspace_enabled"`
-	ConfigRevision    int64          `json:"config_revision"`
-	ExcludedReason    string         `json:"excluded_reason,omitempty"`
-	Name              string         `json:"name"`
-	Description       string         `json:"description"`
-	Parameters        map[string]any `json:"parameters"`
-	Enabled           bool           `json:"enabled"`
-	UnavailableReason string         `json:"unavailable_reason,omitempty"`
+	ServiceEnabled    bool               `json:"service_enabled"`
+	WorkspaceEnabled  bool               `json:"workspace_enabled"`
+	ConfigRevision    int64              `json:"config_revision"`
+	ExcludedReason    string             `json:"excluded_reason,omitempty"`
+	Name              string             `json:"name"`
+	Description       string             `json:"description"`
+	Parameters        map[string]any     `json:"parameters"`
+	Enabled           bool               `json:"enabled"`
+	UnavailableReason string             `json:"unavailable_reason,omitempty"`
+	Source            *domain.ToolSource `json:"source,omitempty"`
 }
 
 func ObjectSchema(properties map[string]any, required []string) map[string]any {

@@ -23,6 +23,7 @@ import (
 	"agentflow-platform/apps/api/internal/inference/requestcontrol"
 	"agentflow-platform/apps/api/internal/inference/routing"
 	"agentflow-platform/apps/api/internal/knowledge"
+	"agentflow-platform/apps/api/internal/mcpconnection"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/recovery"
@@ -46,6 +47,8 @@ type applicationDependencies struct {
 	requestLimiter *concurrency.ModelRequestLimiter
 	sandboxRunner  *sandbox.Runner
 	telemetry      *telemetry.Observer
+	mcpAdapter     *tool.MCPAdapter
+	mcpConnections *mcpconnection.Service
 }
 
 func buildDependencies(cfg config.Config, options applicationOptions) (applicationDependencies, error) {
@@ -186,10 +189,34 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 		return applicationDependencies{}, fmt.Errorf("configure filesystem tools: %w", err)
 	}
 	bindings := append([]tool.Binding{tool.WebSearchTool(tavilyClient), tool.SandboxCommandTool(sandboxRunner)}, filesystemTools.Bindings()...)
-	toolManager, err := tool.NewManager(cfg.ToolConfigPath, bindings...)
+	mcpAdapter, err := tool.NewMCPAdapter(cfg.MCPConfigPath)
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("configure MCP: %w", err)
+	}
+	defer func() {
+		if cleanupStore {
+			mcpAdapter.Close()
+		}
+	}()
+	if err := mcpAdapter.CheckRequired(context.Background()); err != nil {
+		return applicationDependencies{}, err
+	}
+	toolCredentialScopes = append(toolCredentialScopes, mcpAdapter.CredentialScopes()...)
+	toolManager, err := tool.NewManager(cfg.ToolConfigPath, append(slices.Clone(bindings), mcpAdapter.Bindings()...)...)
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("create tools manager: %w", err)
 	}
+	// Keep the encryption key out of serializable application configuration.
+	mcpConnections, err := mcpconnection.New(workspaceStore, mcpconnection.Config{EncryptionKey: credential.FromEnvironment("MCP_CREDENTIAL_ENCRYPTION_KEY").Reveal(), LocalOrigins: splitCSV(cfg.MCPWorkspaceLocalOrigins)})
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("configure Workspace MCP connections: %w", err)
+	}
+	defer func() {
+		if cleanupStore {
+			mcpConnections.Close()
+		}
+	}()
+	toolManager.SetWorkspaceResolver(mcpConnections.Catalog)
 	verifierRegistry := verification.NewRegistry(verification.Options{
 		AllowHostCommands:       cfg.AuthMode == "local",
 		WorkspaceRoot:           cfg.VerificationWorkspaceRoot,
@@ -298,6 +325,7 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 		AllowedOrigins: splitOrigins(cfg.AllowedOrigins),
 		Identity:       identityManager,
 		Workspaces:     workspaceStore,
+		MCPConnections: mcpConnections,
 	})
 	if err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -306,12 +334,17 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 		return applicationDependencies{}, fmt.Errorf("create http handler: %w", err)
 	}
 
+	mcpAdapter.Start(func(discovered []tool.Binding) error {
+		return toolManager.ReplaceBindings(append(slices.Clone(bindings), discovered...))
+	})
 	cleanupStore = false
 	return applicationDependencies{
 		store: appStore, handler: handler, memoryProvider: memoryProvider,
-		sandboxRunner: sandboxRunner,
-		telemetry:     traceObserver,
-		runController: runController, requestLimiter: requestLimiter,
+		sandboxRunner:  sandboxRunner,
+		telemetry:      traceObserver,
+		mcpAdapter:     mcpAdapter,
+		mcpConnections: mcpConnections,
+		runController:  runController, requestLimiter: requestLimiter,
 	}, nil
 }
 

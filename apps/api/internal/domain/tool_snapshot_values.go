@@ -1,5 +1,15 @@
 package domain
 
+// ToolSource identifies the reviewed remote contract, never a live connection
+// or credential. Omission preserves existing built-in Tool snapshots.
+type ToolSource struct {
+	Kind           string `json:"kind"`
+	ServerID       string `json:"server_id"`
+	RemoteName     string `json:"remote_name"`
+	Transport      string `json:"transport"`
+	DefinitionHash string `json:"definition_hash,omitempty"`
+}
+
 // These values are the durable Tool contract frozen with each Run. Runtime
 // policy and progress behavior lives in the Tool packages, not in domain.
 type ToolSecuritySource string

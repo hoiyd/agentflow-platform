@@ -16,7 +16,8 @@ import (
 
 type recoveryCatalog struct{ catalog *tool.Catalog }
 
-func (c recoveryCatalog) Catalog() (*tool.Catalog, error) { return c.catalog, nil }
+func (c recoveryCatalog) Catalog() (*tool.Catalog, error)                   { return c.catalog, nil }
+func (c recoveryCatalog) CatalogForWorkspace(string) (*tool.Catalog, error) { return c.catalog, nil }
 
 func TestWorkspaceToolConfigurationWriteFailure(t *testing.T) {
 	// A failed allowlist write must remain an internal error, not masquerade as

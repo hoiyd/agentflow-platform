@@ -1,0 +1,57 @@
+.tools-tabs {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  max-width: 1180px;
+  margin: 0 auto 24px;
+  border-bottom: 1px solid var(--border);
+}
+.tools-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-strong);
+  padding: 12px 0;
+  font-size: 14px;
+}
+.tools-tabs button[aria-current] { color: var(--accent); border-bottom-color: var(--accent); }
+.mcp-connections { max-width: 1180px; margin: 0 auto; }
+.mcp-connections-heading, .mcp-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.mcp-connections-heading { margin-bottom: 24px; }
+.mcp-connections-heading h2 { margin: 0 0 8px; font-size: 20px; }
+.mcp-connections-heading p, .mcp-empty { color: var(--muted-strong); font-size: 13px; margin: 0; }
+.mcp-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.mcp-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; min-height: 36px; min-width: 36px; padding: 0 12px; font-size: 13px; }
+.mcp-connection-list { border-top: 1px solid var(--border); }
+.mcp-connection-row { display: grid; grid-template-columns: minmax(240px, 1fr) 170px auto; align-items: center; gap: 24px; padding: 22px 0; border-bottom: 1px solid var(--border); }
+.mcp-connection-info { min-width: 0; }
+.mcp-connection-info h3 { font-size: 15px; margin: 0 0 8px; overflow-wrap: anywhere; }
+.mcp-connection-info p { margin: 0 0 6px; font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; color: var(--muted-strong); }
+.mcp-connection-info small, .mcp-connection-status small { font-size: 12px; color: var(--muted-strong); }
+.mcp-connection-status { display: grid; gap: 6px; font-size: 13px; overflow-wrap: anywhere; }
+.mcp-empty { padding: 28px 0; }
+.mcp-dialog { width: min(720px, calc(100% - 64px)); max-height: calc(100vh - 96px); margin: 64px auto auto; overflow-y: auto; padding: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.mcp-dialog::backdrop { background: rgb(20 24 30 / 35%); }
+.mcp-dialog-heading { margin-bottom: 24px; }
+.mcp-dialog h2 { margin: 0; font-size: 20px; }
+.mcp-dialog-heading button { padding: 8px; }
+.mcp-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.mcp-fields > label:nth-child(-n+2), .mcp-tool-selection, .mcp-enabled { grid-column: 1 / -1; }
+.mcp-fields > label:not(.mcp-enabled) { display: grid; gap: 8px; color: var(--muted-strong); font-size: 13px; }
+.mcp-fields input:not([type=checkbox]) { width: 100%; min-width: 0; height: 40px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--ink); }
+.mcp-tool-selection { border: 0; border-top: 1px solid var(--border); margin: 4px 0 0; padding: 12px 0 0; min-width: 0; }
+.mcp-tool-selection legend { padding: 0 12px 0 0; color: var(--muted-strong); font-size: 13px; }
+.mcp-tool-option { display: flex; align-items: start; gap: 12px; padding: 12px 0; }
+.mcp-tool-option span { display: grid; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.mcp-tool-option strong { font-family: var(--font-mono); font-size: 13px; }
+.mcp-tool-option small { color: var(--muted-strong); font-size: 12px; line-height: 1.5; }
+.mcp-tool-option input, .mcp-enabled input { width: 16px; height: 16px; accent-color: var(--accent); margin: 2px 0 0; flex-shrink: 0; }
+.mcp-enabled { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.mcp-dialog-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.mcp-dialog-actions button { min-width: 156px; height: 40px; min-height: 40px; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; }
+.mcp-delete-dialog { width: min(520px, calc(100% - 64px)); }
+.mcp-delete-dialog > p { line-height: 1.6; margin: 20px 0; color: var(--muted-strong); }

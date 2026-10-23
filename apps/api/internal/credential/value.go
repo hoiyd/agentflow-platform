@@ -14,6 +14,9 @@ type Value struct {
 	value string
 }
 
+// FromSecret accepts a secret decrypted at a trusted transport boundary.
+func FromSecret(value string) Value { return Value{value: strings.TrimSpace(value)} }
+
 func FromEnvironment(name string) Value {
 	return Value{value: strings.TrimSpace(os.Getenv(strings.TrimSpace(name)))}
 }

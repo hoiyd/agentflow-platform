@@ -18,6 +18,7 @@ import (
 	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/identity"
+	"agentflow-platform/apps/api/internal/mcpconnection"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/planning"
 	"agentflow-platform/apps/api/internal/redaction"
@@ -56,6 +57,7 @@ type AgentRuntimeOperations interface {
 
 type ToolOperations interface {
 	Catalog() (*tool.Catalog, error)
+	CatalogForWorkspace(string) (*tool.Catalog, error)
 }
 
 type RunCapacity interface {
@@ -80,6 +82,7 @@ type Dependencies struct {
 	AllowedOrigins []string
 	Identity       *identity.Manager
 	Workspaces     *store.PostgresStore
+	MCPConnections *mcpconnection.Service
 }
 
 type Handler struct {
@@ -96,6 +99,7 @@ type Handler struct {
 	allowedOrigins []string
 	identity       *identity.Manager
 	workspaces     *store.PostgresStore
+	mcpConnections *mcpconnection.Service
 }
 
 func NewHandler(dependencies Dependencies) (*Handler, error) {
@@ -137,6 +141,7 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		allowedOrigins: append([]string(nil), dependencies.AllowedOrigins...),
 		identity:       dependencies.Identity,
 		workspaces:     dependencies.Workspaces,
+		mcpConnections: dependencies.MCPConnections,
 	}, nil
 }
 

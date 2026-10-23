@@ -32,8 +32,8 @@ func (r *Runtime) compileHarnessBindings() error {
 	return nil
 }
 
-func (r *Runtime) currentCatalog() (*tool.Catalog, error) {
-	catalog, err := r.tools.Catalog()
+func (r *Runtime) currentCatalog(workspace string) (*tool.Catalog, error) {
+	catalog, err := r.tools.CatalogForWorkspace(workspace)
 	if err != nil {
 		return nil, err
 	}

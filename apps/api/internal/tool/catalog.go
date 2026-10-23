@@ -150,6 +150,7 @@ func (c *Catalog) List() []ToolInfo {
 			Name: descriptor.Name, Description: descriptor.Description,
 			Parameters: copySchema(descriptor.Parameters), Enabled: c.enabled[name],
 			UnavailableReason: bindingUnavailableReason(c.bindings[name]),
+			Source:            copyToolSource(descriptor.Source),
 		})
 	}
 	return items

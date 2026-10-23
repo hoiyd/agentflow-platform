@@ -156,6 +156,11 @@ type Config struct {
 	RecoveryStaleRunTimeout time.Duration
 	DatabaseURL             string
 	ToolConfigPath          string
+	// MCPConfigPath declares operator-reviewed read-only Streamable HTTP servers.
+	// Empty disables MCP; optional discovery never blocks application startup.
+	MCPConfigPath string
+	// Only the operator may approve private/local origins, never a connection URL.
+	MCPWorkspaceLocalOrigins string
 	// FilesystemRootsPath is an operator-owned JSON map of logical roots to
 	// Workspace IDs and host directories. Empty disables file Tools; writes also
 	// require managed_output roots, explicit policy and Workspace/Agent grants.
@@ -293,6 +298,8 @@ func Load() Config {
 		RecoveryStaleRunTimeout:           getDurationEnv("RECOVERY_STALE_RUN_TIMEOUT", 60*time.Second),
 		DatabaseURL:                       getEnv("DATABASE_URL", ""),
 		ToolConfigPath:                    getEnv("TOOL_CONFIG_PATH", ".data/tools.json"),
+		MCPConfigPath:                     getEnv("MCP_CONFIG_PATH", ""),
+		MCPWorkspaceLocalOrigins:          getEnv("MCP_WORKSPACE_LOCAL_ORIGINS", ""),
 		FilesystemRootsPath:               getEnv("FILESYSTEM_ROOTS_PATH", ""),
 		ToolSchemaMode:                    getEnv("TOOL_SCHEMA_MODE", "eager"),
 		ToolSchemaTokenThreshold:          getIntEnv("TOOL_SCHEMA_TOKEN_THRESHOLD", 2048),

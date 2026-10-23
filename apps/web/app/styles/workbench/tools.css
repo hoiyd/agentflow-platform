@@ -116,6 +116,11 @@
   margin-top: 8px;
 }
 
+.tool-card > .tool-source {
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
 .tool-card-schema {
   margin-top: 12px;
 }

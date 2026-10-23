@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { AgentInfo, ToolInfo, SkillInfo } from "../../lib/api";
+import { toolAvailabilityLabel } from "../../lib/tool-availability";
 import { AgentSkillBindings } from "./AgentSkillBindings";
 
 export type AgentConfigDraft = {
@@ -159,11 +160,11 @@ export function AgentConfigPanel({
                 <input
                   checked={draft.tools.includes(tool.name)}
                   disabled={disabled || (!tool.enabled && !draft.tools.includes(tool.name))}
-                  title={tool.excluded_reason ?? ""}
+                  title={toolAvailabilityLabel(tool)}
                   onChange={() => onToggleTool(tool.name)}
                   type="checkbox"
                 />
-                <span>{tool.name}</span>
+                <span>{tool.name}{tool.source?.kind === "mcp" ? <small className="agent-tool-source">MCP · {tool.source.server_id} / {tool.source.remote_name}{toolAvailabilityLabel(tool) ? ` · ${toolAvailabilityLabel(tool)}` : ""}</small> : null}</span>
               </label>
             ))
           )}

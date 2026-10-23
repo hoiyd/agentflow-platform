@@ -1,0 +1,10 @@
+{
+  "servers": [
+    {
+      "id": "deepwiki",
+      "url": "https://mcp.deepwiki.com/mcp",
+      "read_only_tools": ["read_wiki_structure"],
+      "required": false
+    }
+  ]
+}

@@ -10,7 +10,7 @@ import (
 )
 
 func (h *Handler) listTools(w http.ResponseWriter, r *http.Request) {
-	service, err := h.tools.Catalog()
+	service, err := h.tools.CatalogForWorkspace(workspaceIDFromRequest(r))
 	if err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return
@@ -36,7 +36,7 @@ func (h *Handler) setToolEnabled(w http.ResponseWriter, r *http.Request, enabled
 		return
 	}
 
-	service, err := h.tools.Catalog()
+	service, err := h.tools.CatalogForWorkspace(workspaceIDFromRequest(r))
 	if err != nil {
 		writeFailure(w, r, http.StatusInternalServerError, err)
 		return

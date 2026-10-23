@@ -276,6 +276,42 @@ func (e KnowledgeScopeSource) Valid() bool {
 	}
 }
 
+// Defines values for MCPConnectionAuthMode.
+const (
+	MCPConnectionAuthModeBearer MCPConnectionAuthMode = "bearer"
+	MCPConnectionAuthModeNone   MCPConnectionAuthMode = "none"
+)
+
+// Valid indicates whether the value is a known member of the MCPConnectionAuthMode enum.
+func (e MCPConnectionAuthMode) Valid() bool {
+	switch e {
+	case MCPConnectionAuthModeBearer:
+		return true
+	case MCPConnectionAuthModeNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MCPConnectionRequestAuthMode.
+const (
+	MCPConnectionRequestAuthModeBearer MCPConnectionRequestAuthMode = "bearer"
+	MCPConnectionRequestAuthModeNone   MCPConnectionRequestAuthMode = "none"
+)
+
+// Valid indicates whether the value is a known member of the MCPConnectionRequestAuthMode enum.
+func (e MCPConnectionRequestAuthMode) Valid() bool {
+	switch e {
+	case MCPConnectionRequestAuthModeBearer:
+		return true
+	case MCPConnectionRequestAuthModeNone:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MessageRole.
 const (
 	Assistant MessageRole = "assistant"
@@ -960,6 +996,36 @@ func (e ToolProgressStatus) Valid() bool {
 	}
 }
 
+// Defines values for ToolSourceKind.
+const (
+	Mcp ToolSourceKind = "mcp"
+)
+
+// Valid indicates whether the value is a known member of the ToolSourceKind enum.
+func (e ToolSourceKind) Valid() bool {
+	switch e {
+	case Mcp:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ToolSourceTransport.
+const (
+	StreamableHttp ToolSourceTransport = "streamable_http"
+)
+
+// Valid indicates whether the value is a known member of the ToolSourceTransport enum.
+func (e ToolSourceTransport) Valid() bool {
+	switch e {
+	case StreamableHttp:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UsageBreakdownSource.
 const (
 	DeepseekCache  UsageBreakdownSource = "deepseek_cache"
@@ -1606,6 +1672,57 @@ type KnowledgeSearchRequest struct {
 	MinSimilarity  *float32        `json:"min_similarity,omitempty"`
 	Query          string          `json:"query"`
 	WorkspaceId    *string         `json:"workspace_id,omitempty"`
+}
+
+// MCPConnection defines model for MCPConnection.
+type MCPConnection struct {
+	AuthMode             MCPConnectionAuthMode `json:"auth_mode"`
+	CreatedAt            time.Time             `json:"created_at"`
+	CredentialConfigured bool                  `json:"credential_configured"`
+	Enabled              bool                  `json:"enabled"`
+
+	// Id BIGINT primary key serialized as a decimal string.
+	Id            string   `json:"id"`
+	Name          string   `json:"name"`
+	ReadOnlyTools []string `json:"read_only_tools"`
+	Revision      int64    `json:"revision"`
+
+	// Status configured, discovered, or stable MCP discovery failure reason; enabled is independent.
+	Status      string              `json:"status"`
+	Tools       []MCPDiscoveredTool `json:"tools"`
+	UpdatedAt   time.Time           `json:"updated_at"`
+	Url         string              `json:"url"`
+	WorkspaceId string              `json:"workspace_id"`
+}
+
+// MCPConnectionAuthMode defines model for MCPConnection.AuthMode.
+type MCPConnectionAuthMode string
+
+// MCPConnectionRequest defines model for MCPConnectionRequest.
+type MCPConnectionRequest struct {
+	AuthMode MCPConnectionRequestAuthMode `json:"auth_mode"`
+
+	// BearerToken Omit to retain a Bearer token; switching auth_mode to none erases it. Empty is valid only with none. Never returned or captured.
+	BearerToken   *string  `json:"bearer_token,omitempty"`
+	Enabled       bool     `json:"enabled"`
+	Name          string   `json:"name"`
+	ReadOnlyTools []string `json:"read_only_tools"`
+
+	// Revision Required for updates; optimistic concurrency, not a protocol version.
+	Revision *int64 `json:"revision,omitempty"`
+	Url      string `json:"url"`
+}
+
+// MCPConnectionRequestAuthMode defines model for MCPConnectionRequest.AuthMode.
+type MCPConnectionRequestAuthMode string
+
+// MCPDiscoveredTool defines model for MCPDiscoveredTool.
+type MCPDiscoveredTool struct {
+	BindingName string  `json:"binding_name"`
+	Description string  `json:"description"`
+	Name        string  `json:"name"`
+	Reason      *string `json:"reason,omitempty"`
+	Supported   bool    `json:"supported"`
 }
 
 // Message defines model for Message.
@@ -2503,6 +2620,9 @@ type ToolInfo struct {
 	// ServiceEnabled Operator-owned service switch. Workspace owners cannot override it.
 	ServiceEnabled *bool `json:"service_enabled,omitempty"`
 
+	// Source Reviewed remote Tool identity. Contains no endpoint credentials or live connection state.
+	Source *ToolSource `json:"source,omitempty"`
+
 	// UnavailableReason Runtime prerequisite that prevents an enabled Tool from being offered to the model.
 	UnavailableReason *string `json:"unavailable_reason,omitempty"`
 
@@ -2541,6 +2661,21 @@ type ToolProgressUpdate struct {
 	Total     *int64  `json:"total,omitempty"`
 	Truncated *bool   `json:"truncated,omitempty"`
 }
+
+// ToolSource Reviewed remote Tool identity. Contains no endpoint credentials or live connection state.
+type ToolSource struct {
+	DefinitionHash *string             `json:"definition_hash,omitempty"`
+	Kind           ToolSourceKind      `json:"kind"`
+	RemoteName     string              `json:"remote_name"`
+	ServerId       string              `json:"server_id"`
+	Transport      ToolSourceTransport `json:"transport"`
+}
+
+// ToolSourceKind defines model for ToolSource.Kind.
+type ToolSourceKind string
+
+// ToolSourceTransport defines model for ToolSource.Transport.
+type ToolSourceTransport string
 
 // UpdateConversationRequest defines model for UpdateConversationRequest.
 type UpdateConversationRequest struct {
@@ -2707,6 +2842,9 @@ type AgentId = string
 // ConversationId defines model for ConversationId.
 type ConversationId = string
 
+// MCPConnectionId defines model for MCPConnectionId.
+type MCPConnectionId = string
+
 // RunId defines model for RunId.
 type RunId = string
 
@@ -2724,6 +2862,9 @@ type InternalError = ErrorResponse
 
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
+
+// ServiceUnavailable defines model for ServiceUnavailable.
+type ServiceUnavailable = ErrorResponse
 
 // TooManyRequests defines model for TooManyRequests.
 type TooManyRequests = ErrorResponse
@@ -2786,6 +2927,12 @@ type IngestDocumentJSONRequestBody = DocumentIngestRequest
 
 // UpdateDocumentMetadataJSONRequestBody defines body for UpdateDocumentMetadata for application/json ContentType.
 type UpdateDocumentMetadataJSONRequestBody = DocumentMetadataUpdate
+
+// CreateMCPConnectionJSONRequestBody defines body for CreateMCPConnection for application/json ContentType.
+type CreateMCPConnectionJSONRequestBody = MCPConnectionRequest
+
+// UpdateMCPConnectionJSONRequestBody defines body for UpdateMCPConnection for application/json ContentType.
+type UpdateMCPConnectionJSONRequestBody = MCPConnectionRequest
 
 // RunRAGEvaluationJSONRequestBody defines body for RunRAGEvaluation for application/json ContentType.
 type RunRAGEvaluationJSONRequestBody = RAGEvaluationRunRequest

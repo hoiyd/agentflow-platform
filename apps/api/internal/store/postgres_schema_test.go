@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+func TestMCPConnectionSchemaIsInstalledOnExistingDatabases(t *testing.T) {
+	joined := strings.Join(postgresMigrations, "\n")
+	for _, required := range []string{"CREATE TABLE IF NOT EXISTS mcp_connections", "credential_ciphertext text NOT NULL DEFAULT ''", "discovery jsonb NOT NULL DEFAULT '[]'", "mcp_connections_workspace_idx"} {
+		if !strings.Contains(joined, required) {
+			t.Fatalf("missing MCP schema step %s", required)
+		}
+	}
+	if !strings.Contains(strings.Join(workspaceReferenceTables, ","), "mcp_connections") {
+		t.Fatal("MCP connections bypass Workspace lifecycle guards")
+	}
+}
+
 func TestPostgresMigrationsUpgradeLegacyRunUsageEntries(t *testing.T) {
 	joined := strings.Join(postgresMigrations, "\n")
 	for _, expected := range []string{

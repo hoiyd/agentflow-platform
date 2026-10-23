@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/tool/policy"
 	"fmt"
 )
@@ -19,12 +20,22 @@ func registeredArgumentContract(binding *Binding) (*argumentContract, error) {
 		return nil, fmt.Errorf("compiled Binding definition changed")
 	}
 	binding.Descriptor.Parameters = copySchema(binding.Descriptor.Parameters)
+	binding.Descriptor.Source = copyToolSource(binding.Descriptor.Source)
 	return binding.contract, nil
+}
+
+func copyToolSource(source *domain.ToolSource) *domain.ToolSource {
+	if source == nil {
+		return nil
+	}
+	copy := *source
+	return &copy
 }
 
 func copyBinding(binding Binding) Binding {
 	binding.UnavailableReason = bindingUnavailableReason(binding)
 	binding.Descriptor.Parameters = copySchema(binding.Descriptor.Parameters)
+	binding.Descriptor.Source = copyToolSource(binding.Descriptor.Source)
 	binding.Descriptor.Security.Scope = policy.NormalizeScope(binding.Descriptor.Security.Scope)
 	return binding
 }

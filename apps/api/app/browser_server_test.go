@@ -106,6 +106,13 @@ func TestBrowserServer(t *testing.T) {
 	cfg.AuthMode = "local"
 	cfg.SandboxEnabled = false
 	cfg.FilesystemRootsPath = ""
+	cfg.MCPConfigPath = ""
+	cfg.MCPWorkspaceLocalOrigins = ""
+	t.Setenv("MCP_CREDENTIAL_ENCRYPTION_KEY", "")
+	var mcpControls http.Handler
+	if os.Getenv("AGENTFLOW_MCP_TEST") == "1" || os.Getenv("AGENTFLOW_MCP_CONNECTION_TEST") == "1" {
+		mcpControls = browserMCPConfig(t, &cfg, root)
+	}
 	if os.Getenv("AGENTFLOW_FILESYSTEM_TEST") == "1" || os.Getenv("AGENTFLOW_FILESYSTEM_WRITE_TEST") == "1" || os.Getenv("AGENTFLOW_PLANNING_TEST") == "1" {
 		browserFilesystemConfig(t, &cfg, root)
 		cfg.RunMaxModelCalls = 24
@@ -169,6 +176,14 @@ func TestBrowserServer(t *testing.T) {
 	}
 	production := application.server.Handler
 	controls := http.NewServeMux()
+	if mcpControls != nil {
+		controls.HandleFunc("/__fixture/mcp", func(w http.ResponseWriter, r *http.Request) {
+			mcpControls.ServeHTTP(w, r)
+			if r.Method == http.MethodPost {
+				application.mcpAdapter.Refresh(r.Context())
+			}
+		})
+	}
 	if os.Getenv("AGENTFLOW_PLANNING_TEST") == "1" {
 		controls.HandleFunc("POST /__fixture/planning/source", func(w http.ResponseWriter, r *http.Request) {
 			var input struct {

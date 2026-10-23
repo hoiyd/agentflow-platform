@@ -10,6 +10,23 @@ var postgresIdentitySchema = []string{
 		UNIQUE (issuer,subject)
 	)`,
 	workspaceEntitySchema,
+	`CREATE TABLE IF NOT EXISTS mcp_connections (
+		id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+		workspace_id bigint NOT NULL REFERENCES workspaces(id),
+		name text NOT NULL CHECK(char_length(btrim(name)) BETWEEN 1 AND 80),
+		url text NOT NULL,
+		auth_mode text NOT NULL CHECK(auth_mode IN ('none','bearer')),
+		enabled boolean NOT NULL DEFAULT false,
+		read_only_tools jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(read_only_tools)='array'),
+		revision bigint NOT NULL DEFAULT 1,
+		status text NOT NULL DEFAULT 'configured',
+		credential_ciphertext text NOT NULL DEFAULT '',
+		discovery jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(discovery)='array'),
+		created_at timestamptz NOT NULL DEFAULT NOW(),
+		updated_at timestamptz NOT NULL DEFAULT NOW(),
+		deleted_at timestamptz
+	)`,
+	`CREATE INDEX IF NOT EXISTS mcp_connections_workspace_idx ON mcp_connections(workspace_id) WHERE deleted_at IS NULL`,
 	`CREATE TABLE IF NOT EXISTS workspace_tool_config (
 		workspace_id bigint PRIMARY KEY REFERENCES workspaces(id),
 		allowed_tools jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(allowed_tools)='array'),

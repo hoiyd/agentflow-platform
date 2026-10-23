@@ -207,6 +207,36 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
+      - name: Run trusted MCP adapter gate
+        env:
+          AGENTFLOW_MCP_TEST: '1'
+        run: npm run test:e2e -- mcp.spec.ts
+      - name: Retain MCP adapter evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcp-adapter-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Run Workspace MCP connection gate
+        env:
+          AGENTFLOW_MCP_CONNECTION_TEST: '1'
+        run: npm run test:e2e -- mcp-connections.spec.ts
+      - name: Retain Workspace MCP connection evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workspace-mcp-evidence
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          retention-days: 14
+          if-no-files-found: warn
+
       - name: Run scoped filesystem read gate
         env:
           AGENTFLOW_FILESYSTEM_TEST: '1'

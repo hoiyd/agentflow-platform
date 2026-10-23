@@ -331,7 +331,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
         />
 
         {view === "tools" ? (
-          <ToolsPanel error={toolCatalog.error} onToggle={(tool) => void toolCatalog.toggle(tool)} tools={toolCatalog.tools} updatingTool={toolCatalog.updatingTool} />
+          <ToolsPanel error={toolCatalog.error} onToggle={(tool) => void toolCatalog.toggle(tool)} tools={toolCatalog.tools} updatingTool={toolCatalog.updatingTool} onCatalogChanged={() => void toolCatalog.refresh()} />
         ) : view === "knowledge" ? (
           <KnowledgePanel model={knowledge} />
         ) : view === "memory" ? (

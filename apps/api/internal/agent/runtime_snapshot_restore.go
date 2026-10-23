@@ -54,7 +54,7 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 		}
 	}
 	snapshot.ContextAssembly = contextassembly.NormalizeConfig(snapshot.ContextAssembly)
-	current, err := r.currentCatalog()
+	current, err := r.currentCatalog(run.WorkspaceID)
 	if err != nil {
 		return restoredRuntime{}, err
 	}
@@ -66,13 +66,13 @@ func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 	for _, frozen := range snapshot.Tools {
 		installed, ok := current.Installed(frozen.Name)
 		if !ok {
-			return restoredRuntime{}, fmt.Errorf("frozen tool %q is no longer installed", frozen.Name)
+			return restoredRuntime{}, fmt.Errorf("%w: frozen tool %q is no longer installed", ErrRuntimeSnapshotUnavailable, frozen.Name)
 		}
 		if !toolDefinitionMatches(installed, frozen) {
-			return restoredRuntime{}, fmt.Errorf("frozen tool %q no longer matches its captured definition", frozen.Name)
+			return restoredRuntime{}, fmt.Errorf("%w: frozen tool %q no longer matches its captured definition", ErrRuntimeSnapshotUnavailable, frozen.Name)
 		}
 		if installed.UnavailableReason != "" {
-			return restoredRuntime{}, fmt.Errorf("frozen tool %q is unavailable: %s", frozen.Name, installed.UnavailableReason)
+			return restoredRuntime{}, fmt.Errorf("%w: frozen tool %q is unavailable: %s", ErrRuntimeSnapshotUnavailable, frozen.Name, installed.UnavailableReason)
 		}
 		restoredBindings = append(restoredBindings, installed)
 	}
@@ -109,6 +109,7 @@ func toolDefinitionMatches(installed tool.Binding, frozen domain.RuntimeToolSnap
 		Parameters: installed.Descriptor.Parameters, SideEffect: string(installed.Descriptor.JournalMode()),
 		SchemaVersion: installed.Descriptor.SchemaVersion, DefinitionRevision: installed.Descriptor.DefinitionRevision,
 		Security: installed.Descriptor.Security,
+		Source:   installed.Descriptor.Source,
 	}
 	currentJSON, err := json.Marshal(current)
 	if err != nil {

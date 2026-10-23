@@ -63,7 +63,7 @@ func (r *Runtime) ValidatePlanSources(ctx context.Context, run domain.Run, sourc
 	if r.planningSources == nil || run.RuntimeSnapshot == nil {
 		return errors.New("plan source validation is unavailable")
 	}
-	catalog, err := r.currentCatalog()
+	catalog, err := r.currentCatalog(run.WorkspaceID)
 	if err != nil {
 		return err
 	}

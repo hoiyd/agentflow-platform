@@ -1203,8 +1203,122 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/mcp/connections:
+    get:
+      operationId: listMCPConnections
+      tags: [Tools]
+      description: List only the selected Workspace's remote MCP connections. Never returns credentials.
+      responses:
+        '200':
+          description: Workspace connections.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MCPConnection'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      operationId: createMCPConnection
+      tags: [Tools]
+      description: Save a Workspace-owned Streamable HTTP connection. Discovery and tool authorization are separate commands.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPConnectionRequest'
+      responses:
+        '201':
+          description: Saved connection; no secret values.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPConnection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/mcp/connections/{id}:
+    parameters:
+      - $ref: '#/components/parameters/MCPConnectionId'
+    get:
+      operationId: getMCPConnection
+      tags: [Tools]
+      responses:
+        '200':
+          description: Owned connection.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPConnection'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateMCPConnection
+      tags: [Tools]
+      description: Update with the last observed revision. Omission preserves a Bearer token; switching authentication to none erases it. URL or credential changes invalidate discovery.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPConnectionRequest'
+      responses:
+        '200':
+          description: Saved connection.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPConnection'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      operationId: deleteMCPConnection
+      tags: [Tools]
+      description: Soft-delete connection and erase its stored credential; preserve historical Run evidence.
+      responses:
+        '204':
+          description: Deleted.
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/mcp/connections/{id}/test:
+    parameters:
+      - $ref: '#/components/parameters/MCPConnectionId'
+    post:
+      operationId: testMCPConnection
+      tags: [Tools]
+      description: Bounded connection and schema discovery; returns status, not tool grants. Failed tests withdraw readiness. Concurrent edits reject stale results.
+      responses:
+        '200':
+          description: Discovery result, including stable authentication or connection failure status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPConnection'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
 components:
   parameters:
+    MCPConnectionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[1-9][0-9]{0,18}$'
     ConversationId:
       name: id
       in: path
@@ -1234,6 +1348,12 @@ components:
         minLength: 1
 
   responses:
+    ServiceUnavailable:
+      description: Required service or credential configuration is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
     BadRequest:
       description: Invalid request.
       content:
@@ -1271,6 +1391,91 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    MCPConnectionRequest:
+      type: object
+      additionalProperties: false
+      required: [name, url, auth_mode, enabled, read_only_tools]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        url:
+          type: string
+          maxLength: 2048
+        auth_mode:
+          type: string
+          enum: [none, bearer]
+        bearer_token:
+          type: string
+          writeOnly: true
+          maxLength: 8192
+          description: Omit to retain a Bearer token; switching auth_mode to none erases it. Empty is valid only with none. Never returned or captured.
+        enabled:
+          type: boolean
+        read_only_tools:
+          type: array
+          maxItems: 64
+          items:
+            type: string
+        revision:
+          type: integer
+          format: int64
+          description: Required for updates; optimistic concurrency, not a protocol version.
+    MCPConnection:
+      type: object
+      required: [id, workspace_id, name, url, auth_mode, enabled, read_only_tools, revision, status, credential_configured, tools, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          description: BIGINT primary key serialized as a decimal string.
+        workspace_id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+        auth_mode:
+          type: string
+          enum: [none, bearer]
+        enabled:
+          type: boolean
+        read_only_tools:
+          type: array
+          items:
+            type: string
+        revision:
+          type: integer
+          format: int64
+        status:
+          type: string
+          description: configured, discovered, or stable MCP discovery failure reason; enabled is independent.
+        credential_configured:
+          type: boolean
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/MCPDiscoveredTool'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    MCPDiscoveredTool:
+      type: object
+      required: [name, binding_name, description, supported]
+      properties:
+        name:
+          type: string
+        binding_name:
+          type: string
+        description:
+          type: string
+        supported:
+          type: boolean
+        reason:
+          type: string
     RAGGoldenSource:
       type: object
       additionalProperties: false
@@ -2090,6 +2295,17 @@ components:
           items:
             type: string
 
+    ToolSource:
+      type: object
+      description: Reviewed remote Tool identity. Contains no endpoint credentials or live connection state.
+      required: [kind, server_id, remote_name, transport]
+      properties:
+        kind: { type: string, enum: [mcp] }
+        server_id: { type: string }
+        remote_name: { type: string }
+        transport: { type: string, enum: [streamable_http] }
+        definition_hash: { type: string }
+
     ToolInfo:
       type: object
       required: [name, description, parameters, enabled]
@@ -2097,6 +2313,7 @@ components:
         service_enabled:
           type: boolean
           description: Operator-owned service switch. Workspace owners cannot override it.
+        source: { $ref: '#/components/schemas/ToolSource' }
         workspace_enabled:
           type: boolean
           description: Persisted Workspace allowlist entry, independent of service readiness.

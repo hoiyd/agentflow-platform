@@ -211,6 +211,7 @@ type ModelRouteCandidateDecision struct {
 }
 
 type RuntimeToolSnapshot struct {
+	Source             *ToolSource    `json:"source,omitempty"`
 	Name               string         `json:"name"`
 	Description        string         `json:"description"`
 	Parameters         map[string]any `json:"parameters"`

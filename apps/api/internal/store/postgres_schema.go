@@ -13,6 +13,9 @@ type postgresColumnRequirement struct {
 }
 
 var postgresRequiredColumns = []postgresColumnRequirement{
+	{Table: "mcp_connections", Column: "workspace_id", UDTName: "int8", NotNull: true},
+	{Table: "mcp_connections", Column: "credential_ciphertext", UDTName: "text", NotNull: true},
+	{Table: "mcp_connections", Column: "discovery", UDTName: "jsonb", NotNull: true},
 	{Table: "run_clarifications", Column: "checkpoint", UDTName: "jsonb", NotNull: true},
 	{Table: "run_clarifications", Column: "questions", UDTName: "jsonb", NotNull: true},
 	{Table: "run_clarifications", Column: "answers", UDTName: "jsonb", NotNull: true},

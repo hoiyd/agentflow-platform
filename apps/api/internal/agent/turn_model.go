@@ -140,6 +140,11 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 		schema = domain.ToolSchemaConfig{Mode: "eager"}
 	}
 	options := m.runtime.toolExecutionOptions
+	// Only server-resolved, currently ready Workspace Bindings supply logical
+	// credential grants. Token bytes stay inside the MCP connection transport.
+	if request.Catalog != nil {
+		options.CredentialScopes = append(append([]string(nil), options.CredentialScopes...), request.Catalog.WorkspaceMCPCredentialScopes()...)
+	}
 	options.PlanOnly = snapshot.ExecutionConstraint == domain.ExecutionPlanOnly
 	// Reviewed plans contain private file-derived content even if ordinary
 	// Conversation history is trimmed from this new Run's Context.

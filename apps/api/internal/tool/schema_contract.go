@@ -145,12 +145,17 @@ func toolDefinitionRevision(descriptor Descriptor) (string, error) {
 		Concurrency   ConcurrencyPolicy  `json:"concurrency"`
 		SideEffect    sideEffectContract `json:"side_effect"`
 		Security      any                `json:"security"`
+		Source        any                `json:"source,omitempty"`
 	}{
 		SchemaVersion: descriptor.SchemaVersion,
 		Name:          descriptor.Name, Description: descriptor.Description,
 		Parameters: descriptor.Parameters, Concurrency: descriptor.Concurrency,
 		SideEffect: descriptor.sideEffectContract(),
 		Security:   descriptor.Security,
+	}
+	// A nil interface must stay omitted to preserve pre-MCP definition hashes.
+	if descriptor.Source != nil {
+		definition.Source = descriptor.Source
 	}
 	encoded, err := json.Marshal(definition)
 	if err != nil {

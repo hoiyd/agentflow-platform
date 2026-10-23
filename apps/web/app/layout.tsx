@@ -25,6 +25,7 @@ import "./styles/workbench/agent-dialog.css";
 import "./styles/workbench/verification.css";
 import "./styles/workbench/agent-toolbar.css";
 import "./styles/workbench/tools.css";
+import "./styles/workbench/mcp-connections.css";
 import "./styles/workbench/memory.css";
 import "./styles/collaboration/panel.css";
 import "./styles/collaboration/autonomous.css";

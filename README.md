@@ -31,7 +31,7 @@ or performance benchmarks.
 
 Tools are callable capabilities; Skills are trusted, versioned instructions
 loaded progressively. Skills cannot grant themselves Tool or credential access.
-See [Tool security](docs/tools/tool-security-policy.md) and [Skills](docs/tools/trusted-skills.md).
+See [Tool security](docs/tools/tool-security-policy.md), [Workspace MCP connections](docs/tools/mcp-adapter.md), and [Skills](docs/tools/trusted-skills.md).
 
 ## Architecture
 
@@ -103,7 +103,7 @@ regression contracts, not live-model quality. Database acceptance needs a dedica
 
 | Status | Scope |
 | --- | --- |
-| Implemented | Three execution modes; guarded Tools/Skills; hybrid RAG and metadata filtering; Context/Memory/Task State; budgets; typed Replay; checkpoints; optional Verification/structured output; optional OIDC and owner-scoped Workspaces |
+| Implemented | Three execution modes; guarded Tools/Skills and opt-in read-only MCP; hybrid RAG and metadata filtering; Context/Memory/Task State; budgets; typed Replay; checkpoints; optional Verification/structured output; optional OIDC and owner-scoped Workspaces |
 | Partial / bounded | Recovery is single-instance; evaluation covers frozen tasks, not general quality; injection and grounded-answer checks do not prove semantic truth; sandbox commands are opt-in scratch execution, not arbitrary host access |
 | Planned | Durable multi-worker dispatch/lease/fencing, team/object-sharing ACLs, broader retention and release hardening, calibrated model/human graders |
 

@@ -156,6 +156,16 @@ and database-test safety.
 
 ## Tool Configuration
 
+`MCP_CONFIG_PATH` optionally installs locally reviewed read-only MCP Tools over
+Streamable HTTP. Empty disables only operator-file connections, not Workspace
+connections. Workspace owners use Tools → MCP connections; Bearer storage requires
+`MCP_CREDENTIAL_ENCRYPTION_KEY` (base64, 32 random bytes). User URLs are public HTTPS
+unless the operator approves exact `MCP_WORKSPACE_LOCAL_ORIGINS`. Servers in the
+operator file are optional by default; discovery
+runs asynchronously and reports readiness through the Tool catalog. Exact Tool
+policy, Workspace grants and Agent bindings still apply. See the
+[MCP configuration and limits](../tools/mcp-adapter.md).
+
 Missing Tool config defaults to enabled `calculator`, `get_current_time`, and
 `web_search`. Web search also needs `TAVILY_API_KEY`, Agent allowlist membership,
 and an exact egress/credential policy. New defaults include the rule; existing
