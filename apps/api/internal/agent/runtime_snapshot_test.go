@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,6 +24,9 @@ import (
 	"agentflow-platform/apps/api/internal/tool/progress"
 )
 
+// Failure inventory: retaining Task State requires an explicit current grant;
+// empty/null rules revoke it even for a frozen Run; neither reload nor revocation
+// may mutate the Snapshot. Advance file metadata, not elapsed time, for reloads.
 func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T) {
 	ctx := context.Background()
 	fixtureStore := fixturestore.New()
@@ -34,6 +38,23 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	manager, err := tool.NewManager(toolPath)
 	if err != nil {
 		t.Fatalf("new tools manager: %v", err)
+	}
+	saveToolsConfig := func(config tool.Config) {
+		t.Helper()
+		previous, err := os.Stat(toolPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := tool.SaveConfig(toolPath, config); err != nil {
+			t.Fatal(err)
+		}
+		modified := previous.ModTime().Add(time.Second)
+		if err := os.Chtimes(toolPath, modified, modified); err != nil {
+			t.Fatal(err)
+		}
+		if err := manager.ReloadIfChanged(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	client := openai.NewClientWithTimeoutAndEmbeddingModel(
 		"do-not-persist-this-key", "https://user:password@openrouter.ai/api/v1?token=private", "http://localhost:11434/api/embed",
@@ -114,14 +135,11 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 		t.Fatal(err)
 	}
 	changedConfig.EnabledTools = []string{"get_current_time"}
-	changedConfig.SecurityPolicy = policy.Policy{Version: "operator-v2", DefaultAction: policy.ActionDeny}
-	time.Sleep(2 * time.Millisecond)
-	if err := tool.SaveConfig(toolPath, changedConfig); err != nil {
-		t.Fatal(err)
+	changedConfig.SecurityPolicy = policy.Policy{
+		Version: "operator-v2", DefaultAction: policy.ActionDeny,
+		Rules: policy.DefaultPolicy().Rules, // Retain the built-in Task State grant explicitly.
 	}
-	if err := manager.ReloadIfChanged(); err != nil {
-		t.Fatal(err)
-	}
+	saveToolsConfig(changedConfig)
 
 	restored, err := runtime.restoreRuntime(prepared.Run)
 	if err != nil {
@@ -145,6 +163,21 @@ func TestRuntimeSnapshotIsSecretFreeAndRestoresFrozenConfiguration(t *testing.T)
 	routes, err := runtime.restoreModelRouteCatalog(prepared.Run.RuntimeSnapshot.ModelRouting)
 	if err != nil || len(routes.Descriptors()) != 1 || routes.Descriptors()[0].Model != "test-model-v1" || routes.Descriptors()[0].Provider != "openrouter" {
 		t.Fatalf("unexpected restored model route: %#v err=%v", routes.Descriptors(), err)
+	}
+	for _, rules := range [][]policy.Rule{nil, {}} {
+		changedConfig.SecurityPolicy.Rules = rules
+		saveToolsConfig(changedConfig)
+		revoked, err := runtime.restoreRuntime(prepared.Run)
+		if err != nil {
+			t.Fatalf("restore after explicit grant removal: %v", err)
+		}
+		if _, ok := revoked.catalog.Resolve(taskstate.UpdateToolName); ok {
+			t.Fatalf("frozen Run restored a Task State grant removed by rules=%#v", rules)
+		}
+		unchanged, err := json.Marshal(prepared.Run.RuntimeSnapshot)
+		if err != nil || string(unchanged) != serialized {
+			t.Fatalf("current operator revocation mutated the frozen Snapshot: %v", err)
+		}
 	}
 
 	prepared.Run.RuntimeSnapshot.Tools[0].Description = "changed tool contract"
