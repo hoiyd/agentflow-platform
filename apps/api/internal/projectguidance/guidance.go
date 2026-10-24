@@ -64,13 +64,17 @@ func NormalizeSelection(selection domain.ProjectContext) (domain.ProjectContext,
 	}
 	selection.Paths = slices.Clone(selection.Paths)
 	for _, name := range selection.Paths {
-		if !validPath(name) || strings.ContainsAny(name, "*?[]") {
+		if !validSelectionPath(name) {
 			return domain.ProjectContext{}, problem("project_guidance_invalid", "Project context accepts concrete relative files, not patterns or directories")
 		}
 	}
 	slices.Sort(selection.Paths)
 	selection.Paths = slices.Compact(selection.Paths)
 	return selection, nil
+}
+
+func validSelectionPath(name string) bool {
+	return validPath(name) && !strings.ContainsAny(name, "*?[]")
 }
 
 func (s *Service) Freeze(ctx context.Context, workspace string, selection domain.ProjectContext) (*domain.ProjectGuidanceSnapshot, error) {

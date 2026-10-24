@@ -27,7 +27,13 @@ Use the actual owned Workspace ID and logical root. The repository has two
 synthetic projects under [`examples/project-guidance`](../../examples/project-guidance).
 Their entry files and report conventions are intentionally different.
 
-Submit an ordinary `ChatRequest` through HTTP or the [headless CLI](../runtime/headless-run-client.md):
+In the workbench, open **Project** beside the message input, choose a project,
+select up to 16 task files and **Apply project**. The selection is visible for
+new Runs in all three modes and retained for that Workspace in the browser tab.
+Cancel leaves it unchanged; **Clear project** removes it. Existing Runs keep
+their frozen guidance. The UI cannot create trust records or grant file Tools.
+
+HTTP and the [headless CLI](../runtime/headless-run-client.md) accept the same selection:
 
 ```json
 {
@@ -42,8 +48,15 @@ The selector accepts 1–16 concrete existing regular files, relative to one roo
 Rules use Go `path.Match`: `*` does not cross `/`; recursive `**`, imports,
 absolute paths and traversal are unsupported. At most 16 rules with 16 patterns
 each follow one required project entry. Unmatched rule files are not read.
-There is no automatic `AGENTS.md`/`CLAUDE.md` discovery or workbench selector.
+There is no automatic `AGENTS.md`/`CLAUDE.md` discovery.
 To read task materials, the Agent still needs separately authorized file Tools.
+
+`GET /api/project-guidance/projects` returns currently authorized logical roots;
+`GET /api/project-guidance/projects/{root}/files?path=.` lists at most 500 entries
+in one directory. Both use the request's Workspace and prohibit caching. Discovery exposes no host
+paths or file contents; linked, sensitive or unsupported selection names are
+omitted. Task paths containing `*?[]` are not supported. The composer checks
+discovery support before sending, so older backends cannot ignore the selection.
 
 ## Context And Recovery
 
@@ -56,15 +69,17 @@ Identical guidance bodies are loaded once. Instructions identical to an active
 Skill are not repeated, and matching Memory text is suppressed. The Manifest
 records `project_guidance`, `content_hash`, `source_path`, matches, selection
 reason and actual framed token cost; unmatched and duplicate sources remain
-explainable. Inspect a `context.assembled` event's raw payload in Replay, or use
-`agentflow result` / `GET /api/runs/{id}/replay` for the typed frozen content.
+explainable. Replay's **Saved project guidance** shows frozen text, hashes, matches
+and body-token estimates. Inspect `context.assembled` for framed token costs;
+`agentflow result` / `GET /api/runs/{id}/replay` return the typed frozen content.
 
 Resume and Tool continuations use frozen text, never hot-load modified guidance.
 Before each model assembly and on Resume, current Workspace/root access and the
 previously selected trust records are checked. Removing them blocks continuation
 before the next provider request; it does not recall an already in-flight request.
 Changing text affects new Runs. New follow-up Runs inherit the prior project
-selection and freeze current text; ordinary Chat requests must select explicitly.
+selection and freeze current text, independently of the current composer draft;
+ordinary Chat requests must select explicitly.
 
 ## Limits And Failures
 
@@ -83,6 +98,10 @@ the existing Manifest and input-budget error.
 | Credential-shaped content | Reject, not redact into a different trusted instruction |
 | File/total/token budget exceeded | `project_guidance_budget_exceeded`; no provider request |
 | Text changes during a paused Run | Resume keeps frozen text; a new Run captures the update |
+| Discovery of foreign roots, sensitive paths or linked files | No host paths/content disclosed; scoped reader checks still apply |
+| Project/file reads complete after selection changes or the dialog closes | Discard obsolete results; never apply another project's files |
+| Cancel, clear or Workspace change | Cancel preserves the saved choice; clear removes it; another Workspace never inherits it |
+| New request reaches an older backend without guidance support | Reject before Chat; never silently omit the selected guidance |
 
 Bounded guidance text is persisted even when Request Capture is metadata-only;
 operator trust configuration explicitly opts these files into Run evidence.
@@ -111,8 +130,10 @@ From the repository root, verify provider delivery and Replay reload in a browse
 
 ```bash
 AGENTFLOW_PROJECT_GUIDANCE_TEST=1 TEST_DATABASE_URL=postgres://.../agentflow_test \
-  bash scripts/test-browser.sh project-guidance.spec.ts
+  bash scripts/test-browser.sh project-guidance
 ```
 
-The Playwright report retains `project-guidance-browser-evidence.json` with Run,
-snapshot and Manifest identities. Both gates use synthetic project text.
+Playwright retains API/workbench/navigation/Workspace evidence JSON and desktop
+screenshots. It checks selection, all modes, cancel/clear/reload, stale reads,
+query failures, compatibility rejection and readable Replay provenance. Both
+gates use synthetic project text, not private conversations or live quality data.

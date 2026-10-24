@@ -21,6 +21,7 @@ import "./styles/workbench/generation-evidence.css";
 import "./styles/workbench/tool-progress.css";
 import "./styles/workbench/task-state.css";
 import "./styles/workbench/composer.css";
+import "./styles/workbench/project-guidance.css";
 import "./styles/workbench/agent-dialog.css";
 import "./styles/workbench/verification.css";
 import "./styles/workbench/agent-toolbar.css";

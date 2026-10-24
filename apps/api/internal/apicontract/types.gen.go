@@ -576,6 +576,24 @@ func (e PartialOutputStatus) Valid() bool {
 	}
 }
 
+// Defines values for ProjectFilePageEntriesKind.
+const (
+	Directory ProjectFilePageEntriesKind = "directory"
+	File      ProjectFilePageEntriesKind = "file"
+)
+
+// Valid indicates whether the value is a known member of the ProjectFilePageEntriesKind enum.
+func (e ProjectFilePageEntriesKind) Valid() bool {
+	switch e {
+	case Directory:
+		return true
+	case File:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ProjectGuidanceEntryReason.
 const (
 	DuplicateContent ProjectGuidanceEntryReason = "duplicate_content"
@@ -2002,6 +2020,29 @@ type ProjectContext struct {
 	Root  string   `json:"root"`
 }
 
+// ProjectFilePage defines model for ProjectFilePage.
+type ProjectFilePage struct {
+	Entries []struct {
+		Kind ProjectFilePageEntriesKind `json:"kind"`
+		Path string                     `json:"path"`
+	} `json:"entries"`
+	Path      string `json:"path"`
+	Truncated bool   `json:"truncated"`
+}
+
+// ProjectFilePageEntriesKind defines model for ProjectFilePage.Entries.Kind.
+type ProjectFilePageEntriesKind string
+
+// ProjectGuidanceCatalog defines model for ProjectGuidanceCatalog.
+type ProjectGuidanceCatalog struct {
+	Configured bool `json:"configured"`
+	Projects   []struct {
+		Entry     string `json:"entry"`
+		Root      string `json:"root"`
+		RuleCount int    `json:"rule_count"`
+	} `json:"projects"`
+}
+
 // ProjectGuidanceEntry defines model for ProjectGuidanceEntry.
 type ProjectGuidanceEntry struct {
 	Content         *string                    `json:"content,omitempty"`
@@ -2971,6 +3012,11 @@ type TooManyRequests = ErrorResponse
 type CompleteLoginParams struct {
 	Code  *string `form:"code,omitempty" json:"code,omitempty"`
 	State *string `form:"state,omitempty" json:"state,omitempty"`
+}
+
+// ListProjectGuidanceFilesParams defines parameters for ListProjectGuidanceFiles.
+type ListProjectGuidanceFilesParams struct {
+	Path *string `form:"path,omitempty" json:"path,omitempty"`
 }
 
 // ObserveRunEventsParams defines parameters for ObserveRunEvents.

@@ -332,6 +332,8 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 		Identity:       identityManager,
 		Workspaces:     workspaceStore,
 		MCPConnections: mcpConnections,
+
+		ProjectGuidance: projectGuidance,
 	})
 	if err != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -29,6 +29,8 @@ import { KnowledgeScopeControl } from "./knowledge/KnowledgeScope";
 import { MemoryPanel } from "./memory/MemoryPanel";
 import { useMemoryWorkbench } from "./memory/useMemoryWorkbench";
 import { OperatorAttentionPanel } from "./attention/OperatorAttentionPanel";
+import { ProjectGuidanceControl } from "./project-guidance/ProjectGuidanceControl";
+import { useProjectContext } from "./project-guidance/useProjectContext";
 
 type ChatShellProps = {
   initialConversationId?: string;
@@ -55,6 +57,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   const messagesRef = useRef<HTMLElement | null>(null);
   const knowledge = useKnowledgeWorkbench();
   const memory = useMemoryWorkbench();
+  const project = useProjectContext();
 
   const session = useRunSession({
     workspace,
@@ -280,7 +283,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
       setError(error instanceof Error ? error.message : "Invalid verification policy");
       return;
     }
-    await session.submit(content, { mode: chatMode, agentId: activeAgentId, completionContract, executionConstraint: planOnly ? "plan_only" : undefined, knowledgeFilter: knowledge.scope.filter });
+    await session.submit(content, { mode: chatMode, agentId: activeAgentId, completionContract, executionConstraint: planOnly ? "plan_only" : undefined, knowledgeFilter: knowledge.scope.filter, projectContext: project.value });
   }
 
   return (
@@ -388,6 +391,8 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
 
         {view === "chat" ? (
           <ChatComposer
+            projectGuidance={<ProjectGuidanceControl value={project.value} onChange={project.change}
+              disabled={isRunStreaming || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification || Boolean(runState && ["queued", "failed_recoverable"].includes(runState.status))} />}
             knowledgeScope={<KnowledgeScopeControl values={knowledge.scope.values} onChange={knowledge.scope.change} disabled={isStreaming || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification} />}
 			planOnly={planOnly} onPlanOnlyChange={setPlanOnly}
             inbox={activeId && runState ? <RunInbox key={activeId} conversationId={activeId} runId={runState.id} mode={chatMode} agentId={activeAgentId}

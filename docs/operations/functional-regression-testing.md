@@ -78,8 +78,9 @@ integration boundary; neither fixture claims live-model quality.
 
 The [scoped guidance gate](../context/project-guidance.md#verification) checks
 explicit project selection, path matching, frozen recovery, current grants and
-rejected inputs through CLI/HTTP/Postgres. Its opt-in browser profile checks
-delivery to the provider and the persisted Manifest after Replay reload.
+rejected inputs through CLI/HTTP/Postgres. Its opt-in browser profile also checks
+the actual form in all modes, stale file reads, Workspace isolation, compatibility
+rejection and readable frozen instructions after Replay reload.
 
 ## Trusted MCP
 

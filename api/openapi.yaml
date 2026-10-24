@@ -33,6 +33,34 @@ tags:
   - name: Knowledge
 
 paths:
+  /api/project-guidance/projects:
+    get:
+      operationId: listProjectGuidanceProjects
+      tags: [Chat]
+      description: List operator-trusted projects with current read-only root access in the authorized Workspace. Returns logical names and rule counts, not host paths or file bodies.
+      responses:
+        '200':
+          description: Empty projects when disabled or no authorized projects remain.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectGuidanceCatalog' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/project-guidance/projects/{root}/files:
+    get:
+      operationId: listProjectGuidanceFiles
+      tags: [Chat]
+      description: Browse at most 500 entries in one authorized project directory. Linked, sensitive and unsafe files are omitted. This supplies selection metadata, not instruction trust or Tool grants.
+      parameters:
+        - { in: path, name: root, required: true, schema: { type: string } }
+        - { in: query, name: path, schema: { type: string, default: '.' } }
+      responses:
+        '200':
+          description: Relative file/directory entries with an explicit truncation flag.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectFilePage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '503': { description: Project guidance discovery is not configured. }
   /api/rag/evaluations/run:
     post:
       operationId: runRAGEvaluation
@@ -1961,6 +1989,34 @@ components:
           $ref: '#/components/schemas/ChatMode'
         completion_contract:
           $ref: '#/components/schemas/CompletionContractInput'
+    ProjectGuidanceCatalog:
+      type: object
+      required: [configured, projects]
+      properties:
+        configured: { type: boolean }
+        projects:
+          type: array
+          items:
+            type: object
+            required: [root, entry, rule_count]
+            properties:
+              root: { type: string }
+              entry: { type: string }
+              rule_count: { type: integer }
+    ProjectFilePage:
+      type: object
+      required: [path, entries, truncated]
+      properties:
+        path: { type: string }
+        truncated: { type: boolean }
+        entries:
+          type: array
+          items:
+            type: object
+            required: [path, kind]
+            properties:
+              path: { type: string }
+              kind: { type: string, enum: [file, directory] }
     ProjectContext:
       type: object
       additionalProperties: false

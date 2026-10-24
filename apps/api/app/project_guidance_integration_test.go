@@ -137,6 +137,7 @@ func TestScopedProjectGuidanceProductionLifecycle(t *testing.T) {
 		projects = append(projects, map[string]any{"root": id, "workspace_id": workspace, "entry": "GUIDE.md", "rules": []any{map[string]any{"path": "report-rules.md", "paths": []string{"reports/*.md"}}}})
 	}
 	writeHeadlessJSON(t, cfg.FilesystemRootsPath, map[string]any{"roots": fileRoots})
+	projects = append(projects, map[string]string{"root": "foreign", "workspace_id": "999999", "entry": "GUIDE.md"})
 	writeHeadlessJSON(t, guidancePath, map[string]any{"projects": projects})
 	files, err := filesystem.New(cfg.FilesystemRootsPath, storage)
 	if err != nil {
@@ -161,6 +162,7 @@ func TestScopedProjectGuidanceProductionLifecycle(t *testing.T) {
 		defer cancel()
 		_ = application.Close(ctx)
 	})
+	checkProjectGuidanceDiscovery(t, server.URL, workspace, root)
 	owned, err := storage.ForWorkspace(domain.NewWorkspaceScope(workspace)).CreateAgent(domain.Agent{Name: "Project reporter", SystemPrompt: "Use the selected project conventions.", Tools: []string{"file_read", "web_fetch"}, RoutingHints: domain.AgentRoutingHints{Capabilities: []string{"project-guidance"}, TaskExamples: []string{"guidance-gate: summarize the supplied project report"}}, MemoryEnabled: false, RetrievalEnabled: false})
 	if err != nil {
 		t.Fatal(err)
@@ -354,6 +356,24 @@ func TestScopedProjectGuidanceProductionLifecycle(t *testing.T) {
 		t.Fatalf("revoked trust reached provider: %s", denied)
 	}
 	if directory := os.Getenv("EVALUATION_REPORT_DIR"); directory != "" {
-		writeHeadlessJSON(t, filepath.Join(directory, "project-guidance-evidence.json"), map[string]any{"schema": "project-guidance-gate-v1", "fixture": true, "base_revision": strings.TrimSpace(string(revision)), "workspace": workspace, "baseline_and_projects": evidence, "updated": updated, "loop": loop, "resumed_run": waiting.Replay.Run.Id, "followup_run": followup, "revoked_run": revoked.Replay.Run.Id, "requests": requests, "checks": []string{"two project conventions and no-guidance control", "CLI JSON -> real HTTP -> production Context -> Postgres Replay", "restart and frozen continuation", "new and follow-up Runs capture changed text", "guidance cannot grant unbound Tools or private network egress", "recalled Memory deduplication", "revoked trust rejects before provider"}, "limitations": []string{"base revision may have uncommitted feature changes; inspect the tested working tree", "synthetic model echoes received conventions; not live adherence or quality calibration", "project selection currently uses API/CLI JSON, not a new workbench selector"}})
+		writeHeadlessJSON(t, filepath.Join(directory, "project-guidance-evidence.json"), map[string]any{
+			"schema": "project-guidance-gate-v1", "fixture": true, "base_revision": strings.TrimSpace(string(revision)),
+			"workspace": workspace, "baseline_and_projects": evidence, "updated": updated, "loop": loop,
+			"resumed_run": waiting.Replay.Run.Id, "followup_run": followup, "revoked_run": revoked.Replay.Run.Id, "requests": requests,
+			"checks": []string{
+				"Workspace-scoped no-store project discovery and bounded file metadata",
+				"invalid configuration, unavailable roots and unselectable names reject or stay hidden",
+				"two project conventions and no-guidance control",
+				"CLI JSON -> real HTTP -> production Context -> Postgres Replay",
+				"restart and frozen continuation", "new and follow-up Runs capture changed text",
+				"guidance cannot grant unbound Tools or private network egress",
+				"recalled Memory deduplication", "revoked trust rejects before provider",
+			},
+			"limitations": []string{
+				"base revision may have uncommitted feature changes; inspect the tested working tree",
+				"synthetic model echoes received conventions; not live adherence or quality calibration",
+				"this gate drives API/CLI; companion browser gates cover the workbench form",
+			},
+		})
 	}
 }

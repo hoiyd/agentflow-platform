@@ -7,6 +7,30 @@ type ProjectContext struct {
 	Paths []string `json:"paths"`
 }
 
+// Discovery exposes logical names and relative file metadata, never host paths
+// or guidance bodies. Selection still requires validation when a Run starts.
+type ProjectGuidanceCatalog struct {
+	Configured bool                     `json:"configured"`
+	Projects   []ProjectGuidanceProject `json:"projects"`
+}
+
+type ProjectGuidanceProject struct {
+	Root      string `json:"root"`
+	Entry     string `json:"entry"`
+	RuleCount int    `json:"rule_count"`
+}
+
+type ProjectFileEntry struct {
+	Path string `json:"path"`
+	Kind string `json:"kind"`
+}
+
+type ProjectFilePage struct {
+	Path      string             `json:"path"`
+	Entries   []ProjectFileEntry `json:"entries"`
+	Truncated bool               `json:"truncated"`
+}
+
 type ProjectGuidanceEntry struct {
 	Path            string   `json:"path"`
 	Patterns        []string `json:"patterns,omitempty"`

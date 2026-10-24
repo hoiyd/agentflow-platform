@@ -1,4 +1,5 @@
 import type { CompletionContractInput } from "./verification";
+import { listGuidanceProjects } from "./project-guidance.ts";
 import {
   apiArray, apiJSON, apiObject, apiRequest, apiVoid, expectObject, isObject, stringValue
 } from "./api-client.ts";
@@ -112,6 +113,12 @@ export async function streamChat(
   onEvent: (event: ChatEvent) => void,
   signal?: AbortSignal
 ) {
+  if (input.project_context) {
+    const catalog = await listGuidanceProjects(signal);
+    if (!catalog.configured || !catalog.projects.some(project => project.root === input.project_context?.root)) {
+      throw new Error("Project guidance is no longer available. Review or clear the selected project before sending.");
+    }
+  }
   if (input.knowledge_filter) {
     const schema = await apiObject<ContractSchemas["DocumentMetadataSchema"]>("/api/documents/metadata-schema", { signal }, { errorMessage: "Unable to confirm Knowledge scope support" }, "metadata schema");
     if (schema.runtime_filtering !== true || schema.version !== input.knowledge_filter.schema_version) {

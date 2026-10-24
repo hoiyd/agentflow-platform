@@ -44,7 +44,7 @@ test("Project guidance: typed request reaches the model and Replay retains sourc
     await info.attach("project-guidance-browser-evidence.json", { contentType: "application/json", body: JSON.stringify({
       workspace_id: workspace, agent_id: agent.id, run_id: run.id, snapshot: frozen, manifest: context.payload.manifest,
       checks: ["real API selection", "strict provider delivery", "frozen hash", "Replay reload and raw provenance"],
-      limitations: ["synthetic model", "project selection is API/CLI-only; no new workbench form", "not live adherence or quality"]
+      limitations: ["synthetic model", "this case covers the API; companion workbench cases submit through the composer", "not live adherence or quality"]
     }, null, 2) });
   } finally {
     expect((await request.delete(`${api}/api/agents/${agent.id}`, { headers })).ok()).toBe(true);

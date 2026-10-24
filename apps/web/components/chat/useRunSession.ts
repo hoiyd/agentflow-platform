@@ -14,9 +14,10 @@ import type { ReasoningEntry } from "./ReasoningDisclosure";
 import type { PartialOutput, RunProjectionSnapshot, ToolProgress } from "../../lib/api-types";
 import type { KnowledgeFilter } from "../knowledge/useKnowledgeScope";
 import { applyToolProgress, restoreToolProgress } from "../../lib/tool-progress";
+import type { ProjectContext } from "../../lib/project-guidance";
 
 type Command =
-  | { kind: "submitting"; content: string; mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only"; knowledgeFilter?: KnowledgeFilter }
+  | { kind: "submitting"; content: string; mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only"; knowledgeFilter?: KnowledgeFilter; projectContext?: ProjectContext }
   | { kind: "continuing"; plan: string; requirements: AgentRoutingRequirements }
   | { kind: "resuming"; input: string; questionId?:string; answer?:ClarificationAnswerRequest };
 type Activity = "idle" | Command["kind"];
@@ -241,7 +242,7 @@ export function useRunSession(options: SessionOptions) {
     try {
       if (command.kind === "submitting") {
         await streamChat({ conversation_id: conversationId || undefined, agent_id: command.agentId || undefined,
-          mode: command.mode, message: command.content, completion_contract: command.completionContract, execution_constraint: command.executionConstraint, knowledge_filter: command.knowledgeFilter }, onEvent, request.signal);
+          mode: command.mode, message: command.content, completion_contract: command.completionContract, execution_constraint: command.executionConstraint, knowledge_filter: command.knowledgeFilter, project_context: command.projectContext }, onEvent, request.signal);
       } else if (command.kind === "continuing") {
         await continueRun({ run_id: runId, plan: command.plan, routing_requirements: command.requirements }, onEvent, request.signal);
       } else {
@@ -313,7 +314,7 @@ export function useRunSession(options: SessionOptions) {
   return {
     runState, setRunState, trace, activity, reasoning, partialOutputs, toolProgress, restoreOutputs, isCancelingRun, clearRun, detach, cancel,
     isStreaming: activity !== "idle", isContinuingRun: activity === "continuing", isResumingRun: activity === "resuming",
-    submit: (content: string, settings: { mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only"; knowledgeFilter?: KnowledgeFilter }) =>
+    submit: (content: string, settings: { mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only"; knowledgeFilter?: KnowledgeFilter; projectContext?: ProjectContext }) =>
       content.trim() ? execute({ kind: "submitting", content: content.trim(), ...settings }) : Promise.resolve(),
     continuePlan: (plan?: string, requirements?: AgentRoutingRequirements) => {
       const current = latest.current.trace;

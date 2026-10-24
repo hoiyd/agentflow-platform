@@ -22,6 +22,10 @@ file into a second handbook.
 9. Apply manual edits directly to repository files with patches and show the
    actual project diff. Do not wrap those edits in temporary intermediary scripts;
    legitimate project generators and formatting commands remain appropriate.
+10. Make scope trade-offs explicit before implementation. If a feature leaves
+    its normal frontend or other consumer unfinished, record separate phases,
+    statuses and acceptance criteria in the backlog. Do not mark the whole
+    feature complete while an expected consumer phase remains unfinished.
 
 For commands with unknown output size:
 

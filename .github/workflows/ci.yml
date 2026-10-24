@@ -195,7 +195,7 @@ jobs:
       - name: Run scoped project guidance gate
         env:
           AGENTFLOW_PROJECT_GUIDANCE_TEST: '1'
-        run: npm run test:e2e -- project-guidance.spec.ts
+        run: npm run test:e2e -- project-guidance
       - name: Retain project guidance evidence
         if: always()
         uses: actions/upload-artifact@v7

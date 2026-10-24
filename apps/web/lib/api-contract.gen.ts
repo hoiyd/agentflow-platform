@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/project-guidance/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description List operator-trusted projects with current read-only root access in the authorized Workspace. Returns logical names and rule counts, not host paths or file bodies. */
+        get: operations["listProjectGuidanceProjects"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/project-guidance/projects/{root}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Browse at most 500 entries in one authorized project directory. Linked, sensitive and unsafe files are omitted. This supplies selection metadata, not instruction trust or Tool grants. */
+        get: operations["listProjectGuidanceFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/rag/evaluations/run": {
         parameters: {
             query?: never;
@@ -1410,6 +1444,23 @@ export interface components {
             mode?: components["schemas"]["ChatMode"];
             completion_contract?: components["schemas"]["CompletionContractInput"];
         };
+        ProjectGuidanceCatalog: {
+            configured: boolean;
+            projects: {
+                root: string;
+                entry: string;
+                rule_count: number;
+            }[];
+        };
+        ProjectFilePage: {
+            path: string;
+            truncated: boolean;
+            entries: {
+                path: string;
+                /** @enum {string} */
+                kind: "file" | "directory";
+            }[];
+        };
         /** @description Select existing relative files in one authorized root. Operator trust is configured separately; this grants no Tools or filesystem permissions. */
         ProjectContext: {
             root: string;
@@ -2545,6 +2596,59 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listProjectGuidanceProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Empty projects when disabled or no authorized projects remain. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectGuidanceCatalog"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    listProjectGuidanceFiles: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path: {
+                root: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relative file/directory entries with an explicit truncation flag. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectFilePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Project guidance discovery is not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     runRAGEvaluation: {
         parameters: {
             query?: never;
