@@ -74,6 +74,9 @@ remain stable across normal laptop and wide-monitor viewports.
   layout shift. **Automatic** removes only the explicit Skill command.
 - Keep template creation separate from runtime selection; see the
   [Agent creation flow](../runtime/agent-profiles.md#creation-and-selection).
+- Project guidance belongs beside the message input, with project/file selection
+  in a dialog shared by all modes. It configures new Runs; frozen Run guidance is
+  read-only and collapsed by default in Replay.
 - Dialogs are horizontally centered and positioned above the visual midpoint so
   their primary fields remain easy to scan.
 - Trace show/hide controls use the same style, side, and placement in Multi-Agent

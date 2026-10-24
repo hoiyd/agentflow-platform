@@ -5,6 +5,8 @@ import "net/http"
 func (h *Handler) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /health", h.health)
 	mux.HandleFunc("POST /api/chat", h.chat)
+	mux.HandleFunc("GET /api/project-guidance/projects", h.listGuidanceProjects)
+	mux.HandleFunc("GET /api/project-guidance/projects/{root}/files", h.listGuidanceProjectFiles)
 
 	h.registerConversationRoutes(mux)
 	h.registerMemoryRoutes(mux)

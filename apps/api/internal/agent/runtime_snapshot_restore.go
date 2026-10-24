@@ -6,6 +6,7 @@ import (
 	"agentflow-platform/apps/api/internal/tool"
 	"agentflow-platform/apps/api/internal/tool/availability"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -40,6 +41,9 @@ func restoreAgent(snapshot domain.RuntimeAgentSnapshot) domain.Agent {
 func (r *Runtime) restoreRuntime(run domain.Run) (restoredRuntime, error) {
 	if err := validateRuntimeSnapshot(run.RuntimeSnapshot); err != nil {
 		return restoredRuntime{}, fmt.Errorf("run %s cannot be resumed safely: %w", run.ID, err)
+	}
+	if err := r.validateProjectGuidance(context.Background(), run); err != nil {
+		return restoredRuntime{}, err
 	}
 	snapshot := run.RuntimeSnapshot
 	if err := r.validateKnowledgeEvidence(run); err != nil {

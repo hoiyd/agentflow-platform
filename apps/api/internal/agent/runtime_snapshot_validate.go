@@ -2,6 +2,7 @@ package agent
 
 import (
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/projectguidance"
 	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/skill"
 	"agentflow-platform/apps/api/internal/tool"
@@ -15,6 +16,9 @@ import (
 func validateRuntimeSnapshot(snapshot *domain.RuntimeSnapshot) error {
 	if snapshot == nil {
 		return ErrRuntimeSnapshotUnavailable
+	}
+	if err := projectguidance.ValidateSnapshot(snapshot.ProjectGuidance); err != nil {
+		return err
 	}
 	if _, err := eligibility.FrozenFilter(snapshot); err != nil {
 		return err

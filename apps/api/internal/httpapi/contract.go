@@ -7,6 +7,9 @@ import (
 
 func chatRequestFromContract(input apicontract.ChatRequest) domain.ChatRequest {
 	request := domain.ChatRequest{Message: input.Message}
+	if input.ProjectContext != nil {
+		request.ProjectContext = &domain.ProjectContext{Root: input.ProjectContext.Root, Paths: append([]string(nil), input.ProjectContext.Paths...)}
+	}
 	if input.KnowledgeFilter != nil {
 		request.KnowledgeFilter = &domain.MetadataFilter{SchemaVersion: string(input.KnowledgeFilter.SchemaVersion), Where: metadataConditionFromInput(input.KnowledgeFilter.Where)}
 	}

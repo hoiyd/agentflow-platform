@@ -33,6 +33,34 @@ tags:
   - name: Knowledge
 
 paths:
+  /api/project-guidance/projects:
+    get:
+      operationId: listProjectGuidanceProjects
+      tags: [Chat]
+      description: List operator-trusted projects with current read-only root access in the authorized Workspace. Returns logical names and rule counts, not host paths or file bodies.
+      responses:
+        '200':
+          description: Empty projects when disabled or no authorized projects remain.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectGuidanceCatalog' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/project-guidance/projects/{root}/files:
+    get:
+      operationId: listProjectGuidanceFiles
+      tags: [Chat]
+      description: Browse at most 500 entries in one authorized project directory. Linked, sensitive and unsafe files are omitted. This supplies selection metadata, not instruction trust or Tool grants.
+      parameters:
+        - { in: path, name: root, required: true, schema: { type: string } }
+        - { in: query, name: path, schema: { type: string, default: '.' } }
+      responses:
+        '200':
+          description: Relative file/directory entries with an explicit truncation flag.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectFilePage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '503': { description: Project guidance discovery is not configured. }
   /api/rag/evaluations/run:
     post:
       operationId: runRAGEvaluation
@@ -1940,6 +1968,7 @@ components:
       type: object
       required: [message]
       properties:
+        project_context: { $ref: '#/components/schemas/ProjectContext' }
         knowledge_filter: { $ref: '#/components/schemas/MetadataFilter' }
         execution_constraint:
           type: string
@@ -1960,6 +1989,69 @@ components:
           $ref: '#/components/schemas/ChatMode'
         completion_contract:
           $ref: '#/components/schemas/CompletionContractInput'
+    ProjectGuidanceCatalog:
+      type: object
+      required: [configured, projects]
+      properties:
+        configured: { type: boolean }
+        projects:
+          type: array
+          items:
+            type: object
+            required: [root, entry, rule_count]
+            properties:
+              root: { type: string }
+              entry: { type: string }
+              rule_count: { type: integer }
+    ProjectFilePage:
+      type: object
+      required: [path, entries, truncated]
+      properties:
+        path: { type: string }
+        truncated: { type: boolean }
+        entries:
+          type: array
+          items:
+            type: object
+            required: [path, kind]
+            properties:
+              path: { type: string }
+              kind: { type: string, enum: [file, directory] }
+    ProjectContext:
+      type: object
+      additionalProperties: false
+      required: [root, paths]
+      description: Select existing relative files in one authorized root. Operator trust is configured separately; this grants no Tools or filesystem permissions.
+      properties:
+        root: { type: string, pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$' }
+        paths:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: { type: string, minLength: 1, maxLength: 1024 }
+    ProjectGuidanceEntry:
+      type: object
+      required: [path, reason, original_bytes, estimated_tokens]
+      properties:
+        path: { type: string }
+        patterns: { type: array, items: { type: string } }
+        matched_paths: { type: array, items: { type: string } }
+        reason: { type: string, enum: [project_entry, path_match, path_not_matched, duplicate_content] }
+        hash: { type: string }
+        content: { type: string }
+        original_bytes: { type: integer }
+        estimated_tokens: { type: integer }
+    ProjectGuidanceSnapshot:
+      type: object
+      required: [version, source_type, workspace_id, selection, root_revision, config_revision, entries]
+      properties:
+        version: { type: string, enum: [project-guidance-v1] }
+        source_type: { type: string, enum: [operator_project_guidance] }
+        workspace_id: { type: string }
+        selection: { $ref: '#/components/schemas/ProjectContext' }
+        root_revision: { type: string }
+        config_revision: { type: string }
+        entries: { type: array, items: { $ref: '#/components/schemas/ProjectGuidanceEntry' } }
     ContinueRunRequest:
       type: object
       required: [plan]
@@ -3133,6 +3225,7 @@ components:
           type: object
           additionalProperties: true
           properties:
+            project_guidance: { $ref: '#/components/schemas/ProjectGuidanceSnapshot' }
             knowledge_scope: { $ref: '#/components/schemas/KnowledgeScope' }
         conversation:
           $ref: '#/components/schemas/Conversation'

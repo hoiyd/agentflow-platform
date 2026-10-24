@@ -11,7 +11,7 @@ func ContainsPrivateData(manifest domain.ContextManifest) bool {
 			continue
 		}
 		switch entry.Source {
-		case SourceHistory, SourceHistorySearch, SourceMemory, SourceKnowledge, SourceCompaction, SourceTaskState:
+		case SourceHistory, SourceHistorySearch, SourceMemory, SourceKnowledge, SourceCompaction, SourceTaskState, SourceProjectGuidance:
 			return true
 		}
 	}

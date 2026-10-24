@@ -26,6 +26,9 @@ func WithFollowupInput(ctx context.Context, id, owner string, allowStopped bool)
 }
 
 func (r *Runtime) createRun(ctx context.Context, agentID, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error) {
+	if err := r.freezeProjectGuidance(ctx, conversationID, &snapshot); err != nil {
+		return domain.Run{}, err
+	}
 	if err := freezeKnowledgeScope(ctx, &snapshot); err != nil {
 		return domain.Run{}, err
 	}

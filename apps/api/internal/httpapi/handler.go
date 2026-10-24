@@ -83,6 +83,8 @@ type Dependencies struct {
 	Identity       *identity.Manager
 	Workspaces     *store.PostgresStore
 	MCPConnections *mcpconnection.Service
+
+	ProjectGuidance ProjectGuidanceDiscovery
 }
 
 type Handler struct {
@@ -100,6 +102,8 @@ type Handler struct {
 	identity       *identity.Manager
 	workspaces     *store.PostgresStore
 	mcpConnections *mcpconnection.Service
+
+	projectGuidance ProjectGuidanceDiscovery
 }
 
 func NewHandler(dependencies Dependencies) (*Handler, error) {
@@ -142,6 +146,8 @@ func NewHandler(dependencies Dependencies) (*Handler, error) {
 		identity:       dependencies.Identity,
 		workspaces:     dependencies.Workspaces,
 		mcpConnections: dependencies.MCPConnections,
+
+		projectGuidance: dependencies.ProjectGuidance,
 	}, nil
 }
 

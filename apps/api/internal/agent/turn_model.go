@@ -37,6 +37,9 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	if !ok {
 		return turn.Result{}, fmt.Errorf("run not found")
 	}
+	if err := m.runtime.validateProjectGuidance(ctx, run); err != nil {
+		return turn.Result{}, err
+	}
 	if err := m.runtime.validateKnowledgeEvidence(run); err != nil {
 		return turn.Result{}, err
 	}
@@ -148,7 +151,7 @@ func (m runtimeTurnModel) Execute(ctx context.Context, request turn.Request, emi
 	options.PlanOnly = snapshot.ExecutionConstraint == domain.ExecutionPlanOnly
 	// Reviewed plans contain private file-derived content even if ordinary
 	// Conversation history is trimmed from this new Run's Context.
-	options.PrivateContext = options.PrivateContext || snapshot.PlanOrigin != nil
+	options.PrivateContext = options.PrivateContext || snapshot.PlanOrigin != nil || snapshot.ProjectGuidance != nil
 	return m.executeStream(ctx, request, route.Client, schema, options, emit)
 }
 
@@ -168,13 +171,26 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 		historySearch = m.runtime.retrieveSessionHistory(ctx, request.RunID, request.ConversationID, request.Input)
 	}
 	session := contextassembly.Session{
-		AgentID: request.Agent.ID,
-		Config:  snapshot.ContextAssembly, Sink: request.Sink,
+		ProjectGuidance: snapshot.ProjectGuidance,
+		AgentID:         request.Agent.ID,
+		Config:          snapshot.ContextAssembly, Sink: request.Sink,
 		History: history, CurrentInput: request.Input,
 		SkillInput: request.SkillInput,
 		Memories:   request.Context.Memories, Knowledge: request.Context.Chunks,
 		HistorySearch: historySearch,
 		Compaction:    compaction,
+	}
+	if snapshot.ProjectGuidance != nil {
+		session.ValidateProjectGuidance = func() error {
+			run, ok, err := m.runtime.store.GetRun(request.RunID)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("project guidance Run is unavailable")
+			}
+			return m.runtime.validateProjectGuidance(ctx, run)
+		}
 	}
 	if !isolatedContext && m.runtime.inbox != nil {
 		session.LoadSteering = func() ([]domain.RunInput, error) {

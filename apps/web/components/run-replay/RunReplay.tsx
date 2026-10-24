@@ -32,6 +32,7 @@ import { useClarifications } from "../chat/useClarifications";
 import { StructuredResult } from "./StructuredResult";
 import { PlanningPanel } from "./PlanningPanel";
 import { FrozenKnowledgeScope } from "../knowledge/KnowledgeScope";
+import { FrozenProjectGuidance } from "../project-guidance/FrozenProjectGuidance";
 
 type Props = {
   runId: string;
@@ -186,6 +187,7 @@ function RunReplayView({ runId, initialEventId }: Props) {
 
       {operationError ? <div className="error" role="alert">{operationError}</div> : null}
       <FrozenKnowledgeScope scope={replay.runtime_snapshot?.knowledge_scope} />
+      <FrozenProjectGuidance snapshot={replay.runtime_snapshot?.project_guidance} />
       {refreshError ? <div className="replay-secondary-error" role="status">Replay refresh unavailable: {refreshError}</div> : null}
 
 		<RecoverySummaryPanel summary={replay.recovery_summary} onAction={handleRecoveryAction} isResuming={isResuming} canResume={replay.run.status === "failed_recoverable"} />

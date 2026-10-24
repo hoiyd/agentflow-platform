@@ -30,6 +30,7 @@ import (
 )
 
 type Runtime struct {
+	projectGuidance ProjectGuidanceProvider
 	planningSources interface {
 		ValidatePlanSources(context.Context, []domain.PlanSource) error
 	}
@@ -108,6 +109,7 @@ type PreparedRun struct {
 // RuntimeOptions captures the complete runtime policy at construction time so
 // new Runs can freeze one coherent snapshot without post-construction setters.
 type RuntimeOptions struct {
+	ProjectGuidance ProjectGuidanceProvider
 	PlanningSources interface {
 		ValidatePlanSources(context.Context, []domain.PlanSource) error
 	}
@@ -163,6 +165,7 @@ func NewRuntime(options RuntimeOptions) (*Runtime, error) {
 	}
 	runtime := &Runtime{
 		planningSources:       options.PlanningSources,
+		projectGuidance:       options.ProjectGuidance,
 		inbox:                 options.Inbox,
 		clarifications:        options.Clarifications,
 		store:                 options.Store,

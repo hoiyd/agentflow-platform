@@ -7,6 +7,7 @@ import { useWorkspaceReadOnly } from "../identity/WorkspaceContext";
 import { SelectionMenu } from "../ui/SelectionMenu";
 
 type ChatComposerProps = {
+  projectGuidance?: ReactNode;
   knowledgeScope?: ReactNode;
   planOnly?: boolean;
   onPlanOnlyChange?: (value: boolean) => void;
@@ -155,10 +156,11 @@ export function ChatComposer(props: ChatComposerProps) {
       {chatMode === "single" && agentsError ? <div className="error">{agentsError}</div> : null}
       {error ? <div className="error">{error}</div> : null}
       {props.inbox}
-      <form className="composer-inner" onSubmit={event => {
+      <form className={`composer-inner${props.projectGuidance ? " with-project-guidance" : ""}`} onSubmit={event => {
         if (readOnly || needsAgent || isStreaming || isAwaitingClarification || isAwaitingPlanApproval || isAwaitingHumanInput) event.preventDefault();
         else onSubmit(event);
       }}>
+        {props.projectGuidance}
         <textarea
           disabled={readOnly || isAwaitingClarification || isAwaitingPlanApproval || isAwaitingHumanInput}
           value={input}

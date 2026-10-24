@@ -157,6 +157,15 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	if f.webFetchResponse(w, input, task) {
 		return
 	}
+	// Historical requests may be retained after the user clears project selection.
+	guidanceTask := latestTask
+	if index := strings.LastIndex(guidanceTask, "\n\nUser request:\n"); index >= 0 {
+		guidanceTask = guidanceTask[index+len("\n\nUser request:\n"):]
+	}
+	if strings.Contains(guidanceTask, "project-guidance-gate") && !strings.Contains(task, "BROWSER_PROJECT_GUIDANCE") {
+		f.reject(w, "selected project guidance was not delivered to the model")
+		return
+	}
 	if f.filesystemResponse(w, input, task) {
 		return
 	}

@@ -27,7 +27,7 @@ trade-offs; [terms](terms.md) defines Run, Stage, Turn, and Snapshot.
 | Mode orchestration, Turn Engine, model/Tool rounds | [`agent/`](../../apps/api/internal/agent), [`agent/turn/`](../../apps/api/internal/agent/turn), [`agent/toolloop/`](../../apps/api/internal/agent/toolloop) |
 | Provider-neutral contracts, routing, request controls, Capture | [`inference/`](../../apps/api/internal/inference) |
 | Catalog, Executor, policy, results, progress, reconciliation | [`tool/`](../../apps/api/internal/tool), [`skill/`](../../apps/api/internal/skill) |
-| Input capacity and non-destructive summaries | [`contextassembly/`](../../apps/api/internal/contextassembly), [`contextcompaction/`](../../apps/api/internal/contextcompaction) |
+| Input capacity, project conventions and non-destructive summaries | [`contextassembly/`](../../apps/api/internal/contextassembly), [`projectguidance/`](../../apps/api/internal/projectguidance), [`contextcompaction/`](../../apps/api/internal/contextcompaction) |
 | Ingestion, shared retrieval policy and curated Memory | [`knowledge/`](../../apps/api/internal/knowledge), [`rag/`](../../apps/api/internal/rag), [`memory/`](../../apps/api/internal/memory) |
 | Admission, cumulative accounting, durable task facts | [`concurrency/`](../../apps/api/internal/concurrency), [`budget/`](../../apps/api/internal/budget), [`taskstate/`](../../apps/api/internal/taskstate) |
 | Durable contracts, events, failures, SQL | [`domain/`](../../apps/api/internal/domain), [`event/`](../../apps/api/internal/event), [`failure/`](../../apps/api/internal/failure), [`store/`](../../apps/api/internal/store) |
