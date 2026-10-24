@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$root/scripts/script-env.sh"
 if [[ -z "${TEST_DATABASE_URL:-}" ]]; then
   printf 'Set TEST_DATABASE_URL to a dedicated Postgres test database with CREATEDB privileges.\n' >&2
   exit 1

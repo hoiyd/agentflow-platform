@@ -1,0 +1,63 @@
+{
+  "enabled_tools": ["calculator", "get_current_time", "web_search", "sandbox_command"],
+  "security_policy": {
+    "version": "tool-security-policy-v1",
+    "default_action": "allow",
+    "rules": [
+      {
+        "id": "builtin-task-state-write",
+        "tool": "update_task_state",
+        "action": "allow_and_log",
+        "capability": {
+          "source": "local",
+          "scope": {
+            "resources": [{"kind": "conversation", "name": "task_state", "access": "write"}],
+            "network": {"mode": "none"}
+          },
+          "side_effect_class": "internal_write",
+          "rate": "run_budgeted",
+          "reversibility": "compensatable",
+          "visibility": "user",
+          "approval_mode": "none",
+          "audit_level": "full"
+        }
+      },
+      {
+        "id": "builtin-web-search-read",
+        "tool": "web_search",
+        "action": "allow",
+        "capability": {
+          "source": "local",
+          "scope": {
+            "network": {"mode": "external", "targets": ["api.tavily.com"]},
+            "credential_scopes": ["tavily_search"]
+          },
+          "side_effect_class": "none",
+          "rate": "run_budgeted",
+          "reversibility": "reversible",
+          "visibility": "run",
+          "approval_mode": "none",
+          "audit_level": "basic"
+        }
+      },
+      {
+        "id": "operator-sandbox-command",
+        "tool": "sandbox_command",
+        "action": "allow_and_log",
+        "capability": {
+          "source": "local",
+          "scope": {
+            "resources": [{"kind": "filesystem", "name": "sbx:scratch", "access": "write"}],
+            "network": {"mode": "none"}
+          },
+          "side_effect_class": "internal_write",
+          "rate": "run_budgeted",
+          "reversibility": "reversible",
+          "visibility": "user",
+          "approval_mode": "none",
+          "audit_level": "full"
+        }
+      }
+    ]
+  }
+}

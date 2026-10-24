@@ -1,7 +1,7 @@
 {
   "schema_version": "failure-corpus-v1",
   "id": "agentflow-historical-failures",
-  "version": "1",
+  "version": "2",
   "cases": [
     {
       "schema_version": "failure-case-v1",
@@ -57,6 +57,34 @@
         "reviewed_at": "2026-10-21T02:33:22Z",
         "redaction": "confirmed",
         "notes": "Repository owner explicitly approved this historical technical summary, immutable public code evidence and regression mapping for promotion. No raw conversation, prompt or credential is retained."
+      }
+    },
+    {
+      "schema_version": "failure-case-v1",
+      "id": "tool-policy-config-upgrade",
+      "owner": "tool",
+      "failure_class": "configuration_authority_inheritance",
+      "source_ref": "https://github.com/hoiyd/agentflow-platform/blob/6a0c315327a280d567d51e12b6d995e7d099196a/apps/api/internal/tool/config.go",
+      "source_revision": "6a0c315327a280d567d51e12b6d995e7d099196a",
+      "evidence": [
+        {
+          "kind": "code_revision",
+          "ref": "https://github.com/hoiyd/agentflow-platform/blob/6a0c315327a280d567d51e12b6d995e7d099196a/apps/api/internal/tool/config.go",
+          "sha256": "8dba2af82f90feddcfca457078fefa5cde6e3040f1a980022825a97c57d84f22"
+        }
+      ],
+      "input_boundary": "An existing operator JSON policy predates the web_fetch default rule. Decoding over prefilled slice entries retained web_search network targets in an unrelated no-network sandbox grant and rejected startup.",
+      "expected_outcome": "The fixed prior configuration starts through production composition without mutation or inherited authority. Actual sandbox receipts survive restart; new Tools gain no implicit enablement, revocation remains effective, and invalid rules reject startup without leaking the sandbox lock.",
+      "regression": {
+        "package": "./app",
+        "test": "TestToolPolicyConfigUpgradeStartsApplication"
+      },
+      "review": {
+        "status": "approved",
+        "reviewer": "repository-owner",
+        "reviewed_at": "2026-10-24T07:40:07Z",
+        "redaction": "confirmed",
+        "notes": "Repository owner explicitly requested all five prevention actions, including adding this described incident to the Failure Corpus. Only the technical summary, public source revision and owned regression mapping are retained; the reproduction uses a synthetic configuration, not the operator file or credentials."
       }
     },
     {

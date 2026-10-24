@@ -21,6 +21,7 @@ to explicit offline fixtures, not the application fallback path.
 
 ```bash
 test -f apps/api/.env || cp apps/api/.env.example apps/api/.env
+test -f scripts/.env || cp scripts/.env.example scripts/.env
 test -f apps/api/config/model-routes.json || cp apps/api/config/model-routes.example.json apps/api/config/model-routes.json
 ```
 
@@ -39,12 +40,18 @@ Edit local configuration before starting:
 
 See [backend configuration](../operations/backend-configuration.md) for settings
 and [model routing](../runtime/model-routing.md) for selection semantics.
+Keep launcher, CLI and test settings in `scripts/.env`; the API's `.env` contains
+business configuration. Both files are ignored by Git. Shell entry points load
+their script settings automatically; process environment overrides local values.
 
 ```bash
 make quickstart               # Locked frontend install, Go modules, API + web
 make dev                      # Subsequent starts without dependency installation
-API_PORT=18080 WEB_PORT=13000 make dev   # Alternative ports
+API_PORT=18080 WEB_PORT=13000 NEXT_PUBLIC_API_BASE_URL=http://localhost:18080 make dev
 ```
+
+An empty `NEXT_PUBLIC_API_BASE_URL` in `scripts/.env` follows `API_PORT`; an
+explicit URL stays pinned, so override it too when selecting alternative ports.
 
 The default API is `http://127.0.0.1:8080`; the workbench is
 [localhost:3000/workspace](http://localhost:3000/workspace).
@@ -77,6 +84,7 @@ npm run dev
 ```
 
 Set `NEXT_PUBLIC_API_BASE_URL` only when the API is elsewhere.
+These direct Go/npm commands do not load `scripts/.env`.
 Workspace selection uses the current owner's entities and persisted active
 default; no frontend namespace environment variable is needed. New databases
 create the local owner's space automatically; migrated databases retain their
@@ -95,8 +103,8 @@ make routing-eval
 make benchmark-evidence
 ```
 
-`make test` runs Go tests, frontend lint, library/component tests, and the
-production build. Without `TEST_DATABASE_URL`, database tests may skip;
+`make test` runs the script configuration gate, Go tests, frontend lint,
+library/component tests, and the production build. Without `TEST_DATABASE_URL`, database tests may skip;
 that is not persistence acceptance. Use only a dedicated test database, never
 application data. Some suites create disposable databases; older integration
 suites use the dedicated database directly. See

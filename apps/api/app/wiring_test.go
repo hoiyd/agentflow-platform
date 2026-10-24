@@ -41,8 +41,6 @@ func TestSplitOrigins(t *testing.T) {
 }
 
 func TestNewStoreRequiresPostgresWithoutFallback(t *testing.T) {
-	t.Setenv("STORE_DRIVER", "file")
-	t.Setenv("DATA_PATH", t.TempDir()+"/state.json")
 	for _, databaseURL := range []string{"", "://invalid"} {
 		backend, err := newStore(config.Config{DatabaseURL: databaseURL})
 		if err == nil {

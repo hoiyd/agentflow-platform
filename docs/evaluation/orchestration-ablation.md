@@ -35,7 +35,7 @@ From `apps/api`, with Go configured as described in [AGENTS.md](../../AGENTS.md)
 ```bash
 go run ./cmd/eval modes --live \
   --database-url "$TEST_DATABASE_URL" \
-  --base-url "$MODEL_BASE_URL" --model "$MODEL_ID" \
+  --base-url https://your-model-endpoint.example/v1 --model YOUR_MODEL \
   --credential-env OPENAI_API_KEY \
   --trials 3 --approval-policy approve \
   --max-model-requests 60 --max-total-tokens 180000 \

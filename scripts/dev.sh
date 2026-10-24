@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${ROOT_DIR}/scripts/script-env.sh"
 
 # shellcheck disable=SC1091
 source "${ROOT_DIR}/scripts/go-env.sh"

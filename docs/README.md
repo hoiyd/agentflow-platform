@@ -90,8 +90,9 @@ These are implementation and operating contracts, not a required reading list.
 ## Documentation Ownership
 
 Keep the README introductory, this page navigational, and each contract in one
-owning document. Defaults belong in [`.env.example`](../apps/api/.env.example),
-DTOs in OpenAPI, and event names in the generated catalog. Preserve executable
+owning document. API defaults belong in [`apps/api/.env.example`](../apps/api/.env.example)
+and tooling defaults in [`scripts/.env.example`](../scripts/.env.example), DTOs
+in OpenAPI, and event names in the generated catalog. Preserve executable
 steps, failure semantics, evidence provenance, and limitations when editing.
 Do not turn implementation notes or private backlogs into the public reading path.
 

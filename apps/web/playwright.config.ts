@@ -36,7 +36,6 @@ export default defineConfig({
       command: "npm run build -- --webpack && npm run start -- --hostname 127.0.0.1 --port 13000",
       env: {
         NEXT_PUBLIC_API_BASE_URL: "http://127.0.0.1:18080",
-        NEXT_PUBLIC_WORKSPACE_ID: "default_workspace",
         AGENTFLOW_TEST_DIST_DIR: ".next-functional"
       },
       url: "http://127.0.0.1:13000/workspace",

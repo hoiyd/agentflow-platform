@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${ROOT_DIR}/scripts/script-env.sh"
 REPORT_PATH="${RELEASE_DRILL_REPORT_PATH:-${ROOT_DIR}/.cache/release-drill/latest.json}"
 
 # shellcheck disable=SC1091

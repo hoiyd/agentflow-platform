@@ -27,13 +27,13 @@ dev:
 	@bash scripts/dev.sh
 
 golden-eval:
-	@bash -c 'source scripts/go-env.sh && activate_agentflow_go && cd apps/api && go run ./cmd/eval rag --enforce'
+	@bash scripts/evaluation/eval.sh rag --enforce
 
 context-eval:
-	@bash -c 'source scripts/go-env.sh && activate_agentflow_go && cd apps/api && go run ./cmd/eval context --enforce'
+	@bash scripts/evaluation/eval.sh context --enforce
 
 routing-eval:
-	@bash -c 'source scripts/go-env.sh && activate_agentflow_go && cd apps/api && go run ./cmd/eval route --enforce'
+	@bash scripts/evaluation/eval.sh route --enforce
 
 benchmark-evidence:
 	@bash scripts/evaluation/benchmark-evidence.sh
