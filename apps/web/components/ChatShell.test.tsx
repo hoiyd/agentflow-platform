@@ -4,6 +4,7 @@ import { ChatShell } from "./ChatShell";
 
 const api = vi.hoisted(() => ({
   getAPIHealth: vi.fn(),
+  createConversation: vi.fn(),
   listConversations: vi.fn(),
   listMessages: vi.fn(),
   getTaskState: vi.fn(),
@@ -24,9 +25,13 @@ vi.mock("../lib/api", () => api);
 const knowledgeAPI = vi.hoisted(() => ({ listDocuments: vi.fn() }));
 vi.mock("../lib/knowledge-api", () => knowledgeAPI);
 vi.mock("./chat/ChatChrome", () => ({
-  Sidebar: ({ onOpenConversation }: { onOpenConversation: (id: string) => void }) => (
-    <button onClick={() => onOpenConversation("b")}>Open B</button>
-  ),
+  Sidebar: ({ onOpenConversation, onNewConversation, isBusy }: {
+    onOpenConversation: (id: string) => void; onNewConversation: () => void; isBusy: boolean;
+  }) => {
+    newConversationFromSidebar = onNewConversation;
+    return <><button onClick={() => onOpenConversation("b")}>Open B</button>
+      <button disabled={isBusy} onClick={onNewConversation}>New conversation</button></>;
+  },
   Topbar: () => null,
   ToolsPanel: () => null
 }));
@@ -51,6 +56,7 @@ vi.mock("./chat/ChatWorkspace", () => ({
   )
 }));
 let submitFromComposer: (event: React.FormEvent) => void;
+let newConversationFromSidebar: () => void;
 vi.mock("./chat/ChatComposer", () => ({
   ChatComposer: ({ input, error, onInputChange, onSubmit }: {
     input: string; error: string; onInputChange: (value: string) => void; onSubmit: (event: React.FormEvent) => void;
@@ -62,6 +68,74 @@ vi.mock("./chat/ChatComposer", () => ({
 vi.mock("./chat/ChatDialogs", () => ({ ChatDialogs: () => null }));
 
 afterEach(cleanup);
+
+// Creation may be slow, reject, or lose ownership to navigation. Never submit
+// into the old Conversation, duplicate creation before render, or apply a late ID.
+it("blocks stale submission and duplicate creation until the new conversation is ready", async () => {
+  setupAPI();
+  let finishCreation!: (conversation: unknown) => void;
+  api.createConversation.mockImplementation(() => new Promise(resolve => { finishCreation = resolve; }));
+  api.streamChat.mockImplementation(() => new Promise(() => {}));
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("A baseline");
+  fireEvent.change(screen.getByRole("textbox", { name: "Prompt" }), { target: { value: "new task" } });
+  const submit = submitFromComposer;
+  const create = newConversationFromSidebar;
+  act(() => {
+    create();
+    submit({ preventDefault() {} } as React.FormEvent);
+    create();
+  });
+  expect(api.createConversation).toHaveBeenCalledTimes(1);
+  expect(api.streamChat).not.toHaveBeenCalled();
+  expect((screen.getByRole("button", { name: "New conversation" }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => finishCreation({ id: "c", title: "New conversation" }));
+  await waitFor(() => expect((screen.getByRole("button", { name: "New conversation" }) as HTMLButtonElement).disabled).toBe(false));
+  expect(screen.queryByText("A baseline")).toBeNull();
+  expect((screen.getByRole("textbox", { name: "Prompt" }) as HTMLInputElement).value).toBe("new task");
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  expect(api.streamChat).toHaveBeenCalledTimes(1);
+  expect(api.streamChat.mock.calls[0][0].conversation_id).toBe("c");
+});
+
+it("preserves the old conversation and draft after creation fails, and permits retry", async () => {
+  setupAPI();
+  let failCreation!: (error: Error) => void;
+  api.createConversation.mockImplementationOnce(() => new Promise((_resolve, reject) => { failCreation = reject; }))
+    .mockResolvedValueOnce({ id: "c", title: "New conversation" });
+  api.streamChat.mockImplementation(() => new Promise(() => {}));
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("A baseline");
+  fireEvent.change(screen.getByRole("textbox", { name: "Prompt" }), { target: { value: "retained draft" } });
+  fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
+  await act(async () => failCreation(new Error("creation unavailable")));
+  expect(screen.getByLabelText("Error").textContent).toBe("creation unavailable");
+  expect(screen.getByText("A baseline")).toBeTruthy();
+  expect((screen.getByRole("textbox", { name: "Prompt" }) as HTMLInputElement).value).toBe("retained draft");
+  expect(api.streamChat).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
+  await waitFor(() => expect(screen.queryByText("A baseline")).toBeNull());
+  await waitFor(() => expect((screen.getByRole("button", { name: "New conversation" }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  expect(api.streamChat.mock.calls[0][0].conversation_id).toBe("c");
+});
+
+it("does not apply a late created conversation after navigation", async () => {
+  setupAPI();
+  let finishCreation!: (conversation: unknown) => void;
+  api.createConversation.mockImplementation(() => new Promise(resolve => { finishCreation = resolve; }));
+  api.streamChat.mockImplementation(() => new Promise(() => {}));
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("A baseline");
+  fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open B" }));
+  await screen.findByText("B baseline");
+  await act(async () => finishCreation({ id: "c", title: "New conversation" }));
+  expect(screen.getByText("B baseline")).toBeTruthy();
+  fireEvent.change(screen.getByRole("textbox", { name: "Prompt" }), { target: { value: "B task" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  expect(api.streamChat.mock.calls[0][0].conversation_id).toBe("b");
+});
 
 it("refreshes task state without canceling pending conversation trace recovery", async () => {
   setupAPI();

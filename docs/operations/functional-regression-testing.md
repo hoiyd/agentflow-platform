@@ -34,6 +34,7 @@ Write or update this inventory before adding isolated fixtures.
 | Withdrawn/expired Knowledge is reused or an edit overwrites a newer revision | [Lifecycle gate](../knowledge/document-lifecycle.md#verification) checks persisted edits, current-source reads, restart and three runtime modes |
 | Memory corrections/deletions lose version or remain recalled | History records the correction; version increases; deletion clears content and recall |
 | Two command callbacks fire before a React render | Only one command is admitted and one optimistic message pair is created |
+| A new Conversation is still being created when Send/Enter fires | Creation and submission stay locked; the draft survives, the new Run uses the created ID, and no previous history is reused |
 | Continue becomes clickable before the previous command settles | `tool-progress.spec.ts` delays history, then checks disabled approval, successful Continue and persisted completion |
 | A stream fails before or after accepting events | Before acceptance, drafts roll back; after acceptance, partial output stays and durable observation resumes |
 | A frozen Skill is mistaken for an observed model input | Replay joins Manifest with the physical request record; missing evidence remains not observed |
