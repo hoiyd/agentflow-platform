@@ -54,6 +54,8 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [apiConnectionStatus, setAPIConnectionStatus] = useState<APIConnectionStatus>("checking");
+  const [isCreatingConversation, setIsCreatingConversation] = useState(false);
+  const conversationCreationPending = useRef(false);
   const messagesRef = useRef<HTMLElement | null>(null);
   const knowledge = useKnowledgeWorkbench();
   const memory = useMemoryWorkbench();
@@ -197,6 +199,10 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   }
 
   async function startNewConversation() {
+    if (conversationCreationPending.current) return;
+    // The current ID still belongs to the old Chat until creation commits.
+    conversationCreationPending.current = true;
+    setIsCreatingConversation(true);
     session.detach();
     const request = conversationRequests.begin();
     setError("");
@@ -215,6 +221,9 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
       if (request.isCurrent()) {
         setError(err instanceof Error ? err.message : "Failed to create conversation");
       }
+    } finally {
+      conversationCreationPending.current = false;
+      setIsCreatingConversation(false);
     }
   }
 
@@ -275,7 +284,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const content = input.trim();
-    if (!content || isStreaming || isAwaitingClarification || isAwaitingPlanApproval || isAwaitingHumanInput || (chatMode === "single" && !activeAgent)) return;
+    if (!content || conversationCreationPending.current || isStreaming || isAwaitingClarification || isAwaitingPlanApproval || isAwaitingHumanInput || (chatMode === "single" && !activeAgent)) return;
     let completionContract;
     try {
       completionContract = buildCompletionContract(verification.settings);
@@ -292,7 +301,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
         activeId={activeId}
         apiConnectionStatus={apiConnectionStatus}
         conversations={conversations}
-        isBusy={isStreaming || isContinuingRun}
+        isBusy={isCreatingConversation || isStreaming || isContinuingRun}
         isCollapsed={isSidebarCollapsed}
         isOpen={isSidebarOpen}
         onCollapseChange={() => setIsSidebarCollapsed((current) => !current)}
@@ -395,7 +404,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
               disabled={isRunStreaming || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification || Boolean(runState && ["queued", "failed_recoverable"].includes(runState.status))} />}
             knowledgeScope={<KnowledgeScopeControl values={knowledge.scope.values} onChange={knowledge.scope.change} disabled={isStreaming || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification} />}
 			planOnly={planOnly} onPlanOnlyChange={setPlanOnly}
-            inbox={activeId && runState ? <RunInbox key={activeId} conversationId={activeId} runId={runState.id} mode={chatMode} agentId={activeAgentId}
+            inbox={activeId && runState && !isCreatingConversation ? <RunInbox key={activeId} conversationId={activeId} runId={runState.id} mode={chatMode} agentId={activeAgentId}
               input={input} busy={isStreaming || ["running","queued","canceling"].includes(runState.status)}
               canStartFollowup={["completed","failed","canceled"].includes(runState.status) && (chatMode !== "single" || Boolean(activeAgent))}
               onSubmitted={()=>setInput("")} onRunAvailable={()=>{if(!isStreaming)void loadConversation(activeId);}} /> : null}
@@ -416,7 +425,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
             isAwaitingPlanApproval={isAwaitingPlanApproval}
             isCreatingAgent={isCreatingAgent}
             isNewAgentFormOpen={isNewAgentFormOpen}
-            isStreaming={isStreaming || Boolean(runState && ["running","queued","canceling"].includes(runState.status))}
+            isStreaming={isCreatingConversation || isStreaming || Boolean(runState && ["running","queued","canceling"].includes(runState.status))}
             onAgentChange={selectAgent}
             onConfigureAgent={openAgentConfig}
             onDescriptionExpandedChange={toggleDescription}

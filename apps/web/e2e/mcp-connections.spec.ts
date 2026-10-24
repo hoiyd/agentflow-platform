@@ -2,6 +2,77 @@ import { test, expect } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { createWorkspaceChatAgent, defaultWorkspaceID } from "./fixtures/workspace-agent";
 
+// Hold only delivery of a real creation response. A slow creation must never
+// send a draft to the previous Conversation or mistake its answer for success.
+test("new conversation blocks submission until its real identity is ready", async ({ page, request }) => {
+  test.skip(process.env.AGENTFLOW_MCP_CONNECTION_TEST !== "1", "requires isolated MCP connection fixture");
+  await page.goto("/workspace");
+  await expect(page.getByText("API connected", { exact: true })).toBeVisible();
+  const workspace = await defaultWorkspaceID(page);
+  const headers = { "X-Workspace-ID": workspace };
+  const agent = await createWorkspaceChatAgent(page, workspace, "Conversation boundary reader");
+  const chatRequests: Array<{ conversation_id: string; message: string }> = [];
+  page.on("request", sent => {
+    if (sent.method() === "POST" && new URL(sent.url()).pathname === "/api/chat") chatRequests.push(sent.postDataJSON());
+  });
+  await page.getByPlaceholder("Ask AgentFlow anything...").fill("conversation creation: previous task");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
+  const oldRunID = (await page.getByRole("link", { name: "View trace", exact: true }).getAttribute("href"))!.split("/").at(-1)!;
+  const previous = await (await request.get(`http://127.0.0.1:18080/api/runs/${oldRunID}/replay`, { headers })).json();
+  let release!: () => void;
+  let arrived!: () => void;
+  let delivered!: () => void;
+  let createdID = "";
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const ready = new Promise<void>(resolve => { arrived = resolve; });
+  const finished = new Promise<void>(resolve => { delivered = resolve; });
+  await page.route("**/api/conversations", async route => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await route.fetch();
+    expect(response.status()).toBe(201);
+    createdID = (await response.json()).id;
+    arrived();
+    await held;
+    await route.fulfill({ response });
+    delivered();
+  });
+  try {
+    await page.getByRole("button", { name: "New conversation", exact: true }).click();
+    await ready;
+    await page.getByPlaceholder("Ask AgentFlow anything...").fill("conversation creation: new task");
+    await expect(page.getByRole("button", { name: "New conversation", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeDisabled();
+    await expect(page.getByLabel("Run inbox", { exact: true })).toHaveCount(0);
+    await page.getByPlaceholder("Ask AgentFlow anything...").press("Enter");
+    expect(chatRequests).toHaveLength(1);
+    const screenshot = test.info().outputPath("new-conversation-pending.png");
+    await page.screenshot({ path: screenshot });
+    await test.info().attach("new-conversation-pending.png", { path: screenshot, contentType: "image/png" });
+  } finally {
+    release();
+    await finished;
+    await page.unroute("**/api/conversations");
+  }
+  await expect(page.getByRole("link", { name: "View trace", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Send message", exact: true })).toBeEnabled();
+  await expect(page.getByPlaceholder("Ask AgentFlow anything...")).toHaveValue("conversation creation: new task");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible();
+  const newRunID = (await page.getByRole("link", { name: "View trace", exact: true }).getAttribute("href"))!.split("/").at(-1)!;
+  const replay = await (await request.get(`http://127.0.0.1:18080/api/runs/${newRunID}/replay`, { headers })).json();
+  expect(replay.run.status).toBe("completed");
+  expect(newRunID).not.toBe(oldRunID);
+  expect(createdID).not.toBe(previous.run.conversation_id);
+  expect(replay.run.conversation_id).toBe(createdID);
+  expect(chatRequests).toHaveLength(2);
+  expect(chatRequests[0]).toMatchObject({ conversation_id: previous.run.conversation_id, message: "conversation creation: previous task" });
+  expect(chatRequests[1]).toMatchObject({ conversation_id: createdID, message: "conversation creation: new task" });
+  expect(JSON.stringify(replay.messages)).not.toContain("conversation creation: previous task");
+  await test.info().attach("new-conversation-evidence.json", { body: JSON.stringify({ schema: "conversation-creation-browser-v1", workspace_id: workspace, agent_id: agent.id, previous_run: oldRunID, previous_conversation: previous.run.conversation_id, new_run: newRunID, new_conversation: createdID, status: replay.run.status, checks: ["real creation response delayed", "duplicate creation and Send disabled", "Enter submits no request while pending", "draft preserved", "new Run uses the created identity", "previous history excluded"], limitations: ["synthetic model and disposable Postgres", "controlled response delivery, not simulated API success"] }, null, 2), contentType: "application/json" });
+  expect((await request.delete(`http://127.0.0.1:18080/api/agents/${agent.id}`, { headers })).ok()).toBe(true);
+});
+
 test("Workspace MCP connections: UI lifecycle, real calls and durable Replay", async ({ page, request }) => {
   test.skip(process.env.AGENTFLOW_MCP_CONNECTION_TEST !== "1", "requires isolated MCP connection fixture");
   test.setTimeout(180_000);
@@ -19,12 +90,14 @@ test("Workspace MCP connections: UI lifecycle, real calls and durable Replay", a
   await page.getByRole("option", { name: "Bearer token", exact: true }).click();
   await page.getByLabel("Bearer token", { exact: true }).fill("wrong-token");
   await page.getByRole("button", { name: "Save connection", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Add MCP connection", exact: true })).toHaveCount(0);
   const row = page.getByRole("article", { name: "Documentation service", exact: true });
   await row.getByRole("button", { name: "Test connection", exact: true }).click();
   await expect(row.getByText("Authentication failed", { exact: true })).toBeVisible();
   await row.getByRole("button", { name: "Edit connection", exact: true }).click();
   await page.getByLabel("Bearer token", { exact: true }).fill(fixture.token);
   await page.getByRole("button", { name: "Save connection", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Edit connection", exact: true })).toHaveCount(0);
   await row.getByRole("button", { name: "Test connection", exact: true }).click();
   await expect(row.getByText("Tools discovered", { exact: true })).toBeVisible();
   await row.getByRole("button", { name: "Edit connection", exact: true }).click();
@@ -34,6 +107,8 @@ test("Workspace MCP connections: UI lifecycle, real calls and durable Replay", a
   await page.screenshot({ path: dialogScreenshot });
   await test.info().attach("workspace-mcp-tool-selection.png", { path: dialogScreenshot, contentType: "image/png" });
   await page.getByRole("button", { name: "Save connection", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Edit connection", exact: true })).toHaveCount(0);
+  await expect(row.getByText("Enabled", { exact: true })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Tools", exact: true }).click();
   await page.getByRole("button", { name: "MCP connections", exact: true }).click();
@@ -54,7 +129,12 @@ test("Workspace MCP connections: UI lifecycle, real calls and durable Replay", a
   const agent = await createWorkspaceChatAgent(page, workspace, "Workspace docs reader", { tools: [toolName], routing_hints: { capabilities: ["public-docs"], task_examples: ["mcp-gate"], exclusions: [] } });
   const runs = [];
   for (const mode of ["Single agent", "Multi-agent", "Bounded loop"]) {
+    const creation = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/conversations");
     await page.getByRole("button", { name: "New conversation", exact: true }).click();
+    const created = await creation;
+    expect(created.status()).toBe(201);
+    const conversation = await created.json();
+    await expect(page.getByRole("link", { name: "View trace", exact: true })).toHaveCount(0);
     await page.getByRole("region", { name: "Chat mode" }).getByRole("button", { name: new RegExp(mode) }).click();
     await page.getByPlaceholder("Ask AgentFlow anything...").fill("mcp-gate: read the public project guide");
     await page.getByRole("button", { name: "Send message", exact: true }).click();
@@ -63,14 +143,22 @@ test("Workspace MCP connections: UI lifecycle, real calls and durable Replay", a
       await page.getByRole("textbox", { name: "Preferred capabilities", exact: true }).fill("public-docs");
       await page.getByRole("button", { name: "Approve & Continue", exact: true }).click();
     }
-    await expect(page.locator(".message.assistant").last()).toContainText("MCP evidence confirmed", { timeout: 45_000 });
+    await expect(page.getByLabel("Task status: completed", { exact: true })).toBeVisible({ timeout: 45_000 });
+    await expect(page.locator(".message.assistant").last()).toContainText("MCP evidence confirmed");
     const runID = (await page.getByRole("link", { name: "View trace", exact: true }).getAttribute("href"))!.split("/").at(-1)!;
     const replay = await (await request.get(`http://127.0.0.1:18080/api/runs/${runID}/replay`, { headers })).json();
+    expect(replay.run.status).toBe("completed");
+    expect(replay.run.conversation_id).toBe(conversation.id);
+    expect(replay.runtime_snapshot.mode).toBe(mode === "Single agent" ? "single" : mode === "Multi-agent" ? "multi_agent" : "autonomous");
     expect(replay.run_events.some((e: { type: string; payload: { tool_name?: string } }) => e.type === "tool.completed" && e.payload.tool_name === toolName)).toBe(true);
     expect(JSON.stringify(replay)).not.toContain(fixture.token);
-    runs.push({ mode, run_id: runID, source: replay.runtime_snapshot.tools.find((t: { name: string }) => t.name === toolName)?.source });
+    runs.push({ mode, run_id: runID, conversation_id: conversation.id, source: replay.runtime_snapshot.tools.find((t: { name: string }) => t.name === toolName)?.source });
   }
+  expect(new Set(runs.map(run => run.conversation_id)).size).toBe(3);
+  const creation = page.waitForResponse(response => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/conversations");
   await page.getByRole("button", { name: "New conversation", exact: true }).click();
+  expect((await creation).status()).toBe(201);
+  await expect(page.getByRole("link", { name: "View trace", exact: true })).toHaveCount(0);
   await page.getByRole("region", { name: "Chat mode" }).getByRole("button", { name: /Multi-agent/ }).click();
   await page.getByPlaceholder("Ask AgentFlow anything...").fill("mcp-gate: read the public project guide");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
