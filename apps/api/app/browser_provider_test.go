@@ -157,6 +157,10 @@ func (f *browserProvider) respond(w http.ResponseWriter, r *http.Request) {
 	if f.webFetchResponse(w, input, task) {
 		return
 	}
+	if strings.Contains(task, "project-guidance-gate") && !strings.Contains(task, "BROWSER_PROJECT_GUIDANCE") {
+		f.reject(w, "selected project guidance was not delivered to the model")
+		return
+	}
 	if f.filesystemResponse(w, input, task) {
 		return
 	}

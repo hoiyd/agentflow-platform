@@ -19,6 +19,7 @@ For startup commands, use [Local setup](../guides/local-setup.md).
 | `EMBEDDING_*` | Independent embedding endpoint/model/dimensions/timeout; dimensions must match stored vectors |
 | `TOOL_CONFIG_PATH` | Operator enablement/security policy file, not application persistence |
 | `TRUSTED_SKILL_DIRS` | Reviewed installation roots; relative to API process cwd |
+| `FILESYSTEM_ROOTS_PATH` / `PROJECT_GUIDANCE_PATH` | Separate file-access and instruction-trust configuration; [project guidance](../context/project-guidance.md) |
 
 The launcher uses `apps/api` as cwd. The template selects
 `config/model-routes.json`, `.data/tools.json`, and `../../.agents/skills`.

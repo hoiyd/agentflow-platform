@@ -576,6 +576,60 @@ func (e PartialOutputStatus) Valid() bool {
 	}
 }
 
+// Defines values for ProjectGuidanceEntryReason.
+const (
+	DuplicateContent ProjectGuidanceEntryReason = "duplicate_content"
+	PathMatch        ProjectGuidanceEntryReason = "path_match"
+	PathNotMatched   ProjectGuidanceEntryReason = "path_not_matched"
+	ProjectEntry     ProjectGuidanceEntryReason = "project_entry"
+)
+
+// Valid indicates whether the value is a known member of the ProjectGuidanceEntryReason enum.
+func (e ProjectGuidanceEntryReason) Valid() bool {
+	switch e {
+	case DuplicateContent:
+		return true
+	case PathMatch:
+		return true
+	case PathNotMatched:
+		return true
+	case ProjectEntry:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProjectGuidanceSnapshotSourceType.
+const (
+	OperatorProjectGuidance ProjectGuidanceSnapshotSourceType = "operator_project_guidance"
+)
+
+// Valid indicates whether the value is a known member of the ProjectGuidanceSnapshotSourceType enum.
+func (e ProjectGuidanceSnapshotSourceType) Valid() bool {
+	switch e {
+	case OperatorProjectGuidance:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProjectGuidanceSnapshotVersion.
+const (
+	ProjectGuidanceV1 ProjectGuidanceSnapshotVersion = "project-guidance-v1"
+)
+
+// Valid indicates whether the value is a known member of the ProjectGuidanceSnapshotVersion enum.
+func (e ProjectGuidanceSnapshotVersion) Valid() bool {
+	switch e {
+	case ProjectGuidanceV1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RAGGoldenDatasetSchemaVersion.
 const (
 	RagGoldenDatasetV1 RAGGoldenDatasetSchemaVersion = "rag-golden-dataset-v1"
@@ -1278,7 +1332,10 @@ type ChatRequest struct {
 	Message         string          `json:"message"`
 	Mode            *ChatMode       `json:"mode,omitempty"`
 	PlanOrigin      *PlanOrigin     `json:"plan_origin,omitempty"`
-	WorkspaceId     *string         `json:"workspace_id,omitempty"`
+
+	// ProjectContext Select existing relative files in one authorized root. Operator trust is configured separately; this grants no Tools or filesystem permissions.
+	ProjectContext *ProjectContext `json:"project_context,omitempty"`
+	WorkspaceId    *string         `json:"workspace_id,omitempty"`
 }
 
 // ChatRequestExecutionConstraint Frozen read-only restriction; omit for ordinary execution.
@@ -1939,6 +1996,46 @@ type PlanSource struct {
 	RootRevision string `json:"root_revision"`
 }
 
+// ProjectContext Select existing relative files in one authorized root. Operator trust is configured separately; this grants no Tools or filesystem permissions.
+type ProjectContext struct {
+	Paths []string `json:"paths"`
+	Root  string   `json:"root"`
+}
+
+// ProjectGuidanceEntry defines model for ProjectGuidanceEntry.
+type ProjectGuidanceEntry struct {
+	Content         *string                    `json:"content,omitempty"`
+	EstimatedTokens int                        `json:"estimated_tokens"`
+	Hash            *string                    `json:"hash,omitempty"`
+	MatchedPaths    *[]string                  `json:"matched_paths,omitempty"`
+	OriginalBytes   int                        `json:"original_bytes"`
+	Path            string                     `json:"path"`
+	Patterns        *[]string                  `json:"patterns,omitempty"`
+	Reason          ProjectGuidanceEntryReason `json:"reason"`
+}
+
+// ProjectGuidanceEntryReason defines model for ProjectGuidanceEntry.Reason.
+type ProjectGuidanceEntryReason string
+
+// ProjectGuidanceSnapshot defines model for ProjectGuidanceSnapshot.
+type ProjectGuidanceSnapshot struct {
+	ConfigRevision string                 `json:"config_revision"`
+	Entries        []ProjectGuidanceEntry `json:"entries"`
+	RootRevision   string                 `json:"root_revision"`
+
+	// Selection Select existing relative files in one authorized root. Operator trust is configured separately; this grants no Tools or filesystem permissions.
+	Selection   ProjectContext                    `json:"selection"`
+	SourceType  ProjectGuidanceSnapshotSourceType `json:"source_type"`
+	Version     ProjectGuidanceSnapshotVersion    `json:"version"`
+	WorkspaceId string                            `json:"workspace_id"`
+}
+
+// ProjectGuidanceSnapshotSourceType defines model for ProjectGuidanceSnapshot.SourceType.
+type ProjectGuidanceSnapshotSourceType string
+
+// ProjectGuidanceSnapshotVersion defines model for ProjectGuidanceSnapshot.Version.
+type ProjectGuidanceSnapshotVersion string
+
 // RAGCitation defines model for RAGCitation.
 type RAGCitation struct {
 	ChunkId         string    `json:"chunk_id"`
@@ -2220,8 +2317,9 @@ type RunReplay struct {
 // RunReplay_RuntimeSnapshot defines model for RunReplay.RuntimeSnapshot.
 type RunReplay_RuntimeSnapshot struct {
 	// KnowledgeScope Frozen business restriction, not a permission grant. Identity hashes normalized filter JSON; old Runs without this field remain unfiltered.
-	KnowledgeScope       *KnowledgeScope        `json:"knowledge_scope,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	KnowledgeScope       *KnowledgeScope          `json:"knowledge_scope,omitempty"`
+	ProjectGuidance      *ProjectGuidanceSnapshot `json:"project_guidance,omitempty"`
+	AdditionalProperties map[string]interface{}   `json:"-"`
 }
 
 // RunStatus defines model for RunStatus.
@@ -2994,6 +3092,14 @@ func (a *RunReplay_RuntimeSnapshot) UnmarshalJSON(b []byte) error {
 		delete(object, "knowledge_scope")
 	}
 
+	if raw, found := object["project_guidance"]; found {
+		err = json.Unmarshal(raw, &a.ProjectGuidance)
+		if err != nil {
+			return fmt.Errorf("error reading 'project_guidance': %w", err)
+		}
+		delete(object, "project_guidance")
+	}
+
 	if len(object) != 0 {
 		a.AdditionalProperties = make(map[string]interface{})
 		for fieldName, fieldBuf := range object {
@@ -3017,6 +3123,13 @@ func (a RunReplay_RuntimeSnapshot) MarshalJSON() ([]byte, error) {
 		object["knowledge_scope"], err = json.Marshal(a.KnowledgeScope)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'knowledge_scope': %w", err)
+		}
+	}
+
+	if a.ProjectGuidance != nil {
+		object["project_guidance"], err = json.Marshal(a.ProjectGuidance)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'project_guidance': %w", err)
 		}
 	}
 

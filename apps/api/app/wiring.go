@@ -25,6 +25,7 @@ import (
 	"agentflow-platform/apps/api/internal/knowledge"
 	"agentflow-platform/apps/api/internal/mcpconnection"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
+	"agentflow-platform/apps/api/internal/projectguidance"
 	"agentflow-platform/apps/api/internal/rag"
 	"agentflow-platform/apps/api/internal/recovery"
 	"agentflow-platform/apps/api/internal/sandbox"
@@ -188,6 +189,10 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 	if err != nil {
 		return applicationDependencies{}, fmt.Errorf("configure filesystem tools: %w", err)
 	}
+	projectGuidance, err := projectguidance.New(cfg.ProjectGuidancePath, filesystemTools)
+	if err != nil {
+		return applicationDependencies{}, fmt.Errorf("configure project guidance: %w", err)
+	}
 	bindings := append([]tool.Binding{tool.WebSearchTool(tavilyClient), tool.WebFetchTool(runWebSourceResolver(appStore)), tool.SandboxCommandTool(sandboxRunner)}, filesystemTools.Bindings()...)
 	mcpAdapter, err := tool.NewMCPAdapter(cfg.MCPConfigPath)
 	if err != nil {
@@ -254,6 +259,7 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 
 	clarifications := observableClarifications{Store: workspaceStore, publish: appStore.publishCommitted}
 	agentRuntime, err = agent.NewRuntime(agent.RuntimeOptions{
+		ProjectGuidance: projectGuidance,
 		PlanningSources: filesystemTools,
 		Inbox:           workspaceStore,
 		Clarifications:  clarifications,

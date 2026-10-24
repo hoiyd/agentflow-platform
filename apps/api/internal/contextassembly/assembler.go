@@ -21,6 +21,11 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	if !active {
 		return Pack{Messages: withPlatformPolicy(request.Messages)}, nil
 	}
+	if session.ValidateProjectGuidance != nil {
+		if err := session.ValidateProjectGuidance(); err != nil {
+			return Pack{}, err
+		}
+	}
 	config := NormalizeConfig(session.Config)
 	inputBudget := config.ContextWindowTokens - config.OutputReserveTokens - config.SafetyMarginTokens
 	var taskState *domain.TaskState
@@ -38,7 +43,7 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	raw := cloneMessages(request.Messages)
 	filtered := raw[:0]
 	for _, message := range raw {
-		if message.Source != SourcePlatformPolicy {
+		if message.Source != SourcePlatformPolicy && message.Source != SourceProjectGuidance {
 			filtered = append(filtered, message)
 		}
 	}
@@ -69,6 +74,7 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	if err != nil {
 		return Pack{}, fmt.Errorf("load frozen Skill context: %w", err)
 	}
+	messages, guidanceDiagnostics := appendProjectGuidance(messages, session.ProjectGuidance)
 	messages = applyRetrievedContextTrustPolicy(messages)
 	messages = withPlatformPolicy(messages)
 	entries := make([]domain.ContextManifestEntry, 0, len(messages)+len(request.Tools)+len(session.Memories)+len(session.Knowledge)+1)
@@ -109,6 +115,7 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 				entry.Activation = "explicit"
 			}
 		}
+		annotateProjectGuidance(&entry, session.ProjectGuidance)
 		if required {
 			entry.IncludedBytes = messageContentBytes(message)
 			requiredTokens += tokens
@@ -137,6 +144,7 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	}
 
 	memoryCandidates := memoryCandidates(session.Memories)
+	suppressGuidanceMemoryDuplicates(memoryCandidates, session)
 	knowledgeCandidates := knowledgeCandidates(session.Knowledge)
 	if session.LoadKnowledgeReads != nil {
 		reads, err := session.LoadKnowledgeReads()
@@ -183,6 +191,7 @@ func Assemble(ctx context.Context, request Request) (Pack, error) {
 	entries = appendCandidateEntries(entries, memoryCandidates)
 	entries = appendCandidateEntries(entries, knowledgeCandidates)
 	entries = appendCandidateEntries(entries, historySearchCandidates)
+	entries = append(entries, guidanceDiagnostics...)
 	if compactionCandidate != nil {
 		entries = append(entries, compactionCandidate.entry)
 	}
@@ -346,7 +355,7 @@ func excludeCompactedHistory(messages []Message, compaction *domain.ContextCompa
 
 func isRequiredSource(source string) bool {
 	switch source {
-	case SourceSystem, SourcePlatformPolicy, SourceCurrentInput, SourceSteering, SourceToolCall, SourceToolResult, SourceSkillMetadata, SourceSkillInstructions:
+	case SourceSystem, SourcePlatformPolicy, SourceCurrentInput, SourceSteering, SourceToolCall, SourceToolResult, SourceSkillMetadata, SourceSkillInstructions, SourceProjectGuidance:
 		return true
 	default:
 		return false
@@ -390,6 +399,9 @@ func selectRelevant(items []candidate, sourceBudget int, remaining int, sourceRe
 	used := 0
 	for index := range items {
 		entry := &items[index].entry
+		if entry.Reason == "duplicate_project_guidance" {
+			continue
+		}
 		if entry.EstimatedTokens <= 0 {
 			entry.Reason = "empty"
 			continue

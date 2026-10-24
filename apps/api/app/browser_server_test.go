@@ -106,6 +106,7 @@ func TestBrowserServer(t *testing.T) {
 	cfg.AuthMode = "local"
 	cfg.SandboxEnabled = false
 	cfg.FilesystemRootsPath = ""
+	cfg.ProjectGuidancePath = ""
 	cfg.MCPConfigPath = ""
 	cfg.MCPWorkspaceLocalOrigins = ""
 	t.Setenv("MCP_CREDENTIAL_ENCRYPTION_KEY", "")
@@ -113,9 +114,12 @@ func TestBrowserServer(t *testing.T) {
 	if os.Getenv("AGENTFLOW_MCP_TEST") == "1" || os.Getenv("AGENTFLOW_MCP_CONNECTION_TEST") == "1" {
 		mcpControls = browserMCPConfig(t, &cfg, root)
 	}
-	if os.Getenv("AGENTFLOW_FILESYSTEM_TEST") == "1" || os.Getenv("AGENTFLOW_FILESYSTEM_WRITE_TEST") == "1" || os.Getenv("AGENTFLOW_PLANNING_TEST") == "1" {
+	if os.Getenv("AGENTFLOW_FILESYSTEM_TEST") == "1" || os.Getenv("AGENTFLOW_FILESYSTEM_WRITE_TEST") == "1" || os.Getenv("AGENTFLOW_PLANNING_TEST") == "1" || os.Getenv("AGENTFLOW_PROJECT_GUIDANCE_TEST") == "1" {
 		browserFilesystemConfig(t, &cfg, root)
 		cfg.RunMaxModelCalls = 24
+	}
+	if os.Getenv("AGENTFLOW_PROJECT_GUIDANCE_TEST") == "1" {
+		browserProjectGuidanceConfig(t, &cfg, root)
 	}
 	// Always override operator reranker variables: only this opt-in gate calls
 	// the controlled provider, and ordinary browser suites remain heuristic.

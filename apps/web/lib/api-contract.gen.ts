@@ -1395,6 +1395,7 @@ export interface components {
             hash: string;
         };
         ChatRequest: {
+            project_context?: components["schemas"]["ProjectContext"];
             knowledge_filter?: components["schemas"]["MetadataFilter"];
             /**
              * @description Frozen read-only restriction; omit for ordinary execution.
@@ -1408,6 +1409,33 @@ export interface components {
             message: string;
             mode?: components["schemas"]["ChatMode"];
             completion_contract?: components["schemas"]["CompletionContractInput"];
+        };
+        /** @description Select existing relative files in one authorized root. Operator trust is configured separately; this grants no Tools or filesystem permissions. */
+        ProjectContext: {
+            root: string;
+            paths: string[];
+        };
+        ProjectGuidanceEntry: {
+            path: string;
+            patterns?: string[];
+            matched_paths?: string[];
+            /** @enum {string} */
+            reason: "project_entry" | "path_match" | "path_not_matched" | "duplicate_content";
+            hash?: string;
+            content?: string;
+            original_bytes: number;
+            estimated_tokens: number;
+        };
+        ProjectGuidanceSnapshot: {
+            /** @enum {string} */
+            version: "project-guidance-v1";
+            /** @enum {string} */
+            source_type: "operator_project_guidance";
+            workspace_id: string;
+            selection: components["schemas"]["ProjectContext"];
+            root_revision: string;
+            config_revision: string;
+            entries: components["schemas"]["ProjectGuidanceEntry"][];
         };
         ContinueRunRequest: {
             plan: string;
@@ -2306,6 +2334,7 @@ export interface components {
             run: components["schemas"]["Run"];
             projection: components["schemas"]["RunProjectionSnapshot"];
             runtime_snapshot?: {
+                project_guidance?: components["schemas"]["ProjectGuidanceSnapshot"];
                 knowledge_scope?: components["schemas"]["KnowledgeScope"];
             } & {
                 [key: string]: unknown;

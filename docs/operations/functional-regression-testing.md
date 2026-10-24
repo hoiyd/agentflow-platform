@@ -74,6 +74,13 @@ configuration, scoped rejection and Replay reload in all modes. Successful
 search/fetch/Artifact acquisition and HTTP/Dial failures have a separate backend
 integration boundary; neither fixture claims live-model quality.
 
+## Project Guidance
+
+The [scoped guidance gate](../context/project-guidance.md#verification) checks
+explicit project selection, path matching, frozen recovery, current grants and
+rejected inputs through CLI/HTTP/Postgres. Its opt-in browser profile checks
+delivery to the provider and the persisted Manifest after Replay reload.
+
 ## Trusted MCP
 
 With a dedicated `TEST_DATABASE_URL`, run:

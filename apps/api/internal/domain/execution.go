@@ -68,6 +68,7 @@ type CollaborationStep struct {
 }
 
 type ChatRequest struct {
+	ProjectContext      *ProjectContext `json:"project_context,omitempty"`
 	KnowledgeFilter     *MetadataFilter `json:"knowledge_filter,omitempty"`
 	ExecutionConstraint string          `json:"execution_constraint,omitempty"`
 	PlanOrigin          *PlanOrigin     `json:"plan_origin,omitempty"`

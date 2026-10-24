@@ -196,6 +196,7 @@ func modelRequirements(request turnpkg.Request, snapshot *domain.RuntimeSnapshot
 		systemPrompt = request.Agent.SystemPrompt
 	}
 	estimated := contextassembly.EstimateTokens(systemPrompt) + contextassembly.EstimateTokens(request.Input)
+	estimated += contextassembly.ProjectGuidanceTokens(snapshot.ProjectGuidance)
 	for _, message := range request.History {
 		estimated += contextassembly.EstimateTokens(message.Role) + contextassembly.EstimateTokens(message.Content) + 4
 	}

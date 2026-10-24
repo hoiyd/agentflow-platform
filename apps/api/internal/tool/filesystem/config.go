@@ -168,6 +168,10 @@ func (s *Service) authorizedRoot(ctx context.Context, id string) (rootRecord, er
 	if err != nil {
 		return rootRecord{}, err
 	}
+	return s.authorizedRootForWorkspace(workspace, id)
+}
+
+func (s *Service) authorizedRootForWorkspace(workspace, id string) (rootRecord, error) {
 	var frozen *rootRecord
 	for i := range s.roots {
 		if s.roots[i].ID == id && s.roots[i].WorkspaceID == workspace {

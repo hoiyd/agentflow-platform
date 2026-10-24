@@ -3,6 +3,9 @@ package domain
 import "time"
 
 type ContextManifestEntry struct {
+	ContentHash  string   `json:"content_hash,omitempty"`
+	SourcePath   string   `json:"source_path,omitempty"`
+	MatchedPaths []string `json:"matched_paths,omitempty"`
 	// Activation records explicit invocation, not model compliance or Tool authority.
 	Activation       string   `json:"activation,omitempty"`
 	Source           string   `json:"source"`

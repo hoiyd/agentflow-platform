@@ -37,6 +37,7 @@ const (
 	SourceTaskState         = "task_state"
 	SourceSkillMetadata     = "skill_metadata"
 	SourceSkillInstructions = "skill_instructions"
+	SourceProjectGuidance   = "project_guidance"
 )
 
 var ErrInputBudgetExceeded = failure.New(failure.Definition{
@@ -90,11 +91,13 @@ type Pack struct {
 }
 
 type Session struct {
-	AgentID      string
-	Config       domain.ContextAssemblyConfig
-	Sink         eventpkg.Sink
-	History      []domain.Message
-	CurrentInput string
+	ProjectGuidance         *domain.ProjectGuidanceSnapshot
+	ValidateProjectGuidance func() error
+	AgentID                 string
+	Config                  domain.ContextAssemblyConfig
+	Sink                    eventpkg.Sink
+	History                 []domain.Message
+	CurrentInput            string
 	// Kept separate because internal Stage prompts are not explicit user intent.
 	SkillInput    string
 	Memories      []domain.RetrievedMemory

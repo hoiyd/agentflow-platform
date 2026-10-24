@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -42,6 +43,10 @@ func (s *Service) readText(ctx context.Context, root rootRecord, path string, by
 	if err != nil {
 		return textFile{}, err
 	}
+	return readTextFile(ctx, file, byteLimit)
+}
+
+func readTextFile(ctx context.Context, file *os.File, byteLimit int) (textFile, error) {
 	defer file.Close()
 	before, err := file.Stat()
 	if err != nil {

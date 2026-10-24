@@ -10,7 +10,9 @@ import (
 	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
+	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/planning"
+	"agentflow-platform/apps/api/internal/projectguidance"
 	"agentflow-platform/apps/api/internal/rag/eligibility"
 	"agentflow-platform/apps/api/internal/redaction"
 	"agentflow-platform/apps/api/internal/store"
@@ -52,7 +54,19 @@ func (c Commands) Start(ctx context.Context, scope Scope, req domain.ChatRequest
 		if err != nil {
 			return commandError(Invalid, err)
 		}
+		if previous.RuntimeSnapshot != nil && previous.RuntimeSnapshot.ProjectGuidance != nil {
+			selection := previous.RuntimeSnapshot.ProjectGuidance.Selection
+			req.ProjectContext = &selection
+		}
 	}
+	if req.ProjectContext != nil {
+		selection, err := projectguidance.NormalizeSelection(*req.ProjectContext)
+		if err != nil {
+			return commandError(Invalid, err)
+		}
+		req.ProjectContext = &selection
+	}
+	ctx = agent.WithProjectContext(ctx, req.ProjectContext)
 	ctx = agent.WithKnowledgeScope(ctx, knowledgeScope)
 	if err := redaction.ValidateValue(req); err != nil {
 		return commandError(Invalid, err)
@@ -169,6 +183,9 @@ func (c Commands) Start(ctx context.Context, scope Scope, req domain.ChatRequest
 		}
 	}
 	if err != nil {
+		if failure.Describe(err).Source == "project_guidance" {
+			return commandError(Invalid, err)
+		}
 		if errors.Is(err, planning.ErrAlreadyStarted) {
 			return commandError(Conflict, err)
 		}

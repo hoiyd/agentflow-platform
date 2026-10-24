@@ -166,6 +166,9 @@ type Config struct {
 	// require managed_output roots, explicit policy and Workspace/Agent grants.
 	// This neither mounts directories in sbx nor grants Shell access.
 	FilesystemRootsPath string
+	// ProjectGuidancePath separately trusts entry/rule files inside read-only
+	// filesystem roots. Empty disables new Project Context requests, not file Tools.
+	ProjectGuidancePath string
 	// ToolSchemaMode controls new Runs: eager, lazy, or auto by estimated Schema cost.
 	ToolSchemaMode string
 	// ToolSchemaTokenThreshold selects lazy in auto mode; it is not a Context or usage limit.
@@ -301,6 +304,7 @@ func Load() Config {
 		MCPConfigPath:                     getEnv("MCP_CONFIG_PATH", ""),
 		MCPWorkspaceLocalOrigins:          getEnv("MCP_WORKSPACE_LOCAL_ORIGINS", ""),
 		FilesystemRootsPath:               getEnv("FILESYSTEM_ROOTS_PATH", ""),
+		ProjectGuidancePath:               getEnv("PROJECT_GUIDANCE_PATH", ""),
 		ToolSchemaMode:                    getEnv("TOOL_SCHEMA_MODE", "eager"),
 		ToolSchemaTokenThreshold:          getIntEnv("TOOL_SCHEMA_TOKEN_THRESHOLD", 2048),
 		ToolResultMaxBatchBytes:           getIntEnv("TOOL_RESULT_MAX_BATCH_BYTES", 8000),
