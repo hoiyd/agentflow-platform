@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT_DIR}/scripts/script-env.sh"
 REPORT_DIR="${LLAMA_CPP_REPORT_DIR:-${ROOT_DIR}/.cache/llama-cpp-compatibility}"
 
 : "${LLAMA_CPP_MODEL:?set LLAMA_CPP_MODEL to the model ID sent to llama.cpp}"

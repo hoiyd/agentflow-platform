@@ -81,6 +81,20 @@ Backend rules:
 - For API shape changes, regenerate the shared client and run
   `make contract-check` from the repository root.
 
+## Configuration Compatibility
+
+- Define omitted, empty and `null` behavior explicitly. Decode collection
+  replacements from zero values; never merge permissions by array position or
+  let omitted fields retain another entry's authority. Saving and reloading
+  must preserve these semantics, including explicit empty grants.
+- Changes to defaults, catalog entries or permissions need a fixed, secret-free
+  prior configuration through the real loader and production startup. Do not
+  regenerate that fixture from current defaults. Assert effective permissions,
+  order independence, rejection and restart, not merely successful parsing.
+- Bind reproduced configuration incidents to the existing
+  [Failure Corpus](docs/evaluation/failure-corpus.md); do not weaken validation
+  or rewrite an operator's file to make startup succeed.
+
 ## Runtime Contract Guardrails
 
 - Before changing Tool or Agent execution, identify what is modified, who owns

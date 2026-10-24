@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${ROOT_DIR}/scripts/script-env.sh"
 BASE_URL="${LLAMA_CPP_BASE_URL:-http://127.0.0.1:18081/v1}"
 REPORT_DIR="${LLAMA_CPP_CALIBRATION_REPORT_DIR:-${ROOT_DIR}/.cache/tokenization-calibration}"
 

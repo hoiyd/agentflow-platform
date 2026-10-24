@@ -47,12 +47,12 @@ schema, unknown owner, absent evidence, pending review or redaction are rejected
 ## Gate and Evidence
 
 Run the mapped tests with `-count=1`; no test command is executed from a manifest.
-For the initial three historical candidates:
+For the current corpus:
 
 ```bash
 revision=$(git rev-parse HEAD)
 go test -json ./internal/agent/toolloop ./app -count=1 \
-  -run '^(TestMultiRoundPreservesReasoningWithoutExposingIt|TestMultiRoundTaskStateWriteUsesRealStageOrTurnIdentity|TestObservableWorkspacePreservesArtifactReads)$' \
+  -run '^(TestMultiRoundPreservesReasoningWithoutExposingIt|TestMultiRoundTaskStateWriteUsesRealStageOrTurnIdentity|TestObservableWorkspacePreservesArtifactReads|TestToolPolicyConfigUpgradeStartsApplication)$' \
   > /tmp/failure-tests.json
 go run ./cmd/eval failures check --results /tmp/failure-tests.json \
   --results-revision "$revision" --enforce > /tmp/failure-regressions.json
@@ -83,7 +83,10 @@ technical summaries, explicitly approved by the repository owner on 2026-10-21:
 #151 Provider continuation, #152 internal Task State write, and #167 Workspace
 Artifact capability loss. They reference immutable public fix code and SHA-256,
 not raw incident captures. The initial gate passed all three owned regressions
-against disposable Postgres. Pending candidates and an empty corpus cannot pass.
+against disposable Postgres. The 2026-10-24 owner-approved addition covers Tool
+policy fields inherited by array position after defaults changed; its fixed
+configuration exercises the [production startup gate](../operations/functional-regression-testing.md#configuration-upgrade-gate).
+Pending candidates and an empty corpus cannot pass.
 
 New samples stay with their RAG, Context, Tool, routing or recovery owner; this
 index records the existing gate target rather than moving all tests. The first

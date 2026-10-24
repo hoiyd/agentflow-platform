@@ -62,7 +62,10 @@ export AGENTFLOW_WEB_URL=http://localhost:3000 # exact server AUTH_WEB_URL origi
 ```
 
 Flags `--api-url`, `--workspace`, `--web-url` and `--session-file` override these
-environment variables. Only the file path may appear in argv. Expired/revoked
+environment variables. `scripts/agentflow.sh` also loads these four settings from
+ignored `scripts/.env`; exported values take precedence. Installed CLI binaries
+read process environment only. See [configuration files](../operations/backend-configuration.md#configuration-files).
+Only the file path may appear in argv. Expired/revoked
 sessions fail; this slice does not add device login, automatic refresh, service
 accounts or token issuance. Secure cookies require HTTPS. API/Web settings are
 origins, not URLs with paths, queries or credentials; API redirects and ambient

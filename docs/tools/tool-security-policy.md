@@ -118,8 +118,15 @@ until a durable approval flow exists.
 ## Operator Configuration
 
 `TOOL_CONFIG_PATH` points to the JSON file that owns enablement and policy.
-Omitting `security_policy` preserves the built-in fail-closed defaults. A
-configured policy uses one exact rule per Tool:
+`enabled_tools` replaces the default list; `[]` disables all service Tools.
+Omitted/null lists keep defaults, but null or blank entries are rejected.
+
+An explicit `security_policy.rules` list replaces the default list; rules never
+inherit capability fields by array position. Omitting the policy or its `rules`
+keeps defaults; `rules: []` or `rules: null` clears explicit rules. Empty/null
+entries, unknown fields and `network.mode: none` with targets are rejected.
+Saving an empty list keeps it explicit, so reloading cannot restore default grants.
+Configure one exact rule per Tool:
 
 ```json
 {

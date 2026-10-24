@@ -4,6 +4,11 @@ These gates protect user-visible behavior, not coverage percentages. The two
 Tool regressions exposed a missing layer: component tests mocked the API, while
 direct Tool-loop tests did not exercise the production application composition.
 
+Shell test/evaluation entry points load ignored `scripts/.env`; process overrides
+win, live flags remain opt-in, and the application `.env` is never imported.
+Direct Go/npm commands require explicit environment settings. See
+[configuration files](backend-configuration.md#configuration-files).
+
 ## Failure Inventory
 
 Write or update this inventory before adding isolated fixtures.
@@ -40,6 +45,7 @@ Write or update this inventory before adding isolated fixtures.
 | Login or Workspace selection is mistaken for permission | The signed OIDC/Postgres browser gate proves membership, nonmember rejection, scoped reload and server-side logout revocation |
 | A valid identity guesses another owner's object ID or supplies linked evidence | The resource authorization gate rejects reads, mutation and Memory provenance; owned resources and persisted revisions remain unchanged |
 | Production wrapping discards scoped Artifact reads | Artifact list/read/search retain capability and authorization in the real application composition |
+| New Tool defaults contaminate an existing operator policy | A fixed prior configuration starts unchanged; effective permissions, denied network, receipts and revocation survive restart |
 | Access is revoked after a stream was admitted | Further delivery stops, the browser reauthenticates, and the durable Run still completes independently |
 | Signup styling bypasses IdP security or creates shared access | The disposable Keycloak theme gate proves native password validation, direct IdP form submission, personal-only access, reload and repeat-login stability |
 | A late Cancel response follows a terminal stream event | It cannot regress the Run to `canceling` or revive cancellation UI |
@@ -66,6 +72,31 @@ the same production HTTP/SSE API and Postgres without a browser. Its retained
 report covers file/Skill execution, accepted and rejected machine results,
 authorization, approval pause, detached execution, SIGINT, cancellation and
 restart reads. The owning document also lists the controlled wire-fault cases.
+
+## Configuration Upgrade Gate
+
+With disposable `TEST_DATABASE_URL`, run from `apps/api`:
+
+```bash
+EVALUATION_REPORT_DIR=/tmp/config-upgrade-evidence \
+  go test -json ./app -run '^TestToolPolicyConfigUpgradeStartsApplication$' -count=1
+```
+
+The [fixed prior policy](../../apps/api/app/testdata/tools.pre-web-fetch.json)
+must not be generated from current defaults. The gate uses `app.New`, HTTP,
+the real Sandbox Binding and Postgres; only the model and sbx CLI are controlled
+fixtures. It checks readiness, exact policy, no implicit new Tool, persisted
+receipts, restart, revocation and invalid-startup lock cleanup. Its JSON evidence
+records the fixture hash, revision/dirty state, resource identities and limits.
+This proves configuration compatibility, not live model quality or VM isolation.
+The [Failure Corpus](../evaluation/failure-corpus.md) makes a missing, skipped or
+failed gate block CI; the ordinary backend job retains both artifacts.
+
+The related-loader audit found prefilled collection decoding only in Tool
+configuration, now corrected. Model routes, MCP, filesystem roots, project
+guidance, verifier configs and Skill YAML decode into fresh values; environment
+configuration applies scalar defaults directly. Recheck these boundaries when
+introducing collection defaults; this audit does not attest arbitrary payloads.
 
 ## Web Fetch
 

@@ -1,10 +1,40 @@
 # Backend Configuration
 
 Configuration is loaded at startup and injected by `app`. Use
-[`.env.example`](../../apps/api/.env.example) for the maintained environment
-list and defaults; this page explains deployment choices. For control scope,
+[`apps/api/.env.example`](../../apps/api/.env.example) for API environment
+inputs and defaults; this page explains deployment choices. For control scope,
 units, precedence, and tuning, use [Execution controls](../runtime/execution-controls.md).
 For startup commands, use [Local setup](../guides/local-setup.md).
+
+## Configuration Files
+
+| Template / ignored local file | Consumer |
+| --- | --- |
+| `apps/api/.env.example` / `apps/api/.env` | Go API runtime and credentials named by the supplied route examples |
+| [`scripts/.env.example`](../../scripts/.env.example) / `scripts/.env` | Development launcher, Headless CLI, evaluation and opt-in tests |
+
+Development, client, test and evaluation shell entry points load `scripts/.env`
+using Node.js 22+ dotenv parsing,
+never Shell evaluation. Existing process values, including empty values, win;
+supported CLI flags override environment settings. A missing file retains each
+program's defaults. `make dev` imports only its three launcher settings; the
+Headless wrapper imports only its four client settings. Test/evaluation entry
+points do not import development ports or the frontend API URL from the file.
+Explicit process overrides still reach child processes.
+
+The API loads only its own `.env`. The script loader never imports that file;
+direct Go/npm commands and installed CLI binaries require script settings in the process
+environment. Do not export the complete API file to the frontend or tests.
+`LLAMA_CPP_API_KEY` and `RERANKER_API_KEY` have runtime and evaluation consumers;
+configure them separately in each file as needed, without automatic secret
+sharing. Live tests remain opt-in and require a dedicated test database.
+
+OS variables and generated test identities are not project settings. Model/Tool
+JSON and CLI flags retain their own contracts; environment entries do not replace
+them. Custom credential names declared by operator JSON/CLI must also be supplied.
+Empty credentials, authorized IDs and deployment facts have no usable default.
+The backend template coverage test checks both templates against Go readers and
+the supplied route catalogs; it never reads local credentials.
 
 ## Baseline Environment
 
@@ -34,8 +64,8 @@ User with its own space, never another OIDC owner's data. Header/query/payload
 selectors must agree; legacy string IDs are not runtime aliases.
 
 The frontend loads `/api/workspaces` after the session probe and validates its
-remembered selection before mounting consumers. `NEXT_PUBLIC_WORKSPACE_ID` is no
-longer used. Archived spaces are read-only; foreign/deleted spaces return 404.
+remembered selection before mounting consumers. Archived spaces are read-only;
+foreign/deleted spaces return 404.
 See [Workspace lifecycle and required old-data migration](workspace-lifecycle.md)
 and [API access](../reference/api-reference.md#access-and-workspace-scope).
 
@@ -101,6 +131,10 @@ runtime/Tool caps fold once into the stricter Run Budget; iterations and output
 characters remain mode-owned. See [Run Budget](../runtime/run-budget.md) for
 settlement, purpose, and overage semantics.
 
+`AUTONOMOUS_MAX_RUNTIME` accepts an optional duration and takes precedence over
+`AUTONOMOUS_MAX_RUNTIME_SECONDS`. Its template value is empty so copying defaults
+does not override an explicitly configured seconds limit.
+
 ## Model Request Capture
 
 | `MODEL_REQUEST_CAPTURE_MODE` | Retained content |
@@ -150,8 +184,7 @@ support vectors; generated `tsvector`/GIN indexes support lexical search without
 another setting. Offline lexical fixtures do not reproduce Postgres query or
 transaction semantics.
 
-Retired `STORE_DRIVER`/`DATA_PATH` values are ignored; old JSON is not read,
-imported, or deleted. `TOOL_CONFIG_PATH` remains operator policy, not a Store.
+`TOOL_CONFIG_PATH` remains operator policy, not application persistence.
 See [storage boundary](../architecture/storage-boundary.md) for fixture separation
 and database-test safety.
 

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$root/scripts/script-env.sh"
 : "${TEST_DATABASE_URL:?Set a dedicated test database with CREATEDB privileges}"
 image="${KEYCLOAK_TEST_IMAGE:-quay.io/keycloak/keycloak:26.7.5}"
 name="agentflow-auth-test-$$"

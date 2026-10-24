@@ -50,7 +50,22 @@ func LoadConfig(path string) (Config, error) {
 		return Config{}, fmt.Errorf("read tools config: %w", err)
 	}
 
+	var supplied struct {
+		SecurityPolicy struct {
+			Rules json.RawMessage `json:"rules"`
+		} `json:"security_policy"`
+	}
+	if err := json.Unmarshal(data, &supplied); err != nil {
+		return Config{}, fmt.Errorf("parse tools config: %w", err)
+	}
 	cfg := DefaultConfig()
+	defaultEnabled := cfg.EnabledTools
+	cfg.EnabledTools = nil
+	if supplied.SecurityPolicy.Rules != nil {
+		// JSON reuses existing slice elements, retaining omitted capability fields.
+		// Replace explicit rules from zero values; only omitted rules keep defaults.
+		cfg.SecurityPolicy.Rules = nil
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&cfg); err != nil {
@@ -61,7 +76,12 @@ func LoadConfig(path string) (Config, error) {
 		return Config{}, fmt.Errorf("parse tools config: unexpected trailing data")
 	}
 	if cfg.EnabledTools == nil {
-		cfg.EnabledTools = DefaultConfig().EnabledTools
+		cfg.EnabledTools = defaultEnabled
+	}
+	for index, name := range cfg.EnabledTools {
+		if strings.TrimSpace(name) == "" {
+			return Config{}, fmt.Errorf("parse tools config: enabled_tools[%d] must be a nonempty Tool name", index)
+		}
 	}
 	cfg.SecurityPolicy = policy.NormalizePolicy(cfg.SecurityPolicy)
 	if err := policy.ValidatePolicy(cfg.SecurityPolicy); err != nil {
@@ -75,7 +95,18 @@ func SaveConfig(path string, cfg Config) error {
 		return nil
 	}
 
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	// Domain snapshots may omit empty rules; operator files must retain them
+	// so a saved deny-by-absence policy cannot restore defaults on the next load.
+	persisted := struct {
+		EnabledTools   []string `json:"enabled_tools"`
+		SecurityPolicy struct {
+			policy.Policy
+			Rules []policy.Rule `json:"rules"`
+		} `json:"security_policy"`
+	}{EnabledTools: cfg.EnabledTools}
+	persisted.SecurityPolicy.Policy = cfg.SecurityPolicy
+	persisted.SecurityPolicy.Rules = cfg.SecurityPolicy.Rules
+	data, err := json.MarshalIndent(persisted, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode tools config: %w", err)
 	}

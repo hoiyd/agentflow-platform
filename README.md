@@ -74,6 +74,7 @@ configured OpenAI-compatible Chat route. From the repository root:
 
 ```bash
 test -f apps/api/.env || cp apps/api/.env.example apps/api/.env
+test -f scripts/.env || cp scripts/.env.example scripts/.env
 test -f apps/api/config/model-routes.json || cp apps/api/config/model-routes.example.json apps/api/config/model-routes.json
 # Set DATABASE_URL, model routes, and their credential variables before starting.
 make quickstart
