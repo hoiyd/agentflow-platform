@@ -16,7 +16,6 @@ import (
 	"agentflow-platform/apps/api/internal/domain"
 	eventpkg "agentflow-platform/apps/api/internal/event"
 	tracepkg "agentflow-platform/apps/api/internal/event"
-	"agentflow-platform/apps/api/internal/failure"
 	"agentflow-platform/apps/api/internal/inference/provider"
 	"agentflow-platform/apps/api/internal/inference/routing"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
@@ -77,7 +76,7 @@ type RuntimeStore interface {
 	ListMessages(string) ([]domain.Message, error)
 	CreateRunWithContract(string, string, domain.RuntimeSnapshot, *domain.CompletionContract) (domain.Run, error)
 	UpdateRunAgent(string, string) (domain.Run, error)
-	UpdateRunStatus(string, domain.RunStatus, string) (domain.Run, error)
+	TransitionRun(domain.RunTransition) (domain.RunTransitionResult, error)
 	UpdateRunHeartbeat(string) (domain.Run, error)
 	GetRun(string) (domain.Run, bool, error)
 	GetDocumentInWorkspace(string, string) (domain.Document, []domain.DocumentChunk, bool, error)
@@ -227,12 +226,10 @@ func (r *Runtime) PrepareChatRunWithContract(ctx context.Context, agentID string
 		return PreparedRun{}, err
 	}
 	agent = restoreAgent(run.RuntimeSnapshot.Agent)
-	run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
+	run, err = r.startRun(run)
 	if err != nil {
 		return PreparedRun{}, err
 	}
-	r.publishRunLifecycle(ctx, run, domain.EventRunCreated, map[string]any{"status": domain.RunQueued})
-	r.publishRunLifecycle(ctx, run, domain.EventRunStarted, map[string]any{"status": run.Status})
 
 	restored, err := r.restoreRuntime(run)
 	if err != nil {
@@ -332,55 +329,6 @@ func (r *Runtime) publishStage(ctx context.Context, step domain.CollaborationSte
 	return err
 }
 
-func (r *Runtime) CompleteRun(id string) (domain.Run, error) {
-	run, err := r.store.UpdateRunStatus(id, domain.RunCompleted, "")
-	if err == nil {
-		r.publishRunLifecycle(context.Background(), run, domain.EventRunCompleted, map[string]any{"status": run.Status})
-		r.scheduleSoftContextCompaction(run)
-		r.forgetProgressGuard(run.ID)
-	}
-	return run, err
-}
-
-func (r *Runtime) FailRun(id string, err error) (domain.Run, error) {
-	message := ""
-	if err != nil {
-		message = err.Error()
-	}
-	if current, ok, loadErr := r.store.GetRun(id); loadErr == nil && ok && current.Status == domain.RunCanceling && errors.Is(err, context.Canceled) {
-		run, updateErr := r.store.UpdateRunStatus(id, domain.RunCanceled, message)
-		if updateErr == nil {
-			r.publishRunLifecycle(context.Background(), run, domain.EventRunCanceled, failure.Merge(map[string]any{"status": run.Status, "error": message}, err))
-			r.forgetProgressGuard(run.ID)
-		}
-		return run, updateErr
-	}
-	run, updateErr := r.store.UpdateRunStatus(id, domain.RunFailed, message)
-	if updateErr == nil {
-		r.publishRunLifecycle(context.Background(), run, domain.EventRunFailed, failure.Merge(map[string]any{"status": run.Status, "error": message}, err))
-		r.forgetProgressGuard(run.ID)
-	}
-	return run, updateErr
-}
-
-func (r *Runtime) RejectRunCompletion(id string, status domain.RunStatus, reason string) (domain.Run, error) {
-	eventType := domain.EventRunFailed
-	switch status {
-	case domain.RunFailed, domain.RunFailedRecoverable:
-	case domain.RunWaitingForUser:
-		eventType = domain.EventRunWaitingForUser
-	default:
-		return domain.Run{}, fmt.Errorf("invalid verification rejection status %q", status)
-	}
-	run, err := r.store.UpdateRunStatus(id, status, strings.TrimSpace(reason))
-	if err == nil {
-		r.publishRunLifecycle(context.Background(), run, eventType, map[string]any{
-			"status": run.Status, "error": run.Error, "source": "completion_gate",
-		})
-	}
-	return run, err
-}
-
 func (r *Runtime) bindRunCancellation(ctx context.Context, runID string) (context.Context, func()) {
 	ctx, cancel := context.WithCancel(ctx)
 	active := &activeRunCancellation{cancel: cancel}
@@ -396,45 +344,6 @@ func (r *Runtime) bindRunCancellation(ctx context.Context, runID string) (contex
 func (r *Runtime) cancelActiveRun(runID string) {
 	if active, ok := r.activeRunCancels.Load(runID); ok {
 		active.(*activeRunCancellation).cancel()
-	}
-}
-
-func (r *Runtime) CancelRun(id string) (domain.Run, error) {
-	run, ok, err := r.store.GetRun(strings.TrimSpace(id))
-	if err != nil {
-		return domain.Run{}, err
-	}
-	if !ok {
-		return domain.Run{}, store.ErrNotFound("run")
-	}
-	switch run.Status {
-	case domain.RunCompleted, domain.RunFailed, domain.RunCanceled:
-		if run.Status == domain.RunCanceled {
-			if err := r.closeCanceledClarification(run); err != nil {
-				return run, err
-			}
-		}
-		r.forgetProgressGuard(run.ID)
-		return run, nil
-	case domain.RunRunning:
-		updated, err := r.store.UpdateRunStatus(run.ID, domain.RunCanceling, "cancel requested by user")
-		if err == nil {
-			r.publishRunLifecycle(context.Background(), updated, domain.EventRunCancelRequested, map[string]any{"status": updated.Status})
-			r.cancelActiveRun(run.ID)
-		}
-		return updated, err
-	case domain.RunCanceling:
-		r.cancelActiveRun(run.ID)
-		return run, nil
-	default:
-		updated, err := r.store.UpdateRunStatus(run.ID, domain.RunCanceled, "canceled by user")
-		if err == nil {
-			r.cancelActiveRun(run.ID)
-			r.publishRunLifecycle(context.Background(), updated, domain.EventRunCanceled, map[string]any{"status": updated.Status})
-			r.forgetProgressGuard(updated.ID)
-			err = r.closeCanceledClarification(updated)
-		}
-		return updated, err
 	}
 }
 

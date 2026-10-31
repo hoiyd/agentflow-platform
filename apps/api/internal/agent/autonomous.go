@@ -56,12 +56,10 @@ func (r *Runtime) PrepareAutonomousRunWithContract(ctx context.Context, agentID 
 		return PreparedCollaborationRun{}, err
 	}
 	agent = restoreAgent(run.RuntimeSnapshot.Agent)
-	run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
+	run, err = r.startRun(run)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
-	r.publishRunLifecycle(ctx, run, domain.EventRunCreated, map[string]any{"status": domain.RunQueued})
-	r.publishRunLifecycle(ctx, run, domain.EventRunStarted, map[string]any{"status": run.Status})
 	log.Printf("autonomous_prepare run_id=%s agent_id=%s max_iterations=%d max_runtime=%s max_output_chars=%d max_tool_calls=%d", run.ID, agent.ID, r.autonomousLimits.MaxIterations, r.autonomousLimits.MaxRuntime, r.autonomousLimits.MaxOutputChars, r.autonomousLimits.MaxToolCalls)
 	return PreparedCollaborationRun{WorkerAgent: agent, Run: run}, nil
 }
@@ -84,60 +82,59 @@ func (r *Runtime) ResumeAutonomous(ctx context.Context, runID string, userInput 
 
 		run, ok, err := r.store.GetRun(strings.TrimSpace(runID))
 		if err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 		if !ok {
-			errs <- fmt.Errorf("run not found")
+			errs <- rejectRecovery(fmt.Errorf("run not found"))
 			return
 		}
 		if run.Status != domain.RunWaitingForUser {
-			errs <- fmt.Errorf("run is not waiting for user input")
+			errs <- rejectRecovery(fmt.Errorf("run is not waiting for user input"))
 			return
 		}
 
 		steps, err := r.store.ListCollaborationSteps(run.ID)
 		if err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 		checkpoint := latestHumanInputStep(steps)
 		if checkpoint == nil || checkpoint.Status != domain.CollaborationStepRunning {
-			errs <- fmt.Errorf("human input checkpoint not found")
+			errs <- rejectRecovery(fmt.Errorf("human input checkpoint not found"))
 			return
 		}
 		userInput = strings.TrimSpace(userInput)
 		if userInput == "" {
-			errs <- fmt.Errorf("user input is required")
+			errs <- rejectRecovery(fmt.Errorf("user input is required"))
 			return
 		}
 
 		restored, err := r.restoreRuntime(run)
 		if err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 		if restored.mode != ChatModeAutonomous {
-			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeAutonomous)
+			errs <- rejectRecovery(fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeAutonomous))
 			return
 		}
 		if err := r.resetProgressGuard(run); err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 
+		run, err = r.transitionRun(run, domain.RunRunning, domain.EventRunResumed, "", nil)
+		if err != nil {
+			errs <- err
+			return
+		}
 		completedCheckpoint, err := r.store.UpdateCollaborationStep(checkpoint.ID, domain.CollaborationStepCompleted, userInput, "")
 		if err != nil {
 			errs <- err
 			return
 		}
-		run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
-		if err != nil {
-			errs <- err
-			return
-		}
 		log.Printf("autonomous_resume run_id=%s checkpoint_id=%s input_len=%d", run.ID, checkpoint.ID, len(userInput))
-		r.publishRunLifecycle(ctx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
 		if err := r.publishStage(ctx, completedCheckpoint, domain.EventStageCompleted); err != nil {
 			errs <- err
 			return
@@ -168,43 +165,52 @@ func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string,
 
 		run, ok, err := r.store.GetRun(strings.TrimSpace(runID))
 		if err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 		if !ok {
-			errs <- fmt.Errorf("run not found")
+			errs <- rejectRecovery(fmt.Errorf("run not found"))
 			return
 		}
 		if run.Status != domain.RunFailedRecoverable {
-			errs <- fmt.Errorf("run is not recoverable")
+			errs <- rejectRecovery(fmt.Errorf("run is not recoverable"))
 			return
 		}
 
 		steps, err := r.store.ListCollaborationSteps(run.ID)
 		if err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 		restored, err := r.restoreRuntime(run)
 		if err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 		if restored.mode != ChatModeAutonomous {
-			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeAutonomous)
+			errs <- rejectRecovery(fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeAutonomous))
 			return
 		}
 		if strings.TrimSpace(recoveryNote) != "" {
 			if err := r.resetProgressGuard(run); err != nil {
-				errs <- err
+				errs <- rejectRecovery(err)
 				return
 			}
+		}
+		if err := r.checkpoints.ValidateResume(ctx, run); err != nil {
+			errs <- rejectRecovery(fmt.Errorf("restore durable checkpoints: %w", err))
+			return
+		}
+
+		run, err = r.transitionRun(run, domain.RunRunning, domain.EventRunResumed, "", nil)
+		if err != nil {
+			errs <- err
+			return
 		}
 		if _, err := r.checkpoints.RestoreRun(ctx, run); err != nil {
 			errs <- fmt.Errorf("restore durable checkpoints: %w", err)
 			return
 		}
-
 		recoveryStep, err := r.store.CreateCollaborationStep(domain.CollaborationStep{
 			RunID:          run.ID,
 			ConversationID: run.ConversationID,
@@ -219,13 +225,7 @@ func (r *Runtime) ResumeRecoverableAutonomous(ctx context.Context, runID string,
 			errs <- err
 			return
 		}
-		run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
-		if err != nil {
-			errs <- err
-			return
-		}
 		log.Printf("autonomous_recovery_resume run_id=%s recovery_step_id=%s note_len=%d", run.ID, recoveryStep.ID, len(recoveryNote))
-		r.publishRunLifecycle(ctx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
 		if err := r.publishStage(ctx, recoveryStep, domain.EventStageCompleted); err != nil {
 			errs <- err
 			return
@@ -438,7 +438,7 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 				}
 				run := prepared.Run
 				if r.clarifications == nil {
-					run, err = r.store.UpdateRunStatus(prepared.Run.ID, domain.RunWaitingForUser, "")
+					run, err = r.transitionRun(prepared.Run, domain.RunWaitingForUser, domain.EventRunWaitingForUser, "", map[string]any{"question": question})
 				}
 				if err != nil {
 					errs <- err
@@ -455,8 +455,6 @@ func (r *Runtime) runAutonomousFromState(ctx context.Context, prepared PreparedC
 						errs <- err
 						return
 					}
-				} else {
-					r.publishRunLifecycle(executionCtx, run, domain.EventRunWaitingForUser, map[string]any{"status": run.Status, "question": question})
 				}
 				events <- liveStageEvent(step)
 				events <- liveRunEvent(run)

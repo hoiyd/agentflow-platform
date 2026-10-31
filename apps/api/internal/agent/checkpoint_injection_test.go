@@ -24,6 +24,8 @@ func (*checkpointProviderStub) RestoreRun(context.Context, domain.Run) (checkpoi
 	return checkpoint.RestoreReport{}, nil
 }
 
+func (*checkpointProviderStub) ValidateResume(context.Context, domain.Run) error { return nil }
+
 func TestRuntimeUsesInjectedCheckpointProvider(t *testing.T) {
 	fixtureStore := fixturestore.New()
 

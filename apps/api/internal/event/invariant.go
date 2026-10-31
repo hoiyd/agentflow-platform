@@ -62,9 +62,17 @@ func CheckRuntimeInvariants(run domain.Run, events []domain.RunEvent) []domain.R
 func checkRunLifecycle(run domain.Run, events []domain.RunEvent) *domain.RuntimeInvariantFailure {
 	opened := false
 	terminal := false
+	recoverable := false
+	terminalIndex := -1
+	lastVerificationRequest := -1
+	for index, item := range events {
+		if item.Type == domain.EventVerificationRequested {
+			lastVerificationRequest = index
+		}
+	}
 	seenLifecycle := false
 	var last domain.RunEvent
-	for _, item := range events {
+	for index, item := range events {
 		switch item.Type {
 		case domain.EventRunCreated, domain.EventRunStarted:
 			seenLifecycle = true
@@ -73,11 +81,21 @@ func checkRunLifecycle(run domain.Run, events []domain.RunEvent) *domain.Runtime
 				return &failure
 			}
 			opened = true
-		case domain.EventRunWaitingForUser, domain.EventRunResumed, domain.EventRunCancelRequested, domain.EventRunRevisionRequested:
+		case domain.EventRunResumed:
 			seenLifecycle = true
-			if !opened || terminal {
+			if !opened || terminal && !recoverable {
 				failure := lifecycleFailure("run_transition_orphan", item, "run transition has no active lifecycle")
 				return &failure
+			}
+			terminal, recoverable = false, false
+		case domain.EventRunWaitingForUser, domain.EventRunCancelRequested, domain.EventRunRevisionRequested:
+			seenLifecycle = true
+			if !opened || terminal && !(events[terminalIndex].Type == domain.EventRunFailed && verificationBoundary(run, item, events[terminalIndex+1:index], index > lastVerificationRequest)) {
+				failure := lifecycleFailure("run_transition_orphan", item, "run transition has no active lifecycle")
+				return &failure
+			}
+			if terminal && item.Type == domain.EventRunWaitingForUser {
+				terminal, recoverable = false, false
 			}
 		case domain.EventRunCompleted, domain.EventRunFailed, domain.EventRunCanceled:
 			seenLifecycle = true
@@ -85,11 +103,13 @@ func checkRunLifecycle(run domain.Run, events []domain.RunEvent) *domain.Runtime
 				failure := lifecycleFailure("run_terminal_orphan", item, "run terminal event has no start")
 				return &failure
 			}
-			if terminal {
+			if terminal && !(events[terminalIndex].Type == domain.EventRunFailed && verificationBoundary(run, item, events[terminalIndex+1:index], index > lastVerificationRequest)) {
 				failure := lifecycleFailure("run_terminal_duplicate", item, "run has more than one terminal event")
 				return &failure
 			}
 			terminal = true
+			terminalIndex = index
+			recoverable = item.Type == domain.EventRunFailed && (item.Payload["status"] == domain.RunFailedRecoverable || item.Payload["status"] == string(domain.RunFailedRecoverable))
 		}
 		last = item
 	}

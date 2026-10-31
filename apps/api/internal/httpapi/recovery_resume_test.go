@@ -217,7 +217,7 @@ func hasStepRole(steps []domain.CollaborationStep, role string) bool {
 }
 
 func TestResumeFailurePolicyKeepsReplayOnlyRunRecoverable(t *testing.T) {
-	status, failRun := resumeFailurePolicy(agent.ErrRuntimeSnapshotResumeUnsupported)
+	status, failRun := resumeFailurePolicy(&agent.PreExecutionRejection{Err: agent.ErrRuntimeSnapshotResumeUnsupported})
 	if status != http.StatusConflict || failRun {
 		t.Fatalf("replay-only resume policy: status=%d fail_run=%t", status, failRun)
 	}
@@ -225,7 +225,7 @@ func TestResumeFailurePolicyKeepsReplayOnlyRunRecoverable(t *testing.T) {
 
 func TestResumeFailurePolicyKeepsCheckpointBlockedRunRecoverable(t *testing.T) {
 	for _, err := range []error{checkpoint.ErrNeedsReconciliation, checkpoint.ErrCheckpointStale} {
-		status, failRun := resumeFailurePolicy(err)
+		status, failRun := resumeFailurePolicy(&agent.PreExecutionRejection{Err: err})
 		if status != http.StatusConflict || failRun {
 			t.Fatalf("checkpoint refusal must not permanently fail the Run: status=%d fail=%v err=%v", status, failRun, err)
 		}

@@ -15,8 +15,10 @@ import (
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/identity"
+	"agentflow-platform/apps/api/internal/planning"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/testsupport/pgfixture"
+	"agentflow-platform/apps/api/internal/verification"
 )
 
 // Production HTTP -> commands -> Runtime -> real Bindings -> Postgres. This
@@ -205,13 +207,45 @@ func TestProductionPlanningContractAndExecution(t *testing.T) {
 	if rejected.Status != domain.RunFailedRecoverable {
 		t.Fatalf("proposal was not rejected: %+v", rejected)
 	}
+	originalEvents, err := s.ListRunEvents(rejected.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalPlan := planning.Read(originalEvents)
+	originalEvidence, err := s.ListVerificationEvidence(rejected.ID)
+	if err != nil || originalPlan == nil || len(originalEvidence) != 1 || originalEvidence[0].Status != domain.VerificationFailed {
+		t.Fatalf("original rejected plan evidence missing: plan=%+v evidence=%+v err=%v", originalPlan, originalEvidence, err)
+	}
 	if _, err := s.AddMessage(conv.ID, "user", "A different task"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.AddMessage(conv.ID, "assistant", "An unrelated successful answer"); err != nil {
 		t.Fatal(err)
 	}
-	call(t, "/api/runs/"+rejected.ID+"/verify", map[string]any{}, 409)
+	data := call(t, "/api/runs/"+rejected.ID+"/verify", map[string]any{}, 200)
+	var verified struct {
+		Run      domain.Run            `json:"run"`
+		Decision verification.Decision `json:"decision"`
+	}
+	if err := json.Unmarshal(data, &verified); err != nil {
+		t.Fatal(err)
+	}
+	if verified.Decision.AllowCompletion || verified.Decision.Status != domain.VerificationFailed || verified.Decision.SubjectHash != originalEvidence[0].SubjectHash || verified.Decision.Attempt != 2 || verified.Run.Status != domain.RunFailed {
+		t.Fatalf("later answer bypassed original proposal gate: %s", data)
+	}
+	currentEvents, err := s.ListRunEvents(rejected.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentPlan := planning.Read(currentEvents)
+	if currentPlan == nil || currentPlan.Hash != originalPlan.Hash || currentPlan.Input != originalPlan.Input || currentPlan.Proposal != originalPlan.Proposal {
+		t.Fatalf("reverification changed original plan: %+v", currentPlan)
+	}
+	evidence, err := s.ListVerificationEvidence(rejected.ID)
+	if err != nil || len(evidence) != 2 || evidence[1].SubjectHash != originalEvidence[0].SubjectHash || evidence[1].Status != domain.VerificationFailed {
+		t.Fatalf("original plan failure evidence lost: %+v %v", evidence, err)
+	}
+	call(t, "/api/chat", domain.ChatRequest{ConversationID: conv.ID, AgentID: owned.ID, Mode: "single", Message: "Execute rejected plan", PlanOrigin: &domain.PlanOrigin{RunID: rejected.ID, Hash: originalPlan.Hash}}, 409)
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()
 	if len(fixture.failures) != 0 {

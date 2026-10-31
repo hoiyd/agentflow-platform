@@ -6,6 +6,7 @@ import type { ChatMode } from "../../lib/api";
 
 type Props = {
  conversationId:string; runId:string; mode:ChatMode; agentId:string; input:string;
+ planOnly?:boolean; executionConstraint?:string;
  busy:boolean; canStartFollowup:boolean; onSubmitted:()=>void; onRunAvailable:()=>void;
 };
 
@@ -76,10 +77,11 @@ function RunInboxContent(props:Props) {
   void act(()=>enqueueRunInput(props.conversationId,{...input,idempotency_key}),props.input);
  }
  const queued=items.filter(item=>item.status==="queued");
+ const followupBlocked=props.planOnly || props.executionConstraint==="plan_only";
  return <div className="run-inbox" aria-label="Run inbox">
   {props.busy && !readOnly ? <div className="run-inbox-actions">
    <button type="button" aria-label="Steer current run" title="Add a constraint at the next safe boundary" disabled={pending || !props.input.trim()} onClick={()=>submit("steer")}><CornerDownRight size={14}/>Steer current run</button>
-   <button type="button" disabled={pending || !props.input.trim()} onClick={()=>submit("follow_up")}><ListPlus size={14}/>Queue follow-up</button>
+   <button type="button" title={followupBlocked?"Read-only planning requires separate explicit plan execution":undefined} disabled={pending || !props.input.trim() || followupBlocked} onClick={()=>submit("follow_up")}><ListPlus size={14}/>Queue follow-up</button>
   </div>:null}
   {error?<div className="error" role="alert">{error}</div>:null}
   {items.length?<details className="run-inbox-receipts"><summary>Input queue{queued.length?` (${queued.length} pending)`:""}</summary>

@@ -105,7 +105,8 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
     useExpandedConversationWidth
   } = props;
   const hasClarification=props.clarifications?.some(q=>["pending","answered","expired"].includes(q.status))??false;
-  const awaitingPlanApproval = chatMode === "multi_agent" && runStatus === "waiting_for_user" && !hasClarification && !props.clarificationLoading;
+  const clarificationUnavailable = Boolean(props.clarificationLoading || props.clarificationError);
+  const awaitingPlanApproval = chatMode === "multi_agent" && runStatus === "waiting_for_user" && !hasClarification && !clarificationUnavailable;
 
   return (
     <section
@@ -172,7 +173,7 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
           <PartialOutputPanel outputs={props.partialOutputs ?? []} runStatus={runStatus} />
           <ToolProgressPanel items={props.toolProgress ?? []} runStatus={runStatus} />
           {props.clarificationError?<div className="error" role="alert">{props.clarificationError}</div>:null}
-          <ClarificationPanel recoverable={runStatus==="failed_recoverable"} items={props.clarifications??[]} busy={isResuming||isStreaming} onResume={props.onClarificationResume}/>
+          <ClarificationPanel recoverable={runStatus==="failed_recoverable"} items={props.clarifications??[]} busy={isResuming||isStreaming||clarificationUnavailable} onResume={props.onClarificationResume}/>
           {messages.at(-1)?.role !== "assistant" && props.reasoning?.length && !props.partialOutputs?.some(item => item.channel === "reasoning" && item.text) ? (
             <ReasoningDisclosure entries={props.reasoning} runStatus={runStatus} />
           ) : null}
@@ -181,7 +182,7 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
       {showCollaborationPanel && isCollaborationPanelOpen ? (
         showAutonomousTrace ? (
           <AutonomousPanel
-            hasStructuredClarification={hasClarification||props.clarificationLoading}
+            hasStructuredClarification={hasClarification||clarificationUnavailable}
             humanInputDraft={humanInputDraft}
             isBusy={isStreaming || isCanceling}
             isCanceling={isCanceling}
@@ -196,7 +197,7 @@ export function ChatWorkspace(props: ChatWorkspaceProps) {
           />
         ) : (
           <CollaborationPanel
-            hasStructuredClarification={hasClarification||props.clarificationLoading}
+            hasStructuredClarification={hasClarification||clarificationUnavailable}
             agents={agents}
             isBusy={isStreaming || isCanceling}
             isContinuing={isContinuing}

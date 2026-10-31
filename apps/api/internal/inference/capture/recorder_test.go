@@ -162,13 +162,22 @@ func TestFullCaptureDowngradesWhenPayloadContainsCredential(t *testing.T) {
 
 func TestExpiredCaptureContentIsPurgedButEnvelopeRemains(t *testing.T) {
 	pgStore, run, path := newCaptureTestRun(t)
-	recorder := NewRecorder(pgStore, Options{Mode: domain.ModelRequestCaptureFull, MaxBytes: 4096, Retention: time.Nanosecond})
+	recorder := NewRecorder(pgStore, Options{Mode: domain.ModelRequestCaptureFull, MaxBytes: 4096, Retention: time.Hour})
 	ctx := eventpkg.WithScope(context.Background(), eventpkg.Scope{RunID: run.ID, ConversationID: run.ConversationID})
 	payload := []byte(`{"messages":[{"role":"user","content":"short-lived"}],"model":"test-model"}`)
 	if err := recorder.Record(ctx, requestcontrol.Observation{
 		ModelCallID: "call-expired", Operation: "chat.completion", Provider: "test", Model: "test-model", Payload: payload,
 	}); err != nil {
 		t.Fatalf("record request: %v", err)
+	}
+	db, err := sql.Open("pgx", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	// Expiration uses the database clock, not sub-microsecond host/VM timing.
+	if _, err := db.Exec("UPDATE model_request_records SET capture_expires_at=NOW()-INTERVAL '1 hour' WHERE run_id=$1", run.ID); err != nil {
+		t.Fatal(err)
 	}
 	records, err := pgStore.ListModelRequestRecords(run.ID)
 	if err != nil || len(records) != 1 {
@@ -180,11 +189,6 @@ func TestExpiredCaptureContentIsPurgedButEnvelopeRemains(t *testing.T) {
 	if records[0].Envelope.PayloadHash == "" || records[0].Envelope.PayloadBytes != len(payload) {
 		t.Fatalf("expiration removed durable envelope metadata: %#v", records[0].Envelope)
 	}
-	db, err := sql.Open("pgx", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
 	readCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var persisted string

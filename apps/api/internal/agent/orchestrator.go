@@ -141,12 +141,10 @@ func (r *Runtime) PrepareCollaborationRunWithContract(ctx context.Context, agent
 		return PreparedCollaborationRun{}, err
 	}
 	agent = restoreAgent(run.RuntimeSnapshot.Agent)
-	run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
+	run, err = r.startRun(run)
 	if err != nil {
 		return PreparedCollaborationRun{}, err
 	}
-	r.publishRunLifecycle(ctx, run, domain.EventRunCreated, map[string]any{"status": domain.RunQueued})
-	r.publishRunLifecycle(ctx, run, domain.EventRunStarted, map[string]any{"status": run.Status})
 	log.Printf("collaboration_prepare run_id=%s initial_agent_id=%s requested_agent_id=%q", run.ID, agent.ID, strings.TrimSpace(agentID))
 	return PreparedCollaborationRun{WorkerAgent: agent, Run: run}, nil
 }
@@ -166,12 +164,11 @@ func (r *Runtime) RunCollaboration(ctx context.Context, prepared PreparedCollabo
 			errs <- err
 			return
 		}
-		waiting, err := r.store.UpdateRunStatus(prepared.Run.ID, domain.RunWaitingForUser, "")
+		_, err = r.transitionRun(prepared.Run, domain.RunWaitingForUser, domain.EventRunWaitingForUser, "", nil)
 		if err != nil {
 			errs <- err
 			return
 		}
-		r.publishRunLifecycle(executionCtx, waiting, domain.EventRunWaitingForUser, map[string]any{"status": waiting.Status})
 	}()
 
 	return events, errs
@@ -188,15 +185,15 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 
 		run, ok, err := r.store.GetRun(strings.TrimSpace(runID))
 		if err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 		if !ok {
-			errs <- store.ErrNotFound("run")
+			errs <- rejectRecovery(store.ErrNotFound("run"))
 			return
 		}
 		if run.Status != domain.RunWaitingForUser {
-			errs <- fmt.Errorf("run is not waiting for user input")
+			errs <- rejectRecovery(fmt.Errorf("run is not waiting for user input"))
 			return
 		}
 		executionCtx, releaseCancellation := r.bindRunCancellation(ctx, run.ID)
@@ -204,27 +201,27 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 
 		restored, err := r.restoreRuntime(run)
 		if err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 		if restored.mode != ChatModeMultiAgent {
-			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeMultiAgent)
+			errs <- rejectRecovery(fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeMultiAgent))
 			return
 		}
 		agents := restored.candidateAgents
 		if len(agents) == 0 {
-			errs <- store.ErrNotFound("agent")
+			errs <- rejectRecovery(store.ErrNotFound("agent"))
 			return
 		}
 
 		steps, err := r.store.ListCollaborationSteps(run.ID)
 		if err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 		plannerStep, ok := findCollaborationStep(steps, "planner")
 		if !ok {
-			errs <- fmt.Errorf("planner step not found")
+			errs <- rejectRecovery(fmt.Errorf("planner step not found"))
 			return
 		}
 		plan = strings.TrimSpace(plan)
@@ -233,6 +230,11 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 		}
 		task := plannerStep.Input
 		task, err = r.taskWithClarifications(run.ID, task)
+		if err != nil {
+			errs <- rejectRecovery(err)
+			return
+		}
+		run, err = r.transitionRun(run, domain.RunRunning, domain.EventRunResumed, "", nil)
 		if err != nil {
 			errs <- err
 			return
@@ -247,12 +249,6 @@ func (r *Runtime) ContinueCollaboration(ctx context.Context, runID string, plan 
 			StageID: updatedPlan.ID, Payload: map[string]any{"kind": "plan_approved", "plan": updatedPlan.Output},
 		})
 		events <- liveStageEvent(updatedPlan)
-		run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
-		if err != nil {
-			errs <- err
-			return
-		}
-		r.publishRunLifecycle(executionCtx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
 		route, routeErr := r.routeWorkerAgent(executionCtx, run.ID, restored, agents, task, plan, requirements)
 		routerInput := fmt.Sprintf("User task:\n%s\n\nApproved plan:\n%s\n\nRouting requirements:\n%s\n\nCandidate agents:\n%s", task, plan, formatRoutingRequirements(requirements), formatCandidateAgents(agents))
 		routerStatus := domain.CollaborationStepCompleted

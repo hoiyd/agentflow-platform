@@ -46,6 +46,11 @@ func (c Commands) Start(ctx context.Context, scope Scope, req domain.ChatRequest
 		if !ok {
 			return commandError(Missing, store.ErrNotFound("run"))
 		}
+		if previous.RuntimeSnapshot != nil {
+			if err := store.ValidateFollowupIntent(previous.RuntimeSnapshot.ExecutionConstraint); err != nil {
+				return commandError(Conflict, err)
+			}
+		}
 		filter, loadErr := eligibility.FrozenFilter(previous.RuntimeSnapshot)
 		if loadErr != nil {
 			return commandError(Invalid, loadErr)

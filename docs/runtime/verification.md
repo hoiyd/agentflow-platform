@@ -71,6 +71,41 @@ candidate Subject Hash, attempt, status, duration, diagnostics and Artifacts.
 Question-aware checks also hash the question; grounding binds source content.
 Changed candidates append stale markers rather than rewriting earlier Evidence.
 
+Reverify resolves the Run-local candidate through its last durable
+`citation.resolved.message_id`, never the latest Conversation answer or question.
+For contracted Runs, the RAG citation event also stores `verification_question`
+(the exact completion input, including resolved clarification text) and
+`verification_subject_hash` (a SHA-256 binding of Run/message identity, that input
+and candidate bytes, separate from the verifier's normalized/grounded Subject
+Hash). This binding must persist before the first verification attempt; a write
+failure is returned.
+
+All contracts check that binding and current-candidate Evidence against the
+reconstructed subject. Contract, verifier-version and Snapshot checks also apply
+to historical Evidence. Planning Runs additionally
+require intact plan evidence with the same input/proposal. Later Conversation
+messages do not prevent fresh checks on the original candidate, and a failed first
+Evidence write does not strand a durably bound candidate. Reverify does not resave
+the answer or replace structured-output evidence with a later answer.
+Only a passing gate uses explicit verified completion; ordinary worker completion
+cannot reopen a Run that has already failed.
+
+Run-local revisions supersede earlier candidate bindings; stale markers for older
+subjects are not evidence for the current candidate. Verification event sequences
+identify the candidate epoch; when a best-effort verification event is absent,
+Evidence start time is compared with the binding event's timestamp. A revision
+with only historical/stale results can retry without resetting the attempt budget.
+Missing, conflicting or
+changed current pointers/bindings return `409` without an attempt;
+storage failures are errors, not empty success. Legacy events without the exact
+question/binding also return `409`: history timestamps cannot reliably reconstruct
+Resume or clarified input. This change adds event payload fields, not DB columns.
+
+HTTP Reverify uses the same capacity and Conversation admission as execution and
+Resume, holds it through verification/settlement, and reloads the Run after waiting.
+A concurrent Resume therefore cannot replace the candidate during verification.
+This uses the existing in-process controller, not a distributed locking protocol.
+
 ## Policy Semantics
 
 - `required=true` participates in the gate; optional checks still produce Evidence.

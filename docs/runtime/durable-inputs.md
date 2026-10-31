@@ -22,6 +22,7 @@ not steer/follow-up receipts. Answering does not create a follow-up Run or appro
 | Process dies after consumption | Message and receipt commit together; reconstruct from applied inputs |
 | Follow-up preparation fails | No message or receipt consumption; remaining inputs stay queued |
 | Follow-up crashes after Run creation | Receipt points to exactly one Run; never auto-create another |
+| Follow-up references a read-only planning Run | Reject enqueue and legacy dispatch before consuming a receipt or creating a successor; keep steering and explicit plan approval unchanged |
 | Stop, failed verification, exhausted budget | Do not automatically start the next task |
 | Queue or admission capacity exhausted | Transparent rejection or retained queue; explicit retry |
 
@@ -95,6 +96,22 @@ there is no unbounded startup dispatcher or automatic replay of side effects.
 This remains a **single-instance** execution boundary, not a multi-instance job
 queue or a general-purpose scheduler.
 
+### Planning follow-up boundary
+
+Queue follow-up is disabled when read-only planning is selected or the source
+Run's frozen constraint is `plan_only`, including after reload. Steering remains
+available at the existing boundaries. The server rejects follow-up enqueue with
+`409 input_plan_only`, including retries of historical queued requests. Automatic
+and explicit dispatch check the receipt's source Run, not just the latest Run in
+the Conversation; the consumption transaction enforces the same policy before
+writing a message, applying the receipt or creating a successor.
+
+Historical planning follow-ups remain queued and withdrawable; they are never
+silently converted, consumed or skipped past FIFO. To execute a plan, use the
+separate explicit [plan approval](read-only-planning.md) path. Ordinary follow-ups
+are unchanged. This boundary rejects unrepresentable planning intent; it does
+not add full successor configuration inheritance.
+
 ## Verification
 
 The failure inventory above drives the Postgres integration gate, including
@@ -131,3 +148,15 @@ Both gates write machine-readable evidence attachments into the Playwright JSON
 report at `apps/web/test-results/results.json`. The first gate has five cases;
 the boundary profile has two. They do not verify multi-instance dispatch or
 guarantee recovery of modes that the existing Runtime cannot Resume.
+
+`run-inbox-planning.spec.ts` adds two focused browser cases through production
+composition and disposable Postgres: planning Queue rejection before/after
+reload with steering preserved, and ordinary follow-up dispatch. Run it with
+the same dedicated `TEST_DATABASE_URL` and browser command above; no opt-in
+provider profile is needed. It retains `planning-inbox-evidence.json` and a
+synthetic desktop screenshot. Focused Go/Postgres tests additionally seed legacy
+queued receipts, reject automatic/manual dispatch and direct command/transaction
+consumption, retain queued state after Store reopen, and check source identity
+when a later ordinary Run exists. Existing planning integration checks the
+separate approved execution path. These are deterministic protocol checks,
+not live-model measurements.

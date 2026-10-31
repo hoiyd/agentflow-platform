@@ -48,12 +48,13 @@ type Observer struct {
 }
 
 type Commands struct {
-	Store        store.WorkspaceStoreProvider
-	Runtime      Runtime
-	Capacity     Capacity
-	Verification runcompletion.Verifier
-	Memory       memory.TurnSyncer
-	AfterRelease func(context.Context, Scope, string)
+	Store          store.WorkspaceStoreProvider
+	Runtime        Runtime
+	Capacity       Capacity
+	Verification   runcompletion.Verifier
+	Memory         memory.TurnSyncer
+	Clarifications ClarificationReader
+	AfterRelease   func(context.Context, Scope, string)
 }
 
 type Reason string

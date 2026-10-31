@@ -16,7 +16,16 @@ var (
 	ErrInputConflict = failure.New(failure.Definition{Message: "input conflicts with its receipt or current execution state", Info: failure.Info{Code: "input_conflict", Source: "run_inbox", Category: failure.CategoryValidation}})
 	ErrInputCapacity = failure.New(failure.Definition{Message: "conversation inbox capacity exceeded", Info: failure.Info{Code: "input_queue_full", Source: "run_inbox", Category: failure.CategoryCapacity, Retryable: true}})
 	ErrInputInvalid  = failure.New(failure.Definition{Message: "invalid inbox input: kind, run, content and idempotency key are required", Info: failure.Info{Code: "input_invalid", Source: "run_inbox", Category: failure.CategoryValidation}})
+	ErrInputPlanOnly = failure.New(failure.Definition{Message: "read-only planning does not accept follow-ups; start a separate explicit plan execution", Info: failure.Info{Code: "input_plan_only", Source: "run_inbox", Category: failure.CategoryValidation}})
 )
+
+// Follow-ups cannot express approval or carry a planning Run's execution intent.
+func ValidateFollowupIntent(executionConstraint string) error {
+	if executionConstraint == domain.ExecutionPlanOnly {
+		return ErrInputPlanOnly
+	}
+	return nil
+}
 
 const inboxSchema = `CREATE TABLE IF NOT EXISTS conversation_inputs (
  id text PRIMARY KEY,
@@ -97,6 +106,18 @@ func (s *PostgresStore) EnqueueRunInput(ctx context.Context, owner, workspace, c
 	if err = lockInbox(ctx, tx, owner, workspace, conversation); err != nil {
 		return domain.RunInput{}, err
 	}
+	var status, executionConstraint string
+	if err = tx.QueryRowContext(ctx, `SELECT status,COALESCE(runtime_snapshot->>'execution_constraint','') FROM runs WHERE id=$1 AND conversation_id=$2 FOR UPDATE`, input.RunID, conversation).Scan(&status, &executionConstraint); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.RunInput{}, ErrInputConflict
+		}
+		return domain.RunInput{}, err
+	}
+	if input.Kind == "follow_up" {
+		if err = ValidateFollowupIntent(executionConstraint); err != nil {
+			return domain.RunInput{}, err
+		}
+	}
 	// Retain receipts for seven days. Applied inputs of active/recoverable Runs
 	// cannot be purged because recovery still needs their original user content.
 	if _, err = tx.ExecContext(ctx, `DELETE FROM conversation_inputs i USING runs r WHERE i.conversation_id=$1 AND i.run_id=r.id
@@ -114,13 +135,6 @@ func (s *PostgresStore) EnqueueRunInput(ctx context.Context, owner, workspace, c
 		return item, e
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return domain.RunInput{}, err
-	}
-	var status string
-	if err = tx.QueryRowContext(ctx, `SELECT status FROM runs WHERE id=$1 AND conversation_id=$2 FOR UPDATE`, input.RunID, conversation).Scan(&status); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return domain.RunInput{}, ErrInputConflict
-		}
 		return domain.RunInput{}, err
 	}
 	if input.Kind == "steer" && status != "running" {

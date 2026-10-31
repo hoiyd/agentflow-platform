@@ -44,11 +44,17 @@ function recoverableFixture() {
   return data;
 }
 
+async function readyResumeButton() {
+  const button = await screen.findByRole("button", { name: "Resume saved run" });
+  await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+  return button;
+}
+
 it("keeps replay evidence and original status when Resume is rejected before acceptance", async () => {
   getReplayPageData.mockResolvedValue({ data: recoverableFixture(), report: null, reportError: "" });
   resumeRun.mockRejectedValue(new Error("Resume denied"));
   render(<RunReplay runId="run-1" />);
-  fireEvent.click(await screen.findByRole("button", { name: "Resume saved run" }));
+  fireEvent.click(await readyResumeButton());
   await screen.findByText("Resume denied");
   expect(screen.getByRole("heading", { name: "Run replay" })).toBeTruthy();
   expect(screen.getByText("Durable checkpoint")).toBeTruthy();
@@ -62,7 +68,7 @@ it("keeps accepted server status and evidence after a Resume transport failure",
     throw new Error("Resume connection lost");
   });
   render(<RunReplay runId="run-1" />);
-  fireEvent.click(await screen.findByRole("button", { name: "Resume saved run" }));
+  fireEvent.click(await readyResumeButton());
   await screen.findByText("Resume connection lost");
   expect(screen.getByText("running")).toBeTruthy();
   expect(screen.getByText("Durable checkpoint")).toBeTruthy();
@@ -74,7 +80,7 @@ it("preserves accepted evidence if the post-Resume refresh fails", async () => {
     .mockRejectedValueOnce(new Error("refresh unavailable"));
   resumeRun.mockImplementation(async (_input, emit) => emit({ type: "done", run_id: "run-1", status: "completed" }));
   render(<RunReplay runId="run-1" />);
-  fireEvent.click(await screen.findByRole("button", { name: "Resume saved run" }));
+  fireEvent.click(await readyResumeButton());
   await screen.findByText(/refresh unavailable/);
   expect(screen.getByRole("heading", { name: "Run replay" })).toBeTruthy();
   expect(screen.getByText("completed")).toBeTruthy();
@@ -90,7 +96,7 @@ it("ignores old Resume events and refreshes after navigating to a different Run"
   next.conversation = { ...next.conversation, title: "Second run" };
   getReplayPageData.mockImplementation(async (id) => ({ data: id === "run-1" ? recoverableFixture() : next, report: null, reportError: "" }));
   const view = render(<RunReplay runId="run-1" />);
-  fireEvent.click(await screen.findByRole("button", { name: "Resume saved run" }));
+  fireEvent.click(await readyResumeButton());
   await waitFor(() => expect(resumeRun).toHaveBeenCalledTimes(1));
   view.rerender(<RunReplay runId="run-2" />);
   await screen.findByText("Second run");
@@ -104,7 +110,7 @@ it("admits only one Resume before React flushes repeated clicks", async () => {
   getReplayPageData.mockResolvedValue({ data: recoverableFixture(), report: null, reportError: "" });
   resumeRun.mockImplementation(() => new Promise(() => {}));
   render(<RunReplay runId="run-1" />);
-  const button = await screen.findByRole("button", { name: "Resume saved run" });
+  const button = await readyResumeButton();
   act(() => { button.click(); button.click(); });
   expect(resumeRun).toHaveBeenCalledTimes(1);
   expect((screen.getByRole("button", { name: "Resuming..." }) as HTMLButtonElement).disabled).toBe(true);
@@ -162,7 +168,7 @@ it("does not let an older read roll back a newly accepted Resume event", async (
     emit({ type: "done", run_id: "run-1", status: "completed" });
     throw new Error("late transport failure");
   });
-  fireEvent.click(screen.getByRole("button", { name: "Resume saved run" }));
+  fireEvent.click(await readyResumeButton());
   await screen.findByText("late transport failure");
   await act(async () => finishOld({ data: reconciliationFixture(), report: null, reportError: "" }));
   expect(screen.getByText("completed")).toBeTruthy();
@@ -464,14 +470,67 @@ function replayFixture(): RunReplayData {
   };
 }
 
-it("uses the bound clarification receipt instead of generic recovery", async () => {
+it("uses backend recovery routing after an applied clarification is hydrated", async () => {
   getReplayPageData.mockResolvedValue({data:recoverableFixture(),report:null,reportError:""});
   questions.list.mockResolvedValue([{id:"question-saved",status:"applied",version:1,run_id:"run-1",conversation_id:"conversation-1",turn_id:"turn-1",questions:[],answers:{}}]);
   render(<RunReplay runId="run-1"/>);
   const button=await screen.findByRole("button",{name:"Resume saved run"});
   await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(button);
-  await waitFor(() => expect(questions.resume).toHaveBeenCalled());
-  expect(questions.resume.mock.calls[0]?.slice(0,2)).toEqual(["run-1","question-saved"]);
+  await waitFor(() => expect(resumeRun).toHaveBeenCalledTimes(1));
+  expect(resumeRun.mock.calls[0][0].run_id).toBe("run-1");
+  expect(questions.resume).not.toHaveBeenCalled();
+});
+
+it("does not resume while clarification hydration is delayed, but allows loaded-empty recovery", async () => {
+  let finish!: (items: unknown[]) => void;
+  questions.list.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  getReplayPageData.mockResolvedValue({ data: recoverableFixture(), report: null, reportError: "" });
+  render(<RunReplay runId="run-1" />);
+  const button = await screen.findByRole("button", { name: "Resume saved run" });
+  fireEvent.click(button);
   expect(resumeRun).not.toHaveBeenCalled();
+  expect(questions.resume).not.toHaveBeenCalled();
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText("Loading clarification state before recovery...")).toBeTruthy();
+  await act(async () => finish([]));
+  expect((button as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(button);
+  await waitFor(() => expect(resumeRun).toHaveBeenCalledTimes(1));
+});
+
+it("keeps all recovery actions visible but blocks Resume after clarification hydration fails", async () => {
+  questions.list.mockRejectedValue(new Error("clarification read unavailable"));
+  const data = recoverableFixture();
+  data.recovery_summary!.actions.push({kind:"continue_in_chat",label:"Open conversation",enabled:true});
+  getReplayPageData.mockResolvedValue({ data, report: null, reportError: "" });
+  render(<RunReplay runId="run-1" />);
+  await screen.findByText(/clarification read unavailable/);
+  const button = screen.getByRole("button", { name: "Resume saved run" });
+  fireEvent.click(button);
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "Open conversation" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(resumeRun).not.toHaveBeenCalled();
+  expect(questions.resume).not.toHaveBeenCalled();
+});
+
+it("requires a new hydration after reloading a changed Run status", async () => {
+  const initial = reconciliationFixture();
+  initial.run.status = "running";
+  getReplayPageData.mockResolvedValueOnce({data:initial,report:null,reportError:""})
+    .mockResolvedValueOnce({data:reconciliationFixture(),report:null,reportError:""});
+  questions.list.mockResolvedValue([]);
+  render(<RunReplay runId="run-1" />);
+  await screen.findByRole("button", {name:"Refresh reconciled replay"});
+  await act(async () => {});
+  let finish!: (items: unknown[]) => void;
+  questions.list.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  fireEvent.click(screen.getByRole("button", {name:"Refresh reconciled replay"}));
+  await screen.findByText("failed_recoverable");
+  const button = screen.getByRole("button", {name:"Resume saved run"});
+  fireEvent.click(button);
+  expect(resumeRun).not.toHaveBeenCalled();
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => finish([]));
+  expect((button as HTMLButtonElement).disabled).toBe(false);
 });

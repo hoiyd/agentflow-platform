@@ -128,6 +128,7 @@ func TestHeadlessRecoveryRejectsWithoutWriting(t *testing.T) {
 				cancel()
 				ctx = canceled
 			case "changed after admission":
+				reason = runcommands.Conflict
 				wantStatus = domain.RunCompleted
 				observer.Run = func(domain.Run) {
 					if _, err := storage.UpdateRunStatus(run.ID, wantStatus, ""); err != nil {

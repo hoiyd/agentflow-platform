@@ -14,12 +14,18 @@ func (s *PostgresStore) applyFollowup(ctx context.Context, tx *sql.Tx, id, owner
 	if err := lockInbox(ctx, tx, owner, run.WorkspaceID, run.ConversationID); err != nil {
 		return err
 	}
-	var oldest string
-	err := tx.QueryRowContext(ctx, `SELECT id FROM conversation_inputs WHERE conversation_id=$1 AND request->>'kind'='follow_up' AND status='queued' AND expires_at>NOW() ORDER BY created_at,id LIMIT 1`, run.ConversationID).Scan(&oldest)
+	var oldest, executionConstraint string
+	err := tx.QueryRowContext(ctx, `SELECT i.id,COALESCE(r.runtime_snapshot->>'execution_constraint','')
+ FROM conversation_inputs i JOIN runs r ON r.id=i.run_id
+ WHERE i.conversation_id=$1 AND i.request->>'kind'='follow_up' AND i.status='queued' AND i.expires_at>NOW()
+ ORDER BY i.created_at,i.id LIMIT 1`, run.ConversationID).Scan(&oldest, &executionConstraint)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && oldest != id {
 		return ErrInputConflict
 	}
 	if err != nil {
+		return err
+	}
+	if err = ValidateFollowupIntent(executionConstraint); err != nil {
 		return err
 	}
 	var status string

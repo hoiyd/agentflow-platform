@@ -103,7 +103,7 @@ func TestRunResultReadsRealCompletionEvidenceAndFailsClosed(t *testing.T) {
 	if _, exposed := unavailable["value"]; exposed || unavailable["verification_status"] != "failed" {
 		t.Fatalf("failed gate exposed JSON: %v", unavailable)
 	}
-	handler := &Handler{store: dependencies.Store, agentRuntime: dependencies.AgentRuntime, verification: dependencies.Verification}
+	handler := &Handler{store: dependencies.Store, agentRuntime: dependencies.AgentRuntime, verification: dependencies.Verification, runController: dependencies.RunController}
 	reverify := func() *httptest.ResponseRecorder {
 		r := httptest.NewRequest(http.MethodPost, "/api/runs/"+rejected.ID+"/verify", nil)
 		r.SetPathValue("id", rejected.ID)
@@ -112,21 +112,48 @@ func TestRunResultReadsRealCompletionEvidenceAndFailsClosed(t *testing.T) {
 		handler.verifyRun(w, r)
 		return w
 	}
-	if response = reverify(); response.Code != 200 {
-		t.Fatalf("original candidate could not be reverified: %s", response.Body.String())
+	assertOriginalSubject := func(response *httptest.ResponseRecorder, attempt, evidenceCount int) {
+		t.Helper()
+		var result struct {
+			Run      domain.Run            `json:"run"`
+			Decision verification.Decision `json:"decision"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		wantHash := verification.SubjectForQuestionAnswer("", `{"summary":"valid JSON is not quality evidence"}`).Hash
+		if response.Code != 200 || result.Decision.AllowCompletion || result.Decision.SubjectHash != wantHash || result.Decision.Attempt != attempt || result.Run.Status == domain.RunCompleted {
+			t.Fatalf("original candidate gate changed: %d %s", response.Code, response.Body.String())
+		}
+		evidence, err := storage.ListVerificationEvidence(rejected.ID)
+		if err != nil || len(evidence) != evidenceCount {
+			t.Fatalf("attempt evidence: count=%d want=%d err=%v", len(evidence), evidenceCount, err)
+		}
+		for _, item := range evidence {
+			if item.SubjectHash != wantHash || item.Status == domain.VerificationStale {
+				t.Fatalf("unrelated message changed subject: %+v", item)
+			}
+		}
+		unavailable := read(dependencies.Store, rejected.ID)
+		var body map[string]any
+		if err := json.Unmarshal(unavailable.Body.Bytes(), &body); err != nil {
+			t.Fatal(err)
+		}
+		if _, exposed := body["value"]; unavailable.Code != 409 || exposed {
+			t.Fatalf("rejected original exposed a machine result: %d %s", unavailable.Code, unavailable.Body.String())
+		}
 	}
+	assertOriginalSubject(reverify(), 2, 4)
 	if _, err = storage.AddMessage(conversation.ID, "user", "a new task"); err != nil {
 		t.Fatal(err)
 	}
-	if response = reverify(); response.Code != 409 {
-		t.Fatalf("question drift accepted as original subject: %d", response.Code)
-	}
+	assertOriginalSubject(reverify(), 3, 6)
 	if _, err = storage.AddMessage(conversation.ID, "assistant", `{"summary":"`+strings.Repeat("later report ", 100)+`"}`); err != nil {
 		t.Fatal(err)
 	}
-	if response = reverify(); response.Code != 409 {
-		t.Fatalf("later answer reused as old Run candidate: %d %s", response.Code, response.Body.String())
-	}
+	// The later answer satisfies both checks, but cannot replace the original;
+	// exhaustion must not append another attempt or expose a machine value.
+	assertOriginalSubject(reverify(), 3, 6)
 	for _, point := range []string{"run", "evidence", "artifacts"} {
 		response = read(resultFailureStore{Store: storage, point: point}, run.ID)
 		if response.Code != 500 {

@@ -16,7 +16,7 @@ func inputFailure(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, store.ErrInputInvalid):
 		status = http.StatusBadRequest
-	case errors.Is(err, store.ErrInputConflict):
+	case errors.Is(err, store.ErrInputConflict), errors.Is(err, store.ErrInputPlanOnly):
 		status = http.StatusConflict
 	case errors.Is(err, store.ErrInputCapacity):
 		status = http.StatusTooManyRequests

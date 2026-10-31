@@ -18,63 +18,66 @@ func (r *Runtime) ResumeRecoverableCollaboration(ctx context.Context, runID stri
 		defer close(errs)
 		run, ok, err := r.store.GetRun(strings.TrimSpace(runID))
 		if err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 		if !ok {
-			errs <- store.ErrNotFound("run")
+			errs <- rejectRecovery(store.ErrNotFound("run"))
 			return
 		}
 		if run.Status != domain.RunFailedRecoverable {
-			errs <- errors.New("run is not recoverable")
+			errs <- rejectRecovery(errors.New("run is not recoverable"))
 			return
 		}
 		executionCtx, releaseCancellation := r.bindRunCancellation(ctx, run.ID)
 		defer releaseCancellation()
 		restored, err := r.restoreRuntime(run)
 		if err != nil {
-			errs <- err
+			errs <- rejectRecovery(err)
 			return
 		}
 		if restored.mode != ChatModeMultiAgent {
-			errs <- fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeMultiAgent)
+			errs <- rejectRecovery(fmt.Errorf("run %s uses %q mode, not %q", run.ID, restored.mode, ChatModeMultiAgent))
+			return
+		}
+		if err := r.checkpoints.ValidateResume(executionCtx, run); err != nil {
+			errs <- rejectRecovery(fmt.Errorf("restore durable checkpoints: %w", err))
+			return
+		}
+		steps, err := r.store.ListCollaborationSteps(run.ID)
+		if err != nil {
+			errs <- rejectRecovery(err)
+			return
+		}
+		planner, found := latestCompletedCollaborationStep(steps, "planner")
+		if !found {
+			errs <- rejectRecovery(errors.New("completed planner step not found"))
+			return
+		}
+		router, found := latestCompletedCollaborationStep(steps, "router")
+		task, err := r.taskWithClarifications(run.ID, planner.Input)
+		if err != nil {
+			errs <- rejectRecovery(err)
+			return
+		}
+		if !found {
+			errs <- rejectRecovery(errors.New("completed router step not found; recover from the plan approval boundary"))
+			return
+		}
+		workerAgent, found := findAgentByID(restored.candidateAgents, router.AgentID)
+		if !found {
+			errs <- rejectRecovery(errors.New("frozen routed worker not found"))
+			return
+		}
+		run, err = r.transitionRun(run, domain.RunRunning, domain.EventRunResumed, "", nil)
+		if err != nil {
+			errs <- err
 			return
 		}
 		if _, err := r.checkpoints.RestoreRun(executionCtx, run); err != nil {
 			errs <- fmt.Errorf("restore durable checkpoints: %w", err)
 			return
 		}
-		steps, err := r.store.ListCollaborationSteps(run.ID)
-		if err != nil {
-			errs <- err
-			return
-		}
-		planner, found := latestCompletedCollaborationStep(steps, "planner")
-		if !found {
-			errs <- errors.New("completed planner step not found")
-			return
-		}
-		router, found := latestCompletedCollaborationStep(steps, "router")
-		task, err := r.taskWithClarifications(run.ID, planner.Input)
-		if err != nil {
-			errs <- err
-			return
-		}
-		if !found {
-			errs <- errors.New("completed router step not found; recover from the plan approval boundary")
-			return
-		}
-		workerAgent, found := findAgentByID(restored.candidateAgents, router.AgentID)
-		if !found {
-			errs <- errors.New("frozen routed worker not found")
-			return
-		}
-		run, err = r.store.UpdateRunStatus(run.ID, domain.RunRunning, "")
-		if err != nil {
-			errs <- err
-			return
-		}
-		r.publishRunLifecycle(executionCtx, run, domain.EventRunResumed, map[string]any{"status": run.Status})
 		events <- liveRunEvent(run)
 		prepared := PreparedCollaborationRun{WorkerAgent: workerAgent, Run: run}
 		workerStep, found := latestCompletedCollaborationStep(steps, "worker")

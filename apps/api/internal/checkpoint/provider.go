@@ -31,6 +31,7 @@ type Store interface {
 
 type Provider interface {
 	RecordStageTransition(context.Context, domain.CollaborationStep, domain.RunEventType) (domain.RunEvent, error)
+	ValidateResume(context.Context, domain.Run) error
 	RestoreRun(context.Context, domain.Run) (RestoreReport, error)
 }
 
@@ -163,60 +164,16 @@ func stageRunEvent(step domain.CollaborationStep, eventType domain.RunEventType)
 
 func (p *InternalProvider) RestoreRun(ctx context.Context, run domain.Run) (RestoreReport, error) {
 	var report RestoreReport
-	if p == nil || p.store == nil {
-		return report, errors.New("checkpoint provider is unavailable")
-	}
-	snapshotHash, toolHash, err := RuntimeHashes(run.RuntimeSnapshot)
+	plan, err := p.planRestore(run)
 	if err != nil {
 		return report, err
 	}
-	checkpoints, err := p.store.ListStageCheckpoints(run.ID)
-	if err != nil {
-		return report, err
-	}
-	effects, err := p.store.ListToolEffects(run.ID)
-	if err != nil {
-		return report, err
-	}
-	effectsByStage := make(map[string][]domain.ToolEffectRecord)
-	for _, effect := range effects {
-		effectsByStage[effect.StageID] = append(effectsByStage[effect.StageID], effect)
-	}
-	events, err := p.store.ListRunEvents(run.ID)
-	if err != nil {
-		return report, err
-	}
-	for _, item := range checkpoints {
-		if item.Provider != InternalStateProvider || item.RuntimeSnapshotHash != snapshotHash || item.ToolDefinitionsHash != toolHash {
-			_ = p.publish(ctx, run, item.StageID, domain.EventCheckpointStale, map[string]any{
-				"checkpoint_id": item.ID, "provider": item.Provider,
-				"runtime_snapshot_match": item.RuntimeSnapshotHash == snapshotHash,
-				"tool_definitions_match": item.ToolDefinitionsHash == toolHash,
-			})
-			return report, fmt.Errorf("%w: stage %s", ErrCheckpointStale, item.StageID)
-		}
-		if item.Status == domain.CheckpointPrepared || item.Status == domain.CheckpointExecuting {
-			if terminal, ok := stageTerminalAfter(events, item.StageID, item.EventCursor); ok {
-				if terminal.Type == domain.EventStageCompleted && hasUncertainEffect(effectsByStage[item.StageID]) {
-					return report, fmt.Errorf("%w: stage %s completed with an uncertain tool effect", ErrNeedsReconciliation, item.StageID)
-				}
-				reconciled, err := p.reconcileStageTerminal(item, terminal)
-				if err != nil {
-					return report, err
-				}
-				item = reconciled
-			}
-		}
-		if item.Status != domain.CheckpointCommitted {
-			for _, effect := range effectsByStage[item.StageID] {
-				if effect.Status == domain.ToolEffectCommitted {
-					// Resume abandons an unfinished Stage and creates a new ID.
-					// It cannot reuse that Stage's journal slots automatically.
-					_ = p.publish(ctx, run, item.StageID, domain.EventCheckpointStale, map[string]any{
-						"checkpoint_id": item.ID, "reason": "committed_effect_in_unfinished_stage",
-					})
-					return report, fmt.Errorf("%w: unfinished stage %s has a committed external effect; automatic stage recreation is unsafe", ErrNeedsReconciliation, item.StageID)
-				}
+	for _, action := range plan {
+		item := action.checkpoint
+		if action.terminal != nil {
+			item, err = p.reconcileStageTerminal(item, *action.terminal)
+			if err != nil {
+				return report, err
 			}
 		}
 		switch item.Status {
@@ -228,12 +185,6 @@ func (p *InternalProvider) RestoreRun(ctx context.Context, run domain.Run) (Rest
 		case domain.CheckpointCompensated:
 			report.CompensatedStageIDs = append(report.CompensatedStageIDs, item.StageID)
 		case domain.CheckpointPrepared, domain.CheckpointExecuting, domain.CheckpointNeedsReconciliation:
-			if hasUncertainEffect(effectsByStage[item.StageID]) {
-				_ = p.publish(ctx, run, item.StageID, domain.EventCheckpointStale, map[string]any{
-					"checkpoint_id": item.ID, "reason": "tool_effect_needs_reconciliation",
-				})
-				return report, fmt.Errorf("%w: stage %s has an uncertain tool effect", ErrNeedsReconciliation, item.StageID)
-			}
 			compensated, err := p.compensateInternalState(ctx, run, item)
 			if err != nil {
 				return report, err

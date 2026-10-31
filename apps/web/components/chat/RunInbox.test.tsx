@@ -6,6 +6,25 @@ import * as api from "../../lib/run-input-api";
 vi.mock("../../lib/run-input-api", () => ({ listRunInputs: vi.fn(), enqueueRunInput: vi.fn(), withdrawRunInput: vi.fn(), startFollowup: vi.fn() }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 
+it.each([
+ {planOnly:true,executionConstraint:undefined},
+ {planOnly:false,executionConstraint:"plan_only"},
+])("blocks planning follow-ups but preserves steering: %j", async settings => {
+ vi.mocked(api.listRunInputs).mockResolvedValue([]);
+ vi.mocked(api.enqueueRunInput).mockResolvedValue({id:"steer-one"} as api.RunInput);
+ const onSubmitted=vi.fn();
+ render(<RunInbox conversationId="conv-one" runId="run-one" mode="single" agentId="agent-one" input="Keep the plan concise" busy canStartFollowup={false} onSubmitted={onSubmitted} onRunAvailable={vi.fn()} {...settings} />);
+ const queue=screen.getByRole("button",{name:"Queue follow-up"}) as HTMLButtonElement;
+ expect(queue.disabled).toBe(true);
+ fireEvent.click(queue);
+ expect(api.enqueueRunInput).not.toHaveBeenCalled();
+ const steer=screen.getByRole("button",{name:"Steer current run"}) as HTMLButtonElement;
+ expect(steer.disabled).toBe(false);
+ fireEvent.click(steer);
+ await waitFor(()=>expect(onSubmitted).toHaveBeenCalledOnce());
+ expect(vi.mocked(api.enqueueRunInput).mock.calls[0][1].kind).toBe("steer");
+});
+
 it("uses explicit actions, preserves idempotency on retry, and restores receipts", async () => {
  vi.mocked(api.listRunInputs).mockResolvedValue([]);
  vi.mocked(api.enqueueRunInput).mockRejectedValueOnce(new Error("Connection lost")).mockResolvedValueOnce({ id:"input-one" } as api.RunInput);

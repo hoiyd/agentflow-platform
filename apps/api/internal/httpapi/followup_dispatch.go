@@ -36,6 +36,18 @@ func (h *Handler) dispatchFollowup(ctx context.Context, scope runcommands.Scope,
 	if input == nil {
 		return store.ErrInputConflict
 	}
+	source, found, err := h.store.ForWorkspace(scope.Workspace).GetRun(input.RunID)
+	if err != nil {
+		return err
+	}
+	if !found || source.ConversationID != conversation {
+		return store.ErrInputConflict
+	}
+	if source.RuntimeSnapshot != nil {
+		if err := store.ValidateFollowupIntent(source.RuntimeSnapshot.ExecutionConstraint); err != nil {
+			return err
+		}
+	}
 	runs, err := h.store.ForWorkspace(scope.Workspace).ListRuns()
 	if err != nil {
 		return err

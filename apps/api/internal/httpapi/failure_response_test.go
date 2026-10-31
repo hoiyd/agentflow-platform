@@ -111,7 +111,7 @@ func TestFailureChatChunkUsesTheSameSafeContract(t *testing.T) {
 }
 
 func TestContinuationFailurePolicyPreservesRetryableRunState(t *testing.T) {
-	if status, failRun := continuationFailurePolicy(errors.New("run is not waiting for user input")); status != http.StatusInternalServerError || failRun {
+	if status, failRun := continuationFailurePolicy(&agentpkg.PreExecutionRejection{Err: errors.New("run is not waiting for user input")}); status != http.StatusConflict || failRun {
 		t.Fatalf("state conflict policy: status=%d fail_run=%t", status, failRun)
 	}
 	if status, failRun := continuationFailurePolicy(errors.New("worker failed")); status != http.StatusInternalServerError || !failRun {
