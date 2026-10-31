@@ -7,14 +7,14 @@ export type ProjectFilePage = components["schemas"]["ProjectFilePage"];
 export type ProjectGuidanceSnapshot = components["schemas"]["ProjectGuidanceSnapshot"];
 
 export async function listGuidanceProjects(signal?: AbortSignal): Promise<ProjectCatalog> {
-  const result = await apiObject<ProjectCatalog>("/api/project-guidance/projects", { signal, cache: "no-store" }, { errorMessage: "Project guidance unavailable" }, "project guidance");
-  if (typeof result.configured !== "boolean" || !Array.isArray(result.projects)) throw new Error("Invalid project guidance catalog");
+  const result = await apiObject<ProjectCatalog>("/api/project-guidance/projects", { signal, cache: "no-store" }, { errorMessage: "Project instructions unavailable" }, "project instructions");
+  if (typeof result.configured !== "boolean" || !Array.isArray(result.projects)) throw new Error("Invalid project instructions catalog");
   return result;
 }
 
 export function listGuidanceFiles(root: string, directory: string, signal?: AbortSignal): Promise<ProjectFilePage> {
   return apiObject<ProjectFilePage>(`/api/project-guidance/projects/${encodeURIComponent(root)}/files?${new URLSearchParams({ path: directory })}`,
-    { signal, cache: "no-store" }, { errorMessage: "Project files unavailable" }, "project files");
+    { signal, cache: "no-store" }, { errorMessage: "Task files unavailable" }, "task files");
 }
 
 export function savedProjectContext(value: unknown): ProjectContext | undefined {

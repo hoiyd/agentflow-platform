@@ -13,7 +13,7 @@ func (s *Service) Projects(ctx context.Context, workspace string) (domain.Projec
 		return result, nil
 	}
 	if err := s.files.ValidateGuidanceConfig(s.config); err != nil {
-		return result, problem("project_guidance_unavailable", "Guidance trust configuration is unavailable or unsafe")
+		return result, problem("project_guidance_unavailable", "Instruction trust configuration is unavailable or unsafe")
 	}
 	projects, _, err := loadConfig(s.config)
 	if err != nil {
@@ -37,7 +37,7 @@ func (s *Service) Projects(ctx context.Context, workspace string) (domain.Projec
 
 func (s *Service) Files(ctx context.Context, workspace, root, directory string) (domain.ProjectFilePage, error) {
 	if !rootID.MatchString(root) || directory != "." && !validSelectionPath(directory) {
-		return domain.ProjectFilePage{}, problem("project_guidance_invalid", "Choose a logical project root and a relative directory")
+		return domain.ProjectFilePage{}, problem("project_guidance_invalid", "Choose a logical source root and a relative directory")
 	}
 	if _, _, err := s.trusted(workspace, root); err != nil {
 		return domain.ProjectFilePage{}, err
@@ -46,11 +46,11 @@ func (s *Service) Files(ctx context.Context, workspace, root, directory string) 
 		ListProjectFiles(context.Context, string, string, string) (domain.ProjectFilePage, error)
 	})
 	if !ok {
-		return domain.ProjectFilePage{}, problem("project_guidance_unavailable", "Project file selection is unavailable")
+		return domain.ProjectFilePage{}, problem("project_guidance_unavailable", "Task file selection is unavailable")
 	}
 	page, err := browser.ListProjectFiles(ctx, workspace, root, directory)
 	if err != nil {
-		return domain.ProjectFilePage{}, problem("project_guidance_unavailable", "Project directory is unavailable or unsafe")
+		return domain.ProjectFilePage{}, problem("project_guidance_unavailable", "Source directory is unavailable or unsafe")
 	}
 	selectable := page.Entries[:0]
 	for _, entry := range page.Entries {

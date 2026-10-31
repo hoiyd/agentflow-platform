@@ -53,10 +53,6 @@
   opacity: 0.52;
 }
 
-.composer-inner {
-  display: grid;
-}
-
 .send {
   min-height: 56px;
   cursor: pointer;
@@ -151,26 +147,44 @@
 }
 
 .composer-inner {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) 42px;
   gap: 8px;
-  align-items: end;
+  align-items: center;
+  min-height: 68px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+.composer-inner:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(45, 95, 211, 0.12);
 }
 
 .composer-inner textarea {
-  min-height: 44px;
+  min-width: 0;
+  min-height: 52px;
   max-height: 150px;
-  border: 1px solid var(--border-strong);
-  border-radius: 5px;
-  background: #ffffff;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--ink);
   line-height: 1.45;
-  padding: 11px 13px;
+  padding: 6px 8px;
+  box-shadow: none;
   resize: none;
 }
 
 .composer-inner textarea:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(45, 95, 211, 0.12);
+  outline: none;
+  box-shadow: none;
+}
+
+.composer-inner textarea:placeholder-shown {
+  height: 52px;
+  padding-block: calc((52px - 1.45em) / 2);
 }
 
 .send {
@@ -190,6 +204,7 @@
   width: 42px;
   min-width: 42px;
   height: 44px;
+  min-height: 44px;
   display: grid;
   place-items: center;
   padding: 0;

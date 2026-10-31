@@ -26,7 +26,7 @@ func (s *Service) ProjectRootRevision(ctx context.Context, workspace, id string,
 		return "", err
 	}
 	if root.WriteAccess != "" {
-		return "", fmt.Errorf("model-writable output roots cannot supply trusted project guidance")
+		return "", fmt.Errorf("model-writable output roots cannot supply trusted project instructions")
 	}
 	for _, name := range paths {
 		if name == "." || validatePath(name) != nil {
@@ -56,7 +56,7 @@ func (s *Service) ReadProjectText(ctx context.Context, workspace, id, name strin
 	}
 	file, err := openFile(root, name)
 	if err != nil {
-		return "", fmt.Errorf("project guidance file is unavailable or unsafe")
+		return "", fmt.Errorf("project instructions file is unavailable or unsafe")
 	}
 	text, err := readTextFile(ctx, file, limit)
 	if err != nil {

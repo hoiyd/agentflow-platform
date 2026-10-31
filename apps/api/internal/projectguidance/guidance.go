@@ -29,11 +29,11 @@ type Service struct {
 
 func New(config string, files Files) (*Service, error) {
 	if files == nil {
-		return nil, problem("project_guidance_unavailable", "Project guidance requires scoped file access")
+		return nil, problem("project_guidance_unavailable", "Project instructions require scoped file access")
 	}
 	if config != "" {
 		if err := files.ValidateGuidanceConfig(config); err != nil {
-			return nil, problem("project_guidance_invalid", "Guidance trust configuration must be operator-controlled")
+			return nil, problem("project_guidance_invalid", "Instruction trust configuration must be operator-controlled")
 		}
 		if _, _, err := loadConfig(config); err != nil {
 			return nil, err
@@ -44,7 +44,7 @@ func New(config string, files Files) (*Service, error) {
 
 func (s *Service) trusted(workspace, root string) (project, string, error) {
 	if s.files.ValidateGuidanceConfig(s.config) != nil {
-		return project{}, "", problem("project_guidance_unavailable", "Guidance trust configuration is unavailable or unsafe")
+		return project{}, "", problem("project_guidance_unavailable", "Instruction trust configuration is unavailable or unsafe")
 	}
 	items, revision, err := loadConfig(s.config)
 	if err != nil {
@@ -55,17 +55,17 @@ func (s *Service) trusted(workspace, root string) (project, string, error) {
 			return item, revision, nil
 		}
 	}
-	return project{}, "", problem("project_guidance_untrusted", "Project guidance is not trusted for this Workspace/root")
+	return project{}, "", problem("project_guidance_untrusted", "Project instructions are not trusted for this Workspace/root")
 }
 
 func NormalizeSelection(selection domain.ProjectContext) (domain.ProjectContext, error) {
 	if !rootID.MatchString(selection.Root) || len(selection.Paths) == 0 || len(selection.Paths) > 16 {
-		return domain.ProjectContext{}, problem("project_guidance_invalid", "Project context requires one logical root and 1-16 existing relative files")
+		return domain.ProjectContext{}, problem("project_guidance_invalid", "Instruction selection requires one logical source root and 1-16 existing relative files")
 	}
 	selection.Paths = slices.Clone(selection.Paths)
 	for _, name := range selection.Paths {
 		if !validSelectionPath(name) {
-			return domain.ProjectContext{}, problem("project_guidance_invalid", "Project context accepts concrete relative files, not patterns or directories")
+			return domain.ProjectContext{}, problem("project_guidance_invalid", "Instruction selection accepts concrete relative files, not patterns or directories")
 		}
 	}
 	slices.Sort(selection.Paths)
@@ -88,7 +88,7 @@ func (s *Service) Freeze(ctx context.Context, workspace string, selection domain
 	}
 	rootRevision, err := s.files.ProjectRootRevision(ctx, workspace, selection.Root, selection.Paths)
 	if err != nil {
-		return nil, problem("project_guidance_unavailable", "Project root or selected files are not currently authorized")
+		return nil, problem("project_guidance_unavailable", "Source root or selected files are not currently authorized")
 	}
 	frozen := &domain.ProjectGuidanceSnapshot{Version: Version, SourceType: SourceType, WorkspaceID: workspace, Selection: selection, RootRevision: rootRevision, ConfigRevision: configRevision}
 	entries := []domain.ProjectGuidanceEntry{{Path: project.Entry, Reason: "project_entry", MatchedPaths: slices.Clone(selection.Paths)}}
@@ -107,18 +107,18 @@ func (s *Service) Freeze(ctx context.Context, workspace string, selection domain
 			content, err := s.files.ReadProjectText(ctx, workspace, selection.Root, entry.Path, MaxFileBytes)
 			if err != nil {
 				if errors.Is(err, redaction.ErrCredentialContent) {
-					return nil, problem("project_guidance_sensitive", "Guidance contains credential-shaped content; operator review is required")
+					return nil, problem("project_guidance_sensitive", "Instructions contain credential-shaped content; operator review is required")
 				}
 				if failure.Describe(err).Code == "filesystem_file_limit" {
-					return nil, problem("project_guidance_budget_exceeded", "Guidance file exceeds the bounded text read limit")
+					return nil, problem("project_guidance_budget_exceeded", "Instruction file exceeds the bounded text read limit")
 				}
-				return nil, problem("project_guidance_unavailable", "Trusted guidance text is unavailable or unsafe")
+				return nil, problem("project_guidance_unavailable", "Trusted instruction text is unavailable or unsafe")
 			}
 			if !utf8.ValidString(content) || strings.ContainsRune(content, 0) || strings.TrimSpace(content) == "" {
-				return nil, problem("project_guidance_invalid", "Guidance requires nonempty UTF-8 text")
+				return nil, problem("project_guidance_invalid", "Instructions require nonempty UTF-8 text")
 			}
 			if redaction.ValidateValue(content) != nil {
-				return nil, problem("project_guidance_sensitive", "Guidance contains credential-shaped content; operator review is required")
+				return nil, problem("project_guidance_sensitive", "Instructions contain credential-shaped content; operator review is required")
 			}
 			entry.Hash, entry.OriginalBytes = hash(content), len(content)
 			bytes += len(content)
@@ -131,7 +131,7 @@ func (s *Service) Freeze(ctx context.Context, workspace string, selection domain
 				tokens += entry.EstimatedTokens
 			}
 			if len(content) > MaxFileBytes || bytes > MaxTotalBytes || tokens > MaxTokens {
-				return nil, &Error{code: "project_guidance_budget_exceeded", message: "Project guidance exceeds its bounded content budget; shorten the trusted files", details: map[string]any{"path": entry.Path, "observed_bytes": bytes, "estimated_tokens": tokens, "max_file_bytes": MaxFileBytes, "max_total_bytes": MaxTotalBytes, "max_tokens": MaxTokens}}
+				return nil, &Error{code: "project_guidance_budget_exceeded", message: "Project instructions exceed their bounded content budget; shorten the trusted files", details: map[string]any{"path": entry.Path, "observed_bytes": bytes, "estimated_tokens": tokens, "max_file_bytes": MaxFileBytes, "max_total_bytes": MaxTotalBytes, "max_tokens": MaxTokens}}
 			}
 		}
 		frozen.Entries = append(frozen.Entries, entry)

@@ -17,7 +17,7 @@ summary of older Messages; originals remain authoritative and recoverable.
 | --- | --- |
 | System protocol, current input, Tool protocol and active results | Required; oversized results use a separate bounded transformation |
 | Task State | Required when a Revision exists; reloaded for every logical assembly |
-| [Project guidance](project-guidance.md) | Explicitly trusted, path-selected and frozen; required, deduplicated and bounded |
+| [Project instructions](project-instructions.md) | Explicitly trusted, path-selected and frozen; required, deduplicated and bounded |
 | Active persisted summary | Required; covered raw Messages are shadowed, not deleted |
 | Recent history, curated Memory, RAG | Selected within source and total budgets |
 | Retrieved original session sources | Bounded exact evidence, separate from the recent raw tail |
