@@ -10,6 +10,22 @@ as a Run status update. The implementation has three cooperating parts:
 These records use the same Postgres persistence boundary and are visible
 through Run Replay. They contain hashes and execution metadata, never API keys.
 
+## Run Lifecycle Writes
+
+Runtime startup, waiting, Resume, Stop and worker settlement use one conditional
+transition. Postgres locks the Run's event stream and row, compares the expected
+status, then commits the status, timing fields and lifecycle events together.
+Failed persistence changes neither; stale or duplicate commands append no facts.
+Subscribers and telemetry receive only committed events.
+
+If completion wins, a late Stop leaves `completed` unchanged. If Stop wins,
+successful completion or acknowledged cancellation settles `canceling` as
+`canceled`. An independent provider failure still settles as `failed`; Stop is
+not proof that every concurrent error was cancellation. Ordinary late results
+cannot overwrite a failed or canceled Run. Explicit
+[reverification](verification.md) may reconsider the original failed candidate;
+this is separate from worker completion.
+
 ## Cold-Start Lifecycle Repair
 
 At startup, `recovery.MarkStaleRunningRuns` scans only Runs whose status is
@@ -93,8 +109,12 @@ The pre-execution rejection preserves the waiting/recovery point. MCP definition
 hashes also bind the negotiated protocol and remote input/output schemas; see
 [trusted MCP recovery](../tools/mcp-adapter.md#execution-and-recovery).
 
-Resume recalculates the Runtime Snapshot and Tool definition hashes. A mismatch
-emits `checkpoint.stale` and fails closed. A committed Stage emits
+Resume first validates the complete checkpoint/effect set without writes,
+including Runtime Snapshot and Tool definition hashes. A mismatch fails closed
+without changing checkpoints or appending restore/compensation facts. Only after
+the Run's conditional Resume succeeds does it revalidate and apply restoration;
+a persistence failure after acceptance is an execution failure, not preflight
+rejection. A committed Stage emits
 `checkpoint.restored` and is not rerun. An interrupted Stage with no uncertain
 or committed external effect is marked `compensated`. An uncertain effect blocks
 Resume with a reconciliation error. A committed external effect in an unfinished
@@ -195,10 +215,20 @@ the request with `409` until every uncertain effect is settled. A repeated or
 stale Resume also returns `409`; Tool reconciliation retains its existing
 optimistic version and idempotent command contracts.
 
-The current API has Workspace scoping but no identity or authorization system.
-An operator-surface permission failure is therefore enforced by the deployment
-boundary and displayed by the UI as the API error; the `actor` field remains
-audit attribution, not proof of identity.
+Workspace ownership and operator permissions are checked independently of the
+recovery decision. The reconciliation `actor` remains audit attribution, not
+proof of identity.
+
+Resume selects its continuation from persisted mode and clarification state,
+then rechecks after acquiring the Conversation writer. An answered clarification
+uses its bound continuation; an applied receipt on a recoverable Run reuses that
+same recovery path. Unanswered or expired questions cannot be bypassed. Replay
+and Workbench wait for a successful clarification read before enabling recovery;
+a failed read is not an empty result.
+
+Typed pre-execution rejection preserves the recovery point. After execution is
+accepted, model, Tool or persistence errors still require settlement. Error text
+does not decide whether a Run failed.
 
 ## Shutdown Ordering
 
@@ -212,9 +242,10 @@ returns an error.
 
 - Postgres implements the repair, checkpoint, and Tool Effect
   contracts.
-- Automatic `failed_recoverable` execution Resume currently supports
-  Autonomous Runs. Other modes remain replayable and repairable but do not
-  silently restart from an unsupported Stage.
+- Ordinary `failed_recoverable` Resume supports Multi-Agent and Autonomous Runs
+  at their existing durable Stage boundaries. Single resumes only a bound
+  clarification continuation; it does not restart an arbitrary interrupted Turn.
+  Multi-Agent plan approval continues through Continue, not ordinary Resume.
 - The checkpoint provider captures AgentFlow internal state. Business-specific
   external compensation handlers are not implemented.
 - Multi-instance Worker takeover still requires Lease/Heartbeat/Fencing or a

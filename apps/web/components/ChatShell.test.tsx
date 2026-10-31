@@ -22,6 +22,8 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/api", () => api);
+const listClarifications = vi.hoisted(() => vi.fn());
+vi.mock("../lib/clarification-api", () => ({listClarifications}));
 const knowledgeAPI = vi.hoisted(() => ({ listDocuments: vi.fn() }));
 vi.mock("../lib/knowledge-api", () => knowledgeAPI);
 vi.mock("./chat/ChatChrome", () => ({
@@ -36,18 +38,19 @@ vi.mock("./chat/ChatChrome", () => ({
   ToolsPanel: () => null
 }));
 vi.mock("./chat/ChatWorkspace", () => ({
-  ChatWorkspace: ({ messages, planDraft, runStatus, isStreaming, isCanceling, onContinue, onResume, onCancel, onTaskStateRefresh, taskState, taskStateError, taskStateLoading }: {
+  ChatWorkspace: ({ messages, planDraft, runStatus, isStreaming, isCanceling, clarificationLoading, clarificationError, onContinue, onResume, onCancel, onTaskStateRefresh, taskState, taskStateError, taskStateLoading }: {
     planDraft: string;
     messages: Array<{ content: string }>; runStatus: string; isStreaming: boolean; isCanceling: boolean;
     onContinue: () => void; onResume: (input?: string) => void; onCancel: () => void;
     onTaskStateRefresh: () => void; taskState: { version: number } | null; taskStateError: string;
     taskStateLoading: boolean;
+    clarificationLoading?: boolean; clarificationError?: string;
   }) => (
     <div>{messages.map((message, index) => <p data-testid="message" key={index}>{message.content}</p>)}<output>{runStatus}</output><output>{planDraft}</output>
       <output aria-label="Command state">{isStreaming ? "busy" : "idle"}</output>
       <output aria-label="Cancel state">{isCanceling ? "canceling" : "idle"}</output>
-      <button onClick={() => onContinue()}>Continue</button><button onClick={() => onResume()}>Resume</button><button onClick={onCancel}>Cancel run</button>
-      <button onClick={() => onResume("answer")}>Resume with input</button>
+      <button disabled={clarificationLoading || Boolean(clarificationError)} onClick={() => onContinue()}>Continue</button><button disabled={clarificationLoading || Boolean(clarificationError)} onClick={() => onResume()}>Resume</button><button onClick={onCancel}>Cancel run</button>
+      <button disabled={clarificationLoading || Boolean(clarificationError)} onClick={() => onResume("answer")}>Resume with input</button>
       <button onClick={onTaskStateRefresh}>Refresh task state</button>
       <output aria-label="Task version">{taskState?.version}</output>
       <output aria-label="Task error">{taskStateError}</output>
@@ -68,6 +71,14 @@ vi.mock("./chat/ChatComposer", () => ({
 vi.mock("./chat/ChatDialogs", () => ({ ChatDialogs: () => null }));
 
 afterEach(cleanup);
+
+it("shares one clarification hydration authority between Workbench and session commands", async () => {
+  setupAPI();
+  api.listRuns.mockResolvedValue([{id:"waiting",conversation_id:"a",status:"waiting_for_user"}]);
+  render(<ChatShell initialConversationId="a" />);
+  await screen.findByText("waiting_for_user");
+  await waitFor(() => expect(listClarifications).toHaveBeenCalledTimes(1));
+});
 
 // Creation may be slow, reject, or lose ownership to navigation. Never submit
 // into the old Conversation, duplicate creation before render, or apply a late ID.
@@ -371,6 +382,7 @@ it("restores the prompt and removes optimistic messages when a stream fails befo
 
 function setupAPI() {
   vi.resetAllMocks();
+  listClarifications.mockResolvedValue([]);
   api.getAPIHealth.mockResolvedValue({ status: "ok" });
   api.listConversations.mockResolvedValue([
     { id: "a", workspace_id: "default_workspace", title: "A" },
@@ -450,6 +462,8 @@ it("does not roll back partial output or resubmit a consumed prompt on transport
 for (const command of ["Continue", "Resume"] as const) {
   it(`${command} failure before the first event restores the waiting Run and removes its draft`, async () => {
     setupAPI();
+    let finishClarifications!: (items: []) => void;
+    listClarifications.mockImplementationOnce(() => new Promise(resolve => { finishClarifications = resolve; }));
     api.listRuns.mockResolvedValue([{ id: "waiting", conversation_id: "a", status: "waiting_for_user", verification_status: "pending" }]);
     api.listCollaborationSteps.mockResolvedValue([{ id: "stage", role: command === "Continue" ? "planner" : "human_input", status: command === "Continue" ? "completed" : "running", output: "approved plan" }]);
     const request = command === "Continue" ? api.continueRun : api.resumeRun;
@@ -457,13 +471,13 @@ for (const command of ["Continue", "Resume"] as const) {
     render(<ChatShell initialConversationId="a" />);
     await screen.findByText("waiting_for_user");
     if (command === "Continue") await screen.findByText("approved plan");
+    const button = screen.getByRole("button", { name: command === "Resume" ? "Resume with input" : command });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(request).not.toHaveBeenCalled();
+    await act(async () => finishClarifications([]));
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
     // Resume reads the supplied answer, not a fabricated Run/Stage identity.
-    if (command === "Resume") {
-      // The test workspace exposes the existing handler's optional answer.
-      fireEvent.click(screen.getByRole("button", { name: "Resume with input" }));
-    } else {
-      fireEvent.click(screen.getByRole("button", { name: command }));
-    }
+    fireEvent.click(button);
     await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
     await screen.findByText("request rejected");
     expect(screen.getByText("waiting_for_user")).toBeTruthy();

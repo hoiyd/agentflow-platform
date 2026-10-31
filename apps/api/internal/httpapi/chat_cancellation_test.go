@@ -29,7 +29,8 @@ func TestRunStreamFailureUsesDurableCancellationState(t *testing.T) {
 		{"already canceled autonomous", domain.RunCanceled, errors.New("run canceled"), domain.RunCanceled, true},
 		{"unrequested cancellation", domain.RunRunning, canceled, domain.RunFailed, false},
 		{"provider failure during stop", domain.RunCanceling, &openai.ModelError{Kind: openai.ErrorTransport}, domain.RunFailed, false},
-		{"rejected continuation", domain.RunWaitingForUser, errors.New("not waiting for user input"), domain.RunWaitingForUser, false},
+		{"rejected continuation", domain.RunWaitingForUser, &agentpkg.PreExecutionRejection{Err: errors.New("not waiting for user input")}, domain.RunWaitingForUser, false},
+		{"execution error resembles rejection", domain.RunRunning, errors.New("not waiting for user input"), domain.RunFailed, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			storage, run := createHTTPTestRun(t)

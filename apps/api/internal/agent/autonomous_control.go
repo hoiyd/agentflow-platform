@@ -30,13 +30,13 @@ func (r *Runtime) stopIfCanceled(events chan<- domain.RunEvent, runID string) (b
 		return false, nil
 	}
 	if run.Status == domain.RunCanceling {
-		run, err = r.store.UpdateRunStatus(run.ID, domain.RunCanceled, "canceled by user")
+		result, settleErr := r.settleRun(domain.RunTransition{RunID: run.ID, To: domain.RunCanceled, EventType: domain.EventRunCanceled, Error: "canceled by user"}, false, nil)
+		run, err = result.Run, settleErr
 		if err != nil {
 			return false, err
 		}
 	}
 	log.Printf("autonomous_canceled run_id=%s", run.ID)
-	r.publishRunLifecycle(context.Background(), run, domain.EventRunCanceled, map[string]any{"status": run.Status})
 	events <- liveRunEvent(run)
 	return true, errRunCanceled
 }

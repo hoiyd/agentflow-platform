@@ -260,8 +260,17 @@ func TestResolveRunCompletionMarksVerificationInfrastructureFailureBlocked(t *te
 }
 
 func TestVerifyRunProjectsWorkspaceAndVerificationFailures(t *testing.T) {
-	contract := &domain.CompletionContract{SubjectType: "run_output"}
+	contract, err := verification.NewRegistry(verification.Options{}).FreezeContract(&domain.CompletionContract{Verifiers: []domain.VerifierSpec{{ID: "text", Type: domain.VerifierTextConstraints, Required: true, Config: map[string]any{"min_characters": 1}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler, workspace, run, conversation := newBoundaryRunningRun(t, contract)
+	// Persist the candidate binding through real completion; an unavailable
+	// verifier leaves no first Evidence but must not prevent infrastructure checks.
+	handler.runController = concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 1})
+	if _, err := runcompletion.Complete(t.Context(), workspace, handler.completionDependencies(), runcompletion.Request{RunID: run.ID, ConversationID: conversation.ID, UserInput: "question", Assistant: "answer"}); err == nil {
+		t.Fatal("expected initial verification infrastructure failure")
+	}
 	request := func() *http.Request {
 		r := httptest.NewRequest(http.MethodPost, "/api/runs/"+run.ID+"/verify", nil)
 		r.SetPathValue("id", run.ID)
@@ -274,14 +283,12 @@ func TestVerifyRunProjectsWorkspaceAndVerificationFailures(t *testing.T) {
 	workspace.listMessagesErr = errors.New("message lookup failed")
 	assertHandlerFailure(t, handler.verifyRun, request(), http.StatusInternalServerError)
 	workspace.listMessagesErr = nil
-	if _, err := workspace.AddMessage(conversation.ID, "user", "question"); err != nil {
-		t.Fatalf("add user message: %v", err)
-	}
-	if _, err := workspace.AddMessage(conversation.ID, "assistant", "answer"); err != nil {
-		t.Fatalf("add assistant message: %v", err)
-	}
 	handler.verification = verification.NewEngine(nil, nil)
 	assertHandlerFailure(t, handler.verifyRun, request(), http.StatusInternalServerError)
+	updated, found, err := workspace.GetRun(run.ID)
+	if err != nil || !found || updated.VerificationStatus != domain.VerificationBlocked {
+		t.Fatalf("verification infrastructure failure was not persisted: %+v %v", updated, err)
+	}
 }
 
 func assertHandlerFailure(t *testing.T, invoke func(http.ResponseWriter, *http.Request), request *http.Request, status int) {

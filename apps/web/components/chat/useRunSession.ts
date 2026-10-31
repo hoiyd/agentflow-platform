@@ -5,6 +5,7 @@ import {
 } from "../../lib/api";
 import { createLatestRequestController } from "../../lib/latest-request";
 import { answerClarification, resumeClarification, type ClarificationAnswerRequest } from "../../lib/clarification-api";
+import { useClarifications } from "./useClarifications";
 import { removePendingMessages } from "../../lib/pending-messages";
 import type { CompletionContractInput } from "../../lib/verification";
 import { createRunEventHandler, isTerminalRunStatus, type DraftMessage, type RunState } from "./runEventProjection";
@@ -38,13 +39,14 @@ type EventOptions = Omit<Parameters<typeof createRunEventHandler>[0],
 // Activity is not the durable Run status; cancellation may overlap a command.
 export function useRunSession(options: SessionOptions) {
   const trace = useRunTrace();
-  const latest = useRef({ options, trace });
-  useLayoutEffect(() => { latest.current = { options, trace }; });
   const [activity, setActivity] = useState<Activity>("idle");
   const activityRef = useRef<Activity>("idle");
   const [isCancelingRun, setCanceling] = useState(false);
   const cancelInFlight = useRef(false);
   const [runState, setStoredRunState] = useState<RunState | null>(null);
+  const clarification = useClarifications(runState?.id ?? "", runState?.status ?? "");
+  const latest = useRef({ options, trace, clarification });
+  useLayoutEffect(() => { latest.current = { options, trace, clarification }; });
   // Pending display updates; completed history is loaded through message.reasoning.
   const [reasoning, setReasoning] = useState<ReasoningEntry[]>([]);
   const [partialOutputs, setPartialOutputs] = useState<PartialOutput[]>([]);
@@ -191,6 +193,13 @@ export function useRunSession(options: SessionOptions) {
     const previousToolProgress = toolProgress;
     const previousOutputCursor = outputCursor.current;
     if (command.kind !== "submitting" && !previousRun?.id) return;
+    const recovery = latest.current.clarification;
+    if (command.kind !== "submitting" && !recovery.isReady(previousRun?.id, previousRun?.status)) {
+      latest.current.options.workspace.setError(recovery.error
+        ? `Cannot continue run: clarification state unavailable: ${recovery.error}`
+        : "Loading clarification state before recovery...");
+      return;
+    }
     activityRef.current = command.kind;
     setActivity(command.kind);
     observations.cancel();
@@ -312,7 +321,7 @@ export function useRunSession(options: SessionOptions) {
   }
 
   return {
-    runState, setRunState, trace, activity, reasoning, partialOutputs, toolProgress, restoreOutputs, isCancelingRun, clearRun, detach, cancel,
+    runState, setRunState, trace, activity, reasoning, partialOutputs, toolProgress, restoreOutputs, isCancelingRun, clearRun, detach, cancel, clarification,
     isStreaming: activity !== "idle", isContinuingRun: activity === "continuing", isResumingRun: activity === "resuming",
     submit: (content: string, settings: { mode: ChatMode; agentId: string; completionContract?: CompletionContractInput; executionConstraint?: "plan_only"; knowledgeFilter?: KnowledgeFilter; projectContext?: ProjectContext }) =>
       content.trim() ? execute({ kind: "submitting", content: content.trim(), ...settings }) : Promise.resolve(),

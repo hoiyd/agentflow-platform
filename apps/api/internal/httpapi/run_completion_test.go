@@ -13,6 +13,7 @@ import (
 
 	"agentflow-platform/apps/api/app/runcompletion"
 	"agentflow-platform/apps/api/internal/agent"
+	"agentflow-platform/apps/api/internal/concurrency"
 	"agentflow-platform/apps/api/internal/domain"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
 	"agentflow-platform/apps/api/internal/store"
@@ -282,7 +283,7 @@ func TestVerifyRunRetriesRecoverableEvidenceAndCompletes(t *testing.T) {
 		t.Fatalf("start run: %v", err)
 	}
 	runtime := newRuntimeForTest(agent.RuntimeOptions{Store: fixtureStore}, newLocalFallbackOpenAIClientForTest())
-	handler := &Handler{store: fixtureStore, agentRuntime: runtime, verification: verification.NewEngine(fixtureStore, registry)}
+	handler := &Handler{store: fixtureStore, agentRuntime: runtime, verification: verification.NewEngine(fixtureStore, registry), runController: concurrency.NewRunController(concurrency.RunOptions{MaxConcurrent: 1})}
 	first := httptest.NewRecorder()
 	if !handler.completeStreamingRun(first, first, nil, context.Background(), runCompletionRequest{
 		RunID: run.ID, ConversationID: conversation.ID, Assistant: " candidate ",

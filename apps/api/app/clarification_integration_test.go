@@ -27,8 +27,10 @@ import (
 // The HTTP handler, Runtime, Binding, generated schema and Postgres are real.
 func TestProductionDurableClarification(t *testing.T) {
 	for _, mode := range []string{"single", "multi_agent", "autonomous"} {
-		for _, scenario := range []string{"happy", "cancel", "withdraw", "claim_restart", "budget", "corrupt", "legacy_text", "completed_restart", "unsafe_restart", "legacy_invalid", "corrupt_identity"} {
+		for _, scenario := range []string{"happy", "cancel", "withdraw", "claim_restart", "budget", "corrupt", "legacy_text", "completed_restart", "unsafe_restart", "legacy_invalid", "corrupt_identity", "generic_happy", "generic_claim_restart", "generic_completed_restart"} {
 			t.Run(mode+"/"+scenario, func(t *testing.T) {
+				generic := strings.HasPrefix(scenario, "generic_")
+				scenario = strings.TrimPrefix(scenario, "generic_")
 				if (scenario == "legacy_text" || scenario == "legacy_invalid") && mode != "autonomous" {
 					t.Skip("legacy text ask is an Autonomous protocol")
 				}
@@ -286,7 +288,13 @@ func TestProductionDurableClarification(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				payload = call("POST", path+"/"+q.ID+"/resume", nil, 200, nil)
+				resumePath := path + "/" + q.ID + "/resume"
+				var resumeBody any
+				if generic {
+					resumePath = "/api/runs/" + run.ID + "/resume"
+					resumeBody = map[string]string{"user_input": ""}
+				}
+				payload = call("POST", resumePath, resumeBody, 200, nil)
 				if scenario == "unsafe_restart" {
 					unchanged, _, err := application.store.GetRun(run.ID)
 					if err != nil || unchanged.Status != domain.RunFailedRecoverable || !strings.Contains(payload, "event: error") {
@@ -401,7 +409,7 @@ func TestProductionDurableClarification(t *testing.T) {
 				if strings.Contains(wire.Body.String(), "clarification continuation lost") {
 					t.Fatal(wire.Body.String())
 				}
-				evidence := map[string]any{"schema": "durable-clarification-evidence-v1", "mode": mode, "run_id": run.ID, "snapshot": final.RuntimeSnapshot, "clarifications": questions, "checks": []string{"real HTTP/runtime/binding/Postgres", "application restart", "same Run/Snapshot", "reasoning and call identity preserved", "idempotent answer", "invariant projection"}, "limitations": []string{"deterministic provider, not live model compliance"}}
+				evidence := map[string]any{"schema": "durable-clarification-evidence-v1", "mode": mode, "scenario": scenario, "recovery_route": resumePath, "run_id": run.ID, "snapshot": final.RuntimeSnapshot, "clarifications": questions, "checks": []string{"real HTTP/runtime/binding/Postgres", "application restart", "same Run/Snapshot", "reasoning and call identity preserved", "idempotent answer", "invariant projection"}, "limitations": []string{"deterministic provider, not live model compliance"}}
 				encoded, _ := json.Marshal(evidence)
 				t.Log(string(encoded))
 			})

@@ -38,9 +38,6 @@ func (h *Handler) resumeRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req apicontract.ResumeRunRequest
-	if h.hasBlockingClarification(w, r, id) {
-		return
-	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return

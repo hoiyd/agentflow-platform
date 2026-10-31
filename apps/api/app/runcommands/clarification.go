@@ -13,6 +13,10 @@ type clarificationRuntime interface {
 	ResumeClarification(context.Context, string, string, string, string) (<-chan domain.RunEvent, <-chan error)
 }
 
+type ClarificationReader interface {
+	ListClarifications(context.Context, string, string, string) ([]domain.Clarification, error)
+}
+
 func (c Commands) ResumeClarification(ctx context.Context, scope Scope, runID, id string, observer Observer) error {
 	if scope.Owner == "" {
 		return commandError(Invalid, clarification.ErrInvalid)
@@ -28,8 +32,7 @@ func (c Commands) ResumeClarification(ctx context.Context, scope Scope, runID, i
 	if run.Status != domain.RunWaitingForUser && run.Status != domain.RunFailedRecoverable {
 		return commandError(Conflict, clarification.ErrConflict)
 	}
-	runtime, ok := c.Runtime.(clarificationRuntime)
-	if !ok {
+	if _, ok := c.Runtime.(clarificationRuntime); !ok {
 		return commandError(Conflict, clarification.ErrConflict)
 	}
 	reservation, err := c.reserve(nil)
@@ -47,7 +50,17 @@ func (c Commands) ResumeClarification(ctx context.Context, scope Scope, runID, i
 	if err != nil {
 		return err
 	}
+	return c.resumeClarification(ctx, scope, scoped, run, id, observer)
+}
+
+// Caller already owns the Conversation lease; generic Resume shares this path.
+func (c Commands) resumeClarification(ctx context.Context, scope Scope, scoped store.WorkspaceStore, run domain.Run, id string, observer Observer) error {
+	runID := run.ID
 	if run.Status != domain.RunWaitingForUser && run.Status != domain.RunFailedRecoverable {
+		return commandError(Conflict, clarification.ErrConflict)
+	}
+	runtime, ok := c.Runtime.(clarificationRuntime)
+	if !ok {
 		return commandError(Conflict, clarification.ErrConflict)
 	}
 	ctx = context.WithoutCancel(ctx)

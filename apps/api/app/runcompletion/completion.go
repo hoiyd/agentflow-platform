@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"agentflow-platform/apps/api/internal/clarification"
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/event"
 	"agentflow-platform/apps/api/internal/planning"
@@ -15,6 +16,7 @@ import (
 // Lifecycle is the existing Runtime's terminal-state capability, not a second engine.
 type Lifecycle interface {
 	CompleteRun(string) (domain.Run, error)
+	CompleteVerifiedRun(string) (domain.Run, error)
 	FailRun(string, error) (domain.Run, error)
 	RejectRunCompletion(string, domain.RunStatus, string) (domain.Run, error)
 }
@@ -49,8 +51,8 @@ func FreezeContract(verifier Verifier, contract *domain.CompletionContract) (*do
 	return verifier.FreezeContract(contract)
 }
 
-// Complete persists the candidate before gating completion. Citation events and
-// title generation retain their best-effort semantics; transport is not an input.
+// Complete persists the candidate before gating completion. Contracted Runs also
+// require a durable subject binding; transport is not an input.
 func Complete(ctx context.Context, scoped store.WorkspaceStore, dependencies Dependencies, request Request) (domain.ChatChunk, error) {
 	sources, citations, invalidCitationIDs, err := ResolveCitations(scoped, request.RunID, request.Assistant)
 	if err != nil {
@@ -67,16 +69,38 @@ func Complete(ctx context.Context, scoped store.WorkspaceStore, dependencies Dep
 		_, _ = dependencies.Runtime.FailRun(request.RunID, err)
 		return domain.ChatChunk{}, err
 	}
-	_, _ = scoped.CreateRunEvent(domain.RunEvent{
+	run, ok, err := scoped.GetRun(request.RunID)
+	if err == nil && !ok {
+		err = store.ErrNotFound("run")
+	}
+	if err != nil {
+		_, _ = dependencies.Runtime.FailRun(request.RunID, err)
+		return domain.ChatChunk{}, err
+	}
+	question, err := completionQuestion(scoped, run, request.UserInput)
+	if err != nil {
+		_, _ = dependencies.Runtime.FailRun(request.RunID, err)
+		return domain.ChatChunk{}, err
+	}
+	payload := map[string]any{
+		"protocol_version":     domain.RAGCitationProtocolVersion,
+		"available_source_ids": citationSourceIDs(sources),
+		"cited_source_ids":     citationSourceIDs(citations),
+		"invalid_source_ids":   invalidCitationIDs,
+		"message_id":           message.ID,
+	}
+	if run.CompletionContract != nil {
+		payload["verification_question"] = question
+		payload["verification_subject_hash"] = candidateBindingHash(run.ID, message.ID, question, request.Assistant)
+	}
+	_, err = scoped.CreateRunEvent(domain.RunEvent{
 		Type: domain.EventCitationResolved, RunID: request.RunID, ConversationID: request.ConversationID,
-		Payload: map[string]any{
-			"protocol_version":     domain.RAGCitationProtocolVersion,
-			"available_source_ids": citationSourceIDs(sources),
-			"cited_source_ids":     citationSourceIDs(citations),
-			"invalid_source_ids":   invalidCitationIDs,
-			"message_id":           message.ID,
-		},
+		Payload: payload,
 	})
+	if err != nil && run.CompletionContract != nil {
+		_, _ = dependencies.Runtime.FailRun(request.RunID, err)
+		return domain.ChatChunk{}, err
+	}
 	if len(webSources)+len(invalidWebCitationIDs) > 0 {
 		_, _ = scoped.CreateRunEvent(domain.RunEvent{
 			Type: domain.EventCitationResolved, RunID: request.RunID, ConversationID: request.ConversationID,
@@ -91,7 +115,7 @@ func Complete(ctx context.Context, scoped store.WorkspaceStore, dependencies Dep
 		})
 	}
 
-	completed, err := Resolve(ctx, scoped, dependencies, request.RunID, request.UserInput, request.Assistant)
+	completed, err := resolve(ctx, scoped, dependencies, run, question, request.Assistant)
 	if err != nil {
 		_, _ = dependencies.Runtime.FailRun(request.RunID, err)
 		return domain.ChatChunk{}, err
@@ -130,18 +154,15 @@ func Resolve(ctx context.Context, scoped store.WorkspaceStore, dependencies Depe
 	if !ok {
 		return domain.Run{}, errors.New("run not found")
 	}
+	question, err = completionQuestion(scoped, run, question)
+	if err != nil {
+		return domain.Run{}, err
+	}
+	return resolve(ctx, scoped, dependencies, run, question, output)
+}
+
+func resolve(ctx context.Context, scoped store.WorkspaceStore, dependencies Dependencies, run domain.Run, question, output string) (domain.Run, error) {
 	if run.RuntimeSnapshot != nil && run.RuntimeSnapshot.ExecutionConstraint == domain.ExecutionPlanOnly {
-		if strings.TrimSpace(question) == "" {
-			messages, err := scoped.ListMessages(run.ConversationID)
-			if err != nil {
-				return domain.Run{}, err
-			}
-			for _, message := range messages {
-				if message.Role == "user" && !message.CreatedAt.After(run.CreatedAt) {
-					question = message.Content
-				}
-			}
-		}
 		items, err := scoped.ListRunEvents(run.ID)
 		if err != nil {
 			return domain.Run{}, err
@@ -163,38 +184,34 @@ func Resolve(ctx context.Context, scoped store.WorkspaceStore, dependencies Depe
 	// Verification is opt-in per Run. Server verifier configuration only makes
 	// implementations available; it never changes an uncontracted chat Run.
 	if run.CompletionContract == nil {
-		return dependencies.Runtime.CompleteRun(runID)
+		return dependencies.Runtime.CompleteRun(run.ID)
 	}
 	if dependencies.Verification == nil {
 		return domain.Run{}, errors.New("verification engine is unavailable")
-	}
-	if strings.TrimSpace(question) == "" {
-		messages, listErr := scoped.ListMessages(run.ConversationID)
-		if listErr != nil {
-			return domain.Run{}, listErr
-		}
-		question = latestUserInput(messages)
 	}
 	result, err := verifyCandidate(ctx, scoped, dependencies, run, question, output)
 	return result.Run, err
 }
 
-func latestAssistantOutput(messages []domain.Message) string {
-	for index := len(messages) - 1; index >= 0; index-- {
-		if messages[index].Role == "assistant" && strings.TrimSpace(messages[index].Content) != "" {
-			return messages[index].Content
+func completionQuestion(scoped store.WorkspaceStore, run domain.Run, question string) (string, error) {
+	planOnly := run.RuntimeSnapshot != nil && run.RuntimeSnapshot.ExecutionConstraint == domain.ExecutionPlanOnly
+	if strings.TrimSpace(question) != "" || run.CompletionContract == nil && !planOnly {
+		return question, nil
+	}
+	messages, err := scoped.ListMessages(run.ConversationID)
+	if err != nil {
+		return "", err
+	}
+	for _, message := range messages {
+		if message.Role == "user" && !message.CreatedAt.After(run.CreatedAt) {
+			question = message.Content
 		}
 	}
-	return ""
-}
-
-func latestUserInput(messages []domain.Message) string {
-	for index := len(messages) - 1; index >= 0; index-- {
-		if messages[index].Role == "user" && strings.TrimSpace(messages[index].Content) != "" {
-			return messages[index].Content
-		}
+	items, err := scoped.ListRunEvents(run.ID)
+	if err != nil {
+		return "", err
 	}
-	return ""
+	return clarification.AddAnswers(question, items)
 }
 
 type VerificationResult struct {
@@ -208,7 +225,7 @@ var (
 	ErrNoCandidate = errors.New("run has no candidate output to verify")
 )
 
-// Reverify uses fresh evidence for the latest durable candidate without
+// Reverify uses fresh evidence for this Run's bound durable candidate without
 // resaving the answer or failing the Run on verifier infrastructure errors.
 func Reverify(ctx context.Context, scoped store.WorkspaceStore, dependencies Dependencies, run domain.Run) (VerificationResult, error) {
 	if run.CompletionContract == nil {
@@ -217,63 +234,38 @@ func Reverify(ctx context.Context, scoped store.WorkspaceStore, dependencies Dep
 	if run.Status == domain.RunCompleted || run.Status == domain.RunCanceled {
 		return VerificationResult{}, ErrTerminal
 	}
-	messages, err := scoped.ListMessages(run.ConversationID)
+	bound, err := boundCandidate(scoped, run)
 	if err != nil {
 		return VerificationResult{}, err
 	}
-	output := latestAssistantOutput(messages)
-	if output == "" {
-		return VerificationResult{}, ErrNoCandidate
-	}
-	question := latestUserInput(messages)
 	if run.RuntimeSnapshot != nil && run.RuntimeSnapshot.ExecutionConstraint == domain.ExecutionPlanOnly {
-		items, err := scoped.ListRunEvents(run.ID)
-		if err != nil {
-			return VerificationResult{}, err
-		}
-		plan := planning.Read(items)
-		if plan == nil || plan.Input != question || plan.Proposal != output {
+		plan := planning.Read(bound.events)
+		if plan == nil || plan.RunID != run.ID || plan.Version != planning.Version || plan.Input != bound.question || plan.Proposal != bound.output {
 			return VerificationResult{}, ErrNoCandidate
 		}
 	}
-	if run.CompletionContract.Output != nil {
-		// Conversation history can advance after this Run. Reverify may refresh
-		// checks on the original subject, never adopt another Run's candidate.
-		evidence, err := scoped.ListVerificationEvidence(run.ID)
-		if err != nil {
-			return VerificationResult{}, err
-		}
-		latest := 0
-		for _, item := range evidence {
-			if item.Attempt > latest {
-				latest = item.Attempt
-			}
-		}
-		subject := verificationSubjectForRun(scoped, run, question, output)
-		known := false
-		for _, item := range evidence {
-			if item.Attempt == latest && item.VerifierID == run.CompletionContract.Output.VerifierID && item.Status != domain.VerificationStale && item.SubjectHash == subject.Hash {
-				known = true
-			}
-		}
-		if !known {
-			return VerificationResult{}, ErrNoCandidate
-		}
+	subject := verificationSubjectForRun(scoped, run, bound.question, bound.output)
+	if err := validateSubjectEvidence(scoped, run, subject, bound); err != nil {
+		return VerificationResult{}, err
 	}
-	return verifyCandidate(ctx, scoped, dependencies, run, question, output)
+	return verifySubject(ctx, scoped, dependencies, run, subject)
 }
 
 func verifyCandidate(ctx context.Context, scoped store.WorkspaceStore, dependencies Dependencies, run domain.Run, question, output string) (VerificationResult, error) {
+	return verifySubject(ctx, scoped, dependencies, run, verificationSubjectForRun(scoped, run, question, output))
+}
+
+func verifySubject(ctx context.Context, scoped store.WorkspaceStore, dependencies Dependencies, run domain.Run, subject verification.Subject) (VerificationResult, error) {
 	if dependencies.Verification == nil {
 		return VerificationResult{}, errors.New("verification engine is unavailable")
 	}
-	decision, err := dependencies.Verification.Verify(ctx, run.ID, verificationSubjectForRun(scoped, run, question, output))
+	decision, err := dependencies.Verification.Verify(ctx, run.ID, subject)
 	if err != nil {
-		_, _ = scoped.UpdateRunVerificationStatus(run.ID, domain.VerificationBlocked)
-		return VerificationResult{}, err
+		_, updateErr := scoped.UpdateRunVerificationStatus(run.ID, domain.VerificationBlocked)
+		return VerificationResult{}, errors.Join(err, updateErr)
 	}
 	if decision.AllowCompletion {
-		run, err = dependencies.Runtime.CompleteRun(run.ID)
+		run, err = dependencies.Runtime.CompleteVerifiedRun(run.ID)
 	} else {
 		run, err = dependencies.Runtime.RejectRunCompletion(run.ID, decision.RunStatus, decision.Summary)
 	}

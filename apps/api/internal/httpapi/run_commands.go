@@ -16,7 +16,7 @@ func commandScope(r *http.Request, workspace string) runcommands.Scope {
 }
 
 func (h *Handler) runCommands() runcommands.Commands {
-	return runcommands.Commands{Store: h.store, Runtime: h.agentRuntime, Capacity: h.runController, Verification: h.verification, Memory: h.memories,
+	return runcommands.Commands{Store: h.store, Runtime: h.agentRuntime, Capacity: h.runController, Verification: h.verification, Memory: h.memories, Clarifications: h.clarifications,
 		AfterRelease: func(ctx context.Context, scope runcommands.Scope, conversation string) {
 			h.scheduleFollowup(ctx, scope, conversation, false)
 		},

@@ -12,7 +12,6 @@ import { buildCompletionContract } from "../lib/verification";
 import { Sidebar, ToolsPanel, Topbar, type APIConnectionStatus, type ChatView } from "./chat/ChatChrome";
 import { ChatComposer } from "./chat/ChatComposer";
 import { RunInbox } from "./chat/RunInbox";
-import { useClarifications } from "./chat/useClarifications";
 import type { Clarification } from "../lib/clarification-api";
 import { ChatDialogs } from "./chat/ChatDialogs";
 import { ChatWorkspace } from "./chat/ChatWorkspace";
@@ -103,7 +102,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   });
 
   const showCollaborationPanel = chatMode === "multi_agent" || chatMode === "autonomous";
-  const clarification=useClarifications(runState?.id??"",runState?.status??"");
+  const clarification=session.clarification;
   const answerKey=useRef<{body:string;key:string}|null>(null);
   async function answerQuestion(question:Clarification,answers:Record<string,string>){
     const body=JSON.stringify({id:question.id,answers});
@@ -117,7 +116,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   const isTaskStatePanelOpen = sidePanel === "task_state";
   const useExpandedConversationWidth =
     !isTaskStatePanelOpen && (chatMode === "single" || (showCollaborationPanel && !isCollaborationPanelOpen));
-  const isAwaitingPlanApproval = chatMode === "multi_agent" && runState?.status === "waiting_for_user" && !clarification.blocking && !clarification.loading;
+  const isAwaitingPlanApproval = chatMode === "multi_agent" && runState?.status === "waiting_for_user" && clarification.ready && !clarification.blocking;
   const isAwaitingClarification = runState?.status === "waiting_for_user" && (clarification.blocking || clarification.loading || Boolean(clarification.error));
   const isAwaitingHumanInput =
     chatMode === "autonomous" &&
@@ -405,6 +404,7 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
             knowledgeScope={<KnowledgeScopeControl values={knowledge.scope.values} onChange={knowledge.scope.change} disabled={isStreaming || isAwaitingHumanInput || isAwaitingPlanApproval || isAwaitingClarification} />}
 			planOnly={planOnly} onPlanOnlyChange={setPlanOnly}
             inbox={activeId && runState && !isCreatingConversation ? <RunInbox key={activeId} conversationId={activeId} runId={runState.id} mode={chatMode} agentId={activeAgentId}
+              planOnly={planOnly} executionConstraint={runState.executionConstraint}
               input={input} busy={isStreaming || ["running","queued","canceling"].includes(runState.status)}
               canStartFollowup={["completed","failed","canceled"].includes(runState.status) && (chatMode !== "single" || Boolean(activeAgent))}
               onSubmitted={()=>setInput("")} onRunAvailable={()=>{if(!isStreaming)void loadConversation(activeId);}} /> : null}

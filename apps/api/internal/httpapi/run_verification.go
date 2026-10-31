@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"agentflow-platform/apps/api/app/runcommands"
 	"agentflow-platform/apps/api/app/runcompletion"
 )
 
@@ -14,22 +15,20 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "run id is required")
 		return
 	}
-	scoped := h.scopedStore(r)
-	run, ok, err := scoped.GetRun(runID)
-	if err != nil {
-		writeFailure(w, r, http.StatusInternalServerError, err)
-		return
-	}
-	if !ok {
-		writeError(w, http.StatusNotFound, "run not found")
-		return
-	}
-	result, err := runcompletion.Reverify(r.Context(), scoped, h.completionDependencies(), run)
+	result, err := h.runCommands().Reverify(r.Context(), commandScope(r, workspaceIDFromRequest(r)), runID)
 	if err != nil {
 		if errors.Is(err, runcompletion.ErrNotRequired) || errors.Is(err, runcompletion.ErrTerminal) || errors.Is(err, runcompletion.ErrNoCandidate) {
 			writeError(w, http.StatusConflict, err.Error())
 		} else {
-			writeFailure(w, r, http.StatusInternalServerError, err)
+			status := http.StatusInternalServerError
+			var commandErr *runcommands.Error
+			if errors.As(err, &commandErr) {
+				status = commandStatus(commandErr.Reason)
+				if commandErr.Reason == runcommands.Overload || commandErr.Reason == runcommands.QueueUnavailable {
+					w.Header().Set("Retry-After", overloadRetryAfterSeconds)
+				}
+			}
+			writeFailure(w, r, status, err)
 		}
 		return
 	}

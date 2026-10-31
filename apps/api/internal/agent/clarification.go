@@ -321,12 +321,11 @@ func (r *Runtime) ResumeClarification(ctx context.Context, owner, workspace, run
 			events <- liveStageEvent(step)
 		}
 		if restored.mode == ChatModeMultiAgent {
-			waiting, err := r.store.UpdateRunStatus(runID, domain.RunWaitingForUser, "")
+			waiting, err := r.transitionRun(run, domain.RunWaitingForUser, domain.EventRunWaitingForUser, "", map[string]any{"source": "plan_approval"})
 			if err != nil {
 				fail(err)
 				return
 			}
-			r.publishRunLifecycle(executionCtx, waiting, domain.EventRunWaitingForUser, map[string]any{"status": waiting.Status, "source": "plan_approval"})
 			events <- liveRunEvent(waiting)
 			return
 		}

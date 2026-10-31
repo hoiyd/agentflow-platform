@@ -59,6 +59,7 @@ type RunStore interface {
 	CreateRunWithContract(agentID string, conversationID string, snapshot domain.RuntimeSnapshot, contract *domain.CompletionContract) (domain.Run, error)
 	UpdateRunAgent(id string, agentID string) (domain.Run, error)
 	UpdateRunStatus(id string, status domain.RunStatus, errorMessage string) (domain.Run, error)
+	TransitionRun(domain.RunTransition) (domain.RunTransitionResult, error)
 	UpdateRunHeartbeat(id string) (domain.Run, error)
 	ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error)
 	GetRun(id string) (domain.Run, bool, error)

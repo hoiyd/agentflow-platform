@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, GitCompareArrows } from "lucide-react";
 import type { RecoveryAction } from "../../lib/api";
 import { resumeRun } from "../../lib/api";
-import { resumeClarification } from "../../lib/clarification-api";
 import type { ChatEvent } from "../../lib/api-types";
 import { createLatestRequestController } from "../../lib/latest-request";
 import { useReplayData } from "./useReplayData";
@@ -74,7 +73,7 @@ function RunReplayView({ runId, initialEventId }: Props) {
   if (conversationId) compareParams.set("conversation", conversationId);
   const compareHref = `/evaluations/compare?${compareParams.toString()}`;
   async function handleResumeRecoverable() {
-    if (!replay || replay.run.status !== "failed_recoverable" || resumeInFlight.current) return;
+    if (!replay || replay.run.status !== "failed_recoverable" || !clarification.isReady(replay.run.id, replay.run.status) || resumeInFlight.current) return;
     const request = commands.begin();
     resumeInFlight.current = true;
     setIsResuming(true);
@@ -92,9 +91,7 @@ function RunReplayView({ runId, initialEventId }: Props) {
           router.push(`/workspace?conversation=${encodeURIComponent(event.conversation_id ?? replay.run.conversation_id)}`);
         }
       };
-      const question = clarification.items.at(-1);
-      if (question?.status === "applied") await resumeClarification(runId, question.id, onEvent, request.signal);
-      else await resumeRun({ run_id: replay.run.id, user_input: "Resume failed recoverable run from replay." }, onEvent, request.signal);
+      await resumeRun({ run_id: replay.run.id, user_input: "Resume failed recoverable run from replay." }, onEvent, request.signal);
       if (request.isCurrent()) await refreshReplay();
     } catch (error) {
       if (request.isCurrent()) setOperationError(error instanceof Error ? error.message : "Failed to resume run");
@@ -190,7 +187,8 @@ function RunReplayView({ runId, initialEventId }: Props) {
       <FrozenProjectGuidance snapshot={replay.runtime_snapshot?.project_guidance} />
       {refreshError ? <div className="replay-secondary-error" role="status">Replay refresh unavailable: {refreshError}</div> : null}
 
-		<RecoverySummaryPanel summary={replay.recovery_summary} onAction={handleRecoveryAction} isResuming={isResuming} canResume={replay.run.status === "failed_recoverable"} />
+		<RecoverySummaryPanel summary={replay.recovery_summary} onAction={handleRecoveryAction} isResuming={isResuming} canResume={replay.run.status === "failed_recoverable" && clarification.ready} />
+        {replay.run.status === "failed_recoverable" && clarification.loading ? <div className="replay-secondary-error" role="status">Loading clarification state before recovery...</div> : null}
         {clarification.error?<div className="error" role="alert">{clarification.error}</div>:null}
         <ClarificationPanel recoverable={replay.run.status==="failed_recoverable"} items={clarification.items} conversationHref={chatHref}/>
 		{replay.recovery_summary?.actions.some((action) => action.kind === "reconcile_tool_effect") ? (

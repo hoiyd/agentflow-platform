@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 
@@ -8,6 +8,61 @@ import type { ReasoningEntry } from "./ReasoningDisclosure";
 import { ReasoningDisclosure } from "./ReasoningDisclosure";
 
 afterEach(cleanup);
+
+for (const mode of ["multi_agent", "autonomous"] as const) {
+  for (const read of ["delayed", "failed"] as const) {
+    it(`${mode} hides continuation sections while clarification hydration is ${read}`, () => {
+      const onContinue = vi.fn();
+      const onResume = vi.fn();
+      const props: Partial<ComponentProps<typeof ChatWorkspace>> = {
+        chatMode: mode, runStatus: "waiting_for_user", isCollaborationPanelOpen: true,
+        showCollaborationPanel: true, showAutonomousTrace: mode === "autonomous",
+        clarifications: [], clarificationLoading: read === "delayed",
+        clarificationError: read === "failed" ? "Clarification read unavailable" : "",
+        onContinue, onResume,
+        collaborationSteps: mode === "multi_agent" ? [{role:"planner",status:"completed"}]
+          : [{role:"human_input",status:"running",output:""}]
+      };
+      const view = render(workspace([], false, [], props));
+      const region = mode === "multi_agent" ? "Review generated plan" : "Human input required";
+      const button = mode === "multi_agent" ? "Approve & Continue" : "Submit & Continue";
+      expect(screen.queryByRole("region", {name:region})).toBeNull();
+      expect(screen.queryByRole("button", {name:button})).toBeNull();
+      if (read === "failed") expect(screen.getByRole("alert").textContent).toBe("Clarification read unavailable");
+      view.rerender(workspace([], false, [], {...props,isCollaborationPanelOpen:false}));
+      expect(screen.queryByRole("button", {name:"Review Plan & Continue"})).toBeNull();
+      expect(screen.getByRole("button", {name:mode === "multi_agent" ? "Show Collaboration Trace" : "Show Autonomous Trace"})).toBeTruthy();
+      expect(onContinue).not.toHaveBeenCalled();
+      expect(onResume).not.toHaveBeenCalled();
+      view.rerender(workspace([], false, [], {...props,clarificationLoading:false,clarificationError:"",planDraft:"Approved plan",humanInputDraft:"Approved input"}));
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.getByRole("region", {name:region})).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", {name:button}));
+      if (mode === "multi_agent") expect(onContinue).toHaveBeenCalledWith("Approved plan",{});
+      else expect(onResume).toHaveBeenCalledWith("Approved input");
+    });
+  }
+}
+
+for (const read of ["delayed", "failed"] as const) {
+  it(`keeps saved clarification evidence but disables its action while hydration is ${read}`, () => {
+    const onClarificationResume = vi.fn();
+    render(workspace([], false, [], {
+      runStatus:"failed_recoverable",clarificationLoading:read === "delayed",
+      clarificationError:read === "failed" ? "Clarification read unavailable" : "",
+      onClarificationResume,
+      clarifications:[{id:"q-1",run_id:"r-1",conversation_id:"c-1",turn_id:"t-1",version:1,status:"applied",
+        created_at:"2026-10-12T00:00:00Z",expires_at:"2026-10-13T00:00:00Z",
+        questions:[{id:"audience",question:"Who is the audience?"}],answers:{audience:"Engineers"}}]
+    }));
+    expect(screen.getByText("Engineers")).toBeTruthy();
+    const button = screen.getByRole("button", {name:/Continue run|Continuing/});
+    fireEvent.click(button);
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(onClarificationResume).not.toHaveBeenCalled();
+    if (read === "failed") expect(screen.getByRole("alert").textContent).toBe("Clarification read unavailable");
+  });
+}
 
 for (const mode of ["multi_agent", "autonomous"] as const) {
   it(`${mode} waits for command settlement before accepting human continuation`, () => {

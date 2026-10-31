@@ -1,33 +1,38 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listClarifications, type Clarification } from "../../lib/clarification-api";
 
+type ReadRequest = {runId: string; status: string; revision: number};
 type ReadState = {
-  runId: string;
-  status: string;
+  request: ReadRequest | null;
   items: Clarification[];
   error: string;
-  loaded: boolean;
 };
 
 export function useClarifications(runId: string, runStatus: string) {
-  const [state, setState] = useState<ReadState>({runId:"", status:"", items:[], error:"", loaded:false});
+  const [state, setState] = useState<ReadState>({request:null, items:[], error:""});
   const [revision, setRevision] = useState(0);
+  const requestedRevision = useRef(0);
+  const request = useMemo(() => ({runId, status:runStatus, revision}), [runId, runStatus, revision]);
   useEffect(() => {
-    if (!runId) return;
+    if (!request.runId) return;
     const controller = new AbortController();
-    void listClarifications(runId, controller.signal).then(items => {
-      if (!controller.signal.aborted) setState({runId, status:runStatus, items, error:"", loaded:true});
+    void listClarifications(request.runId, controller.signal).then(items => {
+      if (!controller.signal.aborted) setState({request, items, error:""});
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) setState(previous => ({
-        runId, status:runStatus, items:previous.runId === runId ? previous.items : [], loaded:true,
-        error:error instanceof Error ? error.message : "Failed to load clarification"
+        request, items:previous.request?.runId === request.runId ? previous.items : [],
+        error:error instanceof Error && error.message ? error.message : "Failed to load clarification"
       }));
     });
     return () => controller.abort();
-  }, [runId, runStatus, revision]);
-  const current = state.runId === runId ? state : null;
+  }, [request]);
+  const current = state.request?.runId === runId ? state : null;
   const blocking = current?.items.some(q => ["pending", "answered", "expired"].includes(q.status)) ?? false;
   // Waiting may mean a question or plan approval. Do not guess from an old read.
-  const loading = Boolean(runId) && (!current?.loaded || current.status !== runStatus);
-  return {items:current?.items ?? [], error:current?.error ?? "", loading, blocking, refresh:() => setRevision(n => n + 1)};
+  const loading = Boolean(runId) && current?.request !== request;
+  const error = current?.error ?? "";
+  const ready = Boolean(runId) && !loading && !error;
+  return {items:current?.items ?? [], error, loading, ready, blocking,
+    isReady:(currentRunId = runId, currentStatus = runStatus) => ready && currentRunId === runId && currentStatus === runStatus && revision === requestedRevision.current,
+    refresh:() => { requestedRevision.current += 1; setRevision(requestedRevision.current); }};
 }
