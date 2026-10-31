@@ -187,7 +187,7 @@ func (m runtimeTurnModel) withContextSession(ctx context.Context, request turn.R
 				return err
 			}
 			if !ok {
-				return fmt.Errorf("project guidance Run is unavailable")
+				return fmt.Errorf("project instructions Run is unavailable")
 			}
 			return m.runtime.validateProjectGuidance(ctx, run)
 		}

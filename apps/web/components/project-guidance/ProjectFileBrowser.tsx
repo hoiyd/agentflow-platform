@@ -6,11 +6,11 @@ export function ProjectFileBrowser({ root, paths, onChange }: { root: string; pa
   const [directory, setDirectory] = useState(".");
   const [draft, setDraft] = useState(".");
   function navigate(next: string) { setDirectory(next); setDraft(next); }
-  return <section className="project-file-browser" aria-label="Project files">
+  return <section className="project-file-browser" aria-label="Task files">
     <div className="project-directory-bar">
       <button type="button" className="project-guidance-icon" aria-label="Parent directory" disabled={directory === "."}
         onClick={() => navigate(directory.split("/").slice(0, -1).join("/") || ".")}><ArrowUp size={16} /></button>
-      <label><input aria-label="Project directory" value={draft} maxLength={1024}
+      <label><input aria-label="Relative directory" value={draft} maxLength={1024}
         onChange={event => setDraft(event.target.value)} onKeyDown={event => {
           if (event.key === "Enter") { event.preventDefault(); navigate(draft.trim() || "."); }
         }} /></label>
@@ -31,7 +31,7 @@ function DirectoryEntries({ root, directory, paths, onChange, navigate }: {
     const controller = new AbortController();
     void listGuidanceFiles(root, directory, controller.signal).then(page => {
       if (!controller.signal.aborted) setResult(page);
-    }).catch(err => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Project files unavailable"); });
+    }).catch(err => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Task files unavailable"); });
     return () => controller.abort();
   }, [root, directory, attempt]);
   if (error) return <div className="project-guidance-notice" role="alert"><span>{error}</span><button type="button" className="secondary-action" onClick={() => { setError(""); setAttempt(value => value + 1); }}>Retry files</button></div>;

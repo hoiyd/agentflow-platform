@@ -42,7 +42,7 @@ These are implementation and operating contracts, not a required reading list.
 - [Run Budget / Usage Ledger](runtime/run-budget.md), [read-only planning](runtime/read-only-planning.md)
 - [Headless Run CLI](runtime/headless-run-client.md)
 - [Memory](context/memory-management.md), [request reconstruction / Capture](context/model-request-reconstruction.md)
-- [Scoped project guidance](context/project-guidance.md)
+- [Scoped project instructions](context/project-instructions.md)
 - [Clarification](runtime/structured-clarification.md), [durable steering](runtime/durable-inputs.md), [partial output](runtime/durable-partial-output.md)
 - [Event catalog](runtime/event-catalog.md), [projections/invariants](runtime/event-projections-runtime-invariants.md), [failures](runtime/failure-handling.md), [operator attention](runtime/operator-attention.md)
 

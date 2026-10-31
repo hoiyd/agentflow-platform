@@ -1,14 +1,16 @@
-# Scoped Project Guidance
+# Scoped Project Instructions
 
-Project guidance supplies reviewed conventions for one explicitly selected project.
-Reading a file does not make it trusted guidance. Guidance cannot grant Tools,
-credentials, filesystem access or command execution.
+Project instructions supply reviewed conventions from an explicitly selected
+source directory, with optional path-specific rules. A source directory is not
+a sub-Workspace or a data namespace. Reading a file does not make it trusted
+instructions; instructions cannot grant Tools, credentials, filesystem access
+or command execution.
 
 ## Configure And Use
 
 1. Configure read-only project roots using [scoped filesystem access](../tools/scoped-filesystem.md).
 2. Set `PROJECT_GUIDANCE_PATH` to an operator-owned JSON file outside model-writable
-   output directories. Empty disables new project selections. Trust is separate
+   output directories. Empty disables new instruction selections. Trust is separate
    from `FILESYSTEM_ROOTS_PATH`, Workspace Tool grants and Agent bindings.
 3. List the exact entry and rule files to trust:
 
@@ -27,11 +29,18 @@ Use the actual owned Workspace ID and logical root. The repository has two
 synthetic projects under [`examples/project-guidance`](../../examples/project-guidance).
 Their entry files and report conventions are intentionally different.
 
-In the workbench, open **Project** beside the message input, choose a project,
-select up to 16 task files and **Apply project**. The selection is visible for
-new Runs in all three modes and retained for that Workspace in the browser tab.
-Cancel leaves it unchanged; **Clear project** removes it. Existing Runs keep
-their frozen guidance. The UI cannot create trust records or grant file Tools.
+In the workbench, open **Project instructions** beside the message input, choose a
+**Source directory**, select up to 16 task files and **Apply instructions**. The
+selection is visible for new Runs in all three modes and retained for that
+Workspace in the browser tab.
+Cancel leaves it unchanged; **Clear selection** removes it. Existing Runs keep
+their frozen instructions. Administrators register sources in configuration;
+the UI cannot create sources or trust records, or grant file Tools.
+
+For compatibility, configuration, API and persisted identifiers retain their
+existing `PROJECT_GUIDANCE_PATH`, `project-guidance`, `project_context` and
+`project_guidance` names. No data migration or operator configuration change is
+required.
 
 HTTP and the [headless CLI](../runtime/headless-run-client.md) accept the same selection:
 
@@ -65,26 +74,26 @@ matched relative paths and root/config identities in `runtime_snapshot.project_g
 The text is JSON-wrapped below platform policy and the current user request.
 It is required Context; it is not compressed into conversation history.
 
-Identical guidance bodies are loaded once. Instructions identical to an active
+Identical instruction bodies are loaded once. Instructions identical to an active
 Skill are not repeated, and matching Memory text is suppressed. The Manifest
 records `project_guidance`, `content_hash`, `source_path`, matches, selection
 reason and actual framed token cost; unmatched and duplicate sources remain
-explainable. Replay's **Saved project guidance** shows frozen text, hashes, matches
-and body-token estimates. Inspect `context.assembled` for framed token costs;
+explainable. Replay's **Saved project instructions** shows frozen text, hashes,
+matches and body-token estimates. Inspect `context.assembled` for framed token costs;
 `agentflow result` / `GET /api/runs/{id}/replay` return the typed frozen content.
 
-Resume and Tool continuations use frozen text, never hot-load modified guidance.
+Resume and Tool continuations use frozen text, never hot-load modified instructions.
 Before each model assembly and on Resume, current Workspace/root access and the
 previously selected trust records are checked. Removing them blocks continuation
 before the next provider request; it does not recall an already in-flight request.
-Changing text affects new Runs. New follow-up Runs inherit the prior project
+Changing text affects new Runs. New follow-up Runs inherit the prior source/file
 selection and freeze current text, independently of the current composer draft;
 ordinary Chat requests must select explicitly.
 
 ## Limits And Failures
 
-Each guidance file is limited to 16 KiB; total observed text to 32 KiB; unique
-guidance bodies to 4,096 estimated tokens. JSON framing and policy also count
+Each instruction file is limited to 16 KiB; total observed text to 32 KiB; unique
+instruction bodies to 4,096 estimated tokens. JSON framing and policy also count
 toward the ordinary model input capacity. Whole instructions are rejected rather
 than silently truncated. A loading failure returns a typed error before creating
 a Run, so it has no Context Manifest; total input overflow after assembly uses
@@ -92,18 +101,18 @@ the existing Manifest and input-budget error.
 
 | Failure | Outcome |
 | --- | --- |
-| Missing/foreign/untrusted root, revoked trust or root drift | Reject; do not fall back to global guidance |
+| Missing/foreign/untrusted root, revoked trust or root drift | Reject; do not fall back to global instructions |
 | Bad configuration/pattern, duplicate source path or unsupported import field | Reject configuration |
 | Symlink, hardlink, non-regular file, sensitive path, invalid text or missing matched file | Reject through the scoped reader |
 | Credential-shaped content | Reject, not redact into a different trusted instruction |
 | File/total/token budget exceeded | `project_guidance_budget_exceeded`; no provider request |
 | Text changes during a paused Run | Resume keeps frozen text; a new Run captures the update |
 | Discovery of foreign roots, sensitive paths or linked files | No host paths/content disclosed; scoped reader checks still apply |
-| Project/file reads complete after selection changes or the dialog closes | Discard obsolete results; never apply another project's files |
+| Source/file reads complete after selection changes or the dialog closes | Discard obsolete results; never apply another source's files |
 | Cancel, clear or Workspace change | Cancel preserves the saved choice; clear removes it; another Workspace never inherits it |
-| New request reaches an older backend without guidance support | Reject before Chat; never silently omit the selected guidance |
+| New request reaches an older backend without instruction selection support | Reject before Chat; never silently omit the selected instructions |
 
-Bounded guidance text is persisted even when Request Capture is metadata-only;
+Bounded instruction text is persisted even when Request Capture is metadata-only;
 operator trust configuration explicitly opts these files into Run evidence.
 Snapshots contain logical roots and relative paths, not absolute host paths.
 Project context is conservatively private for network Tool policy. Trust/hash
@@ -120,7 +129,7 @@ EVALUATION_REPORT_DIR=/tmp/project-guidance go test ./app -run '^TestScopedProje
 ```
 
 The retained `project-guidance-evidence.json` contains CLI/Replay evidence for two
-projects and a no-guidance control, actual model inputs, restart/frozen continuation
+source directories and a no-instructions control, actual model inputs, restart/frozen continuation
 and fresh follow-up selection. It also checks Memory deduplication, revoked trust,
 corrupt snapshots and permission claims that cannot grant Tools or network access.
 Real file Bindings and Postgres execute; a controlled provider echoes received

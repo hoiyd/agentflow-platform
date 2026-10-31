@@ -191,7 +191,7 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 	}
 	projectGuidance, err := projectguidance.New(cfg.ProjectGuidancePath, filesystemTools)
 	if err != nil {
-		return applicationDependencies{}, fmt.Errorf("configure project guidance: %w", err)
+		return applicationDependencies{}, fmt.Errorf("configure project instructions: %w", err)
 	}
 	bindings := append([]tool.Binding{tool.WebSearchTool(tavilyClient), tool.WebFetchTool(runWebSourceResolver(appStore)), tool.SandboxCommandTool(sandboxRunner)}, filesystemTools.Bindings()...)
 	mcpAdapter, err := tool.NewMCPAdapter(cfg.MCPConfigPath)

@@ -1,4 +1,4 @@
-// Package projectguidance freezes explicitly trusted project conventions. It
+// Package projectguidance freezes explicitly trusted project instructions. It
 // neither discovers arbitrary instruction files nor grants execution authority.
 package projectguidance
 
@@ -72,12 +72,12 @@ var rootID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 func loadConfig(name string) ([]project, string, error) {
 	file, err := os.Open(name)
 	if err != nil {
-		return nil, "", problem("project_guidance_unavailable", "Project guidance configuration is unavailable")
+		return nil, "", problem("project_guidance_unavailable", "Project instructions configuration is unavailable")
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, 65537))
 	if err != nil || len(data) > 65536 {
-		return nil, "", problem("project_guidance_invalid", "Project guidance configuration exceeds its read limit")
+		return nil, "", problem("project_guidance_invalid", "Project instructions configuration exceeds its read limit")
 	}
 	var config struct {
 		Projects []project `json:"projects"`
@@ -85,25 +85,25 @@ func loadConfig(name string) ([]project, string, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	if decoder.Decode(&config) != nil || decoder.Decode(new(any)) != io.EOF || len(config.Projects) > 64 {
-		return nil, "", problem("project_guidance_invalid", "Invalid project guidance configuration")
+		return nil, "", problem("project_guidance_invalid", "Invalid project instructions configuration")
 	}
 	seen := map[string]bool{}
 	for _, item := range config.Projects {
 		id, err := strconv.ParseInt(item.WorkspaceID, 10, 64)
 		key := item.WorkspaceID + ":" + item.Root
 		if err != nil || id < 1 || strconv.FormatInt(id, 10) != item.WorkspaceID || !rootID.MatchString(item.Root) || !validPath(item.Entry) || len(item.Rules) > 16 || seen[key] {
-			return nil, "", problem("project_guidance_invalid", "Projects require unique Workspace/root identities and one bounded entry file")
+			return nil, "", problem("project_guidance_invalid", "Instruction sources require unique Workspace/root identities and one bounded entry file")
 		}
 		seen[key] = true
 		paths := map[string]bool{item.Entry: true}
 		for _, rule := range item.Rules {
 			if !validPath(rule.Path) || paths[rule.Path] || len(rule.Paths) == 0 || len(rule.Paths) > 16 {
-				return nil, "", problem("project_guidance_invalid", "Guidance rules require unique files and bounded path patterns")
+				return nil, "", problem("project_guidance_invalid", "Instruction rules require unique files and bounded path patterns")
 			}
 			paths[rule.Path] = true
 			for _, pattern := range rule.Paths {
 				if !validPattern(pattern) {
-					return nil, "", problem("project_guidance_invalid", "Guidance patterns must be relative path.Match patterns; recursive globs and imports are unsupported")
+					return nil, "", problem("project_guidance_invalid", "Instruction patterns must be relative path.Match patterns; recursive globs and imports are unsupported")
 				}
 			}
 		}

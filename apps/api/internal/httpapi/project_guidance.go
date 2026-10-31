@@ -29,7 +29,7 @@ func (h *Handler) listGuidanceProjects(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) listGuidanceProjectFiles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	if h.projectGuidance == nil {
-		writeError(w, http.StatusServiceUnavailable, "Project guidance is not configured")
+		writeError(w, http.StatusServiceUnavailable, "Project instructions are not configured")
 		return
 	}
 	directory := r.URL.Query().Get("path")

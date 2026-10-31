@@ -27,7 +27,7 @@ for tasks that do not need filesystem Tools.
 `--request` is an existing OpenAPI `ChatRequest`, bounded to 2 MiB. It accepts all
 three modes, Agent/Conversation identity, read-only planning, Knowledge filters
 and Completion Contracts without maintaining a parallel request format. Optional
-[`project_context`](../context/project-guidance.md) selects path-scoped guidance;
+[`project_context`](../context/project-instructions.md) selects path-scoped project instructions;
 it does not grant file access or Tools.
 
 ```bash

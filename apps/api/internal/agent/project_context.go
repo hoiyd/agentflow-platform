@@ -27,14 +27,14 @@ func (r *Runtime) freezeProjectGuidance(ctx context.Context, conversation string
 		return nil
 	}
 	if r.projectGuidance == nil {
-		return fmt.Errorf("project guidance is unavailable")
+		return fmt.Errorf("project instructions are unavailable")
 	}
 	owner, ok, err := r.store.GetConversation(conversation)
 	if err != nil {
 		return err
 	}
 	if !ok || owner.WorkspaceID == "" {
-		return fmt.Errorf("project guidance requires a persisted Workspace Conversation")
+		return fmt.Errorf("project instructions require a persisted Workspace Conversation")
 	}
 	snapshot.ProjectGuidance, err = r.projectGuidance.Freeze(ctx, owner.WorkspaceID, *selection)
 	return err
@@ -49,7 +49,7 @@ func (r *Runtime) validateProjectGuidance(ctx context.Context, run domain.Run) e
 		return err
 	}
 	if frozen.WorkspaceID != run.WorkspaceID || r.projectGuidance == nil {
-		return fmt.Errorf("frozen project guidance authority is unavailable")
+		return fmt.Errorf("frozen project instructions authority is unavailable")
 	}
 	return r.projectGuidance.Validate(ctx, run.WorkspaceID, frozen)
 }

@@ -1,7 +1,8 @@
 package domain
 
-// ProjectContext selects existing relative project files, never a host directory
-// or a grant. Operator-owned configuration separately identifies trusted guidance.
+// ProjectContext selects a logical source directory and relative task files for
+// project instructions, not a sub-Workspace, namespace or access grant. Its wire
+// names remain stable for existing clients and Run snapshots.
 type ProjectContext struct {
 	Root  string   `json:"root"`
 	Paths []string `json:"paths"`

@@ -116,7 +116,7 @@ export async function streamChat(
   if (input.project_context) {
     const catalog = await listGuidanceProjects(signal);
     if (!catalog.configured || !catalog.projects.some(project => project.root === input.project_context?.root)) {
-      throw new Error("Project guidance is no longer available. Review or clear the selected project before sending.");
+      throw new Error("Project instructions are no longer available. Review or clear the selected source directory before sending.");
     }
   }
   if (input.knowledge_filter) {
