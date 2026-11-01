@@ -340,7 +340,7 @@ export function ToolsPanel({ error, onToggle, tools, updatingTool, onCatalogChan
             <div className="tool-card-header">
               <h3>{tool.name}</h3>
               <label className="tool-toggle">
-                <input type="checkbox" aria-label={`Allow ${tool.name} in this Workspace`} checked={tool.workspace_enabled ?? tool.enabled} disabled={readOnly || tool.service_enabled === false || ["sandbox_disabled", "filesystem_unconfigured", "filesystem_write_unconfigured", "filesystem_root_changed"].includes(tool.unavailable_reason ?? "") || updatingTool === tool.name} onChange={() => onToggle(tool)} />
+                <input type="checkbox" aria-label={`Allow ${tool.name} in this Workspace`} checked={tool.workspace_enabled ?? tool.enabled} disabled={readOnly || tool.service_enabled === false || ["sandbox_disabled", "filesystem_unconfigured", "filesystem_write_unconfigured", "filesystem_root_changed"].includes(tool.unavailable_reason ?? "") || Boolean(updatingTool)} onChange={() => onToggle(tool)} />
                 <span>{(tool.workspace_enabled ?? tool.enabled) ? "Allowed" : "Not allowed"}</span>
               </label>
             </div>

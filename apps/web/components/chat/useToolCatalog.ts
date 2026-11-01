@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listTools, setToolEnabled, type ToolInfo } from "../../lib/api";
 import { createLatestRequestController } from "../../lib/latest-request";
 
@@ -6,12 +6,13 @@ export function useToolCatalog() {
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [error, setError] = useState("");
   const [updatingTool, setUpdatingTool] = useState("");
+  const writing = useRef(false);
   const [requests] = useState(createLatestRequestController);
 
   useEffect(() => () => requests.cancel(), [requests]);
 
   async function refresh() {
-    if (updatingTool) return;
+    if (writing.current) return;
     const request = requests.begin();
     setError("");
     try {
@@ -23,7 +24,8 @@ export function useToolCatalog() {
   }
 
   async function toggle(tool: ToolInfo) {
-    if (updatingTool) return;
+    if (writing.current) return;
+    writing.current = true;
     const request = requests.begin();
     setUpdatingTool(tool.name);
     setError("");
@@ -33,6 +35,7 @@ export function useToolCatalog() {
     } catch (err) {
       if (request.isCurrent()) setError(err instanceof Error ? err.message : "Failed to update tool");
     } finally {
+      writing.current = false;
       if (request.isCurrent()) setUpdatingTool("");
     }
   }

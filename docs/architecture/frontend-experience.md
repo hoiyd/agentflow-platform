@@ -82,6 +82,9 @@ remain stable across normal laptop and wide-monitor viewports.
   their primary fields remain easy to scan.
 - Trace show/hide controls use the same style, side, and placement in Multi-Agent
   and Autonomous modes.
+- Tool Catalog writes are serial: every grant toggle is disabled while one write
+  is pending, and retained handlers use a synchronous admission guard. Failure
+  leaves the previous catalog visible, reports the error and unlocks all toggles.
 - Status must remain visible outside the composer footer and must not disappear
   when mode tabs or trace panels change.
 
