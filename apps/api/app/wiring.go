@@ -51,6 +51,7 @@ type applicationDependencies struct {
 	mcpAdapter     *tool.MCPAdapter
 	mcpConnections *mcpconnection.Service
 	coldStart      *recovery.ColdStart
+	compaction     interface{ CloseCompaction(context.Context) error }
 }
 
 func buildDependencies(cfg config.Config, options applicationOptions) (applicationDependencies, error) {
@@ -348,8 +349,9 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 	cleanupStore = false
 	coldStart.Start()
 	return applicationDependencies{
-		coldStart: coldStart,
-		store:     appStore, handler: handler, memoryProvider: memoryProvider,
+		coldStart:  coldStart,
+		compaction: agentRuntime,
+		store:      appStore, handler: handler, memoryProvider: memoryProvider,
 		sandboxRunner:  sandboxRunner,
 		telemetry:      traceObserver,
 		mcpAdapter:     mcpAdapter,

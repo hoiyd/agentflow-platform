@@ -88,6 +88,9 @@ func (s *Compactor) CompactIfNeeded(ctx context.Context, request Request) (*doma
 	if config.CompactionMode == contextassembly.CompactionModeOff {
 		return nil, nil
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	lock := s.conversationLock(request.ConversationID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -148,6 +151,9 @@ func (s *Compactor) CompactIfNeeded(ctx context.Context, request Request) (*doma
 		Prompt:       compactionPrompt(previous, plan.newSourceMessages, targetTokens),
 		TargetTokens: targetTokens,
 	})
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	}
 	if err != nil || strings.TrimSpace(result.Text) == "" {
 		if err == nil {
 			err = ErrSummaryUnavailable
@@ -191,6 +197,9 @@ func (s *Compactor) CompactIfNeeded(ctx context.Context, request Request) (*doma
 	}
 	completionEvent, err := s.newEvent(request, domain.EventCompactionCompleted, completedPayload, nil)
 	if err != nil {
+		return nil, s.failAttempt(request, startedPayload, err, false)
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, s.failAttempt(request, startedPayload, err, false)
 	}
 	created, _, err := s.store.CommitContextCompaction(compaction, completionEvent)

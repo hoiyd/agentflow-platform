@@ -36,8 +36,9 @@ type Application struct {
 	mcpConnections *mcpconnection.Service
 	coldStart      *recovery.ColdStart
 
-	closeOnce sync.Once
-	closeErr  error
+	closeOnce  sync.Once
+	closeErr   error
+	compaction interface{ CloseCompaction(context.Context) error }
 }
 
 func New(cfg config.Config, options ...Option) (*Application, error) {
@@ -61,6 +62,7 @@ func New(cfg config.Config, options ...Option) (*Application, error) {
 		mcpAdapter:     dependencies.mcpAdapter,
 		mcpConnections: dependencies.mcpConnections,
 		coldStart:      dependencies.coldStart,
+		compaction:     dependencies.compaction,
 		server: &http.Server{
 			Addr:              serverAddress(cfg),
 			Handler:           dependencies.handler.Routes(),
@@ -137,6 +139,12 @@ func (a *Application) Close(ctx context.Context) error {
 		if a.memoryProvider != nil {
 			if err := a.memoryProvider.Close(ctx); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("drain memory provider: %w", err))
+				drained = false
+			}
+		}
+		if a.compaction != nil {
+			if err := a.compaction.CloseCompaction(ctx); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("drain soft compaction: %w", err))
 				drained = false
 			}
 		}

@@ -15,7 +15,7 @@ import (
 )
 
 func (r *Runtime) scheduleSoftContextCompaction(run domain.Run) {
-	go func() {
+	r.startSoftCompaction(func(ctx context.Context) {
 		snapshot, err := r.snapshotForRun(run.ID)
 		if err != nil {
 			return
@@ -24,8 +24,8 @@ func (r *Runtime) scheduleSoftContextCompaction(run domain.Run) {
 		if err != nil {
 			return
 		}
-		r.compactContextBestEffort(context.Background(), run.ID, run.ConversationID, snapshot, contextassembly.CompactionTriggerSoft, "", client)
-	}()
+		r.compactContextBestEffort(ctx, run.ID, run.ConversationID, snapshot, contextassembly.CompactionTriggerSoft, "", client)
+	})
 }
 
 func (r *Runtime) compactContextBestEffort(ctx context.Context, runID, conversationID string, snapshot *domain.RuntimeSnapshot, trigger string, triggerKey string, client provider.Client) *domain.ContextCompaction {

@@ -74,6 +74,14 @@ Compaction skips when off or fewer than two new Messages are eligible. Isolated
 Worker Turns skip conversation compaction/history retrieval. Agent streams that
 may have executed Tools are never automatically replayed after overflow.
 
+Soft compaction is application-owned best-effort work: at most one job runs per
+Runtime, with no pending queue. Busy triggers are skipped; the answer never waits.
+Each job retains its frozen summary timeout. Shutdown stops admission, cancels
+and joins the job's failure/commit settlement before closing Store; an incomplete
+drain returns an error and leaves Store open. Canceled or timed-out late results
+cannot replace the active summary. Auxiliary cost is not charged retroactively
+to the completed Run's Budget.
+
 ## Compaction Algorithm
 
 `context-compaction-v4` incrementally summarizes previous summary plus eligible
