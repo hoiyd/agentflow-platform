@@ -15,6 +15,7 @@ import (
 	"agentflow-platform/apps/api/internal/config"
 	"agentflow-platform/apps/api/internal/mcpconnection"
 	memorypkg "agentflow-platform/apps/api/internal/memory"
+	"agentflow-platform/apps/api/internal/recovery"
 	"agentflow-platform/apps/api/internal/sandbox"
 	"agentflow-platform/apps/api/internal/store"
 	"agentflow-platform/apps/api/internal/telemetry"
@@ -33,9 +34,11 @@ type Application struct {
 	telemetry      *telemetry.Observer
 	mcpAdapter     *tool.MCPAdapter
 	mcpConnections *mcpconnection.Service
+	coldStart      *recovery.ColdStart
 
-	closeOnce sync.Once
-	closeErr  error
+	closeOnce  sync.Once
+	closeErr   error
+	compaction interface{ CloseCompaction(context.Context) error }
 }
 
 func New(cfg config.Config, options ...Option) (*Application, error) {
@@ -58,6 +61,8 @@ func New(cfg config.Config, options ...Option) (*Application, error) {
 		telemetry:      dependencies.telemetry,
 		mcpAdapter:     dependencies.mcpAdapter,
 		mcpConnections: dependencies.mcpConnections,
+		coldStart:      dependencies.coldStart,
+		compaction:     dependencies.compaction,
 		server: &http.Server{
 			Addr:              serverAddress(cfg),
 			Handler:           dependencies.handler.Routes(),
@@ -111,6 +116,10 @@ func (a *Application) Close(ctx context.Context) error {
 	a.closeOnce.Do(func() {
 		var closeErrors []error
 		drained := true
+		if err := a.coldStart.Close(ctx); err != nil {
+			closeErrors = append(closeErrors, fmt.Errorf("close cold-start recovery: %w", err))
+			drained = false
+		}
 		a.mcpAdapter.Close()
 		a.mcpConnections.Close()
 		// Cancel guest commands before waiting on Runs that may be blocked on
@@ -130,6 +139,12 @@ func (a *Application) Close(ctx context.Context) error {
 		if a.memoryProvider != nil {
 			if err := a.memoryProvider.Close(ctx); err != nil {
 				closeErrors = append(closeErrors, fmt.Errorf("drain memory provider: %w", err))
+				drained = false
+			}
+		}
+		if a.compaction != nil {
+			if err := a.compaction.CloseCompaction(ctx); err != nil {
+				closeErrors = append(closeErrors, fmt.Errorf("drain soft compaction: %w", err))
 				drained = false
 			}
 		}

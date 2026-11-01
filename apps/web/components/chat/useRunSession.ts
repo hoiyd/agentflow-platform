@@ -27,8 +27,8 @@ type Workspace = Pick<ReturnType<typeof useConversationWorkspace>,
 type SessionOptions = {
   workspace: Workspace;
   observing: boolean;
-  onReload: (conversationId: string, command: Command["kind"] | "observed") => Promise<void>;
-  onConversationAccepted: () => void;
+  onReload: (conversationId: string, command: Command["kind"] | "observed" | "rejected") => Promise<void>;
+  onHistoryHandoff: () => void;
   // View layout remains owned by ChatShell; return its pre-acceptance rollback.
   onSubmissionStart: (mode: ChatMode) => () => void;
 };
@@ -204,7 +204,9 @@ export function useRunSession(options: SessionOptions) {
     setActivity(command.kind);
     observations.cancel();
     const request = streams.begin();
-    const { workspace, onSubmissionStart } = latest.current.options;
+    const { workspace, onSubmissionStart, onHistoryHandoff } = latest.current.options;
+    // Invalidate reads before drafts are inserted, not at the first SSE event.
+    onHistoryHandoff();
     const previousTrace = latest.current.trace;
     const runId = previousRun?.id ?? "";
     let conversationId = workspace.activeId;
@@ -239,7 +241,6 @@ export function useRunSession(options: SessionOptions) {
       onEvent: () => { accepted = true; },
       onConversation: (event) => {
         conversationId = event.conversation_id;
-        latest.current.options.onConversationAccepted();
         workspace.setActiveId(conversationId);
       },
       onDone: (event) => workspace.applyTitle(event.conversation_id, event.title),
@@ -277,6 +278,9 @@ export function useRunSession(options: SessionOptions) {
         } else if (command.kind === "resuming") {
           setRunState(previousRun);
         }
+        try { await latest.current.options.onReload(conversationId, "rejected"); }
+        catch { /* Keep the restored input/history and original command error. */ }
+        if (!request.isCurrent()) return;
       }
       workspace.setError(error instanceof Error ? error.message : `Unexpected ${command.kind === "submitting" ? "chat" : command.kind === "continuing" ? "continue" : "resume"} error`);
       if (accepted && runRef.current?.id) {

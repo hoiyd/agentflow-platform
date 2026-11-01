@@ -82,6 +82,9 @@ remain stable across normal laptop and wide-monitor viewports.
   their primary fields remain easy to scan.
 - Trace show/hide controls use the same style, side, and placement in Multi-Agent
   and Autonomous modes.
+- Tool Catalog writes are serial: every grant toggle is disabled while one write
+  is pending, and retained handlers use a synchronous admission guard. Failure
+  leaves the previous catalog visible, reports the error and unlocks all toggles.
 - Status must remain visible outside the composer footer and must not disappear
   when mode tabs or trace panels change.
 
@@ -155,6 +158,11 @@ Three dimensions must remain separate:
 - **Connection leases** invalidate obsolete stream, cancellation, and observation
   callbacks. Navigating away aborts browser requests, not the backend Run; only
   an explicit Cancel requests backend cancellation.
+
+Admitted Submit/Continue/Resume commands invalidate pending history and Task State
+reads before inserting drafts. History regains ownership through an explicit
+reload after completion or pre-acceptance rejection; a failed refresh preserves
+already accepted messages. The first SSE event is too late for this handoff.
 
 Before the first accepted event, a failed submission removes only its optimistic
 drafts and restores input, Run/Trace state, and layout. Once events are accepted,

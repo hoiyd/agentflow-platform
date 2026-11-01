@@ -63,8 +63,10 @@ export function ChatShell({ initialConversationId = "", initialView = "chat" }: 
   const session = useRunSession({
     workspace,
     observing: view === "chat",
-    onConversationAccepted: () => conversationRequests.cancel(),
-    onReload: (conversationId, command) => command === "continuing" || command === "resuming"
+    onHistoryHandoff: () => conversationRequests.cancel(),
+    onReload: (conversationId, command) => command === "rejected" && !conversationId
+      ? refreshConversations(undefined, true)
+      : command === "continuing" || command === "resuming" || command === "rejected"
       ? loadConversation(conversationId)
       : refreshConversations(conversationId),
     onSubmissionStart: (mode) => {

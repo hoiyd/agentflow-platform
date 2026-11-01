@@ -29,8 +29,15 @@ func MarkStaleRunningRuns(appStore Store, staleTimeout time.Duration) (int, erro
 	if err != nil {
 		return 0, err
 	}
+	return repairRuns(appStore, runs, cutoff)
+}
+
+func repairRuns(appStore Store, runs []domain.Run, cutoff time.Time) (int, error) {
 	repaired := 0
 	for _, run := range runs {
+		if run.HeartbeatAt != nil && !run.HeartbeatAt.Before(cutoff) {
+			continue
+		}
 		events, err := appStore.ListRunEvents(run.ID)
 		if err != nil {
 			return repaired, err
@@ -40,11 +47,15 @@ func MarkStaleRunningRuns(appStore Store, staleTimeout time.Duration) (int, erro
 			return repaired, fmt.Errorf("plan interrupted run repair %s: %w", run.ID, err)
 		}
 		if opened, ok := openRunLifecycle(events); ok {
+			typ, status := domain.EventRunFailed, domain.RunFailedRecoverable
+			if run.Status == domain.RunCanceling {
+				typ, status = domain.EventRunCanceled, domain.RunCanceled
+			}
 			terminal = append(terminal, domain.RunEvent{
-				Type: domain.EventRunFailed, RunID: run.ID, ConversationID: run.ConversationID,
+				Type: typ, RunID: run.ID, ConversationID: run.ConversationID,
 				ParentEventID: opened.ID,
 				Payload: map[string]any{
-					"status": string(domain.RunFailedRecoverable), "error": staleRunMessage,
+					"status": string(status), "error": staleRunMessage,
 					"synthetic": true, "reason": domain.InterruptedWorkerReason,
 					"repaired_from_event_id": opened.ID,
 				},
@@ -55,7 +66,7 @@ func MarkStaleRunningRuns(appStore Store, staleTimeout time.Duration) (int, erro
 			cursor = events[len(events)-1].Sequence
 		}
 		result, err := appStore.RepairInterruptedRun(domain.InterruptedRunRepair{
-			RunID: run.ID, StaleBefore: cutoff, ExpectedEventCursor: cursor,
+			RunID: run.ID, ExpectedStatus: run.Status, StaleBefore: cutoff, ExpectedEventCursor: cursor,
 			TerminalEvents: terminal, ErrorMessage: staleRunMessage,
 		})
 		if err != nil {
@@ -78,10 +89,10 @@ func openRunLifecycle(events []domain.RunEvent) (domain.RunEvent, bool) {
 	var opened domain.RunEvent
 	for _, item := range events {
 		switch item.Type {
-		case domain.EventRunCreated, domain.EventRunStarted:
+		case domain.EventRunCreated, domain.EventRunStarted, domain.EventRunResumed:
 			opened = item
 		case domain.EventRunCompleted, domain.EventRunFailed, domain.EventRunCanceled:
-			return domain.RunEvent{}, false
+			opened = domain.RunEvent{}
 		}
 	}
 	return opened, opened.Type != ""

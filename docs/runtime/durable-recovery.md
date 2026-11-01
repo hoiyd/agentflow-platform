@@ -28,9 +28,16 @@ this is separate from worker completion.
 
 ## Cold-Start Lifecycle Repair
 
-At startup, `recovery.MarkStaleRunningRuns` scans only Runs whose status is
-`running` and whose heartbeat is older than `RECOVERY_STALE_RUN_TIMEOUT`.
-Active Runs owned by the current process are not scanned.
+Before accepting requests, recovery captures the existing `running` and
+`canceling` Run IDs. Stale executions are repaired immediately; one bounded
+recheck after `RECOVERY_STALE_RUN_TIMEOUT` covers fresh orphans from a quick
+restart. Its heartbeat cutoff never advances beyond startup, so new Runs and
+renewed executions cannot be repaired by a late timer. Shutdown cancels and
+drains this recheck before closing persistence. This is single-instance crash
+repair, not distributed worker ownership or fencing.
+
+Status or event-cursor conflicts reject the stale plan without mutation; the
+expiry recheck re-reads at most once to settle a concurrently requested Stop.
 
 For each stale Run, the event protocol finds open scopes and appends synthetic
 terminal events in inner-to-outer order:
@@ -63,14 +70,16 @@ Every synthetic payload includes:
 ```
 
 The typed `run.failed` payload records `failed_recoverable`, keeping the event
-projection aligned with the authoritative Run row. The store rechecks the stale
-heartbeat and expected event cursor before making changes. Appending terminal
+projection aligned with the authoritative Run row. The store rechecks the expected
+Run status, stale heartbeat and event cursor before making changes. Appending terminal
 events, changing running Stage records to `failed`, and changing the Run to
-`failed_recoverable` occur in one Postgres transaction. A second startup scan
-observes a non-running Run and does nothing, so repair is idempotent.
+`failed_recoverable` occur in one Postgres transaction. Interrupted `canceling`
+Runs instead settle as `canceled` with `run.canceled`; uncertain external Effects
+still require reconciliation and are never automatically executed. Repeated
+repair observes a settled Run and appends no further facts.
 
-Recovery planning or persistence failure prevents API startup. It does not
-silently leave an inconsistent Run active.
+Initial planning or persistence failure prevents startup. A failed deferred
+recheck is logged and reported on Close; it is not an unbounded background retry.
 
 Historical event streams created before strict Stage pairing may contain a
 terminal Stage event without a start event. They remain readable. New streams

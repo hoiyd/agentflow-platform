@@ -403,6 +403,66 @@ function setupAPI() {
   knowledgeAPI.listDocuments.mockResolvedValue([]);
 }
 
+// Failure inventory: old history may finish between draft insertion and the
+// first SSE event; pre-acceptance rejection must reload history and retain input.
+it("hands history ownership to Submit before conversation acceptance", async () => {
+  setupAPI();
+  let finishHistory!: (messages: unknown[]) => void;
+  api.listMessages.mockImplementationOnce(() => new Promise(resolve => { finishHistory = resolve; }));
+  api.streamChat.mockImplementation(() => new Promise(() => {}));
+  render(<ChatShell initialConversationId="a" />);
+  await waitFor(() => expect(api.listMessages).toHaveBeenCalledTimes(1));
+  fireEvent.change(screen.getByRole("textbox", {name:"Prompt"}), {target:{value:"new pending question"}});
+  fireEvent.click(screen.getByRole("button", {name:"Send"}));
+  expect(api.streamChat).toHaveBeenCalledTimes(1);
+  await act(async () => finishHistory([{id:"old",role:"assistant",content:"late old history"}]));
+  expect(screen.getByText("new pending question")).toBeTruthy();
+  expect(screen.queryByText("late old history")).toBeNull();
+  await act(async () => {
+    const emit=api.streamChat.mock.calls[0][1];
+    emit({type:"conversation",conversation_id:"a"});
+    emit({type:"run_state",run_id:"new",status:"running"});
+    emit({type:"model_delta",delta:"visible streamed answer"});
+  });
+  expect(screen.getByText("visible streamed answer")).toBeTruthy();
+});
+
+it("restores valid history after a pre-acceptance rejection during initial load", async () => {
+  setupAPI();
+  let finishHistory!: (messages: unknown[]) => void;
+  let rejectSubmit!: (error: Error) => void;
+  api.listMessages.mockImplementationOnce(() => new Promise(resolve => { finishHistory=resolve; }));
+  api.streamChat.mockImplementation(() => new Promise((_resolve,reject) => {rejectSubmit=reject;}));
+  render(<ChatShell initialConversationId="a" />);
+  await waitFor(() => expect(api.listMessages).toHaveBeenCalledTimes(1));
+  fireEvent.change(screen.getByRole("textbox",{name:"Prompt"}),{target:{value:"retry this question"}});
+  fireEvent.click(screen.getByRole("button",{name:"Send"}));
+  await act(async()=>rejectSubmit(new Error("request not accepted")));
+  expect(api.listMessages).toHaveBeenCalledTimes(2);
+  await screen.findByText("A baseline");
+  await act(async()=>finishHistory([{content:"obsolete initial read"}]));
+  expect(screen.queryByText("obsolete initial read")).toBeNull();
+  expect(screen.getByRole("textbox",{name:"Prompt"}).getAttribute("value")).toBe("retry this question");
+  expect(screen.getByLabelText("Error").textContent).toBe("request not accepted");
+});
+
+it("recovers the initial conversation list when submission fails before any conversation is selected", async () => {
+  setupAPI();
+  let finishList!: (items: unknown[]) => void;
+  api.listConversations.mockImplementationOnce(() => new Promise(resolve => {finishList=resolve;}));
+  api.streamChat.mockRejectedValue(new Error("early rejection"));
+  render(<ChatShell initialConversationId="" />);
+  await waitFor(()=>expect(api.listConversations).toHaveBeenCalledTimes(1));
+  fireEvent.change(screen.getByRole("textbox",{name:"Prompt"}),{target:{value:"early task"}});
+  fireEvent.click(screen.getByRole("button",{name:"Send"}));
+  await screen.findByText("A baseline");
+  expect(api.listConversations).toHaveBeenCalledTimes(2);
+  await act(async()=>finishList([{id:"obsolete",title:"obsolete list"}]));
+  expect(screen.getByRole("textbox",{name:"Prompt"}).getAttribute("value")).toBe("early task");
+  expect(screen.getByLabelText("Error").textContent).toBe("early rejection");
+  expect(screen.queryByText("obsolete list")).toBeNull();
+});
+
 it("accepts only one stream command before React rerenders", async () => {
   setupAPI();
   api.streamChat.mockImplementation(() => new Promise(() => {}));

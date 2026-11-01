@@ -44,6 +44,10 @@ type Runtime struct {
 	routerMode            string
 	contextAssemblyConfig domain.ContextAssemblyConfig
 	contextCompactor      *contextcompaction.Compactor
+	compactionMu          sync.Mutex
+	compactionCancel      context.CancelFunc
+	compactionDone        chan struct{}
+	compactionClosed      bool
 	autonomousLimits      AutonomousLimits
 	runBudget             domain.RuntimeRunBudget
 	toolProgressConfig    progress.Config

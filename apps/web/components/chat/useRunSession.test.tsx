@@ -12,7 +12,7 @@ function mountSession() {
   const workspace = {activeId:"conversation-1",setActiveId:vi.fn(),setInput:vi.fn(),setMessages:vi.fn(),setError:vi.fn(),applyTitle:vi.fn()};
   const onReload = vi.fn(async () => {});
   const hook = renderHook(() => useRunSession({workspace,observing:false,onReload,
-    onConversationAccepted:vi.fn(),onSubmissionStart:() => () => {}}));
+    onHistoryHandoff:vi.fn(),onSubmissionStart:() => () => {}}));
   act(() => hook.result.current.setRunState({id:"run-1",agentId:"agent-1",status:"failed_recoverable",verificationStatus:"not_required"}));
   return {...hook,workspace,onReload};
 }

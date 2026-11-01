@@ -156,7 +156,7 @@ func (s *Store) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, error) {
 
 	items := []domain.Run{}
 	for _, run := range s.data.Runs {
-		if run.Status != domain.RunRunning {
+		if run.Status != domain.RunRunning && run.Status != domain.RunCanceling {
 			continue
 		}
 		if run.HeartbeatAt == nil || run.HeartbeatAt.Before(cutoff) {

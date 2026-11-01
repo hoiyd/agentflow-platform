@@ -50,6 +50,8 @@ type applicationDependencies struct {
 	telemetry      *telemetry.Observer
 	mcpAdapter     *tool.MCPAdapter
 	mcpConnections *mcpconnection.Service
+	coldStart      *recovery.ColdStart
+	compaction     interface{ CloseCompaction(context.Context) error }
 }
 
 func buildDependencies(cfg config.Config, options applicationOptions) (applicationDependencies, error) {
@@ -120,10 +122,9 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 		return applicationDependencies{}, fmt.Errorf("initialize identity: %w", err)
 	}
 
-	if recovered, recoveryErr := recovery.MarkStaleRunningRuns(appStore, cfg.RecoveryStaleRunTimeout); recoveryErr != nil {
+	coldStart, recoveryErr := recovery.PrepareColdStart(appStore, cfg.RecoveryStaleRunTimeout)
+	if recoveryErr != nil {
 		return applicationDependencies{}, fmt.Errorf("repair interrupted runs: %w", recoveryErr)
-	} else if recovered > 0 {
-		log.Printf("native recovery repaired %d stale running run(s) as failed_recoverable", recovered)
 	}
 	requestLimiter := concurrency.NewModelRequestLimiter(concurrency.ModelRequestLimits{
 		MaxConcurrent:      global,
@@ -346,8 +347,11 @@ func buildDependencies(cfg config.Config, options applicationOptions) (applicati
 		return toolManager.ReplaceBindings(append(slices.Clone(bindings), discovered...))
 	})
 	cleanupStore = false
+	coldStart.Start()
 	return applicationDependencies{
-		store: appStore, handler: handler, memoryProvider: memoryProvider,
+		coldStart:  coldStart,
+		compaction: agentRuntime,
+		store:      appStore, handler: handler, memoryProvider: memoryProvider,
 		sandboxRunner:  sandboxRunner,
 		telemetry:      traceObserver,
 		mcpAdapter:     mcpAdapter,
