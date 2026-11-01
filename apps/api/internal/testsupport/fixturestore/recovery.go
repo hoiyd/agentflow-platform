@@ -3,7 +3,6 @@ package fixturestore
 import (
 	"agentflow-platform/apps/api/internal/domain"
 	"agentflow-platform/apps/api/internal/store"
-	"errors"
 	"time"
 )
 
@@ -22,7 +21,7 @@ func (s *Store) RepairInterruptedRun(request domain.InterruptedRunRepair) (domai
 		return domain.InterruptedRunRepairResult{}, store.ErrNotFound("run")
 	}
 	run := &s.data.Runs[runIndex]
-	if run.Status != domain.RunRunning || (run.HeartbeatAt != nil && !run.HeartbeatAt.Before(request.StaleBefore)) {
+	if run.Status != request.ExpectedStatus || (run.Status != domain.RunRunning && run.Status != domain.RunCanceling) || (run.HeartbeatAt != nil && !run.HeartbeatAt.Before(request.StaleBefore)) {
 		return domain.InterruptedRunRepairResult{Run: store.CloneRun(*run)}, nil
 	}
 
@@ -33,7 +32,7 @@ func (s *Store) RepairInterruptedRun(request domain.InterruptedRunRepair) (domai
 		}
 	}
 	if cursor != request.ExpectedEventCursor {
-		return domain.InterruptedRunRepairResult{}, errors.New("run event cursor changed during recovery")
+		return domain.InterruptedRunRepairResult{Run: store.CloneRun(*run)}, nil
 	}
 
 	now := time.Now().UTC()
@@ -65,7 +64,11 @@ func (s *Store) RepairInterruptedRun(request domain.InterruptedRunRepair) (domai
 			effect.UpdatedAt = now
 		}
 	}
-	store.ApplyRunStatus(run, domain.RunFailedRecoverable, request.ErrorMessage, now)
+	status := domain.RunFailedRecoverable
+	if run.Status == domain.RunCanceling {
+		status = domain.RunCanceled
+	}
+	store.ApplyRunStatus(run, status, request.ErrorMessage, now)
 
 	return domain.InterruptedRunRepairResult{Run: store.CloneRun(*run), AppendedEvents: appended, Applied: true}, nil
 }

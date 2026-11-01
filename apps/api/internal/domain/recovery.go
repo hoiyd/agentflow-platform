@@ -5,10 +5,11 @@ import "time"
 const InterruptedWorkerReason = "worker_interrupted"
 
 // InterruptedRunRepair is an optimistic, atomic mutation used during cold
-// startup. Stores must re-check both the stale heartbeat and event cursor before
+// startup. Stores must re-check status, stale heartbeat and event cursor before
 // appending terminal events and changing the Run status.
 type InterruptedRunRepair struct {
 	RunID               string
+	ExpectedStatus      RunStatus
 	StaleBefore         time.Time
 	ExpectedEventCursor int64
 	TerminalEvents      []RunEvent

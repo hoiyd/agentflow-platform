@@ -31,7 +31,7 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 	if err != nil {
 		return domain.InterruptedRunRepairResult{}, err
 	}
-	if run.Status != domain.RunRunning || (run.HeartbeatAt != nil && !run.HeartbeatAt.Before(request.StaleBefore)) {
+	if run.Status != request.ExpectedStatus || (run.Status != domain.RunRunning && run.Status != domain.RunCanceling) || (run.HeartbeatAt != nil && !run.HeartbeatAt.Before(request.StaleBefore)) {
 		return domain.InterruptedRunRepairResult{Run: run}, nil
 	}
 
@@ -40,7 +40,7 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 		return domain.InterruptedRunRepairResult{}, err
 	}
 	if cursor != request.ExpectedEventCursor {
-		return domain.InterruptedRunRepairResult{}, errors.New("run event cursor changed during recovery")
+		return domain.InterruptedRunRepairResult{Run: run}, nil
 	}
 
 	now := time.Now().UTC()
@@ -87,6 +87,10 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 		return domain.InterruptedRunRepairResult{}, err
 	}
 
+	status := domain.RunFailedRecoverable
+	if run.Status == domain.RunCanceling {
+		status = domain.RunCanceled
+	}
 	run, err = scanRun(tx.QueryRow(`
 		UPDATE runs
 		SET status = $1,
@@ -103,7 +107,7 @@ func (s *PostgresStore) RepairInterruptedRun(request domain.InterruptedRunRepair
 		RETURNING id, workspace_id, agent_id, conversation_id, status, error,
 			runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at,
 			active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at`,
-		string(domain.RunFailedRecoverable), errorMessage, now, request.RunID))
+		string(status), errorMessage, now, request.RunID))
 	if err != nil {
 		return domain.InterruptedRunRepairResult{}, err
 	}

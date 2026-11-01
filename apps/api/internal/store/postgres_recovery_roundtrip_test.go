@@ -167,7 +167,7 @@ func TestPostgresInterruptedRunRepairIsAtomicAndIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	request := domain.InterruptedRunRepair{
-		RunID: run.ID, StaleBefore: time.Now().UTC().Add(time.Hour),
+		RunID: run.ID, ExpectedStatus: domain.RunRunning, StaleBefore: time.Now().UTC().Add(time.Hour),
 		ExpectedEventCursor: events[len(events)-1].Sequence, TerminalEvents: terminal,
 		ErrorMessage: "worker interrupted",
 	}
@@ -176,6 +176,12 @@ func TestPostgresInterruptedRunRepairIsAtomicAndIdempotent(t *testing.T) {
 		Payload: map[string]any{"status": string(domain.RunFailedRecoverable), "error": "worker interrupted"},
 	})
 	request.TerminalEvents = terminal
+	staleRequest := request
+	staleRequest.ExpectedEventCursor--
+	staleResult, err := postgresStore.RepairInterruptedRun(staleRequest)
+	if err != nil || staleResult.Applied || staleResult.Run.Status != domain.RunRunning {
+		t.Fatalf("stale event plan applied: %+v %v", staleResult, err)
+	}
 	result, err := postgresStore.RepairInterruptedRun(request)
 	if err != nil || !result.Applied || result.Run.Status != domain.RunFailedRecoverable || len(result.AppendedEvents) != 5 {
 		t.Fatalf("repair run: %#v err=%v", result, err)

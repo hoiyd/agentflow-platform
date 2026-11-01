@@ -294,7 +294,7 @@ func (s *PostgresStore) ListStaleRunningRuns(cutoff time.Time) ([]domain.Run, er
 	rows, err := s.db.Query(`
 		SELECT id, workspace_id::text, agent_id, conversation_id, status, error, runtime_snapshot, completion_contract, verification_status, started_at, execution_started_at, active_runtime_ms, heartbeat_at, completed_at, created_at, updated_at
 		FROM runs
-		WHERE status = 'running'
+		WHERE status IN ('running', 'canceling')
 			AND (heartbeat_at IS NULL OR heartbeat_at < $1)
 		ORDER BY created_at ASC`, cutoff)
 	if err != nil {
