@@ -51,9 +51,9 @@ export function useConversationHistory({ workspace, session, onModeRestored: han
     session.clearRun();
   }
 
-  function activateConversation(id: string) {
+  function activateConversation(id: string, preserveCommand = false) {
     if (id !== activeId) {
-      session.detach();
+      if (!preserveCommand) session.detach();
       resetConversationRuntimeState();
       setMessages([]);
       clearTaskState();
@@ -62,7 +62,7 @@ export function useConversationHistory({ workspace, session, onModeRestored: han
     setActiveId(id);
   }
 
-  async function refreshConversations(nextActiveId?: string) {
+  async function refreshConversations(nextActiveId?: string, restoreRejectedCommand = false) {
     const request = conversationRequests.begin();
     try {
       const items = await listConversations(request.signal);
@@ -72,7 +72,9 @@ export function useConversationHistory({ workspace, session, onModeRestored: han
       setConversations(items);
       const target = nextActiveId || (!activeId ? items[0]?.id : undefined);
       if (target) {
-        activateConversation(target);
+        // An initial rejected Submit owns this reload, not a new navigation.
+        // Keep its lease alive so it can restore the original command error.
+        activateConversation(target, restoreRejectedCommand);
         await loadConversation(target, request);
       }
     } catch (err) {
@@ -121,8 +123,8 @@ export function useConversationHistory({ workspace, session, onModeRestored: han
       if (!request.isCurrent()) {
         return;
       }
-      setMessages([]);
-      resetConversationRuntimeState();
+      // Navigation already cleared the previous Conversation. A failed refresh
+      // must keep accepted history, including a command's restored baseline.
       setError(err instanceof Error ? err.message : "Failed to load conversation");
     } finally {
       if (taskRequest.isCurrent()) {

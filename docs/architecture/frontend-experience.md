@@ -156,6 +156,11 @@ Three dimensions must remain separate:
   callbacks. Navigating away aborts browser requests, not the backend Run; only
   an explicit Cancel requests backend cancellation.
 
+Admitted Submit/Continue/Resume commands invalidate pending history and Task State
+reads before inserting drafts. History regains ownership through an explicit
+reload after completion or pre-acceptance rejection; a failed refresh preserves
+already accepted messages. The first SSE event is too late for this handoff.
+
 Before the first accepted event, a failed submission removes only its optimistic
 drafts and restores input, Run/Trace state, and layout. Once events are accepted,
 partial output stays visible; a transport failure can reconnect to the durable
